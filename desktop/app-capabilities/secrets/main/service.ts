@@ -14,8 +14,8 @@ import {
   type SecretDeleteInput,
   type SecretGetInput,
   type SecretListResult,
-  type SecretSkillEnvApplyInput,
-  type SecretSkillEnvApplyResult,
+  type SecretSkillEnvQueueInput,
+  type SecretSkillEnvQueueResult,
   type SecretSkillEnvScanInput,
   type SecretSkillEnvScanResult,
   type SecretSafeView,
@@ -167,9 +167,9 @@ export function createSecretsService(deps: SecretsServiceDeps) {
   }
 
   async function queueSkillEnvBindings(
-    input: SecretSkillEnvApplyInput,
+    input: SecretSkillEnvQueueInput,
     security: SkillEnvBindingSecurity,
-  ): Promise<SecretSkillEnvApplyResult> {
+  ): Promise<SecretSkillEnvQueueResult> {
     const secret = await requireByName(input.name)
     return await deps.skillEnvBindings.enqueue({ ...input, name: secret.name }, secret.value, security)
   }

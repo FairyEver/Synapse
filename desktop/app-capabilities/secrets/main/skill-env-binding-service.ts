@@ -7,10 +7,10 @@ import type { ActorIdentity, AuditSink, PermissionGuard } from "../../../electro
 import type { TrustedSkillRoot } from "../../../electron/services/editor-scan-roots"
 import { parseDotenvDocument, patchDotenvValues } from "../../../electron/services/skill-env/dotenv-document"
 import type {
-  SecretSkillEnvApplyInput,
-  SecretSkillEnvApplyResult,
+  SecretSkillEnvQueueInput,
+  SecretSkillEnvQueueResult,
   SecretSkillEnvScanResult,
-  SkillEnvBindingApplyItem,
+  SkillEnvBindingQueueItem,
   SkillEnvBindingItem,
 } from "../shared/schema"
 
@@ -34,12 +34,39 @@ export type SkillEnvBindingServiceDeps = {
   readonly createId?: () => string
   readonly now?: () => number
   readonly logger: SkillEnvBindingLogger
+  readonly openFile?: (filePath: string, flags: number) => Promise<FileHandle>
 }
 
 type StoredBinding = {
   readonly publicItem: SkillEnvBindingItem
   readonly root: TrustedSkillRoot
   readonly fileHash: string | null
+  readonly rootIdentity: FileIdentity | null
+  readonly skillIdentity: FileIdentity | null
+  readonly envIdentity: FileIdentity | null
+  readonly rootRealPath: string | null
+  readonly skillRealPath: string | null
+  readonly envRealPath: string | null
+}
+
+type FileIdentity = {
+  readonly dev: number
+  readonly ino: number
+  readonly size: number
+  readonly mtimeMs: number
+  readonly ctimeMs: number
+  readonly birthtimeMs: number
+}
+
+function emptyBindingEvidence(): Pick<StoredBinding, "rootIdentity" | "skillIdentity" | "envIdentity" | "rootRealPath" | "skillRealPath" | "envRealPath"> {
+  return {
+    rootIdentity: null,
+    skillIdentity: null,
+    envIdentity: null,
+    rootRealPath: null,
+    skillRealPath: null,
+    envRealPath: null,
+  }
 }
 
 type ScanSession = {
@@ -53,6 +80,12 @@ type ValidatedBinding = {
   readonly content: string
   readonly envPath: string
   readonly mode: number
+  readonly rootIdentity: FileIdentity
+  readonly skillIdentity: FileIdentity
+  readonly envIdentity: FileIdentity
+  readonly rootRealPath: string
+  readonly skillRealPath: string
+  readonly envRealPath: string
 }
 
 class UnsafeBindingError extends Error {
@@ -112,10 +145,10 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
   }
 
   async function enqueue(
-    input: SecretSkillEnvApplyInput,
+    input: SecretSkillEnvQueueInput,
     value: string,
     security: SkillEnvBindingSecurity,
-  ): Promise<SecretSkillEnvApplyResult> {
+  ): Promise<SecretSkillEnvQueueResult> {
     const run = queueTail.then(async () => {
       const timestamp = now()
       pruneSessions(timestamp)
@@ -129,9 +162,9 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
       if (selected.some((item) => !item)) throw new Error("扫描项目无效，请重新扫描。")
 
       const currentRoots = await deps.listRoots()
-      const results: SkillEnvBindingApplyItem[] = []
+      const results: SkillEnvBindingQueueItem[] = []
       for (const stored of selected as StoredBinding[]) {
-        results.push(await applyOne(stored, input.name, value, currentRoots, security))
+        results.push(await updateOne(stored, input.name, value, currentRoots, security))
       }
       return { items: results }
     })
@@ -145,12 +178,14 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
     value: string,
   ): Promise<StoredBinding[]> {
     let entries
+    let rootIdentity: FileIdentity
     try {
       const rootInfo = await lstat(root.path)
       if (!rootInfo.isDirectory()) return []
+      rootIdentity = toFileIdentity(rootInfo)
       entries = await readdir(root.path, { withFileTypes: true })
       const rootAfter = await lstat(root.path)
-      if (!sameIdentity(rootInfo, rootAfter) || rootAfter.isSymbolicLink()) return []
+      if (rootAfter.isSymbolicLink() || !sameIdentity(rootIdentity, toFileIdentity(rootAfter))) return []
     } catch {
       deps.logger.warn("Failed to scan trusted Skill root.", { scope: root.scope })
       return []
@@ -159,6 +194,13 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
     const items: StoredBinding[] = []
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.isSymbolicLink()) continue
+      try {
+        const rootBeforeCandidate = await lstat(root.path)
+        if (rootBeforeCandidate.isSymbolicLink()
+          || !sameIdentity(rootIdentity, toFileIdentity(rootBeforeCandidate))) return []
+      } catch {
+        return []
+      }
       const skillName = entry.name
       const skillPath = path.join(root.path, skillName)
       const envPath = path.join(skillPath, ".env")
@@ -167,7 +209,15 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
       let envInfo
       try {
         ;[skillInfo, envInfo] = await Promise.all([lstat(skillMdPath), lstat(envPath)])
-      } catch {
+      } catch (error) {
+        if (isNotFoundLikeError(error)) continue
+        const base = createPublicItem(createId(), root, skillName, envPath)
+        items.push({
+          publicItem: { ...base, status: "unwritable", message: "配置文件读取失败。" },
+          root,
+          fileHash: null,
+          ...emptyBindingEvidence(),
+        })
         continue
       }
       if (!skillInfo.isFile() || skillInfo.isSymbolicLink()) continue
@@ -178,6 +228,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
           publicItem: { ...base, status: "unsafe_link", message: "配置文件是符号链接。" },
           root,
           fileHash: null,
+          ...emptyBindingEvidence(),
         })
         continue
       }
@@ -185,23 +236,23 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
 
       let validated: ValidatedBinding | undefined
       try {
-        validated = await openValidatedBinding(root, skillName, envPath, "read")
+        validated = await openValidatedBinding(root, skillName, envPath, "read", deps.openFile)
       } catch (error) {
         if (error instanceof UnsafeBindingError) {
           items.push({
             publicItem: { ...base, status: "unsafe_link", message: "配置文件路径不安全。" },
             root,
             fileHash: null,
+            ...emptyBindingEvidence(),
           })
           continue
         }
-        if (isPermissionLikeError(error)) {
-          items.push({
-            publicItem: { ...base, status: "unwritable", message: "配置文件不可读或不可写。" },
-            root,
-            fileHash: null,
-          })
-        }
+        items.push({
+          publicItem: { ...base, status: "unwritable", message: "配置文件不可读或不可写。" },
+          root,
+          fileHash: null,
+          ...emptyBindingEvidence(),
+        })
         continue
       }
       let content: string
@@ -216,7 +267,17 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         const match = document.entries.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase())
         if (!match) continue
         if (match.value === value) {
-          items.push({ publicItem: { ...base, status: "up_to_date" }, root, fileHash })
+          items.push({
+            publicItem: { ...base, status: "up_to_date" },
+            root,
+            fileHash,
+            rootIdentity: validated.rootIdentity,
+            skillIdentity: validated.skillIdentity,
+            envIdentity: validated.envIdentity,
+            rootRealPath: validated.rootRealPath,
+            skillRealPath: validated.skillRealPath,
+            envRealPath: validated.envRealPath,
+          })
           continue
         }
         const writable = (envInfo.mode & 0o222) !== 0 && await isWritable(envPath)
@@ -226,28 +287,40 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
             : { ...base, status: "unwritable", message: "配置文件不可写。" },
           root,
           fileHash,
+          rootIdentity: validated.rootIdentity,
+          skillIdentity: validated.skillIdentity,
+          envIdentity: validated.envIdentity,
+          rootRealPath: validated.rootRealPath,
+          skillRealPath: validated.skillRealPath,
+          envRealPath: validated.envRealPath,
         })
       } catch {
         items.push({
           publicItem: { ...base, status: "invalid", message: "配置文件格式无效。" },
           root,
           fileHash,
+          rootIdentity: validated.rootIdentity,
+          skillIdentity: validated.skillIdentity,
+          envIdentity: validated.envIdentity,
+          rootRealPath: validated.rootRealPath,
+          skillRealPath: validated.skillRealPath,
+          envRealPath: validated.envRealPath,
         })
       }
     }
     return items
   }
 
-  async function applyOne(
+  async function updateOne(
     stored: StoredBinding,
     name: string,
     value: string,
     currentRoots: readonly TrustedSkillRoot[],
     security: SkillEnvBindingSecurity,
-  ): Promise<SkillEnvBindingApplyItem> {
-    const base = applyItemBase(stored.publicItem)
+  ): Promise<SkillEnvBindingQueueItem> {
+    const base = queueItemBase(stored.publicItem)
     const auditMetadata = {
-      operation: "skill-env-binding-apply",
+      operation: "skill-env-binding-queue",
       secretName: name,
       editorIds: stored.publicItem.editors.map(({ id }) => id),
       scope: stored.publicItem.scope,
@@ -255,30 +328,44 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
     }
 
     try {
-      if (!(await allowRootRead(stored.root, security, "skill-env-binding-apply-revalidate"))) {
-        return recordApplyResult(base, "failed", "没有读取该位置的权限。", security, auditMetadata, "denied")
+      if (!(await allowRootRead(stored.root, security, "skill-env-binding-queue-revalidate"))) {
+        return recordQueueResult(base, "failed", "没有读取该位置的权限。", security, auditMetadata, "denied")
       }
-      if (!stored.fileHash || !(await rootStillTrusted(stored.root, currentRoots))) {
-        return recordApplyResult(base, "conflict", "扫描结果已失效。", security, auditMetadata)
+      if (!stored.fileHash
+        || !stored.rootIdentity
+        || !stored.skillIdentity
+        || !stored.envIdentity
+        || !(await rootStillTrusted(stored.root, currentRoots))
+        || !(await bindingStillMatches(stored))) {
+        return recordQueueResult(base, "conflict", "扫描结果已失效。", security, auditMetadata)
       }
       const validated = await openValidatedBinding(
         stored.root,
         stored.publicItem.skillName,
         stored.publicItem.envPath,
         "write",
+        deps.openFile,
       )
       try {
+        if (!sameIdentity(stored.rootIdentity, validated.rootIdentity)
+          || !sameIdentity(stored.skillIdentity, validated.skillIdentity)
+          || !sameIdentity(stored.envIdentity, validated.envIdentity)
+          || stored.rootRealPath !== validated.rootRealPath
+          || stored.skillRealPath !== validated.skillRealPath
+          || stored.envRealPath !== validated.envRealPath) {
+          return recordQueueResult(base, "conflict", "扫描结果已失效。", security, auditMetadata)
+        }
         if (hashContent(validated.content) !== stored.fileHash) {
-          return recordApplyResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
+          return recordQueueResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
         }
         if ((validated.mode & 0o222) === 0) {
-          return recordApplyResult(base, "failed", "配置文件不可写。", security, auditMetadata)
+          return recordQueueResult(base, "failed", "配置文件不可写。", security, auditMetadata)
         }
 
         const document = parseDotenvDocument(validated.content)
         const matches = document.entries.filter((entry) => entry.name.toLowerCase() === name.toLowerCase())
         if (matches.length !== 1) {
-          return recordApplyResult(base, "conflict", "配置键已发生变化。", security, auditMetadata)
+          return recordQueueResult(base, "conflict", "配置键已发生变化。", security, auditMetadata)
         }
         const nextContent = patchDotenvValues(validated.content, { [matches[0].name]: value })
         const permission = await security.permissionGuard.check({
@@ -288,7 +375,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
           context: auditMetadata,
         })
         if (!permission.allowed) {
-          return recordApplyResult(base, "failed", "没有写入该位置的权限。", security, {
+          return recordQueueResult(base, "failed", "没有写入该位置的权限。", security, {
             ...auditMetadata,
             policyId: permission.policyId,
           }, "denied")
@@ -297,11 +384,11 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         const pathStat = await lstat(stored.publicItem.envPath)
         const currentEnvRealPath = await realpath(stored.publicItem.envPath)
         if (!sameIdentity(currentStat, pathStat) || currentEnvRealPath !== validated.envPath) {
-          return recordApplyResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
+          return recordQueueResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
         }
         await validated.handle.truncate(0)
-        await validated.handle.write(nextContent, 0, "utf8")
-        return recordApplyResult(base, "updated", undefined, security, auditMetadata)
+        await writeFileHandleFully(validated.handle, nextContent)
+        return recordQueueResult(base, "updated", undefined, security, auditMetadata)
       } finally {
         await validated.handle.close().catch(() => undefined)
       }
@@ -311,12 +398,12 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         skillName: stored.publicItem.skillName,
       })
       if (error instanceof StaleBindingError) {
-        return recordApplyResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
+        return recordQueueResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
       }
       if (error instanceof UnsafeBindingError) {
-        return recordApplyResult(base, "failed", "配置文件路径不安全。", security, auditMetadata)
+        return recordQueueResult(base, "failed", "配置文件路径不安全。", security, auditMetadata)
       }
-      return recordApplyResult(base, "failed", "配置文件写入失败。", security, auditMetadata, "failed")
+      return recordQueueResult(base, "failed", "配置文件写入失败。", security, auditMetadata, "failed")
     }
   }
 
@@ -328,7 +415,7 @@ export type SkillEnvBindingService = ReturnType<typeof createSkillEnvBindingServ
 async function allowRootRead(
   root: TrustedSkillRoot,
   security: SkillEnvBindingSecurity,
-  operation: "skill-env-binding-scan" | "skill-env-binding-apply-revalidate",
+  operation: "skill-env-binding-scan" | "skill-env-binding-queue-revalidate",
 ): Promise<boolean> {
   const context = { operation, scope: root.scope }
   const permission = await security.permissionGuard.check({
@@ -374,19 +461,19 @@ function createPublicItem(
   }
 }
 
-function applyItemBase(item: SkillEnvBindingItem): Omit<SkillEnvBindingApplyItem, "status"> {
+function queueItemBase(item: SkillEnvBindingItem): Omit<SkillEnvBindingQueueItem, "status"> {
   const { status: _status, ...base } = item
   return base
 }
 
-function recordApplyResult(
-  base: Omit<SkillEnvBindingApplyItem, "status">,
-  status: SkillEnvBindingApplyItem["status"],
+function recordQueueResult(
+  base: Omit<SkillEnvBindingQueueItem, "status">,
+  status: SkillEnvBindingQueueItem["status"],
   message: string | undefined,
   security: SkillEnvBindingSecurity,
   metadata: Record<string, unknown>,
   auditOutcome: "allowed" | "denied" | "failed" = status === "updated" ? "allowed" : "failed",
-): SkillEnvBindingApplyItem {
+): SkillEnvBindingQueueItem {
   security.auditSink.record({
     action: "fs.write",
     actor: security.actor,
@@ -402,6 +489,7 @@ async function openValidatedBinding(
   skillName: string,
   expectedEnvPath: string,
   mode: "read" | "write",
+  openFile: ((filePath: string, flags: number) => Promise<FileHandle>) | undefined,
 ): Promise<ValidatedBinding> {
   const rootPath = path.resolve(root.path)
   const skillPath = path.join(rootPath, skillName)
@@ -438,7 +526,7 @@ async function openValidatedBinding(
   const noFollowFlag = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0
   let handle: FileHandle | undefined
   try {
-    handle = await open(envPath, mode === "write"
+    handle = await (openFile ?? open)(envPath, mode === "write"
       ? constants.O_RDWR | noFollowFlag
       : constants.O_RDONLY | noFollowFlag)
     const handleStat = await handle.stat()
@@ -464,7 +552,18 @@ async function openValidatedBinding(
       throw new UnsafeBindingError("parent identity changed")
     }
     const content = await handle.readFile("utf8")
-    return { handle, content, envPath: envRealPath, mode: handleStat.mode }
+    return {
+      handle,
+      content,
+      envPath: envRealPath,
+      mode: handleStat.mode,
+      rootIdentity: toFileIdentity(rootInfo),
+      skillIdentity: toFileIdentity(skillInfo),
+      envIdentity: toFileIdentity(handleStat),
+      rootRealPath,
+      skillRealPath,
+      envRealPath,
+    }
   } catch (error) {
     await handle?.close().catch(() => undefined)
     if (error instanceof UnsafeBindingError) throw error
@@ -496,6 +595,43 @@ async function rootStillTrusted(
   return false
 }
 
+async function bindingStillMatches(stored: StoredBinding): Promise<boolean> {
+  if (!stored.rootIdentity || !stored.skillIdentity || !stored.envIdentity
+    || !stored.rootRealPath || !stored.skillRealPath || !stored.envRealPath) return false
+  const rootPath = path.resolve(stored.root.path)
+  const skillPath = path.dirname(stored.publicItem.envPath)
+  try {
+    const [rootInfo, skillInfo, envInfo] = await Promise.all([
+      lstat(rootPath),
+      lstat(skillPath),
+      lstat(stored.publicItem.envPath),
+    ])
+    if (rootInfo.isSymbolicLink() || skillInfo.isSymbolicLink() || envInfo.isSymbolicLink()) {
+      throw new UnsafeBindingError("unsafe binding path")
+    }
+    if (!rootInfo.isDirectory() || !skillInfo.isDirectory() || !envInfo.isFile()) return false
+    if (!sameIdentity(stored.rootIdentity, toFileIdentity(rootInfo))
+      || !sameIdentity(stored.skillIdentity, toFileIdentity(skillInfo))
+      || !sameIdentity(stored.envIdentity, toFileIdentity(envInfo))) return false
+    const [rootRealPath, skillRealPath, envRealPath] = await Promise.all([
+      realpath(rootPath),
+      realpath(skillPath),
+      realpath(stored.publicItem.envPath),
+    ])
+    if (rootRealPath !== stored.rootRealPath
+      || skillRealPath !== stored.skillRealPath
+      || envRealPath !== stored.envRealPath
+      || path.dirname(skillRealPath) !== rootRealPath
+      || path.dirname(envRealPath) !== skillRealPath) {
+      throw new UnsafeBindingError("unsafe binding containment")
+    }
+    return true
+  } catch (error) {
+    if (error instanceof UnsafeBindingError) throw error
+    return false
+  }
+}
+
 async function isWritable(filePath: string): Promise<boolean> {
   try {
     await access(filePath, constants.W_OK)
@@ -507,6 +643,34 @@ async function isWritable(filePath: string): Promise<boolean> {
 
 function hashContent(content: string): string {
   return createHash("sha256").update(content).digest("hex")
+}
+
+async function writeFileHandleFully(handle: FileHandle, content: string): Promise<void> {
+  const data = Buffer.from(content, "utf8")
+  let offset = 0
+  while (offset < data.length) {
+    const result = await handle.write(data, offset, data.length - offset, offset)
+    if (result.bytesWritten <= 0) throw new BindingIoError("zero progress while writing")
+    offset += result.bytesWritten
+  }
+}
+
+function toFileIdentity(stats: {
+  dev: number
+  ino: number
+  size: number
+  mtimeMs: number
+  ctimeMs: number
+  birthtimeMs: number
+}): FileIdentity {
+  return {
+    dev: stats.dev,
+    ino: stats.ino,
+    size: stats.size,
+    mtimeMs: stats.mtimeMs,
+    ctimeMs: stats.ctimeMs,
+    birthtimeMs: stats.birthtimeMs,
+  }
 }
 
 function sameIdentity(left: {
@@ -537,4 +701,10 @@ function isPermissionLikeError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false
   const code = error instanceof BindingIoError ? error.causeCode : "code" in error ? error.code : undefined
   return code === "EACCES" || code === "EPERM" || code === "EROFS"
+}
+
+function isNotFoundLikeError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const code = error instanceof BindingIoError ? error.causeCode : "code" in error ? error.code : undefined
+  return code === "ENOENT" || code === "ENOTDIR"
 }

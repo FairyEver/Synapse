@@ -8,8 +8,8 @@ import {
   secretDeleteInputSchema,
   secretGetInputSchema,
   secretListResultSchema,
-  secretSkillEnvApplyInputSchema,
-  secretSkillEnvApplyResultSchema,
+  secretSkillEnvQueueInputSchema,
+  secretSkillEnvQueueResultSchema,
   secretSkillEnvScanInputSchema,
   secretSkillEnvScanResultSchema,
   secretSafeViewSchema,
@@ -96,10 +96,10 @@ export const secretsIpcModule: IpcModule = {
     queueSkillEnvBindings: {
       channel: "synapse:secrets:queue-skill-env-bindings",
       kind: "invoke",
-      request: secretSkillEnvApplyInputSchema,
-      response: secretSkillEnvApplyResultSchema,
+      request: secretSkillEnvQueueInputSchema,
+      response: secretSkillEnvQueueResultSchema,
       handler: (ctx, request) => resolveSecretsService(ctx).queueSkillEnvBindings(
-        secretSkillEnvApplyInputSchema.parse(request),
+        secretSkillEnvQueueInputSchema.parse(request),
         {
           actor: { kind: "user" },
           permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),

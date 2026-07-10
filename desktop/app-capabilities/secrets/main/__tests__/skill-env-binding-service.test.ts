@@ -1,4 +1,5 @@
-import { chmod, mkdir, mkdtemp, readFile, realpath, rename, symlink, writeFile } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, open, readFile, realpath, rename, symlink, writeFile } from "node:fs/promises"
+import type { FileHandle } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -192,6 +193,72 @@ describe("SkillEnvBindingService", () => {
     expect(await readFile(path.join(replacement, ".env"), "utf8")).toBe("TOKEN=outside\n")
   })
 
+  it("conflicts when the root is replaced with identical content", async () => {
+    const root = await createRoot()
+    await createSkill(root, "demo", "TOKEN=old\n")
+    const harness = createHarness([trustedRoot(root)])
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+
+    const replacement = await createRoot()
+    await createSkill(replacement, "demo", "TOKEN=old\n")
+    const oldRoot = `${root}-old`
+    await rename(root, oldRoot)
+    tempRoots.push(oldRoot)
+    await rename(replacement, root)
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, "new", harness.security)
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "conflict" }),
+    ])
+  })
+
+  it("conflicts when a Skill directory is replaced with identical content", async () => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\n")
+    const harness = createHarness([trustedRoot(root)])
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+
+    const replacement = path.join(root, "replacement-skill")
+    await mkdir(replacement)
+    await writeFile(path.join(replacement, "SKILL.md"), "# demo\n")
+    await writeFile(path.join(replacement, ".env"), "TOKEN=old\n")
+    await rename(skill, path.join(root, "demo-old"))
+    await rename(replacement, skill)
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, "new", harness.security)
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "conflict" }),
+    ])
+  })
+
+  it("conflicts when the env file is replaced with identical content", async () => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\n")
+    const harness = createHarness([trustedRoot(root)])
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+
+    const envPath = path.join(skill, ".env")
+    await rename(envPath, path.join(skill, ".env-old"))
+    await writeFile(envPath, "TOKEN=old\n")
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, "new", harness.security)
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "conflict" }),
+    ])
+  })
+
   it("rejects a file that becomes unwritable after scanning", async () => {
     const root = await createRoot()
     const skill = await createSkill(root, "demo", "TOKEN=old\n")
@@ -229,6 +296,106 @@ describe("SkillEnvBindingService", () => {
       expect.objectContaining({ action: "fs.write", resource: envRealPath }),
     ])
   })
+
+  it("completes a short-write sequence before reporting updated", async () => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old-value\nSECOND=keep\n")
+    let shortWriteCalls = 0
+    const harness = createHarness([trustedRoot(root)], () => 100, async (filePath, flags) => {
+      const handle = await open(filePath, flags)
+      const originalWrite = handle.write.bind(handle)
+      return new Proxy(handle, {
+        get(target, property, receiver) {
+          if (property === "write") {
+            return async (data: Buffer, offset: number, length: number, position: number) => {
+              if (length > 1) {
+                shortWriteCalls += 1
+                return originalWrite(data, offset, Math.max(1, Math.floor(length / 2)), position)
+              }
+              return originalWrite(data, offset, length, position)
+            }
+          }
+          return Reflect.get(target, property, receiver)
+        },
+      }) as FileHandle
+    })
+    const scan = await harness.service.scan("TOKEN", "new-value", harness.security)
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items.find((item) => item.skillName === "demo")!.id],
+    }, "new-value", harness.security)
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "updated" }),
+    ])
+    expect(shortWriteCalls).toBeGreaterThan(1)
+    expect(await readFile(path.join(skill, ".env"), "utf8")).toBe('TOKEN="new-value"\nSECOND=keep\n')
+  })
+
+  it("shows ordinary scan I/O failures as unwritable items", async () => {
+    const root = await createRoot()
+    await createSkill(root, "demo", "TOKEN=old\n")
+    const harness = createHarness([trustedRoot(root)], () => 100, async () => {
+      const error = new Error("simulated read failure") as NodeJS.ErrnoException
+      error.code = "EIO"
+      throw error
+    })
+
+    const result = await harness.service.scan("TOKEN", "new", harness.security)
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "unwritable" }),
+    ])
+  })
+
+  it("serializes concurrent enqueue calls and continues after the first call fails", async () => {
+    const root = await createRoot()
+    await createSkill(root, "first", "TOKEN=first\n")
+    await createSkill(root, "second", "TOKEN=second\n")
+    const harness = createHarness([trustedRoot(root)])
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+    const byName = new Map(scan.items.map((item) => [item.skillName, item.id]))
+    let releaseFirst!: () => void
+    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve })
+    let writeCalls = 0
+    harness.security.permissionGuard.check = vi.fn(async (request) => {
+      harness.permissionRequests.push(request)
+      if (request.action === "fs.write") {
+        writeCalls += 1
+        if (writeCalls === 1) {
+          await firstGate
+          return { allowed: false as const, policyId: "queue-test" }
+        }
+      }
+      return { allowed: true as const }
+    })
+
+    const first = harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [byName.get("first")!],
+    }, "new", harness.security)
+    while (writeCalls === 0) await new Promise((resolve) => setTimeout(resolve, 0))
+    const second = harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [byName.get("second")!],
+    }, "new", harness.security)
+    await Promise.resolve()
+    expect(writeCalls).toBe(1)
+    releaseFirst()
+
+    const [firstResult, secondResult] = await Promise.all([first, second])
+    expect(firstResult.items).toEqual([
+      expect.objectContaining({ skillName: "first", status: "failed" }),
+    ])
+    expect(secondResult.items).toEqual([
+      expect.objectContaining({ skillName: "second", status: "updated" }),
+    ])
+    expect(await readFile(path.join(root, "second", ".env"), "utf8")).toBe('TOKEN="new"\n')
+  })
 })
 
 async function createRoot(): Promise<string> {
@@ -256,7 +423,11 @@ function trustedRoot(root: string): TrustedSkillRoot {
   }
 }
 
-function createHarness(roots: TrustedSkillRoot[], now: () => number = () => 100) {
+function createHarness(
+  roots: TrustedSkillRoot[],
+  now: () => number = () => 100,
+  openFile?: (filePath: string, flags: number) => Promise<FileHandle>,
+) {
   const auditEvents: Parameters<AuditSink["record"]>[0][] = []
   const permissionRequests: Parameters<PermissionGuard["check"]>[0][] = []
   const permissionGuard: PermissionGuard = {
@@ -276,12 +447,14 @@ function createHarness(roots: TrustedSkillRoot[], now: () => number = () => 100)
     listRoots: async () => roots,
     createId: () => `id-${nextId++}`,
     now,
+    openFile,
     logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
   })
   return {
     service,
     permissionRequests,
     auditEvents,
+    permissionGuard,
     security: { actor: { kind: "user" as const }, permissionGuard, auditSink },
   }
 }
