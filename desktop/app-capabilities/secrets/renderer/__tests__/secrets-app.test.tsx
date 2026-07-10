@@ -670,6 +670,90 @@ describe("SecretsModule", () => {
     expect(document.body.textContent).toContain("删除“OTHER”后不可恢复。")
   })
 
+  it("invalidates a pending bypass delete scan when refresh begins", async () => {
+    let resolveDeleteScan: ((result: typeof skillEnvScanResult) => void) | undefined
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    mocks.secrets.scanSkillEnvBindings.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveDeleteScan = resolve
+    }))
+
+    await renderSecretsModule()
+    act(() => {
+      clickButtonByLabel("删除密钥：TOKEN", { altKey: true })
+    })
+    await act(async () => {
+      clickRefreshButton()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      resolveDeleteScan?.({ scanSessionId: "scan-token", items: [] })
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.delete).not.toHaveBeenCalled()
+  })
+
+  it("invalidates a pending bypass delete scan after editing the target", async () => {
+    let resolveDeleteScan: ((result: typeof skillEnvScanResult) => void) | undefined
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    mocks.secrets.scanSkillEnvBindings.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveDeleteScan = resolve
+    }))
+
+    await renderSecretsModule()
+    act(() => {
+      clickButtonByLabel("删除密钥：TOKEN", { altKey: true })
+      clickButtonByLabel("编辑密钥：TOKEN")
+    })
+    await act(async () => {
+      setInputValue("#secret-description", "updated")
+      clickButton("保存")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      resolveDeleteScan?.({ scanSessionId: "scan-token", items: [] })
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.update).toHaveBeenCalledWith({ name: "TOKEN", description: "updated" })
+    expect(mocks.secrets.delete).not.toHaveBeenCalled()
+  })
+
+  it("reports a started delete failure after the confirmation dialog closes", async () => {
+    let rejectDelete: ((error: Error) => void) | undefined
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    mocks.secrets.delete.mockImplementationOnce(() => new Promise((_, reject) => {
+      rejectDelete = reject
+    }))
+
+    await renderSecretsModule()
+    await act(async () => {
+      clickButtonByLabel("删除密钥：TOKEN")
+      await Promise.resolve()
+    })
+    act(() => {
+      clickButton("删除")
+    })
+
+    expect(document.body.textContent).not.toContain("删除“TOKEN”后不可恢复。")
+
+    await act(async () => {
+      rejectDelete?.(new Error("delete failed: super-secret"))
+      await Promise.resolve()
+    })
+
+    expect(mocks.toast.error).toHaveBeenCalledWith("删除失败")
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      "Failed to delete secret.",
+      expect.objectContaining({
+        errorName: "Error",
+        errorMessageLength: "delete failed: super-secret".length,
+      }),
+    )
+    expect(mocks.logger.error.mock.calls.at(-1)?.[1]).not.toHaveProperty("error")
+    expect(document.body.textContent).toContain("TOKEN")
+  })
+
   it("shows retry when loading fails", async () => {
     mocks.secrets.list.mockRejectedValueOnce(new Error("load failed"))
 
@@ -701,6 +785,12 @@ async function renderSecretsModule(): Promise<void> {
 
 function clickButton(text: string) {
   buttonByText(text).dispatchEvent(new MouseEvent("click", { bubbles: true }))
+}
+
+function clickRefreshButton() {
+  const button = document.querySelector<HTMLButtonElement>("[data-system-app-top-bar-actions] button")
+  if (!button) throw new Error("Refresh button not found")
+  button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 }
 
 function clickButtonByLabel(label: string, init: MouseEventInit = {}) {

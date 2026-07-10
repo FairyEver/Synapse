@@ -154,6 +154,8 @@ export function SecretsModule() {
   }, [])
 
   const reload = useCallback(async () => {
+    invalidateDeleteScan()
+    setDeleting(null)
     try {
       setLoading(true)
       setLoadError("")
@@ -168,11 +170,13 @@ export function SecretsModule() {
     } finally {
       setLoading(false)
     }
-  }, [clearSecretReveals, replaceSecrets, secretsBridge])
+  }, [clearSecretReveals, invalidateDeleteScan, replaceSecrets, secretsBridge])
 
   useEffect(() => {
     void reload()
     const unsubscribe = secretsBridge.onChanged((event) => {
+      invalidateDeleteScan()
+      setDeleting(null)
       replaceSecrets(event.secrets)
       clearSecretReveals()
     })
@@ -250,6 +254,8 @@ export function SecretsModule() {
             description: form.description,
           })
 
+      invalidateDeleteScan()
+      setDeleting(null)
       setSecrets((current) => {
         const next = mergeSecret(current, saved)
         secretsRef.current = next
@@ -282,11 +288,12 @@ export function SecretsModule() {
         return next
       })
       clearSecretReveals()
-      invalidateDeleteScan()
-      setDeleting(null)
+      if (isCurrentDeleteTarget(scanGeneration, secret.id)) {
+        invalidateDeleteScan()
+        setDeleting(null)
+      }
     } catch (error) {
-      if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
-      logger.error("Failed to delete secret.", error)
+      logger.error("Failed to delete secret.", errorDiagnostic(error))
       toast.error("删除失败")
     }
   }
