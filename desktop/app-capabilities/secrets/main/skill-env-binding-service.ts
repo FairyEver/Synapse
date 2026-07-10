@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { access, constants, lstat as fsLstat, open, readdir, realpath } from "node:fs/promises"
+import { access, constants, lstat as fsLstat, open, readdir, realpath, rename, rm } from "node:fs/promises"
 import type { FileHandle } from "node:fs/promises"
 import path from "node:path"
 
@@ -45,6 +45,11 @@ export type SkillEnvBindingServiceDeps = {
   readonly logger: SkillEnvBindingLogger
   readonly openFile?: (filePath: string, flags: number) => Promise<FileHandle>
   readonly beforeBindingOpen?: (phase: "scan" | "queue") => Promise<void>
+  readonly atomicFileOps?: {
+    open(filePath: string, flags: number, mode: number): Promise<FileHandle>
+    rename(sourcePath: string, targetPath: string): Promise<void>
+    remove(filePath: string): Promise<void>
+  }
 }
 
 type StoredBinding = {
@@ -117,6 +122,11 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
   let queueTail: Promise<void> = Promise.resolve()
   const now = () => deps.now?.() ?? Date.now()
   const createId = () => deps.createId?.() ?? randomUUID()
+  const atomicFileOps = deps.atomicFileOps ?? {
+    open: (filePath: string, flags: number, mode: number) => open(filePath, flags, mode),
+    rename,
+    remove: (filePath: string) => rm(filePath, { force: true }),
+  }
 
   function pruneSessions(timestamp: number): void {
     for (const [id, session] of sessions) {
@@ -166,6 +176,9 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
       }
       const selected = input.itemIds.map((id) => session.items.get(id))
       if (selected.some((item) => !item)) throw new Error("扫描项目无效，请重新扫描。")
+      if (selected.some((item) => item?.publicItem.status !== "needs_update")) {
+        throw new Error("仅可队列更新需要更新的项目，请重新扫描。")
+      }
 
       const currentRoots = await deps.listRoots()
       const results: SkillEnvBindingQueueItem[] = []
@@ -360,6 +373,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         "write",
         deps.openFile,
       )
+      let stagedPath: string | undefined
       try {
         if (!sameIdentity(stored.rootIdentity, validated.rootIdentity)
           || !sameIdentity(stored.skillIdentity, validated.skillIdentity)
@@ -394,6 +408,12 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
             policyId: permission.policyId,
           }, "denied")
         }
+        stagedPath = await prepareAtomicEnvReplacement(
+          validated.envPath,
+          nextContent,
+          Number(validated.mode & 0o7777n),
+          atomicFileOps,
+        )
         const currentStat = await validated.handle.stat({ bigint: true })
         const pathStat = await lstat(stored.publicItem.envPath)
         const currentEnvRealPath = await realpath(stored.publicItem.envPath)
@@ -419,11 +439,12 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         if (hashContent(finalContent) !== stored.fileHash) {
           return recordQueueResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
         }
-        await validated.handle.truncate(0)
-        await writeFileHandleFully(validated.handle, nextContent)
+        await atomicFileOps.rename(stagedPath, validated.envPath)
+        stagedPath = undefined
         return recordQueueResult(base, "updated", undefined, security, auditMetadata)
       } finally {
         await validated.handle.close().catch(() => undefined)
+        if (stagedPath) await atomicFileOps.remove(stagedPath).catch(() => undefined)
       }
     } catch (error) {
       if (error instanceof BindingContentChangedError) {
@@ -558,11 +579,12 @@ async function openValidatedBinding(
     throw new UnsafeBindingError("unsafe real path")
   }
   const noFollowFlag = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0
+  const nonBlockingFlag = typeof constants.O_NONBLOCK === "number" ? constants.O_NONBLOCK : 0
   let handle: FileHandle | undefined
   try {
     handle = await (openFile ?? open)(envPath, mode === "write"
-      ? constants.O_RDWR | noFollowFlag
-      : constants.O_RDONLY | noFollowFlag)
+      ? constants.O_RDWR | noFollowFlag | nonBlockingFlag
+      : constants.O_RDONLY | noFollowFlag | nonBlockingFlag)
     const handleStat = await handle.stat({ bigint: true })
     const pathStat = await lstat(envPath)
     if (!handleStat.isFile() || pathStat.isSymbolicLink() || !sameIdentity(handleStat, pathStat)) {
@@ -699,6 +721,36 @@ async function readFileHandleSnapshot(handle: FileHandle, expectedSize: bigint):
     throw new BindingContentChangedError("configuration file grew while reading")
   }
   return content.toString("utf8")
+}
+
+async function prepareAtomicEnvReplacement(
+  envPath: string,
+  content: string,
+  mode: number,
+  atomicFileOps: NonNullable<SkillEnvBindingServiceDeps["atomicFileOps"]>,
+): Promise<string> {
+  const temporaryPath = path.join(path.dirname(envPath), `.synapse-env-${randomUUID()}.tmp`)
+  const noFollowFlag = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0
+  const nonBlockingFlag = typeof constants.O_NONBLOCK === "number" ? constants.O_NONBLOCK : 0
+  const flags = constants.O_WRONLY
+    | constants.O_CREAT
+    | constants.O_EXCL
+    | noFollowFlag
+    | nonBlockingFlag
+  let handle: FileHandle | undefined
+  try {
+    handle = await atomicFileOps.open(temporaryPath, flags, 0o600)
+    await writeFileHandleFully(handle, content)
+    await handle.chmod(mode)
+    await handle.sync()
+    await handle.close()
+    handle = undefined
+    return temporaryPath
+  } catch (error) {
+    await handle?.close().catch(() => undefined)
+    await atomicFileOps.remove(temporaryPath).catch(() => undefined)
+    throw error
+  }
 }
 
 async function writeFileHandleFully(handle: FileHandle, content: string): Promise<void> {
