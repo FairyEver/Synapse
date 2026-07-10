@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { errorLogCode, errorLogName } from "./error-sanitize"
 import { isFileNotFoundError, isPermissionError, pathExists } from "./fs-utils"
@@ -29,7 +29,35 @@ function isRawEditorWriteError(error: unknown, targetPath: string): boolean {
   return error instanceof Error && error.message.includes(targetPath)
 }
 
-async function swapPathAtomically(replacementPath: string, targetPath: string): Promise<void> {
+type AtomicSwapOptions = {
+  readonly beforeSwap?: () => Promise<void>
+  readonly afterMoveExistingTarget?: (movedTargetPath: string) => Promise<void>
+  readonly beforeRestoreMovedTarget?: (movedTargetPath: string) => Promise<void>
+  readonly beforeDeleteMovedTarget?: (movedTargetPath: string) => Promise<void>
+  readonly onRetainedMovedTarget?: () => void
+}
+
+class AtomicSwapRestoreError extends Error {
+  constructor(cause: unknown) {
+    super("原目标自动恢复失败，请手动处理保留的目标和备份。", { cause })
+  }
+}
+
+async function pathEntryExists(targetPath: string): Promise<boolean> {
+  try {
+    await lstat(targetPath)
+    return true
+  } catch (error) {
+    if (isFileNotFoundError(error)) return false
+    throw error
+  }
+}
+
+async function swapPathAtomically(
+  replacementPath: string,
+  targetPath: string,
+  options: AtomicSwapOptions = {},
+): Promise<void> {
   const parentDirectoryPath = path.dirname(targetPath)
   const targetName = path.basename(targetPath)
 
@@ -44,24 +72,53 @@ async function swapPathAtomically(replacementPath: string, targetPath: string): 
   let movedReplacement = false
 
   try {
+    await options.beforeSwap?.()
+
     if (hadExistingTarget) {
       await rename(targetPath, backupPath)
       movedExistingTarget = true
+      await options.afterMoveExistingTarget?.(backupPath)
     }
 
     await rename(replacementPath, targetPath)
     movedReplacement = true
   } catch (error) {
     if (movedExistingTarget && !movedReplacement) {
-      await rename(backupPath, targetPath)
-        .catch((err) => logger.warn("Failed to restore backup", createEditorWriteErrorLogMeta(err)))
+      try {
+        if (await pathEntryExists(targetPath)) {
+          throw new Error("atomic swap target reappeared before restore", { cause: error })
+        }
+        await options.beforeRestoreMovedTarget?.(backupPath)
+        await rename(backupPath, targetPath)
+      } catch (restoreError) {
+        logger.warn("Failed to safely restore atomic swap backup", {
+          targetName,
+          ...createEditorWriteErrorLogMeta(restoreError),
+        })
+        throw new AtomicSwapRestoreError(restoreError)
+      }
     }
 
     throw error
   } finally {
     if (movedExistingTarget && movedReplacement) {
-      await rm(backupPath, { recursive: true, force: true })
-        .catch((err) => logger.warn("Failed to clean up backup", createEditorWriteErrorLogMeta(err)))
+      try {
+        await options.beforeDeleteMovedTarget?.(backupPath)
+        await rm(backupPath, { recursive: true, force: true })
+      } catch (cleanupError) {
+        logger.warn("Retained changed atomic swap backup", {
+          targetName,
+          ...createEditorWriteErrorLogMeta(cleanupError),
+        })
+        try {
+          options.onRetainedMovedTarget?.()
+        } catch (callbackError) {
+          logger.warn("Failed to report retained atomic swap backup", {
+            targetName,
+            ...createEditorWriteErrorLogMeta(callbackError),
+          })
+        }
+      }
     }
   }
 }
@@ -99,6 +156,7 @@ async function replaceFileAtomically(targetPath: string, content: string): Promi
 async function replaceDirectoryAtomically(
   targetPath: string,
   populate: (stagingDirectoryPath: string) => Promise<void>,
+  options: AtomicSwapOptions = {},
 ): Promise<void> {
   const parentDirectoryPath = path.dirname(targetPath)
 
@@ -108,7 +166,7 @@ async function replaceDirectoryAtomically(
 
   try {
     await populate(stagingDirectoryPath)
-    await swapPathAtomically(stagingDirectoryPath, targetPath)
+    await swapPathAtomically(stagingDirectoryPath, targetPath, options)
   } catch (error) {
     await rm(stagingDirectoryPath, { recursive: true, force: true })
       .catch((err) => logger.warn("Failed to clean up staging directory", createEditorWriteErrorLogMeta(err)))

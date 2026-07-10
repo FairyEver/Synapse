@@ -8,6 +8,12 @@ Use this guide only for Synapse local secrets stored in the `密钥库` app.
 
 Do not use these tools for Workflow variables, Database rows, Automation schedules, provider settings, shell environment variables, Resource Repository publishing, or editor installation state.
 
+Secret names can also match keys in installed Skill root `.env` files. This association is file-based and case-insensitive; Synapse does not keep an installation database or persistent update queue.
+
+These MCP tools modify encrypted secret storage only. Create, update, and upsert never scan or write installed Skill files. The desktop app provides a separate explicit scan and user-confirmed in-memory serial queue for updating associated `.env` files.
+
+The desktop scanner accepts runtime `.env` files up to 1 MiB. Scanning is available on Windows, but the current desktop queue returns a failure for every Windows write; the user must update the local `.env` manually. On macOS and Linux, the desktop queue performs a final validation and then uses a same-directory atomic replacement. MCP tools never scan or write these files and cannot bypass these desktop limits.
+
 ## Default Flow
 
 1. Use `app_secrets_item_list` to inspect secret names without values.
@@ -15,7 +21,7 @@ Do not use these tools for Workflow variables, Database rows, Automation schedul
 3. Use `app_secrets_item_get` with `includeValue: true` only when the user explicitly needs the stored value.
 4. Use `app_secrets_item_upsert` when setting a value and creation/update are both acceptable.
 5. Use `app_secrets_item_create` when creation must fail if the name already exists.
-6. Use `app_secrets_item_update` for existing secrets or renames.
+6. Use `app_secrets_item_update` to change an existing secret value or description.
 7. Use `app_secrets_item_delete` only after the name is clear.
 
 ## Sensitive Value Rules
@@ -28,3 +34,5 @@ Do not use these tools for Workflow variables, Database rows, Automation schedul
 ## Name Rules
 
 Names must contain only letters, digits, and underscores. Names are matched case-insensitively.
+
+Names are immutable after creation. To use a different name, create a new secret and update the Skill's `.env.example` and runtime code separately.

@@ -14,6 +14,7 @@ type VariableSubstitutionDialogProps = {
   secrets: SecretSafeView[]
   initialValues: Record<string, string>
   onConfirm: (substitutions: Record<string, string>) => Promise<void> | void
+  showOneShotWarning?: boolean
 }
 
 function matchSecret(
@@ -32,6 +33,7 @@ function VariableSubstitutionDialog({
   secrets,
   initialValues,
   onConfirm,
+  showOneShotWarning = false,
 }: VariableSubstitutionDialogProps) {
   const [values, setValues] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -77,7 +79,7 @@ function VariableSubstitutionDialog({
     >
       <FormDialog
         title="变量替换"
-        description="留空则保留原文。"
+        description={showOneShotWarning ? "安装后无法同步；留空则保留原文。" : "留空则保留原文。"}
         footer={
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? "安装中..." : "继续安装"}

@@ -97,6 +97,7 @@ export const IPC_CHANNELS = {
     "recordComplete": "synapse:skill-repository-install:record-complete",
   },
   "installers": {
+    "inspectSkillEnvSource": "synapse:installers:inspect-skill-env-source",
     "prepareLocalSkillSource": "synapse:installers:prepare-local-skill-source",
     "prepareInlineRuleSource": "synapse:installers:prepare-inline-rule-source",
     "installSourceToEditor": "synapse:installers:install-source-to-editor",
@@ -288,6 +289,8 @@ export const IPC_CHANNELS = {
     "update": "synapse:secrets:update",
     "upsert": "synapse:secrets:upsert",
     "delete": "synapse:secrets:delete",
+    "scanSkillEnvBindings": "synapse:secrets:scan-skill-env-bindings",
+    "queueSkillEnvBindings": "synapse:secrets:queue-skill-env-bindings",
     "changed": "synapse:secrets:changed",
   },
   "agentPersonas": {

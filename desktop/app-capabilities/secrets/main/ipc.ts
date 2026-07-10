@@ -1,12 +1,17 @@
 import { z } from "zod"
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
 import type { WindowManager } from "../../../electron/runtime/window"
+import type { AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import type { SecretsService } from "./service"
 import {
   secretCreateInputSchema,
   secretDeleteInputSchema,
   secretGetInputSchema,
   secretListResultSchema,
+  secretSkillEnvQueueInputSchema,
+  secretSkillEnvQueueResultSchema,
+  secretSkillEnvScanInputSchema,
+  secretSkillEnvScanResultSchema,
   secretSafeViewSchema,
   secretUpdateInputSchema,
   secretUpsertInputSchema,
@@ -73,6 +78,34 @@ export const secretsIpcModule: IpcModule = {
       request: secretDeleteInputSchema,
       response: secretSafeViewSchema,
       handler: (ctx, request) => resolveSecretsService(ctx).delete(secretDeleteInputSchema.parse(request)),
+    },
+    scanSkillEnvBindings: {
+      channel: "synapse:secrets:scan-skill-env-bindings",
+      kind: "invoke",
+      request: secretSkillEnvScanInputSchema,
+      response: secretSkillEnvScanResultSchema,
+      handler: (ctx, request) => resolveSecretsService(ctx).scanSkillEnvBindings(
+        secretSkillEnvScanInputSchema.parse(request),
+        {
+          actor: { kind: "user" },
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+        },
+      ),
+    },
+    queueSkillEnvBindings: {
+      channel: "synapse:secrets:queue-skill-env-bindings",
+      kind: "invoke",
+      request: secretSkillEnvQueueInputSchema,
+      response: secretSkillEnvQueueResultSchema,
+      handler: (ctx, request) => resolveSecretsService(ctx).queueSkillEnvBindings(
+        secretSkillEnvQueueInputSchema.parse(request),
+        {
+          actor: { kind: "user" },
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+        },
+      ),
     },
   },
   events: {

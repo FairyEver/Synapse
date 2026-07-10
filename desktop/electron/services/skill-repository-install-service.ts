@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { copyFile, mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises"
+import { copyFile, mkdir, mkdtemp, open, readFile, rm } from "node:fs/promises"
 import path from "node:path"
 import { app } from "electron"
 import { z } from "zod"
@@ -250,6 +250,20 @@ export class SkillRepositoryInstallService implements PreparedContentInstallSour
     if (!attachment) throw new Error("prepared source attachment is unavailable")
     await mkdir(path.dirname(targetPath), { recursive: true })
     await copyFile(path.join(prepared.directoryPath, attachment.path), targetPath)
+  }
+
+  async readPreparedSkillAttachmentText(
+    sourceId: string,
+    contentId: string,
+    relativePath: string,
+  ): Promise<string | null> {
+    const prepared = this.requirePrepared(sourceId, contentId)
+    const attachment = prepared.manifest.files.find((file) => (
+      file.path !== prepared.manifest.mainFile
+      && file.path === `content/${relativePath}`
+    ))
+    if (!attachment || attachment.kind !== "text") return null
+    return readFile(path.join(prepared.directoryPath, attachment.path), "utf8")
   }
 
   async markPreparedInstalled(sourceId: string, contentId: string): Promise<void> {

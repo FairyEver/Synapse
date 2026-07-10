@@ -6,13 +6,18 @@ import type {
   SecretItemEntryV1,
   SecretSettingsEntryV1,
 } from "../../../electron/runtime/data-repo/schemas/secrets"
-import type { SynapseConfig, SynapseConfigPatch, SynapseVariable } from "../../../src/types/config"
+import type { SynapseConfig, SynapseConfigPatch } from "../../../src/types/config"
+import type { SkillEnvBindingSecurity, SkillEnvBindingService } from "./skill-env-binding-service"
 import {
   SECRET_NAME_REGEX,
   type SecretCreateInput,
   type SecretDeleteInput,
   type SecretGetInput,
   type SecretListResult,
+  type SecretSkillEnvQueueInput,
+  type SecretSkillEnvQueueResult,
+  type SecretSkillEnvScanInput,
+  type SecretSkillEnvScanResult,
   type SecretSafeView,
   type SecretUpdateInput,
   type SecretUpsertInput,
@@ -31,6 +36,7 @@ export type SecretsServiceDeps = {
   readonly settings: DataNamespace<SecretSettingsEntryV1>
   readonly loadConfig: () => Promise<SynapseConfig>
   readonly updateConfig: (patch: SynapseConfigPatch) => Promise<SynapseConfig>
+  readonly skillEnvBindings: SkillEnvBindingService
   readonly now?: () => Date
   readonly createId?: () => string
   readonly logger: SecretsLogger
@@ -104,14 +110,11 @@ export function createSecretsService(deps: SecretsServiceDeps) {
 
   async function update(input: SecretUpdateInput): Promise<SecretSafeView> {
     const existing = await requireByName(input.name)
-    const nextName = input.newName !== undefined ? normalizeName(input.newName) : existing.name
-    await assertNameAvailable(nextName, existing.name)
     const description = Object.prototype.hasOwnProperty.call(input, "description")
       ? normalizeDescription(input.description)
       : existing.description
     const item: SecretItemEntryV1 = {
       ...existing,
-      name: nextName,
       value: input.value !== undefined ? input.value : existing.value,
       ...(description ? { description } : { description: undefined }),
       updatedAt: timestamp(),
@@ -150,6 +153,22 @@ export function createSecretsService(deps: SecretsServiceDeps) {
     await deps.items.remove(existing.id)
     await emitChanged()
     return safe
+  }
+
+  async function scanSkillEnvBindings(
+    input: SecretSkillEnvScanInput,
+    security: SkillEnvBindingSecurity,
+  ): Promise<SecretSkillEnvScanResult> {
+    const secret = await requireByName(input.name)
+    return await deps.skillEnvBindings.scan(secret.name, secret.value, security)
+  }
+
+  async function queueSkillEnvBindings(
+    input: SecretSkillEnvQueueInput,
+    security: SkillEnvBindingSecurity,
+  ): Promise<SecretSkillEnvQueueResult> {
+    const secret = await requireByName(input.name)
+    return await deps.skillEnvBindings.enqueue({ ...input, name: secret.name }, secret.value, security)
   }
 
   async function migrateLegacyConfig(): Promise<void> {
@@ -225,6 +244,8 @@ export function createSecretsService(deps: SecretsServiceDeps) {
     update,
     upsert,
     delete: deleteItem,
+    scanSkillEnvBindings,
+    queueSkillEnvBindings,
   }
 }
 

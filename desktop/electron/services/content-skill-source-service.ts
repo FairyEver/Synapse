@@ -3,6 +3,8 @@ import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
 import {
+  SKILL_ENV_EXAMPLE_PATH,
+  assertNoRuntimeSkillEnvPath,
   assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
 } from "../../src/lib/content-attachments"
@@ -203,8 +205,16 @@ async function collectSkillFiles(
     throwInvalid("files", `无法读取 Skill 附件目录：${formatSkillSourceRelativePath(baseDir, currentDir)}`)
   }
 
+  if (currentDir === baseDir) {
+    try {
+      assertNoRuntimeSkillEnvPath(children)
+    } catch (error) {
+      throwInvalid("files", getErrorMessage(error))
+    }
+  }
+
   for (const name of children) {
-    if (name.startsWith(".")) continue
+    if (name.startsWith(".") && !(currentDir === baseDir && name === SKILL_ENV_EXAMPLE_PATH)) continue
     if (skip.has(name) && currentDir === baseDir) continue
 
     const fullPath = path.join(currentDir, name)

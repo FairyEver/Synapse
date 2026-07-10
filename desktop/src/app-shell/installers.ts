@@ -7,6 +7,7 @@ import type {
   SynapsePrepareInlineRuleSourcePayload,
   SynapsePrepareLocalSkillSourcePayload,
   SynapseRuleInstallerSource,
+  SynapseSkillEnvInspectionResult,
   SynapseSkillInstallerSource,
 } from "@/types/installers"
 
@@ -35,6 +36,12 @@ async function prepareInlineRuleSource(
   return requireInstallersBridge().prepareInlineRuleSource(payload)
 }
 
+async function inspectSkillEnvSource(
+  source: SynapseSkillInstallerSource,
+): Promise<SynapseSkillEnvInspectionResult> {
+  return requireInstallersBridge().inspectSkillEnvSource(source)
+}
+
 async function installSourceToEditor(
   payload: SynapseInstallSourceToEditorPayload,
 ): Promise<SynapseContentInstallResult> {
@@ -48,6 +55,7 @@ async function installSourceToEditorTargets(
 }
 
 export {
+  inspectSkillEnvSource,
   installSourceToEditorTargets,
   installSourceToEditor,
   prepareInlineRuleSource,

@@ -4,6 +4,7 @@ import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import {
+  assertNoRuntimeSkillEnvPath,
   assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
 } from "../../src/lib/content-attachments"
@@ -269,6 +270,7 @@ async function resolveAttachmentRecords(
   }
 
   const skillPayload = payload as SynapseCreateSkillPayload | SynapseUpdateSkillPayload
+  assertNoRuntimeSkillEnvPath(skillPayload.files.map((file) => file.originalName))
   const existingAttachmentsBySha = new Map(
     (baseline?.attachments ?? []).map((attachment) => [attachment.sha256, attachment] as const),
   )
@@ -696,7 +698,7 @@ class ContentWriteService {
           error: error instanceof Error ? error.message : String(error),
         })
         await rm(stagedIconPath, { force: true }).catch(() => {})
-        throw new Error("图标图片保存失败，内容已写入但未完成图标替换，请重试保存。")
+        throw new Error("图标图片保存失败，内容已写入但未完成图标替换，请重试保存。", { cause: error })
       }
     }
 

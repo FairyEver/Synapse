@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from "react"
-import { Clipboard, Eye, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { Clipboard, Eye, Pencil, Plus, RefreshCw, ScanSearch, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { Button } from "../../../src/components/ui/button"
@@ -30,6 +30,12 @@ import { ScrollArea } from "../../../src/components/ui/scroll-area"
 import { Skeleton } from "../../../src/components/ui/skeleton"
 import { Textarea } from "../../../src/components/ui/textarea"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../../../src/components/ui/tooltip"
+import {
   Table,
   TableBody,
   TableCell,
@@ -51,7 +57,8 @@ import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
 import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
-import type { SecretSafeView } from "../shared/schema"
+import type { SecretSafeView, SecretSkillEnvScanResult } from "../shared/schema"
+import { SkillEnvUpdateDialog } from "./skill-env-update-dialog"
 
 const logger = createRendererLogger("secrets.app")
 
@@ -79,6 +86,17 @@ type SecretValueDialogState = {
   readonly value: string
 }
 
+type SkillEnvUpdateDialogState = {
+  readonly name: string
+  readonly scanResult: SecretSkillEnvScanResult
+}
+
+type DeleteSecretDialogState = {
+  readonly secret: SecretSafeView
+  readonly bindingCount: number
+  readonly scanGeneration: number
+}
+
 const emptyFormState: SecretFormState = {
   mode: "create",
   secret: null,
@@ -96,12 +114,38 @@ export function SecretsModule() {
   const [saving, setSaving] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState<SecretFormState>(emptyFormState)
-  const [deleting, setDeleting] = useState<SecretSafeView | null>(null)
+  const [deleting, setDeleting] = useState<DeleteSecretDialogState | null>(null)
+  const [skillEnvUpdateDialog, setSkillEnvUpdateDialog] = useState<SkillEnvUpdateDialogState | null>(null)
   const [secretReveals, setSecretReveals] = useState<SecretRevealStateById>({})
   const [secretValueDialog, setSecretValueDialog] = useState<SecretValueDialogState | null>(null)
+  const secretsRef = useRef<SecretSafeView[]>([])
   const secretRevealGeneration = useRef(0)
+  const skillEnvScanGeneration = useRef(0)
+  const deleteScanGeneration = useRef(0)
+  const deleteTargetIdRef = useRef<string | null>(null)
 
   const secretsBridge = useMemo(() => requireBridgeDomain("secrets"), [])
+
+  const invalidateDeleteScan = useCallback(() => {
+    deleteScanGeneration.current += 1
+    deleteTargetIdRef.current = null
+  }, [])
+
+  const replaceSecrets = useCallback((nextSecrets: SecretSafeView[]) => {
+    secretsRef.current = nextSecrets
+    const deleteTargetId = deleteTargetIdRef.current
+    if (deleteTargetId && !nextSecrets.some((secret) => secret.id === deleteTargetId)) {
+      invalidateDeleteScan()
+      setDeleting(null)
+    }
+    setSecrets(nextSecrets)
+  }, [invalidateDeleteScan])
+
+  const isCurrentDeleteTarget = useCallback((scanGeneration: number, secretId: string) => (
+    deleteScanGeneration.current === scanGeneration
+    && deleteTargetIdRef.current === secretId
+    && secretsRef.current.some((secret) => secret.id === secretId)
+  ), [])
 
   const clearSecretReveals = useCallback(() => {
     secretRevealGeneration.current += 1
@@ -110,11 +154,13 @@ export function SecretsModule() {
   }, [])
 
   const reload = useCallback(async () => {
+    invalidateDeleteScan()
+    setDeleting(null)
     try {
       setLoading(true)
       setLoadError("")
       const result = await secretsBridge.list()
-      setSecrets(result.secrets)
+      replaceSecrets(result.secrets)
       clearSecretReveals()
     } catch (error) {
       const message = errorMessage(error, "加载失败")
@@ -124,15 +170,21 @@ export function SecretsModule() {
     } finally {
       setLoading(false)
     }
-  }, [clearSecretReveals, secretsBridge])
+  }, [clearSecretReveals, invalidateDeleteScan, replaceSecrets, secretsBridge])
 
   useEffect(() => {
     void reload()
-    return secretsBridge.onChanged((event) => {
-      setSecrets(event.secrets)
+    const unsubscribe = secretsBridge.onChanged((event) => {
+      invalidateDeleteScan()
+      setDeleting(null)
+      replaceSecrets(event.secrets)
       clearSecretReveals()
     })
-  }, [clearSecretReveals, reload, secretsBridge])
+    return () => {
+      invalidateDeleteScan()
+      unsubscribe()
+    }
+  }, [clearSecretReveals, invalidateDeleteScan, reload, replaceSecrets, secretsBridge])
 
   const openCreateForm = () => {
     setForm(emptyFormState)
@@ -158,6 +210,26 @@ export function SecretsModule() {
     setForm(emptyFormState)
   }
 
+  const scanSkillEnvBindings = useCallback(async (name: string): Promise<SecretSkillEnvScanResult | null> => {
+    try {
+      return await secretsBridge.scanSkillEnvBindings({ name })
+    } catch (error) {
+      logger.error("Failed to scan Skill env bindings.", { name, ...errorDiagnostic(error) })
+      toast.error("扫描失败，请重试。")
+      return null
+    }
+  }, [secretsBridge])
+
+  const scanAndOpenSkillEnvUpdate = useCallback(async (name: string) => {
+    const requestGeneration = ++skillEnvScanGeneration.current
+    const scanResult = await scanSkillEnvBindings(name)
+    if (requestGeneration !== skillEnvScanGeneration.current) return null
+    if (scanResult && scanResult.items.length > 0) {
+      setSkillEnvUpdateDialog({ name, scanResult })
+    }
+    return scanResult
+  }, [scanSkillEnvBindings])
+
   const submitForm = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (saving) return
@@ -173,7 +245,6 @@ export function SecretsModule() {
       const saved = form.mode === "edit" && form.secret
         ? await secretsBridge.update({
             name: form.secret.name,
-            ...(name !== form.secret.name ? { newName: name } : undefined),
             ...(form.updateValue ? { value: form.value } : undefined),
             description: form.description,
           })
@@ -183,10 +254,20 @@ export function SecretsModule() {
             description: form.description,
           })
 
-      setSecrets((current) => mergeSecret(current, saved))
+      invalidateDeleteScan()
+      setDeleting(null)
+      setSecrets((current) => {
+        const next = mergeSecret(current, saved)
+        secretsRef.current = next
+        return next
+      })
       clearSecretReveals()
       toast.success("已保存")
-      closeForm()
+      setFormOpen(false)
+      setForm(emptyFormState)
+      if ((form.mode === "create" && form.value.length > 0) || (form.mode === "edit" && form.updateValue)) {
+        await scanAndOpenSkillEnvUpdate(saved.name)
+      }
     } catch (error) {
       const message = errorMessage(error, "保存失败")
       logger.error("Failed to save secret.", error)
@@ -197,24 +278,48 @@ export function SecretsModule() {
     }
   }
 
-  const deleteSecret = async (secret: SecretSafeView) => {
+  const deleteSecret = async (secret: SecretSafeView, scanGeneration: number) => {
+    if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
     try {
       await secretsBridge.delete({ name: secret.name })
-      setSecrets((current) => current.filter((entry) => entry.id !== secret.id))
+      setSecrets((current) => {
+        const next = current.filter((entry) => entry.id !== secret.id)
+        secretsRef.current = next
+        return next
+      })
       clearSecretReveals()
-      setDeleting(null)
+      if (isCurrentDeleteTarget(scanGeneration, secret.id)) {
+        invalidateDeleteScan()
+        setDeleting(null)
+      }
     } catch (error) {
-      logger.error("Failed to delete secret.", error)
+      logger.error("Failed to delete secret.", errorDiagnostic(error))
       toast.error("删除失败")
     }
   }
 
-  const startDeleteSecret = (secret: SecretSafeView, event: MouseEvent<HTMLElement>) => {
-    if (shouldBypassDeleteConfirm(event)) {
-      void deleteSecret(secret)
+  const startDeleteSecret = async (secret: SecretSafeView, event: MouseEvent<HTMLElement>) => {
+    const bypassConfirmation = shouldBypassDeleteConfirm(event)
+    const scanGeneration = ++deleteScanGeneration.current
+    deleteTargetIdRef.current = secret.id
+    setDeleting(null)
+
+    let scanResult: SecretSkillEnvScanResult
+    try {
+      scanResult = await secretsBridge.scanSkillEnvBindings({ name: secret.name })
+    } catch (error) {
+      if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
+      logger.error("Failed to scan Skill env bindings.", { name: secret.name, ...errorDiagnostic(error) })
+      toast.error("扫描失败，请重试。")
       return
     }
-    setDeleting(secret)
+
+    if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
+    if (bypassConfirmation) {
+      void deleteSecret(secret, scanGeneration)
+      return
+    }
+    setDeleting({ secret, bindingCount: scanResult.items.length, scanGeneration })
   }
 
   const toggleSecretReveal = useCallback(async (secret: SecretSafeView) => {
@@ -317,9 +422,10 @@ export function SecretsModule() {
             <SecretsTable
               secrets={secrets}
               reveals={secretReveals}
-              onDelete={startDeleteSecret}
+              onDelete={(secret, event) => void startDeleteSecret(secret, event)}
               onEdit={openEditForm}
               onRevealToggle={(secret) => void toggleSecretReveal(secret)}
+              onScan={(secret) => void scanAndOpenSkillEnvUpdate(secret.name)}
             />
           )}
         </div>
@@ -342,12 +448,26 @@ export function SecretsModule() {
         onValueChange={(value) => setForm((current) => ({ ...current, value, error: "" }))}
       />
       <DeleteSecretDialog
-        secret={deleting}
+        state={deleting}
         onOpenChange={(open) => {
-          if (!open) setDeleting(null)
+          if (!open) {
+            invalidateDeleteScan()
+            setDeleting(null)
+          }
         }}
         onDelete={() => {
-          if (deleting) void deleteSecret(deleting)
+          if (deleting) void deleteSecret(deleting.secret, deleting.scanGeneration)
+        }}
+      />
+      <SkillEnvUpdateDialog
+        name={skillEnvUpdateDialog?.name ?? ""}
+        scanResult={skillEnvUpdateDialog?.scanResult ?? null}
+        onQueueError={(error) => {
+          logger.error("Failed to queue Skill env updates.", errorDiagnostic(error))
+          toast.error("更新失败，请重试。")
+        }}
+        onOpenChange={(open) => {
+          if (!open) setSkillEnvUpdateDialog(null)
         }}
       />
       <SecretValueDialog
@@ -368,7 +488,7 @@ function SecretsTableSkeleton() {
         <col data-column="name" className="w-56" />
         <col data-column="description" />
         <col data-column="value" className="w-64" />
-        <col data-column="actions" className="w-24" />
+        <col data-column="actions" className="w-28" />
       </colgroup>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
@@ -403,20 +523,23 @@ function SecretsTable({
   onDelete,
   onEdit,
   onRevealToggle,
+  onScan,
 }: {
   readonly secrets: SecretSafeView[]
   readonly reveals: SecretRevealStateById
   readonly onDelete: (secret: SecretSafeView, event: MouseEvent<HTMLElement>) => void
   readonly onEdit: (secret: SecretSafeView) => void
   readonly onRevealToggle: (secret: SecretSafeView) => void
+  readonly onScan: (secret: SecretSafeView) => void
 }) {
   return (
-    <Table containerClassName="rounded-md border bg-background" className="min-w-[42rem] table-fixed">
+    <TooltipProvider>
+      <Table containerClassName="rounded-md border bg-background" className="min-w-[42rem] table-fixed">
       <colgroup>
         <col data-column="name" className="w-56" />
         <col data-column="description" />
         <col data-column="value" className="w-64" />
-        <col data-column="actions" className="w-24" />
+        <col data-column="actions" className="w-28" />
       </colgroup>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
@@ -444,6 +567,20 @@ function SecretsTable({
             </TableCell>
             <TableCell className="align-middle text-right">
               <div className="flex justify-end gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`扫描关联 Skill：${secret.name}`}
+                      onClick={() => onScan(secret)}
+                    >
+                      <ScanSearch className="size-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>扫描关联 Skill</TooltipContent>
+                </Tooltip>
                 <Button
                   type="button"
                   variant="ghost"
@@ -467,7 +604,8 @@ function SecretsTable({
           </TableRow>
         ))}
       </TableBody>
-    </Table>
+      </Table>
+    </TooltipProvider>
   )
 }
 
@@ -612,7 +750,9 @@ function SecretDialog({
                   value={form.name}
                   onChange={(event) => onNameChange(event.target.value)}
                   disabled={saving}
-                  autoFocus
+                  readOnly={isEdit}
+                  aria-readonly={isEdit ? "true" : undefined}
+                  autoFocus={!isEdit}
                   aria-invalid={Boolean(form.error)}
                 />
                 {form.error ? <FieldError>{form.error}</FieldError> : null}
@@ -651,6 +791,7 @@ function SecretDialog({
                   value={form.description}
                   onChange={(event) => onDescriptionChange(event.target.value)}
                   disabled={saving}
+                  autoFocus={isEdit}
                 />
               </FieldContent>
             </Field>
@@ -670,21 +811,23 @@ function SecretDialog({
 }
 
 function DeleteSecretDialog({
-  secret,
+  state,
   onDelete,
   onOpenChange,
 }: {
-  readonly secret: SecretSafeView | null
+  readonly state: DeleteSecretDialogState | null
   readonly onDelete: () => void
   readonly onOpenChange: (open: boolean) => void
 }) {
   return (
-    <AlertDialog open={Boolean(secret)} onOpenChange={onOpenChange}>
+    <AlertDialog open={Boolean(state)} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>删除密钥</AlertDialogTitle>
           <AlertDialogDescription>
-            {secret ? `删除“${secret.name}”后不可恢复。` : "删除后不可恢复。"}
+            {state?.bindingCount
+              ? `发现 ${state.bindingCount} 个关联 Skill，删除密钥不会删除这些 .env 键。`
+              : state ? `删除“${state.secret.name}”后不可恢复。` : "删除后不可恢复。"}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

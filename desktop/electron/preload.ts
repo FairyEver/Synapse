@@ -82,6 +82,7 @@ const IPC_CHANNELS = {
     "recordComplete": "synapse:skill-repository-install:record-complete",
   },
   "installers": {
+    "inspectSkillEnvSource": "synapse:installers:inspect-skill-env-source",
     "installSourceToEditor": "synapse:installers:install-source-to-editor",
     "installSourceToEditorTargets": "synapse:installers:install-source-to-editor-targets",
     "prepareLocalSkillSource": "synapse:installers:prepare-local-skill-source",
@@ -417,6 +418,8 @@ const IPC_CHANNELS = {
     "update": "synapse:secrets:update",
     "upsert": "synapse:secrets:upsert",
     "delete": "synapse:secrets:delete",
+    "scanSkillEnvBindings": "synapse:secrets:scan-skill-env-bindings",
+    "queueSkillEnvBindings": "synapse:secrets:queue-skill-env-bindings",
     "changed": "synapse:secrets:changed",
   },
   "agentPersonas": {
@@ -909,6 +912,8 @@ const synapseBridge: SynapseBridge = {
     update: (input) => invoke(IPC_CHANNELS.secrets.update)(input),
     upsert: (input) => invoke(IPC_CHANNELS.secrets.upsert)(input),
     delete: (input) => invoke(IPC_CHANNELS.secrets.delete)(input),
+    scanSkillEnvBindings: (input) => invoke(IPC_CHANNELS.secrets.scanSkillEnvBindings)(input),
+    queueSkillEnvBindings: (input) => invoke(IPC_CHANNELS.secrets.queueSkillEnvBindings)(input),
     onChanged: createRawPayloadSubscription(
       subscribe,
       IPC_CHANNELS.secrets.changed,
@@ -1211,6 +1216,7 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["skill-repository-install"].recordComplete)({ sessionId }),
   },
   installers: {
+    inspectSkillEnvSource: invoke(IPC_CHANNELS.installers.inspectSkillEnvSource),
     installSourceToEditor: invoke(IPC_CHANNELS.installers.installSourceToEditor),
     installSourceToEditorTargets: invoke(IPC_CHANNELS.installers.installSourceToEditorTargets),
     prepareLocalSkillSource: invoke(IPC_CHANNELS.installers.prepareLocalSkillSource),

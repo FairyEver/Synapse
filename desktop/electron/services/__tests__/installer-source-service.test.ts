@@ -42,6 +42,33 @@ describe("InstallerSourceService", () => {
     expect(source.localSourceId).toBeTruthy()
   })
 
+  it("includes a root .env.example in the local Skill draft", async () => {
+    const root = await createTempDir()
+    await writeFile(path.join(root, "SKILL.md"), "# Skill\n", "utf8")
+    await writeFile(path.join(root, ".env.example"), "TOKEN=default\n", "utf8")
+
+    const service = new InstallerSourceService()
+    const source = await service.prepareLocalSkillSource({ sourceDirectoryPath: root })
+    const stored = service.getLocalSkill(source.localSourceId!)
+
+    expect(stored.draft.files.map((file) => file.originalName)).toContain(".env.example")
+    await expect(service.readLocalSkillAttachmentText(source, ".env.example"))
+      .resolves.toBe("TOKEN=default\n")
+    await expect(service.readLocalSkillAttachmentText(source, "missing.txt"))
+      .resolves.toBeNull()
+  })
+
+  it("rejects a local Skill source containing a root .env", async () => {
+    const root = await createTempDir()
+    await writeFile(path.join(root, "SKILL.md"), "# Skill\n", "utf8")
+    await writeFile(path.join(root, ".env"), "TOKEN=secret\n", "utf8")
+
+    const service = new InstallerSourceService()
+
+    await expect(service.prepareLocalSkillSource({ sourceDirectoryPath: root }))
+      .rejects.toThrow("Skill 源目录不能包含 .env，请只提交 .env.example。")
+  })
+
   it("rejects local Skill directories without root SKILL.md", async () => {
     const root = await createTempDir()
     await writeFile(path.join(root, "README.md"), "# Readme only\n", "utf8")

@@ -7,9 +7,31 @@ import type {
 } from "../../../../electron/runtime/data-repo/schemas/secrets"
 import { createDefaultConfig } from "../../../../src/lib/config"
 import type { SynapseConfig, SynapseConfigPatch } from "../../../../src/types/config"
+import { secretUpdateInputSchema } from "../../shared/schema"
 import { createSecretsService } from "../service"
 
 describe("SecretsService", () => {
+  it("keeps Skill env values inside the service during scan and queue update", async () => {
+    const harness = createHarness()
+    const service = createSecretsService(harness.deps)
+    await service.create({ name: "TOKEN", value: "private-value" })
+    const security = { actor: { kind: "user" as const }, permissionGuard: {} as never, auditSink: {} as never }
+
+    await service.scanSkillEnvBindings({ name: "token" }, security)
+    await service.queueSkillEnvBindings({
+      name: "token",
+      scanSessionId: "scan-1",
+      itemIds: ["item-1"],
+    }, security)
+
+    expect(harness.skillEnvBindings.scan).toHaveBeenCalledWith("TOKEN", "private-value", security)
+    expect(harness.skillEnvBindings.enqueue).toHaveBeenCalledWith({
+      name: "TOKEN",
+      scanSessionId: "scan-1",
+      itemIds: ["item-1"],
+    }, "private-value", security)
+  })
+
   it("creates and lists safe secret views without values", async () => {
     const service = createSecretsService(createHarness().deps)
 
@@ -53,22 +75,29 @@ describe("SecretsService", () => {
       .rejects.toThrow("密钥已存在")
   })
 
-  it("updates name value and description", async () => {
+  it("rejects attempts to rename an existing secret", () => {
+    expect(secretUpdateInputSchema.safeParse({
+      name: "TOKEN",
+      newName: "RENAMED_TOKEN",
+      description: "new description",
+    }).success).toBe(false)
+  })
+
+  it("updates value and description while preserving the original name", async () => {
     const service = createSecretsService(createHarness().deps)
     await service.create({ name: "TOKEN", value: "old", description: "old description" })
 
     await expect(service.update({
       name: "token",
-      newName: "RENAMED_TOKEN",
       value: "new",
       description: "new description",
     })).resolves.toEqual({
       id: "id-1",
-      name: "RENAMED_TOKEN",
+      name: "TOKEN",
       description: "new description",
       hasValue: true,
     })
-    await expect(service.get({ name: "RENAMED_TOKEN", includeValue: true }))
+    await expect(service.get({ name: "TOKEN", includeValue: true }))
       .resolves.toMatchObject({ value: "new" })
   })
 
@@ -210,17 +239,23 @@ function createHarness(options: HarnessOptions = {}) {
     if (patch.global?.variables) config.global.variables = patch.global.variables
     return config
   })
+  const skillEnvBindings = {
+    scan: vi.fn(async () => ({ scanSessionId: "scan-1", items: [] })),
+    enqueue: vi.fn(async () => ({ items: [] })),
+  }
 
   return {
     items,
     settings,
     config,
     updateConfig,
+    skillEnvBindings,
     deps: {
       items,
       settings,
       loadConfig: async () => config,
       updateConfig,
+      skillEnvBindings,
       now: () => new Date("2026-07-09T00:00:00.000Z"),
       createId: () => `id-${items.records.size + 1}`,
       logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },

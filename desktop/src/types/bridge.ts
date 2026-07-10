@@ -32,6 +32,10 @@ import type {
   SecretDeleteInput,
   SecretGetInput,
   SecretListResult,
+  SecretSkillEnvQueueInput,
+  SecretSkillEnvQueueResult,
+  SecretSkillEnvScanInput,
+  SecretSkillEnvScanResult,
   SecretSafeView,
   SecretUpdateInput,
   SecretUpsertInput,
@@ -110,6 +114,7 @@ import type {
   SynapsePrepareInlineRuleSourcePayload,
   SynapsePrepareLocalSkillSourcePayload,
   SynapseRuleInstallerSource,
+  SynapseSkillEnvInspectionResult,
   SynapseSkillInstallerSource,
 } from "./installers"
 import type {
@@ -956,6 +961,8 @@ export type SynapseBridge = {
     update: (input: SecretUpdateInput) => Promise<SecretSafeView>
     upsert: (input: SecretUpsertInput) => Promise<SecretUpsertResult>
     delete: (input: SecretDeleteInput) => Promise<SecretSafeView>
+    scanSkillEnvBindings: (input: SecretSkillEnvScanInput) => Promise<SecretSkillEnvScanResult>
+    queueSkillEnvBindings: (input: SecretSkillEnvQueueInput) => Promise<SecretSkillEnvQueueResult>
     onChanged: (listener: (event: SecretsChangedEvent) => void) => () => void
   }
   agentPersonas: {
@@ -1213,6 +1220,9 @@ export type SynapseBridge = {
     recordComplete: (sessionId: string) => Promise<{ ok: true }>
   }
   installers: {
+    inspectSkillEnvSource: (
+      source: SynapseSkillInstallerSource,
+    ) => Promise<SynapseSkillEnvInspectionResult>
     installSourceToEditor: (
       payload: SynapseInstallSourceToEditorPayload,
     ) => Promise<SynapseContentInstallResult>

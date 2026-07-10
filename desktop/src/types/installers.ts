@@ -32,6 +32,16 @@ export type SynapseSkillInstallerSource = SynapseInstallerSourceBase & {
   repositoryContentId?: string
 }
 
+export type SynapseSkillEnvDeclaration = {
+  name: string
+  defaultValue: string
+}
+
+export type SynapseSkillEnvInspectionResult = {
+  declarations: SynapseSkillEnvDeclaration[]
+  legacyPlaceholders: string[]
+}
+
 export type SynapseRuleInstallerSource = SynapseInstallerSourceBase & {
   kind: "rule"
   body?: string
@@ -61,6 +71,7 @@ export type SynapseInstallSourceToEditorPayload = {
   replaceConfirmed?: boolean
   replacedSourceIdentity?: string
   scope: SynapseEditorInstallScope
+  skillEnvValues?: Record<string, string>
   source: SynapseInstallerSource
   variableSubstitutions?: Record<string, string>
 }
@@ -77,6 +88,7 @@ export type SynapseInstallSourceToEditorTargetsPayload = {
   mode: "install" | "reinstall" | "update"
   overwriteConfirmed?: boolean
   replaceConfirmed?: boolean
+  skillEnvValues?: Record<string, string>
   variableSubstitutions?: Record<string, string>
 }
 

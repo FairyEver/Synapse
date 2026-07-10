@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -11,6 +11,11 @@ import {
 
 const mocks = vi.hoisted(() => ({
   getSkillDetail: vi.fn(),
+  logger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
   prepareSkillDirectory: vi.fn(),
   rename: vi.fn(),
   rm: vi.fn(),
@@ -46,6 +51,10 @@ vi.mock("../editor-adapter-service", () => ({
   editorAdapterService: {
     resolveTarget: mocks.resolveTarget,
   },
+}))
+
+vi.mock("../log-store", () => ({
+  createMainLogger: () => mocks.logger,
 }))
 
 vi.mock("../content-service", () => ({
@@ -334,6 +343,193 @@ describe("EditorInstallService security", () => {
     }))
   })
 
+  it.each(["env", "directory"] as const)(
+    "keeps a changed internal backup after successful install and returns a warning (%s)",
+    async (mutation) => {
+      const root = await createTempRoot()
+      const targetPath = path.join(root, "skills", "test-skill")
+      let internalBackupPath = ""
+      let displacedOriginalPath = ""
+      let renameCall = 0
+      await mkdir(targetPath, { recursive: true })
+      await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+      await writeFile(path.join(targetPath, ".env"), "TOKEN=original\n", "utf8")
+
+      mocks.rename.mockImplementation(async (sourcePath, destinationPath) => {
+        const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+        renameCall += 1
+        await actual.rename(sourcePath, destinationPath)
+        if (renameCall === 1) {
+          internalBackupPath = String(destinationPath)
+          return
+        }
+        if (renameCall !== 2) return
+        if (mutation === "env") {
+          await writeFile(path.join(internalBackupPath, ".env"), "TOKEN=changed-after-install\n", "utf8")
+          return
+        }
+        displacedOriginalPath = `${internalBackupPath}-displaced`
+        await actual.rename(internalBackupPath, displacedOriginalPath)
+        await mkdir(internalBackupPath)
+        await writeFile(path.join(internalBackupPath, "concurrent-marker.txt"), "concurrent", "utf8")
+      })
+      mocks.resolveTarget.mockResolvedValue({
+        contentType: "skill",
+        editorId: "test-editor",
+        label: "Test Editor",
+        message: null,
+        scope: "global",
+        status: "ready",
+        targetExists: true,
+        targetKind: "directory",
+        targetPath,
+      })
+      mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+      mocks.prepareSkillDirectory.mockImplementation(async (
+        { stagingDirectoryPath }: { stagingDirectoryPath: string },
+      ) => {
+        await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# New Skill\n", "utf8")
+      })
+
+      const result = await editorInstallService.installToEditor({
+        contentId: "skill-1",
+        contentType: "skill",
+        editorId: "test-editor",
+        overwriteConfirmed: true,
+        scope: "global",
+      }, {
+        actor: { kind: "user" },
+        auditSink: new InMemoryAuditSink(),
+        permissionGuard: createPermissionGuard(),
+      })
+
+      expect(result.warning).toBe("旧 Skill 备份发生变化，已保留，请手动检查。")
+      await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8"))
+        .resolves.toBe("# New Skill\n")
+      await expect(readFile(path.join(targetPath, ".env"), "utf8"))
+        .resolves.toBe("TOKEN=original\n")
+      if (mutation === "env") {
+        await expect(readFile(path.join(internalBackupPath, ".env"), "utf8"))
+          .resolves.toBe("TOKEN=changed-after-install\n")
+      } else {
+        await expect(readFile(path.join(internalBackupPath, "concurrent-marker.txt"), "utf8"))
+          .resolves.toBe("concurrent")
+        await expect(readFile(path.join(displacedOriginalPath, ".env"), "utf8"))
+          .resolves.toBe("TOKEN=original\n")
+      }
+      expect(mocks.logger.warn).toHaveBeenCalledWith(
+        "Retained changed atomic swap backup",
+        expect.objectContaining({ targetName: "test-skill", errorName: "Error" }),
+      )
+    },
+  )
+
+  it("deletes an unchanged internal backup after successful install", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    let internalBackupPath = ""
+    let renameCall = 0
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+    await writeFile(path.join(targetPath, ".env"), "TOKEN=original\n", "utf8")
+    mocks.rename.mockImplementation(async (sourcePath, destinationPath) => {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      renameCall += 1
+      await actual.rename(sourcePath, destinationPath)
+      if (renameCall === 1) internalBackupPath = String(destinationPath)
+    })
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockImplementation(async (
+      { stagingDirectoryPath }: { stagingDirectoryPath: string },
+    ) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# New Skill\n", "utf8")
+    })
+
+    const result = await editorInstallService.installToEditor({
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      overwriteConfirmed: true,
+      scope: "global",
+    }, {
+      actor: { kind: "user" },
+      auditSink: new InMemoryAuditSink(),
+      permissionGuard: createPermissionGuard(),
+    })
+
+    expect(result.warning).toBeUndefined()
+    await expect(lstat(internalBackupPath)).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("keeps a warning when deleting a validated internal backup fails", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    let internalBackupPath = ""
+    let renameCall = 0
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+    await writeFile(path.join(targetPath, ".env"), "TOKEN=original\n", "utf8")
+    mocks.rename.mockImplementation(async (sourcePath, destinationPath) => {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      renameCall += 1
+      await actual.rename(sourcePath, destinationPath)
+      if (renameCall === 1) internalBackupPath = String(destinationPath)
+    })
+    mocks.rm.mockImplementation(async (target, options) => {
+      if (String(target) === internalBackupPath) {
+        throw Object.assign(new Error("simulated backup cleanup failure"), { code: "EACCES" })
+      }
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      return actual.rm(target, options)
+    })
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockImplementation(async (
+      { stagingDirectoryPath }: { stagingDirectoryPath: string },
+    ) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# New Skill\n", "utf8")
+    })
+
+    const result = await editorInstallService.installToEditor({
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      overwriteConfirmed: true,
+      scope: "global",
+    }, {
+      actor: { kind: "user" },
+      auditSink: new InMemoryAuditSink(),
+      permissionGuard: createPermissionGuard(),
+    })
+
+    expect(result.warning).toBe("旧 Skill 备份发生变化，已保留，请手动检查。")
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8"))
+      .resolves.toBe("# New Skill\n")
+    await expect(readFile(path.join(internalBackupPath, "SKILL.md"), "utf8"))
+      .resolves.toBe("# Existing Skill\n")
+  })
+
   it("copies the old Skill to desktop backup when rename crosses devices", async () => {
     const root = await createTempRoot()
     const targetPath = path.join(root, "skills", "test-skill")
@@ -557,6 +753,74 @@ describe("EditorInstallService security", () => {
         resource: targetPath,
       }),
     ]))
+  })
+
+  it("preserves a concurrent target and desktop backup when replacement fails after backup", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
+    const markerPath = path.join(targetPath, "concurrent-marker.txt")
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockImplementation(async () => {
+      await mkdir(targetPath, { recursive: true })
+      await writeFile(markerPath, "concurrent", "utf8")
+      throw new Error("prepare failed")
+    })
+
+    const auditSink = new InMemoryAuditSink()
+    const payload: SynapseInstallToEditorPayload = {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      overwriteConfirmed: true,
+      replaceConfirmed: true,
+      scope: "global",
+    }
+
+    await expect(editorInstallService.installToEditor(payload, {
+      actor: { kind: "user" },
+      auditSink,
+      permissionGuard: createPermissionGuard(),
+    })).rejects.toThrow("旧 Skill 备份恢复失败")
+
+    await expect(readFile(markerPath, "utf8")).resolves.toBe("concurrent")
+    await expect(readFile(path.join(backupPath, "SKILL.md"), "utf8"))
+      .resolves.toBe("# Existing Skill\n")
+    expect(auditSink.list()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        action: "fs.write",
+        outcome: "failed",
+        resource: backupPath,
+        metadata: expect.objectContaining({ operation: "install-backup-restore" }),
+      }),
+      expect.objectContaining({
+        action: "fs.write",
+        outcome: "failed",
+        resource: targetPath,
+      }),
+    ]))
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      "Failed to restore backed up skill directory",
+      expect.objectContaining({
+        backupPath: path.basename(backupPath),
+        targetPath: path.basename(targetPath),
+        errorName: "Error",
+      }),
+    )
   })
 
   it("reports restore failure when replacement fails after backup", async () => {

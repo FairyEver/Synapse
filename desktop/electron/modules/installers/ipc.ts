@@ -5,6 +5,7 @@ import type {
   SynapseInstallSourceToEditorTargetsPayload,
   SynapsePrepareInlineRuleSourcePayload,
   SynapsePrepareLocalSkillSourcePayload,
+  SynapseSkillInstallerSource,
 } from "../../../src/types/installers"
 import type { EventBus } from "../../runtime/event-bus"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
@@ -63,6 +64,7 @@ const installSourceToEditorSchema = z.object({
   replaceConfirmed: z.boolean().optional(),
   replacedSourceIdentity: z.string().optional(),
   scope: z.enum(["global", "project"]),
+  skillEnvValues: z.record(z.string(), z.string()).optional(),
   source: installerSourceSchema,
   variableSubstitutions: z.record(z.string(), z.string()).optional(),
 }).strict()
@@ -77,6 +79,7 @@ const installSourceToEditorTargetsSchema = z.object({
   mode: z.enum(["install", "reinstall", "update"]),
   overwriteConfirmed: z.boolean().optional(),
   replaceConfirmed: z.boolean().optional(),
+  skillEnvValues: z.record(z.string(), z.string()).optional(),
   source: installerSourceSchema,
   targets: z.array(installSourceTargetSchema),
   variableSubstitutions: z.record(z.string(), z.string()).optional(),
@@ -85,6 +88,20 @@ const installSourceToEditorTargetsSchema = z.object({
 export const installersIpcModule: IpcModule = {
   id: "installers",
   methods: {
+    inspectSkillEnvSource: {
+      kind: "invoke",
+      channel: "synapse:installers:inspect-skill-env-source",
+      request: skillInstallerSourceSchema,
+      response: z.object({
+        declarations: z.array(z.object({
+          name: z.string(),
+          defaultValue: z.string(),
+        }).strict()),
+        legacyPlaceholders: z.array(z.string()),
+      }).strict(),
+      handler: (_ctx, source: SynapseSkillInstallerSource) =>
+        editorInstallService.inspectSkillEnvSource(source),
+    },
     prepareLocalSkillSource: {
       kind: "invoke",
       channel: "synapse:installers:prepare-local-skill-source",

@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { SECRETS_MCP_TOOL_NAMES } from "../../../secrets/shared/capability"
 import { SYNAPSE_SKILL_SOURCE_IDENTITY } from "../../shared/capability"
 import { createSynapseSkillService } from "../service"
 import { buildDriveTools } from "../../../../synapse-capabilities/shared/drive-domain"
@@ -27,6 +28,7 @@ async function createPackageRoot() {
     "utf8",
   )
   await writeFile(path.join(root, "database", "index.md"), "# Database\n", "utf8")
+  await writeFile(path.join(root, ".env.example"), "TOKEN=default\n", "utf8")
   return root
 }
 
@@ -84,6 +86,23 @@ describe("SynapseSkillService", () => {
     )
 
     await expect(readFile(targetPath, "utf8")).resolves.toBe("# Database\n")
+  })
+
+  it("reads prepared text attachments with null semantics", async () => {
+    const packageRoot = await createPackageRoot()
+    const service = createSynapseSkillService({ packageRoot })
+    const source = await service.prepareInstallSource()
+
+    await expect(service.readPreparedSkillAttachmentText(
+      source.preparedSourceId,
+      source.sourceIdentity,
+      ".env.example",
+    )).resolves.toBe("TOKEN=default\n")
+    await expect(service.readPreparedSkillAttachmentText(
+      source.preparedSourceId,
+      source.sourceIdentity,
+      "../.env.example",
+    )).resolves.toBeNull()
   })
 
   it("ships the current system Synapse Skill package", async () => {
@@ -167,5 +186,33 @@ describe("SynapseSkillService", () => {
     expect(modelPriceApiText).toContain("model_price_rule_update")
     expect(modelPriceApiText).toContain("ruleId")
     expect(modelPriceApiText).toContain("already indexed usage totals")
+  })
+
+  it("documents the immutable secret name and desktop-only Skill ENV update boundary", async () => {
+    const [secretsIndex, secretsApiReference] = await Promise.all([
+      readFile(path.join(systemPackageRoot, "secrets/index.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "secrets/api-reference.md"), "utf8"),
+    ])
+    const secretsDocs = `${secretsIndex}\n${secretsApiReference}`
+    const documentedTools = [...secretsApiReference.matchAll(/^### (app_secrets_[a-z_]+)$/gm)]
+      .map((match) => match[1])
+      .sort()
+    const registeredTools = [...Object.values(SECRETS_MCP_TOOL_NAMES)].sort()
+
+    expect(documentedTools).toEqual(registeredTools)
+    expect(secretsIndex).toContain("Names are immutable after creation.")
+    expect(secretsIndex).toContain("never scan or write installed Skill files")
+    expect(secretsIndex).toContain("in-memory serial queue")
+    expect(secretsApiReference).toContain("Names are immutable after creation.")
+    expect(secretsApiReference).toContain("not MCP actions or tools")
+    expect(secretsApiReference).toContain("never scan or write installed Skill files")
+    expect(secretsIndex).toContain("1 MiB")
+    expect(secretsIndex).toContain("Windows")
+    expect(secretsApiReference).toContain("1 MiB")
+    expect(secretsApiReference).toContain("Windows")
+    expect(secretsDocs).not.toMatch(/existing secrets or renames|supports renames/i)
+    expect(secretsDocs).not.toMatch(/\bapp_secrets_[a-z0-9_]*(?:scan|queue)[a-z0-9_]*\b/i)
+    expect(secretsDocs).not.toMatch(/\bapp\.secrets\.[a-z0-9_.]*(?:scan|queue)[a-z0-9_.]*\b/i)
+    expect(secretsDocs).not.toContain("newName")
   })
 })

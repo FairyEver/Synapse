@@ -4,6 +4,7 @@ import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import { applyVariableSubstitutions } from "../../src/lib/variable-substitution"
+import { assertNoRuntimeSkillEnvPath } from "../../src/lib/content-attachments"
 import type { SynapseContentDetail } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
@@ -35,6 +36,10 @@ import { editorInstallStrategyById } from "./definitions/generated/main-registry
 import { pathExists } from "./fs-utils"
 import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
+import {
+  materializeSkillEnv,
+  type SkillEnvMaterializationGuard,
+} from "./skill-env/skill-env-materializer"
 import {
   checkEditorWritePermission,
   recordEditorWriteAudit,
@@ -174,6 +179,7 @@ function toInstallToEditorPayload(payload: SynapseInstallSourceToEditorPayload):
     overwriteConfirmed: payload.overwriteConfirmed,
     replaceConfirmed: payload.replaceConfirmed,
     replacedContentId: payload.replacedSourceIdentity,
+    skillEnvValues: payload.skillEnvValues,
     variableSubstitutions: payload.variableSubstitutions,
     preparedSourceId: payload.source.preparedSourceId,
   }
@@ -315,6 +321,9 @@ export class EditorInstallCore {
             : payload.preparedSourceId
             ? await this.deps.preparedSourceProvider.readPreparedSkill(payload.preparedSourceId, payload.contentId)
             : await contentService.getSkillDetail(payload.contentId)
+          assertNoRuntimeSkillEnvPath(
+            detail?.attachments.map((attachment) => attachment.originalName) ?? [],
+          )
           const repositoryRootPath = sourceOverride?.readSkillDetail || payload.preparedSourceId || !detail
             ? null
             : await getActiveRepositoryRootPath()
@@ -370,6 +379,7 @@ export class EditorInstallCore {
             : detail
 
           try {
+            let skillEnvGuard: SkillEnvMaterializationGuard | null = null
             await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
               if (!detailWithSubstitutions) {
                 throw new Error("Skill 安装源不可用。")
@@ -411,6 +421,42 @@ export class EditorInstallCore {
                   })
                 },
               })
+              await materializeSkillEnv({
+                stagingDirectoryPath,
+                existingTargetDirectoryPath: target.targetPath,
+                values: payload.skillEnvValues ?? {},
+                registerPrecondition(guard) {
+                  skillEnvGuard = guard
+                },
+              })
+            }, {
+              beforeSwap: async () => {
+                if (!skillEnvGuard) {
+                  throw new Error("Skill .env 更新前置校验未注册。")
+                }
+                await skillEnvGuard.validate()
+              },
+              afterMoveExistingTarget: async (movedTargetPath) => {
+                if (!skillEnvGuard) {
+                  throw new Error("Skill .env 更新前置校验未注册。")
+                }
+                await skillEnvGuard.validateMovedTarget(movedTargetPath)
+              },
+              beforeRestoreMovedTarget: async (movedTargetPath) => {
+                if (!skillEnvGuard) {
+                  throw new Error("Skill .env 更新前置校验未注册。")
+                }
+                await skillEnvGuard.validateMovedTargetForRestore(movedTargetPath)
+              },
+              beforeDeleteMovedTarget: async (movedTargetPath) => {
+                if (!skillEnvGuard) {
+                  throw new Error("Skill .env 更新前置校验未注册。")
+                }
+                await skillEnvGuard.validateMovedTarget(movedTargetPath)
+              },
+              onRetainedMovedTarget: () => {
+                installWarning = "旧 Skill 备份发生变化，已保留，请手动检查。"
+              },
             })
           } catch (error) {
             if (backupPathForRestore && await pathExists(backupPathForRestore)) {
@@ -420,7 +466,9 @@ export class EditorInstallCore {
                 targetName: path.basename(target.targetPath),
               }
               try {
-                await rm(target.targetPath, { recursive: true, force: true })
+                if (await pathEntryExists(target.targetPath)) {
+                  throw new Error("Skill 目标目录已重新出现，不能自动恢复旧备份。", { cause: error })
+                }
                 await moveDirectoryAllowingCrossDevice(backupPathForRestore, target.targetPath)
                 recordEditorWriteAudit(security, backupPathForRestore, "allowed", restoreAuditMetadata)
               } catch (restoreError) {

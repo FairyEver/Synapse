@@ -13,6 +13,14 @@ Tools return this safe view unless `app_secrets_item_get` is called with `includ
 }
 ```
 
+## Skill ENV Boundary
+
+Names are immutable after creation. A case-insensitive secret name can associate with the same key in an installed Skill root `.env` file, without an installation database.
+
+MCP create, update, and upsert modify encrypted secret storage only and never scan or write installed Skill files. Explicit scanning and the user-confirmed in-memory serial update queue are desktop app IPC/UI capabilities, not MCP actions or tools.
+
+Desktop runtime `.env` scanning, reinstall merging, and queue updates have a 1 MiB file-size limit and fail safely above it. Desktop scanning is available on Windows, but the current Windows queue returns a failure for each write and requires the user to update the local `.env` manually. On macOS and Linux, the desktop queue performs a final validation before a same-directory atomic replacement. MCP tools never scan or write Skill `.env` files and do not bypass these limits.
+
 ## Tools
 
 ### app_secrets_item_list
@@ -63,13 +71,12 @@ Input:
 ```json
 {
   "name": "API_TOKEN",
-  "newName": "API_TOKEN_2",
   "value": "new secret value",
   "description": "optional"
 }
 ```
 
-Updates an existing secret. Omit `value` when only changing metadata. The response never includes `value`.
+Updates an existing secret value or description. The name identifies the existing secret and cannot be changed. Omit `value` when only changing metadata. The response never includes `value`.
 
 ### app_secrets_item_upsert
 
