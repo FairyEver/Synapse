@@ -454,8 +454,12 @@ describe("SecretsModule", () => {
     mocks.secrets.queueSkillEnvBindings.mockResolvedValueOnce({
       items: [
         { ...scanResult.items[0], status: "updated" },
-        { ...scanResult.items[1], status: "failed" },
-        { ...scanResult.items[2], status: "conflict" },
+        {
+          ...scanResult.items[1],
+          status: "failed",
+          message: "当前 Windows 环境不支持安全原子更新。",
+        },
+        { ...scanResult.items[2], status: "conflict", message: "扫描结果已失效。" },
       ],
     })
 
@@ -480,6 +484,9 @@ describe("SecretsModule", () => {
     expect(document.body.textContent).toContain("已更新")
     expect(document.body.textContent).toContain("更新失败")
     expect(document.body.textContent).toContain("文件已变化")
+    expect(rowText("skill-two")).toContain("当前 Windows 环境不支持安全原子更新。")
+    expect(rowText("skill-three")).toContain("扫描结果已失效。")
+    expect(document.body.textContent).not.toContain("super-secret")
   })
 
   it("keeps the scanned rows available when the queue request fails", async () => {
@@ -816,6 +823,13 @@ function clickCheckbox(id: string) {
   const checkbox = document.getElementById(id)
   if (!checkbox) throw new Error(`Checkbox not found: ${id}`)
   checkbox.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+}
+
+function rowText(skillName: string): string {
+  const row = Array.from(document.querySelectorAll("tr"))
+    .find((candidate) => candidate.textContent?.includes(skillName))
+  if (!row) throw new Error(`Missing Skill row: ${skillName}`)
+  return row.textContent ?? ""
 }
 
 function setInputValue(selector: string, value: string) {

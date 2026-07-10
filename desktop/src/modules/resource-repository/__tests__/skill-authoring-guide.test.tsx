@@ -102,6 +102,8 @@ describe("Skill authoring guide content", () => {
     expect(skillAuthoringGuideMarkdown).toContain("保留未声明的用户自有键")
     expect(skillAuthoringGuideMarkdown).toContain("已有声明键的现有值")
     expect(skillAuthoringGuideMarkdown).toContain("新声明或缺失的键使用安装确认弹窗中的值")
+    expect(skillAuthoringGuideMarkdown).toContain("当前 Windows 不执行安全原子队列写入")
+    expect(skillAuthoringGuideMarkdown).toContain("1 MiB")
   })
 
   it("states the dotenv key-name constraint in the guide and both canonical prompts", () => {

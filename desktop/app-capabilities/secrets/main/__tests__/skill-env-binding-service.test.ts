@@ -8,7 +8,11 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { AuditSink, PermissionGuard } from "../../../../electron/runtime/security"
 import type { TrustedSkillRoot } from "../../../../electron/services/editor-scan-roots"
-import { createSkillEnvBindingService, sameIdentity } from "../skill-env-binding-service"
+import {
+  createSkillEnvBindingService,
+  removeAtomicTempFile,
+  sameIdentity,
+} from "../skill-env-binding-service"
 
 const tempRoots: string[] = []
 
@@ -18,6 +22,16 @@ afterEach(async () => {
 })
 
 describe("SkillEnvBindingService", () => {
+  it("reports a missing default atomic temp file instead of treating it as removed", async () => {
+    const root = await createRoot()
+    const tempPath = path.join(root, ".synapse-env-missing.tmp")
+
+    await expect(removeAtomicTempFile(tempPath)).rejects.toMatchObject({ code: "ENOENT" })
+    await writeFile(tempPath, "staged")
+    await expect(removeAtomicTempFile(tempPath)).resolves.toBeUndefined()
+    await expect(stat(tempPath)).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("fails closed when stable file identity is unavailable", () => {
     const unavailable = {
       dev: 0n,

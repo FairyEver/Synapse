@@ -147,7 +147,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
   const atomicFileOps = deps.atomicFileOps ?? {
     open: (filePath: string, flags: number, mode: number) => open(filePath, flags, mode),
     rename,
-    remove: (filePath: string) => rm(filePath, { force: true }),
+    remove: removeAtomicTempFile,
   }
 
   function pruneSessions(timestamp: number): void {
@@ -560,6 +560,10 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
   }
 
   return { scan, enqueue }
+}
+
+export function removeAtomicTempFile(filePath: string): Promise<void> {
+  return rm(filePath)
 }
 
 export type SkillEnvBindingService = ReturnType<typeof createSkillEnvBindingService>

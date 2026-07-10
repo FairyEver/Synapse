@@ -33,7 +33,10 @@ type SkillEnvUpdateDialogProps = {
   readonly onQueueError: (error: unknown) => void
 }
 
-type QueueStatusById = Record<string, SkillEnvBindingQueueItem["status"]>
+type QueueResultById = Record<
+  string,
+  Pick<SkillEnvBindingQueueItem, "status" | "message">
+>
 
 export function SkillEnvUpdateDialog({
   name,
@@ -42,7 +45,7 @@ export function SkillEnvUpdateDialog({
   onQueueError,
 }: SkillEnvUpdateDialogProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [queueStatuses, setQueueStatuses] = useState<QueueStatusById>({})
+  const [queueResults, setQueueResults] = useState<QueueResultById>({})
   const [updating, setUpdating] = useState(false)
   const activeSessionRef = useRef<string | null>(null)
   const secretsBridge = useMemo(() => requireBridgeDomain("secrets"), [])
@@ -53,7 +56,7 @@ export function SkillEnvUpdateDialog({
     setSelectedIds(scanResult?.items
       .filter((item) => item.status === "needs_update")
       .map((item) => item.id) ?? [])
-    setQueueStatuses({})
+    setQueueResults({})
     setUpdating(false)
   }, [scanResult])
 
@@ -74,7 +77,10 @@ export function SkillEnvUpdateDialog({
     try {
       const result = await secretsBridge.queueSkillEnvBindings({ name, scanSessionId, itemIds })
       if (activeSessionRef.current !== scanSessionId) return
-      setQueueStatuses(Object.fromEntries(result.items.map((item) => [item.id, item.status])))
+      setQueueResults(Object.fromEntries(result.items.map((item) => [item.id, {
+        status: item.status,
+        message: item.message,
+      }])))
       setSelectedIds([])
     } catch (error) {
       if (activeSessionRef.current === scanSessionId) onQueueError(error)
@@ -106,7 +112,7 @@ export function SkillEnvUpdateDialog({
               </TableHeader>
               <TableBody>
                 {scanResult?.items.map((item) => {
-                  const selectable = item.status === "needs_update" && queueStatuses[item.id] === undefined
+                  const selectable = item.status === "needs_update" && queueResults[item.id] === undefined
                   return (
                     <TableRow key={item.id}>
                       <TableCell>
@@ -124,7 +130,7 @@ export function SkillEnvUpdateDialog({
                         {item.envPath}
                       </TableCell>
                       <TableCell>
-                        <BindingStatusBadge item={item} queueStatus={queueStatuses[item.id]} />
+                        <BindingStatus item={item} queueResult={queueResults[item.id]} />
                       </TableCell>
                     </TableRow>
                   )
@@ -147,20 +153,30 @@ export function SkillEnvUpdateDialog({
   )
 }
 
-function BindingStatusBadge({
+function BindingStatus({
   item,
-  queueStatus,
+  queueResult,
 }: {
   readonly item: SkillEnvBindingItem
-  readonly queueStatus: SkillEnvBindingQueueItem["status"] | undefined
+  readonly queueResult: Pick<SkillEnvBindingQueueItem, "status" | "message"> | undefined
 }) {
+  const queueStatus = queueResult?.status
   const label = queueStatus ? queueStatusLabel(queueStatus) : scanStatusLabel(item.status)
   const destructive = queueStatus === "failed"
     || queueStatus === "conflict"
     || item.status === "invalid"
     || item.status === "unwritable"
     || item.status === "unsafe_link"
-  return <Badge variant={destructive ? "destructive" : "secondary"}>{label}</Badge>
+  return (
+    <div className="space-y-1">
+      <Badge variant={destructive ? "destructive" : "secondary"}>{label}</Badge>
+      {queueResult?.message ? (
+        <p className="max-w-64 whitespace-normal break-words text-xs text-muted-foreground">
+          {queueResult.message}
+        </p>
+      ) : null}
+    </div>
+  )
 }
 
 function scanStatusLabel(status: SkillEnvBindingItem["status"]): string {
