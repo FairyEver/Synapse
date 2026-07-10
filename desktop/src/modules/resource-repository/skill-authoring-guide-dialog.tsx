@@ -11,10 +11,17 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "sonner"
 import skillAuthoringGuideMarkdown from "./docs/skill-authoring-guide.md?raw"
-import { parseSkillAuthoringGuide, type SkillAuthoringGuideSegment } from "./skill-authoring-guide"
+import {
+  loadSkillAuthoringGuide,
+  type SkillAuthoringGuideLoadResult,
+  type SkillAuthoringGuideSegment,
+} from "./skill-authoring-guide"
 
 const logger = createRendererLogger("resource-repository.skill-authoring-guide")
-const guideSegments = parseSkillAuthoringGuide(skillAuthoringGuideMarkdown)
+const guide = loadSkillAuthoringGuide(skillAuthoringGuideMarkdown)
+if (guide.status === "error") {
+  logger.error("Skill authoring guide load failed.", guide.error)
+}
 
 type SkillAuthoringGuideDialogProps = {
   readonly open: boolean
@@ -32,17 +39,31 @@ export function SkillAuthoringGuideDialog({ open, onOpenChange }: SkillAuthoring
         <DialogFrame className="max-h-[calc(100vh-2rem)]">
           <DialogFrameHeader title="Skill 开发指南" />
           <DialogFrameBody>
-            <ScrollArea className="h-full min-h-0" data-track="skill-authoring-guide">
-              <div className="space-y-6 px-5 py-4">
-                {guideSegments.map((segment, index) => (
-                  <GuideSegment key={segment.kind === "prompt" ? segment.id : `markdown-${index}`} segment={segment} />
-                ))}
-              </div>
-            </ScrollArea>
+            <SkillAuthoringGuideContent guide={guide} />
           </DialogFrameBody>
         </DialogFrame>
       </DialogContent>
     </Dialog>
+  )
+}
+
+export function SkillAuthoringGuideContent({
+  guide,
+}: {
+  readonly guide: SkillAuthoringGuideLoadResult
+}) {
+  if (guide.status === "error") {
+    return <p className="px-5 py-4 text-sm text-muted-foreground">指南加载失败</p>
+  }
+
+  return (
+    <ScrollArea className="h-full min-h-0" data-track="skill-authoring-guide">
+      <div className="space-y-6 px-5 py-4">
+        {guide.segments.map((segment, index) => (
+          <GuideSegment key={segment.kind === "prompt" ? segment.id : `markdown-${index}`} segment={segment} />
+        ))}
+      </div>
+    </ScrollArea>
   )
 }
 

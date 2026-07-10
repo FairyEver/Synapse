@@ -14,6 +14,30 @@ export type SkillAuthoringGuideSegment =
       readonly content: string
     }
 
+export type SkillAuthoringGuideLoadResult =
+  | { readonly status: "success"; readonly segments: readonly SkillAuthoringGuideSegment[] }
+  | {
+      readonly status: "error"
+      readonly error: {
+        readonly errorName: string
+        readonly messageLength: number
+      }
+    }
+
+export function loadSkillAuthoringGuide(markdown: string): SkillAuthoringGuideLoadResult {
+  try {
+    return { status: "success", segments: parseSkillAuthoringGuide(markdown) }
+  } catch (error) {
+    return {
+      status: "error",
+      error: {
+        errorName: error instanceof Error ? error.name : typeof error,
+        messageLength: error instanceof Error ? error.message.length : 0,
+      },
+    }
+  }
+}
+
 export function parseSkillAuthoringGuide(markdown: string): SkillAuthoringGuideSegment[] {
   const segments: SkillAuthoringGuideSegment[] = []
   const promptIds = new Set<SkillAuthoringPromptId>()

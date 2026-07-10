@@ -1,12 +1,15 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react"
+import { act, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import skillAuthoringGuideMarkdown from "../docs/skill-authoring-guide.md?raw"
-import { SkillAuthoringGuideDialog } from "../skill-authoring-guide-dialog"
-import { parseSkillAuthoringGuide } from "../skill-authoring-guide"
+import {
+  SkillAuthoringGuideContent,
+  SkillAuthoringGuideDialog,
+} from "../skill-authoring-guide-dialog"
+import { loadSkillAuthoringGuide, parseSkillAuthoringGuide } from "../skill-authoring-guide"
 
 const mocks = vi.hoisted(() => ({
   logger: {
@@ -76,6 +79,21 @@ describe("parseSkillAuthoringGuide", () => {
   ])("rejects %s blocks", (_caseName, markdown) => {
     expect(() => parseSkillAuthoringGuide(markdown)).toThrow("Skill 开发指南格式无效。")
   })
+
+  it("returns safe error metadata without retaining malformed guide content", () => {
+    const sensitiveMarkdown = `${VALID_GUIDE}\nprivate prompt content\n:::`
+
+    const result = loadSkillAuthoringGuide(sensitiveMarkdown)
+
+    expect(result).toEqual({
+      status: "error",
+      error: {
+        errorName: "Error",
+        messageLength: "Skill 开发指南格式无效。".length,
+      },
+    })
+    expect(JSON.stringify(result)).not.toContain("private prompt content")
+  })
 })
 
 describe("Skill authoring guide content", () => {
@@ -84,6 +102,16 @@ describe("Skill authoring guide content", () => {
     expect(skillAuthoringGuideMarkdown).toContain("保留未声明的用户自有键")
     expect(skillAuthoringGuideMarkdown).toContain("已有声明键的现有值")
     expect(skillAuthoringGuideMarkdown).toContain("新声明或缺失的键使用安装确认弹窗中的值")
+  })
+
+  it("states the dotenv key-name constraint in the guide and both canonical prompts", () => {
+    const keyNameConstraint = "[A-Za-z_][A-Za-z0-9_]*"
+    const segments = parseSkillAuthoringGuide(skillAuthoringGuideMarkdown)
+    const prompts = segments.filter((segment) => segment.kind === "prompt")
+
+    expect(skillAuthoringGuideMarkdown.split(keyNameConstraint)).toHaveLength(4)
+    expect(prompts).toHaveLength(2)
+    expect(prompts.every((prompt) => prompt.content.includes(keyNameConstraint))).toBe(true)
   })
 })
 
@@ -135,16 +163,29 @@ describe("SkillAuthoringGuideDialog", () => {
     expect(JSON.stringify(mocks.logger.error.mock.calls)).not.toContain("permission denied")
     expect(JSON.stringify(mocks.logger.error.mock.calls)).not.toContain("请检查当前目录")
   })
+
+  it("shows only the load failure state when the guide is malformed", async () => {
+    const guide = loadSkillAuthoringGuide(`${VALID_GUIDE}\n:::`)
+    await renderContent(roots, <SkillAuthoringGuideContent guide={guide} />)
+
+    expect(document.body.textContent).toContain("指南加载失败")
+    expect(document.body.textContent).not.toContain("请检查当前目录中的已有 Skill")
+    expect(findButtons("复制提示词")).toHaveLength(0)
+  })
 })
 
 async function renderDialog(roots: Root[]): Promise<void> {
+  await renderContent(roots, <SkillAuthoringGuideDialog open onOpenChange={vi.fn()} />)
+}
+
+async function renderContent(roots: Root[], content: ReactNode): Promise<void> {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
   roots.push(root)
 
   await act(async () => {
-    root.render(<SkillAuthoringGuideDialog open onOpenChange={vi.fn()} />)
+    root.render(content)
     await Promise.resolve()
   })
 }
