@@ -4,6 +4,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import skillAuthoringGuideMarkdown from "../docs/skill-authoring-guide.md?raw"
 import { SkillAuthoringGuideDialog } from "../skill-authoring-guide-dialog"
 import { parseSkillAuthoringGuide } from "../skill-authoring-guide"
 
@@ -69,8 +70,21 @@ describe("parseSkillAuthoringGuide", () => {
     ["unknown prompt", VALID_GUIDE.replace('id="create-skill"', 'id="other-skill"')],
     ["empty prompt", VALID_GUIDE.replace("请在当前目录创建一个新 Skill。\n:::", "   \n:::")],
     ["stray directive marker", `${VALID_GUIDE}\n:::`],
+    ["leading-space unknown prompt", `${VALID_GUIDE}\n  :::synapse-prompt id="other-skill" title="未知"`],
+    ["trailing-space closer inside a prompt", VALID_GUIDE.replace("第二行保持原样。\n:::", "第二行保持原样。\n::: \n:::")],
+    ["stray whitespace closer", `${VALID_GUIDE}\n  :::  `],
   ])("rejects %s blocks", (_caseName, markdown) => {
     expect(() => parseSkillAuthoringGuide(markdown)).toThrow("Skill 开发指南格式无效。")
+  })
+})
+
+describe("Skill authoring guide content", () => {
+  it("describes reinstall value replacement without claiming declared values are preserved", () => {
+    expect(skillAuthoringGuideMarkdown).toContain("安装 Skill 时，Synapse 根据根目录的 `.env.example` 创建本地 `.env`")
+    expect(skillAuthoringGuideMarkdown).toContain("保留未声明的用户自有键")
+    expect(skillAuthoringGuideMarkdown).toContain("使用安装确认弹窗中的值写入已声明键")
+    expect(skillAuthoringGuideMarkdown).toContain("继续前应核对确认弹窗中的值")
+    expect(skillAuthoringGuideMarkdown).not.toContain("更新 Skill 时会保留已有键值")
   })
 })
 

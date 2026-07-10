@@ -31,7 +31,7 @@ export function parseSkillAuthoringGuide(markdown: string): SkillAuthoringGuideS
     const promptStart = PROMPT_START.exec(line)
 
     if (!promptStart) {
-      if (line === PROMPT_END || line.startsWith(PROMPT_DIRECTIVE_PREFIX)) throwInvalidGuide()
+      if (isDirectiveLike(line)) throwInvalidGuide()
       markdownLines.push(line)
       continue
     }
@@ -49,7 +49,7 @@ export function parseSkillAuthoringGuide(markdown: string): SkillAuthoringGuideS
         closed = true
         break
       }
-      if (contentLine.startsWith(PROMPT_DIRECTIVE_PREFIX)) throwInvalidGuide()
+      if (isDirectiveLike(contentLine)) throwInvalidGuide()
       contentLines.push(contentLine)
     }
 
@@ -66,6 +66,11 @@ export function parseSkillAuthoringGuide(markdown: string): SkillAuthoringGuideS
   }
 
   return segments
+}
+
+function isDirectiveLike(line: string): boolean {
+  const trimmedLine = line.trim()
+  return trimmedLine === PROMPT_END || trimmedLine.startsWith(PROMPT_DIRECTIVE_PREFIX)
 }
 
 function throwInvalidGuide(): never {
