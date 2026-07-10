@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { AuditSink, PermissionGuard } from "../../../../electron/runtime/security"
 import type { TrustedSkillRoot } from "../../../../electron/services/editor-scan-roots"
-import { createSkillEnvBindingService } from "../skill-env-binding-service"
+import { createSkillEnvBindingService, sameIdentity } from "../skill-env-binding-service"
 
 const tempRoots: string[] = []
 
@@ -17,6 +17,32 @@ afterEach(async () => {
 })
 
 describe("SkillEnvBindingService", () => {
+  it("fails closed when stable file identity is unavailable", () => {
+    const unavailable = {
+      dev: 0n,
+      ino: 0n,
+      size: 10n,
+      mtimeMs: 20n,
+      ctimeMs: 30n,
+      birthtimeMs: 40n,
+    }
+
+    expect(sameIdentity(unavailable, unavailable)).toBe(false)
+  })
+
+  it("compares file identities above Number.MAX_SAFE_INTEGER without precision loss", () => {
+    const base = BigInt(Number.MAX_SAFE_INTEGER) + 1n
+
+    expect(sameIdentity(
+      { dev: base, ino: base + 2n },
+      { dev: base, ino: base + 2n },
+    )).toBe(true)
+    expect(sameIdentity(
+      { dev: base, ino: base + 2n },
+      { dev: base, ino: base + 3n },
+    )).toBe(false)
+  })
+
   it("scans safe metadata and classifies update state without exposing values", async () => {
     const root = await createRoot()
     await createSkill(root, "needs", "TOKEN=old-secret\n")
@@ -360,6 +386,28 @@ describe("SkillEnvBindingService", () => {
     expect(await readFile(path.join(skill, ".env"), "utf8")).toBe('TOKEN="new-value"\nSECOND=keep\n')
   })
 
+  it("treats CRLF multiline secret values as up to date after updating", async () => {
+    const root = await createRoot()
+    await createSkill(root, "demo", "TOKEN=old\n")
+    const harness = createHarness([trustedRoot(root)])
+    const secretValue = "first\r\nsecond"
+    const scan = await harness.service.scan("TOKEN", secretValue, harness.security)
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, secretValue, harness.security)
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "updated" }),
+    ])
+
+    const rescanned = await harness.service.scan("TOKEN", secretValue, harness.security)
+    expect(rescanned.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "up_to_date" }),
+    ])
+  })
+
   it("shows ordinary scan I/O failures as unwritable items", async () => {
     const root = await createRoot()
     await createSkill(root, "demo", "TOKEN=old\n")
@@ -459,6 +507,81 @@ describe("SkillEnvBindingService", () => {
     ])
     expect(await readFile(path.join(skill, ".env"), "utf8")).toBe("TOKEN=old\n")
     expect(await readFile(path.join(oldSkill, ".env"), "utf8")).toBe("TOKEN=old\n")
+  })
+
+  it("does not truncate when the opened env content changes during permission check", async () => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\n")
+    const envPath = path.join(skill, ".env")
+    const harness = createHarness([trustedRoot(root)])
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+    let releasePermission!: () => void
+    const permissionGate = new Promise<void>((resolve) => { releasePermission = resolve })
+    harness.security.permissionGuard.check = vi.fn(async (request) => {
+      harness.permissionRequests.push(request)
+      if (request.action === "fs.write") {
+        await permissionGate
+      }
+      return { allowed: true as const }
+    })
+
+    const queued = harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, "new", harness.security)
+    while (!harness.permissionRequests.some(({ action }) => action === "fs.write")) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+    await writeFile(envPath, "TOKEN=changed-during-permission\n")
+    releasePermission()
+
+    const result = await queued
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "conflict" }),
+    ])
+    expect(await readFile(envPath, "utf8")).toBe("TOKEN=changed-during-permission\n")
+  })
+
+  it("conflicts when the env path changes during the post-permission reread", async () => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\n")
+    const envPath = path.join(skill, ".env")
+    const oldEnvPath = path.join(skill, ".env-old")
+    let swapped = false
+    const harness = createHarness([trustedRoot(root)], () => 100, async (filePath, flags) => {
+      const handle = await open(filePath, flags)
+      const originalRead = handle.read.bind(handle)
+      return new Proxy(handle, {
+        get(target, property, receiver) {
+          if (property === "read") {
+            return async (buffer: Buffer, offset: number, length: number, position: number) => {
+              const result = await originalRead(buffer, offset, length, position)
+              if (!swapped) {
+                swapped = true
+                await rename(envPath, oldEnvPath)
+                await writeFile(envPath, "TOKEN=old\n")
+              }
+              return result
+            }
+          }
+          return Reflect.get(target, property, receiver)
+        },
+      }) as FileHandle
+    })
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, "new", harness.security)
+
+    expect(swapped).toBe(true)
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "conflict" }),
+    ])
+    expect(await readFile(envPath, "utf8")).toBe("TOKEN=old\n")
   })
 })
 

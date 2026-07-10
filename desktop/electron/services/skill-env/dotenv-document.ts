@@ -20,8 +20,12 @@ function normalizedName(name: string): string {
   return name.toLowerCase()
 }
 
+export function canonicalizeDotenvValue(value: string): string {
+  return value.replace(/\r\n?/g, "\n")
+}
+
 function serializeDotenvValue(name: string, value: string): string {
-  const normalized = value.replace(/\r\n?/g, "\n")
+  const normalized = canonicalizeDotenvValue(value)
   for (const delimiter of ['"', "'", "`"] as const) {
     if (normalized.includes(delimiter)) {
       continue
@@ -54,7 +58,7 @@ function decodeEntryValue(name: string, rawValue: string): string {
   if (decoded === undefined) {
     throw new Error(`无法解析配置键：${name}`)
   }
-  return decoded.replace(/\r\n?/g, "\n")
+  return canonicalizeDotenvValue(decoded)
 }
 
 function normalizedValues(values: Readonly<Record<string, string>>): ReadonlyMap<string, string> {
@@ -70,7 +74,7 @@ function normalizedValues(values: Readonly<Record<string, string>>): ReadonlyMap
     if (normalized.has(key)) {
       throw new Error(`配置键重复：${name}`)
     }
-    normalized.set(key, value)
+    normalized.set(key, canonicalizeDotenvValue(value))
   }
   return normalized
 }

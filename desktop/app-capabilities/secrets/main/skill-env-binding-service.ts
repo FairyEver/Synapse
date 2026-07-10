@@ -1,11 +1,15 @@
 import { createHash, randomUUID } from "node:crypto"
-import { access, constants, lstat, open, readdir, realpath } from "node:fs/promises"
+import { access, constants, lstat as fsLstat, open, readdir, realpath } from "node:fs/promises"
 import type { FileHandle } from "node:fs/promises"
 import path from "node:path"
 
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import type { TrustedSkillRoot } from "../../../electron/services/editor-scan-roots"
-import { parseDotenvDocument, patchDotenvValues } from "../../../electron/services/skill-env/dotenv-document"
+import {
+  canonicalizeDotenvValue,
+  parseDotenvDocument,
+  patchDotenvValues,
+} from "../../../electron/services/skill-env/dotenv-document"
 import type {
   SecretSkillEnvQueueInput,
   SecretSkillEnvQueueResult,
@@ -15,6 +19,10 @@ import type {
 } from "../shared/schema"
 
 const SCAN_SESSION_TTL_MS = 300_000
+
+function lstat(filePath: string) {
+  return fsLstat(filePath, { bigint: true })
+}
 
 export type SkillEnvBindingLogger = {
   warn(message: string, meta?: Record<string, unknown>): void
@@ -51,12 +59,8 @@ type StoredBinding = {
 }
 
 type FileIdentity = {
-  readonly dev: number
-  readonly ino: number
-  readonly size: number
-  readonly mtimeMs: number
-  readonly ctimeMs: number
-  readonly birthtimeMs: number
+  readonly dev: bigint
+  readonly ino: bigint
 }
 
 function emptyBindingEvidence(): Pick<StoredBinding, "rootIdentity" | "skillIdentity" | "envIdentity" | "rootRealPath" | "skillRealPath" | "envRealPath"> {
@@ -80,7 +84,7 @@ type ValidatedBinding = {
   readonly handle: FileHandle
   readonly content: string
   readonly envPath: string
-  readonly mode: number
+  readonly mode: bigint
   readonly rootIdentity: FileIdentity
   readonly skillIdentity: FileIdentity
   readonly envIdentity: FileIdentity
@@ -271,7 +275,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         const document = parseDotenvDocument(content)
         const match = document.entries.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase())
         if (!match) continue
-        if (match.value === value) {
+        if (match.value === canonicalizeDotenvValue(value)) {
           items.push({
             publicItem: { ...base, status: "up_to_date" },
             root,
@@ -285,7 +289,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
           })
           continue
         }
-        const writable = (envInfo.mode & 0o222) !== 0 && await isWritable(envPath)
+        const writable = (envInfo.mode & 0o222n) !== 0n && await isWritable(envPath)
         items.push({
           publicItem: writable
             ? { ...base, status: "needs_update" }
@@ -363,7 +367,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         if (hashContent(validated.content) !== stored.fileHash) {
           return recordQueueResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
         }
-        if ((validated.mode & 0o222) === 0) {
+        if ((validated.mode & 0o222n) === 0n) {
           return recordQueueResult(base, "failed", "配置文件不可写。", security, auditMetadata)
         }
 
@@ -385,7 +389,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
             policyId: permission.policyId,
           }, "denied")
         }
-        const currentStat = await validated.handle.stat()
+        const currentStat = await validated.handle.stat({ bigint: true })
         const pathStat = await lstat(stored.publicItem.envPath)
         const currentEnvRealPath = await realpath(stored.publicItem.envPath)
         if (!sameIdentity(currentStat, pathStat) || currentEnvRealPath !== validated.envPath) {
@@ -393,6 +397,18 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         }
         if (!(await bindingStillMatches(stored))) {
           return recordQueueResult(base, "conflict", "扫描结果已失效。", security, auditMetadata)
+        }
+        const currentContent = await readFileHandleFully(validated.handle)
+        const postReadStat = await validated.handle.stat({ bigint: true })
+        const postReadPathStat = await lstat(stored.publicItem.envPath)
+        const postReadEnvRealPath = await realpath(stored.publicItem.envPath)
+        if (!sameIdentity(postReadStat, postReadPathStat)
+          || postReadEnvRealPath !== validated.envPath
+          || !(await bindingStillMatches(stored))) {
+          return recordQueueResult(base, "conflict", "扫描结果已失效。", security, auditMetadata)
+        }
+        if (hashContent(currentContent) !== stored.fileHash) {
+          return recordQueueResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
         }
         await validated.handle.truncate(0)
         await writeFileHandleFully(validated.handle, nextContent)
@@ -468,6 +484,7 @@ function createPublicItem(
 
 function queueItemBase(item: SkillEnvBindingItem): Omit<SkillEnvBindingQueueItem, "status"> {
   const { status: _status, ...base } = item
+  void _status
   return base
 }
 
@@ -534,7 +551,7 @@ async function openValidatedBinding(
     handle = await (openFile ?? open)(envPath, mode === "write"
       ? constants.O_RDWR | noFollowFlag
       : constants.O_RDONLY | noFollowFlag)
-    const handleStat = await handle.stat()
+    const handleStat = await handle.stat({ bigint: true })
     const pathStat = await lstat(envPath)
     if (!handleStat.isFile() || pathStat.isSymbolicLink() || !sameIdentity(handleStat, pathStat)) {
       throw new UnsafeBindingError("file identity changed")
@@ -650,6 +667,19 @@ function hashContent(content: string): string {
   return createHash("sha256").update(content).digest("hex")
 }
 
+async function readFileHandleFully(handle: FileHandle): Promise<string> {
+  const chunks: Buffer[] = []
+  let position = 0
+  while (true) {
+    const chunk = Buffer.allocUnsafe(64 * 1024)
+    const { bytesRead } = await handle.read(chunk, 0, chunk.length, position)
+    if (bytesRead === 0) break
+    chunks.push(chunk.subarray(0, bytesRead))
+    position += bytesRead
+  }
+  return Buffer.concat(chunks).toString("utf8")
+}
+
 async function writeFileHandleFully(handle: FileHandle, content: string): Promise<void> {
   const data = Buffer.from(content, "utf8")
   let offset = 0
@@ -661,45 +691,28 @@ async function writeFileHandleFully(handle: FileHandle, content: string): Promis
 }
 
 function toFileIdentity(stats: {
-  dev: number
-  ino: number
-  size: number
-  mtimeMs: number
-  ctimeMs: number
-  birthtimeMs: number
+  dev: bigint
+  ino: bigint
 }): FileIdentity {
   return {
     dev: stats.dev,
     ino: stats.ino,
-    size: stats.size,
-    mtimeMs: stats.mtimeMs,
-    ctimeMs: stats.ctimeMs,
-    birthtimeMs: stats.birthtimeMs,
   }
 }
 
-function sameIdentity(left: {
-  dev: number
-  ino: number
-  size?: number
-  mtimeMs?: number
-  ctimeMs?: number
-  birthtimeMs?: number
+export function sameIdentity(left: {
+  dev: bigint
+  ino: bigint
 }, right: {
-  dev: number
-  ino: number
-  size?: number
-  mtimeMs?: number
-  ctimeMs?: number
-  birthtimeMs?: number
+  dev: bigint
+  ino: bigint
 }): boolean {
-  if (left.dev !== 0 && right.dev !== 0 && left.ino !== 0 && right.ino !== 0) {
-    return left.dev === right.dev && left.ino === right.ino
-  }
-  return left.size === right.size
-    && left.mtimeMs === right.mtimeMs
-    && left.ctimeMs === right.ctimeMs
-    && left.birthtimeMs === right.birthtimeMs
+  return left.dev !== 0n
+    && right.dev !== 0n
+    && left.ino !== 0n
+    && right.ino !== 0n
+    && left.dev === right.dev
+    && left.ino === right.ino
 }
 
 function isNotFoundLikeError(error: unknown): boolean {
