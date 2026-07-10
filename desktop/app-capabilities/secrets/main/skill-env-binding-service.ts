@@ -19,6 +19,7 @@ import type {
 } from "../shared/schema"
 
 const SCAN_SESSION_TTL_MS = 300_000
+const MAX_ENV_FILE_BYTES = 1024n * 1024n
 
 function lstat(filePath: string) {
   return fsLstat(filePath, { bigint: true })
@@ -95,6 +96,10 @@ type ValidatedBinding = {
 
 class UnsafeBindingError extends Error {
   readonly code = "unsafe_link"
+}
+
+class BindingContentChangedError extends Error {
+  readonly code = "conflict"
 }
 
 class BindingIoError extends Error {
@@ -398,7 +403,10 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         if (!(await bindingStillMatches(stored))) {
           return recordQueueResult(base, "conflict", "扫描结果已失效。", security, auditMetadata)
         }
-        const currentContent = await readFileHandleFully(validated.handle)
+        const currentContent = await readFileHandleSnapshot(validated.handle, currentStat.size)
+        if (hashContent(currentContent) !== stored.fileHash) {
+          return recordQueueResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
+        }
         const postReadStat = await validated.handle.stat({ bigint: true })
         const postReadPathStat = await lstat(stored.publicItem.envPath)
         const postReadEnvRealPath = await realpath(stored.publicItem.envPath)
@@ -407,7 +415,8 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
           || !(await bindingStillMatches(stored))) {
           return recordQueueResult(base, "conflict", "扫描结果已失效。", security, auditMetadata)
         }
-        if (hashContent(currentContent) !== stored.fileHash) {
+        const finalContent = await readFileHandleSnapshot(validated.handle, postReadStat.size)
+        if (hashContent(finalContent) !== stored.fileHash) {
           return recordQueueResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
         }
         await validated.handle.truncate(0)
@@ -417,6 +426,9 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         await validated.handle.close().catch(() => undefined)
       }
     } catch (error) {
+      if (error instanceof BindingContentChangedError) {
+        return recordQueueResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
+      }
       deps.logger.warn("Failed to queue Skill env binding.", {
         scope: stored.publicItem.scope,
         skillName: stored.publicItem.skillName,
@@ -573,7 +585,7 @@ async function openValidatedBinding(
       || path.dirname(envRealAfter) !== skillRealPath) {
       throw new UnsafeBindingError("parent identity changed")
     }
-    const content = await handle.readFile("utf8")
+    const content = await readFileHandleSnapshot(handle, handleStat.size)
     return {
       handle,
       content,
@@ -667,17 +679,26 @@ function hashContent(content: string): string {
   return createHash("sha256").update(content).digest("hex")
 }
 
-async function readFileHandleFully(handle: FileHandle): Promise<string> {
-  const chunks: Buffer[] = []
-  let position = 0
-  while (true) {
-    const chunk = Buffer.allocUnsafe(64 * 1024)
-    const { bytesRead } = await handle.read(chunk, 0, chunk.length, position)
-    if (bytesRead === 0) break
-    chunks.push(chunk.subarray(0, bytesRead))
-    position += bytesRead
+async function readFileHandleSnapshot(handle: FileHandle, expectedSize: bigint): Promise<string> {
+  if (expectedSize < 0n || expectedSize > MAX_ENV_FILE_BYTES) {
+    throw new BindingIoError("configuration file exceeds the size limit")
   }
-  return Buffer.concat(chunks).toString("utf8")
+  const byteLength = Number(expectedSize)
+  const content = Buffer.allocUnsafe(byteLength)
+  let offset = 0
+  while (offset < byteLength) {
+    const { bytesRead } = await handle.read(content, offset, byteLength - offset, offset)
+    if (bytesRead <= 0) {
+      throw new BindingContentChangedError("configuration file shortened while reading")
+    }
+    offset += bytesRead
+  }
+  const trailingByte = Buffer.allocUnsafe(1)
+  const { bytesRead: trailingBytesRead } = await handle.read(trailingByte, 0, 1, byteLength)
+  if (trailingBytesRead !== 0) {
+    throw new BindingContentChangedError("configuration file grew while reading")
+  }
+  return content.toString("utf8")
 }
 
 async function writeFileHandleFully(handle: FileHandle, content: string): Promise<void> {

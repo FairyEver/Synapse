@@ -583,6 +583,139 @@ describe("SkillEnvBindingService", () => {
     ])
     expect(await readFile(envPath, "utf8")).toBe("TOKEN=old\n")
   })
+
+  it.each([
+    ["equal-length", "TOKEN=alt\n"],
+    ["different-length", "TOKEN=changed-after-reread\n"],
+  ])("conflicts when content changes during post-read identity checks (%s)", async (_case, replacement) => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\n")
+    const envPath = path.join(skill, ".env")
+    let openCount = 0
+    let queueStatCalls = 0
+    const harness = createHarness([trustedRoot(root)], () => 100, async (filePath, flags) => {
+      const handle = await open(filePath, flags)
+      openCount += 1
+      if (openCount !== 2) return handle
+      const originalStat = handle.stat.bind(handle)
+      return new Proxy(handle, {
+        get(target, property, receiver) {
+          if (property === "stat") {
+            return async (options?: { bigint?: boolean }) => {
+              queueStatCalls += 1
+              if (queueStatCalls === 3) {
+                await writeFile(envPath, replacement)
+              }
+              return originalStat(options as never)
+            }
+          }
+          return Reflect.get(target, property, receiver)
+        },
+      }) as FileHandle
+    })
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, "new", harness.security)
+
+    expect(queueStatCalls).toBeGreaterThanOrEqual(3)
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "conflict" }),
+    ])
+    expect(await readFile(envPath, "utf8")).toBe(replacement)
+  })
+
+  it.each([
+    ["grows", "TOKEN=old\nEXTRA=x\n"],
+    ["shrinks", "TOKEN=\n"],
+  ])("uses a bounded final snapshot when the env file %s during reading", async (_case, replacement) => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\n")
+    const envPath = path.join(skill, ".env")
+    let openCount = 0
+    let queueSnapshot = 0
+    let finalSnapshotReads = 0
+    const harness = createHarness([trustedRoot(root)], () => 100, async (filePath, flags) => {
+      const handle = await open(filePath, flags)
+      openCount += 1
+      if (openCount !== 2) return handle
+      const originalRead = handle.read.bind(handle)
+      return new Proxy(handle, {
+        get(target, property, receiver) {
+          if (property === "read") {
+            return async (buffer: Buffer, offset: number, length: number, position: number) => {
+              if (position === 0) queueSnapshot += 1
+              if (queueSnapshot !== 3) {
+                return originalRead(buffer, offset, length, position)
+              }
+              finalSnapshotReads += 1
+              const requestedLength = replacement.length < "TOKEN=old\n".length && position === 0
+                ? Math.max(1, Math.floor(length / 2))
+                : length
+              const result = await originalRead(buffer, offset, requestedLength, position)
+              if (finalSnapshotReads === 1) {
+                await writeFile(envPath, replacement)
+              }
+              return result
+            }
+          }
+          return Reflect.get(target, property, receiver)
+        },
+      }) as FileHandle
+    })
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, "new", harness.security)
+
+    expect(finalSnapshotReads).toBeGreaterThan(0)
+    expect(finalSnapshotReads).toBeLessThanOrEqual(Buffer.byteLength("TOKEN=old\n") + 1)
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "conflict" }),
+    ])
+    expect(await readFile(envPath, "utf8")).toBe(replacement)
+  })
+
+  it("rejects an oversized env file before reading it into memory", async () => {
+    const root = await createRoot()
+    await createSkill(root, "demo", `TOKEN=old\n#${"x".repeat(1024 * 1024)}\n`)
+    let contentReadCalls = 0
+    const harness = createHarness([trustedRoot(root)], () => 100, async (filePath, flags) => {
+      const handle = await open(filePath, flags)
+      const originalReadFile = handle.readFile.bind(handle)
+      const originalRead = handle.read.bind(handle)
+      return new Proxy(handle, {
+        get(target, property, receiver) {
+          if (property === "readFile") {
+            return async (options?: Parameters<FileHandle["readFile"]>[0]) => {
+              contentReadCalls += 1
+              return originalReadFile(options as never)
+            }
+          }
+          if (property === "read") {
+            return async (buffer: Buffer, offset: number, length: number, position: number) => {
+              contentReadCalls += 1
+              return originalRead(buffer, offset, length, position)
+            }
+          }
+          return Reflect.get(target, property, receiver)
+        },
+      }) as FileHandle
+    })
+
+    const result = await harness.service.scan("TOKEN", "new", harness.security)
+
+    expect(contentReadCalls).toBe(0)
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "unwritable" }),
+    ])
+  })
 })
 
 async function createRoot(): Promise<string> {
