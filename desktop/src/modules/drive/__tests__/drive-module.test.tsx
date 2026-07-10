@@ -281,14 +281,17 @@ describe("DriveModule", () => {
     const html = renderToStaticMarkup(<DriveModule />)
 
     expect(html).toContain("云盘")
-    expect(html).toContain("我的分享")
+    expect(html).toContain("新建")
+    expect(html).toContain('aria-label="刷新"')
+    expect(html).toContain('aria-label="更多"')
+    expect(html).not.toContain("我的分享")
+    expect(html).not.toContain("站点")
+    expect(html).not.toContain("本地同步")
     expect(html).not.toContain("已分享")
     expect(html).not.toContain("已发布")
-    expect(html).toContain("上传")
     expect(html).not.toContain("上传文件")
     expect(html).not.toContain("上传文件夹")
-    expect(html).toContain("新建文件夹")
-    expect(html).toContain("刷新")
+    expect(html).not.toContain("新建文件夹")
   })
 
   it("shows fixed public assets and trash entries only at the drive root", async () => {
@@ -355,20 +358,32 @@ describe("DriveModule", () => {
     expect(mocks.listDrivePublicAssets).toHaveBeenCalledWith({ offset: 0, limit: 50 })
     expect(document.querySelector('[aria-current="page"]')?.textContent).toBe("公开素材")
     expect(queryExactButton("上传")).toBeNull()
-    expect(queryButton("新建文件夹")).toBeNull()
-    expect(queryButton("我的分享")).toBeNull()
+    expect(queryButton("新建")).toBeNull()
     expect(queryButton("上传公开素材")).not.toBeNull()
+    expect(getButtonByLabel("刷新").querySelector(".lucide-refresh-cw")).not.toBeNull()
   })
 
-  it("opens public link management from one top-bar action", async () => {
+  it("uses an icon refresh action in the trash view", async () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(getButton("我的分享")).not.toBeNull()
+    await clickDriveRow("回收站")
+    await flushAct()
+
+    expect(document.querySelector('[aria-current="page"]')?.textContent).toBe("回收站")
+    expect(queryExactButton("刷新")).toBeNull()
+    expect(getButtonByLabel("刷新").querySelector(".lucide-refresh-cw")).not.toBeNull()
+  })
+
+  it("opens public link management from the top-bar more menu", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(queryButton("我的分享")).toBeNull()
     expect(queryButton("已分享")).toBeNull()
     expect(queryButton("已发布")).toBeNull()
 
-    await clickButtonText("我的分享")
+    await clickDriveToolbarMenuItem("更多", "我的分享")
     await flushAct()
 
     expect(document.body.textContent).toContain("公开链接")
@@ -546,7 +561,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("站点")
+    await clickDriveToolbarMenuItem("更多", "站点")
     await flushAct()
 
     const dialog = document.querySelector('[role="dialog"]')
@@ -578,7 +593,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("站点")
+    await clickDriveToolbarMenuItem("更多", "站点")
     await flushAct()
     await openRowMenu("001")
     await clickText("访问设置")
@@ -595,8 +610,27 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(driveToolbarActionTexts()).toEqual(["同步", "本地同步", "上传", "新建文件夹", "我的分享", "站点", "刷新"])
-    expect(getButton("站点").querySelector("svg")).toBeNull()
+    expect(driveToolbarActionLabels()).toEqual(["同步状态：暂无同步绑定", "新建", "刷新", "更多"])
+    expect(getButtonByLabel("刷新").querySelector(".lucide-refresh-cw")).not.toBeNull()
+    expect(getButtonByLabel("更多").querySelector(".lucide-ellipsis")).not.toBeNull()
+  })
+
+  it("orders create actions in one top-bar menu", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openDriveToolbarMenu("新建")
+
+    expect(menuItemTexts()).toEqual(["新建文件夹", "上传文件", "上传文件夹"])
+  })
+
+  it("orders management actions in the top-bar more menu", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openDriveToolbarMenu("更多")
+
+    expect(menuItemTexts()).toEqual(["本地同步", "我的分享", "站点"])
   })
 
   it("shows drive sync conflicts in the top toolbar", async () => {
@@ -1382,7 +1416,7 @@ describe("DriveModule", () => {
 
     await render(<DriveModule />)
     await flushAct()
-    await clickButtonText("本地同步")
+    await clickDriveToolbarMenuItem("更多", "本地同步")
 
     const dialog = document.querySelector('[role="dialog"]')
     if (!dialog) throw new Error("Local drive sync dialog not found")
@@ -1451,7 +1485,7 @@ describe("DriveModule", () => {
       getTableRow("Projects").click()
       await flushPromises()
     })
-    await clickButtonText("本地同步")
+    await clickDriveToolbarMenuItem("更多", "本地同步")
 
     const dialog = document.querySelector('[role="dialog"]')
     if (!dialog) throw new Error("Local drive sync dialog not found")
@@ -1477,7 +1511,7 @@ describe("DriveModule", () => {
 
     await render(<DriveModule />)
     await flushAct()
-    await clickButtonText("本地同步")
+    await clickDriveToolbarMenuItem("更多", "本地同步")
     await clickText("选择文件夹")
     mocks.previewDriveSyncBinding.mockClear()
 
@@ -1513,7 +1547,7 @@ describe("DriveModule", () => {
 
     await render(<DriveModule />)
     await flushAct()
-    await clickButtonText("本地同步")
+    await clickDriveToolbarMenuItem("更多", "本地同步")
     await clickText("选择文件夹")
     await clickButtonText("上传并同步")
 
@@ -1579,10 +1613,10 @@ describe("DriveModule", () => {
     const html = renderToStaticMarkup(<DriveModule />)
 
     expect(html).not.toContain('aria-label="搜索"')
-    expect(html).toContain("上传")
+    expect(html).toContain("新建")
     expect(html).not.toContain("上传文件")
     expect(html).not.toContain("上传文件夹")
-    expect(html).toContain("新建文件夹")
+    expect(html).not.toContain("新建文件夹")
   })
 
   it("shows an account login state without listing drive items when unauthenticated", async () => {
@@ -1603,11 +1637,9 @@ describe("DriveModule", () => {
     expect(document.body.textContent).not.toContain("synapse:account:drive:items:list")
     expect(queryButton("上传文件")).toBeNull()
     expect(queryButton("上传文件夹")).toBeNull()
-    expect(getButton("本地同步").disabled).toBe(true)
-    expect(getButton("上传").disabled).toBe(true)
-    expect(getButton("新建文件夹").disabled).toBe(true)
-    expect(getButton("我的分享").disabled).toBe(true)
-    expect(getButton("刷新").disabled).toBe(true)
+    expect(getButton("新建").disabled).toBe(true)
+    expect(getButtonByLabel("更多").disabled).toBe(true)
+    expect(getButtonByLabel("刷新").disabled).toBe(true)
     expect(getButtonByLabel("同步状态：1 个绑定").textContent).toContain("1")
     expect(queryButtonByLabel("同步状态：暂无同步绑定")).toBeNull()
     expect(queryButton("已分享")).toBeNull()
@@ -1635,11 +1667,9 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("在浏览器完成登录后会自动刷新。")
     expect(queryButton("上传文件")).toBeNull()
     expect(queryButton("上传文件夹")).toBeNull()
-    expect(getButton("本地同步").disabled).toBe(true)
-    expect(getButton("上传").disabled).toBe(true)
-    expect(getButton("新建文件夹").disabled).toBe(true)
-    expect(getButton("我的分享").disabled).toBe(true)
-    expect(getButton("刷新").disabled).toBe(true)
+    expect(getButton("新建").disabled).toBe(true)
+    expect(getButtonByLabel("更多").disabled).toBe(true)
+    expect(getButtonByLabel("刷新").disabled).toBe(true)
     expect(queryButton("已分享")).toBeNull()
     expect(queryButton("已发布")).toBeNull()
   })
@@ -1653,7 +1683,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushPromises()
 
-    expect(getButton("我的分享").disabled).toBe(true)
+    expect(getButtonByLabel("更多").disabled).toBe(true)
     expect(queryButton("已分享")).toBeNull()
     expect(queryButton("已发布")).toBeNull()
 
@@ -1856,7 +1886,7 @@ describe("DriveModule", () => {
 
     const folderRow = getTableRow("作业范文")
     await act(async () => {
-      getButton("刷新").click()
+      getButtonByLabel("刷新").click()
       folderRow.click()
       await flushPromises()
     })
@@ -2161,10 +2191,7 @@ describe("DriveModule", () => {
   it("opens a folder name dialog before creating a folder", async () => {
     await render(<DriveModule />)
 
-    const createButton = getButton("新建文件夹")
-    await act(async () => {
-      createButton.click()
-    })
+    await clickDriveToolbarMenuItem("新建", "新建文件夹")
 
     expect(document.querySelector('input[aria-label="文件夹名称"]')).not.toBeNull()
     expect(mocks.createDriveFolder).not.toHaveBeenCalled()
@@ -2283,15 +2310,20 @@ describe("DriveModule", () => {
     })
 
     expect(document.body.textContent).toContain("正在上传 1 项")
-    expect(getButton("本地同步").disabled).toBe(true)
-    expect(getButton("上传").disabled).toBe(true)
-    expect(getButton("新建文件夹").disabled).toBe(false)
+    expect(getButton("新建").disabled).toBe(false)
+    expect(getButtonByLabel("更多").disabled).toBe(false)
 
-    await act(async () => {
-      getButton("新建文件夹").click()
-      await flushPromises()
-    })
+    await openDriveToolbarMenu("新建")
+    expect(getMenuItem("新建文件夹").hasAttribute("data-disabled")).toBe(false)
+    expect(getMenuItem("上传文件").hasAttribute("data-disabled")).toBe(true)
+    expect(getMenuItem("上传文件夹").hasAttribute("data-disabled")).toBe(true)
+    await clickMenuItemText("新建文件夹")
     expect(document.querySelector('input[aria-label="文件夹名称"]')).not.toBeNull()
+
+    await openDriveToolbarMenu("更多")
+    expect(getMenuItem("本地同步").hasAttribute("data-disabled")).toBe(true)
+    expect(getMenuItem("我的分享").hasAttribute("data-disabled")).toBe(false)
+    expect(getMenuItem("站点").hasAttribute("data-disabled")).toBe(false)
 
     await act(async () => {
       upload.resolve({ completed: 1, failed: 0, skipped: 0 })
@@ -2892,7 +2924,7 @@ describe("DriveModule", () => {
     expect(rowButtonTexts("shared.md")).toEqual(["取消分享", "预览", "删除", "更多"])
   })
 
-  it("uses a text upload menu without button icons", async () => {
+  it("routes create actions through the top-bar new menu", async () => {
     await render(<DriveModule />)
     await flushAct()
 
@@ -2902,16 +2934,15 @@ describe("DriveModule", () => {
     const fileInputClick = vi.spyOn(fileInput, "click")
     const folderInputClick = vi.spyOn(folderInput, "click")
 
-    expect(getButton("上传").querySelector("svg")).toBeNull()
-    expect(getButton("新建文件夹").querySelector("svg")).toBeNull()
+    expect(getButton("新建").querySelector("svg")).toBeNull()
     expect(queryButton("上传文件")).toBeNull()
     expect(queryButton("上传文件夹")).toBeNull()
 
-    await openButtonMenu("上传")
+    await openDriveToolbarMenu("新建")
     await clickText("上传文件")
     expect(fileInputClick).toHaveBeenCalledTimes(1)
 
-    await openButtonMenu("上传")
+    await openDriveToolbarMenu("新建")
     await clickText("上传文件夹")
     expect(folderInputClick).toHaveBeenCalledTimes(1)
   })
@@ -3129,7 +3160,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("我的分享")
+    await clickDriveToolbarMenuItem("更多", "我的分享")
     await flushAct()
 
     const dialogContent = document.querySelector('[data-slot="dialog-content"]')
@@ -3162,7 +3193,7 @@ describe("DriveModule", () => {
 
     await render(<DriveModule />)
     await flushAct()
-    await clickButtonText("我的分享")
+    await clickDriveToolbarMenuItem("更多", "我的分享")
     await flushAct()
 
     const dialog = document.querySelector('[role="dialog"]')
@@ -3187,7 +3218,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("我的分享")
+    await clickDriveToolbarMenuItem("更多", "我的分享")
     await flushAct()
 
     expect(mocks.listDriveShares).toHaveBeenCalledTimes(1)
@@ -3202,7 +3233,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("我的分享")
+    await clickDriveToolbarMenuItem("更多", "我的分享")
     await flushAct()
 
     expect(document.body.textContent).toContain("report.txt")
@@ -3253,7 +3284,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("我的分享")
+    await clickDriveToolbarMenuItem("更多", "我的分享")
     await flushAct()
     const button = getButtonByLabel("取消分享 report.txt")
     await act(async () => {
@@ -3295,7 +3326,7 @@ describe("DriveModule", () => {
 
     expect(getTableRow("report.txt").textContent).toContain("分享：3天 · 密码 · 可阅读")
 
-    await clickButtonText("我的分享")
+    await clickDriveToolbarMenuItem("更多", "我的分享")
     await flushAct()
     await clickButtonByLabel("取消分享 report.txt")
     await clickButtonText("关闭")
@@ -3309,7 +3340,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     mocks.listDriveShares.mockReturnValueOnce(shares.promise)
-    await clickButtonText("我的分享")
+    await clickDriveToolbarMenuItem("更多", "我的分享")
 
     expect(document.querySelector('[data-slot="skeleton"]')).not.toBeNull()
 
@@ -3326,7 +3357,7 @@ describe("DriveModule", () => {
       .mockResolvedValueOnce(createDrivePublicLinksPage([]))
 
     await clickButtonText("关闭")
-    await clickButtonText("我的分享")
+    await clickDriveToolbarMenuItem("更多", "我的分享")
     await flushAct()
 
     expect(document.body.textContent).toContain("读取失败")
@@ -3353,11 +3384,11 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("我的分享")
+    await clickDriveToolbarMenuItem("更多", "我的分享")
     await flushAct()
     await clickButtonText("加载更多")
     await clickButtonText("关闭")
-    await clickButtonText("我的分享")
+    await clickDriveToolbarMenuItem("更多", "我的分享")
     await flushAct()
 
     expect(document.body.textContent).toContain("second-round.txt")
@@ -3592,8 +3623,8 @@ function driveToolbarButtons(): HTMLButtonElement[] {
   return Array.from(toolbar.querySelectorAll<HTMLButtonElement>("button"))
 }
 
-function driveToolbarActionTexts(): string[] {
-  return driveToolbarButtons().map((button) => button.textContent?.trim() ?? "")
+function driveToolbarActionLabels(): string[] {
+  return driveToolbarButtons().map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim() ?? "")
 }
 
 function getTableRow(text: string): HTMLTableRowElement {
@@ -3708,21 +3739,33 @@ function createDirectoryEntry(name: string, entries: readonly unknown[]): unknow
 
 async function openFirstMenu(): Promise<void> {
   await act(async () => {
-    const trigger = document.querySelector('button[aria-label^="更多"]')
+    const trigger = document.querySelector('button[aria-label^="更多 "]')
     if (!(trigger instanceof HTMLButtonElement)) throw new Error("More menu button not found")
     trigger.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
     await flushPromises()
   })
 }
 
-async function openButtonMenu(text: string): Promise<void> {
+async function openDriveToolbarMenu(label: string): Promise<void> {
   await act(async () => {
     const trigger = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
-      .find((candidate) => candidate.textContent?.trim() === text)
-    if (!trigger) throw new Error(`Menu button not found: ${text}`)
+      .find((candidate) => candidate.getAttribute("aria-label") === label || candidate.textContent?.trim() === label)
+    if (!trigger) throw new Error(`Drive toolbar menu button not found: ${label}`)
     trigger.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
     await flushPromises()
   })
+}
+
+async function clickDriveToolbarMenuItem(menuLabel: string, itemText: string): Promise<void> {
+  await openDriveToolbarMenu(menuLabel)
+  await clickMenuItemText(itemText)
+}
+
+function getMenuItem(text: string): HTMLElement {
+  const item = Array.from(document.body.querySelectorAll<HTMLElement>("[role='menuitem']"))
+    .find((candidate) => candidate.textContent?.trim() === text)
+  if (!item) throw new Error(`Menu item not found: ${text}`)
+  return item
 }
 
 async function openRowMenu(name: string): Promise<void> {

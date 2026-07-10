@@ -29,12 +29,16 @@ import { ModuleContentPanel, ModulePage } from "@/components/module-page"
 import { RelativeTime } from "@/components/relative-time"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { FormDialog } from "@/components/form-dialog"
-import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { DrivePublicAssetsView, type DrivePublicAssetsViewActionState, type DrivePublicAssetsViewHandle } from "./drive-public-assets-view"
 import { DriveSiteCreateDialog } from "./drive-site-create-dialog"
 import { DriveSitesDialog } from "./drive-sites-dialog"
-import { DriveSyncDialog, DriveSyncStatusButton, type DriveSyncDialogState } from "./drive-sync-dialog"
+import { DriveSyncDialog, type DriveSyncDialogState } from "./drive-sync-dialog"
 import { DriveTrashView, type DriveTrashViewActionState, type DriveTrashViewHandle } from "./drive-trash-view"
+import {
+  DrivePublicAssetToolbarActions,
+  DriveToolbarActions,
+  DriveTrashToolbarActions,
+} from "./drive-toolbar-actions"
 import {
   DRIVE_PUBLIC_ASSETS_ENTRY_ID,
   DRIVE_TRASH_ENTRY_ID,
@@ -128,7 +132,6 @@ import {
 import {
   DriveRendererActionsProvider,
   useDriveRendererActions,
-  type DriveRendererAction,
 } from "./markdown/drive-renderer-actions"
 
 type DrivePathEntry = {
@@ -1712,135 +1715,6 @@ function DriveFileTableSkeleton() {
         ))}
       </TableBody>
     </Table>
-  )
-}
-
-function DriveUploadActions({
-  disabled,
-  onUploadFiles,
-  onUploadFolder,
-}: {
-  readonly disabled: boolean
-  readonly onUploadFiles: () => void
-  readonly onUploadFolder: () => void
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <SystemAppTopBarActionButton disabled={disabled}>
-          上传
-        </SystemAppTopBarActionButton>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onUploadFiles}>上传文件</DropdownMenuItem>
-        <DropdownMenuItem onClick={onUploadFolder}>上传文件夹</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-function DriveToolbarActions({
-  children,
-  createDisabled,
-  onCreateFolder,
-  onOpenLocalSync,
-  onOpenPublicLinks,
-  onOpenSites,
-  onOpenSyncStatus,
-  onRefresh,
-  onUploadFiles,
-  onUploadFolder,
-  publicLinksDisabled,
-  refreshDisabled,
-  rendererActions,
-  syncSnapshot,
-  uploadDisabled,
-}: {
-  readonly children: ReactNode
-  readonly createDisabled: boolean
-  readonly publicLinksDisabled: boolean
-  readonly refreshDisabled: boolean
-  readonly rendererActions: readonly DriveRendererAction[]
-  readonly syncSnapshot: DriveSyncSnapshotDto | null
-  readonly uploadDisabled: boolean
-  readonly onCreateFolder: () => void
-  readonly onOpenLocalSync: () => void
-  readonly onOpenPublicLinks: () => void
-  readonly onOpenSites: () => void
-  readonly onOpenSyncStatus: () => void
-  readonly onRefresh: () => void
-  readonly onUploadFiles: () => void
-  readonly onUploadFolder: () => void
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-0" data-testid="drive-toolbar-actions">
-      {children}
-      {rendererActions.map((action) => (
-        <SystemAppTopBarActionButton key={action.id} type="button" disabled={action.disabled} onClick={action.onClick}>
-          {action.badge ? `${action.label} ${action.badge}` : action.label}
-        </SystemAppTopBarActionButton>
-      ))}
-      <DriveSyncStatusButton snapshot={syncSnapshot} onOpen={onOpenSyncStatus} />
-      <SystemAppTopBarActionButton disabled={uploadDisabled} onClick={onOpenLocalSync}>
-        本地同步
-      </SystemAppTopBarActionButton>
-      <DriveUploadActions
-        disabled={uploadDisabled}
-        onUploadFiles={onUploadFiles}
-        onUploadFolder={onUploadFolder}
-      />
-      <SystemAppTopBarActionButton disabled={createDisabled} onClick={onCreateFolder}>
-        新建文件夹
-      </SystemAppTopBarActionButton>
-      <SystemAppTopBarActionButton disabled={publicLinksDisabled} onClick={onOpenPublicLinks}>
-        我的分享
-      </SystemAppTopBarActionButton>
-      <SystemAppTopBarActionButton disabled={publicLinksDisabled} onClick={onOpenSites}>
-        站点
-      </SystemAppTopBarActionButton>
-      <SystemAppTopBarActionButton disabled={refreshDisabled} onClick={onRefresh}>
-        刷新
-      </SystemAppTopBarActionButton>
-    </div>
-  )
-}
-
-function DrivePublicAssetToolbarActions({
-  uploadDisabled,
-  refreshDisabled,
-  onUpload,
-  onRefresh,
-}: {
-  readonly uploadDisabled: boolean
-  readonly refreshDisabled: boolean
-  readonly onUpload: () => void
-  readonly onRefresh: () => void
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-0">
-      <SystemAppTopBarActionButton type="button" disabled={uploadDisabled} onClick={onUpload}>
-        上传公开素材
-      </SystemAppTopBarActionButton>
-      <SystemAppTopBarActionButton type="button" disabled={refreshDisabled} onClick={onRefresh}>
-        刷新
-      </SystemAppTopBarActionButton>
-    </div>
-  )
-}
-
-function DriveTrashToolbarActions({
-  refreshDisabled,
-  onRefresh,
-}: {
-  readonly refreshDisabled: boolean
-  readonly onRefresh: () => void
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-0">
-      <SystemAppTopBarActionButton type="button" disabled={refreshDisabled} onClick={onRefresh}>
-        刷新
-      </SystemAppTopBarActionButton>
-    </div>
   )
 }
 
