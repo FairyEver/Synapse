@@ -110,6 +110,7 @@ import type {
   SynapsePrepareInlineRuleSourcePayload,
   SynapsePrepareLocalSkillSourcePayload,
   SynapseRuleInstallerSource,
+  SynapseSkillEnvInspectionResult,
   SynapseSkillInstallerSource,
 } from "./installers"
 import type {
@@ -1213,6 +1214,9 @@ export type SynapseBridge = {
     recordComplete: (sessionId: string) => Promise<{ ok: true }>
   }
   installers: {
+    inspectSkillEnvSource: (
+      source: SynapseSkillInstallerSource,
+    ) => Promise<SynapseSkillEnvInspectionResult>
     installSourceToEditor: (
       payload: SynapseInstallSourceToEditorPayload,
     ) => Promise<SynapseContentInstallResult>

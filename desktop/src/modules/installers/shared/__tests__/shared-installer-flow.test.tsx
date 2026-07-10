@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     },
   },
   installSourceToEditor: vi.fn(),
+  inspectSkillEnvSource: vi.fn(),
   readContent: vi.fn(),
   resolveEditorInstallTarget: vi.fn(),
   readyTargetOverrides: {} as Record<string, unknown>,
@@ -38,6 +39,7 @@ vi.mock("@/app-shell/content", () => ({
 
 vi.mock("@/app-shell/installers", () => ({
   installSourceToEditor: mocks.installSourceToEditor,
+  inspectSkillEnvSource: mocks.inspectSkillEnvSource,
 }))
 
 vi.mock("@/app-shell/config", () => ({
@@ -240,6 +242,10 @@ function resetMockState() {
     hasValue: true,
   })
   mocks.readyTargetOverrides = {}
+  mocks.inspectSkillEnvSource.mockResolvedValue({
+    declarations: [],
+    legacyPlaceholders: [],
+  })
 }
 
 beforeEach(() => {
@@ -314,6 +320,28 @@ async function renderFlowWithInitialGlobalTarget() {
   })
 }
 
+async function renderSkillFlowWithInitialProjectTarget() {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+
+  await act(async () => {
+    root.render(
+      <SharedInstallerFlow
+        mode="modal"
+        source={repositorySkillSource}
+        editors={[editor]}
+        initialEditor={editor}
+        initialSelection={{ scope: "project", projectPath: "/tmp/project" }}
+        projects={[{ id: "project-1", name: "Project", path: "/tmp/project" }]}
+        onCancel={vi.fn()}
+        onInstalled={vi.fn()}
+      />,
+    )
+  })
+}
+
 function clickButton(text: string) {
   const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
     .find((candidate) => candidate.textContent?.includes(text))
@@ -325,6 +353,14 @@ function setInputValue(input: HTMLInputElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
   setter?.call(input, value)
   input.dispatchEvent(new Event("input", { bubbles: true }))
+}
+
+function inputByLabel(label: string) {
+  const labelElement = Array.from(document.querySelectorAll<HTMLLabelElement>("label"))
+    .find((candidate) => candidate.textContent === label)
+  return labelElement?.htmlFor
+    ? document.getElementById(labelElement.htmlFor) as HTMLInputElement | null
+    : null
 }
 
 afterEach(() => {
@@ -379,8 +415,188 @@ describe("SharedInstallerFlow", () => {
     expect(document.querySelector("[data-testid='initial-selection']")?.textContent).toBe("global:")
   })
 
+  it("confirms declared Skill ENV values and passes every value to the installer", async () => {
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [
+        { name: "GITEE_TOKEN", defaultValue: "" },
+        { name: "API_BASE_URL", defaultValue: "https://example.com" },
+        { name: "OPTIONAL_EMPTY", defaultValue: "" },
+      ],
+      legacyPlaceholders: [],
+    })
+    mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
+    await renderFlow(repositorySkillSource)
+
+    await act(async () => {
+      clickButton("Codex")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("选择目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("Skill 配置")
+    expect(inputByLabel("GITEE_TOKEN")?.value).toBe("saved-token")
+    expect(inputByLabel("API_BASE_URL")?.value).toBe("https://example.com")
+    expect(inputByLabel("OPTIONAL_EMPTY")?.value).toBe("")
+
+    await act(async () => {
+      clickButton("继续安装")
+    })
+    await act(async () => {
+      clickButton("仅本次使用")
+      await Promise.resolve()
+    })
+
+    expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
+      skillEnvValues: {
+        GITEE_TOKEN: "saved-token",
+        API_BASE_URL: "https://example.com",
+        OPTIONAL_EMPTY: "",
+      },
+    }))
+  })
+
+  it("keeps sustainable ENV values separate from legacy one-shot substitutions", async () => {
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [{ name: "GITEE_TOKEN", defaultValue: "" }],
+      legacyPlaceholders: ["INLINE_TOKEN"],
+    })
+    mocks.secrets.list.mockResolvedValue({
+      secrets: [
+        { id: "secret-1", name: "GITEE_TOKEN", description: "saved", hasValue: true },
+        { id: "secret-2", name: "INLINE_TOKEN", description: "saved", hasValue: true },
+      ],
+      total: 2,
+    })
+    mocks.secrets.get.mockImplementation(async ({ name }: { name: string }) => ({
+      id: name === "GITEE_TOKEN" ? "secret-1" : "secret-2",
+      name,
+      description: "saved",
+      hasValue: true,
+      value: name === "GITEE_TOKEN" ? "saved-token" : "inline-token",
+    }))
+    mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
+    await renderFlow(repositorySkillSource)
+
+    await act(async () => {
+      clickButton("Codex")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("选择目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("Skill 配置")
+    await act(async () => {
+      clickButton("继续安装")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("变量替换")
+    expect(document.body.textContent).toContain("安装后无法同步")
+
+    await act(async () => {
+      clickButton("继续安装")
+      await Promise.resolve()
+    })
+
+    expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
+      skillEnvValues: { GITEE_TOKEN: "saved-token" },
+      variableSubstitutions: { INLINE_TOKEN: "inline-token" },
+    }))
+  })
+
+  it("deduplicates same-name secret updates and prefers the sustainable ENV value", async () => {
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [{ name: "GITEE_TOKEN", defaultValue: "" }],
+      legacyPlaceholders: ["gitee_token"],
+    })
+    mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
+    await renderFlow(repositorySkillSource)
+
+    await act(async () => {
+      clickButton("Codex")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("选择目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const envInput = inputByLabel("GITEE_TOKEN")
+    await act(async () => {
+      if (envInput) setInputValue(envInput, "env-token")
+    })
+    await act(async () => {
+      clickButton("继续安装")
+      await Promise.resolve()
+    })
+
+    const legacyInput = document.querySelector<HTMLInputElement>("input")
+    await act(async () => {
+      if (legacyInput) setInputValue(legacyInput, "legacy-token")
+    })
+    await act(async () => {
+      clickButton("继续安装")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("保存密钥")
+    await act(async () => {
+      clickButton("保存并继续")
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.upsert).toHaveBeenCalledTimes(1)
+    expect(mocks.secrets.upsert).toHaveBeenCalledWith({
+      name: "GITEE_TOKEN",
+      value: "env-token",
+    })
+    expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
+      skillEnvValues: { GITEE_TOKEN: "env-token" },
+      variableSubstitutions: { gitee_token: "legacy-token" },
+    }))
+  })
+
+  it("warns before confirming project-scoped Skill ENV values", async () => {
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [{ name: "GITEE_TOKEN", defaultValue: "" }],
+      legacyPlaceholders: [],
+    })
+    await renderSkillFlowWithInitialProjectTarget()
+
+    await act(async () => {
+      clickButton("选择目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("请确认 .env 不会被提交到 Git。")
+  })
+
   it("asks for repository Skill variables before install and passes substitutions", async () => {
-    mocks.readContent.mockResolvedValue({ content: "```text\nGITEE_TOKEN=${{ GITEE_TOKEN }}\n```" })
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [],
+      legacyPlaceholders: ["GITEE_TOKEN"],
+    })
     mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
     await renderFlow(repositorySkillSource)
 
@@ -415,7 +631,10 @@ describe("SharedInstallerFlow", () => {
 
   it("keeps placeholders when submitted variable values are empty", async () => {
     mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
-    mocks.readContent.mockResolvedValue({ content: "GITEE_TOKEN=${{ GITEE_TOKEN }}" })
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [],
+      legacyPlaceholders: ["GITEE_TOKEN"],
+    })
     mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
     await renderFlow(repositorySkillSource)
 
@@ -441,7 +660,10 @@ describe("SharedInstallerFlow", () => {
 
   it("saves new variables before continuing install", async () => {
     mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
-    mocks.readContent.mockResolvedValue({ content: "GITEE_TOKEN=${{ GITEE_TOKEN }}" })
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [],
+      legacyPlaceholders: ["GITEE_TOKEN"],
+    })
     mocks.updateConfig.mockResolvedValue(undefined)
     mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
     await renderFlow(repositorySkillSource)

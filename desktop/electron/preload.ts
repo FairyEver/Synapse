@@ -82,6 +82,7 @@ const IPC_CHANNELS = {
     "recordComplete": "synapse:skill-repository-install:record-complete",
   },
   "installers": {
+    "inspectSkillEnvSource": "synapse:installers:inspect-skill-env-source",
     "installSourceToEditor": "synapse:installers:install-source-to-editor",
     "installSourceToEditorTargets": "synapse:installers:install-source-to-editor-targets",
     "prepareLocalSkillSource": "synapse:installers:prepare-local-skill-source",
@@ -1211,6 +1212,7 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["skill-repository-install"].recordComplete)({ sessionId }),
   },
   installers: {
+    inspectSkillEnvSource: invoke(IPC_CHANNELS.installers.inspectSkillEnvSource),
     installSourceToEditor: invoke(IPC_CHANNELS.installers.installSourceToEditor),
     installSourceToEditorTargets: invoke(IPC_CHANNELS.installers.installSourceToEditorTargets),
     prepareLocalSkillSource: invoke(IPC_CHANNELS.installers.prepareLocalSkillSource),

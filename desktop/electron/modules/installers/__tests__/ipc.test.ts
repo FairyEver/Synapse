@@ -5,6 +5,7 @@ import type { SynapseInstallSourceToEditorTargetsResult } from "../../../../src/
 const mocks = vi.hoisted(() => ({
   installSourceToEditor: vi.fn(),
   installSourceToEditorTargets: vi.fn(),
+  inspectSkillEnvSource: vi.fn(),
   prepareInlineRuleSource: vi.fn(),
   prepareLocalSkillSource: vi.fn(),
 }))
@@ -13,6 +14,7 @@ vi.mock("../../../services/editor-install-service", () => ({
   editorInstallService: {
     installSourceToEditor: mocks.installSourceToEditor,
     installSourceToEditorTargets: mocks.installSourceToEditorTargets,
+    inspectSkillEnvSource: mocks.inspectSkillEnvSource,
   },
 }))
 
@@ -74,6 +76,10 @@ beforeEach(() => {
       },
     }],
   })
+  mocks.inspectSkillEnvSource.mockResolvedValue({
+    declarations: [{ name: "GITEE_TOKEN", defaultValue: "" }],
+    legacyPlaceholders: ["INLINE_TOKEN"],
+  })
 })
 
 describe("installersIpcModule", () => {
@@ -103,6 +109,25 @@ describe("installersIpcModule", () => {
     expect(mocks.prepareLocalSkillSource).toHaveBeenCalledWith({
       sourceDirectoryPath: "/tmp/skill",
     })
+  })
+
+  it("inspects Skill ENV declarations through the service", async () => {
+    const harness = createHarness()
+    const source = {
+      kind: "skill",
+      origin: "repository",
+      sourceIdentity: "skill-1",
+      repositoryContentId: "skill-1",
+      name: "team-skill",
+    }
+
+    const result = await harness.invoke("synapse:installers:inspect-skill-env-source", source)
+
+    expect(result).toEqual({
+      declarations: [{ name: "GITEE_TOKEN", defaultValue: "" }],
+      legacyPlaceholders: ["INLINE_TOKEN"],
+    })
+    expect(mocks.inspectSkillEnvSource).toHaveBeenCalledWith(source)
   })
 
   it("rejects empty and extra fields", async () => {
@@ -135,11 +160,13 @@ describe("installersIpcModule", () => {
         name: "team.rule",
         body: "# Rule",
       },
+      skillEnvValues: { EMPTY_ALLOWED: "" },
     })
 
     expect(mocks.installSourceToEditor).toHaveBeenCalledWith(
       expect.objectContaining({
         editorId: "codex",
+        skillEnvValues: { EMPTY_ALLOWED: "" },
         source: expect.objectContaining({ sourceIdentity: "inline-rule:abc" }),
       }),
       expect.objectContaining({
@@ -165,12 +192,14 @@ describe("installersIpcModule", () => {
         sourceFingerprint: "sha256:test",
       },
       targets: [{ editorId: "codex", scope: "global" }],
+      skillEnvValues: { GITEE_TOKEN: "saved-token" },
     }) as SynapseInstallSourceToEditorTargetsResult
 
     expect(result.results).toHaveLength(1)
     expect(mocks.installSourceToEditorTargets).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "install",
+        skillEnvValues: { GITEE_TOKEN: "saved-token" },
         targets: [{ editorId: "codex", scope: "global" }],
       }),
       expect.objectContaining({

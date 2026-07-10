@@ -97,6 +97,7 @@ export const IPC_CHANNELS = {
     "recordComplete": "synapse:skill-repository-install:record-complete",
   },
   "installers": {
+    "inspectSkillEnvSource": "synapse:installers:inspect-skill-env-source",
     "prepareLocalSkillSource": "synapse:installers:prepare-local-skill-source",
     "prepareInlineRuleSource": "synapse:installers:prepare-inline-rule-source",
     "installSourceToEditor": "synapse:installers:install-source-to-editor",
