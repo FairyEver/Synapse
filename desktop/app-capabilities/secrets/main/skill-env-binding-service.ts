@@ -600,7 +600,7 @@ async function openValidatedBinding(
     }
   } catch (error) {
     await handle?.close().catch(() => undefined)
-    if (error instanceof UnsafeBindingError) throw error
+    if (error instanceof UnsafeBindingError || error instanceof BindingContentChangedError) throw error
     const causeCode = error && typeof error === "object" && "code" in error && typeof error.code === "string"
       ? error.code
       : undefined

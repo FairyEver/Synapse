@@ -716,6 +716,58 @@ describe("SkillEnvBindingService", () => {
       expect.objectContaining({ skillName: "demo", status: "unwritable" }),
     ])
   })
+
+  it.each([
+    ["grows", "TOKEN=old-first\nEXTRA=x\n"],
+    ["shrinks", "TOKEN=\n"],
+  ])("reports a conflict when the env file %s during the queue open snapshot", async (_case, replacement) => {
+    const root = await createRoot()
+    const first = await createSkill(root, "first", "TOKEN=old-first\n")
+    const second = await createSkill(root, "second", "TOKEN=old-second\n")
+    const firstEnvPath = path.join(first, ".env")
+    let attackQueueOpen = false
+    let mutated = false
+    const harness = createHarness([trustedRoot(root)], () => 100, async (filePath, flags) => {
+      const handle = await open(filePath, flags)
+      if (!attackQueueOpen || filePath !== firstEnvPath) return handle
+      const originalRead = handle.read.bind(handle)
+      return new Proxy(handle, {
+        get(target, property, receiver) {
+          if (property === "read") {
+            return async (buffer: Buffer, offset: number, length: number, position: number) => {
+              const requestedLength = replacement.length < "TOKEN=old-first\n".length && !mutated
+                ? Math.max(1, Math.floor(length / 2))
+                : length
+              const result = await originalRead(buffer, offset, requestedLength, position)
+              if (!mutated) {
+                mutated = true
+                await writeFile(firstEnvPath, replacement)
+              }
+              return result
+            }
+          }
+          return Reflect.get(target, property, receiver)
+        },
+      }) as FileHandle
+    })
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+    const byName = new Map(scan.items.map((item) => [item.skillName, item.id]))
+    attackQueueOpen = true
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [byName.get("first")!, byName.get("second")!],
+    }, "new", harness.security)
+
+    expect(mutated).toBe(true)
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "first", status: "conflict" }),
+      expect.objectContaining({ skillName: "second", status: "updated" }),
+    ])
+    expect(await readFile(firstEnvPath, "utf8")).toBe(replacement)
+    expect(await readFile(path.join(second, ".env"), "utf8")).toBe('TOKEN="new"\n')
+  })
 })
 
 async function createRoot(): Promise<string> {
