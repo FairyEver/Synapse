@@ -11,7 +11,7 @@ describe("secretsIpcModule", () => {
     expect(secretsIpcModule.methods.upsert.channel).toBe("synapse:secrets:upsert")
     expect(secretsIpcModule.methods.delete.channel).toBe("synapse:secrets:delete")
     expect(secretsIpcModule.methods.scanSkillEnvBindings.channel).toBe("synapse:secrets:scan-skill-env-bindings")
-    expect(secretsIpcModule.methods.applySkillEnvBindings.channel).toBe("synapse:secrets:apply-skill-env-bindings")
+    expect(secretsIpcModule.methods.queueSkillEnvBindings.channel).toBe("synapse:secrets:queue-skill-env-bindings")
     expect(secretsIpcModule.events.changed.channel).toBe("synapse:secrets:changed")
   })
 
@@ -20,7 +20,7 @@ describe("secretsIpcModule", () => {
       name: "TOKEN",
       value: "must-not-cross-ipc",
     })).toThrow()
-    expect(() => secretsIpcModule.methods.applySkillEnvBindings.request.parse({
+    expect(() => secretsIpcModule.methods.queueSkillEnvBindings.request.parse({
       name: "TOKEN",
       scanSessionId: "scan-1",
       itemIds: ["item-1"],
@@ -52,7 +52,7 @@ describe("secretsIpcModule", () => {
       upsert: vi.fn(async () => ({ secret: { id: "id-1", name: "TOKEN", hasValue: true }, created: true })),
       delete: vi.fn(async () => ({ id: "id-1", name: "TOKEN", hasValue: true })),
       scanSkillEnvBindings: vi.fn(async () => ({ scanSessionId: "scan-1", items: [] })),
-      applySkillEnvBindings: vi.fn(async () => ({ items: [] })),
+      queueSkillEnvBindings: vi.fn(async () => ({ items: [] })),
     }
     const broadcast = vi.fn()
     const permissionGuard = { check: vi.fn() }
@@ -74,7 +74,7 @@ describe("secretsIpcModule", () => {
     await secretsIpcModule.methods.upsert.handler(ctx as never, { name: "TOKEN", value: "secret" })
     await secretsIpcModule.methods.delete.handler(ctx as never, { name: "TOKEN" })
     await secretsIpcModule.methods.scanSkillEnvBindings.handler(ctx as never, { name: "TOKEN" })
-    await secretsIpcModule.methods.applySkillEnvBindings.handler(ctx as never, {
+    await secretsIpcModule.methods.queueSkillEnvBindings.handler(ctx as never, {
       name: "TOKEN",
       scanSessionId: "scan-1",
       itemIds: ["item-1"],
@@ -90,7 +90,7 @@ describe("secretsIpcModule", () => {
       { name: "TOKEN" },
       { actor: { kind: "user" }, permissionGuard, auditSink },
     )
-    expect(service.applySkillEnvBindings).toHaveBeenCalledWith(
+    expect(service.queueSkillEnvBindings).toHaveBeenCalledWith(
       { name: "TOKEN", scanSessionId: "scan-1", itemIds: ["item-1"] },
       { actor: { kind: "user" }, permissionGuard, auditSink },
     )

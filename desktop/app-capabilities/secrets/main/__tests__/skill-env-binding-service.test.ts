@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readFile, realpath, symlink, writeFile } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, readFile, realpath, rename, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -62,6 +62,31 @@ describe("SkillEnvBindingService", () => {
     expect(result.items).toEqual([])
   })
 
+  it("fails closed when a trusted root is replaced with a symlink", async () => {
+    const realRoot = await createRoot()
+    await createSkill(realRoot, "demo", "TOKEN=old\n")
+    const parent = await createRoot()
+    const linkedRoot = path.join(parent, "skills")
+    await symlink(realRoot, linkedRoot)
+
+    const harness = createHarness([trustedRoot(linkedRoot)])
+    const result = await harness.service.scan("TOKEN", "new", harness.security)
+
+    expect(result.items).toEqual([])
+  })
+
+  it("fails closed when a Skill parent is replaced with a symlink", async () => {
+    const root = await createRoot()
+    const outside = await createRoot()
+    const realSkill = await createSkill(outside, "real", "TOKEN=old\n")
+    await symlink(realSkill, path.join(root, "demo"))
+
+    const harness = createHarness([trustedRoot(root)])
+    const result = await harness.service.scan("TOKEN", "new", harness.security)
+
+    expect(result.items).toEqual([])
+  })
+
   it("expires a scan session at exactly 300000 milliseconds", async () => {
     const root = await createRoot()
     await createSkill(root, "demo", "TOKEN=old\n")
@@ -70,7 +95,7 @@ describe("SkillEnvBindingService", () => {
     const scan = await harness.service.scan("TOKEN", "new", harness.security)
     now += 300_000
 
-    await expect(harness.service.apply({
+    await expect(harness.service.enqueue({
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
@@ -83,12 +108,12 @@ describe("SkillEnvBindingService", () => {
     const harness = createHarness([trustedRoot(root)])
     const scan = await harness.service.scan("TOKEN", "new", harness.security)
 
-    await expect(harness.service.apply({
+    await expect(harness.service.enqueue({
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: ["forged"],
     }, "new", harness.security)).rejects.toThrow("扫描项目无效")
-    await expect(harness.service.apply({
+    await expect(harness.service.enqueue({
       name: "OTHER",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
@@ -104,7 +129,7 @@ describe("SkillEnvBindingService", () => {
     const byName = new Map(scan.items.map((item) => [item.skillName, item]))
     await writeFile(path.join(first, ".env"), "TOKEN=changed-after-scan\n")
 
-    const result = await harness.service.apply({
+    const result = await harness.service.enqueue({
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [byName.get("first")!.id, byName.get("second")!.id],
@@ -133,7 +158,7 @@ describe("SkillEnvBindingService", () => {
     await rm(linkedEnv)
     await symlink(path.join(duplicate, ".env"), linkedEnv)
 
-    const result = await harness.service.apply({
+    const result = await harness.service.enqueue({
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [byName.get("duplicate")!.id, byName.get("linked")!.id],
@@ -141,8 +166,30 @@ describe("SkillEnvBindingService", () => {
 
     expect(result.items).toEqual([
       expect.objectContaining({ skillName: "duplicate", status: "conflict" }),
-      expect.objectContaining({ skillName: "linked", status: "conflict" }),
+      expect.objectContaining({ skillName: "linked", status: "failed" }),
     ])
+  })
+
+  it("does not write through a Skill parent swapped after scanning", async () => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\n")
+    const outside = await createRoot()
+    const replacement = await createSkill(outside, "replacement", "TOKEN=outside\n")
+    const harness = createHarness([trustedRoot(root)])
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+
+    await rename(skill, path.join(root, "demo-old"))
+    await symlink(replacement, skill)
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, "new", harness.security)
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "failed" }),
+    ])
+    expect(await readFile(path.join(replacement, ".env"), "utf8")).toBe("TOKEN=outside\n")
   })
 
   it("rejects a file that becomes unwritable after scanning", async () => {
@@ -152,7 +199,7 @@ describe("SkillEnvBindingService", () => {
     const scan = await harness.service.scan("TOKEN", "new", harness.security)
     await chmod(path.join(skill, ".env"), 0o444)
 
-    const result = await harness.service.apply({
+    const result = await harness.service.enqueue({
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
@@ -169,7 +216,7 @@ describe("SkillEnvBindingService", () => {
     await createSkill(root, "demo", "TOKEN=old\n")
     const harness = createHarness([trustedRoot(root)])
     const scan = await harness.service.scan("TOKEN", "new", harness.security)
-    await harness.service.apply({
+    await harness.service.enqueue({
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],

@@ -166,12 +166,12 @@ export function createSecretsService(deps: SecretsServiceDeps) {
     return await deps.skillEnvBindings.scan(secret.name, secret.value, security)
   }
 
-  async function applySkillEnvBindings(
+  async function queueSkillEnvBindings(
     input: SecretSkillEnvApplyInput,
     security: SkillEnvBindingSecurity,
   ): Promise<SecretSkillEnvApplyResult> {
     const secret = await requireByName(input.name)
-    return await deps.skillEnvBindings.apply({ ...input, name: secret.name }, secret.value, security)
+    return await deps.skillEnvBindings.enqueue({ ...input, name: secret.name }, secret.value, security)
   }
 
   async function migrateLegacyConfig(): Promise<void> {
@@ -248,7 +248,7 @@ export function createSecretsService(deps: SecretsServiceDeps) {
     upsert,
     delete: deleteItem,
     scanSkillEnvBindings,
-    applySkillEnvBindings,
+    queueSkillEnvBindings,
   }
 }
 

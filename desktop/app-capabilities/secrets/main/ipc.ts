@@ -93,12 +93,12 @@ export const secretsIpcModule: IpcModule = {
         },
       ),
     },
-    applySkillEnvBindings: {
-      channel: "synapse:secrets:apply-skill-env-bindings",
+    queueSkillEnvBindings: {
+      channel: "synapse:secrets:queue-skill-env-bindings",
       kind: "invoke",
       request: secretSkillEnvApplyInputSchema,
       response: secretSkillEnvApplyResultSchema,
-      handler: (ctx, request) => resolveSecretsService(ctx).applySkillEnvBindings(
+      handler: (ctx, request) => resolveSecretsService(ctx).queueSkillEnvBindings(
         secretSkillEnvApplyInputSchema.parse(request),
         {
           actor: { kind: "user" },

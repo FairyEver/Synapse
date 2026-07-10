@@ -10,21 +10,21 @@ import type { SynapseConfig, SynapseConfigPatch } from "../../../../src/types/co
 import { createSecretsService } from "../service"
 
 describe("SecretsService", () => {
-  it("keeps Skill env values inside the service during scan and apply", async () => {
+  it("keeps Skill env values inside the service during scan and queue update", async () => {
     const harness = createHarness()
     const service = createSecretsService(harness.deps)
     await service.create({ name: "TOKEN", value: "private-value" })
     const security = { actor: { kind: "user" as const }, permissionGuard: {} as never, auditSink: {} as never }
 
     await service.scanSkillEnvBindings({ name: "token" }, security)
-    await service.applySkillEnvBindings({
+    await service.queueSkillEnvBindings({
       name: "token",
       scanSessionId: "scan-1",
       itemIds: ["item-1"],
     }, security)
 
     expect(harness.skillEnvBindings.scan).toHaveBeenCalledWith("TOKEN", "private-value", security)
-    expect(harness.skillEnvBindings.apply).toHaveBeenCalledWith({
+    expect(harness.skillEnvBindings.enqueue).toHaveBeenCalledWith({
       name: "TOKEN",
       scanSessionId: "scan-1",
       itemIds: ["item-1"],
@@ -233,7 +233,7 @@ function createHarness(options: HarnessOptions = {}) {
   })
   const skillEnvBindings = {
     scan: vi.fn(async () => ({ scanSessionId: "scan-1", items: [] })),
-    apply: vi.fn(async () => ({ items: [] })),
+    enqueue: vi.fn(async () => ({ items: [] })),
   }
 
   return {

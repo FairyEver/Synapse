@@ -419,7 +419,7 @@ const IPC_CHANNELS = {
     "upsert": "synapse:secrets:upsert",
     "delete": "synapse:secrets:delete",
     "scanSkillEnvBindings": "synapse:secrets:scan-skill-env-bindings",
-    "applySkillEnvBindings": "synapse:secrets:apply-skill-env-bindings",
+    "queueSkillEnvBindings": "synapse:secrets:queue-skill-env-bindings",
     "changed": "synapse:secrets:changed",
   },
   "agentPersonas": {
@@ -913,7 +913,7 @@ const synapseBridge: SynapseBridge = {
     upsert: (input) => invoke(IPC_CHANNELS.secrets.upsert)(input),
     delete: (input) => invoke(IPC_CHANNELS.secrets.delete)(input),
     scanSkillEnvBindings: (input) => invoke(IPC_CHANNELS.secrets.scanSkillEnvBindings)(input),
-    applySkillEnvBindings: (input) => invoke(IPC_CHANNELS.secrets.applySkillEnvBindings)(input),
+    queueSkillEnvBindings: (input) => invoke(IPC_CHANNELS.secrets.queueSkillEnvBindings)(input),
     onChanged: createRawPayloadSubscription(
       subscribe,
       IPC_CHANNELS.secrets.changed,
