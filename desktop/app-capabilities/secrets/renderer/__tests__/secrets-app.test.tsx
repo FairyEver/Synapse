@@ -85,6 +85,7 @@ const skillEnvScanResult = {
       scope: "global" as const,
       envPath: "/Users/me/.cursor/skills/skill-three/.env",
       status: "invalid" as const,
+      message: "配置文件格式无效。",
     },
     {
       id: "item-4",
@@ -93,6 +94,7 @@ const skillEnvScanResult = {
       scope: "global" as const,
       envPath: "/Users/me/.codex/skills/skill-four/.env",
       status: "unwritable" as const,
+      message: "配置文件不可读或不可写。",
     },
     {
       id: "item-5",
@@ -101,6 +103,7 @@ const skillEnvScanResult = {
       scope: "global" as const,
       envPath: "/Users/me/.claude/skills/skill-five/.env",
       status: "unsafe_link" as const,
+      message: "配置文件路径不安全。",
     },
   ],
 }
@@ -428,6 +431,9 @@ describe("SecretsModule", () => {
     expect(document.body.textContent).toContain("格式错误")
     expect(document.body.textContent).toContain("不可写")
     expect(document.body.textContent).toContain("不安全路径")
+    expect(rowText("skill-three")).toContain("配置文件格式无效。")
+    expect(rowText("skill-four")).toContain("配置文件不可读或不可写。")
+    expect(rowText("skill-five")).toContain("配置文件路径不安全。")
     expect(document.body.textContent).not.toContain("changed-secret")
 
     await act(async () => {
@@ -486,6 +492,7 @@ describe("SecretsModule", () => {
     expect(document.body.textContent).toContain("文件已变化")
     expect(rowText("skill-two")).toContain("当前 Windows 环境不支持安全原子更新。")
     expect(rowText("skill-three")).toContain("扫描结果已失效。")
+    expect(rowText("skill-three")).not.toContain("配置文件格式无效。")
     expect(document.body.textContent).not.toContain("super-secret")
   })
 

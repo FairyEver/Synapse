@@ -167,12 +167,13 @@ function BindingStatus({
     || item.status === "invalid"
     || item.status === "unwritable"
     || item.status === "unsafe_link"
+  const message = queueResult?.message ?? item.message
   return (
     <div className="space-y-1">
       <Badge variant={destructive ? "destructive" : "secondary"}>{label}</Badge>
-      {queueResult?.message ? (
+      {message ? (
         <p className="max-w-64 whitespace-normal break-words text-xs text-muted-foreground">
-          {queueResult.message}
+          {message}
         </p>
       ) : null}
     </div>
