@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { SECRETS_MCP_TOOL_NAMES } from "../../../secrets/shared/capability"
 import { SYNAPSE_SKILL_SOURCE_IDENTITY } from "../../shared/capability"
 import { createSynapseSkillService } from "../service"
 import { buildDriveTools } from "../../../../synapse-capabilities/shared/drive-domain"
@@ -192,13 +193,22 @@ describe("SynapseSkillService", () => {
       readFile(path.join(systemPackageRoot, "secrets/index.md"), "utf8"),
       readFile(path.join(systemPackageRoot, "secrets/api-reference.md"), "utf8"),
     ])
+    const secretsDocs = `${secretsIndex}\n${secretsApiReference}`
+    const documentedTools = [...secretsApiReference.matchAll(/^### (app_secrets_[a-z_]+)$/gm)]
+      .map((match) => match[1])
+      .sort()
+    const registeredTools = [...Object.values(SECRETS_MCP_TOOL_NAMES)].sort()
 
+    expect(documentedTools).toEqual(registeredTools)
     expect(secretsIndex).toContain("Names are immutable after creation.")
     expect(secretsIndex).toContain("never scan or write installed Skill files")
     expect(secretsIndex).toContain("in-memory serial queue")
     expect(secretsApiReference).toContain("Names are immutable after creation.")
     expect(secretsApiReference).toContain("not MCP actions or tools")
     expect(secretsApiReference).toContain("never scan or write installed Skill files")
-    expect(`${secretsIndex}\n${secretsApiReference}`).not.toContain("newName")
+    expect(secretsDocs).not.toMatch(/existing secrets or renames|supports renames/i)
+    expect(secretsDocs).not.toMatch(/\bapp_secrets_[a-z0-9_]*(?:scan|queue)[a-z0-9_]*\b/i)
+    expect(secretsDocs).not.toMatch(/\bapp\.secrets\.[a-z0-9_.]*(?:scan|queue)[a-z0-9_.]*\b/i)
+    expect(secretsDocs).not.toContain("newName")
   })
 })
