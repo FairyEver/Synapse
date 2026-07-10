@@ -698,7 +698,7 @@ class ContentWriteService {
           error: error instanceof Error ? error.message : String(error),
         })
         await rm(stagedIconPath, { force: true }).catch(() => {})
-        throw new Error("图标图片保存失败，内容已写入但未完成图标替换，请重试保存。")
+        throw new Error("图标图片保存失败，内容已写入但未完成图标替换，请重试保存。", { cause: error })
       }
     }
 
