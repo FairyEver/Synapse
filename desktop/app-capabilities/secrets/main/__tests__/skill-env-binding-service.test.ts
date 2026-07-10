@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, open, readFile, realpath, rename, symlink, writeFile } from "node:fs/promises"
+import { chmod, link, mkdir, mkdtemp, open, readFile, realpath, rename, symlink, writeFile } from "node:fs/promises"
 import type { FileHandle } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -85,6 +85,32 @@ describe("SkillEnvBindingService", () => {
     const harness = createHarness([trustedRoot(root)])
     const result = await harness.service.scan("TOKEN", "new", harness.security)
 
+    expect(result.items).toEqual([])
+  })
+
+  it("discards a candidate when the root changes after its precheck", async () => {
+    const root = await createRoot()
+    await createSkill(root, "demo", "TOKEN=old\n")
+    const replacement = await createRoot()
+    await createSkill(replacement, "demo", "TOKEN=old\n")
+    let swapped = false
+    const harness = createHarness(
+      [trustedRoot(root)],
+      () => 100,
+      undefined,
+      async (phase) => {
+        if (phase !== "scan" || swapped) return
+        swapped = true
+        const oldRoot = `${root}-old`
+        await rename(root, oldRoot)
+        tempRoots.push(oldRoot)
+        await rename(replacement, root)
+      },
+    )
+
+    const result = await harness.service.scan("TOKEN", "new", harness.security)
+
+    expect(swapped).toBe(true)
     expect(result.items).toEqual([])
   })
 
@@ -396,6 +422,44 @@ describe("SkillEnvBindingService", () => {
     ])
     expect(await readFile(path.join(root, "second", ".env"), "utf8")).toBe('TOKEN="new"\n')
   })
+
+  it("does not truncate when the Skill parent changes during permission check", async () => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\n")
+    const harness = createHarness([trustedRoot(root)])
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+    let releasePermission!: () => void
+    const permissionGate = new Promise<void>((resolve) => { releasePermission = resolve })
+    harness.security.permissionGuard.check = vi.fn(async (request) => {
+      harness.permissionRequests.push(request)
+      if (request.action === "fs.write") {
+        await permissionGate
+      }
+      return { allowed: true as const }
+    })
+
+    const queued = harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, "new", harness.security)
+    while (!harness.permissionRequests.some(({ action }) => action === "fs.write")) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+    const oldSkill = path.join(root, "demo-old")
+    await rename(skill, oldSkill)
+    await mkdir(skill)
+    await writeFile(path.join(skill, "SKILL.md"), "# replacement\n")
+    await link(path.join(oldSkill, ".env"), path.join(skill, ".env"))
+    releasePermission()
+
+    const result = await queued
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "conflict" }),
+    ])
+    expect(await readFile(path.join(skill, ".env"), "utf8")).toBe("TOKEN=old\n")
+    expect(await readFile(path.join(oldSkill, ".env"), "utf8")).toBe("TOKEN=old\n")
+  })
 })
 
 async function createRoot(): Promise<string> {
@@ -427,6 +491,7 @@ function createHarness(
   roots: TrustedSkillRoot[],
   now: () => number = () => 100,
   openFile?: (filePath: string, flags: number) => Promise<FileHandle>,
+  beforeBindingOpen?: (phase: "scan" | "queue") => Promise<void>,
 ) {
   const auditEvents: Parameters<AuditSink["record"]>[0][] = []
   const permissionRequests: Parameters<PermissionGuard["check"]>[0][] = []
@@ -448,6 +513,7 @@ function createHarness(
     createId: () => `id-${nextId++}`,
     now,
     openFile,
+    beforeBindingOpen,
     logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
   })
   return {
