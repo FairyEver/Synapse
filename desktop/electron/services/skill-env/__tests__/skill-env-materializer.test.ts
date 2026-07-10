@@ -39,6 +39,7 @@ import {
   materializeSkillEnv,
   type SkillEnvMaterializationGuard,
 } from "../skill-env-materializer"
+import { SKILL_RUNTIME_ENV_MAX_BYTES } from "../file-policy"
 import { replaceDirectoryAtomically } from "../../editor-file-write-utils"
 
 const tempRoots: string[] = []
@@ -186,12 +187,60 @@ describe("materializeSkillEnv", () => {
       }
 
       await expect(materializeSkillEnv({ ...paths, values: {} }))
-        .rejects.toThrow("Skill .env 超过 1 MiB 限制。")
+        .rejects.toThrow("Skill .env 不能超过 1 MiB。")
       await expect(readFile(path.join(paths.stagingDirectoryPath, ".env")))
         .rejects.toMatchObject({ code: "ENOENT" })
       expect((await stat(envPath)).size).toBe(1024 * 1024 + 1)
     },
   )
+
+  it("rejects a fresh .env whose confirmed value makes the final UTF-8 output too large", async () => {
+    const paths = await createDirectories()
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+
+    await expect(materializeSkillEnv({
+      ...paths,
+      values: { TOKEN: "x".repeat(Number(SKILL_RUNTIME_ENV_MAX_BYTES)) },
+    })).rejects.toThrow("Skill .env 不能超过 1 MiB。")
+
+    await expect(readFile(path.join(paths.stagingDirectoryPath, ".env")))
+      .rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("rejects a merged .env whose newly confirmed key pushes final bytes over the limit", async () => {
+    const paths = await createDirectories()
+    const existing = "TOKEN=existing\n"
+    await writeFile(path.join(paths.existingTargetDirectoryPath, ".env"), existing, "utf8")
+    await writeFile(
+      path.join(paths.stagingDirectoryPath, ".env.example"),
+      "TOKEN=\nNEW_KEY=\n",
+      "utf8",
+    )
+
+    await expect(materializeSkillEnv({
+      ...paths,
+      values: { NEW_KEY: "密".repeat(Math.ceil(Number(SKILL_RUNTIME_ENV_MAX_BYTES) / 3)) },
+    })).rejects.toThrow("Skill .env 不能超过 1 MiB。")
+
+    await expect(readFile(path.join(paths.stagingDirectoryPath, ".env")))
+      .rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(paths.existingTargetDirectoryPath, ".env"), "utf8"))
+      .resolves.toBe(existing)
+  })
+
+  it("rejects an oversized final output supplied entirely by .env.example", async () => {
+    const paths = await createDirectories()
+    await writeFile(
+      path.join(paths.stagingDirectoryPath, ".env.example"),
+      `TOKEN=\n#${"x".repeat(Number(SKILL_RUNTIME_ENV_MAX_BYTES))}\n`,
+      "utf8",
+    )
+
+    await expect(materializeSkillEnv({ ...paths, values: {} }))
+      .rejects.toThrow("Skill .env 不能超过 1 MiB。")
+    await expect(readFile(path.join(paths.stagingDirectoryPath, ".env")))
+      .rejects.toMatchObject({ code: "ENOENT" })
+  })
 
   it.each([
     ["grows", "TOKEN=old\nEXTRA=added\n"],

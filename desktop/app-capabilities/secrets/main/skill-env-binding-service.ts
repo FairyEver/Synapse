@@ -5,7 +5,12 @@ import path from "node:path"
 
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import type { TrustedSkillRoot } from "../../../electron/services/editor-scan-roots"
-import { SKILL_RUNTIME_ENV_MAX_BYTES } from "../../../electron/services/skill-env/file-policy"
+import {
+  assertSkillRuntimeEnvBytes,
+  SKILL_RUNTIME_ENV_MAX_BYTES,
+  SKILL_RUNTIME_ENV_SIZE_LIMIT_MESSAGE,
+  SkillRuntimeEnvSizeError,
+} from "../../../electron/services/skill-env/file-policy"
 import {
   canonicalizeDotenvValue,
   parseDotenvDocument,
@@ -440,6 +445,15 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
           return recordQueueResult(base, "conflict", "配置键已发生变化。", security, auditMetadata)
         }
         const nextContent = patchDotenvValues(validated.content, { [matches[0].name]: value })
+        try {
+          assertSkillRuntimeEnvBytes(nextContent)
+        } catch (error) {
+          if (!(error instanceof SkillRuntimeEnvSizeError)) throw error
+          return recordQueueResult(base, "failed", SKILL_RUNTIME_ENV_SIZE_LIMIT_MESSAGE, security, {
+            ...auditMetadata,
+            reason: "runtime-env-size-limit",
+          }, "failed")
+        }
         if (platform === "win32") {
           return recordQueueResult(
             base,

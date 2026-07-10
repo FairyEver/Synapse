@@ -9,7 +9,10 @@ import {
 } from "../../../src/lib/content-attachments"
 import { arePathsEqualForCompare } from "../../../src/lib/path-compare"
 import { createDotenvFromExample, mergeDotenvExample } from "./dotenv-document"
-import { SKILL_RUNTIME_ENV_MAX_BYTES } from "./file-policy"
+import {
+  assertSkillRuntimeEnvByteLength,
+  assertSkillRuntimeEnvBytes,
+} from "./file-policy"
 
 export type MaterializeSkillEnvInput = {
   readonly stagingDirectoryPath: string
@@ -42,10 +45,6 @@ function createChangedEnvError(): Error {
 
 function createChangedTargetDirectoryError(): Error {
   return new Error("Skill 目标目录在读取 .env 期间发生变化。")
-}
-
-function createOversizedEnvError(): Error {
-  return new Error("Skill .env 超过 1 MiB 限制。")
 }
 
 function assertRegularEnvEntry(entry: { isFile(): boolean; isSymbolicLink(): boolean }): void {
@@ -264,9 +263,7 @@ async function readBoundedEnvSnapshot(
   handle: Awaited<ReturnType<typeof open>>,
   expectedSize: bigint,
 ): Promise<Buffer> {
-  if (expectedSize < 0n || expectedSize > SKILL_RUNTIME_ENV_MAX_BYTES) {
-    throw createOversizedEnvError()
-  }
+  assertSkillRuntimeEnvByteLength(expectedSize)
 
   const byteLength = Number(expectedSize)
   const content = Buffer.allocUnsafe(byteLength)
@@ -406,6 +403,7 @@ export async function materializeSkillEnv(
   } catch (error) {
     if (isMissingPathError(error)) {
       if (existing === null) return "absent"
+      assertSkillRuntimeEnvBytes(existing.content)
       await writeFile(stagedEnvPath, existing.content)
       return "merged"
     }
@@ -415,6 +413,7 @@ export async function materializeSkillEnv(
   const content = existing === null
     ? createDotenvFromExample(example, input.values)
     : mergeDotenvExample(existing.content.toString("utf8"), example, input.values)
+  assertSkillRuntimeEnvBytes(content)
   await writeFile(stagedEnvPath, content, "utf8")
   return existing === null ? "created" : "merged"
 }

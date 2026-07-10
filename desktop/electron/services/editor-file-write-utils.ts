@@ -33,6 +33,8 @@ type AtomicSwapOptions = {
   readonly beforeSwap?: () => Promise<void>
   readonly afterMoveExistingTarget?: (movedTargetPath: string) => Promise<void>
   readonly beforeRestoreMovedTarget?: (movedTargetPath: string) => Promise<void>
+  readonly beforeDeleteMovedTarget?: (movedTargetPath: string) => Promise<void>
+  readonly onRetainedMovedTarget?: () => void
 }
 
 class AtomicSwapRestoreError extends Error {
@@ -100,8 +102,23 @@ async function swapPathAtomically(
     throw error
   } finally {
     if (movedExistingTarget && movedReplacement) {
-      await rm(backupPath, { recursive: true, force: true })
-        .catch((err) => logger.warn("Failed to clean up backup", createEditorWriteErrorLogMeta(err)))
+      try {
+        await options.beforeDeleteMovedTarget?.(backupPath)
+        await rm(backupPath, { recursive: true, force: true })
+      } catch (cleanupError) {
+        logger.warn("Retained changed atomic swap backup", {
+          targetName,
+          ...createEditorWriteErrorLogMeta(cleanupError),
+        })
+        try {
+          options.onRetainedMovedTarget?.()
+        } catch (callbackError) {
+          logger.warn("Failed to report retained atomic swap backup", {
+            targetName,
+            ...createEditorWriteErrorLogMeta(callbackError),
+          })
+        }
+      }
     }
   }
 }

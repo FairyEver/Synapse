@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { AuditSink, PermissionGuard } from "../../../../electron/runtime/security"
 import type { TrustedSkillRoot } from "../../../../electron/services/editor-scan-roots"
+import { SKILL_RUNTIME_ENV_MAX_BYTES } from "../../../../electron/services/skill-env/file-policy"
 import {
   createSkillEnvBindingService,
   removeAtomicTempFile,
@@ -738,6 +739,60 @@ describe("SkillEnvBindingService", () => {
     expect(result.items).toEqual([
       expect.objectContaining({ skillName: "demo", status: "unwritable" }),
     ])
+  })
+
+  it.each([
+    ["ASCII", "x".repeat(64)],
+    ["multibyte", "密".repeat(20)],
+  ])("fails a final %s UTF-8 output over 1 MiB before permission or temp staging and continues", async (_caseName, value) => {
+    const root = await createRoot()
+    const firstPrefix = "TOKEN=old\n#"
+    const firstSuffix = "\n"
+    const firstTargetBytes = Number(SKILL_RUNTIME_ENV_MAX_BYTES) - 32
+    const firstContent = `${firstPrefix}${"a".repeat(
+      firstTargetBytes - Buffer.byteLength(firstPrefix) - Buffer.byteLength(firstSuffix),
+    )}${firstSuffix}`
+    const first = await createSkill(root, "first", firstContent)
+    const second = await createSkill(root, "second", "TOKEN=old\n")
+    let stagedOpenCalls = 0
+    const harness = createHarness(
+      [trustedRoot(root)],
+      () => 100,
+      undefined,
+      undefined,
+      createAtomicFileOps({
+        open: async (filePath, flags, mode) => {
+          stagedOpenCalls += 1
+          return open(filePath, flags, mode)
+        },
+      }),
+    )
+    const scan = await harness.service.scan("TOKEN", value, harness.security)
+    const byName = new Map(scan.items.map((item) => [item.skillName, item.id]))
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [byName.get("first")!, byName.get("second")!],
+    }, value, harness.security)
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        skillName: "first",
+        status: "failed",
+        message: "Skill .env 不能超过 1 MiB。",
+      }),
+      expect.objectContaining({ skillName: "second", status: "updated" }),
+    ])
+    expect(stagedOpenCalls).toBe(1)
+    expect(harness.permissionRequests.filter(({ action }) => action === "fs.write"))
+      .toHaveLength(1)
+    expect(await readFile(path.join(first, ".env"), "utf8")).toBe(firstContent)
+    expect(await readFile(path.join(second, ".env"), "utf8"))
+      .toBe(`TOKEN=${JSON.stringify(value)}\n`)
+    expect(await listSkillEnvTemps(first)).toEqual([])
+    expect(JSON.stringify(result)).not.toContain(value)
+    expect(JSON.stringify(harness.auditEvents)).not.toContain(value)
   })
 
   it.each([

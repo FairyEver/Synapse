@@ -448,6 +448,15 @@ export class EditorInstallCore {
                 }
                 await skillEnvGuard.validateMovedTargetForRestore(movedTargetPath)
               },
+              beforeDeleteMovedTarget: async (movedTargetPath) => {
+                if (!skillEnvGuard) {
+                  throw new Error("Skill .env 更新前置校验未注册。")
+                }
+                await skillEnvGuard.validateMovedTarget(movedTargetPath)
+              },
+              onRetainedMovedTarget: () => {
+                installWarning = "旧 Skill 备份发生变化，已保留，请手动检查。"
+              },
             })
           } catch (error) {
             if (backupPathForRestore && await pathExists(backupPathForRestore)) {
