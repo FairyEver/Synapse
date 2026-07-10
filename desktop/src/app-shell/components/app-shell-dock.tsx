@@ -48,7 +48,7 @@ export function AppShellDock({
         className="flex min-w-0 justify-center"
       >
         <ScrollArea className="min-w-0 max-w-full" scrollbars="horizontal">
-          <div className="flex min-w-max items-center justify-center gap-1.5">
+          <div className="flex min-w-max items-center justify-center gap-0">
             {apps.map((app) => {
               const active = app.id === value
 
