@@ -4,7 +4,7 @@
 
 **Goal:** Replace one-shot Skill body substitutions with a file-based `.env.example`/`.env` protocol, let users scan and update affected installed Skills after a secret value changes, and add an in-app Skill authoring guide with two copyable Agent prompts.
 
-**Architecture:** Add a pure Dotenv document layer, extend Skill source inspection and installation so `.env` is materialized in the atomic staging directory, and add an ephemeral main-process binding scanner that discovers current files from trusted editor roots without storing installation records. Secrets remains the only owner of secret values; the renderer receives scan status and opaque result ids, never the values used for batch updates. The resource repository renders one bundled Markdown guide and locally parses two controlled prompt blocks for copy actions.
+**Architecture:** Add a pure Dotenv document layer, extend Skill source inspection and installation so `.env` is materialized in the atomic staging directory, and add an ephemeral main-process binding scanner that discovers current files from trusted editor roots without storing installation records. Secrets remains the only owner of secret values; the renderer receives scan status and opaque result ids, never the values used for queue updates. Updates execute as an in-memory serial queue, one Skill at a time, with per-item conflict/failure results and no persistent queue records. The resource repository renders one bundled Markdown guide and locally parses two controlled prompt blocks for copy actions.
 
 **Tech Stack:** Electron 41, Node.js runtime APIs, Vite 8 raw imports, React 19, TypeScript 6, zod, shadcn/ui, Tailwind CSS 4, Vitest.
 
@@ -39,7 +39,7 @@ Create:
 - `desktop/electron/services/skill-env/skill-env-materializer.ts`: generate or merge `.env` inside an install staging directory.
 - `desktop/electron/services/skill-env/__tests__/skill-env-materializer.test.ts`: fresh install and update merge coverage.
 - `desktop/electron/services/editor-scan-roots.ts`: shared trusted global/project Skill-root enumeration.
-- `desktop/app-capabilities/secrets/main/skill-env-binding-service.ts`: ephemeral scan sessions and revalidated batch updates.
+- `desktop/app-capabilities/secrets/main/skill-env-binding-service.ts`: ephemeral scan sessions and revalidated serial queue updates.
 - `desktop/app-capabilities/secrets/main/__tests__/skill-env-binding-service.test.ts`: discovery, security, conflict, expiry, and redaction coverage.
 - `desktop/app-capabilities/secrets/renderer/skill-env-update-dialog.tsx`: selection and per-item result UI.
 - `desktop/src/modules/content/components/skill-env-values-dialog.tsx`: install-time values form for `.env.example` declarations.
@@ -579,7 +579,7 @@ git commit -m "feat: materialize skill env files on install"
 
 ---
 
-### Task 5: Trusted Binding Scan And Revalidated Batch Update
+### Task 5: Trusted Binding Scan And Revalidated Queue Update
 
 **Files:**
 - Create: `desktop/electron/services/editor-scan-roots.ts`
@@ -596,8 +596,9 @@ git commit -m "feat: materialize skill env files on install"
 
 **Interfaces:**
 - Produces `listTrustedSkillRoots(): Promise<TrustedSkillRoot[]>`.
-- Produces `SkillEnvBindingService.scan(name, value, security)` and `.apply(input, value, security)`.
-- Secrets IPC adds `scanSkillEnvBindings` and `applySkillEnvBindings`.
+- Produces `SkillEnvBindingService.scan(name, value, security)` and `.enqueue(input, value, security)`.
+- Secrets IPC adds `scanSkillEnvBindings` and `queueSkillEnvBindings`.
+- Queue execution is in-memory and serial: one Skill update at a time, ordered by `itemIds`; a conflict/failure is recorded and the next item continues. No persistent queue record is created.
 - Scan sessions expire after exactly five minutes and live only in memory.
 
 - [ ] **Step 1: Add failing schemas and service tests**
@@ -618,7 +619,7 @@ const scanResult = {
 }
 ```
 
-Test `needs_update`, `up_to_date`, `invalid`, `unwritable`, and `unsafe_link`; verify JSON never contains old or new values. Test forged ids, expiry at `300_000` ms, hash changes, duplicate keys, and a partial update where the second item still succeeds after the first conflicts.
+Test `needs_update`, `up_to_date`, `invalid`, `unwritable`, and `unsafe_link`; verify JSON never contains old or new values. Test forged ids, expiry at `300_000` ms, hash changes, duplicate keys, serial queue order, and a queue where the second item still succeeds after the first conflicts.
 
 - [ ] **Step 2: Run service tests and confirm failure**
 
@@ -701,9 +702,9 @@ async function scanSkillEnvBindings(input, security) {
   return deps.skillEnvBindings.scan(secret.name, secret.value, security)
 }
 
-async function applySkillEnvBindings(input, security) {
+async function queueSkillEnvBindings(input, security) {
   const secret = await requireByName(input.name)
-  return deps.skillEnvBindings.apply(input, secret.value, security)
+  return deps.skillEnvBindings.enqueue(input, secret.value, security)
 }
 ```
 
@@ -742,7 +743,7 @@ git commit -m "feat: scan and update skill env bindings"
 
 **Interfaces:**
 - Removes `newName` from `SecretUpdateInput`.
-- `SkillEnvUpdateDialog` receives one safe scan result and calls `applySkillEnvBindings` with selected ids.
+- `SkillEnvUpdateDialog` receives one safe scan result and calls `queueSkillEnvBindings` with selected ids; the service processes them serially and returns ordered per-item results.
 - Create/value-update/manual-scan open the scan flow; description-only updates do not.
 
 - [ ] **Step 1: Write failing immutable-name and scan UI tests**
@@ -759,7 +760,7 @@ for description-only edit, and:
 ```ts
 expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "TOKEN" })
 expect(document.body.textContent).toContain("更新 Skill 配置")
-expect(mocks.secrets.applySkillEnvBindings).toHaveBeenCalledWith({
+expect(mocks.secrets.queueSkillEnvBindings).toHaveBeenCalledWith({
   name: "TOKEN",
   scanSessionId: "scan-1",
   itemIds: ["item-1"],
@@ -1002,7 +1003,7 @@ Add a stable `Skill ENV 配置` boundary to `AGENTS.md`:
 
 ```md
 - Skill 可持续配置使用根目录 `.env.example` 声明键，由安装器生成或合并本地 `.env`；不要把真实 `.env` 写入资源仓库，也不要继续把需要后续同步的值替换进 `SKILL.md`。
-- 密钥名称与 `.env` 键名构成文件关联，名称创建后不可修改。密钥值变化后只能扫描受信任编辑器 Skill 目录，并由用户确认后更新；不得保存安装实例或静默批量改写。
+- 密钥名称与 `.env` 键名构成文件关联，名称创建后不可修改。密钥值变化后只能扫描受信任编辑器 Skill 目录，并由用户确认后进入内存串行队列；不得保存安装实例或静默改写。
 ```
 
 Update the Synapse Skill Secrets guide/API reference to state:
@@ -1018,7 +1019,7 @@ Update the Synapse Skill Secrets guide/API reference to state:
 Add one user-facing bullet to `RELEASE_NOTES_PENDING.md`:
 
 ```md
-- Skill 现在可以用 `.env.example` 声明安装配置；密钥变更后可扫描受影响的已安装 Skill 并确认批量更新。资源仓库新增 Skill 开发指南和两段可复制的本地 Agent 提示词。
+- Skill 现在可以用 `.env.example` 声明安装配置；密钥变更后可扫描受影响的已安装 Skill，并确认后按队列逐项更新。资源仓库新增 Skill 开发指南和两段可复制的本地 Agent 提示词。
 ```
 
 - [ ] **Step 3: Run all focused suites**
@@ -1047,7 +1048,7 @@ Expected: every command exits 0; `git diff --check` prints nothing.
 Run:
 
 ```bash
-rg -n "skillEnvValues|scanSkillEnvBindings|applySkillEnvBindings" desktop/app-capabilities/secrets desktop/electron/services desktop/src/modules/installers
+rg -n "skillEnvValues|scanSkillEnvBindings|queueSkillEnvBindings" desktop/app-capabilities/secrets desktop/electron/services desktop/src/modules/installers
 rg -n "newName" desktop/app-capabilities/secrets desktop/app-capabilities/synapse-skill/skill-package/secrets
 ```
 

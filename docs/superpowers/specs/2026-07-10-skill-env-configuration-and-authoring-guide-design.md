@@ -12,7 +12,7 @@ Skill 作者在根目录提交 `.env.example` 声明配置键，Synapse 安装�
 
 ## 目标
 
-- 让安装后的 Skill 配置可以在密钥值变化后被可靠发现和批量更新。
+- 让安装后的 Skill 配置可以在密钥值变化后被可靠发现，并通过串行队列逐项更新。
 - 不建立持久化的 Skill 安装实例或密钥绑定数据库。
 - 让关联关系存在于 Skill 自身的标准配置文件中。
 - 保持已安装 Skill 离开 Synapse 后仍可独立运行，不要求运行时调用 Synapse MCP。
@@ -28,7 +28,7 @@ Skill 作者在根目录提交 `.env.example` 声明配置键，Synapse 安装�
 - 不为每个安装实例保存持久化路径、来源或绑定关系。
 - 不让 Synapse 在 Skill 运行时注入环境变量。
 - 不要求 Skill 通过 Synapse MCP 读取配置。
-- 不在本阶段为扫描和批量更新新增 MCP 工具。
+- 不在本阶段为扫描和队列更新新增 MCP 工具。
 - 不改变 Rule 的 `${{ NAME }}` 变量替换行为。
 
 ## 核心决策
@@ -376,7 +376,7 @@ Rule 继续使用现有 `${{ NAME }}` 安装时替换，不纳入本次 `.env` �
 
 `SecretsService` 继续作为密钥 CRUD 的唯一业务入口。扫描服务通过受控接口按名称读取最新值，Renderer 不接收批量更新所需的真实值。
 
-密钥扫描与批量更新首先作为 Secrets IPC/UI 能力提供，不新增 MCP action。现有 Secrets MCP、Synapse Skill 的 secrets 指南和 API reference 需要同步说明：
+密钥扫描与队列更新首先作为 Secrets IPC/UI 能力提供，不新增 MCP action。队列采用内存串行执行：一次只处理一个 Skill，单项失败或冲突不阻塞后续项，结果按队列顺序返回；不保存持久化队列记录。现有 Secrets MCP、Synapse Skill 的 secrets 指南和 API reference 需要同步说明：
 
 - 密钥名称可作为 Skill `.env` 键的关联名。
 - 名称创建后不可修改。
