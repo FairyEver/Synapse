@@ -1389,8 +1389,66 @@ describe("AgentComposer", () => {
       />,
     )
 
-    expect(html).toContain("中英翻译 | hello")
-    expect(html).toContain("普通 | 普通问题")
+    const wrapper = document.createElement("div")
+    wrapper.innerHTML = html
+    const contents = [...wrapper.querySelectorAll("p")]
+    const translatorContent = contents.find((element) => element.textContent === "hello")
+    const ordinaryContent = contents.find((element) => element.textContent === "普通问题")
+
+    expect(translatorContent?.parentElement?.previousElementSibling?.textContent).toContain("中英翻译")
+    expect(ordinaryContent?.parentElement?.previousElementSibling?.textContent).toContain("普通")
+  })
+
+  it("keeps pending message actions visible while long content truncates", () => {
+    const longContent = "这是一条很长的待发送消息".repeat(20)
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={true}
+        cancelPhase="idle"
+        pendingMessages={[
+          {
+            id: "pending-long",
+            target: {
+              projectId: "project-1",
+              conversationId: "conversation-1",
+              sessionKey: "local:renderer",
+            },
+            content: longContent,
+            createdAt: "2026-07-11T12:00:00.000Z",
+            status: "queued",
+            mainThreadPersonaId: null,
+            mainThreadPersonaName: "普通",
+          },
+        ]}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+        onRemovePendingMessage={vi.fn()}
+      />,
+    )
+    const wrapper = document.createElement("div")
+    wrapper.innerHTML = html
+
+    const viewport = wrapper.querySelector<HTMLElement>('[data-slot="scroll-area-viewport"]')
+    expect(viewport?.className).toContain("overflow-x-hidden")
+    expect(viewport?.className).toContain("[&>div]:!block")
+
+    const content = [...wrapper.querySelectorAll("p")]
+      .find((element) => element.textContent === longContent)
+    expect(content).toBeDefined()
+    expect(content?.classList.contains("truncate")).toBe(true)
+    expect(content?.classList.contains("whitespace-nowrap")).toBe(true)
+    expect(content?.parentElement?.classList.contains("min-w-0")).toBe(true)
+    expect(content?.parentElement?.classList.contains("flex-1")).toBe(true)
+    expect(content?.parentElement?.previousElementSibling?.classList.contains("shrink-0")).toBe(true)
+
+    const removeButton = wrapper.querySelector<HTMLButtonElement>('button[aria-label="删除待发送消息"]')
+    expect(removeButton?.parentElement?.classList.contains("shrink-0")).toBe(true)
   })
 
   it("renders all permission modes in the selector", async () => {
