@@ -69,3 +69,15 @@ export const CC_SWITCH_IMPORT_JSON_MAX_BYTES = 2 * 1024 * 1024
 
 // CC Switch SQLite Provider 导入最大行数：限制设置页预览 cc-switch.db 时单次读取的 Claude provider 数量。
 export const CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS = 500
+
+// Skill 卸载器递归扫描最大目录深度：限制自定义根目录中的异常深层级遍历。
+export const SKILL_UNINSTALL_SCAN_MAX_DEPTH = 32
+
+// Skill 卸载器单次最多访问目录数：避免误选超大目录后长期占用主进程。
+export const SKILL_UNINSTALL_SCAN_MAX_DIRECTORIES = 50_000
+
+// Skill 卸载器单次扫描超时时间（毫秒）：超时后返回已发现结果并标记扫描未完成。
+export const SKILL_UNINSTALL_SCAN_TIMEOUT_MS = 30_000
+
+// Skill 卸载器目录读取并发数：限制递归扫描对本机文件系统的瞬时压力。
+export const SKILL_UNINSTALL_SCAN_CONCURRENCY = 8

@@ -1,0 +1,55 @@
+import { z } from "zod"
+
+const trimmedNonEmptyString = z.string().transform((value) => value.trim()).pipe(z.string().min(1))
+
+export const skillUninstallQuerySchema = z.object({
+  name: trimmedNonEmptyString,
+  searchRootPath: trimmedNonEmptyString.optional(),
+}).strict()
+
+export const skillUninstallCandidateSchema = z.object({
+  path: z.string().min(1),
+  name: z.string().min(1),
+  frontmatterName: z.string().optional(),
+  editorIds: z.array(z.string()),
+  source: z.enum(["synapse", "external"]),
+  synapseContentId: z.string().optional(),
+}).strict()
+
+export const skillUninstallScanResultSchema = z.object({
+  candidates: z.array(skillUninstallCandidateSchema),
+  complete: z.boolean(),
+  warnings: z.array(z.string()),
+}).strict()
+
+export const skillUninstallTargetSchema = z.object({
+  query: skillUninstallQuerySchema,
+  path: z.string().min(1),
+}).strict()
+
+export const skillUninstallBatchResultItemSchema = z.object({
+  path: z.string().min(1),
+  status: z.enum(["trashed", "failed", "skipped"]),
+  error: z.string().optional(),
+}).strict()
+
+export const skillUninstallBatchResultSchema = z.object({
+  results: z.array(skillUninstallBatchResultItemSchema),
+}).strict()
+
+export const skillUninstallScanRequestSchema = z.object({
+  scanId: z.string().min(1),
+  query: skillUninstallQuerySchema,
+}).strict()
+
+export const skillUninstallCancelRequestSchema = z.object({
+  scanId: z.string().min(1),
+}).strict()
+
+export type SkillUninstallQuery = z.infer<typeof skillUninstallQuerySchema>
+export type SkillUninstallCandidate = z.infer<typeof skillUninstallCandidateSchema>
+export type SkillUninstallScanResult = z.infer<typeof skillUninstallScanResultSchema>
+export type SkillUninstallTarget = z.infer<typeof skillUninstallTargetSchema>
+export type SkillUninstallBatchResult = z.infer<typeof skillUninstallBatchResultSchema>
+export type SkillUninstallScanRequest = z.infer<typeof skillUninstallScanRequestSchema>
+export type SkillUninstallCancelRequest = z.infer<typeof skillUninstallCancelRequestSchema>
