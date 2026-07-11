@@ -146,6 +146,13 @@ describe("system app registry", () => {
     }
   })
 
+  it("uses a distinct icon for the Skill uninstaller", () => {
+    const installer = getSystemAppManifest("skill-installer")
+    const uninstaller = getSystemAppManifest("skill-uninstaller")
+
+    expect(uninstaller?.icon).not.toBe(installer?.icon)
+  })
+
   it("exposes pure definitions without icon URLs for Electron", () => {
     const definitions = listSystemAppDefinitions()
     expect(definitions.map((app) => app.id)).toEqual(listSystemApps().map((app) => app.id))
