@@ -123,7 +123,7 @@ export type EditorScanQuickPublishDraft =
     }
 
 export type EditorScanTrashRequest = {
-  itemType: "skill" | "rule"
+  itemType: "rule"
   itemName: string
   itemPath: string
   editorId: SynapseEditorId

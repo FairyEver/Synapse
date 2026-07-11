@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   },
   editorScanService: {
     assertTrustedEditorReadTarget: vi.fn(),
+    trashScanItem: vi.fn(),
   },
 }))
 
@@ -28,7 +29,7 @@ vi.mock("../../../services/editor-scan-service", () => ({
   listSkillFiles: vi.fn(),
   assertTrustedEditorReadTarget: mocks.editorScanService.assertTrustedEditorReadTarget,
   prepareQuickPublishDraft: vi.fn(),
-  trashScanItem: vi.fn(),
+  trashScanItem: mocks.editorScanService.trashScanItem,
 }))
 
 import { editorScanIpcModule } from "../ipc"
@@ -45,6 +46,28 @@ describe("editorScanIpcModule", () => {
     })
     mocks.contentSkillSourceService.resolveSkillMainFile.mockResolvedValue("/tmp/skills/review/SKILL.md")
     mocks.editorScanService.assertTrustedEditorReadTarget.mockResolvedValue(undefined)
+    mocks.editorScanService.trashScanItem.mockResolvedValue({
+      trashed: true,
+      mode: "path",
+      path: "/tmp/skills/review",
+    })
+  })
+
+  it("rejects Skill removal through the legacy editor scan trash channel", async () => {
+    const harness = createHarness()
+
+    await expect(harness.invoke("synapse:editor-scan:trash-item", {
+      itemType: "skill",
+      itemPath: "/tmp/skills/review",
+      itemName: "review",
+      editorId: "claude-code",
+      scope: "global",
+      source: "external",
+      trash: { mode: "path" },
+      synapseContentId: null,
+    })).rejects.toThrow()
+
+    expect(mocks.editorScanService.trashScanItem).not.toHaveBeenCalled()
   })
 
   it("uploads scanned Skills through the Skill Repository channel", async () => {

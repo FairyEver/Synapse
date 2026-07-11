@@ -121,7 +121,7 @@ const quickPublishDraftSchema = z.discriminatedUnion("itemType", [
 ])
 
 const trashRequestSchema = z.object({
-  itemType: z.enum(["skill", "rule"]),
+  itemType: z.literal("rule"),
   itemName: z.string(),
   itemPath: z.string(),
   editorId: z.string(),

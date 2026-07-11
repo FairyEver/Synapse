@@ -14,7 +14,14 @@ const mocks = vi.hoisted(() => ({
   },
   permissionGuard: {},
   scanAll: vi.fn(),
+  skillUninstallerService: {
+    uninstall: vi.fn(),
+  },
   trashScanItem: vi.fn(),
+}))
+
+vi.mock("../../../../app-capabilities/skill-uninstaller/main/service", () => ({
+  skillUninstallerService: mocks.skillUninstallerService,
 }))
 
 vi.mock("../../../services/install-status-cache-service", () => ({
@@ -70,10 +77,28 @@ describe("installStatusIpcModule", () => {
       }],
       projects: [],
     })
+    mocks.skillUninstallerService.uninstall.mockImplementation(async (
+      _targets: unknown,
+      _security: unknown,
+      hooks: { onTrashedContentId?: (contentId: string) => Promise<void> },
+    ) => {
+      try {
+        await hooks.onTrashedContentId?.("skill-1")
+        return { results: [{ path: "/editor/skills/skill", status: "trashed" }] }
+      } catch {
+        return {
+          results: [{
+            path: "/editor/skills/skill",
+            status: "trashed",
+            warning: "已移到废纸篓，安装状态刷新失败。",
+          }],
+        }
+      }
+    })
     mocks.trashScanItem.mockResolvedValue(undefined)
   })
 
-  it("keeps uninstall success when install status refresh fails", async () => {
+  it("routes Skill uninstall through the shared Skill Uninstaller service", async () => {
     const { installStatusIpcModule } = await import("../ipc")
     mocks.installStatusCacheService.refresh.mockRejectedValueOnce(new Error("scan failed"))
 
@@ -82,12 +107,49 @@ describe("installStatusIpcModule", () => {
       editorId: "codex",
     })).resolves.toBeUndefined()
 
-    expect(mocks.trashScanItem).toHaveBeenCalled()
+    expect(mocks.skillUninstallerService.uninstall).toHaveBeenCalledWith(
+      [{ path: "/editor/skills/skill", query: { name: "Skill" } }],
+      {
+        actor: { kind: "user" },
+        auditSink: mocks.auditSink,
+        permissionGuard: mocks.permissionGuard,
+      },
+      { onTrashedContentId: expect.any(Function) },
+    )
+    expect(mocks.trashScanItem).not.toHaveBeenCalled()
     expect(mocks.installStatusCacheService.refresh).toHaveBeenCalledWith("skill-1")
     expect(mocks.eventBus.emit).not.toHaveBeenCalled()
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       "Failed to refresh install status after uninstall.",
       expect.objectContaining({ contentId: "skill-1", editorId: "codex" }),
+    )
+  })
+
+  it("keeps Rule uninstall on the editor scan trash path", async () => {
+    const { installStatusIpcModule } = await import("../ipc")
+    mocks.scanAll.mockResolvedValueOnce({
+      global: [{
+        editorId: "codex",
+        rules: [{
+          name: "Rule",
+          path: "/editor/AGENTS.md",
+          synapseContentId: "rule-1",
+          trash: { mode: "rule-section", ruleId: "rule-1" },
+        }],
+        skills: [],
+      }],
+      projects: [],
+    })
+
+    await installStatusIpcModule.methods.uninstall.handler(createContext() as never, {
+      contentId: "rule-1",
+      editorId: "codex",
+    })
+
+    expect(mocks.skillUninstallerService.uninstall).not.toHaveBeenCalled()
+    expect(mocks.trashScanItem).toHaveBeenCalledWith(
+      expect.objectContaining({ itemType: "rule", itemPath: "/editor/AGENTS.md" }),
+      expect.objectContaining({ actor: { kind: "user" } }),
     )
   })
 })

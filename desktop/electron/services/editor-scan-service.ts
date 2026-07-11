@@ -283,9 +283,7 @@ async function getTrustedTrashRoots(
   if (!adapter) return []
 
   const scanConfig = adapter.getScanPathConfig()
-  const roots = request.itemType === "skill"
-    ? scanConfig.globalSkillPaths ?? (scanConfig.globalSkillsPath ? [scanConfig.globalSkillsPath] : [])
-    : (scanConfig.globalRulesPath ? [scanConfig.globalRulesPath] : [])
+  const roots = scanConfig.globalRulesPath ? [scanConfig.globalRulesPath] : []
 
   if (request.scope === "global") {
     return Array.from(new Set(roots))
@@ -294,7 +292,7 @@ async function getTrustedTrashRoots(
   const config = await configStore.load()
   return Array.from(new Set(config.global.projects.map((project) => {
     const paths = scanConfig.projectPaths(project.path)
-    return request.itemType === "skill" ? paths.skillsPath : paths.rulesPath
+    return paths.rulesPath
   })))
 }
 
@@ -766,25 +764,6 @@ async function prepareQuickPublishDraft(
   }
 }
 
-async function assertTrashableSkillDirectory(dirPath: string): Promise<void> {
-  let info
-  try {
-    info = await lstat(dirPath)
-  } catch {
-    throw new Error("目标不存在。")
-  }
-
-  if (info.isSymbolicLink() || !info.isDirectory()) {
-    throw new Error("目标类型不匹配。")
-  }
-
-  const mainFile = await resolveSkillMainFile(dirPath)
-  const meta = await readSynapseSkillMeta(dirPath)
-  if (!mainFile && !meta) {
-    throw new Error("目标类型不匹配。")
-  }
-}
-
 async function assertTrashableRuleFile(filePath: string): Promise<void> {
   let info
   try {
@@ -856,11 +835,7 @@ async function trashScanItem(
       }
     }
 
-    if (request.itemType === "skill") {
-      await assertTrashableSkillDirectory(request.itemPath)
-    } else {
-      await assertTrashableRuleFile(request.itemPath)
-    }
+    await assertTrashableRuleFile(request.itemPath)
 
     await shell.trashItem(request.itemPath)
     recordEditorTrashAudit(security, request.itemPath, "allowed", auditMetadata)

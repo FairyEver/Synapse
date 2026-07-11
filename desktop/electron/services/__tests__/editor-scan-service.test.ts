@@ -721,43 +721,6 @@ describe("editor scan quick publish", () => {
 })
 
 describe("editor scan trash", () => {
-  it("moves a skill directory to the system trash", async () => {
-    const projectRoot = await createTempDir()
-    const skillDir = path.join(projectRoot, ".agents", "skills", "release-helper")
-    await mkdir(skillDir, { recursive: true })
-    await writeFile(path.join(skillDir, "SKILL.md"), "# Release Helper\n")
-    trashItem.mockResolvedValue(undefined)
-    const { auditEvents, security } = createAllowingSecurity()
-    mockEditorScanProject(projectRoot)
-
-    const result = await trashScanItem({
-      itemType: "skill",
-      itemName: "release-helper",
-      itemPath: skillDir,
-      editorId: "codex",
-      scope: "project",
-      source: "external",
-      trash: { mode: "path" },
-      synapseContentId: null,
-    }, security)
-
-    expect(trashItem).toHaveBeenCalledWith(skillDir)
-    expect(result).toEqual({ trashed: true, mode: "path", path: skillDir })
-    expect(auditEvents.at(-1)).toMatchObject({
-      action: "fs.write",
-      outcome: "allowed",
-      resource: skillDir,
-      metadata: {
-        operation: "trash",
-        contentType: "skill",
-        editorId: "codex",
-        scope: "project",
-        source: "external",
-        trashMode: "path",
-      },
-    })
-  })
-
   it("moves a standalone rule file to the system trash", async () => {
     const projectRoot = await createTempDir()
     const rulePath = path.join(projectRoot, ".cursor", "rules", "project.mdc")
@@ -852,18 +815,17 @@ describe("editor scan trash", () => {
   it("rejects path trash outside configured editor scan roots", async () => {
     const projectRoot = await createTempDir()
     const rogueRoot = await createTempDir()
-    const skillDir = path.join(rogueRoot, "release-helper")
-    await mkdir(skillDir, { recursive: true })
-    await writeFile(path.join(skillDir, "SKILL.md"), "# Release Helper\n")
+    const rulePath = path.join(rogueRoot, "project.mdc")
+    await writeFile(rulePath, "# Rule\n")
     trashItem.mockResolvedValue(undefined)
     const { security } = createAllowingSecurity()
     mockEditorScanProject(projectRoot)
 
     await expect(trashScanItem({
-      itemType: "skill",
-      itemName: "release-helper",
-      itemPath: skillDir,
-      editorId: "codex",
+      itemType: "rule",
+      itemName: "project.mdc",
+      itemPath: rulePath,
+      editorId: "cursor",
       scope: "project",
       source: "external",
       trash: { mode: "path" },
