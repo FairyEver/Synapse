@@ -234,6 +234,8 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
     schedule()
   })
 
+  shouldStop()
+
   return {
     candidates: [...candidates.values()].sort((left, right) => left.path.localeCompare(right.path)),
     complete: warnings.size === 0,

@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { scanSkillRoots } from "../scanner"
 
 const roots: string[] = []
@@ -206,5 +206,28 @@ describe("scanSkillRoots", () => {
       complete: false,
       warnings: ["扫描超时，当前结果可能不完整。"],
     })
+  })
+
+  it("reports a timeout reached while the final empty directory read finishes", async () => {
+    const root = await fixture()
+    let calls = 0
+    const now = vi.spyOn(Date, "now").mockImplementation(() => ++calls <= 4 ? 0 : 100)
+
+    try {
+      const result = await scanSkillRoots({
+        query: { name: "jenkins" },
+        roots: [{ path: root, editorIds: [] }],
+        classifyEditors: () => [],
+        limits: { timeoutMs: 50, concurrency: 1 },
+      })
+
+      expect(result).toMatchObject({
+        candidates: [],
+        complete: false,
+        warnings: ["扫描超时，当前结果可能不完整。"],
+      })
+    } finally {
+      now.mockRestore()
+    }
   })
 })
