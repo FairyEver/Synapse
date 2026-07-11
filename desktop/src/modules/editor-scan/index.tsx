@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { closeDialogThenNavigate } from "@/app-shell/dialog-navigate"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import type { SynapseEditorId } from "@/types/editor"
@@ -27,6 +28,7 @@ import { EditorBulkSkillCopyDialog } from "./components/editor-bulk-skill-copy-d
 import { EditorBulkSkillTrashDialog } from "./components/editor-bulk-skill-trash-dialog"
 import type { EditorScanSkillCopyItem } from "./lib/editor-copy-source"
 import { EditorDirectoriesView } from "./components/editor-directories-view"
+import { useSkillUninstallerDialog } from "../../../app-capabilities/skill-uninstaller/renderer"
 
 type AppViewTab = "content" | "directories"
 type ContentTab = "skill" | "rule"
@@ -45,6 +47,7 @@ function EditorScanModule() {
   const [selectedSkillMap, setSelectedSkillMap] = useState<Map<string, EditorScanSkillCopyItem>>(() => new Map())
   const [bulkCopyOpen, setBulkCopyOpen] = useState(false)
   const [bulkTrashOpen, setBulkTrashOpen] = useState(false)
+  const { dialog: skillUninstallerDialog, openSkillUninstaller } = useSkillUninstallerDialog()
 
   const selectedSkillKeys = useMemo(() => new Set(selectedSkillMap.keys()), [selectedSkillMap])
   const selectedSkills = useMemo(() => Array.from(selectedSkillMap.values()), [selectedSkillMap])
@@ -119,6 +122,21 @@ function EditorScanModule() {
     },
     [],
   )
+
+  const requestSkillUninstall = useCallback((item: ScanItemForDetail) => {
+    closeDialogThenNavigate(
+      () => setDetailOpen(false),
+      () => openSkillUninstaller({
+        initialName: item.name,
+        ...(item.scope === "project"
+          ? { initialSearchRootPath: item.projectPath ?? item.path }
+          : {}),
+        onCompleted: async () => {
+          await refresh()
+        },
+      }),
+    )
+  }, [openSkillUninstaller, refresh])
 
   const handleSkillSelectionChange = useCallback((
     item: EditorScanSkillItem,
@@ -377,6 +395,7 @@ function EditorScanModule() {
       <ScanItemDetailDialog
         item={detailItem}
         onChanged={refresh}
+        onRequestSkillUninstall={requestSkillUninstall}
         open={detailOpen}
         onOpenChange={setDetailOpen}
       />
@@ -398,6 +417,7 @@ function EditorScanModule() {
         open={bulkTrashOpen}
         onOpenChange={setBulkTrashOpen}
       />
+      {skillUninstallerDialog}
     </SystemAppWindowShell>
   )
 }

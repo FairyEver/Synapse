@@ -134,6 +134,18 @@ describe("scan item detail dialog layout", () => {
     expect(source).toContain("item.trash.disabledReason")
   })
 
+  it("delegates Skill uninstall while keeping Rule trash local", async () => {
+    const source = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("onRequestSkillUninstall?.(item)")
+    expect(source).toMatch(/if \(item\.type === "skill"\) \{[\s\S]*onRequestSkillUninstall\?\.\(item\)[\s\S]*return[\s\S]*\}[\s\S]*setIsTrashConfirmOpen\(true\)/)
+    expect(source).toContain('if (!item || item.type !== "rule" || trashDisabledReason) return')
+    expect(source).toContain('{item.type === "rule" ? (')
+  })
+
   it("offers a publish-to-repo action for synapse-installed scan items", async () => {
     const source = await readFile(
       new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),

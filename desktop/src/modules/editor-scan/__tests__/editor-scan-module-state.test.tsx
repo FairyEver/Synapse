@@ -6,7 +6,19 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { EditorScanModule } from "../index"
 
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
 const refresh = vi.fn()
+const mocks = vi.hoisted(() => ({
+  openSkillUninstaller: vi.fn(),
+}))
+
+vi.mock("../../../../app-capabilities/skill-uninstaller/renderer", () => ({
+  useSkillUninstallerDialog: () => ({
+    dialog: <div data-skill-uninstaller-dialog />,
+    openSkillUninstaller: mocks.openSkillUninstaller,
+  }),
+}))
 
 vi.mock("../hooks/use-editor-scan", () => ({
   useEditorScan: () => ({
@@ -118,7 +130,58 @@ vi.mock("@/modules/apps/components/system-app-window-shell", () => ({
 }))
 
 vi.mock("../components/scan-item-detail-dialog", () => ({
-  ScanItemDetailDialog: () => null,
+  ScanItemDetailDialog: ({
+    onRequestSkillUninstall,
+  }: {
+    readonly onRequestSkillUninstall?: (item: {
+      readonly type: "skill"
+      readonly name: string
+      readonly path: string
+      readonly source: "external"
+      readonly preview: string
+      readonly editorId: "cursor"
+      readonly editorLabel: string
+      readonly scope: "global" | "project"
+      readonly projectPath?: string
+      readonly trash: { readonly mode: "path" }
+    }) => void
+  }) => (
+    <>
+      <button
+        type="button"
+        onClick={() => onRequestSkillUninstall?.({
+          type: "skill",
+          name: "jenkins",
+          path: "/repo/.cursor/skills/jenkins",
+          source: "external",
+          preview: "",
+          editorId: "cursor",
+          editorLabel: "Cursor",
+          scope: "project",
+          projectPath: "/repo",
+          trash: { mode: "path" },
+        })}
+      >
+        卸载甲
+      </button>
+      <button
+        type="button"
+        onClick={() => onRequestSkillUninstall?.({
+          type: "skill",
+          name: "jenkins",
+          path: "/Users/liyang/.cursor/skills/jenkins",
+          source: "external",
+          preview: "",
+          editorId: "cursor",
+          editorLabel: "Cursor",
+          scope: "global",
+          trash: { mode: "path" },
+        })}
+      >
+        卸载乙
+      </button>
+    </>
+  ),
 }))
 
 vi.mock("../components/editor-bulk-skill-copy-dialog", () => ({
@@ -133,14 +196,19 @@ describe("EditorScanModule", () => {
   const roots: Root[] = []
 
   beforeEach(() => {
+    vi.useFakeTimers()
     document.body.innerHTML = ""
     refresh.mockReset()
+    mocks.openSkillUninstaller.mockReset()
   })
 
   afterEach(() => {
-    for (const root of roots.splice(0)) {
-      root.unmount()
-    }
+    act(() => {
+      for (const root of roots.splice(0)) {
+        root.unmount()
+      }
+    })
+    vi.useRealTimers()
   })
 
   it("renders content and directory app tabs", async () => {
@@ -243,6 +311,47 @@ describe("EditorScanModule", () => {
     expect(contentPanel?.textContent).not.toContain("Skill")
     expect(contentPanel?.textContent).not.toContain("Rule")
     expect(contentPanel?.querySelector("h2")).toBeNull()
+  })
+
+  it("opens the skill uninstaller with the project scope", async () => {
+    await renderEditorScanModule(roots)
+
+    await act(async () => {
+      buttonByText("卸载甲")?.click()
+      await vi.advanceTimersByTimeAsync(300)
+    })
+
+    expect(mocks.openSkillUninstaller).toHaveBeenCalledWith(expect.objectContaining({
+      initialName: "jenkins",
+      initialSearchRootPath: "/repo",
+    }))
+  })
+
+  it("opens the skill uninstaller without a search root for global scope", async () => {
+    await renderEditorScanModule(roots)
+
+    await act(async () => {
+      buttonByText("卸载乙")?.click()
+      await vi.advanceTimersByTimeAsync(300)
+    })
+
+    const options = mocks.openSkillUninstaller.mock.calls[0]?.[0]
+    expect(options).toEqual(expect.objectContaining({ initialName: "jenkins" }))
+    expect(options).not.toHaveProperty("initialSearchRootPath")
+  })
+
+  it("refreshes the IDE scan after skill uninstall completes", async () => {
+    await renderEditorScanModule(roots)
+
+    await act(async () => {
+      buttonByText("卸载甲")?.click()
+      await vi.advanceTimersByTimeAsync(300)
+    })
+
+    const options = mocks.openSkillUninstaller.mock.calls[0]?.[0]
+    await options.onCompleted()
+
+    expect(refresh).toHaveBeenCalledOnce()
   })
 })
 
