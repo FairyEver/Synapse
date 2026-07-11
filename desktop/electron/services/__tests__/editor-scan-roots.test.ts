@@ -46,7 +46,9 @@ vi.mock("../editor-adapters", () => ({
         projectPaths: (candidateRoot: string) => ({
           skillsPath: candidateRoot === "/repo"
             ? "/repo/.cursor/skills"
-            : projectRoot,
+            : candidateRoot === "/"
+              ? "/.cursor/skills"
+              : projectRoot,
           rulesPath: "",
         }),
       }),
@@ -121,5 +123,24 @@ describe("listTrustedSkillRoots", () => {
     )
 
     expect(ids).toContain("cursor")
+  })
+
+  it("attributes a candidate when the custom search path is the POSIX root", async () => {
+    const { inferProjectSkillEditors } = await import("../editor-scan-roots")
+
+    const ids = await inferProjectSkillEditors("/.cursor/skills/jenkins", "/")
+
+    expect(ids).toContain("cursor")
+  })
+
+  it("recognizes descendants of Windows drive roots", async () => {
+    const { isPathEqualOrInside } = await import("../editor-scan-roots")
+
+    expect(isPathEqualOrInside(
+      "C:\\",
+      "C:\\Users\\alice\\.cursor\\skills",
+      path.win32,
+    )).toBe(true)
+    expect(isPathEqualOrInside("C:\\", "D:\\skills", path.win32)).toBe(false)
   })
 })

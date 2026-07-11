@@ -117,6 +117,23 @@ describe("SkillUninstallerService", () => {
     expect(trashItem).not.toHaveBeenCalled()
   })
 
+  it("trashes a valid target below the POSIX filesystem root", async () => {
+    const targetPath = await createSkill(tempRoot, "jenkins")
+    const trashItem = vi.fn().mockResolvedValue(undefined)
+    const { security } = createSecurity()
+    const service = new SkillUninstallerService({ trashItem })
+
+    const result = await service.uninstall([
+      {
+        query: { name: "jenkins", searchRootPath: path.parse(targetPath).root },
+        path: targetPath,
+      },
+    ], security)
+
+    expect(result.results[0]).toMatchObject({ status: "trashed" })
+    expect(trashItem).toHaveBeenCalledWith(targetPath)
+  })
+
   it("skips a target that changes name after scanning", async () => {
     const targetPath = await createSkill(tempRoot, "target", "jenkins")
     await writeFile(path.join(targetPath, "SKILL.md"), "---\nname: changed\n---\n")

@@ -24,6 +24,22 @@ type MutableTrustedSkillRoot = {
   path: string
 }
 
+type PathSemantics = Pick<typeof path, "isAbsolute" | "relative" | "sep">
+
+export function isPathEqualOrInside(
+  rootPath: string,
+  candidatePath: string,
+  pathSemantics: PathSemantics = path,
+): boolean {
+  const relativePath = pathSemantics.relative(rootPath, candidatePath)
+  return relativePath === ""
+    || (
+      !pathSemantics.isAbsolute(relativePath)
+      && relativePath !== ".."
+      && !relativePath.startsWith(`..${pathSemantics.sep}`)
+    )
+}
+
 async function physicalPath(candidate: string): Promise<string> {
   try {
     return await realpath(candidate)
@@ -89,7 +105,7 @@ export async function inferProjectSkillEditors(
   const editors = new Set<SynapseEditorId>()
   let possibleProjectRoot = candidateParent
 
-  while (possibleProjectRoot === root || possibleProjectRoot.startsWith(`${root}${path.sep}`)) {
+  while (isPathEqualOrInside(root, possibleProjectRoot)) {
     for (const adapter of editorAdapters) {
       const expected = await physicalPath(
         adapter.getScanPathConfig().projectPaths(possibleProjectRoot).skillsPath,

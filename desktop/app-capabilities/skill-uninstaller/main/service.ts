@@ -5,6 +5,7 @@ import path from "node:path"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import {
   inferProjectSkillEditors,
+  isPathEqualOrInside,
   listGlobalTrustedSkillRoots,
 } from "../../../electron/services/editor-scan-roots"
 import { createMainLogger } from "../../../electron/services/log-store"
@@ -41,10 +42,6 @@ export type SkillUninstallerServiceDeps = {
 type RevalidatedTarget = {
   readonly path: string
   readonly synapseContentId?: string
-}
-
-function isEqualOrInside(rootPath: string, candidatePath: string): boolean {
-  return candidatePath === rootPath || candidatePath.startsWith(`${rootPath}${path.sep}`)
 }
 
 function normalizeName(value: string): string {
@@ -124,10 +121,10 @@ async function revalidateTarget(target: SkillUninstallTarget): Promise<Revalidat
     throw new Error(TARGET_CHANGED_ERROR)
   }
 
-  if (!roots.some((root) => isEqualOrInside(root, targetRealPath))) {
+  if (!roots.some((root) => isPathEqualOrInside(root, targetRealPath))) {
     throw new Error(TARGET_OUTSIDE_ERROR)
   }
-  if (!isEqualOrInside(targetRealPath, skillRealPath)) {
+  if (!isPathEqualOrInside(targetRealPath, skillRealPath)) {
     throw new Error(TARGET_CHANGED_ERROR)
   }
 
