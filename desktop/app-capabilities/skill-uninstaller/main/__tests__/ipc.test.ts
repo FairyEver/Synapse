@@ -36,21 +36,24 @@ describe("skill uninstaller schemas", () => {
     expect(Object.keys(skillUninstallerIpcModule.methods)).toEqual(["scan", "cancelScan", "uninstall"])
   })
 
-  it("removes a scan controller after cancellation", async () => {
+  it("removes a scan controller immediately after cancellation", async () => {
     const { createSkillUninstallerIpcModule } = await import("../ipc")
-    const scan = vi.fn((_query, _security, signal: AbortSignal) => new Promise((resolve) => {
-      signal.addEventListener("abort", () => resolve({ candidates: [], complete: false, warnings: ["扫描已取消。"] }))
-    }))
+    let scanSignal: AbortSignal | undefined
+    const scan = vi.fn((_query, _security, signal: AbortSignal) => {
+      scanSignal = signal
+      return new Promise(() => undefined)
+    })
     const module = createSkillUninstallerIpcModule({ scan, uninstall: vi.fn() } as never)
     const ctx = {
       resolve: vi.fn(() => ({})),
     }
-    const scanPromise = module.methods.scan.handler(ctx as never, {
+    void module.methods.scan.handler(ctx as never, {
       scanId: "scan-1",
       query: { name: "jenkins" },
     })
-    await module.methods.cancelScan.handler(ctx as never, { scanId: "scan-1" })
-    await expect(scanPromise).resolves.toMatchObject({ complete: false })
+    await expect(module.methods.cancelScan.handler(ctx as never, { scanId: "scan-1" }))
+      .resolves.toEqual({ cancelled: true })
+    expect(scanSignal?.aborted).toBe(true)
     await expect(module.methods.cancelScan.handler(ctx as never, { scanId: "scan-1" }))
       .resolves.toEqual({ cancelled: false })
   })

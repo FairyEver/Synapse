@@ -63,7 +63,10 @@ export function createSkillUninstallerIpcModule(
         response: z.object({ cancelled: z.boolean() }).strict(),
         handler: async (_ctx, request: SkillUninstallCancelRequest) => {
           const controller = activeScans.get(request.scanId)
-          controller?.abort()
+          if (controller && activeScans.get(request.scanId) === controller) {
+            activeScans.delete(request.scanId)
+            controller.abort()
+          }
           return { cancelled: Boolean(controller) }
         },
       },
