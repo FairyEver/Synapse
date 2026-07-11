@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises"
+import { chmod, mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -249,9 +249,86 @@ describe("scanSkillRoots", () => {
 
     expect(result).toEqual({
       candidates: [],
-      complete: false,
-      warnings: ["部分目录无法读取，当前结果可能不完整。"],
+      complete: true,
+      warnings: [],
     })
+  })
+
+  it("returns a partial warning for a registered root with a non-ENOENT read error", async () => {
+    const root = await fixture()
+    await chmod(root, 0)
+    try {
+      const result = await scanSkillRoots({
+        query: { name: "jenkins" },
+        roots: [{ path: root, editorIds: ["codex"] }],
+        classifyEditors: () => [],
+      })
+
+      expect(result.candidates).toEqual([])
+      expect(result.complete).toBe(false)
+      expect(result.warnings).not.toEqual([])
+    } finally {
+      await chmod(root, 0o700)
+    }
+  })
+
+  it("continues below an unreadable SKILL.md instead of treating it as a Skill root", async () => {
+    const root = await fixture()
+    const parent = await skill(root, "parent", "other")
+    const nested = await skill(parent, "nested/jenkins")
+    const parentSkill = path.join(parent, "SKILL.md")
+    await chmod(parentSkill, 0)
+    try {
+      const result = await scanSkillRoots({
+        query: { name: "jenkins" },
+        roots: [{ path: root, editorIds: [] }],
+        classifyEditors: () => [],
+      })
+
+      expect(result.candidates.map((candidate) => candidate.path)).toEqual([nested])
+      expect(result.complete).toBe(false)
+      expect(result.warnings).toContain("部分 Skill 文件无法读取，当前结果可能不完整。")
+    } finally {
+      await chmod(parentSkill, 0o600)
+    }
+  })
+
+  it("stops all workers after a fatal root failure", async () => {
+    const hangingRoot = await fixture()
+    const fatalRoot = await fixture()
+    const lateRoot = await fixture()
+    await skill(hangingRoot, ".", "jenkins")
+    await skill(fatalRoot, ".", "jenkins")
+    await skill(lateRoot, ".", "jenkins")
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    let markHangingStarted!: () => void
+    const hangingStarted = new Promise<void>((resolve) => { markHangingStarted = resolve })
+    const classified: string[] = []
+
+    const scan = scanSkillRoots({
+      query: { name: "jenkins" },
+      roots: [hangingRoot, fatalRoot, lateRoot].map((root) => ({ path: root, editorIds: [] })),
+      classifyEditors: async (candidatePath) => {
+        classified.push(candidatePath)
+        if (candidatePath === hangingRoot) {
+          markHangingStarted()
+          await gate
+        }
+        if (candidatePath === fatalRoot) {
+          await hangingStarted
+          throw new Error("fatal")
+        }
+        return []
+      },
+      limits: { concurrency: 2 },
+    })
+
+    await expect(scan).rejects.toThrow()
+    release()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(classified).toEqual([hangingRoot, fatalRoot])
   })
 
   it("settles on cancellation when editor classification never resolves", async () => {

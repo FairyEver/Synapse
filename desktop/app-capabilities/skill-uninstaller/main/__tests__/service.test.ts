@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises"
+import { chmod, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -217,6 +217,26 @@ describe("SkillUninstallerService", () => {
 
     expect(result.results[0]).toMatchObject({ status: "skipped" })
     expect(trashItem).not.toHaveBeenCalled()
+  })
+
+  it("does not let an unreadable ancestor SKILL.md hide a nested target", async () => {
+    const ancestor = await createSkill(tempRoot, "bundle", "other")
+    const targetPath = await createSkill(ancestor, "nested/jenkins")
+    const ancestorSkill = path.join(ancestor, "SKILL.md")
+    await chmod(ancestorSkill, 0)
+    const trashItem = vi.fn().mockResolvedValue(undefined)
+    const { security } = createSecurity()
+    const service = new SkillUninstallerService({ trashItem })
+    try {
+      const result = await service.uninstall([
+        { query: { name: "jenkins", searchRootPath: tempRoot }, path: targetPath },
+      ], security)
+
+      expect(result.results[0]).toMatchObject({ status: "trashed" })
+      expect(trashItem).toHaveBeenCalledWith(targetPath)
+    } finally {
+      await chmod(ancestorSkill, 0o600)
+    }
   })
 
   it("trashes external Skills sequentially and keeps later targets after one failure", async () => {

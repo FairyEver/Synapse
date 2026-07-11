@@ -118,10 +118,16 @@ export async function isSkillTargetDiscoverable(input: {
       }
       if (index === traversedDirectories.length - 1) continue
       try {
-        const skillStats = await lstat(path.join(ancestor, "SKILL.md"))
+        const ancestorSkillPath = path.join(ancestor, "SKILL.md")
+        const skillStats = await lstat(ancestorSkillPath)
         if (skillStats.isFile() && !skillStats.isSymbolicLink()) {
-          hiddenByAncestorSkill = true
-          break
+          try {
+            await readFile(ancestorSkillPath, "utf8")
+            hiddenByAncestorSkill = true
+            break
+          } catch {
+            continue
+          }
         }
       } catch (error) {
         if (!isMissing(error)) throw error
@@ -153,6 +159,8 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
   let visitedDirectories = 0
   let stopped = false
   let directoryLimitReached = false
+  let hasFatalError = false
+  let fatalError: unknown
   let resolveStop!: () => void
   const stopPromise = new Promise<void>((resolve) => { resolveStop = resolve })
 
@@ -204,6 +212,7 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
       stats = await waitFor(lstat(entry.path))
     } catch (error) {
       if (entry.depth === 0 && input.rootErrorsFatal) throw error
+      if (entry.depth === 0 && isMissing(error)) return
       warnings.add(DIRECTORY_READ_WARNING)
       return
     }
@@ -214,6 +223,7 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
       candidateRealPath = await waitFor(realpath(entry.path))
     } catch (error) {
       if (entry.depth === 0 && input.rootErrorsFatal) throw error
+      if (entry.depth === 0 && isMissing(error)) return
       warnings.add(DIRECTORY_READ_WARNING)
       return
     }
@@ -232,35 +242,37 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
     if (skillStats === STOPPED) return
 
     if (skillStats?.isFile() && !skillStats.isSymbolicLink()) {
-      let content
+      let content: string | undefined
       try {
-        content = await waitFor(readFile(skillFilePath, "utf8"))
+        const readResult = await waitFor(readFile(skillFilePath, "utf8"))
+        if (readResult === STOPPED) return
+        content = readResult
       } catch {
         warnings.add(SKILL_READ_WARNING)
+      }
+      if (content !== undefined) {
+        const directoryName = path.basename(candidatePath)
+        const frontmatterName = readFrontmatterName(content)
+        const matches = normalizeName(directoryName) === targetName
+          || (frontmatterName !== undefined && normalizeName(frontmatterName) === targetName)
+        if (matches && !shouldStop()) {
+          const classifiedEditorIds = await waitFor(Promise.resolve(input.classifyEditors(candidatePath)))
+          if (classifiedEditorIds === STOPPED || shouldStop()) return
+          const synapseContentId = await waitFor(readSynapseContentId(candidatePath))
+          if (synapseContentId === STOPPED || shouldStop()) return
+          const current = candidates.get(candidateRealPath)
+          const editorIds = [...new Set([...(current?.editorIds ?? []), ...entry.editorIds, ...classifiedEditorIds])]
+          candidates.set(candidateRealPath, {
+            path: candidatePath,
+            name: directoryName,
+            ...(frontmatterName ? { frontmatterName } : {}),
+            editorIds,
+            source: synapseContentId ? "synapse" : "external",
+            ...(synapseContentId ? { synapseContentId } : {}),
+          })
+        }
         return
       }
-      if (content === STOPPED) return
-      const directoryName = path.basename(candidatePath)
-      const frontmatterName = readFrontmatterName(content)
-      const matches = normalizeName(directoryName) === targetName
-        || (frontmatterName !== undefined && normalizeName(frontmatterName) === targetName)
-      if (matches && !shouldStop()) {
-        const classifiedEditorIds = await waitFor(Promise.resolve(input.classifyEditors(candidatePath)))
-        if (classifiedEditorIds === STOPPED || shouldStop()) return
-        const synapseContentId = await waitFor(readSynapseContentId(candidatePath))
-        if (synapseContentId === STOPPED || shouldStop()) return
-        const current = candidates.get(candidateRealPath)
-        const editorIds = [...new Set([...(current?.editorIds ?? []), ...entry.editorIds, ...classifiedEditorIds])]
-        candidates.set(candidateRealPath, {
-          path: candidatePath,
-          name: directoryName,
-          ...(frontmatterName ? { frontmatterName } : {}),
-          editorIds,
-          source: synapseContentId ? "synapse" : "external",
-          ...(synapseContentId ? { synapseContentId } : {}),
-        })
-      }
-      return
     }
 
     let entries
@@ -268,6 +280,7 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
       entries = await waitFor(readdir(entry.path, { withFileTypes: true }))
     } catch (error) {
       if (entry.depth === 0 && input.rootErrorsFatal) throw error
+      if (entry.depth === 0 && isMissing(error)) return
       warnings.add(DIRECTORY_READ_WARNING)
       return
     }
@@ -280,7 +293,7 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
   }
 
   try {
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve) => {
       function schedule(): void {
         while (!stopped && !directoryLimitReached && activeWorkers < concurrency && queueIndex < queue.length) {
           const entry = queue[queueIndex++]
@@ -288,12 +301,22 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
           void scanEntry(entry).then(() => {
             activeWorkers--
             schedule()
-          }, reject)
+          }, (error: unknown) => {
+            if (!hasFatalError) {
+              hasFatalError = true
+              fatalError = error
+              stopped = true
+              resolveStop()
+            }
+            activeWorkers--
+            schedule()
+          })
         }
         if ((stopped || directoryLimitReached || queueIndex >= queue.length) && activeWorkers === 0) resolve()
       }
       schedule()
     })
+    if (hasFatalError) throw fatalError
     shouldStop()
     return {
       candidates: [...candidates.values()].sort((left, right) => left.path.localeCompare(right.path)),

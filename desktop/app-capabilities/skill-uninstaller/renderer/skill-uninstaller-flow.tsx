@@ -39,6 +39,8 @@ export type SkillUninstallerFlowProps = {
   readonly onCompleted?: (result: SkillUninstallBatchResult) => Promise<void> | void
 }
 
+type QueryUpdate = SkillUninstallQuery | ((current: SkillUninstallQuery) => SkillUninstallQuery)
+
 export function SkillUninstallerFlow({
   mode,
   initialQuery,
@@ -112,7 +114,7 @@ export function SkillUninstallerFlow({
     }
   }, [cancelScan, normalizedQuery, skillUninstallerBridge])
 
-  const updateQuery = useCallback((next: SkillUninstallQuery) => {
+  const updateQuery = useCallback((update: QueryUpdate) => {
     const activeScanId = activeScanIdRef.current
     if (activeScanId) {
       activeScanIdRef.current = null
@@ -122,7 +124,7 @@ export function SkillUninstallerFlow({
         logger.warn("Skill uninstall scan cancellation after query change failed.", { error })
       })
     }
-    setQuery(next)
+    setQuery((current) => typeof update === "function" ? update(current) : update)
     setScanResult(null)
     setScanQuery(null)
     setSelectedPaths(new Set())
@@ -183,11 +185,11 @@ export function SkillUninstallerFlow({
       const incompleteCount = result.results.filter((item) => item.status !== "trashed").length
       const trashedCount = result.results.length - incompleteCount
       const resultWarnings = result.results.flatMap((item) => item.warning ? [item.warning] : [])
-      if (incompleteCount > 0) {
-        setNoticeMessage(`已移到废纸篓 ${trashedCount} 个，未完成 ${incompleteCount} 个。`)
-      } else if (resultWarnings.length > 0) {
-        setNoticeMessage([...new Set(resultWarnings)].join(" "))
-      }
+      const notices = [
+        ...(incompleteCount > 0 ? [`已移到废纸篓 ${trashedCount} 个，未完成 ${incompleteCount} 个。`] : []),
+        ...new Set(resultWarnings),
+      ]
+      if (notices.length > 0) setNoticeMessage(notices.join(" "))
       if (onCompleted) {
         try {
           await onCompleted(result)
@@ -208,7 +210,7 @@ export function SkillUninstallerFlow({
 
   const chooseSearchRoot = async () => {
     const selectedPath = await repositoryBridge.chooseDirectory()
-    if (selectedPath) updateQuery({ ...query, searchRootPath: selectedPath })
+    if (selectedPath) updateQuery((current) => ({ ...current, searchRootPath: selectedPath }))
   }
 
   return (
@@ -222,7 +224,7 @@ export function SkillUninstallerFlow({
               value={query.name}
               readOnly={queryReadOnly}
               disabled={uninstalling}
-              onChange={(event) => updateQuery({ ...query, name: event.target.value })}
+              onChange={(event) => updateQuery((current) => ({ ...current, name: event.target.value }))}
             />
           </Field>
           <Field>
@@ -234,10 +236,10 @@ export function SkillUninstallerFlow({
                 placeholder="全局 Skill 目录"
                 readOnly={queryReadOnly}
                 disabled={uninstalling}
-                onChange={(event) => updateQuery({
-                  ...query,
+                onChange={(event) => updateQuery((current) => ({
+                  ...current,
                   searchRootPath: event.target.value || undefined,
-                })}
+                }))}
               />
               <InputGroupAddon align="inline-end">
                 <InputGroupButton
