@@ -15,6 +15,13 @@
 - Synapse 当前写出的 `SKILL.md` 一律包含 YAML frontmatter，至少写 `name` 和 `description`
 - Skill 附件保留原相对路径，例如 `scripts/deploy.sh`、`references/guide.md`
 
+## Skill 卸载扫描
+
+- 未指定搜索目录时，Synapse 只扫描已注册 Agent 的全局 Skill 根目录。
+- 指定搜索目录时，Synapse 在该目录下受限递归查找 `SKILL.md`，排除依赖、版本控制、缓存和构建目录，不跟随符号链接。
+- Skill 名称按目录名或 `SKILL.md` frontmatter `name` 忽略大小写精确匹配。
+- Synapse 安装和外部安装的 Skill 都可以由用户选择后移入系统废纸篓。
+
 ## Claude Code
 
 ### 全局
