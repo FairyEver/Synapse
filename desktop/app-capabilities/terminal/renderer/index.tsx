@@ -64,6 +64,7 @@ import type {
   SynapseTerminalOutputChunk,
   SynapseTerminalSession,
 } from "../../../src/types/terminal"
+import { encodeTerminalCommandInput } from "../shared/terminal-input"
 import { createTerminalRenderingOptions } from "./terminal-rendering"
 import {
   getTerminalToolbarActions,
@@ -536,7 +537,7 @@ export function TerminalModule() {
     const payload = resolveTerminalToolbarPayload(action, rendererPlatform)
     if (!payload) return
 
-    const data = action.kind === "shell-command" ? `${payload}\r` : payload
+    const data = action.kind === "shell-command" ? encodeTerminalCommandInput(payload) : payload
     try {
       await terminalBridge.writeSession({
         sessionId: activeSession.id,
