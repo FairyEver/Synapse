@@ -29,6 +29,7 @@ import type {
   TerminalUpdateGroupSettingsInput,
   TerminalWriteSessionInput,
 } from "../shared/schema"
+import { encodeTerminalCommandInput } from "../shared/terminal-input"
 import { createTerminalOutputBuffer, type TerminalOutputBuffer } from "./output-buffer"
 import type { TerminalStore, TerminalStoreState } from "./store"
 
@@ -209,7 +210,7 @@ export function createTerminalService(deps: {
   function writeStartupCommand(sessionId: string, command: string): void {
     const runtime = getRunningRuntime(sessionId)
     startupEchoFilters.set(sessionId, createStartupEchoFilter(command))
-    runtime.pty.write(appendTerminalNewline(command))
+    runtime.pty.write(encodeTerminalCommandInput(command))
   }
 
   function filterStartupCommandEcho(sessionId: string, data: string): string {
@@ -740,8 +741,4 @@ function validateAbsoluteCwdInput(cwd: string): string {
     throw new Error("Terminal cwd must be an absolute path")
   }
   return cwd
-}
-
-function appendTerminalNewline(command: string): string {
-  return command.endsWith("\n") ? command : `${command}\n`
 }

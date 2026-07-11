@@ -444,7 +444,7 @@ describe("TerminalService", () => {
       status: "running",
     })
     expect(spawnInputs).toEqual([expect.objectContaining({ cwd: tempDir, cols: 120, rows: 40 })])
-    expect(pty.write).toHaveBeenCalledWith("nvm use\npnpm dev\n")
+    expect(pty.write).toHaveBeenCalledWith("nvm use\rpnpm dev\r")
   })
 
   it("rejects launching an unknown group command", async () => {
