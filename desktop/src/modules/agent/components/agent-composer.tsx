@@ -462,7 +462,7 @@ function AgentComposer({
                 {visiblePendingMessages.map((message) => (
                   <div
                     key={message.id}
-                    className="flex min-w-0 max-w-full items-center gap-2 border-b border-border py-1.5 last:border-b-0"
+                    className="flex min-w-0 max-w-full items-center gap-2 border-b border-border py-1 last:border-b-0"
                   >
                     <div className="flex max-w-40 shrink-0 items-center gap-2 text-sm text-muted-foreground">
                       <CornerDownRight className="size-3.5 shrink-0" />

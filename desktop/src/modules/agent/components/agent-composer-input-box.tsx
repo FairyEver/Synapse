@@ -28,7 +28,7 @@ function AgentComposerInputBox({
     >
       {slashMenu}
       {pendingMessages ? (
-        <div className="agent-composer-input-box__pending border-b border-border px-1 pb-2">
+        <div className="agent-composer-input-box__pending border-b border-border px-1 pb-1">
           {pendingMessages}
         </div>
       ) : null}

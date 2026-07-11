@@ -1449,6 +1449,14 @@ describe("AgentComposer", () => {
 
     const removeButton = wrapper.querySelector<HTMLButtonElement>('button[aria-label="删除待发送消息"]')
     expect(removeButton?.parentElement?.classList.contains("shrink-0")).toBe(true)
+
+    const pendingRow = removeButton?.parentElement?.parentElement
+    expect(pendingRow?.classList.contains("py-1")).toBe(true)
+    expect(pendingRow?.classList.contains("py-1.5")).toBe(false)
+
+    const pendingSection = wrapper.querySelector<HTMLElement>(".agent-composer-input-box__pending")
+    expect(pendingSection?.classList.contains("pb-1")).toBe(true)
+    expect(pendingSection?.classList.contains("pb-2")).toBe(false)
   })
 
   it("renders all permission modes in the selector", async () => {
