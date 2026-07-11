@@ -130,6 +130,8 @@ describe("SkillUninstallerFlow", () => {
     await click("扫描")
 
     expect(document.querySelectorAll('[role="checkbox"][aria-label^="选择"]').length).toBe(2)
+    expect(document.body.textContent).toContain("Codex")
+    expect(document.body.textContent).not.toContain("codex")
     expect(getButton("移到废纸篓").disabled).toBe(true)
     await clickCheckbox("全选")
     expect(getButton("移到废纸篓（2）").disabled).toBe(false)

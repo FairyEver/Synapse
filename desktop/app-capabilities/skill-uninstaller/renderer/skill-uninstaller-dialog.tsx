@@ -22,6 +22,7 @@ export function SkillUninstallerDialog(props: SkillUninstallerDialogProps) {
           <DialogFrameHeader title="Skill 卸载器" bordered />
           <DialogFrameBody className="overflow-hidden px-5 py-4">
             <SkillUninstallerFlow
+              key={JSON.stringify(props.query)}
               mode="modal"
               initialQuery={props.query}
               queryReadOnly

@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, type ReactNode } from "react"
+import { act, type ReactNode, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -15,9 +15,12 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock("../skill-uninstaller-flow", () => ({
-  SkillUninstallerFlow: (props: Record<string, unknown>) => {
+  SkillUninstallerFlow: (props: {
+    initialQuery: { name: string }
+  } & Record<string, unknown>) => {
     mocks.flowProps(props)
-    return <div>卸载流程</div>
+    const [query] = useState(props.initialQuery)
+    return <div>卸载流程：{query.name}</div>
   },
 }))
 
@@ -110,5 +113,32 @@ describe("useSkillUninstallerDialog", () => {
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     })
     expect(document.body.textContent).not.toContain("卸载流程")
+  })
+
+  it("replaces the locked flow query while the dialog remains open", async () => {
+    function Harness() {
+      const { dialog, openSkillUninstaller } = useSkillUninstallerDialog()
+      return (
+        <>
+          <button type="button" onClick={() => openSkillUninstaller({ initialName: "jenkins" })}>打开 Jenkins</button>
+          <button type="button" onClick={() => openSkillUninstaller({ initialName: "docker" })}>替换为 Docker</button>
+          {dialog}
+        </>
+      )
+    }
+    await render(<Harness />)
+
+    await act(async () => {
+      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "打开 Jenkins")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    expect(document.body.textContent).toContain("卸载流程：jenkins")
+
+    await act(async () => {
+      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "替换为 Docker")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    expect(document.body.textContent).toContain("卸载流程：docker")
+    expect(document.body.textContent).not.toContain("卸载流程：jenkins")
   })
 })

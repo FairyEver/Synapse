@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
+import { getEditorLabel } from "@/lib/editor-registry"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import type {
   SkillUninstallBatchResult,
@@ -319,7 +320,9 @@ function CandidateRow({
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{candidate.name}</span>
-          {candidate.editorIds.map((editorId) => <Badge key={editorId} variant="secondary">{editorId}</Badge>)}
+          {candidate.editorIds.map((editorId) => (
+            <Badge key={editorId} variant="secondary">{getEditorLabel(editorId)}</Badge>
+          ))}
           <span className="text-xs text-muted-foreground">{candidate.source === "synapse" ? "Synapse" : "外部"}</span>
         </div>
         <p className="break-all font-mono text-xs text-muted-foreground">{candidate.path}</p>
