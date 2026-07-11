@@ -100,6 +100,10 @@ vi.mock("../../../../app-capabilities/skill-installer/renderer", () => ({
   SkillInstallerModule: () => <div>Skill 安装器内容</div>,
 }))
 
+vi.mock("../../../../app-capabilities/skill-uninstaller/renderer", () => ({
+  SkillUninstallerModule: () => <div>Skill 卸载器内容</div>,
+}))
+
 vi.mock("../../../../app-capabilities/rule-installer/renderer", () => ({
   RuleInstallerModule: () => <div>Rule 安装器内容</div>,
 }))
@@ -211,6 +215,20 @@ describe("SystemAppContent launcher", () => {
     })
 
     expect(document.body.textContent).toContain("蜂群任务内容")
+  })
+
+  it("renders skill-uninstaller through the system app host", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<SystemAppContent appId="skill-uninstaller" />)
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("Skill 卸载器内容")
   })
 })
 

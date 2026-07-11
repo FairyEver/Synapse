@@ -85,6 +85,10 @@ vi.mock("../../../../app-capabilities/skill-installer/renderer", () => ({
   SkillInstallerModule: () => <div>Skill 安装器窗口</div>,
 }))
 
+vi.mock("../../../../app-capabilities/skill-uninstaller/renderer", () => ({
+  SkillUninstallerModule: () => <div>Skill 卸载器窗口</div>,
+}))
+
 vi.mock("../../../../app-capabilities/synapse-skill/renderer", () => ({
   SynapseSkillModule: () => <div>Synapse Skill 窗口</div>,
 }))
@@ -143,6 +147,12 @@ describe("SystemAppWindowApp", () => {
     window.history.replaceState({}, "", "/?window=system-app&appId=secrets")
     await renderSystemAppWindow(roots)
     expect(document.body.textContent).toContain("密钥库窗口")
+  })
+
+  it("renders the skill uninstaller system app", async () => {
+    window.history.replaceState({}, "", "/?window=system-app&appId=skill-uninstaller")
+    await renderSystemAppWindow(roots)
+    expect(document.body.textContent).toContain("Skill 卸载器窗口")
   })
 
   it("renders a short error for unknown app ids", async () => {

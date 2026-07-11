@@ -5,6 +5,7 @@ import { databaseAppDefinition } from "../database/app-definition"
 import { driveAppDefinition } from "../drive/app-definition"
 import { documentTemplateAppDefinition } from "../../../app-capabilities/document-template/renderer/app-definition"
 import { skillInstallerAppDefinition } from "../../../app-capabilities/skill-installer/renderer/app-definition"
+import { skillUninstallerAppDefinition } from "../../../app-capabilities/skill-uninstaller/renderer/app-definition"
 import { synapseSkillAppDefinition } from "../../../app-capabilities/synapse-skill/renderer/app-definition"
 import { secretsAppDefinition } from "../../../app-capabilities/secrets/renderer/app-definition"
 import { ruleInstallerAppDefinition } from "../../../app-capabilities/rule-installer/renderer/app-definition"
@@ -37,6 +38,7 @@ const systemAppDefinitions = [
   databaseAppDefinition,
   documentTemplateAppDefinition,
   skillInstallerAppDefinition,
+  skillUninstallerAppDefinition,
   synapseSkillAppDefinition,
   secretsAppDefinition,
   ruleInstallerAppDefinition,

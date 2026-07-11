@@ -22,6 +22,7 @@ import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
 import { AgentPersonasModule } from "../../../../app-capabilities/agent-personas/renderer"
 import { DocumentTemplateModule } from "../../../../app-capabilities/document-template/renderer"
 import { SkillInstallerModule } from "../../../../app-capabilities/skill-installer/renderer"
+import { SkillUninstallerModule } from "../../../../app-capabilities/skill-uninstaller/renderer"
 import { SynapseSkillModule } from "../../../../app-capabilities/synapse-skill/renderer"
 import { SecretsModule } from "../../../../app-capabilities/secrets/renderer"
 import { RuleInstallerModule } from "../../../../app-capabilities/rule-installer/renderer"
@@ -99,6 +100,7 @@ function SystemAppContent({
   if (appId === "database") return <DatabaseModule />
   if (appId === "document-template") return <DocumentTemplateModule />
   if (appId === "skill-installer") return <SkillInstallerModule />
+  if (appId === "skill-uninstaller") return <SkillUninstallerModule />
   if (appId === "synapse-skill") return <SynapseSkillModule />
   if (appId === "secrets") return <SecretsModule />
   if (appId === "rule-installer") return <RuleInstallerModule />

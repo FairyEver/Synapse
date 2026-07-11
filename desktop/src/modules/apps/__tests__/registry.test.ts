@@ -25,6 +25,7 @@ describe("system app registry", () => {
       "database",
       "document-template",
       "skill-installer",
+      "skill-uninstaller",
       "synapse-skill",
       "secrets",
       "rule-installer",
@@ -98,6 +99,16 @@ describe("system app registry", () => {
       dock: { pinnedByDefault: false, order: 260 },
       capabilities: {
         primaryMcpPrefix: "app_secrets",
+      },
+    })
+    expect(getSystemAppManifest("skill-uninstaller")).toMatchObject({
+      id: "skill-uninstaller",
+      namespace: "skill_uninstaller",
+      name: "Skill 卸载器",
+      windowTitle: "Skill 卸载器",
+      dock: { pinnedByDefault: false, order: 285 },
+      capabilities: {
+        primaryMcpPrefix: "app_skill_uninstaller",
       },
     })
   })
