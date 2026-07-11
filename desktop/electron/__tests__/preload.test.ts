@@ -301,6 +301,27 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps skill uninstaller methods to IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+    await bridge.skillUninstaller.scan({ scanId: "scan-1", query: { name: "jenkins" } })
+    await bridge.skillUninstaller.cancelScan({ scanId: "scan-1" })
+    await bridge.skillUninstaller.uninstall({
+      targets: [{ query: { name: "jenkins" }, path: "/tmp/jenkins" }],
+    })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:skill-uninstaller:scan",
+      { scanId: "scan-1", query: { name: "jenkins" } },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:skill-uninstaller:scan:cancel",
+      { scanId: "scan-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:skill-uninstaller:uninstall",
+      { targets: [{ query: { name: "jenkins" }, path: "/tmp/jenkins" }] },
+    )
+  })
+
   it("maps quick input bridge methods to quick input IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
