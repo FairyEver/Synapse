@@ -10,6 +10,7 @@ import {
 } from "../../runtime/security"
 
 const mocks = vi.hoisted(() => ({
+  chmod: vi.fn(),
   getSkillDetail: vi.fn(),
   logger: {
     error: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock("node:fs/promises", async () => {
 
   return {
     ...actual,
+    chmod: mocks.chmod,
     rename: mocks.rename,
     rm: mocks.rm,
   }
@@ -130,6 +132,10 @@ describe("EditorInstallService security", () => {
       status: "ready",
       isGitRepository: true,
       gitRootPath: "/repo",
+    })
+    mocks.chmod.mockImplementation(async (...args: Parameters<typeof import("node:fs/promises")["chmod"]>) => {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      return actual.chmod(...args)
     })
     mocks.rename.mockImplementation(async (
       oldPath: Parameters<typeof import("node:fs/promises")["rename"]>[0],
@@ -288,6 +294,7 @@ describe("EditorInstallService security", () => {
     const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
     await mkdir(targetPath, { recursive: true })
     await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+    await writeFile(path.join(targetPath, ".env"), "TOKEN=existing\nCUSTOM=user-only\n", "utf8")
 
     mocks.resolveTarget.mockResolvedValue({
       contentType: "skill",
@@ -305,6 +312,11 @@ describe("EditorInstallService security", () => {
       { stagingDirectoryPath }: { stagingDirectoryPath: string },
     ) => {
       await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# New Skill\n", "utf8")
+      await writeFile(
+        path.join(stagingDirectoryPath, ".env.example"),
+        "TOKEN=default\nNEW_KEY=default\n",
+        "utf8",
+      )
     })
 
     const auditSink = new InMemoryAuditSink()
@@ -314,6 +326,7 @@ describe("EditorInstallService security", () => {
       editorId: "test-editor",
       overwriteConfirmed: true,
       replaceConfirmed: true,
+      skillEnvValues: { TOKEN: "submitted", NEW_KEY: "confirmed" },
       scope: "global",
     }
 
@@ -327,7 +340,11 @@ describe("EditorInstallService security", () => {
     })
 
     await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# New Skill\n")
+    await expect(readFile(path.join(targetPath, ".env"), "utf8"))
+      .resolves.toBe('TOKEN=existing\nCUSTOM=user-only\nNEW_KEY="confirmed"\n')
     await expect(readFile(path.join(backupPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
+    await expect(readFile(path.join(backupPath, ".env"), "utf8"))
+      .resolves.toBe("TOKEN=existing\nCUSTOM=user-only\n")
     expect(auditSink.list()).toContainEqual(expect.objectContaining({
       action: "fs.write",
       actor: { kind: "user" },
@@ -341,6 +358,57 @@ describe("EditorInstallService security", () => {
       resource: backupPath,
       metadata: expect.objectContaining({ operation: "install-backup" }),
     }))
+  })
+
+  it("restores a conflict replacement when the backed-up .env changes after materialization", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+    await writeFile(path.join(targetPath, ".env"), "TOKEN=existing\n", "utf8")
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockImplementation(async (
+      { stagingDirectoryPath }: { stagingDirectoryPath: string },
+    ) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# New Skill\n", "utf8")
+      await writeFile(path.join(stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+    })
+    mocks.chmod.mockImplementationOnce(async (...args: Parameters<typeof import("node:fs/promises")["chmod"]>) => {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      await actual.chmod(...args)
+      await writeFile(path.join(backupPath, ".env"), "TOKEN=changed-after-materialize\n", "utf8")
+    })
+
+    await expect(editorInstallService.installToEditor({
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      overwriteConfirmed: true,
+      replaceConfirmed: true,
+      scope: "global",
+    }, {
+      actor: { kind: "user" },
+      auditSink: new InMemoryAuditSink(),
+      permissionGuard: createPermissionGuard(),
+    })).rejects.toThrow("Skill .env 在读取期间发生变化。")
+
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8"))
+      .resolves.toBe("# Existing Skill\n")
+    await expect(readFile(path.join(targetPath, ".env"), "utf8"))
+      .resolves.toBe("TOKEN=changed-after-materialize\n")
+    await expect(lstat(backupPath)).rejects.toMatchObject({ code: "ENOENT" })
   })
 
   it.each(["env", "directory"] as const)(

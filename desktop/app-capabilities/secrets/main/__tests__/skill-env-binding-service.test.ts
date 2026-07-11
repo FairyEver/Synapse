@@ -168,7 +168,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)).rejects.toThrow("扫描会话已过期")
+    }, async () => "new", harness.security)).rejects.toThrow("扫描会话已过期")
   })
 
   it("rejects a forged item id and a different secret name", async () => {
@@ -181,12 +181,12 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: ["forged"],
-    }, "new", harness.security)).rejects.toThrow("扫描项目无效")
+    }, async () => "new", harness.security)).rejects.toThrow("扫描项目无效")
     await expect(harness.service.enqueue({
       name: "OTHER",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)).rejects.toThrow("密钥名称不匹配")
+    }, async () => "new", harness.security)).rejects.toThrow("密钥名称不匹配")
   })
 
   it("reports a hash conflict but continues updating later selected items", async () => {
@@ -202,7 +202,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [byName.get("first")!.id, byName.get("second")!.id],
-    }, "new-secret", harness.security)
+    }, async () => "new-secret", harness.security)
 
     expect(result.items.map(({ skillName, status }) => ({ skillName, status }))).toEqual([
       { skillName: "first", status: "conflict" },
@@ -231,7 +231,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [byName.get("duplicate")!.id, byName.get("linked")!.id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(result.items).toEqual([
       expect.objectContaining({ skillName: "duplicate", status: "conflict" }),
@@ -253,7 +253,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(result.items).toEqual([
       expect.objectContaining({ skillName: "demo", status: "failed" }),
@@ -278,7 +278,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
     expect(result.items).toEqual([
       expect.objectContaining({ skillName: "demo", status: "conflict" }),
     ])
@@ -301,7 +301,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
     expect(result.items).toEqual([
       expect.objectContaining({ skillName: "demo", status: "conflict" }),
     ])
@@ -321,7 +321,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
     expect(result.items).toEqual([
       expect.objectContaining({ skillName: "demo", status: "conflict" }),
     ])
@@ -338,7 +338,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(result.items).toEqual([
       expect.objectContaining({ skillName: "demo", status: "failed" }),
@@ -355,7 +355,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     const envRealPath = await realpath(path.join(root, "demo", ".env"))
     expect(harness.permissionRequests).toEqual([
@@ -401,7 +401,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items.find((item) => item.skillName === "demo")!.id],
-    }, "new-value", harness.security)
+    }, async () => "new-value", harness.security)
 
     expect(result.items).toEqual([
       expect.objectContaining({ skillName: "demo", status: "updated" }),
@@ -421,7 +421,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, secretValue, harness.security)
+    }, async () => secretValue, harness.security)
     expect(result.items).toEqual([
       expect.objectContaining({ skillName: "demo", status: "updated" }),
     ])
@@ -474,15 +474,17 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [byName.get("first")!],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
     while (writeCalls === 0) await new Promise((resolve) => setTimeout(resolve, 0))
+    let secondValue = "queued-value"
     const second = harness.service.enqueue({
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [byName.get("second")!],
-    }, "new", harness.security)
+    }, async () => secondValue, harness.security)
     await Promise.resolve()
     expect(writeCalls).toBe(1)
+    secondValue = "latest-value"
     releaseFirst()
 
     const [firstResult, secondResult] = await Promise.all([first, second])
@@ -492,7 +494,7 @@ describe("SkillEnvBindingService", () => {
     expect(secondResult.items).toEqual([
       expect.objectContaining({ skillName: "second", status: "updated" }),
     ])
-    expect(await readFile(path.join(root, "second", ".env"), "utf8")).toBe('TOKEN="new"\n')
+    expect(await readFile(path.join(root, "second", ".env"), "utf8")).toBe('TOKEN="latest-value"\n')
   })
 
   it("does not truncate when the Skill parent changes during permission check", async () => {
@@ -514,7 +516,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
     while (!harness.permissionRequests.some(({ action }) => action === "fs.write")) {
       await new Promise((resolve) => setTimeout(resolve, 0))
     }
@@ -553,7 +555,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
     while (!harness.permissionRequests.some(({ action }) => action === "fs.write")) {
       await new Promise((resolve) => setTimeout(resolve, 0))
     }
@@ -599,7 +601,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(swapped).toBe(true)
     expect(result.items).toEqual([
@@ -643,7 +645,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(queueStatCalls).toBeGreaterThanOrEqual(3)
     expect(result.items).toEqual([
@@ -696,7 +698,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(finalSnapshotReads).toBeGreaterThan(0)
     expect(finalSnapshotReads).toBeLessThanOrEqual(Buffer.byteLength("TOKEN=old\n") + 1)
@@ -774,7 +776,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [byName.get("first")!, byName.get("second")!],
-    }, value, harness.security)
+    }, async () => value, harness.security)
 
     expect(result.items).toEqual([
       expect.objectContaining({
@@ -836,7 +838,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [byName.get("first")!, byName.get("second")!],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(mutated).toBe(true)
     expect(result.items).toEqual([
@@ -883,7 +885,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(writeCalls).toBeGreaterThan(1)
     expect(result.items).toEqual([expect.objectContaining({ status: "failed" })])
@@ -918,7 +920,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [byName.get("demo")!, byName.get("second")!],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(result.items).toEqual([
       expect.objectContaining({ skillName: "demo", status: "failed" }),
@@ -973,7 +975,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(stagedOpenCalls).toBe(1)
     expect(result.items).toEqual([expect.objectContaining({ status: "conflict" })])
@@ -1005,7 +1007,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(stagedOpenCalls).toBe(1)
     expect(result.items).toEqual([expect.objectContaining({ status: "updated" })])
@@ -1032,7 +1034,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
     while (!harness.permissionRequests.some(({ action }) => action === "fs.write")) {
       await new Promise((resolve) => setTimeout(resolve, 0))
     }
@@ -1077,7 +1079,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(queueStatCalls).toBeGreaterThanOrEqual(3)
     expect(result.items).toEqual([expect.objectContaining({ status: "conflict" })])
@@ -1110,7 +1112,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: scan.items.map(({ id }) => id),
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(stagedOpenCalls).toBe(0)
     expect(result.items).toEqual([
@@ -1154,7 +1156,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(result.items).toEqual([expect.objectContaining({ status: "failed" })])
     const leftovers = await listSkillEnvTemps(movedSkill)
@@ -1257,7 +1259,7 @@ describe("SkillEnvBindingService", () => {
         name: "TOKEN",
         scanSessionId: scan.scanSessionId,
         itemIds: [byName.get("first")!, byName.get("second")!],
-      }, "new", harness.security)
+      }, async () => "new", harness.security)
 
       expect(result.items).toEqual([
         expect.objectContaining({ skillName: "first", status: "failed" }),
@@ -1340,7 +1342,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [firstItem.id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(result.items).toEqual([expect.objectContaining({ status: "failed" })])
     const audit = harness.auditEvents.find((event) => event.resource === firstEnvPath && event.action === "fs.write")
@@ -1367,7 +1369,7 @@ describe("SkillEnvBindingService", () => {
       name: "TOKEN",
       scanSessionId: scan.scanSessionId,
       itemIds: [scan.items[0].id],
-    }, "new", harness.security)
+    }, async () => "new", harness.security)
 
     expect(sourceOpenFlags).toHaveLength(2)
     if (constants.O_NONBLOCK !== 0) {
@@ -1422,7 +1424,7 @@ describe("SkillEnvBindingService", () => {
         name: "TOKEN",
         scanSessionId: scan.scanSessionId,
         itemIds: [blocked.id, needsUpdate.id],
-      }, "new", harness.security)).rejects.toThrow("仅可队列更新需要更新的项目")
+      }, async () => "new", harness.security)).rejects.toThrow("仅可队列更新需要更新的项目")
 
       expect(await readFile(path.join(needs, ".env"), "utf8")).toBe("TOKEN=old\n")
       expect(harness.permissionRequests.filter(({ action }) => action === "fs.write")).toEqual([])

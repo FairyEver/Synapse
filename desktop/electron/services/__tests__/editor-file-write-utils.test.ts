@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -110,5 +110,70 @@ describe("editor file write utils", () => {
       "Failed to safely restore atomic swap backup",
       expect.objectContaining({ errorName: "Error", targetName: "skill" }),
     )
+  })
+
+  it("rejects a target directory that appears during pre-swap validation", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-editor-write-"))
+    tempDirs.push(tempDir)
+    const targetPath = path.join(tempDir, "skill")
+    let concurrentTargetInode = 0n
+
+    await expect(replaceDirectoryAtomically(
+      targetPath,
+      async (stagingDirectoryPath) => {
+        await writeFile(path.join(stagingDirectoryPath, "new-marker.txt"), "new", "utf8")
+      },
+      {
+        beforeSwap: async () => {
+          await mkdir(targetPath)
+          concurrentTargetInode = (await stat(targetPath, { bigint: true })).ino
+        },
+      },
+    )).rejects.toThrow("atomic swap target state changed")
+
+    expect((await stat(targetPath, { bigint: true })).ino).toBe(concurrentTargetInode)
+    await expect(readFile(path.join(targetPath, "new-marker.txt")))
+      .rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("rejects a dangling target symlink that appears during pre-swap validation", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-editor-write-"))
+    tempDirs.push(tempDir)
+    const targetPath = path.join(tempDir, "skill")
+
+    await expect(replaceDirectoryAtomically(
+      targetPath,
+      async (stagingDirectoryPath) => {
+        await writeFile(path.join(stagingDirectoryPath, "new-marker.txt"), "new", "utf8")
+      },
+      {
+        beforeSwap: async () => {
+          await symlink(path.join(tempDir, "missing-target"), targetPath)
+        },
+      },
+    )).rejects.toThrow("atomic swap target state changed")
+
+    expect((await lstat(targetPath)).isSymbolicLink()).toBe(true)
+  })
+
+  it("rejects an existing target directory that disappears during pre-swap validation", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-editor-write-"))
+    tempDirs.push(tempDir)
+    const targetPath = path.join(tempDir, "skill")
+    await mkdir(targetPath)
+
+    await expect(replaceDirectoryAtomically(
+      targetPath,
+      async (stagingDirectoryPath) => {
+        await writeFile(path.join(stagingDirectoryPath, "new-marker.txt"), "new", "utf8")
+      },
+      {
+        beforeSwap: async () => {
+          await rm(targetPath, { recursive: true })
+        },
+      },
+    )).rejects.toThrow("atomic swap target state changed")
+
+    await expect(stat(targetPath)).rejects.toMatchObject({ code: "ENOENT" })
   })
 })

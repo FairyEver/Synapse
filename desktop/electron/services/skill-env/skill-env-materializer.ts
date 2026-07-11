@@ -1,5 +1,5 @@
 import { constants } from "node:fs"
-import { lstat, open, readFile, readdir, realpath, writeFile } from "node:fs/promises"
+import { chmod, lstat, open, readFile, readdir, realpath, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import {
@@ -79,6 +79,7 @@ type TargetDirectoryIdentity = EntryIdentity & {
 type FileSnapshot = EntryIdentity & {
   readonly ctimeNs: bigint
   readonly mtimeNs: bigint
+  readonly mode: bigint
   readonly size: bigint
 }
 
@@ -159,6 +160,7 @@ function hasSameFileSnapshot(left: FileSnapshot, right: FileSnapshot): boolean {
     && left.size === right.size
     && left.mtimeNs === right.mtimeNs
     && left.ctimeNs === right.ctimeNs
+    && left.mode === right.mode
 }
 
 async function assertEnvPathMatchesOpenedFile(
@@ -251,6 +253,7 @@ async function readExistingEnv(
         dev: openedEntry.dev,
         ino: openedEntry.ino,
         mtimeNs: openedEntry.mtimeNs,
+        mode: openedEntry.mode,
         size: openedEntry.size,
       },
     }
@@ -288,6 +291,18 @@ async function readBoundedEnvSnapshot(
 async function assertStagingHasNoRuntimeEnv(stagingDirectoryPath: string): Promise<void> {
   const entries = await readdir(stagingDirectoryPath, { withFileTypes: true })
   assertNoRuntimeSkillEnvPath(entries.map((entry) => entry.name))
+}
+
+async function writeStagedEnv(
+  stagedEnvPath: string,
+  content: string | Uint8Array,
+  existingMode?: bigint,
+): Promise<void> {
+  const finalMode = process.platform === "win32" || existingMode === undefined
+    ? 0o600
+    : Number(existingMode & 0o600n)
+  await writeFile(stagedEnvPath, content, { flag: "wx", mode: 0o600 })
+  await chmod(stagedEnvPath, finalMode)
 }
 
 async function assertTargetStillMissing(targetPath: string): Promise<void> {
@@ -404,7 +419,7 @@ export async function materializeSkillEnv(
     if (isMissingPathError(error)) {
       if (existing === null) return "absent"
       assertSkillRuntimeEnvBytes(existing.content)
-      await writeFile(stagedEnvPath, existing.content)
+      await writeStagedEnv(stagedEnvPath, existing.content, existing.file.mode)
       return "merged"
     }
     throw error
@@ -414,6 +429,6 @@ export async function materializeSkillEnv(
     ? createDotenvFromExample(example, input.values)
     : mergeDotenvExample(existing.content.toString("utf8"), example, input.values)
   assertSkillRuntimeEnvBytes(content)
-  await writeFile(stagedEnvPath, content, "utf8")
+  await writeStagedEnv(stagedEnvPath, content, existing?.file.mode)
   return existing === null ? "created" : "merged"
 }

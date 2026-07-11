@@ -189,7 +189,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
 
   async function enqueue(
     input: SecretSkillEnvQueueInput,
-    value: string,
+    resolveValue: () => Promise<string>,
     security: SkillEnvBindingSecurity,
   ): Promise<SecretSkillEnvQueueResult> {
     const run = queueTail.then(async () => {
@@ -207,6 +207,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         throw new Error("仅可队列更新需要更新的项目，请重新扫描。")
       }
 
+      const value = await resolveValue()
       const currentRoots = await deps.listRoots()
       const results: SkillEnvBindingQueueItem[] = []
       for (const stored of selected as StoredBinding[]) {

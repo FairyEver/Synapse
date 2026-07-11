@@ -377,6 +377,7 @@ export class EditorInstallCore {
                 content: applyVariableSubstitutions(detail.content, payload.variableSubstitutions, { includeCodeBlocks: true }),
               }
             : detail
+          const existingSkillDirectoryPath = backupPathForRestore ?? target.targetPath
 
           try {
             let skillEnvGuard: SkillEnvMaterializationGuard | null = null
@@ -423,7 +424,7 @@ export class EditorInstallCore {
               })
               await materializeSkillEnv({
                 stagingDirectoryPath,
-                existingTargetDirectoryPath: target.targetPath,
+                existingTargetDirectoryPath: existingSkillDirectoryPath,
                 values: payload.skillEnvValues ?? {},
                 registerPrecondition(guard) {
                   skillEnvGuard = guard

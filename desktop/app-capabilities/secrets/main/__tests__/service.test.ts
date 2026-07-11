@@ -29,7 +29,62 @@ describe("SecretsService", () => {
       name: "TOKEN",
       scanSessionId: "scan-1",
       itemIds: ["item-1"],
-    }, "private-value", security)
+    }, expect.any(Function), security)
+    const resolveValue = harness.skillEnvBindings.enqueue.mock.calls[0]?.[1]
+    await expect(resolveValue?.()).resolves.toBe("private-value")
+  })
+
+  it("resolves the latest secret value when a queued update starts", async () => {
+    const harness = createHarness()
+    let releaseQueue: (() => void) | undefined
+    const queueBlocked = new Promise<void>((resolve) => {
+      releaseQueue = resolve
+    })
+    let resolvedValue = ""
+    harness.skillEnvBindings.enqueue.mockImplementationOnce(async (_input, resolveValue) => {
+      await queueBlocked
+      resolvedValue = await resolveValue()
+      return { items: [] }
+    })
+    const service = createSecretsService(harness.deps)
+    await service.create({ name: "TOKEN", value: "old-value" })
+
+    const queued = service.queueSkillEnvBindings({
+      name: "TOKEN",
+      scanSessionId: "scan-1",
+      itemIds: ["item-1"],
+    }, { actor: { kind: "user" }, permissionGuard: {} as never, auditSink: {} as never })
+    await service.update({ name: "TOKEN", value: "latest-value" })
+    releaseQueue?.()
+
+    await expect(queued).resolves.toEqual({ items: [] })
+    expect(resolvedValue).toBe("latest-value")
+  })
+
+  it("fails a queued update if the secret is deleted and recreated before execution", async () => {
+    const harness = createHarness()
+    let releaseQueue: (() => void) | undefined
+    const queueBlocked = new Promise<void>((resolve) => {
+      releaseQueue = resolve
+    })
+    harness.skillEnvBindings.enqueue.mockImplementationOnce(async (_input, resolveValue) => {
+      await queueBlocked
+      await resolveValue()
+      return { items: [] }
+    })
+    const service = createSecretsService(harness.deps)
+    await service.create({ name: "TOKEN", value: "old-value" })
+
+    const queued = service.queueSkillEnvBindings({
+      name: "TOKEN",
+      scanSessionId: "scan-1",
+      itemIds: ["item-1"],
+    }, { actor: { kind: "user" }, permissionGuard: {} as never, auditSink: {} as never })
+    await service.delete({ name: "TOKEN" })
+    await service.create({ name: "TOKEN", value: "replacement-value" })
+    releaseQueue?.()
+
+    await expect(queued).rejects.toThrow("密钥不存在：TOKEN")
   })
 
   it("creates and lists safe secret views without values", async () => {
@@ -243,6 +298,7 @@ function createHarness(options: HarnessOptions = {}) {
     scan: vi.fn(async () => ({ scanSessionId: "scan-1", items: [] })),
     enqueue: vi.fn(async () => ({ items: [] })),
   }
+  let nextId = 1
 
   return {
     items,
@@ -257,7 +313,7 @@ function createHarness(options: HarnessOptions = {}) {
       updateConfig,
       skillEnvBindings,
       now: () => new Date("2026-07-09T00:00:00.000Z"),
-      createId: () => `id-${items.records.size + 1}`,
+      createId: () => `id-${nextId++}`,
       logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
     },
   }

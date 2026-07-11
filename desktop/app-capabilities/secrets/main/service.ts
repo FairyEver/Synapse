@@ -168,7 +168,17 @@ export function createSecretsService(deps: SecretsServiceDeps) {
     security: SkillEnvBindingSecurity,
   ): Promise<SecretSkillEnvQueueResult> {
     const secret = await requireByName(input.name)
-    return await deps.skillEnvBindings.enqueue({ ...input, name: secret.name }, secret.value, security)
+    return await deps.skillEnvBindings.enqueue(
+      { ...input, name: secret.name },
+      async () => {
+        const current = await deps.items.get(secret.id)
+        if (!current || current.name !== secret.name) {
+          throw new Error(`密钥不存在：${secret.name}`)
+        }
+        return current.value
+      },
+      security,
+    )
   }
 
   async function migrateLegacyConfig(): Promise<void> {

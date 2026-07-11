@@ -1,7 +1,7 @@
 import { lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { errorLogCode, errorLogName } from "./error-sanitize"
-import { isFileNotFoundError, isPermissionError, pathExists } from "./fs-utils"
+import { isFileNotFoundError, isPermissionError } from "./fs-utils"
 import { createMainLogger } from "./log-store"
 
 const logger = createMainLogger("service.editor-file-write")
@@ -67,12 +67,16 @@ async function swapPathAtomically(
     parentDirectoryPath,
     `.synapse-install-backup-${targetName}-${Date.now()}`,
   )
-  const hadExistingTarget = await pathExists(targetPath)
+  const hadExistingTarget = await pathEntryExists(targetPath)
   let movedExistingTarget = false
   let movedReplacement = false
 
   try {
     await options.beforeSwap?.()
+    const hasExistingTargetAfterValidation = await pathEntryExists(targetPath)
+    if (hasExistingTargetAfterValidation !== hadExistingTarget) {
+      throw new Error("atomic swap target state changed")
+    }
 
     if (hadExistingTarget) {
       await rename(targetPath, backupPath)

@@ -1,4 +1,4 @@
-import { lstat, mkdtemp, mkdir, readFile, realpath, rename, rm, stat, symlink, truncate, writeFile } from "node:fs/promises"
+import { chmod, lstat, mkdtemp, mkdir, readFile, realpath, rename, rm, stat, symlink, truncate, writeFile } from "node:fs/promises"
 import { constants } from "node:fs"
 import type { FileHandle } from "node:fs/promises"
 import os from "node:os"
@@ -6,32 +6,42 @@ import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const fsMocks = vi.hoisted(() => ({
+  actualChmod: null as typeof import("node:fs/promises").chmod | null,
   actualLstat: null as typeof import("node:fs/promises").lstat | null,
   actualOpen: null as typeof import("node:fs/promises").open | null,
   actualRealpath: null as typeof import("node:fs/promises").realpath | null,
   actualRename: null as typeof import("node:fs/promises").rename | null,
+  actualWriteFile: null as typeof import("node:fs/promises").writeFile | null,
+  chmod: vi.fn<typeof import("node:fs/promises").chmod>(),
   lstat: vi.fn<typeof import("node:fs/promises").lstat>(),
   open: vi.fn<typeof import("node:fs/promises").open>(),
   realpath: vi.fn<typeof import("node:fs/promises").realpath>(),
   rename: vi.fn<typeof import("node:fs/promises").rename>(),
+  writeFile: vi.fn<typeof import("node:fs/promises").writeFile>(),
 }))
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>()
+  fsMocks.actualChmod = actual.chmod
   fsMocks.actualLstat = actual.lstat
   fsMocks.actualOpen = actual.open
   fsMocks.actualRealpath = actual.realpath
   fsMocks.actualRename = actual.rename
+  fsMocks.actualWriteFile = actual.writeFile
+  fsMocks.chmod.mockImplementation(actual.chmod)
   fsMocks.lstat.mockImplementation(actual.lstat)
   fsMocks.open.mockImplementation(actual.open)
   fsMocks.realpath.mockImplementation(actual.realpath)
   fsMocks.rename.mockImplementation(actual.rename)
+  fsMocks.writeFile.mockImplementation(actual.writeFile)
   return {
     ...actual,
+    chmod: fsMocks.chmod,
     lstat: fsMocks.lstat,
     open: fsMocks.open,
     realpath: fsMocks.realpath,
     rename: fsMocks.rename,
+    writeFile: fsMocks.writeFile,
   }
 })
 
@@ -101,14 +111,18 @@ afterEach(async () => {
 })
 
 beforeEach(() => {
+  fsMocks.chmod.mockReset()
   fsMocks.lstat.mockReset()
   fsMocks.open.mockReset()
   fsMocks.realpath.mockReset()
   fsMocks.rename.mockReset()
+  fsMocks.writeFile.mockReset()
+  fsMocks.chmod.mockImplementation(fsMocks.actualChmod!)
   fsMocks.lstat.mockImplementation(fsMocks.actualLstat!)
   fsMocks.open.mockImplementation(fsMocks.actualOpen!)
   fsMocks.realpath.mockImplementation(fsMocks.actualRealpath!)
   fsMocks.rename.mockImplementation(fsMocks.actualRename!)
+  fsMocks.writeFile.mockImplementation(fsMocks.actualWriteFile!)
 })
 
 describe("materializeSkillEnv", () => {
@@ -123,6 +137,60 @@ describe("materializeSkillEnv", () => {
 
     await expect(readFile(path.join(paths.stagingDirectoryPath, ".env"), "utf8"))
       .resolves.toBe("# config\nTOKEN=\"secret value\"\nREGION=cn\n")
+  })
+
+  it.runIf(process.platform !== "win32")("creates a fresh .env with owner-only permissions", async () => {
+    const paths = await createDirectories()
+    const stagedEnvPath = path.join(paths.stagingDirectoryPath, ".env")
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+
+    await materializeSkillEnv({ ...paths, values: { TOKEN: "secret" } })
+
+    expect(Number((await stat(stagedEnvPath, { bigint: true })).mode & 0o777n)).toBe(0o600)
+  })
+
+  it.runIf(process.platform !== "win32").each([
+    [0o400, 0o400],
+    [0o600, 0o600],
+    [0o640, 0o600],
+  ])("does not broaden an existing .env mode from %s", async (existingMode, expectedMode) => {
+    const paths = await createDirectories()
+    const existingEnvPath = path.join(paths.existingTargetDirectoryPath, ".env")
+    const stagedEnvPath = path.join(paths.stagingDirectoryPath, ".env")
+    await writeFile(existingEnvPath, "TOKEN=old\n", "utf8")
+    await chmod(existingEnvPath, existingMode)
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\nNEW_KEY=default\n", "utf8")
+
+    await materializeSkillEnv({ ...paths, values: {} })
+
+    expect(Number((await stat(stagedEnvPath, { bigint: true })).mode & 0o777n)).toBe(expectedMode)
+    expect(Number((await stat(existingEnvPath, { bigint: true })).mode & 0o777n)).toBe(existingMode)
+  })
+
+  it("does not mutate the existing .env when securing the staged mode fails", async () => {
+    const paths = await createDirectories()
+    const existingEnvPath = path.join(paths.existingTargetDirectoryPath, ".env")
+    await writeFile(existingEnvPath, "TOKEN=old\n", "utf8")
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+    fsMocks.chmod.mockRejectedValueOnce(new Error("chmod failed"))
+
+    await expect(materializeSkillEnv({ ...paths, values: {} }))
+      .rejects.toThrow("chmod failed")
+    await expect(readFile(existingEnvPath, "utf8")).resolves.toBe("TOKEN=old\n")
+  })
+
+  it("does not mutate the existing .env when writing the staged file fails", async () => {
+    const paths = await createDirectories()
+    const existingEnvPath = path.join(paths.existingTargetDirectoryPath, ".env")
+    const stagedEnvPath = path.join(paths.stagingDirectoryPath, ".env")
+    await writeFile(existingEnvPath, "TOKEN=old\n", "utf8")
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+    fsMocks.writeFile.mockRejectedValueOnce(new Error("write failed"))
+
+    await expect(materializeSkillEnv({ ...paths, values: {} }))
+      .rejects.toThrow("write failed")
+    await expect(readFile(existingEnvPath, "utf8")).resolves.toBe("TOKEN=old\n")
+    await expect(readFile(stagedEnvPath)).rejects.toMatchObject({ code: "ENOENT" })
   })
 
   it("merges into the staged file without mutating the existing target", async () => {
