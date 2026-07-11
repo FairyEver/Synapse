@@ -16,7 +16,8 @@ import {
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import {
   buildBulkSkillTrashSummary,
-  createBulkSkillTrashRequest,
+  createBulkSkillUninstallTargets,
+  mapBulkSkillUninstallResults,
   type BulkSkillTrashResultItem,
 } from "@/modules/editor-scan/lib/bulk-skill-trash"
 import type { EditorScanSkillCopyItem } from "@/modules/editor-scan/lib/editor-copy-source"
@@ -72,25 +73,24 @@ function EditorBulkSkillTrashDialog({
     }
 
     setIsTrashing(true)
-    const nextResults: BulkSkillTrashResultItem[] = []
+    let nextResults: BulkSkillTrashResultItem[]
 
-    for (const item of items) {
-      try {
-        const result = await bridge.editorScan.trashItem(createBulkSkillTrashRequest(item))
-        nextResults.push({ item, path: result.path, status: "trashed" })
-      } catch (error) {
-        logger.error("Bulk Skill trash item failed.", {
-          editorId: item.editorId,
-          error,
-          itemName: item.name,
-          scope: item.scope,
-        })
-        nextResults.push({
-          item,
-          message: error instanceof Error ? error.message : "移到废纸篓失败。",
-          status: "failed",
-        })
-      }
+    try {
+      const result = await bridge.skillUninstaller.uninstall({
+        targets: createBulkSkillUninstallTargets(items),
+      })
+      nextResults = mapBulkSkillUninstallResults(items, result)
+    } catch (error) {
+      logger.error("Bulk Skill uninstall failed.", {
+        errorType: error instanceof Error ? error.name : typeof error,
+        itemCount: items.length,
+        operation: "skill-uninstall-batch",
+      })
+      nextResults = items.map((item) => ({
+        item,
+        message: error instanceof Error ? error.message : "移到废纸篓失败。",
+        status: "failed",
+      }))
     }
 
     setResults(nextResults)

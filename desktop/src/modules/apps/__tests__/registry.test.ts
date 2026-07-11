@@ -25,6 +25,7 @@ describe("system app registry", () => {
       "database",
       "document-template",
       "skill-installer",
+      "skill-uninstaller",
       "synapse-skill",
       "secrets",
       "rule-installer",
@@ -100,6 +101,16 @@ describe("system app registry", () => {
         primaryMcpPrefix: "app_secrets",
       },
     })
+    expect(getSystemAppManifest("skill-uninstaller")).toMatchObject({
+      id: "skill-uninstaller",
+      namespace: "skill_uninstaller",
+      name: "Skill 卸载器",
+      windowTitle: "Skill 卸载器",
+      dock: { pinnedByDefault: false, order: 285 },
+      capabilities: {
+        primaryMcpPrefix: "app_skill_uninstaller",
+      },
+    })
   })
 
   it("lists launchable apps without the launcher entry", () => {
@@ -133,6 +144,13 @@ describe("system app registry", () => {
       expect(app.window).toBeDefined()
       expect(app.capabilities?.primaryMcpPrefix).toMatch(/^app_[a-z0-9_]+$/)
     }
+  })
+
+  it("uses a distinct icon for the Skill uninstaller", () => {
+    const installer = getSystemAppManifest("skill-installer")
+    const uninstaller = getSystemAppManifest("skill-uninstaller")
+
+    expect(uninstaller?.icon).not.toBe(installer?.icon)
   })
 
   it("exposes pure definitions without icon URLs for Electron", () => {

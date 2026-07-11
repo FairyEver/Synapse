@@ -1,4 +1,7 @@
-import type { EditorScanTrashRequest } from "@/types/editor-scan"
+import type {
+  SkillUninstallBatchResult,
+  SkillUninstallTarget,
+} from "../../../../app-capabilities/skill-uninstaller/shared/schema"
 import type { EditorScanSkillCopyItem } from "./editor-copy-source"
 
 export type BulkSkillTrashResultItem =
@@ -11,17 +14,40 @@ export type BulkSkillTrashSummary = {
   trashed: number
 }
 
-function createBulkSkillTrashRequest(item: EditorScanSkillCopyItem): EditorScanTrashRequest {
-  return {
-    editorId: item.editorId,
-    itemName: item.name,
-    itemPath: item.path,
-    itemType: "skill",
-    scope: item.scope,
-    source: item.source,
-    synapseContentId: item.synapseContentId ?? null,
-    trash: item.trash,
-  }
+function createBulkSkillUninstallTargets(
+  items: readonly EditorScanSkillCopyItem[],
+): SkillUninstallTarget[] {
+  return items.map((item) => ({
+    path: item.path,
+    query: {
+      name: item.name,
+      ...(item.scope === "project"
+        ? { searchRootPath: item.projectPath ?? item.path }
+        : {}),
+    },
+  }))
+}
+
+function mapBulkSkillUninstallResults(
+  items: readonly EditorScanSkillCopyItem[],
+  result: SkillUninstallBatchResult,
+): BulkSkillTrashResultItem[] {
+  const resultByPath = new Map(result.results.map((item) => [item.path, item]))
+
+  return items.map((item) => {
+    const uninstallResult = resultByPath.get(item.path)
+    if (!uninstallResult) {
+      return { item, message: "未返回卸载结果。", status: "failed" }
+    }
+    if (uninstallResult.status === "trashed") {
+      return { item, path: uninstallResult.path, status: "trashed" }
+    }
+    return {
+      item,
+      message: uninstallResult.error ?? "未能移到废纸篓。",
+      status: "failed",
+    }
+  })
 }
 
 function buildBulkSkillTrashSummary(results: BulkSkillTrashResultItem[]): BulkSkillTrashSummary {
@@ -38,5 +64,6 @@ function buildBulkSkillTrashSummary(results: BulkSkillTrashResultItem[]): BulkSk
 
 export {
   buildBulkSkillTrashSummary,
-  createBulkSkillTrashRequest,
+  createBulkSkillUninstallTargets,
+  mapBulkSkillUninstallResults,
 }

@@ -46,6 +46,7 @@ const MODULE_SOURCES = [
   { id: "skill-repository-install", importPath: "electron/modules/skill-repository-install/ipc.ts" },
   { id: "installers", importPath: "electron/modules/installers/ipc.ts" },
   { id: "synapseSkill", outputId: "synapse-skill", importPath: "app-capabilities/synapse-skill/main/ipc.ts" },
+  { id: "skill-uninstaller", importPath: "app-capabilities/skill-uninstaller/main/ipc.ts" },
   { id: "config", importPath: "electron/modules/config/ipc.ts" },
   { id: "identity", importPath: "electron/modules/identity/ipc.ts" },
   { id: "user-profile", importPath: "electron/modules/user-profile/ipc.ts" },

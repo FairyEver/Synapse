@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   onOpenChange: vi.fn(),
   onTrashed: vi.fn(),
   success: vi.fn(),
-  trashItem: vi.fn(),
+  uninstall: vi.fn(),
   warning: vi.fn(),
 }))
 
@@ -34,8 +34,8 @@ vi.mock("@/app-shell/notifications", () => ({
 
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
-    editorScan: {
-      trashItem: mocks.trashItem,
+    skillUninstaller: {
+      uninstall: mocks.uninstall,
     },
   }),
 }))
@@ -55,7 +55,10 @@ vi.mock("@/components/ui/alert-dialog", () => ({
 
 let roots: Root[] = []
 
-function createItem(name: string): EditorScanSkillCopyItem {
+function createItem(
+  name: string,
+  overrides: Partial<EditorScanSkillCopyItem> = {},
+): EditorScanSkillCopyItem {
   return {
     key: `global:/source/${name}`,
     name,
@@ -68,6 +71,7 @@ function createItem(name: string): EditorScanSkillCopyItem {
     editorLabel: "ClaudeCode/Synapse",
     scope: "global",
     trash: { mode: "path" },
+    ...overrides,
   }
 }
 
@@ -113,34 +117,47 @@ describe("EditorBulkSkillTrashDialog", () => {
     expect(document.body.textContent).toContain("可从系统废纸篓恢复。")
   })
 
-  it("trashes selected skills sequentially and closes after full success", async () => {
-    mocks.trashItem.mockResolvedValue({ trashed: true, mode: "path", path: "/source/jenkins" })
+  it("uninstalls selected skills in one batch and closes after full success", async () => {
+    mocks.uninstall.mockResolvedValue({
+      results: [
+        { path: "/source/jenkins", status: "trashed" },
+        { path: "/source/release", status: "trashed" },
+      ],
+    })
 
-    await renderDialog([createItem("jenkins"), createItem("release")])
+    await renderDialog([
+      createItem("jenkins"),
+      createItem("release", {
+        key: "project:/source/release",
+        projectPath: "/projects/demo",
+        scope: "project",
+      }),
+    ])
 
     await act(async () => clickButton("移到废纸篓"))
 
-    expect(mocks.trashItem).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      itemName: "jenkins",
-      itemPath: "/source/jenkins",
-      itemType: "skill",
-      trash: { mode: "path" },
-    }))
-    expect(mocks.trashItem).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      itemName: "release",
-      itemPath: "/source/release",
-      itemType: "skill",
-      trash: { mode: "path" },
-    }))
-    expect(mocks.onTrashed).toHaveBeenCalledWith(["global:/source/jenkins", "global:/source/release"])
+    expect(mocks.uninstall).toHaveBeenCalledTimes(1)
+    expect(mocks.uninstall).toHaveBeenCalledWith({
+      targets: [
+        { query: { name: "jenkins" }, path: "/source/jenkins" },
+        {
+          query: { name: "release", searchRootPath: "/projects/demo" },
+          path: "/source/release",
+        },
+      ],
+    })
+    expect(mocks.onTrashed).toHaveBeenCalledWith(["global:/source/jenkins", "project:/source/release"])
     expect(mocks.success).toHaveBeenCalledWith("已移到废纸篓 2 个 Skill")
     expect(mocks.onOpenChange).toHaveBeenCalledWith(false)
   })
 
   it("keeps failed items visible after partial success", async () => {
-    mocks.trashItem
-      .mockResolvedValueOnce({ trashed: true, mode: "path", path: "/source/jenkins" })
-      .mockRejectedValueOnce(new Error("没有写入该位置的权限。"))
+    mocks.uninstall.mockResolvedValue({
+      results: [
+        { path: "/source/jenkins", status: "trashed" },
+        { path: "/source/release", status: "skipped", error: "没有写入该位置的权限。" },
+      ],
+    })
 
     await renderDialog([createItem("jenkins"), createItem("release")])
 
@@ -151,5 +168,18 @@ describe("EditorBulkSkillTrashDialog", () => {
     expect(mocks.onOpenChange).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain("release")
     expect(document.body.textContent).toContain("没有写入该位置的权限。")
+  })
+
+  it("shows a failure when the batch service omits an item result", async () => {
+    mocks.uninstall.mockResolvedValue({
+      results: [{ path: "/source/jenkins", status: "trashed" }],
+    })
+
+    await renderDialog([createItem("jenkins"), createItem("release")])
+
+    await act(async () => clickButton("移到废纸篓"))
+
+    expect(mocks.onTrashed).toHaveBeenCalledWith(["global:/source/jenkins"])
+    expect(document.body.textContent).toContain("release：未返回卸载结果。")
   })
 })

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
   buildBulkSkillTrashSummary,
-  createBulkSkillTrashRequest,
+  createBulkSkillUninstallTargets,
+  mapBulkSkillUninstallResults,
   type BulkSkillTrashResultItem,
 } from "../bulk-skill-trash"
 import type { EditorScanSkillCopyItem } from "../editor-copy-source"
@@ -25,19 +26,37 @@ function createItem(name: string): EditorScanSkillCopyItem {
 }
 
 describe("bulk skill trash helpers", () => {
-  it("creates a trash request from a selected Skill", () => {
-    const item = createItem("jenkins")
+  it("creates global and project uninstall targets", () => {
+    const projectItem = createItem("jenkins")
+    const globalItem = { ...createItem("release"), scope: "global" as const }
+    const projectItemWithoutRoot = { ...createItem("deploy"), projectPath: undefined }
 
-    expect(createBulkSkillTrashRequest(item)).toEqual({
-      itemType: "skill",
-      itemName: "jenkins",
-      itemPath: "/source/jenkins",
-      editorId: "claude-code",
-      scope: "project",
-      source: "external",
-      trash: { mode: "path" },
-      synapseContentId: null,
-    })
+    expect(createBulkSkillUninstallTargets([
+      globalItem,
+      projectItem,
+      projectItemWithoutRoot,
+    ])).toEqual([
+      { path: "/source/release", query: { name: "release" } },
+      { path: "/source/jenkins", query: { name: "jenkins", searchRootPath: "/repo" } },
+      { path: "/source/deploy", query: { name: "deploy", searchRootPath: "/source/deploy" } },
+    ])
+  })
+
+  it("maps uninstall results by exact path and exposes skipped or missing results as failures", () => {
+    const jenkins = createItem("jenkins")
+    const release = createItem("release")
+    const deploy = createItem("deploy")
+
+    expect(mapBulkSkillUninstallResults([jenkins, release, deploy], {
+      results: [
+        { path: "/source/release", status: "skipped", error: "正在使用。" },
+        { path: "/source/jenkins", status: "trashed" },
+      ],
+    })).toEqual([
+      { item: jenkins, path: "/source/jenkins", status: "trashed" },
+      { item: release, message: "正在使用。", status: "failed" },
+      { item: deploy, message: "未返回卸载结果。", status: "failed" },
+    ])
   })
 
   it("summarizes trashed and failed results", () => {

@@ -42,6 +42,7 @@ import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/ma
 import { swarmTaskIpcModule } from "../../app-capabilities/swarm-task/main/ipc"
 import { synapseSkillIpcModule } from "../../app-capabilities/synapse-skill/main/ipc"
 import { secretsIpcModule } from "../../app-capabilities/secrets/main/ipc"
+import { skillUninstallerIpcModule } from "../../app-capabilities/skill-uninstaller/main/ipc"
 
 /**
  * Creates and configures the IpcRegistry with all migrated modules.
@@ -81,6 +82,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(terminalIpcModule, ctx)
   registry.register(quickInputIpcModule, ctx)
   registry.register(secretsIpcModule, ctx)
+  registry.register(skillUninstallerIpcModule, ctx)
   registry.register(agentPersonasIpcModule, ctx)
   registry.register(soundNotifierIpcModule, ctx)
   registry.register(swarmTaskIpcModule, ctx)
@@ -124,6 +126,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   terminalIpcModule,
   quickInputIpcModule,
   secretsIpcModule,
+  skillUninstallerIpcModule,
   agentPersonasIpcModule,
   soundNotifierIpcModule,
   swarmTaskIpcModule,

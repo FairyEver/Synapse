@@ -34,6 +34,25 @@ vi.mock("../editor-adapters", () => ({
         projectPaths: () => ({ skillsPath: projectRoot, rulesPath: "" }),
       }),
     },
+    {
+      id: "cursor",
+      label: "Cursor",
+      getScanPathConfig: () => ({
+        globalSkillsPath: null,
+        globalSkillPaths: [],
+        globalRulesPath: null,
+        rulesSupported: false,
+        detectionDir: "/missing-cursor-home",
+        projectPaths: (candidateRoot: string) => ({
+          skillsPath: candidateRoot === "/repo"
+            ? "/repo/.cursor/skills"
+            : candidateRoot === "/"
+              ? "/.cursor/skills"
+              : projectRoot,
+          rulesPath: "",
+        }),
+      }),
+    },
   ],
 }))
 
@@ -76,6 +95,7 @@ describe("listTrustedSkillRoots", () => {
         editors: [
           { id: "claude-code", label: "Claude Code" },
           { id: "codex", label: "Codex" },
+          { id: "cursor", label: "Cursor" },
         ],
         scope: "project",
         projectId: "project-1",
@@ -83,5 +103,44 @@ describe("listTrustedSkillRoots", () => {
         path: await realpath(projectRoot),
       },
     ])
+  })
+
+  it("lists global roots without configured project roots", async () => {
+    const { listGlobalTrustedSkillRoots } = await import("../editor-scan-roots")
+
+    const roots = await listGlobalTrustedSkillRoots()
+
+    expect(roots.every((root) => root.scope === "global")).toBe(true)
+    expect(roots).toHaveLength(1)
+  })
+
+  it("attributes a custom candidate through adapter project path rules", async () => {
+    const { inferProjectSkillEditors } = await import("../editor-scan-roots")
+
+    const ids = await inferProjectSkillEditors(
+      "/repo/.cursor/skills/jenkins",
+      "/repo",
+    )
+
+    expect(ids).toContain("cursor")
+  })
+
+  it("attributes a candidate when the custom search path is the POSIX root", async () => {
+    const { inferProjectSkillEditors } = await import("../editor-scan-roots")
+
+    const ids = await inferProjectSkillEditors("/.cursor/skills/jenkins", "/")
+
+    expect(ids).toContain("cursor")
+  })
+
+  it("recognizes descendants of Windows drive roots", async () => {
+    const { isPathEqualOrInside } = await import("../editor-scan-roots")
+
+    expect(isPathEqualOrInside(
+      "C:\\",
+      "C:\\Users\\alice\\.cursor\\skills",
+      path.win32,
+    )).toBe(true)
+    expect(isPathEqualOrInside("C:\\", "D:\\skills", path.win32)).toBe(false)
   })
 })

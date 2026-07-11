@@ -91,6 +91,11 @@ const IPC_CHANNELS = {
   "synapse-skill": {
     "prepareInstallSource": "synapse:synapse-skill:install-source:prepare",
   },
+  "skill-uninstaller": {
+    "scan": "synapse:skill-uninstaller:scan",
+    "cancelScan": "synapse:skill-uninstaller:scan:cancel",
+    "uninstall": "synapse:skill-uninstaller:uninstall",
+  },
   "config": {
     "get": "synapse:config:get",
     "update": "synapse:config:update",
@@ -894,6 +899,11 @@ const synapseBridge: SynapseBridge = {
     chooseJsonFile: () => invoke(IPC_CHANNELS.documentTemplate.chooseJsonFile)(),
     chooseOutputFile: (input) => invoke(IPC_CHANNELS.documentTemplate.chooseOutputFile)(input),
     generateDocx: (input) => invoke(IPC_CHANNELS.documentTemplate.generateDocx)(input),
+  },
+  skillUninstaller: {
+    scan: invoke(IPC_CHANNELS["skill-uninstaller"].scan),
+    cancelScan: invoke(IPC_CHANNELS["skill-uninstaller"].cancelScan),
+    uninstall: invoke(IPC_CHANNELS["skill-uninstaller"].uninstall),
   },
   quickInput: {
     list: () => invoke(IPC_CHANNELS.quickInput.list)(),

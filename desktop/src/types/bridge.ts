@@ -24,6 +24,13 @@ import type {
   GenerateDocxResult,
 } from "../../app-capabilities/document-template/shared/schema"
 import type {
+  SkillUninstallBatchResult,
+  SkillUninstallCancelRequest,
+  SkillUninstallScanRequest,
+  SkillUninstallScanResult,
+  SkillUninstallTarget,
+} from "../../app-capabilities/skill-uninstaller/shared/schema"
+import type {
   SynapseQuickInputChangedEvent,
   SynapseQuickInputItem,
 } from "./quick-input"
@@ -946,6 +953,11 @@ export type SynapseBridge = {
     chooseJsonFile: () => Promise<string | null>
     chooseOutputFile: (input?: { defaultPath?: string }) => Promise<string | null>
     generateDocx: (input: GenerateDocxInput) => Promise<GenerateDocxResult>
+  }
+  skillUninstaller: {
+    scan: (request: SkillUninstallScanRequest) => Promise<SkillUninstallScanResult>
+    cancelScan: (request: SkillUninstallCancelRequest) => Promise<{ cancelled: boolean }>
+    uninstall: (request: { targets: SkillUninstallTarget[] }) => Promise<SkillUninstallBatchResult>
   }
   quickInput: {
     list: () => Promise<SynapseQuickInputItem[]>

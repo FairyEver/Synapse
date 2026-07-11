@@ -86,11 +86,18 @@ function logSafeItemPath(filePath: string): string {
 type ScanItemDetailDialogProps = {
   item: ScanItemForDetail | null
   onChanged?: () => Promise<void> | void
+  onRequestSkillUninstall?: (item: ScanItemForDetail) => void
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemDetailDialogProps) {
+function ScanItemDetailDialog({
+  item,
+  onChanged,
+  onRequestSkillUninstall,
+  open,
+  onOpenChange,
+}: ScanItemDetailDialogProps) {
   const { content: loadedContent, loading, error } = useScanItemContent(
     open && item?.content == null ? item?.path ?? null : null,
   )
@@ -175,7 +182,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
     : null
 
   const handleTrashConfirm = useCallback(async () => {
-    if (!item || trashDisabledReason) return
+    if (!item || item.type !== "rule" || trashDisabledReason) return
     setIsTrashBusy(true)
     setTrashError(null)
 
@@ -562,38 +569,40 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
 
   return (
     <>
-      <AlertDialog
-        open={isTrashConfirmOpen}
-        onOpenChange={(nextOpen) => {
-          if (!isTrashBusy) setIsTrashConfirmOpen(nextOpen)
-        }}
-        data-track="editor-scan-trash-confirm"
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>移到废纸篓？</AlertDialogTitle>
-            <AlertDialogDescription>
-              <span className="block">{item.name}</span>
-              <span className="block break-all">{item.path}</span>
-              <span className="block">可从系统废纸篓恢复。</span>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isTrashBusy}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              data-track="editor-scan-trash-confirm-submit"
-              disabled={isTrashBusy}
-              onClick={(event) => {
-                event.preventDefault()
-                void handleTrashConfirm()
-              }}
-            >
-              {isTrashBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
-              移到废纸篓
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {item.type === "rule" ? (
+        <AlertDialog
+          open={isTrashConfirmOpen}
+          onOpenChange={(nextOpen) => {
+            if (!isTrashBusy) setIsTrashConfirmOpen(nextOpen)
+          }}
+          data-track="editor-scan-trash-confirm"
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>移到废纸篓？</AlertDialogTitle>
+              <AlertDialogDescription>
+                <span className="block">{item.name}</span>
+                <span className="block break-all">{item.path}</span>
+                <span className="block">可从系统废纸篓恢复。</span>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isTrashBusy}>取消</AlertDialogCancel>
+              <AlertDialogAction
+                data-track="editor-scan-trash-confirm-submit"
+                disabled={isTrashBusy}
+                onClick={(event) => {
+                  event.preventDefault()
+                  void handleTrashConfirm()
+                }}
+              >
+                {isTrashBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
+                移到废纸篓
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
 
       <AlertDialog
         open={fallbackReason !== null}
@@ -856,7 +865,13 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
                 <DropdownMenuGroup>
                   <DropdownMenuItem
                     disabled={isTrashBusy || trashDisabledReason !== null}
-                    onSelect={() => setIsTrashConfirmOpen(true)}
+                    onSelect={() => {
+                      if (item.type === "skill") {
+                        onRequestSkillUninstall?.(item)
+                        return
+                      }
+                      setIsTrashConfirmOpen(true)
+                    }}
                   >
                     移到废纸篓
                   </DropdownMenuItem>

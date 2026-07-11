@@ -24,6 +24,22 @@ type MutableTrustedSkillRoot = {
   path: string
 }
 
+type PathSemantics = Pick<typeof path, "isAbsolute" | "relative" | "sep">
+
+export function isPathEqualOrInside(
+  rootPath: string,
+  candidatePath: string,
+  pathSemantics: PathSemantics = path,
+): boolean {
+  const relativePath = pathSemantics.relative(rootPath, candidatePath)
+  return relativePath === ""
+    || (
+      !pathSemantics.isAbsolute(relativePath)
+      && relativePath !== ".."
+      && !relativePath.startsWith(`..${pathSemantics.sep}`)
+    )
+}
+
 async function physicalPath(candidate: string): Promise<string> {
   try {
     return await realpath(candidate)
@@ -46,10 +62,19 @@ function addEditor(
   roots.set(key, { ...input, editors: [editor] })
 }
 
-export async function listTrustedSkillRoots(): Promise<TrustedSkillRoot[]> {
+function toTrustedRoots(roots: Map<string, MutableTrustedSkillRoot>): TrustedSkillRoot[] {
+  return Array.from(roots.values()).map((root) => ({
+    ...root,
+    editors: root.editors.slice().sort((left, right) => left.id.localeCompare(right.id)),
+  }))
+}
+
+async function collectGlobalRoots(
+  adapters: typeof editorAdapters,
+): Promise<TrustedSkillRoot[]> {
   const roots = new Map<string, MutableTrustedSkillRoot>()
 
-  for (const adapter of editorAdapters) {
+  for (const adapter of adapters) {
     const scanConfig = adapter.getScanPathConfig()
     const configuredRoots = scanConfig.globalSkillPaths
       ?? (scanConfig.globalSkillsPath ? [scanConfig.globalSkillsPath] : [])
@@ -62,6 +87,43 @@ export async function listTrustedSkillRoots(): Promise<TrustedSkillRoot[]> {
         { id: adapter.id, label: adapter.label },
       )
     }
+  }
+
+  return toTrustedRoots(roots)
+}
+
+export async function listGlobalTrustedSkillRoots(): Promise<TrustedSkillRoot[]> {
+  return collectGlobalRoots(editorAdapters)
+}
+
+export async function inferProjectSkillEditors(
+  candidatePath: string,
+  searchRootPath: string,
+): Promise<SynapseEditorId[]> {
+  const candidateParent = path.dirname(await physicalPath(candidatePath))
+  const root = await physicalPath(searchRootPath)
+  const editors = new Set<SynapseEditorId>()
+  let possibleProjectRoot = candidateParent
+
+  while (isPathEqualOrInside(root, possibleProjectRoot)) {
+    for (const adapter of editorAdapters) {
+      const expected = await physicalPath(
+        adapter.getScanPathConfig().projectPaths(possibleProjectRoot).skillsPath,
+      )
+      if (expected === candidateParent) editors.add(adapter.id)
+    }
+    if (possibleProjectRoot === root) break
+    possibleProjectRoot = path.dirname(possibleProjectRoot)
+  }
+
+  return [...editors].sort((left, right) => left.localeCompare(right))
+}
+
+export async function listTrustedSkillRoots(): Promise<TrustedSkillRoot[]> {
+  const globalRoots = await listGlobalTrustedSkillRoots()
+  const roots = new Map<string, MutableTrustedSkillRoot>()
+  for (const root of globalRoots) {
+    roots.set(`global::${root.path}`, { ...root, editors: [...root.editors] })
   }
 
   const config = await configStore.load()
@@ -83,8 +145,5 @@ export async function listTrustedSkillRoots(): Promise<TrustedSkillRoot[]> {
     }
   }
 
-  return Array.from(roots.values()).map((root) => ({
-    ...root,
-    editors: root.editors.slice().sort((left, right) => left.id.localeCompare(right.id)),
-  }))
+  return toTrustedRoots(roots)
 }
