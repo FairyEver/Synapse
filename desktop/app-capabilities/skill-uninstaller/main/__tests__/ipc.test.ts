@@ -31,6 +31,23 @@ describe("skill uninstaller schemas", () => {
     })).toThrow()
   })
 
+  it("accepts a non-fatal warning on a trashed result", async () => {
+    const { skillUninstallBatchResultSchema } = await import("../../shared/schema")
+    expect(skillUninstallBatchResultSchema.parse({
+      results: [{
+        path: "/tmp/jenkins",
+        status: "trashed",
+        warning: "已移到废纸篓，安装状态刷新失败。",
+      }],
+    })).toEqual({
+      results: [{
+        path: "/tmp/jenkins",
+        status: "trashed",
+        warning: "已移到废纸篓，安装状态刷新失败。",
+      }],
+    })
+  })
+
   it("registers scan, cancel, and uninstall channels", async () => {
     const { skillUninstallerIpcModule } = await import("../ipc")
     expect(Object.keys(skillUninstallerIpcModule.methods)).toEqual(["scan", "cancelScan", "uninstall"])

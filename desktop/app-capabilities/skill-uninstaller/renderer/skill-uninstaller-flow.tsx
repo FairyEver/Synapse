@@ -51,11 +51,13 @@ export function SkillUninstallerFlow({
   const [scanId, setScanId] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
   const [scanResult, setScanResult] = useState<Awaited<ReturnType<ReturnType<typeof getSkillUninstallerBridge>["scan"]>> | null>(null)
+  const [scanQuery, setScanQuery] = useState<SkillUninstallQuery | null>(null)
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set())
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [uninstalling, setUninstalling] = useState(false)
   const [failureMessages, setFailureMessages] = useState<Record<string, string>>({})
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null)
   const activeScanIdRef = useRef<string | null>(null)
   const skillUninstallerBridge = useMemo(getSkillUninstallerBridge, [])
   const repositoryBridge = useMemo(() => requireBridgeDomain("repository"), [])
@@ -68,9 +70,6 @@ export function SkillUninstallerFlow({
   const cancelScan = useCallback(async () => {
     const activeScanId = activeScanIdRef.current
     if (!activeScanId) return
-    activeScanIdRef.current = null
-    setScanId(null)
-    setScanning(false)
     try {
       await skillUninstallerBridge.cancelScan({ scanId: activeScanId })
     } catch (error) {
@@ -79,7 +78,10 @@ export function SkillUninstallerFlow({
   }, [skillUninstallerBridge])
 
   const startScan = useCallback(async () => {
-    if (!normalizedQuery.name) return
+    if (!normalizedQuery.name) {
+      setErrorMessage("请输入 Skill 名称。")
+      return
+    }
     if (activeScanIdRef.current) await cancelScan()
 
     const nextScanId = crypto.randomUUID()
@@ -87,9 +89,11 @@ export function SkillUninstallerFlow({
     setScanId(nextScanId)
     setScanning(true)
     setScanResult(null)
+    setScanQuery(normalizedQuery)
     setSelectedPaths(new Set())
     setFailureMessages({})
     setErrorMessage(null)
+    setNoticeMessage(null)
 
     try {
       const result = await skillUninstallerBridge.scan({ scanId: nextScanId, query: normalizedQuery })
@@ -107,6 +111,25 @@ export function SkillUninstallerFlow({
       }
     }
   }, [cancelScan, normalizedQuery, skillUninstallerBridge])
+
+  const updateQuery = useCallback((next: SkillUninstallQuery) => {
+    const activeScanId = activeScanIdRef.current
+    if (activeScanId) {
+      activeScanIdRef.current = null
+      setScanId(null)
+      setScanning(false)
+      void skillUninstallerBridge.cancelScan({ scanId: activeScanId }).catch((error) => {
+        logger.warn("Skill uninstall scan cancellation after query change failed.", { error })
+      })
+    }
+    setQuery(next)
+    setScanResult(null)
+    setScanQuery(null)
+    setSelectedPaths(new Set())
+    setFailureMessages({})
+    setErrorMessage(null)
+    setNoticeMessage(null)
+  }, [skillUninstallerBridge])
 
   useEffect(() => {
     if (autoScan && normalizedQuery.name) void startScan()
@@ -136,14 +159,15 @@ export function SkillUninstallerFlow({
   }
 
   const submitUninstall = async () => {
-    if (selectedCandidates.length === 0 || uninstalling) return
+    if (selectedCandidates.length === 0 || uninstalling || !scanQuery) return
     setUninstalling(true)
     setErrorMessage(null)
+    setNoticeMessage(null)
     try {
       const result = await skillUninstallerBridge.uninstall({
         targets: selectedCandidates.map((candidate) => ({
           path: candidate.path,
-          query: normalizedQuery,
+          query: scanQuery,
         })),
       })
       const resultByPath = new Map(result.results.map((item) => [item.path, item]))
@@ -156,7 +180,24 @@ export function SkillUninstallerFlow({
         .map((item) => [item.path, item.error ?? "未能移到废纸篓。"])))
       setSelectedPaths(new Set())
       setConfirmOpen(false)
-      await onCompleted?.(result)
+      const incompleteCount = result.results.filter((item) => item.status !== "trashed").length
+      const trashedCount = result.results.length - incompleteCount
+      const resultWarnings = result.results.flatMap((item) => item.warning ? [item.warning] : [])
+      if (incompleteCount > 0) {
+        setNoticeMessage(`已移到废纸篓 ${trashedCount} 个，未完成 ${incompleteCount} 个。`)
+      } else if (resultWarnings.length > 0) {
+        setNoticeMessage([...new Set(resultWarnings)].join(" "))
+      }
+      if (onCompleted) {
+        try {
+          await onCompleted(result)
+        } catch (error) {
+          logger.warn("Skill uninstall completion refresh failed.", { error })
+          setNoticeMessage(incompleteCount > 0
+            ? `已移到废纸篓 ${trashedCount} 个，未完成 ${incompleteCount} 个，刷新失败。`
+            : "已移到废纸篓，刷新失败。")
+        }
+      }
     } catch (error) {
       logger.error("Skill uninstall failed.", { error })
       setErrorMessage(error instanceof Error ? error.message : "移到废纸篓失败。")
@@ -166,8 +207,8 @@ export function SkillUninstallerFlow({
   }
 
   const chooseSearchRoot = async () => {
-    const path = await repositoryBridge.chooseDirectory()
-    if (path) setQuery((current) => ({ ...current, searchRootPath: path }))
+    const selectedPath = await repositoryBridge.chooseDirectory()
+    if (selectedPath) updateQuery({ ...query, searchRootPath: selectedPath })
   }
 
   return (
@@ -180,7 +221,8 @@ export function SkillUninstallerFlow({
               id="skill-uninstaller-name"
               value={query.name}
               readOnly={queryReadOnly}
-              onChange={(event) => setQuery((current) => ({ ...current, name: event.target.value }))}
+              disabled={uninstalling}
+              onChange={(event) => updateQuery({ ...query, name: event.target.value })}
             />
           </Field>
           <Field>
@@ -189,16 +231,18 @@ export function SkillUninstallerFlow({
               <InputGroupInput
                 id="skill-uninstaller-search-root"
                 value={query.searchRootPath ?? ""}
+                placeholder="全局 Skill 目录"
                 readOnly={queryReadOnly}
-                onChange={(event) => setQuery((current) => ({
-                  ...current,
+                disabled={uninstalling}
+                onChange={(event) => updateQuery({
+                  ...query,
                   searchRootPath: event.target.value || undefined,
-                }))}
+                })}
               />
               <InputGroupAddon align="inline-end">
                 <InputGroupButton
                   variant="outline"
-                  disabled={queryReadOnly}
+                  disabled={queryReadOnly || uninstalling}
                   onClick={() => void chooseSearchRoot()}
                 >
                   选择
@@ -212,7 +256,7 @@ export function SkillUninstallerFlow({
           <Button
             type="button"
             variant="outline"
-            disabled={!scanning && !normalizedQuery.name}
+            disabled={uninstalling}
             onClick={() => void (scanning ? cancelScan() : startScan())}
           >
             {scanning ? <Spinner aria-label="扫描中" data-icon="inline-start" /> : null}
@@ -240,6 +284,12 @@ export function SkillUninstallerFlow({
         <Alert variant="destructive">
           <AlertTitle>操作失败</AlertTitle>
           <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {noticeMessage ? (
+        <Alert>
+          <AlertDescription>{noticeMessage}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -272,7 +322,7 @@ export function SkillUninstallerFlow({
       </ScrollArea>
 
       <div className="flex shrink-0 justify-end gap-2">
-        {onCancel ? <Button type="button" variant="outline" onClick={onCancel}>取消</Button> : null}
+        {onCancel ? <Button type="button" variant="outline" disabled={uninstalling} onClick={onCancel}>取消</Button> : null}
         <Button
           type="button"
           variant="destructive"
@@ -323,6 +373,7 @@ function CandidateRow({
           {candidate.editorIds.map((editorId) => (
             <Badge key={editorId} variant="secondary">{getEditorLabel(editorId)}</Badge>
           ))}
+          {candidate.editorIds.length === 0 ? <Badge variant="secondary">其它位置</Badge> : null}
           <span className="text-xs text-muted-foreground">{candidate.source === "synapse" ? "Synapse" : "外部"}</span>
         </div>
         <p className="break-all font-mono text-xs text-muted-foreground">{candidate.path}</p>

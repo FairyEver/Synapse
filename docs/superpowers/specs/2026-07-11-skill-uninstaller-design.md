@@ -109,6 +109,7 @@ type SkillUninstallBatchResult = {
     path: string
     status: "trashed" | "failed" | "skipped"
     error?: string
+    warning?: string
   }>
 }
 ```

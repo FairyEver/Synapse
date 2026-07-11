@@ -168,6 +168,7 @@ describe("SkillUninstallerFlow", () => {
     })
     expect(document.body.textContent).not.toContain("/one/jenkins")
     expect(document.body.textContent).toContain("没有写入该位置的权限。")
+    expect(document.body.textContent).toContain("已移到废纸篓 1 个，未完成 1 个。")
     expect(onCompleted).toHaveBeenCalledWith({
       results: [
         { path: "/one/jenkins", status: "trashed" },
@@ -191,7 +192,7 @@ describe("SkillUninstallerFlow", () => {
     expect(document.body.textContent).toContain("未找到匹配的 Skill。")
   })
 
-  it("cancels an active scan", async () => {
+  it("keeps partial results returned after cancelling an active scan", async () => {
     let resolveScan: ((result: SkillUninstallScanResult) => void) | undefined
     mocks.scan.mockImplementation(() => new Promise<SkillUninstallScanResult>((resolve) => {
       resolveScan = resolve
@@ -205,16 +206,98 @@ describe("SkillUninstallerFlow", () => {
     await click("取消扫描")
 
     expect(mocks.cancelScan).toHaveBeenCalledWith({ scanId: request.scanId })
-    expect(getButton("扫描")).toBeTruthy()
 
     await act(async () => {
-      resolveScan?.({ candidates: [candidate("/late/jenkins")], complete: true, warnings: [] })
+      resolveScan?.({
+        candidates: [candidate("/late/jenkins")],
+        complete: false,
+        warnings: ["扫描已取消。"],
+      })
     })
-    expect(document.body.textContent).not.toContain("/late/jenkins")
+    expect(document.body.textContent).toContain("/late/jenkins")
+    expect(document.body.textContent).toContain("扫描未完成")
+    expect(getButton("扫描")).toBeTruthy()
   })
 
-  it("keeps an active page scan cancellable when the query is edited", async () => {
-    mocks.scan.mockImplementation(() => new Promise<SkillUninstallScanResult>(() => undefined))
+  it("uses the query snapshot that discovered selected targets", async () => {
+    mocks.scan.mockResolvedValue({
+      candidates: [candidate("/one/jenkins")],
+      complete: true,
+      warnings: [],
+    })
+    mocks.uninstall.mockResolvedValue({ results: [{ path: "/one/jenkins", status: "trashed" }] })
+    await renderFlow()
+    await click("扫描")
+    await clickCheckbox("全选")
+    await click("移到废纸篓（1）")
+    await click("确认移到废纸篓")
+
+    expect(mocks.uninstall).toHaveBeenCalledWith({
+      targets: [{ query: { name: "jenkins" }, path: "/one/jenkins" }],
+    })
+  })
+
+  it("clears stale scan results when the editable query changes", async () => {
+    mocks.scan.mockResolvedValue({
+      candidates: [candidate("/one/jenkins")],
+      complete: true,
+      warnings: [],
+    })
+    await renderFlow()
+    await click("扫描")
+    const input = document.querySelector<HTMLInputElement>("#skill-uninstaller-name")
+    if (!input) throw new Error("Skill name input not found")
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+      setter?.call(input, "other")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    expect(document.body.textContent).not.toContain("/one/jenkins")
+  })
+
+  it("does not misreport a completed trash when the caller refresh fails", async () => {
+    mocks.scan.mockResolvedValue({
+      candidates: [candidate("/one/jenkins")],
+      complete: true,
+      warnings: [],
+    })
+    mocks.uninstall.mockResolvedValue({ results: [{ path: "/one/jenkins", status: "trashed" }] })
+    await renderFlow({ onCompleted: vi.fn().mockRejectedValue(new Error("refresh failed")) })
+    await click("扫描")
+    await clickCheckbox("全选")
+    await click("移到废纸篓（1）")
+    await click("确认移到废纸篓")
+
+    expect(document.body.textContent).toContain("已移到废纸篓，刷新失败。")
+    expect(document.body.textContent).not.toContain("移到废纸篓失败。")
+  })
+
+  it("validates an empty name and labels the default search scope", async () => {
+    await renderFlow({ initialQuery: { name: "" } })
+    expect(document.querySelector<HTMLInputElement>("#skill-uninstaller-search-root")?.placeholder)
+      .toBe("全局 Skill 目录")
+    await click("扫描")
+    expect(document.body.textContent).toContain("请输入 Skill 名称。")
+  })
+
+  it("labels candidates without editor attribution as other locations", async () => {
+    mocks.scan.mockResolvedValue({
+      candidates: [{ ...candidate("/other/jenkins"), editorIds: [] }],
+      complete: true,
+      warnings: [],
+    })
+    await renderFlow()
+    await click("扫描")
+    expect(document.body.textContent).toContain("其它位置")
+  })
+
+  it("cancels and discards an active page scan when the query is edited", async () => {
+    let resolveScan: ((result: SkillUninstallScanResult) => void) | undefined
+    mocks.scan.mockImplementation(() => new Promise<SkillUninstallScanResult>((resolve) => {
+      resolveScan = resolve
+    }))
     await renderFlow()
     await click("扫描")
     const request = mocks.scan.mock.calls[0]?.[0]
@@ -227,10 +310,12 @@ describe("SkillUninstallerFlow", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }))
     })
 
-    expect(getButton("取消扫描")).toBeTruthy()
-    await click("取消扫描")
     expect(mocks.cancelScan).toHaveBeenCalledWith({ scanId: request.scanId })
     expect(getButton("扫描")).toBeTruthy()
+    await act(async () => {
+      resolveScan?.({ candidates: [candidate("/stale/jenkins")], complete: false, warnings: ["扫描已取消。"] })
+    })
+    expect(document.body.textContent).not.toContain("/stale/jenkins")
   })
 
   it("cancels an active scan when unmounted", async () => {

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -44,7 +44,7 @@ async function createSkill(parent: string, name: string, frontmatterName = name)
   const skillPath = path.join(parent, name)
   await mkdir(skillPath, { recursive: true })
   await writeFile(path.join(skillPath, "SKILL.md"), `---\nname: ${frontmatterName}\n---\n`)
-  return skillPath
+  return realpath(skillPath)
 }
 
 describe("SkillUninstallerService", () => {
@@ -119,6 +119,7 @@ describe("SkillUninstallerService", () => {
 
   it("trashes a valid target below the POSIX filesystem root", async () => {
     const targetPath = await createSkill(tempRoot, "jenkins")
+    const canonicalTargetPath = await realpath(targetPath)
     const trashItem = vi.fn().mockResolvedValue(undefined)
     const { security } = createSecurity()
     const service = new SkillUninstallerService({ trashItem })
@@ -126,12 +127,31 @@ describe("SkillUninstallerService", () => {
     const result = await service.uninstall([
       {
         query: { name: "jenkins", searchRootPath: path.parse(targetPath).root },
-        path: targetPath,
+        path: canonicalTargetPath,
       },
     ], security)
 
     expect(result.results[0]).toMatchObject({ status: "trashed" })
-    expect(trashItem).toHaveBeenCalledWith(targetPath)
+    expect(trashItem).toHaveBeenCalledWith(canonicalTargetPath)
+  })
+
+  it("skips a renderer-injected symlink alias for a discoverable target", async () => {
+    const realParent = path.join(tempRoot, "real")
+    await mkdir(realParent)
+    await createSkill(realParent, "jenkins")
+    const aliasParent = path.join(tempRoot, "alias")
+    await symlink(realParent, aliasParent, "dir")
+    const aliasTarget = path.join(aliasParent, "jenkins")
+    const trashItem = vi.fn()
+    const { security } = createSecurity()
+    const service = new SkillUninstallerService({ trashItem })
+
+    const result = await service.uninstall([
+      { query: { name: "jenkins", searchRootPath: tempRoot }, path: aliasTarget },
+    ], security)
+
+    expect(result.results[0]).toMatchObject({ status: "skipped" })
+    expect(trashItem).not.toHaveBeenCalled()
   })
 
   it("skips a target that changes name after scanning", async () => {
@@ -149,6 +169,53 @@ describe("SkillUninstallerService", () => {
       status: "skipped",
       error: "目标已发生变化，已跳过。",
     })
+    expect(trashItem).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["an excluded directory", "node_modules/jenkins"],
+    ["a target beyond the depth limit", `${Array.from({ length: 33 }, (_, index) => `d${index}`).join("/")}/jenkins`],
+  ])("skips renderer-injected targets under %s", async (_label, relativePath) => {
+    const targetPath = await createSkill(tempRoot, relativePath)
+    const trashItem = vi.fn()
+    const { security } = createSecurity()
+    const service = new SkillUninstallerService({ trashItem })
+
+    const result = await service.uninstall([
+      { query: { name: "jenkins", searchRootPath: tempRoot }, path: targetPath },
+    ], security)
+
+    expect(result.results[0]).toMatchObject({ status: "skipped" })
+    expect(trashItem).not.toHaveBeenCalled()
+  })
+
+  it("skips a nested target hidden below another Skill root", async () => {
+    const ancestor = await createSkill(tempRoot, "bundle", "other")
+    const targetPath = await createSkill(ancestor, "nested/jenkins")
+    const trashItem = vi.fn()
+    const { security } = createSecurity()
+    const service = new SkillUninstallerService({ trashItem })
+
+    const result = await service.uninstall([
+      { query: { name: "jenkins", searchRootPath: tempRoot }, path: targetPath },
+    ], security)
+
+    expect(result.results[0]).toMatchObject({ status: "skipped" })
+    expect(trashItem).not.toHaveBeenCalled()
+  })
+
+  it("skips a target hidden below a search root that is itself a Skill", async () => {
+    const scanRoot = await createSkill(tempRoot, "bundle", "other")
+    const targetPath = await createSkill(scanRoot, "nested/jenkins")
+    const trashItem = vi.fn()
+    const { security } = createSecurity()
+    const service = new SkillUninstallerService({ trashItem })
+
+    const result = await service.uninstall([
+      { query: { name: "jenkins", searchRootPath: scanRoot }, path: targetPath },
+    ], security)
+
+    expect(result.results[0]).toMatchObject({ status: "skipped" })
     expect(trashItem).not.toHaveBeenCalled()
   })
 
@@ -203,7 +270,7 @@ describe("SkillUninstallerService", () => {
     expect(auditRecord).toHaveBeenCalledWith(expect.objectContaining({ outcome: "denied" }))
   })
 
-  it("refreshes Synapse content after trash and ignores refresh failure", async () => {
+  it("keeps trash success and returns a warning when install status refresh fails", async () => {
     const targetPath = await createSkill(tempRoot, "jenkins")
     await writeFile(path.join(targetPath, ".synapse.json"), JSON.stringify({ id: "content-1" }))
     const trashItem = vi.fn().mockResolvedValue(undefined)
@@ -215,7 +282,11 @@ describe("SkillUninstallerService", () => {
       { query: { name: "jenkins", searchRootPath: tempRoot }, path: targetPath },
     ], security, { onTrashedContentId })
 
-    expect(result.results[0]).toMatchObject({ status: "trashed" })
+    expect(result.results[0]).toEqual({
+      path: targetPath,
+      status: "trashed",
+      warning: "已移到废纸篓，安装状态刷新失败。",
+    })
     expect(onTrashedContentId).toHaveBeenCalledWith("content-1")
   })
 })

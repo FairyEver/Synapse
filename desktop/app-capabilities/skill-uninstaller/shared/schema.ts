@@ -31,6 +31,7 @@ export const skillUninstallBatchResultItemSchema = z.object({
   path: z.string().min(1),
   status: z.enum(["trashed", "failed", "skipped"]),
   error: z.string().optional(),
+  warning: z.string().optional(),
 }).strict()
 
 export const skillUninstallBatchResultSchema = z.object({

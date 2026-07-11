@@ -78,10 +78,13 @@ export function createSkillUninstallerIpcModule(
         handler: async (ctx, request: { targets: SkillUninstallTarget[] }) => {
           const eventBus = ctx.resolve<EventBus>("core.event-bus")
           return service.uninstall(request.targets, securityFrom(ctx), {
-            onTrashedContentId: (contentId) => notifyInstallStatusChanged(eventBus, contentId, {
-              logger,
-              warningMessage: "Failed to refresh install status after Skill uninstall.",
-            }),
+            onTrashedContentId: async (contentId) => {
+              const refreshed = await notifyInstallStatusChanged(eventBus, contentId, {
+                logger,
+                warningMessage: "Failed to refresh install status after Skill uninstall.",
+              })
+              if (refreshed === false) throw new Error("Install status refresh failed.")
+            },
           })
         },
       },

@@ -9,14 +9,13 @@ import {
   listGlobalTrustedSkillRoots,
 } from "../../../electron/services/editor-scan-roots"
 import { createMainLogger } from "../../../electron/services/log-store"
-import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
 import type {
   SkillUninstallBatchResult,
   SkillUninstallQuery,
   SkillUninstallScanResult,
   SkillUninstallTarget,
 } from "../shared/schema"
-import { scanSkillRoots } from "./scanner"
+import { isSkillTargetDiscoverable, scanSkillRoots } from "./scanner"
 
 const logger = createMainLogger("app.skill-uninstaller")
 const SEARCH_ROOT_ERROR = "搜索目录不存在或无法读取。"
@@ -24,6 +23,7 @@ const TARGET_CHANGED_ERROR = "目标已发生变化，已跳过。"
 const TARGET_OUTSIDE_ERROR = "目标不在本次扫描范围内，已跳过。"
 const WRITE_DENIED_ERROR = "没有写入该位置的权限。"
 const TRASH_FAILED_ERROR = "移到废纸篓失败。"
+const STATUS_REFRESH_WARNING = "已移到废纸篓，安装状态刷新失败。"
 
 export type SkillUninstallerSecurity = {
   readonly actor: ActorIdentity
@@ -42,24 +42,6 @@ export type SkillUninstallerServiceDeps = {
 type RevalidatedTarget = {
   readonly path: string
   readonly synapseContentId?: string
-}
-
-function normalizeName(value: string): string {
-  return value.trim().toLowerCase()
-}
-
-function readFrontmatterName(content: string): string | undefined {
-  if (!content.startsWith("---")) return undefined
-  const end = content.indexOf("\n---", 3)
-  if (end < 0) return undefined
-  return parseFrontmatterBlock(content.slice(4, end)).metadata.name?.trim() || undefined
-}
-
-function matchesQueryName(targetPath: string, content: string, queryName: string): boolean {
-  const expected = normalizeName(queryName)
-  const frontmatterName = readFrontmatterName(content)
-  return normalizeName(path.basename(targetPath)) === expected
-    || (frontmatterName !== undefined && normalizeName(frontmatterName) === expected)
 }
 
 async function readSynapseContentId(targetPath: string): Promise<string | undefined> {
@@ -109,12 +91,10 @@ async function revalidateTarget(target: SkillUninstallTarget): Promise<Revalidat
   }
 
   let targetRealPath: string
-  let skillRealPath: string
   let roots: string[]
   try {
-    [targetRealPath, skillRealPath, roots] = await Promise.all([
+    [targetRealPath, roots] = await Promise.all([
       realpath(target.path),
-      realpath(path.join(target.path, "SKILL.md")),
       resolveAllowedRoots(target.query),
     ])
   } catch {
@@ -124,17 +104,15 @@ async function revalidateTarget(target: SkillUninstallTarget): Promise<Revalidat
   if (!roots.some((root) => isPathEqualOrInside(root, targetRealPath))) {
     throw new Error(TARGET_OUTSIDE_ERROR)
   }
-  if (!isPathEqualOrInside(targetRealPath, skillRealPath)) {
-    throw new Error(TARGET_CHANGED_ERROR)
-  }
-
-  let content: string
   try {
-    content = await readFile(skillRealPath, "utf8")
+    if (!await isSkillTargetDiscoverable({
+      query: target.query,
+      roots,
+      targetPath: target.path,
+    })) {
+      throw new Error(TARGET_CHANGED_ERROR)
+    }
   } catch {
-    throw new Error(TARGET_CHANGED_ERROR)
-  }
-  if (!matchesQueryName(targetRealPath, content, target.query.name)) {
     throw new Error(TARGET_CHANGED_ERROR)
   }
 
@@ -194,6 +172,7 @@ export class SkillUninstallerService {
           roots: [{ path: rootPath, editorIds: [] }],
           classifyEditors: (candidatePath) => inferProjectSkillEditors(candidatePath, rootPath),
           signal,
+          rootErrorsFatal: true,
         })
         recordAudit(security, "fs.read.outside-userdata", resource, "allowed", "skill-uninstall-scan")
         return result
@@ -275,6 +254,10 @@ export class SkillUninstallerService {
           await hooks.onTrashedContentId(revalidated.synapseContentId)
         } catch (error) {
           logger.warn("Failed to refresh install status after trashing Skill.", { error })
+          const result = results.at(-1)
+          if (result?.path === target.path && result.status === "trashed") {
+            result.warning = STATUS_REFRESH_WARNING
+          }
         }
       }
     }

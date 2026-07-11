@@ -208,6 +208,77 @@ describe("scanSkillRoots", () => {
     })
   })
 
+  it("settles on timeout when editor classification never resolves", async () => {
+    const root = await fixture()
+    await skill(root, ".", "jenkins")
+
+    const result = await scanSkillRoots({
+      query: { name: "jenkins" },
+      roots: [{ path: root, editorIds: [] }],
+      classifyEditors: () => new Promise(() => undefined),
+      limits: { timeoutMs: 5 },
+    })
+
+    expect(result).toMatchObject({
+      candidates: [],
+      complete: false,
+      warnings: ["扫描超时，当前结果可能不完整。"],
+    })
+  })
+
+  it("fails when the explicit root cannot be enumerated", async () => {
+    const root = await fixture()
+    const missing = path.join(root, "missing")
+
+    await expect(scanSkillRoots({
+      query: { name: "jenkins", searchRootPath: missing },
+      roots: [{ path: missing, editorIds: [] }],
+      classifyEditors: () => [],
+      rootErrorsFatal: true,
+    })).rejects.toThrow()
+  })
+
+  it("returns a warning for an unavailable registered root", async () => {
+    const root = await fixture()
+    const missing = path.join(root, "missing")
+    const result = await scanSkillRoots({
+      query: { name: "jenkins" },
+      roots: [{ path: missing, editorIds: ["codex"] }],
+      classifyEditors: () => [],
+    })
+
+    expect(result).toEqual({
+      candidates: [],
+      complete: false,
+      warnings: ["部分目录无法读取，当前结果可能不完整。"],
+    })
+  })
+
+  it("settles on cancellation when editor classification never resolves", async () => {
+    const root = await fixture()
+    await skill(root, ".", "jenkins")
+    const controller = new AbortController()
+    let started!: () => void
+    const classificationStarted = new Promise<void>((resolve) => { started = resolve })
+    const scan = scanSkillRoots({
+      query: { name: "jenkins" },
+      roots: [{ path: root, editorIds: [] }],
+      classifyEditors: () => {
+        started()
+        return new Promise(() => undefined)
+      },
+      signal: controller.signal,
+    })
+    await classificationStarted
+    controller.abort()
+
+    await expect(scan).resolves.toMatchObject({
+      candidates: [],
+      complete: false,
+      warnings: ["扫描已取消。"],
+    })
+  })
+
   it("reports a timeout reached while the final empty directory read finishes", async () => {
     const root = await fixture()
     let calls = 0

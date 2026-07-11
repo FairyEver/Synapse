@@ -12,7 +12,7 @@ async function notifyInstallStatusChanged(
     logger: WarnLogger
     warningMessage: string
   },
-): Promise<void> {
+): Promise<boolean> {
   try {
     const entries = await installStatusCacheService.refresh(contentId)
     eventBus.emit({
@@ -21,8 +21,10 @@ async function notifyInstallStatusChanged(
       payload: { contentId, entries },
       timestamp: new Date().toISOString(),
     })
+    return true
   } catch (error) {
     options.logger.warn(options.warningMessage, { contentId, error })
+    return false
   }
 }
 
