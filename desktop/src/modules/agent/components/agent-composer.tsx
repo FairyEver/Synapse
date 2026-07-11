@@ -454,44 +454,53 @@ function AgentComposer({
             />
           ) : null}
           pendingMessages={visiblePendingMessages.length > 0 ? (
-            <ScrollArea className="max-h-40">
-              <div className="flex flex-col">
+            <ScrollArea
+              className="max-h-40 min-w-0 max-w-full"
+              viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"
+            >
+              <div className="flex min-w-0 max-w-full flex-col">
                 {visiblePendingMessages.map((message) => (
                   <div
                     key={message.id}
-                    className="flex min-w-0 items-center gap-2 border-b border-border py-1.5 last:border-b-0"
+                    className="flex min-w-0 max-w-full items-center gap-2 border-b border-border py-1.5 last:border-b-0"
                   >
-                    <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" />
+                    <div className="flex max-w-40 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <CornerDownRight className="size-3.5 shrink-0" />
+                      <span className="truncate">{pendingMessagePersonaName(message)}</span>
+                      <span aria-hidden="true">|</span>
+                    </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-muted-foreground">
-                        {pendingMessageDisplayText(message)}
+                      <p className="truncate whitespace-nowrap text-sm text-muted-foreground">
+                        {formatDraftAttachmentsForMessage(message.content, message.attachments ?? [])}
                       </p>
                       {message.status === "failed" ? (
-                        <p className="truncate text-xs text-destructive">{message.error ?? "发送失败"}</p>
+                        <p className="truncate whitespace-nowrap text-xs text-destructive">{message.error ?? "发送失败"}</p>
                       ) : null}
                     </div>
-                    {message.status === "failed" ? (
+                    <div className="flex shrink-0 items-center gap-1">
+                      {message.status === "failed" ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label="重试发送"
+                          data-track="agent-pending-message-retry"
+                          onClick={() => onRetryPendingMessage?.(message.id)}
+                        >
+                          <RotateCcw />
+                        </Button>
+                      ) : null}
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon-xs"
-                        aria-label="重试发送"
-                        data-track="agent-pending-message-retry"
-                        onClick={() => onRetryPendingMessage?.(message.id)}
+                        aria-label="删除待发送消息"
+                        data-track="agent-pending-message-remove"
+                        onClick={() => onRemovePendingMessage?.(message.id)}
                       >
-                        <RotateCcw />
+                        <Trash2 />
                       </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label="删除待发送消息"
-                      data-track="agent-pending-message-remove"
-                      onClick={() => onRemovePendingMessage?.(message.id)}
-                    >
-                      <Trash2 />
-                    </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -670,9 +679,8 @@ function isSupportedImageMimeType(type: string): type is AgentDraftImageAttachme
   return SUPPORTED_IMAGE_MIME_TYPES.has(type as AgentDraftImageAttachment["mimeType"])
 }
 
-function pendingMessageDisplayText(message: PendingMessage): string {
-  const personaName = message.mainThreadPersonaName?.trim() || "普通"
-  return `${personaName} | ${formatDraftAttachmentsForMessage(message.content, message.attachments ?? [])}`
+function pendingMessagePersonaName(message: PendingMessage): string {
+  return message.mainThreadPersonaName?.trim() || "普通"
 }
 
 function AgentPersonaMenu({
