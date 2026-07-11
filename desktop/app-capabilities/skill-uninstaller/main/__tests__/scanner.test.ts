@@ -151,4 +151,60 @@ describe("scanSkillRoots", () => {
 
     expect(result).toMatchObject({ complete: false, warnings: ["扫描已取消。"] })
   })
+
+  it("does not add a candidate when cancelled during editor classification", async () => {
+    const root = await fixture()
+    await skill(root, ".", "jenkins")
+    const controller = new AbortController()
+    let markClassificationStarted!: () => void
+    const classificationStarted = new Promise<void>((resolve) => {
+      markClassificationStarted = resolve
+    })
+    let releaseClassification!: () => void
+    const classificationGate = new Promise<void>((resolve) => {
+      releaseClassification = resolve
+    })
+
+    const scan = scanSkillRoots({
+      query: { name: "jenkins" },
+      roots: [{ path: root, editorIds: [] }],
+      classifyEditors: async () => {
+        markClassificationStarted()
+        await classificationGate
+        return []
+      },
+      signal: controller.signal,
+    })
+    await classificationStarted
+    controller.abort()
+    releaseClassification()
+
+    const result = await scan
+    expect(result).toMatchObject({
+      candidates: [],
+      complete: false,
+      warnings: ["扫描已取消。"],
+    })
+  })
+
+  it("does not add a candidate when timing out during editor classification", async () => {
+    const root = await fixture()
+    await skill(root, ".", "jenkins")
+
+    const result = await scanSkillRoots({
+      query: { name: "jenkins" },
+      roots: [{ path: root, editorIds: [] }],
+      classifyEditors: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        return []
+      },
+      limits: { timeoutMs: 1 },
+    })
+
+    expect(result).toMatchObject({
+      candidates: [],
+      complete: false,
+      warnings: ["扫描超时，当前结果可能不完整。"],
+    })
+  })
 })

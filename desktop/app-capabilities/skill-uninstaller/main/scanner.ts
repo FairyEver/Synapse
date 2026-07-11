@@ -170,6 +170,8 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
           input.classifyEditors(candidatePath),
           readSynapseContentId(candidatePath),
         ])
+        if (shouldStop()) return
+
         const current = candidates.get(candidateRealPath)
         const editorIds = [...new Set([
           ...(current?.editorIds ?? []),
