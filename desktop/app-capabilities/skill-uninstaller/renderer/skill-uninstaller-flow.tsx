@@ -195,8 +195,8 @@ export function SkillUninstallerFlow({
           await onCompleted(result)
         } catch (error) {
           logger.warn("Skill uninstall completion refresh failed.", { error })
-          setNoticeMessage(incompleteCount > 0
-            ? `已移到废纸篓 ${trashedCount} 个，未完成 ${incompleteCount} 个，刷新失败。`
+          setNoticeMessage(notices.length > 0
+            ? [...new Set([...notices, "刷新失败。"])].join(" ")
             : "已移到废纸篓，刷新失败。")
         }
       }

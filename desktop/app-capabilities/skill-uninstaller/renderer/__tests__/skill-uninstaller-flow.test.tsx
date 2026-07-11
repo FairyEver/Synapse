@@ -199,6 +199,29 @@ describe("SkillUninstallerFlow", () => {
     expect(document.body.textContent).toContain("安装状态刷新失败")
   })
 
+  it("preserves result notices when the completion refresh also fails", async () => {
+    mocks.scan.mockResolvedValue({
+      candidates: [candidate("/one/jenkins"), candidate("/two/jenkins")],
+      complete: true,
+      warnings: [],
+    })
+    mocks.uninstall.mockResolvedValue({
+      results: [
+        { path: "/one/jenkins", status: "trashed", warning: "已移到废纸篓，安装状态刷新失败。" },
+        { path: "/two/jenkins", status: "failed", error: "没有写入该位置的权限。" },
+      ],
+    })
+    await renderFlow({ onCompleted: vi.fn().mockRejectedValue(new Error("refresh failed")) })
+    await click("扫描")
+    await clickCheckbox("全选")
+    await click("移到废纸篓（2）")
+    await click("确认移到废纸篓")
+
+    expect(document.body.textContent).toContain("已移到废纸篓 1 个，未完成 1 个。")
+    expect(document.body.textContent).toContain("安装状态刷新失败")
+    expect(document.body.textContent).toContain("刷新失败")
+  })
+
   it("preserves a name edited while the directory chooser is open", async () => {
     let resolveDirectory!: (value: string) => void
     mocks.chooseDirectory.mockImplementation(() => new Promise<string>((resolve) => {

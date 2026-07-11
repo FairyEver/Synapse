@@ -31,6 +31,16 @@ export type ScanSkillRoot = {
   readonly editorIds: readonly string[]
 }
 
+type SkillFileSystem = {
+  readonly lstat: (targetPath: string) => ReturnType<typeof lstat>
+  readonly readFile: (targetPath: string, encoding: "utf8") => Promise<string>
+}
+
+const defaultSkillFileSystem: SkillFileSystem = {
+  lstat: (targetPath) => lstat(targetPath),
+  readFile: (targetPath, encoding) => readFile(targetPath, encoding),
+}
+
 export type ScanSkillRootsInput = {
   readonly query: SkillUninstallQuery
   readonly roots: readonly ScanSkillRoot[]
@@ -39,6 +49,7 @@ export type ScanSkillRootsInput = {
   ) => readonly string[] | Promise<readonly string[]>
   readonly signal?: AbortSignal
   readonly rootErrorsFatal?: boolean
+  readonly skillFileSystem?: SkillFileSystem
   readonly limits?: Partial<{
     maxDepth: number
     maxDirectories: number
@@ -75,6 +86,25 @@ function matchesQuery(targetPath: string, content: string, queryName: string): b
     || (frontmatterName !== undefined && normalizeName(frontmatterName) === expected)
 }
 
+async function inspectSkillFile(
+  directoryPath: string,
+  fileSystem: SkillFileSystem,
+): Promise<{ status: "absent" | "unreadable" } | { status: "readable"; content: string }> {
+  const skillPath = path.join(directoryPath, "SKILL.md")
+  let stats
+  try {
+    stats = await fileSystem.lstat(skillPath)
+  } catch (error) {
+    return { status: isMissing(error) ? "absent" : "unreadable" }
+  }
+  if (!stats.isFile() || stats.isSymbolicLink()) return { status: "absent" }
+  try {
+    return { status: "readable", content: await fileSystem.readFile(skillPath, "utf8") }
+  } catch {
+    return { status: "unreadable" }
+  }
+}
+
 async function readSynapseContentId(candidatePath: string): Promise<string | undefined> {
   const metadataPath = path.join(candidatePath, ".synapse.json")
   try {
@@ -92,10 +122,12 @@ export async function isSkillTargetDiscoverable(input: {
   readonly roots: readonly string[]
   readonly targetPath: string
   readonly maxDepth?: number
+  readonly skillFileSystem?: SkillFileSystem
 }): Promise<boolean> {
   const targetRealPath = await realpath(input.targetPath)
   if (path.resolve(input.targetPath) !== targetRealPath) return false
   const maxDepth = input.maxDepth ?? SKILL_UNINSTALL_SCAN_MAX_DEPTH
+  const skillFileSystem = input.skillFileSystem ?? defaultSkillFileSystem
 
   for (const root of input.roots) {
     const relative = path.relative(root, targetRealPath)
@@ -117,29 +149,17 @@ export async function isSkillTargetDiscoverable(input: {
         break
       }
       if (index === traversedDirectories.length - 1) continue
-      try {
-        const ancestorSkillPath = path.join(ancestor, "SKILL.md")
-        const skillStats = await lstat(ancestorSkillPath)
-        if (skillStats.isFile() && !skillStats.isSymbolicLink()) {
-          try {
-            await readFile(ancestorSkillPath, "utf8")
-            hiddenByAncestorSkill = true
-            break
-          } catch {
-            continue
-          }
-        }
-      } catch (error) {
-        if (!isMissing(error)) throw error
+      const ancestorSkill = await inspectSkillFile(ancestor, skillFileSystem)
+      if (ancestorSkill.status === "readable") {
+        hiddenByAncestorSkill = true
+        break
       }
     }
     if (hiddenByAncestorSkill) continue
 
-    const skillPath = path.join(targetRealPath, "SKILL.md")
-    const skillStats = await lstat(skillPath)
-    if (!skillStats.isFile() || skillStats.isSymbolicLink()) continue
-    const content = await readFile(skillPath, "utf8")
-    if (matchesQuery(targetRealPath, content, input.query.name)) return true
+    const targetSkill = await inspectSkillFile(targetRealPath, skillFileSystem)
+    if (targetSkill.status !== "readable") continue
+    if (matchesQuery(targetRealPath, targetSkill.content, input.query.name)) return true
   }
   return false
 }
@@ -150,6 +170,7 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
   const timeoutMs = input.limits?.timeoutMs ?? SKILL_UNINSTALL_SCAN_TIMEOUT_MS
   const concurrency = Math.max(1, Math.floor(input.limits?.concurrency ?? SKILL_UNINSTALL_SCAN_CONCURRENCY))
   const targetName = normalizeName(input.query.name)
+  const skillFileSystem = input.skillFileSystem ?? defaultSkillFileSystem
   const startedAt = Date.now()
   const queue: QueueEntry[] = input.roots.map((root) => ({ path: root.path, depth: 0, editorIds: root.editorIds }))
   const candidates = new Map<string, SkillUninstallCandidate>()
@@ -229,50 +250,33 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
     }
     if (candidateRealPath === STOPPED) return
     const candidatePath = path.resolve(entry.path)
-    const skillFilePath = path.join(entry.path, "SKILL.md")
-    let skillStats
-    try {
-      skillStats = await waitFor(lstat(skillFilePath))
-    } catch (error) {
-      if (!isMissing(error)) {
-        warnings.add(SKILL_READ_WARNING)
-        return
-      }
-    }
-    if (skillStats === STOPPED) return
+    const skillInspection = await waitFor(inspectSkillFile(entry.path, skillFileSystem))
+    if (skillInspection === STOPPED) return
+    if (skillInspection.status === "unreadable") warnings.add(SKILL_READ_WARNING)
 
-    if (skillStats?.isFile() && !skillStats.isSymbolicLink()) {
-      let content: string | undefined
-      try {
-        const readResult = await waitFor(readFile(skillFilePath, "utf8"))
-        if (readResult === STOPPED) return
-        content = readResult
-      } catch {
-        warnings.add(SKILL_READ_WARNING)
+    if (skillInspection.status === "readable") {
+      const content = skillInspection.content
+      const directoryName = path.basename(candidatePath)
+      const frontmatterName = readFrontmatterName(content)
+      const matches = normalizeName(directoryName) === targetName
+        || (frontmatterName !== undefined && normalizeName(frontmatterName) === targetName)
+      if (matches && !shouldStop()) {
+        const classifiedEditorIds = await waitFor(Promise.resolve(input.classifyEditors(candidatePath)))
+        if (classifiedEditorIds === STOPPED || shouldStop()) return
+        const synapseContentId = await waitFor(readSynapseContentId(candidatePath))
+        if (synapseContentId === STOPPED || shouldStop()) return
+        const current = candidates.get(candidateRealPath)
+        const editorIds = [...new Set([...(current?.editorIds ?? []), ...entry.editorIds, ...classifiedEditorIds])]
+        candidates.set(candidateRealPath, {
+          path: candidatePath,
+          name: directoryName,
+          ...(frontmatterName ? { frontmatterName } : {}),
+          editorIds,
+          source: synapseContentId ? "synapse" : "external",
+          ...(synapseContentId ? { synapseContentId } : {}),
+        })
       }
-      if (content !== undefined) {
-        const directoryName = path.basename(candidatePath)
-        const frontmatterName = readFrontmatterName(content)
-        const matches = normalizeName(directoryName) === targetName
-          || (frontmatterName !== undefined && normalizeName(frontmatterName) === targetName)
-        if (matches && !shouldStop()) {
-          const classifiedEditorIds = await waitFor(Promise.resolve(input.classifyEditors(candidatePath)))
-          if (classifiedEditorIds === STOPPED || shouldStop()) return
-          const synapseContentId = await waitFor(readSynapseContentId(candidatePath))
-          if (synapseContentId === STOPPED || shouldStop()) return
-          const current = candidates.get(candidateRealPath)
-          const editorIds = [...new Set([...(current?.editorIds ?? []), ...entry.editorIds, ...classifiedEditorIds])]
-          candidates.set(candidateRealPath, {
-            path: candidatePath,
-            name: directoryName,
-            ...(frontmatterName ? { frontmatterName } : {}),
-            editorIds,
-            source: synapseContentId ? "synapse" : "external",
-            ...(synapseContentId ? { synapseContentId } : {}),
-          })
-        }
-        return
-      }
+      return
     }
 
     let entries

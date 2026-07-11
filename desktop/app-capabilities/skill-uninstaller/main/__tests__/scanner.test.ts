@@ -1,8 +1,8 @@
-import { chmod, mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises"
+import { chmod, lstat, mkdtemp, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { scanSkillRoots } from "../scanner"
+import { isSkillTargetDiscoverable, scanSkillRoots } from "../scanner"
 
 const roots: string[] = []
 
@@ -293,6 +293,54 @@ describe("scanSkillRoots", () => {
     }
   })
 
+  it("continues below a directory when lstat of its SKILL.md fails", async () => {
+    const root = await fixture()
+    const parent = path.join(root, "parent")
+    await mkdir(parent)
+    const nested = await skill(parent, "nested/jenkins")
+    const parentSkill = path.join(parent, "SKILL.md")
+    const result = await scanSkillRoots({
+      query: { name: "jenkins" },
+      roots: [{ path: root, editorIds: [] }],
+      classifyEditors: () => [],
+      skillFileSystem: {
+        lstat: async (targetPath) => {
+          if (targetPath === parentSkill) throw Object.assign(new Error("denied"), { code: "EACCES" })
+          return lstat(targetPath)
+        },
+        readFile,
+      },
+    })
+
+    expect(result.candidates.map((candidate) => candidate.path)).toEqual([nested])
+    expect(result.complete).toBe(false)
+    expect(result.warnings).toContain("部分 Skill 文件无法读取，当前结果可能不完整。")
+  })
+
+  it("does not let an ancestor SKILL.md lstat error hide a discoverable target", async () => {
+    const root = await fixture()
+    const parent = path.join(root, "parent")
+    await mkdir(parent)
+    const target = await skill(parent, "nested/jenkins")
+    const parentSkill = path.join(parent, "SKILL.md")
+    const canonicalParentSkill = path.join(await realpath(parent), "SKILL.md")
+
+    await expect(isSkillTargetDiscoverable({
+      query: { name: "jenkins" },
+      roots: [await realpath(root)],
+      targetPath: await realpath(target),
+      skillFileSystem: {
+        lstat: async (targetPath) => {
+          if (targetPath === parentSkill || targetPath === canonicalParentSkill) {
+            throw Object.assign(new Error("denied"), { code: "EACCES" })
+          }
+          return lstat(targetPath)
+        },
+        readFile,
+      },
+    })).resolves.toBe(true)
+  })
+
   it("stops all workers after a fatal root failure", async () => {
     const hangingRoot = await fixture()
     const fatalRoot = await fixture()
@@ -328,7 +376,9 @@ describe("scanSkillRoots", () => {
     release()
     await Promise.resolve()
     await Promise.resolve()
-    expect(classified).toEqual([hangingRoot, fatalRoot])
+    expect(classified).toHaveLength(2)
+    expect(new Set(classified)).toEqual(new Set([hangingRoot, fatalRoot]))
+    expect(classified).not.toContain(lateRoot)
   })
 
   it("settles on cancellation when editor classification never resolves", async () => {
