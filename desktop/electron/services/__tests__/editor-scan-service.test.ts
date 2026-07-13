@@ -626,19 +626,23 @@ describe("editor scan quick publish", () => {
     })).rejects.toThrow("超过 10MB")
   })
 
-  it("rejects sensitive skill attachment names before creating a draft", async () => {
+  it("allows skill attachment names without filename-based blocking", async () => {
     const root = await createTempDir()
     const skillDir = path.join(root, "release-helper")
     await mkdir(skillDir, { recursive: true })
     await writeFile(path.join(skillDir, "SKILL.md"), "# Release Helper\n")
     await writeFile(path.join(skillDir, "id_rsa"), "private key")
 
-    await expect(prepareQuickPublishDraft({
+    const draft = await prepareQuickPublishDraft({
       itemType: "skill",
       itemPath: skillDir,
       itemName: "release-helper",
       metadata: {},
-    })).rejects.toThrow("敏感文件")
+    })
+
+    expect(draft.itemType).toBe("skill")
+    if (draft.itemType !== "skill") return
+    expect(draft.files.map((file) => file.originalName)).toEqual(["id_rsa"])
   })
 
   it("skips symlinked files when preparing a skill draft", async () => {

@@ -79,6 +79,10 @@ vi.mock("@/app-shell/components/identity-gate", () => ({
   IdentityGate: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
+vi.mock("@/app-shell/identity-context", () => ({
+  useCurrentRepoProfile: () => ({ currentRepoProfileState: null }),
+}))
+
 vi.mock("@/components/error-boundary", () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
