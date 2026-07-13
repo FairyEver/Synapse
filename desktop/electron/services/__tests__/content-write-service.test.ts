@@ -531,7 +531,7 @@ describe("contentWriteService", () => {
     expect(writeAttachments).not.toHaveBeenCalled()
   })
 
-  it("blocks a high-confidence secret before writing Skill attachments", async () => {
+  it("allows credential examples in Skill content and attachments", async () => {
     const root = await createTempRoot()
     const repository: SynapseRepositoryConfig = {
       uuid: "repo-1",
@@ -552,6 +552,7 @@ describe("contentWriteService", () => {
     })
     const writeAttachments = vi.spyOn(attachmentsPoolService, "writeAttachments")
     const secretValue = "synthetic-secret-value-12345678901234567890"
+    const attachmentText = `Authorization: Bearer ${secretValue}`
 
     const result = contentWriteService.createSkill({
       title: "Skill",
@@ -563,11 +564,14 @@ describe("contentWriteService", () => {
       iconType: "icon",
       iconImage: "",
       content: `https://example.test/hook?token=${secretValue}`,
-      files: [],
+      files: [{
+        originalName: "scripts/example.mjs",
+        size: attachmentText.length,
+        bytes: new TextEncoder().encode(attachmentText),
+      }],
     }, { displayName: "User", userId: "user" })
 
-    await expect(result).rejects.toThrow("sensitive-url")
-    await expect(result).rejects.not.toThrow(secretValue)
-    expect(writeAttachments).not.toHaveBeenCalled()
+    await expect(result).resolves.toBeDefined()
+    expect(writeAttachments).toHaveBeenCalled()
   })
 })

@@ -166,40 +166,27 @@ describe("content skill source service", () => {
     expect(JSON.stringify(draft)).not.toContain("SHOULD_NOT_BE_READ")
   })
 
-  it("blocks high-confidence publish secrets without exposing their value", async () => {
+  it("publishes credential examples and sensitive-looking attachment names", async () => {
     const root = await createTempRoot()
     const secretValue = "synthetic-webhook-key-12345678901234567890"
-    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+    await writeText(path.join(root, "SKILL.md"), [
+      "# Demo Skill",
+      `Authorization: Bearer ${secretValue}`,
+    ].join("\n"))
     await writeText(
       path.join(root, ".env.example"),
       `WECOM_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${secretValue}\n`,
     )
+    await writeText(path.join(root, "secrets", "id_rsa"), "private key fixture")
+    await writeText(path.join(root, "certificates", "client.pem"), "certificate fixture")
 
-    const result = readSkillDraftFromDirectory(root, undefined, { mode: "publish" })
-    await expect(result).rejects.toThrow("sensitive-url")
-    await expect(result).rejects.not.toThrow(secretValue)
-  })
-
-  it("allows documented placeholder forms during publish scanning", async () => {
-    const root = await createTempRoot()
-    await writeText(path.join(root, "SKILL.md"), [
-      "# Demo Skill",
-      "Authorization: Bearer ${API_TOKEN}",
-      "https://example.test/callback?token=<placeholder>",
-    ].join("\n"))
-    await writeText(path.join(root, ".env.example"), "API_TOKEN=replace-me\nPASSWORD=changeme\n")
-
-    await expect(readSkillDraftFromDirectory(root, undefined, { mode: "publish" })).resolves.toMatchObject({
-      sourceImportSummary: { fileCount: 2 },
-    })
-  })
-
-  it("rejects sensitive attachment names", async () => {
-    const root = await createTempRoot()
-    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
-    await writeText(path.join(root, "secrets", "id_rsa"), "secret")
-
-    await expect(readSkillDraftFromDirectory(root)).rejects.toThrow(ContentCapabilityError)
+    const draft = await readSkillDraftFromDirectory(root, undefined, { mode: "publish" })
+    expect(draft.content).toContain(secretValue)
+    expect(draft.files.map((file) => file.originalName)).toEqual([
+      ".env.example",
+      "certificates/client.pem",
+      "secrets/id_rsa",
+    ])
   })
 
   it("rejects oversized skill main files before reading draft content", async () => {

@@ -38,7 +38,6 @@ import {
 import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
-import { findSkillPublishSecret } from "./skill-publish-secret-scan"
 
 const SNAPSHOT_FILE_NAME = "snapshot.json"
 const ICON_IMAGE_FILE_NAME = "icon.png"
@@ -272,17 +271,6 @@ async function resolveAttachmentRecords(
 
   const skillPayload = payload as SynapseCreateSkillPayload | SynapseUpdateSkillPayload
   assertNoPublishRuntimeEnvPath(skillPayload.files.map((file) => file.originalName))
-  assertSafeSkillPublishText("主说明", skillPayload.content)
-  for (const file of skillPayload.files) {
-    if (!file.bytes) continue
-    let text: string
-    try {
-      text = new TextDecoder("utf-8", { fatal: true }).decode(file.bytes)
-    } catch {
-      continue
-    }
-    assertSafeSkillPublishText(file.originalName, text)
-  }
   const existingAttachmentsBySha = new Map(
     (baseline?.attachments ?? []).map((attachment) => [attachment.sha256, attachment] as const),
   )
@@ -341,15 +329,6 @@ async function resolveAttachmentRecords(
     attachments: nextAttachments,
     createdPaths: written.createdPaths,
   }
-}
-
-function assertSafeSkillPublishText(relativeName: string, content: string): void {
-  const finding = findSkillPublishSecret(content, {
-    envExample: relativeName.toLowerCase() === ".env.example",
-  })
-  if (!finding) return
-  const key = finding.key ? `，键名 ${finding.key}` : ""
-  throw new Error(`文件疑似包含敏感信息：${relativeName}（${finding.kind}，第 ${finding.line} 行${key}）`)
 }
 
 class ContentWriteService {

@@ -90,7 +90,7 @@ To import an existing Skill directory:
 }
 ```
 
-`sourceDirectoryPath` imports the Skill main file and safe attachments. It excludes `.env`, `.env.*` except root `.env.example`, `.synapse.json`, `.synapse.repository.json`, other hidden entries, and symlinks; excluded runtime env files are never read. High-confidence secrets in published UTF-8 files block the mutation without exposing their value. Directory imports are limited to 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total. Successful source imports may return `sourceImportSummary` with included counts, total size, and exclusion counts.
+`sourceDirectoryPath` imports the Skill main file and attachments. It excludes `.env`, `.env.*` except root `.env.example`, `.synapse.json`, `.synapse.repository.json`, other hidden entries, and symlinks; excluded runtime env files are never read. Directory imports are limited to 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total. Successful source imports may return `sourceImportSummary` with included counts, total size, and exclusion counts.
 
 `app_resource_repository_prompt_create`
 

@@ -82,7 +82,7 @@ const repositoryIdProperty = {
 
 const sourceDirectoryPathProperty = {
   type: "string",
-  description: "Absolute local Skill directory containing SKILL.md. Upload excludes .env, .env.* (except root .env.example), .synapse.json, .synapse.repository.json, other hidden entries, and symlinks without reading excluded runtime env files; high-confidence secrets in published UTF-8 content block upload.",
+  description: "Absolute local Skill directory containing SKILL.md. Upload excludes .env, .env.* (except root .env.example), .synapse.json, .synapse.repository.json, other hidden entries, and symlinks without reading excluded runtime env files.",
 }
 
 const optionalNameProperty = {

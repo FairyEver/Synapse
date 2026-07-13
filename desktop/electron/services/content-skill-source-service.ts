@@ -20,7 +20,6 @@ import {
 } from "./content-skill-attachment-constraints"
 import { sanitizeError } from "./error-sanitize"
 import { createMainLogger } from "./log-store"
-import { findSkillPublishSecret } from "./skill-publish-secret-scan"
 
 const logger = createMainLogger("service.content-skill-source")
 const SYNAPSE_SKILL_ID_FILE = ".synapse.json"
@@ -32,19 +31,6 @@ const SKILL_MAIN_FILE_PRIORITY = [
   "readme.md",
   "index.md",
 ]
-const SENSITIVE_ATTACHMENT_NAMES = new Set([
-  "id_dsa",
-  "id_ecdsa",
-  "id_ed25519",
-  "id_rsa",
-])
-const SENSITIVE_ATTACHMENT_EXTENSIONS = new Set([
-  ".key",
-  ".p12",
-  ".pem",
-  ".pfx",
-])
-
 type ContentSkillSourceSecurityDeps = {
   actor: ActorIdentity
   auditSink: AuditSink
@@ -168,10 +154,6 @@ async function readSkillDraftFromDirectory(
     if (!content.trim()) {
       throwInvalid("content", "Skill 主说明为空。")
     }
-    if ((options.mode ?? "install") === "publish") {
-      assertNoPublishSecret(path.basename(mainFilePath), content)
-    }
-
     const controlFiles = [SYNAPSE_SKILL_ID_FILE, SYNAPSE_SKILL_REPOSITORY_ID_FILE]
     const skip = new Set<string>([path.basename(mainFilePath), ...controlFiles])
     const state: SkillFileCollectionState = {
@@ -308,7 +290,7 @@ async function collectSkillFiles(
     }
 
     if (!fileStat.isFile()) continue
-    await collectSkillFile(baseDir, fullPath, fileStat.size, state, mode)
+    await collectSkillFile(baseDir, fullPath, fileStat.size, state)
   }
 }
 
@@ -317,14 +299,9 @@ async function collectSkillFile(
   fullPath: string,
   size: number,
   state: SkillFileCollectionState,
-  mode: SkillSourceReadMode,
 ): Promise<void> {
   const relativeName = normalizeContentAttachmentPath(toPortableRelativePath(path.relative(baseDir, fullPath)))
   if (!relativeName) return
-
-  if (isSensitiveAttachment(relativeName)) {
-    throwInvalid("files", `附件包含敏感文件：${relativeName}`)
-  }
 
   if (size > CONTENT_SKILL_ATTACHMENT_MAX_SIZE) {
     throwInvalid("files", `附件超过 10MB：${relativeName}`)
@@ -342,7 +319,6 @@ async function collectSkillFile(
 
   try {
     const bytes = await readFile(fullPath)
-    if (mode === "publish") assertNoPublishSecretBytes(relativeName, bytes)
     state.files.push({
       originalName: relativeName,
       size,
@@ -360,25 +336,6 @@ async function collectSkillFile(
 
 function controlFileName(name: string): boolean {
   return name === SYNAPSE_SKILL_ID_FILE || name === SYNAPSE_SKILL_REPOSITORY_ID_FILE
-}
-
-function assertNoPublishSecret(relativeName: string, content: string): void {
-  const finding = findSkillPublishSecret(content, {
-    envExample: relativeName.toLowerCase() === SKILL_ENV_EXAMPLE_PATH,
-  })
-  if (!finding) return
-  const key = finding.key ? `，键名 ${finding.key}` : ""
-  throwInvalid("files", `文件疑似包含敏感信息：${relativeName}（${finding.kind}，第 ${finding.line} 行${key}）`)
-}
-
-function assertNoPublishSecretBytes(relativeName: string, bytes: Buffer): void {
-  let content: string
-  try {
-    content = new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-  } catch {
-    return
-  }
-  assertNoPublishSecret(relativeName, content)
 }
 
 function createSkillSourceFingerprint(
@@ -441,14 +398,6 @@ function parseFrontmatter(text: string): { metadata: Record<string, string>; bod
   const block = text.slice(4, endIndex)
   const { metadata } = parseFrontmatterBlock(block)
   return { metadata, body: text.slice(endIndex + 4).trim() }
-}
-
-function isSensitiveAttachment(relativeName: string): boolean {
-  const baseName = path.basename(relativeName).toLowerCase()
-  return (
-    SENSITIVE_ATTACHMENT_NAMES.has(baseName)
-    || SENSITIVE_ATTACHMENT_EXTENSIONS.has(path.extname(baseName))
-  )
 }
 
 function assertUniqueSkillAttachmentPaths(files: SynapseCreateSkillFilePayload[]): void {

@@ -113,6 +113,8 @@ describe("Skill Repository capability domain", () => {
       .toContain("without reading excluded runtime env files")
     expect(JSON.stringify(tools.get("app_skill_repository_import_local")?.inputSchema.properties.sourceDirectoryPath))
       .toContain(".synapse.repository.json")
+    expect(JSON.stringify(tools.get("app_skill_repository_import_local")?.inputSchema.properties.sourceDirectoryPath))
+      .not.toContain("high-confidence secrets")
     expect(tools.get("app_skill_repository_set_visibility")?.inputSchema).toMatchObject({
       required: ["repositoryId", "visibility"],
       properties: {
