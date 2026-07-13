@@ -69,10 +69,6 @@ vi.mock("../../../../app-capabilities/terminal/renderer", () => ({
   TerminalModule: () => <div>终端窗口</div>,
 }))
 
-vi.mock("../../../../app-capabilities/screenshot/renderer", () => ({
-  ScreenshotModule: () => <div>截图窗口</div>,
-}))
-
 vi.mock("../../../../app-capabilities/sound-notifier/renderer", () => ({
   SoundNotifierModule: () => <div>Sound Notifier 窗口</div>,
 }))

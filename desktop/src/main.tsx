@@ -98,15 +98,6 @@ void (async () => {
         </AppErrorBoundary>
       </StrictMode>,
     )
-  } else if (windowType === "screenshot-overlay") {
-    const { ScreenshotOverlayApp } = await import("../app-capabilities/screenshot/renderer/overlay")
-    createRoot(document.getElementById("root")!).render(
-      <StrictMode>
-        <AppErrorBoundary>
-          <ScreenshotOverlayApp />
-        </AppErrorBoundary>
-      </StrictMode>,
-    )
   } else {
     createRoot(document.getElementById("root")!).render(
       <StrictMode>

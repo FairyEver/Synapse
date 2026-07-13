@@ -291,6 +291,7 @@ export type SynapseOpenContentCreateWindowPayload = {
   contentType: SynapseContentType
   initialValue?: SynapseCreateContentPayload | null
   notices?: SynapseContentWindowNotice[]
+  quickPublishSessionId?: string
   requestId?: string
   sourceLabel?: string | null
   title: string
@@ -301,6 +302,7 @@ export type SynapseOpenContentEditWindowPayload = {
   id: string
   origin: "detail" | "external"
   prefill?: SynapseContentEditPrefill | null
+  quickPublishSessionId?: string
   requestId?: string
   sourceLabel?: string | null
   title: string

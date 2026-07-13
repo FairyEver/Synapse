@@ -2,7 +2,7 @@ import { chmod, lstat, mkdtemp, mkdir, readFile, realpath, symlink, writeFile } 
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { isSkillTargetDiscoverable, scanSkillRoots } from "../scanner"
+import { isSkillTargetDiscoverable, scanSkillNames, scanSkillRoots } from "../scanner"
 
 const roots: string[] = []
 
@@ -25,6 +25,47 @@ async function skill(root: string, relative: string, frontmatterName?: string): 
 afterEach(async () => {
   const { rm } = await import("node:fs/promises")
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+})
+
+describe("scanSkillNames", () => {
+  it("uses frontmatter names, falls back to directory names, and deduplicates case-insensitively", async () => {
+    const firstRoot = await fixture()
+    const secondRoot = await fixture()
+    await skill(firstRoot, "folder-z", "zulu")
+    await skill(firstRoot, "Alpha")
+    await skill(secondRoot, "duplicate-z", "ZULU")
+
+    const result = await scanSkillNames({
+      roots: [firstRoot, secondRoot].map((root) => ({ path: root, editorIds: [] })),
+    })
+
+    expect(result).toEqual({
+      names: ["Alpha", "zulu"],
+      complete: true,
+      warnings: [],
+    })
+  })
+
+  it("shares traversal exclusions and cancellation behavior with candidate scans", async () => {
+    const root = await fixture()
+    await skill(root, "node_modules/excluded")
+    const parent = await skill(root, "bundle", "bundle")
+    await skill(parent, "nested/hidden", "hidden")
+
+    const result = await scanSkillNames({ roots: [{ path: root, editorIds: [] }] })
+    expect(result.names).toEqual(["bundle"])
+
+    const controller = new AbortController()
+    controller.abort()
+    await expect(scanSkillNames({
+      roots: [{ path: root, editorIds: [] }],
+      signal: controller.signal,
+    })).resolves.toMatchObject({
+      names: [],
+      complete: false,
+      warnings: ["扫描已取消。"],
+    })
+  })
 })
 
 describe("scanSkillRoots", () => {

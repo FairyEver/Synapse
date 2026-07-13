@@ -39,29 +39,29 @@ describe("ResourceRepositoryModule", () => {
     await renderResourceRepository(roots)
 
     expect(document.body.textContent).toContain("技能内容")
-    expect(findButtonByAccessibleName("Skill 开发指南")).toBeInstanceOf(HTMLButtonElement)
+    expect(findButtonByAccessibleName("Skill 开发提示词")).toBeInstanceOf(HTMLButtonElement)
 
     await clickButton("规则")
     expect(document.body.textContent).toContain("规则内容")
-    expect(findButtonByAccessibleName("Skill 开发指南")).toBeUndefined()
+    expect(findButtonByAccessibleName("Skill 开发提示词")).toBeUndefined()
 
     await clickButton("提示词")
     expect(document.body.textContent).toContain("提示词内容")
-    expect(findButtonByAccessibleName("Skill 开发指南")).toBeUndefined()
+    expect(findButtonByAccessibleName("Skill 开发提示词")).toBeUndefined()
 
     await clickButton("技能")
-    expect(findButtonByAccessibleName("Skill 开发指南")).toBeInstanceOf(HTMLButtonElement)
+    expect(findButtonByAccessibleName("Skill 开发提示词")).toBeInstanceOf(HTMLButtonElement)
   })
 
   it("opens the Skill authoring guide from the skills action", async () => {
     await renderResourceRepository(roots)
 
-    const action = findButtonByAccessibleName("Skill 开发指南")
+    const action = findButtonByAccessibleName("Skill 开发提示词")
     if (!(action instanceof HTMLButtonElement)) throw new Error("Skill guide action not found")
     await clickElement(action)
 
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Skill 开发指南")
-    expect(findButtons("复制提示词")).toHaveLength(2)
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Skill 开发提示词")
+    expect(findButtons("复制完整提示词")).toHaveLength(1)
   })
 
   it("opens on the requested content type and forwards the pending request", async () => {

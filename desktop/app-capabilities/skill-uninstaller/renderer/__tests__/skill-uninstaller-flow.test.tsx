@@ -9,12 +9,19 @@ import type { SkillUninstallCandidate, SkillUninstallScanResult } from "../../sh
 import { SkillUninstallerFlow, type SkillUninstallerFlowProps } from "../skill-uninstaller-flow"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+HTMLElement.prototype.scrollIntoView = vi.fn()
 
 const mocks = vi.hoisted(() => ({
   cancelScan: vi.fn(),
   chooseDirectory: vi.fn(),
   error: vi.fn(),
   scan: vi.fn(),
+  scanNames: vi.fn(),
   uninstall: vi.fn(),
 }))
 
@@ -24,6 +31,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       return {
         cancelScan: mocks.cancelScan,
         scan: mocks.scan,
+        scanNames: mocks.scanNames,
         uninstall: mocks.uninstall,
       }
     }
@@ -108,6 +116,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.cancelScan.mockResolvedValue({ cancelled: true })
   mocks.chooseDirectory.mockResolvedValue(null)
+  mocks.scanNames.mockResolvedValue({ names: [], complete: true, warnings: [] })
 })
 
 afterEach(async () => {
@@ -119,6 +128,93 @@ afterEach(async () => {
 })
 
 describe("SkillUninstallerFlow", () => {
+  it("preloads editable name options and supports keyboard selection", async () => {
+    mocks.scanNames.mockResolvedValue({ names: ["jenkins"], complete: true, warnings: [] })
+    await renderFlow({ initialQuery: { name: "" } })
+    const input = document.querySelector<HTMLInputElement>("#skill-uninstaller-name")
+    if (!input) throw new Error("Skill name input not found")
+
+    await act(async () => {
+      await Promise.resolve()
+      input.focus()
+    })
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
+    })
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    })
+
+    expect(mocks.scanNames).toHaveBeenCalledWith({
+      scanId: expect.any(String),
+    })
+    expect(mocks.scan).not.toHaveBeenCalled()
+    expect(input.value).toBe("jenkins")
+  })
+
+  it("does not preload name options for a read-only flow", async () => {
+    await renderFlow({ queryReadOnly: true })
+    expect(mocks.scanNames).not.toHaveBeenCalled()
+  })
+
+  it("refreshes name options after choosing a custom search root", async () => {
+    mocks.chooseDirectory.mockResolvedValue("/chosen")
+    await renderFlow({ initialQuery: { name: "" } })
+    await click("选择")
+
+    expect(mocks.scanNames).toHaveBeenLastCalledWith({
+      scanId: expect.any(String),
+      searchRootPath: "/chosen",
+    })
+  })
+
+  it("refreshes name options after a manually entered search root loses focus", async () => {
+    await renderFlow({ initialQuery: { name: "" } })
+    const searchRootInput = document.querySelector<HTMLInputElement>("#skill-uninstaller-search-root")
+    const nameInput = document.querySelector<HTMLInputElement>("#skill-uninstaller-name")
+    if (!searchRootInput || !nameInput) throw new Error("Query inputs not found")
+
+    await act(async () => {
+      searchRootInput.focus()
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+      setter?.call(searchRootInput, "/typed")
+      searchRootInput.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async () => {
+      nameInput.focus()
+    })
+
+    expect(mocks.scanNames).toHaveBeenLastCalledWith({
+      scanId: expect.any(String),
+      searchRootPath: "/typed",
+    })
+  })
+
+  it("ignores stale name options after the search root changes", async () => {
+    let resolveGlobal!: (result: { names: string[]; complete: boolean; warnings: string[] }) => void
+    let resolveCustom!: (result: { names: string[]; complete: boolean; warnings: string[] }) => void
+    mocks.scanNames.mockImplementation(({ searchRootPath }: { searchRootPath?: string }) => (
+      new Promise((resolve) => {
+        if (searchRootPath) resolveCustom = resolve
+        else resolveGlobal = resolve
+      })
+    ))
+    mocks.chooseDirectory.mockResolvedValue("/chosen")
+    await renderFlow({ initialQuery: { name: "" } })
+    await click("选择")
+
+    await act(async () => {
+      resolveCustom({ names: ["current-skill"], complete: true, warnings: [] })
+      await Promise.resolve()
+      resolveGlobal({ names: ["stale-skill"], complete: true, warnings: [] })
+    })
+    const nameInput = document.querySelector<HTMLInputElement>("#skill-uninstaller-name")
+    await act(async () => nameInput?.focus())
+
+    expect(document.body.textContent).toContain("current-skill")
+    expect(document.body.textContent).not.toContain("stale-skill")
+  })
+
   it("starts with no selected candidates and supports select all", async () => {
     mocks.scan.mockResolvedValue({
       candidates: [candidate("/one/jenkins"), candidate("/two/jenkins")],
@@ -132,6 +228,18 @@ describe("SkillUninstallerFlow", () => {
     expect(document.querySelectorAll('[role="checkbox"][aria-label^="选择"]').length).toBe(2)
     expect(document.body.textContent).toContain("Codex")
     expect(document.body.textContent).not.toContain("codex")
+    const scanButton = getButton("扫描")
+    const separator = document.querySelector<HTMLElement>('[data-slot="separator"]')
+    const allCheckbox = document.querySelector<HTMLElement>('[role="checkbox"][aria-label="全选"]')
+    const candidateCheckbox = document.querySelector<HTMLElement>('[role="checkbox"][aria-label^="选择"]')
+    expect(scanButton.parentElement?.className).toContain("justify-end")
+    expect(separator).toBeInstanceOf(HTMLElement)
+    expect(scanButton.compareDocumentPosition(separator as Node) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .not.toBe(0)
+    expect((separator?.compareDocumentPosition(allCheckbox as Node) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .not.toBe(0)
+    expect(allCheckbox?.parentElement?.className).toContain("gap-3")
+    expect(candidateCheckbox?.parentElement?.className).toContain("gap-3")
     expect(getButton("移到废纸篓").disabled).toBe(true)
     await clickCheckbox("全选")
     expect(getButton("移到废纸篓（2）").disabled).toBe(false)

@@ -35,7 +35,6 @@ import { driveSyncIpcModule } from "../modules/drive-sync/ipc"
 import { liveIpcModule } from "../modules/live/ipc"
 import { documentTemplateIpcModule } from "../../app-capabilities/document-template/main/ipc"
 import { terminalIpcModule } from "../../app-capabilities/terminal/main/ipc"
-import { screenshotIpcModule } from "../../app-capabilities/screenshot/main/ipc"
 import { quickInputIpcModule } from "../../app-capabilities/quick-input/main/ipc"
 import { agentPersonasIpcModule } from "../../app-capabilities/agent-personas/main/ipc"
 import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
@@ -87,7 +86,6 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(soundNotifierIpcModule, ctx)
   registry.register(swarmTaskIpcModule, ctx)
   registry.register(synapseSkillIpcModule, ctx)
-  registry.register(screenshotIpcModule, ctx)
   registry.register(opsIpcModule, ctx)
 
   return registry
@@ -131,6 +129,5 @@ export const registeredIpcModules: readonly IpcModule[] = [
   soundNotifierIpcModule,
   swarmTaskIpcModule,
   synapseSkillIpcModule,
-  screenshotIpcModule,
   opsIpcModule,
 ]

@@ -16,9 +16,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldLabel, FieldSet } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { getEditorLabel } from "@/lib/editor-registry"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
@@ -27,6 +27,7 @@ import type {
   SkillUninstallCandidate,
   SkillUninstallQuery,
 } from "../shared/schema"
+import { SkillNameCombobox } from "./skill-name-combobox"
 
 const logger = createRendererLogger("skill-uninstaller.flow")
 
@@ -40,6 +41,18 @@ export type SkillUninstallerFlowProps = {
 }
 
 type QueryUpdate = SkillUninstallQuery | ((current: SkillUninstallQuery) => SkillUninstallQuery)
+
+type SkillNameOptionsState = {
+  readonly names: readonly string[]
+  readonly loading: boolean
+  readonly warning?: string
+  readonly error?: string
+}
+
+const EMPTY_SKILL_NAME_OPTIONS: SkillNameOptionsState = {
+  names: [],
+  loading: false,
+}
 
 export function SkillUninstallerFlow({
   mode,
@@ -60,7 +73,9 @@ export function SkillUninstallerFlow({
   const [failureMessages, setFailureMessages] = useState<Record<string, string>>({})
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null)
+  const [nameOptions, setNameOptions] = useState<SkillNameOptionsState>(EMPTY_SKILL_NAME_OPTIONS)
   const activeScanIdRef = useRef<string | null>(null)
+  const activeNameScanIdRef = useRef<string | null>(null)
   const skillUninstallerBridge = useMemo(getSkillUninstallerBridge, [])
   const repositoryBridge = useMemo(() => requireBridgeDomain("repository"), [])
 
@@ -78,6 +93,48 @@ export function SkillUninstallerFlow({
       logger.warn("Skill uninstall scan cancellation failed.", { error })
     }
   }, [skillUninstallerBridge])
+
+  const cancelNameScan = useCallback(() => {
+    const activeScanId = activeNameScanIdRef.current
+    activeNameScanIdRef.current = null
+    if (!activeScanId) return
+    void skillUninstallerBridge.cancelScan({ scanId: activeScanId }).catch((error) => {
+      logger.warn("Skill name scan cancellation failed.", { error })
+    })
+  }, [skillUninstallerBridge])
+
+  const scanNameOptions = useCallback(async (searchRootPath?: string) => {
+    if (queryReadOnly) return
+    cancelNameScan()
+    const nextScanId = crypto.randomUUID()
+    activeNameScanIdRef.current = nextScanId
+    setNameOptions({ names: [], loading: true })
+    try {
+      const normalizedSearchRootPath = searchRootPath?.trim()
+      const result = await skillUninstallerBridge.scanNames({
+        scanId: nextScanId,
+        ...(normalizedSearchRootPath ? { searchRootPath: normalizedSearchRootPath } : {}),
+      })
+      if (activeNameScanIdRef.current !== nextScanId) return
+      setNameOptions({
+        names: result.names,
+        loading: false,
+        ...(result.complete ? {} : {
+          warning: result.warnings[0] ?? "部分目录未扫描完成。",
+        }),
+      })
+    } catch (error) {
+      if (activeNameScanIdRef.current !== nextScanId) return
+      logger.warn("Skill name scan failed.", { error })
+      setNameOptions({
+        names: [],
+        loading: false,
+        error: "Skill 名称加载失败，可继续输入。",
+      })
+    } finally {
+      if (activeNameScanIdRef.current === nextScanId) activeNameScanIdRef.current = null
+    }
+  }, [cancelNameScan, queryReadOnly, skillUninstallerBridge])
 
   const startScan = useCallback(async () => {
     if (!normalizedQuery.name) {
@@ -138,14 +195,19 @@ export function SkillUninstallerFlow({
   }, [autoScan, normalizedQuery.name, startScan])
 
   useEffect(() => {
+    if (!queryReadOnly) void scanNameOptions(initialQuery?.searchRootPath)
+  }, [initialQuery?.searchRootPath, queryReadOnly, scanNameOptions])
+
+  useEffect(() => {
     return () => {
       const activeScanId = activeScanIdRef.current
       activeScanIdRef.current = null
       if (activeScanId) void skillUninstallerBridge.cancelScan({ scanId: activeScanId }).catch((error) => {
         logger.warn("Skill uninstall scan cancellation on unmount failed.", { error })
       })
+      cancelNameScan()
     }
-  }, [skillUninstallerBridge])
+  }, [cancelNameScan, skillUninstallerBridge])
 
   const candidates = scanResult?.candidates ?? []
   const allSelected = candidates.length > 0 && candidates.every((candidate) => selectedPaths.has(candidate.path))
@@ -210,7 +272,10 @@ export function SkillUninstallerFlow({
 
   const chooseSearchRoot = async () => {
     const selectedPath = await repositoryBridge.chooseDirectory()
-    if (selectedPath) updateQuery((current) => ({ ...current, searchRootPath: selectedPath }))
+    if (selectedPath) {
+      updateQuery((current) => ({ ...current, searchRootPath: selectedPath }))
+      void scanNameOptions(selectedPath)
+    }
   }
 
   return (
@@ -219,12 +284,15 @@ export function SkillUninstallerFlow({
         <FieldSet>
           <Field>
             <FieldLabel htmlFor="skill-uninstaller-name">Skill 名称</FieldLabel>
-            <Input
-              id="skill-uninstaller-name"
+            <SkillNameCombobox
               value={query.name}
+              options={nameOptions.names}
+              loading={nameOptions.loading}
+              warning={nameOptions.warning}
+              error={nameOptions.error}
               readOnly={queryReadOnly}
               disabled={uninstalling}
-              onChange={(event) => updateQuery((current) => ({ ...current, name: event.target.value }))}
+              onValueChange={(name) => updateQuery((current) => ({ ...current, name }))}
             />
           </Field>
           <Field>
@@ -240,6 +308,13 @@ export function SkillUninstallerFlow({
                   ...current,
                   searchRootPath: event.target.value || undefined,
                 }))}
+                onInput={() => {
+                  cancelNameScan()
+                  setNameOptions(EMPTY_SKILL_NAME_OPTIONS)
+                }}
+                onBlur={(event) => {
+                  if (!queryReadOnly && !uninstalling) void scanNameOptions(event.currentTarget.value)
+                }}
               />
               <InputGroupAddon align="inline-end">
                 <InputGroupButton
@@ -254,7 +329,7 @@ export function SkillUninstallerFlow({
           </Field>
         </FieldSet>
 
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex justify-end">
           <Button
             type="button"
             variant="outline"
@@ -264,23 +339,10 @@ export function SkillUninstallerFlow({
             {scanning ? <Spinner aria-label="扫描中" data-icon="inline-start" /> : null}
             {scanning ? "取消扫描" : "扫描"}
           </Button>
-          {scanResult && candidates.length > 0 ? (
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                aria-label="全选"
-                checked={allSelected}
-                disabled={uninstalling}
-                onCheckedChange={(checked) => {
-                  setSelectedPaths(checked === true
-                    ? new Set(candidates.map((candidate) => candidate.path))
-                    : new Set())
-                }}
-              />
-              全选
-            </label>
-          ) : null}
         </div>
       </div>
+
+      <Separator />
 
       {errorMessage ? (
         <Alert variant="destructive">
@@ -302,6 +364,22 @@ export function SkillUninstallerFlow({
             {scanResult.warnings.map((warning) => <p key={warning}>{warning}</p>)}
           </AlertDescription>
         </Alert>
+      ) : null}
+
+      {scanResult && candidates.length > 0 ? (
+        <label className="flex min-h-10 shrink-0 items-center gap-3 text-sm">
+          <Checkbox
+            aria-label="全选"
+            checked={allSelected}
+            disabled={uninstalling}
+            onCheckedChange={(checked) => {
+              setSelectedPaths(checked === true
+                ? new Set(candidates.map((candidate) => candidate.path))
+                : new Set())
+            }}
+          />
+          全选
+        </label>
       ) : null}
 
       <ScrollArea className={mode === "modal" ? "min-h-0 flex-1" : "max-h-96"}>

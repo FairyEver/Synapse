@@ -20,9 +20,11 @@ import {
 } from "./content-skill-attachment-constraints"
 import { sanitizeError } from "./error-sanitize"
 import { createMainLogger } from "./log-store"
+import { findSkillPublishSecret } from "./skill-publish-secret-scan"
 
 const logger = createMainLogger("service.content-skill-source")
 const SYNAPSE_SKILL_ID_FILE = ".synapse.json"
+const SYNAPSE_SKILL_REPOSITORY_ID_FILE = ".synapse.repository.json"
 const SKILL_MAIN_FILE_PRIORITY = [
   "SKILL.md",
   "skill.md",
@@ -54,13 +56,31 @@ type ContentSkillSourceDraft = {
   files: SynapseCreateSkillFilePayload[]
   mainFilePath: string
   metadata: Record<string, string>
+  publishFingerprint: string
+  sourceFingerprint: string
+  sourceImportSummary: SkillSourceImportSummary
   sourceDirectoryPath: string
 }
 
+type SkillSourceReadMode = "install" | "publish"
+
+type SkillSourceImportSummary = {
+  controlFilesExcluded: string[]
+  fileCount: number
+  hiddenEntryCount: number
+  runtimeEnvExcluded: boolean
+  symlinkCount: number
+  totalBytes: number
+}
+
 type SkillFileCollectionState = {
+  controlFilesExcluded: string[]
   directoryCount: number
   fileCount: number
   files: SynapseCreateSkillFilePayload[]
+  hiddenEntryCount: number
+  runtimeEnvExcluded: boolean
+  symlinkCount: number
   totalSize: number
 }
 
@@ -122,6 +142,7 @@ async function resolveTrustedSkillMainFile(dirPath: string, filePath: string): P
 async function readSkillDraftFromDirectory(
   sourceDirectoryPath: string,
   security?: ContentSkillSourceSecurityDeps,
+  options: { mode?: SkillSourceReadMode } = {},
 ): Promise<ContentSkillSourceDraft> {
   const dirPath = sourceDirectoryPath.trim()
   if (!dirPath) {
@@ -147,10 +168,23 @@ async function readSkillDraftFromDirectory(
     if (!content.trim()) {
       throwInvalid("content", "Skill 主说明为空。")
     }
+    if ((options.mode ?? "install") === "publish") {
+      assertNoPublishSecret(path.basename(mainFilePath), content)
+    }
 
-    const skip = new Set<string>([path.basename(mainFilePath), SYNAPSE_SKILL_ID_FILE])
-    const state: SkillFileCollectionState = { directoryCount: 0, fileCount: 0, totalSize: mainFileSize, files: [] }
-    await collectSkillFiles(dirPath, dirPath, skip, state, 0)
+    const controlFiles = [SYNAPSE_SKILL_ID_FILE, SYNAPSE_SKILL_REPOSITORY_ID_FILE]
+    const skip = new Set<string>([path.basename(mainFilePath), ...controlFiles])
+    const state: SkillFileCollectionState = {
+      controlFilesExcluded: [],
+      directoryCount: 0,
+      fileCount: 0,
+      files: [],
+      hiddenEntryCount: 0,
+      runtimeEnvExcluded: false,
+      symlinkCount: 0,
+      totalSize: mainFileSize,
+    }
+    await collectSkillFiles(dirPath, dirPath, skip, state, 0, options.mode ?? "install")
     state.files.sort((a, b) => a.originalName.localeCompare(b.originalName))
     assertUniqueSkillAttachmentPaths(state.files)
     recordSkillSourceAudit(security, dirPath, "allowed", auditMetadata)
@@ -161,6 +195,16 @@ async function readSkillDraftFromDirectory(
       content,
       files: state.files,
       metadata: parseFrontmatter(content).metadata,
+      publishFingerprint: createSkillPublishFingerprint(parseFrontmatter(content).body, state.files),
+      sourceFingerprint: createSkillSourceFingerprint(content, state.files),
+      sourceImportSummary: {
+        controlFilesExcluded: state.controlFilesExcluded.sort(),
+        fileCount: state.fileCount + 1,
+        hiddenEntryCount: state.hiddenEntryCount,
+        runtimeEnvExcluded: state.runtimeEnvExcluded,
+        symlinkCount: state.symlinkCount,
+        totalBytes: state.totalSize,
+      },
     }
   } catch (error) {
     recordSkillSourceAudit(security, dirPath, "failed", auditMetadata)
@@ -193,6 +237,7 @@ async function collectSkillFiles(
   skip: Set<string>,
   state: SkillFileCollectionState,
   depth: number,
+  mode: SkillSourceReadMode,
 ): Promise<void> {
   let children: string[]
   try {
@@ -205,7 +250,7 @@ async function collectSkillFiles(
     throwInvalid("files", `无法读取 Skill 附件目录：${formatSkillSourceRelativePath(baseDir, currentDir)}`)
   }
 
-  if (currentDir === baseDir) {
+  if (currentDir === baseDir && mode === "install") {
     try {
       assertNoRuntimeSkillEnvPath(children)
     } catch (error) {
@@ -214,8 +259,23 @@ async function collectSkillFiles(
   }
 
   for (const name of children) {
-    if (name.startsWith(".") && !(currentDir === baseDir && name === SKILL_ENV_EXAMPLE_PATH)) continue
-    if (skip.has(name) && currentDir === baseDir) continue
+    const normalizedHiddenName = name.toLowerCase()
+    const isRootEnvExample = currentDir === baseDir && normalizedHiddenName === SKILL_ENV_EXAMPLE_PATH
+    if (
+      !isRootEnvExample
+      && (normalizedHiddenName === ".env" || normalizedHiddenName.startsWith(".env."))
+    ) {
+      state.runtimeEnvExcluded = true
+      continue
+    }
+    if (currentDir === baseDir && skip.has(name)) {
+      if (controlFileName(name)) state.controlFilesExcluded.push(name)
+      continue
+    }
+    if (name.startsWith(".") && !isRootEnvExample) {
+      state.hiddenEntryCount += 1
+      continue
+    }
 
     const fullPath = path.join(currentDir, name)
     let fileStat: Awaited<ReturnType<typeof lstat>>
@@ -229,7 +289,10 @@ async function collectSkillFiles(
       throwInvalid("files", `无法检查 Skill 附件：${formatSkillSourceRelativePath(baseDir, fullPath)}`)
     }
 
-    if (fileStat.isSymbolicLink()) continue
+    if (fileStat.isSymbolicLink()) {
+      state.symlinkCount += 1
+      continue
+    }
 
     if (fileStat.isDirectory()) {
       const nextDepth = depth + 1
@@ -240,12 +303,12 @@ async function collectSkillFiles(
       if (state.directoryCount > CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT) {
         throwInvalid("files", `Skill 附件目录数量超过 ${CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT} 个。`)
       }
-      await collectSkillFiles(baseDir, fullPath, skip, state, nextDepth)
+      await collectSkillFiles(baseDir, fullPath, skip, state, nextDepth, mode)
       continue
     }
 
     if (!fileStat.isFile()) continue
-    await collectSkillFile(baseDir, fullPath, fileStat.size, state)
+    await collectSkillFile(baseDir, fullPath, fileStat.size, state, mode)
   }
 }
 
@@ -254,6 +317,7 @@ async function collectSkillFile(
   fullPath: string,
   size: number,
   state: SkillFileCollectionState,
+  mode: SkillSourceReadMode,
 ): Promise<void> {
   const relativeName = normalizeContentAttachmentPath(toPortableRelativePath(path.relative(baseDir, fullPath)))
   if (!relativeName) return
@@ -278,18 +342,94 @@ async function collectSkillFile(
 
   try {
     const bytes = await readFile(fullPath)
+    if (mode === "publish") assertNoPublishSecretBytes(relativeName, bytes)
     state.files.push({
       originalName: relativeName,
       size,
       bytes: new Uint8Array(bytes),
     })
   } catch (error) {
+    if (error instanceof ContentCapabilityError) throw error
     logger.warn("Failed to read skill source attachment.", {
       ...sourcePathDiagnostic(fullPath, baseDir),
       error: sanitizeSkillSourceError(error),
     })
     throwInvalid("files", `无法读取 Skill 附件：${relativeName}`)
   }
+}
+
+function controlFileName(name: string): boolean {
+  return name === SYNAPSE_SKILL_ID_FILE || name === SYNAPSE_SKILL_REPOSITORY_ID_FILE
+}
+
+function assertNoPublishSecret(relativeName: string, content: string): void {
+  const finding = findSkillPublishSecret(content, {
+    envExample: relativeName.toLowerCase() === SKILL_ENV_EXAMPLE_PATH,
+  })
+  if (!finding) return
+  const key = finding.key ? `，键名 ${finding.key}` : ""
+  throwInvalid("files", `文件疑似包含敏感信息：${relativeName}（${finding.kind}，第 ${finding.line} 行${key}）`)
+}
+
+function assertNoPublishSecretBytes(relativeName: string, bytes: Buffer): void {
+  let content: string
+  try {
+    content = new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+  } catch {
+    return
+  }
+  assertNoPublishSecret(relativeName, content)
+}
+
+function createSkillSourceFingerprint(
+  content: string,
+  files: SynapseCreateSkillFilePayload[],
+): string {
+  const hash = createHash("sha256")
+  hash.update(content.replace(/\r\n/g, "\n").trim())
+  for (const file of files) {
+    if (!file.bytes) throwInvalid("files", `无法读取 Skill 附件：${file.originalName}`)
+    hash.update("\0")
+    hash.update(file.originalName)
+    hash.update("\0")
+    hash.update(file.bytes)
+  }
+  return `sha256:${hash.digest("hex")}`
+}
+
+function createSkillPublishFingerprint(
+  content: string,
+  files: readonly Pick<SynapseCreateSkillFilePayload, "bytes" | "originalName">[],
+): string {
+  const hash = createHash("sha256")
+  hash.update(normalizePublishContent(content))
+  for (const file of [...files].sort((left, right) => left.originalName.localeCompare(right.originalName))) {
+    if (!file.bytes) throwInvalid("files", `无法读取 Skill 附件：${file.originalName}`)
+    hash.update("\0")
+    hash.update(file.originalName)
+    hash.update("\0")
+    hash.update(createHash("sha256").update(file.bytes).digest("hex"))
+  }
+  return `sha256:${hash.digest("hex")}`
+}
+
+function createStoredSkillPublishFingerprint(
+  content: string,
+  files: readonly { originalName: string; sha256: string }[],
+): string {
+  const hash = createHash("sha256")
+  hash.update(normalizePublishContent(content))
+  for (const file of [...files].sort((left, right) => left.originalName.localeCompare(right.originalName))) {
+    hash.update("\0")
+    hash.update(file.originalName)
+    hash.update("\0")
+    hash.update(file.sha256)
+  }
+  return `sha256:${hash.digest("hex")}`
+}
+
+function normalizePublishContent(content: string): string {
+  return content.replace(/\r\n?/gu, "\n").trim()
 }
 
 function parseFrontmatter(text: string): { metadata: Record<string, string>; body: string } {
@@ -419,10 +559,14 @@ function getErrorMessage(error: unknown): string {
 
 export {
   assertDirectoryExists,
+  createStoredSkillPublishFingerprint,
   readSkillDraftFromDirectory,
   resolveRootSkillMainFile,
   resolveSkillMainFile,
   SYNAPSE_SKILL_ID_FILE,
+  SYNAPSE_SKILL_REPOSITORY_ID_FILE,
   type ContentSkillSourceDraft,
   type ContentSkillSourceSecurityDeps,
+  type SkillSourceImportSummary,
+  type SkillSourceReadMode,
 }

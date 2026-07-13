@@ -9,6 +9,7 @@ import {
 import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
 import type {
   SkillUninstallCandidate,
+  SkillUninstallNameScanResult,
   SkillUninstallQuery,
   SkillUninstallScanResult,
 } from "../shared/schema"
@@ -41,12 +42,8 @@ const defaultSkillFileSystem: SkillFileSystem = {
   readFile: (targetPath, encoding) => readFile(targetPath, encoding),
 }
 
-export type ScanSkillRootsInput = {
-  readonly query: SkillUninstallQuery
+type ScanSkillRootsCommonInput = {
   readonly roots: readonly ScanSkillRoot[]
-  readonly classifyEditors: (
-    candidatePath: string,
-  ) => readonly string[] | Promise<readonly string[]>
   readonly signal?: AbortSignal
   readonly rootErrorsFatal?: boolean
   readonly skillFileSystem?: SkillFileSystem
@@ -58,10 +55,20 @@ export type ScanSkillRootsInput = {
   }>
 }
 
+export type ScanSkillRootsInput = ScanSkillRootsCommonInput & {
+  readonly query: SkillUninstallQuery
+  readonly classifyEditors: (
+    candidatePath: string,
+  ) => readonly string[] | Promise<readonly string[]>
+}
+
+export type ScanSkillNamesInput = ScanSkillRootsCommonInput
+
 type QueueEntry = {
   path: string
   depth: number
   editorIds: readonly string[]
+  rootIndex: number
 }
 
 function normalizeName(value: string): string {
@@ -164,16 +171,49 @@ export async function isSkillTargetDiscoverable(input: {
   return false
 }
 
+type ScanSkillRootsInternalInput = ScanSkillRootsCommonInput & {
+  readonly query?: SkillUninstallQuery
+  readonly classifyEditors?: ScanSkillRootsInput["classifyEditors"]
+}
+
+type ScanSkillRootsInternalResult = SkillUninstallScanResult & SkillUninstallNameScanResult
+
 export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillUninstallScanResult> {
+  const result = await scanSkillRootsInternal(input)
+  return {
+    candidates: result.candidates,
+    complete: result.complete,
+    warnings: result.warnings,
+  }
+}
+
+export async function scanSkillNames(input: ScanSkillNamesInput): Promise<SkillUninstallNameScanResult> {
+  const result = await scanSkillRootsInternal(input)
+  return {
+    names: result.names,
+    complete: result.complete,
+    warnings: result.warnings,
+  }
+}
+
+async function scanSkillRootsInternal(
+  input: ScanSkillRootsInternalInput,
+): Promise<ScanSkillRootsInternalResult> {
   const maxDepth = input.limits?.maxDepth ?? SKILL_UNINSTALL_SCAN_MAX_DEPTH
   const maxDirectories = input.limits?.maxDirectories ?? SKILL_UNINSTALL_SCAN_MAX_DIRECTORIES
   const timeoutMs = input.limits?.timeoutMs ?? SKILL_UNINSTALL_SCAN_TIMEOUT_MS
   const concurrency = Math.max(1, Math.floor(input.limits?.concurrency ?? SKILL_UNINSTALL_SCAN_CONCURRENCY))
-  const targetName = normalizeName(input.query.name)
+  const targetName = input.query ? normalizeName(input.query.name) : undefined
   const skillFileSystem = input.skillFileSystem ?? defaultSkillFileSystem
   const startedAt = Date.now()
-  const queue: QueueEntry[] = input.roots.map((root) => ({ path: root.path, depth: 0, editorIds: root.editorIds }))
+  const queue: QueueEntry[] = input.roots.map((root, rootIndex) => ({
+    path: root.path,
+    depth: 0,
+    editorIds: root.editorIds,
+    rootIndex,
+  }))
   const candidates = new Map<string, SkillUninstallCandidate>()
+  const names = new Map<string, { name: string; path: string; rootIndex: number }>()
   const warnings = new Set<string>()
   let queueIndex = 0
   let activeWorkers = 0
@@ -258,9 +298,25 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
       const content = skillInspection.content
       const directoryName = path.basename(candidatePath)
       const frontmatterName = readFrontmatterName(content)
-      const matches = normalizeName(directoryName) === targetName
+      const canonicalName = frontmatterName ?? directoryName
+      const normalizedCanonicalName = normalizeName(canonicalName)
+      const currentName = names.get(normalizedCanonicalName)
+      if (!input.query && (
+        !currentName
+        || entry.rootIndex < currentName.rootIndex
+        || (entry.rootIndex === currentName.rootIndex && candidatePath.localeCompare(currentName.path) < 0)
+      )) {
+        names.set(normalizedCanonicalName, {
+          name: canonicalName,
+          path: candidatePath,
+          rootIndex: entry.rootIndex,
+        })
+      }
+      const matches = targetName !== undefined && (
+        normalizeName(directoryName) === targetName
         || (frontmatterName !== undefined && normalizeName(frontmatterName) === targetName)
-      if (matches && !shouldStop()) {
+      )
+      if (matches && input.classifyEditors && !shouldStop()) {
         const classifiedEditorIds = await waitFor(Promise.resolve(input.classifyEditors(candidatePath)))
         if (classifiedEditorIds === STOPPED || shouldStop()) return
         const synapseContentId = await waitFor(readSynapseContentId(candidatePath))
@@ -291,7 +347,12 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
     if (entries === STOPPED) return
     for (const child of entries) {
       if (!child.isDirectory() || child.isSymbolicLink()) continue
-      queue.push({ path: path.join(entry.path, child.name), depth: entry.depth + 1, editorIds: entry.editorIds })
+      queue.push({
+        path: path.join(entry.path, child.name),
+        depth: entry.depth + 1,
+        editorIds: entry.editorIds,
+        rootIndex: entry.rootIndex,
+      })
     }
     shouldStop()
   }
@@ -324,6 +385,9 @@ export async function scanSkillRoots(input: ScanSkillRootsInput): Promise<SkillU
     shouldStop()
     return {
       candidates: [...candidates.values()].sort((left, right) => left.path.localeCompare(right.path)),
+      names: [...names.values()].map((item) => item.name).sort((left, right) => left.localeCompare(right, undefined, {
+        sensitivity: "base",
+      })),
       complete: warnings.size === 0,
       warnings: [...warnings],
     }

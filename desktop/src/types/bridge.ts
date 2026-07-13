@@ -26,6 +26,8 @@ import type {
 import type {
   SkillUninstallBatchResult,
   SkillUninstallCancelRequest,
+  SkillUninstallNameScanRequest,
+  SkillUninstallNameScanResult,
   SkillUninstallScanRequest,
   SkillUninstallScanResult,
   SkillUninstallTarget,
@@ -76,16 +78,6 @@ import type {
   SwarmTaskUpdateInput,
   SwarmWorkerRun,
 } from "../../app-capabilities/swarm-task/shared/schema"
-import type {
-  ScreenshotArtifact,
-  ScreenshotCaptureInput,
-  ScreenshotCaptureToFileInput,
-  ScreenshotClipboardResult,
-  ScreenshotInteractiveCaptureInput,
-  ScreenshotRegion,
-  ScreenshotSaveArtifactInput,
-  ScreenshotSaveResult,
-} from "../../app-capabilities/screenshot/shared/schema"
 import type {
   SynapseTerminalCreateGroupCommandInput,
   SynapseTerminalCreateGroupInput,
@@ -364,6 +356,8 @@ import type {
 import type {
   EditorScanQuickPublishDraft,
   EditorScanQuickPublishRequest,
+  EditorScanFinalizeQuickPublishRequest,
+  EditorScanFinalizeQuickPublishResult,
   EditorScanSkillRepositoryUploadRequest,
   EditorScanSkillRepositoryUploadResult,
   EditorScanResult,
@@ -956,6 +950,7 @@ export type SynapseBridge = {
   }
   skillUninstaller: {
     scan: (request: SkillUninstallScanRequest) => Promise<SkillUninstallScanResult>
+    scanNames: (request: SkillUninstallNameScanRequest) => Promise<SkillUninstallNameScanResult>
     cancelScan: (request: SkillUninstallCancelRequest) => Promise<{ cancelled: boolean }>
     uninstall: (request: { targets: SkillUninstallTarget[] }) => Promise<SkillUninstallBatchResult>
   }
@@ -1054,17 +1049,6 @@ export type SynapseBridge = {
     onData: (listener: (event: SynapseTerminalDataEvent) => void) => () => void
     onSessionChanged: (listener: (session: SynapseTerminalSession) => void) => () => void
     onSessionDeleted: (listener: (event: SynapseTerminalSessionDeletedEvent) => void) => () => void
-  }
-  screenshot: {
-    capture: (input: ScreenshotCaptureInput) => Promise<ScreenshotArtifact>
-    captureToFile: (input: ScreenshotCaptureToFileInput) => Promise<ScreenshotSaveResult>
-    saveArtifact: (input: ScreenshotSaveArtifactInput) => Promise<ScreenshotSaveResult>
-    copyToClipboard: (input: ScreenshotCaptureInput) => Promise<ScreenshotClipboardResult>
-    copyArtifactToClipboard: (input: ScreenshotArtifact) => Promise<ScreenshotClipboardResult>
-    startInteractiveCapture: (input?: ScreenshotInteractiveCaptureInput) => Promise<ScreenshotArtifact | null>
-    completeInteractiveCapture: (input: ScreenshotRegion) => Promise<boolean>
-    cancelInteractiveCapture: () => Promise<boolean>
-    chooseOutputFile: (input?: { defaultPath?: string }) => Promise<string | null>
   }
   git: {
     checkEnvironment: () => Promise<SynapseGitEnvironmentState>
@@ -1232,6 +1216,9 @@ export type SynapseBridge = {
     recordComplete: (sessionId: string) => Promise<{ ok: true }>
   }
   installers: {
+    inspectGlobalSkillInstallations: (
+      source: SynapseSkillInstallerSource,
+    ) => Promise<SynapseEditorInstallStatusResult>
     inspectSkillEnvSource: (
       source: SynapseSkillInstallerSource,
     ) => Promise<SynapseSkillEnvInspectionResult>
@@ -1287,6 +1274,9 @@ export type SynapseBridge = {
     prepareQuickPublishDraft: (
       request: EditorScanQuickPublishRequest,
     ) => Promise<EditorScanQuickPublishDraft>
+    finalizeQuickPublish: (
+      request: EditorScanFinalizeQuickPublishRequest,
+    ) => Promise<EditorScanFinalizeQuickPublishResult>
     trashItem: (request: EditorScanTrashRequest) => Promise<EditorScanTrashResult>
     uploadSkillToSkillRepository: (
       request: EditorScanSkillRepositoryUploadRequest,

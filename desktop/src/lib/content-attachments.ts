@@ -5,7 +5,8 @@ const WINDOWS_UNSAFE_CHARS = new Set(["<", ">", ":", "\"", "|", "?", "*", "/", "
 const SKILL_ENV_EXAMPLE_PATH = ".env.example"
 const SKILL_RUNTIME_ENV_PATH = ".env"
 const SKILL_ATTACHMENT_RESERVED_INSTALL_PATHS = new Set(
-  ["SKILL.md", ".synapse.json"].map((value) => normalizePathForCompare(value, { platform: "win32" })),
+  ["SKILL.md", ".synapse.json", ".synapse.repository.json"]
+    .map((value) => normalizePathForCompare(value, { platform: "win32" })),
 )
 
 function normalizeContentAttachmentPath(originalName: string): string {
@@ -61,6 +62,18 @@ function assertNoRuntimeSkillEnvPath(originalNames: readonly string[]): void {
   }
 }
 
+function assertNoPublishRuntimeEnvPath(originalNames: readonly string[]): void {
+  const hasRuntimeEnv = originalNames.some((name) => {
+    const normalized = normalizeContentAttachmentPath(name).toLowerCase()
+    if (normalized === SKILL_ENV_EXAMPLE_PATH) return false
+    const basename = normalized.split("/").at(-1) ?? ""
+    return basename === ".env" || basename.startsWith(".env.")
+  })
+  if (hasRuntimeEnv) {
+    throw new Error("Skill 发布内容不能包含运行时 .env 文件，请只提交根目录 .env.example。")
+  }
+}
+
 function toWindowsSafeSegment(segment: string): string {
   const cleaned = segment
     .split("")
@@ -83,6 +96,7 @@ function isWindowsUnsafeChar(char: string): boolean {
 
 export {
   assertNoRuntimeSkillEnvPath,
+  assertNoPublishRuntimeEnvPath,
   assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
   normalizeContentAttachmentSegment,

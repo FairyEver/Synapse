@@ -3,10 +3,11 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
-import { SYNAPSE_SKILL_ID_FILE_NAME } from "./editor-adapters/skill-identity"
 import { isFileNotFoundError } from "./fs-utils"
 
 const sharedSkillRepositoryPromise = import("@synapse/shared")
+export const SKILL_REPOSITORY_ID_FILE_NAME = ".synapse.repository.json"
+export const LEGACY_SKILL_REPOSITORY_ID_FILE_NAME = ".synapse.json"
 
 export type SkillRepositoryIdentity = {
   readonly id: string
@@ -28,7 +29,7 @@ export async function ensureSkillRepositoryIdentityWriteAllowed(
   security?: SkillRepositoryIdentityWriteSecurity,
 ): Promise<void> {
   if (!security) return
-  await checkIdentityWritePermission(security, path.join(sourceDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME), {
+  await checkIdentityWritePermission(security, path.join(sourceDirectoryPath, SKILL_REPOSITORY_ID_FILE_NAME), {
     operation: "skill-repository.identity.write.preflight",
   })
 }
@@ -38,7 +39,7 @@ export async function writeSkillRepositoryIdentity(
   identity: SkillRepositoryIdentity,
   security?: SkillRepositoryIdentityWriteSecurity,
 ): Promise<void> {
-  const targetPath = path.join(sourceDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME)
+  const targetPath = path.join(sourceDirectoryPath, SKILL_REPOSITORY_ID_FILE_NAME)
   let tempPath: string | null = null
   const metadata = {
     operation: "skill-repository.identity.write",
@@ -50,7 +51,7 @@ export async function writeSkillRepositoryIdentity(
 
   try {
     await mkdir(sourceDirectoryPath, { recursive: true })
-    tempPath = path.join(sourceDirectoryPath, `${SYNAPSE_SKILL_ID_FILE_NAME}.${randomUUID()}.tmp`)
+    tempPath = path.join(sourceDirectoryPath, `${SKILL_REPOSITORY_ID_FILE_NAME}.${randomUUID()}.tmp`)
     await writeFile(tempPath, `${JSON.stringify(identity, null, 2)}\n`, "utf8")
     await rename(tempPath, targetPath)
     tempPath = null
@@ -65,9 +66,39 @@ export async function writeSkillRepositoryIdentity(
 }
 
 export async function readSkillRepositoryIdentity(sourceDirectoryPath: string): Promise<SkillRepositoryIdentity | null> {
+  const current = await readIdentityFile(path.join(sourceDirectoryPath, SKILL_REPOSITORY_ID_FILE_NAME))
+  if (current) return current
+  return readIdentityFile(path.join(sourceDirectoryPath, LEGACY_SKILL_REPOSITORY_ID_FILE_NAME))
+}
+
+export async function removeLegacySkillRepositoryIdentity(
+  sourceDirectoryPath: string,
+  security?: SkillRepositoryIdentityWriteSecurity,
+): Promise<boolean> {
+  const legacyPath = path.join(sourceDirectoryPath, LEGACY_SKILL_REPOSITORY_ID_FILE_NAME)
+  const legacyIdentity = await readIdentityFile(legacyPath)
+  if (!legacyIdentity) return false
+
+  const metadata = {
+    operation: "skill-repository.identity.migrate",
+    repositoryId: legacyIdentity.id,
+  }
+  if (security) await checkIdentityWritePermission(security, legacyPath, metadata)
+
+  try {
+    await rm(legacyPath)
+    recordIdentityAudit(security, legacyPath, "allowed", metadata)
+    return true
+  } catch (error) {
+    recordIdentityAudit(security, legacyPath, "failed", metadata)
+    throw error
+  }
+}
+
+async function readIdentityFile(filePath: string): Promise<SkillRepositoryIdentity | null> {
   let raw: string
   try {
-    raw = await readFile(path.join(sourceDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME), "utf8")
+    raw = await readFile(filePath, "utf8")
   } catch (error) {
     if (isFileNotFoundError(error)) return null
     throw error

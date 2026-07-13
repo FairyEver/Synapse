@@ -23,10 +23,6 @@ import {
 } from "../../synapse-capabilities/shared/app-domain"
 import { TERMINAL_MCP_TOOL_NAMES } from "../../app-capabilities/terminal/shared/capability"
 import {
-  SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
-  SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
-} from "../../app-capabilities/screenshot/shared/capability"
-import {
   SECRETS_CAPABILITY_IDS,
   SECRETS_MCP_TOOL_NAMES,
 } from "../../app-capabilities/secrets/shared/capability"
@@ -61,8 +57,6 @@ describe("App capability domain", () => {
     expect(buildAppTools().map((tool) => tool.name)).toEqual([
       "app_document_template_docx_generate",
       ...Object.values(TERMINAL_MCP_TOOL_NAMES),
-      SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
-      SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
       SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
       ...Object.values(SECRETS_MCP_TOOL_NAMES),
       ...Object.values(SWARM_TASK_MCP_TOOL_NAMES),

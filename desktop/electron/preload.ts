@@ -82,6 +82,7 @@ const IPC_CHANNELS = {
     "recordComplete": "synapse:skill-repository-install:record-complete",
   },
   "installers": {
+    "inspectGlobalSkillInstallations": "synapse:installers:inspect-global-skill-installations",
     "inspectSkillEnvSource": "synapse:installers:inspect-skill-env-source",
     "installSourceToEditor": "synapse:installers:install-source-to-editor",
     "installSourceToEditorTargets": "synapse:installers:install-source-to-editor-targets",
@@ -93,6 +94,7 @@ const IPC_CHANNELS = {
   },
   "skill-uninstaller": {
     "scan": "synapse:skill-uninstaller:scan",
+    "scanNames": "synapse:skill-uninstaller:names:scan",
     "cancelScan": "synapse:skill-uninstaller:scan:cancel",
     "uninstall": "synapse:skill-uninstaller:uninstall",
   },
@@ -126,6 +128,7 @@ const IPC_CHANNELS = {
     "readItemContent": "synapse:editor-scan:read-item-content",
     "listSkillFiles": "synapse:editor-scan:list-skill-files",
     "prepareQuickPublishDraft": "synapse:editor-scan:prepare-quick-publish-draft",
+    "finalizeQuickPublish": "synapse:editor-scan:finalize-quick-publish",
     "trashItem": "synapse:editor-scan:trash-item",
     "uploadSkillToSkillRepository": "synapse:editor-scan:upload-skill-to-skill-repository",
   },
@@ -494,17 +497,6 @@ const IPC_CHANNELS = {
     "data": "synapse:terminal:data",
     "sessionChanged": "synapse:terminal:session-changed",
     "sessionDeleted": "synapse:terminal:session-deleted",
-  },
-  "screenshot": {
-    "capture": "synapse:screenshot:capture",
-    "captureToFile": "synapse:screenshot:file:capture",
-    "saveArtifact": "synapse:screenshot:file:save-artifact",
-    "copyToClipboard": "synapse:screenshot:clipboard:copy",
-    "copyArtifactToClipboard": "synapse:screenshot:clipboard:copy-artifact",
-    "startInteractiveCapture": "synapse:screenshot:interactive:start",
-    "completeInteractiveCapture": "synapse:screenshot:interactive:complete",
-    "cancelInteractiveCapture": "synapse:screenshot:interactive:cancel",
-    "chooseOutputFile": "synapse:screenshot:output:choose",
   },
   "git": {
     "checkEnvironment": "synapse:git:environment:check",
@@ -902,6 +894,7 @@ const synapseBridge: SynapseBridge = {
   },
   skillUninstaller: {
     scan: invoke(IPC_CHANNELS["skill-uninstaller"].scan),
+    scanNames: invoke(IPC_CHANNELS["skill-uninstaller"].scanNames),
     cancelScan: invoke(IPC_CHANNELS["skill-uninstaller"].cancelScan),
     uninstall: invoke(IPC_CHANNELS["skill-uninstaller"].uninstall),
   },
@@ -1021,17 +1014,6 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       IPC_CHANNELS.terminal.sessionDeleted,
     ),
-  },
-  screenshot: {
-    capture: (input) => invoke(IPC_CHANNELS.screenshot.capture)(input),
-    captureToFile: (input) => invoke(IPC_CHANNELS.screenshot.captureToFile)(input),
-    saveArtifact: (input) => invoke(IPC_CHANNELS.screenshot.saveArtifact)(input),
-    copyToClipboard: (input) => invoke(IPC_CHANNELS.screenshot.copyToClipboard)(input),
-    copyArtifactToClipboard: (input) => invoke(IPC_CHANNELS.screenshot.copyArtifactToClipboard)(input),
-    startInteractiveCapture: (input) => invoke(IPC_CHANNELS.screenshot.startInteractiveCapture)(input),
-    completeInteractiveCapture: (input) => invoke(IPC_CHANNELS.screenshot.completeInteractiveCapture)(input),
-    cancelInteractiveCapture: () => invoke(IPC_CHANNELS.screenshot.cancelInteractiveCapture)(undefined),
-    chooseOutputFile: (input) => invoke(IPC_CHANNELS.screenshot.chooseOutputFile)(input),
   },
   git: {
     checkEnvironment: invoke(IPC_CHANNELS.git.checkEnvironment),
@@ -1226,6 +1208,7 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["skill-repository-install"].recordComplete)({ sessionId }),
   },
   installers: {
+    inspectGlobalSkillInstallations: invoke(IPC_CHANNELS.installers.inspectGlobalSkillInstallations),
     inspectSkillEnvSource: invoke(IPC_CHANNELS.installers.inspectSkillEnvSource),
     installSourceToEditor: invoke(IPC_CHANNELS.installers.installSourceToEditor),
     installSourceToEditorTargets: invoke(IPC_CHANNELS.installers.installSourceToEditorTargets),
@@ -1274,6 +1257,8 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["editor-scan"].listSkillFiles)({ dirPath }),
     prepareQuickPublishDraft: (request) =>
       invoke(IPC_CHANNELS["editor-scan"].prepareQuickPublishDraft)(request),
+    finalizeQuickPublish: (request) =>
+      invoke(IPC_CHANNELS["editor-scan"].finalizeQuickPublish)(request),
     trashItem: (request) =>
       invoke(IPC_CHANNELS["editor-scan"].trashItem)(request),
     uploadSkillToSkillRepository: (request) =>

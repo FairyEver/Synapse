@@ -19,7 +19,7 @@ import type {
 import { editorAdapterService } from "./editor-adapter-service"
 import { editorAdapters } from "./editor-adapters"
 import { areSkillContentIdsEquivalent } from "./editor-adapters/skill-identity"
-import { scanAll } from "./editor-scan-service"
+import { scanAll, scanSkillDirectories } from "./editor-scan-service"
 
 function normalizeRuleContent(content: string): string {
   return content.replace(/\r\n/g, "\n").trim()
@@ -170,6 +170,40 @@ function createEntry(params: {
 }
 
 export class EditorInstallStatusService {
+  async resolveGlobalSkillInstallations(
+    payload: SynapseResolveEditorInstallStatusPayload,
+  ): Promise<SynapseEditorInstallStatusResult> {
+    if (payload.contentType !== "skill") {
+      throw new Error("全局 Skill 安装检测只支持 Skill。")
+    }
+
+    const adapters = editorAdapters.filter(
+      (adapter) => adapter.supportsGlobal && adapter.supportedContentTypes.includes("skill"),
+    )
+    const entries = await Promise.all(adapters.map(async (adapter) => {
+      const config = adapter.getScanPathConfig()
+      const globalSkillPaths = config.globalSkillPaths
+        ?? (config.globalSkillsPath ? [config.globalSkillsPath] : [])
+      const [target, scan] = await Promise.all([
+        editorAdapterService.resolveTarget(createResolvePayload(payload, adapter.id, "global")),
+        scanSkillDirectories(globalSkillPaths),
+      ])
+      if (scan.skillScanError) {
+        throw new Error(`${adapter.label} 全局 Skill 检测失败：${scan.skillScanError}`)
+      }
+
+      return createEntry({
+        editorId: adapter.id,
+        editorLabel: adapter.label,
+        scope: "global",
+        target,
+        scanStatus: statusFromSkill(findByContentIdOrName(scan.skills, payload), payload),
+      })
+    }))
+
+    return { entries }
+  }
+
   async resolveForContent(
     payload: SynapseResolveEditorInstallStatusPayload,
   ): Promise<SynapseEditorInstallStatusResult> {

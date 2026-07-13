@@ -8,10 +8,13 @@ import { createMainLogger } from "../../../electron/services/log-store"
 import {
   skillUninstallBatchResultSchema,
   skillUninstallCancelRequestSchema,
+  skillUninstallNameScanRequestSchema,
+  skillUninstallNameScanResultSchema,
   skillUninstallScanRequestSchema,
   skillUninstallScanResultSchema,
   skillUninstallTargetSchema,
   type SkillUninstallCancelRequest,
+  type SkillUninstallNameScanRequest,
   type SkillUninstallScanRequest,
   type SkillUninstallTarget,
 } from "../shared/schema"
@@ -32,9 +35,21 @@ function securityFrom(ctx: IpcHandlerContext): SkillUninstallerSecurity {
 }
 
 export function createSkillUninstallerIpcModule(
-  service: Pick<SkillUninstallerService, "scan" | "uninstall"> = skillUninstallerService,
+  service: Pick<SkillUninstallerService, "scan" | "scanNames" | "uninstall"> = skillUninstallerService,
 ): IpcModule {
   const activeScans = new Map<string, AbortController>()
+
+  async function runScan<T>(scanId: string, scan: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    activeScans.get(scanId)?.abort()
+    const controller = new AbortController()
+    activeScans.set(scanId, controller)
+    try {
+      return await scan(controller.signal)
+    } finally {
+      if (activeScans.get(scanId) === controller) activeScans.delete(scanId)
+    }
+  }
+
   const module: IpcModule = {
     id: "skill-uninstaller",
     methods: {
@@ -43,18 +58,20 @@ export function createSkillUninstallerIpcModule(
         channel: "synapse:skill-uninstaller:scan",
         request: skillUninstallScanRequestSchema,
         response: skillUninstallScanResultSchema,
-        handler: async (ctx, request: SkillUninstallScanRequest) => {
-          activeScans.get(request.scanId)?.abort()
-          const controller = new AbortController()
-          activeScans.set(request.scanId, controller)
-          try {
-            return await service.scan(request.query, securityFrom(ctx), controller.signal)
-          } finally {
-            if (activeScans.get(request.scanId) === controller) {
-              activeScans.delete(request.scanId)
-            }
-          }
-        },
+        handler: async (ctx, request: SkillUninstallScanRequest) => runScan(
+          request.scanId,
+          (signal) => service.scan(request.query, securityFrom(ctx), signal),
+        ),
+      },
+      scanNames: {
+        kind: "invoke",
+        channel: "synapse:skill-uninstaller:names:scan",
+        request: skillUninstallNameScanRequestSchema,
+        response: skillUninstallNameScanResultSchema,
+        handler: async (ctx, request: SkillUninstallNameScanRequest) => runScan(
+          request.scanId,
+          (signal) => service.scanNames(request.searchRootPath, securityFrom(ctx), signal),
+        ),
       },
       cancelScan: {
         kind: "invoke",

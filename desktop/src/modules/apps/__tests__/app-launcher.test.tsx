@@ -117,7 +117,6 @@ describe("AppsModule", () => {
     expect(findButton("本地数据库")).toBeTruthy()
     expect(findButton("模板生成文档")).toBeTruthy()
     expect(findButton("终端")).toBeTruthy()
-    expect(findButton("截图")).toBeTruthy()
     expect(findButton("IDE 管理")).toBeTruthy()
     expect(findButton("用量监控")).toBeTruthy()
     expect(findButton("价格管理")).toBeTruthy()

@@ -475,7 +475,7 @@ describe("contentWriteService", () => {
     await expect(contentWriteService.createSkill(payload, {
       displayName: "User",
       userId: "user",
-    })).rejects.toThrow("Skill 源目录不能包含 .env，请只提交 .env.example。")
+    })).rejects.toThrow("Skill 发布内容不能包含运行时 .env 文件")
     expect(writeAttachments).not.toHaveBeenCalled()
   })
 
@@ -527,7 +527,47 @@ describe("contentWriteService", () => {
     }, {
       displayName: "User",
       userId: "user",
-    })).rejects.toThrow("Skill 源目录不能包含 .env，请只提交 .env.example。")
+    })).rejects.toThrow("Skill 发布内容不能包含运行时 .env 文件")
+    expect(writeAttachments).not.toHaveBeenCalled()
+  })
+
+  it("blocks a high-confidence secret before writing Skill attachments", async () => {
+    const root = await createTempRoot()
+    const repository: SynapseRepositoryConfig = {
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: root,
+      contentDirs: { skill: "skills" },
+    }
+    const config = createDefaultConfig()
+    config.activeRepoUuid = repository.uuid
+    config.repositories = [repository]
+    vi.spyOn(configStore, "load").mockResolvedValue(config)
+    vi.spyOn(repositoryStore, "getRepositoryState").mockResolvedValue({
+      repositoryUuid: repository.uuid,
+      localPath: root,
+      status: "ready",
+      isGitRepository: false,
+      gitRootPath: null,
+    })
+    const writeAttachments = vi.spyOn(attachmentsPoolService, "writeAttachments")
+    const secretValue = "synthetic-secret-value-12345678901234567890"
+
+    const result = contentWriteService.createSkill({
+      title: "Skill",
+      name: "skill",
+      description: "Description",
+      category: "test",
+      icon: "wrench",
+      iconBg: "default",
+      iconType: "icon",
+      iconImage: "",
+      content: `https://example.test/hook?token=${secretValue}`,
+      files: [],
+    }, { displayName: "User", userId: "user" })
+
+    await expect(result).rejects.toThrow("sensitive-url")
+    await expect(result).rejects.not.toThrow(secretValue)
     expect(writeAttachments).not.toHaveBeenCalled()
   })
 })

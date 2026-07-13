@@ -1,19 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Download, MoreHorizontal, RefreshCw } from "lucide-react"
+import { Download, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "../../../src/app-shell/config"
-import { resolveEditorInstallStatus } from "../../../src/app-shell/editor-install-status"
+import { inspectGlobalSkillInstallations } from "../../../src/app-shell/installers"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { EditorIcon } from "../../../src/components/editor-icon"
 import { Badge } from "../../../src/components/ui/badge"
 import { Button } from "../../../src/components/ui/button"
 import { Card, CardContent } from "../../../src/components/ui/card"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../../../src/components/ui/dropdown-menu"
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
 import { Spinner } from "../../../src/components/ui/spinner"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
@@ -97,14 +91,7 @@ function SynapseSkillModule() {
     setStatusError("")
     try {
       const installSource = await ensureSource()
-      const result = await resolveEditorInstallStatus({
-        contentId: "synapse-skill",
-        contentName: "synapse-skill",
-        contentType: "skill",
-        projects: [],
-        sourceFingerprint: installSource.sourceFingerprint,
-        title: "Synapse Skill",
-      })
+      const result = await inspectGlobalSkillInstallations(installSource)
       setStatusEntries(result.entries.filter((entry) => entry.scope === "global"))
     } catch (error) {
       const message = error instanceof Error ? error.message : "读取安装状态失败"
@@ -220,7 +207,8 @@ function SynapseSkillModule() {
                 ) : globalEditors.map((editor) => {
                   const entry = statusEntries.find((item) => item.editorId === editor.id)
                   const targetPath = entry?.targetPath ?? null
-                  const showStatusBadge = !entry || entry.status !== "not_installed"
+                  const showStatusBadge = !entry
+                    || (entry.status !== "installed" && entry.status !== "not_installed")
                   return (
                     <div
                       key={editor.id}
@@ -253,24 +241,15 @@ function SynapseSkillModule() {
                           </Button>
                         ) : null}
                         {entry?.status === "installed" ? (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={`${editor.label} 更多操作`}
-                                disabled={preparing}
-                              >
-                                <MoreHorizontal />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onSelect={() => void openInstallFlowForEditor(editor.id)}>
-                                重新安装
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={preparing}
+                            onClick={() => void openInstallFlowForEditor(editor.id)}
+                          >
+                            重新安装
+                          </Button>
                         ) : null}
                       </div>
                       {targetPath ? (

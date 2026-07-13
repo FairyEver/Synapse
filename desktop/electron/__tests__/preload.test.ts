@@ -221,89 +221,10 @@ describe("preload bridge", () => {
     )
   })
 
-  it("maps screenshot bridge methods to screenshot IPC channels", async () => {
-    const bridge = await loadPreloadBridge()
-
-    await bridge.screenshot.capture({ mode: "fullscreen" })
-    const artifact = {
-      id: "shot-1",
-      mimeType: "image/png" as const,
-      bytes: new Uint8Array([1, 2, 3]),
-      size: 3,
-      width: 1,
-      height: 1,
-      tempPath: "/tmp/shot-1.png",
-      capture: {
-        mode: "fullscreen" as const,
-        coordinateSpace: "screen" as const,
-        capturedAt: "2026-06-24T08:00:00.000Z",
-      },
-    }
-    await bridge.screenshot.startInteractiveCapture({ hideCurrentWindow: true })
-    await bridge.screenshot.completeInteractiveCapture({ x: 1, y: 2, width: 3, height: 4 })
-    await bridge.screenshot.cancelInteractiveCapture()
-    await bridge.screenshot.captureToFile({
-      capture: { mode: "region", region: { x: 1, y: 2, width: 3, height: 4 } },
-      outputPath: "/tmp/screen.png",
-    })
-    await bridge.screenshot.copyToClipboard({ mode: "fullscreen" })
-    await bridge.screenshot.copyArtifactToClipboard(artifact)
-    await bridge.screenshot.saveArtifact({ artifact, outputPath: "/tmp/screen.png" })
-    await bridge.screenshot.chooseOutputFile({ defaultPath: "screen.png" })
-
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      1,
-      "synapse:screenshot:capture",
-      { mode: "fullscreen" },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      2,
-      "synapse:screenshot:interactive:start",
-      { hideCurrentWindow: true },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      3,
-      "synapse:screenshot:interactive:complete",
-      { x: 1, y: 2, width: 3, height: 4 },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      4,
-      "synapse:screenshot:interactive:cancel",
-      undefined,
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      5,
-      "synapse:screenshot:file:capture",
-      {
-        capture: { mode: "region", region: { x: 1, y: 2, width: 3, height: 4 } },
-        outputPath: "/tmp/screen.png",
-      },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      6,
-      "synapse:screenshot:clipboard:copy",
-      { mode: "fullscreen" },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      7,
-      "synapse:screenshot:clipboard:copy-artifact",
-      artifact,
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      8,
-      "synapse:screenshot:file:save-artifact",
-      { artifact, outputPath: "/tmp/screen.png" },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      9,
-      "synapse:screenshot:output:choose",
-      { defaultPath: "screen.png" },
-    )
-  })
-
   it("maps skill uninstaller methods to IPC channels", async () => {
     const bridge = await loadPreloadBridge()
     await bridge.skillUninstaller.scan({ scanId: "scan-1", query: { name: "jenkins" } })
+    await bridge.skillUninstaller.scanNames({ scanId: "names-1" })
     await bridge.skillUninstaller.cancelScan({ scanId: "scan-1" })
     await bridge.skillUninstaller.uninstall({
       targets: [{ query: { name: "jenkins" }, path: "/tmp/jenkins" }],
@@ -311,6 +232,10 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:skill-uninstaller:scan",
       { scanId: "scan-1", query: { name: "jenkins" } },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:skill-uninstaller:names:scan",
+      { scanId: "names-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:skill-uninstaller:scan:cancel",
@@ -521,6 +446,14 @@ describe("preload bridge", () => {
   it("maps installer preparation methods to narrow IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
+    await bridge.installers.inspectGlobalSkillInstallations({
+      kind: "skill",
+      origin: "prepared",
+      sourceIdentity: "synapse-skill",
+      preparedSourceId: "synapse-skill:test",
+      name: "synapse-skill",
+      sourceFingerprint: "sha256:test",
+    })
     await bridge.installers.prepareLocalSkillSource({ sourceDirectoryPath: "/tmp/skill" })
     await bridge.installers.prepareInlineRuleSource({ name: "team.rule", body: "# Rule" })
     await bridge.installers.installSourceToEditor({
@@ -551,6 +484,17 @@ describe("preload bridge", () => {
       targets: [{ editorId: "codex" as never, scope: "global" }],
     })
 
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:installers:inspect-global-skill-installations",
+      {
+        kind: "skill",
+        origin: "prepared",
+        sourceIdentity: "synapse-skill",
+        preparedSourceId: "synapse-skill:test",
+        name: "synapse-skill",
+        sourceFingerprint: "sha256:test",
+      },
+    )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:installers:prepare-local-skill-source",
       { sourceDirectoryPath: "/tmp/skill" },
@@ -616,6 +560,23 @@ describe("preload bridge", () => {
         scope: "project",
         projectPath: "/tmp/project",
       },
+    )
+  })
+
+  it("maps checked Skill publish finalization to the narrow IPC channel", async () => {
+    const bridge = await loadPreloadBridge()
+    const request = {
+      contentId: "skill-1",
+      mode: "overwrite" as const,
+      repositoryVersion: "20260713010101",
+      sessionId: "c5e23732-3f58-40c2-9d71-7ce5d0df07be",
+    }
+
+    await bridge.editorScan.finalizeQuickPublish(request)
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:editor-scan:finalize-quick-publish",
+      request,
     )
   })
 

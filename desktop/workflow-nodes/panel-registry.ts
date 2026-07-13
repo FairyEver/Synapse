@@ -11,7 +11,6 @@ import { WorkflowCallNodePanel } from "./workflow-call/panel"
 import { CodexNodePanel } from "./codex/panel"
 import { ClaudeCodeNodePanel } from "./claude-code/panel"
 import { DocumentTemplateNodePanel } from "../app-capabilities/document-template/workflow-node/panel"
-import { ScreenshotNodePanel } from "../app-capabilities/screenshot/workflow-node/panel"
 import { SwarmTaskNodePanel } from "../app-capabilities/swarm-task/workflow-node/panel"
 
 export interface NodePanelProps {
@@ -43,7 +42,6 @@ const panelRegistry = new Map<string, PanelComponent>([
   ["codex", CodexNodePanel as unknown as PanelComponent],
   ["claude_code", ClaudeCodeNodePanel as unknown as PanelComponent],
   ["document_template_docx_generate", DocumentTemplateNodePanel as unknown as PanelComponent],
-  ["screenshot_capture", ScreenshotNodePanel as unknown as PanelComponent],
   ["swarm_task_run", SwarmTaskNodePanel as unknown as PanelComponent],
 ])
 

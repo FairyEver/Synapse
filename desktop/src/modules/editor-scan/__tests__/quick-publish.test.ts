@@ -135,6 +135,16 @@ describe("quick publish payload builders", () => {
       ].join("\n"),
       files: [],
       metadata: {},
+      publishFingerprint: "sha256:publish",
+      sourceFingerprint: "sha256:source",
+      sourceImportSummary: {
+        controlFilesExcluded: [],
+        fileCount: 1,
+        hiddenEntryCount: 0,
+        runtimeEnvExcluded: false,
+        symlinkCount: 0,
+        totalBytes: 1,
+      },
     }
 
     const { payload } = buildSkillQuickPublishPayload(draft)
@@ -163,6 +173,16 @@ describe("quick publish payload builders", () => {
       ].join("\n"),
       files: [{ originalName: "assets/template.bin", size: 3, bytes }],
       metadata: {},
+      publishFingerprint: "sha256:publish",
+      sourceFingerprint: "sha256:source",
+      sourceImportSummary: {
+        controlFilesExcluded: [],
+        fileCount: 2,
+        hiddenEntryCount: 0,
+        runtimeEnvExcluded: false,
+        symlinkCount: 0,
+        totalBytes: 4,
+      },
     }
 
     const result = buildSkillQuickPublishPayload(draft)

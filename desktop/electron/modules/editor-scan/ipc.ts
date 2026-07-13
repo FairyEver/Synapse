@@ -11,6 +11,7 @@ import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type {
   EditorScanSkillRepositoryUploadRequest,
+  EditorScanFinalizeQuickPublishRequest,
   EditorScanQuickPublishRequest,
   EditorScanTrashRequest,
 } from "../../../src/types/editor-scan"
@@ -19,6 +20,7 @@ import {
   readItemContent,
   listSkillFiles,
   assertTrustedEditorReadTarget,
+  finalizeQuickPublish,
   prepareQuickPublishDraft,
   trashScanItem,
 } from "../../services/editor-scan-service"
@@ -94,12 +96,23 @@ const quickPublishRequestSchema = z.object({
   itemName: z.string(),
   ruleContent: z.string().optional(),
   metadata: z.record(z.string(), z.string()).optional(),
+  purpose: z.enum(["copy", "publish"]).optional(),
+  synapseContentId: z.string().optional(),
 })
 
 const quickPublishSkillFileSchema = z.object({
   originalName: z.string(),
   size: z.number(),
   bytes: z.instanceof(Uint8Array),
+})
+
+const sourceImportSummarySchema = z.object({
+  controlFilesExcluded: z.array(z.string()),
+  fileCount: z.number().int().nonnegative(),
+  hiddenEntryCount: z.number().int().nonnegative(),
+  runtimeEnvExcluded: z.boolean(),
+  symlinkCount: z.number().int().nonnegative(),
+  totalBytes: z.number().int().nonnegative(),
 })
 
 const quickPublishDraftSchema = z.discriminatedUnion("itemType", [
@@ -117,8 +130,31 @@ const quickPublishDraftSchema = z.discriminatedUnion("itemType", [
     content: z.string(),
     files: z.array(quickPublishSkillFileSchema),
     metadata: z.record(z.string(), z.string()),
+    publishFingerprint: z.string().min(1),
+    publishSessionId: z.string().uuid().optional(),
+    sourceFingerprint: z.string().min(1),
+    sourceImportSummary: sourceImportSummarySchema,
   }),
 ])
+
+const finalizeQuickPublishRequestSchema = z.object({
+  contentId: z.string().min(1),
+  mode: z.enum(["new", "overwrite"]),
+  repositoryVersion: z.string().min(1),
+  sessionId: z.string().uuid(),
+}).strict()
+
+const finalizeQuickPublishResultSchema = z.object({
+  message: z.string().min(1),
+  status: z.enum([
+    "content-mismatch",
+    "identity-conflict",
+    "identity-written",
+    "session-expired",
+    "source-changed",
+    "write-failed",
+  ]),
+})
 
 const trashRequestSchema = z.object({
   itemType: z.literal("rule"),
@@ -145,6 +181,7 @@ const uploadSkillToSkillRepositoryRequestSchema = z.object({
   scope: z.enum(["global", "project"]),
   projectPath: z.string().nullable().optional(),
   mainFileName: z.string().nullable().optional(),
+  expectedSourceFingerprint: z.string().min(1).optional(),
 }).strict()
 type UploadSkillToSkillRepositoryRequest = z.infer<typeof uploadSkillToSkillRepositoryRequestSchema>
 
@@ -155,6 +192,9 @@ const uploadSkillToSkillRepositoryResultSchema = z.object({
   managementUrl: z.string().url(),
   identityWritten: z.boolean(),
   identityWriteError: z.string().optional(),
+  identityMigrated: z.boolean(),
+  identityMigrationWarning: z.string().optional(),
+  sourceImportSummary: sourceImportSummarySchema,
 })
 
 export const editorScanIpcModule: IpcModule = {
@@ -208,6 +248,19 @@ export const editorScanIpcModule: IpcModule = {
         })
       },
     },
+    finalizeQuickPublish: {
+      kind: "invoke",
+      channel: "synapse:editor-scan:finalize-quick-publish",
+      request: finalizeQuickPublishRequestSchema,
+      response: finalizeQuickPublishResultSchema,
+      handler: async (ctx, request: EditorScanFinalizeQuickPublishRequest) => {
+        return finalizeQuickPublish(request, {
+          actor: { kind: "user" },
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+        })
+      },
+    },
     trashItem: {
       kind: "invoke",
       channel: "synapse:editor-scan:trash-item",
@@ -249,6 +302,9 @@ export const editorScanIpcModule: IpcModule = {
             sourceDirectoryPath: (request as EditorScanSkillRepositoryUploadRequest).itemPath,
             name: (request as EditorScanSkillRepositoryUploadRequest).itemName,
             openInBrowser: false,
+            ...(request.expectedSourceFingerprint
+              ? { expectedSourceFingerprint: request.expectedSourceFingerprint }
+              : {}),
           },
           security,
         )

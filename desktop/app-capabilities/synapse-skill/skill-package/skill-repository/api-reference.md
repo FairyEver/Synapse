@@ -40,7 +40,7 @@ Returns repository metadata and files.
 
 `sourceDirectoryPath` is required. The other fields are optional. If `name`, `title`, or `description` is omitted, Synapse uses Skill metadata or local defaults where available.
 
-Use this for the first upload of a local Skill folder. If local `.synapse.json` already contains a cloud Skill repository id, the tool can update that repository instead of creating a new one.
+Use this for the first upload of a local Skill folder. Synapse excludes runtime `.env` files, `.synapse.json`, `.synapse.repository.json`, other hidden entries, and symlinks, and blocks high-confidence secrets. If local `.synapse.repository.json` contains a cloud Skill repository id, the tool can update that repository instead of creating a new one. Legacy cloud identity in `.synapse.json` remains compatible until the next successful upload migrates it.
 
 Returns the repository id, repository name, owner handle, management URL, and local identity write status:
 
@@ -50,11 +50,20 @@ Returns the repository id, repository name, owner handle, management URL, and lo
   "name": "team-skill",
   "owner": "liyang",
   "managementUrl": "https://synapse.example/console/skill-repositories/repo-id",
-  "identityWritten": true
+  "identityWritten": true,
+  "identityMigrated": false,
+  "sourceImportSummary": {
+    "fileCount": 3,
+    "totalBytes": 2048,
+    "runtimeEnvExcluded": true,
+    "controlFilesExcluded": [".synapse.json"],
+    "hiddenEntryCount": 1,
+    "symlinkCount": 0
+  }
 }
 ```
 
-If `identityWritten` is false, the cloud upload succeeded but Synapse could not write `.synapse.json` locally. The result may include `identityWriteError`.
+If `identityWritten` is false, the cloud upload succeeded but Synapse could not write `.synapse.repository.json` locally. The result may include `identityWriteError`. `identityMigrated` reports successful legacy identity migration; cleanup problems appear as `identityMigrationWarning` without changing the successful cloud upload result.
 
 ## Update Local Skill
 

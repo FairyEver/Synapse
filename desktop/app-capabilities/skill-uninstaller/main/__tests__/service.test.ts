@@ -80,6 +80,26 @@ describe("SkillUninstallerService", () => {
     }))
   })
 
+  it("scans canonical Skill names below a permitted custom root", async () => {
+    await createSkill(tempRoot, "custom-folder", "canonical-name")
+    const { security, permissionCheck, auditRecord } = createSecurity()
+    const service = new SkillUninstallerService({ trashItem: vi.fn() })
+
+    const result = await service.scanNames(tempRoot, security)
+
+    expect(result.names).toEqual(["canonical-name"])
+    expect(permissionCheck).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      context: { operation: "skill-uninstall-name-scan" },
+      resource: tempRoot,
+    }))
+    expect(auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      metadata: { operation: "skill-uninstall-name-scan" },
+      outcome: "allowed",
+    }))
+  })
+
   it("denies a custom-root scan before reading it", async () => {
     await createSkill(tempRoot, "jenkins")
     const { security, auditRecord } = createSecurity(false)

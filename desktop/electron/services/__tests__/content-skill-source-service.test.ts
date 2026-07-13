@@ -132,6 +132,68 @@ describe("content skill source service", () => {
     },
   )
 
+  it.skipIf(process.platform === "win32")("publishes without reading runtime env files and reports excluded entries", async () => {
+    const root = await createTempRoot()
+    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+    const blockedEnvDirectory = path.join(root, ".env")
+    await writeText(path.join(blockedEnvDirectory, "secret.txt"), "SHOULD_NOT_BE_READ=runtime-only")
+    await chmod(blockedEnvDirectory, 0)
+    await writeText(path.join(root, ".env.local"), "SHOULD_NOT_BE_READ=runtime-local")
+    await writeText(path.join(root, "nested", ".env"), "SHOULD_NOT_BE_READ=nested")
+    await writeText(path.join(root, ".env.example"), "API_TOKEN=${API_TOKEN}\n")
+    await writeText(path.join(root, ".synapse.json"), JSON.stringify({ id: "content-id" }))
+    await writeText(path.join(root, ".synapse.repository.json"), JSON.stringify({ id: "cloud-id" }))
+    await writeText(path.join(root, ".hidden", "ignored.md"), "hidden")
+    await writeText(path.join(root, "references", "guide.md"), "guide")
+    await symlink(path.join(root, "references", "guide.md"), path.join(root, "guide-link.md"))
+
+    const draft = await (async () => {
+      try {
+        return await readSkillDraftFromDirectory(root, undefined, { mode: "publish" })
+      } finally {
+        await chmod(blockedEnvDirectory, 0o700)
+      }
+    })()
+
+    expect(draft.files.map((file) => file.originalName)).toEqual([".env.example", "references/guide.md"])
+    expect(draft.sourceImportSummary).toMatchObject({
+      controlFilesExcluded: [".synapse.json", ".synapse.repository.json"],
+      fileCount: 3,
+      hiddenEntryCount: 1,
+      runtimeEnvExcluded: true,
+      symlinkCount: 1,
+    })
+    expect(JSON.stringify(draft)).not.toContain("SHOULD_NOT_BE_READ")
+  })
+
+  it("blocks high-confidence publish secrets without exposing their value", async () => {
+    const root = await createTempRoot()
+    const secretValue = "synthetic-webhook-key-12345678901234567890"
+    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+    await writeText(
+      path.join(root, ".env.example"),
+      `WECOM_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${secretValue}\n`,
+    )
+
+    const result = readSkillDraftFromDirectory(root, undefined, { mode: "publish" })
+    await expect(result).rejects.toThrow("sensitive-url")
+    await expect(result).rejects.not.toThrow(secretValue)
+  })
+
+  it("allows documented placeholder forms during publish scanning", async () => {
+    const root = await createTempRoot()
+    await writeText(path.join(root, "SKILL.md"), [
+      "# Demo Skill",
+      "Authorization: Bearer ${API_TOKEN}",
+      "https://example.test/callback?token=<placeholder>",
+    ].join("\n"))
+    await writeText(path.join(root, ".env.example"), "API_TOKEN=replace-me\nPASSWORD=changeme\n")
+
+    await expect(readSkillDraftFromDirectory(root, undefined, { mode: "publish" })).resolves.toMatchObject({
+      sourceImportSummary: { fileCount: 2 },
+    })
+  })
+
   it("rejects sensitive attachment names", async () => {
     const root = await createTempRoot()
     await writeText(path.join(root, "SKILL.md"), "# Demo Skill")

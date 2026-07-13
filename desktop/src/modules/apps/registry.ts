@@ -12,7 +12,6 @@ import { ruleInstallerAppManifest } from "../../../app-capabilities/rule-install
 import { quickInputAppManifest } from "../../../app-capabilities/quick-input/renderer/app-manifest"
 import { soundNotifierAppManifest } from "../../../app-capabilities/sound-notifier/renderer/app-manifest"
 import { terminalAppManifest } from "../../../app-capabilities/terminal/renderer/app-manifest"
-import { screenshotAppManifest } from "../../../app-capabilities/screenshot/renderer/app-manifest"
 import { editorScanAppManifest } from "@/modules/editor-scan/app-manifest"
 import { gitAppManifest } from "@/modules/git/app-manifest"
 import { modelPriceAppManifest } from "@/modules/model-price/app-manifest"
@@ -45,7 +44,6 @@ const systemApps = [
   quickInputAppManifest,
   soundNotifierAppManifest,
   terminalAppManifest,
-  screenshotAppManifest,
   editorScanAppManifest,
   usageMonitorAppManifest,
   modelPriceAppManifest,

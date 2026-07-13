@@ -5,7 +5,7 @@
 Synapse currently has two navigation models:
 
 - The main window uses fixed top tabs for Agent, Workflow, Drive, Automation, Apps, and Settings.
-- The Apps module uses a system app registry for built-in apps such as Resource Repository, Database, Terminal, Screenshot, Model Price, and Document Template.
+- The Apps module uses a system app registry for built-in apps such as Resource Repository, Database, Terminal, Model Price, and Document Template.
 
 The target product model is that Synapse behaves as an app-based system. Top-level functions are system apps, and the top bar becomes a Dock for pinned apps rather than a fixed tab list.
 
@@ -117,7 +117,6 @@ Display Name   App ID                Namespace
 资源仓库       resource-repository   resource_repository
 本地数据库     database              database
 终端           terminal              terminal
-截图           screenshot            screenshot
 Git            git                   git
 编辑器扫描     editor-scan           editor_scan
 用量监控       usage-monitor         usage_monitor
@@ -180,7 +179,6 @@ app.settings.repository.*         app_settings_repository_*
 app.resource_repository.*         app_resource_repository_*
 app.database.*                    app_database_*
 app.terminal.*                    app_terminal_*
-app.screenshot.*                  app_screenshot_*
 app.git.*                         app_git_*
 app.editor_scan.*                 app_editor_scan_*
 app.usage_monitor.*               app_usage_monitor_*

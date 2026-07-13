@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   },
   editorScanService: {
     assertTrustedEditorReadTarget: vi.fn(),
+    finalizeQuickPublish: vi.fn(),
     trashScanItem: vi.fn(),
   },
 }))
@@ -28,6 +29,7 @@ vi.mock("../../../services/editor-scan-service", () => ({
   readItemContent: vi.fn(),
   listSkillFiles: vi.fn(),
   assertTrustedEditorReadTarget: mocks.editorScanService.assertTrustedEditorReadTarget,
+  finalizeQuickPublish: mocks.editorScanService.finalizeQuickPublish,
   prepareQuickPublishDraft: vi.fn(),
   trashScanItem: mocks.editorScanService.trashScanItem,
 }))
@@ -43,9 +45,22 @@ describe("editorScanIpcModule", () => {
       owner: "alice",
       managementUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
       identityWritten: true,
+      identityMigrated: false,
+      sourceImportSummary: {
+        controlFilesExcluded: [],
+        fileCount: 1,
+        hiddenEntryCount: 0,
+        runtimeEnvExcluded: false,
+        symlinkCount: 0,
+        totalBytes: 10,
+      },
     })
     mocks.contentSkillSourceService.resolveSkillMainFile.mockResolvedValue("/tmp/skills/review/SKILL.md")
     mocks.editorScanService.assertTrustedEditorReadTarget.mockResolvedValue(undefined)
+    mocks.editorScanService.finalizeQuickPublish.mockResolvedValue({
+      status: "identity-written",
+      message: "本地 Skill 已关联到已保存内容。",
+    })
     mocks.editorScanService.trashScanItem.mockResolvedValue({
       trashed: true,
       mode: "path",
@@ -70,6 +85,25 @@ describe("editorScanIpcModule", () => {
     expect(mocks.editorScanService.trashScanItem).not.toHaveBeenCalled()
   })
 
+  it("finalizes a checked Skill publish through the main process", async () => {
+    const harness = createHarness()
+    const request = {
+      contentId: "skill-1",
+      mode: "new" as const,
+      repositoryVersion: "20260713010101",
+      sessionId: "c5e23732-3f58-40c2-9d71-7ce5d0df07be",
+    }
+
+    await expect(harness.invoke("synapse:editor-scan:finalize-quick-publish", request)).resolves.toEqual({
+      status: "identity-written",
+      message: "本地 Skill 已关联到已保存内容。",
+    })
+    expect(mocks.editorScanService.finalizeQuickPublish).toHaveBeenCalledWith(
+      request,
+      expect.objectContaining({ actor: { kind: "user" } }),
+    )
+  })
+
   it("uploads scanned Skills through the Skill Repository channel", async () => {
     const harness = createHarness()
 
@@ -86,6 +120,15 @@ describe("editorScanIpcModule", () => {
       owner: "alice",
       managementUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
       identityWritten: true,
+      identityMigrated: false,
+      sourceImportSummary: {
+        controlFilesExcluded: [],
+        fileCount: 1,
+        hiddenEntryCount: 0,
+        runtimeEnvExcluded: false,
+        symlinkCount: 0,
+        totalBytes: 10,
+      },
     })
 
     expect(mocks.uploadService.importLocal).toHaveBeenCalledWith(

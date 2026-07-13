@@ -30,7 +30,6 @@ import { QuickInputModule } from "../../../../app-capabilities/quick-input/rende
 import { SoundNotifierModule } from "../../../../app-capabilities/sound-notifier/renderer"
 import { SwarmTaskModule } from "../../../../app-capabilities/swarm-task/renderer"
 import { TerminalModule } from "../../../../app-capabilities/terminal/renderer"
-import { ScreenshotModule } from "../../../../app-capabilities/screenshot/renderer"
 import { AppLauncherGrid } from "./app-launcher-grid"
 import { EmbeddedSystemAppShell } from "./embedded-system-app-shell"
 import { getSystemAppManifest, listLaunchableSystemApps } from "../registry"
@@ -107,7 +106,6 @@ function SystemAppContent({
   if (appId === "quick-input") return <QuickInputModule />
   if (appId === "sound-notifier") return <SoundNotifierModule />
   if (appId === "terminal") return <TerminalModule />
-  if (appId === "screenshot") return <ScreenshotModule />
   if (appId === "git") return <GitModule />
   if (appId === "editor-scan") return <EditorScanModule />
   if (appId === "usage-monitor") return <UsageMonitorModule />

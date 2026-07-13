@@ -23,6 +23,7 @@ export type ContentOpenRequest =
       initialValue: SynapseCreateRulePayload
       sourceLabel: string
       notices?: ContentCreateNotice[]
+      quickPublishSessionId?: string
     }
   | {
       kind: "create"
@@ -31,6 +32,7 @@ export type ContentOpenRequest =
       initialValue: CreateSkillPayload
       sourceLabel: string
       notices?: ContentCreateNotice[]
+      quickPublishSessionId?: string
     }
   | {
       kind: "detail"
@@ -45,6 +47,7 @@ export type ContentOpenRequest =
       contentId: string
       prefill: EditOverwriteRulePrefill
       sourceLabel: string
+      quickPublishSessionId?: string
     }
   | {
       kind: "edit-overwrite"
@@ -53,6 +56,7 @@ export type ContentOpenRequest =
       contentId: string
       prefill: EditOverwriteSkillPrefill
       sourceLabel: string
+      quickPublishSessionId?: string
     }
 
 function createContentOpenRequestId(): string {

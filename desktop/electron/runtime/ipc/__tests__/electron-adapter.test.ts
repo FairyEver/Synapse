@@ -261,22 +261,4 @@ describe("createElectronTransportInstall", () => {
     expect(serializedLog).not.toContain("/Users/alice")
   })
 
-  it("passes the sender webContents id to the registry invoker", async () => {
-    const { createElectronTransportInstall } = await import("../electron-adapter")
-    const install = createElectronTransportInstall()
-    const invoker = vi.fn(async () => "ok")
-
-    install("synapse:test:sender", invoker)
-
-    const handler = electronMock.handlers.get("synapse:test:sender")
-    await expect(handler?.({
-      senderFrame: { url: "http://localhost:5173/" },
-      sender: { id: 77 },
-    }, { value: "request" })).resolves.toBe("ok")
-
-    expect(invoker).toHaveBeenCalledWith(
-      { value: "request" },
-      { senderWebContentsId: 77 },
-    )
-  })
 })

@@ -47,6 +47,8 @@ describe("Content capability domain", () => {
     expect(create?.description).toContain("sourceDirectoryPath")
     expect(create?.description).toContain("200 attachment directories")
     expect(JSON.stringify(create?.inputSchema.properties.sourceDirectoryPath)).toContain("depth 8")
+    expect(JSON.stringify(create?.inputSchema.properties.sourceDirectoryPath)).toContain("without reading excluded runtime env files")
+    expect(JSON.stringify(create?.inputSchema.properties.sourceDirectoryPath)).toContain(".synapse.repository.json")
     expect(update?.inputSchema).toMatchObject({
       required: ["id", "baseHistoryDirname"],
     })

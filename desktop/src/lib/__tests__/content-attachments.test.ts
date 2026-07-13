@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  assertNoPublishRuntimeEnvPath,
   assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
   normalizeContentAttachmentSegment,
@@ -63,7 +64,18 @@ describe("normalizeContentAttachmentPath", () => {
       .toThrow("附件路径不能使用 Skill 安装保留文件：skill.md")
     expect(() => assertUniqueContentAttachmentPaths([".Synapse.JSON"]))
       .toThrow("附件路径不能使用 Skill 安装保留文件：.Synapse.JSON")
+    expect(() => assertUniqueContentAttachmentPaths([".synapse.repository.json"]))
+      .toThrow("附件路径不能使用 Skill 安装保留文件：.synapse.repository.json")
     expect(() => assertUniqueContentAttachmentPaths(["references/SKILL.md"]))
       .not.toThrow()
+  })
+
+  it("allows only root .env.example in publish attachments", () => {
+    expect(() => assertNoPublishRuntimeEnvPath([".env.example", "references/guide.md"]))
+      .not.toThrow()
+    expect(() => assertNoPublishRuntimeEnvPath([".env.local"]))
+      .toThrow("运行时 .env")
+    expect(() => assertNoPublishRuntimeEnvPath(["nested/.env.example"]))
+      .toThrow("运行时 .env")
   })
 })

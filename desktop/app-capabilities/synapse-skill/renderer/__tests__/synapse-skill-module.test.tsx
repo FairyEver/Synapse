@@ -43,7 +43,7 @@ const synapseSkillBridge = vi.hoisted(() => ({
 }))
 
 const loadEditors = vi.hoisted(() => vi.fn(async () => undefined))
-const resolveEditorInstallStatus = vi.hoisted(() => vi.fn(async () => ({
+const inspectGlobalSkillInstallations = vi.hoisted(() => vi.fn(async () => ({
   entries: [
     {
       editorId: "codex",
@@ -67,8 +67,8 @@ vi.mock("@/app-shell/config", () => ({
   }),
 }))
 
-vi.mock("@/app-shell/editor-install-status", () => ({
-  resolveEditorInstallStatus,
+vi.mock("@/app-shell/installers", () => ({
+  inspectGlobalSkillInstallations,
 }))
 
 vi.mock("@/app-shell/logging", () => ({
@@ -130,7 +130,7 @@ let roots: Root[] = []
 beforeEach(() => {
   synapseSkillBridge.prepareInstallSource.mockClear()
   loadEditors.mockClear()
-  resolveEditorInstallStatus.mockClear()
+  inspectGlobalSkillInstallations.mockClear()
   showItemInFolder.mockClear()
 })
 
@@ -149,14 +149,7 @@ describe("SynapseSkillModule", () => {
     await renderModule()
 
     expect(loadEditors).toHaveBeenCalled()
-    expect(resolveEditorInstallStatus).toHaveBeenCalledWith({
-      contentId: "synapse-skill",
-      contentName: "synapse-skill",
-      contentType: "skill",
-      projects: [],
-      sourceFingerprint: "sha256:current",
-      title: "Synapse Skill",
-    })
+    expect(inspectGlobalSkillInstallations).toHaveBeenCalledWith(preparedSource)
     expect(document.body.textContent).toContain("全局安装状态")
     expect(document.body.textContent).toContain("Codex")
     expect(document.body.textContent).not.toContain("未安装")
@@ -169,6 +162,32 @@ describe("SynapseSkillModule", () => {
     await clickButton("安装")
 
     expect(synapseSkillBridge.prepareInstallSource).toHaveBeenCalled()
+    expect(document.body.textContent).toContain("synapse-skill:codex:global")
+  })
+
+  it("shows only a direct reinstall action for installed targets", async () => {
+    const installedResult = {
+      entries: [
+        {
+          editorId: "codex",
+          editorLabel: "Codex",
+          scope: "global",
+          status: "installed",
+          targetPath: "/Users/test/.agents/skills/synapse-skill",
+          message: null,
+        },
+      ],
+    }
+    inspectGlobalSkillInstallations
+      .mockResolvedValueOnce(installedResult)
+      .mockResolvedValueOnce(installedResult)
+    await renderModule()
+
+    expect(document.body.textContent).not.toContain("已安装")
+    expect(document.body.querySelector('[aria-label="Codex 更多操作"]')).toBeNull()
+
+    await clickButton("重新安装")
+
     expect(document.body.textContent).toContain("synapse-skill:codex:global")
   })
 

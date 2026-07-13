@@ -17,7 +17,8 @@ Do not use this domain file for database records, Automation schedules/items, wo
 1. Call `app_resource_repository_type_describe` before create or update to discover valid categories, icons, background colors, name constraints, and attachment constraints.
 2. Choose the resource-specific tool group: `app_resource_repository_rule_*`, `app_resource_repository_skill_*`, or `app_resource_repository_prompt_*`.
 3. For updates and deletes, call the matching `app_resource_repository_*_get` first and pass `latestHistoryDirname` as `baseHistoryDirname`.
-4. After create, update, or delete, report the returned id, status, title, and latest history version.
+4. When updating an existing local Skill directory, prefer `sourceDirectoryPath` instead of rebuilding its body and attachments with inline `files`. Omit appearance fields when the icon is unchanged.
+5. After create, update, or delete, report the returned id, status, title, and latest history version. Distinguish a locally generated repository version from a remotely synchronized version, and claim a remote push only after its status is verified.
 
 ## Ownership Rules
 
@@ -48,9 +49,9 @@ For Skill resources, use one of these attachment modes:
 
 Do not provide both `files` and `sourceDirectoryPath`.
 
-When using `files`, keep paths relative to the Skill root, such as `references/checklist.md`. Do not use absolute paths, path traversal, `SKILL.md`, or `.synapse.json`. The server normalizes paths, rejects duplicates and Skill install control files, skips unsafe names from source directories, and enforces count and size limits.
+When using `files`, keep paths relative to the Skill root, such as `references/checklist.md`. Do not use absolute paths, path traversal, `SKILL.md`, runtime `.env` files, `.synapse.json`, or `.synapse.repository.json`. The server normalizes paths, rejects duplicates and Skill install control files, skips unsafe names from source directories, and enforces count and size limits.
 
-When using `sourceDirectoryPath`, the server reads the Skill main file and imports non-hidden attachments. Source directory imports are limited to 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total. If frontmatter exists in the main file, use its metadata when the user has not provided explicit fields.
+When using `sourceDirectoryPath`, Synapse excludes `.env`, `.env.*` except root `.env.example`, both Synapse identity files, other hidden entries, and symlinks. Excluded runtime env files are identified by directory entry name and are not read. High-confidence secrets in the main file, `.env.example`, or other UTF-8 attachments block publishing without returning the secret value. Source directory imports are limited to 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total. If frontmatter exists in the main file, use its metadata when the user has not provided explicit fields.
 
 ## Resource Fields
 

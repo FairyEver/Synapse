@@ -15,10 +15,12 @@ import type {
   SynapseInstallSourceToEditorTargetsResult,
 } from "../../src/types/installers"
 import type { SynapseContentDetail } from "../../src/types/content"
+import type { SynapseEditorInstallStatusResult } from "../../src/types/editor-install-status"
 import { configStore } from "./config-store"
 import { contentService } from "./content-service"
 import { editorAdapterService } from "./editor-adapter-service"
 import { editorInstallStrategyById } from "./definitions/generated/main-registry"
+import { editorInstallStatusService } from "./editor-install-status-service"
 import { readExistingTextFile } from "./editor-file-write-utils"
 import { EditorInstallCore } from "./editor-install-core"
 import {
@@ -272,6 +274,19 @@ export class EditorInstallService {
     }
 
     return { results }
+  }
+
+  async inspectGlobalSkillInstallations(
+    source: SynapseSkillInstallerSource,
+  ): Promise<SynapseEditorInstallStatusResult> {
+    return editorInstallStatusService.resolveGlobalSkillInstallations({
+      contentId: source.sourceIdentity,
+      contentName: source.name,
+      contentType: "skill",
+      projects: [],
+      sourceFingerprint: source.sourceFingerprint,
+      title: source.title,
+    })
   }
 
   inspectSkillEnvSource(

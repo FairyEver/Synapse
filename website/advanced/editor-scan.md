@@ -22,8 +22,10 @@ Editor Scan 扫描已注册编辑器的全局和项目级 Skill / Rule，并按�
 
 ## 注意事项
 
-Skill 主文件优先按 `SKILL.md`、`skill.md`、`README.md`、`readme.md`、`index.md` 查找。目录中带 `.synapse.json` 且包含内容 ID 的 Skill 标记为 Synapse 来源，否则标记为外部来源。
+Skill 主文件优先按 `SKILL.md`、`skill.md`、`README.md`、`readme.md`、`index.md` 查找。目录中带正常资源仓库 `.synapse.json` 且包含内容 ID 的 Skill 标记为 Synapse 来源；旧云仓库身份不会被误识别。云 Skill Repository 身份单独保存在 `.synapse.repository.json`。
 
-Quick Publish 读取 Skill 附件时跳过隐藏文件、主说明文件、`.synapse.json` 和符号链接。单个附件超过 10MB、附件总大小超过 50MB、附件数量超过 200 个，或附件名属于敏感密钥文件时，导入草稿将失败。
+选择“发布到仓库”或上传到 Skill Repository 时，系统先显示发布摘要并等待确认。发布会排除 `.env`、`.env.*`（根 `.env.example` 除外）、两类身份文件、其他隐藏项和符号链接；运行时 `.env` 只按目录项名称识别，不读取内容。主说明、`.env.example` 和其他 UTF-8 附件若命中高置信度密钥检查，发布会停止且不会显示密钥值。发布最多包含 100 个文件、200 个附件目录，目录深度不超过 8 层，单文件不超过 10MB，总大小不超过 50MB。
+
+保存发布内容后，系统先显示“已保存到本地，正在同步仓库”；只有后台同步成功后才显示仓库同步完成。本地 Skill 只有在预检快照、保存后的安装内容和身份文件均未发生冲突时才会更新 `.synapse.json` 关联；失败不会重复提交仓库内容，并可重试关联写入。
 
 移动到废纸篓前，系统检查写入权限并记录审计。部分 Rule 若没有明确边界，将显示不支持移动到废纸篓，需要在 Finder 中处理。

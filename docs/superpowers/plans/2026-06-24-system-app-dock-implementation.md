@@ -158,7 +158,6 @@ it("lists all system apps in launcher order", () => {
     "database",
     "document-template",
     "terminal",
-    "screenshot",
     "editor-scan",
     "usage-monitor",
     "model-price",
@@ -225,7 +224,6 @@ export const SYSTEM_APP_IDS = [
   "database",
   "document-template",
   "terminal",
-  "screenshot",
   "editor-scan",
   "usage-monitor",
   "model-price",
@@ -247,7 +245,6 @@ export type SynapseSystemAppNamespace =
   | "database"
   | "document_template"
   | "terminal"
-  | "screenshot"
   | "editor_scan"
   | "usage_monitor"
   | "model_price"
@@ -320,7 +317,6 @@ git: namespace "git", order 220, no legacy unless tools are added
 database: namespace "database", order 230, legacy ["database"]
 document-template: namespace "document_template", order 240, no legacy
 terminal: namespace "terminal", order 250, no legacy
-screenshot: namespace "screenshot", order 260, no legacy
 editor-scan: namespace "editor_scan", order 270, no legacy
 usage-monitor: namespace "usage_monitor", order 280, no legacy
 model-price: namespace "model_price", order 290, legacy ["model_price"]
@@ -407,7 +403,6 @@ const systemAppDefinitions = [
   databaseAppDefinition,
   documentTemplateAppDefinition,
   terminalAppDefinition,
-  screenshotAppDefinition,
   editorScanAppDefinition,
   usageMonitorAppDefinition,
   modelPriceAppDefinition,
@@ -589,7 +584,6 @@ const appDescriptions = {
   database: "表、字段、数据记录",
   "document-template": "模板与 JSON",
   terminal: "会话、命令输入",
-  screenshot: "屏幕截图",
   "editor-scan": "编辑器扫描与安装状态",
   "usage-monitor": "CC 与 Codex 用量",
   "model-price": "模型价格规则",

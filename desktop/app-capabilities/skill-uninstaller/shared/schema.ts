@@ -22,6 +22,12 @@ export const skillUninstallScanResultSchema = z.object({
   warnings: z.array(z.string()),
 }).strict()
 
+export const skillUninstallNameScanResultSchema = z.object({
+  names: z.array(z.string().min(1)),
+  complete: z.boolean(),
+  warnings: z.array(z.string()),
+}).strict()
+
 export const skillUninstallTargetSchema = z.object({
   query: skillUninstallQuerySchema,
   path: z.string().min(1),
@@ -43,6 +49,11 @@ export const skillUninstallScanRequestSchema = z.object({
   query: skillUninstallQuerySchema,
 }).strict()
 
+export const skillUninstallNameScanRequestSchema = z.object({
+  scanId: z.string().min(1),
+  searchRootPath: trimmedNonEmptyString.optional(),
+}).strict()
+
 export const skillUninstallCancelRequestSchema = z.object({
   scanId: z.string().min(1),
 }).strict()
@@ -50,7 +61,9 @@ export const skillUninstallCancelRequestSchema = z.object({
 export type SkillUninstallQuery = z.infer<typeof skillUninstallQuerySchema>
 export type SkillUninstallCandidate = z.infer<typeof skillUninstallCandidateSchema>
 export type SkillUninstallScanResult = z.infer<typeof skillUninstallScanResultSchema>
+export type SkillUninstallNameScanResult = z.infer<typeof skillUninstallNameScanResultSchema>
 export type SkillUninstallTarget = z.infer<typeof skillUninstallTargetSchema>
 export type SkillUninstallBatchResult = z.infer<typeof skillUninstallBatchResultSchema>
 export type SkillUninstallScanRequest = z.infer<typeof skillUninstallScanRequestSchema>
+export type SkillUninstallNameScanRequest = z.infer<typeof skillUninstallNameScanRequestSchema>
 export type SkillUninstallCancelRequest = z.infer<typeof skillUninstallCancelRequestSchema>

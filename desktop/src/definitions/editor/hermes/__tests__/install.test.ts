@@ -20,7 +20,7 @@ afterEach(async () => {
 })
 
 describe("Hermes Skill installation", () => {
-  it("keeps .env.example at the Skill root and materializes a scanner-compatible .env", async () => {
+  it("keeps the Hermes layout and writes scanner-compatible metadata", async () => {
     const root = await createTempRoot()
     const stagingDirectoryPath = path.join(root, "staging")
     const existingTargetDirectoryPath = path.join(root, "existing")
@@ -60,7 +60,8 @@ describe("Hermes Skill installation", () => {
         name: "hermes-skill",
         title: "Hermes Skill",
         type: "skill",
-      },
+        sourceFingerprint: "sha256:current",
+      } as PrepareSkillDirectoryContext["detail"] & { sourceFingerprint: string },
       payload: {
         contentId: "hermes-skill",
         contentType: "skill",
@@ -87,6 +88,12 @@ describe("Hermes Skill installation", () => {
       .resolves.toBe("TOKEN=\n")
     await expect(readFile(path.join(stagingDirectoryPath, ".env"), "utf8"))
       .resolves.toBe("TOKEN=\"confirmed\"\n")
+    await expect(readFile(path.join(stagingDirectoryPath, ".synapse.json"), "utf8"))
+      .resolves.toBe(JSON.stringify({
+        id: "hermes-skill",
+        repositoryVersion: "20260710000000",
+        sourceFingerprint: "sha256:current",
+      }, null, 2))
     await expect(readFile(path.join(stagingDirectoryPath, "references", "scripts", "run.js"), "utf8"))
       .resolves.toBe("export {}\n")
   })

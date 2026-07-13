@@ -23,9 +23,9 @@ Skill Repository stores Skills only. Rules and prompt sharing are intentionally 
 ## Default Flow
 
 1. For an existing local Skill folder, call `app_skill_repository_import_local` with `sourceDirectoryPath`.
-2. The local folder must contain root `SKILL.md`. The tool uploads `SKILL.md` and non-hidden attachments.
-3. If the upload succeeds, Synapse attempts to write `.synapse.json` into the local Skill folder through its local permission and audit boundary. Check `identityWritten`; if it is false, the cloud upload succeeded but the local folder was not linked.
-4. For later updates, prefer `app_skill_repository_update_local` when the target `repositoryId` is known. `app_skill_repository_import_local` can also use the local `.synapse.json` cloud identity when present.
+2. The local folder must contain root `SKILL.md`. Synapse excludes runtime `.env` files, both identity files, other hidden entries, and symlinks; excluded runtime env files are not read. High-confidence secrets block upload.
+3. If the upload succeeds, Synapse attempts to write `.synapse.repository.json` through its local permission and audit boundary. Check `identityWritten`; if it is false, the cloud upload succeeded but the local folder was not linked.
+4. For later updates, prefer `app_skill_repository_update_local` when the target `repositoryId` is known. `app_skill_repository_import_local` uses `.synapse.repository.json` when present. A legacy cloud identity in `.synapse.json` remains readable and migrates after a successful upload without overwriting a normal Resource Repository identity.
 5. Use `app_skill_repository_set_visibility` when the user explicitly wants a repository to become private or public.
 6. Use `app_skill_repository_open` to get the management URL. It opens the user's browser only when `openInBrowser` is true.
 7. Use `app_skill_repository_open_public` to get the public page URL for a public repository.
@@ -53,7 +53,7 @@ Admin removal only hides or restores public Skill repositories from the public s
 
 ## Safety
 
-Uploading reads local files and writing `.synapse.json` modifies the local Skill folder. These actions go through Synapse permission and audit checks. A denied write permission stops the cloud upload before mutation; a later filesystem write failure is returned as `identityWritten: false`.
+Uploading reads only publishable local files and writing `.synapse.repository.json` modifies the local Skill folder. These actions go through Synapse permission and audit checks. A denied write permission stops the cloud upload before mutation; a later filesystem write failure is returned as `identityWritten: false`.
 
 Do not upload arbitrary project folders as Skills. Use a folder that is intended to be a Skill and contains root `SKILL.md`.
 

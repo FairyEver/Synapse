@@ -88,6 +88,13 @@ const installSourceToEditorTargetsSchema = z.object({
 export const installersIpcModule: IpcModule = {
   id: "installers",
   methods: {
+    inspectGlobalSkillInstallations: {
+      kind: "invoke",
+      channel: "synapse:installers:inspect-global-skill-installations",
+      request: skillInstallerSourceSchema,
+      handler: (_ctx, source: SynapseSkillInstallerSource) =>
+        editorInstallService.inspectGlobalSkillInstallations(source),
+    },
     inspectSkillEnvSource: {
       kind: "invoke",
       channel: "synapse:installers:inspect-skill-env-source",

@@ -130,6 +130,16 @@ function createDeps(options: {
         size: 5,
         bytes: new Uint8Array([104, 101, 108, 108, 111]),
       }],
+      publishFingerprint: "sha256:publish",
+      sourceFingerprint: "sha256:source",
+      sourceImportSummary: {
+        controlFilesExcluded: [],
+        fileCount: 2,
+        hiddenEntryCount: 0,
+        runtimeEnvExcluded: false,
+        symlinkCount: 0,
+        totalBytes: 128,
+      },
     })),
     resolveCurrentIdentity: vi.fn(async () => ({ userId: options.currentUserId ?? "user-1" })),
   }
@@ -287,7 +297,7 @@ describe("content capability dispatcher", () => {
       sourceDirectoryPath: "/tmp/demo-skill",
     }, { source: "mcp-stdio" })
 
-    expect(deps.readSkillDraftFromDirectory).toHaveBeenCalledWith("/tmp/demo-skill", undefined)
+    expect(deps.readSkillDraftFromDirectory).toHaveBeenCalledWith("/tmp/demo-skill", undefined, { mode: "publish" })
     expect(deps.contentWriter.createContent).toHaveBeenCalledWith(expect.objectContaining({
       contentType: "skill",
       payload: expect.objectContaining({

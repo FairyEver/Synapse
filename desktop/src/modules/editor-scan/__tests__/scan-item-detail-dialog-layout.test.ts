@@ -220,6 +220,9 @@ describe("scan item detail dialog layout", () => {
     expect(source).toContain('item.type === "skill"')
     expect(source).toContain("getUploadSkillToSkillRepositoryDisabledReason")
     expect(source).toContain("handleUploadSkillToSkillRepository")
+    expect(source).toContain("prepareSkillRepositoryUpload")
+    expect(source).toContain("isSkillRepositoryUploadConfirmOpen")
+    expect(source).toContain("expectedSourceFingerprint")
   })
 
   it("opens Synapse after uploading to Skill Repository", async () => {

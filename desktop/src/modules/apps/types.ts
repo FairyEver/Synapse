@@ -18,7 +18,6 @@ export const SYSTEM_APP_IDS = [
   "quick-input",
   "sound-notifier",
   "terminal",
-  "screenshot",
   "editor-scan",
   "usage-monitor",
   "model-price",
@@ -47,7 +46,6 @@ export type SynapseSystemAppNamespace =
   | "quick_input"
   | "sound_notifier"
   | "terminal"
-  | "screenshot"
   | "editor_scan"
   | "usage_monitor"
   | "model_price"

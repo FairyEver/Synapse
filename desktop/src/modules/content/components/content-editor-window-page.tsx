@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { AlertTriangle, LoaderCircle } from "lucide-react"
+import { toast } from "sonner"
 import {
   createContent,
   listContent,
@@ -10,6 +11,7 @@ import {
   updateContent,
 } from "@/app-shell/content"
 import { createRendererLogger } from "@/app-shell/logging"
+import { getSynapseBridge } from "@/lib/electron-bridge"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -82,6 +84,13 @@ type SkillAttachmentLoadState = {
   errorMessage?: string
   path: string
   status: "idle" | "loading" | "ready" | "binary" | "error"
+}
+
+type SkillPublishFinalizeRetry = {
+  contentId: string
+  mode: "new" | "overwrite"
+  repositoryVersion: string
+  sessionId: string
 }
 
 const CONTENT_LABELS: Record<SynapseContentType, string> = {
@@ -618,7 +627,52 @@ function SkillEditorWindow({ request }: ContentEditorWindowPageProps) {
     path: "",
     status: "idle",
   })
+  const [publishFinalizeRetry, setPublishFinalizeRetry] = useState<SkillPublishFinalizeRetry | null>(null)
+  const [isPublishFinalizeRetrying, setIsPublishFinalizeRetrying] = useState(false)
   const mode = request.kind
+
+  const finalizePublishedSkill = useCallback(async (
+    saved: Omit<SkillPublishFinalizeRetry, "sessionId">,
+  ): Promise<boolean> => {
+    const sessionId = initPayload?.quickPublishSessionId
+    if (!sessionId) return true
+    const retry = { ...saved, sessionId }
+    const bridge = getSynapseBridge()
+    if (!bridge) {
+      setPublishFinalizeRetry(retry)
+      return false
+    }
+    const result = await bridge.editorScan.finalizeQuickPublish(retry)
+    if (result.status === "write-failed") {
+      setPublishFinalizeRetry(retry)
+      return false
+    }
+    if (result.status === "identity-written") toast.success(result.message)
+    else toast.warning(result.message)
+    return true
+  }, [initPayload?.quickPublishSessionId])
+
+  const retryPublishFinalize = useCallback(async () => {
+    if (!publishFinalizeRetry) return
+    setIsPublishFinalizeRetrying(true)
+    try {
+      const bridge = getSynapseBridge()
+      if (!bridge) throw new Error("当前窗口无法更新本地关联。")
+      const result = await bridge.editorScan.finalizeQuickPublish(publishFinalizeRetry)
+      if (result.status === "write-failed") {
+        toast.error(result.message)
+        return
+      }
+      setPublishFinalizeRetry(null)
+      if (result.status === "identity-written") toast.success(result.message)
+      else toast.warning(result.message)
+      window.close()
+    } catch {
+      toast.error("本地关联更新失败，请重试。")
+    } finally {
+      setIsPublishFinalizeRetrying(false)
+    }
+  }, [publishFinalizeRetry])
 
   useEffect(() => {
     let canceled = false
@@ -664,6 +718,14 @@ function SkillEditorWindow({ request }: ContentEditorWindowPageProps) {
       if (request.kind === "create") {
         const result = await createContent("skill", finalPayload)
         if (result.status === "conflict") throw new Error("内容已更新，请刷新后再编辑。")
+        toast.info(result.pendingPushCount > 0
+          ? "已保存到本地，正在同步仓库。"
+          : result.pushed ? "仓库同步完成。" : "已保存到本地。")
+        if (!await finalizePublishedSkill({
+          contentId: result.id,
+          mode: "new",
+          repositoryVersion: result.latestHistoryDirname,
+        })) return
         window.close()
         return
       }
@@ -671,6 +733,14 @@ function SkillEditorWindow({ request }: ContentEditorWindowPageProps) {
       if (!detail) throw new Error("内容尚未加载。")
       const result = await updateContent("skill", { ...finalPayload, id: detail.id, baseHistoryDirname: detail.latestHistoryDirname })
       if (result.status === "conflict") throw new Error("内容已更新，请刷新后再编辑。")
+      toast.info(result.pendingPushCount > 0
+        ? "已保存到本地，正在同步仓库。"
+        : result.pushed ? "仓库同步完成。" : "已保存到本地。")
+      if (!await finalizePublishedSkill({
+        contentId: result.id,
+        mode: "overwrite",
+        repositoryVersion: result.latestHistoryDirname,
+      })) return
       if (request.origin === "detail") {
         await openContentDetailWindow({ contentType: "skill", id: result.id, title: result.title, viewMode: "rendered" })
       }
@@ -911,6 +981,20 @@ function SkillEditorWindow({ request }: ContentEditorWindowPageProps) {
         onOpenChange={formState.setIsDiscardConfirmOpen}
         onDiscard={formState.handleDiscard}
       />
+      <AlertDialog open={publishFinalizeRetry !== null}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>内容已保存，本地关联未更新</AlertDialogTitle>
+            <AlertDialogDescription>可以重试更新关联；关闭不会重复提交仓库内容。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => window.close()}>关闭</Button>
+            <Button disabled={isPublishFinalizeRetrying} onClick={() => void retryPublishFinalize()}>
+              {isPublishFinalizeRetrying ? "重试中" : "重试更新关联"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

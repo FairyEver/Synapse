@@ -76,7 +76,7 @@ Rule `name` may use lowercase letters, numbers, hyphens, and dots. It is limited
 
 Skill `name` may use only lowercase letters, numbers, and hyphens. It is limited to 64 characters, must start and end with a lowercase letter or number, and rejects Windows reserved names such as `con`, `aux`, `nul`, `com1`, or `lpt1`. Do not use dots; Synapse writes this value into the installed Skill directory and `SKILL.md` frontmatter.
 
-`files` are attachments only. Do not include `SKILL.md` or `.synapse.json`; Synapse generates those install files from the Skill body and repository metadata.
+`files` are attachments only. Do not include `SKILL.md`, runtime `.env` files, `.synapse.json`, or `.synapse.repository.json`; Synapse generates install control files from the Skill body and repository metadata.
 
 To import an existing Skill directory:
 
@@ -90,7 +90,7 @@ To import an existing Skill directory:
 }
 ```
 
-`sourceDirectoryPath` imports the Skill main file and non-hidden attachments. Directory imports are limited to 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total.
+`sourceDirectoryPath` imports the Skill main file and safe attachments. It excludes `.env`, `.env.*` except root `.env.example`, `.synapse.json`, `.synapse.repository.json`, other hidden entries, and symlinks; excluded runtime env files are never read. High-confidence secrets in published UTF-8 files block the mutation without exposing their value. Directory imports are limited to 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total. Successful source imports may return `sourceImportSummary` with included counts, total size, and exclusion counts.
 
 `app_resource_repository_prompt_create`
 
@@ -121,7 +121,9 @@ Update payloads use the same fields as create, plus:
 
 Updates are rejected unless the current repository profile created the resource.
 
-For `app_resource_repository_skill_update` with `sourceDirectoryPath`, omit appearance fields when you want to preserve the current built-in icon or image icon.
+When updating an existing local Skill directory, prefer `sourceDirectoryPath` instead of rebuilding the body and attachments with inline `files`. For `app_resource_repository_skill_update` with `sourceDirectoryPath`, omit appearance fields when you want to preserve the current built-in icon or image icon.
+
+A successful mutation may first create a local repository version while remote synchronization is still pending. Report these states separately, and claim that the version was pushed only after remote synchronization is verified.
 
 ## Delete
 

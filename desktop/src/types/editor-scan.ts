@@ -97,12 +97,23 @@ export type EditorScanQuickPublishRequest = {
   itemName: string
   ruleContent?: string
   metadata?: Record<string, string>
+  purpose?: "copy" | "publish"
+  synapseContentId?: string
 }
 
 export type EditorScanQuickPublishSkillFile = {
   originalName: string
   size: number
   bytes: Uint8Array
+}
+
+export type EditorScanSourceImportSummary = {
+  controlFilesExcluded: string[]
+  fileCount: number
+  hiddenEntryCount: number
+  runtimeEnvExcluded: boolean
+  symlinkCount: number
+  totalBytes: number
 }
 
 export type EditorScanQuickPublishDraft =
@@ -120,7 +131,29 @@ export type EditorScanQuickPublishDraft =
       content: string
       files: EditorScanQuickPublishSkillFile[]
       metadata: Record<string, string>
+      publishFingerprint: string
+      publishSessionId?: string
+      sourceFingerprint: string
+      sourceImportSummary: EditorScanSourceImportSummary
     }
+
+export type EditorScanFinalizeQuickPublishRequest = {
+  contentId: string
+  mode: "new" | "overwrite"
+  repositoryVersion: string
+  sessionId: string
+}
+
+export type EditorScanFinalizeQuickPublishResult = {
+  message: string
+  status:
+    | "content-mismatch"
+    | "identity-conflict"
+    | "identity-written"
+    | "session-expired"
+    | "source-changed"
+    | "write-failed"
+}
 
 export type EditorScanTrashRequest = {
   itemType: "rule"
@@ -147,6 +180,7 @@ export type EditorScanSkillRepositoryUploadRequest = {
   scope: EditorScanScope
   projectPath?: string | null
   mainFileName?: string | null
+  expectedSourceFingerprint?: string
 }
 
 export type EditorScanSkillRepositoryUploadResult = {
@@ -156,4 +190,7 @@ export type EditorScanSkillRepositoryUploadResult = {
   managementUrl: string
   identityWritten: boolean
   identityWriteError?: string
+  identityMigrated: boolean
+  identityMigrationWarning?: string
+  sourceImportSummary: EditorScanSourceImportSummary
 }

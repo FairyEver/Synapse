@@ -35,8 +35,6 @@ import { createSynapseActionRouter } from "../capabilities/action-router"
 import { createAppCapabilityDispatcher } from "../../app-capabilities/dispatcher"
 import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabilities/document-template/main/dispatcher"
 import { createDocumentTemplateService } from "../../app-capabilities/document-template/main/service"
-import { createScreenshotCapabilityDispatcher } from "../../app-capabilities/screenshot/main/dispatcher"
-import { createScreenshotService } from "../../app-capabilities/screenshot/main/service"
 import { createSoundNotifierCapabilityDispatcher } from "../../app-capabilities/sound-notifier/main/dispatcher"
 import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
 import { createSoundNotifierService, type SoundNotifierService } from "../../app-capabilities/sound-notifier/main/service"
@@ -1029,11 +1027,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       permissionGuard,
       auditSink,
     })
-    const screenshotDispatcher = createScreenshotCapabilityDispatcher({
-      service: createScreenshotService(),
-      permissionGuard,
-      auditSink,
-    })
     const soundNotifierDispatcher = createSoundNotifierCapabilityDispatcher({
       service: ctx.registry.get<SoundNotifierService>("core.sound-notifier"),
     })
@@ -1048,7 +1041,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     })
     const appDispatcher = createAppCapabilityDispatcher({
       documentTemplate: documentTemplateDispatcher,
-      screenshot: screenshotDispatcher,
       secrets: secretsDispatcher,
       soundNotifier: soundNotifierDispatcher,
       swarmTask: swarmTaskDispatcher,

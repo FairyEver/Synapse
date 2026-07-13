@@ -185,35 +185,6 @@ describe("IpcRegistryImpl (T3.2)", () => {
     expect(Date.now() - t0).toBeGreaterThanOrEqual(8)
   })
 
-  it("passes per-invocation transport context to handlers", async () => {
-    const harness = createInMemoryHarness()
-    const seenSenderIds: Array<number | undefined> = []
-    harness.registry.register(
-      {
-        id: "sender-demo",
-        methods: {
-          readSender: {
-            kind: "invoke",
-            channel: "synapse:sender-demo:read-sender",
-            request: z.object({}),
-            response: z.number().optional(),
-            handler: (handlerCtx) => {
-              seenSenderIds.push(handlerCtx.senderWebContentsId)
-              return handlerCtx.senderWebContentsId
-            },
-          },
-        },
-        events: {},
-      },
-      { ...ctx, moduleId: "sender-demo" },
-    )
-
-    await expect(harness.invoke("synapse:sender-demo:read-sender", {}, { senderWebContentsId: 42 }))
-      .resolves.toBe(42)
-
-    expect(seenSenderIds).toEqual([42])
-  })
-
   it("unregister() is idempotent — calling twice does not throw or re-detach", () => {
     const harness = createInMemoryHarness()
     const result = harness.registry.register(demoModule(), ctx)

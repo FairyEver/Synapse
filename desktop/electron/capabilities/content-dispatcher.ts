@@ -57,6 +57,7 @@ type ContentCapabilityDispatcherDeps = {
   readSkillDraftFromDirectory: (
     sourceDirectoryPath: string,
     security?: ContentIconImageSecurityDeps,
+    options?: { mode?: "install" | "publish" },
   ) => Promise<ContentSkillSourceDraft>
   resolveCurrentIdentity: () => Promise<ContentIdentity>
   security?: ContentIconImageSecurityDeps
@@ -72,6 +73,7 @@ type MutatingContentOperation = Extract<ParsedContentAction["operation"], "creat
 type SkillSourceMergeResult = {
   params: ContentToolParams
   sourceFiles?: SynapseCreateSkillFilePayload[]
+  sourceImportSummary?: ContentSkillSourceDraft["sourceImportSummary"]
 }
 
 const CONTENT_ACTION_PATTERN = /^content\.(rule|skill|prompt)\.(list|get|create|update|delete)$/u
@@ -308,7 +310,10 @@ async function createContent(
   } as SynapseCreateContentRequest)
   emitContentChanged(deps, "create", result)
 
-  return { ok: true, data: result }
+  return {
+    ok: true,
+    data: merged.sourceImportSummary ? { ...result, sourceImportSummary: merged.sourceImportSummary } : result,
+  }
 }
 
 async function updateContent(
@@ -336,7 +341,10 @@ async function updateContent(
   assertNoMutationConflict(result)
   emitContentChanged(deps, "update", result)
 
-  return { ok: true, data: result }
+  return {
+    ok: true,
+    data: merged.sourceImportSummary ? { ...result, sourceImportSummary: merged.sourceImportSummary } : result,
+  }
 }
 
 async function deleteContent(
@@ -414,7 +422,11 @@ async function mergeSkillSourceParams(
     return { params }
   }
 
-  const sourceDraft = await deps.readSkillDraftFromDirectory(sourceDirectoryPath, security ?? deps.security)
+  const sourceDraft = await deps.readSkillDraftFromDirectory(
+    sourceDirectoryPath,
+    security ?? deps.security,
+    { mode: "publish" },
+  )
   const parsed = parseFrontmatter(sourceDraft.content)
   const metadata = sourceDraft.metadata
   const fallbackName = path.basename(sourceDirectoryPath)
@@ -436,6 +448,7 @@ async function mergeSkillSourceParams(
       ...mergeExistingAppearanceParams(params, currentDetail),
     },
     sourceFiles: sourceDraft.files,
+    sourceImportSummary: sourceDraft.sourceImportSummary,
   }
 }
 

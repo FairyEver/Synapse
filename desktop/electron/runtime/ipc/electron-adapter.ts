@@ -6,7 +6,6 @@
  */
 
 import { ipcMain } from "electron"
-import type { IpcInvocationContext } from "./types"
 import type { SynapseGitUserFacingFailure } from "../../../src/types/git"
 import { assertTrustedIpcSender } from "../../ipc/validated-ipc"
 import { sanitizeGitDiagnosticText } from "../../services/git-client/git-sanitize"
@@ -172,13 +171,13 @@ function redactDiagnosticText(value: string): string {
  * Each installed handler returns a disposer that removes the listener.
  */
 export function createElectronTransportInstall(options: ElectronTransportInstallOptions = {}) {
-  return (channel: string, invoker: (request: unknown, invocation?: IpcInvocationContext) => Promise<unknown>) => {
+  return (channel: string, invoker: (request: unknown) => Promise<unknown>) => {
     // eslint-disable-next-line no-restricted-properties -- This adapter is the single Electron transport boundary for IpcRegistry.
     ipcMain.handle(channel, async (event, request) => {
       assertTrustedIpcSender(event)
       const startedAt = performance.now()
       try {
-        return await invoker(request, invocationContextFromEvent(event))
+        return await invoker(request)
       } catch (error) {
         options.logger?.error("IPC invoke failed.", {
           channel,
@@ -193,10 +192,4 @@ export function createElectronTransportInstall(options: ElectronTransportInstall
       ipcMain.removeHandler(channel)
     }
   }
-}
-
-function invocationContextFromEvent(event: { readonly sender?: { readonly id?: unknown } }): IpcInvocationContext {
-  return typeof event.sender?.id === "number"
-    ? { senderWebContentsId: event.sender.id }
-    : {}
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import {
+  skillUninstallNameScanRequestSchema,
   skillUninstallQuerySchema,
   skillUninstallTargetSchema,
 } from "../../shared/schema"
@@ -31,6 +32,15 @@ describe("skill uninstaller schemas", () => {
     })).toThrow()
   })
 
+  it("accepts an optional search root for name scans", () => {
+    expect(skillUninstallNameScanRequestSchema.parse({ scanId: "names-1" }))
+      .toEqual({ scanId: "names-1" })
+    expect(skillUninstallNameScanRequestSchema.parse({
+      scanId: "names-1",
+      searchRootPath: " /repo ",
+    })).toEqual({ scanId: "names-1", searchRootPath: "/repo" })
+  })
+
   it("accepts a non-fatal warning on a trashed result", async () => {
     const { skillUninstallBatchResultSchema } = await import("../../shared/schema")
     expect(skillUninstallBatchResultSchema.parse({
@@ -48,9 +58,31 @@ describe("skill uninstaller schemas", () => {
     })
   })
 
-  it("registers scan, cancel, and uninstall channels", async () => {
+  it("registers candidate scan, name scan, cancel, and uninstall channels", async () => {
     const { skillUninstallerIpcModule } = await import("../ipc")
-    expect(Object.keys(skillUninstallerIpcModule.methods)).toEqual(["scan", "cancelScan", "uninstall"])
+    expect(Object.keys(skillUninstallerIpcModule.methods)).toEqual([
+      "scan",
+      "scanNames",
+      "cancelScan",
+      "uninstall",
+    ])
+  })
+
+  it("passes name scans through the shared scan controller", async () => {
+    const { createSkillUninstallerIpcModule } = await import("../ipc")
+    const scanNames = vi.fn(async () => ({ names: ["jenkins"], complete: true, warnings: [] }))
+    const module = createSkillUninstallerIpcModule({
+      scan: vi.fn(),
+      scanNames,
+      uninstall: vi.fn(),
+    } as never)
+    const ctx = { resolve: vi.fn(() => ({})) }
+
+    await expect(module.methods.scanNames.handler(ctx as never, {
+      scanId: "names-1",
+      searchRootPath: "/repo",
+    })).resolves.toEqual({ names: ["jenkins"], complete: true, warnings: [] })
+    expect(scanNames).toHaveBeenCalledWith("/repo", expect.any(Object), expect.any(AbortSignal))
   })
 
   it("removes a scan controller immediately after cancellation", async () => {

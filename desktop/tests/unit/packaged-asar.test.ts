@@ -35,14 +35,6 @@ function currentClaudeBinarySegments(): readonly string[] {
   ]
 }
 
-function currentNodeScreenshotsBinarySegments(): readonly string[] {
-  const packageName = process.platform === "win32"
-    ? `node-screenshots-win32-${process.arch}-msvc`
-    : `node-screenshots-${process.platform}-${process.arch}`
-  const binaryName = `node-screenshots.${packageName.replace("node-screenshots-", "")}.node`
-  return ["app.asar.unpacked", "node_modules", packageName, binaryName]
-}
-
 function hash(value: Buffer): string {
   return createHash("sha256").update(value).digest("hex")
 }
@@ -268,7 +260,6 @@ describe("packaged asar verification", () => {
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
-      await writeUnpackedFixture(resourcesPath, currentNodeScreenshotsBinarySegments())
       await writeExtraResourceFixtures(resourcesPath)
 
       const result = await execFileAsync(process.execPath, [
@@ -428,7 +419,6 @@ describe("packaged asar verification", () => {
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeUsageAnalysisWorkers: true }))
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
-      await writeUnpackedFixture(resourcesPath, currentNodeScreenshotsBinarySegments())
       await writeExtraResourceFixtures(resourcesPath)
       await writeUnpackedFixture(
         resourcesPath,
@@ -470,7 +460,6 @@ describe("packaged asar verification", () => {
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeUsageAnalysisWorkers: true }))
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
-      await writeUnpackedFixture(resourcesPath, currentNodeScreenshotsBinarySegments())
       await writeExtraResourceFixtures(resourcesPath)
       await writeUnpackedFixture(
         resourcesPath,

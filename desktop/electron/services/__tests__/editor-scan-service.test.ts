@@ -26,8 +26,11 @@ import {
   buildSkillQuickPublishPayload,
 } from "../../../src/modules/editor-scan/lib/quick-publish"
 import { configStore } from "../config-store"
+import { contentHistoryService } from "../content-history-service"
+import * as editorScanRoots from "../editor-scan-roots"
 import {
   EDITOR_SCAN_SKILL_FILE_LIST_LIMITS,
+  finalizeQuickPublish,
   listSkillFiles,
   prepareQuickPublishDraft,
   readItemContent,
@@ -119,6 +122,103 @@ afterEach(async () => {
 })
 
 describe("editor scan quick publish", () => {
+  it("links a saved Skill only when the checked snapshot still matches", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "release-helper")
+    await mkdir(skillDir)
+    await writeFile(path.join(skillDir, "SKILL.md"), [
+      "---",
+      "name: release-helper",
+      "description: Release helper.",
+      "---",
+      "# Release Helper",
+    ].join("\n"))
+    vi.spyOn(editorScanRoots, "listTrustedSkillRoots").mockResolvedValue([{
+      editors: [{ id: "codex", label: "Codex" }],
+      scope: "global",
+      path: root,
+    }])
+    const config = createDefaultConfig()
+    config.activeRepoUuid = "repo-1"
+    config.repositories = [{
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: root,
+      contentDirs: { skill: "skills" },
+    }]
+    vi.spyOn(configStore, "load").mockResolvedValue(config)
+    vi.spyOn(contentHistoryService, "readCurrentDetail").mockResolvedValue({
+      attachmentCount: 0,
+      attachments: [],
+      category: "development",
+      content: "# Release Helper",
+      createdAt: "2026-07-13T00:00:00.000Z",
+      createdBy: "user-1",
+      createdByDisplayName: "User",
+      deleted: false,
+      description: "Release helper.",
+      icon: "wrench",
+      iconBg: "default",
+      id: "skill-1",
+      latestHistoryDirname: "20260713010101",
+      modifiedAt: "2026-07-13T00:00:00.000Z",
+      modifiedBy: "user-1",
+      modifiedByDisplayName: "User",
+      name: "release-helper",
+      title: "Release Helper",
+      type: "skill",
+    })
+    const { security } = createAllowingSecurity()
+
+    const draft = await prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: skillDir,
+      itemName: "release-helper",
+      purpose: "publish",
+    }, security)
+    expect(draft.itemType).toBe("skill")
+    if (draft.itemType !== "skill" || !draft.publishSessionId) return
+
+    await expect(finalizeQuickPublish({
+      contentId: "skill-1",
+      mode: "new",
+      repositoryVersion: "20260713010101",
+      sessionId: draft.publishSessionId,
+    }, security)).resolves.toMatchObject({ status: "identity-written" })
+    await expect(readFile(path.join(skillDir, ".synapse.json"), "utf8")).resolves.toContain('"id": "skill-1"')
+  })
+
+  it("keeps a saved resource but skips linking when the local source changed", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "release-helper")
+    await mkdir(skillDir)
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Release Helper\n")
+    vi.spyOn(editorScanRoots, "listTrustedSkillRoots").mockResolvedValue([{
+      editors: [{ id: "codex", label: "Codex" }],
+      scope: "global",
+      path: root,
+    }])
+    const { security } = createAllowingSecurity()
+    const draft = await prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: skillDir,
+      itemName: "release-helper",
+      purpose: "publish",
+    }, security)
+    expect(draft.itemType).toBe("skill")
+    if (draft.itemType !== "skill" || !draft.publishSessionId) return
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Changed\n")
+
+    await expect(finalizeQuickPublish({
+      contentId: "skill-1",
+      mode: "new",
+      repositoryVersion: "20260713010101",
+      sessionId: draft.publishSessionId,
+    }, security)).resolves.toMatchObject({ status: "source-changed" })
+    await expect(readFile(path.join(skillDir, ".synapse.json"), "utf8"))
+      .rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("checks read permission before returning scanned item content and attachments", async () => {
     const root = await createTempDir()
     const rulePath = path.join(root, "AGENTS.md")

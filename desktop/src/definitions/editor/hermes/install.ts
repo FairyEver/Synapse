@@ -34,9 +34,14 @@ export const installStrategy: EditorInstallStrategy = {
       skillMainContent.endsWith("\n") ? skillMainContent : `${skillMainContent}\n`,
     )
 
+    const detailWithFingerprint = detail as typeof detail & { sourceFingerprint?: string }
     await writeTextFile(
       path.join(stagingDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME),
-      JSON.stringify({ id: detail.id }, null, 2),
+      JSON.stringify({
+        id: detail.id,
+        repositoryVersion: detail.latestHistoryDirname,
+        ...(detailWithFingerprint.sourceFingerprint ? { sourceFingerprint: detailWithFingerprint.sourceFingerprint } : {}),
+      }, null, 2),
     )
 
     for (const attachment of detail.attachments) {

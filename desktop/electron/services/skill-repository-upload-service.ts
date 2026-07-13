@@ -15,6 +15,7 @@ import { AccountAuthenticationRequiredError, accountService } from "./account-se
 import {
   ensureSkillRepositoryIdentityWriteAllowed,
   readSkillRepositoryIdentity,
+  removeLegacySkillRepositoryIdentity,
   writeSkillRepositoryIdentity,
   type SkillRepositoryIdentityWriteSecurity,
 } from "./skill-repository-local-identity"
@@ -27,6 +28,7 @@ export type SkillRepositoryLocalImportInput = {
   readonly name?: string | null
   readonly title?: string | null
   readonly description?: string | null
+  readonly expectedSourceFingerprint?: string
   readonly openInBrowser?: boolean
 }
 
@@ -37,6 +39,9 @@ export type SkillRepositoryLocalImportResult = {
   readonly managementUrl: string
   readonly identityWritten: boolean
   readonly identityWriteError?: string
+  readonly identityMigrated: boolean
+  readonly identityMigrationWarning?: string
+  readonly sourceImportSummary: ContentSkillSourceDraft["sourceImportSummary"]
 }
 
 type SkillRepositoryUploadAccountPort = {
@@ -50,6 +55,7 @@ type SkillRepositoryUploadServiceDeps = {
   readonly openExternal?: (url: string) => Promise<void> | void
   readonly ensureIdentityWriteAllowed?: typeof ensureSkillRepositoryIdentityWriteAllowed
   readonly readIdentity?: typeof readSkillRepositoryIdentity
+  readonly removeLegacyIdentity?: typeof removeLegacySkillRepositoryIdentity
   readonly writeIdentity?: typeof writeSkillRepositoryIdentity
 }
 
@@ -59,6 +65,7 @@ export class SkillRepositoryUploadService {
   private readonly openExternal?: (url: string) => Promise<void> | void
   private readonly ensureIdentityWriteAllowed: typeof ensureSkillRepositoryIdentityWriteAllowed
   private readonly readIdentity: typeof readSkillRepositoryIdentity
+  private readonly removeLegacyIdentity: typeof removeLegacySkillRepositoryIdentity
   private readonly writeIdentity: typeof writeSkillRepositoryIdentity
 
   constructor(deps: SkillRepositoryUploadServiceDeps = {}) {
@@ -67,6 +74,7 @@ export class SkillRepositoryUploadService {
     this.openExternal = deps.openExternal
     this.ensureIdentityWriteAllowed = deps.ensureIdentityWriteAllowed ?? ensureSkillRepositoryIdentityWriteAllowed
     this.readIdentity = deps.readIdentity ?? readSkillRepositoryIdentity
+    this.removeLegacyIdentity = deps.removeLegacyIdentity ?? removeLegacySkillRepositoryIdentity
     this.writeIdentity = deps.writeIdentity ?? writeSkillRepositoryIdentity
   }
 
@@ -78,7 +86,10 @@ export class SkillRepositoryUploadService {
       throw new AccountAuthenticationRequiredError()
     }
 
-    const source = await readSkillDraftFromDirectory(input.sourceDirectoryPath, security)
+    const source = await readSkillDraftFromDirectory(input.sourceDirectoryPath, security, { mode: "publish" })
+    if (input.expectedSourceFingerprint && source.sourceFingerprint !== input.expectedSourceFingerprint) {
+      throw new Error("本地 Skill 在确认后发生变化，请重新检查发布内容。")
+    }
     if (path.basename(source.mainFilePath) !== "SKILL.md") {
       throw new Error("Skill 必须包含根目录 SKILL.md。")
     }
@@ -112,6 +123,8 @@ export class SkillRepositoryUploadService {
 
     let identityWritten = true
     let identityWriteError: string | undefined
+    let identityMigrated = false
+    let identityMigrationWarning: string | undefined
     try {
       await this.writeIdentity(source.sourceDirectoryPath, {
         id: repository.id,
@@ -119,6 +132,15 @@ export class SkillRepositoryUploadService {
         owner,
         name: repository.name,
       }, security)
+      try {
+        const verifiedIdentity = await this.readIdentity(source.sourceDirectoryPath)
+        if (verifiedIdentity?.id !== repository.id || verifiedIdentity.name !== repository.name) {
+          throw new Error("新云仓库身份验证失败，已保留旧身份文件。")
+        }
+        identityMigrated = await this.removeLegacyIdentity(source.sourceDirectoryPath, security)
+      } catch (error) {
+        identityMigrationWarning = errorMessage(error)
+      }
     } catch (error) {
       identityWritten = false
       identityWriteError = errorMessage(error)
@@ -134,7 +156,10 @@ export class SkillRepositoryUploadService {
       owner,
       managementUrl,
       identityWritten,
+      identityMigrated,
+      sourceImportSummary: source.sourceImportSummary,
       ...(identityWriteError ? { identityWriteError } : {}),
+      ...(identityMigrationWarning ? { identityMigrationWarning } : {}),
     }
   }
 }

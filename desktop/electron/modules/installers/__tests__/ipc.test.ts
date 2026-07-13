@@ -5,6 +5,7 @@ import type { SynapseInstallSourceToEditorTargetsResult } from "../../../../src/
 const mocks = vi.hoisted(() => ({
   installSourceToEditor: vi.fn(),
   installSourceToEditorTargets: vi.fn(),
+  inspectGlobalSkillInstallations: vi.fn(),
   inspectSkillEnvSource: vi.fn(),
   prepareInlineRuleSource: vi.fn(),
   prepareLocalSkillSource: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock("../../../services/editor-install-service", () => ({
   editorInstallService: {
     installSourceToEditor: mocks.installSourceToEditor,
     installSourceToEditorTargets: mocks.installSourceToEditorTargets,
+    inspectGlobalSkillInstallations: mocks.inspectGlobalSkillInstallations,
     inspectSkillEnvSource: mocks.inspectSkillEnvSource,
   },
 }))
@@ -80,6 +82,7 @@ beforeEach(() => {
     declarations: [{ name: "GITEE_TOKEN", defaultValue: "" }],
     legacyPlaceholders: ["INLINE_TOKEN"],
   })
+  mocks.inspectGlobalSkillInstallations.mockResolvedValue({ entries: [] })
 })
 
 describe("installersIpcModule", () => {
@@ -128,6 +131,22 @@ describe("installersIpcModule", () => {
       legacyPlaceholders: ["INLINE_TOKEN"],
     })
     expect(mocks.inspectSkillEnvSource).toHaveBeenCalledWith(source)
+  })
+
+  it("inspects global Skill installations through the public installer method", async () => {
+    const harness = createHarness()
+    const source = {
+      kind: "skill",
+      origin: "prepared",
+      sourceIdentity: "synapse-skill",
+      preparedSourceId: "synapse-skill:test",
+      name: "synapse-skill",
+      sourceFingerprint: "sha256:test",
+    }
+
+    await harness.invoke("synapse:installers:inspect-global-skill-installations", source)
+
+    expect(mocks.inspectGlobalSkillInstallations).toHaveBeenCalledWith(source)
   })
 
   it("rejects empty and extra fields", async () => {

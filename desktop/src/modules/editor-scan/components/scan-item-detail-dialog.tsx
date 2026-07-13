@@ -59,7 +59,11 @@ import { cn } from "@/lib/utils"
 import type { EditorWriteTargetInitialSelection } from "@/modules/content/components/editor-write-target-selector"
 import { SharedInstallerFlow } from "@/modules/installers/shared/shared-installer-flow"
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
-import type { EditorScanSkillFileEntry, ScanItemForDetail } from "@/types/editor-scan"
+import type {
+  EditorScanQuickPublishDraft,
+  EditorScanSkillFileEntry,
+  ScanItemForDetail,
+} from "@/types/editor-scan"
 import type { SynapseInstallerSource } from "@/types/installers"
 import { useScanItemContent, useSkillFiles } from "../hooks/use-scan-item-content"
 import {
@@ -81,6 +85,35 @@ const logger = createRendererLogger("editor-scan")
 function logSafeItemPath(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/")
   return normalized.split("/").pop() ?? filePath
+}
+
+type AttachmentDiff = { added: number; changed: number; removed: number }
+
+async function buildAttachmentDiff(
+  draft: Extract<EditorScanQuickPublishDraft, { itemType: "skill" }>,
+  existing: { originalName: string; sha256: string }[],
+): Promise<AttachmentDiff> {
+  const existingByName = new Map(existing.map((file) => [file.originalName, file.sha256]))
+  const draftNames = new Set(draft.files.map((file) => file.originalName))
+  let added = 0
+  let changed = 0
+
+  for (const file of draft.files) {
+    const existingHash = existingByName.get(file.originalName)
+    if (!existingHash) {
+      added += 1
+      continue
+    }
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", Uint8Array.from(file.bytes))
+    const hash = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("")
+    if (hash !== existingHash) changed += 1
+  }
+
+  return {
+    added,
+    changed,
+    removed: existing.filter((file) => !draftNames.has(file.originalName)).length,
+  }
 }
 
 type ScanItemDetailDialogProps = {
@@ -127,8 +160,13 @@ function ScanItemDetailDialog({
   const [isReinstallOpen, setIsReinstallOpen] = useState(false)
   const [isReinstallBusy, setIsReinstallBusy] = useState(false)
   const [isPublishChoiceOpen, setIsPublishChoiceOpen] = useState(false)
+  const [quickPublishDraft, setQuickPublishDraft] = useState<EditorScanQuickPublishDraft | null>(null)
+  const [overwriteDiff, setOverwriteDiff] = useState<AttachmentDiff | null>(null)
+  const [overwriteUnavailableReason, setOverwriteUnavailableReason] = useState<string | null>(null)
   const [isOverwriteBusy, setIsOverwriteBusy] = useState(false)
   const [isSkillRepositoryUploadBusy, setIsSkillRepositoryUploadBusy] = useState(false)
+  const [isSkillRepositoryUploadConfirmOpen, setIsSkillRepositoryUploadConfirmOpen] = useState(false)
+  const [skillRepositoryPublishDraft, setSkillRepositoryPublishDraft] = useState<Extract<EditorScanQuickPublishDraft, { itemType: "skill" }> | null>(null)
   const [skillRepositoryManagementUrl, setSkillRepositoryManagementUrl] = useState<string | null>(null)
 
   useEffect(() => {
@@ -143,8 +181,13 @@ function ScanItemDetailDialog({
       setIsTrashBusy(false)
       setIsReinstallBusy(false)
       setIsPublishChoiceOpen(false)
+      setQuickPublishDraft(null)
+      setOverwriteDiff(null)
+      setOverwriteUnavailableReason(null)
       setIsOverwriteBusy(false)
       setIsSkillRepositoryUploadBusy(false)
+      setIsSkillRepositoryUploadConfirmOpen(false)
+      setSkillRepositoryPublishDraft(null)
       setSkillRepositoryManagementUrl(null)
       return
     }
@@ -251,12 +294,14 @@ function ScanItemDetailDialog({
         throw new Error("当前窗口无法读取本地内容。")
       }
 
-      const draft = await bridge.editorScan.prepareQuickPublishDraft({
+      const draft = quickPublishDraft ?? await bridge.editorScan.prepareQuickPublishDraft({
         itemType: item.type,
         itemPath: item.path,
         itemName: item.name,
         ruleContent: item.type === "rule" ? item.content : undefined,
         metadata: item.metadata,
+        purpose: "publish",
+        synapseContentId: item.synapseContentId ?? undefined,
       })
       const sourceLabel = formatQuickPublishSourceLabel(item)
 
@@ -281,6 +326,7 @@ function ScanItemDetailDialog({
               contentType: "skill",
               initialValue: result.payload,
               notices: result.notices,
+              quickPublishSessionId: draft.publishSessionId,
               sourceLabel,
             })
           }
@@ -292,13 +338,56 @@ function ScanItemDetailDialog({
     } finally {
       setIsQuickPublishBusy(false)
     }
-  }, [disabledReason, item, onOpenChange])
+  }, [disabledReason, item, onOpenChange, quickPublishDraft])
+
+  const preparePublishChoice = useCallback(async () => {
+    if (!item || disabledReason) return
+    setIsQuickPublishBusy(true)
+    setQuickPublishError(null)
+    setOverwriteDiff(null)
+    setOverwriteUnavailableReason(null)
+
+    try {
+      const bridge = getSynapseBridge()
+      if (!bridge) throw new Error("当前窗口无法读取本地内容。")
+      const draft = await bridge.editorScan.prepareQuickPublishDraft({
+        itemType: item.type,
+        itemPath: item.path,
+        itemName: item.name,
+        ruleContent: item.type === "rule" ? item.content : undefined,
+        metadata: item.metadata,
+        purpose: "publish",
+        synapseContentId: item.synapseContentId ?? undefined,
+      })
+      setQuickPublishDraft(draft)
+
+      if (item.synapseContentId) {
+        try {
+          const detail = await readDetail(item.type, item.synapseContentId)
+          if (detail.deleted) {
+            setOverwriteUnavailableReason("关联内容已删除，只能发布为新内容。")
+          } else if (draft.itemType === "skill" && detail.type === "skill") {
+            setOverwriteDiff(await buildAttachmentDiff(draft, detail.attachments))
+          }
+        } catch {
+          setOverwriteUnavailableReason("关联内容不在当前仓库，只能发布为新内容。")
+        }
+      } else {
+        setOverwriteUnavailableReason("当前本地内容未关联仓库，只能发布为新内容。")
+      }
+      setIsPublishChoiceOpen(true)
+    } catch (error) {
+      setQuickPublishError(error instanceof Error ? error.message : "发布前检查失败。")
+    } finally {
+      setIsQuickPublishBusy(false)
+    }
+  }, [disabledReason, item])
 
   const handlePrimaryAction = useCallback(async () => {
     if (!item || disabledReason) return
 
     if (!item.synapseContentId) {
-      await publishAsNew()
+      await preparePublishChoice()
       return
     }
 
@@ -331,7 +420,7 @@ function ScanItemDetailDialog({
     } finally {
       setIsQuickPublishBusy(false)
     }
-  }, [disabledReason, item, onOpenChange, publishAsNew])
+  }, [disabledReason, item, onOpenChange, preparePublishChoice])
 
   const handleReinstall = useCallback(async () => {
     if (!item?.synapseContentId || disabledReason) return
@@ -412,27 +501,9 @@ function ScanItemDetailDialog({
         throw new Error("当前窗口无法读取本地内容。")
       }
 
-      const detail = await readDetail(item.type, item.synapseContentId)
-      if (detail.deleted) {
-        setIsPublishChoiceOpen(false)
-        setFallbackReason("仓库内容已删除。")
-        logger.info("Publish-to-repo overwrite fallback.", {
-          contentId: item.synapseContentId,
-          contentType: item.type,
-          editorId: item.editorId,
-          reason: "deleted",
-          scope: item.scope,
-        })
-        return
-      }
-
-      const draft = await bridge.editorScan.prepareQuickPublishDraft({
-        itemType: item.type,
-        itemPath: item.path,
-        itemName: item.name,
-        ruleContent: item.type === "rule" ? item.content : undefined,
-        metadata: item.metadata,
-      })
+      if (overwriteUnavailableReason) return
+      const draft = quickPublishDraft
+      if (!draft) throw new Error("发布快照已失效，请重新打开发布操作。")
 
       const sourceLabel = formatQuickPublishSourceLabel(item)
       const requestId = createContentOpenRequestId()
@@ -442,15 +513,17 @@ function ScanItemDetailDialog({
         () => onOpenChange(false),
         () => {
           if (draft.itemType === "rule") {
+            const normalized = buildRuleQuickPublishPayload(draft)
             requestOpenContentEditOverwrite({
               kind: "edit-overwrite",
               requestId,
               contentType: "rule",
               contentId: item.synapseContentId!,
-              prefill: { contentType: "rule", content: draft.content },
+              prefill: { contentType: "rule", content: normalized.payload.content },
               sourceLabel,
             })
           } else {
+            const normalized = buildSkillQuickPublishPayload(draft)
             requestOpenContentEditOverwrite({
               kind: "edit-overwrite",
               requestId,
@@ -458,13 +531,14 @@ function ScanItemDetailDialog({
               contentId: item.synapseContentId!,
               prefill: {
                 contentType: "skill",
-                content: draft.content,
+                content: normalized.payload.content,
                 files: draft.files.map((file) => ({
                   originalName: file.originalName,
                   size: file.size,
                   bytes: file.bytes,
                 })),
               },
+              quickPublishSessionId: draft.publishSessionId,
               sourceLabel,
             })
           }
@@ -490,7 +564,7 @@ function ScanItemDetailDialog({
     } finally {
       setIsOverwriteBusy(false)
     }
-  }, [disabledReason, item, onOpenChange])
+  }, [disabledReason, item, onOpenChange, overwriteUnavailableReason, quickPublishDraft])
 
   const handlePublishAsNewFromChoice = useCallback(async () => {
     if (!item) return
@@ -503,6 +577,33 @@ function ScanItemDetailDialog({
     setIsPublishChoiceOpen(false)
     await publishAsNew()
   }, [item, publishAsNew])
+
+  const prepareSkillRepositoryUpload = useCallback(async () => {
+    if (!item) return
+    const disabled = getUploadSkillToSkillRepositoryDisabledReason(item)
+    if (disabled) return
+    setIsSkillRepositoryUploadBusy(true)
+    setQuickPublishError(null)
+    try {
+      const bridge = getSynapseBridge()
+      if (!bridge) throw new Error("当前窗口无法读取本地内容。")
+      const draft = await bridge.editorScan.prepareQuickPublishDraft({
+        itemType: "skill",
+        itemPath: item.path,
+        itemName: item.name,
+        metadata: item.metadata,
+        purpose: "publish",
+        synapseContentId: item.synapseContentId ?? undefined,
+      })
+      if (draft.itemType !== "skill") throw new Error("读取 Skill 发布内容失败。")
+      setSkillRepositoryPublishDraft(draft)
+      setIsSkillRepositoryUploadConfirmOpen(true)
+    } catch (error) {
+      setQuickPublishError(buildUploadSkillToSkillRepositoryErrorMessage(error))
+    } finally {
+      setIsSkillRepositoryUploadBusy(false)
+    }
+  }, [item])
 
   const handleUploadSkillToSkillRepository = useCallback(async () => {
     if (!item) return
@@ -518,9 +619,18 @@ function ScanItemDetailDialog({
       }
 
       const result = await bridge.editorScan.uploadSkillToSkillRepository(
-        buildUploadSkillToSkillRepositoryRequest(item),
+        {
+          ...buildUploadSkillToSkillRepositoryRequest(item),
+          expectedSourceFingerprint: skillRepositoryPublishDraft?.sourceFingerprint,
+        },
       )
+      setIsSkillRepositoryUploadConfirmOpen(false)
       success(buildUploadSkillToSkillRepositorySuccessMessage())
+      if (!result.identityWritten) {
+        warning("云仓库已上传，但本地云仓库关联写入失败。")
+      } else if (result.identityMigrationWarning) {
+        warning("云仓库已上传，旧身份文件清理失败，不影响本次上传。")
+      }
       logger.info("Skill Repository upload completed from scan detail.", {
         editorId: item.editorId,
         itemType: item.type,
@@ -553,7 +663,7 @@ function ScanItemDetailDialog({
     } finally {
       setIsSkillRepositoryUploadBusy(false)
     }
-  }, [item, notifyError, success])
+  }, [item, notifyError, skillRepositoryPublishDraft?.sourceFingerprint, success, warning])
 
   if (!item) return null
 
@@ -622,7 +732,7 @@ function ScanItemDetailDialog({
             <AlertDialogAction
               onClick={() => {
                 setFallbackReason(null)
-                void publishAsNew()
+                void preparePublishChoice()
               }}
             >
               作为新内容导入
@@ -641,7 +751,24 @@ function ScanItemDetailDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>发布到仓库</AlertDialogTitle>
             <AlertDialogDescription>
-              把本地内容推回仓库。覆盖会替换该 {item.type === "skill" ? "Skill" : "Rule"} 在仓库的现有内容，仓库会保留历史版本，可回退。
+              {quickPublishDraft?.itemType === "skill" ? (
+                <span className="space-y-1">
+                  <span className="block">
+                    将发布 {quickPublishDraft.sourceImportSummary.fileCount} 个文件，共 {formatSkillAttachmentSize(quickPublishDraft.sourceImportSummary.totalBytes)}。
+                  </span>
+                  <span className="block">
+                    `.env`、`.synapse.json`、`.synapse.repository.json`、其他隐藏项和符号链接不会发布。
+                  </span>
+                  {overwriteDiff ? (
+                    <span className="block">
+                      覆盖附件：新增 {overwriteDiff.added}，变化 {overwriteDiff.changed}，删除 {overwriteDiff.removed}。标题、分类和图标默认保留，历史版本可回退。
+                    </span>
+                  ) : null}
+                  {overwriteUnavailableReason ? <span className="block">{overwriteUnavailableReason}</span> : null}
+                </span>
+              ) : (
+                <>覆盖会替换该 Rule 的现有正文，仓库会保留历史版本，可回退。</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -658,7 +785,7 @@ function ScanItemDetailDialog({
               发布为新内容
             </Button>
             <AlertDialogAction
-              disabled={isOverwriteBusy || isQuickPublishBusy}
+              disabled={isOverwriteBusy || isQuickPublishBusy || overwriteUnavailableReason !== null}
               onClick={(event) => {
                 event.preventDefault()
                 void handlePublishOverwrite()
@@ -666,6 +793,44 @@ function ScanItemDetailDialog({
             >
               {isOverwriteBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
               覆盖现有内容
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={isSkillRepositoryUploadConfirmOpen}
+        onOpenChange={(nextOpen) => {
+          if (!isSkillRepositoryUploadBusy) setIsSkillRepositoryUploadConfirmOpen(nextOpen)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>上传到 Skill Repository</AlertDialogTitle>
+            <AlertDialogDescription>
+              {skillRepositoryPublishDraft ? (
+                <span className="space-y-1">
+                  <span className="block">
+                    将上传 {skillRepositoryPublishDraft.sourceImportSummary.fileCount} 个文件，共 {formatSkillAttachmentSize(skillRepositoryPublishDraft.sourceImportSummary.totalBytes)}。
+                  </span>
+                  <span className="block">
+                    .env、两类身份文件、其他隐藏项和符号链接不会上传。
+                  </span>
+                </span>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSkillRepositoryUploadBusy}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isSkillRepositoryUploadBusy}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleUploadSkillToSkillRepository()
+              }}
+            >
+              {isSkillRepositoryUploadBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
+              确认上传
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -727,7 +892,6 @@ function ScanItemDetailDialog({
               titleClassName="flex min-w-0 items-center gap-2"
               description={[
                 metaEntries.length > 0 ? metaEntries.map(([k, v]) => `${k}: ${v}`).join(" · ") : null,
-                item.type === "skill" && item.fileCount != null ? `${item.fileCount} 个文件` : null,
               ].filter(Boolean).join(" · ")}
             >
               <div className="flex items-center gap-2">
@@ -845,7 +1009,7 @@ function ScanItemDetailDialog({
                           editorId: item.editorId,
                           scope: item.scope,
                         })
-                        setIsPublishChoiceOpen(true)
+                        void preparePublishChoice()
                       }}
                     >
                       发布到仓库
@@ -854,7 +1018,7 @@ function ScanItemDetailDialog({
                   {item.type === "skill" ? (
                     <DropdownMenuItem
                       disabled={isSkillRepositoryUploadBusy || uploadSkillToRepositoryDisabledReason !== null}
-                      onSelect={() => void handleUploadSkillToSkillRepository()}
+                      onSelect={() => void prepareSkillRepositoryUpload()}
                     >
                       {isSkillRepositoryUploadBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
                       上传到 Skill Repository

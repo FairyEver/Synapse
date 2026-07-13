@@ -5,6 +5,7 @@ import type { EditorScanProjectEntry, EditorScanResult } from "../../../src/type
 const mocks = vi.hoisted(() => ({
   resolveTarget: vi.fn(),
   scanAll: vi.fn(),
+  scanSkillDirectories: vi.fn(),
 }))
 
 vi.mock("../editor-adapters", () => ({
@@ -15,6 +16,13 @@ vi.mock("../editor-adapters", () => ({
       supportsGlobal: true,
       supportsProject: true,
       supportedContentTypes: ["rule", "skill"],
+      getScanPathConfig: () => ({
+        globalSkillsPath: "/global/skills",
+        globalRulesPath: "/global/AGENTS.md",
+        rulesSupported: true,
+        detectionDir: "/global",
+        projectPaths: () => ({ skillsPath: "/project/skills", rulesPath: "/project/AGENTS.md" }),
+      }),
     },
   ],
 }))
@@ -27,6 +35,7 @@ vi.mock("../editor-adapter-service", () => ({
 
 vi.mock("../editor-scan-service", () => ({
   scanAll: mocks.scanAll,
+  scanSkillDirectories: mocks.scanSkillDirectories,
 }))
 
 import { EditorInstallStatusService } from "../editor-install-status-service"
@@ -68,6 +77,107 @@ describe("EditorInstallStatusService", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.resolveTarget.mockImplementation(createReadyTarget)
+    mocks.scanSkillDirectories.mockResolvedValue({ skills: [], duplicateSkillNames: [] })
+  })
+
+  it("resolves global Skill installations without scanning projects or rules", async () => {
+    mocks.scanSkillDirectories.mockResolvedValue({
+      skills: [{
+        name: "synapse-skill",
+        path: "/global/skills/synapse-skill",
+        source: "synapse",
+        synapseContentId: "synapse-skill",
+        repositoryVersion: "system",
+        sourceFingerprint: "sha256:old",
+        preview: "Use Synapse MCP tools.",
+        fileCount: 2,
+        trash: { mode: "path" },
+      }],
+      duplicateSkillNames: [],
+    })
+
+    const result = await new EditorInstallStatusService().resolveGlobalSkillInstallations({
+      contentType: "skill",
+      contentId: "synapse-skill",
+      contentName: "synapse-skill",
+      title: "Synapse Skill",
+      sourceFingerprint: "sha256:new",
+      projects: [],
+    })
+
+    expect(mocks.scanSkillDirectories).toHaveBeenCalledWith(["/global/skills"])
+    expect(mocks.scanAll).not.toHaveBeenCalled()
+    expect(result.entries).toEqual([
+      expect.objectContaining({ editorId: "codex", scope: "global", status: "needs_update" }),
+    ])
+  })
+
+  it.each([
+    {
+      name: "matching fingerprint",
+      installedContentId: "synapse-skill",
+      installedFingerprint: "sha256:current",
+      expectedStatus: "installed",
+    },
+    {
+      name: "legacy built-in without fingerprint",
+      installedContentId: "builtin__skill__synapse-skill",
+      installedFingerprint: undefined,
+      expectedStatus: "needs_update",
+    },
+    {
+      name: "external same-name Skill",
+      installedContentId: null,
+      installedFingerprint: undefined,
+      expectedStatus: "external_same_name",
+    },
+  ])("classifies a global installation with $name", async ({
+    installedContentId,
+    installedFingerprint,
+    expectedStatus,
+  }) => {
+    mocks.scanSkillDirectories.mockResolvedValue({
+      skills: [{
+        name: "synapse-skill",
+        path: "/global/skills/synapse-skill",
+        source: installedContentId ? "synapse" : "external",
+        synapseContentId: installedContentId,
+        repositoryVersion: null,
+        sourceFingerprint: installedFingerprint,
+        preview: "Use Synapse MCP tools.",
+        fileCount: 2,
+        trash: { mode: "path" },
+      }],
+      duplicateSkillNames: [],
+    })
+
+    const result = await new EditorInstallStatusService().resolveGlobalSkillInstallations({
+      contentType: "skill",
+      contentId: "synapse-skill",
+      contentName: "synapse-skill",
+      title: "Synapse Skill",
+      sourceFingerprint: "sha256:current",
+      projects: [],
+    })
+
+    expect(result.entries[0]?.status).toBe(expectedStatus)
+  })
+
+  it("fails global inspection when a Skill root cannot be scanned", async () => {
+    mocks.scanSkillDirectories.mockResolvedValue({
+      skills: [],
+      duplicateSkillNames: [],
+      skillScanError: "Skill 目录读取失败",
+    })
+
+    await expect(new EditorInstallStatusService().resolveGlobalSkillInstallations({
+      contentType: "skill",
+      contentId: "synapse-skill",
+      contentName: "synapse-skill",
+      title: "Synapse Skill",
+      sourceFingerprint: "sha256:current",
+      projects: [],
+    })).rejects.toThrow("Codex 全局 Skill 检测失败")
   })
 
   it("marks a Codex project rule with the same synapse content id and content as installed", async () => {

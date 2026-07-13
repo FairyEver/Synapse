@@ -152,15 +152,23 @@ describe("SynapseSkillService", () => {
       driveApiText,
       automationIndex,
       automationApiText,
+      contentIndex,
+      contentApiText,
       modelPriceIndex,
       modelPriceApiText,
+      skillRepositoryIndex,
+      skillRepositoryApiText,
     ] = await Promise.all([
       readPackageText("drive/index.md"),
       readPackageText("drive/api-reference.md"),
       readPackageText("automation/index.md"),
       readPackageText("automation/api-reference.md"),
+      readPackageText("content/index.md"),
+      readPackageText("content/api-reference.md"),
       readPackageText("model-price/index.md"),
       readPackageText("model-price/api-reference.md"),
+      readPackageText("skill-repository/index.md"),
+      readPackageText("skill-repository/api-reference.md"),
     ])
     const missingDriveTools = buildDriveTools()
       .map((tool) => tool.name)
@@ -178,6 +186,12 @@ describe("SynapseSkillService", () => {
     expect(automationApiText).toContain("defaultConfig")
     expect(automationApiText).toContain("paramTemplates")
     expect(automationApiText).not.toContain("\"shell\": \"posix\"")
+    expect(contentIndex).toContain("prefer `sourceDirectoryPath`")
+    expect(contentIndex).toContain("claim a remote push only after its status is verified")
+    expect(contentApiText).toContain("remote synchronization is still pending")
+    expect(contentApiText).toContain("excluded runtime env files are never read")
+    expect(skillRepositoryIndex).toContain(".synapse.repository.json")
+    expect(skillRepositoryApiText).toContain("identityMigrated")
     expect(modelPriceIndex).toContain("model_price_used_model_list")
     expect(modelPriceIndex).toContain("ruleId")
     expect(modelPriceIndex).toContain("RMB per 1M tokens")

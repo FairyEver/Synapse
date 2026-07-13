@@ -7,12 +7,6 @@ import {
   TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
 } from "../../app-capabilities/terminal/shared/capability"
 import {
-  SCREENSHOT_CAPTURE_CAPABILITY_ID,
-  SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
-  SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
-  SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
-} from "../../app-capabilities/screenshot/shared/capability"
-import {
   SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
   SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
 } from "../../app-capabilities/sound-notifier/shared/capability"
@@ -151,19 +145,6 @@ describe("App capability domain", () => {
       },
       required: ["groupId", "name"],
     })
-  })
-
-  it("registers screenshot capture and file save MCP tools", () => {
-    expect(APP_DOMAIN.capabilities.map((capability) => capability.id)).toEqual(expect.arrayContaining([
-      SCREENSHOT_CAPTURE_CAPABILITY_ID,
-      SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
-    ]))
-    expect(APP_MCP_TOOL_ACTIONS[SCREENSHOT_CAPTURE_MCP_TOOL_NAME]).toBe(SCREENSHOT_CAPTURE_CAPABILITY_ID)
-    expect(APP_MCP_TOOL_ACTIONS[SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME]).toBe(SCREENSHOT_FILE_SAVE_CAPABILITY_ID)
-    expect(buildAppTools().map((tool) => tool.name)).toEqual(expect.arrayContaining([
-      SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
-      SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
-    ]))
   })
 
   it("registers Sound Notifier MCP play tool", () => {

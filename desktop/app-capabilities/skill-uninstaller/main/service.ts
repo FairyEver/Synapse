@@ -11,11 +11,12 @@ import {
 import { createMainLogger } from "../../../electron/services/log-store"
 import type {
   SkillUninstallBatchResult,
+  SkillUninstallNameScanResult,
   SkillUninstallQuery,
   SkillUninstallScanResult,
   SkillUninstallTarget,
 } from "../shared/schema"
-import { isSkillTargetDiscoverable, scanSkillRoots } from "./scanner"
+import { isSkillTargetDiscoverable, scanSkillNames, scanSkillRoots } from "./scanner"
 
 const logger = createMainLogger("app.skill-uninstaller")
 const SEARCH_ROOT_ERROR = "搜索目录不存在或无法读取。"
@@ -138,6 +139,39 @@ function recordAudit(
   })
 }
 
+async function scanCustomRoot<T>(
+  resource: string,
+  security: SkillUninstallerSecurity,
+  operation: "skill-uninstall-scan" | "skill-uninstall-name-scan",
+  scan: (rootPath: string) => Promise<T>,
+): Promise<T> {
+  let permissionDenied = false
+  try {
+    const permission = await security.permissionGuard.check({
+      action: "fs.read.outside-userdata",
+      actor: security.actor,
+      context: { operation },
+      resource,
+    })
+    if (!permission.allowed) {
+      permissionDenied = true
+      recordAudit(security, "fs.read.outside-userdata", resource, "denied", operation)
+      throw new Error(SEARCH_ROOT_ERROR)
+    }
+
+    const stats = await lstat(resource)
+    if (stats.isSymbolicLink() || !stats.isDirectory()) throw new Error(SEARCH_ROOT_ERROR)
+    const result = await scan(await realpath(resource))
+    recordAudit(security, "fs.read.outside-userdata", resource, "allowed", operation)
+    return result
+  } catch (error) {
+    if (!permissionDenied) {
+      recordAudit(security, "fs.read.outside-userdata", resource, "failed", operation)
+    }
+    throw new Error(SEARCH_ROOT_ERROR, { cause: error })
+  }
+}
+
 export class SkillUninstallerService {
   constructor(private readonly deps: SkillUninstallerServiceDeps = {
     trashItem: (targetPath) => shell.trashItem(targetPath),
@@ -149,39 +183,15 @@ export class SkillUninstallerService {
     signal?: AbortSignal,
   ): Promise<SkillUninstallScanResult> {
     if (query.searchRootPath) {
-      const resource = query.searchRootPath
-      let permissionDenied = false
-      try {
-        const permission = await security.permissionGuard.check({
-          action: "fs.read.outside-userdata",
-          actor: security.actor,
-          context: { operation: "skill-uninstall-scan" },
-          resource,
-        })
-        if (!permission.allowed) {
-          permissionDenied = true
-          recordAudit(security, "fs.read.outside-userdata", resource, "denied", "skill-uninstall-scan")
-          throw new Error(SEARCH_ROOT_ERROR)
-        }
-
-        const stats = await lstat(resource)
-        if (stats.isSymbolicLink() || !stats.isDirectory()) throw new Error(SEARCH_ROOT_ERROR)
-        const rootPath = await realpath(resource)
-        const result = await scanSkillRoots({
+      return scanCustomRoot(query.searchRootPath, security, "skill-uninstall-scan", async (rootPath) => (
+        scanSkillRoots({
           query,
           roots: [{ path: rootPath, editorIds: [] }],
           classifyEditors: (candidatePath) => inferProjectSkillEditors(candidatePath, rootPath),
           signal,
           rootErrorsFatal: true,
         })
-        recordAudit(security, "fs.read.outside-userdata", resource, "allowed", "skill-uninstall-scan")
-        return result
-      } catch (error) {
-        if (!permissionDenied) {
-          recordAudit(security, "fs.read.outside-userdata", resource, "failed", "skill-uninstall-scan")
-        }
-        throw new Error(SEARCH_ROOT_ERROR, { cause: error })
-      }
+      ))
     }
 
     const roots = await listGlobalTrustedSkillRoots()
@@ -192,6 +202,31 @@ export class SkillUninstallerService {
         editorIds: root.editors.map((editor) => editor.id),
       })),
       classifyEditors: () => [],
+      signal,
+    })
+  }
+
+  async scanNames(
+    searchRootPath: string | undefined,
+    security: SkillUninstallerSecurity,
+    signal?: AbortSignal,
+  ): Promise<SkillUninstallNameScanResult> {
+    if (searchRootPath) {
+      return scanCustomRoot(searchRootPath, security, "skill-uninstall-name-scan", async (rootPath) => (
+        scanSkillNames({
+          roots: [{ path: rootPath, editorIds: [] }],
+          signal,
+          rootErrorsFatal: true,
+        })
+      ))
+    }
+
+    const roots = await listGlobalTrustedSkillRoots()
+    return scanSkillNames({
+      roots: roots.map((root) => ({
+        path: root.path,
+        editorIds: root.editors.map((editor) => editor.id),
+      })),
       signal,
     })
   }

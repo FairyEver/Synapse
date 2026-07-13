@@ -44,8 +44,8 @@ export function ResourceRepositoryModule({
     <SystemAppTopBarActionButton
       iconOnly
       type="button"
-      aria-label="Skill 开发指南"
-      tooltip="Skill 开发指南"
+      aria-label="Skill 开发提示词"
+      tooltip="Skill 开发提示词"
       onClick={() => setGuideOpen(true)}
     >
       <BookOpen />

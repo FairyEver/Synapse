@@ -8,6 +8,7 @@ import { findSkillDirectoryByContentId } from "../editor-adapters/skill-identity
 import {
   ensureSkillRepositoryIdentityWriteAllowed,
   readSkillRepositoryIdentity,
+  removeLegacySkillRepositoryIdentity,
   writeSkillRepositoryIdentity,
 } from "../skill-repository-local-identity"
 
@@ -33,7 +34,7 @@ describe("ensureSkillRepositoryIdentityWriteAllowed", () => {
       {
         action: "fs.write",
         actor,
-        resource: path.join(dir, ".synapse.json"),
+        resource: path.join(dir, ".synapse.repository.json"),
         context: {
           operation: "skill-repository.identity.write.preflight",
         },
@@ -51,12 +52,12 @@ describe("ensureSkillRepositoryIdentityWriteAllowed", () => {
     await expect(ensureSkillRepositoryIdentityWriteAllowed(dir, { actor, auditSink, permissionGuard }))
       .rejects.toThrow("denied by policy")
 
-    await expect(readFile(path.join(dir, ".synapse.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(dir, ".synapse.repository.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
     expect(auditEvents).toEqual([
       {
         action: "fs.write",
         actor,
-        resource: path.join(dir, ".synapse.json"),
+        resource: path.join(dir, ".synapse.repository.json"),
         outcome: "denied",
         metadata: {
           operation: "skill-repository.identity.write.preflight",
@@ -69,7 +70,7 @@ describe("ensureSkillRepositoryIdentityWriteAllowed", () => {
 })
 
 describe("writeSkillRepositoryIdentity", () => {
-  it("checks write permission, writes .synapse.json atomically, and records allowed audit", async () => {
+  it("checks write permission, writes .synapse.repository.json atomically, and records allowed audit", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-id-"))
     const permissionRequests: PermissionRequest[] = []
     const permissionGuard = permissionGuardReturning({ allowed: true }, permissionRequests)
@@ -78,7 +79,7 @@ describe("writeSkillRepositoryIdentity", () => {
 
     await writeSkillRepositoryIdentity(dir, identity, { actor, auditSink, permissionGuard })
 
-    const targetPath = path.join(dir, ".synapse.json")
+    const targetPath = path.join(dir, ".synapse.repository.json")
     await expect(stat(targetPath)).resolves.toMatchObject({ isFile: expect.any(Function) })
     await expect(readFile(targetPath, "utf8")).resolves.toBe(`${JSON.stringify(identity, null, 2)}\n`)
     expect(permissionRequests).toEqual([
@@ -110,7 +111,7 @@ describe("writeSkillRepositoryIdentity", () => {
 
   it("records denied audit and does not write the identity file", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-id-denied-"))
-    const targetPath = path.join(dir, ".synapse.json")
+    const targetPath = path.join(dir, ".synapse.repository.json")
     const permissionGuard = permissionGuardReturning({ allowed: false, reason: "denied by policy", policyId: "policy-1" })
     const auditEvents: Parameters<AuditSink["record"]>[0][] = []
     const auditSink = auditSinkRecording(auditEvents)
@@ -150,7 +151,7 @@ describe("writeSkillRepositoryIdentity", () => {
     expect(auditEvents.at(-1)).toEqual({
       action: "fs.write",
       actor,
-      resource: path.join(filePath, ".synapse.json"),
+      resource: path.join(filePath, ".synapse.repository.json"),
       outcome: "failed",
       metadata: {
         operation: "skill-repository.identity.write",
@@ -162,7 +163,7 @@ describe("writeSkillRepositoryIdentity", () => {
 
   it("removes the temporary file when rename fails after writing", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-id-cleanup-"))
-    await mkdir(path.join(dir, ".synapse.json"))
+    await mkdir(path.join(dir, ".synapse.repository.json"))
     const permissionGuard = permissionGuardReturning({ allowed: true })
     const auditEvents: Parameters<AuditSink["record"]>[0][] = []
     const auditSink = auditSinkRecording(auditEvents)
@@ -171,7 +172,7 @@ describe("writeSkillRepositoryIdentity", () => {
       .rejects.toThrow()
 
     const entries = await readdir(dir)
-    expect(entries.filter((entry) => entry.startsWith(".synapse.json.") && entry.endsWith(".tmp"))).toEqual([])
+    expect(entries.filter((entry) => entry.startsWith(".synapse.repository.json.") && entry.endsWith(".tmp"))).toEqual([])
     expect(auditEvents.at(-1)?.outcome).toBe("failed")
   })
 })
@@ -179,7 +180,7 @@ describe("writeSkillRepositoryIdentity", () => {
 describe("readSkillRepositoryIdentity", () => {
   it("reads valid cloud Skill Repository identity", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-read-"))
-    await writeFile(path.join(dir, ".synapse.json"), JSON.stringify(identity), "utf8")
+    await writeFile(path.join(dir, ".synapse.repository.json"), JSON.stringify(identity), "utf8")
 
     await expect(readSkillRepositoryIdentity(dir)).resolves.toEqual(identity)
   })
@@ -203,13 +204,27 @@ describe("readSkillRepositoryIdentity", () => {
     await expect(readSkillRepositoryIdentity(invalidNameDir)).resolves.toBeNull()
   })
 
-  it("keeps the legacy skill id reader compatible with cloud identity files", async () => {
+  it("reads a legacy cloud identity and removes only that legacy kind during migration", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-read-legacy-cloud-"))
+    const legacyPath = path.join(dir, ".synapse.json")
+    await writeFile(legacyPath, JSON.stringify(identity), "utf8")
+
+    await expect(readSkillRepositoryIdentity(dir)).resolves.toEqual(identity)
+    await expect(removeLegacySkillRepositoryIdentity(dir)).resolves.toBe(true)
+    await expect(readFile(legacyPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+
+    await writeFile(legacyPath, JSON.stringify({ id: "resource-content-id" }), "utf8")
+    await expect(removeLegacySkillRepositoryIdentity(dir)).resolves.toBe(false)
+    await expect(readFile(legacyPath, "utf8")).resolves.toContain("resource-content-id")
+  })
+
+  it("does not expose cloud identity as a resource repository content id", async () => {
     const parentDir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-legacy-reader-"))
     const skillDir = path.join(parentDir, "demo-skill")
     await mkdir(skillDir)
     await writeSkillRepositoryIdentity(skillDir, identity)
 
-    await expect(findSkillDirectoryByContentId(parentDir, "repo-1")).resolves.toBe(skillDir)
+    await expect(findSkillDirectoryByContentId(parentDir, "repo-1")).resolves.toBeNull()
   })
 })
 

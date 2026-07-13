@@ -9,7 +9,6 @@ import { WorkflowCallNodeCard } from "../../../../workflow-nodes/workflow-call/c
 import { CodexNodeCard } from "../../../../workflow-nodes/codex/card"
 import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
 import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-template/workflow-node/card"
-import { ScreenshotNodeCard } from "../../../../app-capabilities/screenshot/workflow-node/card"
 import { SwarmTaskNodeCard } from "../../../../app-capabilities/swarm-task/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
@@ -21,7 +20,6 @@ import type { WorkflowCallNodeConfig } from "../../../../workflow-nodes/workflow
 import type { CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
 import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
 import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/document-template/workflow-node/schema"
-import type { ScreenshotNodeConfig } from "../../../../app-capabilities/screenshot/workflow-node/schema"
 import type { SwarmTaskNodeConfig } from "../../../../app-capabilities/swarm-task/workflow-node/schema"
 
 export function PromptNodeWrapper({ id, data, selected }: NodeProps) {
@@ -149,19 +147,6 @@ export function DocumentTemplateNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
-export function ScreenshotNodeWrapper({ id, data, selected }: NodeProps) {
-  const name = (data as { name?: string }).name
-  return (
-    <NodeContextMenu nodeId={id} nodeType="screenshot_capture">
-      <div>
-        <Handle type="target" position={Position.Left} />
-        <ScreenshotNodeCard config={data as ScreenshotNodeConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
-      </div>
-    </NodeContextMenu>
-  )
-}
-
 export function SwarmTaskNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
@@ -185,6 +170,5 @@ export const nodeTypes = {
   codex: CodexNodeWrapper,
   claude_code: ClaudeCodeNodeWrapper,
   document_template_docx_generate: DocumentTemplateNodeWrapper,
-  screenshot_capture: ScreenshotNodeWrapper,
   swarm_task_run: SwarmTaskNodeWrapper,
 }

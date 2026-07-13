@@ -23,6 +23,7 @@ const serviceLogger = vi.hoisted(() => {
 const readSkillDraftFromDirectory = vi.hoisted(() => vi.fn())
 const ensureSkillRepositoryIdentityWriteAllowed = vi.hoisted(() => vi.fn())
 const readSkillRepositoryIdentity = vi.hoisted(() => vi.fn())
+const removeLegacySkillRepositoryIdentity = vi.hoisted(() => vi.fn())
 const writeSkillRepositoryIdentity = vi.hoisted(() => vi.fn())
 
 vi.mock("electron", () => ({
@@ -68,6 +69,7 @@ vi.mock("../skill-repository-local-identity", async (importOriginal) => {
     ...actual,
     ensureSkillRepositoryIdentityWriteAllowed,
     readSkillRepositoryIdentity,
+    removeLegacySkillRepositoryIdentity,
     writeSkillRepositoryIdentity,
   }
 })
@@ -90,12 +92,21 @@ const authenticatedState: SynapseAccountState = {
   },
 }
 
+const identity = {
+  id: "repo-1",
+  kind: "cloud-skill-repository" as const,
+  owner: "liyang",
+  name: "demo-skill",
+}
+
 describe("SkillRepositoryUploadService", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     readSkillDraftFromDirectory.mockResolvedValue(skillDraft())
     ensureSkillRepositoryIdentityWriteAllowed.mockResolvedValue(undefined)
-    readSkillRepositoryIdentity.mockResolvedValue(null)
+    readSkillRepositoryIdentity.mockReset()
+    readSkillRepositoryIdentity.mockResolvedValueOnce(null).mockResolvedValue(identity)
+    removeLegacySkillRepositoryIdentity.mockResolvedValue(false)
     writeSkillRepositoryIdentity.mockResolvedValue(undefined)
   })
 
@@ -117,6 +128,8 @@ describe("SkillRepositoryUploadService", () => {
       owner: "liyang",
       managementUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
       identityWritten: true,
+      identityMigrated: false,
+      sourceImportSummary: skillDraft().sourceImportSummary,
     })
 
     expect(importSkillRepository).toHaveBeenCalledWith({
@@ -138,6 +151,7 @@ describe("SkillRepositoryUploadService", () => {
       owner: "liyang",
       name: "demo-skill",
     }, undefined)
+    expect(removeLegacySkillRepositoryIdentity).toHaveBeenCalledWith("/skills/demo", undefined)
     expect(openExternal).not.toHaveBeenCalled()
   })
 
@@ -155,6 +169,7 @@ describe("SkillRepositoryUploadService", () => {
   })
 
   it("uses local cloud identity repositoryId when explicit repositoryId is absent", async () => {
+    readSkillRepositoryIdentity.mockReset()
     readSkillRepositoryIdentity.mockResolvedValue({
       id: "repo-local",
       kind: "cloud-skill-repository",
@@ -175,6 +190,7 @@ describe("SkillRepositoryUploadService", () => {
   })
 
   it("recreates a repository when the local cloud identity is stale", async () => {
+    readSkillRepositoryIdentity.mockReset()
     readSkillRepositoryIdentity.mockResolvedValue({
       id: "repo-stale",
       kind: "cloud-skill-repository",
@@ -223,6 +239,19 @@ describe("SkillRepositoryUploadService", () => {
       .rejects.toThrow("denied by policy")
 
     expect(ensureSkillRepositoryIdentityWriteAllowed).toHaveBeenCalledWith("/skills/demo", undefined)
+    expect(importSkillRepository).not.toHaveBeenCalled()
+  })
+
+  it("stops before upload when the confirmed local snapshot changed", async () => {
+    const importSkillRepository = vi.fn()
+    const service = new SkillRepositoryUploadService({
+      accountService: { getState: () => authenticatedState, importSkillRepository },
+    })
+
+    await expect(service.importLocal({
+      sourceDirectoryPath: "/skills/demo",
+      expectedSourceFingerprint: "sha256:older",
+    })).rejects.toThrow("本地 Skill 在确认后发生变化")
     expect(importSkillRepository).not.toHaveBeenCalled()
   })
 
@@ -332,6 +361,16 @@ function skillDraft(overrides: Partial<ContentSkillSourceDraft> = {}): ContentSk
     content: "# Demo",
     metadata: { name: "demo-skill", title: "Demo Skill" },
     files: [],
+    publishFingerprint: "sha256:publish",
+    sourceFingerprint: "sha256:source",
+    sourceImportSummary: {
+      controlFilesExcluded: [],
+      fileCount: 1,
+      hiddenEntryCount: 0,
+      runtimeEnvExcluded: false,
+      symlinkCount: 0,
+      totalBytes: 6,
+    },
     ...overrides,
   }
 }

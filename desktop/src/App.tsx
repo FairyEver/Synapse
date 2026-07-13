@@ -9,6 +9,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { subscribeContentOpenRequest, type ContentOpenRequest } from "@/app-shell/content-navigation"
 import { ensureBodyInteractable } from "@/app-shell/dialog-navigate"
 import { useKnowledgeBaseStorageMigration } from "@/app-shell/hooks/use-knowledge-base-storage-migration"
+import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { updateDiagnosticContext } from "@/lib/diagnostic-context"
 import {
@@ -48,6 +49,7 @@ import { SystemAppContent } from "@/modules/apps/components/system-app-content"
 import type { SynapseSystemAppId } from "@/modules/apps/types"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
 import { SoundNotifierHost } from "../app-capabilities/sound-notifier/renderer/host"
+import { SynapseSkillUpdateDialogHost } from "../app-capabilities/synapse-skill/renderer/update-dialog"
 
 type ActiveAppId = SynapseSystemAppId
 type ActiveAppChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
@@ -77,6 +79,12 @@ function MainApp() {
   const hasNoRepositories = !hasRepositories
   const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
   const isActiveRepositoryMissing = activeRepositoryState?.status === "missing" || activeRepositoryState?.status === "inaccessible"
+  const { currentRepoProfileState } = useCurrentRepoProfile()
+  const repoOnboardingActive = Boolean(
+    activeRepository
+    && activeRepositoryState?.status === "ready"
+    && currentRepoProfileState?.status === "needs-onboarding",
+  )
 
   const activeAppIdRef = useRef(activeAppId)
   activeAppIdRef.current = activeAppId
@@ -284,6 +292,9 @@ function MainApp() {
         <KnowledgeBaseStorageMigrationDialog
           progress={knowledgeBaseStorageMigration.progress}
           onCancel={knowledgeBaseStorageMigration.cancel}
+        />
+        <SynapseSkillUpdateDialogHost
+          enabled={!knowledgeBaseStorageMigration.progress.active && !repoOnboardingActive}
         />
       </AppShellLayout>
     </IdentityGate>

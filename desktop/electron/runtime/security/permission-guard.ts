@@ -22,7 +22,6 @@ export type PermissionAction =
   | "network.listen"
   | "extension.load"
   | "agent.spawn"
-  | "screen.capture"
   | "secret.read"
   | "secret.write"
   | "scheduler.mutate"

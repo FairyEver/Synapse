@@ -97,6 +97,7 @@ export const IPC_CHANNELS = {
     "recordComplete": "synapse:skill-repository-install:record-complete",
   },
   "installers": {
+    "inspectGlobalSkillInstallations": "synapse:installers:inspect-global-skill-installations",
     "inspectSkillEnvSource": "synapse:installers:inspect-skill-env-source",
     "prepareLocalSkillSource": "synapse:installers:prepare-local-skill-source",
     "prepareInlineRuleSource": "synapse:installers:prepare-inline-rule-source",
@@ -108,6 +109,7 @@ export const IPC_CHANNELS = {
   },
   "skill-uninstaller": {
     "scan": "synapse:skill-uninstaller:scan",
+    "scanNames": "synapse:skill-uninstaller:names:scan",
     "cancelScan": "synapse:skill-uninstaller:scan:cancel",
     "uninstall": "synapse:skill-uninstaller:uninstall",
   },
@@ -141,6 +143,7 @@ export const IPC_CHANNELS = {
     "readItemContent": "synapse:editor-scan:read-item-content",
     "listSkillFiles": "synapse:editor-scan:list-skill-files",
     "prepareQuickPublishDraft": "synapse:editor-scan:prepare-quick-publish-draft",
+    "finalizeQuickPublish": "synapse:editor-scan:finalize-quick-publish",
     "trashItem": "synapse:editor-scan:trash-item",
     "uploadSkillToSkillRepository": "synapse:editor-scan:upload-skill-to-skill-repository",
   },
@@ -365,17 +368,6 @@ export const IPC_CHANNELS = {
     "data": "synapse:terminal:data",
     "sessionChanged": "synapse:terminal:session-changed",
     "sessionDeleted": "synapse:terminal:session-deleted",
-  },
-  "screenshot": {
-    "capture": "synapse:screenshot:capture",
-    "captureToFile": "synapse:screenshot:file:capture",
-    "saveArtifact": "synapse:screenshot:file:save-artifact",
-    "copyToClipboard": "synapse:screenshot:clipboard:copy",
-    "copyArtifactToClipboard": "synapse:screenshot:clipboard:copy-artifact",
-    "startInteractiveCapture": "synapse:screenshot:interactive:start",
-    "completeInteractiveCapture": "synapse:screenshot:interactive:complete",
-    "cancelInteractiveCapture": "synapse:screenshot:interactive:cancel",
-    "chooseOutputFile": "synapse:screenshot:output:choose",
   },
   "git": {
     "checkEnvironment": "synapse:git:environment:check",

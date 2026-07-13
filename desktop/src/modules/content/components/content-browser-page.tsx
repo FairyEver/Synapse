@@ -195,6 +195,7 @@ function ContentBrowserPage({
           id: item.id,
           origin: "external",
           prefill: request.prefill,
+          quickPublishSessionId: request.quickPublishSessionId,
           requestId: request.requestId,
           sourceLabel: request.sourceLabel,
           title: `编辑 ${item.title}`,

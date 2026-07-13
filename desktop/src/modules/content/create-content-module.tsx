@@ -39,6 +39,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
     const openCreateEditorWindow = useCallback(async (input: {
       initialValue?: SynapseCreateContentPayload<T> | null
       notices?: ContentCreateNotice[]
+      quickPublishSessionId?: string
       requestId?: string
       sourceLabel?: string | null
     } = {}) => {
@@ -47,6 +48,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           contentType: config.contentType,
           initialValue: input.initialValue,
           notices: input.notices,
+          quickPublishSessionId: input.quickPublishSessionId,
           requestId: input.requestId,
           sourceLabel: input.sourceLabel,
           title: `新建 ${definition.singularLabel}`,
@@ -79,6 +81,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
       void openCreateEditorWindow({
         initialValue: request.initialValue as SynapseCreateContentPayload<T>,
         notices: request.notices,
+        quickPublishSessionId: request.quickPublishSessionId,
         requestId: request.requestId,
         sourceLabel: request.sourceLabel,
       })

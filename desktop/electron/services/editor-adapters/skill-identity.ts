@@ -9,6 +9,7 @@ const LEGACY_BUILTIN_SYNAPSE_SKILL_CONTENT_ID = "builtin__skill__synapse-skill"
 
 interface SynapseSkillMeta {
   id?: unknown
+  kind?: unknown
 }
 const UNIQUE_SUFFIX_LIMIT = 999
 
@@ -22,6 +23,7 @@ function isSamePath(left: string, right: string): boolean {
 function parseSkillIdFile(raw: string): string | null {
   try {
     const meta = JSON.parse(raw) as SynapseSkillMeta
+    if (meta.kind === "cloud-skill-repository") return null
     return typeof meta.id === "string" && meta.id.trim().length > 0 ? meta.id : null
   } catch {
     return null

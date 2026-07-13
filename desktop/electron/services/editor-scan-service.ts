@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto"
 import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { shell } from "electron"
 import type {
   EditorScanGlobalResult,
+  EditorScanFinalizeQuickPublishRequest,
+  EditorScanFinalizeQuickPublishResult,
   EditorScanItemSource,
   EditorScanProjectEntry,
   EditorScanProjectResult,
@@ -21,6 +24,8 @@ import { editorAdapters } from "./editor-adapters"
 import { editorScanStrategyById } from "./definitions/generated/main-registry"
 import { pathExists } from "./editor-adapters/utils"
 import { configStore } from "./config-store"
+import { getActiveRepositoryConfig } from "../../src/lib/config"
+import { contentHistoryService } from "./content-history-service"
 import { listTrustedSkillRoots } from "./editor-scan-roots"
 import { createMainLogger } from "./log-store"
 import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
@@ -30,15 +35,34 @@ import {
 } from "./editor-file-write-utils"
 import {
   readSkillDraftFromDirectory,
+  createStoredSkillPublishFingerprint,
   resolveSkillMainFile,
   SYNAPSE_SKILL_ID_FILE,
 } from "./content-skill-source-service"
+import {
+  ContentSkillIdentityChangedError,
+  readContentSkillIdentityRaw,
+  writeContentSkillIdentity,
+} from "./content-skill-local-identity"
 
 const logger = createMainLogger("service.editor-scan")
 const RULE_TRASH_UNSUPPORTED_REASON = "当前 Rule 没有明确边界，请在 Finder 中处理。"
 const SAFE_RULE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/
 const EDITOR_SCAN_SCOPE_ERROR = "目标不在当前编辑器扫描范围内。"
 const EDITOR_SCAN_TRASH_SCOPE_ERROR = EDITOR_SCAN_SCOPE_ERROR
+const QUICK_PUBLISH_SESSION_MAX_COUNT = 20
+const QUICK_PUBLISH_SESSION_TTL_MS = 30 * 60 * 1000
+
+type QuickPublishSession = {
+  expectedIdentityRaw: string | null
+  expiresAt: number
+  itemPath: string
+  originalContentId: string | null
+  publishFingerprint: string
+  sourceFingerprint: string
+}
+
+const quickPublishSessions = new Map<string, QuickPublishSession>()
 
 // --- helpers ---
 
@@ -337,7 +361,13 @@ async function readSynapseSkillMeta(
 ): Promise<{ id: string; repositoryVersion: string | null; sourceFingerprint: string | null } | null> {
   try {
     const raw = await readFile(path.join(skillDir, SYNAPSE_SKILL_ID_FILE), "utf8")
-    const meta = JSON.parse(raw) as { id?: unknown; repositoryVersion?: unknown; sourceFingerprint?: unknown }
+    const meta = JSON.parse(raw) as {
+      id?: unknown
+      kind?: unknown
+      repositoryVersion?: unknown
+      sourceFingerprint?: unknown
+    }
+    if (meta.kind === "cloud-skill-repository") return null
     if (typeof meta.id !== "string" || meta.id.trim().length === 0) {
       return null
     }
@@ -717,6 +747,135 @@ async function listSkillFiles(
   }
 }
 
+function pruneQuickPublishSessions(now = Date.now()): void {
+  for (const [sessionId, session] of quickPublishSessions) {
+    if (session.expiresAt <= now) quickPublishSessions.delete(sessionId)
+  }
+  while (quickPublishSessions.size >= QUICK_PUBLISH_SESSION_MAX_COUNT) {
+    const oldestSessionId = quickPublishSessions.keys().next().value as string | undefined
+    if (!oldestSessionId) break
+    quickPublishSessions.delete(oldestSessionId)
+  }
+}
+
+async function createQuickPublishSession(
+  request: EditorScanQuickPublishRequest,
+  sourceDraft: Awaited<ReturnType<typeof readSkillDraftFromDirectory>>,
+): Promise<string> {
+  pruneQuickPublishSessions()
+  const sessionId = randomUUID()
+  quickPublishSessions.set(sessionId, {
+    expectedIdentityRaw: await readContentSkillIdentityRaw(request.itemPath),
+    expiresAt: Date.now() + QUICK_PUBLISH_SESSION_TTL_MS,
+    itemPath: request.itemPath,
+    originalContentId: request.synapseContentId?.trim() || null,
+    publishFingerprint: sourceDraft.publishFingerprint,
+    sourceFingerprint: sourceDraft.sourceFingerprint,
+  })
+  return sessionId
+}
+
+function isLegacyCloudIdentity(raw: string | null): boolean {
+  if (!raw) return false
+  try {
+    const value = JSON.parse(raw) as { kind?: unknown }
+    return value.kind === "cloud-skill-repository"
+  } catch {
+    return false
+  }
+}
+
+async function finalizeQuickPublish(
+  request: EditorScanFinalizeQuickPublishRequest,
+  security?: EditorScanReadSecurityDeps,
+): Promise<EditorScanFinalizeQuickPublishResult> {
+  pruneQuickPublishSessions()
+  const session = quickPublishSessions.get(request.sessionId)
+  if (!session || session.expiresAt <= Date.now()) {
+    quickPublishSessions.delete(request.sessionId)
+    return { status: "session-expired", message: "内容已保存，但发布检查已过期，未更新本地关联。" }
+  }
+
+  if (
+    request.mode === "overwrite"
+    && (!session.originalContentId || session.originalContentId !== request.contentId)
+  ) {
+    quickPublishSessions.delete(request.sessionId)
+    return { status: "content-mismatch", message: "内容已保存，但覆盖目标与预检时不一致，未更新本地关联。" }
+  }
+
+  const auditMetadata = {
+    contentId: request.contentId,
+    operation: "finalize-quick-publish",
+  }
+  await checkEditorReadPermission(security, session.itemPath, auditMetadata)
+  await assertTrustedEditorReadTarget(security, session.itemPath, auditMetadata, "skill")
+
+  const currentDraft = await readSkillDraftFromDirectory(session.itemPath, undefined, { mode: "publish" })
+  if (currentDraft.publishFingerprint !== session.publishFingerprint) {
+    quickPublishSessions.delete(request.sessionId)
+    return { status: "source-changed", message: "内容已保存，但本地 Skill 在预检后发生变化，未更新关联。" }
+  }
+
+  const config = await configStore.load()
+  const repository = getActiveRepositoryConfig(config)
+  const detail = repository
+    ? await contentHistoryService.readCurrentDetail(repository, "skill", request.contentId)
+    : null
+  const storedFingerprint = detail
+    ? createStoredSkillPublishFingerprint(detail.content, detail.attachments)
+    : null
+  const metadataMatches = Boolean(
+    detail
+    && (!currentDraft.metadata.name || detail.name === currentDraft.metadata.name.trim())
+    && (!currentDraft.metadata.description || detail.description === currentDraft.metadata.description.trim()),
+  )
+  if (
+    !detail
+    || detail.deleted
+    || detail.latestHistoryDirname !== request.repositoryVersion
+    || storedFingerprint !== session.publishFingerprint
+    || !metadataMatches
+  ) {
+    quickPublishSessions.delete(request.sessionId)
+    return { status: "content-mismatch", message: "内容已保存，但保存后的安装内容与本地快照不一致，未更新关联。" }
+  }
+
+  if (isLegacyCloudIdentity(session.expectedIdentityRaw)) {
+    quickPublishSessions.delete(request.sessionId)
+    return {
+      status: "identity-conflict",
+      message: "内容已保存，但检测到旧云仓库身份；为避免覆盖，未更新资源仓库关联。请先完成一次云上传迁移。",
+    }
+  }
+
+  const finalDraft = await readSkillDraftFromDirectory(session.itemPath, undefined, { mode: "publish" })
+  if (finalDraft.publishFingerprint !== session.publishFingerprint) {
+    quickPublishSessions.delete(request.sessionId)
+    return { status: "source-changed", message: "内容已保存，但本地 Skill 在关联写入前发生变化，未更新关联。" }
+  }
+
+  try {
+    await writeContentSkillIdentity(session.itemPath, {
+      id: request.contentId,
+      repositoryVersion: request.repositoryVersion,
+      sourceFingerprint: session.sourceFingerprint,
+    }, session.expectedIdentityRaw, security)
+    quickPublishSessions.delete(request.sessionId)
+    return { status: "identity-written", message: "本地 Skill 已关联到已保存内容。" }
+  } catch (error) {
+    if (error instanceof ContentSkillIdentityChangedError) {
+      quickPublishSessions.delete(request.sessionId)
+      return { status: "identity-conflict", message: `内容已保存，但${error.message}` }
+    }
+    logger.warn("Failed to finalize local skill identity after publish.", {
+      contentId: request.contentId,
+      error: error instanceof Error ? error.name : "UnknownError",
+    })
+    return { status: "write-failed", message: "内容已保存，但本地关联更新失败，可以重试更新关联。" }
+  }
+}
+
 async function prepareQuickPublishDraft(
   request: EditorScanQuickPublishRequest,
   security?: EditorScanReadSecurityDeps,
@@ -746,7 +905,13 @@ async function prepareQuickPublishDraft(
       return draft
     }
 
-    const sourceDraft = await readSkillDraftFromDirectory(request.itemPath)
+    const isPublish = request.purpose === "publish"
+    const sourceDraft = await readSkillDraftFromDirectory(
+      request.itemPath,
+      undefined,
+      { mode: isPublish ? "publish" : "install" },
+    )
+    const publishSessionId = isPublish ? await createQuickPublishSession(request, sourceDraft) : undefined
 
     const draft = {
       itemType: "skill" as const,
@@ -755,6 +920,10 @@ async function prepareQuickPublishDraft(
       content: sourceDraft.content,
       files: sourceDraft.files as EditorScanQuickPublishSkillFile[],
       metadata: { ...sourceDraft.metadata, ...(request.metadata ?? {}) },
+      publishFingerprint: sourceDraft.publishFingerprint,
+      ...(publishSessionId ? { publishSessionId } : {}),
+      sourceFingerprint: sourceDraft.sourceFingerprint,
+      sourceImportSummary: sourceDraft.sourceImportSummary,
     }
     recordEditorReadAudit(security, request.itemPath, "allowed", auditMetadata)
     return draft
@@ -856,6 +1025,7 @@ export {
   readItemContent,
   listSkillFiles,
   assertTrustedEditorReadTarget,
+  finalizeQuickPublish,
   prepareQuickPublishDraft,
   scanSkillDirectories,
   trashScanItem,

@@ -12,6 +12,7 @@ import { SkillUninstallerModule } from "../index"
 const mocks = vi.hoisted(() => ({
   chooseDirectory: vi.fn(),
   scan: vi.fn(),
+  scanNames: vi.fn(),
 }))
 
 vi.mock("@/lib/electron-bridge", () => ({
@@ -20,6 +21,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       return {
         cancelScan: vi.fn(),
         scan: mocks.scan,
+        scanNames: mocks.scanNames,
         uninstall: vi.fn(),
       }
     }
@@ -48,6 +50,7 @@ describe("SkillUninstallerModule", () => {
     document.body.innerHTML = ""
     vi.clearAllMocks()
     mocks.chooseDirectory.mockResolvedValue(null)
+    mocks.scanNames.mockResolvedValue({ names: [], complete: true, warnings: [] })
   })
 
   afterEach(() => {
@@ -56,7 +59,7 @@ describe("SkillUninstallerModule", () => {
     }
   })
 
-  it("renders editable query controls without scanning automatically", async () => {
+  it("renders editable query controls, preloads names, and does not scan candidates automatically", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -76,6 +79,7 @@ describe("SkillUninstallerModule", () => {
     expect(searchRootInput?.readOnly).toBe(false)
     expect(findButton("选择")).toBeInstanceOf(HTMLButtonElement)
     expect(findButton("扫描")).toBeInstanceOf(HTMLButtonElement)
+    expect(mocks.scanNames).toHaveBeenCalledWith({ scanId: expect.any(String) })
     expect(mocks.scan).not.toHaveBeenCalled()
   })
 })

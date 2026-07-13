@@ -24,12 +24,6 @@ import {
   TERMINAL_SESSION_WRITE_CAPABILITY_ID,
 } from "../../app-capabilities/terminal/shared/capability"
 import {
-  SCREENSHOT_CAPTURE_CAPABILITY_ID,
-  SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
-  SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
-  SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
-} from "../../app-capabilities/screenshot/shared/capability"
-import {
   SECRETS_CAPABILITY_IDS,
   SECRETS_ITEM_CREATE_CAPABILITY_ID,
   SECRETS_ITEM_DELETE_CAPABILITY_ID,
@@ -185,18 +179,6 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     mutates: true,
   },
   {
-    id: SCREENSHOT_CAPTURE_CAPABILITY_ID,
-    title: "Capture screenshot",
-    description: "Capture a fullscreen or coordinate-region PNG screenshot and return a temporary artifact.",
-    mutates: false,
-  },
-  {
-    id: SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
-    title: "Save screenshot file",
-    description: "Capture a fullscreen or coordinate-region PNG screenshot and save it to a local .png file.",
-    mutates: true,
-  },
-  {
     id: SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
     title: "Play sound",
     description: "Play a semantic Sound Notifier reminder on the local computer.",
@@ -242,8 +224,6 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [TERMINAL_MCP_TOOL_NAMES.sessionResize]: TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionDelete]: TERMINAL_SESSION_DELETE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionStop]: TERMINAL_SESSION_STOP_CAPABILITY_ID,
-  [SCREENSHOT_CAPTURE_MCP_TOOL_NAME]: SCREENSHOT_CAPTURE_CAPABILITY_ID,
-  [SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME]: SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
   [SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME]: SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
   [SECRETS_MCP_TOOL_NAMES.list]: SECRETS_ITEM_LIST_CAPABILITY_ID,
   [SECRETS_MCP_TOOL_NAMES.get]: SECRETS_ITEM_GET_CAPABILITY_ID,
@@ -280,7 +260,6 @@ const nonnegativeIntField = (description: string) => ({
   description,
 })
 const booleanField = (description: string) => ({ type: "boolean", description })
-const numberField = (description: string) => ({ type: "number", description })
 
 const sessionIdProperty = stringField("Terminal session id.", { minLength: 1 })
 const strictEmptyInputSchema = {
@@ -288,30 +267,6 @@ const strictEmptyInputSchema = {
   properties: {},
   additionalProperties: false,
 }
-const screenshotRegionSchema = {
-  type: "object",
-  description: "Screen coordinates for a region capture.",
-  properties: {
-    x: numberField("Left screen coordinate."),
-    y: numberField("Top screen coordinate."),
-    width: numberField("Region width in screen coordinates."),
-    height: numberField("Region height in screen coordinates."),
-  },
-  required: ["x", "y", "width", "height"],
-} as const
-const screenshotCaptureProperties = {
-  mode: {
-    type: "string",
-    enum: ["fullscreen", "region"],
-    description: "Use fullscreen for the current focused Synapse window's screen, or region with explicit screen coordinates.",
-  },
-  region: screenshotRegionSchema,
-  hideCurrentWindow: {
-    type: "boolean",
-    description: "When true, Synapse hides the current focused Synapse window before capture when available.",
-  },
-} as const
-
 const swarmTaskConfigSchema = {
   type: "object",
   properties: {
@@ -625,42 +580,6 @@ export function buildAppTools(): McpToolDefinition[] {
           force: booleanField("When true, force stop if supported."),
         },
         required: ["sessionId"],
-      },
-    },
-    {
-      name: SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
-      description: "Capture a fullscreen or coordinate-region PNG screenshot. Fullscreen uses the current focused Synapse window's screen when available, otherwise the primary screen. Region captures require x, y, width, and height screen coordinates. Returns metadata and a temporary PNG path; raw image bytes are not returned through MCP.",
-      inputSchema: {
-        type: "object",
-        properties: screenshotCaptureProperties,
-        required: ["mode"],
-        allOf: [
-          {
-            if: { properties: { mode: { const: "region" } } },
-            then: { required: ["region"] },
-          },
-        ],
-      },
-    },
-    {
-      name: SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
-      description: "Capture a fullscreen or coordinate-region PNG screenshot and save it to outputPath. Existing outputPath is rejected unless overwrite is true.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          capture: {
-            type: "object",
-            description: "Screenshot capture input.",
-            properties: screenshotCaptureProperties,
-            required: ["mode"],
-          },
-          outputPath: stringField("Absolute local .png output path."),
-          overwrite: {
-            type: "boolean",
-            description: "When true, replace outputPath if it already exists. Defaults to false.",
-          },
-        },
-        required: ["capture", "outputPath"],
       },
     },
     {

@@ -24,18 +24,11 @@ export interface IpcHandlerLogger {
   }
 }
 
-export interface IpcInvocationContext {
-  /** Electron webContents id for the renderer that invoked this request. */
-  readonly senderWebContentsId?: number
-}
-
 export interface IpcHandlerContext {
   /** Module id from IpcModule.id. Useful for logging and metrics. */
   readonly moduleId: string
   /** Optional logger used by transport/runtime adapters. */
   readonly logger?: IpcHandlerLogger
-  /** Per-request sender metadata, filled by Electron transport when available. */
-  readonly senderWebContentsId?: number
   /**
    * Ad-hoc service lookup hook so the IPC handler can pull other services
    * out of ServiceRegistry without depending on it directly. Wired by the

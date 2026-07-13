@@ -10,6 +10,7 @@ const requestSchema = z.object({
   title: z.string().optional(),
   content: z.string().optional(),
   repositoryVersion: z.string().optional(),
+  sourceFingerprint: z.string().optional(),
   projects: z.array(z.object({ id: z.string(), name: z.string(), path: z.string() })),
 })
 const anySchema = z.any()

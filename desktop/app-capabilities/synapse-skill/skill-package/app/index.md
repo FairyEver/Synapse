@@ -32,22 +32,6 @@ Rules:
 - Deleting a running terminal session stops it before removing the record.
 - Do not use Terminal tools as a broad command runner when a narrower MCP tool exists.
 
-## Screenshot
-
-Use `app_screenshot_capture` when the user asks to take a fullscreen screenshot or a screenshot from explicit screen coordinates.
-
-Use `app_screenshot_file_save` when the user asks to save the screenshot to a specific `.png` path.
-
-Rules:
-
-- For region screenshots, provide screen coordinates as `x`, `y`, `width`, and `height`.
-- Use `mode: "fullscreen"` when the user does not provide coordinates. Fullscreen captures use the current focused Synapse window's screen when available, otherwise the primary screen.
-- Set `hideCurrentWindow: true` when the user asks to exclude the current Synapse window from the screenshot.
-- Screenshot capture requests are permission-checked and audited.
-- Treat `tempPath` as a temporary local artifact path, not a permanent user file.
-- Use `app_screenshot_file_save` for durable output. Do not overwrite an existing output file unless the user explicitly asks to replace it.
-- MCP screenshot tools return metadata and local paths, not raw image bytes.
-
 ## Sound Notifier
 
 Use `app_sound_notifier_sound_play` when the user asks to play a local sound reminder, remind them with sound, or notify them that an Agent or command needs attention.
