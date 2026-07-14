@@ -58,7 +58,10 @@ import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypas
 import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type { SecretSafeView, SecretSkillEnvScanResult } from "../shared/schema"
-import { SkillEnvUpdateDialog } from "./skill-env-update-dialog"
+import {
+  SkillEnvUpdateDialog,
+  type SkillEnvUpdateScanGroup,
+} from "./skill-env-update-dialog"
 
 const logger = createRendererLogger("secrets.app")
 
@@ -86,11 +89,6 @@ type SecretValueDialogState = {
   readonly value: string
 }
 
-type SkillEnvUpdateDialogState = {
-  readonly name: string
-  readonly scanResult: SecretSkillEnvScanResult
-}
-
 type DeleteSecretDialogState = {
   readonly secret: SecretSafeView
   readonly bindingCount: number
@@ -115,7 +113,7 @@ export function SecretsModule() {
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState<SecretFormState>(emptyFormState)
   const [deleting, setDeleting] = useState<DeleteSecretDialogState | null>(null)
-  const [skillEnvUpdateDialog, setSkillEnvUpdateDialog] = useState<SkillEnvUpdateDialogState | null>(null)
+  const [skillEnvUpdateGroups, setSkillEnvUpdateGroups] = useState<readonly SkillEnvUpdateScanGroup[]>([])
   const [secretReveals, setSecretReveals] = useState<SecretRevealStateById>({})
   const [secretValueDialog, setSecretValueDialog] = useState<SecretValueDialogState | null>(null)
   const secretsRef = useRef<SecretSafeView[]>([])
@@ -225,7 +223,7 @@ export function SecretsModule() {
     const scanResult = await scanSkillEnvBindings(name)
     if (requestGeneration !== skillEnvScanGeneration.current) return null
     if (scanResult && scanResult.items.length > 0) {
-      setSkillEnvUpdateDialog({ name, scanResult })
+      setSkillEnvUpdateGroups([{ name, scanResult }])
     }
     return scanResult
   }, [scanSkillEnvBindings])
@@ -460,14 +458,13 @@ export function SecretsModule() {
         }}
       />
       <SkillEnvUpdateDialog
-        name={skillEnvUpdateDialog?.name ?? ""}
-        scanResult={skillEnvUpdateDialog?.scanResult ?? null}
+        groups={skillEnvUpdateGroups}
         onQueueError={(error) => {
           logger.error("Failed to queue Skill env updates.", errorDiagnostic(error))
           toast.error("更新失败，请重试。")
         }}
         onOpenChange={(open) => {
-          if (!open) setSkillEnvUpdateDialog(null)
+          if (!open) setSkillEnvUpdateGroups([])
         }}
       />
       <SecretValueDialog

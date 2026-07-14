@@ -517,6 +517,40 @@ describe("SecretsModule", () => {
     expect(document.body.textContent).not.toContain("changed-secret")
   })
 
+  it("rescans an expired update group before retrying", async () => {
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    mocks.secrets.scanSkillEnvBindings
+      .mockResolvedValueOnce(skillEnvScanResult)
+      .mockResolvedValueOnce({
+        scanSessionId: "scan-refreshed",
+        items: [skillEnvScanResult.items[0]],
+      })
+    mocks.secrets.queueSkillEnvBindings.mockRejectedValueOnce(
+      new Error("扫描会话已过期，请重新扫描。"),
+    )
+
+    await renderSecretsModule()
+    await act(async () => {
+      clickButtonByLabel("扫描关联 Skill：TOKEN")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("更新选中项")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("TOKEN 的扫描会话已过期，请重新扫描。")
+
+    await act(async () => {
+      clickButton("重新扫描")
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenNthCalledWith(2, { name: "TOKEN" })
+    expect(document.body.textContent).not.toContain("扫描会话已过期")
+    expect(document.body.textContent).toContain("skill-one")
+  })
+
   it("scans bindings from the row action", async () => {
     mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
     mocks.secrets.scanSkillEnvBindings.mockResolvedValueOnce(skillEnvScanResult)

@@ -24,6 +24,12 @@ vi.mock("@/modules/content/components/content-action-split-button", () => ({
   ContentActionSplitButton: () => <button type="button">操作</button>,
 }))
 
+vi.mock("@/modules/content/components/skill-env-secret-config-dialog", () => ({
+  SkillEnvSecretConfigDialog: ({ item }: { item: SynapseContentMeta<"skill"> }) => (
+    <div data-testid="skill-env-config-dialog">{item.title}</div>
+  ),
+}))
+
 vi.mock("@/modules/content/contexts/install-status-context", () => ({
   useInstallStatus: (contentId: string) => {
     if (contentId === "stale-skill") {
@@ -180,6 +186,24 @@ describe("ContentGrid", () => {
     expect(envBadge?.textContent).toBe("env")
     expect(envBadge?.getAttribute("data-variant")).toBe("secondary")
     expect(plainTitle?.parentElement?.querySelector('[data-slot="badge"]')).toBeNull()
+  })
+
+  it("opens env configuration from the badge without opening the skill card", async () => {
+    const { container, onOpenItem } = await renderGrid([
+      createContentItem("skill", { id: "env-skill", hasEnv: true, title: "Env Skill" }),
+    ])
+    const envButton = container.querySelector<HTMLButtonElement>('[aria-label="配置 Env Skill 的环境变量"]')
+
+    expect(envButton?.tagName).toBe("BUTTON")
+
+    await act(async () => {
+      envButton?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }))
+      envButton?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: " " }))
+      envButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(container.querySelector('[data-testid="skill-env-config-dialog"]')?.textContent).toBe("Env Skill")
+    expect(onOpenItem).not.toHaveBeenCalled()
   })
 
   it("does not show the skill name row on prompt cards", async () => {

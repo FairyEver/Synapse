@@ -1,5 +1,5 @@
 import { LoaderCircle, RotateCcw, Trash2 } from "lucide-react"
-import type { MouseEvent } from "react"
+import { useState, type MouseEvent } from "react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,7 @@ import {
   ContentItemText,
 } from "@/modules/content/components/content-item-meta"
 import { EditorInstallBadges } from "@/modules/content/components/editor-install-badges"
+import { SkillEnvSecretConfigDialog } from "@/modules/content/components/skill-env-secret-config-dialog"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
 type ContentGridProps = {
@@ -111,11 +112,13 @@ function ContentListCard({
   contentType,
   item,
   onInstallDialogOpenChange,
+  onConfigureSkillEnv,
   onOpen,
 }: {
   contentType: SynapseContentType
   item: SynapseContentMeta
   onInstallDialogOpenChange?: (open: boolean) => void
+  onConfigureSkillEnv?: (item: SynapseContentMeta<"skill">) => void
   onOpen: () => void
 }) {
   const categoryLabel = getCategoryLabel(contentType, item.category)
@@ -133,6 +136,7 @@ function ContentListCard({
         categoryLabel={categoryLabel}
         item={item}
         onInstallDialogOpenChange={onInstallDialogOpenChange}
+        onConfigureSkillEnv={() => onConfigureSkillEnv?.(item)}
         onOpen={onOpen}
       />
     )
@@ -252,12 +256,14 @@ function SkillContentListCard({
   categoryLabel,
   item,
   onInstallDialogOpenChange,
+  onConfigureSkillEnv,
   onOpen,
 }: {
   authorLabel: string
   categoryLabel: string
   item: SynapseContentMeta<"skill">
   onInstallDialogOpenChange?: (open: boolean) => void
+  onConfigureSkillEnv: () => void
   onOpen: () => void
 }) {
   const skillName = item.name?.trim()
@@ -297,7 +303,21 @@ function SkillContentListCard({
               descriptionTextClassName="text-xs"
               title={item.title}
               titleAccessory={item.hasEnv === true ? (
-                <Badge variant="secondary">env</Badge>
+                <Badge asChild variant="secondary" className="cursor-pointer hover:bg-secondary/80">
+                  <button
+                    type="button"
+                    aria-label={`配置 ${item.title} 的环境变量`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onConfigureSkillEnv()
+                    }}
+                    onKeyDown={(event) => {
+                      event.stopPropagation()
+                    }}
+                  >
+                    env
+                  </button>
+                </Badge>
               ) : null}
             />
           </div>
@@ -334,6 +354,8 @@ function ContentGrid({
   onRestoreItem,
   onPurgeItem,
 }: ContentGridProps) {
+  const [envConfigItem, setEnvConfigItem] = useState<SynapseContentMeta<"skill"> | null>(null)
+
   if (isDeletedView) {
     return (
       <div className="grid grid-cols-2 gap-2">
@@ -352,17 +374,28 @@ function ContentGrid({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-2">
-      {items.map((item) => (
-        <ContentListCard
-          key={item.id}
-          contentType={contentType}
-          item={item}
-          onInstallDialogOpenChange={onInstallDialogOpenChange}
-          onOpen={() => onOpenItem(item)}
+    <>
+      <div className="grid grid-cols-2 gap-2">
+        {items.map((item) => (
+          <ContentListCard
+            key={item.id}
+            contentType={contentType}
+            item={item}
+            onInstallDialogOpenChange={onInstallDialogOpenChange}
+            onConfigureSkillEnv={setEnvConfigItem}
+            onOpen={() => onOpenItem(item)}
+          />
+        ))}
+      </div>
+      {envConfigItem ? (
+        <SkillEnvSecretConfigDialog
+          item={envConfigItem}
+          onOpenChange={(open) => {
+            if (!open) setEnvConfigItem(null)
+          }}
         />
-      ))}
-    </div>
+      ) : null}
+    </>
   )
 }
 
