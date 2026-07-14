@@ -158,6 +158,23 @@ export interface AgentUserQuestion {
   readonly multiSelect?: boolean
 }
 
+export type AgentUserQuestionResolutionStatus =
+  | "answered"
+  | "skipped"
+  | "timed_out"
+  | "cancelled"
+
+export interface AgentUserQuestionResolutionAnswer {
+  readonly questionIndex: number
+  readonly values: readonly string[]
+}
+
+export interface AgentUserQuestionResolution {
+  readonly status: AgentUserQuestionResolutionStatus
+  readonly resolvedAt: string
+  readonly answers?: readonly AgentUserQuestionResolutionAnswer[]
+}
+
 export interface AgentPermissionRequestEvent extends AgentEventBase {
   readonly type: "permissionRequest"
   readonly requestId: string

@@ -20,6 +20,23 @@ export interface SynapseAgentUserQuestion {
   readonly multiSelect?: boolean
 }
 
+export type SynapseAgentUserQuestionResolutionStatus =
+  | "answered"
+  | "skipped"
+  | "timed_out"
+  | "cancelled"
+
+export interface SynapseAgentUserQuestionResolutionAnswer {
+  readonly questionIndex: number
+  readonly values: readonly string[]
+}
+
+export interface SynapseAgentUserQuestionResolution {
+  readonly status: SynapseAgentUserQuestionResolutionStatus
+  readonly resolvedAt: string
+  readonly answers?: readonly SynapseAgentUserQuestionResolutionAnswer[]
+}
+
 export const SYNAPSE_AGENT_PERMISSION_MODES = [
   "default",
   "acceptEdits",
@@ -329,6 +346,7 @@ export interface SynapseAgentPermissionRequestTimelineItem extends SynapseAgentT
   readonly toolInput?: string
   readonly toolInputRaw?: Record<string, unknown>
   readonly questions?: readonly SynapseAgentUserQuestion[]
+  readonly resolution?: SynapseAgentUserQuestionResolution
 }
 
 export interface SynapseAgentToolProgressTimelineItem extends SynapseAgentTimelineBase {

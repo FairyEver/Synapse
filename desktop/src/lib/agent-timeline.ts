@@ -9,6 +9,7 @@ import type {
   SynapseAgentToolProgressTimelineItem,
   SynapseAgentTurnOutcome,
   SynapseAgentUserQuestion,
+  SynapseAgentUserQuestionResolution,
 } from "../types/agent"
 
 type TimelineRecordRole = "user" | "assistant" | "system" | "tool"
@@ -199,6 +200,7 @@ export function historyRecordToTimelineItem(
         toolInput: entry.content.includes("\n") ? entry.content.slice(entry.content.indexOf("\n") + 1) : undefined,
         toolInputRaw: recordMetadata(metadata, "toolInputRaw"),
         questions: questionsMetadata(metadata, "questions"),
+        resolution: userQuestionResolutionMetadata(metadata, "userQuestionResolution"),
       }
     case "error":
       return {
@@ -610,9 +612,11 @@ function questionsMetadata(
     })
     if (options.some((option) => !option)) return undefined
     const header = typeof record?.header === "string" ? record.header : undefined
-    const id = questionId(record)
+    const id = stringMetadata(record, "id")
+    const key = stringMetadata(record, "key")
     questions.push({
       ...(id ? { id } : {}),
+      ...(key ? { key } : {}),
       question,
       ...(header ? { header } : {}),
       options: options as SynapseAgentUserQuestion["options"],
@@ -622,10 +626,40 @@ function questionsMetadata(
   return questions.length > 0 ? questions : undefined
 }
 
-function questionId(record: Record<string, unknown> | undefined): string | undefined {
-  const id = typeof record?.id === "string" && record.id.trim() ? record.id.trim() : undefined
-  if (id) return id
-  return typeof record?.key === "string" && record.key.trim() ? record.key.trim() : undefined
+function userQuestionResolutionMetadata(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): SynapseAgentUserQuestionResolution | undefined {
+  const value = metadata?.[key]
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  const status = record.status
+  const resolvedAt = record.resolvedAt
+  if (
+    status !== "answered"
+    && status !== "skipped"
+    && status !== "timed_out"
+    && status !== "cancelled"
+  ) return undefined
+  if (typeof resolvedAt !== "string") return undefined
+  const rawAnswers = record.answers
+  if (rawAnswers !== undefined && !Array.isArray(rawAnswers)) return undefined
+  const answers = rawAnswers?.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return undefined
+    const answer = item as Record<string, unknown>
+    if (!Number.isInteger(answer.questionIndex) || (answer.questionIndex as number) < 0) return undefined
+    if (!Array.isArray(answer.values) || answer.values.some((entry) => typeof entry !== "string")) return undefined
+    return {
+      questionIndex: answer.questionIndex as number,
+      values: answer.values as string[],
+    }
+  })
+  if (answers?.some((answer) => !answer)) return undefined
+  return {
+    status,
+    resolvedAt,
+    ...(answers ? { answers: answers as SynapseAgentUserQuestionResolution["answers"] } : {}),
+  }
 }
 
 function imageArtifactsMetadata(

@@ -384,6 +384,31 @@ describe("agent utils", () => {
     expect(transcript).not.toContain("权限")
   })
 
+  it("includes resolved AskUserQuestion answers in copied transcripts", () => {
+    const entries = [{
+      id: "question-1",
+      kind: "permissionRequest",
+      requestId: "request-1",
+      toolName: "AskUserQuestion",
+      timestamp: "2026-04-27T03:18:00.000Z",
+      questions: [{
+        question: "选择处理范围",
+        options: [{ label: "文档, 图片" }, { label: "音频" }],
+        multiSelect: true,
+      }],
+      resolution: {
+        status: "answered",
+        resolvedAt: "2026-04-27T03:19:00.000Z",
+        answers: [{ questionIndex: 0, values: ["文档, 图片", "音频"] }],
+      },
+    }] as const
+
+    const transcript = formatAgentTranscript(entries)
+
+    expect(transcript).toContain(`已回答 ${formatEntryTime(entries[0].timestamp)}`)
+    expect(transcript).toContain("回答：文档, 图片、音频")
+  })
+
   it("omits malformed timestamps from copied transcripts", () => {
     const entries = [
       {

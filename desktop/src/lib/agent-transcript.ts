@@ -98,7 +98,7 @@ function labelForTimelineItem(entry: SynapseAgentTimelineItem): string {
     case "toolProgress":
       return "工具"
     case "permissionRequest":
-      if (isAskUserQuestionEntry(entry)) return "待回答"
+      if (isAskUserQuestionEntry(entry)) return userQuestionLabel(entry)
       return "权限"
     case "error":
       return "错误"
@@ -151,7 +151,7 @@ function timelineItemText(entry: SynapseAgentTimelineItem): string {
     case "permissionRequest": {
       const permissionEntry = entry
       if (isAskUserQuestionEntry(permissionEntry)) {
-        return userQuestionText(permissionEntry) || permissionEntry.toolName
+        return redactSensitiveText(userQuestionText(permissionEntry) || permissionEntry.toolName)
       }
       return permissionEntry.toolInput
         ? `${permissionEntry.toolName}\n${formatAgentInputText(permissionEntry.toolInput)}`
@@ -184,14 +184,39 @@ function isAskUserQuestionEntry(entry: SynapseAgentTimelineItem): boolean {
 
 function userQuestionText(entry: SynapseAgentPermissionRequestTimelineItem): string {
   const questions = entry.questions ?? []
-  return questions.map((question, index) => {
+  const questionText = questions.map((question, index) => {
+    const answer = entry.resolution?.answers?.find((item) => item.questionIndex === index)
     const lines = [
       question.header ? `${question.header}: ${question.question}` : question.question,
       ...(question.options?.map((option) =>
         option.description ? `- ${option.label}: ${option.description}` : `- ${option.label}`) ?? []),
+      ...(answer?.values.length ? [`回答：${answer.values.join("、")}`] : []),
     ]
     return questions.length > 1 ? `${index + 1}. ${lines.join("\n")}` : lines.join("\n")
   }).join("\n\n")
+  if (!entry.resolution || entry.resolution.status === "answered") return questionText
+  return [questionText, `状态：${userQuestionResolutionLabel(entry.resolution.status)}`]
+    .filter(Boolean)
+    .join("\n\n")
+}
+
+function userQuestionLabel(entry: SynapseAgentPermissionRequestTimelineItem): string {
+  return entry.resolution ? userQuestionResolutionLabel(entry.resolution.status) : "待回答"
+}
+
+function userQuestionResolutionLabel(
+  status: NonNullable<SynapseAgentPermissionRequestTimelineItem["resolution"]>["status"],
+): string {
+  switch (status) {
+    case "answered":
+      return "已回答"
+    case "skipped":
+      return "未回答"
+    case "timed_out":
+      return "已超时"
+    case "cancelled":
+      return "已停止"
+  }
 }
 
 const MAX_RAW_INPUT_STRING_LENGTH = 160

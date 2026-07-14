@@ -170,6 +170,126 @@ describe("AgentUserQuestionCard", () => {
     })
   })
 
+  it("uses question ids and keys when submitting answers", async () => {
+    const identifiedQuestions = [
+      { ...questions[0], id: "question-id" },
+      {
+        key: "question-key",
+        question: "继续吗？",
+        options: [{ label: "继续" }, { label: "停止" }],
+        multiSelect: false,
+      },
+    ]
+    const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn(async () => undefined)
+    const container = renderCard(onRespond, {
+      ...questionItem,
+      questions: identifiedQuestions,
+      toolInputRaw: { questions: identifiedQuestions },
+    })
+
+    act(() => {
+      optionButton(container, "重试").click()
+      optionButton(container, "继续").click()
+    })
+    await act(async () => {
+      buttonByText(container, "提交").click()
+      await Promise.resolve()
+    })
+
+    expect(onRespond).toHaveBeenCalledWith("request-1", "allow", {
+      questions: identifiedQuestions,
+      answers: { "question-id": "重试", "question-key": "继续" },
+    })
+  })
+
+  it("submits multi-select answers as arrays without splitting labels on commas", async () => {
+    const multiQuestions = [{
+      question: "选择处理范围",
+      options: [
+        { label: "文档, 图片" },
+        { label: "音频" },
+      ],
+      multiSelect: true,
+    }]
+    const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn(async () => undefined)
+    const container = renderCard(onRespond, {
+      ...questionItem,
+      questions: multiQuestions,
+      toolInputRaw: { questions: multiQuestions },
+    })
+
+    act(() => {
+      optionButton(container, "文档, 图片").click()
+      optionButton(container, "音频").click()
+    })
+    await act(async () => {
+      buttonByText(container, "提交").click()
+      await Promise.resolve()
+    })
+
+    expect(onRespond).toHaveBeenCalledWith("request-1", "allow", {
+      questions: multiQuestions,
+      answers: { "question-0": ["文档, 图片", "音频"] },
+    })
+  })
+
+  it("restores answered selections as disabled controls", () => {
+    const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn()
+    const container = renderCard(onRespond, {
+      ...questionItem,
+      resolution: {
+        status: "answered",
+        resolvedAt: "2026-05-14T00:01:00.000Z",
+        answers: [{ questionIndex: 0, values: ["重试"] }],
+      },
+    }, false)
+
+    const selected = optionButton(container, "重试")
+    const unselected = optionButton(container, "跳过")
+    expect(container.textContent).toContain("已回答")
+    expect(selected.dataset.state).toBe("checked")
+    expect(selected.disabled).toBe(true)
+    expect(unselected.dataset.state).toBe("unchecked")
+    expect(container.textContent).not.toContain("提交")
+  })
+
+  it("shows unmatched persisted answers instead of dropping them", () => {
+    const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn()
+    const container = renderCard(onRespond, {
+      ...questionItem,
+      resolution: {
+        status: "answered",
+        resolvedAt: "2026-05-14T00:01:00.000Z",
+        answers: [{ questionIndex: 0, values: ["外部渠道输入"] }],
+      },
+    }, false)
+
+    expect(container.textContent).toContain("已回答：外部渠道输入")
+  })
+
+  it.each([
+    ["skipped", "未回答"],
+    ["timed_out", "已超时"],
+    ["cancelled", "已停止"],
+  ] as const)("renders %s resolution status", (status, label) => {
+    const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn()
+    const container = renderCard(onRespond, {
+      ...questionItem,
+      resolution: { status, resolvedAt: "2026-05-14T00:01:00.000Z" },
+    }, false)
+
+    expect(container.textContent).toContain(label)
+    expect(container.textContent).not.toContain("提交")
+  })
+
+  it("labels legacy resolved cards without inventing an answer", () => {
+    const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn()
+    const container = renderCard(onRespond, questionItem, false)
+
+    expect(container.textContent).toContain("已结束")
+    expect(optionButton(container, "重试").dataset.state).toBe("unchecked")
+  })
+
   it("can skip a pending question without treating it as approval", async () => {
     const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn(async () => undefined)
     const container = renderCard(onRespond)
@@ -191,6 +311,7 @@ describe("AgentUserQuestionCard", () => {
 function renderCard(
   onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"],
   item: SynapseAgentPermissionRequestTimelineItem = questionItem,
+  pending = true,
 ): HTMLElement {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -200,7 +321,7 @@ function renderCard(
     root.render(
       <AgentUserQuestionCard
         item={item}
-        pending
+        pending={pending}
         isLatestPending
         onRespond={onRespond}
       />,

@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 import type {
   SynapseAgentPermissionRequestTimelineItem,
   SynapseAgentUserQuestion,
+  SynapseAgentUserQuestionResolution,
 } from "@/types/agent"
 import { formatAgentInputText, sanitizeAgentRawInput } from "../utils"
 
@@ -37,7 +38,7 @@ function AgentUserQuestionCard({
 }: AgentUserQuestionCardProps) {
   const questions = useMemo(() => userQuestions(item), [item])
   const domIdPrefix = useId()
-  const [answers, setAnswers] = useState<AnswerState>({})
+  const [answers, setAnswers] = useState<AnswerState>(() => answerStateFromResolution(item.resolution))
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -46,9 +47,14 @@ function AgentUserQuestionCard({
     }
   }, [submitting, pending])
 
+  useEffect(() => {
+    if (item.resolution) setAnswers(answerStateFromResolution(item.resolution))
+  }, [item.resolution])
+
   const complete = questions.length > 0
     && questions.every((question, index) => (answers[index]?.length ?? 0) > 0)
   const body = item.toolInput ? formatAgentInputText(item.toolInput) : formatRawInput(item.toolInputRaw)
+  const interactive = pending && !item.resolution
 
   function selectSingle(index: number, value: string) {
     setAnswers((current) => ({ ...current, [index]: [value] }))
@@ -67,7 +73,10 @@ function AgentUserQuestionCard({
     if (submitting || !complete) return
     setSubmitting(true)
     const answerRecord = Object.fromEntries(
-      questions.map((question, index) => [questionAnswerKey(question, index), (answers[index] ?? []).join(", ")]),
+      questions.map((question, index) => [
+        questionAnswerKey(question, index),
+        question.multiSelect ? answers[index] ?? [] : answers[index]?.[0] ?? "",
+      ]),
     )
     track({
       component: "agent",
@@ -109,6 +118,7 @@ function AgentUserQuestionCard({
     })
     try {
       await onRespond(item.requestId, "deny", undefined, ASK_USER_QUESTION_EMPTY_ANSWER_MESSAGE)
+      setAnswers({})
     } catch {
       setSubmitting(false)
     }
@@ -119,15 +129,15 @@ function AgentUserQuestionCard({
       data-agent-permission-request-id={item.requestId}
       className={cn(
         "my-1 overflow-hidden rounded-lg border border-border bg-card",
-        isLatestPending && pending && "ring-2 ring-primary",
+        isLatestPending && interactive && "ring-2 ring-primary",
       )}
     >
       <div className="flex items-center gap-2 bg-muted/30 px-3 py-2">
         <CircleHelp className="size-4 shrink-0 text-muted-foreground" />
         <span className="text-sm font-semibold">{questions[0]?.header ?? "需要选择"}</span>
         <div className="ml-auto flex items-center gap-1.5">
-          {!pending ? (
-            <Badge variant="secondary">已处理</Badge>
+          {!interactive ? (
+            <Badge variant="secondary">{resolutionStatusLabel(item.resolution)}</Badge>
           ) : null}
         </div>
       </div>
@@ -141,7 +151,8 @@ function AgentUserQuestionCard({
               index={index}
               idPrefix={`${domIdPrefix}-${index}`}
               selected={answers[index] ?? []}
-              disabled={!pending || submitting}
+              resolution={item.resolution}
+              disabled={!interactive || submitting}
               onSelectSingle={selectSingle}
               onToggleMulti={toggleMulti}
             />
@@ -153,7 +164,7 @@ function AgentUserQuestionCard({
         </div>
       ) : null}
 
-      {pending ? (
+      {interactive ? (
         <div className="flex items-center gap-2 border-t border-border px-3 py-2">
           <Button
             type="button"
@@ -183,6 +194,7 @@ function QuestionBlock({
   index,
   idPrefix,
   selected,
+  resolution,
   disabled,
   onSelectSingle,
   onToggleMulti,
@@ -191,11 +203,15 @@ function QuestionBlock({
   readonly index: number
   readonly idPrefix: string
   readonly selected: readonly string[]
+  readonly resolution?: SynapseAgentUserQuestionResolution
   readonly disabled: boolean
   readonly onSelectSingle: (index: number, value: string) => void
   readonly onToggleMulti: (index: number, value: string, checked: boolean) => void
 }) {
   const options = question.options ?? []
+  const unmatchedAnswers = resolution?.status === "answered"
+    ? selected.filter((value) => !options.some((option) => option.label === value))
+    : []
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-1">
@@ -212,7 +228,11 @@ function QuestionBlock({
               <Label
                 key={optionId}
                 htmlFor={optionId}
-                className="flex cursor-pointer items-start gap-2 rounded-md border border-border p-2"
+                className={cn(
+                  "flex cursor-pointer items-start gap-2 rounded-md border border-border p-2",
+                  disabled && "cursor-default",
+                  selected.includes(option.label) && "bg-muted/50",
+                )}
               >
                 <Checkbox
                   id={optionId}
@@ -237,7 +257,11 @@ function QuestionBlock({
               <Label
                 key={optionId}
                 htmlFor={optionId}
-                className="flex cursor-pointer items-start gap-2 rounded-md border border-border p-2"
+                className={cn(
+                  "flex cursor-pointer items-start gap-2 rounded-md border border-border p-2",
+                  disabled && "cursor-default",
+                  selected.includes(option.label) && "bg-muted/50",
+                )}
               >
                 <RadioGroupItem id={optionId} value={option.label} />
                 <OptionText label={option.label} description={option.description} />
@@ -246,6 +270,9 @@ function QuestionBlock({
           })}
         </RadioGroup>
       )}
+      {unmatchedAnswers.length > 0 ? (
+        <p className="text-xs text-muted-foreground">已回答：{unmatchedAnswers.join("、")}</p>
+      ) : null}
     </div>
   )
 }
@@ -296,9 +323,11 @@ function parseQuestions(rawQuestions: readonly unknown[]): readonly SynapseAgent
     })
     if (options.some((option) => !option)) return []
     const header = typeof record?.header === "string" ? record.header : undefined
-    const id = questionId(record)
+    const id = typeof record?.id === "string" && record.id.trim() ? record.id.trim() : undefined
+    const key = typeof record?.key === "string" && record.key.trim() ? record.key.trim() : undefined
     questions.push({
       ...(id ? { id } : {}),
+      ...(key ? { key } : {}),
       question,
       ...(header ? { header } : {}),
       options: options as SynapseAgentUserQuestion["options"],
@@ -316,6 +345,29 @@ function questionId(record: Record<string, unknown> | undefined): string | undef
   const id = typeof record?.id === "string" && record.id.trim() ? record.id.trim() : undefined
   if (id) return id
   return typeof record?.key === "string" && record.key.trim() ? record.key.trim() : undefined
+}
+
+function answerStateFromResolution(
+  resolution: SynapseAgentUserQuestionResolution | undefined,
+): AnswerState {
+  return Object.fromEntries(
+    resolution?.answers?.map((answer) => [answer.questionIndex, answer.values]) ?? [],
+  )
+}
+
+function resolutionStatusLabel(resolution: SynapseAgentUserQuestionResolution | undefined): string {
+  switch (resolution?.status) {
+    case "answered":
+      return "已回答"
+    case "skipped":
+      return "未回答"
+    case "timed_out":
+      return "已超时"
+    case "cancelled":
+      return "已停止"
+    default:
+      return "已结束"
+  }
 }
 
 function formatRawInput(value: Record<string, unknown> | undefined): string {

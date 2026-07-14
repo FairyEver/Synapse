@@ -37,4 +37,39 @@ describe("agent IPC event schema", () => {
       text: "hi",
     })
   })
+
+  it("preserves user question identity and resolution in timeline responses", () => {
+    const parsed = agentIpcModule.methods.getTimeline.response!.parse({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      conversationId: "conversation-1",
+      entries: [{
+        id: "question-1",
+        kind: "permissionRequest",
+        timestamp: "2026-07-14T00:00:00.000Z",
+        requestId: "request-1",
+        toolName: "AskUserQuestion",
+        questions: [{
+          id: "question-id",
+          key: "question-key",
+          question: "选一个？",
+          options: [{ label: "A" }, { label: "B" }],
+          multiSelect: false,
+        }],
+        resolution: {
+          status: "answered",
+          resolvedAt: "2026-07-14T00:01:00.000Z",
+          answers: [{ questionIndex: 0, values: ["B"] }],
+        },
+      }],
+    }) as { entries: Array<Record<string, unknown>> }
+
+    expect(parsed.entries[0]).toMatchObject({
+      questions: [{ id: "question-id", key: "question-key" }],
+      resolution: {
+        status: "answered",
+        answers: [{ questionIndex: 0, values: ["B"] }],
+      },
+    })
+  })
 })
