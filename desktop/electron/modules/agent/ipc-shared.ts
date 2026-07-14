@@ -106,10 +106,20 @@ export const agentUserQuestionOptionSchema = z.object({
   description: z.string().optional(),
 })
 export const agentUserQuestionSchema = z.object({
+  id: z.string().optional(),
+  key: z.string().optional(),
   question: z.string(),
   header: z.string().optional(),
   options: z.array(agentUserQuestionOptionSchema).optional(),
   multiSelect: z.boolean().optional(),
+})
+export const agentUserQuestionResolutionSchema = z.object({
+  status: z.enum(["answered", "skipped", "timed_out", "cancelled"]),
+  resolvedAt: z.string(),
+  answers: z.array(z.object({
+    questionIndex: z.number().int().nonnegative(),
+    values: z.array(z.string()),
+  })).optional(),
 })
 const resultMetadataSchema = z.object({
   mainThreadPersona: z.object({
@@ -177,6 +187,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     toolInput: z.string().optional(),
     toolInputRaw: jsonRecordSchema.optional(),
     questions: z.array(agentUserQuestionSchema).optional(),
+    resolution: agentUserQuestionResolutionSchema.optional(),
   }),
   z.object({
     ...timelineBaseSchema,

@@ -10,7 +10,7 @@ import {
   sumClaudeSdkUsageSummaries,
   type ClaudeSdkUsageSummary,
 } from "../../../src/lib/token-usage"
-import type { AgentMessage } from "./types"
+import type { AgentMessage, AgentUserQuestionResolution } from "./types"
 
 export interface AgentSessionRepositoryOptions {
   readonly projectId: string
@@ -315,6 +315,35 @@ export class AgentSessionRepository {
     const history = conversation.history.map((entry, index) =>
       index === historyIndex
         ? { ...entry, metadata: { ...(entry.metadata ?? {}), ...metadata } }
+        : entry)
+    const updated = {
+      ...conversation,
+      history,
+      updatedAt: this.isoNow(),
+    }
+    await this.conversations.upsert(updated)
+    return updated
+  }
+
+  async resolveUserQuestion(
+    conversationIdValue: string,
+    requestId: string,
+    resolution: AgentUserQuestionResolution,
+  ): Promise<ConversationEntryV1 | null> {
+    const conversation = await this.requireConversation(conversationIdValue)
+    const historyIndex = findPermissionRequestHistoryIndex(conversation.history, requestId)
+    if (historyIndex === -1) return null
+    const current = conversation.history[historyIndex]
+    if (current?.metadata?.userQuestionResolution) return null
+    const history = conversation.history.map((entry, index) =>
+      index === historyIndex
+        ? {
+            ...entry,
+            metadata: {
+              ...(entry.metadata ?? {}),
+              userQuestionResolution: resolution,
+            },
+          }
         : entry)
     const updated = {
       ...conversation,
@@ -742,6 +771,19 @@ function findLastHistoryIndex(
 ): number {
   for (let index = history.length - 1; index >= 0; index -= 1) {
     if (history[index]?.role === role) return index
+  }
+  return -1
+}
+
+function findPermissionRequestHistoryIndex(
+  history: readonly ConversationEntryV1["history"][number][],
+  requestId: string,
+): number {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const metadata = history[index]?.metadata
+    if (metadata?.agentEventType === "permissionRequest" && metadata.requestId === requestId) {
+      return index
+    }
   }
   return -1
 }

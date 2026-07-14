@@ -919,6 +919,7 @@ describe("AgentRuntimeService", () => {
 
   it("answers AskUserQuestion without running permission guard", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const eventBus = { emit: vi.fn() }
     const questions = [{
       question: "该怎么处理？",
       header: "处理方式",
@@ -937,6 +938,7 @@ describe("AgentRuntimeService", () => {
       providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
       createSession: () => session,
       permissionGuard: permissionGuard as never,
+      eventBus: eventBus as never,
       now: fixedNow,
     })
 
@@ -960,7 +962,65 @@ describe("AgentRuntimeService", () => {
         answers: { "该怎么处理？": "重试" },
       },
     }])
-    await expect(turn).resolves.toMatchObject({ resultText: "question answered" })
+    const result = await turn
+    expect(result).toMatchObject({ resultText: "question answered" })
+    const stored = await conversations.get(result.conversationId)
+    expect(stored?.history.find((entry) => entry.metadata?.requestId === "conversation-a-permission-1")?.metadata)
+      .toMatchObject({
+        userQuestionResolution: {
+          status: "answered",
+          resolvedAt: "2026-04-26T00:00:00.000Z",
+          answers: [{ questionIndex: 0, values: ["重试"] }],
+        },
+      })
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: "conversationUpdated",
+      payload: expect.objectContaining({ conversationId: result.conversationId }),
+    }))
+  })
+
+  it("normalizes multi-select arrays for the SDK while preserving exact stored values", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const questions = [{
+      question: "选择处理范围",
+      options: [
+        { label: "文档, 图片" },
+        { label: "音频" },
+      ],
+      multiSelect: true,
+    }]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "question answered")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs choices"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+    await service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      updatedInput: { answers: { "question-0": ["文档, 图片", "音频"] } },
+      actor: { kind: "user" },
+    })
+
+    expect(session.responses[0]?.updatedInput).toEqual({
+      questions,
+      answers: { "选择处理范围": "文档, 图片, 音频" },
+    })
+    const result = await turn
+    const stored = await conversations.get(result.conversationId)
+    expect(stored?.history.find((entry) => entry.metadata?.requestId === "conversation-a-permission-1")?.metadata)
+      .toMatchObject({
+        userQuestionResolution: {
+          status: "answered",
+          answers: [{ questionIndex: 0, values: ["文档, 图片", "音频"] }],
+        },
+      })
   })
 
   it("passes through AskUserQuestion answers already keyed by question text", async () => {
@@ -1189,7 +1249,11 @@ describe("AgentRuntimeService", () => {
       behavior: "deny",
       message: "未收到选择，已停止操作。",
     }])
-    await expect(turn).resolves.toMatchObject({ resultText: "question skipped" })
+    const result = await turn
+    expect(result).toMatchObject({ resultText: "question skipped" })
+    const stored = await conversations.get(result.conversationId)
+    expect(stored?.history.find((entry) => entry.metadata?.requestId === "conversation-a-permission-1")?.metadata)
+      .toMatchObject({ userQuestionResolution: { status: "skipped" } })
   })
 
   it("uses answer timeout wording for AskUserQuestion pending requests", async () => {
@@ -1223,7 +1287,39 @@ describe("AgentRuntimeService", () => {
       behavior: "deny",
       message: "等待用户回复超时，已停止本次操作。",
     }])
-    await expect(turn).resolves.toMatchObject({ resultText: "question timed out" })
+    const result = await turn
+    expect(result).toMatchObject({ resultText: "question timed out" })
+    const stored = await conversations.get(result.conversationId)
+    expect(stored?.history.find((entry) => entry.metadata?.requestId === "conversation-a-permission-1")?.metadata)
+      .toMatchObject({ userQuestionResolution: { status: "timed_out" } })
+  })
+
+  it("records a pending AskUserQuestion as cancelled when the turn stops", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const questions = [{
+      question: "继续吗？",
+      options: [{ label: "继续" }, { label: "停止" }],
+      multiSelect: false,
+    }]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "unused")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs choice"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+    const pending = service.listPendingPermissions()[0]
+    await expect(service.cancelTurn(pending!.conversationId)).resolves.toEqual({ status: "hard-killed" })
+    await turn
+
+    const stored = await conversations.get(pending!.conversationId)
+    expect(stored?.history.find((entry) => entry.metadata?.requestId === "conversation-a-permission-1")?.metadata)
+      .toMatchObject({ userQuestionResolution: { status: "cancelled" } })
   })
 
   it("redacts permission response failure audit metadata", async () => {

@@ -123,6 +123,50 @@ describe("AgentSessionRepository", () => {
     expect((await repository.getActive("s1", "local"))?.id).toBe(second.id)
   })
 
+  it("resolves only the matching user question history entry once", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+    })
+    const session = await repository.createSession({
+      sessionKey: "s1",
+      platform: "local",
+      name: "questions",
+    })
+    await repository.appendHistory(session.id, "system", "AskUserQuestion", {
+      agentEventType: "permissionRequest",
+      requestId: "request-1",
+    })
+    await repository.appendHistory(session.id, "system", "status", {
+      agentEventType: "sdkEvent",
+    })
+    await repository.appendHistory(session.id, "system", "AskUserQuestion", {
+      agentEventType: "permissionRequest",
+      requestId: "request-2",
+    })
+
+    await repository.resolveUserQuestion(session.id, "request-1", {
+      status: "answered",
+      resolvedAt: "2026-05-14T00:01:00.000Z",
+      answers: [{ questionIndex: 0, values: ["确认发送"] }],
+    })
+    await repository.resolveUserQuestion(session.id, "request-1", {
+      status: "cancelled",
+      resolvedAt: "2026-05-14T00:02:00.000Z",
+    })
+
+    const history = (await conversations.get(session.id))?.history ?? []
+    expect(history[0]?.metadata?.userQuestionResolution).toEqual({
+      status: "answered",
+      resolvedAt: "2026-05-14T00:01:00.000Z",
+      answers: [{ questionIndex: 0, values: ["确认发送"] }],
+    })
+    expect(history[1]?.metadata?.userQuestionResolution).toBeUndefined()
+    expect(history[2]?.metadata?.userQuestionResolution).toBeUndefined()
+  })
+
   it("retries the final active write when creating a session", async () => {
     const conversations = new FailingUpsertNamespace<ConversationEntryV1>("conversations", new Set([2]))
     const logger = { warn: vi.fn() }

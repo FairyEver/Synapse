@@ -59,6 +59,7 @@ import type {
   AgentPermissionRequestEvent,
   AgentRuntimeRelayResult,
   AgentRuntimeTurnResult,
+  AgentUserQuestionResolution,
 } from "./types"
 import { redactSensitiveText } from "./redaction"
 import {
@@ -1224,6 +1225,15 @@ export class ConversationRouter {
       let settled = false
       const abort = (): void => {
         this.sessionManager.settlePendingPermission(pending)
+        if (isAskUserQuestionEvent(event)) {
+          const status = String(abortSignal?.reason ?? "").includes("timeout")
+            ? "timed_out"
+            : "cancelled"
+          void this.persistUserQuestionResolution(conversationId, event.requestId, {
+            status,
+            resolvedAt: this.isoNow(),
+          })
+        }
       }
       const settle = (): void => {
         if (settled) return
@@ -1260,8 +1270,14 @@ export class ConversationRouter {
         liveSession.respondPermission(event.requestId, {
           behavior: "deny",
           message: permissionTimeoutMessage(event),
-        }).then(() => {
+        }).then(async () => {
           this.sessionManager.settlePendingPermission(pending)
+          if (isAskUserQuestionEvent(event)) {
+            await this.persistUserQuestionResolution(conversationId, event.requestId, {
+              status: "timed_out",
+              resolvedAt: this.isoNow(),
+            })
+          }
         }).catch((error) => {
           this.deps.logger?.warn("Permission timeout auto-deny failed.", {
             boundary: "agent-runtime.permission-timeout",
@@ -1619,6 +1635,26 @@ export class ConversationRouter {
         ...queuedTurnFailureMetadata(error),
       })
       return false
+    }
+  }
+
+  private async persistUserQuestionResolution(
+    conversationId: string,
+    requestId: string,
+    resolution: AgentUserQuestionResolution,
+  ): Promise<void> {
+    try {
+      const conversation = await this.repository.resolveUserQuestion(conversationId, requestId, resolution)
+      if (conversation) this.emitConversationUpdated(conversation)
+    } catch (error) {
+      this.deps.logger?.warn("Agent user question resolution persistence failed.", {
+        boundary: "agent-runtime.user-question-resolution",
+        projectId: this.deps.projectId,
+        conversationId,
+        requestId,
+        status: resolution.status,
+        ...queuedTurnFailureMetadata(error),
+      })
     }
   }
 

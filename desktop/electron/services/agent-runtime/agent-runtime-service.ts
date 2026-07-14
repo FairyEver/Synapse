@@ -80,6 +80,7 @@ import type {
   AgentMessage,
   AgentPendingPermission,
   AgentPermissionResponseRequest,
+  AgentUserQuestionResolution,
   AgentRuntimeRelayResult,
   AgentRuntimeTurnResult,
   CancelTurnResult,
@@ -570,7 +571,16 @@ export class AgentRuntimeService {
       })
     }
 
+    const pendingQuestion = state.pending && isAskUserQuestionTool(state.pending.toolName)
+      ? state.pending
+      : undefined
     this.sessionManager.settlePending(state)
+    if (pendingQuestion) {
+      await this.persistUserQuestionResolution(pendingQuestion, {
+        status: "cancelled",
+        resolvedAt: this.isoNow(),
+      })
+    }
 
     if (state.liveSession) {
       const gracefulSent = await this.sessionManager.interrupt(conversationId)
@@ -819,6 +829,10 @@ export class AgentRuntimeService {
           message: ASK_USER_QUESTION_EMPTY_ANSWER_MESSAGE,
         })
         this.sessionManager.settlePendingPermission(pending)
+        await this.persistUserQuestionResolution(pending, {
+          status: "skipped",
+          resolvedAt: this.isoNow(),
+        })
         throw error
       }
       await pending.liveSession.respondPermission(request.requestId, {
@@ -827,6 +841,10 @@ export class AgentRuntimeService {
         message: askUserQuestionResponseMessage(request),
       })
       this.sessionManager.settlePendingPermission(pending)
+      await this.persistUserQuestionResolution(
+        pending,
+        askUserQuestionResolution(pending, request, this.isoNow()),
+      )
       return
     }
 
@@ -1246,6 +1264,29 @@ export class AgentRuntimeService {
     return message.workspacePath ?? this.deps.workDir
   }
 
+  private async persistUserQuestionResolution(
+    pending: PendingPermissionState,
+    resolution: AgentUserQuestionResolution,
+  ): Promise<void> {
+    try {
+      const conversation = await this.repository.resolveUserQuestion(
+        pending.conversationId,
+        pending.requestId,
+        resolution,
+      )
+      if (conversation) this.emitConversationUpdated(conversation)
+    } catch (error) {
+      this.deps.logger?.warn("Agent user question resolution persistence failed.", {
+        boundary: "agent-runtime.user-question-resolution",
+        projectId: pending.projectId,
+        conversationId: pending.conversationId,
+        requestId: pending.requestId,
+        status: resolution.status,
+        error: agentRuntimeErrorMessage(error),
+      })
+    }
+  }
+
   private replyTargetEnv(message: AgentMessage): Record<string, string> | undefined {
     return this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey)
   }
@@ -1398,7 +1439,7 @@ function askUserQuestionUpdatedInput(
   if (!answers || Object.keys(answers).length === 0) {
     throw new Error(AGENT_ASK_USER_QUESTION_ANSWERS_REQUIRED_MESSAGE)
   }
-  const questions = request.updatedInput?.questions ?? pending.questions ?? pending.toolInputRaw?.questions
+  const questions = pending.questions ?? pending.toolInputRaw?.questions ?? request.updatedInput?.questions
   if (!Array.isArray(questions)) {
     throw new Error(AGENT_ASK_USER_QUESTION_QUESTIONS_REQUIRED_MESSAGE)
   }
@@ -1410,6 +1451,41 @@ function askUserQuestionUpdatedInput(
       ? { answers: normalized.answers }
       : { response: normalized.response }),
   }
+}
+
+function askUserQuestionResolution(
+  pending: PendingPermissionState,
+  request: AgentPermissionResponseRequest,
+  resolvedAt: string,
+): AgentUserQuestionResolution {
+  if (request.behavior === "deny") {
+    return { status: "skipped", resolvedAt }
+  }
+  const questions = request.updatedInput?.questions ?? pending.questions ?? pending.toolInputRaw?.questions
+  const answers = recordValue(request.updatedInput?.answers)
+  if (!Array.isArray(questions) || !answers) {
+    return { status: "answered", resolvedAt }
+  }
+  const questionTextCounts = askUserQuestionTextCounts(questions)
+  const resolvedAnswers = questions.flatMap((question, index) => {
+    const record = recordValue(question)
+    const answer = askUserQuestionAnswerValue(answers, record, index, questionTextCounts)
+    const values = askUserQuestionResolutionValues(answer)
+    return values.length > 0 ? [{ questionIndex: index, values }] : []
+  })
+  return {
+    status: "answered",
+    resolvedAt,
+    ...(resolvedAnswers.length > 0 ? { answers: resolvedAnswers } : {}),
+  }
+}
+
+function askUserQuestionResolutionValues(value: unknown): string[] {
+  if (value === undefined || value === null) return []
+  const values = Array.isArray(value) ? value : [value]
+  return values
+    .map((item) => String(item).trim())
+    .filter(Boolean)
 }
 
 function normalizeAskUserQuestionResponse(
@@ -1438,9 +1514,9 @@ function normalizeAskUserQuestionResponse(
     if (!hasAnswerValue(answer)) {
       throw new Error(AGENT_ASK_USER_QUESTION_ALL_ANSWERS_REQUIRED_MESSAGE)
     }
-    normalizedAnswers[textKey] = answer
     const label = askUserQuestionResponseLabel(record, index)
     const formattedAnswer = formatAskUserQuestionAnswerValue(answer)
+    normalizedAnswers[textKey] = formattedAnswer
     responseLines.push(`${index + 1}. ${label}: ${formattedAnswer}`)
   })
 

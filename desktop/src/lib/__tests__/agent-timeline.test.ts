@@ -101,6 +101,40 @@ describe("agent timeline conversion", () => {
     })
   })
 
+  it("restores user question ids, keys, and resolution metadata", () => {
+    expect(historyRecordToTimelineItem("session-1", {
+      role: "system",
+      content: "AskUserQuestion",
+      timestamp: "2026-07-14T00:00:00.000Z",
+      metadata: {
+        agentEventType: "permissionRequest",
+        requestId: "request-1",
+        toolName: "AskUserQuestion",
+        questions: [{
+          id: "question-id",
+          key: "question-key",
+          question: "选择处理范围",
+          options: [{ label: "文档, 图片" }, { label: "音频" }],
+          multiSelect: true,
+        }],
+        userQuestionResolution: {
+          status: "answered",
+          resolvedAt: "2026-07-14T00:01:00.000Z",
+          answers: [{ questionIndex: 0, values: ["文档, 图片", "音频"] }],
+        },
+      },
+    }, 2, "claude")).toEqual(expect.objectContaining({
+      kind: "permissionRequest",
+      requestId: "request-1",
+      questions: [expect.objectContaining({ id: "question-id", key: "question-key" })],
+      resolution: {
+        status: "answered",
+        resolvedAt: "2026-07-14T00:01:00.000Z",
+        answers: [{ questionIndex: 0, values: ["文档, 图片", "音频"] }],
+      },
+    }))
+  })
+
   it("restores image artifacts from stored tool result metadata", () => {
     expect(historyRecordToTimelineItem("session-1", {
       role: "tool",

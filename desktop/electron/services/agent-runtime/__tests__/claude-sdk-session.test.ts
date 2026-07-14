@@ -908,6 +908,8 @@ describe("ClaudeSDKSession", () => {
     const session = createSession(factory)
     const questionInput = {
       questions: [{
+        id: "question-id",
+        key: "question-key",
         question: "该怎么处理？",
         header: "处理方式",
         options: [
