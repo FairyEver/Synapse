@@ -57,11 +57,16 @@ export function normalizeClaudeSdkUsage(
   usage: Record<string, unknown> | undefined,
 ): ClaudeSdkUsageSummary | undefined {
   if (!usage) return undefined
-  const inputTokens = tokenNumber(usage, ["input_tokens"])
-  const outputTokens = tokenNumber(usage, ["output_tokens"])
-  const cacheReadInputTokens = tokenNumber(usage, ["cache_read_input_tokens"])
-  const cacheCreationInputTokens = tokenNumber(usage, ["cache_creation_input_tokens"])
-  const reasoningOutputTokens = tokenNumber(usage, ["reasoning_output_tokens", "reasoning_tokens"])
+  const inputTokens = tokenNumber(usage, ["input_tokens", "inputTokens"])
+  const outputTokens = tokenNumber(usage, ["output_tokens", "outputTokens"])
+  const cacheReadInputTokens = tokenNumber(usage, ["cache_read_input_tokens", "cacheReadInputTokens", "cacheRead"])
+  const cacheCreationInputTokens = tokenNumber(usage, ["cache_creation_input_tokens", "cacheCreationInputTokens", "cacheWrite"])
+  const reasoningOutputTokens = tokenNumber(usage, [
+    "reasoning_output_tokens",
+    "reasoningOutputTokens",
+    "reasoning_tokens",
+    "reasoningTokens",
+  ])
   if (
     inputTokens === undefined
     && outputTokens === undefined

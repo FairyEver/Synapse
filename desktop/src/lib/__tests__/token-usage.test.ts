@@ -24,6 +24,23 @@ describe("token usage helpers", () => {
     })
   })
 
+  it("normalizes camel-case model usage fields", () => {
+    expect(normalizeClaudeSdkUsage({
+      inputTokens: 10,
+      outputTokens: 2,
+      cacheCreationInputTokens: 4,
+      cacheReadInputTokens: 30,
+      reasoningOutputTokens: 7,
+    })).toEqual({
+      inputTokens: 10,
+      outputTokens: 2,
+      cacheCreationInputTokens: 4,
+      cacheReadInputTokens: 30,
+      reasoningOutputTokens: 7,
+      totalTokens: 53,
+    })
+  })
+
   it("sums unique Claude SDK usage records with reasoning when present", () => {
     expect(sumClaudeSdkUsage([
       {

@@ -384,11 +384,12 @@ export class AgentSessionRepository {
     readonly sdkResultUuid?: string
     readonly sdkSessionId?: string
     readonly usage?: Record<string, unknown>
+    readonly usageSummary?: ClaudeSdkUsageSummary
     readonly modelUsage?: Record<string, unknown>
     readonly userMeta?: ConversationEntryV1["userMeta"]
   }): Promise<AgentUsageEntryV1 | undefined> {
     if (!this.agentUsage) return undefined
-    const summary = normalizeClaudeSdkUsage(input.usage)
+    const summary = input.usageSummary ?? normalizeClaudeSdkUsage(input.usage)
     if (!input.usage || !summary) return undefined
     const conversation = await this.requireConversation(input.conversationId)
     const source = usageSourceFields(input.userMeta ?? conversation.userMeta)

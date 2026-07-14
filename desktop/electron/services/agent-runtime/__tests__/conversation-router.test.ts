@@ -980,8 +980,8 @@ describe("ConversationRouter", () => {
           sdkResultUuid: "result-multi-model",
           sdkSessionId: "sdk-1",
           usage: {
-            input_tokens: 3_000,
-            output_tokens: 400,
+            input_tokens: 2_000,
+            output_tokens: 300,
           },
           modelUsage: {
             "qwen-max": { input_tokens: 1_000, output_tokens: 100 },
@@ -996,8 +996,23 @@ describe("ConversationRouter", () => {
     const savedConversation = await conversations.get(result.conversationId)
     const assistantEntry = savedConversation?.history.find((entry) => entry.role === "assistant")
     const resultEvent = events.find((event) => event.type === "result")?.payload?.event as AgentResultEvent | undefined
+    const usageRows = await agentUsage.list()
 
     expect(assistantEntry?.metadata).toEqual(expect.objectContaining({
+      usage: {
+        inputTokens: 3_000,
+        outputTokens: 400,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        totalTokens: 3_400,
+      },
+      turnUsage: {
+        inputTokens: 3_000,
+        outputTokens: 400,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        totalTokens: 3_400,
+      },
       modelUsage: {
         "qwen-max": { input_tokens: 1_000, output_tokens: 100 },
         "deepseek-chat": { inputTokens: 2_000, outputTokens: 300 },
@@ -1021,6 +1036,19 @@ describe("ConversationRouter", () => {
         costBreakdownCny: assistantEntry?.metadata?.costBreakdownCny,
       }),
     }))
+    expect(usageRows).toEqual([
+      expect.objectContaining({
+        usage: { input_tokens: 2_000, output_tokens: 300 },
+        usageSummary: {
+          inputTokens: 3_000,
+          outputTokens: 400,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          totalTokens: 3_400,
+        },
+      }),
+    ])
+    expect(result.usage).toEqual({ input_tokens: 2_000, output_tokens: 300 })
     expect(result.costCny).toBe(0.0272)
   })
 
@@ -1139,8 +1167,89 @@ describe("ConversationRouter", () => {
     }))
   })
 
-  it("falls back to turn usage pricing when cumulative per-model usage cannot be normalized", async () => {
+  it("includes auxiliary model deltas when top-level usage only reports the main model", async () => {
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
     const { conversations, router } = createRouter({
+      agentUsage,
+      env: { ANTHROPIC_MODEL: "main-model" },
+      priceRules: [
+        priceRule("helper-model", { inputPer1M: 1, outputPer1M: 2 }),
+        priceRule("main-model", { inputPer1M: 10, outputPer1M: 20 }),
+      ],
+      session: new ScriptedSession([
+        {
+          type: "result",
+          content: "first usage answer",
+          done: true,
+          sdkResultUuid: "result-helper-delta-1",
+          sdkSessionId: "sdk-1",
+          usage: { input_tokens: 100, output_tokens: 10 },
+          modelUsage: {
+            "helper-model": { inputTokens: 10, outputTokens: 2 },
+            "main-model": { inputTokens: 100, outputTokens: 10 },
+          },
+        },
+        {
+          type: "result",
+          content: "second usage answer",
+          done: true,
+          sdkResultUuid: "result-helper-delta-2",
+          sdkSessionId: "sdk-1",
+          usage: { input_tokens: 50, output_tokens: 5 },
+          modelUsage: {
+            "helper-model": { inputTokens: 14, outputTokens: 5 },
+            "main-model": { inputTokens: 150, outputTokens: 15 },
+          },
+        },
+      ], "sdk-1"),
+    })
+
+    await router.send(baseMessage("hello"))
+    const second = await router.send(baseMessage("again"))
+    const savedConversation = await conversations.get(second.conversationId)
+    const assistantEntries = savedConversation?.history.filter((entry) => entry.role === "assistant")
+    const usageRows = await agentUsage.list()
+
+    expect(assistantEntries?.[1]?.metadata).toEqual(expect.objectContaining({
+      turnUsage: {
+        inputTokens: 54,
+        outputTokens: 8,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        totalTokens: 62,
+      },
+      usage: {
+        inputTokens: 164,
+        outputTokens: 20,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        totalTokens: 184,
+      },
+      costCny: 0.00061,
+      totalCostCny: 0.001824,
+    }))
+    expect(usageRows.map((row) => row.usageSummary)).toEqual([
+      {
+        inputTokens: 110,
+        outputTokens: 12,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        totalTokens: 122,
+      },
+      {
+        inputTokens: 54,
+        outputTokens: 8,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        totalTokens: 62,
+      },
+    ])
+  })
+
+  it("falls back to turn usage pricing when cumulative per-model usage cannot be normalized", async () => {
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { conversations, router } = createRouter({
+      agentUsage,
       env: { ANTHROPIC_MODEL: "fallback-model" },
       priceRules: [
         priceRule("fallback-model", { inputPer1M: 10, outputPer1M: 20 }),
@@ -1172,6 +1281,7 @@ describe("ConversationRouter", () => {
     const second = await router.send(baseMessage("again"))
     const savedConversation = await conversations.get(second.conversationId)
     const assistantEntries = savedConversation?.history.filter((entry) => entry.role === "assistant")
+    const usageRows = await agentUsage.list()
 
     expect(first.conversationId).toBe(second.conversationId)
     expect(assistantEntries?.[1]?.metadata).toEqual(expect.objectContaining({
@@ -1184,7 +1294,25 @@ describe("ConversationRouter", () => {
         cacheWrite: 0,
         reasoning: 0,
       },
+      turnUsage: {
+        input_tokens: 20,
+        output_tokens: 5,
+      },
+      usage: {
+        inputTokens: 120,
+        outputTokens: 15,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        totalTokens: 135,
+      },
     }))
+    expect(usageRows[1]?.usageSummary).toEqual({
+      inputTokens: 20,
+      outputTokens: 5,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      totalTokens: 25,
+    })
   })
 
   it("omits CNY result cost when per-model usage includes an unpriced model", async () => {
@@ -1205,8 +1333,8 @@ describe("ConversationRouter", () => {
           sdkResultUuid: "result-partial-model",
           sdkSessionId: "sdk-1",
           usage: {
-            input_tokens: 3_000,
-            output_tokens: 400,
+            input_tokens: 1_000,
+            output_tokens: 100,
           },
           modelUsage: {
             "qwen-max": { input_tokens: 1_000, output_tokens: 100 },
@@ -1223,6 +1351,20 @@ describe("ConversationRouter", () => {
     const resultEvent = events.find((event) => event.type === "result")?.payload?.event as AgentResultEvent | undefined
 
     expect(assistantEntry?.metadata).toEqual(expect.objectContaining({
+      usage: {
+        inputTokens: 3_000,
+        outputTokens: 400,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        totalTokens: 3_400,
+      },
+      turnUsage: {
+        inputTokens: 3_000,
+        outputTokens: 400,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        totalTokens: 3_400,
+      },
       modelUsage: {
         "qwen-max": { input_tokens: 1_000, output_tokens: 100 },
         "unknown-model": { inputTokens: 2_000, outputTokens: 300 },
