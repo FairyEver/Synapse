@@ -116,12 +116,13 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
                   onDelete()
                   return
                 }
+                suppressClickRef.current = true
                 setDeleteDialogOpen(true)
               }}
             >
               <Trash2 />
             </Button>
-            <AlertDialogContent>
+            <AlertDialogContent onClick={(event) => event.stopPropagation()}>
               <AlertDialogHeader>
                 <AlertDialogTitle>删除工作流</AlertDialogTitle>
                 <AlertDialogDescription>确定删除「{meta.name}」？此操作不可恢复。</AlertDialogDescription>
