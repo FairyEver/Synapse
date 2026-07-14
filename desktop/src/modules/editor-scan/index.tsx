@@ -376,6 +376,7 @@ function EditorScanModule() {
         contentScrollable={false}
         contentClassName="bg-surface"
         sidebarResizable
+        sidebarPersistenceId="editor-scan"
         sidebarDefaultSize={250}
         sidebarMinSize={250}
       >

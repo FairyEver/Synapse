@@ -814,6 +814,7 @@ export function TerminalModule() {
         sidebar={sidebar}
         contentScrollable={false}
         sidebarResizable
+        sidebarPersistenceId="terminal"
       >
         <main className="flex h-full min-h-0 min-w-0 flex-col">
           {activeSession ? (
