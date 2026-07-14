@@ -123,6 +123,7 @@ describe("SynapseSkillService", () => {
     })
     expect(detail.content).toContain("database/index.md")
     expect(detail.content).toContain("workflow/index.md")
+    expect(detail.content).toContain("static site publishing or republishing")
     expect(attachmentNames).toEqual([
       "app/api-reference.md",
       "app/index.md",
@@ -180,6 +181,17 @@ describe("SynapseSkillService", () => {
     expect(driveIndex).not.toContain("不处理密码分享")
     expect(driveIndex).toContain("passwordEnabled")
     expect(driveIndex).toContain("expiresIn")
+    expect(driveIndex).toContain("Choose the public route from the final publishable artifact")
+    expect(driveIndex).toContain("outer folder contains only that standalone HTML file")
+    expect(driveIndex).toContain("`app_drive_file_upload`, then `app_drive_share_create`")
+    expect(driveIndex).toContain("`app_drive_folder_upload`, then `app_drive_site_create`")
+    expect(driveIndex).toContain("Do not call `app_drive_share_create` again for a normal update")
+    expect(driveIndex).toContain("ask whether to republish the public site")
+    expect(driveIndex).toContain("call `app_drive_site_republish` with the existing `siteId` without asking again")
+    expect(driveIndex).toContain("Never call `app_drive_site_create` for an ordinary update")
+    expect(driveIndex).toContain("may remain cached for up to five minutes")
+    expect(driveApiText).toContain("Use a share for a standalone HTML file")
+    expect(driveApiText).toContain("republishing preserves the public site URL")
     expect(missingDriveTools).toEqual([])
     expect(automationIndex).toContain("builtin.workflow")
     expect(automationIndex).toContain("workflowId")

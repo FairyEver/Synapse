@@ -7,7 +7,7 @@ Use this skill when the user wants to operate Synapse through MCP tools.
 First classify the user's intent, then read the matching domain file before using tools:
 
 - Database, tables, rows, columns, choices, SQL, table folders, mutation logs -> `database/index.md`
-- Drive files, folders, upload, download, preview, share links, public assets, trash, versions -> `drive/index.md`
+- Drive files, folders, upload, download, preview, HTML page sharing, static site publishing or republishing, public assets, trash, versions -> `drive/index.md`
 - Workflow definitions, nodes, edges, DAG validation, layout, variables, providers, workflow runs -> `workflow/index.md`
 - Automation items, schedules, cron/interval triggers, executors, enablement, manual runs, active runs, run history, Swarm Task reusable configs and multi-Agent runs -> `automation/index.md`
 - Cloud Skill repositories, local Skill upload, cloud Skill repository update, repository management URL -> `skill-repository/index.md`

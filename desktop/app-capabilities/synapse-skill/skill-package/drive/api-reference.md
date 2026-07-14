@@ -212,6 +212,8 @@ Protected `/share` and `/sites` links require `password`; without it, this tool 
 
 Use share tools for `/share/...` links to existing Drive files or folders. Shares can be read-only or editable depending on access settings. Deleted or trashed source items temporarily disable affected share links. Restoring the item reactivates links disabled by that delete operation; manually disabled shares stay disabled.
 
+Use a share for a standalone HTML file, including when the user casually calls it a website or site. Updating the same Drive item changes what the existing `/share/...` link renders; do not create another share for a normal file update.
+
 ### `app_drive_share_list`
 
 List current user's Drive share links. Passwords are not returned.
@@ -245,6 +247,8 @@ Input:
 ## Drive Site Tools
 
 Use site tools for publishing a Drive folder as a read-only static website at `/sites/<siteId>/`. Site publishing copies the folder at publish or republish time. It does not create a `/share/...` link, does not grant Drive browse or edit access, and does not use `/files/<assetId>` public asset URLs.
+
+Use a site when the publishable artifact is a multi-file folder, build bundle, multi-page site, or HTML that requires local relative assets. A folder containing only one standalone HTML file should use a normal file share unless the user explicitly requires `/sites/...` after the distinction is clear.
 
 ### `app_drive_site_create`
 
@@ -318,7 +322,7 @@ Input:
 
 ### `app_drive_site_republish`
 
-Copy the remembered source folder into a new site deployment. The active deployment switches only after success.
+Copy the remembered source folder into a new site deployment. Use the existing `siteId` after updating that source folder; republishing preserves the public site URL. The active deployment switches only after success, so a failed republish leaves the previous deployment online.
 
 Input:
 

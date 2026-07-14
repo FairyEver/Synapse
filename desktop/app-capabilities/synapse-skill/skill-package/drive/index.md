@@ -1,6 +1,6 @@
 # Synapse Drive MCP
 
-Use Synapse Drive MCP tools when the user wants to upload, open, preview, download, share, organize, delete, restore, or create Drive-backed public asset links in Synapse Drive.
+Use Synapse Drive MCP tools when the user wants to upload, open, preview, download, share, publish a static site, organize, delete, restore, or create Drive-backed public asset links in Synapse Drive.
 
 ## Scope
 
@@ -74,6 +74,42 @@ Do not use these tools to edit shared files, create comments, import shared cont
 Do not repeat passwords in the final answer.
 When using Codex `--json` or raw MCP event logs for debugging, remember tool arguments can include passwords. Do not save, quote, or attach those raw logs unless the password parameters are removed first.
 
+## HTML Publishing Route
+
+Choose the public route from the final publishable artifact, not from casual words such as "page", "website", or "site".
+
+1. Inspect the generated files immediately before uploading.
+2. If the result is one standalone HTML file, call `app_drive_file_upload`, then `app_drive_share_create`. This remains the preferred route when the user calls it a website or site, or when an outer folder contains only that standalone HTML file.
+   - Standalone means the HTML does not require sibling local CSS, JavaScript, images, fonts, or other files. Inline content, data URLs, and remote URLs do not make it a multi-file site.
+3. If the result contains multiple HTML pages, a build output bundle, or HTML that depends on local relative assets, call `app_drive_folder_upload`, then `app_drive_site_create` for the uploaded folder.
+4. If local dependencies are missing or the artifact shape cannot be inspected, ask one concise question instead of guessing the route.
+5. Treat natural-language wording as intent, not as an explicit request for a URL type. If the user explicitly requires `/sites/...` after the distinction is clear, follow that request.
+
+## Updating Published HTML
+
+Identify the existing public identity before uploading. Resolve a provided `/share/...` or `/sites/...` URL with `app_drive_link_resolve`; otherwise search `app_drive_share_list` or `app_drive_site_list`. If more than one existing target matches, ask the user which one to update instead of creating a new public link.
+
+### Shared HTML
+
+1. Resolve the shared file item id, then call `app_drive_item_get` to obtain its current `parentId` and name.
+2. Upload the replacement with `app_drive_file_upload` to the same parent and name. Same-name upload keeps the item id and existing `/share/...` link.
+3. Do not call `app_drive_share_create` again for a normal update. Report that the existing link is unchanged and visitors can see the current file after refreshing or reopening it.
+
+### Published Site
+
+1. Find the existing site with `app_drive_site_list` and keep its `siteId` and `sourceFolderItemId`. Update the remembered source folder rather than creating another folder or site.
+2. For a complete local build folder, call `app_drive_item_get` for the source folder, then call `app_drive_folder_upload` with the source folder's current parent and name so the upload merges into that folder. For individual files, upload them to their existing source paths and names.
+3. Folder upload overwrites and adds files but does not remove Drive files missing from the local build. If the user requests an exact mirror, list the differences and confirm deletions separately before deleting anything.
+4. After the source update succeeds:
+   - If the user explicitly asked to update the public site, publish the update, redeploy, or synchronize the live website, call `app_drive_site_republish` with the existing `siteId` without asking again.
+   - If the user asked only to update or synchronize the Drive source files, finish the upload and ask whether to republish the public site.
+5. Never call `app_drive_site_create` for an ordinary update. Republishing preserves the `/sites/<siteId>/` URL and switches deployments only after the new copy succeeds.
+6. If source upload fails, do not republish. If republishing fails, report that the Drive source was updated but the previous public deployment remains online.
+
+### Visitor Refresh Behavior
+
+Updating either route does not live-reload pages already open in a visitor's browser. Tell the user that no new link is needed, but visitors must refresh or reopen the page. Public site HTML revalidates on refresh; unchanged CSS, JavaScript, image, or font URLs may remain cached for up to five minutes. Password-protected site assets are not stored in the browser cache.
+
 ## Default Flow
 
 1. If the user did not specify a target folder, omit `parentId` so the file or folder is uploaded to the Drive root directory.
@@ -96,7 +132,7 @@ When using Codex `--json` or raw MCP event logs for debugging, remember tool arg
    - Pass `accessMode: "link_read"` for a new read-only link, `accessMode: "link_edit"` when logged-in link holders may edit supported text files, or `accessMode: "specified_users_edit"` with `editorEmails` when only specific logged-in users may edit.
    - Do not pass `editorEmails` for read-only or link-edit links. For `specified_users_edit`, provide one or more email addresses.
    - Use the `app_drive_share_create` result when the user needs the password for a specific share. `app_drive_share_list` lists existing shares without returning passwords.
-11. If the user asks to publish a Drive folder as a static website, folder site, multi-page HTML prototype, or product prototype site, call `app_drive_site_create`. Sites use `/sites/<siteId>/`, copy the folder at publish time, and do not grant Drive browse or edit access.
+11. After applying **HTML Publishing Route**, if the artifact is a Drive folder containing a multi-file static website, build bundle, multi-page HTML prototype, or product prototype site, call `app_drive_site_create`. Sites use `/sites/<siteId>/`, copy the folder at publish time, and do not grant Drive browse or edit access.
    - Use `sourceFolderItemId`, `name`, `accessMode`, and `expiresIn`.
    - Set `entryPath` only when the homepage is not the default `index.html`.
    - Use `accessMode: "public"` for open sites or `accessMode: "password"` when the user asks for a password. Pass `password` only when the user provides a custom site password. Site MCP results never return passwords, so ask for a custom password when the user needs a known value.
@@ -134,14 +170,19 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 ## Common Requests
 
 - "上传这个文件并给我链接": call `app_drive_file_upload`, then `app_drive_share_create`.
+- "把这个单文件 HTML 做成网站": inspect the artifact, then call `app_drive_file_upload` and `app_drive_share_create` when it is standalone.
+- "发布这个包含 assets 的构建目录": call `app_drive_folder_upload`, then `app_drive_site_create`.
 - "上传到公开素材": call `app_drive_direct_link_upload`.
 - "上传到图床": call `app_drive_direct_link_upload`.
 - "生成直链": call `app_drive_direct_link_upload`.
 - "生成外链": call `app_drive_direct_link_upload`.
 - "分享云盘文件": call `app_drive_share_create`.
-- "发布这个文件夹为站点": call `app_drive_site_create`.
+- "发布这个文件夹为站点": inspect the artifact first; call `app_drive_site_create` only when it is a multi-file site or the user explicitly requires `/sites/...` after the distinction is clear.
 - "把这个多页 HTML 原型发成网站": call `app_drive_site_create`.
 - "重新发布站点": call `app_drive_site_republish`.
+- "更新这个分享网页并同步云盘": overwrite the existing Drive item with `app_drive_file_upload`; keep the existing share and do not call `app_drive_share_create`.
+- "更新站点源文件并同步线上": update the remembered source folder, then call `app_drive_site_republish` with the existing site id.
+- "只更新站点的云盘文件": update the remembered source folder, then ask whether to republish.
 - "管理站点": call `app_drive_site_list`.
 - "停用站点": call `app_drive_site_disable`.
 - "启用站点": call `app_drive_site_enable`.
