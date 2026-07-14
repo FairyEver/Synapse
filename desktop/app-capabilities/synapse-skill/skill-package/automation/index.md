@@ -6,7 +6,7 @@ You have access to Synapse Automation MCP tools for managing Automation items an
 
 Use this skill only for Synapse Automation items, trigger/executor configuration, scheduled cron/interval or webhook triggers, enablement, manual runs, active run stopping, run history, Automation runtime state, and Swarm Task app runs.
 
-Do not call legacy `scheduler_*` tools; they are no longer part of the current Synapse MCP registry. Do not use this domain file for direct terminal control, Workflow definitions, database rows, Resource Repository publishing, provider settings, or editor installation. For another current Synapse MCP domain, return to `synapse-skill/content.md` routing and read the matching `files/<domain>/index.md` attachment before using that domain's tools.
+Do not call legacy `scheduler_*` tools; they are no longer part of the current Synapse MCP registry. Do not use this domain file for direct terminal control, Workflow definitions, database rows, Resource Repository publishing, provider settings, or editor installation. For another current Synapse MCP domain, return to `SKILL.md` for routing and read the matching `<domain>/index.md` attachment before using that domain's tools.
 
 ## Capabilities
 
@@ -92,7 +92,7 @@ If a read result only shows `{ type, summary }`, that is expected. It is not eno
 
 ## Swarm Task Rules
 
-Use Swarm Task when the user wants a reusable multi-Agent prompt run. A task stores the prompt, project, concurrency, run mode, per-slot round count, summary, handoff, output, and Agent options. Each run snapshots the task config, so later task edits do not change historical runs.
+Use Swarm Task when the user wants a reusable multi-Agent prompt run. A task stores the prompt, project, concurrency, run mode, per-slot round count, prompt-injection options, and Agent options. Each run snapshots the task config, so later task edits do not change historical runs.
 
 Do not use Swarm Task for direct terminal control. Workers are Agent conversations created by Synapse; worker details live in linked Agent conversations with platform `"swarm"`.
 
@@ -109,7 +109,7 @@ Default flow:
 
 `concurrency` is the number of slots. `maxRounds` is the number of batches in `batch` mode and the per-slot round count in `continuous` mode, so the planned worker count is `concurrency * maxRounds`. Stop or cancel can make the actual started count lower.
 
-Summary is enabled by default. Handoff is disabled by default. If handoff is enabled, batch mode passes the previous batch's handoffs forward; continuous mode passes the same slot's previous round handoff forward. Summaries can include recent previous rounds according to the saved config.
+Summary injection is disabled by default. Sequence/batch context, previous handoff, summary, recent-summary injection, and file-write instructions are all opt-in; file locking remains enabled if file-write injection is later enabled. If handoff is enabled, batch mode passes the previous batch's handoffs forward, while continuous mode passes the same slot's previous round handoff forward. Summary `recentLimit` defaults to 3 when recent-summary injection is enabled.
 
 ## API Reference
 

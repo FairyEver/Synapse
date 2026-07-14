@@ -8,7 +8,7 @@ All tools are accessed via the `synapse-mcp` MCP server.
 
 ### app_workflow_node_type_list
 
-List available node types with summaries. Current built-in node types include `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `codex`, `claude_code`, and `end`.
+List available node types with summaries. Current built-in node types include `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `swarm_task_run`, `codex`, `claude_code`, and `end`.
 
 **Params:** none
 **Returns:** `[{ type, title, subtitle, color }]`
@@ -81,6 +81,34 @@ No provider needed on the call node. It invokes another saved workflow and retur
 - `paramBindings` (object) — child param name to typed binding map. Use this for file/directory params, for example `{ "input_file": { "mode": "value", "source": { "type": "param", "param": "input_file" } } }`.
 
 Before configuring child params, call `app_workflow_definition_get` for the child workflow and read its current `params`. Do not put the same child param in both `paramTemplates` and `paramBindings`. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides; child codex/claude_code nodes still need an effective project. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
+
+### document_template_docx_generate
+
+Generates a DOCX from a template. No provider needed. Config fields:
+
+- `templatePath` (string) — input DOCX template path
+- `outputPath` (string) — generated DOCX output path
+- `dataSource` (enum: `dataPath`/`inline`) — selects a JSON file or inline JSON text
+- `dataPath?` (string) — required when `dataSource` is `dataPath`
+- `dataJson?` (string) — required when `dataSource` is `inline`
+- `overwrite` (boolean) — whether an existing output file may be replaced
+- `variables` (array) — variable bindings available to path and inline-data templates
+
+The path fields and inline JSON support `{{variable}}` interpolation. The node output is the generated `outputPath`; generation metadata is also available in the node result outputs.
+
+### swarm_task_run
+
+Starts a saved Swarm Task. No provider needed. Config fields:
+
+- `taskId` (string) — saved Swarm Task ID
+- `promptOverride?` (string) — prompt override for this run; supports `{{variable}}` interpolation
+- `runModeOverride?` (enum: `batch`/`continuous`)
+- `maxRoundsOverride?` (number, 1-500)
+- `concurrencyOverride?` (number, 1-20)
+- `waitForCompletion` (boolean, default false) — return after starting or wait for a terminal result
+- `variables` (array) — variable bindings used by the prompt override
+
+The node output is the Swarm run ID. Result outputs include `runId`, `status`, totals, and `outputDirectory`; when `waitForCompletion` is false, the initial result returns immediately after the run starts.
 
 ### codex
 

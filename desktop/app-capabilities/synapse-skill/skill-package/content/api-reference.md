@@ -36,6 +36,8 @@ Use `latestHistoryDirname` from `get` when updating or deleting.
 
 ## Create
 
+Rule, Skill, and Prompt create/update payloads all accept optional `usage` text for concise usage guidance. Omit it when no separate guidance is needed.
+
 `app_resource_repository_rule_create`
 
 ```json

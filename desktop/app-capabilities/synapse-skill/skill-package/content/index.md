@@ -10,7 +10,7 @@ Use this skill only for Synapse Resource Repository resources:
 - Skills
 - Prompts
 
-Do not use this domain file for database records, Automation schedules/items, workflow definitions, editor installation, provider settings, or general file editing. For another current Synapse MCP domain, return to `synapse-skill/content.md` routing and read the matching `files/<domain>/index.md` attachment before using that domain's tools.
+Do not use this domain file for database records, Automation schedules/items, workflow definitions, editor installation, provider settings, or general file editing. For another current Synapse MCP domain, return to `SKILL.md` for routing and read the matching `<domain>/index.md` attachment before using that domain's tools.
 
 ## Default Flow
 
@@ -54,6 +54,8 @@ When using `files`, keep paths relative to the Skill root, such as `references/c
 When using `sourceDirectoryPath`, Synapse excludes `.env`, `.env.*` except root `.env.example`, both Synapse identity files, other hidden entries, and symlinks. Excluded runtime env files are identified by directory entry name and are not read. Source directory imports are limited to 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total. If frontmatter exists in the main file, use its metadata when the user has not provided explicit fields.
 
 ## Resource Fields
+
+Rules, Skills, and Prompts all support optional `usage` text for concise usage guidance. Omit it when no separate usage guidance is needed.
 
 Rules require:
 

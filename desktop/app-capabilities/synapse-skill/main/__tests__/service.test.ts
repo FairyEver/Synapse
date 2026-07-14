@@ -6,6 +6,8 @@ import { SECRETS_MCP_TOOL_NAMES } from "../../../secrets/shared/capability"
 import { SYNAPSE_SKILL_SOURCE_IDENTITY } from "../../shared/capability"
 import { createSynapseSkillService } from "../service"
 import { buildDriveTools } from "../../../../synapse-capabilities/shared/drive-domain"
+import { buildAllMcpTools } from "../../../../synapse-capabilities/shared/registry"
+import { swarmTaskConfigSchema } from "../../../swarm-task/shared/schema"
 
 vi.mock("electron", () => ({
   app: {
@@ -202,6 +204,89 @@ describe("SynapseSkillService", () => {
     expect(modelPriceApiText).toContain("model_price_rule_update")
     expect(modelPriceApiText).toContain("ruleId")
     expect(modelPriceApiText).toContain("already indexed usage totals")
+  })
+
+  it("routes current domains through installed Synapse Skill paths", async () => {
+    const [skillRoot, automationIndex, contentIndex, databaseIndex, workflowIndex] = await Promise.all([
+      readFile(path.join(systemPackageRoot, "SKILL.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "automation/index.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "content/index.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "database/index.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "workflow/index.md"), "utf8"),
+    ])
+    const domainGuides = [automationIndex, contentIndex, databaseIndex, workflowIndex].join("\n")
+
+    expect(skillRoot).toContain("Swarm Task")
+    expect(skillRoot).toContain("Terminal")
+    expect(skillRoot).toContain("Sound Notifier")
+    expect(domainGuides).not.toContain("synapse-skill/content.md")
+    expect(domainGuides).not.toContain("files/<domain>/index.md")
+    expect(domainGuides).toContain("`SKILL.md`")
+    expect(domainGuides).toContain("`<domain>/index.md`")
+  })
+
+  it("documents every canonical MCP tool in the installed package", async () => {
+    const service = createSynapseSkillService({ packageRoot: systemPackageRoot })
+    const source = await service.prepareInstallSource()
+    const detail = await service.readPreparedSkill(source.preparedSourceId, source.sourceIdentity)
+    const packageText = (await Promise.all([
+      readFile(path.join(systemPackageRoot, "SKILL.md"), "utf8"),
+      ...detail.attachments
+        .filter((attachment) => attachment.originalName.endsWith(".md"))
+        .map((attachment) => readFile(path.join(systemPackageRoot, attachment.originalName), "utf8")),
+    ])).join("\n")
+    const missingTools = buildAllMcpTools()
+      .map((tool) => tool.name)
+      .filter((toolName) => toolName.startsWith("app_"))
+      .filter((toolName) => !packageText.includes(toolName))
+
+    expect(missingTools).toEqual([])
+  })
+
+  it("documents current Workflow, Swarm Task, and Resource Repository contracts", async () => {
+    const [workflowIndex, workflowApiText, automationIndex, automationApiText, contentIndex, contentApiText] = await Promise.all([
+      readFile(path.join(systemPackageRoot, "workflow/index.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "workflow/api-reference.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "automation/index.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "automation/api-reference.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "content/index.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "content/api-reference.md"), "utf8"),
+    ])
+    const workflowDocs = `${workflowIndex}\n${workflowApiText}`
+    const automationDocs = `${automationIndex}\n${automationApiText}`
+    const contentDocs = `${contentIndex}\n${contentApiText}`
+
+    expect(workflowDocs).toContain("document_template_docx_generate")
+    expect(workflowDocs).toContain("swarm_task_run")
+    expect(workflowIndex).toContain("`completed`, `failed`, or `cancelled`")
+    expect(automationIndex).toContain("Summary injection is disabled by default.")
+    expect(automationIndex).not.toContain("Summary is enabled by default.")
+    expect(automationDocs).toContain("mainThreadPersonaId")
+    expect(contentDocs).toContain("`usage`")
+
+    const swarmDefaults = swarmTaskConfigSchema.parse({ projectId: "project-1", prompt: "Run." })
+    expect(swarmDefaults.promptInjection).toEqual({
+      sequenceBatch: { enabled: false },
+      previousHandoff: { enabled: false },
+      summary: { enabled: false, injectRecent: false, recentLimit: 3 },
+      fileWrite: {
+        enabled: false,
+        path: "",
+        mode: "append-only",
+        lock: { enabled: true },
+      },
+      customAppendix: "",
+    })
+
+    const canonicalTools = buildAllMcpTools()
+    for (const toolName of [
+      "app_resource_repository_rule_create",
+      "app_resource_repository_skill_create",
+      "app_resource_repository_prompt_create",
+    ]) {
+      expect(canonicalTools.find((tool) => tool.name === toolName)?.inputSchema.properties)
+        .toHaveProperty("usage")
+    }
   })
 
   it("documents the immutable secret name and desktop-only Skill ENV update boundary", async () => {

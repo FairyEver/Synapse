@@ -9,13 +9,13 @@ First classify the user's intent, then read the matching domain file before usin
 - Database, tables, rows, columns, choices, SQL, table folders, mutation logs -> `database/index.md`
 - Drive files, folders, upload, download, preview, share links, public assets, trash, versions -> `drive/index.md`
 - Workflow definitions, nodes, edges, DAG validation, layout, variables, providers, workflow runs -> `workflow/index.md`
-- Automation items, schedules, cron/interval triggers, executors, enablement, manual runs, active runs, run history -> `automation/index.md`
+- Automation items, schedules, cron/interval triggers, executors, enablement, manual runs, active runs, run history, Swarm Task reusable configs and multi-Agent runs -> `automation/index.md`
 - Cloud Skill repositories, local Skill upload, cloud Skill repository update, repository management URL -> `skill-repository/index.md`
 - Rule, Skill, Prompt publishing and Resource Repository management -> `content/index.md`
 - Model price rules and used-model pricing -> `model-price/index.md`
 - Local secrets and placeholder secret values -> `secrets/index.md`
 - Settings repositories -> `repository/index.md`
-- App-provided capabilities such as document generation -> `app/index.md`
+- App-provided capabilities such as document generation, Synapse-managed Terminal sessions, and Sound Notifier playback -> `app/index.md`
 
 If the task spans multiple domains, handle each part in order and read each relevant domain file.
 

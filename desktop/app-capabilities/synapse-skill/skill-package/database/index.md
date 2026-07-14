@@ -8,7 +8,7 @@ Use the `app_database_*` tool names for new work. The older `database_*` tool na
 
 Use this skill only for Synapse Database operations: tables, columns, rows, choices, table folders, mutation logs, and SQL against the Synapse Database.
 
-Do not use this domain file for workflows, scheduled tasks, Resource Repository publishing, provider settings, or editor MCP registration. For another current Synapse MCP domain, return to `synapse-skill/content.md` routing and read the matching `files/<domain>/index.md` attachment before using that domain's tools.
+Do not use this domain file for workflows, scheduled tasks, Resource Repository publishing, provider settings, or editor MCP registration. For another current Synapse MCP domain, return to `SKILL.md` for routing and read the matching `<domain>/index.md` attachment before using that domain's tools.
 
 ## Default Flow
 
