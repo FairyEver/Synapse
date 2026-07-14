@@ -287,6 +287,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       contentScrollable={false}
       contentLayout={contentLayout}
       sidebarResizable
+      sidebarPersistenceId="agent"
     >
       {selectedDetached ? (
         <AgentDetachedPlaceholder onShowWindow={() => void handleShowDetachedConversation()} />

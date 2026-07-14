@@ -470,7 +470,13 @@ function DatabaseTablesView() {
   }
 
   return (
-    <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface" sidebarResizable>
+    <SidebarContentLayout
+      sidebar={sidebar}
+      contentScrollable={false}
+      contentClassName="bg-surface"
+      sidebarResizable
+      sidebarPersistenceId="database"
+    >
       <div className="h-full min-h-0">
         {loadError ? (
           <div className="flex h-full flex-col">

@@ -4,7 +4,12 @@
 import { act } from "react"
 import type { ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+const resizableMocks = vi.hoisted(() => ({
+  onLayoutChanged: undefined as (() => void) | undefined,
+  onSidebarResize: undefined as ((size: { inPixels: number }) => void) | undefined,
+}))
 
 vi.mock("@/components/ui/resizable", () => ({
   ResizableHandle: () => <div data-testid="resize-handle" />,
@@ -13,27 +18,37 @@ vi.mock("@/components/ui/resizable", () => ({
     defaultSize,
     minSize,
     maxSize,
+    onResize,
   }: {
     readonly children: ReactNode
     readonly defaultSize?: number
     readonly minSize?: number
     readonly maxSize?: number
-  }) => (
-    <div
-      data-default-size={defaultSize}
-      data-min-size={minSize}
-      data-max-size={maxSize}
-    >
-      {children}
-    </div>
-  ),
+    readonly onResize?: (size: { inPixels: number }) => void
+  }) => {
+    if (onResize) resizableMocks.onSidebarResize = onResize
+    return (
+      <div
+        data-default-size={defaultSize}
+        data-min-size={minSize}
+        data-max-size={maxSize}
+      >
+        {children}
+      </div>
+    )
+  },
   ResizablePanelGroup: ({
     children,
     className,
+    onLayoutChanged,
   }: {
     readonly children: ReactNode
     readonly className?: string
-  }) => <div className={className}>{children}</div>,
+    readonly onLayoutChanged?: () => void
+  }) => {
+    resizableMocks.onLayoutChanged = onLayoutChanged
+    return <div className={className}>{children}</div>
+  },
 }))
 
 vi.mock("@/components/ui/scroll-area", () => ({
@@ -52,6 +67,12 @@ import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 
 let roots: Root[] = []
 
+beforeEach(() => {
+  window.localStorage.clear()
+  resizableMocks.onLayoutChanged = undefined
+  resizableMocks.onSidebarResize = undefined
+})
+
 afterEach(() => {
   for (const root of roots) {
     act(() => {
@@ -60,6 +81,7 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  vi.restoreAllMocks()
 })
 
 async function renderLayout(props: Partial<React.ComponentProps<typeof SidebarContentLayout>> = {}) {
@@ -104,6 +126,115 @@ describe("SidebarContentLayout", () => {
     expect(sidebarPanel?.getAttribute("data-default-size")).toBe("250")
     expect(sidebarPanel?.getAttribute("data-min-size")).toBe("250")
     expect(sidebarPanel?.getAttribute("data-max-size")).toBe("360")
+  })
+
+  it("restores a persisted sidebar width", async () => {
+    window.localStorage.setItem("synapse:ui:sidebar-width:v1:agent", "312")
+
+    const container = await renderLayout({
+      sidebarResizable: true,
+      sidebarPersistenceId: "agent",
+    })
+
+    expect(container.querySelector("[data-default-size]")?.getAttribute("data-default-size"))
+      .toBe("312")
+  })
+
+  it("persists the final sidebar width after the layout change completes", async () => {
+    await renderLayout({
+      sidebarResizable: true,
+      sidebarPersistenceId: "agent",
+    })
+
+    resizableMocks.onSidebarResize?.({ inPixels: 318.4 })
+    expect(window.localStorage.getItem("synapse:ui:sidebar-width:v1:agent")).toBeNull()
+
+    resizableMocks.onLayoutChanged?.()
+    expect(window.localStorage.getItem("synapse:ui:sidebar-width:v1:agent")).toBe("318")
+  })
+
+  it("keeps persistence records isolated by page", async () => {
+    window.localStorage.setItem("synapse:ui:sidebar-width:v1:agent", "300")
+    window.localStorage.setItem("synapse:ui:sidebar-width:v1:terminal", "340")
+
+    const agent = await renderLayout({
+      sidebarResizable: true,
+      sidebarPersistenceId: "agent",
+    })
+    const terminal = await renderLayout({
+      sidebarResizable: true,
+      sidebarPersistenceId: "terminal",
+    })
+
+    expect(agent.querySelector("[data-default-size]")?.getAttribute("data-default-size"))
+      .toBe("300")
+    expect(terminal.querySelector("[data-default-size]")?.getAttribute("data-default-size"))
+      .toBe("340")
+  })
+
+  it("clamps stored widths to the current sidebar constraints", async () => {
+    window.localStorage.setItem("synapse:ui:sidebar-width:v1:editor-scan", "999")
+
+    const container = await renderLayout({
+      sidebarResizable: true,
+      sidebarPersistenceId: "editor-scan",
+      sidebarDefaultSize: 250,
+      sidebarMinSize: 250,
+      sidebarMaxSize: 360,
+    })
+
+    expect(container.querySelector("[data-default-size]")?.getAttribute("data-default-size"))
+      .toBe("360")
+  })
+
+  it("falls back safely when persisted data is invalid or storage is unavailable", async () => {
+    window.localStorage.setItem("synapse:ui:sidebar-width:v1:agent", "invalid")
+    const invalid = await renderLayout({
+      sidebarResizable: true,
+      sidebarPersistenceId: "agent",
+      sidebarDefaultSize: 240,
+    })
+
+    expect(invalid.querySelector("[data-default-size]")?.getAttribute("data-default-size"))
+      .toBe("240")
+
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("storage unavailable")
+    })
+    const unavailable = await renderLayout({
+      sidebarResizable: true,
+      sidebarPersistenceId: "database",
+      sidebarDefaultSize: 260,
+    })
+
+    expect(unavailable.querySelector("[data-default-size]")?.getAttribute("data-default-size"))
+      .toBe("260")
+  })
+
+  it("keeps resizing usable when persisted data cannot be written", async () => {
+    await renderLayout({
+      sidebarResizable: true,
+      sidebarPersistenceId: "agent",
+    })
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage unavailable")
+    })
+
+    resizableMocks.onSidebarResize?.({ inPixels: 320 })
+
+    expect(() => resizableMocks.onLayoutChanged?.()).not.toThrow()
+  })
+
+  it("does not access persistence without a page identity", async () => {
+    const getItem = vi.spyOn(Storage.prototype, "getItem")
+    const setItem = vi.spyOn(Storage.prototype, "setItem")
+
+    await renderLayout({ sidebarResizable: true })
+
+    expect(getItem).not.toHaveBeenCalled()
+    expect(setItem).not.toHaveBeenCalled()
+    expect(resizableMocks.onSidebarResize).toBeUndefined()
+    expect(resizableMocks.onLayoutChanged).toBeUndefined()
   })
 
   it("does not put content padding on the scroll clipping layer", async () => {

@@ -482,6 +482,7 @@ export function SwarmTaskModule() {
             )}
             contentScrollable={false}
             sidebarResizable
+            sidebarPersistenceId="swarm-task"
             sidebarDefaultSize={260}
             sidebarMinSize={220}
             sidebarMaxSize={360}
