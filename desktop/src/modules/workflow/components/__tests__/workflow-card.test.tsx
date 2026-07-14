@@ -128,6 +128,45 @@ describe("WorkflowCard", () => {
     expect(document.body.textContent).not.toContain("确定删除")
   })
 
+  it("confirms deletion without opening the workflow", async () => {
+    const onOpen = vi.fn()
+    const onDelete = vi.fn()
+    const container = await renderWorkflowCard({ onOpen, onDelete })
+
+    await openDeleteDialog(container)
+    const confirmButton = findButtonByText("删除")
+
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onDelete).toHaveBeenCalledTimes(1)
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it("cancels deletion without opening the workflow", async () => {
+    const onOpen = vi.fn()
+    const onDelete = vi.fn()
+    const container = await renderWorkflowCard({ onOpen, onDelete })
+
+    await openDeleteDialog(container)
+    const overlay = document.body.querySelector<HTMLElement>('[data-slot="alert-dialog-overlay"]')
+
+    await act(async () => {
+      overlay?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onOpen).not.toHaveBeenCalled()
+    const cancelButton = findButtonByText("取消")
+
+    await act(async () => {
+      cancelButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onDelete).not.toHaveBeenCalled()
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
   it("opens the active run from the progress action", async () => {
     const onOpenActiveRun = vi.fn()
     const container = await renderWorkflowCard({
@@ -189,6 +228,18 @@ async function renderWorkflowCard(props: Partial<ComponentProps<typeof WorkflowC
   })
 
   return container
+}
+
+async function openDeleteDialog(container: HTMLDivElement): Promise<void> {
+  const deleteButton = container.querySelector<HTMLButtonElement>('[aria-label="删除工作流"]')
+  await act(async () => {
+    deleteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+  })
+}
+
+function findButtonByText(text: string): HTMLButtonElement | undefined {
+  return Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
+    .find((button) => button.textContent?.trim() === text)
 }
 
 const workflowMeta: WorkflowMeta = {
