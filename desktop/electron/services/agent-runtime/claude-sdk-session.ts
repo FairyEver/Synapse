@@ -7,6 +7,7 @@ import type {
   PermissionResult,
   Query,
   SDKMessage,
+  SessionStore,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 import path from "node:path"
@@ -96,6 +97,7 @@ export interface ClaudeSDKSessionOptions {
   readonly abortSignal?: AbortSignal
   readonly additionalDirectories?: readonly string[]
   readonly sdkSettings?: ClaudeSDKRuntimeSettings
+  readonly onConversationTitle?: (title: string) => void | Promise<void>
   readonly queryFactory?: QueryFactory
   readonly logger?: Pick<StructuredLogger, "warn">
   readonly now?: () => Date
@@ -371,6 +373,10 @@ export class ClaudeSDKSession implements AgentLiveSession {
     if (options.disallowedTools?.length) queryOptions.disallowedTools = [...options.disallowedTools]
     if (options.additionalDirectories?.length) {
       queryOptions.additionalDirectories = [...options.additionalDirectories]
+    }
+    if (options.onConversationTitle && !options.sdkSessionId) {
+      queryOptions.sessionStore = conversationTitleSessionStore(options.onConversationTitle)
+      queryOptions.sessionStoreFlush = "eager"
     }
     queryOptions.hooks = this.buildHooks()
     if (options.sdkSessionId) queryOptions.resume = options.sdkSessionId
@@ -718,6 +724,27 @@ const MAX_CONSECUTIVE_IDENTICAL_TODO_WRITE_ALLOWS = 2
 const MAX_CONSECUTIVE_IDENTICAL_TODO_WRITE_DENIES = 2
 const TODO_WRITE_LOOP_GUIDANCE = "Repeated identical TodoWrite call was blocked to prevent a tool loop. Do not retry TodoWrite. Answer the user directly using the existing tool results."
 const TODO_WRITE_LOOP_STOP_REASON = "Stopped repeated TodoWrite calls to prevent a tool loop."
+
+function conversationTitleSessionStore(
+  onConversationTitle: NonNullable<ClaudeSDKSessionOptions["onConversationTitle"]>,
+): SessionStore {
+  return {
+    async append(_key, entries) {
+      for (const entry of entries) {
+        const title = conversationTitleFromTranscriptEntry(entry)
+        if (title) await onConversationTitle(title)
+      }
+    },
+    async load() {
+      return null
+    },
+  }
+}
+
+function conversationTitleFromTranscriptEntry(entry: { readonly type: string, readonly [key: string]: unknown }): string | undefined {
+  if (entry.type !== "ai-title" || typeof entry.aiTitle !== "string") return undefined
+  return entry.aiTitle.trim() || undefined
+}
 
 function defaultQueryFactory(input: {
   prompt: AsyncIterable<SDKUserMessage>

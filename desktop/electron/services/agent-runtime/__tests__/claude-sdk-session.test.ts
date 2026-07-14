@@ -1,6 +1,7 @@
 import type {
   PermissionResult,
   SDKMessage,
+  SessionStore,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
@@ -116,6 +117,35 @@ describe("ClaudeSDKSession", () => {
     expect(getOptions()).toMatchObject({
       maxTurns: 200,
     })
+  })
+
+  it("consumes ai-title transcript entries for fresh conversations", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const onConversationTitle = vi.fn(async (_title: string) => {})
+    createSession(factory, { onConversationTitle })
+
+    const options = getOptions()
+    const sessionStore = options.sessionStore as SessionStore
+    expect(options.sessionStoreFlush).toBe("eager")
+
+    await sessionStore.append({ projectKey: "project-1", sessionId: "sdk-1" }, [
+      { type: "user", message: { role: "user", content: "hello" } },
+      { type: "ai-title", aiTitle: "  Send test message in WeCom  " },
+      { type: "ai-title", aiTitle: "   " },
+    ])
+
+    expect(onConversationTitle).toHaveBeenCalledTimes(1)
+    expect(onConversationTitle).toHaveBeenCalledWith("Send test message in WeCom")
+  })
+
+  it("does not install a transcript mirror when resuming a conversation", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      sdkSessionId: "sdk-existing",
+      onConversationTitle: vi.fn(),
+    })
+
+    expect(getOptions().sessionStore).toBeUndefined()
   })
 
   it("allows callers to override the default SDK turn cap", () => {

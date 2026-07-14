@@ -541,6 +541,42 @@ export class AgentSessionRepository {
     return updated
   }
 
+  async renameSessionFromGeneratedTitle(
+    conversationIdValue: string,
+    name: string,
+  ): Promise<ConversationEntryV1 | null> {
+    const conversation = await this.requireConversation(conversationIdValue)
+    const normalizedName = name.trim()
+    if (
+      !normalizedName
+      || normalizedName === conversation.name
+      || !isReplaceableAutomaticConversationName(conversation)
+    ) return null
+    const updated: ConversationEntryV1 = {
+      ...conversation,
+      name: normalizedName,
+      updatedAt: this.isoNow(),
+    }
+    await this.conversations.upsert(updated)
+    return updated
+  }
+
+  async renameSessionFromFirstUserMessage(
+    conversationIdValue: string,
+  ): Promise<ConversationEntryV1 | null> {
+    const conversation = await this.requireConversation(conversationIdValue)
+    if (!isAutomaticConversationName(conversation.name)) return null
+    const name = firstUserMessageTitle(conversation)
+    if (!name) return null
+    const updated: ConversationEntryV1 = {
+      ...conversation,
+      name,
+      updatedAt: this.isoNow(),
+    }
+    await this.conversations.upsert(updated)
+    return updated
+  }
+
   private async requireConversation(conversationIdValue: string): Promise<ConversationEntryV1> {
     const conversation = await this.get(conversationIdValue)
     if (!conversation) {
@@ -605,6 +641,28 @@ export class AgentSessionRepository {
   private isoNow(): string {
     return this.now().toISOString()
   }
+}
+
+const AUTOMATIC_CONVERSATION_NAME_PATTERN = /^(?:新会话|新对话)(?:\s+\d{1,2}:\d{2}(?:\s*[AP]M)?)?$/i
+const FALLBACK_CONVERSATION_TITLE_MAX_LENGTH = 50
+
+function isAutomaticConversationName(name: string | undefined): boolean {
+  return typeof name === "string" && AUTOMATIC_CONVERSATION_NAME_PATTERN.test(name.trim())
+}
+
+function isReplaceableAutomaticConversationName(conversation: ConversationEntryV1): boolean {
+  return isAutomaticConversationName(conversation.name)
+    || conversation.name === firstUserMessageTitle(conversation)
+}
+
+function firstUserMessageTitle(conversation: ConversationEntryV1): string | undefined {
+  const content = conversation.history.find((entry) => entry.role === "user")?.content
+  if (!content) return undefined
+  const normalized = content.replace(/\s+/g, " ").trim()
+  if (!normalized) return undefined
+  const characters = Array.from(normalized)
+  if (characters.length <= FALLBACK_CONVERSATION_TITLE_MAX_LENGTH) return normalized
+  return `${characters.slice(0, FALLBACK_CONVERSATION_TITLE_MAX_LENGTH - 1).join("")}…`
 }
 
 export function conversationId(

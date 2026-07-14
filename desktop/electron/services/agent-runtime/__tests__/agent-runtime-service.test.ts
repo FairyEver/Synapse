@@ -75,6 +75,89 @@ describe("AgentRuntimeService", () => {
     })
   })
 
+  it("renames an automatically named conversation from an SDK transcript title", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const eventBus = { emit: vi.fn() }
+    const session = new ScriptedSession([{
+      type: "result",
+      content: "done",
+      done: true,
+      sdkSessionId: "sdk-1",
+    }], "sdk-1")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService(
+        "anthropic",
+        { ANTHROPIC_API_KEY: "sk-test" },
+      ) as unknown as ProviderService,
+      createSession: async (input) => {
+        await input.onConversationTitle?.("Send test message in WeCom")
+        return session
+      },
+      eventBus: eventBus as never,
+      now: fixedNow,
+    })
+    const conversation = await service.createSession({
+      sessionKey: "s1",
+      platform: "local",
+      name: "新会话 15:20",
+      agentType: "claude-code",
+    })
+
+    await service.sendToConversation(baseMessage("hello"), conversation.id)
+
+    await expect(conversations.get(conversation.id)).resolves.toMatchObject({
+      name: "Send test message in WeCom",
+    })
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "agent",
+      type: "conversationUpdated",
+      payload: expect.objectContaining({ conversationId: conversation.id }),
+    }))
+  })
+
+  it("falls back to the first user message when the SDK emits no transcript title", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const eventBus = { emit: vi.fn() }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService(
+        "anthropic",
+        { ANTHROPIC_API_KEY: "sk-test" },
+      ) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([{
+        type: "result",
+        content: "你好！有什么可以帮你的吗？",
+        done: true,
+        sdkSessionId: "sdk-1",
+      }], "sdk-1"),
+      eventBus: eventBus as never,
+      now: fixedNow,
+    })
+    const conversation = await service.createSession({
+      sessionKey: "s1",
+      platform: "local-renderer",
+      name: "新对话 15:54",
+      agentType: "claude-code",
+    })
+
+    await service.sendToConversation({
+      ...baseMessage("你好"),
+      platform: "local-renderer",
+    }, conversation.id)
+
+    await expect(conversations.get(conversation.id)).resolves.toMatchObject({ name: "你好" })
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "agent",
+      type: "conversationUpdated",
+      payload: expect.objectContaining({ conversationId: conversation.id }),
+    }))
+  })
+
   it("reports active sessions only for managed knowledge base runtimes", () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const managedService = new AgentRuntimeService({

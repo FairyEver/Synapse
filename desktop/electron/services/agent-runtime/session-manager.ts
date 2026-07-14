@@ -62,6 +62,7 @@ export interface CreateAgentLiveSessionInput {
   readonly additionalDirectories?: readonly string[]
   readonly sdkSettings?: ClaudeSDKRuntimeSettings
   readonly abortSignal?: AbortSignal
+  readonly onConversationTitle?: (title: string) => void | Promise<void>
 }
 
 export type AgentLiveSessionFactory = (
@@ -98,6 +99,7 @@ export interface SessionManagerDeps {
     ResolvedPersonaSdkConfig | Promise<ResolvedPersonaSdkConfig>
   readonly sdkSubagentToolPolicies?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkSubagentToolPolicies | Promise<AgentSdkSubagentToolPolicies>
+  readonly onConversationTitle?: (conversationId: string, title: string) => void | Promise<void>
 }
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000
@@ -133,6 +135,7 @@ export class SessionManager {
         subagentToolPolicies: input.subagentToolPolicies,
         additionalDirectories: input.additionalDirectories,
         sdkSettings: input.sdkSettings,
+        onConversationTitle: input.onConversationTitle,
         abortSignal: input.abortSignal,
         logger: deps.logger,
         now: deps.now,
@@ -321,6 +324,9 @@ export class SessionManager {
       additionalDirectories,
       sdkSettings,
       abortSignal: input.abortSignal,
+      onConversationTitle: this.deps.onConversationTitle
+        ? (title) => this.deps.onConversationTitle?.(input.conversation.id, title)
+        : undefined,
     })
     input.state.liveSession = liveSession
     input.state.providerId = providerId

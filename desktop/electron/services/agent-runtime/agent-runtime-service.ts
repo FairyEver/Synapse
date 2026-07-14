@@ -221,6 +221,8 @@ export class AgentRuntimeService {
       sdkAgents: deps.sdkAgents,
       sdkPersonaConfig: deps.sdkPersonaConfig,
       sdkSubagentToolPolicies: deps.sdkSubagentToolPolicies,
+      onConversationTitle: (conversationId, title) =>
+        this.applyGeneratedConversationTitle(conversationId, title),
     })
     this.sessionLifecycle = new SessionLifecycleManager({
       projectId: deps.projectId,
@@ -973,6 +975,14 @@ export class AgentRuntimeService {
     const updated = await this.sessionLifecycle.saveMainThreadPersona(input.conversationId, snapshot ?? null)
     this.emitConversationUpdated(updated)
     return updated
+  }
+
+  private async applyGeneratedConversationTitle(
+    conversationId: string,
+    title: string,
+  ): Promise<void> {
+    const updated = await this.repository.renameSessionFromGeneratedTitle(conversationId, title)
+    if (updated) this.emitConversationUpdated(updated)
   }
 
   async clearCurrentAgentSessionId(

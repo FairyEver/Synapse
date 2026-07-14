@@ -257,6 +257,46 @@ describe("AgentSessionRepository", () => {
     })
   })
 
+  it("renames only automatically named conversations from generated titles", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+      idFactory: fixedIdFactory(["auto", "legacy", "custom"]),
+    })
+    const automatic = await repository.createSession({
+      sessionKey: "local:renderer",
+      name: "新会话 08:32 PM",
+    })
+    const legacy = await repository.createSession({
+      sessionKey: "local:renderer",
+      name: "新对话 15:20",
+    })
+    const custom = await repository.createSession({
+      sessionKey: "local:renderer",
+      name: "企业微信通知",
+    })
+
+    await repository.appendHistory(automatic.id, "user", "你好")
+    await expect(repository.renameSessionFromFirstUserMessage(
+      automatic.id,
+    )).resolves.toMatchObject({ name: "你好" })
+    await expect(repository.renameSessionFromGeneratedTitle(
+      automatic.id,
+      "  Send test message in WeCom  ",
+    )).resolves.toMatchObject({ name: "Send test message in WeCom" })
+    await expect(repository.renameSessionFromGeneratedTitle(
+      legacy.id,
+      "发送企业微信测试消息",
+    )).resolves.toMatchObject({ name: "发送企业微信测试消息" })
+    await expect(repository.renameSessionFromGeneratedTitle(
+      custom.id,
+      "Generated replacement",
+    )).resolves.toBeNull()
+    await expect(conversations.get(custom.id)).resolves.toMatchObject({ name: "企业微信通知" })
+  })
+
   it("clears active main-thread persona without dropping mode or model tier", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({

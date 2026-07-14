@@ -596,6 +596,20 @@ export class ConversationRouter {
     }
   }
 
+  private async applyFirstUserMessageTitleFallback(conversationId: string): Promise<void> {
+    try {
+      const updated = await this.repository.renameSessionFromFirstUserMessage(conversationId)
+      if (updated) this.emitConversationUpdated(updated)
+    } catch (error) {
+      this.deps.logger?.warn("Agent conversation fallback title failed.", {
+        boundary: "agent-runtime.conversation-title.fallback",
+        projectId: this.deps.projectId,
+        conversationId,
+        ...errorMetadata(error),
+      })
+    }
+  }
+
   private async processLiveTurn(
     state: RuntimeSessionState,
     message: AgentMessage,
@@ -787,6 +801,7 @@ export class ConversationRouter {
     }
 
     const sdkSessionId = liveSession.currentSessionId()
+    await this.applyFirstUserMessageTitleFallback(conversation.id)
     const saved = await this.saveExecutionResult(conversation, resultText, sdkSessionId, resultMetadata, {
       assistantHistoryPersisted,
     })
@@ -1107,6 +1122,7 @@ export class ConversationRouter {
         }
         error = errorResult.error
       }
+      await this.applyFirstUserMessageTitleFallback(conversation.id)
       const saved = await this.saveExecutionResult(conversation, resultText, liveSession.currentSessionId(), resultMetadata, {
         assistantHistoryPersisted,
       })
