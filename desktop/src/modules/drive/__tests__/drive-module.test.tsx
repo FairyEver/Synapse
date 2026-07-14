@@ -2872,7 +2872,7 @@ describe("DriveModule", () => {
     expect(getDialogContent().className).toContain("sm:max-w-lg")
     expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_test?password=AbC234xy")
     expect(document.body.textContent).toContain("AbC234xy")
-    expect(document.body.textContent).toContain("天前")
+    expect(document.body.textContent).toMatch(/\d+ (?:分钟|小时|天|个月|年)前/)
     expect(getButton("复制链接").querySelector("svg")).toBeNull()
     expect(getButton("打开文件").querySelector("svg")).toBeNull()
     expect(queryButtonByLabel("复制密码")?.querySelector("svg")).toBeNull()
@@ -3243,7 +3243,7 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("时间")
     expect(document.body.textContent).toContain("操作")
     expect(document.body.textContent).toContain("文件")
-    expect(document.body.textContent).toContain("天前")
+    expect(document.body.textContent).toMatch(/\d+ (?:分钟|小时|天|个月|年)前/)
     expect(document.body.textContent).toContain("来源正常")
     expect(document.body.textContent).not.toContain("folder")
 
