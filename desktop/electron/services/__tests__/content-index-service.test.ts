@@ -73,12 +73,12 @@ describe("content-index-service git helpers", () => {
     expect(exec.mock.calls.map(([sql]) => sql)).toEqual(["BEGIN IMMEDIATE", "ROLLBACK"])
   })
 
-  it("preserves usage while mapping content summaries to database rows", async () => {
+  it("preserves usage and env metadata while mapping content summaries to database rows", async () => {
     const {
       _fromDatabaseRowForTests,
       _toDatabaseRowForTests,
     } = await import("../content-index-service")
-    const summary: SynapseContentMeta<"rule"> = {
+    const summary: SynapseContentMeta<"skill"> = {
       attachmentCount: 0,
       category: "General",
       createdAt: "2026-01-01T00:00:00.000Z",
@@ -88,19 +88,21 @@ describe("content-index-service git helpers", () => {
       description: "Description",
       icon: "file-text",
       iconBg: "default",
-      id: "rule-1",
+      hasEnv: true,
+      id: "skill-1",
       latestHistoryDirname: "20260101000000Z__user__abc123",
       modifiedAt: "2026-01-02T00:00:00.000Z",
       modifiedBy: "user",
       modifiedByDisplayName: "User",
-      title: "Rule",
-      type: "rule",
-      usage: "Use this rule when triaging content.",
+      title: "Skill",
+      type: "skill",
+      usage: "Use this skill when triaging content.",
     }
 
     const row = _toDatabaseRowForTests(summary, new Map())
 
-    expect(row.usage).toBe("Use this rule when triaging content.")
+    expect(row.usage).toBe("Use this skill when triaging content.")
+    expect(row.hasEnv).toBe(1)
     expect(_fromDatabaseRowForTests({
       attachment_count: row.attachmentCount,
       category: row.category,
@@ -113,6 +115,7 @@ describe("content-index-service git helpers", () => {
       icon_bg: row.iconBg,
       icon_image: row.iconImage,
       icon_type: row.iconType,
+      has_env: row.hasEnv,
       id: row.id,
       latest_history_dirname: row.latestHistoryDirname,
       modified_at: row.modifiedAt,
@@ -123,8 +126,9 @@ describe("content-index-service git helpers", () => {
       type: row.type,
       usage: row.usage,
     })).toMatchObject({
-      id: "rule-1",
-      usage: "Use this rule when triaging content.",
+      hasEnv: true,
+      id: "skill-1",
+      usage: "Use this skill when triaging content.",
     })
   })
 })

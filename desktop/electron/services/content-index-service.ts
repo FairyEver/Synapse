@@ -42,6 +42,7 @@ function toDatabaseRow(
 ) {
   return {
     attachmentCount: summary.attachmentCount,
+    hasEnv: summary.hasEnv === true ? 1 : 0,
     category: summary.category,
     createdAt: summary.createdAt,
     createdBy: summary.createdBy,
@@ -118,6 +119,7 @@ function fromDatabaseRow(row: Record<string, unknown>): SynapseContentMeta | nul
     deleted: row.deleted === 1,
     latestHistoryDirname: row.latest_history_dirname,
     attachmentCount: typeof row.attachment_count === "number" ? row.attachment_count : 0,
+    hasEnv: row.has_env === 1,
     source: "repository",
     isReadonly: false,
   } as SynapseContentMeta
@@ -269,8 +271,8 @@ class ContentIndexService {
           id, type, title, name, description, usage, category, icon, icon_bg,
           icon_type, icon_image,
           modified_by, modified_by_name, modified_at, created_by, created_by_name,
-          created_at, deleted, latest_history_dirname, attachment_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          created_at, deleted, latest_history_dirname, attachment_count, has_env
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           type = excluded.type,
           title = excluded.title,
@@ -290,7 +292,8 @@ class ContentIndexService {
           created_at = excluded.created_at,
           deleted = excluded.deleted,
           latest_history_dirname = excluded.latest_history_dirname,
-          attachment_count = excluded.attachment_count
+          attachment_count = excluded.attachment_count,
+          has_env = excluded.has_env
       `)
 
       for (const item of allContent.flat()) {
@@ -317,6 +320,7 @@ class ContentIndexService {
           row.deleted,
           row.latestHistoryDirname,
           row.attachmentCount,
+          row.hasEnv,
         )
       }
 
@@ -442,8 +446,8 @@ class ContentIndexService {
             id, type, title, name, description, usage, category, icon, icon_bg,
             icon_type, icon_image,
             modified_by, modified_by_name, modified_at, created_by, created_by_name,
-            created_at, deleted, latest_history_dirname, attachment_count
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            created_at, deleted, latest_history_dirname, attachment_count, has_env
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             type = excluded.type,
             title = excluded.title,
@@ -463,7 +467,8 @@ class ContentIndexService {
             created_at = excluded.created_at,
             deleted = excluded.deleted,
             latest_history_dirname = excluded.latest_history_dirname,
-            attachment_count = excluded.attachment_count
+            attachment_count = excluded.attachment_count,
+            has_env = excluded.has_env
         `)
         const deleteStatement = database.prepare(`
           DELETE FROM content_index
@@ -497,6 +502,7 @@ class ContentIndexService {
             row.deleted,
             row.latestHistoryDirname,
             row.attachmentCount,
+            row.hasEnv,
           )
         }
 

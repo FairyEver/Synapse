@@ -2,7 +2,10 @@ import { readFile, readdir } from "node:fs/promises"
 import type { Dirent } from "node:fs"
 import path from "node:path"
 import { getContentDir } from "../../src/lib/config"
-import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
+import {
+  normalizeContentAttachmentPath,
+  SKILL_ENV_EXAMPLE_PATH,
+} from "../../src/lib/content-attachments"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseContentAttachmentRecord,
@@ -251,6 +254,9 @@ function buildSummary(
     deleted: snapshot.deleted,
     latestHistoryDirname: historyDirname,
     attachmentCount: attachments.length,
+    hasEnv: contentType === "skill" && attachments.some(
+      (attachment) => attachment.originalName === SKILL_ENV_EXAMPLE_PATH,
+    ),
     source: "repository",
     isReadonly: false,
   }

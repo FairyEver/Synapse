@@ -165,13 +165,31 @@ describe("ContentGrid", () => {
     expect(onOpenItem).not.toHaveBeenCalled()
   })
 
+  it("shows an env badge beside the title only when the skill declares env support", async () => {
+    const { container } = await renderGrid([
+      createContentItem("skill", { id: "env-skill", hasEnv: true, title: "Env Skill" }),
+      createContentItem("skill", { id: "plain-skill", hasEnv: false, title: "Plain Skill" }),
+    ])
+
+    const envTitle = Array.from(container.querySelectorAll("p"))
+      .find((element) => element.textContent === "Env Skill")
+    const plainTitle = Array.from(container.querySelectorAll("p"))
+      .find((element) => element.textContent === "Plain Skill")
+    const envBadge = envTitle?.parentElement?.querySelector('[data-slot="badge"]')
+
+    expect(envBadge?.textContent).toBe("env")
+    expect(envBadge?.getAttribute("data-variant")).toBe("secondary")
+    expect(plainTitle?.parentElement?.querySelector('[data-slot="badge"]')).toBeNull()
+  })
+
   it("does not show the skill name row on prompt cards", async () => {
     const { container } = await renderGrid([
-      createContentItem("prompt", { name: "prompt-name" }),
+      createContentItem("prompt", { hasEnv: true, name: "prompt-name" }),
     ], "prompt")
 
     expect(container.querySelector('[aria-label="复制 Skill 名称"]')).toBeNull()
     expect(container.textContent).not.toContain("prompt-name")
+    expect(container.textContent).not.toContain("env")
   })
 
   it("shows update badge in the install status footer when an installed skill is stale", async () => {

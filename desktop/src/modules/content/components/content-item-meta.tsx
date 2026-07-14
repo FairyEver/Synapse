@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -27,6 +27,7 @@ type ContentItemTextProps = {
   descriptionTextClassName?: string
   descriptionWrap?: boolean
   title: string
+  titleAccessory?: ReactNode
 }
 
 type ContentItemBadgesProps = {
@@ -40,6 +41,7 @@ function ContentItemText({
   descriptionTextClassName,
   descriptionWrap,
   title,
+  titleAccessory,
 }: ContentItemTextProps) {
   const descRef = useRef<HTMLParagraphElement>(null)
   const [isClamped, setIsClamped] = useState(false)
@@ -63,7 +65,10 @@ function ContentItemText({
   return (
     <>
       <div className="min-w-0 w-full max-w-full flex flex-col gap-1.5">
-        <p className="max-w-full truncate text-sm font-medium leading-4 text-foreground">{title}</p>
+        <div className="flex min-w-0 max-w-full items-center gap-1.5">
+          <p className="min-w-0 truncate text-sm font-medium leading-4 text-foreground">{title}</p>
+          {titleAccessory}
+        </div>
         <p
           ref={descRef}
           className={cn(

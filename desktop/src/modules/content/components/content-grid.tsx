@@ -1,6 +1,7 @@
 import { LoaderCircle, RotateCcw, Trash2 } from "lucide-react"
 import type { MouseEvent } from "react"
 import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { getCategoryLabel } from "@/lib/content-categories"
 import { resolveDisplayName } from "@/lib/display-name"
@@ -295,6 +296,9 @@ function SkillContentListCard({
               description={item.usage?.trim() || item.description}
               descriptionTextClassName="text-xs"
               title={item.title}
+              titleAccessory={item.hasEnv === true ? (
+                <Badge variant="secondary">env</Badge>
+              ) : null}
             />
           </div>
 

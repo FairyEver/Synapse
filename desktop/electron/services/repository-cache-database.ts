@@ -70,7 +70,8 @@ function ensureRepositoryCacheSchema(
       created_at TEXT,
       deleted INTEGER DEFAULT 0,
       latest_history_dirname TEXT,
-      attachment_count INTEGER DEFAULT 0
+      attachment_count INTEGER DEFAULT 0,
+      has_env INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE INDEX IF NOT EXISTS idx_content_index_modified_at
@@ -108,6 +109,16 @@ function ensureRepositoryCacheSchema(
       if (!message.includes("duplicate column")) {
         throw error
       }
+    }
+  }
+
+  try {
+    database.exec(`ALTER TABLE content_index ADD COLUMN has_env INTEGER NOT NULL DEFAULT 0`)
+    database.prepare(`DELETE FROM index_meta WHERE key = ?`).run("last_synced_git_sha")
+  } catch (error) {
+    const message = (error as Error).message ?? ""
+    if (!message.includes("duplicate column")) {
+      throw error
     }
   }
 

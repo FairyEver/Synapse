@@ -70,6 +70,7 @@ type SynapseContentSummaryBase = {
   deleted: boolean
   latestHistoryDirname: string
   attachmentCount: number
+  hasEnv?: boolean
   source?: SynapseContentSource
   isReadonly?: boolean
 }
