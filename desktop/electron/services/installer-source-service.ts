@@ -5,6 +5,7 @@ import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-
 import { slugifySkillName } from "../../src/definitions/editor/shared-skill-frontmatter"
 import { normalizeContentNameInput, validateContentNameInput } from "../../src/lib/content-name-input"
 import { normalizeSkillNameInput, validateSkillNameInput } from "../../src/lib/skill-name-input"
+import { SKILL_ENV_EXAMPLE_PATH } from "../../src/lib/content-attachments"
 import type { SynapseContentDetail } from "../../src/types/content"
 import type {
   SynapsePrepareInlineRuleSourcePayload,
@@ -21,6 +22,7 @@ import {
   createInlineRuleSourceIdentity,
   createLocalSkillSourceIdentity,
 } from "./installer-source-identity"
+import { assertSkillRuntimeEnvByteLength } from "./skill-env/file-policy"
 
 type StoredLocalSkillSource = {
   draft: ContentSkillSourceDraft
@@ -200,7 +202,11 @@ class InstallerSourceService {
     }
     const stored = this.getLocalSkill(source.localSourceId)
     const file = stored.draft.files.find((candidate) => candidate.originalName === relativePath)
-    return file?.bytes ? Buffer.from(file.bytes).toString("utf8") : null
+    if (!file?.bytes) return null
+    if (relativePath === SKILL_ENV_EXAMPLE_PATH) {
+      assertSkillRuntimeEnvByteLength(file.bytes.byteLength)
+    }
+    return Buffer.from(file.bytes).toString("utf8")
   }
 }
 

@@ -7,6 +7,7 @@ import { z } from "zod"
 import type { SkillRepositoryInstallManifest } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { SynapseAccountState } from "../../src/types/account"
 import type { SynapseContentDetail } from "../../src/types/content"
+import { SKILL_ENV_EXAMPLE_PATH } from "../../src/lib/content-attachments"
 import type {
   SynapseSkillRepositoryInstallPrepareResult,
   SynapseSkillRepositoryInstallResolveResult,
@@ -30,6 +31,7 @@ import {
 import type { PreparedContentInstallSourceProvider } from "./editor-install-service"
 import { LiveClientIdStore } from "./live-client-id-store"
 import { createMainLogger } from "./log-store"
+import { assertSkillRuntimeEnvByteLength } from "./skill-env/file-policy"
 
 const logger = createMainLogger("service.skill-repository-install")
 
@@ -263,6 +265,9 @@ export class SkillRepositoryInstallService implements PreparedContentInstallSour
       && file.path === `content/${relativePath}`
     ))
     if (!attachment || attachment.kind !== "text") return null
+    if (relativePath === SKILL_ENV_EXAMPLE_PATH) {
+      assertSkillRuntimeEnvByteLength(attachment.size)
+    }
     return readFile(path.join(prepared.directoryPath, attachment.path), "utf8")
   }
 

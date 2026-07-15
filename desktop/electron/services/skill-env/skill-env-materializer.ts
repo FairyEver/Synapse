@@ -414,7 +414,16 @@ export async function materializeSkillEnv(
 
   let example: string
   try {
+    const exampleEntry = await lstat(stagedExamplePath, { bigint: true })
+    if (exampleEntry.isSymbolicLink()) {
+      throw new Error("Skill .env.example 不能是符号链接。")
+    }
+    if (!exampleEntry.isFile()) {
+      throw new Error("Skill .env.example 必须是普通文件。")
+    }
+    assertSkillRuntimeEnvByteLength(exampleEntry.size)
     example = await readFile(stagedExamplePath, "utf8")
+    assertSkillRuntimeEnvBytes(example)
   } catch (error) {
     if (isMissingPathError(error)) {
       if (existing === null) return "absent"

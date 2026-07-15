@@ -16,6 +16,10 @@ import type {
 } from "../../src/types/installers"
 import type { SynapseContentDetail } from "../../src/types/content"
 import type { SynapseEditorInstallStatusResult } from "../../src/types/editor-install-status"
+import {
+  normalizeContentAttachmentPath,
+  SKILL_ENV_EXAMPLE_PATH,
+} from "../../src/lib/content-attachments"
 import { configStore } from "./config-store"
 import { contentService } from "./content-service"
 import { editorAdapterService } from "./editor-adapter-service"
@@ -30,6 +34,7 @@ import {
 import type { EditorWriteSecurityDeps } from "./editor-write-security"
 import { installerSourceService } from "./installer-source-service"
 import { SkillEnvSourceService } from "./skill-env/skill-env-source-service"
+import { assertSkillRuntimeEnvByteLength } from "./skill-env/file-policy"
 
 type EditorReadSecurityDeps = {
   actor: ActorIdentity
@@ -332,6 +337,13 @@ export class EditorInstallService {
     if (source.origin === "repository") {
       if (!source.repositoryContentId) throw new Error("Skill 安装源不可用。")
       const detail = await contentService.getSkillDetail(source.repositoryContentId)
+      if (relativePath === SKILL_ENV_EXAMPLE_PATH) {
+        const normalizedPath = normalizeContentAttachmentPath(relativePath)
+        const attachment = detail.attachments.find((candidate) => (
+          normalizeContentAttachmentPath(candidate.originalName) === normalizedPath
+        ))
+        if (attachment) assertSkillRuntimeEnvByteLength(attachment.size)
+      }
       const file = await contentService.getAttachmentFile(
         "skill",
         source.repositoryContentId,

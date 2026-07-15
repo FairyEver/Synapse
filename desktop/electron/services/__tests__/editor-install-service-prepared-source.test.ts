@@ -90,6 +90,7 @@ function defaultConfig() {
 }
 
 import { EditorInstallService } from "../editor-install-service"
+import { SKILL_RUNTIME_ENV_MAX_BYTES } from "../skill-env/file-policy"
 
 const tempRoots: string[] = []
 
@@ -393,6 +394,7 @@ describe("EditorInstallService prepared source", () => {
 
   it("inspects a repository Skill at its latest history version", async () => {
     mocks.getSkillDetail.mockResolvedValue({
+      attachments: [{ originalName: ".env.example", sha256: "a".repeat(64), size: 25 }],
       content: "# Skill\n",
       latestHistoryDirname: "history-1",
     })
@@ -415,5 +417,29 @@ describe("EditorInstallService prepared source", () => {
     })
     expect(mocks.getAttachmentFile)
       .toHaveBeenCalledWith("skill", "skill-1", "history-1", ".env.example")
+  })
+
+  it("rejects an oversized repository .env.example before reading attachment content", async () => {
+    mocks.getSkillDetail.mockResolvedValue({
+      attachments: [{
+        originalName: ".env.example",
+        sha256: "a".repeat(64),
+        size: Number(SKILL_RUNTIME_ENV_MAX_BYTES) + 1,
+      }],
+      content: "# Skill\n",
+      latestHistoryDirname: "history-1",
+    })
+    const service = new EditorInstallService()
+    const source = {
+      kind: "skill" as const,
+      origin: "repository" as const,
+      sourceIdentity: "skill-1",
+      repositoryContentId: "skill-1",
+      name: "repository-skill",
+    }
+
+    await expect(service.inspectSkillEnvSource(source))
+      .rejects.toThrow("Skill .env 不能超过 1 MiB。")
+    expect(mocks.getAttachmentFile).not.toHaveBeenCalled()
   })
 })

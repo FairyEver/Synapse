@@ -5,6 +5,7 @@ import type {
   SynapseSkillInstallerSource,
 } from "../../../src/types/installers"
 import { parseDotenvDocument } from "./dotenv-document"
+import { assertSkillRuntimeEnvBytes } from "./file-policy"
 
 export type SkillEnvSourceReader = {
   readMainContent(source: SynapseSkillInstallerSource): Promise<string>
@@ -23,6 +24,7 @@ export class SkillEnvSourceService {
       this.reader.readTextAttachment(source, SKILL_ENV_EXAMPLE_PATH),
     ])
     const legacyPlaceholders = detectPlaceholders(mainContent, { includeCodeBlocks: true })
+    if (example !== null) assertSkillRuntimeEnvBytes(example)
     const declarations = example === null
       ? []
       : parseDotenvDocument(example).entries.map(({ name, value }) => ({ name, defaultValue: value }))

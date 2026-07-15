@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { SynapseSkillInstallerSource } from "../../../../src/types/installers"
 import { SkillEnvSourceService } from "../skill-env-source-service"
+import { SKILL_RUNTIME_ENV_MAX_BYTES } from "../file-policy"
 
 const source: SynapseSkillInstallerSource = {
   kind: "skill",
@@ -43,5 +44,17 @@ describe("SkillEnvSourceService", () => {
       declarations: [],
       legacyPlaceholders: [],
     })
+  })
+
+  it("rejects an oversized .env.example before parsing declarations", async () => {
+    const reader = {
+      readMainContent: vi.fn().mockResolvedValue("# Skill\n"),
+      readTextAttachment: vi.fn().mockResolvedValue(
+        "x".repeat(Number(SKILL_RUNTIME_ENV_MAX_BYTES) + 1),
+      ),
+    }
+
+    await expect(new SkillEnvSourceService(reader).inspect(source))
+      .rejects.toThrow("Skill .env 不能超过 1 MiB。")
   })
 })

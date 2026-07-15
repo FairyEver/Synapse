@@ -296,16 +296,18 @@ describe("materializeSkillEnv", () => {
       .resolves.toBe(existing)
   })
 
-  it("rejects an oversized final output supplied entirely by .env.example", async () => {
+  it("rejects an oversized .env.example from metadata before reading it", async () => {
     const paths = await createDirectories()
+    const examplePath = path.join(paths.stagingDirectoryPath, ".env.example")
     await writeFile(
-      path.join(paths.stagingDirectoryPath, ".env.example"),
+      examplePath,
       `TOKEN=\n#${"x".repeat(Number(SKILL_RUNTIME_ENV_MAX_BYTES))}\n`,
       "utf8",
     )
 
     await expect(materializeSkillEnv({ ...paths, values: {} }))
       .rejects.toThrow("Skill .env 不能超过 1 MiB。")
+    expect(fsMocks.lstat).toHaveBeenCalledWith(examplePath, { bigint: true })
     await expect(readFile(path.join(paths.stagingDirectoryPath, ".env")))
       .rejects.toMatchObject({ code: "ENOENT" })
   })

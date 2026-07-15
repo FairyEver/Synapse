@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import { InstallerSourceService } from "../installer-source-service"
+import { SKILL_RUNTIME_ENV_MAX_BYTES } from "../skill-env/file-policy"
 
 const tempRoots: string[] = []
 
@@ -56,6 +57,22 @@ describe("InstallerSourceService", () => {
       .resolves.toBe("TOKEN=default\n")
     await expect(service.readLocalSkillAttachmentText(source, "missing.txt"))
       .resolves.toBeNull()
+  })
+
+  it("rejects an oversized local .env.example before UTF-8 conversion", async () => {
+    const root = await createTempDir()
+    await writeFile(path.join(root, "SKILL.md"), "# Skill\n", "utf8")
+    await writeFile(
+      path.join(root, ".env.example"),
+      "x".repeat(Number(SKILL_RUNTIME_ENV_MAX_BYTES) + 1),
+      "utf8",
+    )
+
+    const service = new InstallerSourceService()
+    const source = await service.prepareLocalSkillSource({ sourceDirectoryPath: root })
+
+    await expect(service.readLocalSkillAttachmentText(source, ".env.example"))
+      .rejects.toThrow("Skill .env 不能超过 1 MiB。")
   })
 
   it("rejects a local Skill source containing a root .env", async () => {

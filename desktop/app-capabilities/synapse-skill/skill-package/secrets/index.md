@@ -14,7 +14,7 @@ Secret names can also match keys in installed Skill root `.env` files. This file
 
 These MCP tools modify encrypted secret storage only. Create, update, and upsert never scan or write installed Skill files. The desktop app provides a separate explicit scan and user-confirmed in-memory serial queue for updating associated `.env` files.
 
-The desktop scanner accepts runtime `.env` files up to 1 MiB. Scanning is available on Windows, but the current desktop queue returns a failure for every Windows write; the user must update the local `.env` manually. On macOS and Linux, the desktop queue performs a final validation and then uses a same-directory atomic replacement. MCP tools never scan or write these files and cannot bypass these desktop limits.
+The desktop scanner accepts runtime `.env` files up to 1 MiB. The installer applies the same limit to root `.env.example` before decoding, parsing, or merging declarations. Scanning is available on Windows, but the current desktop queue returns a failure for every Windows write; the user must update the local `.env` manually. On macOS and Linux, the desktop queue performs a final validation and then uses a same-directory atomic replacement. MCP tools never scan or write these files and cannot bypass these desktop limits.
 
 ## Default Flow
 
