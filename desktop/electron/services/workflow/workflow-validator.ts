@@ -395,6 +395,26 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
       const bindingRecord = rawBindings && typeof rawBindings === "object" && !Array.isArray(rawBindings)
         ? rawBindings as Record<string, unknown>
         : undefined
+      const bindingTemplateValues = Object.values(bindingRecord ?? {}).flatMap((rawBinding) => {
+        if (!rawBinding || typeof rawBinding !== "object" || Array.isArray(rawBinding)) return []
+        const binding = rawBinding as Partial<WorkflowParamBinding>
+        return binding.mode === "template" && typeof binding.template === "string"
+          ? [binding.template]
+          : []
+      })
+      for (const value of bindingTemplateValues) {
+        for (const placeholder of extractWorkflowCallTemplateVariables(value)) {
+          if (!boundNames.has(placeholder)) {
+            errors.push({
+              type: "invalid_config",
+              nodeId: node.id,
+              nodeName: node.name,
+              field: "paramBindings",
+              message: `节点「${node.name}」的模板变量「${placeholder}」未绑定，请在节点变量中添加绑定`,
+            })
+          }
+        }
+      }
       if (childParams) {
         for (const childParam of childParams) {
           if (workflowParamHasDefault(childParam)) continue

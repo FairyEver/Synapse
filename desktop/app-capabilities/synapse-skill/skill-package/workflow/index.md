@@ -151,7 +151,7 @@ Recommended MCP flow:
      }
    }
    ```
-5. Run `app_workflow_definition_inspect` after updating. It catches direct self-calls, missing required child parameter templates or bindings, unbound variables in `paramTemplates`, file/directory parent bindings whose resource type or `allowMultiple` value differs from the child parameter, and string/template sources used for multi-resource child params.
+5. Run `app_workflow_definition_inspect` after updating. It catches direct self-calls, missing required child parameter templates or bindings, unbound variables in `paramTemplates` and template-mode `paramBindings`, file/directory parent bindings whose resource type or `allowMultiple` value differs from the child parameter, and string/template sources used for multi-resource child params.
 
 Do not put both `paramTemplates.<name>` and `paramBindings.<name>` on the same child parameter. For file/directory child params, prefer a `paramBindings` value binding from a parent parameter with the same resource kind and the same `allowMultiple` value. Existing single-resource configs may still receive an absolute path string from `paramTemplates`, `static`, or `node_output`. Multi-resource child params must directly bind a matching multi-resource parent param; they reject templates, `static`, and `node_output`. Single and multi resource params are never converted automatically.
 

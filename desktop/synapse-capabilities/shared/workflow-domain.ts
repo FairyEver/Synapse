@@ -189,7 +189,7 @@ const workflowDefinitionSchema = {
               variables: { type: "array", items: variableBindingSchema },
               workflowId: { type: "string", description: "workflow_call only: child workflow ID to invoke." },
               paramTemplates: { type: "object", description: "workflow_call only: child text/number/option parameter name to template string map. Legacy single file/directory templates remain accepted; multi-select resource params cannot use templates." },
-              paramBindings: { type: "object", description: "workflow_call only: child parameter name to typed binding map. Single file/directory params may use param, node_output, or static string value sources. Multi-select resource params must directly bind a parent param with the same resource kind and allowMultiple value." },
+              paramBindings: { type: "object", description: "workflow_call only: child parameter name to typed binding map. Template bindings use { mode: 'template', template: '{{variable}}' } and every placeholder must be declared in variables. Single file/directory params may use param, node_output, or static string value sources. Multi-select resource params must directly bind a parent param with the same resource kind and allowMultiple value." },
               templatePath: { type: "string", description: "document_template_docx_generate only: DOCX template path. Supports {{variable}} interpolation." },
               outputPath: { type: "string", description: "document_template_docx_generate only: generated DOCX output path. Supports {{variable}} interpolation." },
               dataSource: { type: "string", enum: ["dataPath", "inline"], description: "document_template_docx_generate only: use a JSON file path or inline JSON data." },

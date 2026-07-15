@@ -340,6 +340,51 @@ describe("validateWorkflow", () => {
     expect(result.errors).toEqual([])
   })
 
+  it("rejects unbound template variables in workflow_call paramBindings", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "parent_topic",
+      type: "text",
+      default: null,
+    }, {
+      paramBindings: {
+        topic: { mode: "template", template: "{{missing}}" },
+      },
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [
+        { name: "topic", type: "text", default: null },
+      ]]]),
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      nodeId: "call",
+      field: "paramBindings",
+      message: expect.stringContaining("模板变量「missing」未绑定"),
+    }))
+  })
+
+  it("accepts bound template variables in workflow_call paramBindings", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "parent_topic",
+      type: "text",
+      default: null,
+    }, {
+      variables: [{ name: "topic", source: { type: "param", param: "parent_topic" } }],
+      paramBindings: {
+        topic: { mode: "template", template: "{{topic}}" },
+      },
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [
+        { name: "topic", type: "text", default: null },
+      ]]]),
+    })
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
   it.each([
     { name: "topic", type: "text" as const, default: null },
     { name: "limit", type: "number" as const, default: null },
