@@ -549,6 +549,46 @@ describe("SharedInstallerFlow", () => {
     expect(mocks.secrets.get).not.toHaveBeenCalled()
   })
 
+  it("saves a confirmed blank Skill ENV value before installing", async () => {
+    mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [{ name: "OPTIONAL_EMPTY", defaultValue: "" }],
+      legacyPlaceholders: [],
+    })
+    mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
+    await renderFlow(repositorySkillSource)
+
+    await act(async () => {
+      clickButton("Codex")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("选择目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("继续安装")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("保存密钥")
+    expect(mocks.installSourceToEditor).not.toHaveBeenCalled()
+
+    await act(async () => {
+      clickButton("保存并继续")
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.upsert).toHaveBeenCalledWith({ name: "OPTIONAL_EMPTY", value: "" })
+    expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
+      skillEnvValues: { OPTIONAL_EMPTY: "" },
+    }))
+  })
+
   it("deduplicates same-name secret updates and prefers the sustainable ENV value", async () => {
     mocks.inspectSkillEnvSource.mockResolvedValue({
       declarations: [{ name: "GITEE_TOKEN", defaultValue: "" }],

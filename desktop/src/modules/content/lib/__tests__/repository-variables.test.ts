@@ -23,6 +23,7 @@ describe("user secret change helpers", () => {
     expect(changeSet).toEqual({
       newSecrets: [
         { name: "API_URL", value: "https://example.test" },
+        { name: "EMPTY", value: "" },
       ],
       updatedSecrets: [
         { name: "TOKEN", value: "new" },
@@ -32,28 +33,28 @@ describe("user secret change helpers", () => {
     expect(hasUserSecretChanges(changeSet)).toBe(true)
   })
 
-  it("ignores blank substitution values", () => {
+  it("preserves a confirmed blank value for a new secret", () => {
     const changeSet = buildUserSecretChangeSet(secrets, {
       EMPTY: "",
     })
 
     expect(changeSet).toEqual({
-      newSecrets: [],
+      newSecrets: [{ name: "EMPTY", value: "" }],
       updatedSecrets: [],
     })
-    expect(hasUserSecretChanges(changeSet)).toBe(false)
+    expect(hasUserSecretChanges(changeSet)).toBe(true)
   })
 
-  it("detects no changes when a saved secret already has a value and the user leaves it blank", () => {
+  it("preserves a confirmed blank value when updating an existing secret", () => {
     const changeSet = buildUserSecretChangeSet(secrets, {
       TOKEN: "",
     })
 
     expect(changeSet).toEqual({
       newSecrets: [],
-      updatedSecrets: [],
+      updatedSecrets: [{ name: "TOKEN", value: "" }],
     })
-    expect(hasUserSecretChanges(changeSet)).toBe(false)
+    expect(hasUserSecretChanges(changeSet)).toBe(true)
   })
 
   it("detects no changes when a saved secret value is unchanged", () => {

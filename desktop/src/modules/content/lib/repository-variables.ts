@@ -16,8 +16,6 @@ function buildUserSecretChangeSet(
   const updatedSecrets: SecretUpsertInput[] = []
 
   for (const [name, value] of Object.entries(substitutions)) {
-    if (value.length === 0) continue
-
     const existing = existingByName.get(name.toLowerCase())
     if (existing && initialValueByName.get(name.toLowerCase()) === value) continue
 
