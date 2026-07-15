@@ -30,6 +30,7 @@ import { contentHistoryService } from "../content-history-service"
 import * as editorScanRoots from "../editor-scan-roots"
 import {
   EDITOR_SCAN_SKILL_FILE_LIST_LIMITS,
+  EDITOR_SCAN_SKILL_PREVIEW_LIMITS,
   finalizeQuickPublish,
   listSkillFiles,
   prepareQuickPublishDraft,
@@ -668,6 +669,43 @@ describe("editor scan quick publish", () => {
     const result = await scanSkillDirectories([root])
 
     expect(result.skills[0]?.preview).toBe(description)
+  })
+
+  it("bounds Skill preview reads to a fixed file prefix", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "large-preview")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(path.join(skillDir, "SKILL.md"), [
+      "---",
+      "name: large-preview",
+      `padding: ${"x".repeat(EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxPreviewBytes)}`,
+      "description: This description is beyond the preview limit.",
+      "---",
+      "# Large Preview",
+    ].join("\n"))
+
+    const result = await scanSkillDirectories([root])
+
+    expect(result.skills[0]?.preview).not.toContain("beyond the preview limit")
+    expect((result.skills[0]?.preview ?? "").length)
+      .toBeLessThanOrEqual(EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxPreviewChars)
+  })
+
+  it("caps the number of Skill directories scanned per root", async () => {
+    const root = await createTempDir()
+    await Promise.all(Array.from(
+      { length: EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxSkillsPerRoot + 1 },
+      async (_, index) => {
+        const skillDir = path.join(root, `skill-${String(index).padStart(3, "0")}`)
+        await mkdir(skillDir, { recursive: true })
+        await writeFile(path.join(skillDir, "SKILL.md"), `# Skill ${index}\n`)
+      },
+    ))
+
+    const result = await scanSkillDirectories([root])
+
+    expect(result.skills).toHaveLength(EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxSkillsPerRoot)
+    expect(result.skillScanError).toContain("Skill 数量超过扫描上限")
   })
 
   it("uses ruleContent when preparing a rule draft", async () => {

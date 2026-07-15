@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises"
+import { lstat, open, opendir, readFile, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { shell } from "electron"
 import type {
@@ -52,6 +52,14 @@ const EDITOR_SCAN_SCOPE_ERROR = "目标不在当前编辑器扫描范围内。"
 const EDITOR_SCAN_TRASH_SCOPE_ERROR = EDITOR_SCAN_SCOPE_ERROR
 const QUICK_PUBLISH_SESSION_MAX_COUNT = 20
 const QUICK_PUBLISH_SESSION_TTL_MS = 30 * 60 * 1000
+const EDITOR_SCAN_SKILL_PREVIEW_LIMITS = {
+  maxChildrenPerSkill: 200,
+  maxPreviewBytes: 64 * 1024,
+  maxPreviewChars: 2_048,
+  maxRootEntries: 1_000,
+  maxSkillsPerRoot: 200,
+  projectConcurrency: 4,
+} as const
 
 type QuickPublishSession = {
   expectedIdentityRaw: string | null
@@ -345,15 +353,37 @@ function parseFrontmatter(text: string): { metadata: Record<string, string>; bod
 
 function previewLines(text: string): string {
   const { metadata, body } = parseFrontmatter(text)
-  return (metadata.description?.trim() || body).split("\n").slice(0, 3).join("\n").trim()
+  return (metadata.description?.trim() || body)
+    .split("\n")
+    .slice(0, 3)
+    .join("\n")
+    .trim()
+    .slice(0, EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxPreviewChars)
 }
 
 async function readPreview(filePath: string): Promise<string> {
+  let handle
   try {
-    return previewLines(await readFile(filePath, "utf8"))
+    handle = await open(filePath, "r")
+    const buffer = Buffer.allocUnsafe(EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxPreviewBytes)
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
+    return previewLines(buffer.subarray(0, bytesRead).toString("utf8"))
   } catch {
     return ""
+  } finally {
+    await handle?.close().catch(() => undefined)
   }
+}
+
+async function countDirectoryEntries(dirPath: string): Promise<number> {
+  let count = 0
+  const directory = await opendir(dirPath)
+  for await (const entry of directory) {
+    if (!entry.name) continue
+    count += 1
+    if (count >= EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxChildrenPerSkill) break
+  }
+  return count
 }
 
 async function readSynapseSkillMeta(
@@ -390,6 +420,7 @@ async function readSynapseSkillMeta(
 // --- skill scanning ---
 
 const SKILL_SCAN_READ_ERROR = "Skill 目录读取失败"
+const SKILL_SCAN_LIMIT_ERROR = `Skill 数量超过扫描上限，仅显示前 ${EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxSkillsPerRoot} 项`
 
 type SkillDirectoryScanResult = {
   items: EditorScanSkillItem[]
@@ -399,26 +430,42 @@ type SkillDirectoryScanResult = {
 async function scanSkillsDirectory(dirPath: string): Promise<SkillDirectoryScanResult> {
   if (!(await pathExists(dirPath))) return { items: [] }
 
-  let entries
+  let directory
   try {
-    entries = await readdir(dirPath, { withFileTypes: true })
+    directory = await opendir(dirPath)
   } catch (error) {
     logger.warn("Failed to read skill scan root.", { dirPath, error })
     return { items: [], error: SKILL_SCAN_READ_ERROR }
   }
 
   const items: EditorScanSkillItem[] = []
+  let candidateCount = 0
+  let rootEntryCount = 0
+  let truncated = false
 
-  for (const entry of entries) {
+  for await (const entry of directory) {
+    if (rootEntryCount >= EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxRootEntries) {
+      truncated = true
+      break
+    }
+    rootEntryCount += 1
     if (!entry.isDirectory()) continue
+    if (candidateCount >= EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxSkillsPerRoot) {
+      truncated = true
+      break
+    }
+    candidateCount += 1
     const skillDir = path.join(dirPath, entry.name)
 
     try {
       const meta = await readSynapseSkillMeta(skillDir)
       const source: EditorScanItemSource = meta ? "synapse" : "external"
 
-      const children = await readdir(skillDir)
-      const previewFile = await resolveSkillMainFile(skillDir)
+      const fileCount = await countDirectoryEntries(skillDir)
+      const previewFile = await resolveSkillMainFile(
+        skillDir,
+        EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxChildrenPerSkill,
+      )
       if (!previewFile && !meta) continue
 
       const preview = previewFile ? await readPreview(previewFile) : ""
@@ -433,7 +480,7 @@ async function scanSkillsDirectory(dirPath: string): Promise<SkillDirectoryScanR
         sourceFingerprint: meta?.sourceFingerprint ?? null,
         preview,
         mainFileName,
-        fileCount: children.length,
+        fileCount,
         trash: { mode: "path" },
       })
     } catch (error) {
@@ -441,7 +488,7 @@ async function scanSkillsDirectory(dirPath: string): Promise<SkillDirectoryScanR
     }
   }
 
-  return { items }
+  return { items, ...(truncated ? { error: SKILL_SCAN_LIMIT_ERROR } : undefined) }
 }
 
 // --- per-editor scan helpers ---
@@ -616,9 +663,14 @@ async function scanAll(): Promise<EditorScanResult> {
   const config = await configStore.load()
   const projects = config.global.projects
 
-  const projectsPromise = Promise.allSettled(
-    projects.map((p) => scanProject(p.path, p.name)),
-  )
+  const projectsPromise = (async () => {
+    const settled: PromiseSettledResult<EditorScanProjectResult>[] = []
+    for (let index = 0; index < projects.length; index += EDITOR_SCAN_SKILL_PREVIEW_LIMITS.projectConcurrency) {
+      const batch = projects.slice(index, index + EDITOR_SCAN_SKILL_PREVIEW_LIMITS.projectConcurrency)
+      settled.push(...await Promise.allSettled(batch.map((project) => scanProject(project.path, project.name))))
+    }
+    return settled
+  })()
 
   const [global, projectSettled] = await Promise.all([globalPromise, projectsPromise])
 
@@ -1029,6 +1081,7 @@ async function trashScanItem(
 
 export {
   EDITOR_SCAN_SKILL_FILE_LIST_LIMITS,
+  EDITOR_SCAN_SKILL_PREVIEW_LIMITS,
   scanAll,
   readItemContent,
   listSkillFiles,

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import type { Stats } from "node:fs"
-import { lstat, open, readdir, realpath, stat } from "node:fs/promises"
+import { lstat, open, opendir, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
 import {
@@ -71,10 +71,19 @@ type SkillFileCollectionState = {
   totalSize: number
 }
 
-async function resolveSkillMainFile(dirPath: string): Promise<string | null> {
+async function resolveSkillMainFile(dirPath: string, maxEntries?: number): Promise<string | null> {
   let children: string[]
   try {
-    children = await readdir(dirPath)
+    if (maxEntries === undefined) {
+      children = await readdir(dirPath)
+    } else {
+      children = []
+      const directory = await opendir(dirPath)
+      for await (const entry of directory) {
+        children.push(entry.name)
+        if (children.length >= maxEntries) break
+      }
+    }
   } catch (error) {
     logger.warn("Failed to read skill source directory.", {
       ...sourcePathDiagnostic(dirPath),
