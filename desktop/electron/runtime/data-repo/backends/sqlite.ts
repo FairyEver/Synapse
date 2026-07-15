@@ -320,7 +320,7 @@ function sanitizeTableName(namespace: string): string {
 
 type SqliteFilterParam = string | number | null
 
-function isSqliteFilterParam(value: DataQueryScalar): value is SqliteFilterParam {
+function isSqliteFilterParam(value: unknown): value is SqliteFilterParam {
   return typeof value === "string" || typeof value === "number"
 }
 
