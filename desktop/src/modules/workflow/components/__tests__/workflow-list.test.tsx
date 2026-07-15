@@ -5,7 +5,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { WorkflowDefinition, WorkflowEvent } from "@/types/workflow"
+import type { WorkflowDefinition, WorkflowEvent, WorkflowMeta } from "@/types/workflow"
 import { WorkflowList } from "../workflow-list"
 
 const {
@@ -14,8 +14,10 @@ const {
   toastSuccess,
   track,
   workflowGet,
+  workflowListState,
   workflowActiveRuns,
   workflowExportPackage,
+  workflowOpenEditor,
   workflowRunDefinition,
   workflowOpenRunner,
   workflowOnEvent,
@@ -25,8 +27,10 @@ const {
   toastSuccess: vi.fn(),
   track: vi.fn(),
   workflowGet: vi.fn(),
+  workflowListState: { items: [] as WorkflowMeta[] },
   workflowActiveRuns: vi.fn(),
   workflowExportPackage: vi.fn(),
+  workflowOpenEditor: vi.fn(),
   workflowRunDefinition: vi.fn(),
   workflowOpenRunner: vi.fn(),
   workflowOnEvent: vi.fn((_callback: (event: WorkflowEvent) => void) => vi.fn()),
@@ -48,7 +52,8 @@ vi.mock("@/app-shell/logging", () => ({
   }),
 }))
 
-vi.mock("@/lib/ui-tracking", () => ({
+vi.mock("@/lib/ui-tracking", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/ui-tracking")>(),
   track,
 }))
 
@@ -57,18 +62,21 @@ vi.mock("../workflow-card", () => ({
     meta,
     runState,
     onExport,
+    onOpen,
     onRun,
     onOpenActiveRun,
   }: {
     meta: { id: string }
     runState?: { status: string; runId?: string }
     onExport: () => void
+    onOpen: () => void
     onRun: () => void
     onOpenActiveRun: (runId: string) => void
   }) => (
     <tr>
       <td>
         <button type="button" data-testid={`run-${meta.id}`} onClick={onRun}>run</button>
+        <button type="button" data-testid={`open-${meta.id}`} onClick={onOpen}>open</button>
         {runState?.runId ? (
           <button type="button" data-testid={`open-active-${meta.id}`} onClick={() => onOpenActiveRun(runState.runId!)}>open active</button>
         ) : null}
@@ -105,14 +113,7 @@ vi.mock("../run-history-dialog", () => ({
 
 vi.mock("../../hooks/use-workflow-list", () => ({
   useWorkflowList: () => ({
-    items: [{
-      id: "workflow-param",
-      name: "Parameterized",
-      version: "v1",
-      nodeCount: 1,
-      createdAt: 0,
-      updatedAt: 0,
-    }],
+    items: workflowListState.items,
     loading: false,
     error: null,
     refresh: vi.fn(),
@@ -138,6 +139,14 @@ const parameterizedWorkflow: WorkflowDefinition = {
 }
 
 beforeEach(() => {
+  workflowListState.items = [{
+    id: "workflow-param",
+    name: "Parameterized",
+    version: "v1",
+    nodeCount: 1,
+    createdAt: 0,
+    updatedAt: 0,
+  }]
   workflowGet.mockResolvedValue(parameterizedWorkflow)
   workflowActiveRuns.mockResolvedValue([])
   workflowRunDefinition.mockResolvedValue({ runId: "run-1" })
@@ -149,6 +158,7 @@ beforeEach(() => {
         get: workflowGet,
         activeRuns: workflowActiveRuns,
         exportPackage: workflowExportPackage,
+        openEditor: workflowOpenEditor,
         runDefinition: workflowRunDefinition,
         openRunner: workflowOpenRunner,
         onEvent: workflowOnEvent,
@@ -283,6 +293,48 @@ describe("WorkflowList", () => {
       await Promise.resolve()
     })
 
+    expect(toastSuccess).toHaveBeenCalledWith("工作流原文已导出")
+  })
+
+  it("shows the protected workflow reason and raw export recovery action", async () => {
+    workflowListState.items = [{
+      id: "workflow-future",
+      name: "Future workflow",
+      version: "v1",
+      nodeCount: 0,
+      createdAt: 0,
+      updatedAt: 0,
+      loadError: "该工作流使用更高的数据版本，请升级 Synapse 后再试。",
+      rawExportAvailable: true,
+    }]
+    workflowExportPackage.mockResolvedValue({
+      path: "/tmp/future.synapse-workflow-future.json",
+      kind: "future-raw",
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowList onCreate={vi.fn()} />)
+    })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="open-workflow-future"]')?.click()
+    })
+
+    expect(document.body.textContent).toContain("该工作流使用更高的数据版本，请升级 Synapse 后再试。")
+    expect(document.body.textContent).toContain("可导出原文备份，并在兼容版本中处理。")
+    expect(workflowOpenEditor).not.toHaveBeenCalled()
+
+    await act(async () => {
+      Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent?.trim() === "导出原文")
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(workflowExportPackage).toHaveBeenCalledWith("workflow-future", "Future workflow")
     expect(toastSuccess).toHaveBeenCalledWith("工作流原文已导出")
   })
 

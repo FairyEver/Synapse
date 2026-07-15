@@ -9,7 +9,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { ModuleContentPanel } from "@/components/module-page"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import {
   Table,
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { track } from "@/lib/ui-tracking"
-import type { WorkflowDefinition, WorkflowParamPresetValue } from "@/types/workflow"
+import type { WorkflowDefinition, WorkflowMeta, WorkflowParamPresetValue } from "@/types/workflow"
 import { errorDiagnostic } from "../lib/error-utils"
 
 const logger = createRendererLogger("workflow.list")
@@ -42,6 +42,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
   const { items, loading, error, refresh } = useWorkflowList()
   const [runTarget, setRunTarget] = useState<WorkflowDefinition | null>(null)
   const [historyWorkflowId, setHistoryWorkflowId] = useState<string | null>(null)
+  const [protectedWorkflow, setProtectedWorkflow] = useState<WorkflowMeta | null>(null)
   const [runningId, setRunningId] = useState<string | null>(null)
   // Track a conflict so we can offer "cancel old & start new" instead of just an error toast.
   const [conflictState, setConflictState] = useState<{ def: WorkflowDefinition; params: Record<string, unknown> } | null>(null)
@@ -172,6 +173,21 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     openRunner(requireBridgeDomain("workflow"), workflowId, runId)
   }
 
+  const handleOpen = (meta: WorkflowMeta) => {
+    if (meta.loadError) {
+      setProtectedWorkflow(meta)
+      return
+    }
+    void requireBridgeDomain("workflow").openEditor(meta.id).catch((err) => {
+      logger.warn("Workflow editor open failed.", {
+        boundary: "renderer.workflow.list.openEditor",
+        workflowId: meta.id,
+        ...errorDiagnostic(err),
+      })
+      toast.error("打开工作流失败，请重试")
+    })
+  }
+
   const handleConfirmRun = async (params: Record<string, unknown>) => {
     if (!runTarget) return
     const def = runTarget
@@ -287,16 +303,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
               <WorkflowCard key={meta.id} meta={meta}
                 runState={runStates[meta.id]}
                 running={runningId !== null}
-                onOpen={() => {
-                  void requireBridgeDomain("workflow").openEditor(meta.id).catch((err) => {
-                    logger.warn("Workflow editor open failed.", {
-                      boundary: "renderer.workflow.list.openEditor",
-                      workflowId: meta.id,
-                      ...errorDiagnostic(err),
-                    })
-                    toast.error("打开工作流失败，请重试")
-                  })
-                }}
+                onOpen={() => handleOpen(meta)}
                 onRun={() => void handleRun(meta.id)}
                 onOpenActiveRun={(runId) => handleOpenActiveRun(meta.id, runId)}
                 onHistory={() => setHistoryWorkflowId(meta.id)}
@@ -306,6 +313,36 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
           </TableBody>
         </Table>
       </ModuleContentPanel>
+      <AlertDialog
+        open={protectedWorkflow !== null}
+        onOpenChange={(open) => { if (!open) setProtectedWorkflow(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>无法打开工作流</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">{protectedWorkflow?.loadError}</span>
+              {protectedWorkflow?.rawExportAvailable ? (
+                <span className="block">可导出原文备份，并在兼容版本中处理。</span>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>关闭</AlertDialogCancel>
+            {protectedWorkflow?.rawExportAvailable ? (
+              <AlertDialogAction
+                onClick={() => {
+                  const target = protectedWorkflow
+                  setProtectedWorkflow(null)
+                  if (target) void handleExport(target.id, target.name)
+                }}
+              >
+                导出原文
+              </AlertDialogAction>
+            ) : null}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <RunParamsDialog
         open={!!runTarget}
         workflowId={runTarget?.id ?? ""}
