@@ -203,6 +203,40 @@ describe("JsonNamespace (T2.2)", () => {
     }
   })
 
+  it("rejects a conditional upsert when the source file changed", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "users.json")
+    try {
+      const ns = new JsonNamespace<User>({
+        name: "users",
+        schemaVersion: 1,
+        backend: "json",
+        filePath: file,
+      })
+      await ns.upsert({ id: "u1", name: "Ada" })
+      const expectedSource = await readFile(file)
+      const externalEnvelope = {
+        schemaVersion: 1,
+        singleton: null,
+        items: {
+          u1: { id: "u1", name: "External update" },
+          u3: { id: "u3", name: "Grace" },
+        },
+      }
+      await writeJsonFileAtomic(file, externalEnvelope)
+
+      await expect(ns.upsertIfFileUnchanged(
+        { id: "u2", name: "Bob" },
+        expectedSource,
+      )).rejects.toThrow("File changed before atomic replacement.")
+
+      expect(JSON.parse(await readFile(file, "utf8"))).toEqual(externalEnvelope)
+      expect(await ns.get("u2")).toBeNull()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("keeps cached collection state unchanged when upsert persistence fails", async () => {
     const dir = await tempDir()
     const file = path.join(dir, "users.json")

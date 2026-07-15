@@ -8,6 +8,7 @@ import type {
   WorkflowMigrationStateEntryV1,
   WorkflowMigrationStateStatus,
 } from "../../runtime/data-repo"
+import { AtomicSourceChangedError, JsonNamespace } from "../../runtime/data-repo"
 import { validateWorkflow, type WorkflowValidationOptions } from "./workflow-validator"
 import { createMainLogger } from "../log-store"
 import { errorLogMeta as baseErrorLogMeta } from "../error-sanitize"
@@ -47,6 +48,7 @@ export interface WorkflowServiceMigrationOptions {
 export class WorkflowService {
   private _seq = 0
   private readonly workflowsNamespace: DataNamespace<WorkflowEntryV1>
+  private readonly workflowsJsonNamespace: JsonNamespace<WorkflowEntryV1> | null
   private readonly migrationStateNamespace: DataNamespace<WorkflowMigrationStateEntryV1>
   private readonly validationOptionsProvider?: WorkflowValidationOptionsProvider
   private readonly paramPresetService?: Pick<WorkflowParamPresetService, "deleteForWorkflow">
@@ -61,6 +63,9 @@ export class WorkflowService {
     migrationOptions: WorkflowServiceMigrationOptions = {},
   ) {
     this.workflowsNamespace = dataRepository.namespace<WorkflowEntryV1>("workflows")
+    this.workflowsJsonNamespace = this.workflowsNamespace instanceof JsonNamespace
+      ? this.workflowsNamespace
+      : null
     this.migrationStateNamespace = dataRepository.namespace<WorkflowMigrationStateEntryV1>("workflow.migration-state")
     this.validationOptionsProvider = validationOptionsProvider
     this.paramPresetService = paramPresetService
@@ -279,13 +284,21 @@ export class WorkflowService {
   }
 
   private async migrateCurrentStore(): Promise<void> {
+    let expectedStoreBytes: Uint8Array | null | undefined
+    let backupPrepared = false
     for (const entry of await this.workflowsNamespace.list()) {
       const result = migrateWorkflowDocument(entry)
       const digest = workflowDocumentDigest(entry)
       if (result.kind === "current") {
         if (result.migrated) {
-          await this.migrationStorage.ensureCurrentStoreBackup()
-          await this.workflowsNamespace.upsert(result.document as WorkflowEntryV1)
+          if (!backupPrepared) {
+            expectedStoreBytes = await this.migrationStorage.ensureCurrentStoreBackup()
+            backupPrepared = true
+          }
+          expectedStoreBytes = await this.upsertMigratedWorkflow(
+            result.document as WorkflowEntryV1,
+            expectedStoreBytes,
+          )
         }
         await this.clearCurrentMigrationState(entry.id)
         continue
@@ -320,6 +333,8 @@ export class WorkflowService {
           && (entry.status === "legacy_recovered" || entry.status === "legacy_conflict"))
         .map((entry) => entry.workflowId),
     )
+    let expectedStoreBytes: Uint8Array | null | undefined
+    let backupPrepared = false
 
     for (const source of sources) {
       if (completedLegacyWorkflowIds.has(source.workflowId)) continue
@@ -355,8 +370,14 @@ export class WorkflowService {
         continue
       }
 
-      await this.migrationStorage.ensureCurrentStoreBackup()
-      await this.workflowsNamespace.upsert(result.document as WorkflowEntryV1)
+      if (!backupPrepared) {
+        expectedStoreBytes = await this.migrationStorage.ensureCurrentStoreBackup()
+        backupPrepared = true
+      }
+      expectedStoreBytes = await this.upsertMigratedWorkflow(
+        result.document as WorkflowEntryV1,
+        expectedStoreBytes,
+      )
       existingIds.add(source.workflowId)
       await this.writeMigrationState({
         id: stateId,
@@ -370,6 +391,31 @@ export class WorkflowService {
         workflowId: source.workflowId,
         sourceDigest: source.digest,
       })
+    }
+  }
+
+  private async upsertMigratedWorkflow(
+    document: WorkflowEntryV1,
+    expectedStoreBytes: Uint8Array | null | undefined,
+  ): Promise<Uint8Array | null | undefined> {
+    if (expectedStoreBytes === undefined) {
+      await this.workflowsNamespace.upsert(document)
+      return undefined
+    }
+    if (!this.workflowsJsonNamespace) {
+      throw new Error("Workflow migration requires the JSON DataRepository backend.")
+    }
+    try {
+      return await this.workflowsJsonNamespace.upsertIfFileUnchanged(document, expectedStoreBytes)
+    } catch (error) {
+      if (error instanceof AtomicSourceChangedError) {
+        logger.warn("workflow migration write blocked because the store changed", {
+          boundary: "workflow-migration.write",
+          workflowId: document.id,
+          errorName: error.name,
+        })
+      }
+      throw error
     }
   }
 

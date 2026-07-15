@@ -486,8 +486,15 @@ describe("WorkflowService", () => {
     }, null, 2)}\n`
     writeFileSync(path.join(dir, "workflows.json"), original, "utf8")
 
+    const guardedUpsert = vi.spyOn(JsonNamespace.prototype, "upsertIfFileUnchanged")
     const svc = createRepoAt(dir, { dataRootPath: dir }).svc
-    await svc.initialize()
+    try {
+      await svc.initialize()
+
+      expect(guardedUpsert).toHaveBeenCalledTimes(1)
+    } finally {
+      guardedUpsert.mockRestore()
+    }
 
     const backups = readdirSync(path.join(dir, "workflow-migration-backups"))
     expect(backups).toHaveLength(1)

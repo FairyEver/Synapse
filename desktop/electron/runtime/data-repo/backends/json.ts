@@ -19,6 +19,7 @@ import {
   fileExists,
   readJsonFile,
   writeJsonFileAtomic,
+  writeJsonFileAtomicIfUnchanged,
 } from "../atomic-io"
 import { InvalidNamespaceDataError } from "../errors"
 import { isEnvelopeShape } from "../envelope"
@@ -183,6 +184,31 @@ export class JsonNamespace<T extends Record<string, unknown>>
         previous,
       })
     })
+  }
+
+  async upsertIfFileUnchanged(
+    item: T & { id: string },
+    expectedSource: Uint8Array | null,
+  ): Promise<Uint8Array> {
+    let writtenBytes: Uint8Array | undefined
+    await this.enqueueWrite(async () => {
+      const env = await this.loadEnvelope()
+      const previous = env.items[item.id]
+      const next = {
+        ...env,
+        items: { ...env.items, [item.id]: item },
+      }
+      writtenBytes = await writeJsonFileAtomicIfUnchanged(this.filePath, next, expectedSource)
+      this.cache = next
+      this.emit({
+        kind: "upsert",
+        id: item.id,
+        value: item,
+        previous,
+      })
+    })
+    if (!writtenBytes) throw new Error("Conditional JSON write did not produce output bytes.")
+    return writtenBytes
   }
 
   async remove(id: string): Promise<void> {

@@ -26,25 +26,29 @@ export interface LegacyWorkflowScanIssue {
 }
 
 export class WorkflowMigrationStorage {
-  private backupPromise: Promise<void> | null = null
+  private readonly backupPromises = new Map<string, Promise<void>>()
 
   constructor(
     private readonly currentStoreFilePath?: string,
     private readonly backupDirectoryPath?: string,
   ) {}
 
-  async ensureCurrentStoreBackup(): Promise<void> {
-    if (!this.currentStoreFilePath || !this.backupDirectoryPath) return
-    this.backupPromise ??= this.createAndVerifyBackup()
-    return this.backupPromise
+  async ensureCurrentStoreBackup(): Promise<Uint8Array | null | undefined> {
+    if (!this.currentStoreFilePath || !this.backupDirectoryPath) return undefined
+    const source = await readBinaryFile(this.currentStoreFilePath)
+    if (source === null) return null
+    const sourceDigest = digestBytes(source)
+    let backup = this.backupPromises.get(sourceDigest)
+    if (!backup) {
+      backup = this.createAndVerifyBackup(source, sourceDigest)
+      this.backupPromises.set(sourceDigest, backup)
+    }
+    await backup
+    return source
   }
 
-  private async createAndVerifyBackup(): Promise<void> {
+  private async createAndVerifyBackup(source: Uint8Array, sourceDigest: string): Promise<void> {
     const sourcePath = this.currentStoreFilePath!
-    const source = await readBinaryFile(sourcePath)
-    if (source === null) return
-
-    const sourceDigest = digestBytes(source)
     const backupName = [
       "workflows",
       WORKFLOW_LEGACY_BASELINE_VERSION,

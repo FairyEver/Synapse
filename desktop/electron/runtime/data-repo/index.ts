@@ -168,6 +168,7 @@ export {
   type WorkflowEntryV1,
 } from "./schemas"
 export {
+  AtomicSourceChangedError,
   copyToTimestampedBackup,
   fileExists,
   readBinaryFile,
@@ -175,5 +176,6 @@ export {
   readTextFile,
   writeBinaryFileAtomic,
   writeJsonFileAtomic,
+  writeJsonFileAtomicIfUnchanged,
   writeTextFileAtomic,
 } from "./atomic-io"

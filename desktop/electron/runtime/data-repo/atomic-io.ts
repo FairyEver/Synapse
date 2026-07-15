@@ -22,6 +22,13 @@ import { randomBytes } from "node:crypto"
 
 const TMP_SUFFIX_BYTES = 8
 
+export class AtomicSourceChangedError extends Error {
+  constructor() {
+    super("File changed before atomic replacement.")
+    this.name = "AtomicSourceChangedError"
+  }
+}
+
 export interface AtomicWriteOptions {
   readonly mode?: number
   /** When true, fsync via copyFile dance for paranoid durability. Default false. */
@@ -77,6 +84,25 @@ export async function writeJsonFileAtomic(
   await writeTextFileAtomic(filePath, text, options)
 }
 
+export async function writeJsonFileAtomicIfUnchanged(
+  filePath: string,
+  value: unknown,
+  expectedSource: Uint8Array | null,
+  options: AtomicWriteOptions = {},
+): Promise<Uint8Array> {
+  const text = `${JSON.stringify(value, null, 2)}\n`
+  const bytes = new TextEncoder().encode(text)
+  await writeAtomic(filePath, options, async (tmpPath) => {
+    await writeFile(tmpPath, text, { encoding: "utf8", mode: options.mode })
+  }, async () => {
+    const current = await readBinaryFile(filePath)
+    if (!sameBytes(current, expectedSource)) {
+      throw new AtomicSourceChangedError()
+    }
+  })
+  return bytes
+}
+
 export async function writeTextFileAtomic(
   filePath: string,
   text: string,
@@ -109,6 +135,7 @@ async function writeAtomic(
   filePath: string,
   _options: AtomicWriteOptions,
   writeBody: (tmpPath: string) => Promise<void>,
+  beforeRename?: () => Promise<void>,
 ): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true })
   const dir = path.dirname(filePath)
@@ -119,6 +146,7 @@ async function writeAtomic(
   )
   try {
     await writeBody(tmpPath)
+    await beforeRename?.()
     await rename(tmpPath, filePath)
   } catch (err) {
     await rm(tmpPath, { force: true }).catch(() => {
@@ -127,6 +155,12 @@ async function writeAtomic(
     })
     throw err
   }
+}
+
+function sameBytes(left: Uint8Array | null, right: Uint8Array | null): boolean {
+  if (left === null || right === null) return left === right
+  if (left.byteLength !== right.byteLength) return false
+  return left.every((value, index) => value === right[index])
 }
 
 export async function readBinaryFile(filePath: string): Promise<Uint8Array | null> {
