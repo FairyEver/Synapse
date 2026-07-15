@@ -26,6 +26,7 @@ import {
   SECRETS_CAPABILITY_IDS,
   SECRETS_MCP_TOOL_NAMES,
 } from "../../app-capabilities/secrets/shared/capability"
+import { SECRET_NAME_REGEX } from "../../app-capabilities/secrets/shared/schema"
 import { SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME } from "../../app-capabilities/sound-notifier/shared/capability"
 import { SWARM_TASK_MCP_TOOL_NAMES } from "../../app-capabilities/swarm-task/shared/capability"
 import {
@@ -177,6 +178,20 @@ describe("Secrets app capability surface", () => {
   it("does not expose repositoryUuid on secret tools", () => {
     for (const tool of buildAppTools().filter((item) => item.name.startsWith("app_secrets_item_"))) {
       expect(tool.inputSchema.properties).not.toHaveProperty("repositoryUuid")
+    }
+  })
+
+  it("advertises the runtime secret name constraint on every named secret tool", () => {
+    const namedTools = buildAppTools().filter((item) => (
+      item.name.startsWith("app_secrets_item_")
+      && item.inputSchema.required?.includes("name")
+    ))
+
+    expect(namedTools).toHaveLength(5)
+    for (const tool of namedTools) {
+      expect(tool.inputSchema.properties.name).toEqual(expect.objectContaining({
+        pattern: SECRET_NAME_REGEX.source,
+      }))
     }
   })
 })

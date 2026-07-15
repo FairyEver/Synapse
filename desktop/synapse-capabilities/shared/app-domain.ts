@@ -33,6 +33,7 @@ import {
   SECRETS_ITEM_UPSERT_CAPABILITY_ID,
   SECRETS_MCP_TOOL_NAMES,
 } from "../../app-capabilities/secrets/shared/capability"
+import { SECRET_NAME_REGEX } from "../../app-capabilities/secrets/shared/schema"
 import {
   SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
   SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
@@ -243,7 +244,10 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [SWARM_TASK_MCP_TOOL_NAMES.runGet]: SWARM_TASK_RUN_GET_CAPABILITY_ID,
 }
 
-const stringField = (description: string, options?: { minLength?: number; maxLength?: number }) => ({
+const stringField = (
+  description: string,
+  options?: { minLength?: number; maxLength?: number; pattern?: string },
+) => ({
   type: "string",
   ...options,
   description,
@@ -262,6 +266,10 @@ const nonnegativeIntField = (description: string) => ({
 const booleanField = (description: string) => ({ type: "boolean", description })
 
 const sessionIdProperty = stringField("Terminal session id.", { minLength: 1 })
+const secretNameProperty = stringField("Secret name. Letters, digits, and underscores only.", {
+  minLength: 1,
+  pattern: SECRET_NAME_REGEX.source,
+})
 const strictEmptyInputSchema = {
   type: "object" as const,
   properties: {},
@@ -637,7 +645,7 @@ export function buildAppTools(): McpToolDefinition[] {
       inputSchema: {
         type: "object",
         properties: {
-          name: stringField("Secret name. Letters, digits, and underscores only.", { minLength: 1 }),
+          name: secretNameProperty,
           includeValue: booleanField("When true, return the stored value after secret-read permission."),
         },
         required: ["name"],
@@ -650,7 +658,7 @@ export function buildAppTools(): McpToolDefinition[] {
       inputSchema: {
         type: "object",
         properties: {
-          name: stringField("Secret name. Letters, digits, and underscores only.", { minLength: 1 }),
+          name: secretNameProperty,
           value: stringField("Secret value."),
           description: stringField("Optional secret description."),
         },
@@ -664,7 +672,7 @@ export function buildAppTools(): McpToolDefinition[] {
       inputSchema: {
         type: "object",
         properties: {
-          name: stringField("Existing secret name. Letters, digits, and underscores only.", { minLength: 1 }),
+          name: secretNameProperty,
           value: stringField("Optional replacement secret value."),
           description: stringField("Optional replacement description. Empty clears the description."),
         },
@@ -678,7 +686,7 @@ export function buildAppTools(): McpToolDefinition[] {
       inputSchema: {
         type: "object",
         properties: {
-          name: stringField("Secret name. Letters, digits, and underscores only.", { minLength: 1 }),
+          name: secretNameProperty,
           value: stringField("Secret value. Required when creating a new secret."),
           description: stringField("Optional secret description. Empty clears the description on update."),
         },
@@ -692,7 +700,7 @@ export function buildAppTools(): McpToolDefinition[] {
       inputSchema: {
         type: "object",
         properties: {
-          name: stringField("Secret name. Letters, digits, and underscores only.", { minLength: 1 }),
+          name: secretNameProperty,
         },
         required: ["name"],
         additionalProperties: false,
