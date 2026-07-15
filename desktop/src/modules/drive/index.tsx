@@ -609,7 +609,9 @@ function DriveModuleContent() {
   }, [parentId, runLocalUpload])
 
   const handleRetryFailedUpload = useCallback(() => {
-    const retryRequest = uploadTaskRef.current ? buildDriveUploadRetryRequest(uploadTaskRef.current) : null
+    const task = uploadTaskRef.current
+    if (!task || task.status === "running") return
+    const retryRequest = buildDriveUploadRetryRequest(task)
     if (!retryRequest) return
     void runLocalUpload(async () => ({ request: retryRequest, skipped: 0 }), { retry: true })
   }, [runLocalUpload])

@@ -33,7 +33,7 @@ export function DriveUploadTaskPanel({
   const currentItem = task?.items.find((item) => item.status === "uploading")
     ?? task?.items.find((item) => item.status === "queued")
     ?? null
-  const canRetry = Boolean(task && task.failedItems > 0 && onRetry)
+  const canRetry = Boolean(task && task.status !== "running" && task.failedItems > 0 && onRetry)
   const canClear = Boolean(task && task.status !== "running" && onClear)
 
   return (

@@ -103,6 +103,39 @@ describe("DriveUploadTaskPanel", () => {
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
+  it("does not enable retry while the upload task is still running", async () => {
+    const running = applyDriveUploadProgressEvent(createDriveUploadTask({
+      id: "upload-task-1",
+      destinationPath: "根目录",
+      parentId: null,
+      request: {
+        taskId: "upload-task-1",
+        parentId: null,
+        items: [
+          { kind: "file", path: "/tmp/a.txt", name: "a.txt", mimeType: "text/plain" },
+          { kind: "file", path: "/tmp/b.txt", name: "b.txt", mimeType: "text/plain" },
+        ],
+      },
+      startedAt: 100,
+    }), {
+      type: "item-failed",
+      taskId: "upload-task-1",
+      itemKey: "file:/tmp/a.txt",
+      message: "上传失败。",
+    })
+
+    await render(
+      <DriveUploadTaskPanel
+        task={running}
+        open
+        onOpenChange={() => undefined}
+        onRetry={() => undefined}
+      />,
+    )
+
+    expect(document.body.textContent).not.toContain("重试失败项")
+  })
+
   it("shows completed empty directories in task progress", async () => {
     const task = finishDriveUploadTask(createDriveUploadTask({
       id: "upload-task-1",
