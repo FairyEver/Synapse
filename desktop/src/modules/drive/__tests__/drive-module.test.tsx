@@ -2289,6 +2289,9 @@ describe("DriveModule", () => {
       duration: 5000,
     }))
     expect(mocks.toast).not.toHaveBeenCalledWith("上传失败")
+    expect(document.body.textContent).toContain("上传失败")
+    expect(document.body.textContent).toContain("失败1")
+    expect(getButton("重试失败项")).not.toBeNull()
   })
 
   it("keeps non-upload list actions available while a local upload is running", async () => {

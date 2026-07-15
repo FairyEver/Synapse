@@ -141,7 +141,7 @@ function EndTruncatedText({ value, className }: { readonly value: string; readon
 
 function uploadTaskStatusText(task: DriveUploadTask): string {
   if (task.status === "running") return "正在上传"
-  if (task.failedItems > 0) return "上传失败"
+  if (task.status === "failed") return "上传失败"
   return "上传完成"
 }
 

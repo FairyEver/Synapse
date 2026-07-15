@@ -125,6 +125,7 @@ import {
   applyDriveUploadProgressEvent,
   buildDriveUploadRetryRequest,
   createDriveUploadTask,
+  failDriveUploadTask,
   finishDriveUploadTask,
   getDriveUploadStatusBadge,
   type DriveUploadTask,
@@ -572,7 +573,7 @@ function DriveModuleContent() {
       const message = errorMessage(rawError, "上传失败")
       if (taskId) {
         setUploadTask((current) => current?.id === taskId
-          ? { ...current, status: "failed", finishedAt: Date.now(), message }
+          ? failDriveUploadTask(current, message)
           : current)
       }
       toast.error(message, { duration: ERROR_NOTIFICATION_DURATION_MS })

@@ -115,6 +115,24 @@ export function finishDriveUploadTask(
   }
 }
 
+export function failDriveUploadTask(
+  task: DriveUploadTask,
+  message: string,
+  finishedAt = Date.now(),
+): DriveUploadTask {
+  return withCounts({
+    ...task,
+    status: "failed",
+    finishedAt,
+    message,
+    items: task.items.map((item) => (
+      item.status === "completed" || item.status === "skipped"
+        ? item
+        : { ...item, status: "failed", message }
+    )),
+  })
+}
+
 export function buildDriveUploadRetryRequest(task: DriveUploadTask): DriveLocalUploadRequest | null {
   const failedItems = task.items.filter((item) => item.status === "failed")
   if (failedItems.length === 0) return null
@@ -155,8 +173,8 @@ export function getDriveUploadStatusBadge(task: DriveUploadTask | null): {
     const label = `正在上传 ${task.totalItems} 项`
     return { label, tone: "neutral", ariaLabel: label }
   }
-  if (task.failedItems > 0) {
-    const label = `上传失败 ${task.failedItems} 项`
+  if (task.status === "failed") {
+    const label = task.failedItems > 0 ? `上传失败 ${task.failedItems} 项` : "上传失败"
     return { label, tone: "destructive", ariaLabel: label }
   }
   const label = `已上传 ${task.completedItems} 项`

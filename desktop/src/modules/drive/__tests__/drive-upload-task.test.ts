@@ -3,6 +3,7 @@ import {
   applyDriveUploadProgressEvent,
   buildDriveUploadRetryRequest,
   createDriveUploadTask,
+  failDriveUploadTask,
   finishDriveUploadTask,
   getDriveUploadStatusBadge,
 } from "../drive-upload-task"
@@ -265,5 +266,36 @@ describe("drive upload task model", () => {
     expect(getDriveUploadStatusBadge(finished)?.label).toBe("已上传 1 项")
     expect(getDriveUploadStatusBadge(failed)).toMatchObject({ label: "上传失败 1 项", tone: "destructive" })
     expect(getDriveUploadStatusBadge(null)).toBeNull()
+  })
+
+  it("marks unfinished items as failed when upload setup rejects", () => {
+    const running = createDriveUploadTask({
+      id: "upload-task-1",
+      destinationPath: "根目录",
+      parentId: null,
+      request: {
+        taskId: "upload-task-1",
+        parentId: null,
+        items: [{ kind: "file", path: "/tmp/a.txt", name: "a.txt", mimeType: "text/plain" }],
+      },
+      startedAt: 100,
+    })
+
+    const failed = failDriveUploadTask(running, "没有本地文件读取权限。", 200)
+
+    expect(failed).toMatchObject({
+      status: "failed",
+      failedItems: 1,
+      finishedAt: 200,
+      message: "没有本地文件读取权限。",
+    })
+    expect(failed.items[0]).toMatchObject({
+      status: "failed",
+      message: "没有本地文件读取权限。",
+    })
+    expect(getDriveUploadStatusBadge(failed)).toMatchObject({
+      label: "上传失败 1 项",
+      tone: "destructive",
+    })
   })
 })
