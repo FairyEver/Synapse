@@ -232,7 +232,9 @@ export function AdminPublicAssetDetailsDialog({
       sortOrder: 'desc',
     }),
     enabled: Boolean(asset),
-    placeholderData: keepPreviousData,
+    placeholderData: (previousData, previousQuery) => (
+      previousQuery?.queryKey[1] === asset?.assetId ? previousData : undefined
+    ),
   })
   const revisions = useQuery({
     queryKey: ['admin-drive-public-asset-revisions', asset?.assetId, revisionPage, revisionPageSize],
@@ -243,7 +245,9 @@ export function AdminPublicAssetDetailsDialog({
       sortOrder: 'desc',
     }),
     enabled: Boolean(asset),
-    placeholderData: keepPreviousData,
+    placeholderData: (previousData, previousQuery) => (
+      previousQuery?.queryKey[1] === asset?.assetId ? previousData : undefined
+    ),
   })
 
   return (

@@ -23,6 +23,7 @@ const mockedAdminApi = vi.mocked(adminApi)
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null
+let queryClient: QueryClient | null = null
 
 beforeEach(() => {
   mockedAdminApi.listDrivePublicAssetAccessLogs.mockResolvedValue({
@@ -54,6 +55,7 @@ afterEach(() => {
   host?.remove()
   root = null
   host = null
+  queryClient = null
   document.body.innerHTML = ''
   vi.clearAllMocks()
 })
@@ -78,13 +80,77 @@ describe('AdminPublicAssetDetailsDialog', () => {
     })
     await waitForText('logo-older.png')
   })
+
+  it('clears access logs when switching to another asset', async () => {
+    mockedAdminApi.listDrivePublicAssetAccessLogs.mockImplementation((assetId) => {
+      if (assetId === 'asset/a') {
+        return Promise.resolve({
+          data: [{
+            accessedAt: '2026-06-18T10:00:00.000Z',
+            bytes: '512',
+            id: 'log-a',
+            ip: '127.0.0.1',
+            method: 'GET',
+            referer: 'https://a.example.test',
+            statusCode: 200,
+            userAgent: 'Vitest',
+          }],
+          page: 1,
+          pageSize: 10,
+          total: 1,
+        })
+      }
+      return new Promise<never>(() => undefined)
+    })
+    renderDialog(createPublicAsset({ assetId: 'asset/a', name: 'a.png' }))
+
+    await clickButtonText('访问日志')
+    await waitForText('https://a.example.test')
+    await rerenderDialog(createPublicAsset({ assetId: 'asset/b', name: 'b.png' }))
+
+    await waitFor(() => {
+      expect(mockedAdminApi.listDrivePublicAssetAccessLogs).toHaveBeenCalledWith('asset/b', expect.any(Object))
+      expect(document.body.textContent).not.toContain('https://a.example.test')
+    })
+  })
+
+  it('clears revisions when switching to another asset', async () => {
+    mockedAdminApi.listDrivePublicAssetRevisions.mockImplementation((assetId) => {
+      if (assetId === 'asset/a') {
+        return Promise.resolve({
+          data: [{
+            id: 'revision-a',
+            mimeType: 'image/png',
+            name: 'a-old.png',
+            replacedAt: '2026-06-17T10:00:00.000Z',
+            size: '256',
+          }],
+          page: 1,
+          pageSize: 10,
+          total: 1,
+        })
+      }
+      return new Promise<never>(() => undefined)
+    })
+    renderDialog(createPublicAsset({ assetId: 'asset/a', name: 'a.png' }))
+
+    await clickButtonText('历史版本')
+    await waitForText('a-old.png')
+    await rerenderDialog(createPublicAsset({ assetId: 'asset/b', name: 'b.png' }))
+
+    await waitFor(() => {
+      expect(mockedAdminApi.listDrivePublicAssetRevisions).toHaveBeenCalledWith('asset/b', expect.any(Object))
+      expect(document.body.textContent).not.toContain('a-old.png')
+      expect(document.querySelector('a[href*="revision-a"]')).toBeNull()
+    })
+  })
 })
 
-function renderDialog() {
+function renderDialog(asset = createPublicAsset()) {
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
-  const queryClient = new QueryClient({
+  queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
       mutations: { retry: false },
@@ -94,9 +160,20 @@ function renderDialog() {
   act(() => {
     root?.render(
       <QueryClientProvider client={queryClient}>
-        <AdminPublicAssetDetailsDialog asset={createPublicAsset()} onOpenChange={vi.fn()} />
+        <AdminPublicAssetDetailsDialog asset={asset} onOpenChange={vi.fn()} />
       </QueryClientProvider>
     )
+  })
+}
+
+async function rerenderDialog(asset: AdminDrivePublicAssetRow) {
+  await act(async () => {
+    root?.render(
+      <QueryClientProvider client={queryClient!}>
+        <AdminPublicAssetDetailsDialog asset={asset} onOpenChange={vi.fn()} />
+      </QueryClientProvider>
+    )
+    await flush()
   })
 }
 
@@ -169,7 +246,7 @@ function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
-function createPublicAsset(): AdminDrivePublicAssetRow {
+function createPublicAsset(overrides: Partial<AdminDrivePublicAssetRow> = {}): AdminDrivePublicAssetRow {
   return {
     accessCount: '3',
     assetId: 'asset/id',
@@ -187,5 +264,6 @@ function createPublicAsset(): AdminDrivePublicAssetRow {
     size: '1024',
     updatedAt: '2026-06-18T09:30:00.000Z',
     url: 'https://assets.example/files/asset_1',
+    ...overrides,
   }
 }
