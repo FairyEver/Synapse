@@ -50,10 +50,10 @@ describe("bulk skill trash helpers", () => {
     expect(mapBulkSkillUninstallResults([jenkins, release, deploy], {
       results: [
         { path: "/source/release", status: "skipped", error: "正在使用。" },
-        { path: "/source/jenkins", status: "trashed" },
+        { path: "/source/jenkins", status: "trashed", warning: "安装状态刷新失败。" },
       ],
     })).toEqual([
-      { item: jenkins, path: "/source/jenkins", status: "trashed" },
+      { item: jenkins, path: "/source/jenkins", status: "trashed", warning: "安装状态刷新失败。" },
       { item: release, message: "正在使用。", status: "failed" },
       { item: deploy, message: "未返回卸载结果。", status: "failed" },
     ])

@@ -98,6 +98,9 @@ function EditorBulkSkillTrashDialog({
     const trashedKeys = nextResults
       .filter((result): result is Extract<BulkSkillTrashResultItem, { status: "trashed" }> => result.status === "trashed")
       .map((result) => result.item.key)
+    const uninstallWarnings = [...new Set(nextResults.flatMap((result) => (
+      result.status === "trashed" && result.warning ? [result.warning] : []
+    )))]
 
     if (trashedKeys.length > 0) {
       try {
@@ -109,10 +112,17 @@ function EditorBulkSkillTrashDialog({
     }
 
     if (summary.trashed === attemptItems.length) {
-      success(`已移到废纸篓 ${summary.trashed} 个 Skill`)
+      if (uninstallWarnings.length > 0) {
+        warning(uninstallWarnings.join("；"))
+      } else {
+        success(`已移到废纸篓 ${summary.trashed} 个 Skill`)
+      }
       onOpenChange(false)
     } else if (summary.trashed > 0) {
-      warning(`已移到废纸篓 ${summary.trashed}/${attemptItems.length} 个 Skill`)
+      warning([
+        `已移到废纸篓 ${summary.trashed}/${attemptItems.length} 个 Skill`,
+        ...uninstallWarnings,
+      ].join("；"))
     } else {
       notifyError("移到废纸篓失败")
     }

@@ -185,6 +185,23 @@ describe("EditorBulkSkillTrashDialog", () => {
     expect(mocks.onOpenChange).toHaveBeenCalledWith(false)
   })
 
+  it("shows the uninstall warning when every Skill was moved to trash", async () => {
+    mocks.uninstall.mockResolvedValue({
+      results: [{
+        path: "/source/jenkins",
+        status: "trashed",
+        warning: "已移到废纸篓，安装状态刷新失败。",
+      }],
+    })
+
+    await renderDialog()
+    await act(async () => clickButton("移到废纸篓"))
+
+    expect(mocks.warning).toHaveBeenCalledWith("已移到废纸篓，安装状态刷新失败。")
+    expect(mocks.success).not.toHaveBeenCalled()
+    expect(mocks.onOpenChange).toHaveBeenCalledWith(false)
+  })
+
   it("shows a failure when the batch service omits an item result", async () => {
     mocks.uninstall.mockResolvedValue({
       results: [{ path: "/source/jenkins", status: "trashed" }],

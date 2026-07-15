@@ -5,7 +5,7 @@ import type {
 import type { EditorScanSkillCopyItem } from "./editor-copy-source"
 
 export type BulkSkillTrashResultItem =
-  | { status: "trashed"; item: EditorScanSkillCopyItem; path: string }
+  | { status: "trashed"; item: EditorScanSkillCopyItem; path: string; warning?: string }
   | { status: "failed"; item: EditorScanSkillCopyItem; message: string }
 
 export type BulkSkillTrashSummary = {
@@ -40,7 +40,12 @@ function mapBulkSkillUninstallResults(
       return { item, message: "未返回卸载结果。", status: "failed" }
     }
     if (uninstallResult.status === "trashed") {
-      return { item, path: uninstallResult.path, status: "trashed" }
+      return {
+        item,
+        path: uninstallResult.path,
+        status: "trashed",
+        ...(uninstallResult.warning ? { warning: uninstallResult.warning } : {}),
+      }
     }
     return {
       item,
