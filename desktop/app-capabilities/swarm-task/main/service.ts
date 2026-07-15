@@ -424,8 +424,9 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
         ? previousHandoffsForWorker(previousWorkers, input)
         : []
 
+      const workerId = createId()
       const worker: SwarmWorkerRun = {
-        id: createId(),
+        id: workerId,
         schemaVersion: 1,
         taskId: input.taskId,
         runId: input.runId,
@@ -435,7 +436,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
         slotIndex: input.slotIndex,
         batchIndex: input.batchIndex,
         status: "running",
-        sessionKey: `swarm:${input.taskId}:${input.runId}`,
+        sessionKey: `swarm:${input.taskId}:${input.runId}:${workerId}`,
         startedAt: timestamp(),
         lastPhase: "queued",
       }

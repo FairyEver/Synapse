@@ -508,7 +508,10 @@ describe("createSwarmTaskService", () => {
     const workerRuns = await service.listWorkerRuns(run.id)
 
     expect(workerRuns).toHaveLength(4)
-    expect(workerRuns[0]?.sessionKey).toBe(`swarm:${task.id}:${run.id}`)
+    expect(new Set(workerRuns.map((worker) => worker.sessionKey)).size).toBe(4)
+    expect(workerRuns.every((worker) => (
+      worker.sessionKey === `swarm:${task.id}:${run.id}:${worker.id}`
+    ))).toBe(true)
     expect(workerRuns.every((worker) => worker.summary === "done")).toBe(true)
   })
 
