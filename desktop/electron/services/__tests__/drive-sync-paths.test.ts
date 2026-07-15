@@ -22,6 +22,8 @@ describe("drive sync path utilities", () => {
   it("returns POSIX-style relative paths inside a binding root", () => {
     expect(toDriveSyncRelativePath("/Users/me/docs", "/Users/me/docs/specs/a.md")).toBe("specs/a.md")
     expect(toDriveSyncRelativePath("/Users/me/docs", "/Users/me/docs")).toBe("")
+    expect(toDriveSyncRelativePath("/Users/me/docs", "/Users/me/docs/..draft.md")).toBe("..draft.md")
+    expect(toDriveSyncRelativePath("/Users/me/docs", "/Users/me/docs/..cache/file.txt")).toBe("..cache/file.txt")
   })
 
   it("rejects paths outside the binding root", () => {
@@ -31,6 +33,18 @@ describe("drive sync path utilities", () => {
 
   it("resolves child paths inside the binding root", () => {
     expect(resolveBindingChildPath("/Users/me/docs", "specs/a.md")).toBe("/Users/me/docs/specs/a.md")
+    expect(resolveBindingChildPath("/Users/me/docs", "..draft.md")).toBe("/Users/me/docs/..draft.md")
+    expect(resolveBindingChildPath("/Users/me/docs", "..cache/file.txt")).toBe("/Users/me/docs/..cache/file.txt")
+  })
+
+  it("prepares valid dot-prefixed download paths inside the real binding root", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-paths-root-"))
+    try {
+      const target = path.join(root, "..cache", "file.txt")
+      await expect(prepareDriveSyncTargetPath(root, target)).resolves.toBe(target)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   it("creates stable case-insensitive collision keys", () => {

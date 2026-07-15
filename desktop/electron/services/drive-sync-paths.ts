@@ -19,7 +19,7 @@ export function assertInsideBindingRoot(rootPath: string, targetPath: string): s
   const target = normalizeLocalPath(targetPath)
   const relative = path.relative(root, target)
   if (relative === "") return target
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (isOutsideRoot(relative)) {
     throw new Error(PATH_OUTSIDE_BINDING_MESSAGE)
   }
   return target
@@ -183,9 +183,13 @@ async function assertNotExistingSymlink(targetPath: string): Promise<void> {
 function assertInsideRealRoot(rootRealPath: string, targetRealPath: string): void {
   const relative = path.relative(rootRealPath, targetRealPath)
   if (relative === "") return
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (isOutsideRoot(relative)) {
     throw new Error(PATH_OUTSIDE_BINDING_MESSAGE)
   }
+}
+
+function isOutsideRoot(relativePath: string): boolean {
+  return relativePath === ".." || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)
 }
 
 function isNodeErrorCode(error: unknown, code: string): boolean {
