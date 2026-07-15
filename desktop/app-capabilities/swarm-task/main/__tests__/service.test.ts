@@ -4,6 +4,19 @@ import type { AgentMessage, AgentRuntimeService } from "../../../../electron/ser
 import { createAgentRuntimeSwarmGateway, createSwarmTaskService, type SwarmAgentGateway } from "../service"
 import type { SwarmRun, SwarmTask, SwarmWorkerRun } from "../../shared/schema"
 
+const mocks = vi.hoisted(() => ({
+  logger: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}))
+
+vi.mock("../../../../electron/services/log-store", () => ({
+  createMainLogger: () => mocks.logger,
+}))
+
 function namespace<T extends { id: string }>() {
   const items = new Map<string, T>()
   return {
@@ -108,11 +121,12 @@ const config = {
 function serviceHarness(options?: {
   agent?: Partial<SwarmAgentGateway>
   eventBus?: { emit: ReturnType<typeof vi.fn> }
+  runs?: ReturnType<typeof namespace<SwarmRun>>
   workers?: ReturnType<typeof namespace<SwarmWorkerRun>>
   resolveProjectPath?: (projectId: string) => Promise<string>
 }) {
   const tasks = namespace<SwarmTask>()
-  const runs = namespace<SwarmRun>()
+  const runs = options?.runs ?? namespace<SwarmRun>()
   const workers = options?.workers ?? namespace<SwarmWorkerRun>()
   const resolveProjectPath = vi.fn(options?.resolveProjectPath ?? (async (projectId: string) => {
     if (projectId === "project-1") return "/repo"
@@ -513,6 +527,65 @@ describe("createSwarmTaskService", () => {
       worker.sessionKey === `swarm:${task.id}:${run.id}:${worker.id}`
     ))).toBe(true)
     expect(workerRuns.every((worker) => worker.summary === "done")).toBe(true)
+  })
+
+  it("stores a redacted run error when background finalization fails", async () => {
+    const pendingResult = deferred<{
+      conversationId: string
+      resultText: string
+      status: "success"
+      events: []
+    }>()
+    const runs = namespace<SwarmRun>()
+    const originalGet = runs.get.bind(runs)
+    let failNextGet = false
+    runs.get = vi.fn(async (id: string) => {
+      if (failNextGet) {
+        failNextGet = false
+        throw new Error("Authorization: Bearer secret-token at /Users/example/private/project")
+      }
+      return originalGet(id)
+    })
+    const { service } = serviceHarness({
+      runs,
+      agent: {
+        sendWorker: vi.fn(async () => pendingResult.promise),
+      },
+    })
+    const task = await service.createTask({
+      name: "任务",
+      config: { ...config, concurrency: 1, maxRounds: 1 },
+    })
+
+    const run = await service.startRun({ taskId: task.id })
+    await vi.waitFor(() => {
+      expect(vi.mocked(runs.get)).toHaveBeenCalled()
+    })
+    failNextGet = true
+    pendingResult.resolve({
+      conversationId: "conversation-1",
+      resultText: "done",
+      status: "success",
+      events: [],
+    })
+
+    await vi.waitFor(async () => {
+      expect(await originalGet(run.id)).toMatchObject({
+        status: "failed",
+        error: expect.any(String),
+      })
+    })
+    const failedRun = await originalGet(run.id)
+    expect(failedRun?.error).not.toContain("secret-token")
+    expect(failedRun?.error).not.toContain("/Users/example/private/project")
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      "Swarm run failed in background.",
+      expect.objectContaining({
+        taskId: task.id,
+        runId: run.id,
+        error: failedRun?.error,
+      }),
+    )
   })
 
   it("injects previous same-slot handoff for continuous runs", async () => {

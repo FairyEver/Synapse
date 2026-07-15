@@ -4,7 +4,10 @@ import path from "node:path"
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
 import type { EventBus } from "../../../electron/runtime/event-bus"
 import type { AgentEvent, AgentMessage, AgentRuntimeService } from "../../../electron/services/agent-runtime"
-import { agentRuntimeErrorMessage } from "../../../electron/services/agent-runtime/error-message"
+import {
+  agentRuntimeErrorMessage,
+  agentRuntimeErrorSummary,
+} from "../../../electron/services/agent-runtime/error-message"
 import { redactSensitiveText } from "../../../electron/services/agent-runtime/redaction"
 import { createMainLogger } from "../../../electron/services/log-store"
 import {
@@ -394,13 +397,20 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
         updatedAt: timestamp(),
       })
       emitChanged({ taskId, runId: run.id, reason: "run-finished" })
-    } catch {
+    } catch (error) {
+      const safeError = agentRuntimeErrorSummary(error, "蜂群任务后台运行失败")
+      logger.error("Swarm run failed in background.", {
+        taskId,
+        runId: run.id,
+        error: safeError,
+      })
       const latestRun = await deps.runs.get(run.id)
       if (!latestRun) return
       const failed: SwarmRun = {
         ...latestRun,
         status: "failed",
         finishedAt: timestamp(),
+        error: safeError,
       }
       await deps.runs.upsert(failed)
       const latestTask = await requireTask(taskId)
