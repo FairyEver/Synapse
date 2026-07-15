@@ -336,6 +336,9 @@ export class WorkflowService {
       logger.warn("legacy repository workflow scan entry skipped", {
         operation: issue.operation,
         workflowId: issue.workflowId,
+        limit: issue.limit,
+        observed: issue.observed,
+        maximum: issue.maximum,
         ...errorLogMeta(issue.error),
       })
     })

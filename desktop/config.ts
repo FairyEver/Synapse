@@ -10,6 +10,21 @@ export const WORKFLOW_ENTRY_VISIBLE_BY_DEFAULT = false
 // 工作流多值文件或文件夹参数的最大资源数量：统一限制定义默认值、运行参数、预设和 MCP 输入的单参数体积。
 export const WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS = 100
 
+// 旧资源仓库工作流找回最多扫描的已配置仓库数：限制升级初始化阶段遍历异常多的历史仓库。
+export const WORKFLOW_LEGACY_RECOVERY_MAX_REPOSITORIES = 50
+
+// 旧资源仓库工作流找回最多扫描的工作流目录总数：限制首次加载期间的目录遍历规模。
+export const WORKFLOW_LEGACY_RECOVERY_MAX_DIRECTORIES = 2_000
+
+// 旧资源仓库单个工作流最多检查的历史版本数：优先从最新版本向前找可解析文档。
+export const WORKFLOW_LEGACY_RECOVERY_MAX_VERSIONS_PER_WORKFLOW = 100
+
+// 旧资源仓库工作流找回单个版本文件最大字节数：读取前后双重限制异常大 JSON 占用内存。
+export const WORKFLOW_LEGACY_RECOVERY_MAX_VERSION_BYTES = 1024 * 1024
+
+// 旧资源仓库工作流找回总扫描时长（毫秒）：避免首次工作流列表长期等待历史文件扫描。
+export const WORKFLOW_LEGACY_RECOVERY_TIMEOUT_MS = 3_000
+
 // 日志复制到剪贴板的最大总字节数：限制设置页复制日志和主进程读取日志的单次文本体积，完整日志应通过导出 zip 获取。
 export const LOG_CLIPBOARD_MAX_BYTES = 2 * 1024 * 1024
 

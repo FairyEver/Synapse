@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, truncate, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -66,5 +66,133 @@ describe("legacy workflow migration storage", () => {
         error: readError,
       }),
     ])
+  })
+
+  it("skips an oversized newest version without reading it and recovers an older version", async () => {
+    const repositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-size-"))
+    roots.push(repositoryPath)
+    const workflowDirectory = path.join(repositoryPath, "workflows", "legacy-workflow")
+    await mkdir(workflowDirectory, { recursive: true })
+    const oversizedPath = path.join(workflowDirectory, "v_200.json")
+    await writeFile(path.join(workflowDirectory, "v_100.json"), JSON.stringify({
+      id: "legacy-workflow",
+      name: "valid",
+    }), "utf8")
+    await writeFile(oversizedPath, "{}", "utf8")
+    await truncate(oversizedPath, 65)
+    readFileMock.mockImplementation(async (filePath) => readFileSync(filePath))
+    const issues: LegacyWorkflowScanIssue[] = []
+
+    await expect(listLegacyWorkflowSources(
+      [repositoryPath],
+      (issue) => issues.push(issue),
+      { maxVersionBytes: 64 },
+    )).resolves.toEqual([
+      expect.objectContaining({ fileName: "v_100.json", workflowId: "legacy-workflow" }),
+    ])
+    expect(readFileMock).not.toHaveBeenCalledWith(oversizedPath)
+    expect(issues).toContainEqual(expect.objectContaining({
+      operation: "scan_limit",
+      limit: "version_bytes",
+      workflowId: "legacy-workflow",
+    }))
+  })
+
+  it("checks only the configured number of newest versions", async () => {
+    const repositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-versions-"))
+    roots.push(repositoryPath)
+    const workflowDirectory = path.join(repositoryPath, "workflows", "legacy-workflow")
+    await mkdir(workflowDirectory, { recursive: true })
+    await writeFile(path.join(workflowDirectory, "v_100.json"), JSON.stringify({
+      id: "legacy-workflow",
+    }), "utf8")
+    await writeFile(path.join(workflowDirectory, "v_200.json"), "{", "utf8")
+    readFileMock.mockImplementation(async (filePath) => readFileSync(filePath))
+    const issues: LegacyWorkflowScanIssue[] = []
+
+    await expect(listLegacyWorkflowSources(
+      [repositoryPath],
+      (issue) => issues.push(issue),
+      { maxVersionsPerWorkflow: 1 },
+    )).resolves.toEqual([])
+    expect(readFileMock).toHaveBeenCalledTimes(1)
+    expect(issues).toContainEqual(expect.objectContaining({
+      operation: "scan_limit",
+      limit: "versions",
+      workflowId: "legacy-workflow",
+    }))
+  })
+
+  it("stops scanning after the total time budget is reached", async () => {
+    const repositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-time-"))
+    roots.push(repositoryPath)
+    const workflowDirectory = path.join(repositoryPath, "workflows", "legacy-workflow")
+    await mkdir(workflowDirectory, { recursive: true })
+    await writeFile(path.join(workflowDirectory, "v_100.json"), "{}", "utf8")
+    const issues: LegacyWorkflowScanIssue[] = []
+    let now = 0
+
+    await expect(listLegacyWorkflowSources(
+      [repositoryPath],
+      (issue) => issues.push(issue),
+      { timeoutMs: 2, now: () => now++ },
+    )).resolves.toEqual([])
+    expect(readFileMock).not.toHaveBeenCalled()
+    expect(issues).toContainEqual(expect.objectContaining({
+      operation: "scan_limit",
+      limit: "timeout",
+    }))
+  })
+
+  it("does not enter workflow directories after the directory budget is reached", async () => {
+    const repositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-directories-"))
+    roots.push(repositoryPath)
+    const workflowDirectory = path.join(repositoryPath, "workflows", "legacy-workflow")
+    await mkdir(workflowDirectory, { recursive: true })
+    await writeFile(path.join(workflowDirectory, "v_100.json"), "{}", "utf8")
+    const issues: LegacyWorkflowScanIssue[] = []
+
+    await expect(listLegacyWorkflowSources(
+      [repositoryPath],
+      (issue) => issues.push(issue),
+      { maxWorkflowDirectories: 0 },
+    )).resolves.toEqual([])
+    expect(readFileMock).not.toHaveBeenCalled()
+    expect(issues).toContainEqual(expect.objectContaining({
+      operation: "scan_limit",
+      limit: "workflow_directories",
+      observed: 1,
+      maximum: 0,
+    }))
+  })
+
+  it("scans only the configured number of repositories", async () => {
+    const firstRepositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-repository-first-"))
+    const secondRepositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-repository-second-"))
+    roots.push(firstRepositoryPath, secondRepositoryPath)
+    for (const [repositoryPath, workflowId] of [
+      [firstRepositoryPath, "first-workflow"],
+      [secondRepositoryPath, "second-workflow"],
+    ] as const) {
+      const workflowDirectory = path.join(repositoryPath, "workflows", workflowId)
+      await mkdir(workflowDirectory, { recursive: true })
+      await writeFile(path.join(workflowDirectory, "v_100.json"), JSON.stringify({ id: workflowId }), "utf8")
+    }
+    readFileMock.mockImplementation(async (filePath) => readFileSync(filePath))
+    const issues: LegacyWorkflowScanIssue[] = []
+
+    await expect(listLegacyWorkflowSources(
+      [firstRepositoryPath, secondRepositoryPath],
+      (issue) => issues.push(issue),
+      { maxRepositories: 1 },
+    )).resolves.toEqual([
+      expect.objectContaining({ workflowId: "first-workflow" }),
+    ])
+    expect(issues).toContainEqual(expect.objectContaining({
+      operation: "scan_limit",
+      limit: "repositories",
+      observed: 2,
+      maximum: 1,
+    }))
   })
 })

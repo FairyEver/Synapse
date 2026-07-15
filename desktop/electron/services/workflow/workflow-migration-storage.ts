@@ -1,6 +1,13 @@
 import { createHash } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
+import { lstat, opendir, readFile } from "node:fs/promises"
 import path from "node:path"
+import {
+  WORKFLOW_LEGACY_RECOVERY_MAX_DIRECTORIES,
+  WORKFLOW_LEGACY_RECOVERY_MAX_REPOSITORIES,
+  WORKFLOW_LEGACY_RECOVERY_MAX_VERSION_BYTES,
+  WORKFLOW_LEGACY_RECOVERY_MAX_VERSIONS_PER_WORKFLOW,
+  WORKFLOW_LEGACY_RECOVERY_TIMEOUT_MS,
+} from "../../../config"
 import {
   fileExists,
   readBinaryFile,
@@ -25,9 +32,21 @@ export interface LegacyWorkflowSource {
 }
 
 export interface LegacyWorkflowScanIssue {
-  readonly operation: "read_repository" | "read_workflow" | "read_version" | "parse_version"
+  readonly operation: "read_repository" | "read_workflow" | "read_version" | "parse_version" | "scan_limit"
   readonly workflowId?: string
+  readonly limit?: "repositories" | "workflow_directories" | "versions" | "version_bytes" | "timeout"
+  readonly observed?: number
+  readonly maximum?: number
   readonly error: Error
+}
+
+export interface LegacyWorkflowScanOptions {
+  readonly maxRepositories?: number
+  readonly maxWorkflowDirectories?: number
+  readonly maxVersionsPerWorkflow?: number
+  readonly maxVersionBytes?: number
+  readonly timeoutMs?: number
+  readonly now?: () => number
 }
 
 export class WorkflowMigrationStorage {
@@ -81,74 +100,209 @@ export class WorkflowMigrationStorage {
 export async function listLegacyWorkflowSources(
   repositoryPaths: readonly string[],
   onIssue?: (issue: LegacyWorkflowScanIssue) => void,
+  options: LegacyWorkflowScanOptions = {},
 ): Promise<LegacyWorkflowSource[]> {
+  const limits = resolveLegacyWorkflowScanOptions(options)
+  const startedAt = limits.now()
+  const deadline = startedAt + limits.timeoutMs
   const results: LegacyWorkflowSource[] = []
-  for (const repositoryPath of [...new Set(repositoryPaths.filter(Boolean))]) {
+  const reportedLimits = new Set<string>()
+  const reportLimit = (
+    limit: NonNullable<LegacyWorkflowScanIssue["limit"]>,
+    message: string,
+    observed: number,
+    maximum: number,
+    workflowId?: string,
+  ) => {
+    const key = `${limit}:${workflowId ?? "global"}`
+    if (reportedLimits.has(key)) return
+    reportedLimits.add(key)
+    onIssue?.({
+      operation: "scan_limit",
+      limit,
+      workflowId,
+      observed,
+      maximum,
+      error: new Error(message),
+    })
+  }
+  const timedOut = () => {
+    const now = limits.now()
+    if (now < deadline) return false
+    reportLimit(
+      "timeout",
+      "Legacy workflow recovery scan reached its time limit.",
+      now - startedAt,
+      limits.timeoutMs,
+    )
+    return true
+  }
+  const uniqueRepositoryPaths = [...new Set(repositoryPaths.filter(Boolean))]
+  if (uniqueRepositoryPaths.length > limits.maxRepositories) {
+    reportLimit(
+      "repositories",
+      "Legacy workflow recovery scan reached its repository limit.",
+      uniqueRepositoryPaths.length,
+      limits.maxRepositories,
+    )
+  }
+
+  let scannedWorkflowDirectories = 0
+  for (const repositoryPath of uniqueRepositoryPaths.slice(0, limits.maxRepositories)) {
+    if (timedOut()) break
     const root = path.join(repositoryPath, "workflows")
     let workflowDirectories
     try {
-      workflowDirectories = await readdir(root, { withFileTypes: true })
+      workflowDirectories = await opendir(root)
     } catch (error) {
       if (errorCode(error) === "ENOENT") continue
       onIssue?.({ operation: "read_repository", error: normalizeError(error) })
       continue
     }
 
-    for (const directory of workflowDirectories) {
-      if (!directory.isDirectory()) continue
-      const workflowDirectory = path.join(root, directory.name)
-      let files
-      try {
-        files = (await readdir(workflowDirectory, { withFileTypes: true }))
-          .filter((entry) => entry.isFile() && /^v_.+\.json$/i.test(entry.name))
-          .map((entry) => entry.name)
-          .sort(compareLegacyVersionFileNamesNewestFirst)
-      } catch (error) {
-        if (errorCode(error) === "ENOENT") continue
-        onIssue?.({
-          operation: "read_workflow",
-          workflowId: directory.name,
-          error: normalizeError(error),
-        })
-        continue
-      }
-
-      for (const fileName of files) {
-        let bytes
+    try {
+      for await (const directory of workflowDirectories) {
+        if (!directory.isDirectory()) continue
+        if (timedOut()) return results
+        if (scannedWorkflowDirectories >= limits.maxWorkflowDirectories) {
+          reportLimit(
+            "workflow_directories",
+            "Legacy workflow recovery scan reached its workflow directory limit.",
+            scannedWorkflowDirectories + 1,
+            limits.maxWorkflowDirectories,
+          )
+          return results
+        }
+        scannedWorkflowDirectories += 1
+        const workflowDirectory = path.join(root, directory.name)
+        let versionFiles
         try {
-          bytes = await readFile(path.join(workflowDirectory, fileName))
+          versionFiles = await listNewestLegacyVersionFiles(
+            workflowDirectory,
+            limits.maxVersionsPerWorkflow,
+            timedOut,
+          )
         } catch (error) {
+          if (errorCode(error) === "ENOENT") continue
           onIssue?.({
-            operation: "read_version",
+            operation: "read_workflow",
             workflowId: directory.name,
             error: normalizeError(error),
           })
           continue
         }
-        try {
-          const document = JSON.parse(bytes.toString("utf8")) as unknown
-          if (!isRecord(document)) continue
-          results.push({
-            repositoryPath,
-            workflowId: typeof document.id === "string" && document.id ? document.id : directory.name,
-            fileName,
-            digest: createHash("sha256").update(bytes).digest("hex"),
-            document,
-          })
-          break
-        } catch (error) {
-          if (!(error instanceof SyntaxError)) throw error
-          onIssue?.({
-            operation: "parse_version",
-            workflowId: directory.name,
-            error,
-          })
-          // Older valid versions remain eligible when the newest file is partial/corrupt.
+        if (versionFiles.timedOut) return results
+        if (versionFiles.observed > limits.maxVersionsPerWorkflow) {
+          reportLimit(
+            "versions",
+            "Legacy workflow recovery scan reached the version limit for a workflow.",
+            versionFiles.observed,
+            limits.maxVersionsPerWorkflow,
+            directory.name,
+          )
+        }
+
+        for (const fileName of versionFiles.files) {
+          if (timedOut()) return results
+          const versionPath = path.join(workflowDirectory, fileName)
+          let bytes
+          try {
+            const fileStats = await lstat(versionPath)
+            if (!fileStats.isFile()) {
+              onIssue?.({
+                operation: "read_version",
+                workflowId: directory.name,
+                error: new Error("Legacy workflow version is no longer a regular file."),
+              })
+              continue
+            }
+            if (fileStats.size > limits.maxVersionBytes) {
+              reportLimit(
+                "version_bytes",
+                "Legacy workflow recovery skipped a version file that exceeded the size limit.",
+                fileStats.size,
+                limits.maxVersionBytes,
+                directory.name,
+              )
+              continue
+            }
+            if (timedOut()) return results
+            bytes = await readFile(versionPath)
+            if (bytes.byteLength > limits.maxVersionBytes) {
+              reportLimit(
+                "version_bytes",
+                "Legacy workflow recovery skipped a version file that exceeded the size limit.",
+                bytes.byteLength,
+                limits.maxVersionBytes,
+                directory.name,
+              )
+              continue
+            }
+          } catch (error) {
+            onIssue?.({
+              operation: "read_version",
+              workflowId: directory.name,
+              error: normalizeError(error),
+            })
+            continue
+          }
+          try {
+            const document = JSON.parse(bytes.toString("utf8")) as unknown
+            if (!isRecord(document)) continue
+            results.push({
+              repositoryPath,
+              workflowId: typeof document.id === "string" && document.id ? document.id : directory.name,
+              fileName,
+              digest: createHash("sha256").update(bytes).digest("hex"),
+              document,
+            })
+            break
+          } catch (error) {
+            if (!(error instanceof SyntaxError)) throw error
+            onIssue?.({
+              operation: "parse_version",
+              workflowId: directory.name,
+              error,
+            })
+            // Older valid versions remain eligible when the newest file is partial/corrupt.
+          }
         }
       }
+    } catch (error) {
+      onIssue?.({ operation: "read_repository", error: normalizeError(error) })
     }
   }
   return results
+}
+
+async function listNewestLegacyVersionFiles(
+  workflowDirectory: string,
+  maximum: number,
+  timedOut: () => boolean,
+): Promise<{ readonly files: string[]; readonly observed: number; readonly timedOut: boolean }> {
+  const directory = await opendir(workflowDirectory)
+  const files: string[] = []
+  let observed = 0
+  for await (const entry of directory) {
+    if (timedOut()) return { files, observed, timedOut: true }
+    if (!entry.isFile() || !/^v_.+\.json$/i.test(entry.name)) continue
+    observed += 1
+    files.push(entry.name)
+    files.sort(compareLegacyVersionFileNamesNewestFirst)
+    if (files.length > maximum) files.pop()
+  }
+  return { files, observed, timedOut: false }
+}
+
+function resolveLegacyWorkflowScanOptions(options: LegacyWorkflowScanOptions) {
+  return {
+    maxRepositories: options.maxRepositories ?? WORKFLOW_LEGACY_RECOVERY_MAX_REPOSITORIES,
+    maxWorkflowDirectories: options.maxWorkflowDirectories ?? WORKFLOW_LEGACY_RECOVERY_MAX_DIRECTORIES,
+    maxVersionsPerWorkflow: options.maxVersionsPerWorkflow ?? WORKFLOW_LEGACY_RECOVERY_MAX_VERSIONS_PER_WORKFLOW,
+    maxVersionBytes: options.maxVersionBytes ?? WORKFLOW_LEGACY_RECOVERY_MAX_VERSION_BYTES,
+    timeoutMs: options.timeoutMs ?? WORKFLOW_LEGACY_RECOVERY_TIMEOUT_MS,
+    now: options.now ?? Date.now,
+  }
 }
 
 function compareLegacyVersionFileNamesNewestFirst(left: string, right: string): number {
