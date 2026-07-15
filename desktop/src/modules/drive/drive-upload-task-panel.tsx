@@ -1,4 +1,5 @@
 import { memo } from "react"
+import { formatBytes } from "@synapse/shared"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -168,11 +169,4 @@ function formatUploadPercent(uploadedBytes: number, totalBytes: number): string 
   if (totalBytes <= 0) return "0%"
   const percent = Math.min(100, Math.max(0, Math.round((uploadedBytes / totalBytes) * 100)))
   return `${percent}%`
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
 }

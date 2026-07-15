@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { formatBytes } from "@synapse/shared"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -104,13 +105,6 @@ function migrationStatsText(progress: SynapseKnowledgeBaseStorageMigrationProgre
     return `已统计 ${formatBytes(progress.copiedBytes)}`
   }
   return null
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
 }
 
 function migrationPhaseText(phase: SynapseKnowledgeBaseStorageMigrationProgress["phase"]): string {

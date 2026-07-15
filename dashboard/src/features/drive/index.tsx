@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { formatBytes } from '@synapse/shared'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, RotateCcw, Trash2 } from 'lucide-react'
@@ -411,10 +412,5 @@ export function canRestoreAdminDriveItem(item: AdminDriveItemRow) {
 }
 
 export function formatDriveBytes(value: string) {
-  const bytes = Number(value)
-  if (!Number.isFinite(bytes)) return '-'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
+  return formatBytes(value)
 }

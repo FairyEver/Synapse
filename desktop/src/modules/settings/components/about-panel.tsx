@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { formatBytes as formatByteSize } from "@synapse/shared"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
@@ -36,22 +37,7 @@ const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
 }
 
 function formatBytes(value: number | null): string | null {
-  if (value === null || !Number.isFinite(value) || value < 0) {
-    return null
-  }
-
-  const units = ["B", "KB", "MB", "GB", "TB"]
-  let nextValue = value
-  let unitIndex = 0
-
-  while (nextValue >= 1024 && unitIndex < units.length - 1) {
-    nextValue /= 1024
-    unitIndex += 1
-  }
-
-  const digits = unitIndex === 0 ? 0 : nextValue >= 100 ? 0 : nextValue >= 10 ? 1 : 2
-
-  return `${nextValue.toFixed(digits)} ${units[unitIndex]}`
+  return value === null || !Number.isFinite(value) || value < 0 ? null : formatByteSize(value)
 }
 
 function formatDuration(totalSeconds: number): string {

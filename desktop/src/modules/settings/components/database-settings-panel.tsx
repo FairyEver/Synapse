@@ -1,4 +1,5 @@
 import { useCallback } from "react"
+import { formatBytes } from "@synapse/shared"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,12 +30,6 @@ import { StatusPill } from "@/modules/settings/components/status-pill"
 import type { DatabaseStatus } from "@/types/database"
 
 const logger = createRendererLogger("settings.database")
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
 
 type StatusRowProps = {
   label: string

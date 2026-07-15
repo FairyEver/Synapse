@@ -1,4 +1,5 @@
 import { type DragEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { formatBytes } from "@synapse/shared"
 import {
   ChevronDown,
   ChevronLeft,
@@ -141,13 +142,6 @@ function readWindowPayload(): SynapseKnowledgeBaseOpenSourceManagerPayload | nul
     return null
   }
   return { projectId, projectName }
-}
-
-function formatBytes(size: number | null): string {
-  if (size === null) return "-"
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
 function SourceEntryMeta({ entry }: { readonly entry: SynapseKnowledgeBaseRawEntry }) {
