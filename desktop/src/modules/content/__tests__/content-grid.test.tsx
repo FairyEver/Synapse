@@ -241,6 +241,27 @@ describe("ContentGrid", () => {
     expect(container.textContent).not.toContain("可更新")
   })
 
+  it("describes editor uninstall as moving content to the system trash", async () => {
+    const { container } = await renderGrid([
+      createContentItem("skill", {
+        id: "current-skill",
+        name: "review",
+      }),
+    ])
+    const editorButton = container.querySelector<HTMLButtonElement>('button[title="Codex"]')
+
+    await act(async () => {
+      editorButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(document.body.textContent).toContain("从 Codex 移到废纸篓？")
+    expect(document.body.textContent).toContain("可从系统废纸篓恢复。")
+    expect(Array.from(document.body.querySelectorAll("button")).some(
+      (button) => button.textContent?.trim() === "移到废纸篓",
+    )).toBe(true)
+    expect(document.body.textContent).not.toContain("确认要删除吗")
+  })
+
   it("does not show update badge when only project installs are stale", async () => {
     const { container } = await renderGrid([
       createContentItem("skill", {

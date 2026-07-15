@@ -66,10 +66,10 @@ function EditorBadge({
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <EditorIcon editorId={editorId} className="size-5" />
-            <span>从 {label} 删除</span>
+            <span>从 {label} 移到废纸篓？</span>
           </AlertDialogTitle>
           <AlertDialogDescription>
-            该内容已安装到 {label} 编辑器的全局设置中。确认要删除吗？
+            可从系统废纸篓恢复。
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -83,7 +83,7 @@ function EditorBadge({
             className="gap-2"
           >
             {busy ? <LoaderCircle className="size-4 animate-spin" /> : null}
-            {busy ? "删除中..." : "删除"}
+            {busy ? "正在移到废纸篓..." : "移到废纸篓"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
