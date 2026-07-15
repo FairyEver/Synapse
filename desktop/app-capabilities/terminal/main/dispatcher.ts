@@ -190,7 +190,14 @@ export function createTerminalCapabilityDispatcher(deps: {
         return { ok: true, data: deps.service.readSession(parsed), affected: 0 }
       }
       if (action === TERMINAL_SESSION_RENAME_CAPABILITY_ID) {
-        return { ok: true, data: await deps.service.renameSession(terminalRenameSessionInputSchema.parse(params)), affected: 1 }
+        const parsed = terminalRenameSessionInputSchema.parse(params)
+        await authorizeTerminalControl(deps, context, {
+          capabilityAction: TERMINAL_SESSION_RENAME_CAPABILITY_ID,
+          resource: parsed.sessionId,
+          boundary: "terminal.mcp.renameSession",
+          sessionId: parsed.sessionId,
+        })
+        return { ok: true, data: await deps.service.renameSession(parsed), affected: 1 }
       }
       if (action === TERMINAL_SESSION_WRITE_CAPABILITY_ID) {
         const parsed = terminalWriteSessionInputSchema.parse(params)
@@ -205,7 +212,16 @@ export function createTerminalCapabilityDispatcher(deps: {
         return { ok: true, data: { ok: true }, affected: 1 }
       }
       if (action === TERMINAL_SESSION_RESIZE_CAPABILITY_ID) {
-        await deps.service.resizeSession(terminalResizeSessionInputSchema.parse(params))
+        const parsed = terminalResizeSessionInputSchema.parse(params)
+        await authorizeTerminalControl(deps, context, {
+          capabilityAction: TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
+          resource: parsed.sessionId,
+          boundary: "terminal.mcp.resizeSession",
+          sessionId: parsed.sessionId,
+          cols: parsed.cols,
+          rows: parsed.rows,
+        })
+        await deps.service.resizeSession(parsed)
         return { ok: true, data: { ok: true }, affected: 1 }
       }
       if (action === TERMINAL_SESSION_DELETE_CAPABILITY_ID) {

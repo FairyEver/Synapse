@@ -12,6 +12,7 @@ import {
   TERMINAL_SESSION_LIST_CAPABILITY_ID,
   TERMINAL_SESSION_READ_CAPABILITY_ID,
   TERMINAL_SESSION_RENAME_CAPABILITY_ID,
+  TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
   TERMINAL_SESSION_STOP_CAPABILITY_ID,
   TERMINAL_SESSION_WRITE_CAPABILITY_ID,
 } from "../../shared/capability"
@@ -359,8 +360,14 @@ describe("createTerminalCapabilityDispatcher", () => {
   it("dispatches rename with parsed input", async () => {
     const renamed = createSession({ title: "Logs" })
     const renameSession = vi.fn(async () => renamed)
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: true })),
+    }
+    const auditSink = { record: vi.fn() }
     const dispatcher = createTerminalCapabilityDispatcher({
       service: { renameSession } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
     })
 
     const result = await dispatcher.dispatch(TERMINAL_SESSION_RENAME_CAPABILITY_ID, {
@@ -372,7 +379,115 @@ describe("createTerminalCapabilityDispatcher", () => {
       sessionId: "s1",
       title: "  Logs  ",
     })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "s1",
+      outcome: "allowed",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_SESSION_RENAME_CAPABILITY_ID,
+        boundary: "terminal.mcp.renameSession",
+        sessionId: "s1",
+      },
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("Logs")
     expect(result).toEqual({ ok: true, data: renamed, affected: 1 })
+  })
+
+  it("authorizes session resize before calling service", async () => {
+    const resizeSession = vi.fn()
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: true })),
+    }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { resizeSession } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    await expect(dispatcher.dispatch(TERMINAL_SESSION_RESIZE_CAPABILITY_ID, {
+      sessionId: "s1",
+      cols: 120,
+      rows: 40,
+    }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: { ok: true }, affected: 1 })
+
+    expect(resizeSession).toHaveBeenCalledWith({ sessionId: "s1", cols: 120, rows: 40 })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "s1",
+      outcome: "allowed",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
+        boundary: "terminal.mcp.resizeSession",
+        sessionId: "s1",
+        cols: 120,
+        rows: 40,
+      },
+    }))
+  })
+
+  it.each([
+    {
+      action: TERMINAL_SESSION_RENAME_CAPABILITY_ID,
+      auditMetadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_SESSION_RENAME_CAPABILITY_ID,
+        boundary: "terminal.mcp.renameSession",
+        sessionId: "s1",
+      },
+      params: { sessionId: "s1", title: "Logs" },
+      serviceMethod: "renameSession",
+    },
+    {
+      action: TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
+      auditMetadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
+        boundary: "terminal.mcp.resizeSession",
+        sessionId: "s1",
+        cols: 120,
+        rows: 40,
+      },
+      params: { sessionId: "s1", cols: 120, rows: 40 },
+      serviceMethod: "resizeSession",
+    },
+  ])("records denied $serviceMethod audits and does not call service", async ({
+    action,
+    auditMetadata,
+    params,
+    serviceMethod,
+  }) => {
+    const serviceCall = vi.fn()
+    const permissionGuard = {
+      check: vi.fn(async () => ({
+        allowed: false,
+        reason: "blocked by policy",
+        policyId: "terminal-deny",
+      })),
+    }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { [serviceMethod]: serviceCall } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    await expect(dispatcher.dispatch(action, params, { source: "mcp-http" }))
+      .rejects.toThrow("blocked by policy")
+
+    expect(serviceCall).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "s1",
+      outcome: "denied",
+      metadata: {
+        ...auditMetadata,
+        reason: "blocked by policy",
+        policyId: "terminal-deny",
+      },
+    }))
   })
 
   it("dispatches group rename with parsed input", async () => {
