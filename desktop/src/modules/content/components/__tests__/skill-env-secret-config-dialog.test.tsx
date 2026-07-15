@@ -171,6 +171,26 @@ describe("SkillEnvSecretConfigDialog", () => {
     expect(document.body.textContent).not.toContain("replacement-value")
   })
 
+  it("scans installed bindings when reusing an existing secret", async () => {
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [{ name: "TOKEN", defaultValue: "" }],
+      legacyPlaceholders: [],
+    })
+    mocks.secrets.list.mockResolvedValue({
+      secrets: [{ id: "secret-1", name: "Token", hasValue: true }],
+      total: 1,
+    })
+
+    await renderDialog()
+    await act(async () => {
+      clickButton("保存到密钥库")
+      await flushPromises()
+    })
+
+    expect(mocks.secrets.upsert).not.toHaveBeenCalled()
+    expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "Token" })
+  })
+
   it("keeps failed values for retry and then queues multiple scan groups serially", async () => {
     mocks.inspectSkillEnvSource.mockResolvedValue({
       declarations: [
