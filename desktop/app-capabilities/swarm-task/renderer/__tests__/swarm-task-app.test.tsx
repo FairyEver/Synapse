@@ -727,6 +727,20 @@ describe("SwarmTaskModule", () => {
     expect(taskButtonByText("任务 A")?.textContent).not.toContain("完成")
   })
 
+  it("refreshes the task list when another task changes", async () => {
+    await renderModule()
+
+    await act(async () => {
+      swarmTaskEvents.changedListener?.({
+        taskId: "task-external",
+        reason: "task-created",
+      })
+      await Promise.resolve()
+    })
+
+    expect(swarmTaskBridge.listTasks).toHaveBeenCalledTimes(2)
+  })
+
   it("polls while the selected run is active and stops after it reaches a terminal state", async () => {
     vi.useFakeTimers()
 

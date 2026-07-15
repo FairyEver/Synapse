@@ -299,9 +299,11 @@ export function SwarmTaskModule() {
       const matchesRun = Boolean(event.runId && event.runId === selectedActiveRun?.id)
       if (!selectedTaskId || matchesTask || matchesRun) {
         void refreshCurrentSnapshot()
+      } else if (["task-created", "task-updated", "task-deleted"].includes(event.reason)) {
+        void reloadTasks({ showLoading: false })
       }
     })
-  ), [refreshCurrentSnapshot, selectedActiveRun?.id, selectedTaskId, swarmTaskBridge])
+  ), [refreshCurrentSnapshot, reloadTasks, selectedActiveRun?.id, selectedTaskId, swarmTaskBridge])
 
   const shouldPollRun = useMemo(() => (
     Boolean(selectedTask && (
