@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
@@ -46,6 +46,43 @@ describe("content skill local identity", () => {
       sourceFingerprint: "sha256:source",
     }, original)).rejects.toBeInstanceOf(ContentSkillIdentityChangedError)
     await expect(readFile(target, "utf8")).resolves.toContain("changed")
+  })
+
+  it.skipIf(process.platform === "win32")("rejects a symlinked resource identity", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-content-skill-id-link-"))
+    const outside = await mkdtemp(path.join(os.tmpdir(), "synapse-content-skill-id-outside-"))
+    const externalIdentity = path.join(outside, "identity.json")
+    await writeFile(externalIdentity, JSON.stringify({ id: "wrong-skill" }), "utf8")
+    await symlink(externalIdentity, path.join(root, ".synapse.json"))
+
+    await expect(readContentSkillIdentityRaw(root)).rejects.toThrow("本地 Skill 关联文件不能是符号链接。")
+  })
+
+  it("rejects a non-file resource identity", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-content-skill-id-directory-"))
+    await mkdir(path.join(root, ".synapse.json"))
+
+    await expect(readContentSkillIdentityRaw(root)).rejects.toThrow("本地 Skill 关联必须是普通文件。")
+  })
+
+  it("checks permission and audits a verified resource identity read", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-content-skill-id-read-"))
+    const target = path.join(root, ".synapse.json")
+    const auditSink = auditSinkStub()
+    const permissionGuard = permissionGuardStub(true)
+    await writeFile(target, JSON.stringify({ id: "skill-1" }), "utf8")
+
+    await expect(readContentSkillIdentityRaw(root, { actor, auditSink, permissionGuard }))
+      .resolves.toContain("skill-1")
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: target,
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "allowed",
+      resource: target,
+    }))
   })
 
   it("fails safely when the identity target is not replaceable", async () => {

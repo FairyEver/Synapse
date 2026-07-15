@@ -360,7 +360,8 @@ async function readSynapseSkillMeta(
   skillDir: string,
 ): Promise<{ id: string; repositoryVersion: string | null; sourceFingerprint: string | null } | null> {
   try {
-    const raw = await readFile(path.join(skillDir, SYNAPSE_SKILL_ID_FILE), "utf8")
+    const raw = await readContentSkillIdentityRaw(skillDir)
+    if (!raw) return null
     const meta = JSON.parse(raw) as {
       id?: unknown
       kind?: unknown
@@ -761,11 +762,12 @@ function pruneQuickPublishSessions(now = Date.now()): void {
 async function createQuickPublishSession(
   request: EditorScanQuickPublishRequest,
   sourceDraft: Awaited<ReturnType<typeof readSkillDraftFromDirectory>>,
+  security?: EditorScanReadSecurityDeps,
 ): Promise<string> {
   pruneQuickPublishSessions()
   const sessionId = randomUUID()
   quickPublishSessions.set(sessionId, {
-    expectedIdentityRaw: await readContentSkillIdentityRaw(request.itemPath),
+    expectedIdentityRaw: await readContentSkillIdentityRaw(request.itemPath, security),
     expiresAt: Date.now() + QUICK_PUBLISH_SESSION_TTL_MS,
     itemPath: request.itemPath,
     originalContentId: request.synapseContentId?.trim() || null,
@@ -911,7 +913,7 @@ async function prepareQuickPublishDraft(
       undefined,
       { mode: isPublish ? "publish" : "install" },
     )
-    const publishSessionId = isPublish ? await createQuickPublishSession(request, sourceDraft) : undefined
+    const publishSessionId = isPublish ? await createQuickPublishSession(request, sourceDraft, security) : undefined
 
     const draft = {
       itemType: "skill" as const,

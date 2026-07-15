@@ -352,6 +352,44 @@ describe("editor scan quick publish", () => {
     }))
   })
 
+  it.skipIf(process.platform === "win32")("does not trust a symlinked resource identity during Skill scan", async () => {
+    const root = await createTempDir()
+    const outside = await createTempDir()
+    const skillDir = path.join(root, "reviewer")
+    const externalIdentity = path.join(outside, "identity.json")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Reviewer\n")
+    await writeFile(externalIdentity, JSON.stringify({ id: "wrong-skill" }))
+    await symlink(externalIdentity, path.join(skillDir, ".synapse.json"))
+
+    const result = await scanSkillDirectories([root])
+
+    expect(result.skills).toContainEqual(expect.objectContaining({
+      name: "reviewer",
+      source: "external",
+      synapseContentId: null,
+    }))
+  })
+
+  it.skipIf(process.platform === "win32")("rejects a symlinked resource identity during Skill publish preparation", async () => {
+    const root = await createTempDir()
+    const outside = await createTempDir()
+    const skillDir = path.join(root, "reviewer")
+    const externalIdentity = path.join(outside, "identity.json")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Reviewer\n")
+    await writeFile(externalIdentity, JSON.stringify({ id: "wrong-skill" }))
+    await symlink(externalIdentity, path.join(skillDir, ".synapse.json"))
+
+    await expect(prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: skillDir,
+      itemName: "reviewer",
+      metadata: {},
+      purpose: "publish",
+    })).rejects.toThrow("本地 Skill 关联文件不能是符号链接")
+  })
+
   it("bounds skill attachment listing by file count and depth", async () => {
     const root = await createTempDir()
     const skillDir = path.join(root, "large-skill")
