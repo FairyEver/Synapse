@@ -479,27 +479,33 @@ describe("WorkflowService", () => {
   it("creates and verifies an exact backup before rewriting the current workflow store", async () => {
     const dir = tmpDir()
     const def = makeDef()
+    const second = { ...makeDef(), id: "second-legacy-workflow" }
     const original = `${JSON.stringify({
       schemaVersion: 1,
       singleton: null,
-      items: { [def.id]: { ...def, schemaVersion: 1 } },
+      items: {
+        [def.id]: { ...def, schemaVersion: 1 },
+        [second.id]: { ...second, schemaVersion: 1 },
+      },
     }, null, 2)}\n`
     writeFileSync(path.join(dir, "workflows.json"), original, "utf8")
 
-    const guardedUpsert = vi.spyOn(JsonNamespace.prototype, "upsertIfFileUnchanged")
+    const guardedBatchUpsert = vi.spyOn(JsonNamespace.prototype, "upsertManyIfFileUnchanged")
     const svc = createRepoAt(dir, { dataRootPath: dir }).svc
     try {
       await svc.initialize()
 
-      expect(guardedUpsert).toHaveBeenCalledTimes(1)
+      expect(guardedBatchUpsert).toHaveBeenCalledTimes(1)
+      expect(guardedBatchUpsert.mock.calls[0]?.[0]).toHaveLength(2)
     } finally {
-      guardedUpsert.mockRestore()
+      guardedBatchUpsert.mockRestore()
     }
 
     const backups = readdirSync(path.join(dir, "workflow-migration-backups"))
     expect(backups).toHaveLength(1)
     expect(readFileSync(path.join(dir, "workflow-migration-backups", backups[0]!), "utf8")).toBe(original)
     expect((await svc.get(def.id))?.meta?.schemaVersion).toBe("1.0.0")
+    expect((await svc.get(second.id))?.meta?.schemaVersion).toBe("1.0.0")
   })
   it("recovers the newest valid workflow from configured legacy repository storage only once", async () => {
     const dir = tmpDir()

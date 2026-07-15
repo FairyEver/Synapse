@@ -237,6 +237,35 @@ describe("JsonNamespace (T2.2)", () => {
     }
   })
 
+  it("keeps every item from a failed batch upsert out of the file and cache", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "users.json")
+    try {
+      const ns = new JsonNamespace<User>({
+        name: "users",
+        schemaVersion: 1,
+        backend: "json",
+        filePath: file,
+      })
+      await ns.upsert({ id: "u1", name: "Ada" })
+      const expectedSource = await readFile(file)
+      const invalid = { id: "u3", name: "Invalid" } as User & { self?: unknown }
+      invalid.self = invalid
+
+      await expect(ns.upsertManyIfFileUnchanged([
+        { id: "u2", name: "Bob" },
+        invalid,
+      ], expectedSource)).rejects.toThrow()
+
+      expect(JSON.parse(await readFile(file, "utf8")).items).toEqual({
+        u1: { id: "u1", name: "Ada" },
+      })
+      expect(await ns.list()).toEqual([{ id: "u1", name: "Ada" }])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("keeps cached collection state unchanged when upsert persistence fails", async () => {
     const dir = await tempDir()
     const file = path.join(dir, "users.json")

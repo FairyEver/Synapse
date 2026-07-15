@@ -168,21 +168,33 @@ export class JsonNamespace<T extends Record<string, unknown>>
   }
 
   async upsert(item: T & { id: string }): Promise<void> {
+    return this.upsertMany([item])
+  }
+
+  async upsertMany(items: readonly (T & { id: string })[]): Promise<void> {
+    if (items.length === 0) return
     return this.enqueueWrite(async () => {
       const env = await this.loadEnvelope()
-      const previous = env.items[item.id]
+      const nextItems = { ...env.items }
+      const changes = items.map((item) => {
+        const previous = nextItems[item.id]
+        nextItems[item.id] = item
+        return { item, previous }
+      })
       const next = {
         ...env,
-        items: { ...env.items, [item.id]: item },
+        items: nextItems,
       }
       await this.persist(next)
       this.cache = next
-      this.emit({
-        kind: "upsert",
-        id: item.id,
-        value: item,
-        previous,
-      })
+      for (const { item, previous } of changes) {
+        this.emit({
+          kind: "upsert",
+          id: item.id,
+          value: item,
+          previous,
+        })
+      }
     })
   }
 
@@ -190,22 +202,39 @@ export class JsonNamespace<T extends Record<string, unknown>>
     item: T & { id: string },
     expectedSource: Uint8Array | null,
   ): Promise<Uint8Array> {
+    return this.upsertManyIfFileUnchanged([item], expectedSource)
+  }
+
+  async upsertManyIfFileUnchanged(
+    items: readonly (T & { id: string })[],
+    expectedSource: Uint8Array | null,
+  ): Promise<Uint8Array> {
+    if (items.length === 0) {
+      throw new Error("Conditional batch upsert requires at least one item.")
+    }
     let writtenBytes: Uint8Array | undefined
     await this.enqueueWrite(async () => {
       const env = await this.loadEnvelope()
-      const previous = env.items[item.id]
+      const nextItems = { ...env.items }
+      const changes = items.map((item) => {
+        const previous = nextItems[item.id]
+        nextItems[item.id] = item
+        return { item, previous }
+      })
       const next = {
         ...env,
-        items: { ...env.items, [item.id]: item },
+        items: nextItems,
       }
       writtenBytes = await writeJsonFileAtomicIfUnchanged(this.filePath, next, expectedSource)
       this.cache = next
-      this.emit({
-        kind: "upsert",
-        id: item.id,
-        value: item,
-        previous,
-      })
+      for (const { item, previous } of changes) {
+        this.emit({
+          kind: "upsert",
+          id: item.id,
+          value: item,
+          previous,
+        })
+      }
     })
     if (!writtenBytes) throw new Error("Conditional JSON write did not produce output bytes.")
     return writtenBytes

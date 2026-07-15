@@ -45,6 +45,15 @@ export interface WorkflowServiceMigrationOptions {
   readonly now?: () => number
 }
 
+interface WorkflowMigrationStateWrite {
+  readonly id: string
+  readonly workflowId: string
+  readonly sourceDigest: string
+  readonly sourceKind: WorkflowMigrationStateEntryV1["sourceKind"]
+  readonly status: WorkflowMigrationStateStatus
+  readonly error?: Error
+}
+
 export class WorkflowService {
   private _seq = 0
   private readonly workflowsNamespace: DataNamespace<WorkflowEntryV1>
@@ -284,26 +293,21 @@ export class WorkflowService {
   }
 
   private async migrateCurrentStore(): Promise<void> {
-    let expectedStoreBytes: Uint8Array | null | undefined
-    let backupPrepared = false
-    for (const entry of await this.workflowsNamespace.list()) {
+    const entries = await this.workflowsNamespace.list()
+    const migratedDocuments: WorkflowEntryV1[] = []
+    const migrationStates: WorkflowMigrationStateWrite[] = []
+    const currentWorkflowIds: string[] = []
+    for (const entry of entries) {
       const result = migrateWorkflowDocument(entry)
       const digest = workflowDocumentDigest(entry)
       if (result.kind === "current") {
         if (result.migrated) {
-          if (!backupPrepared) {
-            expectedStoreBytes = await this.migrationStorage.ensureCurrentStoreBackup()
-            backupPrepared = true
-          }
-          expectedStoreBytes = await this.upsertMigratedWorkflow(
-            result.document as WorkflowEntryV1,
-            expectedStoreBytes,
-          )
+          migratedDocuments.push(result.document as WorkflowEntryV1)
         }
-        await this.clearCurrentMigrationState(entry.id)
+        currentWorkflowIds.push(entry.id)
         continue
       }
-      await this.writeMigrationState({
+      migrationStates.push({
         id: currentMigrationStateId(entry.id),
         workflowId: entry.id,
         sourceDigest: digest,
@@ -311,6 +315,17 @@ export class WorkflowService {
         status: result.kind === "unsupported_future" ? "unsupported_future" : "failed",
         error: result.error,
       })
+    }
+
+    if (migratedDocuments.length > 0) {
+      const expectedStoreBytes = await this.migrationStorage.ensureCurrentStoreBackup()
+      await this.upsertMigratedWorkflows(migratedDocuments, expectedStoreBytes)
+    }
+    for (const workflowId of currentWorkflowIds) {
+      await this.clearCurrentMigrationState(workflowId)
+    }
+    for (const state of migrationStates) {
+      await this.writeMigrationState(state)
     }
   }
 
@@ -419,6 +434,37 @@ export class WorkflowService {
     }
   }
 
+  private async upsertMigratedWorkflows(
+    documents: readonly WorkflowEntryV1[],
+    expectedStoreBytes: Uint8Array | null | undefined,
+  ): Promise<void> {
+    if (expectedStoreBytes === undefined) {
+      if (this.workflowsJsonNamespace) {
+        await this.workflowsJsonNamespace.upsertMany(documents)
+        return
+      }
+      for (const document of documents) {
+        await this.workflowsNamespace.upsert(document)
+      }
+      return
+    }
+    if (!this.workflowsJsonNamespace) {
+      throw new Error("Workflow migration requires the JSON DataRepository backend.")
+    }
+    try {
+      await this.workflowsJsonNamespace.upsertManyIfFileUnchanged(documents, expectedStoreBytes)
+    } catch (error) {
+      if (error instanceof AtomicSourceChangedError) {
+        logger.warn("workflow migration batch write blocked because the store changed", {
+          boundary: "workflow-migration.batch-write",
+          workflowCount: documents.length,
+          errorName: error.name,
+        })
+      }
+      throw error
+    }
+  }
+
   private toWorkflowMeta(entry: WorkflowEntryV1): WorkflowMeta {
     const result = migrateWorkflowDocument(entry)
     if (result.kind === "current") {
@@ -450,14 +496,7 @@ export class WorkflowService {
     await this.migrationStateNamespace.remove(currentMigrationStateId(workflowId))
   }
 
-  private async writeMigrationState(input: {
-    readonly id: string
-    readonly workflowId: string
-    readonly sourceDigest: string
-    readonly sourceKind: WorkflowMigrationStateEntryV1["sourceKind"]
-    readonly status: WorkflowMigrationStateStatus
-    readonly error?: Error
-  }): Promise<void> {
+  private async writeMigrationState(input: WorkflowMigrationStateWrite): Promise<void> {
     await this.migrationStateNamespace.upsert({
       id: input.id,
       schemaVersion: 1,
