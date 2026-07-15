@@ -32,7 +32,7 @@ describe("EditorInstallService batch source install", () => {
     const service = new EditorInstallService()
     const calls: string[] = []
     vi.spyOn(service, "installSourceToEditor").mockImplementation(async (payload) => {
-      calls.push(payload.editorId)
+      calls.push(`${payload.editorId}:${payload.mode}`)
       return createInstallResult(payload.editorId)
     })
 
@@ -45,7 +45,7 @@ describe("EditorInstallService batch source install", () => {
       ],
     })
 
-    expect(calls).toEqual(["codex", "cursor"])
+    expect(calls).toEqual(["codex:install", "cursor:install"])
     expect(result.results).toEqual([
       expect.objectContaining({ status: "installed", target: { editorId: "codex", scope: "global" } }),
       expect.objectContaining({ status: "installed", target: { editorId: "cursor", scope: "global" } }),
@@ -54,7 +54,7 @@ describe("EditorInstallService batch source install", () => {
 
   it("keeps installing after one target fails", async () => {
     const service = new EditorInstallService()
-    vi.spyOn(service, "installSourceToEditor").mockImplementation(async (payload) => {
+    const installSpy = vi.spyOn(service, "installSourceToEditor").mockImplementation(async (payload) => {
       if (payload.editorId === "broken") {
         throw new Error("install failed")
       }
@@ -81,6 +81,8 @@ describe("EditorInstallService batch source install", () => {
         status: "installed",
       }),
     ])
+    expect(installSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({ mode: "update" }), undefined)
+    expect(installSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({ mode: "update" }), undefined)
   })
 
   it("propagates Skill env values to every target", async () => {
@@ -92,7 +94,7 @@ describe("EditorInstallService batch source install", () => {
     })
 
     await service.installSourceToEditorTargets({
-      mode: "install",
+      mode: "reinstall",
       skillEnvValues: { TOKEN: "saved-token" },
       source,
       targets: [
@@ -103,8 +105,8 @@ describe("EditorInstallService batch source install", () => {
 
     expect(payloads).toHaveLength(2)
     expect(payloads).toEqual([
-      expect.objectContaining({ skillEnvValues: { TOKEN: "saved-token" } }),
-      expect.objectContaining({ skillEnvValues: { TOKEN: "saved-token" } }),
+      expect.objectContaining({ mode: "reinstall", skillEnvValues: { TOKEN: "saved-token" } }),
+      expect.objectContaining({ mode: "reinstall", skillEnvValues: { TOKEN: "saved-token" } }),
     ])
   })
 })

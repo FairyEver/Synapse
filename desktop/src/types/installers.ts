@@ -63,9 +63,12 @@ export type SynapsePrepareInlineRuleSourcePayload = {
   name: string
 }
 
+export type SynapseInstallSourceMode = "install" | "reinstall" | "update"
+
 export type SynapseInstallSourceToEditorPayload = {
   editorId: SynapseEditorId
   installFormValues?: SynapseEditorInstallFormValues
+  mode?: SynapseInstallSourceMode
   overwriteConfirmed?: boolean
   projectPath?: string
   replaceConfirmed?: boolean
@@ -87,7 +90,7 @@ export type SynapseInstallSourceTarget = {
 export type SynapseInstallSourceToEditorTargetsPayload = {
   source: SynapseInstallerSource
   targets: SynapseInstallSourceTarget[]
-  mode: "install" | "reinstall" | "update"
+  mode: SynapseInstallSourceMode
   overwriteConfirmed?: boolean
   replaceConfirmed?: boolean
   skillEnvValues?: Record<string, string>

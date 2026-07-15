@@ -252,6 +252,7 @@ export class EditorInstallService {
     for (const target of payload.targets) {
       const singlePayload: SynapseInstallSourceToEditorPayload = {
         editorId: target.editorId,
+        mode: payload.mode,
         overwriteConfirmed: payload.overwriteConfirmed,
         projectPath: target.projectPath,
         replaceConfirmed: payload.replaceConfirmed,

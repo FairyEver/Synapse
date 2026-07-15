@@ -16,6 +16,7 @@ import type {
 import type {
   SynapseInstallSourceToEditorPayload,
   SynapseInstallerSource,
+  SynapseInstallSourceMode,
   SynapseRuleInstallerSource,
   SynapseSkillInstallerSource,
 } from "../../src/types/installers"
@@ -204,6 +205,7 @@ export class EditorInstallCore {
       toInstallToEditorPayload(payload),
       security,
       this.createSourceOverride(payload.source),
+      payload.mode ?? "install",
     )
   }
 
@@ -236,6 +238,7 @@ export class EditorInstallCore {
     payload: SynapseInstallToEditorPayload,
     security?: EditorWriteSecurityDeps,
     sourceOverride?: EditorInstallSourceOverride,
+    operation: SynapseInstallSourceMode = "install",
   ): Promise<SynapseContentInstallResult> {
     const target = await this.deps.resolveEditorInstallTarget(payload)
     const definition = getContentTypeDefinition(payload.contentType)
@@ -252,7 +255,7 @@ export class EditorInstallCore {
       contentId: payload.contentId,
       contentType: payload.contentType,
       editorId: payload.editorId,
-      operation: "install",
+      operation,
       scope: payload.scope,
     }
 
@@ -352,7 +355,7 @@ export class EditorInstallCore {
               const backupPath = await getAvailableDesktopSkillBackupPath(target.targetPath)
               const backupAuditMetadata = {
                 ...auditMetadata,
-                operation: "install-backup",
+                operation: `${operation}-backup`,
                 targetName: path.basename(target.targetPath),
               }
               await checkEditorWritePermission(security, backupPath, backupAuditMetadata)
@@ -466,7 +469,7 @@ export class EditorInstallCore {
             if (backupPathForRestore && await pathExists(backupPathForRestore)) {
               const restoreAuditMetadata = {
                 ...auditMetadata,
-                operation: "install-backup-restore",
+                operation: `${operation}-backup-restore`,
                 targetName: path.basename(target.targetPath),
               }
               try {
@@ -496,7 +499,7 @@ export class EditorInstallCore {
             let previousBackupPath: string | null = null
             const previousBackupAuditMetadata = {
               ...auditMetadata,
-              operation: "install-previous-backup",
+              operation: `${operation}-previous-backup`,
               targetName: path.basename(previousSkillDirectoryPath),
             }
             try {

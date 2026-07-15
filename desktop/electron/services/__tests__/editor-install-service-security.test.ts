@@ -239,6 +239,53 @@ describe("EditorInstallService security", () => {
     await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# Updated Skill\n")
   })
 
+  it("records the source install mode in editor write audits", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: false,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockImplementation(async (
+      { stagingDirectoryPath }: { stagingDirectoryPath: string },
+    ) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# Updated Skill\n", "utf8")
+    })
+    const auditSink = new InMemoryAuditSink()
+
+    await editorInstallService.installSourceToEditor({
+      editorId: "test-editor",
+      mode: "update",
+      scope: "global",
+      source: {
+        kind: "skill",
+        origin: "repository",
+        sourceIdentity: "skill-1",
+        repositoryContentId: "skill-1",
+        name: "test-skill",
+        title: "Test Skill",
+      },
+    }, {
+      actor: { kind: "user" },
+      auditSink,
+      permissionGuard: createPermissionGuard(),
+    })
+
+    expect(auditSink.list()).toContainEqual(expect.objectContaining({
+      outcome: "allowed",
+      resource: targetPath,
+      metadata: expect.objectContaining({ operation: "update" }),
+    }))
+  })
+
   it("does not clean up a Windows case-equivalent previous Skill directory after install", async () => {
     vi.spyOn(process, "platform", "get").mockReturnValue("win32")
     const root = await createTempRoot()
