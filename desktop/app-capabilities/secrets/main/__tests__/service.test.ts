@@ -17,9 +17,9 @@ describe("SecretsService", () => {
     await service.create({ name: "TOKEN", value: "private-value" })
     const security = { actor: { kind: "user" as const }, permissionGuard: {} as never, auditSink: {} as never }
 
-    await service.scanSkillEnvBindings({ name: "token" }, security)
+    await service.scanSkillEnvBindings({ name: "TOKEN" }, security)
     await service.queueSkillEnvBindings({
-      name: "token",
+      name: "TOKEN",
       scanSessionId: "scan-1",
       itemIds: ["item-1"],
     }, security)
@@ -32,6 +32,14 @@ describe("SecretsService", () => {
     }, expect.any(Function), security)
     const resolveValue = harness.skillEnvBindings.enqueue.mock.calls[0]?.[1]
     await expect(resolveValue?.()).resolves.toBe("private-value")
+
+    await expect(service.scanSkillEnvBindings({ name: "token" }, security))
+      .rejects.toThrow("大小写完全一致：token")
+    await expect(service.queueSkillEnvBindings({
+      name: "token",
+      scanSessionId: "scan-1",
+      itemIds: ["item-1"],
+    }, security)).rejects.toThrow("大小写完全一致：token")
   })
 
   it("resolves the latest secret value when a queued update starts", async () => {

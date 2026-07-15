@@ -343,10 +343,14 @@ async function renderSkillFlowWithInitialProjectTarget() {
 }
 
 function clickButton(text: string) {
-  const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
-    .find((candidate) => candidate.textContent?.includes(text))
+  const button = buttonByText(text)
 
   button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+}
+
+function buttonByText(text: string) {
+  return Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+    .find((candidate) => candidate.textContent?.includes(text))
 }
 
 function setInputValue(input: HTMLInputElement, value: string) {
@@ -463,6 +467,36 @@ describe("SharedInstallerFlow", () => {
       },
       skillEnvSecretNames: { GITEE_TOKEN: "GITEE_TOKEN" },
     }))
+  })
+
+  it("blocks Skill ENV keys that differ only by case from an existing secret", async () => {
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [{ name: "api_key", defaultValue: "" }],
+      legacyPlaceholders: [],
+    })
+    mocks.secrets.list.mockResolvedValue({
+      secrets: [{ id: "secret-1", name: "API_KEY", hasValue: true }],
+      total: 1,
+    })
+    await renderFlow(repositorySkillSource)
+
+    await act(async () => {
+      clickButton("Codex")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("选择目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("已存在密钥 API_KEY")
+    expect(inputByLabel("api_key")?.disabled).toBe(true)
+    expect(buttonByText("继续安装")?.disabled).toBe(true)
+    expect(mocks.installSourceToEditor).not.toHaveBeenCalled()
   })
 
   it("keeps sustainable ENV values separate from legacy one-shot substitutions", async () => {

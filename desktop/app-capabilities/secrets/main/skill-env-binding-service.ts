@@ -319,7 +319,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
       const fileHash = hashContent(content)
       try {
         const document = parseDotenvDocument(content)
-        const match = document.entries.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase())
+        const match = document.entries.find((candidate) => candidate.name === name)
         if (!match) continue
         if (match.value === canonicalizeDotenvValue(value)) {
           items.push({
@@ -441,11 +441,11 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         }
 
         const document = parseDotenvDocument(validated.content)
-        const matches = document.entries.filter((entry) => entry.name.toLowerCase() === name.toLowerCase())
+        const matches = document.entries.filter((entry) => entry.name === name)
         if (matches.length !== 1) {
           return recordQueueResult(base, "conflict", "配置键已发生变化。", security, auditMetadata)
         }
-        const nextContent = patchDotenvValues(validated.content, { [matches[0].name]: value })
+        const nextContent = patchDotenvValues(validated.content, { [name]: value })
         try {
           assertSkillRuntimeEnvBytes(nextContent)
         } catch (error) {

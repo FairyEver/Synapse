@@ -17,7 +17,7 @@ export type DotenvDocument = {
 const DOTENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 function normalizedName(name: string): string {
-  return name.toLowerCase()
+  return name
 }
 
 export function canonicalizeDotenvValue(value: string): string {

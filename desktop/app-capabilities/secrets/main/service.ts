@@ -180,7 +180,11 @@ export function createSecretsService(deps: SecretsServiceDeps) {
     input: SecretSkillEnvScanInput,
     security: SkillEnvBindingSecurity,
   ): Promise<SecretSkillEnvScanResult> {
-    const secret = await requireByName(input.name)
+    const requestedName = normalizeName(input.name)
+    const secret = await requireByName(requestedName)
+    if (secret.name !== requestedName) {
+      throw new Error(`Skill 配置键必须与密钥名称大小写完全一致：${requestedName}`)
+    }
     return await deps.skillEnvBindings.scan(secret.name, secret.value, security)
   }
 
@@ -188,7 +192,11 @@ export function createSecretsService(deps: SecretsServiceDeps) {
     input: SecretSkillEnvQueueInput,
     security: SkillEnvBindingSecurity,
   ): Promise<SecretSkillEnvQueueResult> {
-    const secret = await requireByName(input.name)
+    const requestedName = normalizeName(input.name)
+    const secret = await requireByName(requestedName)
+    if (secret.name !== requestedName) {
+      throw new Error(`Skill 配置键必须与密钥名称大小写完全一致：${requestedName}`)
+    }
     return await deps.skillEnvBindings.enqueue(
       { ...input, name: secret.name },
       async () => {

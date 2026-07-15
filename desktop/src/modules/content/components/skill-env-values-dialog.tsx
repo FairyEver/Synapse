@@ -29,7 +29,10 @@ type SkillEnvValuesDialogProps = {
 
 function matchSecret(name: string, secrets: SecretSafeView[]): SecretSafeView | undefined {
   return secrets.find((secret) => secret.name === name)
-    ?? secrets.find((secret) => secret.name.toLowerCase() === name.toLowerCase())
+}
+
+function findSecretNameConflict(name: string, secrets: SecretSafeView[]): SecretSafeView | undefined {
+  return secrets.find((secret) => secret.name !== name && secret.name.toLowerCase() === name.toLowerCase())
 }
 
 function SkillEnvValuesDialog({
@@ -45,6 +48,7 @@ function SkillEnvValuesDialog({
   const [values, setValues] = useState<Record<string, string>>({})
   const [replacedSecretNames, setReplacedSecretNames] = useState<Set<string>>(new Set())
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const hasNameConflicts = declarations.some(({ name }) => Boolean(findSecretNameConflict(name, secrets)))
   const resolvedInitialValues = useMemo(() => Object.fromEntries(
     declarations.map(({ name }) => [name, initialValues[name] ?? ""]),
   ), [declarations, initialValues])
@@ -58,7 +62,7 @@ function SkillEnvValuesDialog({
   }, [open, resolvedInitialValues])
 
   const handleSubmit = useCallback(async () => {
-    if (isSubmitting) return
+    if (isSubmitting || hasNameConflicts) return
 
     setIsSubmitting(true)
     try {
@@ -74,7 +78,7 @@ function SkillEnvValuesDialog({
     } finally {
       setIsSubmitting(false)
     }
-  }, [declarations, isSubmitting, onConfirm, replacedSecretNames, secrets, values])
+  }, [declarations, hasNameConflicts, isSubmitting, onConfirm, replacedSecretNames, secrets, values])
 
   return (
     <Dialog
@@ -87,7 +91,7 @@ function SkillEnvValuesDialog({
         title="Skill 配置"
         description="这些值会写入 Skill 目录中的 .env。"
         footer={(
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting || hasNameConflicts}>
             {isSubmitting ? "安装中..." : "继续安装"}
           </Button>
         )}
@@ -105,6 +109,7 @@ function SkillEnvValuesDialog({
           {declarations.map(({ name }, index) => {
             const inputId = `${formId}-${index}`
             const savedSecret = matchSecret(name, secrets)
+            const nameConflict = savedSecret ? undefined : findSecretNameConflict(name, secrets)
             const reusing = Boolean(savedSecret?.hasValue) && !replacedSecretNames.has(name)
             return (
               <div key={name}>
@@ -116,9 +121,10 @@ function SkillEnvValuesDialog({
                   <InputGroup>
                     <InputGroupInput
                       id={inputId}
-                      placeholder={reusing ? "已保存" : "配置值"}
-                      disabled={isSubmitting || reusing}
-                      value={reusing ? "" : values[name] ?? ""}
+                      aria-invalid={Boolean(nameConflict) || undefined}
+                      placeholder={nameConflict ? "密钥名称冲突" : reusing ? "已保存" : "配置值"}
+                      disabled={isSubmitting || reusing || Boolean(nameConflict)}
+                      value={reusing || nameConflict ? "" : values[name] ?? ""}
                       onChange={(event) => {
                         setValues((current) => ({ ...current, [name]: event.target.value }))
                       }}
@@ -142,6 +148,11 @@ function SkillEnvValuesDialog({
                       </InputGroupAddon>
                     ) : null}
                   </InputGroup>
+                  {nameConflict ? (
+                    <p className="text-sm text-destructive">
+                      已存在密钥 {nameConflict.name}，名称必须与配置键完全一致。
+                    </p>
+                  ) : null}
                 </div>
               </div>
             )

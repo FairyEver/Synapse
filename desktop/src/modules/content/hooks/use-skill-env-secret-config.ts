@@ -9,7 +9,7 @@ import type { SecretSafeView } from "../../../../app-capabilities/secrets/shared
 import type { SkillEnvUpdateScanGroup } from "../../../../app-capabilities/secrets/renderer/skill-env-update-dialog"
 
 type SkillEnvSecretConfigLoadState = "error" | "loading" | "ready"
-type SkillEnvSecretConfigMode = "new" | "replace" | "reuse"
+type SkillEnvSecretConfigMode = "name_conflict" | "new" | "replace" | "reuse"
 type SkillEnvSecretConfigSaveState = "failed" | "idle" | "saved" | "saving"
 type SkillEnvSecretConfigValueOrigin = "default" | "input"
 
@@ -52,7 +52,10 @@ function installerSource(item: SynapseContentMeta<"skill">): SynapseSkillInstall
 
 function matchSecret(name: string, secrets: readonly SecretSafeView[]): SecretSafeView | undefined {
   return secrets.find((secret) => secret.name === name)
-    ?? secrets.find((secret) => secret.name.toLowerCase() === name.toLowerCase())
+}
+
+function findSecretNameConflict(name: string, secrets: readonly SecretSafeView[]): SecretSafeView | undefined {
+  return secrets.find((secret) => secret.name !== name && secret.name.toLowerCase() === name.toLowerCase())
 }
 
 function createField(
@@ -61,6 +64,21 @@ function createField(
   secrets: readonly SecretSafeView[],
 ): SkillEnvSecretConfigField {
   const secret = matchSecret(name, secrets)
+  const nameConflict = secret ? undefined : findSecretNameConflict(name, secrets)
+  if (nameConflict) {
+    return {
+      defaultValue,
+      existingHasValue: nameConflict.hasValue,
+      existingSecretName: nameConflict.name,
+      mode: "name_conflict",
+      name,
+      saveState: "idle",
+      touched: false,
+      value: "",
+      valueOrigin: "input",
+      visible: false,
+    }
+  }
   if (secret?.hasValue) {
     return {
       defaultValue,
@@ -94,13 +112,13 @@ function mergeScanGroups(
   current: readonly SkillEnvUpdateScanGroup[],
   additions: readonly SkillEnvUpdateScanGroup[],
 ): SkillEnvUpdateScanGroup[] {
-  const next = new Map(current.map((group) => [group.name.toLowerCase(), group]))
-  for (const group of additions) next.set(group.name.toLowerCase(), group)
+  const next = new Map(current.map((group) => [group.name, group]))
+  for (const group of additions) next.set(group.name, group)
   return [...next.values()]
 }
 
 function uniqueNames(names: readonly string[]): string[] {
-  return [...new Map(names.map((name) => [name.toLowerCase(), name])).values()]
+  return [...new Set(names)]
 }
 
 function errorDiagnostic(error: unknown): { readonly errorName?: string; readonly errorMessageLength: number } {
@@ -222,7 +240,9 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
   const save = useCallback(async (): Promise<SkillEnvSecretConfigSaveOutcome> => {
     if (saving) return { kind: "partial", failedCount: 0, savedCount: 0 }
     const candidates = fields.filter((field) => (
-      field.mode !== "reuse" && (field.value.length > 0 || field.touched)
+      field.mode !== "name_conflict"
+      && field.mode !== "reuse"
+      && (field.value.length > 0 || field.touched)
     ))
     const reusedNames = fields
       .filter((field) => field.mode === "reuse" && field.existingHasValue)
@@ -324,10 +344,12 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
 
   const hasUnsavedValues = fields.some((field) => field.mode !== "reuse" && field.value.length > 0)
   const hasSaveFailures = fields.some((field) => field.saveState === "failed" && field.value.length > 0)
+  const hasNameConflicts = fields.some((field) => field.mode === "name_conflict")
 
   return {
     fields,
     hasSaveFailures,
+    hasNameConflicts,
     hasUnsavedValues,
     loadState,
     notice,

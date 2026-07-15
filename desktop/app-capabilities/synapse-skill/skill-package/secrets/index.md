@@ -10,7 +10,7 @@ Use this guide only for Synapse local secrets stored in the `密钥库` app.
 
 Do not use these tools for Workflow variables, Database rows, Automation schedules, provider settings, shell environment variables, Resource Repository publishing, or editor installation state.
 
-Secret names can also match keys in installed Skill root `.env` files. This association is file-based and case-insensitive; Synapse does not keep an installation database or persistent update queue.
+Secret names can also match keys in installed Skill root `.env` files. This file-based association requires the secret name and `.env` key to use exactly the same case; a case-only name conflict must be resolved before association. Synapse does not keep an installation database or persistent update queue.
 
 These MCP tools modify encrypted secret storage only. Create, update, and upsert never scan or write installed Skill files. The desktop app provides a separate explicit scan and user-confirmed in-memory serial queue for updating associated `.env` files.
 
@@ -35,6 +35,6 @@ The desktop scanner accepts runtime `.env` files up to 1 MiB. Scanning is availa
 
 ## Name Rules
 
-Names must contain only letters, digits, and underscores. Names are matched case-insensitively.
+Names must contain only letters, digits, and underscores. Secret storage names are matched case-insensitively, while installed Skill `.env` associations require an exact-case match.
 
 Names are immutable after creation. To use a different name, create a new secret and update the Skill's `.env.example` and runtime code separately.

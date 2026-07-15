@@ -18,15 +18,15 @@ describe("dotenv document", () => {
     ])
   })
 
-  it("rejects duplicate names case-insensitively", () => {
-    expect(() => parseDotenvDocument("TOKEN=one\ntoken=two\n"))
-      .toThrow("配置键重复：token")
+  it("keeps case-distinct environment names separate", () => {
+    expect(parseDotenvDocument("TOKEN=one\ntoken=two\n").entries.map((entry) => entry.name))
+      .toEqual(["TOKEN", "token"])
   })
 
   it("patches only the selected raw value", () => {
-    const input = "# keep\nTOKEN = old # keep comment\nOTHER='same'\n"
+    const input = "# keep\nTOKEN = old # keep comment\ntoken=lowercase\nOTHER='same'\n"
     const next = patchDotenvValues(input, { token: "new value" })
-    expect(next).toBe("# keep\nTOKEN = \"new value\" # keep comment\nOTHER='same'\n")
+    expect(next).toBe("# keep\nTOKEN = old # keep comment\ntoken=\"new value\"\nOTHER='same'\n")
   })
 
   it("serializes replacement values losslessly through Node parseEnv", () => {

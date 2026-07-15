@@ -78,7 +78,6 @@ describe("SkillEnvBindingService", () => {
     const result = await harness.service.scan("TOKEN", "new-secret", harness.security)
 
     expect(result.items.map(({ skillName, status }) => ({ skillName, status }))).toEqual([
-      { skillName: "current", status: "up_to_date" },
       { skillName: "invalid", status: "invalid" },
       { skillName: "linked", status: "unsafe_link" },
       { skillName: "needs", status: "needs_update" },
@@ -214,14 +213,13 @@ describe("SkillEnvBindingService", () => {
     expect(JSON.stringify(harness.auditEvents)).not.toContain("new-secret")
   })
 
-  it("revalidates duplicate keys and symlink changes before writes", async () => {
+  it("updates only the exact key and rejects symlink changes before writes", async () => {
     const root = await createRoot()
-    const duplicate = await createSkill(root, "duplicate", "TOKEN=old\n")
+    const duplicate = await createSkill(root, "duplicate", "TOKEN=old\ntoken=other\n")
     const linked = await createSkill(root, "linked", "TOKEN=old\n")
     const harness = createHarness([trustedRoot(root)])
     const scan = await harness.service.scan("TOKEN", "new", harness.security)
     const byName = new Map(scan.items.map((item) => [item.skillName, item]))
-    await writeFile(path.join(duplicate, ".env"), "TOKEN=old\ntoken=other\n")
     const linkedEnv = path.join(linked, ".env")
     const { rm } = await import("node:fs/promises")
     await rm(linkedEnv)
@@ -234,9 +232,11 @@ describe("SkillEnvBindingService", () => {
     }, async () => "new", harness.security)
 
     expect(result.items).toEqual([
-      expect.objectContaining({ skillName: "duplicate", status: "conflict" }),
+      expect.objectContaining({ skillName: "duplicate", status: "updated" }),
       expect.objectContaining({ skillName: "linked", status: "failed" }),
     ])
+    expect(await readFile(path.join(duplicate, ".env"), "utf8"))
+      .toBe('TOKEN="new"\ntoken=other\n')
   })
 
   it("does not write through a Skill parent swapped after scanning", async () => {

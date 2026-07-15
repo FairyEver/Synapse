@@ -15,7 +15,7 @@ Tools return this safe view unless `app_secrets_item_get` is called with `includ
 
 ## Skill ENV Boundary
 
-Names are immutable after creation. A case-insensitive secret name can associate with the same key in an installed Skill root `.env` file, without an installation database.
+Names are immutable after creation. Secret storage resolves names case-insensitively, but association with a key in an installed Skill root `.env` file requires exactly matching case. A case-only conflict must be resolved before association; Synapse does not keep an installation database.
 
 MCP create, update, and upsert modify encrypted secret storage only and never scan or write installed Skill files. Explicit scanning and the user-confirmed in-memory serial update queue are desktop app IPC/UI capabilities, not MCP actions or tools.
 

@@ -23,7 +23,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import {
   InputGroup,
   InputGroupAddon,
@@ -95,7 +95,7 @@ function SkillEnvSecretConfigDialog({ item, onOpenChange }: SkillEnvSecretConfig
       <Button type="button" variant="outline" disabled={config.saving} onClick={closeConfig}>
         取消
       </Button>
-      <Button type="submit" disabled={config.saving}>
+      <Button type="submit" disabled={config.saving || config.hasNameConflicts}>
         {config.saving ? "保存中" : "保存到密钥库"}
       </Button>
     </>
@@ -241,16 +241,17 @@ function SkillEnvSecretField({
 }) {
   const status = fieldStatus(field)
   const reusing = field.mode === "reuse"
+  const nameConflict = field.mode === "name_conflict"
 
   return (
-    <Field data-invalid={field.saveState === "failed" || undefined}>
+    <Field data-invalid={field.saveState === "failed" || nameConflict || undefined}>
       <div className="flex min-w-0 items-center justify-between gap-3">
         <FieldLabel htmlFor={inputId} className="min-w-0 truncate font-mono text-xs">
           {field.name}
         </FieldLabel>
         <div className="flex shrink-0 items-center gap-1">
           <Badge variant={status.variant}>{status.label}</Badge>
-          {field.existingSecretName && field.existingHasValue ? (
+          {field.existingSecretName && field.existingHasValue && !nameConflict ? (
             <Button
               type="button"
               variant="ghost"
@@ -269,13 +270,13 @@ function SkillEnvSecretField({
           id={inputId}
           type={field.visible ? "text" : "password"}
           autoComplete="new-password"
-          aria-invalid={field.saveState === "failed" || undefined}
-          disabled={saving || reusing}
-          placeholder={reusing ? "已保存到密钥库" : "输入值"}
+          aria-invalid={field.saveState === "failed" || nameConflict || undefined}
+          disabled={saving || reusing || nameConflict}
+          placeholder={nameConflict ? "密钥名称冲突" : reusing ? "已保存到密钥库" : "输入值"}
           value={field.value}
           onChange={(event) => onValueChange(event.target.value)}
         />
-        {!reusing ? (
+        {!reusing && !nameConflict ? (
           <InputGroupAddon align="inline-end">
             <InputGroupButton
               size="icon-xs"
@@ -288,6 +289,9 @@ function SkillEnvSecretField({
           </InputGroupAddon>
         ) : null}
       </InputGroup>
+      {nameConflict ? (
+        <FieldError>已存在密钥 {field.existingSecretName}，名称必须与配置键完全一致。</FieldError>
+      ) : null}
     </Field>
   )
 }
@@ -297,6 +301,7 @@ function fieldStatus(field: SkillEnvSecretConfigField): {
   readonly variant: "destructive" | "outline" | "secondary"
 } {
   if (field.saveState === "failed") return { label: "保存失败", variant: "destructive" }
+  if (field.mode === "name_conflict") return { label: "名称冲突", variant: "destructive" }
   if (field.mode === "reuse") return { label: "已保存", variant: "secondary" }
   if (!field.value) return { label: "未设置", variant: "outline" }
   if (field.valueOrigin === "default" && field.value === field.defaultValue) {

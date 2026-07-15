@@ -104,8 +104,8 @@ describe("SkillEnvSecretConfigDialog", () => {
     })
     mocks.secrets.list.mockResolvedValue({
       secrets: [
-        { id: "secret-1", name: "token", hasValue: true },
-        { id: "secret-2", name: "optional", hasValue: false },
+        { id: "secret-1", name: "TOKEN", hasValue: true },
+        { id: "secret-2", name: "OPTIONAL", hasValue: false },
       ],
       total: 2,
     })
@@ -135,18 +135,18 @@ describe("SkillEnvSecretConfigDialog", () => {
     })
   })
 
-  it("starts replacement empty and preserves the existing canonical name", async () => {
+  it("starts replacement empty and preserves the exact existing name", async () => {
     mocks.inspectSkillEnvSource.mockResolvedValue({
       declarations: [{ name: "TOKEN", defaultValue: "repository-default" }],
       legacyPlaceholders: [],
     })
     mocks.secrets.list.mockResolvedValue({
-      secrets: [{ id: "secret-1", name: "Token", description: "existing", hasValue: true }],
+      secrets: [{ id: "secret-1", name: "TOKEN", description: "existing", hasValue: true }],
       total: 1,
     })
     mocks.secrets.upsert.mockResolvedValue({
       created: false,
-      secret: { id: "secret-1", name: "Token", description: "existing", hasValue: true },
+      secret: { id: "secret-1", name: "TOKEN", description: "existing", hasValue: true },
     })
     const onOpenChange = vi.fn()
 
@@ -164,9 +164,9 @@ describe("SkillEnvSecretConfigDialog", () => {
       await flushPromises()
     })
 
-    expect(mocks.secrets.upsert).toHaveBeenCalledWith({ name: "Token", value: "replacement-value" })
+    expect(mocks.secrets.upsert).toHaveBeenCalledWith({ name: "TOKEN", value: "replacement-value" })
     expect(mocks.secrets.get).not.toHaveBeenCalled()
-    expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "Token" })
+    expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "TOKEN" })
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(document.body.textContent).not.toContain("replacement-value")
   })
@@ -177,7 +177,7 @@ describe("SkillEnvSecretConfigDialog", () => {
       legacyPlaceholders: [],
     })
     mocks.secrets.list.mockResolvedValue({
-      secrets: [{ id: "secret-1", name: "Token", hasValue: true }],
+      secrets: [{ id: "secret-1", name: "TOKEN", hasValue: true }],
       total: 1,
     })
 
@@ -188,7 +188,27 @@ describe("SkillEnvSecretConfigDialog", () => {
     })
 
     expect(mocks.secrets.upsert).not.toHaveBeenCalled()
-    expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "Token" })
+    expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "TOKEN" })
+  })
+
+  it("blocks a declaration whose key differs only by case from an existing secret", async () => {
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [{ name: "api_key", defaultValue: "" }],
+      legacyPlaceholders: [],
+    })
+    mocks.secrets.list.mockResolvedValue({
+      secrets: [{ id: "secret-1", name: "API_KEY", hasValue: true }],
+      total: 1,
+    })
+
+    await renderDialog()
+
+    expect(rowForLabel("api_key").textContent).toContain("名称冲突")
+    expect(rowForLabel("api_key").textContent).toContain("已存在密钥 API_KEY")
+    expect(inputForLabel("api_key").disabled).toBe(true)
+    expect(buttonByText("保存到密钥库")?.disabled).toBe(true)
+    expect(mocks.secrets.upsert).not.toHaveBeenCalled()
+    expect(mocks.secrets.scanSkillEnvBindings).not.toHaveBeenCalled()
   })
 
   it("keeps failed values for retry and then queues multiple scan groups serially", async () => {
