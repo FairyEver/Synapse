@@ -545,7 +545,7 @@ function DriveModuleContent() {
 
   const runLocalUpload = useCallback(async (
     createRequest: () => Promise<DriveLocalUploadBuildResult>,
-    options: { readonly retry?: boolean } = {},
+    options: { readonly destinationPath?: string; readonly retry?: boolean } = {},
   ) => {
     if (uploadActionsDisabled && !options.retry) return
     let taskId: string | null = null
@@ -561,7 +561,7 @@ function DriveModuleContent() {
       const nextTask = createDriveUploadTask({
         id: taskId,
         parentId: request.parentId ?? null,
-        destinationPath: formatDriveBreadcrumbPath(path),
+        destinationPath: options.destinationPath ?? formatDriveBreadcrumbPath(path),
         request: requestWithTaskId,
       })
       setUploadTask(nextTask)
@@ -621,7 +621,10 @@ function DriveModuleContent() {
     if (!task || task.status === "running") return
     const retryRequest = buildDriveUploadRetryRequest(task)
     if (!retryRequest) return
-    void runLocalUpload(async () => ({ request: retryRequest, skipped: 0 }), { retry: true })
+    void runLocalUpload(async () => ({ request: retryRequest, skipped: 0 }), {
+      destinationPath: task.destinationPath,
+      retry: true,
+    })
   }, [runLocalUpload])
 
   const handleClearUploadTask = useCallback(() => {

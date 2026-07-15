@@ -2457,6 +2457,7 @@ describe("DriveModule", () => {
         mimeType: "text/plain",
       }],
     })
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("/作业范文")
   })
 
   it("clears a finished upload task from the breadcrumb row", async () => {
