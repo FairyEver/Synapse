@@ -121,6 +121,7 @@ export {
   type ConversationEntryV1,
   type ConversationMainThreadPersonaSnapshotV1,
   type ConversationResumePolicyV1,
+  type ConversationTitleSourceV1,
   type ConversationUsageV1,
   type CoreConfigV1,
   type CoreIdentityV2,

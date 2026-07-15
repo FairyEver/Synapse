@@ -718,6 +718,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(conversationsSchema.validate({ ...baseConversation, usage: { inputTokens: -1 } })).toBe(false)
     expect(conversationsSchema.validate({ ...baseConversation, costUsd: Infinity })).toBe(false)
     expect(conversationsSchema.validate({ ...baseConversation, costUsd: -0.01 })).toBe(false)
+    expect(conversationsSchema.validate({ ...baseConversation, titleSource: "manual" })).toBe(true)
+    expect(conversationsSchema.validate({ ...baseConversation, titleSource: "inferred" })).toBe(false)
   })
 
   it("migrates Sound Notifier settings from v1 default preset settings to v3 empty settings", async () => {

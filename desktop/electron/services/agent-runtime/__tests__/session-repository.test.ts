@@ -325,20 +325,70 @@ describe("AgentSessionRepository", () => {
     await repository.appendHistory(automatic.id, "user", "你好")
     await expect(repository.renameSessionFromFirstUserMessage(
       automatic.id,
-    )).resolves.toMatchObject({ name: "你好" })
+    )).resolves.toMatchObject({ name: "你好", titleSource: "fallback" })
     await expect(repository.renameSessionFromGeneratedTitle(
       automatic.id,
       "  Send test message in WeCom  ",
-    )).resolves.toMatchObject({ name: "Send test message in WeCom" })
+    )).resolves.toMatchObject({ name: "Send test message in WeCom", titleSource: "generated" })
     await expect(repository.renameSessionFromGeneratedTitle(
       legacy.id,
       "发送企业微信测试消息",
-    )).resolves.toMatchObject({ name: "发送企业微信测试消息" })
+    )).resolves.toMatchObject({ name: "发送企业微信测试消息", titleSource: "generated" })
     await expect(repository.renameSessionFromGeneratedTitle(
       custom.id,
       "Generated replacement",
     )).resolves.toBeNull()
-    await expect(conversations.get(custom.id)).resolves.toMatchObject({ name: "企业微信通知" })
+    await expect(conversations.get(custom.id)).resolves.toMatchObject({
+      name: "企业微信通知",
+      titleSource: "manual",
+    })
+  })
+
+  it("persists manual title intent even when the title looks automatic", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+      idFactory: fixedIdFactory(["fallback", "automatic"]),
+    })
+    const fallback = await repository.createSession({
+      sessionKey: "local:renderer",
+      name: "新会话 08:32 PM",
+    })
+    const automatic = await repository.createSession({
+      sessionKey: "local:renderer",
+      name: "新对话 15:20",
+    })
+
+    await repository.appendHistory(fallback.id, "user", "保留这个标题")
+    await repository.renameSessionFromFirstUserMessage(fallback.id)
+    await expect(repository.renameSession(fallback.id, "保留这个标题"))
+      .resolves.toMatchObject({ titleSource: "manual" })
+    await expect(repository.renameSession(automatic.id, "新会话"))
+      .resolves.toMatchObject({ titleSource: "manual" })
+
+    const restoredRepository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+    })
+    await expect(restoredRepository.renameSessionFromGeneratedTitle(
+      fallback.id,
+      "迟到的自动标题",
+    )).resolves.toBeNull()
+    await expect(restoredRepository.renameSessionFromGeneratedTitle(
+      automatic.id,
+      "另一个迟到标题",
+    )).resolves.toBeNull()
+    await expect(conversations.get(fallback.id)).resolves.toMatchObject({
+      name: "保留这个标题",
+      titleSource: "manual",
+    })
+    await expect(conversations.get(automatic.id)).resolves.toMatchObject({
+      name: "新会话",
+      titleSource: "manual",
+    })
   })
 
   it("clears active main-thread persona without dropping mode or model tier", async () => {

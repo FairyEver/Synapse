@@ -32,6 +32,9 @@ const isOptionalString = (value: unknown): boolean =>
 const isOptionalBoolean = (value: unknown): boolean =>
   value === undefined || typeof value === "boolean"
 
+const isConversationTitleSource = (value: unknown): value is ConversationTitleSourceV1 =>
+  value === "automatic" || value === "fallback" || value === "generated" || value === "manual"
+
 const isPlainRecord = <T extends Record<string, unknown>>(value: unknown): value is T => {
   return isAnyRecord<T>(value) && !Array.isArray(value)
 }
@@ -184,6 +187,7 @@ export interface ConversationUserMetaV1 extends Record<string, unknown> {
 }
 
 export type ConversationResumePolicyV1 = "resume" | "fresh" | "continue"
+export type ConversationTitleSourceV1 = "automatic" | "fallback" | "generated" | "manual"
 
 export interface ConversationUsageV1 extends Record<string, unknown> {
   inputTokens?: number
@@ -231,6 +235,7 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
   userMeta?: ConversationUserMetaV1
   active: boolean
   name?: string
+  titleSource?: ConversationTitleSourceV1
   createdAt: string
   updatedAt: string
 }
@@ -263,6 +268,7 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && ((v as ConversationEntryV1).agentConfig === undefined || isConversationAgentConfig((v as ConversationEntryV1).agentConfig))
     && ((v as ConversationEntryV1).resumePolicy === undefined || isConversationResumePolicy((v as ConversationEntryV1).resumePolicy))
     && isOptionalRecord((v as ConversationEntryV1).userMeta)
+    && ((v as ConversationEntryV1).titleSource === undefined || isConversationTitleSource((v as ConversationEntryV1).titleSource))
     && typeof (v as ConversationEntryV1).createdAt === "string"
     && typeof (v as ConversationEntryV1).updatedAt === "string",
 }

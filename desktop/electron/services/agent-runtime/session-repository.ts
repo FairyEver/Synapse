@@ -158,6 +158,7 @@ export class AgentSessionRepository {
       userMeta: input.userMeta,
       active: true,
       name: input.name ?? input.sessionKey,
+      titleSource: initialConversationTitleSource(input.name ?? input.sessionKey),
       resumePolicy: input.resumePolicy ?? "resume",
       createdAt: now,
       updatedAt: now,
@@ -238,6 +239,7 @@ export class AgentSessionRepository {
       userMeta: input.userMeta,
       active: false,
       name: input.name ?? input.sessionKey,
+      titleSource: initialConversationTitleSource(input.name ?? input.sessionKey),
       resumePolicy: input.resumePolicy ?? "fresh",
       createdAt: now,
       updatedAt: now,
@@ -565,6 +567,7 @@ export class AgentSessionRepository {
     const updated: ConversationEntryV1 = {
       ...conversation,
       name,
+      titleSource: "manual",
       updatedAt: this.isoNow(),
     }
     await this.conversations.upsert(updated)
@@ -580,11 +583,12 @@ export class AgentSessionRepository {
     if (
       !normalizedName
       || normalizedName === conversation.name
-      || !isReplaceableAutomaticConversationName(conversation)
+      || !canReplaceWithGeneratedTitle(conversation)
     ) return null
     const updated: ConversationEntryV1 = {
       ...conversation,
       name: normalizedName,
+      titleSource: "generated",
       updatedAt: this.isoNow(),
     }
     await this.conversations.upsert(updated)
@@ -595,12 +599,13 @@ export class AgentSessionRepository {
     conversationIdValue: string,
   ): Promise<ConversationEntryV1 | null> {
     const conversation = await this.requireConversation(conversationIdValue)
-    if (!isAutomaticConversationName(conversation.name)) return null
+    if (!canReplaceWithFallbackTitle(conversation)) return null
     const name = firstUserMessageTitle(conversation)
     if (!name) return null
     const updated: ConversationEntryV1 = {
       ...conversation,
       name,
+      titleSource: "fallback",
       updatedAt: this.isoNow(),
     }
     await this.conversations.upsert(updated)
@@ -680,7 +685,19 @@ function isAutomaticConversationName(name: string | undefined): boolean {
   return typeof name === "string" && AUTOMATIC_CONVERSATION_NAME_PATTERN.test(name.trim())
 }
 
-function isReplaceableAutomaticConversationName(conversation: ConversationEntryV1): boolean {
+function initialConversationTitleSource(name: string): "automatic" | "manual" {
+  return isAutomaticConversationName(name) ? "automatic" : "manual"
+}
+
+function canReplaceWithFallbackTitle(conversation: ConversationEntryV1): boolean {
+  if (conversation.titleSource !== undefined) return conversation.titleSource === "automatic"
+  return isAutomaticConversationName(conversation.name)
+}
+
+function canReplaceWithGeneratedTitle(conversation: ConversationEntryV1): boolean {
+  if (conversation.titleSource !== undefined) {
+    return conversation.titleSource === "automatic" || conversation.titleSource === "fallback"
+  }
   return isAutomaticConversationName(conversation.name)
     || conversation.name === firstUserMessageTitle(conversation)
 }
