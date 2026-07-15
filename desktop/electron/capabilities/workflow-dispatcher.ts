@@ -272,11 +272,20 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 
   "workflow.run.get": async (params, deps) => {
+    const workflowId = requireString(params, "workflowId")
     const runId = requireWorkflowRunId(params, "runId")
     const status = await deps.getRunStatus(runId)
-    if (status) return { ok: true, data: sanitizeWorkflowRunStatus(status) }
+    if (status) {
+      return {
+        ok: true,
+        data: status.workflowId === workflowId ? sanitizeWorkflowRunStatus(status) : null,
+      }
+    }
     const snapshot = await deps.snapshotService.findByRunId(runId)
-    return { ok: true, data: snapshot ? snapshotToRunStatus(snapshot) : null }
+    return {
+      ok: true,
+      data: snapshot?.workflowId === workflowId ? snapshotToRunStatus(snapshot) : null,
+    }
   },
 
   "workflow.run.list": async (params, deps) => {

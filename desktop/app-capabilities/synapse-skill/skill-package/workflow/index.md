@@ -64,7 +64,7 @@ When you see this URI, parse it as `providerId = <providerId>` and `modelTier = 
 9. Call `app_workflow_layout_update` after node/edge changes.
 10. Call `app_workflow_definition_inspect` and fix errors before executing.
 11. Call `app_workflow_run_execute` with params to start execution. Returns `{ runId }`.
-12. Poll `app_workflow_run_get` with the runId (2-3 second intervals) until status is `completed`, `failed`, or `cancelled`.
+12. Poll `app_workflow_run_get` with the workflowId and runId (2-3 second intervals) until status is `completed`, `failed`, or `cancelled`.
 
 Strict validation runs after every MCP mutation. Do not create disconnected placeholders and plan to connect them later; that save will be rejected. Use connected `app_workflow_node_create` calls or a full `app_workflow_definition_update` instead.
 

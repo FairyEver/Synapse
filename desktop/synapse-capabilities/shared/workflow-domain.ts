@@ -17,7 +17,7 @@ const workflowCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.workflow.definition.list" as CapabilityId, title: "List workflows", description: "List all workflow definitions.", mutates: false },
   { id: "app.workflow.definition.get" as CapabilityId, title: "Get workflow", description: "Get a full workflow definition by ID.", mutates: false },
   { id: "app.workflow.definition.inspect" as CapabilityId, title: "Inspect workflow", description: "Validate a workflow definition and return errors/warnings.", mutates: false },
-  { id: "app.workflow.run.get" as CapabilityId, title: "Get run status", description: "Get workflow run status by runId.", mutates: false },
+  { id: "app.workflow.run.get" as CapabilityId, title: "Get run status", description: "Get workflow run status by workflowId and runId.", mutates: false },
   { id: "app.workflow.run.list" as CapabilityId, title: "List run history", description: "List run history for a workflow.", mutates: false },
   // Whole write
   { id: "app.workflow.definition.create" as CapabilityId, title: "Create workflow", description: "Create a new empty workflow with a default end node.", mutates: true },
@@ -302,11 +302,14 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     },
     {
       name: "workflow_run_get",
-      description: "Get workflow run status by runId. Returns run status including per-node results with durationMs, input size context, timeoutMs/retryable diagnostics when available, or null if not found.",
+      description: "Get workflow run status by workflowId and runId. Returns run status including per-node results with durationMs, input size context, timeoutMs/retryable diagnostics when available, or null if not found or not owned by the workflow.",
       inputSchema: {
         type: "object",
-        properties: { runId: { type: "string", description: "Run ID returned by workflow_run_execute." } },
-        required: ["runId"],
+        properties: {
+          workflowId: { type: "string", description: "Workflow ID used to execute the run." },
+          runId: { type: "string", description: "Run ID returned by workflow_run_execute." },
+        },
+        required: ["workflowId", "runId"],
       },
     },
     {
@@ -357,7 +360,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     // Execute
     {
       name: "workflow_run_execute",
-      description: "Execute a workflow with the given parameters. Returns { runId } on success. Use workflow_run_get to poll. For option params, pass strings; closed options must match configured values, while custom-enabled options accept non-empty custom strings.",
+      description: "Execute a workflow with the given parameters. Returns { runId } on success. Use workflow_run_get with this workflowId and the returned runId to poll. For option params, pass strings; closed options must match configured values, while custom-enabled options accept non-empty custom strings.",
       inputSchema: {
         type: "object",
         properties: {

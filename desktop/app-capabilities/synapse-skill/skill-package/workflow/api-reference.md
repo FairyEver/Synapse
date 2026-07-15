@@ -244,11 +244,11 @@ Validate a workflow definition without saving.
 
 ### app_workflow_run_get
 
-Get execution status by run ID.
+Get execution status for a run owned by a workflow.
 
-**Params:** `runId` (string, required)
+**Params:** `workflowId` (string, required), `runId` (string, required)
 **Returns:** `{ status, nodeResults, error? }` or snapshot from history, or `null`
-**Notes:** Checks in-memory active runs first, then persisted snapshots.
+**Notes:** Authorizes the read against `workflowId`, then checks in-memory active runs and persisted snapshots. Returns `null` when the run does not belong to that workflow.
 Node results include `durationMs` when available. For failures, inspect the failed node's `error`, `durationMs`, effective provider/model/project fields, timeout config, and upstream input size before retrying.
 
 ### app_workflow_run_list
@@ -372,7 +372,7 @@ Execute a workflow with parameters.
 
 **Params:** `workflowId` (string, required), `params?` (object — key-value matching param definitions)
 **Returns:** `{ runId }`
-**Notes:** Poll `app_workflow_run_get` with the returned runId to track progress. For option params, pass a string. Closed options must match one configured option value; params with `allowCustomOption: true` accept a non-empty custom string. Custom run values are not saved back to the workflow definition. For file/directory params, pass either a local path string or a resource ref. Synapse normalizes strings to:
+**Notes:** Poll `app_workflow_run_get` with this `workflowId` and the returned `runId` to track progress. For option params, pass a string. Closed options must match one configured option value; params with `allowCustomOption: true` accept a non-empty custom string. Custom run values are not saved back to the workflow definition. For file/directory params, pass either a local path string or a resource ref. Synapse normalizes strings to:
 
 ```json
 { "kind": "local_path", "entryType": "file", "path": "/absolute/path/to/file.txt" }

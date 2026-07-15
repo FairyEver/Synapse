@@ -137,6 +137,15 @@ describe("createWorkflowDispatcher", () => {
     expect(runExecuteParams?.description).toContain("allowMultiple=true")
     expect(runExecuteParams?.description).toContain("up to 100")
     expect(runExecuteParams?.description).toContain("Custom run values are not saved back")
+
+    const runGetTool = tools.find((item) => item.name === "workflow_run_get")
+    expect(runGetTool?.inputSchema).toMatchObject({
+      required: ["workflowId", "runId"],
+      properties: {
+        workflowId: { type: "string" },
+        runId: { type: "string" },
+      },
+    })
   })
 
   it("workflow.definition.list dispatches correctly", async () => {
@@ -184,7 +193,7 @@ describe("createWorkflowDispatcher", () => {
     })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    const result = await dispatcher.dispatch("workflow.run.get", { runId: "run-snap" }, { source: "api" })
+    const result = await dispatcher.dispatch("workflow.run.get", { workflowId: "wf-1", runId: "run-snap" }, { source: "api" })
 
     expect(result.ok).toBe(true)
     expect(result.data).toEqual({
@@ -253,7 +262,7 @@ describe("createWorkflowDispatcher", () => {
     })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    const result = await dispatcher.dispatch("workflow.run.get", { runId: "run-active" }, { source: "mcp-http" })
+    const result = await dispatcher.dispatch("workflow.run.get", { workflowId: "wf-1", runId: "run-active" }, { source: "mcp-http" })
 
     expect(result.ok).toBe(true)
     const serialized = JSON.stringify(result.data)
@@ -273,11 +282,38 @@ describe("createWorkflowDispatcher", () => {
     })
   })
 
+  it("workflow.run.get returns null when the run belongs to another workflow", async () => {
+    const snapshot = {
+      runId: "run-private",
+      workflowId: "wf-private",
+      status: "completed",
+      startedAt: 1,
+      endedAt: 2,
+      version: "v1",
+      params: { private: "value" },
+      nodeResults: {},
+    } satisfies WorkflowRunSnapshot
+    const deps = makeDeps({
+      snapshotService: {
+        ...makeDeps().snapshotService,
+        findByRunId: vi.fn(async () => snapshot),
+      } as unknown as WorkflowDispatchDeps["snapshotService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const result = await dispatcher.dispatch("workflow.run.get", {
+      workflowId: "wf-public",
+      runId: "run-private",
+    }, { source: "mcp-http" })
+
+    expect(result).toEqual({ ok: true, data: null })
+  })
+
   it("workflow.run.get rejects unsafe run ids before querying snapshots", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
 
-    await expect(dispatcher.dispatch("workflow.run.get", { runId: "../escaped-run" }, { source: "api" }))
+    await expect(dispatcher.dispatch("workflow.run.get", { workflowId: "wf-1", runId: "../escaped-run" }, { source: "api" }))
       .rejects
       .toThrow("Invalid workflow run id")
     expect(deps.getRunStatus).not.toHaveBeenCalled()
@@ -685,6 +721,53 @@ describe("createWorkflowDispatcher", () => {
         workflowAction: "workflow.run.list",
         workflowId: "wf-1",
         policyId: "deny-workflow-read",
+      }),
+    }))
+  })
+
+  it("authorizes workflow.run.get against the workflow before resolving the run id", async () => {
+    const auditSink = {
+      record: vi.fn(),
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({
+        allowed: false as const,
+        reason: "workflow run denied",
+        policyId: "deny-workflow-run",
+      })),
+    }
+    const deps = makeDeps({ permissionGuard, auditSink })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await expect(dispatcher.dispatch("workflow.run.get", {
+      workflowId: "wf-private",
+      runId: "run-private",
+    }, { source: "mcp-http" })).rejects.toThrow("workflow run denied")
+
+    expect(deps.getRunStatus).not.toHaveBeenCalled()
+    expect(deps.snapshotService.findByRunId).not.toHaveBeenCalled()
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "workflow.read",
+      actor: { kind: "user", id: "workflow-dispatch:mcp-http" },
+      resource: "workflow:wf-private",
+      context: {
+        source: "mcp-http",
+        workflowAction: "workflow.run.get",
+        workflowId: "wf-private",
+        runId: "run-private",
+      },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "workflow.read",
+      resource: "workflow:wf-private",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        workflowId: "wf-private",
+        runId: "run-private",
+        policyId: "deny-workflow-run",
       }),
     }))
   })

@@ -473,7 +473,7 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 8. workflow_layout_update({ workflowId })               → 自动排列节点位置
 9. workflow_definition_inspect({ definition })          → 校验完整性
 10. workflow_run_execute({ workflowId, params })         → 执行工作流
-11. workflow_run_get({ runId })                          → 轮询运行结果
+11. workflow_run_get({ workflowId, runId })              → 轮询运行结果
 ```
 
 文件和文件夹参数可设置 `allowMultiple: true`。此时默认值和运行值必须是有序、非空、最多 100 项且不重复的数组；即使只有一项也保持数组。MCP 运行参数的数组项可混用绝对路径字符串和匹配类型的 `local_path` 引用，任一项无效都会使整次运行失败并返回对应索引。
