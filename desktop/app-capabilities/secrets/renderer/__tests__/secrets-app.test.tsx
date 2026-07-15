@@ -542,6 +542,14 @@ describe("SecretsModule", () => {
 
     expect(rowText("skill-one")).toContain("文件已变化")
     expect(document.body.querySelector<HTMLButtonElement>('button[aria-label="选择 Skill：skill-one（TOKEN）"]')?.disabled).toBe(true)
+    expect(buttonByText("更新选中项").disabled).toBe(true)
+
+    await act(async () => {
+      clickButton("更新选中项")
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.queueSkillEnvBindings).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       clickButton("重新扫描")

@@ -147,7 +147,7 @@ export function SkillEnvUpdateDialog({
     activeSessionRef.current = sessionSignature
     setUpdating(true)
 
-    const completedKeys: string[] = []
+    const deselectedKeys: string[] = []
     const nextResults: QueueResultById = {}
     const nextErrors: Record<string, QueueErrorKind> = {}
 
@@ -167,7 +167,7 @@ export function SkillEnvUpdateDialog({
         for (const item of result.items) {
           const key = itemKey(group.name, item.id)
           nextResults[key] = { status: item.status, message: item.message }
-          if (item.status === "updated") completedKeys.push(key)
+          if (item.status === "updated" || item.status === "conflict") deselectedKeys.push(key)
         }
       } catch (error) {
         if (activeSessionRef.current !== sessionSignature) return
@@ -179,7 +179,7 @@ export function SkillEnvUpdateDialog({
     if (activeSessionRef.current === sessionSignature) {
       setQueueResults((current) => ({ ...current, ...nextResults }))
       setQueueErrors(nextErrors)
-      setSelectedIds((current) => current.filter((key) => !completedKeys.includes(key)))
+      setSelectedIds((current) => current.filter((key) => !deselectedKeys.includes(key)))
       setUpdating(false)
     }
   }
