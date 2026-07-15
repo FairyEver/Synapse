@@ -198,6 +198,7 @@ function snapshotToRunStatus(snapshot: WorkflowRunSnapshot): WorkflowRunStatus {
     durationMs: snapshot.endedAt ? snapshot.endedAt - snapshot.startedAt : undefined,
     params: snapshot.params,
     definition: snapshot.definition,
+    ...(snapshot.definitionMigration ? { definitionMigration: snapshot.definitionMigration } : {}),
     ...(error ? { error } : {}),
   }
 }

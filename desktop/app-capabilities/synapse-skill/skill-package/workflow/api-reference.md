@@ -249,8 +249,8 @@ Get execution status for a run owned by a workflow.
 **Notes:** Renderer events, run status, and persisted snapshots bound large node-output fields. A value ending in `[truncated]`, an array ending in `[truncated]`, or an object with `__synapseTruncated: true` is a bounded history representation; the Workflow engine still uses the complete value while executing downstream nodes.
 
 **Params:** `workflowId` (string, required), `runId` (string, required)
-**Returns:** `{ status, nodeResults, error? }` or snapshot from history, or `null`
-**Notes:** Authorizes the read against `workflowId`, then checks in-memory active runs and persisted snapshots. Returns `null` when the run does not belong to that workflow.
+**Returns:** `{ status, nodeResults, error?, definitionMigration? }` or snapshot from history, or `null`
+**Notes:** Authorizes the read against `workflowId`, then checks in-memory active runs and persisted snapshots. Returns `null` when the run does not belong to that workflow. An archived snapshot can return `definitionMigration` with `kind: "failed" | "unsupported_future"` plus source/target versions when its embedded definition is protected; do not interpret, reconstruct, rerun, or reuse that unavailable definition.
 Node results include `durationMs` when available. For failures, inspect the failed node's `error`, `durationMs`, effective provider/model/project fields, timeout config, and upstream input size before retrying.
 
 ### app_workflow_run_list

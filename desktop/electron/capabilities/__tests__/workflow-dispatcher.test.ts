@@ -142,6 +142,7 @@ describe("createWorkflowDispatcher", () => {
     expect(runExecuteParams?.description).toContain("Custom run values are not saved back")
 
     const runGetTool = tools.find((item) => item.name === "workflow_run_get")
+    expect(runGetTool?.description).toContain("definitionMigration")
     expect(runGetTool?.inputSchema).toMatchObject({
       required: ["workflowId", "runId"],
       properties: {
@@ -226,6 +227,11 @@ describe("createWorkflowDispatcher", () => {
         },
       },
       error: "workflow failed",
+      definitionMigration: {
+        kind: "unsupported_future",
+        sourceVersion: "9.0.0",
+        targetVersion: "1.0.0",
+      },
     }
     const deps = makeDeps({
       getRunStatus: vi.fn(async () => null),
@@ -249,6 +255,7 @@ describe("createWorkflowDispatcher", () => {
       durationMs: 600,
       params: { topic: "alpha" },
       error: "workflow failed",
+      definitionMigration: snapshot.definitionMigration,
     })
     expect(result.data).not.toHaveProperty("version")
   })

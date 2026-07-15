@@ -302,7 +302,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     },
     {
       name: "workflow_run_get",
-      description: "Get workflow run status by workflowId and runId. Returns run status including per-node results with durationMs, input size context, timeoutMs/retryable diagnostics when available, or null if not found or not owned by the workflow.",
+      description: "Get workflow run status by workflowId and runId. Returns run status including per-node results with durationMs, input size context, timeoutMs/retryable diagnostics when available, or null if not found or not owned by the workflow. Archived snapshots whose embedded definition is protected after a failed or future-version migration include definitionMigration; do not interpret or reuse the unavailable definition.",
       inputSchema: {
         type: "object",
         properties: {

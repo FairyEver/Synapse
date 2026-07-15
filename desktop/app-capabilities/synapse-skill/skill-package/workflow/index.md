@@ -71,6 +71,8 @@ Use `app_workflow_run_list` with an integer `limit` from 1 to 20 when recent run
 
 Large node outputs are bounded in renderer events, run status, and persisted snapshots. Treat `[truncated]` markers or `__synapseTruncated: true` as a history-size boundary, not as the value used between nodes during execution.
 
+If `app_workflow_run_get` returns `definitionMigration`, the archived run's embedded workflow definition is protected because migration failed or it comes from a future schema version. Do not interpret, reconstruct, rerun, or reuse that unavailable definition; report the diagnostic instead.
+
 Strict validation runs after every MCP mutation. Do not create disconnected placeholders and plan to connect them later; that save will be rejected. Use connected `app_workflow_node_create` calls or a full `app_workflow_definition_update` instead.
 
 Workflow node IDs must use only letters, numbers, `_`, or `-`. Never create or preserve node IDs containing path separators, `..`, absolute paths, or spaces.
