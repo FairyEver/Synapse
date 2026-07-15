@@ -979,7 +979,7 @@ describe("AgentRuntimeService", () => {
     }))
   })
 
-  it("normalizes multi-select arrays for the SDK while preserving exact stored values", async () => {
+  it("normalizes multi-select arrays for the SDK and stored resolution", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const questions = [{
       question: "选择处理范围",
@@ -1004,7 +1004,7 @@ describe("AgentRuntimeService", () => {
     await service.respondPermission({
       requestId: "conversation-a-permission-1",
       behavior: "allow",
-      updatedInput: { answers: { "question-0": ["文档, 图片", "音频"] } },
+      updatedInput: { answers: { "question-0": ["  文档, 图片  ", "", "音频"] } },
       actor: { kind: "user" },
     })
 
@@ -1164,6 +1164,44 @@ describe("AgentRuntimeService", () => {
       message: "未收到选择，已停止操作。",
     }])
     await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
+  })
+
+  it("rejects AskUserQuestion allow responses with only blank array answers", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const questions = [{
+      question: "选择处理范围",
+      options: [{ label: "文档" }, { label: "图片" }],
+      multiSelect: true,
+    }]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "question skipped")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs choices"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await expect(service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      updatedInput: { answers: { "question-0": ["", "   "] } },
+      actor: { kind: "user" },
+    })).rejects.toThrow("继续前需要回答所有问题。")
+
+    expect(session.responses).toEqual([{
+      requestId: "conversation-a-permission-1",
+      behavior: "deny",
+      message: "未收到选择，已停止操作。",
+    }])
+    const result = await turn
+    const stored = await conversations.get(result.conversationId)
+    expect(stored?.history.find((entry) => entry.metadata?.requestId === "conversation-a-permission-1")?.metadata)
+      .toMatchObject({ userQuestionResolution: { status: "skipped" } })
   })
 
   it("rejects AskUserQuestion allow responses that do not cover every question", async () => {

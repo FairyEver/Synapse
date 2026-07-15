@@ -1469,8 +1469,7 @@ function askUserQuestionResolution(
   const questionTextCounts = askUserQuestionTextCounts(questions)
   const resolvedAnswers = questions.flatMap((question, index) => {
     const record = recordValue(question)
-    const answer = askUserQuestionAnswerValue(answers, record, index, questionTextCounts)
-    const values = askUserQuestionResolutionValues(answer)
+    const values = askUserQuestionAnswerValues(answers, record, index, questionTextCounts) ?? []
     return values.length > 0 ? [{ questionIndex: index, values }] : []
   })
   return {
@@ -1480,7 +1479,7 @@ function askUserQuestionResolution(
   }
 }
 
-function askUserQuestionResolutionValues(value: unknown): string[] {
+function normalizeAskUserQuestionAnswerValues(value: unknown): string[] {
   if (value === undefined || value === null) return []
   const values = Array.isArray(value) ? value : [value]
   return values
@@ -1510,12 +1509,12 @@ function normalizeAskUserQuestionResponse(
     if ((questionTextCounts.get(textKey) ?? 0) > 1) {
       hasDuplicateQuestionText = true
     }
-    const answer = askUserQuestionAnswerValue(answers, record, index, questionTextCounts)
-    if (!hasAnswerValue(answer)) {
+    const answerValues = askUserQuestionAnswerValues(answers, record, index, questionTextCounts)
+    if (!answerValues) {
       throw new Error(AGENT_ASK_USER_QUESTION_ALL_ANSWERS_REQUIRED_MESSAGE)
     }
     const label = askUserQuestionResponseLabel(record, index)
-    const formattedAnswer = formatAskUserQuestionAnswerValue(answer)
+    const formattedAnswer = answerValues.join(", ")
     normalizedAnswers[textKey] = formattedAnswer
     responseLines.push(`${index + 1}. ${label}: ${formattedAnswer}`)
   })
@@ -1537,15 +1536,15 @@ function askUserQuestionTextCounts(questions: readonly unknown[]): Map<string, n
   return counts
 }
 
-function askUserQuestionAnswerValue(
+function askUserQuestionAnswerValues(
   answers: Record<string, unknown>,
   question: Record<string, unknown> | undefined,
   index: number,
   questionTextCounts: ReadonlyMap<string, number>,
-): unknown {
+): string[] | undefined {
   for (const key of askUserQuestionAnswerKeys(question, index, questionTextCounts)) {
-    const value = answers[key]
-    if (hasAnswerValue(value)) return value
+    const values = normalizeAskUserQuestionAnswerValues(answers[key])
+    if (values.length > 0) return values
   }
   return undefined
 }
@@ -1574,22 +1573,12 @@ function askUserQuestionResponseLabel(question: Record<string, unknown> | undefi
   return header ? `${header}: ${text}` : text
 }
 
-function formatAskUserQuestionAnswerValue(value: unknown): string {
-  if (Array.isArray(value)) return value.map((item) => String(item)).join(", ")
-  return String(value)
-}
-
 function omitAskUserQuestionResponseFields(input: Record<string, unknown> | undefined): Record<string, unknown> {
   const output = { ...(input ?? {}) }
   delete output.questions
   delete output.answers
   delete output.response
   return output
-}
-
-function hasAnswerValue(value: unknown): boolean {
-  if (Array.isArray(value)) return value.length > 0
-  return typeof value === "string" ? value.trim().length > 0 : value !== undefined && value !== null
 }
 
 function stringRecordValue(value: unknown): string | undefined {
