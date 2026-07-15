@@ -8,6 +8,7 @@ import {
 import type { WorkflowDefinition, WorkflowParam } from "../../../src/types/workflow"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { LOCAL_CLAUDE_CODE_PROVIDER_ID } from "../provider/types"
+import { assertSafeWorkflowId } from "./workflow-id"
 import { validateWorkflowParamConfiguration } from "./workflow-param-validator"
 
 export const WORKFLOW_SCHEMA_VERSION = "1.0.0"
@@ -148,6 +149,7 @@ function assertCurrentWorkflowDocument(value: unknown): asserts value is Version
     throw new Error("Workflow document schema version is invalid.")
   }
   assertNonEmptyString(value.id, "id")
+  assertSafeWorkflowId(value.id)
   assertString(value.name, "name")
   assertString(value.version, "version")
   assertNumber(value.createdAt, "createdAt")

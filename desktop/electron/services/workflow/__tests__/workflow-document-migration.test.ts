@@ -60,6 +60,22 @@ describe("workflow document migration", () => {
     expect(source).toEqual(original)
   })
 
+  it("rejects workflow ids that current operations cannot address", async () => {
+    const source = await fixture("0.0.0") as Record<string, unknown>
+    source.id = "unsafe/workflow"
+    const original = structuredClone(source)
+
+    const result = migrateWorkflowDocument(source)
+
+    expect(result).toMatchObject({ kind: "failed" })
+    if (result.kind !== "failed") return
+    expect(result.error).toMatchObject({
+      name: "DataMigrationValidationError",
+      message: expect.stringContaining("failed validation"),
+    })
+    expect(source).toEqual(original)
+  })
+
   it.each([
     ["description", (source: Record<string, unknown>) => { source.description = 42 }],
     ["defaultProviderId", (source: Record<string, unknown>) => { source.defaultProviderId = false }],

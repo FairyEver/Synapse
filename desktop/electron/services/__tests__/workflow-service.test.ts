@@ -565,6 +565,34 @@ describe("WorkflowService", () => {
     await restarted.initialize()
     await expect(restarted.get(def.id)).resolves.toBeNull()
   })
+  it("isolates a legacy workflow whose document id is unsafe", async () => {
+    const dir = tmpDir()
+    const repositoryPath = tmpDir()
+    const legacyDir = path.join(repositoryPath, "workflows", "safe-directory-name")
+    const source = { ...makeDef(), id: "unsafe/workflow", name: "不应找回" }
+    mkdirSync(legacyDir, { recursive: true })
+    const sourceText = JSON.stringify(source)
+    writeFileSync(path.join(legacyDir, "v_100.json"), sourceText, "utf8")
+
+    const svc = createRepoAt(dir, {
+      dataRootPath: dir,
+      listLegacyRepositoryPaths: async () => [repositoryPath],
+    }).svc
+    await svc.initialize()
+
+    expect(await svc.list()).toEqual([])
+    expect(readFileSync(path.join(legacyDir, "v_100.json"), "utf8")).toBe(sourceText)
+    const migrationState = JSON.parse(
+      readFileSync(path.join(dir, "workflow.migration-state.json"), "utf8"),
+    ) as { items: Record<string, WorkflowMigrationStateEntryV1> }
+    expect(Object.values(migrationState.items)).toContainEqual(expect.objectContaining({
+      workflowId: "unsafe/workflow",
+      sourceKind: "legacy_repository",
+      status: "failed",
+      errorCode: "DataMigrationValidationError",
+      errorMessage: expect.stringContaining("failed validation"),
+    }))
+  })
   it("keeps current workflows available when a configured legacy repository cannot be scanned", async () => {
     const dir = tmpDir()
     const repositoryPath = tmpDir()
