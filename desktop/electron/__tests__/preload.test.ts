@@ -1060,6 +1060,49 @@ describe("preload bridge", () => {
     expect(serializedLog).not.toContain("/Users/liyang/private")
   })
 
+  it("does not log secret mutation fields when Secrets IPC fails", async () => {
+    const bridge = await loadPreloadBridge()
+    const failure = new Error("secret storage unavailable")
+    electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
+      if ([
+        "synapse:secrets:create",
+        "synapse:secrets:update",
+        "synapse:secrets:upsert",
+      ].includes(channel)) {
+        return Promise.reject(failure)
+      }
+      return Promise.resolve(undefined)
+    })
+    const input = {
+      name: "PRIVATE_SECRET_NAME",
+      value: "PRIVATE_SECRET_VALUE",
+      description: "PRIVATE_SECRET_DESCRIPTION",
+    }
+
+    await expect(bridge.secrets.create(input)).rejects.toThrow("secret storage unavailable")
+    await expect(bridge.secrets.update(input)).rejects.toThrow("secret storage unavailable")
+    await expect(bridge.secrets.upsert(input)).rejects.toThrow("secret storage unavailable")
+
+    const logCalls = electronMock.ipcRenderer.invoke.mock.calls.filter(([channel]) =>
+      channel === "synapse:log:write")
+    expect(logCalls).toHaveLength(3)
+    for (const logCall of logCalls) {
+      expect(logCall[1]).toEqual(expect.objectContaining({
+        details: expect.objectContaining({
+          request: {
+            nameProvided: true,
+            valueProvided: true,
+            descriptionProvided: true,
+          },
+        }),
+      }))
+    }
+    const serializedLogs = JSON.stringify(logCalls)
+    expect(serializedLogs).not.toContain("PRIVATE_SECRET_NAME")
+    expect(serializedLogs).not.toContain("PRIVATE_SECRET_VALUE")
+    expect(serializedLogs).not.toContain("PRIVATE_SECRET_DESCRIPTION")
+  })
+
   it("does not log local file paths when local drive upload IPC fails", async () => {
     const bridge = await loadPreloadBridge()
     const failure = new Error("upload unavailable")

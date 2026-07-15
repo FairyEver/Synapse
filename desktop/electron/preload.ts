@@ -805,6 +805,18 @@ function summarizeDriveDocumentImageImportRequest(input: unknown): unknown {
   }
 }
 
+function summarizeSecretsMutationRequest(input: unknown): unknown {
+  if (!input || typeof input !== "object") {
+    return { inputType: typeof input }
+  }
+  const request = input as Record<string, unknown>
+  return {
+    nameProvided: typeof request.name === "string",
+    valueProvided: typeof request.value === "string",
+    descriptionProvided: typeof request.description === "string",
+  }
+}
+
 function binaryDataByteLength(value: unknown): number | undefined {
   if (Object.prototype.toString.call(value) === "[object ArrayBuffer]") {
     return (value as ArrayBuffer).byteLength
@@ -913,9 +925,18 @@ const synapseBridge: SynapseBridge = {
   secrets: {
     list: () => invoke(IPC_CHANNELS.secrets.list)(),
     get: (input) => invoke(IPC_CHANNELS.secrets.get)(input),
-    create: (input) => invoke(IPC_CHANNELS.secrets.create)(input),
-    update: (input) => invoke(IPC_CHANNELS.secrets.update)(input),
-    upsert: (input) => invoke(IPC_CHANNELS.secrets.upsert)(input),
+    create: (input) => invokeWithFailureLogRequest(
+      IPC_CHANNELS.secrets.create,
+      summarizeSecretsMutationRequest,
+    )(input),
+    update: (input) => invokeWithFailureLogRequest(
+      IPC_CHANNELS.secrets.update,
+      summarizeSecretsMutationRequest,
+    )(input),
+    upsert: (input) => invokeWithFailureLogRequest(
+      IPC_CHANNELS.secrets.upsert,
+      summarizeSecretsMutationRequest,
+    )(input),
     delete: (input) => invoke(IPC_CHANNELS.secrets.delete)(input),
     scanSkillEnvBindings: (input) => invoke(IPC_CHANNELS.secrets.scanSkillEnvBindings)(input),
     queueSkillEnvBindings: (input) => invoke(IPC_CHANNELS.secrets.queueSkillEnvBindings)(input),
