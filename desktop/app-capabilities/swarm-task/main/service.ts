@@ -4,6 +4,7 @@ import path from "node:path"
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
 import type { EventBus } from "../../../electron/runtime/event-bus"
 import type { AgentEvent, AgentMessage, AgentRuntimeService } from "../../../electron/services/agent-runtime"
+import { agentRuntimeErrorMessage } from "../../../electron/services/agent-runtime/error-message"
 import { createMainLogger } from "../../../electron/services/log-store"
 import {
   normalizeSwarmTaskConfig,
@@ -532,8 +533,11 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       ? extracted.summary ?? fallbackSummary(outcome.resultText)
       : undefined
     const summaryFallback = summaryEnabled && !extracted.summary
+    const safeError = outcome.error
+      ? agentRuntimeErrorMessage(outcome.error, "worker failed")
+      : undefined
     const finalMessage =
-      outcome.error ??
+      safeError ??
       (outcome.resultText ? outcome.resultText.slice(0, 500) : outcome.status === "cancelled" ? "cancelled" : undefined)
     const updated: SwarmWorkerRun = {
       ...latestWorker,
@@ -546,7 +550,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       ...(finalMessage ? { lastMessage: finalMessage } : {}),
       ...(summary ? { summary, summaryFallback } : {}),
       ...(handoffEnabled && extracted.handoff ? { handoff: extracted.handoff } : {}),
-      ...(outcome.error ? { error: outcome.error } : {}),
+      ...(safeError ? { error: safeError } : {}),
     }
     await deps.workers.upsert(updated)
     emitChanged({
@@ -559,7 +563,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     return {
       status: outcome.status,
       resultText: outcome.resultText,
-      error: outcome.error,
+      error: safeError,
     }
   }
 

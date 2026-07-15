@@ -782,7 +782,9 @@ describe("createSwarmTaskService", () => {
     await vi.waitFor(async () => {
       expect(await service.listWorkerRuns(run.id)).toHaveLength(1)
     })
-    pending.reject(new Error("gateway exploded"))
+    pending.reject(new Error(
+      "gateway exploded Authorization: Bearer sk-live-secret-token api_key=provider-secret",
+    ))
 
     await vi.waitFor(async () => {
       expect(await service.getRun(run.id)).toMatchObject({ status: "failed" })
@@ -794,10 +796,45 @@ describe("createSwarmTaskService", () => {
     expect(workerRuns[0]).toMatchObject({
       status: "failed",
       lastPhase: "failed",
-      error: "gateway exploded",
-      lastMessage: "gateway exploded",
+      error: expect.stringContaining("gateway exploded"),
+      lastMessage: expect.stringContaining("gateway exploded"),
     })
+    expect(workerRuns[0]?.error).toBe(workerRuns[0]?.lastMessage)
+    expect(JSON.stringify(workerRuns[0])).not.toContain("sk-live-secret-token")
+    expect(JSON.stringify(workerRuns[0])).not.toContain("provider-secret")
     expect(latestTask).toMatchObject({ lastRunId: run.id, lastStatus: "failed" })
+  })
+
+  it("sanitizes returned gateway errors before persisting worker state", async () => {
+    const { service } = serviceHarness({
+      agent: {
+        sendWorker: vi.fn(async () => ({
+          conversationId: "conversation-sensitive-error",
+          resultText: "",
+          status: "failed" as const,
+          events: [],
+          error: "provider failed with github_pat_secretvalue",
+        })),
+      },
+    })
+    const task = await service.createTask({ name: "任务", config })
+
+    const run = await service.startRun({
+      taskId: task.id,
+      configOverride: { concurrency: 1, maxRounds: 1 },
+    })
+
+    await vi.waitFor(async () => {
+      expect(await service.getRun(run.id)).toMatchObject({ status: "failed" })
+    })
+
+    const workerRuns = await service.listWorkerRuns(run.id)
+    expect(workerRuns[0]).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("provider failed"),
+      lastMessage: expect.stringContaining("provider failed"),
+    })
+    expect(JSON.stringify(workerRuns[0])).not.toContain("github_pat_secretvalue")
   })
 
   it("cancels an in-flight worker by conversation id published before gateway resolution", async () => {
