@@ -176,7 +176,10 @@ export class ConversationRouter {
     const effectiveConversation = message.modeOverride
       ? await this.repository.savePermissionMode(conversation.id, message.modeOverride)
       : conversation
-    return this.enqueueTurn(message, effectiveConversation, options)
+    const effectiveMessage = conversation.platform
+      ? { ...message, platform: conversation.platform }
+      : message
+    return this.enqueueTurn(effectiveMessage, effectiveConversation, options)
   }
 
   async sendNewSession(

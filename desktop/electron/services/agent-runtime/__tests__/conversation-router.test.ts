@@ -2245,6 +2245,52 @@ describe("ConversationRouter", () => {
     ]))
   })
 
+  it("uses the persisted conversation platform for renderer follow-up turns", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const existing = conversation({ platform: "swarm" })
+    await conversations.upsert(existing)
+    const { eventBus, events } = createEventBusRecorder()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: false, reason: "renderer-only policy" })),
+    } as unknown as PermissionGuard
+    const afterTurn = vi.fn()
+    const replyTargets = {
+      rememberReplyTarget: vi.fn(),
+      dispatchAgentEvent: vi.fn(async () => {}),
+    }
+    const { router } = createRouter({
+      conversations,
+      eventBus,
+      permissionGuard,
+      afterTurn,
+      replyTargets,
+      session: new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    const result = await router.sendToConversation({
+      ...baseMessage("continue"),
+      platform: "local-renderer",
+    }, existing.id)
+
+    expect(result.error).toBeUndefined()
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(afterTurn).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.objectContaining({ platform: "swarm" }),
+    }))
+    expect(replyTargets.rememberReplyTarget).toHaveBeenCalledWith(expect.objectContaining({
+      transport: { kind: "swarm" },
+    }))
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "phase.update",
+        payload: expect.objectContaining({ conversationId: existing.id }),
+      }),
+    ]))
+  })
+
   it("dispatches every background phase transition through the default EventBus coalesce window", async () => {
     const eventBus = createEventBus()
     const scopedEventBus = new ScopedEventBusImpl("project-1", eventBus)
