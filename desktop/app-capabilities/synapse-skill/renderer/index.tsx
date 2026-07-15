@@ -132,6 +132,23 @@ function getInstallSummaryLabel(entries: SynapseEditorInstallStatusEntry[]): str
   return parts.length > 0 ? parts.join(" · ") : "无需操作"
 }
 
+function retainBatchErrorsForRetryableEditors(
+  errors: Record<string, string>,
+  entries: SynapseEditorInstallStatusEntry[],
+): Record<string, string> {
+  const retryableEditorIds = new Set(
+    entries.filter((entry) => canBatchInstall(entry.status)).map((entry) => entry.editorId),
+  )
+  return Object.fromEntries(Object.entries(errors).filter(([editorId]) => retryableEditorIds.has(editorId)))
+}
+
+function removeBatchError(errors: Record<string, string>, editorId: string | undefined): Record<string, string> {
+  if (!editorId || !(editorId in errors)) return errors
+  const next = { ...errors }
+  delete next[editorId]
+  return next
+}
+
 function SynapseSkillModule() {
   const { config } = useAppConfig()
   const [source, setSource] = useState<SynapseSkillInstallerSource | null>(null)
@@ -166,7 +183,9 @@ function SynapseSkillModule() {
     try {
       const installSource = await ensureSource()
       const result = await inspectGlobalSkillInstallations(installSource)
-      setStatusEntries(result.entries.filter((entry) => entry.scope === "global"))
+      const globalEntries = result.entries.filter((entry) => entry.scope === "global")
+      setStatusEntries(globalEntries)
+      setBatchErrors((current) => retainBatchErrorsForRetryableEditors(current, globalEntries))
     } catch (error) {
       const message = error instanceof Error ? error.message : "读取安装状态失败"
       logger.error("Failed to load Synapse Skill install status.", error)
@@ -292,6 +311,7 @@ function SynapseSkillModule() {
                     setInitialEditor(null)
                   }}
                   onInstalled={async () => {
+                    setBatchErrors((current) => removeBatchError(current, initialEditor?.id))
                     toast.success("安装完成")
                     setFlowSource(null)
                     setInitialEditor(null)

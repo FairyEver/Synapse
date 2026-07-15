@@ -107,14 +107,17 @@ vi.mock("@/modules/installers/shared/shared-installer-flow", () => ({
   SharedInstallerFlow: ({
     initialEditor,
     initialSelection,
+    onInstalled,
     source,
   }: {
     initialEditor?: SynapseEditorAdapterSummary | null
     initialSelection?: { scope: string } | null
+    onInstalled: () => Promise<void> | void
     source: typeof preparedSource
   }) => (
     <div data-testid="installer-flow">
       {source.name}:{initialEditor?.id ?? "none"}:{initialSelection?.scope}
+      <button type="button" onClick={() => void onInstalled()}>模拟安装成功</button>
     </div>
   ),
 }))
@@ -292,6 +295,62 @@ describe("SynapseSkillModule", () => {
     await vi.waitFor(() => {
       expect(document.body.textContent).not.toContain("目标目录不可写")
     })
+  })
+
+  it("clears a stale batch error after refresh confirms the target is installed", async () => {
+    const missingResult = {
+      entries: [{
+        editorId: "codex",
+        editorLabel: "Codex",
+        scope: "global",
+        status: "not_installed",
+        targetPath: "/Users/test/.agents/skills/synapse-skill",
+        message: null,
+      }],
+    }
+    const installedResult = {
+      entries: [{
+        ...missingResult.entries[0],
+        status: "installed",
+      }],
+    }
+    inspectGlobalSkillInstallations
+      .mockResolvedValueOnce(missingResult)
+      .mockResolvedValueOnce(missingResult)
+      .mockResolvedValueOnce(missingResult)
+      .mockResolvedValueOnce(installedResult)
+    installSourceToEditorTargets.mockResolvedValueOnce({
+      results: [{
+        target: { editorId: "codex", scope: "global" },
+        status: "failed",
+        error: "目标目录不可写",
+      }],
+    })
+    await renderModule()
+
+    await clickButton("安装缺失项")
+    await vi.waitFor(() => expect(document.body.textContent).toContain("目标目录不可写"))
+    await clickButton("刷新")
+
+    await vi.waitFor(() => expect(document.body.textContent).not.toContain("目标目录不可写"))
+  })
+
+  it("clears the selected editor batch error after a successful standard install", async () => {
+    installSourceToEditorTargets.mockResolvedValueOnce({
+      results: [{
+        target: { editorId: "codex", scope: "global" },
+        status: "failed",
+        error: "目标目录不可写",
+      }],
+    })
+    await renderModule()
+    await clickButton("安装缺失项")
+    await vi.waitFor(() => expect(document.body.textContent).toContain("目标目录不可写"))
+
+    await clickButton("安装")
+    await clickButton("模拟安装成功")
+
+    await vi.waitFor(() => expect(document.body.textContent).not.toContain("目标目录不可写"))
   })
 })
 
