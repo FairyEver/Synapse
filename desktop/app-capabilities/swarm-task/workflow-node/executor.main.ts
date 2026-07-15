@@ -8,7 +8,8 @@ import type { SwarmTaskNodeConfig } from "./schema"
 type SwarmTaskWorkflowService = Pick<SwarmTaskService, "startRun" | "getRun" | "cancelRun">
 
 const TERMINAL_STATUSES = new Set<SwarmRun["status"]>(["success", "partial", "failed", "cancelled"])
-const POLL_INTERVAL_MS = 100
+const INITIAL_POLL_INTERVAL_MS = 500
+const MAX_POLL_INTERVAL_MS = 5_000
 
 export const swarmTaskNodeExecutor: NodeExecutor<SwarmTaskNodeConfig> = {
   async execute(input: NodeExecutionInput<SwarmTaskNodeConfig>): Promise<NodeExecutionResult> {
@@ -89,6 +90,7 @@ async function waitForTerminalRun(
   abortSignal: AbortSignal,
 ): Promise<SwarmRun> {
   let latest = initialRun
+  let pollIntervalMs = INITIAL_POLL_INTERVAL_MS
   let abortCancelPromise: Promise<unknown> | undefined
   const requestCancelRun = () => {
     abortCancelPromise ??= service.cancelRun(initialRun.id).catch(() => undefined)
@@ -109,7 +111,8 @@ async function waitForTerminalRun(
       }
       latest = polled
       if (!TERMINAL_STATUSES.has(latest.status)) {
-        await sleep(POLL_INTERVAL_MS, abortSignal)
+        await sleep(pollIntervalMs, abortSignal)
+        pollIntervalMs = Math.min(pollIntervalMs * 2, MAX_POLL_INTERVAL_MS)
       }
     }
   } catch (error) {

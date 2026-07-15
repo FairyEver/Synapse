@@ -134,7 +134,8 @@ describe("swarmTaskNodeExecutor", () => {
     expect(service.getRun).not.toHaveBeenCalled()
   })
 
-  it("polls until a terminal run succeeds when wait is enabled", async () => {
+  it("backs off polling until a terminal run succeeds when wait is enabled", async () => {
+    vi.useFakeTimers()
     const terminalRun: SwarmRun = {
       ...baseRun,
       status: "success",
@@ -144,26 +145,60 @@ describe("swarmTaskNodeExecutor", () => {
       startRun: vi.fn().mockResolvedValue(baseRun),
       getRun: vi.fn()
         .mockResolvedValueOnce({ ...baseRun, totals: { ...baseRun.totals, started: 1 } })
+        .mockResolvedValueOnce({ ...baseRun, totals: { ...baseRun.totals, started: 2 } })
+        .mockResolvedValueOnce(baseRun)
+        .mockResolvedValueOnce(baseRun)
+        .mockResolvedValueOnce(baseRun)
+        .mockResolvedValueOnce(baseRun)
         .mockResolvedValueOnce(terminalRun),
       cancelRun: vi.fn(),
     }
 
-    const result = await swarmTaskNodeExecutor.execute(createInput({
-      taskId: "task-1",
-      waitForCompletion: true,
-      variables: [],
-    }, service))
+    try {
+      const resultPromise = swarmTaskNodeExecutor.execute(createInput({
+        taskId: "task-1",
+        waitForCompletion: true,
+        variables: [],
+      }, service))
 
-    expect(result.status).toBe("success")
-    expect(result.output).toBe("run-1")
-    expect(result.outputs).toEqual({
-      runId: "run-1",
-      status: "success",
-      totals: terminalRun.totals,
-      outputDirectory: "/tmp/swarm-runs/run-1",
-    })
-    expect(service.getRun).toHaveBeenCalledTimes(2)
-    expect(service.getRun).toHaveBeenCalledWith("run-1")
+      await vi.advanceTimersByTimeAsync(499)
+      expect(service.getRun).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(service.getRun).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(999)
+      expect(service.getRun).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(service.getRun).toHaveBeenCalledTimes(3)
+      await vi.advanceTimersByTimeAsync(1_999)
+      expect(service.getRun).toHaveBeenCalledTimes(3)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(service.getRun).toHaveBeenCalledTimes(4)
+      await vi.advanceTimersByTimeAsync(3_999)
+      expect(service.getRun).toHaveBeenCalledTimes(4)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(service.getRun).toHaveBeenCalledTimes(5)
+      await vi.advanceTimersByTimeAsync(4_999)
+      expect(service.getRun).toHaveBeenCalledTimes(5)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(service.getRun).toHaveBeenCalledTimes(6)
+      await vi.advanceTimersByTimeAsync(4_999)
+      expect(service.getRun).toHaveBeenCalledTimes(6)
+      await vi.advanceTimersByTimeAsync(1)
+
+      const result = await resultPromise
+      expect(result.status).toBe("success")
+      expect(result.output).toBe("run-1")
+      expect(result.outputs).toEqual({
+        runId: "run-1",
+        status: "success",
+        totals: terminalRun.totals,
+        outputDirectory: "/tmp/swarm-runs/run-1",
+      })
+      expect(service.getRun).toHaveBeenCalledTimes(7)
+      expect(service.getRun).toHaveBeenCalledWith("run-1")
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("maps terminal failed and cancelled runs to node status", async () => {
