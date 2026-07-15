@@ -1,4 +1,4 @@
 interface:
   display_name: "Synapse Fix Issue"
-  short_description: "Fix Synapse bugs sequentially from a GitHub issues list."
-  default_prompt: "Paste a FairyEver/Synapse GitHub issues directory or query URL to process every eligible bug issue with live progress updates."
+  short_description: "Safely process Synapse bug queues with live progress and ETA."
+  default_prompt: "Use $synapse-fix-issue with a FairyEver/Synapse issues URL to safely process every eligible bug with status control, focused commits, a text progress bar, and ETA."

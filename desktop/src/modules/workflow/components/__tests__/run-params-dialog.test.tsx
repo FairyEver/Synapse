@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   presetDelete: vi.fn(),
   chooseParamFile: vi.fn(),
   chooseParamDirectory: vi.fn(),
+  chooseParamFiles: vi.fn(),
+  chooseParamDirectories: vi.fn(),
 }))
 
 vi.mock("@/lib/ui-tracking", async (importOriginal) => {
@@ -84,6 +86,8 @@ function installBridge() {
     workflow: {
       chooseParamFile: mocks.chooseParamFile,
       chooseParamDirectory: mocks.chooseParamDirectory,
+      chooseParamFiles: mocks.chooseParamFiles,
+      chooseParamDirectories: mocks.chooseParamDirectories,
     },
     workflowParamPresets: {
       list: mocks.presetList,
@@ -134,6 +138,11 @@ describe("RunParamsDialog", () => {
     const topicLabel = [...document.body.querySelectorAll<HTMLLabelElement>("label")]
       .find((label) => label.textContent?.trim() === "topic")
     expect(topicLabel?.parentElement?.className).toContain("sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]")
+
+    const scrollViewport = document.body.querySelector<HTMLElement>('[data-slot="scroll-area-viewport"]')
+    expect(scrollViewport?.className).toContain("overflow-x-hidden")
+    expect(scrollViewport?.className).toContain("[&>div]:!block")
+    expect(scrollViewport?.className).toContain("[&>div]:!max-w-full")
   })
 
   it("keeps the empty parameter state concise", async () => {
@@ -248,6 +257,40 @@ describe("RunParamsDialog", () => {
         directoryParamCount: 1,
       }),
     }))
+  })
+
+  it("appends and submits ordered multi-file params as resource ref arrays", async () => {
+    mocks.chooseParamFiles
+      .mockResolvedValueOnce(["/tmp/first.txt", "/tmp/second.txt"])
+      .mockResolvedValueOnce(["/tmp/second.txt", "/tmp/third.txt"])
+    const { onConfirm } = await renderDialog({
+      params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
+    })
+
+    await act(async () => { clickButton("选择文件") })
+    await act(async () => { clickButton("添加文件") })
+    expect(mocks.toast).toHaveBeenCalledWith("已忽略 1 个重复项")
+
+    const itemGroup = document.body.querySelector<HTMLElement>('[data-slot="item-group"]')
+    const firstItem = document.body.querySelector<HTMLElement>('[data-slot="item"]')
+    expect(itemGroup?.className).toContain("gap-0")
+    expect(firstItem?.className).toContain("flex-nowrap")
+    expect(firstItem?.className).toContain("py-0")
+
+    await act(async () => {
+      document.body.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onConfirm).toHaveBeenCalledWith(
+      {
+        input_files: [
+          { kind: "local_path", entryType: "file", path: "/tmp/first.txt" },
+          { kind: "local_path", entryType: "file", path: "/tmp/second.txt" },
+          { kind: "local_path", entryType: "file", path: "/tmp/third.txt" },
+        ],
+      },
+      { input_files: ["/tmp/first.txt", "/tmp/second.txt", "/tmp/third.txt"] },
+    )
   })
 
   it("submits a selected closed option value", async () => {

@@ -141,7 +141,11 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
           ) : childParams.map((param) => {
             const label = param.description ?? param.name
             const isResourceParam = param.type === "file" || param.type === "directory"
-            const matchingParentParams = workflowParams.filter((parentParam) => parentParam.type === param.type)
+            const matchingParentParams = workflowParams.filter((parentParam) =>
+              parentParam.type === param.type
+              && Boolean(parentParam.allowMultiple) === Boolean(param.allowMultiple),
+            )
+            const bindingMismatch = resourceBindingMismatch(param, bindings[param.name], workflowParams)
 
             return (
               <div key={param.name} className="grid gap-1.5">
@@ -179,6 +183,7 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
                 {!isResourceParam && templates[param.name] && extractLooseTemplateNames(templates[param.name]).some((name) => !variableNames.has(name)) ? (
                   <p className="text-xs text-destructive">存在未绑定变量</p>
                 ) : null}
+                {bindingMismatch ? <p className="text-xs text-destructive">绑定参数的资源类型或多选设置不一致</p> : null}
               </div>
             )
           })}
@@ -207,7 +212,11 @@ function buildInitialParamMappings(config: WorkflowCallNodeConfig, childParams: 
     if (nextTemplates[param.name] !== undefined || nextBindings[param.name] !== undefined) continue
     const parentParam = parentParamsByName.get(param.name)
 
-    if ((param.type === "file" || param.type === "directory") && parentParam?.type === param.type) {
+    if (
+      (param.type === "file" || param.type === "directory")
+      && parentParam?.type === param.type
+      && Boolean(parentParam.allowMultiple) === Boolean(param.allowMultiple)
+    ) {
       nextBindings[param.name] = {
         mode: "value",
         source: { type: "param", param: param.name },
@@ -237,4 +246,18 @@ function resourceBindingSelectValue(binding: WorkflowParamBinding | undefined): 
     return `${RESOURCE_PARAM_PREFIX}${binding.source.param}`
   }
   return ""
+}
+
+function resourceBindingMismatch(
+  childParam: WorkflowParam,
+  binding: WorkflowParamBinding | undefined,
+  parentParams: readonly WorkflowParam[],
+): boolean {
+  if (!binding || binding.mode !== "value") return false
+  if (binding.source.type !== "param") return true
+  const parentParamName = binding.source.param
+  const parentParam = parentParams.find((param) => param.name === parentParamName)
+  return !parentParam
+    || parentParam.type !== childParam.type
+    || Boolean(parentParam.allowMultiple) !== Boolean(childParam.allowMultiple)
 }

@@ -97,6 +97,71 @@ describe("ParamsEditorDialog", () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it("wraps an existing resource default when multi-select is enabled", async () => {
+    const onChange = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <ParamsEditorDialog
+          open
+          params={[
+            { name: "input_file", type: "file", default: { kind: "local_path", entryType: "file", path: "/tmp/input.txt" } },
+          ]}
+          onChange={onChange}
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>('[role="switch"]')?.click()
+    })
+    await act(async () => { clickButton("保存") })
+
+    expect(onChange).toHaveBeenCalledWith([{
+      name: "input_file",
+      type: "file",
+      allowMultiple: true,
+      default: [{ kind: "local_path", entryType: "file", path: "/tmp/input.txt" }],
+    }])
+  })
+
+  it("keeps multi-select enabled until a multi-resource default is reduced to one item", async () => {
+    const onChange = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <ParamsEditorDialog
+          open
+          params={[{
+            name: "input_files",
+            type: "file",
+            allowMultiple: true,
+            default: [
+              { kind: "local_path", entryType: "file", path: "/tmp/a.txt" },
+              { kind: "local_path", entryType: "file", path: "/tmp/b.txt" },
+            ],
+          }]}
+          onChange={onChange}
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    const multipleSwitch = document.body.querySelector<HTMLButtonElement>('[role="switch"]')
+    await act(async () => { multipleSwitch?.click() })
+    expect(multipleSwitch?.getAttribute("aria-checked")).toBe("true")
+    expect(document.body.textContent).toContain("2 / 100")
+  })
+
   it("trims option values, drops empty options, and clears invalid option defaults", async () => {
     const onChange = vi.fn()
     const onClose = vi.fn()

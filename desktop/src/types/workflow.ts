@@ -11,24 +11,26 @@ export type WorkflowResourceRef =
   | WorkflowDriveResourceRef
   | WorkflowStagedResourceRef
   | WorkflowInlineFileResourceRef
-export type WorkflowParamDefault = string | number | WorkflowResourceRef | null
+export type WorkflowParamDefault = string | number | WorkflowResourceRef | WorkflowResourceRef[] | null
 export interface WorkflowParam {
   name: string; type: WorkflowParamType; default: WorkflowParamDefault; description?: string
   options?: string[]
   allowCustomOption?: boolean
+  allowMultiple?: boolean
 }
+export type WorkflowParamPresetValue = string | string[]
 export interface WorkflowParamPreset {
   id: string
   workflowId: string
   name: string
-  values: Record<string, string>
+  values: Record<string, WorkflowParamPresetValue>
   createdAt: number
   updatedAt: number
 }
 export interface SaveWorkflowParamPresetInput {
   workflowId: string
   name: string
-  values: Record<string, string>
+  values: Record<string, WorkflowParamPresetValue>
   overwritePresetId?: string
 }
 export interface WorkflowNode {

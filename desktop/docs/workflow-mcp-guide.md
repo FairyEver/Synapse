@@ -123,8 +123,9 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 | `workflowId` | string | 要调用的子工作流 ID，不能是当前工作流 ID |
 | `variables` | VariableBinding[] | 从父工作流参数、上游节点输出或静态值绑定变量 |
 | `paramTemplates` | `Record<string, string>` | 子工作流参数名到模板文本的映射，支持 `{{变量名}}` |
+| `paramBindings` | `Record<string, WorkflowParamBinding>` | 文件或文件夹子参数的类型化绑定；父子参数的资源类型和 `allowMultiple` 必须一致 |
 
-配置前先用 `workflow_definition_list` 找到子工作流，再用 `workflow_definition_get` 读取子工作流当前 `params`。`paramTemplates` 的 key 应来自子工作流参数名。子工作流内部 prompt/switch 节点仍需要通过子工作流默认值或子节点覆盖获得 provider/model/project；codex/claude_code 节点仍需要有效项目。
+配置前先用 `workflow_definition_list` 找到子工作流，再用 `workflow_definition_get` 读取子工作流当前 `params`。`paramTemplates` 和 `paramBindings` 的 key 应来自子工作流参数名，单值与多值资源参数不会自动互转。子工作流内部 prompt/switch 节点仍需要通过子工作流默认值或子节点覆盖获得 provider/model/project；codex/claude_code 节点仍需要有效项目。
 
 ### codex — Codex 节点
 
@@ -467,6 +468,8 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 10. workflow_run_execute({ workflowId, params })         → 执行工作流
 11. workflow_run_get({ runId })                          → 轮询运行结果
 ```
+
+文件和文件夹参数可设置 `allowMultiple: true`。此时默认值和运行值必须是有序、非空、最多 100 项且不重复的数组；即使只有一项也保持数组。MCP 运行参数的数组项可混用绝对路径字符串和匹配类型的 `local_path` 引用，任一项无效都会使整次运行失败并返回对应索引。
 
 节点 ID 只能包含字母、数字、下划线和短横线。不要在 MCP 写入或导入工作流时使用包含路径分隔符、`..`、绝对路径或空格的节点 ID。
 

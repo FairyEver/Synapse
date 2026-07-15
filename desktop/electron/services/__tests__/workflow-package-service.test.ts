@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
-import type { SynapseWorkflowPackageV1, WorkflowModelMapping } from "../../../src/types/workflow-package"
+import type { SynapseWorkflowPackageV1, SynapseWorkflowPackageV2, WorkflowModelMapping } from "../../../src/types/workflow-package"
 import type { CCProvider } from "../provider/types"
 import { WorkflowPackageService } from "../workflow/workflow-package-service"
 
@@ -203,7 +203,7 @@ describe("WorkflowPackageService", () => {
     const { service } = createService()
     const pkg = await service.buildExportPackage("workflow-source")
 
-    expect(pkg.format).toBe("synapse-workflow-package-v1")
+    expect(pkg.format).toBe("synapse-workflow-package-v2")
     expect(pkg.exportedAt).toBe(nowIso)
     expect(pkg.workflow.id).toBe("workflow-source")
     expect(pkg.modelReferences).toHaveLength(2)
@@ -317,7 +317,7 @@ describe("WorkflowPackageService", () => {
   it("clears Code X node project ids when importing mixed workflows", async () => {
     const { service, saved } = createService()
     const pkg = await service.buildExportPackage("workflow-source")
-    const mixedPkg: SynapseWorkflowPackageV1 = {
+    const mixedPkg: SynapseWorkflowPackageV2 = {
       ...pkg,
       workflow: {
         ...pkg.workflow,

@@ -1,4 +1,6 @@
+import path from "node:path"
 import type { WorkflowDefinition, WorkflowParam, WorkflowResourceRef, ValidationResult, ValidationError, ValidationWarning } from "../../../src/types/workflow"
+import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../config"
 import type { SynapseConfig } from "../../../src/types/config"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { createMainLogger } from "../log-store"
@@ -56,6 +58,12 @@ function isWorkflowResourceRef(value: unknown): value is WorkflowResourceRef {
 
 function validateParamDefault(param: WorkflowParam, errors: ValidationError[]): void {
   const name = param.name.trim()
+  if (param.allowMultiple !== undefined && typeof param.allowMultiple !== "boolean") {
+    errors.push({ type: "invalid_config", message: `参数「${name}」的允许多选设置必须是布尔值` })
+  }
+  if (param.allowMultiple !== undefined && !isResourceParamType(param.type)) {
+    errors.push({ type: "invalid_config", message: `参数「${name}」只有文件或文件夹类型可以允许多选` })
+  }
   if (param.type === "number" && param.default !== null) {
     if (typeof param.default !== "number" || !Number.isFinite(param.default)) {
       errors.push({ type: "invalid_config", message: `参数「${name}」是数字类型，默认值必须是有效数字` })
@@ -65,10 +73,51 @@ function validateParamDefault(param: WorkflowParam, errors: ValidationError[]): 
     errors.push({ type: "invalid_config", message: `参数「${name}」的默认值必须是文本` })
   }
   if (isResourceParamType(param.type) && param.default !== null) {
-    if (!isWorkflowResourceRef(param.default) || param.default.entryType !== param.type) {
+    if (param.allowMultiple === true) {
+      validateMultiResourceDefault(param, errors)
+    } else if (!isWorkflowResourceRef(param.default) || param.default.entryType !== param.type) {
       errors.push({ type: "invalid_config", message: `参数「${name}」的默认值必须是${param.type === "file" ? "文件" : "文件夹"}引用` })
     }
   }
+}
+
+function validateMultiResourceDefault(param: WorkflowParam, errors: ValidationError[]): void {
+  const name = param.name.trim()
+  if (!Array.isArray(param.default)) {
+    errors.push({ type: "invalid_config", message: `参数「${name}」的多选默认值必须是资源引用数组` })
+    return
+  }
+  if (param.default.length === 0) {
+    errors.push({ type: "invalid_config", message: `参数「${name}」的多选默认值不能为空` })
+    return
+  }
+  if (param.default.length > WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS) {
+    errors.push({ type: "invalid_config", message: `参数「${name}」的多选默认值最多包含 ${WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS} 项` })
+    return
+  }
+  const identities = new Set<string>()
+  for (const value of param.default) {
+    if (!isWorkflowResourceRef(value) || value.entryType !== param.type) {
+      errors.push({ type: "invalid_config", message: `参数「${name}」的多选默认值必须全部是${param.type === "file" ? "文件" : "文件夹"}引用` })
+      return
+    }
+    const identity = workflowResourceIdentity(value)
+    if (identities.has(identity)) {
+      errors.push({ type: "invalid_config", message: `参数「${name}」的多选默认值不能包含重复资源` })
+      return
+    }
+    identities.add(identity)
+  }
+}
+
+function workflowResourceIdentity(value: WorkflowResourceRef): string {
+  if (value.kind === "local_path") {
+    const normalizedPath = path.normalize(value.path)
+    return `local_path:${value.entryType}:${process.platform === "win32" ? normalizedPath.toLocaleLowerCase() : normalizedPath}`
+  }
+  if (value.kind === "drive") return `drive:${value.entryType}:${value.id}:${value.versionId ?? ""}`
+  if (value.kind === "staged") return `staged:${value.entryType}:${value.id}`
+  return `inline_file:${value.name}:${value.mimeType ?? ""}:${value.base64}`
 }
 
 function normalizeOptionValues(options: unknown): string[] {
@@ -612,11 +661,7 @@ export function validateRunParams(def: WorkflowDefinition, params: Record<string
       }
     }
     if (isResourceParamType(param.type)) {
-      const isStringPath = typeof value === "string" && value.trim().length > 0
-      const isEnvelope = Boolean(value) && typeof value === "object" && !Array.isArray(value)
-      if (!isStringPath && !isEnvelope) {
-        errors.push({ type: "invalid_config", message: `参数「${param.name}」必须是${param.type === "file" ? "文件" : "文件夹"}引用` })
-      }
+      validateRunResourceParam(param, value, errors)
     }
   }
   return errors
@@ -634,9 +679,46 @@ export function buildEffectiveRunParams(def: WorkflowDefinition, params: Record<
 
 function paramHasValue(params: Record<string, unknown>, name: string): boolean {
   const value = params[name]
-  return Object.prototype.hasOwnProperty.call(params, name) && value !== undefined && value !== null
+  return Object.prototype.hasOwnProperty.call(params, name)
+    && value !== undefined
+    && value !== null
+    && (!Array.isArray(value) || value.length > 0)
 }
 
 function paramHasDefault(param: { default?: unknown }): boolean {
-  return param.default !== undefined && param.default !== null
+  return param.default !== undefined
+    && param.default !== null
+    && (!Array.isArray(param.default) || param.default.length > 0)
+}
+
+function validateRunResourceParam(param: WorkflowParam, value: unknown, errors: ValidationError[]): void {
+  const kind = param.type === "file" ? "文件" : "文件夹"
+  if (param.allowMultiple !== true) {
+    if (Array.isArray(value)) {
+      errors.push({ type: "invalid_config", message: `参数「${param.name}」必须是单个${kind}引用` })
+    } else if (!isRunResourceInput(value)) {
+      errors.push({ type: "invalid_config", message: `参数「${param.name}」必须是${kind}引用` })
+    }
+    return
+  }
+  if (!Array.isArray(value)) {
+    errors.push({ type: "invalid_config", message: `参数「${param.name}」必须是${kind}引用数组` })
+    return
+  }
+  if (value.length === 0) {
+    errors.push({ type: "missing_param", message: `缺少必填参数「${param.name}」` })
+    return
+  }
+  if (value.length > WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS) {
+    errors.push({ type: "invalid_config", message: `参数「${param.name}」最多包含 ${WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS} 项` })
+    return
+  }
+  if (value.some((item) => !isRunResourceInput(item))) {
+    errors.push({ type: "invalid_config", message: `参数「${param.name}」必须全部是${kind}引用` })
+  }
+}
+
+function isRunResourceInput(value: unknown): boolean {
+  return (typeof value === "string" && value.trim().length > 0)
+    || (Boolean(value) && typeof value === "object" && !Array.isArray(value))
 }

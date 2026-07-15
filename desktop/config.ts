@@ -7,6 +7,9 @@ export const CONVERSATION_IDLE_ROLLOVER_PROMPT_MS = ONE_HOUR_MS
 // 工作流入口默认显示开关：为 true 时所有用户直接看到工作流入口；为 false 时继续通过金手指状态控制入口显隐。
 export const WORKFLOW_ENTRY_VISIBLE_BY_DEFAULT = false
 
+// 工作流多值文件或文件夹参数的最大资源数量：统一限制定义默认值、运行参数、预设和 MCP 输入的单参数体积。
+export const WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS = 100
+
 // 日志复制到剪贴板的最大总字节数：限制设置页复制日志和主进程读取日志的单次文本体积，完整日志应通过导出 zip 获取。
 export const LOG_CLIPBOARD_MAX_BYTES = 2 * 1024 * 1024
 

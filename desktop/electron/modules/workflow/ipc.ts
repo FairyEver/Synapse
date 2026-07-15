@@ -14,9 +14,10 @@ import type { WorkflowWindowManager } from "../../services/workflow/window-manag
 import type { EventBus } from "../../runtime/event-bus"
 import { configuredWorkflowProjectIdsFromConfig, validateWorkflow, type WorkflowValidationOptions } from "../../services/workflow/workflow-validator"
 import { normalizeWorkflowRunParams } from "../../services/workflow/workflow-param-normalizer"
+import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../config"
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
 import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunResult, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
-import type { SynapseWorkflowPackageV1, WorkflowImportOptions, WorkflowModelMapping } from "../../../src/types/workflow-package"
+import type { SynapseWorkflowPackage, WorkflowImportOptions, WorkflowModelMapping } from "../../../src/types/workflow-package"
 import { normalizeContentFileNameSegment } from "../../../src/lib/content-attachments"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
@@ -328,9 +329,9 @@ function parseWorkflowPackageOrFail(options: {
   readonly source: "workflow.inspectImportPackage" | "workflow.importPackage"
   readonly fileBase: string
   readonly mappingCount?: number
-}): SynapseWorkflowPackageV1 {
+}): SynapseWorkflowPackage {
   try {
-    return workflowPackageSchema.parse(options.raw) as SynapseWorkflowPackageV1
+    return workflowPackageSchema.parse(options.raw) as SynapseWorkflowPackage
   } catch (error) {
     recordFilePermissionFailure({
       auditSink: options.auditSink,
@@ -403,14 +404,16 @@ const workflowResourceRefSchema = z.union([
   z.object({ kind: z.literal("staged"), entryType: workflowResourceEntryTypeSchema, id: z.string() }),
   z.object({ kind: z.literal("inline_file"), entryType: z.literal("file"), name: z.string(), mimeType: z.string().optional(), base64: z.string() }),
 ])
+const workflowResourceRefListSchema = z.array(workflowResourceRefSchema).min(1).max(WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS)
 
 const workflowParamSchema = z.object({
   name: z.string(),
   type: z.enum(["text", "number", "file", "directory", "option"]),
-  default: z.union([z.string(), z.number(), workflowResourceRefSchema, z.null()]),
+  default: z.union([z.string(), z.number(), workflowResourceRefSchema, workflowResourceRefListSchema, z.null()]),
   description: z.string().optional(),
   options: z.array(z.string()).optional(),
   allowCustomOption: z.boolean().optional(),
+  allowMultiple: z.boolean().optional(),
 })
 
 const workflowDefinitionSchema = z.object({
@@ -430,7 +433,10 @@ const workflowParamPresetSchema = z.object({
   id: z.string(),
   workflowId: workflowIdSchema,
   name: z.string(),
-  values: z.record(z.string(), z.string()),
+  values: z.record(z.string(), z.union([
+    z.string(),
+    z.array(z.string().min(1)).min(1).max(WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS),
+  ])),
   createdAt: z.number(),
   updatedAt: z.number(),
 })
@@ -438,7 +444,10 @@ const workflowParamPresetSchema = z.object({
 const saveWorkflowParamPresetSchema = z.object({
   workflowId: workflowIdSchema,
   name: z.string(),
-  values: z.record(z.string(), z.string()),
+  values: z.record(z.string(), z.union([
+    z.string(),
+    z.array(z.string().min(1)).min(1).max(WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS),
+  ])),
   overwritePresetId: z.string().optional(),
 })
 
@@ -466,7 +475,10 @@ const workflowModelReferenceSchema = z.object({
 })
 
 const workflowPackageSchema = z.object({
-  format: z.literal("synapse-workflow-package-v1"),
+  format: z.union([
+    z.literal("synapse-workflow-package-v1"),
+    z.literal("synapse-workflow-package-v2"),
+  ]),
   exportedAt: z.string(),
   workflow: workflowDefinitionSchema,
   modelReferences: z.array(workflowModelReferenceSchema),
@@ -810,10 +822,10 @@ async function waitForRunCompletion(runId: string): Promise<RunCompletionWaitRes
   return result
 }
 
-async function chooseWorkflowParamPath(options: {
+async function chooseWorkflowParamPaths(options: {
   readonly title: string
   readonly properties: Electron.OpenDialogOptions["properties"]
-}): Promise<string | null> {
+}): Promise<string[]> {
   const parentWindow = focusedWindow()
   const dialogOptions: Electron.OpenDialogOptions = {
     title: options.title,
@@ -822,8 +834,16 @@ async function chooseWorkflowParamPath(options: {
   const result = parentWindow
     ? await dialog.showOpenDialog(parentWindow, dialogOptions)
     : await dialog.showOpenDialog(dialogOptions)
-  if (result.canceled || result.filePaths.length === 0) return null
-  return result.filePaths[0] ?? null
+  if (result.canceled) return []
+  return result.filePaths
+}
+
+async function chooseWorkflowParamPath(options: {
+  readonly title: string
+  readonly properties: Electron.OpenDialogOptions["properties"]
+}): Promise<string | null> {
+  const [selectedPath] = await chooseWorkflowParamPaths(options)
+  return selectedPath ?? null
 }
 
 async function abortActiveRunsForWorkflow(options: {
@@ -1045,6 +1065,14 @@ export const workflowIpcModule: IpcModule = {
     chooseParamDirectory: {
       channel: "synapse:workflow:param-directory:choose", kind: "invoke", request: z.void().optional(), response: z.string().nullable(),
       handler: async () => chooseWorkflowParamPath({ title: "选择文件夹", properties: ["openDirectory"] }),
+    },
+    chooseParamFiles: {
+      channel: "synapse:workflow:param-files:choose", kind: "invoke", request: z.void().optional(), response: z.array(z.string()),
+      handler: async () => chooseWorkflowParamPaths({ title: "选择文件", properties: ["openFile", "multiSelections"] }),
+    },
+    chooseParamDirectories: {
+      channel: "synapse:workflow:param-directories:choose", kind: "invoke", request: z.void().optional(), response: z.array(z.string()),
+      handler: async () => chooseWorkflowParamPaths({ title: "选择文件夹", properties: ["openDirectory", "multiSelections"] }),
     },
     paramPresetsList: {
       channel: "synapse:workflow:param-presets:list", kind: "invoke",

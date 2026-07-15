@@ -1690,6 +1690,8 @@ export type SynapseBridge = {
     importPackage: (packagePath: string, mappings: WorkflowModelMapping[], options?: WorkflowImportOptions, packageDigest?: string) => Promise<{ workflowId: string; versionHash: string } | { errors: ValidationError[] }>
     chooseParamFile: () => Promise<string | null>
     chooseParamDirectory: () => Promise<string | null>
+    chooseParamFiles: () => Promise<string[]>
+    chooseParamDirectories: () => Promise<string[]>
     onEvent: (listener: (event: WorkflowEvent) => void) => () => void
     onDefinitionUpdated: (listener: (payload: { workflowId: string; source?: string; versionHash?: string }) => void) => () => void
     onRunnerSwitchRun: (listener: (payload: { runId: string }) => void) => () => void

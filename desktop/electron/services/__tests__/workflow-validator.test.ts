@@ -47,6 +47,57 @@ describe("validateWorkflow", () => {
     expect(result.errors).toHaveLength(0)
   })
 
+  it("accepts valid multi-resource parameter defaults", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [{
+        name: "inputs",
+        type: "file",
+        allowMultiple: true,
+        default: [
+          { kind: "local_path", entryType: "file", path: "/tmp/first.txt" },
+          { kind: "local_path", entryType: "file", path: "/tmp/second.txt" },
+        ],
+      }],
+    })
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toHaveLength(0)
+  })
+
+  it("rejects invalid multi-resource parameter metadata and defaults", () => {
+    const nonResourceResult = validateWorkflow({
+      ...base,
+      params: [{ name: "topic", type: "text", default: null, allowMultiple: true }],
+    })
+    const emptyDefaultResult = validateWorkflow({
+      ...base,
+      params: [{ name: "inputs", type: "file", default: [], allowMultiple: true }],
+    })
+    const duplicateDefaultResult = validateWorkflow({
+      ...base,
+      params: [{
+        name: "inputs",
+        type: "file",
+        allowMultiple: true,
+        default: [
+          { kind: "local_path", entryType: "file", path: "/tmp/input.txt" },
+          { kind: "local_path", entryType: "file", path: "/tmp/input.txt" },
+        ],
+      }],
+    })
+
+    expect(nonResourceResult.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: "参数「topic」只有文件或文件夹类型可以允许多选" }),
+    ]))
+    expect(emptyDefaultResult.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: "参数「inputs」的多选默认值不能为空" }),
+    ]))
+    expect(duplicateDefaultResult.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: "参数「inputs」的多选默认值不能包含重复资源" }),
+    ]))
+  })
+
   it("rejects option defaults that are not strings", () => {
     const result = validateWorkflow({
       ...base,

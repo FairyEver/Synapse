@@ -40,6 +40,7 @@ export const workflowCallNodeExecutor: NodeExecutor<WorkflowCallNodeConfig> = {
       paramTemplates: config.paramTemplates,
       paramBindings: config.paramBindings,
       parentParamValues: input.paramValues,
+      parentParamDefinitions: input.paramDefinitions,
       resolvedVariables,
     })
     if (paramResult.errors.length > 0) {

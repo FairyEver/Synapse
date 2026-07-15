@@ -32,9 +32,11 @@ import type {
   WorkflowParam,
   WorkflowParamDefault,
   WorkflowParamPreset,
+  WorkflowParamPresetValue,
   WorkflowResourceEntryType,
   WorkflowResourceRef,
 } from "@/types/workflow"
+import { MultiResourcePathField } from "./multi-resource-path-field"
 
 const NO_PRESET_VALUE = "__none__"
 
@@ -42,13 +44,13 @@ interface RunParamsDialogProps {
   open: boolean
   workflowId: string
   params: WorkflowParam[]
-  lastValues?: Record<string, string>
-  onConfirm: (values: Record<string, unknown>, rawValues: Record<string, string>) => Promise<void>
+  lastValues?: Record<string, WorkflowParamPresetValue>
+  onConfirm: (values: Record<string, unknown>, rawValues: Record<string, WorkflowParamPresetValue>) => Promise<void>
   onCancel: () => void
 }
 
 export function RunParamsDialog({ open, workflowId, params, lastValues, onConfirm, onCancel }: RunParamsDialogProps) {
-  const [values, setValues] = useState<Record<string, string>>(() => buildInitialValues(params, lastValues))
+  const [values, setValues] = useState<Record<string, WorkflowParamPresetValue>>(() => buildInitialValues(params, lastValues))
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [presets, setPresets] = useState<WorkflowParamPreset[]>([])
@@ -119,11 +121,12 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     for (const param of params) {
       const raw = values[param.name]
       if (param.type === "number") {
-        if (param.default === null && (raw === "" || Number.isNaN(Number(raw)))) {
+        const input = stringParamValue(raw)
+        if (param.default === null && (input === "" || Number.isNaN(Number(input)))) {
           next[param.name] = "此项为必填"
         }
       } else if (param.type === "option") {
-        const trimmed = raw?.trim() ?? ""
+        const trimmed = stringParamValue(raw).trim()
         if (param.default === null && !trimmed) {
           next[param.name] = "此项为必填"
           continue
@@ -132,7 +135,9 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
         if (param.allowCustomOption !== true && trimmed && !options.includes(trimmed)) {
           next[param.name] = "请选择预设选项"
         }
-      } else if (param.default === null && !raw) {
+      } else if ((param.type === "file" || param.type === "directory") && param.allowMultiple) {
+        if (param.default === null && resourcePathValues(raw).length === 0) next[param.name] = "此项为必填"
+      } else if (param.default === null && !stringParamValue(raw)) {
         next[param.name] = "此项为必填"
       }
     }
@@ -144,18 +149,24 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     const parsed: Record<string, unknown> = {}
     for (const param of params) {
       if (param.type === "number") {
-        const raw = values[param.name]
+        const raw = stringParamValue(values[param.name])
         const num = Number(raw)
         parsed[param.name] = raw === "" || Number.isNaN(num) ? (param.default ?? 0) : num
       } else if (param.type === "file" || param.type === "directory") {
-        parsed[param.name] = values[param.name]?.trim()
-          ? toLocalPathParam(param.type, values[param.name])
-          : param.default
+        if (param.allowMultiple) {
+          const paths = resourcePathValues(values[param.name])
+          parsed[param.name] = paths.length > 0
+            ? paths.map((resourcePath) => toLocalPathParam(param.type as WorkflowResourceEntryType, resourcePath))
+            : param.default
+        } else {
+          const resourcePath = stringParamValue(values[param.name]).trim()
+          parsed[param.name] = resourcePath ? toLocalPathParam(param.type, resourcePath) : param.default
+        }
       } else if (param.type === "option") {
-        const trimmed = values[param.name]?.trim() ?? ""
+        const trimmed = stringParamValue(values[param.name]).trim()
         parsed[param.name] = trimmed || param.default || ""
       } else {
-        parsed[param.name] = values[param.name]
+        parsed[param.name] = stringParamValue(values[param.name])
       }
     }
     return parsed
@@ -170,7 +181,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     })
   }
 
-  function updateValue(name: string, nextValue: string): void {
+  function updateValue(name: string, nextValue: WorkflowParamPresetValue): void {
     setValues((current) => ({ ...current, [name]: nextValue }))
     clearError(name)
   }
@@ -357,7 +368,10 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
                 </div>
               </div>
             )}
-            <ScrollArea className="max-h-[56vh] pr-2">
+            <ScrollArea
+              className="min-w-0 max-h-[56vh] pr-2"
+              viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"
+            >
               <div className="grid gap-3 py-1">
                 {params.length === 0 && <p className="text-sm text-muted-foreground">无需参数</p>}
                 {params.map((param) => (
@@ -370,15 +384,22 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
                         <Input
                           id={param.name}
                           type="number"
-                          value={values[param.name] ?? ""}
+                          value={stringParamValue(values[param.name])}
                           onChange={(event) => updateValue(param.name, event.target.value)}
                           aria-invalid={!!errors[param.name]}
+                        />
+                      ) : (param.type === "file" || param.type === "directory") && param.allowMultiple ? (
+                        <MultiResourcePathField
+                          entryType={param.type}
+                          paths={resourcePathValues(values[param.name])}
+                          onChange={(paths) => updateValue(param.name, paths)}
+                          disabled={submitting || savingPreset}
                         />
                       ) : param.type === "file" || param.type === "directory" ? (
                         <InputGroup>
                           <InputGroupInput
                             id={param.name}
-                            value={values[param.name] ?? ""}
+                            value={stringParamValue(values[param.name])}
                             onChange={(event) => updateValue(param.name, event.target.value)}
                             aria-invalid={!!errors[param.name]}
                           />
@@ -395,7 +416,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
                       ) : param.type === "option" ? (
                         <OptionParamControl
                           param={param}
-                          value={values[param.name] ?? ""}
+                          value={stringParamValue(values[param.name])}
                           hasError={!!errors[param.name]}
                           onChange={(nextValue) => updateValue(param.name, nextValue)}
                         />
@@ -403,7 +424,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
                         <Textarea
                           id={param.name}
                           rows={3}
-                          value={values[param.name] ?? ""}
+                          value={stringParamValue(values[param.name])}
                           onChange={(event) => updateValue(param.name, event.target.value)}
                           aria-invalid={!!errors[param.name]}
                         />
@@ -587,10 +608,13 @@ function OptionParamControl({ param, value, hasError, onChange }: OptionParamCon
   )
 }
 
-function buildInitialValues(params: WorkflowParam[], source?: Record<string, string>): Record<string, string> {
+function buildInitialValues(
+  params: WorkflowParam[],
+  source?: Record<string, WorkflowParamPresetValue>,
+): Record<string, WorkflowParamPresetValue> {
   return Object.fromEntries(params.map((param) => [
     param.name,
-    source?.[param.name] ?? paramDefaultInputValue(param.default),
+    initialParamInputValue(param, source?.[param.name]),
   ]))
 }
 
@@ -623,10 +647,35 @@ function isWorkflowResourceRef(value: unknown): value is WorkflowResourceRef {
   return typeof value === "object" && value !== null && "kind" in value
 }
 
+function initialParamInputValue(param: WorkflowParam, sourceValue?: WorkflowParamPresetValue): WorkflowParamPresetValue {
+  if ((param.type === "file" || param.type === "directory") && param.allowMultiple) {
+    if (sourceValue !== undefined) return resourcePathValues(sourceValue)
+    return resourceDefaultInputPaths(param.default)
+  }
+  if (typeof sourceValue === "string") return sourceValue
+  return paramDefaultInputValue(param.default)
+}
+
 function paramDefaultInputValue(value: WorkflowParamDefault): string {
   if (isWorkflowResourceRef(value) && value.kind === "local_path") return value.path
   if (typeof value === "number" || typeof value === "string") return String(value)
   return ""
+}
+
+function resourceDefaultInputPaths(value: WorkflowParamDefault): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((resource): resource is Extract<WorkflowResourceRef, { kind: "local_path" }> => resource.kind === "local_path")
+    .map((resource) => resource.path)
+}
+
+function resourcePathValues(value: WorkflowParamPresetValue | undefined): string[] {
+  if (Array.isArray(value)) return value
+  return value?.trim() ? [value] : []
+}
+
+function stringParamValue(value: WorkflowParamPresetValue | undefined): string {
+  return typeof value === "string" ? value : ""
 }
 
 function toLocalPathParam(entryType: WorkflowResourceEntryType, rawPath: string): WorkflowResourceRef {

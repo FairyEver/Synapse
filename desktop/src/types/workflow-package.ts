@@ -29,6 +29,15 @@ export interface SynapseWorkflowPackageV1 {
   modelReferences: WorkflowModelReference[]
 }
 
+export interface SynapseWorkflowPackageV2 {
+  format: "synapse-workflow-package-v2"
+  exportedAt: string
+  workflow: WorkflowDefinition
+  modelReferences: WorkflowModelReference[]
+}
+
+export type SynapseWorkflowPackage = SynapseWorkflowPackageV1 | SynapseWorkflowPackageV2
+
 export interface WorkflowModelMapping {
   sourceRefId: string
   targetProviderId: string

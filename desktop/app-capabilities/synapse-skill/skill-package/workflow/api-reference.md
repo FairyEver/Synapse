@@ -78,7 +78,7 @@ No provider needed on the call node. It invokes another saved workflow and retur
 - `workflowId` (string) — child workflow ID to call. Must not be the current workflow ID.
 - `variables` (array) — variable bindings from parent workflow params, upstream node outputs, or static values
 - `paramTemplates` (object) — child text/number/option param name to template string map. Values may use `{{variable}}` placeholders declared in `variables`.
-- `paramBindings` (object) — child param name to typed binding map. Use this for file/directory params, for example `{ "input_file": { "mode": "value", "source": { "type": "param", "param": "input_file" } } }`.
+- `paramBindings` (object) — child param name to typed binding map. Use this for file/directory params, for example `{ "input_file": { "mode": "value", "source": { "type": "param", "param": "input_file" } } }`. Parent and child params must have the same resource kind and the same `allowMultiple` value.
 
 Before configuring child params, call `app_workflow_definition_get` for the child workflow and read its current `params`. Do not put the same child param in both `paramTemplates` and `paramBindings`. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides; child codex/claude_code nodes still need an effective project. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
 
@@ -330,7 +330,7 @@ Delete an edge by ID.
 
 Replace the workflow's parameter list entirely.
 
-**Params:** `workflowId` (string, required), `params` (array, required) — each: `{ name, type: "text"|"number"|"file"|"directory"|"option", default?, description?, options?, allowCustomOption? }`
+**Params:** `workflowId` (string, required), `params` (array, required) — each: `{ name, type: "text"|"number"|"file"|"directory"|"option", default?, description?, options?, allowCustomOption?, allowMultiple? }`
 **Returns:** `{ versionHash, validation? }`
 **Notes:** Pass empty array to clear all params. Use `null` default for required params. For file/directory defaults, use a resource ref:
 
@@ -339,6 +339,8 @@ Replace the workflow's parameter list entirely.
 ```
 
 Use `"entryType": "directory"` for directory params. Defaults store a reference, not file bytes.
+
+Set `allowMultiple: true` only for file/directory params. Its default and run value must be an ordered, non-empty array of at most 100 unique resources, even when it contains one item. Array items may mix absolute local path strings and `local_path` objects at run time; stored defaults use resource objects.
 
 For option / 选项 params, set `options` to an array of strings. The option label and value are the same string. Set `allowCustomOption: true` only when runs may provide a non-empty custom string. Custom run values are not saved back to the workflow definition.
 
@@ -370,7 +372,7 @@ Execute a workflow with parameters.
 { "kind": "local_path", "entryType": "file", "path": "/absolute/path/to/file.txt" }
 ```
 
-The path must exist and match the param kind before the run starts. Remote or Drive-backed resource kinds should remain explicit objects for future compatibility; unsupported kinds are rejected instead of silently stringified.
+The path must exist and match the param kind before the run starts. For a file/directory param with `allowMultiple: true`, pass an ordered, non-empty array of at most 100 unique items; each item may be an absolute local path string or matching resource object. One item is still passed as an array. Any invalid item rejects the whole run and reports its array index. Remote or Drive-backed resource kinds should remain explicit objects for future compatibility; unsupported kinds are rejected instead of silently stringified.
 
 ### app_workflow_run_disable
 

@@ -55,6 +55,80 @@ describe("normalizeWorkflowRunParams", () => {
     expect(result.errors[0]).toMatchObject({ type: "invalid_config", message: "参数「input」暂不支持 drive 文件引用" })
   })
 
+  it("normalizes ordered multi-file inputs and serializes paths as JSON", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-workflow-params-"))
+    const firstPath = path.join(root, "first.txt")
+    const secondPath = path.join(root, "second.txt")
+    await writeFile(firstPath, "first")
+    await writeFile(secondPath, "second")
+
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "inputs", type: "file", default: null, allowMultiple: true },
+    ]), {
+      inputs: [
+        firstPath,
+        { kind: "local_path", entryType: "file", path: secondPath },
+      ],
+    })
+
+    expect(result.errors).toEqual([])
+    expect(result.params.inputs).toEqual([
+      { kind: "local_path", entryType: "file", path: firstPath },
+      { kind: "local_path", entryType: "file", path: secondPath },
+    ])
+    expect(result.stringValues.inputs).toBe(JSON.stringify([firstPath, secondPath]))
+    expect(result.snapshotParams.inputs).toEqual(result.params.inputs)
+  })
+
+  it("treats an empty multi-resource array as missing", async () => {
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "inputs", type: "file", default: null, allowMultiple: true },
+    ]), { inputs: [] })
+
+    expect(result.errors[0]).toMatchObject({ type: "missing_param", message: "缺少必填参数「inputs」" })
+  })
+
+  it("rejects duplicate resources in a multi-resource parameter", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-workflow-params-"))
+    const filePath = path.join(root, "input.txt")
+    await writeFile(filePath, "hello")
+
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "inputs", type: "file", default: null, allowMultiple: true },
+    ]), { inputs: [filePath, { kind: "local_path", entryType: "file", path: filePath }] })
+
+    expect(result.errors[0]).toMatchObject({ type: "invalid_config", message: "参数「inputs」第 2 项与前面的资源重复" })
+  })
+
+  it("rejects mismatched single and multi resource shapes", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-workflow-params-"))
+    const filePath = path.join(root, "input.txt")
+    await writeFile(filePath, "hello")
+
+    const multiResult = await normalizeWorkflowRunParams(def([
+      { name: "inputs", type: "file", default: null, allowMultiple: true },
+    ]), { inputs: filePath })
+    const singleResult = await normalizeWorkflowRunParams(def([
+      { name: "input", type: "file", default: null },
+    ]), { input: [filePath] })
+
+    expect(multiResult.errors[0]).toMatchObject({ type: "invalid_config", message: "参数「inputs」必须是资源引用数组" })
+    expect(singleResult.errors[0]).toMatchObject({ type: "invalid_config", message: "参数「input」必须是单个资源引用" })
+  })
+
+  it("rejects the whole multi-resource value when one item is invalid", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-workflow-params-"))
+    const filePath = path.join(root, "input.txt")
+    await writeFile(filePath, "hello")
+
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "inputs", type: "file", default: null, allowMultiple: true },
+    ]), { inputs: [filePath, root] })
+
+    expect(result.errors[0]).toMatchObject({ type: "invalid_config", message: "参数「inputs」第 2 项必须是文件" })
+    expect(result.params.inputs).toEqual([filePath, root])
+  })
+
   it("normalizes option params as strings and rejects values outside a closed option list", async () => {
     const result = await normalizeWorkflowRunParams(def([
       { name: "report_type", type: "option", default: "周报", options: ["日报", "周报"], allowCustomOption: false },

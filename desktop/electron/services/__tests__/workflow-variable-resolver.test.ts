@@ -19,6 +19,17 @@ describe("resolveVariables", () => {
 
     expect(resolved.input).toBe("/tmp/input.txt")
   })
+  it("resolves multi-resource params to an ordered JSON path array", () => {
+    const b: VariableBinding[] = [{ name: "inputs", source: { type: "param", param: "input_files" } }]
+    const { resolved } = resolveVariables(b, {
+      input_files: [
+        { kind: "local_path", entryType: "file", path: "/tmp/first.txt" },
+        { kind: "local_path", entryType: "file", path: "/tmp/second.txt" },
+      ],
+    }, {})
+
+    expect(resolved.inputs).toBe('["/tmp/first.txt","/tmp/second.txt"]')
+  })
   it("resolves node_output source", () => {
     const b: VariableBinding[] = [{ name: "r", source: { type: "node_output", node: "n1" } }]
     const { resolved } = resolveVariables(b, {}, { n1: "output" })

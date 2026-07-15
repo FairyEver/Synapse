@@ -148,6 +148,9 @@ export {
   type WebhookRunEntryV1,
   type WebhookRunStatusV1,
   type WorkflowParamPresetEntryV1,
+  type WorkflowParamPresetEntryV2,
+  type WorkflowParamPresetValueV2,
+  reviveWorkflowParamPresetsEnvelope,
   type WorkflowEntryV1,
 } from "./placeholders"
 

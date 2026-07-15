@@ -14,8 +14,10 @@ vi.mock("../log-store", () => ({
 import {
   DataRepositoryImpl,
   JsonNamespace,
+  reviveWorkflowParamPresetsEnvelope,
   workflowParamPresetsSchema,
   type WorkflowParamPresetEntryV1,
+  type WorkflowParamPresetEntryV2,
 } from "../../runtime/data-repo"
 import { WorkflowParamPresetService } from "../workflow/workflow-param-preset-service"
 
@@ -91,8 +93,38 @@ describe("WorkflowParamPresetService", () => {
     expect(await service.list("workflow-a")).toEqual([])
   })
 
+  it("stores ordered multi-resource path arrays", async () => {
+    const service = createService()
+    const saved = await service.save({
+      workflowId: "workflow-a",
+      name: "多文件",
+      values: { files: ["/tmp/a.txt", "/tmp/b.txt"] },
+    })
+
+    expect(saved.values).toEqual({ files: ["/tmp/a.txt", "/tmp/b.txt"] })
+    expect(await service.list("workflow-a")).toEqual([expect.objectContaining({ values: saved.values })])
+  })
+
   it("normalizes invalid stored values out of the namespace", () => {
-    const valid: WorkflowParamPresetEntryV1 = {
+    const valid: WorkflowParamPresetEntryV2 = {
+      id: "preset-1",
+      schemaVersion: 2,
+      workflowId: "workflow-a",
+      name: "A",
+      values: { topic: "value" },
+      createdAt: 1,
+      updatedAt: 1,
+    }
+
+    expect(workflowParamPresetsSchema.validate(valid)).toBe(true)
+    expect(workflowParamPresetsSchema.validate({ ...valid, values: { files: ["/tmp/a.txt"] } })).toBe(true)
+    expect(workflowParamPresetsSchema.validate({ ...valid, values: { files: [] } })).toBe(false)
+    expect(workflowParamPresetsSchema.validate({ ...valid, values: { count: 1 } })).toBe(false)
+    expect(workflowParamPresetsSchema.validate({ ...valid, workflowId: "" })).toBe(false)
+  })
+
+  it("revives v1 string presets as v2 entries", () => {
+    const legacy: WorkflowParamPresetEntryV1 = {
       id: "preset-1",
       schemaVersion: 1,
       workflowId: "workflow-a",
@@ -102,8 +134,14 @@ describe("WorkflowParamPresetService", () => {
       updatedAt: 1,
     }
 
-    expect(workflowParamPresetsSchema.validate(valid)).toBe(true)
-    expect(workflowParamPresetsSchema.validate({ ...valid, values: { count: 1 } })).toBe(false)
-    expect(workflowParamPresetsSchema.validate({ ...valid, workflowId: "" })).toBe(false)
+    expect(reviveWorkflowParamPresetsEnvelope({
+      schemaVersion: 1,
+      singleton: null,
+      items: { [legacy.id]: legacy },
+    })).toEqual({
+      schemaVersion: 2,
+      singleton: null,
+      items: { [legacy.id]: { ...legacy, schemaVersion: 2 } },
+    })
   })
 })

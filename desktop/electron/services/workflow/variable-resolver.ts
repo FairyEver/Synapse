@@ -72,12 +72,24 @@ export function resolveVariables(
 function paramValueToString(raw: unknown): string {
   if (raw == null) return ""
   if (typeof raw === "number" && Number.isNaN(raw)) return ""
+  if (Array.isArray(raw)) {
+    const locators = raw.map(resourceLocator)
+    if (locators.every((value): value is string => value !== null)) return JSON.stringify(locators)
+  }
   if (typeof raw === "object" && !Array.isArray(raw)) {
     const record = raw as Record<string, unknown>
     if (record.kind === "local_path" && typeof record.path === "string") return record.path
     if (typeof record.id === "string") return record.id
   }
   return String(raw)
+}
+
+function resourceLocator(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
+  const record = raw as Record<string, unknown>
+  if (record.kind === "local_path" && typeof record.path === "string") return record.path
+  if (typeof record.id === "string") return record.id
+  return null
 }
 
 export function interpolatePrompt(template: string, vars: Record<string, string>): string {

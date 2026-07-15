@@ -10,7 +10,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Plus, Trash2, ChevronUp, ChevronDown, FolderOpen } from "lucide-react"
+import { toast } from "sonner"
 import type { WorkflowParam, WorkflowParamDefault, WorkflowResourceEntryType, WorkflowResourceRef } from "@/types/workflow"
+import { MultiResourcePathField } from "./multi-resource-path-field"
 
 type DraftParam = WorkflowParam & { _key: string }
 const REQUIRED_OPTION_VALUE = "__required__"
@@ -29,6 +31,7 @@ function fromDraft(d: DraftParam): WorkflowParam {
     param.options = d.options
     param.allowCustomOption = d.allowCustomOption
   }
+  if ((d.type === "file" || d.type === "directory") && d.allowMultiple === true) param.allowMultiple = true
   return param
 }
 
@@ -47,6 +50,7 @@ interface WorkflowParamCardProps {
 
 function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelete, onMoveUp, onMoveDown }: WorkflowParamCardProps) {
   const allowCustomId = useId()
+  const allowMultipleId = useId()
   const resourceEntryType: WorkflowResourceEntryType | null = param.type === "file" || param.type === "directory" ? param.type : null
   const optionRows = param.options ?? []
   const normalizedOptions = normalizeOptionValues(optionRows)
@@ -63,13 +67,31 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
       onChange({ default: toLocalPathDefault(resourceEntryType, selectedPath) })
     }
   }
+  const handleAllowMultipleChange = (checked: boolean) => {
+    if (!resourceEntryType) return
+    if (checked) {
+      const existingDefault = resourceDefaultPath(param.default)
+      onChange({
+        allowMultiple: true,
+        default: existingDefault ? [toLocalPathRef(resourceEntryType, existingDefault)] : null,
+      })
+      return
+    }
+
+    const existingDefaults = resourceDefaultRefs(param.default)
+    if (existingDefaults.length > 1) {
+      toast.error("请先将默认值删到一项")
+      return
+    }
+    onChange({ allowMultiple: false, default: existingDefaults[0] ?? null })
+  }
   const handleTypeChange = (value: string) => {
     const type = value as WorkflowParam["type"]
     if (type === "option") {
       onChange({ type, default: null, options: [], allowCustomOption: false })
       return
     }
-    onChange({ type, default: null, options: undefined, allowCustomOption: undefined })
+    onChange({ type, default: null, options: undefined, allowCustomOption: undefined, allowMultiple: undefined })
   }
   const updateOption = (optionIndex: number, value: string) => {
     onChange({ options: optionRows.map((option, i) => i === optionIndex ? value : option) })
@@ -151,7 +173,20 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
         </div>
       </div>
       <div className="grid gap-1.5">
-        <Label className="text-xs">默认值</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label className="text-xs">默认值</Label>
+          {resourceEntryType && (
+            <div className="flex items-center gap-2">
+              <Label htmlFor={allowMultipleId} className="text-xs text-muted-foreground">允许多选</Label>
+              <Switch
+                id={allowMultipleId}
+                size="sm"
+                checked={param.allowMultiple ?? false}
+                onCheckedChange={handleAllowMultipleChange}
+              />
+            </div>
+          )}
+        </div>
         {param.type === "number" ? (
           <Input
             type="number"
@@ -160,6 +195,12 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
               onChange({ default: e.target.value === "" ? null : Number(e.target.value) })
             }
             placeholder="可选"
+          />
+        ) : resourceEntryType && param.allowMultiple ? (
+          <MultiResourcePathField
+            entryType={resourceEntryType}
+            paths={resourceDefaultPaths(param.default)}
+            onChange={(paths) => onChange({ default: paths.length > 0 ? paths.map((path) => toLocalPathRef(resourceEntryType, path)) : null })}
           />
         ) : resourceEntryType ? (
           <InputGroup>
@@ -270,6 +311,7 @@ function paramsEqual(a: WorkflowParam[], b: WorkflowParam[]): boolean {
     && p.type === b[i]?.type
     && p.description === b[i]?.description
     && paramDefaultEqual(p.default, b[i]?.default)
+    && Boolean(p.allowMultiple) === Boolean(b[i]?.allowMultiple)
     && optionMetadataEqual(p, b[i])
   )
 }
@@ -368,7 +410,7 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
   return (
     <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-xl" aria-describedby={undefined}>
         <DialogHeader><DialogTitle>编辑工作流参数</DialogTitle></DialogHeader>
         <ScrollArea className="max-h-[60vh] py-2 pr-1">
           <div className="grid gap-2">
@@ -432,6 +474,18 @@ function resourceDefaultPath(value: WorkflowParamDefault): string {
   return ""
 }
 
+function resourceDefaultRefs(value: WorkflowParamDefault): WorkflowResourceRef[] {
+  if (Array.isArray(value)) return value.filter(isWorkflowResourceRef)
+  if (isWorkflowResourceRef(value)) return [value]
+  return []
+}
+
+function resourceDefaultPaths(value: WorkflowParamDefault): string[] {
+  return resourceDefaultRefs(value)
+    .filter((resource): resource is Extract<WorkflowResourceRef, { kind: "local_path" }> => resource.kind === "local_path")
+    .map((resource) => resource.path)
+}
+
 function textDefaultValue(value: WorkflowParamDefault): string {
   return typeof value === "string" ? value : ""
 }
@@ -440,6 +494,10 @@ function toLocalPathDefault(entryType: WorkflowResourceEntryType, rawPath: strin
   const path = rawPath.trim()
   if (!path) return null
   return { kind: "local_path", entryType, path }
+}
+
+function toLocalPathRef(entryType: WorkflowResourceEntryType, rawPath: string): WorkflowResourceRef {
+  return { kind: "local_path", entryType, path: rawPath.trim() }
 }
 
 function normalizeOptionValues(options?: readonly string[]): string[] {
@@ -461,6 +519,7 @@ function sanitizeParamForSave(param: WorkflowParam): WorkflowParam {
     default: param.default,
   }
   if (param.description !== undefined) base.description = param.description
+  if ((param.type === "file" || param.type === "directory") && param.allowMultiple === true) base.allowMultiple = true
   if (param.type !== "option") return base
 
   const options = normalizeOptionValues(param.options)
@@ -475,7 +534,7 @@ function sanitizeParamForSave(param: WorkflowParam): WorkflowParam {
 
 function paramDefaultEqual(a: WorkflowParamDefault, b: WorkflowParamDefault): boolean {
   if (a === b) return true
-  if (isWorkflowResourceRef(a) || isWorkflowResourceRef(b)) {
+  if (Array.isArray(a) || Array.isArray(b) || isWorkflowResourceRef(a) || isWorkflowResourceRef(b)) {
     return JSON.stringify(a) === JSON.stringify(b)
   }
   return false

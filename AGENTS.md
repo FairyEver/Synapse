@@ -185,6 +185,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - 快捷输入是独立系统应用，不属于系统设置页。Agent 对话只消费快捷输入库中的文本，并默认直接发送；不要恢复“直接发送”开关，也不要把快捷输入重新塞回 slash menu 的插入候选里，除非当前对话明确改变这个产品边界。
 - Knowledge Base 资料管理窗口是 `.raw` 文件管理器；上传和拖拽上传必须把用户选择的文件原样复制到当前 `.raw` 文件夹，不得自动转换格式、生成 Markdown 替代文件、额外保留一份 originals 附件，或把普通上传变成 source staging 流程。
 - Workflow 必须保持外层 DAG 约束；MCP/agent 写操作必须走 get -> mutate -> validate -> save 的受控路径，校验失败不得保存；不得删除 end 节点。
+- Workflow 的文件和文件夹参数通过 `allowMultiple` 显式区分单选与多选；多选值始终是有序、非空、最多 100 项且不重复的资源引用数组，单选与多选不得自动互相转换。子工作流直接绑定资源参数时，资源类型和 `allowMultiple` 必须一致。
 - Workflow loop 的退出条件必须由子图内真实节点和 Loop Output 的 continue/break 出口表达，不要退回到隐藏在配置面板里的表达式字符串。
 - Scheduler 子进程环境必须经过 allowlist；`PATH` 默认按用户配置和 login shell 环境 merge；运行诊断必须保留，失败时用于 UI 排查。
 - Rule / Skill / Content 写入编辑器目录、覆盖、替换、备份失败等敏感路径必须经过确认、权限检查和审计；备份失败必须阻断替换；安装和复制文案不能混用。

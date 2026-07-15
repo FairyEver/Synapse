@@ -114,6 +114,30 @@ describe("workflowIpcModule", () => {
     await expect(harness.invoke("synapse:workflow:param-file:choose", undefined)).resolves.toBeNull()
   })
 
+  it("opens multi-select native pickers for workflow resource params", async () => {
+    electronMock.dialog.showOpenDialog
+      .mockResolvedValueOnce({ canceled: false, filePaths: ["/tmp/a.txt", "/tmp/b.txt"] })
+      .mockResolvedValueOnce({ canceled: false, filePaths: ["/tmp/a", "/tmp/b"] })
+    const harness = createInMemoryHarness()
+    harness.registry.register(workflowIpcModule, {
+      moduleId: "workflow",
+      resolve: <T,>(): T => { throw new Error("No services expected") },
+    })
+
+    await expect(harness.invoke("synapse:workflow:param-files:choose", undefined))
+      .resolves.toEqual(["/tmp/a.txt", "/tmp/b.txt"])
+    await expect(harness.invoke("synapse:workflow:param-directories:choose", undefined))
+      .resolves.toEqual(["/tmp/a", "/tmp/b"])
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenNthCalledWith(1, {
+      title: "选择文件",
+      properties: ["openFile", "multiSelections"],
+    })
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenNthCalledWith(2, {
+      title: "选择文件夹",
+      properties: ["openDirectory", "multiSelections"],
+    })
+  })
+
   it("accepts option params when saving workflow definitions", async () => {
     const workflow = { save: vi.fn(async () => ({ versionHash: "v-option" })) }
     const eventBus = { emit: vi.fn() }

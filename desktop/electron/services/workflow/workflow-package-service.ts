@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto"
 import type { WorkflowDefinition, WorkflowNode } from "../../../src/types/workflow"
 import type {
-  SynapseWorkflowPackageV1,
+  SynapseWorkflowPackage,
+  SynapseWorkflowPackageV2,
   WorkflowImportPreview,
   WorkflowImportOptions,
   WorkflowImportProviderOption,
@@ -14,7 +15,11 @@ import type { CCProvider } from "../provider/types"
 import { createMainLogger } from "../log-store"
 import type { WorkflowSaveError, WorkflowService } from "./workflow-service"
 
-const PACKAGE_FORMAT = "synapse-workflow-package-v1" as const
+const PACKAGE_FORMAT = "synapse-workflow-package-v2" as const
+const SUPPORTED_PACKAGE_FORMATS: readonly SynapseWorkflowPackage["format"][] = [
+  "synapse-workflow-package-v1",
+  PACKAGE_FORMAT,
+]
 const MODEL_TIERS: readonly WorkflowPackageModelTier[] = ["default", "haiku", "sonnet", "opus"]
 const logger = createMainLogger("service.workflow.package")
 
@@ -38,7 +43,7 @@ export class WorkflowPackageService {
     this.createId = deps.createId ?? randomUUID
   }
 
-  async buildExportPackage(workflowId: string): Promise<SynapseWorkflowPackageV1> {
+  async buildExportPackage(workflowId: string): Promise<SynapseWorkflowPackageV2> {
     const workflow = await this.workflowService.get(workflowId)
     if (!workflow) throw new Error(`Workflow ${workflowId} not found`)
     const providers = await this.providerService.listProviders()
@@ -50,7 +55,7 @@ export class WorkflowPackageService {
     }
   }
 
-  async buildImportPreview(packagePath: string, pkg: SynapseWorkflowPackageV1, packageDigest: string): Promise<WorkflowImportPreview> {
+  async buildImportPreview(packagePath: string, pkg: SynapseWorkflowPackage, packageDigest: string): Promise<WorkflowImportPreview> {
     assertPackage(pkg)
     const providers = await this.providerService.listProviders()
     const providerOptions = providers.map(toProviderOption)
@@ -78,7 +83,7 @@ export class WorkflowPackageService {
   }
 
   async importPackage(
-    pkg: SynapseWorkflowPackageV1,
+    pkg: SynapseWorkflowPackage,
     mappings: readonly WorkflowModelMapping[],
     options: WorkflowImportOptions = {},
   ): Promise<{ workflowId: string; versionHash: string } | WorkflowSaveError> {
@@ -311,8 +316,8 @@ function suggestMappings(
   })
 }
 
-function assertPackage(value: SynapseWorkflowPackageV1): void {
-  if (!value || value.format !== PACKAGE_FORMAT) throw new Error("Invalid workflow package format")
+function assertPackage(value: SynapseWorkflowPackage): void {
+  if (!value || !SUPPORTED_PACKAGE_FORMATS.includes(value.format)) throw new Error("Invalid workflow package format")
   if (!value.workflow || typeof value.workflow.id !== "string") throw new Error("Invalid workflow package workflow")
   if (!Array.isArray(value.modelReferences)) throw new Error("Invalid workflow package model references")
 }

@@ -85,7 +85,9 @@ For `file` and `directory`, the parameter value is a resource reference, not fil
 
 For directories, use `"entryType": "directory"` and a directory path. When calling `app_workflow_run_execute` from MCP, you may pass either this object or a plain local path string. Synapse normalizes plain strings to `local_path`, verifies that the path exists, and checks the expected file/directory kind before the run starts.
 
-When defining defaults with `app_workflow_param_update`, use `null` for required params. For optional file/directory params, use the same resource object shape as above. Do not inline file bytes into params.
+Set `allowMultiple: true` on a file/directory definition to accept multiple resources. Defaults and run values then use an ordered, non-empty array with at most 100 unique items; one item is still an array. Run arrays may mix absolute local path strings and matching resource objects. Any invalid item rejects the entire run and identifies its index.
+
+When defining defaults with `app_workflow_param_update`, use `null` for required params. For optional file/directory params, use the same resource object shape as above, or an array of those objects when `allowMultiple: true`. Do not inline file bytes into params.
 
 For `option` params, define `options` as an array of strings and optionally set `allowCustomOption`. Example:
 
@@ -146,7 +148,7 @@ Recommended MCP flow:
    ```
 5. Run `app_workflow_definition_inspect` after updating. It catches direct self-calls and unbound variables in `paramTemplates`.
 
-Do not put both `paramTemplates.<name>` and `paramBindings.<name>` on the same child parameter. For file/directory child params, prefer a `paramBindings` value binding from a parent file/directory param with the same resource kind.
+Do not put both `paramTemplates.<name>` and `paramBindings.<name>` on the same child parameter. For file/directory child params, prefer a `paramBindings` value binding from a parent parameter with the same resource kind and the same `allowMultiple` value; single and multi resource params are not converted automatically.
 
 At runtime, the call node reads the child workflow's latest saved definition. It returns only the child workflow End output as the workflow_call node output. It does not lock a child version and does not expose arbitrary child node outputs.
 

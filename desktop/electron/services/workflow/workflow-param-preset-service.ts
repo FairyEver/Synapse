@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto"
-import type { DataNamespace, DataRepository, WorkflowParamPresetEntryV1 } from "../../runtime/data-repo"
+import path from "node:path"
+import type { DataNamespace, DataRepository, WorkflowParamPresetEntryV2, WorkflowParamPresetValueV2 } from "../../runtime/data-repo"
+import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../config"
 import { createMainLogger } from "../log-store"
 
 const logger = createMainLogger("service.workflow-param-presets")
@@ -8,7 +10,7 @@ export interface WorkflowParamPreset {
   readonly id: string
   readonly workflowId: string
   readonly name: string
-  readonly values: Record<string, string>
+  readonly values: Record<string, WorkflowParamPresetValueV2>
   readonly createdAt: number
   readonly updatedAt: number
 }
@@ -16,15 +18,15 @@ export interface WorkflowParamPreset {
 export interface SaveWorkflowParamPresetInput {
   readonly workflowId: string
   readonly name: string
-  readonly values: Record<string, string>
+  readonly values: Record<string, WorkflowParamPresetValueV2>
   readonly overwritePresetId?: string
 }
 
 export class WorkflowParamPresetService {
-  private readonly presets: DataNamespace<WorkflowParamPresetEntryV1>
+  private readonly presets: DataNamespace<WorkflowParamPresetEntryV2>
 
   constructor(dataRepository: DataRepository) {
-    this.presets = dataRepository.namespace<WorkflowParamPresetEntryV1>("workflow.param-presets")
+    this.presets = dataRepository.namespace<WorkflowParamPresetEntryV2>("workflow.param-presets")
   }
 
   async list(workflowId: string): Promise<WorkflowParamPreset[]> {
@@ -53,12 +55,12 @@ export class WorkflowParamPresetService {
       : null
     const id = previous?.id ?? randomUUID()
     const createdAt = previous?.createdAt ?? now
-    const entry: WorkflowParamPresetEntryV1 = {
+    const entry: WorkflowParamPresetEntryV2 = {
       id,
-      schemaVersion: 1,
+      schemaVersion: 2,
       workflowId,
       name,
-      values: { ...input.values },
+      values: validateAndClonePresetValues(input.values),
       createdAt,
       updatedAt: now,
     }
@@ -87,13 +89,34 @@ export class WorkflowParamPresetService {
   }
 }
 
-function toPublicPreset(entry: WorkflowParamPresetEntryV1): WorkflowParamPreset {
+function toPublicPreset(entry: WorkflowParamPresetEntryV2): WorkflowParamPreset {
   return {
     id: entry.id,
     workflowId: entry.workflowId,
     name: entry.name,
-    values: { ...entry.values },
+    values: clonePresetValues(entry.values),
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
   }
+}
+
+function clonePresetValues(values: Record<string, WorkflowParamPresetValueV2>): Record<string, WorkflowParamPresetValueV2> {
+  return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value]))
+}
+
+function validateAndClonePresetValues(values: Record<string, WorkflowParamPresetValueV2>): Record<string, WorkflowParamPresetValueV2> {
+  for (const [paramName, value] of Object.entries(values)) {
+    if (!Array.isArray(value)) continue
+    if (value.length === 0) throw new Error(`Preset param ${paramName} must not be an empty array`)
+    if (value.length > WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS) {
+      throw new Error(`Preset param ${paramName} exceeds ${WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS} items`)
+    }
+    const identities = value.map((resourcePath) => {
+      if (!resourcePath.trim()) throw new Error(`Preset param ${paramName} contains an empty path`)
+      const normalized = path.normalize(resourcePath.trim())
+      return process.platform === "win32" ? normalized.toLocaleLowerCase() : normalized
+    })
+    if (new Set(identities).size !== identities.length) throw new Error(`Preset param ${paramName} contains duplicate paths`)
+  }
+  return clonePresetValues(values)
 }

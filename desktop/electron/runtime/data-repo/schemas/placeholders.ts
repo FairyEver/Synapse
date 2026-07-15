@@ -9,6 +9,8 @@
 
 import type { Migration, NamespaceSchema } from "../types"
 import type { JsonFileEnvelope } from "../backends/json"
+import { migration } from "../migrations"
+import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../../config"
 import {
   isOptionalValidWebhookPort,
   isValidWebhookMaxBodyBytes,
@@ -1022,23 +1024,86 @@ export interface WorkflowParamPresetEntryV1 extends Record<string, unknown> {
   updatedAt: number
 }
 
-export const workflowParamPresetsSchema: NamespaceSchema<WorkflowParamPresetEntryV1> = {
+export type WorkflowParamPresetValueV2 = string | string[]
+
+export interface WorkflowParamPresetEntryV2 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 2
+  workflowId: string
+  name: string
+  values: Record<string, WorkflowParamPresetValueV2>
+  createdAt: number
+  updatedAt: number
+}
+
+const workflowParamPresetMigrations: readonly Migration[] = [
+  migration<WorkflowParamPresetEntryV1, WorkflowParamPresetEntryV2>(1, 2, migrateWorkflowParamPresetEntryV1ToV2),
+]
+
+export const workflowParamPresetsSchema: NamespaceSchema<WorkflowParamPresetEntryV2> = {
   name: "workflow.param-presets",
   backend: "json",
-  currentVersion: 1,
-  migrations: noMigrations,
-  validate: (v): v is WorkflowParamPresetEntryV1 =>
-    isAnyRecord<WorkflowParamPresetEntryV1>(v)
-    && (v as WorkflowParamPresetEntryV1).schemaVersion === 1
-    && typeof (v as WorkflowParamPresetEntryV1).id === "string"
-    && (v as WorkflowParamPresetEntryV1).id.length > 0
-    && typeof (v as WorkflowParamPresetEntryV1).workflowId === "string"
-    && (v as WorkflowParamPresetEntryV1).workflowId.length > 0
-    && typeof (v as WorkflowParamPresetEntryV1).name === "string"
-    && (v as WorkflowParamPresetEntryV1).name.length > 0
-    && isStringRecord((v as WorkflowParamPresetEntryV1).values)
-    && typeof (v as WorkflowParamPresetEntryV1).createdAt === "number"
-    && typeof (v as WorkflowParamPresetEntryV1).updatedAt === "number",
+  currentVersion: 2,
+  migrations: workflowParamPresetMigrations,
+  validate: isWorkflowParamPresetEntryV2,
+}
+
+export function reviveWorkflowParamPresetsEnvelope(raw: unknown): JsonFileEnvelope<WorkflowParamPresetEntryV2> | null {
+  if (!isWorkflowJsonEnvelope(raw)) return null
+  if (raw.schemaVersion === 2) return raw as JsonFileEnvelope<WorkflowParamPresetEntryV2>
+  if (raw.schemaVersion !== 1) return null
+
+  const items: Record<string, WorkflowParamPresetEntryV2> = {}
+  for (const [id, value] of Object.entries(raw.items)) {
+    if (!isWorkflowParamPresetEntryV1(value)) return null
+    const migrated = migrateWorkflowParamPresetEntryV1ToV2(value)
+    items[id] = migrated
+  }
+  return { schemaVersion: 2, singleton: null, items }
+}
+
+function migrateWorkflowParamPresetEntryV1ToV2(entry: WorkflowParamPresetEntryV1): WorkflowParamPresetEntryV2 {
+  return { ...entry, schemaVersion: 2, values: { ...entry.values } }
+}
+
+function isWorkflowParamPresetEntryV1(value: unknown): value is WorkflowParamPresetEntryV1 {
+  return isWorkflowParamPresetEntryBase(value)
+    && value.schemaVersion === 1
+    && isStringRecord(value.values)
+}
+
+function isWorkflowParamPresetEntryV2(value: unknown): value is WorkflowParamPresetEntryV2 {
+  return isWorkflowParamPresetEntryBase(value)
+    && value.schemaVersion === 2
+    && isWorkflowParamPresetValues(value.values)
+}
+
+function isWorkflowParamPresetEntryBase(value: unknown): value is Record<string, unknown> & {
+  id: string
+  workflowId: string
+  name: string
+  createdAt: number
+  updatedAt: number
+} {
+  return isPlainRecord(value)
+    && typeof value.id === "string"
+    && value.id.length > 0
+    && typeof value.workflowId === "string"
+    && value.workflowId.length > 0
+    && typeof value.name === "string"
+    && value.name.length > 0
+    && typeof value.createdAt === "number"
+    && typeof value.updatedAt === "number"
+}
+
+function isWorkflowParamPresetValues(value: unknown): value is Record<string, WorkflowParamPresetValueV2> {
+  return isPlainRecord(value) && Object.values(value).every((item) =>
+    typeof item === "string"
+    || (Array.isArray(item)
+      && item.length > 0
+      && item.length <= WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS
+      && item.every((pathValue) => typeof pathValue === "string" && pathValue.length > 0)),
+  )
 }
 
 export interface WorkflowEntryV1 extends Record<string, unknown> {
@@ -1057,10 +1122,11 @@ export interface WorkflowEntryV1 extends Record<string, unknown> {
   params: Array<{
     name: string
     type: "text" | "number" | "file" | "directory" | "option"
-    default: string | number | WorkflowResourceRefV1 | null
+    default: string | number | WorkflowResourceRefV1 | WorkflowResourceRefV1[] | null
     description?: string
     options?: string[]
     allowCustomOption?: boolean
+    allowMultiple?: boolean
   }>
   nodes: Array<{ id: string; name: string; type: string; position: { x: number; y: number }; config: Record<string, unknown> }>
   edges: Array<{ id: string; from: string; to: string; branch?: string }>
@@ -1070,10 +1136,11 @@ function isWorkflowParam(value: unknown): value is WorkflowEntryV1["params"][num
   return isAnyRecord<Record<string, unknown>>(value)
     && typeof value.name === "string"
     && isWorkflowParamType(value.type)
-    && (value.default === null || typeof value.default === "string" || typeof value.default === "number" || isWorkflowResourceRef(value.default))
+    && (value.default === null || typeof value.default === "string" || typeof value.default === "number" || isWorkflowResourceRef(value.default) || isWorkflowResourceRefArray(value.default))
     && isOptionalString(value.description)
     && (value.options === undefined || isStringArray(value.options))
     && isOptionalBoolean(value.allowCustomOption)
+    && isOptionalBoolean(value.allowMultiple)
 }
 
 function isWorkflowParamType(value: unknown): value is WorkflowEntryV1["params"][number]["type"] {
@@ -1102,6 +1169,10 @@ function isWorkflowResourceRef(value: unknown): value is WorkflowResourceRefV1 {
       && isOptionalString(value.mimeType)
   }
   return false
+}
+
+function isWorkflowResourceRefArray(value: unknown): value is WorkflowResourceRefV1[] {
+  return Array.isArray(value) && value.every(isWorkflowResourceRef)
 }
 
 function isWorkflowNode(value: unknown): value is WorkflowEntryV1["nodes"][number] {
@@ -1150,7 +1221,7 @@ function normalizeWorkflowParam(value: unknown): WorkflowEntryV1["params"][numbe
   const rawDefault = value.default
   const defaultValue = rawDefault === undefined || rawDefault === null
     ? null
-    : typeof rawDefault === "string" || typeof rawDefault === "number" || isWorkflowResourceRef(rawDefault)
+    : typeof rawDefault === "string" || typeof rawDefault === "number" || isWorkflowResourceRef(rawDefault) || isWorkflowResourceRefArray(rawDefault)
       ? rawDefault
       : null
   const param: WorkflowEntryV1["params"][number] = {
@@ -1162,6 +1233,7 @@ function normalizeWorkflowParam(value: unknown): WorkflowEntryV1["params"][numbe
   if (description !== undefined) param.description = description
   if (isStringArray(value.options)) param.options = value.options
   if (typeof value.allowCustomOption === "boolean") param.allowCustomOption = value.allowCustomOption
+  if (typeof value.allowMultiple === "boolean") param.allowMultiple = value.allowMultiple
   return param
 }
 

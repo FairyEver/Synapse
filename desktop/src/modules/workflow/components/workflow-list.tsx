@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { track } from "@/lib/ui-tracking"
-import type { WorkflowDefinition } from "@/types/workflow"
+import type { WorkflowDefinition, WorkflowParamPresetValue } from "@/types/workflow"
 import { errorDiagnostic } from "../lib/error-utils"
 
 const logger = createRendererLogger("workflow.list")
@@ -46,7 +46,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
   // Track a conflict so we can offer "cancel old & start new" instead of just an error toast.
   const [conflictState, setConflictState] = useState<{ def: WorkflowDefinition; params: Record<string, unknown> } | null>(null)
   // Remember last-used param values per workflow so the dialog can pre-fill them on re-run
-  const [lastRunValues, setLastRunValues] = useState<Record<string, Record<string, string>>>({})
+  const [lastRunValues, setLastRunValues] = useState<Record<string, Record<string, WorkflowParamPresetValue>>>({})
 
   // Track the latest run status per workflow so WorkflowCard can show a live badge.
   const [runStates, setRunStates] = useState<Record<string, WorkflowCardRunState>>({})

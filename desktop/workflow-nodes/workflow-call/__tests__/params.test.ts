@@ -143,6 +143,22 @@ describe("workflow call params", () => {
     expect(result.errors).toEqual([])
   })
 
+  it("rejects direct resource bindings when parent and child cardinality differ", () => {
+    const result = buildWorkflowCallParams({
+      childDefinition: child([{ name: "input_files", type: "file", default: null, allowMultiple: true }]),
+      paramTemplates: {},
+      paramBindings: { input_files: { mode: "value", source: { type: "param", param: "input_file" } } },
+      parentParamDefinitions: [{ name: "input_file", type: "file", default: null }],
+      parentParamValues: { input_file: { kind: "local_path", entryType: "file", path: "/tmp/input.txt" } },
+      resolvedVariables: {},
+    })
+
+    expect(result.params).toEqual({})
+    expect(result.errors).toEqual([
+      "子工作流参数「input_files」与父工作流参数「input_file」的资源类型或多选设置不一致",
+    ])
+  })
+
   it("rejects duplicate template and binding mappings for the same child param", () => {
     const result = buildWorkflowCallParams({
       childDefinition: child([{ name: "topic", type: "text", default: null }]),

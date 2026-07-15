@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import type { ZodType } from "zod"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../electron/runtime/security"
 import type { SynapseAgentConversationTarget } from "../src/types/agent-navigation"
-import type { WorkflowDefinition, WorkflowRunResult, WorkflowNodeUsageCostSnapshot } from "../src/types/workflow"
+import type { WorkflowDefinition, WorkflowParam, WorkflowRunResult, WorkflowNodeUsageCostSnapshot } from "../src/types/workflow"
 
 export interface PortDefinition { id: string; label: string }
 export interface ConfigFieldDescriptor {
@@ -121,6 +121,7 @@ export interface NodeExecutionInput<TConfig> {
   config: TConfig
   resolvedVariables: Record<string, string>
   paramValues?: Record<string, unknown>
+  paramDefinitions?: readonly WorkflowParam[]
   context: WorkflowRuntimeContext
   agentDeps: AgentSendDeps
   runtimeDeps?: NodeRuntimeDeps

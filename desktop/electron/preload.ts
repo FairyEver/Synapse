@@ -301,6 +301,8 @@ const IPC_CHANNELS = {
     "importPackage": "synapse:workflow:import-package",
     "chooseParamFile": "synapse:workflow:param-file:choose",
     "chooseParamDirectory": "synapse:workflow:param-directory:choose",
+    "chooseParamFiles": "synapse:workflow:param-files:choose",
+    "chooseParamDirectories": "synapse:workflow:param-directories:choose",
     "paramPresetsList": "synapse:workflow:param-presets:list",
     "paramPresetsSave": "synapse:workflow:param-presets:save",
     "paramPresetsDelete": "synapse:workflow:param-presets:delete",
@@ -1588,6 +1590,8 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS.workflow.importPackage)({ packagePath, packageDigest, mappings, options }),
     chooseParamFile: () => invoke(IPC_CHANNELS.workflow.chooseParamFile)(),
     chooseParamDirectory: () => invoke(IPC_CHANNELS.workflow.chooseParamDirectory)(),
+    chooseParamFiles: () => invoke(IPC_CHANNELS.workflow.chooseParamFiles)(),
+    chooseParamDirectories: () => invoke(IPC_CHANNELS.workflow.chooseParamDirectories)(),
     onEvent: (listener) =>
       subscribe(EVENT_CHANNELS.workflow.event)((domainEvent) => {
         listener((domainEvent as DomainEvent).payload as WorkflowEvent)

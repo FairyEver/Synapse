@@ -119,6 +119,7 @@ describe("createWorkflowDispatcher", () => {
     expect(paramProperties?.type).toMatchObject({ enum: expect.arrayContaining(["option"]) })
     expect(paramProperties).toHaveProperty("options")
     expect(paramProperties).toHaveProperty("allowCustomOption")
+    expect(paramProperties).toHaveProperty("allowMultiple")
 
     const nodeTypeListTool = tools.find((item) => item.name === "workflow_node_type_list")
     expect(nodeTypeListTool?.description).toContain("text/number/option")
@@ -129,6 +130,8 @@ describe("createWorkflowDispatcher", () => {
     }).properties?.params
     expect(runExecuteTool?.description).toContain("custom-enabled options")
     expect(runExecuteParams?.description).toContain("allowCustomOption=true")
+    expect(runExecuteParams?.description).toContain("allowMultiple=true")
+    expect(runExecuteParams?.description).toContain("up to 100")
     expect(runExecuteParams?.description).toContain("Custom run values are not saved back")
   })
 
@@ -810,6 +813,24 @@ describe("createWorkflowDispatcher", () => {
     expect(deps.runWorkflow).toHaveBeenCalledWith("wf-1", { key: "val" }, {
       actor: { kind: "user", id: "workflow-dispatch:api" },
     })
+  })
+
+  it("workflow.run.execute forwards mixed multi-resource arrays unchanged for runtime normalization", async () => {
+    const deps = makeDeps()
+    const dispatcher = createWorkflowDispatcher(deps)
+    const files = [
+      "/tmp/a.txt",
+      { kind: "local_path", entryType: "file", path: "/tmp/b.txt" },
+    ]
+
+    const result = await dispatcher.dispatch(
+      "workflow.run.execute",
+      { workflowId: "wf-1", params: { files } },
+      { source: "api" },
+    )
+
+    expect(result.ok).toBe(true)
+    expect(deps.runWorkflow).toHaveBeenCalledWith("wf-1", { files }, expect.any(Object))
   })
 
   it("workflow.run.execute passes the dispatch actor into the workflow run", async () => {

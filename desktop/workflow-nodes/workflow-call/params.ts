@@ -8,6 +8,7 @@ export interface BuildWorkflowCallParamsInput {
   paramTemplates: Record<string, string>
   paramBindings?: Record<string, WorkflowParamBinding>
   parentParamValues?: Record<string, unknown>
+  parentParamDefinitions?: readonly WorkflowParam[]
   resolvedVariables: Record<string, string>
 }
 
@@ -40,6 +41,11 @@ export function buildWorkflowCallParams(input: BuildWorkflowCallParamsInput): Bu
 
     if (binding) {
       if (binding.mode === "value") {
+        const bindingError = validateValueBinding(param, binding.source, input.parentParamDefinitions)
+        if (bindingError) {
+          errors.push(bindingError)
+          continue
+        }
         params[param.name] = resolveValueBinding(binding.source, input)
         continue
       }
@@ -70,6 +76,22 @@ export function buildWorkflowCallParams(input: BuildWorkflowCallParamsInput): Bu
   }
 
   return { params, errors }
+}
+
+function validateValueBinding(
+  childParam: WorkflowParam,
+  source: WorkflowVariableSource,
+  parentParams: readonly WorkflowParam[] | undefined,
+): string | null {
+  if (childParam.type !== "file" && childParam.type !== "directory") return null
+  if (source.type !== "param") return `子工作流资源参数「${childParam.name}」必须直接绑定父工作流参数`
+  if (!parentParams) return null
+  const parentParam = parentParams?.find((param) => param.name === source.param)
+  if (!parentParam) return `子工作流参数「${childParam.name}」引用的父工作流参数「${source.param}」不存在`
+  if (parentParam.type !== childParam.type || Boolean(parentParam.allowMultiple) !== Boolean(childParam.allowMultiple)) {
+    return `子工作流参数「${childParam.name}」与父工作流参数「${source.param}」的资源类型或多选设置不一致`
+  }
+  return null
 }
 
 function resolveValueBinding(source: WorkflowVariableSource, input: BuildWorkflowCallParamsInput): unknown {
@@ -115,5 +137,5 @@ function renderTemplateParam(
 }
 
 function paramHasDefault(param: WorkflowParam): boolean {
-  return param.default !== undefined && param.default !== null
+  return param.default !== undefined && param.default !== null && (!Array.isArray(param.default) || param.default.length > 0)
 }

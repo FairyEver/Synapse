@@ -51,7 +51,7 @@ export const WORKFLOW_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAnd
 // MCP tool definitions (JSON Schema input schemas)
 // ---------------------------------------------------------------------------
 
-const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Workflow params support text, number, file, directory, and option types; option labels and values are the same string, and custom run values are not saved back to the definition. file/directory values are resource references such as { kind: "local_path", entryType: "file", path: "/abs/file.txt" }. Available node types include prompt, switch, http_request, script, workflow_call, document_template_docx_generate, swarm_task_run, codex, claude_code, and end. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Switch branches are mutually exclusive: connect each branch only to its own downstream nodes, then merge after those branch-specific nodes if needed. Nodes define a "variables" list that binds upstream node outputs or workflow params; reference them in templates with {{variableName}}. A workflow_call node invokes another saved workflow, maps text/number/option child params through paramTemplates, can pass file/directory child params through paramBindings, and returns the child workflow's End output. A document_template_docx_generate node generates a DOCX from a template and either a JSON file or inline JSON data. A swarm_task_run node starts a saved Swarm Task and can optionally wait for its terminal result. A script node runs shell code in the effective project workspace, so workflow defaultProjectId is required because script config has no node-level projectId field. A codex node runs local codex exec, needs an effective project, may set a per-task workingDirectory, and returns Codex's final reply text. A claude_code node runs the user's local Claude Code CLI via claude -p, needs an effective project, may set workingDirectory and Claude Code settings/MCP paths, and returns Claude Code's final reply text. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
+const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Workflow params support text, number, file, directory, and option types; option labels and values are the same string, and custom run values are not saved back to the definition. file/directory values are resource references such as { kind: "local_path", entryType: "file", path: "/abs/file.txt" }; set allowMultiple=true to accept an ordered, non-empty array of up to 100 unique references. Available node types include prompt, switch, http_request, script, workflow_call, document_template_docx_generate, swarm_task_run, codex, claude_code, and end. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Switch branches are mutually exclusive: connect each branch only to its own downstream nodes, then merge after those branch-specific nodes if needed. Nodes define a "variables" list that binds upstream node outputs or workflow params; reference them in templates with {{variableName}}. A workflow_call node invokes another saved workflow, maps text/number/option child params through paramTemplates, can pass file/directory child params through paramBindings when resource kind and allowMultiple match, and returns the child workflow's End output. A document_template_docx_generate node generates a DOCX from a template and either a JSON file or inline JSON data. A swarm_task_run node starts a saved Swarm Task and can optionally wait for its terminal result. A script node runs shell code in the effective project workspace, so workflow defaultProjectId is required because script config has no node-level projectId field. A codex node runs local codex exec, needs an effective project, may set a per-task workingDirectory, and returns Codex's final reply text. A claude_code node runs the user's local Claude Code CLI via claude -p, needs an effective project, may set workingDirectory and Claude Code settings/MCP paths, and returns Claude Code's final reply text. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
 
 const modelTierSchema = {
   type: "string",
@@ -116,7 +116,7 @@ const workflowParamTypeSchema = {
   description: "Workflow parameter type. file and directory params receive resource references, not file bytes. option params use the same string for label and value.",
 }
 
-const workflowParamDefaultDescription = "Default value. Use null for required params. For file/directory, use a resource ref such as { kind: 'local_path', entryType: 'file', path: '/abs/file.txt' } or { kind: 'local_path', entryType: 'directory', path: '/abs/dir' }. For option params, use one of the option strings unless custom values are allowed."
+const workflowParamDefaultDescription = "Default value. Use null for required params. For file/directory, use a resource ref such as { kind: 'local_path', entryType: 'file', path: '/abs/file.txt' } or { kind: 'local_path', entryType: 'directory', path: '/abs/dir' }. When allowMultiple=true, use a non-empty array of up to 100 unique refs. For option params, use one of the option strings unless custom values are allowed."
 
 const workflowParamSchema = {
   type: "object",
@@ -133,6 +133,10 @@ const workflowParamSchema = {
     allowCustomOption: {
       type: "boolean",
       description: "When true, runs may pass a custom option string; custom run values are not saved back to the workflow definition.",
+    },
+    allowMultiple: {
+      type: "boolean",
+      description: "file/directory only. When true, defaults and run values are ordered non-empty arrays with at most 100 unique resources.",
     },
   },
   required: ["name", "type"],
@@ -350,7 +354,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
         type: "object",
         properties: {
           workflowId: { type: "string", description: "Workflow ID to execute." },
-          params: { type: "object", description: "Key-value parameters matching the workflow's param definitions. For file/directory params, pass a local path string or a resource ref such as { kind: 'local_path', entryType: 'file', path: '/abs/file.txt' }. For option params, pass a string; closed options must match one configured option value, while allowCustomOption=true accepts a non-empty custom string. Custom run values are not saved back to the workflow definition." },
+          params: { type: "object", description: "Key-value parameters matching the workflow's param definitions. For single file/directory params, pass a local path string or resource ref. When allowMultiple=true, pass an ordered non-empty array of up to 100 unique path strings and/or refs; one item is still an array. For option params, pass a string; closed options must match one configured option value, while allowCustomOption=true accepts a non-empty custom string. Custom run values are not saved back to the workflow definition." },
         },
         required: ["workflowId"],
       },
