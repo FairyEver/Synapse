@@ -19,6 +19,8 @@ import {
   secretListResultSchema,
   secretSkillEnvQueueInputSchema,
   secretSkillEnvQueueResultSchema,
+  secretSkillEnvBatchScanInputSchema,
+  secretSkillEnvBatchScanResultSchema,
   secretSkillEnvScanInputSchema,
   secretSkillEnvScanResultSchema,
   secretSafeViewSchema,
@@ -147,6 +149,29 @@ export const secretsIpcModule: IpcModule = {
           permissionGuard,
           auditSink,
         }))
+      },
+    },
+    scanSkillEnvBindingsBatch: {
+      channel: "synapse:secrets:scan-skill-env-bindings-batch",
+      kind: "invoke",
+      request: secretSkillEnvBatchScanInputSchema,
+      response: secretSkillEnvBatchScanResultSchema,
+      handler: async (ctx, request) => {
+        const input = secretSkillEnvBatchScanInputSchema.parse(request)
+        const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+        const security = { permissionGuard, auditSink, actor: SECRETS_APP_ACTOR }
+        const runScan = input.names.reduceRight<() => Promise<unknown>>(
+          (next, name) => () => runAuthorizedSecretOperation(security, {
+            action: "secret.read",
+            operation: SECRETS_SKILL_ENV_SCAN_OPERATION,
+            context: { source: "api", actor: SECRETS_APP_ACTOR },
+            secretName: name,
+            includeValue: true,
+          }, next),
+          () => resolveSecretsService(ctx).scanSkillEnvBindingsBatch(input, security),
+        )
+        return secretSkillEnvBatchScanResultSchema.parse(await runScan())
       },
     },
     queueSkillEnvBindings: {

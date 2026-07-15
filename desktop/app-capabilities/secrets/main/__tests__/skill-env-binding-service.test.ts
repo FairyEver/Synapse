@@ -94,6 +94,35 @@ describe("SkillEnvBindingService", () => {
     expect(JSON.stringify(harness.auditEvents)).not.toContain("new-secret")
   })
 
+  it("scans multiple secret names through one root and env read", async () => {
+    const root = await createRoot()
+    await createSkill(root, "demo", "TOKEN=old\nREGION=cn\n")
+    let scanOpens = 0
+    const harness = createHarness(
+      [trustedRoot(root)],
+      () => 100,
+      undefined,
+      async (phase) => {
+        if (phase === "scan") scanOpens += 1
+      },
+    )
+
+    const groups = await harness.service.scanMany([
+      { name: "TOKEN", value: "new" },
+      { name: "REGION", value: "cn" },
+    ], harness.security)
+
+    expect(scanOpens).toBe(1)
+    expect(harness.listRoots).toHaveBeenCalledOnce()
+    expect(groups.map(({ name, scanResult }) => ({
+      name,
+      status: scanResult.items[0]?.status,
+    }))).toEqual([
+      { name: "TOKEN", status: "needs_update" },
+      { name: "REGION", status: "up_to_date" },
+    ])
+  })
+
   it("does not recurse below direct child Skill directories", async () => {
     const root = await createRoot()
     await createSkill(path.join(root, "group"), "nested", "TOKEN=old\n")
@@ -1487,8 +1516,9 @@ function createHarness(
   }
   let nextId = 1
   const logger = { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() }
+  const listRoots = vi.fn(async () => roots)
   const deps = {
-    listRoots: async () => roots,
+    listRoots,
     createId: () => `id-${nextId++}`,
     now,
     openFile,
@@ -1503,6 +1533,7 @@ function createHarness(
     permissionRequests,
     auditEvents,
     logger,
+    listRoots,
     permissionGuard,
     security: { actor: { kind: "user" as const }, permissionGuard, auditSink },
   }

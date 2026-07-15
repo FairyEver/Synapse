@@ -18,6 +18,7 @@ describe("SecretsService", () => {
     const security = { actor: { kind: "user" as const }, permissionGuard: {} as never, auditSink: {} as never }
 
     await service.scanSkillEnvBindings({ name: "TOKEN" }, security)
+    await service.scanSkillEnvBindingsBatch({ names: ["TOKEN"] }, security)
     await service.queueSkillEnvBindings({
       name: "TOKEN",
       scanSessionId: "scan-1",
@@ -25,6 +26,9 @@ describe("SecretsService", () => {
     }, security)
 
     expect(harness.skillEnvBindings.scan).toHaveBeenCalledWith("TOKEN", "private-value", security)
+    expect(harness.skillEnvBindings.scanMany).toHaveBeenCalledWith([
+      { name: "TOKEN", value: "private-value" },
+    ], security)
     expect(harness.skillEnvBindings.enqueue).toHaveBeenCalledWith({
       name: "TOKEN",
       scanSessionId: "scan-1",
@@ -403,6 +407,10 @@ function createHarness(options: HarnessOptions = {}) {
   })
   const skillEnvBindings = {
     scan: vi.fn(async () => ({ scanSessionId: "scan-1", items: [] })),
+    scanMany: vi.fn(async (requests: readonly { name: string }[]) => requests.map(({ name }) => ({
+      name,
+      scanResult: { scanSessionId: `scan-${name}`, items: [] },
+    }))),
     enqueue: vi.fn(async () => ({ items: [] })),
   }
   let nextId = 1

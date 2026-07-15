@@ -299,6 +299,7 @@ export const IPC_CHANNELS = {
     "upsert": "synapse:secrets:upsert",
     "delete": "synapse:secrets:delete",
     "scanSkillEnvBindings": "synapse:secrets:scan-skill-env-bindings",
+    "scanSkillEnvBindingsBatch": "synapse:secrets:scan-skill-env-bindings-batch",
     "queueSkillEnvBindings": "synapse:secrets:queue-skill-env-bindings",
     "changed": "synapse:secrets:changed",
   },

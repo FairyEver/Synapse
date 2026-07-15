@@ -214,26 +214,25 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
   }, [updateField])
 
   const scanNames = useCallback(async (names: readonly string[]): Promise<ScanNamesResult> => {
-    const results = await Promise.all(uniqueNames(names).map(async (name) => {
-      try {
-        const scanResult = await secretsBridge.scanSkillEnvBindings({ name })
-        return { name, scanResult }
-      } catch (error) {
-        logger.error("Failed to scan installed Skill environment bindings.", {
-          contentId: item.id,
-          ...errorDiagnostic(error),
-        })
-        return { name, scanResult: null }
+    const requestedNames = uniqueNames(names)
+    try {
+      const result = await secretsBridge.scanSkillEnvBindingsBatch({ names: requestedNames })
+      const scannedNames = new Set(result.groups.map(({ name }) => name))
+      return {
+        failedNames: requestedNames.filter((name) => !scannedNames.has(name)),
+        groups: result.groups.flatMap(({ name, scanResult }) => (
+          scanResult.items.some((entry) => entry.status !== "up_to_date")
+            ? [{ name, scanResult }]
+            : []
+        )),
       }
-    }))
-
-    return {
-      failedNames: results.filter((result) => !result.scanResult).map((result) => result.name),
-      groups: results.flatMap(({ name, scanResult }) => (
-        scanResult && scanResult.items.some((entry) => entry.status !== "up_to_date")
-          ? [{ name, scanResult }]
-          : []
-      )),
+    } catch (error) {
+      logger.error("Failed to scan installed Skill environment bindings.", {
+        contentId: item.id,
+        nameCount: requestedNames.length,
+        ...errorDiagnostic(error),
+      })
+      return { failedNames: requestedNames, groups: [] }
     }
   }, [item.id, secretsBridge])
 

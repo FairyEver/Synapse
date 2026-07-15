@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
     list: vi.fn(),
     queueSkillEnvBindings: vi.fn(),
     scanSkillEnvBindings: vi.fn(),
+    scanSkillEnvBindingsBatch: vi.fn(),
     upsert: vi.fn(),
   },
   toast: {
@@ -81,6 +82,12 @@ beforeEach(() => {
   mocks.inspectSkillEnvSource.mockResolvedValue({ declarations: [], legacyPlaceholders: [] })
   mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
   mocks.secrets.scanSkillEnvBindings.mockResolvedValue({ scanSessionId: "scan-empty", items: [] })
+  mocks.secrets.scanSkillEnvBindingsBatch.mockImplementation(async ({ names }: { names: string[] }) => ({
+    groups: names.map((name) => ({
+      name,
+      scanResult: { scanSessionId: `scan-${name}`, items: [] },
+    })),
+  }))
   mocks.secrets.queueSkillEnvBindings.mockResolvedValue({ items: [] })
 })
 
@@ -166,7 +173,7 @@ describe("SkillEnvSecretConfigDialog", () => {
 
     expect(mocks.secrets.upsert).toHaveBeenCalledWith({ name: "TOKEN", value: "replacement-value" })
     expect(mocks.secrets.get).not.toHaveBeenCalled()
-    expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "TOKEN" })
+    expect(mocks.secrets.scanSkillEnvBindingsBatch).toHaveBeenCalledWith({ names: ["TOKEN"] })
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(document.body.textContent).not.toContain("replacement-value")
   })
@@ -188,7 +195,7 @@ describe("SkillEnvSecretConfigDialog", () => {
     })
 
     expect(mocks.secrets.upsert).not.toHaveBeenCalled()
-    expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "TOKEN" })
+    expect(mocks.secrets.scanSkillEnvBindingsBatch).toHaveBeenCalledWith({ names: ["TOKEN"] })
   })
 
   it("blocks a declaration whose key differs only by case from an existing secret", async () => {
@@ -208,7 +215,7 @@ describe("SkillEnvSecretConfigDialog", () => {
     expect(inputForLabel("api_key").disabled).toBe(true)
     expect(buttonByText("保存到密钥库")?.disabled).toBe(true)
     expect(mocks.secrets.upsert).not.toHaveBeenCalled()
-    expect(mocks.secrets.scanSkillEnvBindings).not.toHaveBeenCalled()
+    expect(mocks.secrets.scanSkillEnvBindingsBatch).not.toHaveBeenCalled()
   })
 
   it("keeps failed values for retry and then queues multiple scan groups serially", async () => {
@@ -223,9 +230,11 @@ describe("SkillEnvSecretConfigDialog", () => {
       .mockResolvedValueOnce({ created: true, secret: { id: "a", name: "TOKEN_A", hasValue: true } })
       .mockRejectedValueOnce(new Error("save failed: value-b"))
       .mockResolvedValueOnce({ created: true, secret: { id: "b", name: "TOKEN_B", hasValue: true } })
-    mocks.secrets.scanSkillEnvBindings.mockImplementation(async ({ name }: { name: string }) => ({
-      scanSessionId: `scan-${name}`,
-      items: [bindingItem(name)],
+    mocks.secrets.scanSkillEnvBindingsBatch.mockImplementation(async ({ names }: { names: string[] }) => ({
+      groups: names.map((name) => ({
+        name,
+        scanResult: { scanSessionId: `scan-${name}`, items: [bindingItem(name)] },
+      })),
     }))
     mocks.secrets.queueSkillEnvBindings.mockImplementation(async ({ name }: { name: string }) => ({
       items: [{ ...bindingItem(name), status: "updated" as const }],
@@ -242,8 +251,8 @@ describe("SkillEnvSecretConfigDialog", () => {
     expect(rowForLabel("TOKEN_B").textContent).toContain("保存失败")
     expect(inputForLabel("TOKEN_B").value).toBe("value-b")
     expect(document.body.textContent).not.toContain("save failed: value-b")
-    expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledTimes(1)
-    expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "TOKEN_A" })
+    expect(mocks.secrets.scanSkillEnvBindingsBatch).toHaveBeenCalledTimes(1)
+    expect(mocks.secrets.scanSkillEnvBindingsBatch).toHaveBeenCalledWith({ names: ["TOKEN_A"] })
 
     await act(async () => {
       clickButton("保存到密钥库")

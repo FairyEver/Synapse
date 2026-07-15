@@ -103,6 +103,20 @@ export const secretSkillEnvScanResultSchema = z.object({
   items: z.array(skillEnvBindingItemSchema),
 }).strict()
 
+export const secretSkillEnvBatchScanInputSchema = z.object({
+  names: z.array(secretNameSchema).min(1).refine(
+    (names) => new Set(names.map((name) => name.toLowerCase())).size === names.length,
+    "密钥名称不能重复。",
+  ),
+}).strict()
+
+export const secretSkillEnvBatchScanResultSchema = z.object({
+  groups: z.array(z.object({
+    name: secretNameSchema,
+    scanResult: secretSkillEnvScanResultSchema,
+  }).strict()),
+}).strict()
+
 export const secretSkillEnvQueueInputSchema = z.object({
   name: secretNameSchema,
   scanSessionId: z.string().min(1),
@@ -130,6 +144,8 @@ export type SecretsChangedEvent = z.infer<typeof secretsChangedEventSchema>
 export type SkillEnvBindingItem = z.infer<typeof skillEnvBindingItemSchema>
 export type SecretSkillEnvScanInput = z.infer<typeof secretSkillEnvScanInputSchema>
 export type SecretSkillEnvScanResult = z.infer<typeof secretSkillEnvScanResultSchema>
+export type SecretSkillEnvBatchScanInput = z.infer<typeof secretSkillEnvBatchScanInputSchema>
+export type SecretSkillEnvBatchScanResult = z.infer<typeof secretSkillEnvBatchScanResultSchema>
 export type SecretSkillEnvQueueInput = z.infer<typeof secretSkillEnvQueueInputSchema>
 export type SkillEnvBindingQueueItem = z.infer<typeof skillEnvBindingQueueItemSchema>
 export type SecretSkillEnvQueueResult = z.infer<typeof secretSkillEnvQueueResultSchema>

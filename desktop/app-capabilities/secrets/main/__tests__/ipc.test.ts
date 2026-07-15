@@ -11,6 +11,9 @@ function createHarness(allow = true) {
     upsert: vi.fn(async () => ({ secret: { id: "id-1", name: "TOKEN", hasValue: true }, created: true })),
     delete: vi.fn(async () => ({ id: "id-1", name: "TOKEN", hasValue: true })),
     scanSkillEnvBindings: vi.fn(async () => ({ scanSessionId: "scan-1", items: [] })),
+    scanSkillEnvBindingsBatch: vi.fn(async ({ names }: { names: string[] }) => ({
+      groups: names.map((name) => ({ name, scanResult: { scanSessionId: `scan-${name}`, items: [] } })),
+    })),
     queueSkillEnvBindings: vi.fn(async () => ({ items: [] })),
   }
   const broadcast = vi.fn()
@@ -42,6 +45,7 @@ describe("secretsIpcModule", () => {
     expect(secretsIpcModule.methods.upsert.channel).toBe("synapse:secrets:upsert")
     expect(secretsIpcModule.methods.delete.channel).toBe("synapse:secrets:delete")
     expect(secretsIpcModule.methods.scanSkillEnvBindings.channel).toBe("synapse:secrets:scan-skill-env-bindings")
+    expect(secretsIpcModule.methods.scanSkillEnvBindingsBatch.channel).toBe("synapse:secrets:scan-skill-env-bindings-batch")
     expect(secretsIpcModule.methods.queueSkillEnvBindings.channel).toBe("synapse:secrets:queue-skill-env-bindings")
     expect(secretsIpcModule.events.changed.channel).toBe("synapse:secrets:changed")
   })
@@ -56,6 +60,10 @@ describe("secretsIpcModule", () => {
       scanSessionId: "scan-1",
       itemIds: ["item-1"],
       value: "must-not-cross-ipc",
+    })).toThrow()
+    expect(() => secretsIpcModule.methods.scanSkillEnvBindingsBatch.request.parse({
+      names: ["TOKEN"],
+      values: ["must-not-cross-ipc"],
     })).toThrow()
   })
 
@@ -187,6 +195,27 @@ describe("secretsIpcModule", () => {
         includeValue: true,
       }),
     }))
+  })
+
+  it("authorizes every name before running one batch Skill env scan", async () => {
+    const { auditSink, ctx, permissionGuard, service } = createHarness()
+
+    await expect(secretsIpcModule.methods.scanSkillEnvBindingsBatch.handler(ctx as never, {
+      names: ["TOKEN", "REGION"],
+    })).resolves.toEqual({
+      groups: [
+        { name: "TOKEN", scanResult: { scanSessionId: "scan-TOKEN", items: [] } },
+        { name: "REGION", scanResult: { scanSessionId: "scan-REGION", items: [] } },
+      ],
+    })
+
+    expect(service.scanSkillEnvBindingsBatch).toHaveBeenCalledTimes(1)
+    expect(permissionGuard.check).toHaveBeenCalledTimes(2)
+    expect(auditSink.record).toHaveBeenCalledTimes(2)
+    expect(permissionGuard.check.mock.calls.map(([request]) => request.resource)).toEqual([
+      "secret:user:token",
+      "secret:user:region",
+    ])
   })
 
   it("stops Skill env queues before reading the secret when permission is denied", async () => {

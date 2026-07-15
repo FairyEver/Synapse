@@ -14,6 +14,8 @@ import {
   type SecretDeleteInput,
   type SecretGetInput,
   type SecretListResult,
+  type SecretSkillEnvBatchScanInput,
+  type SecretSkillEnvBatchScanResult,
   type SecretSkillEnvQueueInput,
   type SecretSkillEnvQueueResult,
   type SecretSkillEnvScanInput,
@@ -188,6 +190,22 @@ export function createSecretsService(deps: SecretsServiceDeps) {
     return await deps.skillEnvBindings.scan(secret.name, secret.value, security)
   }
 
+  async function scanSkillEnvBindingsBatch(
+    input: SecretSkillEnvBatchScanInput,
+    security: SkillEnvBindingSecurity,
+  ): Promise<SecretSkillEnvBatchScanResult> {
+    const requests = []
+    for (const name of input.names) {
+      const requestedName = normalizeName(name)
+      const secret = await requireByName(requestedName)
+      if (secret.name !== requestedName) {
+        throw new Error(`Skill 配置键必须与密钥名称大小写完全一致：${requestedName}`)
+      }
+      requests.push({ name: secret.name, value: secret.value })
+    }
+    return { groups: await deps.skillEnvBindings.scanMany(requests, security) }
+  }
+
   async function queueSkillEnvBindings(
     input: SecretSkillEnvQueueInput,
     security: SkillEnvBindingSecurity,
@@ -334,6 +352,7 @@ export function createSecretsService(deps: SecretsServiceDeps) {
     upsert,
     delete: deleteItem,
     scanSkillEnvBindings,
+    scanSkillEnvBindingsBatch,
     queueSkillEnvBindings,
   }
 }
