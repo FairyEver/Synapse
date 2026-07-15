@@ -5,6 +5,7 @@ import type { DataNamespace } from "../../../electron/runtime/data-repo"
 import type { EventBus } from "../../../electron/runtime/event-bus"
 import type { AgentEvent, AgentMessage, AgentRuntimeService } from "../../../electron/services/agent-runtime"
 import { agentRuntimeErrorMessage } from "../../../electron/services/agent-runtime/error-message"
+import { redactSensitiveText } from "../../../electron/services/agent-runtime/redaction"
 import { createMainLogger } from "../../../electron/services/log-store"
 import {
   normalizeSwarmTaskConfig,
@@ -24,7 +25,6 @@ import {
 import {
   buildSwarmWorkerPrompt,
   extractSwarmStructuredOutput,
-  fallbackSummary,
 } from "./prompt-builder"
 import { createSwarmScheduler, type SwarmWorkerRunner } from "./scheduler"
 
@@ -529,8 +529,8 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     const extracted = extractSwarmStructuredOutput(outcome.resultText)
     const summaryEnabled = input.input.config.promptInjection.summary.enabled
     const handoffEnabled = input.input.config.promptInjection.previousHandoff.enabled
-    const summary = summaryEnabled
-      ? extracted.summary ?? fallbackSummary(outcome.resultText)
+    const summary = summaryEnabled && extracted.summary
+      ? sanitizeSwarmSummary(extracted.summary)
       : undefined
     const summaryFallback = summaryEnabled && !extracted.summary
     const safeError = outcome.error
@@ -548,7 +548,8 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       finishedAt: timestamp(),
       lastPhase: outcome.status === "success" ? "completed" : outcome.status,
       ...(finalMessage ? { lastMessage: finalMessage } : {}),
-      ...(summary ? { summary, summaryFallback } : {}),
+      ...(summary ? { summary, summaryFallback: false } : {}),
+      ...(summaryFallback ? { summaryFallback: true } : {}),
       ...(handoffEnabled && extracted.handoff ? { handoff: extracted.handoff } : {}),
       ...(safeError ? { error: safeError } : {}),
     }
@@ -732,6 +733,10 @@ function previousSlotHandoff(
 
 function inferBatchIndex(worker: SwarmWorkerRun): number {
   return worker.batchIndex ?? 1
+}
+
+function sanitizeSwarmSummary(summary: string): string {
+  return [...redactSensitiveText(summary.trim())].slice(0, 2000).join("")
 }
 
 function isAbortError(error: unknown): boolean {

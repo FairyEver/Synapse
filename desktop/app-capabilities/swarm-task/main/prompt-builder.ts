@@ -180,7 +180,3 @@ function extractBlock<K extends keyof ExtractedSwarmOutput>(
   const value = text.slice(contentStart, end).trim()
   return value ? { [key]: value } as Pick<ExtractedSwarmOutput, K> : {}
 }
-
-export function fallbackSummary(text: string, maxLength = 2000): string {
-  return text.trim().slice(0, maxLength)
-}

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import {
   buildSwarmWorkerPrompt,
   extractSwarmStructuredOutput,
-  fallbackSummary,
 } from "../prompt-builder"
 import type { SwarmTaskConfig, SwarmWorkerRun } from "../../shared/schema"
 
@@ -191,11 +190,5 @@ describe("extractSwarmStructuredOutput", () => {
 
   it("returns undefined values when blocks are missing", () => {
     expect(extractSwarmStructuredOutput("plain result")).toEqual({})
-  })
-})
-
-describe("fallbackSummary", () => {
-  it("trims long final output", () => {
-    expect(fallbackSummary("a".repeat(20), 8)).toBe("aaaaaaaa")
   })
 })

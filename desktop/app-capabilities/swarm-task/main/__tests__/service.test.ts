@@ -667,12 +667,12 @@ describe("createSwarmTaskService", () => {
     expect(JSON.stringify(emitted)).not.toContain("done")
   })
 
-  it("stores fallback summary when summary block is missing", async () => {
+  it("does not store raw output as a summary when the summary block is missing", async () => {
     const { service } = serviceHarness({
       agent: {
         sendWorker: vi.fn(async () => ({
-          conversationId: "conversation-1",
-          resultText: "plain final result",
+          conversationId: "conversation-fallback",
+          resultText: "plain final result Authorization: Bearer sk-private-token",
           status: "success",
           events: [],
         })),
@@ -686,8 +686,41 @@ describe("createSwarmTaskService", () => {
     })
     const workerRuns = await service.listWorkerRuns(run.id)
 
-    expect(workerRuns[0]?.summary).toBe("plain final result")
+    expect(workerRuns[0]?.summary).toBeUndefined()
     expect(workerRuns[0]?.summaryFallback).toBe(true)
+  })
+
+  it("redacts and bounds explicit worker summaries before persistence", async () => {
+    const { service } = serviceHarness({
+      agent: {
+        sendWorker: vi.fn(async () => ({
+          conversationId: "conversation-summary-redaction",
+          resultText: [
+            "<SYNAPSE_SWARM_SUMMARY>",
+            `completed Authorization: Bearer sk-private-token ${"界".repeat(2200)}`,
+            "</SYNAPSE_SWARM_SUMMARY>",
+          ].join("\n"),
+          status: "success",
+          events: [],
+        })),
+      },
+    })
+    const task = await service.createTask({ name: "任务", config })
+
+    const run = await service.startRun({
+      taskId: task.id,
+      configOverride: { concurrency: 1, maxRounds: 1 },
+    })
+
+    await vi.waitFor(async () => {
+      expect(await service.getRun(run.id)).toMatchObject({ status: "success" })
+    })
+
+    const workerRuns = await service.listWorkerRuns(run.id)
+    expect(workerRuns[0]?.summary).toContain("completed")
+    expect(workerRuns[0]?.summary).not.toContain("sk-private-token")
+    expect([...(workerRuns[0]?.summary ?? "")]).toHaveLength(2000)
+    expect(workerRuns[0]?.summaryFallback).toBe(false)
   })
 
   it("persists cancelled worker state when the gateway aborts during cancelRun", async () => {
