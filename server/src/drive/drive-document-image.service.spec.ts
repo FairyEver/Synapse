@@ -42,6 +42,27 @@ describe("DriveDocumentImageService", () => {
       "relative",
       "data",
     ])
+    expect(result.sources.at(-1)).toMatchObject({
+      src: "data:image/png;base64,…（26 字节）",
+      kind: "data",
+      canImport: false,
+    })
+    expect(result.sources.at(-1)?.previewUrl).toBeUndefined()
+  })
+
+  it("returns a bounded summary instead of a complete data image URI", async () => {
+    const payload = "a".repeat(1024 * 1024)
+    const service = createService({
+      currentMarkdown: `![data](data:image/png;base64,${payload})`,
+    })
+
+    const result = await service.scanOwnerItemImages({ actorUserId: "owner-1", itemId: "item-1" })
+    const source = result.sources[0]
+
+    expect(source?.kind).toBe("data")
+    expect(source?.src).toBe(`data:image/png;base64,…（${payload.length + 22} 字节）`)
+    expect(source?.src.length).toBeLessThan(80)
+    expect(source?.previewUrl).toBeUndefined()
   })
 
   it("rejects collaborator import even when collaborator can edit", async () => {

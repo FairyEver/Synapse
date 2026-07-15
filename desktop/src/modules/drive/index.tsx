@@ -51,9 +51,11 @@ import {
   DriveTableColumns,
 } from "./drive-table-columns"
 import {
+  DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES,
   DRIVE_LOCAL_UPLOAD_MAX_FILES,
   DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
   createDriveLocalUploadTooDeepError,
+  createDriveLocalUploadTooManyDirectoriesError,
   createDriveLocalUploadTooManyFilesError,
 } from "@/lib/drive-local-upload-limits"
 import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
@@ -125,6 +127,7 @@ import {
   applyDriveUploadProgressEvent,
   buildDriveUploadRetryRequest,
   createDriveUploadTask,
+  failDriveUploadTask,
   finishDriveUploadTask,
   getDriveUploadStatusBadge,
   type DriveUploadTask,
@@ -314,6 +317,11 @@ function DriveModuleContent() {
     busyIds: disablingShareIds,
     busyIdsRef: disablingShareIdsRef,
     setBusyId: setDisablingShareId,
+  } = useBusyIdSet()
+  const {
+    busyIds: deletingItemIds,
+    busyIdsRef: deletingItemIdsRef,
+    setBusyId: setDeletingItemId,
   } = useBusyIdSet()
   const [submitting, setSubmitting] = useState(false)
   const [uploadTask, setUploadTask] = useState<DriveUploadTask | null>(null)
@@ -537,7 +545,7 @@ function DriveModuleContent() {
 
   const runLocalUpload = useCallback(async (
     createRequest: () => Promise<DriveLocalUploadBuildResult>,
-    options: { readonly retry?: boolean } = {},
+    options: { readonly destinationPath?: string; readonly retry?: boolean } = {},
   ) => {
     if (uploadActionsDisabled && !options.retry) return
     let taskId: string | null = null
@@ -553,7 +561,7 @@ function DriveModuleContent() {
       const nextTask = createDriveUploadTask({
         id: taskId,
         parentId: request.parentId ?? null,
-        destinationPath: formatDriveBreadcrumbPath(path),
+        destinationPath: options.destinationPath ?? formatDriveBreadcrumbPath(path),
         request: requestWithTaskId,
       })
       setUploadTask(nextTask)
@@ -562,7 +570,7 @@ function DriveModuleContent() {
       const resultWithSkipped = withSkipped(result, skipped)
       setUploadTask((current) => current?.id === taskId ? finishDriveUploadTask(current, resultWithSkipped) : current)
       const message = uploadResultMessage(resultWithSkipped)
-      if (resultWithSkipped.failed > 0) {
+      if (driveUploadFailedCount(resultWithSkipped) > 0) {
         toast.error(message, { duration: ERROR_NOTIFICATION_DURATION_MS })
       } else {
         toast(message)
@@ -572,7 +580,7 @@ function DriveModuleContent() {
       const message = errorMessage(rawError, "上传失败")
       if (taskId) {
         setUploadTask((current) => current?.id === taskId
-          ? { ...current, status: "failed", finishedAt: Date.now(), message }
+          ? failDriveUploadTask(current, message)
           : current)
       }
       toast.error(message, { duration: ERROR_NOTIFICATION_DURATION_MS })
@@ -609,9 +617,14 @@ function DriveModuleContent() {
   }, [parentId, runLocalUpload])
 
   const handleRetryFailedUpload = useCallback(() => {
-    const retryRequest = uploadTaskRef.current ? buildDriveUploadRetryRequest(uploadTaskRef.current) : null
+    const task = uploadTaskRef.current
+    if (!task || task.status === "running") return
+    const retryRequest = buildDriveUploadRetryRequest(task)
     if (!retryRequest) return
-    void runLocalUpload(async () => ({ request: retryRequest, skipped: 0 }), { retry: true })
+    void runLocalUpload(async () => ({ request: retryRequest, skipped: 0 }), {
+      destinationPath: task.destinationPath,
+      retry: true,
+    })
   }, [runLocalUpload])
 
   const handleClearUploadTask = useCallback(() => {
@@ -677,6 +690,8 @@ function DriveModuleContent() {
   }, [loadItems, moveParentId, moveTarget])
 
   const deleteDriveItem = useCallback(async (item: DriveItemDto): Promise<boolean> => {
+    if (deletingItemIdsRef.current.has(item.id)) return false
+    setDeletingItemId(item.id, true)
     setSubmitting(true)
     try {
       await requireSynapseBridge().account.deleteDriveItem({
@@ -690,9 +705,10 @@ function DriveModuleContent() {
       toast(errorMessage(rawError, "删除失败"))
       return false
     } finally {
+      setDeletingItemId(item.id, false)
       setSubmitting(false)
     }
-  }, [loadDriveUsage, loadItems])
+  }, [deletingItemIdsRef, loadDriveUsage, loadItems, setDeletingItemId])
 
   const handleDelete = useCallback((item: DriveItemDto, event?: Pick<MouseEvent<HTMLElement>, "altKey">) => {
     if (event && shouldBypassDeleteConfirm(event)) {
@@ -952,6 +968,7 @@ function DriveModuleContent() {
         onOpenShareDetails={handleOpenShareDetails}
         onDisableShare={handleDisableShare}
         disablingShareIds={disablingShareIds}
+        deletingItemIds={deletingItemIds}
         onUploadDroppedFiles={handleDroppedFiles}
         uploadDisabled={uploadActionsDisabled}
       />
@@ -1531,6 +1548,7 @@ function DriveFileList({
   onOpenShareDetails,
   onDisableShare,
   disablingShareIds,
+  deletingItemIds,
   onUploadDroppedFiles,
   uploadDisabled,
 }: {
@@ -1555,6 +1573,7 @@ function DriveFileList({
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly disablingShareIds: ReadonlySet<string>
+  readonly deletingItemIds: ReadonlySet<string>
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
   readonly uploadDisabled: boolean
 }) {
@@ -1638,6 +1657,7 @@ function DriveFileList({
                   onOpenShareDetails={onOpenShareDetails}
                   onDisableShare={onDisableShare}
                   disablingShare={item.activeShareId ? disablingShareIds.has(item.activeShareId) : false}
+                  deleting={deletingItemIds.has(item.id)}
                 />
               ))}
             </TableBody>
@@ -1884,6 +1904,7 @@ function DriveFileListRow({
   onOpenShareDetails,
   onDisableShare,
   disablingShare,
+  deleting,
 }: {
   readonly drivePath: string
   readonly item: DriveItemDto
@@ -1899,6 +1920,7 @@ function DriveFileListRow({
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly disablingShare: boolean
+  readonly deleting: boolean
 }) {
   const isFolder = item.type === "folder"
   const statusBadges = getDriveStatusBadges(item)
@@ -2017,7 +2039,7 @@ function DriveFileListRow({
           <Button type="button" variant="ghost" size="xs" disabled={!canOpen} onClick={() => onOpenItem(item)}>
             预览
           </Button>
-          <Button type="button" variant="ghost" size="xs" onClick={(event) => onDelete(item, event)}>
+          <Button type="button" variant="ghost" size="xs" disabled={deleting} onClick={(event) => onDelete(item, event)}>
             删除
           </Button>
           <DriveItemMenu
@@ -2390,6 +2412,23 @@ function DrivePublicLinksDialog({
     void loadShares({ generation })
   }, [loadShares, open])
 
+  useEffect(() => {
+    const nextOffset = shareState.page?.nextOffset
+    if (
+      !open
+      || !shareState.loaded
+      || shareState.loading
+      || shareState.loadingMore
+      || shareState.error
+      || visibleShares.length > 0
+      || !shareState.page?.hasMore
+      || nextOffset === null
+      || nextOffset === undefined
+    ) return
+
+    void loadShares({ offset: nextOffset, append: true, generation: shareLoadGenerationRef.current })
+  }, [loadShares, open, shareState.error, shareState.loaded, shareState.loading, shareState.loadingMore, shareState.page, visibleShares.length])
+
   const reloadAfterPublicLinkChange = useCallback(async () => {
     await loadShares()
     await onDriveItemsChanged()
@@ -2490,6 +2529,7 @@ function DrivePublicLinkList({
 }) {
   if (loading) return <DrivePublicLinkTableSkeleton />
   if (error) return <DriveDialogErrorState message={error} onRetry={onRetry} />
+  if (shares.length === 0 && page?.hasMore && page.nextOffset !== null) return <DrivePublicLinkTableSkeleton />
   if (shares.length === 0) return <DriveDialogEmptyState title={emptyTitle} />
 
   return (
@@ -2953,6 +2993,7 @@ async function buildDriveLocalFolderItemsFromFiles(files: readonly File[]): Prom
     const folder = folders.get(folderName) ?? { files: [], directories: new Set<string>() }
     for (const directory of parentDirectoryPaths(fileRelativePath)) {
       folder.directories.add(directory)
+      assertDriveLocalUploadDirectoryCapacity(folder.directories.size)
     }
     folder.files.push({
       path,
@@ -3071,6 +3112,7 @@ async function collectFilesFromDirectoryEntry({
       }
       if (isDriveDirectoryEntry(child)) {
         const relativePath = `${prefix}${child.name}`
+        assertDriveLocalUploadDirectoryCapacity(directories.length + 1)
         directories.push(relativePath)
         await collectFilesFromDirectoryEntry({
           directories,
@@ -3139,6 +3181,12 @@ function parentDirectoryPaths(relativePath: string): string[] {
 function assertDriveLocalUploadFileCapacity(fileCount: number): void {
   if (fileCount > DRIVE_LOCAL_UPLOAD_MAX_FILES) {
     throw createDriveLocalUploadTooManyFilesError()
+  }
+}
+
+function assertDriveLocalUploadDirectoryCapacity(directoryCount: number): void {
+  if (directoryCount > DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES) {
+    throw createDriveLocalUploadTooManyDirectoriesError()
   }
 }
 
@@ -3330,14 +3378,19 @@ function formatDriveShareAccessSummary(item: {
 
 function uploadResultMessage(result: DriveLocalUploadResult): string {
   const completedLabel = formatUploadCompleted(result)
-  if (result.failed === 0) {
+  const failedCount = driveUploadFailedCount(result)
+  if (failedCount === 0) {
     return result.skipped > 0
       ? `已上传 ${completedLabel}，跳过 ${result.skipped} 个`
       : `已上传 ${completedLabel}`
   }
   return result.message
-    ? `上传完成 ${completedLabel}，失败 ${result.failed} 个：${result.message}`
-    : `上传完成 ${completedLabel}，失败 ${result.failed} 个`
+    ? `上传完成 ${completedLabel}，失败 ${failedCount} 个：${result.message}`
+    : `上传完成 ${completedLabel}，失败 ${failedCount} 个`
+}
+
+function driveUploadFailedCount(result: DriveLocalUploadResult): number {
+  return result.failed + (result.failedDirectories ?? 0)
 }
 
 function withSkipped(result: DriveLocalUploadResult, skipped: number): DriveLocalUploadResult {

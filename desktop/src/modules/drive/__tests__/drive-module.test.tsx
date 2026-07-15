@@ -20,7 +20,7 @@ import {
 } from "@synapse/shared"
 import type { SynapseAccountState } from "@/types/account"
 import type { DriveLocalUploadProgressEvent } from "@/types/bridge"
-import { DRIVE_LOCAL_UPLOAD_MAX_FILES } from "@/lib/drive-local-upload-limits"
+import { DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES, DRIVE_LOCAL_UPLOAD_MAX_FILES } from "@/lib/drive-local-upload-limits"
 
 import { DriveModule } from "../index"
 
@@ -2289,6 +2289,9 @@ describe("DriveModule", () => {
       duration: 5000,
     }))
     expect(mocks.toast).not.toHaveBeenCalledWith("上传失败")
+    expect(document.body.textContent).toContain("上传失败")
+    expect(document.body.textContent).toContain("失败1")
+    expect(getButton("重试失败项")).not.toBeNull()
   })
 
   it("keeps non-upload list actions available while a local upload is running", async () => {
@@ -2384,7 +2387,7 @@ describe("DriveModule", () => {
       emitDriveLocalUploadProgress({
         type: "item-started",
         taskId: lastUploadTaskId(),
-        itemKey: "file:/tmp/report.txt",
+        itemKey: "item:0",
       })
       await flushPromises()
     })
@@ -2394,7 +2397,7 @@ describe("DriveModule", () => {
       emitDriveLocalUploadProgress({
         type: "item-completed",
         taskId: lastUploadTaskId(),
-        itemKey: "file:/tmp/report.txt",
+        itemKey: "item:0",
       })
       upload.resolve({ completed: 1, failed: 0, skipped: 0 })
       await flushPromises()
@@ -2434,7 +2437,7 @@ describe("DriveModule", () => {
       emitDriveLocalUploadProgress({
         type: "item-failed",
         taskId: firstTaskId,
-        itemKey: "file:/tmp/report.txt",
+        itemKey: "item:0",
         message: "上传失败。",
       })
       upload.resolve({ completed: 0, failed: 1, skipped: 0, message: "上传失败。" })
@@ -2454,6 +2457,7 @@ describe("DriveModule", () => {
         mimeType: "text/plain",
       }],
     })
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("/作业范文")
   })
 
   it("clears a finished upload task from the breadcrumb row", async () => {
@@ -2716,6 +2720,27 @@ describe("DriveModule", () => {
     expect(mocks.uploadDriveLocalItems).not.toHaveBeenCalled()
     expect(mocks.toastError).toHaveBeenCalledWith(
       `一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_FILES} 个文件，请拆分后再上传。`,
+      expect.objectContaining({ duration: 5000 }),
+    )
+  })
+
+  it("stops expanding dropped folders when the directory limit is reached", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    const dropzone = getDriveDropzone()
+    const directoryEntries = Array.from({ length: DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES + 1 }, (_, index) => (
+      createDirectoryEntry(`empty-${index}`, [])
+    ))
+
+    dispatchDragEvent(dropzone, "drop", createDataTransfer({
+      items: [createDirectoryTransferItem("bulk", directoryEntries)],
+    }))
+    await flushAct()
+
+    expect(mocks.uploadDriveLocalItems).not.toHaveBeenCalled()
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      `一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES} 个文件夹，请拆分后再上传。`,
       expect.objectContaining({ duration: 5000 }),
     )
   })
@@ -3152,6 +3177,30 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已删除")
   })
 
+  it("ignores repeated Alt-click deletes while the item is pending", async () => {
+    const deletion = createDeferred<void>()
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
+    ])
+    mocks.deleteDriveItem.mockReturnValueOnce(deletion.promise)
+    await render(<DriveModule />)
+    await flushAct()
+
+    const deleteButton = rowButton("report.txt", "删除")
+    if (!deleteButton) throw new Error("Delete button not found")
+    await act(async () => {
+      deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, altKey: true }))
+      deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, altKey: true }))
+      await flushPromises()
+    })
+
+    expect(mocks.deleteDriveItem).toHaveBeenCalledTimes(1)
+    expect(rowButton("report.txt", "删除")?.disabled).toBe(true)
+
+    deletion.resolve()
+    await flushAct()
+  })
+
   it("defaults public link management to the share list without publication tabs", async () => {
     mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
       createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
@@ -3208,6 +3257,26 @@ describe("DriveModule", () => {
     await clickTabText("文件")
     expect(dialog.textContent).toContain("notes.md")
     expect(dialog.textContent).not.toContain("docs")
+  })
+
+  it("loads additional share pages until the active type is found", async () => {
+    mocks.listDriveShares
+      .mockResolvedValueOnce(createDrivePublicLinksPage([
+        createDriveShare({ id: "share-folder", shareId: "shr_folder", itemName: "docs", itemType: "folder" }),
+      ], { hasMore: true, nextOffset: 1 }))
+      .mockResolvedValueOnce(createDrivePublicLinksPage([
+        createDriveShare({ id: "share-file", shareId: "shr_file", itemName: "notes.md", itemType: "file" }),
+      ]))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await flushAct()
+
+    expect(mocks.listDriveShares).toHaveBeenNthCalledWith(1, { offset: 0, limit: 20 })
+    expect(mocks.listDriveShares).toHaveBeenNthCalledWith(2, { offset: 1, limit: 20 })
+    expect(document.body.textContent).toContain("notes.md")
+    expect(document.body.textContent).not.toContain("暂无分享")
   })
 
   it("loads share data in the public links dialog", async () => {

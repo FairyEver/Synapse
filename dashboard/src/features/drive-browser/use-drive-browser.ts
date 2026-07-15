@@ -64,6 +64,13 @@ type KeyedDriveBrowserSnapshot = {
   snapshot: DriveBrowserSnapshotDto
 }
 
+type DriveBrowserUnlockVariables = {
+  readonly itemId?: string
+  readonly keySignature: string
+  readonly password: string
+  readonly shareId: string
+}
+
 export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   const queryClient = useQueryClient()
   const [unlockedSnapshotState, setUnlockedSnapshotState] = useState<KeyedDriveBrowserSnapshot | null>(null)
@@ -74,8 +81,12 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   const unlockedKeyPayload = useMemo(() => toUnlockedSnapshotKey(input), [input])
   const unlockedKeySignature = useMemo(() => JSON.stringify(unlockedKeyPayload), [unlockedKeyPayload])
   const queryKeySignatureRef = useRef(queryKeySignature)
+  const unlockedKeySignatureRef = useRef(unlockedKeySignature)
   const queryKey = useMemo(() => ['drive-browser', queryKeyPayload], [queryKeyPayload])
-  const unlockedSnapshot = keyedSnapshotForSignature(unlockedSnapshotState, unlockedKeySignature)
+  const shouldValidateInitialPassword = input.context === 'share' && Boolean(input.initialPassword)
+  const unlockedSnapshot = shouldValidateInitialPassword
+    ? null
+    : keyedSnapshotForSignature(unlockedSnapshotState, unlockedKeySignature)
   const pagedSnapshot = keyedSnapshotForSignature(pagedSnapshotState, queryKeySignature)
 
   const query = useQuery({
@@ -84,13 +95,13 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
     enabled: unlockedSnapshot === null,
   })
   const unlockMutation = useMutation({
-    mutationFn: async (password: string) => {
-      if (input.context !== 'share') throw new Error('当前文件不需要密码。')
-      const result = await driveBrowserApi.unlockShare(input.shareId, password, input.itemId)
+    mutationFn: async (variables: DriveBrowserUnlockVariables) => {
+      const result = await driveBrowserApi.unlockShare(variables.shareId, variables.password, variables.itemId)
       return requireDriveBrowserSnapshot(result)
     },
-    onSuccess: (snapshot) => {
-      setUnlockedSnapshotState({ keySignature: unlockedKeySignature, snapshot })
+    onSuccess: (snapshot, variables) => {
+      if (variables.keySignature !== unlockedKeySignatureRef.current) return
+      setUnlockedSnapshotState({ keySignature: variables.keySignature, snapshot })
       setPagedSnapshotState(null)
     },
   })
@@ -146,6 +157,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
     loadMoreMutation.reset()
   }, [queryKeySignature])
   useEffect(() => {
+    unlockedKeySignatureRef.current = unlockedKeySignature
     setUnlockedSnapshotState(null)
   }, [unlockedKeySignature])
 
@@ -221,7 +233,15 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
     return {
       status: 'passwordRequired',
       message: query.data.message,
-      unlock: (password) => unlockMutation.mutate(password),
+      unlock: (password) => {
+        if (input.context !== 'share') return
+        unlockMutation.mutate({
+          itemId: input.itemId,
+          keySignature: unlockedKeySignature,
+          password,
+          shareId: input.shareId,
+        })
+      },
       unlocking: unlockMutation.isPending,
       unlockError: unlockMutation.error ? getErrorMessage(unlockMutation.error) : initialPasswordRejected ? query.data.message : null,
     }

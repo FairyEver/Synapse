@@ -104,6 +104,16 @@ afterEach(() => {
 })
 
 describe('DriveMarkdownRenderer', () => {
+  it('switches from the empty code fallback to rendered markdown without changing hook order', () => {
+    const { rerender } = renderMarkdown({ previewData: preview({ html: '', text: '' }) })
+
+    expect(document.querySelector('[data-monaco-editor="true"]')).not.toBeNull()
+    expect(() => rerender({ previewData: preview() })).not.toThrow()
+    expect(document.querySelector('[data-testid="markdown-body"]')).not.toBeNull()
+    expect(() => rerender({ previewData: preview({ html: '', text: '' }) })).not.toThrow()
+    expect(document.querySelector('[data-monaco-editor="true"]')).not.toBeNull()
+  })
+
   it('aligns the outline rail with the markdown content top padding', () => {
     renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
 

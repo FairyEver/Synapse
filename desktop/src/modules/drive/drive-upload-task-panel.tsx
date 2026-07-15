@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -33,7 +34,7 @@ export function DriveUploadTaskPanel({
   const currentItem = task?.items.find((item) => item.status === "uploading")
     ?? task?.items.find((item) => item.status === "queued")
     ?? null
-  const canRetry = Boolean(task && task.failedItems > 0 && onRetry)
+  const canRetry = Boolean(task && task.status !== "running" && task.items.some((item) => item.status === "failed") && onRetry)
   const canClear = Boolean(task && task.status !== "running" && onClear)
 
   return (
@@ -114,7 +115,7 @@ function UploadMetric({ label, value }: { readonly label: string; readonly value
   )
 }
 
-function UploadTaskItemRow({ item }: { readonly item: DriveUploadTaskItem }) {
+const UploadTaskItemRow = memo(function UploadTaskItemRow({ item }: { readonly item: DriveUploadTaskItem }) {
   return (
     <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50">
       <div className="min-w-0 flex-1">
@@ -128,7 +129,7 @@ function UploadTaskItemRow({ item }: { readonly item: DriveUploadTaskItem }) {
       </Badge>
     </div>
   )
-}
+})
 
 function EndTruncatedText({ value, className }: { readonly value: string; readonly className?: string }) {
   return (
@@ -140,7 +141,7 @@ function EndTruncatedText({ value, className }: { readonly value: string; readon
 
 function uploadTaskStatusText(task: DriveUploadTask): string {
   if (task.status === "running") return "正在上传"
-  if (task.failedItems > 0) return "上传失败"
+  if (task.status === "failed") return "上传失败"
   return "上传完成"
 }
 

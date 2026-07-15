@@ -284,9 +284,59 @@ describe("AccountService", () => {
     })
 
     expect(events).toEqual([
-      { type: "item-started", taskId: "upload-task-1", itemKey: `file:${filePath}` },
-      { type: "item-progress", taskId: "upload-task-1", itemKey: `file:${filePath}`, uploadedBytes: 6, totalBytes: 6 },
-      { type: "item-completed", taskId: "upload-task-1", itemKey: `file:${filePath}` },
+      { type: "item-started", taskId: "upload-task-1", itemKey: "item:0" },
+      { type: "item-progress", taskId: "upload-task-1", itemKey: "item:0", uploadedBytes: 6, totalBytes: 6 },
+      { type: "item-completed", taskId: "upload-task-1", itemKey: "item:0" },
+    ])
+    expect(JSON.stringify(events)).not.toContain(filePath)
+  })
+
+  it("coalesces upload progress emitted within one reporting interval", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-progress-coalesced-"))
+    const filePath = path.join(dir, "archive.bin")
+    const size = 512 * 1024
+    await writeFile(filePath, Buffer.alloc(size))
+
+    const fetch = vi.fn(async (_url, init) => {
+      const body = init?.body as AsyncIterable<unknown> | undefined
+      if (body) {
+        for await (const _chunk of body) {
+          // Drain the upload body so stream progress can be emitted.
+        }
+      }
+      return new Response(null, { status: 200 })
+    }) as unknown as typeof globalThis.fetch
+    const { service } = await createTestAccountService({ fetch })
+    vi.spyOn(service, "prepareDriveUpload").mockResolvedValue({
+      item: driveItem({ id: "file-1", name: "archive.bin", size: String(size) }),
+      sessionId: "session-file-1",
+      upload: {
+        expiresAt: "2026-06-09T00:10:00.000Z",
+        headers: { "Content-Type": "application/octet-stream" },
+        method: "PUT",
+        url: "https://upload.example.test/file-1",
+      },
+    })
+    vi.spyOn(service, "completeDriveUpload").mockResolvedValue(
+      driveItem({ id: "file-1", name: "archive.bin", size: String(size) }),
+    )
+    vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+    const events: Array<{ readonly type: string; readonly uploadedBytes?: number }> = []
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000)
+    try {
+      await service.uploadDriveLocalItems({
+        taskId: "upload-task-1",
+        parentId: null,
+        items: [{ kind: "file", path: filePath, name: "archive.bin", mimeType: "application/octet-stream" }],
+      }, {
+        onProgress: (event) => events.push(event),
+      })
+    } finally {
+      now.mockRestore()
+    }
+
+    expect(events.filter((event) => event.type === "item-progress")).toEqual([
+      expect.objectContaining({ uploadedBytes: size }),
     ])
   })
 
@@ -969,6 +1019,30 @@ describe("AccountService", () => {
       files: [],
     })
     expect(service.completeDriveUpload).not.toHaveBeenCalled()
+  })
+
+  it("reports directory-only folder prepare failures as failures", async () => {
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "prepareDriveFolderUpload").mockRejectedValue(new Error("network down"))
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: null,
+      items: [{
+        kind: "folder",
+        folderName: "项目A",
+        directories: [
+          { relativePath: "empty" },
+          { relativePath: "nested/leaf" },
+        ],
+        files: [],
+      }],
+    })).resolves.toEqual({
+      completed: 0,
+      failed: 0,
+      failedDirectories: 3,
+      skipped: 0,
+      message: "上传失败。",
+    })
   })
 
   it("cleans up a newly prepared folder root when every local folder upload fails", async () => {

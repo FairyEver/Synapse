@@ -941,17 +941,19 @@ export class AccountService {
     let completed = 0
     let completedDirectories = 0
     let failed = 0
+    let failedDirectories = 0
     let skipped = 0
     let firstError: string | undefined
     const progress = { taskId: input.taskId, onProgress: options.onProgress }
 
-    for (const item of input.items) {
+    for (const [itemIndex, item] of input.items.entries()) {
       const result = item.kind === "file"
-        ? await this.uploadDriveLocalFile(input.parentId ?? null, item, progress)
-        : await this.uploadDriveLocalFolder(input.parentId ?? null, item, progress)
+        ? await this.uploadDriveLocalFile(input.parentId ?? null, item, progress, driveLocalUploadItemKey(itemIndex))
+        : await this.uploadDriveLocalFolder(input.parentId ?? null, item, progress, itemIndex)
       completed += result.completed
       completedDirectories += result.completedDirectories ?? 0
       failed += result.failed
+      failedDirectories += result.failedDirectories ?? 0
       skipped += result.skipped
       firstError ??= result.message
     }
@@ -960,6 +962,7 @@ export class AccountService {
       completed,
       ...(completedDirectories > 0 ? { completedDirectories } : {}),
       failed,
+      ...(failedDirectories > 0 ? { failedDirectories } : {}),
       skipped,
       ...(firstError ? { message: firstError } : {}),
     }
@@ -1061,8 +1064,8 @@ export class AccountService {
     parentId: string | null,
     item: DriveLocalUploadFileItem,
     progress: DriveLocalUploadProgressReporter,
+    itemKey: string,
   ): Promise<DriveLocalUploadResult> {
-    const itemKey = driveLocalFileUploadItemKey(item)
     const fileStat = await safeLocalFileStat(item.path)
     if (!fileStat?.isFile()) {
       logger.warn("Drive local upload skipped.", { operation: "uploadDriveLocalFile", reason: "not-file" })
@@ -1113,6 +1116,7 @@ export class AccountService {
     parentId: string | null,
     item: DriveLocalUploadFolderItem,
     progress: DriveLocalUploadProgressReporter,
+    itemIndex: number,
   ): Promise<DriveLocalUploadResult> {
     const files: Array<{
       path: string
@@ -1120,6 +1124,7 @@ export class AccountService {
       size: string
       sizeBytes: number
       mimeType: string | null
+      itemKey: string
     }> = []
     const seenRelativePaths = new Set<string>()
     let skipped = 0
@@ -1147,8 +1152,8 @@ export class AccountService {
       directories.push({ relativePath: directory.relativePath })
     }
 
-    for (const file of item.files) {
-      const itemKey = driveLocalFolderUploadItemKey(item.folderName, file.relativePath)
+    for (const [fileIndex, file] of item.files.entries()) {
+      const itemKey = driveLocalUploadItemKey(itemIndex, fileIndex)
       if (!isSafeDriveRelativePath(file.relativePath)) {
         skipped += 1
         emitDriveLocalUploadProgress(progress, { type: "item-skipped", itemKey, message: "文件路径无效。" })
@@ -1184,6 +1189,7 @@ export class AccountService {
         size: String(fileStat.size),
         sizeBytes: fileStat.size,
         mimeType: file.mimeType ?? null,
+        itemKey,
       })
     }
 
@@ -1194,11 +1200,16 @@ export class AccountService {
       for (const file of files) {
         emitDriveLocalUploadProgress(progress, {
           type: "item-failed",
-          itemKey: driveLocalFolderUploadItemKey(item.folderName, file.relativePath),
+          itemKey: file.itemKey,
           message,
         })
       }
-      return { completed: 0, failed: files.length, skipped, message }
+      return {
+        completed: 0,
+        failed: files.length,
+        skipped,
+        message,
+      }
     }
 
     let prepared: DriveFolderUploadPrepareResult
@@ -1218,11 +1229,17 @@ export class AccountService {
       for (const file of files) {
         emitDriveLocalUploadProgress(progress, {
           type: "item-failed",
-          itemKey: driveLocalFolderUploadItemKey(item.folderName, file.relativePath),
+          itemKey: file.itemKey,
           message,
         })
       }
-      return { completed: 0, failed: files.length, skipped, message }
+      return {
+        completed: 0,
+        failed: files.length,
+        ...(files.length === 0 ? { failedDirectories: directories.length + 1 } : {}),
+        skipped,
+        message,
+      }
     }
 
     const preparedByPath = new Map(prepared.entries.map((entry) => [entry.relativePath, entry]))
@@ -1231,7 +1248,7 @@ export class AccountService {
     let firstError: string | undefined
 
     for (const file of files) {
-      const itemKey = driveLocalFolderUploadItemKey(item.folderName, file.relativePath)
+      const itemKey = file.itemKey
       const preparedEntry = preparedByPath.get(file.relativePath)
       if (!preparedEntry) {
         failed += 1
@@ -2641,12 +2658,8 @@ function localUploadErrorMessage(error?: unknown): string {
   return "上传失败。"
 }
 
-function driveLocalFileUploadItemKey(item: DriveLocalUploadFileItem): string {
-  return `file:${item.path}`
-}
-
-function driveLocalFolderUploadItemKey(folderName: string, relativePath: string): string {
-  return `folder:${folderName}/${relativePath}`
+function driveLocalUploadItemKey(itemIndex: number, fileIndex?: number): string {
+  return fileIndex === undefined ? `item:${itemIndex}` : `item:${itemIndex}:${fileIndex}`
 }
 
 function emitDriveLocalUploadProgress(
@@ -2662,11 +2675,29 @@ function createUploadProgressTransform(
   onProgress: (uploadedBytes: number, totalBytes: number) => void,
 ): Transform {
   let uploadedBytes = 0
+  let lastReportedBytes = 0
+  let lastReportedAt = Date.now()
+
+  const reportProgress = (force = false): void => {
+    if (uploadedBytes === lastReportedBytes) return
+
+    const now = Date.now()
+    if (!force && now - lastReportedAt < 100) return
+
+    lastReportedBytes = uploadedBytes
+    lastReportedAt = now
+    onProgress(uploadedBytes, totalBytes)
+  }
+
   return new Transform({
     transform(chunk: Buffer | string, encoding, callback) {
       uploadedBytes += typeof chunk === "string" ? Buffer.byteLength(chunk, encoding as BufferEncoding) : chunk.byteLength
-      onProgress(uploadedBytes, totalBytes)
+      reportProgress(uploadedBytes >= totalBytes)
       callback(null, chunk)
+    },
+    flush(callback) {
+      reportProgress(true)
+      callback()
     },
   })
 }

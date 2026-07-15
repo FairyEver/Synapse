@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useState, type MouseEvent } from "react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type MouseEvent } from "react"
 import { LoaderCircle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import type { DriveTrashItemDto, DriveTrashListPageDto } from "@synapse/shared"
@@ -70,11 +70,15 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
   const [error, setError] = useState<string | null>(null)
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DriveTrashItemDto | null>(null)
+  const loadRequestIdRef = useRef(0)
 
   const loadTrash = useCallback(async (offset = 0) => {
+    const requestId = ++loadRequestIdRef.current
     if (offset === 0) {
       setLoading(true)
       setError(null)
+      setLoadingMore(false)
+      setLoadMoreError(null)
     } else {
       setLoadingMore(true)
       setLoadMoreError(null)
@@ -84,6 +88,7 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
         offset,
         limit: DRIVE_TRASH_PAGE_SIZE,
       })
+      if (loadRequestIdRef.current !== requestId) return
       setPage((current) => {
         if (offset === 0 || !current) return result
         return {
@@ -93,6 +98,7 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
         }
       })
     } catch (rawError) {
+      if (loadRequestIdRef.current !== requestId) return
       const message = errorMessage(rawError, offset === 0 ? "回收站加载失败" : "加载失败")
       if (offset === 0) {
         setError(message)
@@ -100,10 +106,12 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
         setLoadMoreError(message)
       }
     } finally {
-      if (offset === 0) {
-        setLoading(false)
-      } else {
-        setLoadingMore(false)
+      if (loadRequestIdRef.current === requestId) {
+        if (offset === 0) {
+          setLoading(false)
+        } else {
+          setLoadingMore(false)
+        }
       }
     }
   }, [])

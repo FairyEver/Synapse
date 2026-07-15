@@ -556,7 +556,7 @@ describe('driveBrowserApi', () => {
   it('notifies auth expiration for protected browser write requests only', async () => {
     const authExpired = vi.fn()
     const unsubscribe = subscribeAuthExpired(authExpired)
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ message: '会话已过期。' }), {
         headers: { 'Content-Type': 'application/json' },
         status: 401,
@@ -569,6 +569,27 @@ describe('driveBrowserApi', () => {
 
       authExpired.mockClear()
       await expect(driveBrowserApi.getShareRoot('shr/id')).rejects.toMatchObject({ status: 401 })
+      expect(authExpired).not.toHaveBeenCalled()
+
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          code: 'DRIVE_SHARE_UNLOCK_REQUIRED',
+          message: '需要先解锁分享。',
+        }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 401,
+        })
+      )
+      authExpired.mockClear()
+      await expect(driveBrowserApi.updateShareText('shr/id', null, {
+        baseVersionId: 'version-1',
+        contentType: 'text',
+        text: 'updated',
+      })).rejects.toMatchObject({
+        code: 'DRIVE_SHARE_UNLOCK_REQUIRED',
+        message: '需要先解锁分享。',
+        status: 401,
+      })
       expect(authExpired).not.toHaveBeenCalled()
 
       authExpired.mockClear()
@@ -601,6 +622,7 @@ describe('driveBrowserApi', () => {
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid', 401)).toBe(false)
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/access', 401)).toBe(false)
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/content', 401)).toBe(true)
+      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/content', 401, 'DRIVE_SHARE_UNLOCK_REQUIRED')).toBe(false)
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/items/child%2Fid/content', 401)).toBe(true)
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/image-sources', 401)).toBe(true)
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/image-sources/import', 401)).toBe(true)

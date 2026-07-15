@@ -172,8 +172,8 @@ export class DriveDocumentImageService {
     if (isDataImageSource(input.source.src)) {
       return {
         ...base,
+        src: summarizeDataImageSource(input.source.src),
         kind: "data",
-        previewUrl: input.source.src,
         canImport: false,
         status: "ready",
         importDisabledReason: "unsupported",
@@ -418,6 +418,14 @@ function summarizeSources(sources: readonly DriveDocumentImageSource[]): DriveDo
 
 function isDataImageSource(src: string): boolean {
   return src.trimStart().toLowerCase().startsWith("data:")
+}
+
+function summarizeDataImageSource(src: string): string {
+  const header = src.trimStart().slice(0, 128)
+  const match = /^data:([^;,]{1,64})(;base64)?,/iu.exec(header)
+  const mediaType = match?.[1]?.toLowerCase() ?? "image"
+  const encoding = match?.[2]?.toLowerCase() ?? ""
+  return `data:${mediaType}${encoding},…（${Buffer.byteLength(src, "utf8")} 字节）`
 }
 
 function isRelativeImageSource(src: string): boolean {

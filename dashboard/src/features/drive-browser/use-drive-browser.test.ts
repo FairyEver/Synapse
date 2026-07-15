@@ -647,6 +647,52 @@ describe('toDriveBrowserQueryKey', () => {
     ))).toBe(false)
   })
 
+  it('ignores stale manual unlock responses after the share route changes', async () => {
+    const staleUnlock = createDeferred<DriveBrowserSnapshotDto>()
+    vi.mocked(driveBrowserApi.getShareRoot)
+      .mockResolvedValueOnce({ passwordRequired: true, message: '请输入密码。' })
+      .mockResolvedValueOnce({ passwordRequired: true, message: '请输入密码。' })
+    vi.mocked(driveBrowserApi.unlockShare).mockReturnValueOnce(staleUnlock.promise)
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const hook = createDriveBrowserHookRenderer(queryClient, { context: 'share', shareId: 'share-a' })
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('passwordRequired')
+    })
+    await act(async () => {
+      if (hook.result.current.status !== 'passwordRequired') throw new Error('browser is not password protected')
+      hook.result.current.unlock('letmein')
+    })
+    await waitFor(() => {
+      expect(driveBrowserApi.unlockShare).toHaveBeenCalledWith('share-a', 'letmein', undefined)
+    })
+
+    hook.rerender({ context: 'share', shareId: 'share-b' })
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('passwordRequired')
+    })
+
+    await act(async () => {
+      staleUnlock.resolve(createSnapshot({
+        current: { ...baseCurrent(), id: 'share-a-file', name: 'first.txt' },
+      }))
+      await staleUnlock.promise
+    })
+
+    expect(hook.result.current.status).toBe('passwordRequired')
+    expect(hook.history.some((entry) => (
+      entry.input.context === 'share'
+      && entry.input.shareId === 'share-b'
+      && entry.state.status === 'ready'
+      && entry.state.snapshot.current.id === 'share-a-file'
+    ))).toBe(false)
+  })
+
   it('keeps an initially unlocked share ready after the password is removed from the URL', async () => {
     const unlockedSnapshot = createSnapshot({
       current: { ...baseCurrent(), id: 'share-file', name: 'unlocked.txt' },
@@ -679,6 +725,47 @@ describe('toDriveBrowserQueryKey', () => {
       .toBe('unlocked.txt')
     expect(driveBrowserApi.unlockShare).toHaveBeenCalledWith('share-1', 'link-password', undefined, {})
     expect(driveBrowserApi.getShareRoot).not.toHaveBeenCalled()
+  })
+
+  it('revalidates a new initial password for an already unlocked share', async () => {
+    const unlockedSnapshot = createSnapshot({
+      current: { ...baseCurrent(), id: 'share-file', name: 'unlocked.txt' },
+    })
+    vi.mocked(driveBrowserApi.unlockShare)
+      .mockResolvedValueOnce(unlockedSnapshot)
+      .mockResolvedValueOnce({ passwordRequired: true, message: '密码错误。' })
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const hook = createDriveBrowserHookRenderer(queryClient, {
+      context: 'share',
+      shareId: 'share-1',
+      initialPassword: 'old-password',
+    })
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('ready')
+    })
+    hook.rerender({ context: 'share', shareId: 'share-1' })
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('ready')
+    })
+
+    hook.rerender({
+      context: 'share',
+      shareId: 'share-1',
+      initialPassword: 'new-password',
+    })
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('passwordRequired')
+    })
+
+    expect(driveBrowserApi.unlockShare).toHaveBeenCalledTimes(2)
+    expect(driveBrowserApi.unlockShare).toHaveBeenLastCalledWith('share-1', 'new-password', undefined, {})
+    expect(hook.result.current.status === 'passwordRequired' ? hook.result.current.unlockError : null).toBe('密码错误。')
   })
 
   it('reports initial share password rejection after the query password is consumed', async () => {
