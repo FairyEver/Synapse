@@ -1,4 +1,4 @@
 interface:
   display_name: "Synapse Fix Issue"
-  short_description: "Fix open Synapse bug issues from a GitHub issue filter."
-  default_prompt: "Paste a FairyEver/Synapse GitHub issue search URL to fix all matching unclaimed bug issues."
+  short_description: "Fix Synapse bugs sequentially from a GitHub issues list."
+  default_prompt: "Paste a FairyEver/Synapse GitHub issues directory or query URL to process every eligible bug issue with live progress updates."

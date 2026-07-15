@@ -1,15 +1,20 @@
 ---
 name: synapse-fix-issue
-description: Use when working in the Synapse repository and the user provides a FairyEver/Synapse GitHub issue search URL, issue query link, or says to 修改问题, 改 bug, 修 bug, 解决 issue, or gives only a GitHub issues?q= link. Fix open bug issues matching the supplied filter, using GitHub labels for claim/status management, focused commits, validation, and Chinese issue close comments.
+description: Use when working in the Synapse repository and the user provides a FairyEver/Synapse GitHub issues directory URL, issue search/query URL, or says to 修改问题, 改 bug, 修 bug, 解决 issue. Sequentially fix eligible open bug issues from the supplied list, using GitHub labels for claim/status management, focused commits, validation, Chinese issue comments, and live remaining-count updates after every issue.
 ---
 
 # Synapse Fix Issue
 
 ## Purpose
 
-Fix all open `bug` issues matching the user's GitHub issue search link for `FairyEver/Synapse`.
+Fix all eligible open `bug` issues from the user's GitHub issues list for `FairyEver/Synapse`.
 
-The user may provide only a GitHub issues search URL. Treat that as an instruction to run this workflow. The URL's query conditions define the target issue set, then intersect that set with open `bug` issues that are not already in a terminal/blocked status.
+The user may provide only a GitHub issues URL. Treat that as an instruction to run this workflow:
+
+- For the repository issues directory, such as `https://github.com/FairyEver/Synapse/issues`, process all eligible issues in that directory.
+- For an issues URL with `q=...`, process only issues matching that query, preserving all supplied filters.
+
+Intersect either list with open `bug` issues that are not already in a terminal/blocked status.
 
 ## Status Labels
 
@@ -43,7 +48,7 @@ An open issue with `bug` and no `状态:*` label is unclaimed.
 - If the tree is dirty with changes outside the target issue scope, continue without asking when the unrelated files can be avoided. Treat those files as user-owned, do not edit them, and stage/commit only files changed for the current issue. Stop and ask only when the existing dirty files overlap the files that must be changed for the issue or make safe validation impossible.
 - Pull the latest code only when it is safe for the current worktree. Do not force-reset or discard local changes.
 - Confirm the GitHub status labels exist: `状态:处理中`, `状态:误判`, `状态:需要决策`. Create missing labels before processing issues.
-- Parse the supplied GitHub issues search URL and preserve its filters, including labels, search text, assignee, milestone, and priority filters.
+- Parse the supplied GitHub issues URL. Treat a plain repository issues directory as having no additional user filter. For a `q=...` URL, preserve its filters, including labels, search text, assignee, milestone, and priority filters.
 - Query matching issues with `gh` or the GitHub connector. Prefer `gh issue list --json number,title,state,labels,url,body` plus local filtering when query escaping is fragile.
 
 ### 2. Build The Target Queue
@@ -64,7 +69,19 @@ Sort the queue by priority label, then issue number:
 
 Within the same priority, process lower issue numbers first.
 
-Process the whole queue sequentially. There is no "one issue per run" limit and no agent ordinal/parallel sharding rule.
+Process the whole queue sequentially. There is no "one issue per run" limit and no agent ordinal/parallel sharding rule. Treat the initial queue as a snapshot only; rebuild it from the source URL after every issue attempt.
+
+Before claiming each issue, show a concise progress update in the conversation using the latest snapshot:
+
+```text
+当前待处理（含本条）：<remaining count>
+正在处理：#<number> <title>
+链接：<url>
+内容：
+<body, or “（无正文）”>
+```
+
+Always show the issue number, link, title, and body before starting its analysis. Do not defer these details to the final summary.
 
 ### 3. Claim One Issue At A Time
 
@@ -76,6 +93,24 @@ For each queued issue:
 - Re-read the issue state and labels after claiming.
 - Continue only if it is still open, still has `状态:处理中`, and does not have `状态:误判` or `状态:需要决策`.
 - If claiming fails or another actor changed the state, skip that issue and record the reason in the final summary. Do not grab a different issue out of order until the current attempt is safely abandoned.
+
+### Refresh Progress After Every Issue
+
+After an issue is fixed and closed, classified as `状态:误判` or `状态:需要决策`, or safely skipped:
+
+- Re-run the original source URL query instead of decrementing a cached count.
+- Reapply the eligibility rules and sorting from step 2.
+- Report the completed issue's result and the refreshed remaining eligible count in the conversation.
+- Select the next issue only from this refreshed queue, then show its number, link, title, and body before claiming it.
+
+Use this progress format:
+
+```text
+#<number> 处理结果：<已修复并关闭 | 状态:误判 | 状态:需要决策 | 已跳过：reason>
+已重新获取列表，当前待处理：<remaining count>
+```
+
+Continue until the refreshed queue is empty or a safety rule requires stopping.
 
 ### 4. Analyze
 
@@ -119,7 +154,7 @@ For a proposed fix that would cause a negative user-facing behavior change:
 - Do not change classification labels.
 - Comment in Chinese with the blocking item, including what existing user capability or behavior would be lost or negatively affected, why the fix creates that tradeoff, and what decision is needed before continuing.
 
-After classification, move to the next queued issue.
+After classification, refresh the source list and report progress before selecting the next issue.
 
 ### 6. Fix
 
@@ -170,14 +205,14 @@ fix: resolve issue #123
 ```
 
 - Remove `状态:处理中` after closing when GitHub permits it. If removal fails after close, mention it in the final summary.
-- Then move to the next queued issue.
+- Then refresh the source list and report progress before selecting the next issue.
 
 ## Final Summary
 
 End with a concise Chinese summary:
 
 - The source GitHub query URL.
-- Number of matching issues found and processed.
+- Initial eligible count, number processed, and latest refreshed remaining count.
 - For each issue: number, title, classification labels, final result, verification commands, and commit hash when applicable.
 - Issues skipped because status changed, claim failed, permission failed, or worktree safety blocked progress.
 - Remaining blockers or follow-up decisions.
