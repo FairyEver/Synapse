@@ -19,11 +19,13 @@ export interface WorkflowParam {
   allowMultiple?: boolean
 }
 export type WorkflowParamPresetValue = string | string[]
+export type WorkflowParamPresetResourceEntryType = WorkflowResourceEntryType | "mixed" | "unavailable"
 export interface WorkflowParamPreset {
   id: string
   workflowId: string
   name: string
   values: Record<string, WorkflowParamPresetValue>
+  resourceEntryTypes: Record<string, WorkflowParamPresetResourceEntryType>
   createdAt: number
   updatedAt: number
 }

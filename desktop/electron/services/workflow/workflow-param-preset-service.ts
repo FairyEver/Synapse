@@ -11,9 +11,12 @@ export interface WorkflowParamPreset {
   readonly workflowId: string
   readonly name: string
   readonly values: Record<string, WorkflowParamPresetValueV2>
+  readonly resourceEntryTypes: Record<string, WorkflowParamPresetResourceEntryType>
   readonly createdAt: number
   readonly updatedAt: number
 }
+
+type WorkflowParamPresetResourceEntryType = "file" | "directory" | "mixed" | "unavailable"
 
 export interface SaveWorkflowParamPresetInput {
   readonly workflowId: string
@@ -31,10 +34,12 @@ export class WorkflowParamPresetService {
 
   async list(workflowId: string): Promise<WorkflowParamPreset[]> {
     const items = await this.presets.list()
-    return items
+    const entries = items
       .filter((preset) => preset.workflowId === workflowId)
       .sort((left, right) => right.updatedAt - left.updatedAt || left.name.localeCompare(right.name))
-      .map(toPublicPreset)
+    const presets: WorkflowParamPreset[] = []
+    for (const entry of entries) presets.push(await toPublicPreset(entry))
+    return presets
   }
 
   async save(input: SaveWorkflowParamPresetInput): Promise<WorkflowParamPreset> {
@@ -89,15 +94,45 @@ export class WorkflowParamPresetService {
   }
 }
 
-function toPublicPreset(entry: WorkflowParamPresetEntryV2): WorkflowParamPreset {
+async function toPublicPreset(entry: WorkflowParamPresetEntryV2): Promise<WorkflowParamPreset> {
   return {
     id: entry.id,
     workflowId: entry.workflowId,
     name: entry.name,
     values: clonePresetValues(entry.values),
+    resourceEntryTypes: await resolvePresetResourceEntryTypes(entry.values),
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
   }
+}
+
+async function resolvePresetResourceEntryTypes(
+  values: Record<string, WorkflowParamPresetValueV2>,
+): Promise<Record<string, WorkflowParamPresetResourceEntryType>> {
+  const entryTypes: Record<string, WorkflowParamPresetResourceEntryType> = {}
+  for (const [paramName, value] of Object.entries(values)) {
+    if (!Array.isArray(value)) continue
+    entryTypes[paramName] = await resolvePresetResourceEntryType(value)
+  }
+  return entryTypes
+}
+
+async function resolvePresetResourceEntryType(
+  resourcePaths: readonly string[],
+): Promise<WorkflowParamPresetResourceEntryType> {
+  let resolvedType: "file" | "directory" | undefined
+  for (const resourcePath of resourcePaths) {
+    try {
+      const resource = await resolveWorkflowLocalResourceIdentity(resourcePath)
+      const currentType = resource.isFile ? "file" : resource.isDirectory ? "directory" : undefined
+      if (!currentType) return "unavailable"
+      if (resolvedType && resolvedType !== currentType) return "mixed"
+      resolvedType = currentType
+    } catch {
+      return "unavailable"
+    }
+  }
+  return resolvedType ?? "unavailable"
 }
 
 function clonePresetValues(values: Record<string, WorkflowParamPresetValueV2>): Record<string, WorkflowParamPresetValueV2> {

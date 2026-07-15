@@ -396,6 +396,7 @@ const workflowParamPresetSchema = z.object({
     z.string(),
     z.array(z.string().min(1)).min(1).max(WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS),
   ])),
+  resourceEntryTypes: z.record(z.string(), z.enum(["file", "directory", "mixed", "unavailable"])),
   createdAt: z.number(),
   updatedAt: z.number(),
 })

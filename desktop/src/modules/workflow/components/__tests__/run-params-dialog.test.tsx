@@ -264,6 +264,32 @@ describe("RunParamsDialog", () => {
     expect(onConfirm).not.toHaveBeenCalled()
   })
 
+  it("rejects a multi-file preset after the parameter changes to multi-directory", async () => {
+    mocks.presetList.mockResolvedValue([
+      {
+        id: "preset-files",
+        workflowId: "workflow-1",
+        name: "文件预设",
+        values: { inputs: ["/tmp/input.txt"] },
+        resourceEntryTypes: { inputs: "file" },
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ])
+    const { onConfirm } = await renderDialog({
+      params: [{ name: "inputs", type: "directory", default: null, allowMultiple: true }],
+    })
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>("#workflow-run-param-preset")?.click()
+    })
+    await act(async () => { clickOption("文件预设") })
+
+    expect(document.body.textContent).toContain("已保存值与当前文件/文件夹类型不兼容，请重新选择")
+    await act(async () => { clickButton("运行") })
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
   it("submits file and directory params as local path resource refs", async () => {
     const onConfirm = vi.fn()
     await renderDialog({

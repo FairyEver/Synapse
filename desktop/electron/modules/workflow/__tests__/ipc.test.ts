@@ -1920,8 +1920,8 @@ describe("workflowIpcModule", () => {
 
   it("exposes workflow parameter preset IPC without logging values", async () => {
     const presets = {
-      list: vi.fn(async () => [{ id: "preset-1", workflowId: "workflow-1", name: "课程", values: { topic: "secret text" }, createdAt: 1, updatedAt: 2 }]),
-      save: vi.fn(async (input: unknown) => ({ id: "preset-2", workflowId: "workflow-1", name: "新预设", values: (input as { values: Record<string, string> }).values, createdAt: 3, updatedAt: 3 })),
+      list: vi.fn(async () => [{ id: "preset-1", workflowId: "workflow-1", name: "课程", values: { topic: "secret text" }, resourceEntryTypes: {}, createdAt: 1, updatedAt: 2 }]),
+      save: vi.fn(async (input: unknown) => ({ id: "preset-2", workflowId: "workflow-1", name: "新预设", values: (input as { values: Record<string, string> }).values, resourceEntryTypes: {}, createdAt: 3, updatedAt: 3 })),
       delete: vi.fn(async () => undefined),
     }
     const harness = createInMemoryHarness()

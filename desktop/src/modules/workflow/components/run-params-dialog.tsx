@@ -32,6 +32,7 @@ import type {
   WorkflowParam,
   WorkflowParamDefault,
   WorkflowParamPreset,
+  WorkflowParamPresetResourceEntryType,
   WorkflowParamPresetValue,
   WorkflowResourceEntryType,
   WorkflowResourceRef,
@@ -244,7 +245,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
       return
     }
     setValues(buildInitialValues(params, preset.values))
-    const nextErrors = buildResourceCardinalityErrors(params, preset.values)
+    const nextErrors = buildResourceCompatibilityErrors(params, preset.values, preset.resourceEntryTypes)
     setIncompatibleValueErrors(nextErrors)
     setErrors(nextErrors)
   }
@@ -647,6 +648,25 @@ function buildResourceCardinalityErrors(
     if ((param.allowMultiple === true && typeof sourceValue === "string")
       || (param.allowMultiple !== true && Array.isArray(sourceValue))) {
       errors[param.name] = "已保存值与当前单选/多选设置不兼容，请重新选择"
+    }
+  }
+  return errors
+}
+
+function buildResourceCompatibilityErrors(
+  params: WorkflowParam[],
+  source: Record<string, WorkflowParamPresetValue>,
+  resourceEntryTypes: Record<string, WorkflowParamPresetResourceEntryType>,
+): Record<string, string> {
+  const errors = buildResourceCardinalityErrors(params, source)
+  for (const param of params) {
+    if ((param.type !== "file" && param.type !== "directory") || param.allowMultiple !== true) continue
+    if (errors[param.name] || !Array.isArray(source[param.name])) continue
+    const savedEntryType = resourceEntryTypes[param.name]
+    if (savedEntryType === "unavailable") {
+      errors[param.name] = "已保存资源不存在或无法访问，请重新选择"
+    } else if (savedEntryType && savedEntryType !== param.type) {
+      errors[param.name] = "已保存值与当前文件/文件夹类型不兼容，请重新选择"
     }
   }
   return errors

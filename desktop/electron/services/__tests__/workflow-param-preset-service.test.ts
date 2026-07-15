@@ -108,7 +108,30 @@ describe("WorkflowParamPresetService", () => {
     })
 
     expect(saved.values).toEqual({ files: [firstPath, secondPath] })
+    expect(saved.resourceEntryTypes).toEqual({ files: "file" })
     expect(await service.list("workflow-a")).toEqual([expect.objectContaining({ values: saved.values })])
+  })
+
+  it("reports current resource types for existing multi-resource presets", async () => {
+    const service = createService()
+    const root = mkdtempSync(path.join(os.tmpdir(), "wf-param-resources-"))
+    roots.push(root)
+    const filePath = path.join(root, "input.txt")
+    writeFileSync(filePath, "input")
+
+    const saved = await service.save({
+      workflowId: "workflow-a",
+      name: "资源类型",
+      values: { files: [filePath], directories: [root] },
+    })
+    expect(saved.resourceEntryTypes).toEqual({ files: "file", directories: "directory" })
+
+    rmSync(filePath)
+    expect(await service.list("workflow-a")).toEqual([
+      expect.objectContaining({
+        resourceEntryTypes: { files: "unavailable", directories: "directory" },
+      }),
+    ])
   })
 
   it("rejects multi-resource aliases that resolve to the same path", async () => {
