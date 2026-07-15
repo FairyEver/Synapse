@@ -109,9 +109,30 @@ export function finishDriveUploadTask(
 export function buildDriveUploadRetryRequest(task: DriveUploadTask): DriveLocalUploadRequest | null {
   const failedItems = task.items.filter((item) => item.status === "failed")
   if (failedItems.length === 0) return null
+  const items: DriveLocalUploadItem[] = []
+  const folders = new Map<string, { readonly index: number; readonly item: DriveLocalUploadFolderItem }>()
+  for (const failedItem of failedItems) {
+    const sourceItem = failedItem.sourceItem
+    if (sourceItem.kind === "file") {
+      items.push(sourceItem)
+      continue
+    }
+    const folder = folders.get(sourceItem.folderName)
+    if (!folder) {
+      folders.set(sourceItem.folderName, { index: items.length, item: sourceItem })
+      items.push(sourceItem)
+      continue
+    }
+    const mergedFolder = {
+      ...folder.item,
+      files: [...folder.item.files, ...sourceItem.files],
+    }
+    folders.set(sourceItem.folderName, { index: folder.index, item: mergedFolder })
+    items[folder.index] = mergedFolder
+  }
   return {
     parentId: task.parentId,
-    items: failedItems.map((item) => item.sourceItem),
+    items,
   }
 }
 
@@ -169,10 +190,10 @@ function taskItemFromFolderFile(
     totalBytes: null,
     message: null,
     sourceItem: {
-      kind: "file",
-      path: file.path,
-      name,
-      mimeType: file.mimeType ?? null,
+      kind: "folder",
+      folderName: folder.folderName,
+      ...(folder.directories ? { directories: folder.directories } : {}),
+      files: [file],
     },
   }
 }

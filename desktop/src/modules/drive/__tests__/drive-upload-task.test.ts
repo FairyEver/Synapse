@@ -142,6 +142,53 @@ describe("drive upload task model", () => {
     })
   })
 
+  it("preserves folder structure when retrying failed folder files", () => {
+    const task = createDriveUploadTask({
+      id: "upload-task-1",
+      destinationPath: "根目录",
+      parentId: "folder-1",
+      request: {
+        taskId: "upload-task-1",
+        parentId: "folder-1",
+        items: [{
+          kind: "folder",
+          folderName: "project",
+          directories: [{ relativePath: "docs" }, { relativePath: "empty" }],
+          files: [
+            { path: "/tmp/project/a.txt", relativePath: "a.txt", mimeType: "text/plain" },
+            { path: "/tmp/project/docs/b.txt", relativePath: "docs/b.txt", mimeType: "text/plain" },
+          ],
+        }],
+      },
+      startedAt: 100,
+    })
+    const firstFailed = applyDriveUploadProgressEvent(task, {
+      type: "item-failed",
+      taskId: "upload-task-1",
+      itemKey: "folder:project/a.txt",
+      message: "上传失败。",
+    })
+    const bothFailed = applyDriveUploadProgressEvent(firstFailed, {
+      type: "item-failed",
+      taskId: "upload-task-1",
+      itemKey: "folder:project/docs/b.txt",
+      message: "上传失败。",
+    })
+
+    expect(buildDriveUploadRetryRequest(bothFailed)).toEqual({
+      parentId: "folder-1",
+      items: [{
+        kind: "folder",
+        folderName: "project",
+        directories: [{ relativePath: "docs" }, { relativePath: "empty" }],
+        files: [
+          { path: "/tmp/project/a.txt", relativePath: "a.txt", mimeType: "text/plain" },
+          { path: "/tmp/project/docs/b.txt", relativePath: "docs/b.txt", mimeType: "text/plain" },
+        ],
+      }],
+    })
+  })
+
   it("derives status badge copy from active and finished tasks", () => {
     const running = createDriveUploadTask({
       id: "upload-task-1",
