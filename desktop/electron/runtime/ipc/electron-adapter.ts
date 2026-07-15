@@ -22,6 +22,7 @@ type ElectronTransportInstallOptions = {
 
 const SENSITIVE_FIELD_PATTERN =
   /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization)/i
+const SENSITIVE_MAP_FIELD_PATTERN = /^(skillEnvValues|variableSubstitutions)$/i
 const BODY_FIELD_PATTERN = /^(prompt|message|content|body|text|requestbody|responsebody|requesttext|responsetext)$/
 const PATH_FIELD_PATTERN = /^(path|paths|url|urls|uri|uris|remoteurl|remoteurls|filepath|filepaths|folderpath|folderpaths|relativepath|relativepaths|fullpath|fullpaths|targetpath|targetpaths|sourcepath|sourcepaths|itempath|itempaths|foldername|filename)$/
 const MAX_STRING_LENGTH = 300
@@ -39,6 +40,9 @@ type IpcErrorEnvelope = {
 
 function sanitizeIpcValue(fieldName: string, value: unknown, depth = 0): unknown {
   if (value === null || value === undefined) return value
+  if (SENSITIVE_MAP_FIELD_PATTERN.test(fieldName)) {
+    return sensitiveMapSummary(value)
+  }
   if (typeof value === "number" || typeof value === "boolean") return value
   if (typeof value === "string") {
     if (SENSITIVE_FIELD_PATTERN.test(fieldName)) return "[redacted]"
@@ -62,6 +66,14 @@ function sanitizeIpcValue(fieldName: string, value: unknown, depth = 0): unknown
     )
   }
   return String(value)
+}
+
+function sensitiveMapSummary(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "[redacted]"
+  return {
+    type: "sensitive-map",
+    keyCount: Object.keys(value as Record<string, unknown>).length,
+  }
 }
 
 function sanitizeIpcObjectField(

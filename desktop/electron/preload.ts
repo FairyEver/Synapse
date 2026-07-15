@@ -649,6 +649,7 @@ const SENSITIVE_IPC_FIELD_PATTERN =
   /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization)/i
 const SENSITIVE_IPC_TEXT_FIELD_PATTERN =
   /(content|prompt|message|body|text|params|definition|payload)/i
+const SENSITIVE_IPC_MAP_FIELD_PATTERN = /^(skillEnvValues|variableSubstitutions)$/i
 const URL_LIKE_IPC_FIELD_PATTERN =
   /(url|uri|remote|href|link)/i
 const URL_TEXT_PATTERN =
@@ -666,6 +667,9 @@ const POSIX_PATH_PATTERN = /(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g
 
 function sanitizeIpcPayload(fieldName: string, value: unknown, depth = 0): unknown {
   if (value === null || value === undefined) return value
+  if (SENSITIVE_IPC_MAP_FIELD_PATTERN.test(fieldName)) {
+    return sensitiveIpcMapSummary(value)
+  }
   if (typeof value === "number" || typeof value === "boolean") return value
   if (typeof value === "string") {
     if (SENSITIVE_IPC_FIELD_PATTERN.test(fieldName)) return "[redacted]"
@@ -694,6 +698,14 @@ function sanitizeIpcPayload(fieldName: string, value: unknown, depth = 0): unkno
     )
   }
   return String(value)
+}
+
+function sensitiveIpcMapSummary(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "[redacted]"
+  return {
+    type: "sensitive-map",
+    keyCount: Object.keys(value as Record<string, unknown>).length,
+  }
 }
 
 function textFieldSummary(value: string): { type: "text"; length: number } {

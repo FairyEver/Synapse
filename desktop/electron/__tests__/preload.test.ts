@@ -1103,6 +1103,59 @@ describe("preload bridge", () => {
     expect(serializedLogs).not.toContain("PRIVATE_SECRET_DESCRIPTION")
   })
 
+  it("does not log installer secret map values when install IPC fails", async () => {
+    const bridge = await loadPreloadBridge()
+    electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
+      if (channel.startsWith("synapse:installers:install-source-to-editor")) {
+        return Promise.reject(new Error("install unavailable"))
+      }
+      return Promise.resolve(undefined)
+    })
+    const source = {
+      kind: "skill" as const,
+      origin: "prepared" as const,
+      sourceIdentity: "synapse-skill",
+      preparedSourceId: "synapse-skill:test",
+      name: "synapse-skill",
+    }
+    const secretMaps = {
+      skillEnvValues: { BAILIAN: "RAW_ENV_SECRET" },
+      variableSubstitutions: { SERVICE: "RAW_VARIABLE_SECRET" },
+    }
+
+    await expect(bridge.installers.installSourceToEditor({
+      editorId: "codex" as never,
+      scope: "global",
+      source,
+      ...secretMaps,
+    })).rejects.toThrow("install unavailable")
+    await expect(bridge.installers.installSourceToEditorTargets({
+      mode: "install",
+      source,
+      targets: [{ editorId: "codex" as never, scope: "global" }],
+      ...secretMaps,
+    })).rejects.toThrow("install unavailable")
+
+    const logCalls = electronMock.ipcRenderer.invoke.mock.calls.filter(([channel]) =>
+      channel === "synapse:log:write")
+    expect(logCalls).toHaveLength(2)
+    for (const logCall of logCalls) {
+      expect(logCall[1]).toEqual(expect.objectContaining({
+        details: expect.objectContaining({
+          request: expect.objectContaining({
+            skillEnvValues: { type: "sensitive-map", keyCount: 1 },
+            variableSubstitutions: { type: "sensitive-map", keyCount: 1 },
+          }),
+        }),
+      }))
+    }
+    const serializedLogs = JSON.stringify(logCalls)
+    expect(serializedLogs).not.toContain("RAW_ENV_SECRET")
+    expect(serializedLogs).not.toContain("RAW_VARIABLE_SECRET")
+    expect(serializedLogs).not.toContain("BAILIAN")
+    expect(serializedLogs).not.toContain("SERVICE")
+  })
+
   it("does not log local file paths when local drive upload IPC fails", async () => {
     const bridge = await loadPreloadBridge()
     const failure = new Error("upload unavailable")

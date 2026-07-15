@@ -154,6 +154,37 @@ describe("createElectronTransportInstall", () => {
     expect(serializedLog).not.toContain("Secrets")
   })
 
+  it("summarizes installer secret maps without logging keys or values", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const { createElectronTransportInstall } = await import("../electron-adapter")
+    const install = createElectronTransportInstall({ logger })
+
+    install("synapse:installers:install-source-to-editor", async () => {
+      throw new Error("install unavailable")
+    })
+
+    const handler = electronMock.handlers.get("synapse:installers:install-source-to-editor")
+    await handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
+      skillEnvValues: { BAILIAN: "RAW_ENV_SECRET" },
+      variableSubstitutions: { SERVICE: "RAW_VARIABLE_SECRET" },
+    })
+
+    expect(logger.error).toHaveBeenCalledWith(
+      "IPC invoke failed.",
+      expect.objectContaining({
+        request: {
+          skillEnvValues: { type: "sensitive-map", keyCount: 1 },
+          variableSubstitutions: { type: "sensitive-map", keyCount: 1 },
+        },
+      }),
+    )
+    const serializedLog = JSON.stringify(logger.error.mock.calls)
+    expect(serializedLog).not.toContain("RAW_ENV_SECRET")
+    expect(serializedLog).not.toContain("RAW_VARIABLE_SECRET")
+    expect(serializedLog).not.toContain("BAILIAN")
+    expect(serializedLog).not.toContain("SERVICE")
+  })
+
   it("returns sanitized user-facing failure envelopes without logging secrets", async () => {
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const { createElectronTransportInstall } = await import("../electron-adapter")
