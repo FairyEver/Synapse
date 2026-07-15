@@ -10,7 +10,10 @@ import type {
 } from "../../../runtime/data-repo"
 import type { ProviderService } from "../../provider"
 import { AgentRuntimeService, conversationId, permissionActionForTool } from "../agent-runtime-service"
-import { AGENT_PERMISSION_UPDATED_INPUT_UNSUPPORTED_MESSAGE } from "../agent-error-messages"
+import {
+  AGENT_PERMISSION_UPDATED_INPUT_UNSUPPORTED_MESSAGE,
+  AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE,
+} from "../agent-error-messages"
 import { CustomCommandRegistry } from "../command-registry"
 import { SkillRegistry, type AgentSkill } from "../skill-registry"
 import type {
@@ -1006,6 +1009,7 @@ describe("AgentRuntimeService", () => {
     })
 
     await conversations.waitForResolutionWrite()
+    expect(session.responses).toEqual([])
     await expect(resolveSoon(turn)).resolves.toBe("timeout")
     conversations.releaseResolutionWrite()
 
@@ -1017,6 +1021,82 @@ describe("AgentRuntimeService", () => {
     expect(stored?.history).toContainEqual(expect.objectContaining({
       content: "continued after answer",
     }))
+  })
+
+  it("keeps AskUserQuestion pending when its answer cannot be persisted", async () => {
+    const conversations = new FailingQuestionResolutionNamespace()
+    const logger = {
+      debug: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+    }
+    const questions = [{
+      question: "继续吗？",
+      options: [{ label: "继续" }],
+      multiSelect: false,
+    }]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "continued after retry")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      logger: logger as never,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs answer"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+    const request = {
+      requestId: "conversation-a-permission-1",
+      behavior: "allow" as const,
+      updatedInput: { answers: { "question-0": "继续" } },
+      actor: { kind: "user" as const },
+    }
+
+    await expect(service.respondPermission(request))
+      .rejects.toThrow(AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE)
+    expect(session.responses).toEqual([])
+    expect(service.listPendingPermissions()).toHaveLength(1)
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Agent user question resolution persistence failed.",
+      expect.objectContaining({
+        boundary: "agent-runtime.user-question-resolution",
+        requestId: "conversation-a-permission-1",
+        status: "answered",
+      }),
+    )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("继续")
+
+    await service.respondPermission(request)
+    expect(session.responses).toHaveLength(1)
+    await expect(turn).resolves.toMatchObject({ resultText: "continued after retry" })
+  })
+
+  it("does not wait for an AskUserQuestion whose history entry failed to persist", async () => {
+    const conversations = new FailingQuestionHistoryNamespace()
+    const questions = [{
+      question: "继续吗？",
+      options: [{ label: "继续" }],
+      multiSelect: false,
+    }]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "unused")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const result = await service.send(baseMessage("needs answer"))
+
+    expect(result.error).toBe(AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE)
+    expect(service.listPendingPermissions()).toEqual([])
+    expect(session.responses).toEqual([])
   })
 
   it("normalizes multi-select arrays for the SDK and stored resolution", async () => {
@@ -2741,6 +2821,43 @@ class BlockingQuestionResolutionNamespace extends MemoryNamespace<ConversationEn
 
   releaseResolutionWrite(): void {
     this.releaseResolution?.()
+  }
+}
+
+class FailingQuestionResolutionNamespace extends MemoryNamespace<ConversationEntryV1> {
+  private failed = false
+
+  constructor() {
+    super("conversations")
+  }
+
+  override async upsert(item: ConversationEntryV1): Promise<void> {
+    const containsResolution = item.history.some((entry) => entry.metadata?.userQuestionResolution !== undefined)
+    if (containsResolution && !this.failed) {
+      this.failed = true
+      throw new Error("resolution storage unavailable")
+    }
+    await super.upsert(item)
+  }
+}
+
+class FailingQuestionHistoryNamespace extends MemoryNamespace<ConversationEntryV1> {
+  private failed = false
+
+  constructor() {
+    super("conversations")
+  }
+
+  override async upsert(item: ConversationEntryV1): Promise<void> {
+    const containsQuestion = item.history.some((entry) => (
+      entry.metadata?.agentEventType === "permissionRequest"
+      && entry.metadata.requestId !== undefined
+    ))
+    if (containsQuestion && !this.failed) {
+      this.failed = true
+      throw new Error("question history storage unavailable")
+    }
+    await super.upsert(item)
   }
 }
 

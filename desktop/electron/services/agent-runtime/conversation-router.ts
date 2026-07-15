@@ -38,6 +38,7 @@ import {
   AGENT_SPAWN_PERMISSION_CHECK_FAILED_MESSAGE,
   AGENT_SESSION_TIMED_OUT_MESSAGE,
   AGENT_TURN_FAILED_MESSAGE,
+  AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE,
   AGENT_USER_QUESTION_TIMEOUT_MESSAGE,
   conversationNotFoundMessage,
 } from "./agent-error-messages"
@@ -1643,6 +1644,9 @@ export class ConversationRouter {
         eventType: event.type,
         ...queuedTurnFailureMetadata(error),
       })
+      if (event.type === "permissionRequest" && isAskUserQuestionEvent(event)) {
+        throw new Error(AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE, { cause: error })
+      }
       return false
     }
   }

@@ -38,6 +38,7 @@ import {
   AGENT_PERMISSION_UPDATED_INPUT_UNSUPPORTED_MESSAGE,
   AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE,
   AGENT_SCHEDULED_SPAWN_DENIED_MESSAGE,
+  AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE,
   commandExecutionStatusMessage,
   conversationNotFoundMessage,
   isConversationNotFoundMessage,
@@ -824,26 +825,27 @@ export class AgentRuntimeService {
       try {
         updatedInput = askUserQuestionUpdatedInput(pending, request)
       } catch (error) {
+        await this.persistUserQuestionResolution(pending, {
+          status: "skipped",
+          resolvedAt: this.isoNow(),
+        }, true)
         await pending.liveSession.respondPermission(request.requestId, {
           behavior: "deny",
           message: ASK_USER_QUESTION_EMPTY_ANSWER_MESSAGE,
         })
-        await this.persistUserQuestionResolution(pending, {
-          status: "skipped",
-          resolvedAt: this.isoNow(),
-        })
         this.sessionManager.settlePendingPermission(pending)
         throw error
       }
+      await this.persistUserQuestionResolution(
+        pending,
+        askUserQuestionResolution(pending, request, this.isoNow()),
+        true,
+      )
       await pending.liveSession.respondPermission(request.requestId, {
         behavior: request.behavior,
         updatedInput,
         message: askUserQuestionResponseMessage(request),
       })
-      await this.persistUserQuestionResolution(
-        pending,
-        askUserQuestionResolution(pending, request, this.isoNow()),
-      )
       this.sessionManager.settlePendingPermission(pending)
       return
     }
@@ -1267,6 +1269,7 @@ export class AgentRuntimeService {
   private async persistUserQuestionResolution(
     pending: PendingPermissionState,
     resolution: AgentUserQuestionResolution,
+    required = false,
   ): Promise<void> {
     try {
       const conversation = await this.repository.resolveUserQuestion(
@@ -1274,6 +1277,9 @@ export class AgentRuntimeService {
         pending.requestId,
         resolution,
       )
+      if (!conversation && required) {
+        throw new Error("AskUserQuestion history entry is unavailable")
+      }
       if (conversation) this.emitConversationUpdated(conversation)
     } catch (error) {
       this.deps.logger?.warn("Agent user question resolution persistence failed.", {
@@ -1284,6 +1290,9 @@ export class AgentRuntimeService {
         status: resolution.status,
         error: agentRuntimeErrorMessage(error),
       })
+      if (required) {
+        throw new Error(AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE, { cause: error })
+      }
     }
   }
 
