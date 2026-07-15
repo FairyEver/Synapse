@@ -303,7 +303,7 @@ function fieldStatus(field: SkillEnvSecretConfigField): {
   if (field.saveState === "failed") return { label: "保存失败", variant: "destructive" }
   if (field.mode === "name_conflict") return { label: "名称冲突", variant: "destructive" }
   if (field.mode === "reuse") return { label: "已保存", variant: "secondary" }
-  if (!field.value) return { label: "未设置", variant: "outline" }
+  if (!field.value) return { label: field.touched ? "待保存" : "未设置", variant: "outline" }
   if (field.valueOrigin === "default" && field.value === field.defaultValue) {
     return { label: "使用默认值", variant: "secondary" }
   }

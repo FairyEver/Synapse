@@ -304,6 +304,31 @@ describe("SkillEnvSecretConfigDialog", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
+  it("asks before discarding a touched empty replacement", async () => {
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [{ name: "TOKEN", defaultValue: "" }],
+      legacyPlaceholders: [],
+    })
+    mocks.secrets.list.mockResolvedValue({
+      secrets: [{ id: "secret-1", name: "TOKEN", hasValue: true }],
+      total: 1,
+    })
+    const onOpenChange = vi.fn()
+
+    await renderDialog(onOpenChange)
+    await act(async () => clickButton("替换"))
+    await act(async () => setInputValue(inputForLabel("TOKEN"), "temporary"))
+    await act(async () => setInputValue(inputForLabel("TOKEN"), ""))
+
+    expect(rowForLabel("TOKEN").textContent).toContain("待保存")
+    expect(rowForLabel("TOKEN").textContent).not.toContain("未设置")
+
+    await act(async () => clickButton("取消"))
+
+    expect(document.body.textContent).toContain("放弃未保存的值？")
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
   it("shows reload for inspection failures and omits save for empty declarations", async () => {
     mocks.inspectSkillEnvSource.mockRejectedValueOnce(new Error("parse failed: secret-value"))
 

@@ -38,6 +38,12 @@ type ScanNamesResult = {
 
 const logger = createRendererLogger("content.skill-env-secret-config")
 
+function isSaveCandidate(field: SkillEnvSecretConfigField): boolean {
+  return field.mode !== "name_conflict"
+    && field.mode !== "reuse"
+    && (field.value.length > 0 || field.touched)
+}
+
 function installerSource(item: SynapseContentMeta<"skill">): SynapseSkillInstallerSource {
   return {
     kind: "skill",
@@ -238,11 +244,7 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
 
   const save = useCallback(async (): Promise<SkillEnvSecretConfigSaveOutcome> => {
     if (saving) return { kind: "partial", failedCount: 0, savedCount: 0 }
-    const candidates = fields.filter((field) => (
-      field.mode !== "name_conflict"
-      && field.mode !== "reuse"
-      && (field.value.length > 0 || field.touched)
-    ))
+    const candidates = fields.filter(isSaveCandidate)
     const reusedNames = fields
       .filter((field) => field.mode === "reuse" && field.existingHasValue)
       .map((field) => field.existingSecretName ?? field.name)
@@ -341,7 +343,7 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
     return { kind: "complete", groups: mergedGroups, savedCount: 0 }
   }, [pendingScanNames, saving, scanNames, updateGroups])
 
-  const hasUnsavedValues = fields.some((field) => field.mode !== "reuse" && field.value.length > 0)
+  const hasUnsavedValues = fields.some(isSaveCandidate)
   const hasSaveFailures = fields.some((field) => field.saveState === "failed" && field.value.length > 0)
   const hasNameConflicts = fields.some((field) => field.mode === "name_conflict")
 
