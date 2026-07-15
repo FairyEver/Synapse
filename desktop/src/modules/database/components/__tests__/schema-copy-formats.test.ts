@@ -29,4 +29,14 @@ describe("schema copy formats", () => {
     expect(output).toContain("app_database_row_list")
     expect(output).not.toMatch(/(?<!app_)database_row_(create|list|update|delete)/)
   })
+
+  it.each(["mcp", "skill-context"])("includes bulk mutation dry-run safety in %s output", (formatKey) => {
+    const output = SCHEMA_COPY_FORMATS.find((format) => format.key === formatKey)?.generate(schema)
+
+    expect(output).toContain("app_database_rows_update")
+    expect(output).toContain("app_database_rows_delete")
+    expect(output).toContain('"dryRun": true')
+    expect(output).toContain("检查返回的 `ids` 和 `affected`")
+    expect(output).toContain("完全相同的参数")
+  })
 })

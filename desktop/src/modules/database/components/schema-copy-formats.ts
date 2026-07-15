@@ -193,6 +193,26 @@ function formatColumnLines(cols: Column[]): string[] {
   })
 }
 
+function bulkMutationSafetyLines(tableName: string, sampleRow: Record<string, unknown>): string[] {
+  return [
+    `## 批量更新/删除安全步骤`,
+    `1. 使用窄且非空的同一 \`where\`，先以 \`dryRun: true\` 调用批量工具。`,
+    `2. 检查返回的 \`ids\` 和 \`affected\`，确认目标行无误。`,
+    `3. 再用完全相同的参数移除 \`dryRun\`（或设为 \`false\`）执行真实写入。`,
+    ``,
+    `### 批量更新预览 · \`app_database_rows_update\``,
+    "```json",
+    stringifyJson({ tableName, where: { id: 1 }, data: sampleRow, dryRun: true }),
+    "```",
+    ``,
+    `### 批量删除预览 · \`app_database_rows_delete\``,
+    "```json",
+    stringifyJson({ tableName, where: { id: 1 }, dryRun: true }),
+    "```",
+    ``,
+  ]
+}
+
 function generateMCPExample(schema: DatabaseTableSchema): string {
   const editableCols = schema.columns.filter((c) => !c.system)
   const sampleRow = buildSampleRow(editableCols)
@@ -240,6 +260,7 @@ function generateMCPExample(schema: DatabaseTableSchema): string {
     stringifyJson({ tableName: schema.name, rowId: 1 }),
     "```",
     ``,
+    ...bulkMutationSafetyLines(schema.name, sampleRow),
     `## where 用法`,
     `- 等值对象：\`{ "status": "todo" }\``,
     `- 多条件数组：\`[{ "field": "...", "op": "=|!=|>|<|>=|<=|LIKE|CONTAINS", "value": ... }]\``,
@@ -285,9 +306,9 @@ function generateSkillContext(schema: DatabaseTableSchema): string {
     `- \`app_database_row_create\` — 插入一行 \`{ tableName, data }\`，返回 \`{ id }\``,
     `- \`app_database_rows_create\` — 事务性批量插入 \`{ tableName, rows }\`，返回 \`{ ids }\``,
     `- \`app_database_row_update\` — 按 id 部分更新 \`{ tableName, rowId, data }\``,
-    `- \`app_database_rows_update\` — 按条件批量更新 \`{ tableName, where, data }\`（where 不能为空）`,
+    `- \`app_database_rows_update\` — 按条件批量更新 \`{ tableName, where, data, dryRun? }\`（where 不能为空）`,
     `- \`app_database_row_delete\` — 按 id 删除 \`{ tableName, rowId }\``,
-    `- \`app_database_rows_delete\` — 按条件批量删除 \`{ tableName, where }\`（where 不能为空）`,
+    `- \`app_database_rows_delete\` — 按条件批量删除 \`{ tableName, where, dryRun? }\`（where 不能为空）`,
     ``,
     `## 字段取值规则`,
     ``,
@@ -366,6 +387,8 @@ function generateSkillContext(schema: DatabaseTableSchema): string {
     "```json",
     stringifyJson({ tableName: schema.name, rowId: 1 }),
     "```",
+    ``,
+    ...bulkMutationSafetyLines(schema.name, sampleRow),
   )
 
   return lines.join("\n")
