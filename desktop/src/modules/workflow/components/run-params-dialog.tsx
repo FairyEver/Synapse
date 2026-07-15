@@ -141,7 +141,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
           next[param.name] = "请选择预设选项"
         }
       } else if ((param.type === "file" || param.type === "directory") && param.allowMultiple) {
-        if (param.default === null && resourcePathValues(raw).length === 0) next[param.name] = "此项为必填"
+        if (resourcePathValues(raw).length === 0) next[param.name] = "此项为必填"
       } else if (param.default === null && !stringParamValue(raw)) {
         next[param.name] = "此项为必填"
       }
@@ -160,9 +160,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
       } else if (param.type === "file" || param.type === "directory") {
         if (param.allowMultiple) {
           const paths = resourcePathValues(values[param.name])
-          parsed[param.name] = paths.length > 0
-            ? paths.map((resourcePath) => toLocalPathParam(param.type as WorkflowResourceEntryType, resourcePath))
-            : param.default
+          parsed[param.name] = paths.map((resourcePath) => toLocalPathParam(param.type as WorkflowResourceEntryType, resourcePath))
         } else {
           const resourcePath = stringParamValue(values[param.name]).trim()
           parsed[param.name] = resourcePath ? toLocalPathParam(param.type, resourcePath) : param.default

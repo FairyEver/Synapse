@@ -22,9 +22,7 @@ export async function normalizeWorkflowRunParams(
   for (const param of def.params) {
     const hasRawValue = Object.prototype.hasOwnProperty.call(rawParams, param.name)
     const supplied = hasRawValue ? rawParams[param.name] : undefined
-    const raw = hasRawValue && !(param.allowMultiple === true && Array.isArray(supplied) && supplied.length === 0)
-      ? supplied
-      : param.default
+    const raw = hasRawValue ? supplied : param.default
     if (raw === undefined || raw === null || (param.allowMultiple === true && Array.isArray(raw) && raw.length === 0)) {
       errors.push({ type: "missing_param", message: `缺少必填参数「${param.name}」` })
       continue

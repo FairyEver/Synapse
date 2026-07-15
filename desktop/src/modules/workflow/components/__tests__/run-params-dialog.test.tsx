@@ -365,6 +365,25 @@ describe("RunParamsDialog", () => {
     expect(document.body.textContent).toContain("此项为必填")
   })
 
+  it("does not restore a multi-resource default after the user clears it", async () => {
+    const defaultPath = "/tmp/default.txt"
+    const { onConfirm } = await renderDialog({
+      params: [{
+        name: "input_files",
+        type: "file",
+        default: [{ kind: "local_path", entryType: "file", path: defaultPath }],
+        allowMultiple: true,
+      }],
+    })
+
+    expect(document.body.textContent).toContain(defaultPath)
+    await act(async () => { clickButton("清空") })
+    await act(async () => { clickButton("运行") })
+
+    expect(onConfirm).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("此项为必填")
+  })
+
   it("submits a selected closed option value", async () => {
     const { onConfirm } = await renderDialog({
       params: [

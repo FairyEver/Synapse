@@ -94,12 +94,36 @@ describe("normalizeWorkflowRunParams", () => {
     expect(result.snapshotParams.inputs).toEqual(result.params.inputs)
   })
 
-  it("treats an empty multi-resource array as missing", async () => {
+  it("treats an explicitly empty multi-resource array as missing instead of using its default", async () => {
     const result = await normalizeWorkflowRunParams(def([
-      { name: "inputs", type: "file", default: null, allowMultiple: true },
+      {
+        name: "inputs",
+        type: "file",
+        default: [{ kind: "local_path", entryType: "file", path: "/tmp/default.txt" }],
+        allowMultiple: true,
+      },
     ]), { inputs: [] })
 
     expect(result.errors[0]).toMatchObject({ type: "missing_param", message: "缺少必填参数「inputs」" })
+    expect(result.params.inputs).toEqual([])
+  })
+
+  it("uses a multi-resource default only when the run value is omitted", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-workflow-params-"))
+    const defaultPath = path.join(root, "default.txt")
+    await writeFile(defaultPath, "default")
+
+    const result = await normalizeWorkflowRunParams(def([{
+      name: "inputs",
+      type: "file",
+      default: [{ kind: "local_path", entryType: "file", path: defaultPath }],
+      allowMultiple: true,
+    }]), {})
+
+    expect(result.errors).toEqual([])
+    expect(result.params.inputs).toEqual([
+      { kind: "local_path", entryType: "file", path: defaultPath },
+    ])
   })
 
   it("rejects duplicate resources in a multi-resource parameter", async () => {
