@@ -1,4 +1,4 @@
-import type { NodeRunResult, WorkflowDefinition, WorkflowNode, WorkflowRunSnapshot, WorkflowRunStatus } from "../../../src/types/workflow"
+import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowNode, WorkflowRunResult, WorkflowRunSnapshot, WorkflowRunStatus } from "../../../src/types/workflow"
 import { sanitizeError } from "../error-sanitize"
 
 const SENSITIVE_OUTPUT_KEY_PATTERN = /^(authorization|cookie|set-cookie|.*(?:secret|token|password|credential|api[-_]?key|session[-_]?key).*)$/i
@@ -31,6 +31,37 @@ export function sanitizeWorkflowRunStatus(status: WorkflowRunStatus): WorkflowRu
     ...(status.error !== undefined ? { error: sanitizeError(status.error) } : {}),
     ...(status.params !== undefined ? { params: sanitizeWorkflowOutputForHistory(status.params) } : {}),
     ...(status.definition ? { definition: sanitizeWorkflowDefinitionForSnapshot(status.definition) } : {}),
+  }
+}
+
+export function sanitizeWorkflowEventForRenderer(event: WorkflowEvent): WorkflowEvent {
+  switch (event.type) {
+    case "node:started":
+    case "node:skipped":
+      return event.result ? { ...event, result: sanitizeNodeRunResultForRenderer(event.result) } : event
+    case "node:completed":
+      return {
+        ...event,
+        output: sanitizeWorkflowOutputForHistory(event.output),
+        ...(event.result ? { result: sanitizeNodeRunResultForRenderer(event.result) } : {}),
+      }
+    case "node:failed":
+      return {
+        ...event,
+        error: sanitizeError(event.error),
+        ...(event.result ? { result: sanitizeNodeRunResultForRenderer(event.result) } : {}),
+      }
+    case "workflow:completed":
+      return { ...event, result: sanitizeWorkflowRunResultForRenderer(event.result) }
+    case "workflow:failed":
+    case "workflow:cancelled":
+      return {
+        ...event,
+        ...(event.type === "workflow:failed" ? { error: sanitizeError(event.error) } : {}),
+        ...(event.result ? { result: sanitizeWorkflowRunResultForRenderer(event.result) } : {}),
+      }
+    default:
+      return event
   }
 }
 
@@ -95,6 +126,18 @@ function sanitizeNodeResultForSnapshot(result: NodeRunResult): NodeRunResult {
     ...(result.output !== undefined ? { output: sanitizeError(result.output) } : {}),
     ...(result.outputs ? { outputs: sanitizeNodeOutputs(result.outputs) } : {}),
     ...(result.error !== undefined ? { error: sanitizeError(result.error) } : {}),
+  }
+}
+
+function sanitizeNodeRunResultForRenderer(result: NodeRunResult): NodeRunResult {
+  return sanitizeNodeResultsForSnapshot({ [result.nodeId]: result })[result.nodeId] ?? result
+}
+
+function sanitizeWorkflowRunResultForRenderer(result: WorkflowRunResult): WorkflowRunResult {
+  return {
+    ...result,
+    nodeResults: sanitizeNodeResultsForSnapshot(result.nodeResults),
+    ...(result.output !== undefined ? { output: sanitizeError(result.output) } : {}),
   }
 }
 

@@ -16,14 +16,14 @@ import { configuredWorkflowProjectIdsFromConfig, validateWorkflow, type Workflow
 import { normalizeWorkflowRunParams } from "../../services/workflow/workflow-param-normalizer"
 import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../config"
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
-import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunResult, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
+import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
 import type { SynapseWorkflowPackage, WorkflowImportOptions, WorkflowModelMapping } from "../../../src/types/workflow-package"
 import { normalizeContentFileNameSegment } from "../../../src/lib/content-attachments"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
 import { isSafeWorkflowId, isSafeWorkflowNodeId, isSafeWorkflowRunId } from "../../services/workflow/workflow-id"
-import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowOutputForHistory, sanitizeWorkflowRunSnapshot, sanitizeWorkflowRunStatus } from "../../services/workflow/run-snapshot-sanitize"
+import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowEventForRenderer, sanitizeWorkflowOutputForHistory, sanitizeWorkflowRunSnapshot, sanitizeWorkflowRunStatus } from "../../services/workflow/run-snapshot-sanitize"
 import { rendererBaseUrl } from "../shared/renderer-base-url"
 
 const logger = createMainLogger("workflow.ipc")
@@ -91,51 +91,8 @@ function visibleEngineRejectionError(error: unknown): string {
   return `引擎异常（${errorName}）：${brief}`
 }
 
-function sanitizeNodeRunResultForRenderer(result: NodeRunResult): NodeRunResult {
-  return sanitizeNodeResultsForSnapshot({ [result.nodeId]: result })[result.nodeId] ?? result
-}
-
-function sanitizeWorkflowRunResultForRenderer(result: WorkflowRunResult): WorkflowRunResult {
-  return {
-    ...result,
-    nodeResults: sanitizeNodeResultsForSnapshot(result.nodeResults),
-    ...(result.output !== undefined ? { output: sanitizeError(result.output) } : {}),
-  }
-}
-
 function sanitizeWorkflowRunStatusForRenderer(status: WorkflowRunStatus): WorkflowRunStatus {
   return sanitizeWorkflowRunStatus(status)
-}
-
-function sanitizeWorkflowEventForRenderer(event: WorkflowEvent): WorkflowEvent {
-  switch (event.type) {
-    case "node:started":
-    case "node:skipped":
-      return event.result ? { ...event, result: sanitizeNodeRunResultForRenderer(event.result) } : event
-    case "node:completed":
-      return {
-        ...event,
-        output: sanitizeWorkflowOutputForHistory(event.output),
-        ...(event.result ? { result: sanitizeNodeRunResultForRenderer(event.result) } : {}),
-      }
-    case "node:failed":
-      return {
-        ...event,
-        error: sanitizeError(event.error),
-        ...(event.result ? { result: sanitizeNodeRunResultForRenderer(event.result) } : {}),
-      }
-    case "workflow:completed":
-      return { ...event, result: sanitizeWorkflowRunResultForRenderer(event.result) }
-    case "workflow:failed":
-    case "workflow:cancelled":
-      return {
-        ...event,
-        ...(event.type === "workflow:failed" ? { error: sanitizeError(event.error) } : {}),
-        ...(event.result ? { result: sanitizeWorkflowRunResultForRenderer(event.result) } : {}),
-      }
-    default:
-      return event
-  }
 }
 
 function runStatusToListItem(status: WorkflowRunStatus): WorkflowRunListItem {

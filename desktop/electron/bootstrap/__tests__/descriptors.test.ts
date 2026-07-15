@@ -1658,6 +1658,10 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("raw-token")
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("/Users/example/repo")
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("/Users/example/params")
+    expect(JSON.stringify(eventBus.emit.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(eventBus.emit.mock.calls)).not.toContain("/Users/example/repo")
+    expect(JSON.stringify([...runStatuses.values()])).not.toContain("sk-secret")
+    expect(JSON.stringify([...runStatuses.values()])).not.toContain("/Users/example/repo")
   })
 
   it("createRunWorkflowHandler keeps resolved node input and progress in live run status", async () => {

@@ -206,7 +206,7 @@ import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import { configuredWorkflowProjectIdsFromConfig, validateWorkflow } from "../services/workflow/workflow-validator"
 import { normalizeWorkflowRunParams } from "../services/workflow/workflow-param-normalizer"
-import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowRunSnapshot } from "../services/workflow/run-snapshot-sanitize"
+import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowEventForRenderer, sanitizeWorkflowRunSnapshot } from "../services/workflow/run-snapshot-sanitize"
 import { agentProviderFailureFromResponse } from "../services/workflow/workflow-utils"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
 import { sanitizeError } from "../services/error-sanitize"
@@ -723,15 +723,17 @@ export function createRunWorkflowHandler(deps: {
       } else if (event.type === "node:completed" || event.type === "node:failed" || event.type === "node:skipped") {
         nextNodeResults[event.nodeId] = event.result ?? nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: "failed", input: { variables: {} } }
       }
-      runStatuses.set(runId, { ...current, nodeResults: nextNodeResults })
+      const sanitizedNextNodeResults = sanitizeNodeResultsForSnapshot(nextNodeResults)
+      runStatuses.set(runId, { ...current, nodeResults: sanitizedNextNodeResults })
       const isTerminalEvt = event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled"
-      const emitPayload = isTerminalEvt ? { ...event, workflowId: id } : event
+      const emitPayload = sanitizeWorkflowEventForRenderer(isTerminalEvt ? { ...event, workflowId: id } : event)
       eventBus.emit({ domain: "workflow", type: event.type, payload: emitPayload, timestamp: new Date().toISOString() }, { backpressure: "block" })
       if (isTerminalEvt) {
         runAborts.delete(runId)
         const endedAt = Date.now()
         const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
-        runStatuses.set(runId, { ...current, runId, workflowId: id, status, nodeResults: event.result?.nodeResults ?? nextNodeResults, startedAt, endedAt, durationMs: event.result?.durationMs ?? endedAt - startedAt, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
+        const terminalNodeResults = sanitizeNodeResultsForSnapshot(event.result?.nodeResults ?? nextNodeResults)
+        runStatuses.set(runId, { ...current, runId, workflowId: id, status, nodeResults: terminalNodeResults, startedAt, endedAt, durationMs: event.result?.durationMs ?? endedAt - startedAt, ...(event.type === "workflow:failed" ? { error: sanitizeError(event.error) } : {}) })
         if (!isWorkflowDeleted?.(id)) {
           Promise.resolve(snapshotService.save(sanitizeWorkflowRunSnapshot({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: event.result?.nodeResults ?? nextNodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) }))).catch((err) => {
             capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
