@@ -36,7 +36,15 @@ import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypas
 import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type { SynapseProjectConfig } from "../../../src/types/config"
-import { isSwarmFileWritePathAllowed, type SwarmRun, type SwarmTask, type SwarmTaskConfig, type SwarmWorkerRun } from "../shared/schema"
+import {
+  isSwarmFileWritePathAllowed,
+  SWARM_TASK_DEFAULT_CONCURRENCY,
+  SWARM_TASK_DEFAULT_MAX_ROUNDS,
+  type SwarmRun,
+  type SwarmTask,
+  type SwarmTaskConfig,
+  type SwarmWorkerRun,
+} from "../shared/schema"
 import { SwarmTaskDetail, type SwarmTaskTab } from "./components/swarm-task-detail"
 import { SwarmTaskSidebar } from "./components/swarm-task-sidebar"
 
@@ -63,8 +71,8 @@ const baseTaskConfig: Omit<SwarmTaskConfig, "projectId"> = {
     customAppendix: "",
   },
   runMode: "batch",
-  concurrency: 1,
-  maxRounds: 1,
+  concurrency: SWARM_TASK_DEFAULT_CONCURRENCY,
+  maxRounds: SWARM_TASK_DEFAULT_MAX_ROUNDS,
   agent: {},
 }
 

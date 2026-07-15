@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { swarmTaskConfigSchema } from "../schema"
+import {
+  SWARM_TASK_DEFAULT_CONCURRENCY,
+  SWARM_TASK_DEFAULT_MAX_ROUNDS,
+  swarmTaskConfigSchema,
+} from "../schema"
 
 const baseConfig = {
   projectId: "project-1",
@@ -25,6 +29,27 @@ const baseConfig = {
 }
 
 describe("swarmTaskConfigSchema", () => {
+  it("defaults current configs to one planned worker", () => {
+    const parsed = swarmTaskConfigSchema.parse({
+      projectId: "project-1",
+      prompt: "Run.",
+    })
+
+    expect(parsed.concurrency).toBe(SWARM_TASK_DEFAULT_CONCURRENCY)
+    expect(parsed.maxRounds).toBe(SWARM_TASK_DEFAULT_MAX_ROUNDS)
+  })
+
+  it("preserves legacy worker-count defaults during normalization", () => {
+    const parsed = swarmTaskConfigSchema.parse({
+      projectId: "project-1",
+      prompt: "Run.",
+      injectOptions: { workerIdentity: true },
+    })
+
+    expect(parsed.concurrency).toBe(3)
+    expect(parsed.maxRounds).toBe(3)
+  })
+
   it("accepts project-relative and absolute file write paths", () => {
     expect(swarmTaskConfigSchema.parse(baseConfig).promptInjection.fileWrite.path)
       .toBe("reports/swarm.md")

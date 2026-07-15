@@ -1,6 +1,8 @@
 import { z } from "zod"
 
 export const swarmRunModeSchema = z.enum(["batch", "continuous"])
+export const SWARM_TASK_DEFAULT_CONCURRENCY = 1
+export const SWARM_TASK_DEFAULT_MAX_ROUNDS = 1
 export const swarmRunStatusSchema = z.enum(["running", "draining", "success", "partial", "failed", "cancelled"])
 export const swarmWorkerRunStatusSchema = z.enum(["queued", "running", "success", "failed", "cancelled", "timeout"])
 export const swarmTaskChangedReasonSchema = z.enum([
@@ -121,8 +123,8 @@ const swarmTaskConfigRawSchema = z.object({
   presetId: z.string().min(1).default("general"),
   promptInjection: swarmPromptInjectionConfigSchema.default(defaultSwarmPromptInjectionConfig),
   runMode: swarmRunModeSchema.default("batch"),
-  concurrency: z.number().int().min(1).max(20).default(3),
-  maxRounds: z.number().int().min(1).max(500).default(3),
+  concurrency: z.number().int().min(1).max(20).default(SWARM_TASK_DEFAULT_CONCURRENCY),
+  maxRounds: z.number().int().min(1).max(500).default(SWARM_TASK_DEFAULT_MAX_ROUNDS),
   agent: swarmAgentConfigSchema.default({}),
 }).strict()
 

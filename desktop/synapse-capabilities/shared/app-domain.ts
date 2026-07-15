@@ -35,6 +35,10 @@ import {
 } from "../../app-capabilities/secrets/shared/capability"
 import { SECRET_NAME_REGEX } from "../../app-capabilities/secrets/shared/schema"
 import {
+  SWARM_TASK_DEFAULT_CONCURRENCY,
+  SWARM_TASK_DEFAULT_MAX_ROUNDS,
+} from "../../app-capabilities/swarm-task/shared/schema"
+import {
   SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
   SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
 } from "../../app-capabilities/sound-notifier/shared/capability"
@@ -336,8 +340,14 @@ const swarmTaskConfigSchema = {
       enum: ["batch", "continuous"],
       description: "batch runs a bounded swarm; continuous can refill workers.",
     },
-    concurrency: positiveIntField("Maximum parallel workers.", 20),
-    maxRounds: positiveIntField("Maximum rounds.", 500),
+    concurrency: {
+      ...positiveIntField("Maximum parallel workers. Defaults to 1.", 20),
+      default: SWARM_TASK_DEFAULT_CONCURRENCY,
+    },
+    maxRounds: {
+      ...positiveIntField("Maximum rounds. Defaults to 1.", 500),
+      default: SWARM_TASK_DEFAULT_MAX_ROUNDS,
+    },
     agent: {
       type: "object",
       properties: {

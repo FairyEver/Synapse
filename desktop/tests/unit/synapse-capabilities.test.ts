@@ -30,6 +30,10 @@ import { SECRET_NAME_REGEX } from "../../app-capabilities/secrets/shared/schema"
 import { SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME } from "../../app-capabilities/sound-notifier/shared/capability"
 import { SWARM_TASK_MCP_TOOL_NAMES } from "../../app-capabilities/swarm-task/shared/capability"
 import {
+  SWARM_TASK_DEFAULT_CONCURRENCY,
+  SWARM_TASK_DEFAULT_MAX_ROUNDS,
+} from "../../app-capabilities/swarm-task/shared/schema"
+import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
   getActionDomainId,
@@ -193,6 +197,23 @@ describe("Secrets app capability surface", () => {
         pattern: SECRET_NAME_REGEX.source,
       }))
     }
+  })
+})
+
+describe("Swarm Task app capability surface", () => {
+  it("advertises the same safe worker-count defaults as the runtime", () => {
+    const createTool = buildAppTools().find((tool) => tool.name === SWARM_TASK_MCP_TOOL_NAMES.taskCreate)
+
+    expect(createTool?.inputSchema).toMatchObject({
+      properties: {
+        config: {
+          properties: {
+            concurrency: { default: SWARM_TASK_DEFAULT_CONCURRENCY },
+            maxRounds: { default: SWARM_TASK_DEFAULT_MAX_ROUNDS },
+          },
+        },
+      },
+    })
   })
 })
 

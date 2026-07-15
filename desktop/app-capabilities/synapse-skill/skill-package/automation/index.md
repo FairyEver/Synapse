@@ -109,7 +109,7 @@ Default flow:
 7. Use `app_swarm_task_run_cancel` to cancel a run.
 8. Use `app_swarm_task_task_delete` only when the task has no running or draining run; it removes the saved task and its run history.
 
-`concurrency` is the number of slots. `maxRounds` is the number of batches in `batch` mode and the per-slot round count in `continuous` mode, so the planned worker count is `concurrency * maxRounds`. Stop or cancel can make the actual started count lower.
+`concurrency` is the number of slots. `maxRounds` is the number of batches in `batch` mode and the per-slot round count in `continuous` mode, so the planned worker count is `concurrency * maxRounds`. Both default to 1 when omitted. Stop or cancel can make the actual started count lower.
 
 If Synapse restarts while a run is active, the run is recovered as `failed` with an interruption error because worker processes are not resumed across main-process restarts.
 
