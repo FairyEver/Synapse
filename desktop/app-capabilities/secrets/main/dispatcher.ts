@@ -113,7 +113,7 @@ async function authorizeSecret(
   includeValue: boolean,
 ): Promise<SecretAuditContext> {
   const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
-  const resource = secretName ? `secret:user:${secretName}` : "secret:user:*"
+  const resource = secretName ? `secret:user:${secretName.toLowerCase()}` : "secret:user:*"
   const metadata = {
     source: context.source ?? "api",
     secretAction: capabilityAction,

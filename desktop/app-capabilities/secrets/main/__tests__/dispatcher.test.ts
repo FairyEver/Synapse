@@ -107,7 +107,7 @@ describe("createSecretsCapabilityDispatcher", () => {
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "secret.read",
-      resource: "secret:user:TOKEN",
+      resource: "secret:user:token",
       context: expect.objectContaining({
         secretAction: SECRETS_ITEM_GET_CAPABILITY_ID,
         includeValue: true,
@@ -116,6 +116,29 @@ describe("createSecretsCapabilityDispatcher", () => {
     expect(service.get).toHaveBeenCalledWith({ name: "TOKEN", includeValue: true })
     expect(JSON.stringify(auditEvents)).not.toContain("super-secret")
     expect(JSON.stringify(auditEvents)).not.toContain('"value"')
+  })
+
+  it("uses one canonical permission and audit resource across name casing", async () => {
+    const { auditEvents, dispatcher, permissionGuard, service } = createHarness()
+
+    await dispatcher.dispatch(
+      SECRETS_ITEM_GET_CAPABILITY_ID,
+      { name: "TOKEN" },
+      { source: "mcp-http" },
+    )
+    await dispatcher.dispatch(
+      SECRETS_ITEM_GET_CAPABILITY_ID,
+      { name: "token" },
+      { source: "mcp-http" },
+    )
+
+    expect(permissionGuard.check).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(permissionGuard.check).mock.calls.map(([request]) => request.resource))
+      .toEqual(["secret:user:token", "secret:user:token"])
+    expect(auditEvents.map(({ resource }) => resource))
+      .toEqual(["secret:user:token", "secret:user:token"])
+    expect(service.get).toHaveBeenNthCalledWith(1, { name: "TOKEN" })
+    expect(service.get).toHaveBeenNthCalledWith(2, { name: "token" })
   })
 
   it("routes mutations through secret.write and never audits raw values", async () => {
@@ -144,7 +167,7 @@ describe("createSecretsCapabilityDispatcher", () => {
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "secret.write",
-      resource: "secret:user:BARK_TOKEN",
+      resource: "secret:user:bark_token",
     }))
     expect(service.create).toHaveBeenCalledWith({
       name: "BARK_TOKEN",
@@ -185,7 +208,7 @@ describe("createSecretsCapabilityDispatcher", () => {
     expect(auditEvents).toContainEqual(expect.objectContaining({
       action: "secret.read",
       outcome: "failed",
-      resource: "secret:user:TOKEN",
+      resource: "secret:user:token",
       metadata: expect.objectContaining({
         errorName: "Error",
         errorLength: "Error: failed with token=super-secret at /Users/me/.secret".length,
@@ -206,7 +229,7 @@ describe("createSecretsCapabilityDispatcher", () => {
     expect(auditEvents).toContainEqual(expect.objectContaining({
       action: "secret.read",
       outcome: "denied",
-      resource: "secret:user:TOKEN",
+      resource: "secret:user:token",
       metadata: expect.objectContaining({
         reason: "denied before service",
         policyId: "test-deny",

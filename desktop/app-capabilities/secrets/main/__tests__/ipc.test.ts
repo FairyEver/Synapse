@@ -138,7 +138,7 @@ describe("secretsIpcModule", () => {
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "secret.read",
       outcome: "denied",
-      resource: "secret:user:TOKEN",
+      resource: "secret:user:token",
     }))
   })
 })
