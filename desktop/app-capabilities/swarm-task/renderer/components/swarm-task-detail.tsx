@@ -147,6 +147,9 @@ function SwarmTaskOverview({
             ["并发上限", String(config.concurrency)],
             [roundLabel, String(config.maxRounds)],
             ["计划 worker", String(config.concurrency * config.maxRounds)],
+            ...(config.promptInjection.customAppendix.trim()
+              ? [["附加提示词", "已配置"]] as ReadonlyArray<readonly [string, string]>
+              : []),
             ...(config.promptInjection.fileWrite.enabled
               ? [["文件", config.promptInjection.fileWrite.path]] as ReadonlyArray<readonly [string, string]>
               : []),

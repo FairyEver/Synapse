@@ -211,6 +211,24 @@ export function SwarmTaskConfigForm({
             })}
           />
         </div>
+        <Field className="grid gap-2">
+          <FieldLabel htmlFor="swarm-task-custom-appendix">附加提示词</FieldLabel>
+          <FieldContent>
+            <Textarea
+              id="swarm-task-custom-appendix"
+              rows={3}
+              className="min-h-[calc(3lh+1rem+2px)] resize-y"
+              value={value.promptInjection.customAppendix}
+              onChange={(event) => onChange({
+                ...value,
+                promptInjection: {
+                  ...value.promptInjection,
+                  customAppendix: event.target.value,
+                },
+              })}
+            />
+          </FieldContent>
+        </Field>
       </ConfigSection>
 
       <ConfigSection

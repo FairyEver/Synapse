@@ -532,6 +532,27 @@ describe("SwarmTaskModule", () => {
     expect(textarea?.className).toContain("min-h-[calc(3lh+1rem+2px)]")
   })
 
+  it("shows and updates the worker prompt appendix", async () => {
+    await renderModule()
+    await clickTab("配置")
+
+    const appendix = document.querySelector<HTMLTextAreaElement>("#swarm-task-custom-appendix")
+    expect(appendix).toBeTruthy()
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
+      setter?.call(appendix, "Only inspect tests.")
+      appendix?.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await clickButton("运行任务")
+
+    expect(swarmTaskBridge.startRun).toHaveBeenCalledWith({
+      taskId: "task-1",
+      configOverride: expect.objectContaining({
+        promptInjection: expect.objectContaining({ customAppendix: "Only inspect tests." }),
+      }),
+    })
+  })
+
   it("shows detailed run mode options in a custom menu", async () => {
     await renderModule()
     await clickTab("配置")
