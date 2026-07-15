@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { zodToJsonSchema } from "zod-to-json-schema"
+import { z } from "zod"
 import type { WorkflowService, WorkflowSaveResult, WorkflowSaveError } from "../services/workflow/workflow-service"
 import type { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import type { NodeTypeRegistry } from "../../workflow-nodes/registry"
@@ -231,7 +231,10 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "workflow.node_type.describe": async (params, deps) => {
     const nodeType = requireString(params, "nodeType")
     const manifest = deps.nodeTypeRegistry.getManifest(nodeType)
-    const configSchema = zodToJsonSchema(manifest.configSchema as unknown as Parameters<typeof zodToJsonSchema>[0])
+    const configSchema = z.toJSONSchema(manifest.configSchema, {
+      io: "input",
+      unrepresentable: "any",
+    })
     const data: Record<string, unknown> = {
       type: manifest.type,
       title: manifest.title,

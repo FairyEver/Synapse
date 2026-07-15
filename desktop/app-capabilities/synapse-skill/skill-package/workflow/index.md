@@ -10,6 +10,8 @@ Do not treat this domain file as the umbrella guidance for every Synapse MCP cap
 
 If a user asks for another Synapse MCP domain while this domain file is active, return to `SKILL.md` for routing and read the matching `<domain>/index.md` attachment before using that domain's tools. If no current domain attachment exists, use the relevant MCP tools directly and keep the workflow-specific guidance here out of that task.
 
+Workflow definitions returned by Synapse contain `meta.schemaVersion`, a SemVer document-schema version managed by Synapse. Preserve the complete `meta` object when sending a fetched definition back through a whole-definition update. Do not invent, downgrade, or remove this value. It is separate from `version`, which is the save revision hash. Legacy definitions are migrated by Synapse before MCP access; a future or failed document cannot be fetched, updated, or run through MCP. `app_workflow_definition_list` may report `loadError`; `rawExportAvailable` only means a future document can be preserved through the Synapse UI's raw export path.
+
 ## Node Types
 
 - **prompt** — Sends a prompt to an AI model, returns the response as output. Requires a provider.
@@ -49,7 +51,7 @@ When you see this URI, parse it as `providerId = <providerId>` and `modelTier = 
 ## Creating a Workflow (Standard Flow)
 
 1. Call `app_workflow_node_type_list` to see available node types.
-2. Call `app_workflow_node_type_describe` for every node type you will configure. Use `nodeType: "prompt"` or `"switch"` before choosing any AI node config; use `nodeType: "workflow_call"` before creating a nested workflow call node; use `nodeType: "document_template_docx_generate"` before configuring document generation; use `nodeType: "swarm_task_run"` before configuring a Swarm Task run; use `nodeType: "codex"` before setting Codex CLI options; use `nodeType: "claude_code"` before setting Claude Code CLI options.
+2. Call `app_workflow_node_type_describe` for every node type you will configure. Include every field listed in `configSchema.required`, including required booleans and arrays. Use `nodeType: "prompt"` or `"switch"` before choosing any AI node config; use the exact node type `"workflow_call"` (not `"app_workflow_call"`) before creating a nested workflow call node; use `nodeType: "document_template_docx_generate"` before configuring document generation; use `nodeType: "swarm_task_run"` before configuring a Swarm Task run; use `nodeType: "codex"` before setting Codex CLI options; use `nodeType: "claude_code"` before setting Claude Code CLI options.
 3. Call `app_workflow_definition_create` with `name`, `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` when known. This returns `{ id, versionHash }` and creates a workflow with a default end node.
 4. If defaults were not set during create, call `app_workflow_definition_get`, update the full definition with `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins`, then call `app_workflow_definition_update`.
 5. Call `app_workflow_param_update` to define input parameters.
@@ -108,7 +110,7 @@ Nodes declare a `variables` array. Each binding has:
 
 ## Template Fields
 
-Use `{{variableName}}` to interpolate bound variables into prompt text, codex/claude_code prompt text, end output templates, HTTP request text fields, and workflow_call child parameter templates. Script node variables are injected as environment variables instead of template text. All referenced template variables must be declared in the node's `variables` array.
+Use `{{variableName}}` to interpolate bound variables into prompt text, codex/claude_code prompt text, end output templates, HTTP request text fields, and workflow_call child parameter templates. Script node variables are injected as environment variables instead of template text; do not write `{{variableName}}` inside `script`. Use `$variableName` in POSIX, `%variableName%` in cmd, or `$env:variableName` in PowerShell. A single file/directory variable is its path string; a multi-resource variable is an ordered JSON array of paths. All referenced template variables must be declared in the node's `variables` array.
 
 Script node `node_output` is the exact stdout string. If a downstream node needs a path, ID, JSON scalar, or other single value, write scripts with `printf` or strip inside the producing script so the output does not include an accidental trailing newline.
 
@@ -119,7 +121,7 @@ Use a **workflow_call** node when the parent workflow should run another saved w
 Config fields:
 - `workflowId` — child workflow ID. Do not set this to the current workflow ID.
 - `variables` — bindings from the parent workflow params, upstream node outputs, or static values.
-- `paramTemplates` — object whose keys are child text/number/option param names and whose values are template strings using `{{variableName}}`.
+- `paramTemplates` — object whose keys are child text/number/option param names and whose values are template strings using `{{variableName}}`. Existing single file/directory string templates remain compatible; do not use templates for multi-resource params.
 - `paramBindings` — object whose keys are child param names and whose values are typed bindings. Use this for file/directory child params so resource references pass through without becoming strings.
 
 Recommended MCP flow:
@@ -146,9 +148,9 @@ Recommended MCP flow:
      }
    }
    ```
-5. Run `app_workflow_definition_inspect` after updating. It catches direct self-calls and unbound variables in `paramTemplates`.
+5. Run `app_workflow_definition_inspect` after updating. It catches direct self-calls, unbound variables in `paramTemplates`, file/directory parent bindings whose resource type or `allowMultiple` value differs from the child parameter, and string/template sources used for multi-resource child params.
 
-Do not put both `paramTemplates.<name>` and `paramBindings.<name>` on the same child parameter. For file/directory child params, prefer a `paramBindings` value binding from a parent parameter with the same resource kind and the same `allowMultiple` value; single and multi resource params are not converted automatically.
+Do not put both `paramTemplates.<name>` and `paramBindings.<name>` on the same child parameter. For file/directory child params, prefer a `paramBindings` value binding from a parent parameter with the same resource kind and the same `allowMultiple` value. Existing single-resource configs may still receive an absolute path string from `paramTemplates`, `static`, or `node_output`. Multi-resource child params must directly bind a matching multi-resource parent param; they reject templates, `static`, and `node_output`. Single and multi resource params are never converted automatically.
 
 At runtime, the call node reads the child workflow's latest saved definition. It returns only the child workflow End output as the workflow_call node output. It does not lock a child version and does not expose arbitrary child node outputs.
 

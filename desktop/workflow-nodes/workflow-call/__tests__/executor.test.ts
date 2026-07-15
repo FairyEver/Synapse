@@ -122,6 +122,39 @@ describe("workflowCallNodeExecutor", () => {
     }))
   })
 
+  it("keeps legacy single-resource template params compatible", async () => {
+    const runtimeDeps = deps()
+    vi.mocked(runtimeDeps.workflowCall!.getWorkflowDefinition).mockResolvedValue({
+      ...childDefinition,
+      params: [{ name: "input_file", type: "file", default: null }],
+    })
+
+    const result = await workflowCallNodeExecutor.execute(makeInput({
+      paramTemplates: { input_file: "{{topic}}" },
+    }, runtimeDeps))
+
+    expect(result.status).toBe("success")
+    expect(runtimeDeps.workflowCall?.runWorkflow).toHaveBeenCalledWith(expect.objectContaining({
+      params: { input_file: "搜索结果" },
+    }))
+  })
+
+  it("rejects multi-resource templates before starting the child workflow", async () => {
+    const runtimeDeps = deps()
+    vi.mocked(runtimeDeps.workflowCall!.getWorkflowDefinition).mockResolvedValue({
+      ...childDefinition,
+      params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
+    })
+
+    const result = await workflowCallNodeExecutor.execute(makeInput({
+      paramTemplates: { input_files: "{{topic}}" },
+    }, runtimeDeps))
+
+    expect(result.status).toBe("failed")
+    expect(result.error).toContain("多选资源参数「input_files」不能使用模板传值")
+    expect(runtimeDeps.workflowCall?.runWorkflow).not.toHaveBeenCalled()
+  })
+
   it("inherits parent project when child has no default project", async () => {
     const runtimeDeps = deps()
     vi.mocked(runtimeDeps.workflowCall!.getWorkflowDefinition).mockResolvedValue({

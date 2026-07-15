@@ -3,22 +3,24 @@ import { Button } from "@/components/ui/button"
 import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item"
 import { ChevronDown, ChevronUp, FolderOpen, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+import { getRendererPlatform } from "@/lib/runtime-platform"
 import type { WorkflowResourceEntryType } from "@/types/workflow"
+import { useWorkflowResourcePicker } from "../hooks/use-workflow-resource-picker"
 
 interface MultiResourcePathFieldProps {
   entryType: WorkflowResourceEntryType
   paths: string[]
   onChange: (paths: string[]) => void
   disabled?: boolean
+  labelledBy?: string
 }
 
-export function MultiResourcePathField({ entryType, paths, onChange, disabled }: MultiResourcePathFieldProps) {
+export function MultiResourcePathField({ entryType, paths, onChange, disabled, labelledBy }: MultiResourcePathFieldProps) {
   const label = entryType === "file" ? "文件" : "文件夹"
+  const { chooseResources } = useWorkflowResourcePicker()
 
   async function choosePaths(): Promise<void> {
-    const selectedPaths = entryType === "file"
-      ? await window.synapse?.workflow.chooseParamFiles?.()
-      : await window.synapse?.workflow.chooseParamDirectories?.()
+    const selectedPaths = await chooseResources(entryType)
     if (!selectedPaths?.length) return
 
     const existing = new Set(paths.map(resourcePathIdentity))
@@ -51,21 +53,23 @@ export function MultiResourcePathField({ entryType, paths, onChange, disabled }:
 
   if (paths.length === 0) {
     return (
-      <Button type="button" variant="outline" className="h-10 w-full justify-start" onClick={() => { void choosePaths() }} disabled={disabled}>
-        <FolderOpen className="size-4" />选择{label}
-      </Button>
+      <div role="group" aria-labelledby={labelledBy}>
+        <Button type="button" variant="outline" className="w-full justify-start" onClick={() => { void choosePaths() }} disabled={disabled}>
+          <FolderOpen className="size-4" />选择{label}
+        </Button>
+      </div>
     )
   }
 
   return (
-    <div className="grid min-w-0 gap-1">
+    <div className="grid min-w-0 gap-1" role="group" aria-labelledby={labelledBy}>
       <div className="flex items-center justify-between gap-2">
         <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{paths.length} / {WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS}</span>
         <div className="flex min-w-0 items-center">
-          <Button type="button" variant="ghost" className="h-10" onClick={() => { void choosePaths() }} disabled={disabled}>
+          <Button type="button" variant="ghost" onClick={() => { void choosePaths() }} disabled={disabled}>
             <FolderOpen className="size-4" />添加{label}
           </Button>
-          <Button type="button" variant="ghost" className="h-10" onClick={() => onChange([])} disabled={disabled}>清空</Button>
+          <Button type="button" variant="ghost" onClick={() => onChange([])} disabled={disabled}>清空</Button>
         </div>
       </div>
       <ItemGroup className="min-w-0 gap-0 has-data-[size=xs]:gap-0">
@@ -79,7 +83,6 @@ export function MultiResourcePathField({ entryType, paths, onChange, disabled }:
                 type="button"
                 size="icon"
                 variant="ghost"
-                className="size-10"
                 disabled={disabled || index === 0}
                 onClick={() => movePath(index, index - 1)}
                 aria-label={`上移${label} ${index + 1}`}
@@ -90,7 +93,6 @@ export function MultiResourcePathField({ entryType, paths, onChange, disabled }:
                 type="button"
                 size="icon"
                 variant="ghost"
-                className="size-10"
                 disabled={disabled || index === paths.length - 1}
                 onClick={() => movePath(index, index + 1)}
                 aria-label={`下移${label} ${index + 1}`}
@@ -101,7 +103,6 @@ export function MultiResourcePathField({ entryType, paths, onChange, disabled }:
                 type="button"
                 size="icon"
                 variant="ghost"
-                className="size-10"
                 disabled={disabled}
                 onClick={() => onChange(paths.filter((_, pathIndex) => pathIndex !== index))}
                 aria-label={`删除${label} ${index + 1}`}
@@ -118,5 +119,5 @@ export function MultiResourcePathField({ entryType, paths, onChange, disabled }:
 
 function resourcePathIdentity(resourcePath: string): string {
   const normalized = resourcePath.trim().replaceAll("\\", "/")
-  return window.synapse?.platform === "win32" ? normalized.toLocaleLowerCase() : normalized
+  return getRendererPlatform() === "win32" ? normalized.toLocaleLowerCase() : normalized
 }

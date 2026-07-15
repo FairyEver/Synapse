@@ -966,6 +966,7 @@ function buildScannerDeps(resolve: <T>(id: string) => T): ProviderReferenceScann
         providerId: string; modelTier: string
       }> = []
       for (const meta of metas) {
+        if (meta.loadError) continue
         const def = await workflowService.get(meta.id) as WorkflowDefinition | null
         if (!def) continue
         for (const node of def.nodes) {

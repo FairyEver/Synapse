@@ -10,9 +10,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Plus, Trash2, ChevronUp, ChevronDown, FolderOpen } from "lucide-react"
-import { toast } from "sonner"
 import type { WorkflowParam, WorkflowParamDefault, WorkflowResourceEntryType, WorkflowResourceRef } from "@/types/workflow"
 import { MultiResourcePathField } from "./multi-resource-path-field"
+import { useWorkflowResourcePicker } from "../hooks/use-workflow-resource-picker"
 
 type DraftParam = WorkflowParam & { _key: string }
 const REQUIRED_OPTION_VALUE = "__required__"
@@ -51,6 +51,7 @@ interface WorkflowParamCardProps {
 function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelete, onMoveUp, onMoveDown }: WorkflowParamCardProps) {
   const allowCustomId = useId()
   const allowMultipleId = useId()
+  const { chooseResource } = useWorkflowResourcePicker()
   const resourceEntryType: WorkflowResourceEntryType | null = param.type === "file" || param.type === "directory" ? param.type : null
   const optionRows = param.options ?? []
   const normalizedOptions = normalizeOptionValues(optionRows)
@@ -60,30 +61,14 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
 
   const handleChooseResourceDefault = async () => {
     if (!resourceEntryType) return
-    const selectedPath = resourceEntryType === "file"
-      ? await window.synapse?.workflow.chooseParamFile?.()
-      : await window.synapse?.workflow.chooseParamDirectory?.()
+    const selectedPath = await chooseResource(resourceEntryType)
     if (selectedPath) {
       onChange({ default: toLocalPathDefault(resourceEntryType, selectedPath) })
     }
   }
   const handleAllowMultipleChange = (checked: boolean) => {
     if (!resourceEntryType) return
-    if (checked) {
-      const existingDefault = resourceDefaultPath(param.default)
-      onChange({
-        allowMultiple: true,
-        default: existingDefault ? [toLocalPathRef(resourceEntryType, existingDefault)] : null,
-      })
-      return
-    }
-
-    const existingDefaults = resourceDefaultRefs(param.default)
-    if (existingDefaults.length > 1) {
-      toast.error("请先将默认值删到一项")
-      return
-    }
-    onChange({ allowMultiple: false, default: existingDefaults[0] ?? null })
+    onChange({ allowMultiple: checked, default: null })
   }
   const handleTypeChange = (value: string) => {
     const type = value as WorkflowParam["type"]
@@ -474,14 +459,9 @@ function resourceDefaultPath(value: WorkflowParamDefault): string {
   return ""
 }
 
-function resourceDefaultRefs(value: WorkflowParamDefault): WorkflowResourceRef[] {
-  if (Array.isArray(value)) return value.filter(isWorkflowResourceRef)
-  if (isWorkflowResourceRef(value)) return [value]
-  return []
-}
-
 function resourceDefaultPaths(value: WorkflowParamDefault): string[] {
-  return resourceDefaultRefs(value)
+  if (!Array.isArray(value)) return []
+  return value
     .filter((resource): resource is Extract<WorkflowResourceRef, { kind: "local_path" }> => resource.kind === "local_path")
     .map((resource) => resource.path)
 }
@@ -513,20 +493,24 @@ function optionValidationError(param: WorkflowParam): string | null {
 }
 
 function sanitizeParamForSave(param: WorkflowParam): WorkflowParam {
+  const defaultValue = (param.type === "file" || param.type === "directory")
+    && (Array.isArray(param.default) !== (param.allowMultiple === true))
+    ? null
+    : param.default
   const base: WorkflowParam = {
     name: param.name,
     type: param.type,
-    default: param.default,
+    default: defaultValue,
   }
   if (param.description !== undefined) base.description = param.description
   if ((param.type === "file" || param.type === "directory") && param.allowMultiple === true) base.allowMultiple = true
   if (param.type !== "option") return base
 
   const options = normalizeOptionValues(param.options)
-  const defaultValue = typeof param.default === "string" ? param.default.trim() : null
+  const optionDefaultValue = typeof param.default === "string" ? param.default.trim() : null
   return {
     ...base,
-    default: defaultValue && options.includes(defaultValue) ? defaultValue : null,
+    default: optionDefaultValue && options.includes(optionDefaultValue) ? optionDefaultValue : null,
     options,
     allowCustomOption: param.allowCustomOption ?? false,
   }

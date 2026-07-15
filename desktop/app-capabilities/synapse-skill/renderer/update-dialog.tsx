@@ -91,17 +91,20 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
     setOpen(false)
   }
 
-  const updateTargets = async () => {
-    if (!source || targets.length === 0 || updating) return
+  const updateTargets = async (
+    requestedTargets: SynapseEditorInstallStatusEntry[] = targets,
+    retainedWarnings: UpdateFailure[] = [],
+  ) => {
+    if (!source || requestedTargets.length === 0 || updating) return
 
     setUpdating(true)
     setFailures([])
-    setWarnings([])
+    setWarnings(retainedWarnings)
     try {
       const result = await installSourceToEditorTargets({
         mode: "update",
         source,
-        targets: targets.map((entry) => ({
+        targets: requestedTargets.map((entry) => ({
           editorId: entry.editorId,
           scope: "global",
         })),
@@ -109,11 +112,14 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
       const nextFailures = result.results.flatMap((item) => item.status === "failed"
         ? [{ editorId: item.target.editorId, message: item.error ?? "更新失败" }]
         : [])
-      const nextWarnings = result.results.flatMap((item) => (
-        item.status === "installed" && item.result?.warning
-          ? [{ editorId: item.target.editorId, message: item.result.warning }]
-          : []
-      ))
+      const nextWarnings = [
+        ...retainedWarnings,
+        ...result.results.flatMap((item) => (
+          item.status === "installed" && item.result?.warning
+            ? [{ editorId: item.target.editorId, message: item.result.warning }]
+            : []
+        )),
+      ]
 
       if (nextFailures.length === 0 && nextWarnings.length === 0) {
         setOpen(false)
@@ -130,7 +136,7 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
     } catch (error) {
       const message = error instanceof Error ? error.message : "更新失败"
       logger.error("Failed to update global Synapse Skill installations.", error)
-      setFailures(targets.map((entry) => ({ editorId: entry.editorId, message })))
+      setFailures(requestedTargets.map((entry) => ({ editorId: entry.editorId, message })))
     } finally {
       setUpdating(false)
     }
@@ -140,6 +146,14 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
   const warningByEditorId = new Map(warnings.map((warning) => [warning.editorId, warning.message]))
   const hasFailures = failures.length > 0
   const hasWarnings = warnings.length > 0
+
+  const retryFailedTargets = () => {
+    const failedEditorIds = new Set(failures.map((failure) => failure.editorId))
+    return updateTargets(
+      targets.filter((entry) => failedEditorIds.has(entry.editorId)),
+      warnings,
+    )
+  }
 
   return (
     <Dialog
@@ -198,7 +212,7 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
           <Button type="button" variant="outline" disabled={updating} onClick={closeDialog}>
             {hasFailures || hasWarnings ? "关闭" : "稍后"}
           </Button>
-          {!hasWarnings || hasFailures ? <Button type="button" disabled={updating} onClick={() => void updateTargets()}>
+          {!hasWarnings || hasFailures ? <Button type="button" disabled={updating} onClick={() => void (hasFailures ? retryFailedTargets() : updateTargets())}>
             {updating ? <Spinner data-icon="inline-start" /> : null}
             {updating ? "正在更新" : hasFailures ? "重试失败项" : "更新"}
           </Button> : null}

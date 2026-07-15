@@ -2,6 +2,8 @@
 
 All tools are accessed via the `synapse-mcp` MCP server.
 
+Workflow definition responses include `meta.schemaVersion` (SemVer). Preserve it on whole-definition updates. Do not confuse it with the `version` save revision. Synapse migrates supported legacy documents before returning them and blocks future or failed documents from fetch, update, and execution. List metadata can expose `loadError`; `rawExportAvailable` refers only to the Synapse UI's protected raw export path.
+
 ---
 
 ## Discovery
@@ -19,7 +21,7 @@ Get full manifest and config JSON Schema for a node type.
 
 **Params:** `nodeType` (string, required)
 **Returns:** `{ type, title, color, ports, configFields, configSchema, availableProviders? }`
-**Notes:** Always call this before configuring a node to get the current schema. For `prompt` and `switch` nodes, the response also includes `availableProviders` — an array of `{ id, name, models: { default?, haiku?, sonnet?, opus? } }`. Use this to discover valid `providerId` values. `codex` and `claude_code` nodes do not use `providerId` or `modelTier`; inspect `nodeType: "codex"` for Codex CLI fields and `nodeType: "claude_code"` for Claude Code CLI fields. If the user provides a copied reference such as `synapse-provider-model://local-claude-code/sonnet`, parse it as `providerId = "local-claude-code"` and `modelTier = "sonnet"`.
+**Notes:** Always call this before configuring a node to get the current schema. Treat `configSchema.required` as authoritative and include every listed field, including booleans and arrays; `configFields[].optional` is aligned with the same requirement. The nested-workflow node type is exactly `workflow_call`, not `app_workflow_call`. For `prompt` and `switch` nodes, the response also includes `availableProviders` — an array of `{ id, name, models: { default?, haiku?, sonnet?, opus? } }`. Use this to discover valid `providerId` values. `codex` and `claude_code` nodes do not use `providerId` or `modelTier`; inspect `nodeType: "codex"` for Codex CLI fields and `nodeType: "claude_code"` for Claude Code CLI fields. If the user provides a copied reference such as `synapse-provider-model://local-claude-code/sonnet`, parse it as `providerId = "local-claude-code"` and `modelTier = "sonnet"`.
 
 ---
 
@@ -69,6 +71,8 @@ Requires workflow `defaultProjectId` as the execution project because script con
 - `timeoutMins?` (number) — execution timeout in minutes
 - `variables` (array) — variable bindings
 
+Resolved variables are injected as environment variables, not interpolated as `{{variable}}` text. Use `$variable` in POSIX, `%variable%` in cmd, or `$env:variable` in PowerShell. Single file/directory params become path strings; multi-resource params become ordered JSON path arrays. Definitions using `{{variable}}` inside `script` are rejected before save.
+
 Output is exact stdout. Use `printf` for single-value outputs that downstream `node_output` bindings will treat as paths, IDs, or JSON scalars.
 
 ### workflow_call
@@ -77,10 +81,10 @@ No provider needed on the call node. It invokes another saved workflow and retur
 
 - `workflowId` (string) — child workflow ID to call. Must not be the current workflow ID.
 - `variables` (array) — variable bindings from parent workflow params, upstream node outputs, or static values
-- `paramTemplates` (object) — child text/number/option param name to template string map. Values may use `{{variable}}` placeholders declared in `variables`.
-- `paramBindings` (object) — child param name to typed binding map. Use this for file/directory params, for example `{ "input_file": { "mode": "value", "source": { "type": "param", "param": "input_file" } } }`. Parent and child params must have the same resource kind and the same `allowMultiple` value.
+- `paramTemplates` (object) — child text/number/option param name to template string map. Values may use `{{variable}}` placeholders declared in `variables`. Legacy single file/directory templates remain accepted; multi-resource params cannot use templates.
+- `paramBindings` (object) — child param name to typed binding map. Use this for file/directory params, for example `{ "input_file": { "mode": "value", "source": { "type": "param", "param": "input_file" } } }`. A single-resource value binding may also use a legacy `static` or `node_output` string path. A multi-resource value binding must directly reference a parent param with the same resource kind and `allowMultiple: true`.
 
-Before configuring child params, call `app_workflow_definition_get` for the child workflow and read its current `params`. Do not put the same child param in both `paramTemplates` and `paramBindings`. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides; child codex/claude_code nodes still need an effective project. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
+Before configuring child params, call `app_workflow_definition_get` for the child workflow and read its current `params`. Do not put the same child param in both `paramTemplates` and `paramBindings`. `app_workflow_definition_inspect` and save reject direct parent bindings whose file/directory type or `allowMultiple` value differs from the child parameter. They also reject templates, `static`, and `node_output` string sources for multi-resource child params. Single and multi values are never converted automatically. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides; child codex/claude_code nodes still need an effective project. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
 
 ### document_template_docx_generate
 
@@ -222,7 +226,7 @@ The node passes the prompt as the `claude -p` query argument and returns only Cl
 List all workflow definitions.
 
 **Params:** none
-**Returns:** `[{ id, name, description?, version, nodeCount, createdAt, updatedAt }]`
+**Returns:** `[{ id, name, description?, version, loadError?, rawExportAvailable?, nodeCount, createdAt, updatedAt }]`
 
 ### app_workflow_definition_get
 

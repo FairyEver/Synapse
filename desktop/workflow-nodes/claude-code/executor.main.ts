@@ -551,14 +551,20 @@ function failureMessageFromResult(result: {
     return MISSING_CLAUDE_CODE_CLI_ERROR
   }
 
+  const stdout = result.stdout?.trim()
+  const stderr = result.stderr?.trim()
+  const streamError = [stdout, stderr].find((value) => value && CLAUDE_CODE_ERROR_SIGNAL_PATTERN.test(value))
   const candidate = result.error?.trim()
-    || result.stderr?.trim()
-    || result.stdout?.trim()
+    || streamError
+    || stderr
+    || stdout
     || (result.signal ? `Claude Code 被信号 ${result.signal} 终止` : undefined)
     || (result.exitCode !== null ? `Claude Code 退出码 ${String(result.exitCode)}` : "Claude Code 执行失败")
 
   return `Claude Code 执行失败：${truncateWithEllipsis(sanitizeError(candidate), 120)}`
 }
+
+const CLAUDE_CODE_ERROR_SIGNAL_PATTERN = /\b(?:api error|error|failed|failure|unauthenticated|unauthorized|forbidden|quota|denied|exception)\b/iu
 
 function isMissingClaudeCodeCliError(error: unknown): boolean {
   const code = typeof error === "object" && error !== null && "code" in error

@@ -51,9 +51,12 @@ describe("workflow MCP tool definitions", () => {
   })
 
   it("teaches agents that workflow_call, codex, and claude_code are supported node types", () => {
-    expect(toolByName("workflow_node_type_list").description).toContain("workflow_call")
-    expect(toolByName("workflow_node_type_list").description).toContain("codex")
-    expect(toolByName("workflow_node_type_list").description).toContain("claude_code")
+    const listDescription = toolByName("workflow_node_type_list").description
+    expect(listDescription).toContain("workflow_call")
+    expect(listDescription).toContain('"app_workflow_call" is not a valid node type')
+    expect(listDescription).toContain("script variables are injected as environment variables")
+    expect(listDescription).toContain("codex")
+    expect(listDescription).toContain("claude_code")
 
     const describeProperties = toolByName("workflow_node_type_describe").inputSchema.properties
     const describeNodeType = objectProperty(describeProperties, "nodeType")
@@ -99,8 +102,10 @@ describe("workflow MCP tool definitions", () => {
     const configDescription = stringProperty(configSchema, "description")
 
     expect(configDescription).toContain("workflow_call")
+    expect(configDescription).toContain("not app_workflow_call")
     expect(configDescription).toContain("workflowId")
     expect(configDescription).toContain("paramTemplates")
+    expect(configDescription).toContain("environment variables")
     expect(configDescription).toContain("codex")
     expect(configDescription).toContain("approvalPolicy")
     expect(configDescription).toContain("configOverrides")
@@ -109,6 +114,9 @@ describe("workflow MCP tool definitions", () => {
     expect(configDescription).toContain("settingSources")
 
     const configProperties = objectProperty(configSchema, "properties")
+    expect(stringProperty(objectProperty(configProperties, "paramTemplates"), "description")).toContain("multi-select resource params cannot use templates")
+    expect(stringProperty(objectProperty(configProperties, "paramBindings"), "description")).toContain("node_output")
+    expect(stringProperty(objectProperty(configProperties, "paramBindings"), "description")).toContain("same resource kind and allowMultiple")
     expect(configProperties).toHaveProperty("enableSearch")
     expect(configProperties).toHaveProperty("features")
     expect(configProperties).toHaveProperty("skipGitRepoCheck")

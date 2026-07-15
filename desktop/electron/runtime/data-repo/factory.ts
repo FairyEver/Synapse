@@ -42,6 +42,7 @@ export function createFileBackedDataRepository(
           defaults: recordSchema.defaults,
           validate: recordSchema.validate,
           reviveEnvelope: jsonReviveEnvelopeFor(schema.name),
+          preserveInvalidJson: schema.name === "workflows",
         }))
         break
       case "encrypted-json":

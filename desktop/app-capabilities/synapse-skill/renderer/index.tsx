@@ -18,42 +18,98 @@ import { SystemAppWindowShell } from "../../../src/modules/apps/components/syste
 import { useEditorAdaptersForContentType } from "../../../src/modules/content/hooks/use-editor-adapters-for-content-type"
 import { SharedInstallerFlow } from "../../../src/modules/installers/shared/shared-installer-flow"
 import type { SynapseEditorAdapterSummary } from "../../../src/types/editor"
-import type { SynapseEditorInstallStatusEntry } from "../../../src/types/editor-install-status"
+import type { SynapseEditorInstallStatusEntry, SynapseEditorInstallStatusValue } from "../../../src/types/editor-install-status"
 import type { SynapseSkillInstallerSource } from "../../../src/types/installers"
 
 const logger = createRendererLogger("synapse-skill.app")
 
-const statusLabels = {
-  conflict: "冲突",
-  external_same_name: "外部同名",
-  installed: "已安装",
-  needs_update: "需更新",
-  not_installed: "未安装",
-  unavailable: "不可用",
-  unsupported: "不支持",
-} as const
-
-function statusBadgeVariant(status: SynapseEditorInstallStatusEntry["status"] | undefined) {
-  if (status === "installed") return "default"
-  if (status === "needs_update") return "secondary"
-  if (status === "conflict") return "destructive"
-  return "outline"
+type InstallStatusPolicy = {
+  readonly label: string
+  readonly badgeVariant: "default" | "secondary" | "destructive" | "outline"
+  readonly showBadge: boolean
+  readonly rowAction: "install" | "update" | "handle" | "reinstall" | null
+  readonly rowActionLabel: string | null
+  readonly batchMode: "install" | "update" | null
+  readonly summaryKind: "missing" | "update" | "action" | null
 }
 
-function canOpenSingleTargetFlow(status: SynapseEditorInstallStatusEntry["status"] | undefined): boolean {
-  return status === "not_installed"
-    || status === "needs_update"
-    || status === "conflict"
-    || status === "external_same_name"
+const installStatusPolicies: Record<SynapseEditorInstallStatusValue, InstallStatusPolicy> = {
+  conflict: {
+    label: "冲突",
+    badgeVariant: "destructive",
+    showBadge: true,
+    rowAction: "handle",
+    rowActionLabel: "处理",
+    batchMode: null,
+    summaryKind: "action",
+  },
+  external_same_name: {
+    label: "外部同名",
+    badgeVariant: "outline",
+    showBadge: true,
+    rowAction: "handle",
+    rowActionLabel: "处理",
+    batchMode: null,
+    summaryKind: "action",
+  },
+  installed: {
+    label: "已安装",
+    badgeVariant: "default",
+    showBadge: false,
+    rowAction: "reinstall",
+    rowActionLabel: "重新安装",
+    batchMode: null,
+    summaryKind: null,
+  },
+  needs_update: {
+    label: "需更新",
+    badgeVariant: "secondary",
+    showBadge: true,
+    rowAction: "update",
+    rowActionLabel: "更新",
+    batchMode: "update",
+    summaryKind: "update",
+  },
+  not_installed: {
+    label: "未安装",
+    badgeVariant: "outline",
+    showBadge: false,
+    rowAction: "install",
+    rowActionLabel: "安装",
+    batchMode: "install",
+    summaryKind: "missing",
+  },
+  unavailable: {
+    label: "不可用",
+    badgeVariant: "outline",
+    showBadge: true,
+    rowAction: null,
+    rowActionLabel: null,
+    batchMode: null,
+    summaryKind: null,
+  },
+  unsupported: {
+    label: "不支持",
+    badgeVariant: "outline",
+    showBadge: true,
+    rowAction: null,
+    rowActionLabel: null,
+    batchMode: null,
+    summaryKind: null,
+  },
+}
+
+function statusBadgeVariant(status: SynapseEditorInstallStatusEntry["status"] | undefined) {
+  return status ? installStatusPolicies[status].badgeVariant : "outline"
 }
 
 function canBatchInstall(status: SynapseEditorInstallStatusEntry["status"] | undefined): boolean {
-  return status === "not_installed" || status === "needs_update"
+  return status ? installStatusPolicies[status].batchMode !== null : false
 }
 
 function getBatchActionLabel(entries: SynapseEditorInstallStatusEntry[]): string {
-  const hasMissing = entries.some((entry) => entry.status === "not_installed")
-  const hasUpdate = entries.some((entry) => entry.status === "needs_update")
+  const hasMissing = entries.some((entry) => installStatusPolicies[entry.status].batchMode === "install")
+  const hasUpdate = entries.some((entry) => installStatusPolicies[entry.status].batchMode === "update")
   if (hasMissing && hasUpdate) return "安装并更新"
   if (hasUpdate) return "更新已安装项"
   if (hasMissing) return "安装缺失项"
@@ -61,27 +117,19 @@ function getBatchActionLabel(entries: SynapseEditorInstallStatusEntry[]): string
 }
 
 function getBatchMode(entries: SynapseEditorInstallStatusEntry[]): "install" | "update" {
-  return entries.some((entry) => entry.status === "needs_update") ? "update" : "install"
+  return entries.some((entry) => installStatusPolicies[entry.status].batchMode === "update") ? "update" : "install"
 }
 
 function getInstallSummaryLabel(entries: SynapseEditorInstallStatusEntry[]): string {
-  const missingCount = entries.filter((entry) => entry.status === "not_installed").length
-  const updateCount = entries.filter((entry) => entry.status === "needs_update").length
-  const actionCount = entries.filter((entry) => (
-    entry.status === "conflict" || entry.status === "external_same_name"
-  )).length
+  const missingCount = entries.filter((entry) => installStatusPolicies[entry.status].summaryKind === "missing").length
+  const updateCount = entries.filter((entry) => installStatusPolicies[entry.status].summaryKind === "update").length
+  const actionCount = entries.filter((entry) => installStatusPolicies[entry.status].summaryKind === "action").length
   const parts = [
     missingCount > 0 ? `${missingCount} 个待安装` : null,
     updateCount > 0 ? `${updateCount} 个待更新` : null,
     actionCount > 0 ? `${actionCount} 个需处理` : null,
   ].filter(Boolean)
   return parts.length > 0 ? parts.join(" · ") : "无需操作"
-}
-
-function getRowActionLabel(status: SynapseEditorInstallStatusEntry["status"]): string {
-  if (status === "needs_update") return "更新"
-  if (status === "not_installed") return "安装"
-  return "处理"
 }
 
 function SynapseSkillModule() {
@@ -284,10 +332,10 @@ function SynapseSkillModule() {
                   <p className="py-3 text-sm text-muted-foreground">未检测到可安装的编辑器</p>
                 ) : globalEditors.map((editor) => {
                   const entry = statusEntries.find((item) => item.editorId === editor.id)
+                  const statusPolicy = entry ? installStatusPolicies[entry.status] : null
                   const targetPath = entry?.targetPath ?? null
                   const batchError = batchErrors[editor.id]
-                  const showStatusBadge = !entry
-                    || (entry.status !== "installed" && entry.status !== "not_installed")
+                  const showStatusBadge = !statusPolicy || statusPolicy.showBadge
                   return (
                     <div
                       key={editor.id}
@@ -303,10 +351,10 @@ function SynapseSkillModule() {
                             variant={statusBadgeVariant(entry?.status)}
                             className="h-7 min-w-16 px-2.5 text-xs"
                           >
-                            {entry ? statusLabels[entry.status] : "检测中"}
+                            {statusPolicy?.label ?? "检测中"}
                           </Badge>
                         ) : null}
-                        {entry && canOpenSingleTargetFlow(entry.status) ? (
+                        {entry && statusPolicy?.rowAction ? (
                           <Button
                             type="button"
                             variant="outline"
@@ -314,20 +362,9 @@ function SynapseSkillModule() {
                             disabled={Boolean(statusError) || preparing || batchInstalling}
                             onClick={() => void openInstallFlowForEditor(editor.id)}
                           >
-                            {entry.status === "not_installed" ? <Download data-icon="inline-start" /> : null}
-                            {entry.status === "needs_update" ? <RefreshCw data-icon="inline-start" /> : null}
-                            {getRowActionLabel(entry.status)}
-                          </Button>
-                        ) : null}
-                        {entry?.status === "installed" ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={Boolean(statusError) || preparing || batchInstalling}
-                            onClick={() => void openInstallFlowForEditor(editor.id)}
-                          >
-                            重新安装
+                            {statusPolicy.rowAction === "install" ? <Download data-icon="inline-start" /> : null}
+                            {statusPolicy.rowAction === "update" ? <RefreshCw data-icon="inline-start" /> : null}
+                            {statusPolicy.rowActionLabel}
                           </Button>
                         ) : null}
                       </div>

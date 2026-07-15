@@ -1,0 +1,38 @@
+{
+  "id": "historical-workflow",
+  "name": "历史工作流",
+  "version": "v_1710000000000_00000000_legacy",
+  "createdAt": 1710000000000,
+  "updatedAt": 1710000000000,
+  "params": [
+    {
+      "name": "topic",
+      "type": "text",
+      "legacyParamField": "keep-me"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "prompt",
+      "name": "提示词",
+      "type": "prompt",
+      "position": { "x": 0, "y": 0 },
+      "config": {
+        "agent": "claude-code",
+        "prompt": "",
+        "legacyConfigField": "keep-me"
+      }
+    },
+    {
+      "id": "end",
+      "name": "结束",
+      "type": "end",
+      "position": { "x": 400, "y": 0 },
+      "config": { "outputType": "text", "template": "", "variables": [] }
+    }
+  ],
+  "edges": [
+    { "id": "edge-1", "from": "prompt", "to": "end" }
+  ],
+  "legacyTopLevelField": "keep-me"
+}

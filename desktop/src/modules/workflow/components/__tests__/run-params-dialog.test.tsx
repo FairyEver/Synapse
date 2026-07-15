@@ -124,25 +124,18 @@ async function renderDialog(props: Partial<ComponentProps<typeof RunParamsDialog
 }
 
 describe("RunParamsDialog", () => {
-  it("uses the compact product form layout", async () => {
-    await renderDialog()
+  it("exposes labeled, operable parameter controls", async () => {
+    const { onConfirm } = await renderDialog()
 
-    const dialogContent = document.body.querySelector<HTMLElement>('[data-slot="dialog-content"]')
-    expect(dialogContent?.className).toContain("sm:max-w-xl")
-    expect(dialogContent?.className).not.toContain("sm:max-w-2xl")
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')
+    expect(dialog?.textContent).toContain("设置运行参数")
+    expect(document.body.querySelector<HTMLLabelElement>('label[for="workflow-run-param-preset"]')?.textContent).toBe("预设")
+    expect(document.body.querySelector<HTMLLabelElement>('label[for="topic"]')?.textContent).toBe("topic")
+    expect(document.body.querySelector<HTMLTextAreaElement>("#topic")).toBeTruthy()
+    expect(document.body.querySelector<HTMLInputElement>("#count")).toBeTruthy()
 
-    const presetLabel = [...document.body.querySelectorAll<HTMLLabelElement>("label")]
-      .find((label) => label.textContent?.trim() === "预设")
-    expect(presetLabel?.parentElement?.className).toContain("sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]")
-
-    const topicLabel = [...document.body.querySelectorAll<HTMLLabelElement>("label")]
-      .find((label) => label.textContent?.trim() === "topic")
-    expect(topicLabel?.parentElement?.className).toContain("sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]")
-
-    const scrollViewport = document.body.querySelector<HTMLElement>('[data-slot="scroll-area-viewport"]')
-    expect(scrollViewport?.className).toContain("overflow-x-hidden")
-    expect(scrollViewport?.className).toContain("[&>div]:!block")
-    expect(scrollViewport?.className).toContain("[&>div]:!max-w-full")
+    await act(async () => { clickButton("运行") })
+    expect(onConfirm).toHaveBeenCalled()
   })
 
   it("keeps the empty parameter state concise", async () => {
@@ -222,6 +215,55 @@ describe("RunParamsDialog", () => {
     expect(document.body.querySelector<HTMLInputElement>("#count")?.value).toBe("9")
   })
 
+  it("does not wrap a single last-run path for a multi-resource parameter", async () => {
+    mocks.chooseParamFiles.mockResolvedValue(["/tmp/reselected.txt"])
+    const { onConfirm } = await renderDialog({
+      params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
+      lastValues: { input_files: "/tmp/legacy.txt" },
+    })
+
+    expect(document.body.textContent).toContain("已保存值与当前单选/多选设置不兼容，请重新选择")
+    await act(async () => { clickButton("运行") })
+    expect(onConfirm).not.toHaveBeenCalled()
+
+    await act(async () => { clickButton("选择文件") })
+    await act(async () => { clickButton("运行") })
+    expect(onConfirm).toHaveBeenCalledWith(
+      { input_files: [{ kind: "local_path", entryType: "file", path: "/tmp/reselected.txt" }] },
+      { input_files: ["/tmp/reselected.txt"] },
+    )
+  })
+
+  it("does not take the first array item for a single-resource last-run value", async () => {
+    const { onConfirm } = await renderDialog({
+      params: [{ name: "input_file", type: "file", default: null }],
+      lastValues: { input_file: ["/tmp/first.txt", "/tmp/second.txt"] },
+    })
+
+    expect(document.body.querySelector<HTMLInputElement>("#input_file")?.value).toBe("")
+    expect(document.body.textContent).toContain("已保存值与当前单选/多选设置不兼容，请重新选择")
+    await act(async () => { clickButton("运行") })
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it("rejects a legacy string preset for a multi-resource parameter", async () => {
+    mocks.presetList.mockResolvedValue([
+      { id: "preset-legacy", workflowId: "workflow-1", name: "旧预设", values: { input_files: "/tmp/legacy.txt" }, createdAt: 1, updatedAt: 2 },
+    ])
+    const { onConfirm } = await renderDialog({
+      params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
+    })
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>("#workflow-run-param-preset")?.click()
+    })
+    await act(async () => { clickOption("旧预设") })
+
+    expect(document.body.textContent).toContain("已保存值与当前单选/多选设置不兼容，请重新选择")
+    await act(async () => { clickButton("运行") })
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
   it("submits file and directory params as local path resource refs", async () => {
     const onConfirm = vi.fn()
     await renderDialog({
@@ -270,13 +312,11 @@ describe("RunParamsDialog", () => {
     await act(async () => { clickButton("选择文件") })
     await act(async () => { clickButton("添加文件") })
     expect(mocks.toast).toHaveBeenCalledWith("已忽略 1 个重复项")
-
-    const itemGroup = document.body.querySelector<HTMLElement>('[data-slot="item-group"]')
-    const firstItem = document.body.querySelector<HTMLElement>('[data-slot="item"]')
-    expect(itemGroup?.className).toContain("gap-0")
-    expect(itemGroup?.className).toContain("has-data-[size=xs]:gap-0")
-    expect(firstItem?.className).toContain("flex-nowrap")
-    expect(firstItem?.className).toContain("py-0")
+    expect(document.body.querySelector<HTMLButtonElement>('[aria-label="上移文件 1"]')?.disabled).toBe(true)
+    expect(document.body.querySelector<HTMLButtonElement>('[aria-label="下移文件 3"]')?.disabled).toBe(true)
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>('[aria-label="上移文件 3"]')?.click()
+    })
 
     await act(async () => {
       document.body.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
@@ -286,12 +326,43 @@ describe("RunParamsDialog", () => {
       {
         input_files: [
           { kind: "local_path", entryType: "file", path: "/tmp/first.txt" },
-          { kind: "local_path", entryType: "file", path: "/tmp/second.txt" },
           { kind: "local_path", entryType: "file", path: "/tmp/third.txt" },
+          { kind: "local_path", entryType: "file", path: "/tmp/second.txt" },
         ],
       },
-      { input_files: ["/tmp/first.txt", "/tmp/second.txt", "/tmp/third.txt"] },
+      { input_files: ["/tmp/first.txt", "/tmp/third.txt", "/tmp/second.txt"] },
     )
+  })
+
+  it("associates multi-resource controls with their parameter label", async () => {
+    await renderDialog({
+      params: [{ name: "input_files", description: "输入资料", type: "file", default: null, allowMultiple: true }],
+    })
+
+    const group = document.body.querySelector<HTMLElement>('[role="group"][aria-labelledby]')
+    const labelId = group?.getAttribute("aria-labelledby")
+    expect(labelId).toBeTruthy()
+    expect(document.getElementById(labelId ?? "")?.textContent).toBe("输入资料")
+    expect(document.getElementById(labelId ?? "")?.getAttribute("for")).toBeNull()
+  })
+
+  it("keeps long resource paths operable and clears the whole selection", async () => {
+    const longPath = `/tmp/${"long-directory/".repeat(12)}input.txt`
+    mocks.chooseParamFiles.mockResolvedValue([longPath])
+    const { onConfirm } = await renderDialog({
+      params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
+    })
+
+    await act(async () => { clickButton("选择文件") })
+    expect(document.body.textContent).toContain(longPath)
+    expect(document.body.querySelector<HTMLButtonElement>('[aria-label="删除文件 1"]')).toBeTruthy()
+    await act(async () => { clickButton("清空") })
+    expect(document.body.textContent).not.toContain(longPath)
+    expect([...document.body.querySelectorAll("button")].some((button) => button.textContent?.trim() === "选择文件")).toBe(true)
+
+    await act(async () => { clickButton("运行") })
+    expect(onConfirm).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("此项为必填")
   })
 
   it("submits a selected closed option value", async () => {

@@ -93,7 +93,7 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
             type="button"
             size="icon-sm"
             variant="ghost"
-            disabled={hasLoadError}
+            disabled={hasLoadError && !meta.rawExportAvailable}
             aria-label="导出工作流"
             data-track="workflow-card-export"
             onClick={(e) => { e.stopPropagation(); onExport() }}

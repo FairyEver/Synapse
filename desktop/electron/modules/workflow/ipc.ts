@@ -414,20 +414,20 @@ const workflowParamSchema = z.object({
   options: z.array(z.string()).optional(),
   allowCustomOption: z.boolean().optional(),
   allowMultiple: z.boolean().optional(),
-})
+}).passthrough()
 
 const workflowDefinitionSchema = z.object({
   id: workflowIdSchema, name: z.string(), description: z.string().optional(),
   version: z.string(), createdAt: z.number(), updatedAt: z.number(),
-  loadError: z.string().optional(),
+  meta: z.object({ schemaVersion: z.string() }).passthrough().optional(),
   defaultProjectId: z.string().optional(),
   defaultProviderId: z.string().optional(),
   defaultModelTier: z.enum(["default", "haiku", "sonnet", "opus"]).optional(),
   defaultNodeTimeoutMins: z.number().int().min(1).optional(),
   params: z.array(workflowParamSchema),
-  nodes: z.array(z.object({ id: workflowNodeIdSchema, name: z.string(), type: z.string(), position: z.object({ x: z.number(), y: z.number() }), config: z.record(z.string(), z.unknown()) })),
-  edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), branch: z.string().optional() })),
-})
+  nodes: z.array(z.object({ id: workflowNodeIdSchema, name: z.string(), type: z.string(), position: z.object({ x: z.number(), y: z.number() }).passthrough(), config: z.record(z.string(), z.unknown()) }).passthrough()),
+  edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), branch: z.string().optional() }).passthrough()),
+}).passthrough()
 
 const workflowParamPresetSchema = z.object({
   id: z.string(),
@@ -478,11 +478,13 @@ const workflowPackageSchema = z.object({
   format: z.union([
     z.literal("synapse-workflow-package-v1"),
     z.literal("synapse-workflow-package-v2"),
+    z.literal("synapse-workflow-package"),
   ]),
+  formatVersion: z.string().optional(),
   exportedAt: z.string(),
-  workflow: workflowDefinitionSchema,
+  workflow: z.unknown(),
   modelReferences: z.array(workflowModelReferenceSchema),
-})
+}).passthrough()
 
 const workflowModelMappingSchema = z.object({
   sourceRefId: z.string(),
@@ -782,16 +784,23 @@ async function resolveWorkflowProjectId(def: WorkflowDefinition): Promise<string
   return projectId || undefined
 }
 
-async function loadWorkflowValidationOptions(workflowService?: Partial<Pick<WorkflowService, "list">>): Promise<WorkflowValidationOptions> {
+async function loadWorkflowValidationOptions(workflowService?: Partial<Pick<WorkflowService, "list" | "get">>): Promise<WorkflowValidationOptions> {
   const appConfig = await configStore.load()
   const workflows = typeof workflowService?.list === "function" ? await workflowService.list() : undefined
+  const readableWorkflows = workflows?.filter((workflow) => !workflow.loadError)
+  const definitions = readableWorkflows && typeof workflowService?.get === "function"
+    ? await Promise.all(readableWorkflows.map((workflow) => workflowService.get!(workflow.id)))
+    : undefined
   return {
     configuredProjectIds: configuredWorkflowProjectIdsFromConfig(appConfig),
-    availableWorkflowIds: workflows?.map((workflow) => workflow.id),
+    availableWorkflowIds: readableWorkflows?.map((workflow) => workflow.id),
+    workflowParamsById: definitions
+      ? new Map(definitions.flatMap((definition) => definition ? [[definition.id, definition.params] as const] : []))
+      : undefined,
   }
 }
 
-function resolveWorkflowValidationService(ctx: { resolve<T>(serviceId: string): T }): Partial<Pick<WorkflowService, "list">> | undefined {
+function resolveWorkflowValidationService(ctx: { resolve<T>(serviceId: string): T }): Partial<Pick<WorkflowService, "list" | "get">> | undefined {
   try {
     return ctx.resolve<WorkflowService>("core.workflow")
   } catch {
@@ -1108,7 +1117,7 @@ export const workflowIpcModule: IpcModule = {
     },
     list: {
       channel: "synapse:workflow:list", kind: "invoke", request: z.void().optional(),
-      response: z.array(z.object({ id: z.string(), name: z.string(), description: z.string().optional(), version: z.string(), loadError: z.string().optional(), nodeCount: z.number(), createdAt: z.number(), updatedAt: z.number() })),
+      response: z.array(z.object({ id: z.string(), name: z.string(), description: z.string().optional(), version: z.string(), loadError: z.string().optional(), rawExportAvailable: z.boolean().optional(), nodeCount: z.number(), createdAt: z.number(), updatedAt: z.number() })),
       handler: async (ctx) => {
         const result = await ctx.resolve<WorkflowService>("core.workflow").list()
         logger.info("workflow:list", { count: result.length })

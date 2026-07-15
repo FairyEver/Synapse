@@ -38,13 +38,19 @@ export async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-export async function readJsonFile<T>(filePath: string): Promise<T | null> {
+export interface ReadJsonFileOptions {
+  /** Preserve malformed source bytes and surface the parse error to the caller. */
+  readonly preserveInvalid?: boolean
+}
+
+export async function readJsonFile<T>(filePath: string, options: ReadJsonFileOptions = {}): Promise<T | null> {
   try {
     const text = await readFile(filePath, "utf8")
     return JSON.parse(text) as T
   } catch (err) {
     if (isFileNotFoundError(err)) return null
     if (err instanceof SyntaxError) {
+      if (options.preserveInvalid) throw err
       await copyToTimestampedBackup(filePath)
       await rm(filePath, { force: true })
       return null

@@ -7,6 +7,7 @@ import { errorCode } from "./workflow-utils"
 import { sanitizeError } from "../error-sanitize"
 import { assertSafeWorkflowId, assertSafeWorkflowRunId } from "./workflow-id"
 import { sanitizeWorkflowRunSnapshot } from "./run-snapshot-sanitize"
+import { migrateWorkflowDocument } from "./workflow-document-migration"
 
 const logger = createMainLogger("service.workflow.snapshots")
 
@@ -41,7 +42,7 @@ export class RunSnapshotService {
           logger.warn("run snapshot file has invalid structure, skipping", { workflowId, file })
           return null
         }
-        return { file, snapshot: sanitizeWorkflowRunSnapshot(raw as WorkflowRunSnapshot) }
+        return { file, snapshot: prepareSnapshotForRead(raw as WorkflowRunSnapshot) }
       } catch (err) {
         logger.warn("run snapshot file corrupted or unreadable, skipping", {
           workflowId, file,
@@ -54,7 +55,7 @@ export class RunSnapshotService {
   }
 
   async save(s: WorkflowRunSnapshot): Promise<void> {
-    const snapshot = sanitizeWorkflowRunSnapshot(s)
+    const snapshot = prepareSnapshotForSave(s)
     const dir = this.dir(snapshot.workflowId)
     const runId = assertSafeWorkflowRunId(snapshot.runId)
     try {
@@ -180,7 +181,7 @@ export class RunSnapshotService {
           logger.warn("findByRunId snapshot has invalid structure, skipping", { runId, workflowId: dirent.name })
           continue
         }
-        return sanitizeWorkflowRunSnapshot(raw as WorkflowRunSnapshot)
+        return prepareSnapshotForRead(raw as WorkflowRunSnapshot)
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === "ENOENT") continue
         logger.warn("findByRunId snapshot read error, skipping", {
@@ -202,7 +203,7 @@ export class RunSnapshotService {
         logger.warn("run snapshot get: invalid structure", { runId, workflowId })
         return null
       }
-      return sanitizeWorkflowRunSnapshot(raw as WorkflowRunSnapshot)
+      return prepareSnapshotForRead(raw as WorkflowRunSnapshot)
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code
       // ENOENT is expected when the snapshot simply doesn't exist — no need to warn
@@ -215,6 +216,34 @@ export class RunSnapshotService {
       return null
     }
   }
+}
+
+function prepareSnapshotForRead(snapshot: WorkflowRunSnapshot): WorkflowRunSnapshot {
+  if (!snapshot.definition) return sanitizeWorkflowRunSnapshot(snapshot)
+  const result = migrateWorkflowDocument(snapshot.definition)
+  if (result.kind === "current") {
+    return sanitizeWorkflowRunSnapshot({ ...snapshot, definition: result.document })
+  }
+  logger.warn("run snapshot workflow definition migration failed, definition omitted", {
+    runId: snapshot.runId,
+    workflowId: snapshot.workflowId,
+    sourceVersion: result.sourceVersion,
+    errorName: result.error.name,
+  })
+  const { definition: _definition, ...withoutDefinition } = snapshot
+  void _definition
+  return sanitizeWorkflowRunSnapshot(withoutDefinition)
+}
+
+function prepareSnapshotForSave(snapshot: WorkflowRunSnapshot): WorkflowRunSnapshot {
+  if (!snapshot.definition) return sanitizeWorkflowRunSnapshot(snapshot)
+  const result = migrateWorkflowDocument(snapshot.definition)
+  if (result.kind !== "current") {
+    throw new Error("Workflow snapshot definition could not be migrated before save.", {
+      cause: result.error,
+    })
+  }
+  return sanitizeWorkflowRunSnapshot({ ...snapshot, definition: result.document })
 }
 
 function snapshotErrorMetadata(error: unknown): {

@@ -235,6 +235,33 @@ describe("RunSnapshotService", () => {
     })
   })
 
+  it("migrates an old snapshot definition in memory without rewriting the history file", async () => {
+    const root = await tmpDir()
+    const workflowDir = path.join(root, "workflow-runs", "wf")
+    await mkdir(workflowDir, { recursive: true })
+    const legacy = {
+      ...snapshot("legacy-run", 100),
+      definition: {
+        id: "wf",
+        name: "Legacy",
+        version: "v1",
+        createdAt: 1,
+        updatedAt: 2,
+        params: [],
+        nodes: [{ id: "end", name: "结束", type: "end", position: { x: 0, y: 0 }, config: {} }],
+        edges: [],
+      },
+    }
+    const raw = JSON.stringify(legacy)
+    const target = path.join(workflowDir, "legacy-run.json")
+    await writeFile(target, raw, "utf8")
+
+    const listed = await new RunSnapshotService(root).list("wf")
+
+    expect(listed[0]?.definition?.meta?.schemaVersion).toBe("1.0.0")
+    expect(await readFile(target, "utf8")).toBe(raw)
+  })
+
   it("rejects unsafe run ids before reading snapshots outside workflow-runs", async () => {
     const root = await tmpDir()
     const escapedDir = path.join(root, "escaped-workflow")

@@ -1,12 +1,12 @@
 import path from "node:path"
-import type { WorkflowDefinition, WorkflowParam, WorkflowResourceRef, ValidationResult, ValidationError, ValidationWarning } from "../../../src/types/workflow"
+import type { WorkflowDefinition, WorkflowParam, WorkflowParamBinding, WorkflowResourceRef, ValidationResult, ValidationError, ValidationWarning } from "../../../src/types/workflow"
 import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../config"
 import type { SynapseConfig } from "../../../src/types/config"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { createMainLogger } from "../log-store"
 import { computeEndReachable } from "./workflow-utils"
 import { agentTimeoutMinsToMs, resolveAgentTimeoutMins } from "../../../workflow-nodes/agent-timeout"
-import { extractWorkflowCallTemplateVariables } from "../../../workflow-nodes/workflow-call/params"
+import { extractWorkflowCallTemplateVariables, validateWorkflowCallValueBinding } from "../../../workflow-nodes/workflow-call/params"
 import { isSafeWorkflowNodeId } from "./workflow-id"
 
 const logger = createMainLogger("service.workflow.validator")
@@ -14,7 +14,10 @@ const logger = createMainLogger("service.workflow.validator")
 export interface WorkflowValidationOptions {
   readonly configuredProjectIds?: Iterable<string>
   readonly availableWorkflowIds?: Iterable<string>
+  readonly workflowParamsById?: ReadonlyMap<string, readonly WorkflowParam[]>
 }
+
+const TEMPLATE_VARIABLE_RE = /\{\{\s*\$?([\p{L}\p{N}_.-]+)\s*\}\}/gu
 
 export function configuredWorkflowProjectIdsFromConfig(config: Pick<SynapseConfig, "repositories" | "global">): string[] {
   const ids = new Set<string>()
@@ -29,6 +32,10 @@ export function configuredWorkflowProjectIdsFromConfig(config: Pick<SynapseConfi
 
 function isResourceParamType(type: WorkflowParam["type"]): type is "file" | "directory" {
   return type === "file" || type === "directory"
+}
+
+function isMultiResourceParam(param: WorkflowParam): boolean {
+  return isResourceParamType(param.type) && param.allowMultiple === true
 }
 
 function isWorkflowResourceRef(value: unknown): value is WorkflowResourceRef {
@@ -305,6 +312,7 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
   const hasDefaultProjectId = Boolean(defaultProjectId)
   const configuredProjectIds = normalizeConfiguredProjectIds(options.configuredProjectIds)
   const availableWorkflowIds = options.availableWorkflowIds ? new Set([...options.availableWorkflowIds].map((id) => id.trim()).filter(Boolean)) : undefined
+  const workflowParamsById = options.workflowParamsById
 
   if (!def.name?.trim()) {
     errors.push({ type: "invalid_config", message: "工作流名称不能为空" })
@@ -489,6 +497,70 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
           }
         }
       }
+
+      const childParams = childWorkflowId ? workflowParamsById?.get(childWorkflowId) : undefined
+      const templateRecord = templates && typeof templates === "object" && !Array.isArray(templates)
+        ? templates as Record<string, unknown>
+        : undefined
+      if (childParams && templateRecord) {
+        for (const childParam of childParams) {
+          const template = templateRecord[childParam.name]
+          if (!isMultiResourceParam(childParam) || typeof template !== "string" || template.length === 0) continue
+          errors.push({
+            type: "invalid_config",
+            nodeId: node.id,
+            nodeName: node.name,
+            field: "paramTemplates",
+            message: `节点「${node.name}」的多选资源参数「${childParam.name}」不能使用 paramTemplates，必须直接绑定类型和多选设置一致的父工作流参数`,
+          })
+        }
+      }
+
+      const rawBindings = cfg.paramBindings
+      if (childParams && rawBindings && typeof rawBindings === "object" && !Array.isArray(rawBindings)) {
+        for (const [childParamName, rawBinding] of Object.entries(rawBindings as Record<string, unknown>)) {
+          if (!rawBinding || typeof rawBinding !== "object" || Array.isArray(rawBinding)) continue
+          const binding = rawBinding as WorkflowParamBinding
+          const childParam = childParams.find((param) => param.name === childParamName)
+          if (!childParam) continue
+          if (binding.mode === "template" && isMultiResourceParam(childParam)) {
+            errors.push({
+              type: "invalid_config",
+              nodeId: node.id,
+              nodeName: node.name,
+              field: "paramBindings",
+              message: `节点「${node.name}」的多选资源参数「${childParam.name}」不能使用模板绑定，必须直接绑定类型和多选设置一致的父工作流参数`,
+            })
+            continue
+          }
+          if (binding.mode !== "value" || !binding.source) continue
+          const bindingError = validateWorkflowCallValueBinding(childParam, binding.source, def.params)
+          if (bindingError) {
+            errors.push({
+              type: "invalid_config",
+              nodeId: node.id,
+              nodeName: node.name,
+              field: "paramBindings",
+              message: bindingError,
+            })
+          }
+        }
+      }
+    }
+
+    if (node.type === "script") {
+      const script = (node.config as Record<string, unknown>).script
+      if (typeof script === "string") {
+        for (const match of script.matchAll(TEMPLATE_VARIABLE_RE)) {
+          errors.push({
+            type: "invalid_config",
+            nodeId: node.id,
+            nodeName: node.name,
+            field: "script",
+            message: `脚本节点「${node.name}」不支持模板变量「{{${match[1]}}}」，请按 Shell 使用环境变量语法`,
+          })
+        }
+      }
     }
 
     if (!hasCycle) {
@@ -509,7 +581,7 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
       // fields are covered by the node's bound variable names.
       for (const text of collectTemplateTexts(node)) {
         const placeholders = new Set(
-          [...text.matchAll(/\{\{\s*\$?([\p{L}\p{N}_.-]+)\s*\}\}/gu)].map((m) => m[1]),
+          [...text.matchAll(TEMPLATE_VARIABLE_RE)].map((m) => m[1]),
         )
         if (placeholders.size > 0) {
           const boundNames = new Set(

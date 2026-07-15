@@ -212,16 +212,17 @@ function buildInitialParamMappings(config: WorkflowCallNodeConfig, childParams: 
     if (nextTemplates[param.name] !== undefined || nextBindings[param.name] !== undefined) continue
     const parentParam = parentParamsByName.get(param.name)
 
-    if (
-      (param.type === "file" || param.type === "directory")
-      && parentParam?.type === param.type
-      && Boolean(parentParam.allowMultiple) === Boolean(param.allowMultiple)
-    ) {
-      nextBindings[param.name] = {
-        mode: "value",
-        source: { type: "param", param: param.name },
+    if (param.type === "file" || param.type === "directory") {
+      if (
+        parentParam?.type === param.type
+        && Boolean(parentParam.allowMultiple) === Boolean(param.allowMultiple)
+      ) {
+        nextBindings[param.name] = {
+          mode: "value",
+          source: { type: "param", param: param.name },
+        }
+        changed = true
       }
-      changed = true
       continue
     }
 
@@ -253,8 +254,9 @@ function resourceBindingMismatch(
   binding: WorkflowParamBinding | undefined,
   parentParams: readonly WorkflowParam[],
 ): boolean {
-  if (!binding || binding.mode !== "value") return false
-  if (binding.source.type !== "param") return true
+  if (!binding) return false
+  if (binding.mode !== "value") return childParam.allowMultiple === true
+  if (binding.source.type !== "param") return childParam.allowMultiple === true
   const parentParamName = binding.source.param
   const parentParam = parentParams.find((param) => param.name === parentParamName)
   return !parentParam

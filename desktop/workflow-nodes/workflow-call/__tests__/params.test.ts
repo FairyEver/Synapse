@@ -143,6 +143,64 @@ describe("workflow call params", () => {
     expect(result.errors).toEqual([])
   })
 
+  it("keeps legacy single-resource static and node-output value bindings compatible", () => {
+    const staticResult = buildWorkflowCallParams({
+      childDefinition: child([{ name: "input_file", type: "file", default: null }]),
+      paramTemplates: {},
+      paramBindings: { input_file: { mode: "value", source: { type: "static", value: "/tmp/static.txt" } } },
+      resolvedVariables: {},
+    })
+    const nodeOutputResult = buildWorkflowCallParams({
+      childDefinition: child([{ name: "input_dir", type: "directory", default: null }]),
+      paramTemplates: {},
+      paramBindings: { input_dir: { mode: "value", source: { type: "node_output", node: "prepare" } } },
+      resolvedVariables: { prepare: "/tmp/generated" },
+    })
+
+    expect(staticResult).toEqual({ params: { input_file: "/tmp/static.txt" }, errors: [] })
+    expect(nodeOutputResult).toEqual({ params: { input_dir: "/tmp/generated" }, errors: [] })
+  })
+
+  it("rejects static and node-output bindings for multi-resource params", () => {
+    for (const source of [
+      { type: "static" as const, value: "/tmp/input.txt" },
+      { type: "node_output" as const, node: "prepare" },
+    ]) {
+      const result = buildWorkflowCallParams({
+        childDefinition: child([{ name: "input_files", type: "file", default: null, allowMultiple: true }]),
+        paramTemplates: {},
+        paramBindings: { input_files: { mode: "value", source } },
+        resolvedVariables: { prepare: "/tmp/input.txt" },
+      })
+
+      expect(result.params).toEqual({})
+      expect(result.errors[0]).toContain(`不能绑定 ${source.type} 字符串来源`)
+    }
+  })
+
+  it("rejects templates for multi-resource params before the child run", () => {
+    const result = buildWorkflowCallParams({
+      childDefinition: child([{ name: "input_files", type: "file", default: null, allowMultiple: true }]),
+      paramTemplates: { input_files: "{{generated_files}}" },
+      resolvedVariables: { generated_files: '["/tmp/a.txt","/tmp/b.txt"]' },
+    })
+
+    expect(result.params).toEqual({})
+    expect(result.errors).toEqual([
+      "子工作流多选资源参数「input_files」不能使用模板传值，必须直接绑定类型和多选设置一致的父工作流参数",
+    ])
+  })
+
+  it("keeps legacy templates compatible for single-resource params", () => {
+    const result = buildWorkflowCallParams({
+      childDefinition: child([{ name: "input_file", type: "file", default: null }]),
+      paramTemplates: { input_file: "{{generated_file}}" },
+      resolvedVariables: { generated_file: "/tmp/input.txt" },
+    })
+
+    expect(result).toEqual({ params: { input_file: "/tmp/input.txt" }, errors: [] })
+  })
+
   it("rejects direct resource bindings when parent and child cardinality differ", () => {
     const result = buildWorkflowCallParams({
       childDefinition: child([{ name: "input_files", type: "file", default: null, allowMultiple: true }]),

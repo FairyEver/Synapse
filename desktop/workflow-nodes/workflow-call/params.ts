@@ -41,7 +41,7 @@ export function buildWorkflowCallParams(input: BuildWorkflowCallParamsInput): Bu
 
     if (binding) {
       if (binding.mode === "value") {
-        const bindingError = validateValueBinding(param, binding.source, input.parentParamDefinitions)
+        const bindingError = validateWorkflowCallValueBinding(param, binding.source, input.parentParamDefinitions)
         if (bindingError) {
           errors.push(bindingError)
           continue
@@ -78,13 +78,17 @@ export function buildWorkflowCallParams(input: BuildWorkflowCallParamsInput): Bu
   return { params, errors }
 }
 
-function validateValueBinding(
+export function validateWorkflowCallValueBinding(
   childParam: WorkflowParam,
   source: WorkflowVariableSource,
   parentParams: readonly WorkflowParam[] | undefined,
 ): string | null {
   if (childParam.type !== "file" && childParam.type !== "directory") return null
-  if (source.type !== "param") return `子工作流资源参数「${childParam.name}」必须直接绑定父工作流参数`
+  if (source.type !== "param") {
+    return childParam.allowMultiple === true
+      ? `子工作流多选资源参数「${childParam.name}」不能绑定 ${source.type} 字符串来源，必须直接绑定类型和多选设置一致的父工作流参数`
+      : null
+  }
   if (!parentParams) return null
   const parentParam = parentParams?.find((param) => param.name === source.param)
   if (!parentParam) return `子工作流参数「${childParam.name}」引用的父工作流参数「${source.param}」不存在`
@@ -105,6 +109,10 @@ function renderTemplateParam(
   template: string,
   resolvedVariables: Record<string, string>,
 ): { hasValue: true; value: unknown } | { hasValue: false } | { error: string } {
+  if ((param.type === "file" || param.type === "directory") && param.allowMultiple === true) {
+    return { error: `子工作流多选资源参数「${param.name}」不能使用模板传值，必须直接绑定类型和多选设置一致的父工作流参数` }
+  }
+
   let rendered: string
   try {
     rendered = interpolatePrompt(template, resolvedVariables)

@@ -37,6 +37,7 @@ import type {
   WorkflowResourceRef,
 } from "@/types/workflow"
 import { MultiResourcePathField } from "./multi-resource-path-field"
+import { useWorkflowResourcePicker } from "../hooks/use-workflow-resource-picker"
 
 const NO_PRESET_VALUE = "__none__"
 
@@ -50,9 +51,11 @@ interface RunParamsDialogProps {
 }
 
 export function RunParamsDialog({ open, workflowId, params, lastValues, onConfirm, onCancel }: RunParamsDialogProps) {
+  const { chooseResource } = useWorkflowResourcePicker()
   const [values, setValues] = useState<Record<string, WorkflowParamPresetValue>>(() => buildInitialValues(params, lastValues))
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [incompatibleValueErrors, setIncompatibleValueErrors] = useState<Record<string, string>>(() => buildResourceCardinalityErrors(params, lastValues))
   const [presets, setPresets] = useState<WorkflowParamPreset[]>([])
   const [selectedPresetId, setSelectedPresetId] = useState<string>(NO_PRESET_VALUE)
   const [presetsLoading, setPresetsLoading] = useState(false)
@@ -80,7 +83,9 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
   useEffect(() => {
     if (!open) return
     setSubmitting(false)
-    setErrors({})
+    const initialErrors = buildResourceCardinalityErrors(params, lastValues)
+    setErrors(initialErrors)
+    setIncompatibleValueErrors(initialErrors)
     setSelectedPresetId(NO_PRESET_VALUE)
     setSaveDialogOpen(false)
     setPresetName("")
@@ -117,7 +122,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
   }, [open, params, lastValues, workflowId])
 
   function validate(): boolean {
-    const next: Record<string, string> = {}
+    const next: Record<string, string> = { ...incompatibleValueErrors }
     for (const param of params) {
       const raw = values[param.name]
       if (param.type === "number") {
@@ -183,6 +188,12 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
 
   function updateValue(name: string, nextValue: WorkflowParamPresetValue): void {
     setValues((current) => ({ ...current, [name]: nextValue }))
+    setIncompatibleValueErrors((current) => {
+      if (!current[name]) return current
+      const next = { ...current }
+      delete next[name]
+      return next
+    })
     clearError(name)
   }
 
@@ -229,10 +240,15 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     const preset = presets.find((item) => item.id === presetId)
     if (!preset) {
       setValues(buildInitialValues(params, lastValues))
+      const nextErrors = buildResourceCardinalityErrors(params, lastValues)
+      setIncompatibleValueErrors(nextErrors)
+      setErrors(nextErrors)
       return
     }
     setValues(buildInitialValues(params, preset.values))
-    setErrors({})
+    const nextErrors = buildResourceCardinalityErrors(params, preset.values)
+    setIncompatibleValueErrors(nextErrors)
+    setErrors(nextErrors)
   }
 
   function handleOpenSaveDialog(): void {
@@ -315,9 +331,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
 
   async function chooseResourcePath(param: WorkflowParam): Promise<void> {
     if (param.type !== "file" && param.type !== "directory") return
-    const selectedPath = param.type === "file"
-      ? await window.synapse?.workflow.chooseParamFile?.()
-      : await window.synapse?.workflow.chooseParamDirectory?.()
+    const selectedPath = await chooseResource(param.type)
     if (!selectedPath) return
     updateValue(param.name, selectedPath)
   }
@@ -374,65 +388,70 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
             >
               <div className="grid gap-3 py-1">
                 {params.length === 0 && <p className="text-sm text-muted-foreground">无需参数</p>}
-                {params.map((param) => (
-                  <div key={param.name} className="grid gap-1.5 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] sm:items-start">
-                    <Label htmlFor={param.name} className="pt-1.5 leading-5">
-                      {param.description ?? param.name}
-                    </Label>
-                    <div className="grid min-w-0 gap-1.5">
-                      {param.type === "number" ? (
-                        <Input
-                          id={param.name}
-                          type="number"
-                          value={stringParamValue(values[param.name])}
-                          onChange={(event) => updateValue(param.name, event.target.value)}
-                          aria-invalid={!!errors[param.name]}
-                        />
-                      ) : (param.type === "file" || param.type === "directory") && param.allowMultiple ? (
-                        <MultiResourcePathField
-                          entryType={param.type}
-                          paths={resourcePathValues(values[param.name])}
-                          onChange={(paths) => updateValue(param.name, paths)}
-                          disabled={submitting || savingPreset}
-                        />
-                      ) : param.type === "file" || param.type === "directory" ? (
-                        <InputGroup>
-                          <InputGroupInput
+                {params.map((param, paramIndex) => {
+                  const isMultiResource = (param.type === "file" || param.type === "directory") && param.allowMultiple === true
+                  const labelId = `workflow-run-param-${paramIndex}-label`
+                  return (
+                    <div key={param.name} className="grid gap-1.5 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] sm:items-start">
+                      <Label id={labelId} htmlFor={isMultiResource ? undefined : param.name} className="pt-1.5 leading-5">
+                        {param.description ?? param.name}
+                      </Label>
+                      <div className="grid min-w-0 gap-1.5">
+                        {param.type === "number" ? (
+                          <Input
                             id={param.name}
+                            type="number"
                             value={stringParamValue(values[param.name])}
                             onChange={(event) => updateValue(param.name, event.target.value)}
                             aria-invalid={!!errors[param.name]}
                           />
-                          <InputGroupAddon align="inline-end">
-                            <InputGroupButton
-                              size="icon-xs"
-                              onClick={() => { void chooseResourcePath(param) }}
-                              aria-label="选择路径"
-                            >
-                              <FolderOpen className="size-3.5" />
-                            </InputGroupButton>
-                          </InputGroupAddon>
-                        </InputGroup>
-                      ) : param.type === "option" ? (
-                        <OptionParamControl
-                          param={param}
-                          value={stringParamValue(values[param.name])}
-                          hasError={!!errors[param.name]}
-                          onChange={(nextValue) => updateValue(param.name, nextValue)}
-                        />
-                      ) : (
-                        <Textarea
-                          id={param.name}
-                          rows={3}
-                          value={stringParamValue(values[param.name])}
-                          onChange={(event) => updateValue(param.name, event.target.value)}
-                          aria-invalid={!!errors[param.name]}
-                        />
-                      )}
-                      {errors[param.name] && <p className="text-xs text-destructive">{errors[param.name]}</p>}
+                        ) : (param.type === "file" || param.type === "directory") && param.allowMultiple ? (
+                          <MultiResourcePathField
+                            entryType={param.type}
+                            paths={resourcePathValues(values[param.name])}
+                            onChange={(paths) => updateValue(param.name, paths)}
+                            disabled={submitting || savingPreset}
+                            labelledBy={labelId}
+                          />
+                        ) : param.type === "file" || param.type === "directory" ? (
+                          <InputGroup>
+                            <InputGroupInput
+                              id={param.name}
+                              value={stringParamValue(values[param.name])}
+                              onChange={(event) => updateValue(param.name, event.target.value)}
+                              aria-invalid={!!errors[param.name]}
+                            />
+                            <InputGroupAddon align="inline-end">
+                              <InputGroupButton
+                                size="icon-xs"
+                                onClick={() => { void chooseResourcePath(param) }}
+                                aria-label="选择路径"
+                              >
+                                <FolderOpen className="size-3.5" />
+                              </InputGroupButton>
+                            </InputGroupAddon>
+                          </InputGroup>
+                        ) : param.type === "option" ? (
+                          <OptionParamControl
+                            param={param}
+                            value={stringParamValue(values[param.name])}
+                            hasError={!!errors[param.name]}
+                            onChange={(nextValue) => updateValue(param.name, nextValue)}
+                          />
+                        ) : (
+                          <Textarea
+                            id={param.name}
+                            rows={3}
+                            value={stringParamValue(values[param.name])}
+                            onChange={(event) => updateValue(param.name, event.target.value)}
+                            aria-invalid={!!errors[param.name]}
+                          />
+                        )}
+                        {errors[param.name] && <p className="text-xs text-destructive">{errors[param.name]}</p>}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </ScrollArea>
             <DialogFooter>
@@ -618,6 +637,23 @@ function buildInitialValues(
   ]))
 }
 
+function buildResourceCardinalityErrors(
+  params: WorkflowParam[],
+  source?: Record<string, WorkflowParamPresetValue>,
+): Record<string, string> {
+  const errors: Record<string, string> = {}
+  for (const param of params) {
+    if (param.type !== "file" && param.type !== "directory") continue
+    const sourceValue = source?.[param.name]
+    if (sourceValue === undefined) continue
+    if ((param.allowMultiple === true && typeof sourceValue === "string")
+      || (param.allowMultiple !== true && Array.isArray(sourceValue))) {
+      errors[param.name] = "已保存值与当前单选/多选设置不兼容，请重新选择"
+    }
+  }
+  return errors
+}
+
 function normalizeOptionValues(options?: readonly string[]): string[] {
   const normalized: string[] = []
   for (const option of options ?? []) {
@@ -670,8 +706,7 @@ function resourceDefaultInputPaths(value: WorkflowParamDefault): string[] {
 }
 
 function resourcePathValues(value: WorkflowParamPresetValue | undefined): string[] {
-  if (Array.isArray(value)) return value
-  return value?.trim() ? [value] : []
+  return Array.isArray(value) ? value : []
 }
 
 function stringParamValue(value: WorkflowParamPresetValue | undefined): string {

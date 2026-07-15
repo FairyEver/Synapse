@@ -767,7 +767,10 @@ describe("SharedInstallerFlow", () => {
       .mockRejectedValueOnce(new Error("完成记录失败"))
       .mockResolvedValueOnce(undefined)
     mocks.readContent.mockResolvedValue({ content: "# Demo" })
-    mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
+    mocks.installSourceToEditor.mockResolvedValue({
+      targetPath: "/tmp/skills/demo",
+      warning: "旧 Skill 备份需要手动检查",
+    })
     await renderFlow(repositorySkillSource, mocks.config.global.projects, onInstalled)
 
     await act(async () => {
@@ -796,6 +799,8 @@ describe("SharedInstallerFlow", () => {
 
     expect(mocks.installSourceToEditor).toHaveBeenCalledTimes(1)
     expect(onInstalled).toHaveBeenCalledTimes(2)
+    expect(mocks.warning).toHaveBeenCalledTimes(1)
+    expect(mocks.warning).toHaveBeenCalledWith("旧 Skill 备份需要手动检查")
     expect(document.body.textContent).toContain("安装完成")
   })
 })

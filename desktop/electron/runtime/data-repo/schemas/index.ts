@@ -16,6 +16,11 @@ export {
   type CoreConfigV1,
 } from "./core-config"
 export {
+  workflowMigrationStateSchema,
+  type WorkflowMigrationStateEntryV1,
+  type WorkflowMigrationStateStatus,
+} from "./workflow-migration-state"
+export {
   coreIdentitySchema,
   type CoreIdentityV2,
 } from "./core-identity"
@@ -103,7 +108,6 @@ export {
   secretsSchema,
   webhookConfigSchema,
   webhookRunsSchema,
-  normalizeWorkflowEntry,
   reviveWorkflowsEnvelope,
   workflowParamPresetsSchema,
   workflowsSchema,
@@ -155,6 +159,7 @@ export {
 } from "./placeholders"
 
 import { coreConfigSchema } from "./core-config"
+import { workflowMigrationStateSchema } from "./workflow-migration-state"
 import { cheatCodeStatesSchema } from "./cheat-code-states"
 import { coreIdentitySchema } from "./core-identity"
 import { driveSyncBaselineSchema, driveSyncBindingsSchema, driveSyncConflictsSchema, driveSyncOperationsSchema, driveSyncStateSchema } from "./drive-sync"
@@ -239,6 +244,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   relayRunsSchema,
   opsDiagnosticsSchema,
   workflowParamPresetsSchema,
+  workflowMigrationStateSchema,
   workflowsSchema,
   conversationsSchema,
   auditSchema,

@@ -37,6 +37,7 @@ export interface WorkflowNode {
   id: string; name: string; type: string; position: { x: number; y: number }; config: Record<string, unknown>
 }
 export interface WorkflowEdge { id: string; from: string; to: string; branch?: string }
+export interface WorkflowSchemaMeta { schemaVersion: string }
 export type WorkflowVariableSource =
   | { readonly type: "param"; readonly param: string }
   | { readonly type: "node_output"; readonly node: string }
@@ -51,16 +52,23 @@ export interface WorkflowVariableBinding {
 export interface WorkflowDefinition {
   id: string; name: string; description?: string; version: string
   createdAt: number; updatedAt: number
-  loadError?: string
+  /** Persisted document schema version. Missing only on legacy input before migration. */
+  meta?: WorkflowSchemaMeta
   defaultProjectId?: string
   defaultProviderId?: string
   defaultModelTier?: "default" | "haiku" | "sonnet" | "opus"
   defaultNodeTimeoutMins?: number
   params: WorkflowParam[]; nodes: WorkflowNode[]; edges: WorkflowEdge[]
 }
+export interface WorkflowFutureDocument extends Record<string, unknown> {
+  id: string
+  name?: string
+  meta: WorkflowSchemaMeta
+}
 export interface WorkflowMeta {
   id: string; name: string; description?: string; version: string
   loadError?: string
+  rawExportAvailable?: boolean
   nodeCount: number; createdAt: number; updatedAt: number
 }
 export interface WorkflowUsageCostBreakdownCny {

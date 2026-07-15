@@ -1,8 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
-import type { SynapseWorkflowPackageV1, SynapseWorkflowPackageV2, WorkflowModelMapping } from "../../../src/types/workflow-package"
+import type {
+  SynapseWorkflowExportPackageV3,
+  SynapseWorkflowPackageV1,
+  SynapseWorkflowPackageV3,
+  WorkflowModelMapping,
+} from "../../../src/types/workflow-package"
 import type { CCProvider } from "../provider/types"
 import { WorkflowPackageService } from "../workflow/workflow-package-service"
+import type { WorkflowExportDocumentResult } from "../workflow/workflow-service"
 
 const logger = vi.hoisted(() => ({
   info: vi.fn(),
@@ -132,12 +138,22 @@ function codexOnlyWorkflowWithDefaultProvider(): WorkflowDefinition {
   }
 }
 
+function currentPackage(pkg: SynapseWorkflowExportPackageV3): SynapseWorkflowPackageV3 {
+  const workflow = pkg.workflow
+  if (!("nodes" in workflow) || !Array.isArray(workflow.nodes)
+    || !("edges" in workflow) || !Array.isArray(workflow.edges)
+    || !("params" in workflow) || !Array.isArray(workflow.params)) {
+    throw new Error("Expected a current workflow export package")
+  }
+  return { ...pkg, workflow: workflow as WorkflowDefinition }
+}
+
 function createService() {
   const saved: WorkflowDefinition[] = []
   const workflowService = {
-    get: vi.fn(async (id: string) => {
-      if (id === "workflow-source") return workflowDefinition()
-      if (id === "codex-source") return codexOnlyWorkflowWithDefaultProvider()
+    getExportDocument: vi.fn(async (id: string): Promise<WorkflowExportDocumentResult | null> => {
+      if (id === "workflow-source") return { kind: "current" as const, document: workflowDefinition() }
+      if (id === "codex-source") return { kind: "current" as const, document: codexOnlyWorkflowWithDefaultProvider() }
       return null
     }),
     save: vi.fn(async (def: WorkflowDefinition) => {
@@ -201,9 +217,10 @@ describe("WorkflowPackageService", () => {
 
   it("builds an export package with grouped model references", async () => {
     const { service } = createService()
-    const pkg = await service.buildExportPackage("workflow-source")
+    const pkg = currentPackage(await service.buildExportPackage("workflow-source"))
 
-    expect(pkg.format).toBe("synapse-workflow-package-v2")
+    expect(pkg.format).toBe("synapse-workflow-package")
+    expect(pkg.formatVersion).toBe("3.0.0")
     expect(pkg.exportedAt).toBe(nowIso)
     expect(pkg.workflow.id).toBe("workflow-source")
     expect(pkg.modelReferences).toHaveLength(2)
@@ -228,9 +245,30 @@ describe("WorkflowPackageService", () => {
     ]))
   })
 
+  it("exports a future-schema workflow without interpreting or rewriting its raw document", async () => {
+    const { service, workflowService, providerService } = createService()
+    const futureDocument = {
+      id: "future-workflow",
+      name: "Future Workflow",
+      meta: { schemaVersion: "2.0.0" },
+      futureOnly: { mode: "preserve-exactly" },
+    }
+    workflowService.getExportDocument.mockResolvedValueOnce({
+      kind: "future",
+      document: futureDocument,
+      sourceVersion: "2.0.0",
+    })
+
+    const pkg = await service.buildExportPackage(futureDocument.id)
+
+    expect(pkg.workflow).toEqual(futureDocument)
+    expect(pkg.modelReferences).toEqual([])
+    expect(providerService.listProviders).not.toHaveBeenCalled()
+  })
+
   it("does not export model references for Code X-only workflows with a default provider", async () => {
     const { service } = createService()
-    const pkg = await service.buildExportPackage("codex-source")
+    const pkg = currentPackage(await service.buildExportPackage("codex-source"))
 
     expect(pkg.workflow).toMatchObject({
       id: "codex-source",
@@ -242,7 +280,7 @@ describe("WorkflowPackageService", () => {
 
   it("builds an import preview with provider options and suggested mappings", async () => {
     const { service } = createService()
-    const pkg = await service.buildExportPackage("workflow-source")
+    const pkg = currentPackage(await service.buildExportPackage("workflow-source"))
     const preview = await service.buildImportPreview("/tmp/shared.synapse-workflow.json", pkg, "sha256:preview")
 
     expect(preview.packagePath).toBe("/tmp/shared.synapse-workflow.json")
@@ -282,7 +320,7 @@ describe("WorkflowPackageService", () => {
 
   it("imports as a new workflow and preserves inherited provider structure", async () => {
     const { service, saved } = createService()
-    const pkg = await service.buildExportPackage("workflow-source")
+    const pkg = currentPackage(await service.buildExportPackage("workflow-source"))
     const mappings: WorkflowModelMapping[] = pkg.modelReferences.map((ref) => ({
       sourceRefId: ref.id,
       targetProviderId: "local-openai",
@@ -316,8 +354,8 @@ describe("WorkflowPackageService", () => {
 
   it("clears Code X node project ids when importing mixed workflows", async () => {
     const { service, saved } = createService()
-    const pkg = await service.buildExportPackage("workflow-source")
-    const mixedPkg: SynapseWorkflowPackageV2 = {
+    const pkg = currentPackage(await service.buildExportPackage("workflow-source"))
+    const mixedPkg: SynapseWorkflowPackageV3 = {
       ...pkg,
       workflow: {
         ...pkg.workflow,
@@ -348,7 +386,7 @@ describe("WorkflowPackageService", () => {
 
   it("blocks importing model workflows without a local project mapping", async () => {
     const { service, saved } = createService()
-    const pkg = await service.buildExportPackage("workflow-source")
+    const pkg = currentPackage(await service.buildExportPackage("workflow-source"))
     const mappings: WorkflowModelMapping[] = pkg.modelReferences.map((ref) => ({
       sourceRefId: ref.id,
       targetProviderId: "local-openai",
@@ -422,7 +460,7 @@ describe("WorkflowPackageService", () => {
 
   it("rejects import when a model reference has no mapping", async () => {
     const { service } = createService()
-    const pkg = await service.buildExportPackage("workflow-source")
+    const pkg = currentPackage(await service.buildExportPackage("workflow-source"))
 
     await expect(service.importPackage(pkg, [])).rejects.toThrow(/Missing model mapping/)
     expect(logger.warn).toHaveBeenCalledWith("workflow package import missing model mapping", {
@@ -435,7 +473,7 @@ describe("WorkflowPackageService", () => {
 
   it("rejects import when a mapping targets an unknown provider", async () => {
     const { service } = createService()
-    const pkg = await service.buildExportPackage("workflow-source")
+    const pkg = currentPackage(await service.buildExportPackage("workflow-source"))
     const mappings = pkg.modelReferences.map((ref) => ({
       sourceRefId: ref.id,
       targetProviderId: "missing-provider",

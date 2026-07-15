@@ -1108,13 +1108,14 @@ function isWorkflowParamPresetValues(value: unknown): value is Record<string, Wo
 
 export interface WorkflowEntryV1 extends Record<string, unknown> {
   id: string
-  schemaVersion: 1
+  /** Legacy per-document version; removed after SemVer migration. */
+  schemaVersion?: 1
+  meta?: { schemaVersion: string }
   name: string
   description?: string
   version: string
   createdAt: number
   updatedAt: number
-  loadError?: string
   defaultProjectId?: string
   defaultProviderId?: string
   defaultModelTier?: "default" | "haiku" | "sonnet" | "opus"
@@ -1130,200 +1131,6 @@ export interface WorkflowEntryV1 extends Record<string, unknown> {
   }>
   nodes: Array<{ id: string; name: string; type: string; position: { x: number; y: number }; config: Record<string, unknown> }>
   edges: Array<{ id: string; from: string; to: string; branch?: string }>
-}
-
-function isWorkflowParam(value: unknown): value is WorkflowEntryV1["params"][number] {
-  return isAnyRecord<Record<string, unknown>>(value)
-    && typeof value.name === "string"
-    && isWorkflowParamType(value.type)
-    && (value.default === null || typeof value.default === "string" || typeof value.default === "number" || isWorkflowResourceRef(value.default) || isWorkflowResourceRefArray(value.default))
-    && isOptionalString(value.description)
-    && (value.options === undefined || isStringArray(value.options))
-    && isOptionalBoolean(value.allowCustomOption)
-    && isOptionalBoolean(value.allowMultiple)
-}
-
-function isWorkflowParamType(value: unknown): value is WorkflowEntryV1["params"][number]["type"] {
-  return value === "text" || value === "number" || value === "file" || value === "directory" || value === "option"
-}
-
-function isWorkflowResourceRef(value: unknown): value is WorkflowResourceRefV1 {
-  if (!isAnyRecord<Record<string, unknown>>(value)) return false
-  if (value.kind === "local_path") {
-    return (value.entryType === "file" || value.entryType === "directory")
-      && typeof value.path === "string"
-  }
-  if (value.kind === "drive") {
-    return (value.entryType === "file" || value.entryType === "directory")
-      && typeof value.id === "string"
-      && isOptionalString(value.versionId)
-  }
-  if (value.kind === "staged") {
-    return (value.entryType === "file" || value.entryType === "directory")
-      && typeof value.id === "string"
-  }
-  if (value.kind === "inline_file") {
-    return value.entryType === "file"
-      && typeof value.name === "string"
-      && typeof value.base64 === "string"
-      && isOptionalString(value.mimeType)
-  }
-  return false
-}
-
-function isWorkflowResourceRefArray(value: unknown): value is WorkflowResourceRefV1[] {
-  return Array.isArray(value) && value.every(isWorkflowResourceRef)
-}
-
-function isWorkflowNode(value: unknown): value is WorkflowEntryV1["nodes"][number] {
-  return isAnyRecord<Record<string, unknown>>(value)
-    && typeof value.id === "string"
-    && typeof value.name === "string"
-    && typeof value.type === "string"
-    && isAnyRecord(value.position)
-    && typeof (value.position as Record<string, unknown>).x === "number"
-    && typeof (value.position as Record<string, unknown>).y === "number"
-    && isAnyRecord(value.config)
-}
-
-function isWorkflowEdge(value: unknown): value is WorkflowEntryV1["edges"][number] {
-  return isAnyRecord<Record<string, unknown>>(value)
-    && typeof value.id === "string"
-    && typeof value.from === "string"
-    && typeof value.to === "string"
-    && isOptionalString(value.branch)
-}
-
-const WORKFLOW_MODEL_TIERS = ["default", "haiku", "sonnet", "opus"] as const
-type WorkflowModelTierValue = typeof WORKFLOW_MODEL_TIERS[number]
-const WORKFLOW_ENTRY_LOAD_ERROR = "工作流数据格式异常"
-
-function normalizeOptionalString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined
-}
-
-function normalizeWorkflowModelTier(value: unknown): WorkflowEntryV1["defaultModelTier"] | undefined {
-  return typeof value === "string" && WORKFLOW_MODEL_TIERS.includes(value as WorkflowModelTierValue)
-    ? value as WorkflowModelTierValue
-    : undefined
-}
-
-function normalizeWorkflowTimeout(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value
-  if (typeof value === "string" && /^[1-9]\d*$/.test(value.trim())) return Number(value.trim())
-  return undefined
-}
-
-function normalizeWorkflowParam(value: unknown): WorkflowEntryV1["params"][number] | null {
-  if (!isAnyRecord<Record<string, unknown>>(value)) return null
-  if (typeof value.name !== "string") return null
-  if (!isWorkflowParamType(value.type)) return null
-  const rawDefault = value.default
-  const defaultValue = rawDefault === undefined || rawDefault === null
-    ? null
-    : typeof rawDefault === "string" || typeof rawDefault === "number" || isWorkflowResourceRef(rawDefault) || isWorkflowResourceRefArray(rawDefault)
-      ? rawDefault
-      : null
-  const param: WorkflowEntryV1["params"][number] = {
-    name: value.name,
-    type: value.type,
-    default: defaultValue,
-  }
-  const description = normalizeOptionalString(value.description)
-  if (description !== undefined) param.description = description
-  if (isStringArray(value.options)) param.options = value.options
-  if (typeof value.allowCustomOption === "boolean") param.allowCustomOption = value.allowCustomOption
-  if (typeof value.allowMultiple === "boolean") param.allowMultiple = value.allowMultiple
-  return param
-}
-
-function normalizeWorkflowNode(value: unknown): WorkflowEntryV1["nodes"][number] | null {
-  if (!isWorkflowNode(value)) return null
-  return {
-    id: value.id,
-    name: value.name,
-    type: value.type,
-    position: {
-      x: (value.position as Record<string, number>).x,
-      y: (value.position as Record<string, number>).y,
-    },
-    config: value.config,
-  }
-}
-
-function normalizeWorkflowEdge(value: unknown): WorkflowEntryV1["edges"][number] | null {
-  if (!isWorkflowEdge(value)) return null
-  const edge: WorkflowEntryV1["edges"][number] = {
-    id: value.id,
-    from: value.from,
-    to: value.to,
-  }
-  const branch = normalizeOptionalString(value.branch)
-  if (branch !== undefined) edge.branch = branch
-  return edge
-}
-
-function normalizeWorkflowArray<T>(values: unknown, normalize: (value: unknown) => T | null): T[] | null {
-  if (!Array.isArray(values)) return null
-  const result: T[] = []
-  for (const value of values) {
-    const normalized = normalize(value)
-    if (!normalized) return null
-    result.push(normalized)
-  }
-  return result
-}
-
-export function normalizeWorkflowEntry(value: unknown): WorkflowEntryV1 | null {
-  if (!isAnyRecord<Record<string, unknown>>(value)) return null
-  if (typeof value.id !== "string") return null
-  if (typeof value.name !== "string") return null
-  const params = normalizeWorkflowArray(value.params, normalizeWorkflowParam)
-  const nodes = normalizeWorkflowArray(value.nodes, normalizeWorkflowNode)
-  const edges = normalizeWorkflowArray(value.edges, normalizeWorkflowEdge)
-  if (!params || !nodes || !edges) return null
-
-  const entry: WorkflowEntryV1 = {
-    id: value.id,
-    schemaVersion: 1,
-    name: value.name,
-    version: typeof value.version === "string" ? value.version : "",
-    createdAt: typeof value.createdAt === "number" ? value.createdAt : Date.now(),
-    updatedAt: typeof value.updatedAt === "number" ? value.updatedAt : Date.now(),
-    params,
-    nodes,
-    edges,
-  }
-  const description = normalizeOptionalString(value.description)
-  if (description !== undefined) entry.description = description
-  const loadError = normalizeOptionalString(value.loadError)
-  if (loadError !== undefined) entry.loadError = loadError
-  const defaultProjectId = normalizeOptionalString(value.defaultProjectId)
-  if (defaultProjectId !== undefined) entry.defaultProjectId = defaultProjectId
-  const defaultProviderId = normalizeOptionalString(value.defaultProviderId)
-  if (defaultProviderId !== undefined) entry.defaultProviderId = defaultProviderId
-  const defaultModelTier = normalizeWorkflowModelTier(value.defaultModelTier)
-  if (defaultModelTier !== undefined) entry.defaultModelTier = defaultModelTier
-  const defaultNodeTimeoutMins = normalizeWorkflowTimeout(value.defaultNodeTimeoutMins)
-  if (defaultNodeTimeoutMins !== undefined) entry.defaultNodeTimeoutMins = defaultNodeTimeoutMins
-  return entry
-}
-
-function recoverInvalidWorkflowEntry(id: string, value: unknown): WorkflowEntryV1 {
-  const record = isAnyRecord<Record<string, unknown>>(value) ? value : {}
-  const now = Date.now()
-  return {
-    id: typeof record.id === "string" && record.id ? record.id : id,
-    schemaVersion: 1,
-    name: typeof record.name === "string" && record.name ? record.name : "工作流数据异常",
-    version: typeof record.version === "string" ? record.version : "",
-    createdAt: typeof record.createdAt === "number" ? record.createdAt : now,
-    updatedAt: typeof record.updatedAt === "number" ? record.updatedAt : now,
-    loadError: WORKFLOW_ENTRY_LOAD_ERROR,
-    params: [],
-    nodes: [],
-    edges: [],
-  }
 }
 
 function isWorkflowJsonEnvelope(value: unknown): value is JsonFileEnvelope<unknown> {
@@ -1343,10 +1150,27 @@ export function reviveWorkflowsEnvelope(raw: unknown): JsonFileEnvelope<Workflow
 
   const items: Record<string, WorkflowEntryV1> = {}
   for (const [id, value] of Object.entries(sourceItems)) {
-    const normalized = normalizeWorkflowEntry(value) ?? recoverInvalidWorkflowEntry(id, value)
-    items[normalized.id] = normalized
+    if (isPlainRecord(value) && value.id === id) {
+      items[id] = value as WorkflowEntryV1
+      continue
+    }
+    items[id] = wrapUnreadableWorkflowEntry(id, value)
   }
   return { schemaVersion: 1, singleton: null, items }
+}
+
+function wrapUnreadableWorkflowEntry(id: string, raw: unknown): WorkflowEntryV1 {
+  const entry = {
+    id,
+    name: isPlainRecord(raw) && typeof raw.name === "string" && raw.name
+      ? raw.name
+      : "无法读取的工作流",
+  } as WorkflowEntryV1
+  Object.defineProperty(entry, "toJSON", {
+    enumerable: false,
+    value: () => raw,
+  })
+  return entry
 }
 
 export const workflowsSchema: NamespaceSchema<WorkflowEntryV1> = {
@@ -1354,28 +1178,11 @@ export const workflowsSchema: NamespaceSchema<WorkflowEntryV1> = {
   backend: "json",
   currentVersion: 1,
   migrations: noMigrations,
+  // Document-level validation and SemVer migration happen in WorkflowService.
+  // Keeping the storage envelope permissive allows one bad/future document to
+  // be isolated without making every other workflow unreadable.
   validate: (v): v is WorkflowEntryV1 =>
-    isAnyRecord<WorkflowEntryV1>(v)
-    && (v as WorkflowEntryV1).schemaVersion === 1
-    && typeof (v as WorkflowEntryV1).id === "string"
-    && typeof (v as WorkflowEntryV1).name === "string"
-    && isOptionalString((v as WorkflowEntryV1).description)
-    && typeof (v as WorkflowEntryV1).version === "string"
-    && typeof (v as WorkflowEntryV1).createdAt === "number"
-    && typeof (v as WorkflowEntryV1).updatedAt === "number"
-    && isOptionalString((v as WorkflowEntryV1).loadError)
-    && isOptionalString((v as WorkflowEntryV1).defaultProjectId)
-    && isOptionalString((v as WorkflowEntryV1).defaultProviderId)
-    && ((v as WorkflowEntryV1).defaultModelTier === undefined
-      || ["default", "haiku", "sonnet", "opus"].includes((v as WorkflowEntryV1).defaultModelTier as string))
-    && ((v as WorkflowEntryV1).defaultNodeTimeoutMins === undefined
-      || (Number.isInteger((v as WorkflowEntryV1).defaultNodeTimeoutMins) && (v as WorkflowEntryV1).defaultNodeTimeoutMins! > 0))
-    && Array.isArray((v as WorkflowEntryV1).params)
-    && (v as WorkflowEntryV1).params.every(isWorkflowParam)
-    && Array.isArray((v as WorkflowEntryV1).nodes)
-    && (v as WorkflowEntryV1).nodes.every(isWorkflowNode)
-    && Array.isArray((v as WorkflowEntryV1).edges)
-    && (v as WorkflowEntryV1).edges.every(isWorkflowEdge),
+    isPlainRecord(v) && typeof v.id === "string" && v.id.length > 0,
 }
 
 function isProviderModelArray(value: unknown): value is ProviderModelEntryV1[] {

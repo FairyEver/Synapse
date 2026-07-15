@@ -47,6 +47,20 @@ describe("normalizeWorkflowRunParams", () => {
     expect(result.errors[0]).toMatchObject({ type: "invalid_config", message: "参数「input」必须是文件" })
   })
 
+  it("rejects a single resource path that does not exist or cannot be accessed", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-workflow-params-"))
+    const missingPath = path.join(root, "missing.txt")
+
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "input", type: "file", default: null },
+    ]), { input: missingPath })
+
+    expect(result.errors[0]).toMatchObject({
+      type: "invalid_config",
+      message: "参数「input」路径不存在或不可访问",
+    })
+  })
+
   it("returns unsupported errors for unresolved remote resource refs", async () => {
     const result = await normalizeWorkflowRunParams(def([{ name: "input", type: "file", default: null }]), {
       input: { kind: "drive", entryType: "file", id: "drive-file-1" },
@@ -127,6 +141,23 @@ describe("normalizeWorkflowRunParams", () => {
 
     expect(result.errors[0]).toMatchObject({ type: "invalid_config", message: "参数「inputs」第 2 项必须是文件" })
     expect(result.params.inputs).toEqual([filePath, root])
+  })
+
+  it("rejects the whole multi-resource value with the missing item's index", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-workflow-params-"))
+    const filePath = path.join(root, "input.txt")
+    const missingPath = path.join(root, "missing.txt")
+    await writeFile(filePath, "hello")
+
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "inputs", type: "file", default: null, allowMultiple: true },
+    ]), { inputs: [filePath, missingPath] })
+
+    expect(result.errors[0]).toMatchObject({
+      type: "invalid_config",
+      message: "参数「inputs」第 2 项路径不存在或不可访问",
+    })
+    expect(result.params.inputs).toEqual([filePath, missingPath])
   })
 
   it("normalizes option params as strings and rejects values outside a closed option list", async () => {

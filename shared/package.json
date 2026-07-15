@@ -10,11 +10,17 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./versioned-data-migrator": {
+      "types": "./dist/versioned-data-migrator.d.cts",
+      "import": "./dist/versioned-data-migrator.cjs",
+      "require": "./dist/versioned-data-migrator.cjs",
+      "default": "./dist/versioned-data-migrator.cjs"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run",
+    "test": "pnpm run build && vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

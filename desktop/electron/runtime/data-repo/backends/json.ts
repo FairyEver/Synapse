@@ -35,6 +35,8 @@ export interface JsonBackendDeps<T> extends NamespaceBaseDeps<T> {
   readonly validate?: (data: unknown) => data is T
   /** Optional reviver to migrate older payloads on read. Returns null to discard. */
   readonly reviveEnvelope?: (raw: unknown) => JsonFileEnvelope<T> | null
+  /** Workflows preserve malformed source files for explicit recovery. */
+  readonly preserveInvalidJson?: boolean
 }
 
 export class JsonNamespace<T extends Record<string, unknown>>
@@ -43,6 +45,7 @@ export class JsonNamespace<T extends Record<string, unknown>>
   private readonly filePath: string
   private readonly validate?: (data: unknown) => data is T
   private readonly reviveEnvelope?: (raw: unknown) => JsonFileEnvelope<T> | null
+  private readonly preserveInvalidJson: boolean
   private cache: JsonFileEnvelope<T> | null = null
   private writeQueue: Promise<void> = Promise.resolve()
 
@@ -51,6 +54,7 @@ export class JsonNamespace<T extends Record<string, unknown>>
     this.filePath = deps.filePath
     this.validate = deps.validate
     this.reviveEnvelope = deps.reviveEnvelope
+    this.preserveInvalidJson = deps.preserveInvalidJson ?? false
   }
 
   protected async loadEnvelope(): Promise<JsonFileEnvelope<T>> {
@@ -61,7 +65,9 @@ export class JsonNamespace<T extends Record<string, unknown>>
       return this.cache
     }
 
-    const raw = await readJsonFile<unknown>(this.filePath)
+    const raw = await readJsonFile<unknown>(this.filePath, {
+      preserveInvalid: this.preserveInvalidJson,
+    })
     if (raw == null) {
       this.cache = this.makeEmpty()
       return this.cache

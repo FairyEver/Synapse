@@ -159,6 +159,40 @@ describe("SynapseSkillUpdateDialogHost", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Synapse Skill 已更新")
   })
 
+  it("retries failed targets without reinstalling warning-only successes", async () => {
+    inspectGlobalSkillInstallations.mockResolvedValue({ entries: createInstallEntries() })
+    installSourceToEditorTargets
+      .mockResolvedValueOnce({
+        results: [
+          {
+            target: { editorId: "codex", scope: "global" },
+            status: "installed",
+            result: { targetPath: "/target", warning: "旧 Skill 备份需要手动检查" },
+          },
+          { target: { editorId: "cursor", scope: "global" }, status: "failed", error: "目录不可写" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        results: [{ target: { editorId: "cursor", scope: "global" }, status: "installed" }],
+      })
+    await renderDialog()
+
+    await clickButton("更新")
+    expect(document.body.textContent).toContain("旧 Skill 备份需要手动检查")
+    expect(document.body.textContent).toContain("目录不可写")
+
+    await clickButton("重试失败项")
+
+    expect(installSourceToEditorTargets).toHaveBeenLastCalledWith({
+      mode: "update",
+      source: preparedSource,
+      targets: [{ editorId: "cursor", scope: "global" }],
+    })
+    expect(document.body.textContent).toContain("旧 Skill 备份需要手动检查")
+    expect(document.body.textContent).not.toContain("目录不可写")
+    expect(toastSuccess).not.toHaveBeenCalled()
+  })
+
   it("prevents closing and duplicate submission while updating", async () => {
     inspectGlobalSkillInstallations.mockResolvedValue({ entries: createInstallEntries() })
     let finishUpdate!: (value: { results: never[] }) => void

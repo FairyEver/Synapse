@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { z } from "zod"
 
 const logStoreMock = vi.hoisted(() => ({
   logger: {
@@ -51,7 +52,7 @@ function makeDeps(overrides: Partial<WorkflowDispatchDeps> = {}): WorkflowDispat
         color: "#000",
         ports: { inputs: [], outputs: [] },
         configFields: [],
-        configSchema: { _def: {} },
+        configSchema: z.object({}),
         cardSummary: () => ({ title: "AI 对话", subtitle: "" }),
       })),
     } as unknown as WorkflowDispatchDeps["nodeTypeRegistry"],
@@ -123,6 +124,9 @@ describe("createWorkflowDispatcher", () => {
 
     const nodeTypeListTool = tools.find((item) => item.name === "workflow_node_type_list")
     expect(nodeTypeListTool?.description).toContain("text/number/option")
+
+    const nodeTypeDescribeTool = tools.find((item) => item.name === "workflow_node_type_describe")
+    expect(nodeTypeDescribeTool?.description).toContain("configSchema.required")
 
     const runExecuteTool = tools.find((item) => item.name === "workflow_run_execute")
     const runExecuteParams = (runExecuteTool?.inputSchema as {
@@ -383,6 +387,111 @@ describe("createWorkflowDispatcher", () => {
       { source: "api" },
     )).rejects.toThrow("Missing or invalid 'definition.id'")
     expect(deps.workflowService.save).not.toHaveBeenCalled()
+  })
+
+  it("reports workflow_call resource binding mismatches during definition inspection", async () => {
+    const deps = makeDeps({
+      loadValidationOptions: vi.fn(async () => ({
+        availableWorkflowIds: ["child"],
+        workflowParamsById: new Map([["child", [
+          { name: "input_file", type: "file" as const, default: null },
+        ]]]),
+      })),
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+    const definition: WorkflowDefinition = {
+      id: "parent",
+      name: "Parent",
+      version: "v1",
+      createdAt: 1,
+      updatedAt: 2,
+      params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
+      nodes: [
+        {
+          id: "call",
+          name: "Call",
+          type: "workflow_call",
+          position: { x: 0, y: 0 },
+          config: {
+            workflowId: "child",
+            variables: [],
+            paramTemplates: {},
+            paramBindings: {
+              input_file: { mode: "value", source: { type: "param", param: "input_files" } },
+            },
+          },
+        },
+        endNode("end"),
+      ],
+      edges: [{ id: "edge-1", from: "call", to: "end" }],
+    }
+
+    const result = await dispatcher.dispatch(
+      "workflow.definition.inspect",
+      { definition },
+      { source: "api" },
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.data).toEqual(expect.objectContaining({
+      valid: false,
+      errors: expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: "call",
+          field: "paramBindings",
+          message: expect.stringContaining("资源类型或多选设置不一致"),
+        }),
+      ]),
+    }))
+  })
+
+  it("rejects workflow_call multi-resource templates before an MCP node update is saved", async () => {
+    const definition: WorkflowDefinition = {
+      id: "parent",
+      name: "Parent",
+      version: "v1",
+      createdAt: 1,
+      updatedAt: 2,
+      params: [],
+      nodes: [
+        {
+          id: "call",
+          name: "Call",
+          type: "workflow_call",
+          position: { x: 0, y: 0 },
+          config: {
+            workflowId: "child",
+            variables: [{ name: "files", source: { type: "static", value: "[]" } }],
+            paramTemplates: { input_files: "{{files}}" },
+            paramBindings: {},
+          },
+        },
+        endNode("end"),
+      ],
+      edges: [{ id: "edge-1", from: "call", to: "end" }],
+    }
+    const save = vi.fn(async () => ({ versionHash: "v2" }))
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        get: vi.fn(async () => structuredClone(definition)),
+        save,
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+      loadValidationOptions: vi.fn(async () => ({
+        availableWorkflowIds: ["child"],
+        workflowParamsById: new Map([["child", [
+          { name: "input_files", type: "file" as const, default: null, allowMultiple: true },
+        ]]]),
+      })),
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "workflow.node.update",
+      { workflowId: "parent", nodeId: "call", patch: { name: "Updated Call" } },
+      { source: "mcp-http" },
+    )).rejects.toThrow("多选资源参数「input_files」不能使用 paramTemplates")
+    expect(save).not.toHaveBeenCalled()
   })
 
   it("checks permission and audits allowed workflow mutations", async () => {
@@ -1353,6 +1462,25 @@ describe("createWorkflowDispatcher", () => {
       expect.objectContaining({ name: "disallowedTools" }),
       expect.objectContaining({ name: "captureDebugArtifacts" }),
       expect.objectContaining({ name: "prompt" }),
+    ]))
+    const configFields = data.configFields as Array<{ name: string; optional?: boolean }>
+    for (const fieldName of ["verbose", "settingSources", "captureDebugArtifacts"]) {
+      expect(configFields.find((field) => field.name === fieldName)?.optional).not.toBe(true)
+    }
+
+    const configSchema = data.configSchema as Record<string, unknown>
+    const configProperties = configSchema.properties as Record<string, unknown>
+    expect(configProperties).toMatchObject({
+      prompt: expect.objectContaining({ type: "string" }),
+      verbose: expect.objectContaining({ type: "boolean" }),
+      settingSources: expect.objectContaining({ type: "array" }),
+      captureDebugArtifacts: expect.objectContaining({ type: "boolean" }),
+    })
+    expect(configSchema.required).toEqual(expect.arrayContaining([
+      "prompt",
+      "verbose",
+      "settingSources",
+      "captureDebugArtifacts",
     ]))
   })
 

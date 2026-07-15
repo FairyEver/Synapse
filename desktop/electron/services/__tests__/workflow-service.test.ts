@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { mkdtempSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync } from "node:fs"
 import { readFileSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import os from "node:os"
@@ -15,8 +15,16 @@ vi.mock("../log-store", () => ({
   createMainLogger: () => logger,
 }))
 
-import { DataRepositoryImpl, JsonNamespace, reviveWorkflowsEnvelope, workflowsSchema, type WorkflowEntryV1 } from "../../runtime/data-repo"
-import { WorkflowService } from "../workflow/workflow-service"
+import {
+  DataRepositoryImpl,
+  JsonNamespace,
+  reviveWorkflowsEnvelope,
+  workflowMigrationStateSchema,
+  workflowsSchema,
+  type WorkflowEntryV1,
+  type WorkflowMigrationStateEntryV1,
+} from "../../runtime/data-repo"
+import { WorkflowService, type WorkflowServiceMigrationOptions } from "../workflow/workflow-service"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
 import { defaultCodexNodeConfig } from "../../../workflow-nodes/codex/schema"
 import "../../../workflow-nodes/register.main"
@@ -35,7 +43,7 @@ afterEach(() => {
   }
 })
 
-function createRepoAt(dir: string): { repo: DataRepositoryImpl; svc: WorkflowService } {
+function createRepoAt(dir: string, options: WorkflowServiceMigrationOptions = {}): { repo: DataRepositoryImpl; svc: WorkflowService } {
   const repo = new DataRepositoryImpl()
   repo.register(workflowsSchema, new JsonNamespace({
     name: workflowsSchema.name,
@@ -45,7 +53,14 @@ function createRepoAt(dir: string): { repo: DataRepositoryImpl; svc: WorkflowSer
     validate: workflowsSchema.validate,
     reviveEnvelope: reviveWorkflowsEnvelope,
   }))
-  const svc = new WorkflowService(repo)
+  repo.register(workflowMigrationStateSchema, new JsonNamespace<WorkflowMigrationStateEntryV1>({
+    name: workflowMigrationStateSchema.name,
+    schemaVersion: workflowMigrationStateSchema.currentVersion,
+    backend: "json",
+    filePath: path.join(dir, "workflow.migration-state.json"),
+    validate: workflowMigrationStateSchema.validate,
+  }))
+  const svc = new WorkflowService(repo, undefined, undefined, options)
   return { repo, svc }
 }
 
@@ -224,6 +239,85 @@ describe("WorkflowService", () => {
     ]))
     expect(await svc.get("parent")).toBeNull()
   })
+  it("rejects workflow_call resource bindings whose cardinality differs from the saved child workflow", async () => {
+    const { svc } = createRepo()
+    const child = {
+      ...makeDef(),
+      id: "child",
+      params: [{ name: "input_file", type: "file", default: null }],
+    } satisfies WorkflowDefinition
+    await svc.save(child)
+    const parent = {
+      ...makeDef(),
+      id: "parent",
+      params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
+      nodes: [
+        {
+          id: "call",
+          name: "调用",
+          type: "workflow_call",
+          position: { x: 0, y: 0 },
+          config: {
+            workflowId: "child",
+            variables: [],
+            paramTemplates: {},
+            paramBindings: {
+              input_file: { mode: "value", source: { type: "param", param: "input_files" } },
+            },
+          },
+        },
+        { id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "", variables: [] } },
+      ],
+      edges: [{ id: "edge-1", from: "call", to: "end" }],
+    } satisfies WorkflowDefinition
+
+    const result = await svc.save(parent)
+
+    expect("errors" in result).toBe(true)
+    expect((result as { errors: Array<{ field?: string; message: string }> }).errors).toContainEqual(expect.objectContaining({
+      field: "paramBindings",
+      message: expect.stringContaining("资源类型或多选设置不一致"),
+    }))
+    expect(await svc.get("parent")).toBeNull()
+  })
+  it("rejects workflow_call multi-resource templates before saving", async () => {
+    const { svc } = createRepo()
+    await svc.save({
+      ...makeDef(),
+      id: "child",
+      params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
+    })
+    const parent = {
+      ...makeDef(),
+      id: "parent",
+      nodes: [
+        {
+          id: "call",
+          name: "调用",
+          type: "workflow_call",
+          position: { x: 0, y: 0 },
+          config: {
+            workflowId: "child",
+            variables: [{ name: "files", source: { type: "static", value: "[]" } }],
+            paramTemplates: { input_files: "{{files}}" },
+            paramBindings: {},
+          },
+        },
+        { id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "", variables: [] } },
+      ],
+      edges: [{ id: "edge-1", from: "call", to: "end" }],
+    } satisfies WorkflowDefinition
+
+    const result = await svc.save(parent)
+
+    expect("errors" in result).toBe(true)
+    expect((result as { errors: Array<{ nodeId?: string; field?: string; message: string }> }).errors).toContainEqual(expect.objectContaining({
+      nodeId: "call",
+      field: "paramTemplates",
+      message: expect.stringContaining("多选资源参数「input_files」"),
+    }))
+    expect(await svc.get("parent")).toBeNull()
+  })
   it("normalizes nullable optional metadata before persisting so restart can list workflows", async () => {
     const { svc, dir } = createRepo()
     const dirty = {
@@ -306,16 +400,146 @@ describe("WorkflowService", () => {
       expect.objectContaining({
         id: "broken-workflow",
         name: "坏工作流",
-        loadError: "工作流数据格式异常",
+        loadError: "工作流数据迁移失败，原始数据已保留。",
         nodeCount: 0,
       }),
     ]))
-    await expect(svc.get("broken-workflow")).resolves.toMatchObject({
-      id: "broken-workflow",
-      loadError: "工作流数据格式异常",
-      nodes: [],
-      edges: [],
-      params: [],
+    await expect(svc.get("broken-workflow")).rejects.toThrow("原始数据已保留")
+  })
+  it("isolates non-object and missing-id entries while preserving their raw values on later writes", async () => {
+    const dir = tmpDir()
+    const valid = { ...makeDef(), id: "valid-workflow" }
+    const missingId = { name: "缺少 ID", unexpected: [1, 2, 3] }
+    writeFileSync(path.join(dir, "workflows.json"), JSON.stringify({
+      schemaVersion: 1,
+      singleton: null,
+      items: {
+        [valid.id]: valid,
+        "primitive-workflow": "raw-value",
+        "missing-id-workflow": missingId,
+      },
+    }), "utf8")
+    const svc = createRepoAt(dir).svc
+
+    expect(await svc.list()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: valid.id, name: valid.name }),
+      expect.objectContaining({ id: "primitive-workflow", loadError: expect.any(String) }),
+      expect.objectContaining({ id: "missing-id-workflow", name: missingId.name, loadError: expect.any(String) }),
+    ]))
+
+    await svc.save({ ...valid, name: "Updated" })
+    const persisted = JSON.parse(readFileSync(path.join(dir, "workflows.json"), "utf8"))
+    expect(persisted.items["primitive-workflow"]).toBe("raw-value")
+    expect(persisted.items["missing-id-workflow"]).toEqual(missingId)
+  })
+  it.each([
+    ["future", { meta: { schemaVersion: "2.0.0" } }],
+    ["failed", { nodes: undefined }],
+  ])("does not overwrite an isolated %s workflow through save", async (_case, override) => {
+    const dir = tmpDir()
+    const original = { ...makeDef(), id: "protected-workflow", ...override }
+    const raw = JSON.stringify({
+      schemaVersion: 1,
+      singleton: null,
+      items: { [original.id]: original },
     })
+    writeFileSync(path.join(dir, "workflows.json"), raw, "utf8")
+    const svc = createRepoAt(dir).svc
+
+    const result = await svc.save({ ...makeDef(), id: original.id, name: "Replacement" })
+
+    expect(result).toMatchObject({
+      errors: [expect.objectContaining({ message: expect.stringContaining("不能被覆盖") })],
+    })
+    expect(JSON.parse(readFileSync(path.join(dir, "workflows.json"), "utf8")).items[original.id])
+      .toEqual(original)
+  })
+  it("exposes a future-schema workflow only through the raw export gateway", async () => {
+    const dir = tmpDir()
+    const original = {
+      ...makeDef(),
+      id: "future-export-workflow",
+      meta: { schemaVersion: "2.0.0" },
+      futureOnly: { mode: "preserve-exactly" },
+    }
+    writeFileSync(path.join(dir, "workflows.json"), JSON.stringify({
+      schemaVersion: 1,
+      singleton: null,
+      items: { [original.id]: original },
+    }), "utf8")
+    const svc = createRepoAt(dir).svc
+
+    await expect(svc.getExportDocument(original.id)).resolves.toEqual({
+      kind: "future",
+      document: original,
+      sourceVersion: "2.0.0",
+    })
+    await expect(svc.get(original.id)).rejects.toThrow("更高的数据版本")
+  })
+  it("creates and verifies an exact backup before rewriting the current workflow store", async () => {
+    const dir = tmpDir()
+    const def = makeDef()
+    const original = `${JSON.stringify({
+      schemaVersion: 1,
+      singleton: null,
+      items: { [def.id]: { ...def, schemaVersion: 1 } },
+    }, null, 2)}\n`
+    writeFileSync(path.join(dir, "workflows.json"), original, "utf8")
+
+    const svc = createRepoAt(dir, { dataRootPath: dir }).svc
+    await svc.initialize()
+
+    const backups = readdirSync(path.join(dir, "workflow-migration-backups"))
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(path.join(dir, "workflow-migration-backups", backups[0]!), "utf8")).toBe(original)
+    expect((await svc.get(def.id))?.meta?.schemaVersion).toBe("1.0.0")
+  })
+  it("recovers the newest valid workflow from configured legacy repository storage only once", async () => {
+    const dir = tmpDir()
+    const repositoryPath = tmpDir()
+    const def = { ...makeDef(), id: "legacy-recovered", name: "找回的工作流" }
+    const legacyDir = path.join(repositoryPath, "workflows", def.id)
+    mkdirSync(legacyDir, { recursive: true })
+    writeFileSync(path.join(legacyDir, "v_100_valid.json"), JSON.stringify(def), "utf8")
+    writeFileSync(path.join(legacyDir, "v_200_partial.json"), "{", "utf8")
+
+    const options: WorkflowServiceMigrationOptions = {
+      dataRootPath: dir,
+      listLegacyRepositoryPaths: async () => [repositoryPath],
+    }
+    const first = createRepoAt(dir, options).svc
+    await first.initialize()
+    await expect(first.get(def.id)).resolves.toMatchObject({
+      id: def.id,
+      name: def.name,
+      meta: { schemaVersion: "1.0.0" },
+    })
+    expect(readFileSync(path.join(legacyDir, "v_100_valid.json"), "utf8")).toBe(JSON.stringify(def))
+
+    await first.delete(def.id)
+    writeFileSync(path.join(legacyDir, "v_300_new.json"), JSON.stringify({
+      ...def,
+      name: "不应复活的新版本",
+      updatedAt: def.updatedAt + 1,
+    }), "utf8")
+    const restarted = createRepoAt(dir, options).svc
+    await restarted.initialize()
+    await expect(restarted.get(def.id)).resolves.toBeNull()
+  })
+  it("keeps current workflows available when a configured legacy repository cannot be scanned", async () => {
+    const dir = tmpDir()
+    const repositoryPath = tmpDir()
+    writeFileSync(path.join(repositoryPath, "workflows"), "not-a-directory", "utf8")
+    const svc = createRepoAt(dir, {
+      listLegacyRepositoryPaths: async () => [repositoryPath],
+    }).svc
+    const def = makeDef()
+
+    expect(await svc.save(def)).toHaveProperty("versionHash")
+    expect((await svc.get(def.id))?.name).toBe(def.name)
+    expect(logger.warn).toHaveBeenCalledWith(
+      "legacy repository workflow scan entry skipped",
+      expect.objectContaining({ operation: "read_repository" }),
+    )
   })
 })

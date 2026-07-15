@@ -142,6 +142,20 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - Synapse MCP 的 Agent 使用指南归属于系统 Skill 包 `desktop/app-capabilities/synapse-skill/skill-package/`，不属于资源仓库内置资源。修改 Database、Drive、Workflow、Automation、Content、Model Price、Variable、Repository 等 MCP 域能力时，必须同步更新该包下对应 `<domain>/index.md` 和必要的 `<domain>/api-reference.md`；不要再新增或维护旧式 `desktop/resources/templates/skills/synapse-*-mcp/` 或资源仓库内置 Skill 模板。
 - 修改 Electron 打包边界时必须把 `app.asar` 当成启动关键路径处理。凡是改动 `desktop/package.json` 的 `files`、`asarUnpack`、`extraResources`，或新增/移动 Electron worker、原生模块、可执行文件、运行时资源，都必须同步确认 sourcemap、unpacked 文件和 packed 文件不会错位；不要只把 `.js` 加入 `asarUnpack` 而忽略同目录产物如 `.js.map`。Claude SDK native binary（例如 `node_modules/@anthropic-ai/claude-agent-sdk-*/claude` 或 `claude.exe`）属于启动关键 runtime 文件；只写 `asarUnpack` 不够，必须校验证明目标平台的实际二进制已落在 `app.asar.unpacked` 中。发版前必须用 `pnpm --filter @synapse/desktop run check:packaged-asar` 或等价校验证明 `package.json`、主进程入口、packed hash 和 unpacked 文件存在性正常。
 
+### 通用数据版本迁移器
+
+- 当用户要求某个功能的持久化数据接入版本迁移、兼容旧格式或在加载时逐级升级时，优先复用 `shared/src/versioned-data-migrator.cts` 中由 `@synapse/shared/versioned-data-migrator` 导出的 `VersionedDataMigrator`，不要在业务模块另写并行迁移器。业务模块负责声明自己的 `schemaVersion`、完整迁移注册表和最终结构校验，并在该业务的统一数据读取入口调用迁移器；迁移器只负责内存编排，事务、备份、并发检查和原子持久化仍由对应存储层负责。除非当前任务明确要求接入，否则本规则不授权主动迁移现有数据。
+- 修改 `VersionedDataMigrator` 的公开类型、版本解析或排序、迁移选择与执行顺序、legacy baseline、克隆策略、校验要求、错误类型或同步执行约束前，必须先搜索并检查仓库内所有导入、调用和迁移注册表，逐一评估对已有数据迁移结果及失败处理的影响。可能改变既有行为时，必须优先保持向后兼容；确需破坏性调整时，应在同一次任务中同步修改所有调用方和相关历史版本测试，并补覆盖多调用方兼容性的回归测试，禁止只验证迁移器自身测试后结束任务。
+
+### Workflow 数据版本
+
+- Workflow 持久化文档使用 `meta.schemaVersion` 的 SemVer，当前版本由 `WORKFLOW_SCHEMA_VERSION` 统一声明；它与每次保存生成的 `version` 修订哈希、DataRepository 外层数字版本、导入导出包 `formatVersion` 相互独立，不得混用。
+- 修改 Workflow 持久化字段、字段语义、参数结构、节点注册集合或任一节点 `configSchema` 时，必须先判断并递增文档版本：删除、重命名、收窄、类型或基数变化用 major；新增节点、可选字段或带默认语义的配置用 minor；只修正持久化规范化且不改变兼容边界用 patch。纯 UI、文案、性能、日志或不影响已存数据解释的运行时修复不递增。
+- 每次 Workflow schema 变化必须同时新增迁移注册项、对应版本历史样本，并更新 `workflow-schema/contract.json`；`workflow-schema-contract.test.ts` 会把文档结构、已注册节点及节点配置 schema 纳入契约校验，禁止只改 schema 或增加节点而遗漏版本递增。已发布迁移不得原地修改；后续修正必须新增版本和迁移步骤。
+- 工作流本地存储、旧仓库目录、导入包和运行快照的读取必须统一经过 `workflow-document-migration.ts`。迁移只在内存克隆上执行，成功且通过最终结构校验后才允许持久化；迁移前必须生成并校验当前 `workflows.json` 的精确字节备份，写入前复查源摘要，失败时保留原文件并阻断覆盖。
+- 无版本旧数据按 `0.0.0` 处理。迁移失败或未来版本必须按单工作流隔离：列表可以显示诊断，但不得把原文改造成空工作流，也不得允许编辑、保存、运行、子工作流调用或 Automation 执行。只有可识别身份和版本的未来文档允许通过专用导出路径原样导出；不得为导出解释、迁移或裁剪正文。迁移诊断只写 `workflow.migration-state`，不得写回用户工作流正文。
+- 应用升级启动时只扫描已配置内容仓库的 `<localPath>/workflows/`，从每个旧工作流目录选择最新可解析版本自动找回；单个仓库、工作流目录或版本文件不可读时只记录结构化诊断并继续处理其它来源。不得扫描整盘、覆盖同 ID 当前数据或删除旧来源。成功或冲突标记必须按工作流身份永久幂等，不能随旧文件摘要或目标 schema 版本变化而失效，防止用户删除已找回工作流后旧数据再次复活。
+
 ### App Capability Package 架构
 
 - 当新增系统应用同时提供 App UI、MCP 能力、Workflow 节点或其它外部调用入口时，必须按能力包组织代码，目录放在 `desktop/app-capabilities/<app-id>/`。

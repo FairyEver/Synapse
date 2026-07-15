@@ -11,8 +11,11 @@
 - 节点通过有向边连接（`from` → `to`）
 - switch 节点的出边必须携带 `branch` 字段
 - `workflow_call` 节点可调用另一个已保存工作流，并把子工作流 End 输出作为自身输出
+- 调用工作流的节点类型固定为 `workflow_call`，不是 `app_workflow_call`
 - `codex` 节点在执行项目或任务工作目录中运行本机 `codex exec`，并把 Codex 最终回复作为自身输出
 - `claude_code` 节点在执行项目或任务工作目录中运行本机 `claude -p`，并把 Claude Code 最终回复作为自身输出
+
+工作流定义中的 `meta.schemaVersion` 是由 Synapse 管理的 SemVer 数据结构版本，`version` 则是每次保存生成的修订标识，两者不是一回事。Agent 读取完整定义后再更新时必须原样保留 `meta`，不要自行改写或删除。旧结构会在读取入口迁移；未来版本或迁移失败的数据不能通过 MCP 获取正文、更新或运行。列表返回的 `loadError` 用于诊断；`rawExportAvailable` 只表示 Synapse 界面允许原样导出高版本正文。
 
 ## 2. 变量系统
 
@@ -27,7 +30,9 @@
 | `static` | 硬编码值 | `{ "type": "static", "value": "你是一个翻译助手" }` |
 
 变量在节点执行前解析完毕。变量名支持字母、数字、下划线和中文。
-变量可用于 prompt/switch/codex/claude_code 提示词、end 输出模板、HTTP 文本字段，以及 `workflow_call.paramTemplates`。script 节点会把变量作为环境变量注入。
+变量可用于 prompt/switch/codex/claude_code 提示词、end 输出模板、HTTP 文本字段，以及 `workflow_call.paramTemplates`。script 节点会把变量作为环境变量注入，不支持在脚本文本中写 `{{变量名}}`。POSIX 使用 `$变量名`，cmd 使用 `%变量名%`，PowerShell 使用 `$env:变量名`。
+
+单个文件或文件夹变量注入绝对路径；多选资源变量注入保持顺序的 JSON 路径数组。例如 POSIX 脚本可用 `printf '%s\n' "$input_file"` 读取单文件路径，用 `printf '%s\n' "$input_files"` 输出多文件 JSON 数组。
 
 script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID、JSON 标量等单值时，脚本里优先用 `printf`，不要让末尾换行混进变量。
 
@@ -110,6 +115,8 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 | `timeoutMins` | number? | 超时分钟数 |
 | `variables` | VariableBinding[] | 变量绑定列表，变量名只能包含字母、数字和下划线，且不能以数字开头 |
 
+绑定变量通过环境变量读取，不使用 `{{变量名}}` 模板语法。文件/文件夹单选值是路径字符串，多选值是有序 JSON 路径数组。
+
 输出：脚本 stdout。
 
 ### workflow_call — 调用工作流节点
@@ -125,7 +132,7 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 | `paramTemplates` | `Record<string, string>` | 子工作流参数名到模板文本的映射，支持 `{{变量名}}` |
 | `paramBindings` | `Record<string, WorkflowParamBinding>` | 文件或文件夹子参数的类型化绑定；父子参数的资源类型和 `allowMultiple` 必须一致 |
 
-配置前先用 `workflow_definition_list` 找到子工作流，再用 `workflow_definition_get` 读取子工作流当前 `params`。`paramTemplates` 和 `paramBindings` 的 key 应来自子工作流参数名，单值与多值资源参数不会自动互转。子工作流内部 prompt/switch 节点仍需要通过子工作流默认值或子节点覆盖获得 provider/model/project；codex/claude_code 节点仍需要有效项目。
+配置前先用 `workflow_definition_list` 找到子工作流，再用 `workflow_definition_get` 读取子工作流当前 `params`。`paramTemplates` 和 `paramBindings` 的 key 应来自子工作流参数名，单值与多值资源参数不会自动互转。保存和 `workflow_definition_inspect` 会拒绝父子资源类型或 `allowMultiple` 不一致的直接绑定。子工作流内部 prompt/switch 节点仍需要通过子工作流默认值或子节点覆盖获得 provider/model/project；codex/claude_code 节点仍需要有效项目。
 
 ### codex — Codex 节点
 
@@ -476,8 +483,8 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 关键点：
 - 步骤 3 创建的工作流已包含一个 end 节点，无需手动创建
 - 严格校验会在每次 MCP 写入后执行，不要先保存未连接的占位节点再补边；复杂图优先本地组装完整定义后用 `workflow_definition_update`
-- 步骤 5 中 `node.config` 必填，并且必须符合 `workflow_node_type_describe` 返回的节点 schema；position 可省略，dispatcher 自动计算布局；`incomingEdges` 为 `{ from, branch? }[]`，`outgoingEdges` 为 `{ to, branch? }[]`
-- 创建 `workflow_call` 前，先读取子工作流定义，按子工作流 `params` 填写 `paramTemplates`
+- 步骤 5 中 `node.config` 必填，并且必须符合 `workflow_node_type_describe` 返回的节点 schema；以 `configSchema.required` 为准，必填的布尔值和数组也不能省略；position 可省略，dispatcher 自动计算布局；`incomingEdges` 为 `{ from, branch? }[]`，`outgoingEdges` 为 `{ to, branch? }[]`
+- 创建 `workflow_call` 前先读取子工作流定义：文本、数字和选项参数使用 `paramTemplates`；文件/文件夹参数优先使用 `paramBindings`。多选资源参数只能直接绑定类型和 `allowMultiple` 一致的父参数
 - 创建 `codex` 前，先用 `workflow_node_type_describe({ nodeType: "codex" })` 读取最新 schema；不要给 codex 节点设置 `providerId` 或 `modelTier`
 - 创建 `claude_code` 前，先用 `workflow_node_type_describe({ nodeType: "claude_code" })` 读取最新 schema；不要给 claude_code 节点设置 `providerId` 或 `modelTier`
 - 步骤 8 在新增、删除或重连节点后调用，自动整理为左右层级排列，无需打开 UI
@@ -500,6 +507,7 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 | 调用当前工作流 | `workflow_call.workflowId` 等于当前工作流 ID | 选择另一个已保存工作流 |
 | 子工作流参数缺失 | `paramTemplates` 未提供子工作流必填参数，且子参数无默认值 | 读取子工作流 `params` 后补齐模板 |
 | 子工作流模板变量未绑定 | `paramTemplates` 中使用了未出现在 `variables` 的 `{{变量名}}` | 在调用节点 `variables` 中添加绑定 |
+| 子工作流多选资源来源不兼容 | 多选文件/文件夹参数使用了模板、`static`、`node_output`，或绑定的父参数类型/基数不一致 | 改为直接绑定同类型且 `allowMultiple: true` 的父参数 |
 | Codex 项目缺失 | codex 节点没有 `projectId`，工作流也没有 `defaultProjectId` | 设置工作流 `defaultProjectId` 或节点 `projectId` |
 | Codex 工作目录不可用 | `workingDirectory` 插值后为空或目录不存在 | 修正工作目录变量或先创建目标目录 |
 | Claude Code 项目缺失 | claude_code 节点没有 `projectId`，工作流也没有 `defaultProjectId` | 设置工作流 `defaultProjectId` 或节点 `projectId` |

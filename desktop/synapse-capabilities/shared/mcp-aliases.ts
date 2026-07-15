@@ -33,11 +33,17 @@ export function withPrimaryAndLegacyMcpTools<T extends McpToolDefinition>(
   tools: readonly T[],
   options: McpAliasOptions,
 ): T[] {
+  const toolNameReplacements = tools
+    .map((tool) => [
+      tool.name,
+      primaryToolNameForLegacy(tool.name, options.legacyPrefix, options.primaryPrefix),
+    ] as const)
+    .sort(([left], [right]) => right.length - left.length)
   const primaryTools = tools.map((tool) => ({
     ...tool,
     name: primaryToolNameForLegacy(tool.name, options.legacyPrefix, options.primaryPrefix),
-    description: rewriteLegacyToolReferences(tool.description, options),
-    inputSchema: rewriteLegacyToolReferences(tool.inputSchema, options),
+    description: rewriteLegacyToolReferences(tool.description, toolNameReplacements),
+    inputSchema: rewriteLegacyToolReferences(tool.inputSchema, toolNameReplacements),
   }) as T)
   const legacyTools = primaryTools.map((tool) => ({
     ...tool,
@@ -48,18 +54,24 @@ export function withPrimaryAndLegacyMcpTools<T extends McpToolDefinition>(
   return [...primaryTools, ...legacyTools]
 }
 
-function rewriteLegacyToolReferences<T>(value: T, options: McpAliasOptions): T {
+function rewriteLegacyToolReferences<T>(
+  value: T,
+  toolNameReplacements: readonly (readonly [string, string])[],
+): T {
   if (typeof value === "string") {
-    return value.replaceAll(`${options.legacyPrefix}_`, `${options.primaryPrefix}_`) as T
+    return toolNameReplacements.reduce<string>(
+      (rewritten, [legacyName, primaryName]) => rewritten.replaceAll(legacyName, primaryName),
+      value,
+    ) as T
   }
   if (Array.isArray(value)) {
-    return value.map((item) => rewriteLegacyToolReferences(item, options)) as T
+    return value.map((item) => rewriteLegacyToolReferences(item, toolNameReplacements)) as T
   }
   if (value && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => [
         key,
-        rewriteLegacyToolReferences(entry, options),
+        rewriteLegacyToolReferences(entry, toolNameReplacements),
       ]),
     ) as T
   }

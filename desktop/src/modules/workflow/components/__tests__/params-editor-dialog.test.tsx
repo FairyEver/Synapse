@@ -97,7 +97,7 @@ describe("ParamsEditorDialog", () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it("wraps an existing resource default when multi-select is enabled", async () => {
+  it("clears a single-resource default when multi-select is enabled", async () => {
     const onChange = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -126,11 +126,11 @@ describe("ParamsEditorDialog", () => {
       name: "input_file",
       type: "file",
       allowMultiple: true,
-      default: [{ kind: "local_path", entryType: "file", path: "/tmp/input.txt" }],
+      default: null,
     }])
   })
 
-  it("keeps multi-select enabled until a multi-resource default is reduced to one item", async () => {
+  it("clears a multi-resource default instead of taking its first item when multi-select is disabled", async () => {
     const onChange = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -158,8 +158,54 @@ describe("ParamsEditorDialog", () => {
 
     const multipleSwitch = document.body.querySelector<HTMLButtonElement>('[role="switch"]')
     await act(async () => { multipleSwitch?.click() })
-    expect(multipleSwitch?.getAttribute("aria-checked")).toBe("true")
-    expect(document.body.textContent).toContain("2 / 100")
+    expect(multipleSwitch?.getAttribute("aria-checked")).toBe("false")
+    await act(async () => { clickButton("保存") })
+
+    expect(onChange).toHaveBeenCalledWith([{
+      name: "input_files",
+      type: "file",
+      default: null,
+    }])
+  })
+
+  it("does not reinterpret incompatible stored default shapes", async () => {
+    const onChange = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <ParamsEditorDialog
+          open
+          params={[
+            {
+              name: "input_files",
+              type: "file",
+              allowMultiple: true,
+              default: { kind: "local_path", entryType: "file", path: "/tmp/single.txt" },
+            },
+            {
+              name: "input_file",
+              type: "file",
+              default: [{ kind: "local_path", entryType: "file", path: "/tmp/first.txt" }],
+            },
+          ]}
+          onChange={onChange}
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    expect(document.body.textContent).not.toContain("/tmp/single.txt")
+    expect(document.body.querySelector<HTMLInputElement>('input[value="/tmp/first.txt"]')).toBeNull()
+    await act(async () => { clickButton("保存") })
+
+    expect(onChange).toHaveBeenCalledWith([
+      { name: "input_files", type: "file", allowMultiple: true, default: null },
+      { name: "input_file", type: "file", default: null },
+    ])
   })
 
   it("trims option values, drops empty options, and clears invalid option defaults", async () => {

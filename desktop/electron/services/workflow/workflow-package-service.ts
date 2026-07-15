@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto"
 import type { WorkflowDefinition, WorkflowNode } from "../../../src/types/workflow"
 import type {
   SynapseWorkflowPackage,
-  SynapseWorkflowPackageV2,
+  SynapseWorkflowExportPackageV3,
+  SynapseWorkflowPackageV3,
   WorkflowImportPreview,
   WorkflowImportOptions,
   WorkflowImportProviderOption,
@@ -10,28 +11,31 @@ import type {
   WorkflowModelReference,
   WorkflowPackageModelTier,
 } from "../../../src/types/workflow-package"
+import { migrateWorkflowDocumentOrThrow } from "./workflow-document-migration"
 import type { ProviderService } from "../provider"
 import type { CCProvider } from "../provider/types"
 import { createMainLogger } from "../log-store"
 import type { WorkflowSaveError, WorkflowService } from "./workflow-service"
 
-const PACKAGE_FORMAT = "synapse-workflow-package-v2" as const
+const PACKAGE_FORMAT = "synapse-workflow-package" as const
+const PACKAGE_FORMAT_VERSION = "3.0.0" as const
 const SUPPORTED_PACKAGE_FORMATS: readonly SynapseWorkflowPackage["format"][] = [
   "synapse-workflow-package-v1",
+  "synapse-workflow-package-v2",
   PACKAGE_FORMAT,
 ]
 const MODEL_TIERS: readonly WorkflowPackageModelTier[] = ["default", "haiku", "sonnet", "opus"]
 const logger = createMainLogger("service.workflow.package")
 
 interface WorkflowPackageServiceDeps {
-  readonly workflowService: Pick<WorkflowService, "get" | "save">
+  readonly workflowService: Pick<WorkflowService, "getExportDocument" | "save">
   readonly providerService: Pick<ProviderService, "listProviders">
   readonly now?: () => Date
   readonly createId?: () => string
 }
 
 export class WorkflowPackageService {
-  private readonly workflowService: Pick<WorkflowService, "get" | "save">
+  private readonly workflowService: Pick<WorkflowService, "getExportDocument" | "save">
   private readonly providerService: Pick<ProviderService, "listProviders">
   private readonly now: () => Date
   private readonly createId: () => string
@@ -43,12 +47,23 @@ export class WorkflowPackageService {
     this.createId = deps.createId ?? randomUUID
   }
 
-  async buildExportPackage(workflowId: string): Promise<SynapseWorkflowPackageV2> {
-    const workflow = await this.workflowService.get(workflowId)
-    if (!workflow) throw new Error(`Workflow ${workflowId} not found`)
+  async buildExportPackage(workflowId: string): Promise<SynapseWorkflowExportPackageV3> {
+    const exportDocument = await this.workflowService.getExportDocument(workflowId)
+    if (!exportDocument) throw new Error(`Workflow ${workflowId} not found`)
+    if (exportDocument.kind === "future") {
+      return {
+        format: PACKAGE_FORMAT,
+        formatVersion: PACKAGE_FORMAT_VERSION,
+        exportedAt: this.now().toISOString(),
+        workflow: exportDocument.document,
+        modelReferences: [],
+      }
+    }
+    const workflow = exportDocument.document
     const providers = await this.providerService.listProviders()
     return {
       format: PACKAGE_FORMAT,
+      formatVersion: PACKAGE_FORMAT_VERSION,
       exportedAt: this.now().toISOString(),
       workflow,
       modelReferences: buildModelReferences(workflow, providers),
@@ -56,29 +71,29 @@ export class WorkflowPackageService {
   }
 
   async buildImportPreview(packagePath: string, pkg: SynapseWorkflowPackage, packageDigest: string): Promise<WorkflowImportPreview> {
-    assertPackage(pkg)
+    const currentPackage = normalizePackage(pkg)
     const providers = await this.providerService.listProviders()
     const providerOptions = providers.map(toProviderOption)
     logger.info("workflow package import preview built", {
-      sourceWorkflowId: pkg.workflow.id,
+      sourceWorkflowId: currentPackage.workflow.id,
       fileBase: packagePath.split(/[\\/]/).pop() ?? packagePath,
-      modelReferenceCount: pkg.modelReferences.length,
+      modelReferenceCount: currentPackage.modelReferences.length,
       providerOptionCount: providerOptions.length,
-      nodeCount: pkg.workflow.nodes.length,
+      nodeCount: currentPackage.workflow.nodes.length,
     })
     return {
       packagePath,
       packageDigest,
       workflow: {
-        id: pkg.workflow.id,
-        name: pkg.workflow.name,
-        nodeCount: pkg.workflow.nodes.length,
-        modelReferenceCount: pkg.modelReferences.length,
-        requiresProjectMapping: workflowNeedsProjectMapping(pkg.workflow),
+        id: currentPackage.workflow.id,
+        name: currentPackage.workflow.name,
+        nodeCount: currentPackage.workflow.nodes.length,
+        modelReferenceCount: currentPackage.modelReferences.length,
+        requiresProjectMapping: workflowNeedsProjectMapping(currentPackage.workflow),
       },
-      modelReferences: pkg.modelReferences,
+      modelReferences: currentPackage.modelReferences,
       providerOptions,
-      suggestedMappings: suggestMappings(pkg.modelReferences, providerOptions),
+      suggestedMappings: suggestMappings(currentPackage.modelReferences, providerOptions),
     }
   }
 
@@ -87,17 +102,17 @@ export class WorkflowPackageService {
     mappings: readonly WorkflowModelMapping[],
     options: WorkflowImportOptions = {},
   ): Promise<{ workflowId: string; versionHash: string } | WorkflowSaveError> {
-    assertPackage(pkg)
+    const currentPackage = normalizePackage(pkg)
     const providers = await this.providerService.listProviders()
     const providerIds = new Set(providers.map((provider) => provider.id))
     const mappingByRef = new Map(mappings.map((mapping) => [mapping.sourceRefId, mapping]))
     const importLogBase = {
-      sourceWorkflowId: pkg.workflow.id,
-      modelReferenceCount: pkg.modelReferences.length,
+      sourceWorkflowId: currentPackage.workflow.id,
+      modelReferenceCount: currentPackage.modelReferences.length,
       mappingCount: mappings.length,
     }
 
-    for (const ref of pkg.modelReferences) {
+    for (const ref of currentPackage.modelReferences) {
       const mapping = mappingByRef.get(ref.id)
       if (!mapping) {
         logger.warn("workflow package import missing model mapping", { ...importLogBase, sourceRefId: ref.id })
@@ -113,7 +128,7 @@ export class WorkflowPackageService {
       }
     }
 
-    if (workflowNeedsProjectMapping(pkg.workflow) && !options.targetProjectId?.trim()) {
+    if (workflowNeedsProjectMapping(currentPackage.workflow) && !options.targetProjectId?.trim()) {
       return {
         errors: [{
           type: "invalid_config",
@@ -124,7 +139,7 @@ export class WorkflowPackageService {
       }
     }
 
-    const imported = rewriteWorkflowForImport(pkg.workflow, pkg.modelReferences, mappingByRef, this.createId(), this.now().getTime(), options)
+    const imported = rewriteWorkflowForImport(currentPackage.workflow, currentPackage.modelReferences, mappingByRef, this.createId(), this.now().getTime(), options)
     const saveResult = await this.workflowService.save(imported)
     if ("errors" in saveResult) {
       logger.warn("workflow package import blocked by validation", {
@@ -318,6 +333,14 @@ function suggestMappings(
 
 function assertPackage(value: SynapseWorkflowPackage): void {
   if (!value || !SUPPORTED_PACKAGE_FORMATS.includes(value.format)) throw new Error("Invalid workflow package format")
+  if (value.format === PACKAGE_FORMAT && value.formatVersion !== PACKAGE_FORMAT_VERSION) {
+    throw new Error("Unsupported workflow package version")
+  }
   if (!value.workflow || typeof value.workflow.id !== "string") throw new Error("Invalid workflow package workflow")
   if (!Array.isArray(value.modelReferences)) throw new Error("Invalid workflow package model references")
+}
+
+function normalizePackage(value: SynapseWorkflowPackage): SynapseWorkflowPackage & { workflow: WorkflowDefinition } {
+  assertPackage(value)
+  return { ...value, workflow: migrateWorkflowDocumentOrThrow(value.workflow) }
 }

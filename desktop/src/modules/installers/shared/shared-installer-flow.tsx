@@ -150,6 +150,7 @@ export function SharedInstallerFlow({
   const pendingInstallOptionsRef = useRef<InstallFlowOptions>({})
   const pendingSkillEnvValuesRef = useRef<Record<string, string> | undefined>(undefined)
   const pendingLegacySubstitutionsRef = useRef<Record<string, string> | undefined>(undefined)
+  const pendingInstallWarningRef = useRef<string | undefined>(undefined)
   const [selection, setSelection] = useState<EditorWriteTargetSelection | null>(null)
   const [installing, setInstalling] = useState(false)
   const [error, setError] = useState("")
@@ -220,8 +221,8 @@ export function SharedInstallerFlow({
     setInstalling(true)
     setError("")
     try {
-      let installWarning: string | undefined
       if (!isCompletionRetryPending) {
+        pendingInstallWarningRef.current = undefined
         await onInstall?.({ editor: flow.selectedEditor, source: flow.source })
         if (!onInstall) {
           const result = await installSourceToEditor({
@@ -236,11 +237,13 @@ export function SharedInstallerFlow({
             skillEnvValues: pendingSkillEnvValuesRef.current,
             variableSubstitutions: pendingLegacySubstitutionsRef.current,
           })
-          installWarning = result.warning
+          pendingInstallWarningRef.current = result.warning
         }
         setIsCompletionRetryPending(true)
       }
       await onInstalled()
+      const installWarning = pendingInstallWarningRef.current
+      pendingInstallWarningRef.current = undefined
       if (installWarning) warning(installWarning)
       setIsCompletionRetryPending(false)
       flow.markInstalled()
@@ -629,6 +632,7 @@ export function SharedInstallerFlow({
                   onClick={() => {
                     setSelection(null)
                     setError("")
+                    pendingInstallWarningRef.current = undefined
                     setIsCompletionRetryPending(false)
                     flow.selectEditor(editor)
                   }}
@@ -663,6 +667,7 @@ export function SharedInstallerFlow({
               onError={setError}
               onSelectionChange={(nextSelection) => {
                 setSelection(nextSelection)
+                pendingInstallWarningRef.current = undefined
                 setIsCompletionRetryPending(false)
               }}
             />

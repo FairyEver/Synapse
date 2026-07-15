@@ -234,6 +234,57 @@ describe("WorkflowCallNodePanel", () => {
     }))
   })
 
+  it("does not auto-fill a template when a multi-resource child param has no compatible parent", async () => {
+    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    workflowGet.mockResolvedValue({
+      id: "child",
+      name: "子工作流",
+      version: "v1",
+      createdAt: 0,
+      updatedAt: 0,
+      params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
+      nodes: [],
+      edges: [],
+    })
+
+    const { onChange } = renderPanel(
+      { workflowId: "child", variables: [], paramTemplates: {}, paramBindings: {} },
+      vi.fn(),
+      [{ name: "input_files", type: "text", default: null }],
+    )
+    await flushEffects()
+
+    expect(onChange).not.toHaveBeenCalledWith(expect.objectContaining({
+      paramTemplates: { input_files: "{{input_files}}" },
+    }))
+  })
+
+  it("does not flag a legacy static binding for a single-resource child param", async () => {
+    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    workflowGet.mockResolvedValue({
+      id: "child",
+      name: "子工作流",
+      version: "v1",
+      createdAt: 0,
+      updatedAt: 0,
+      params: [{ name: "input_file", type: "file", default: null }],
+      nodes: [],
+      edges: [],
+    })
+
+    const { container } = renderPanel({
+      workflowId: "child",
+      variables: [],
+      paramTemplates: {},
+      paramBindings: {
+        input_file: { mode: "value", source: { type: "static", value: "/tmp/input.txt" } },
+      },
+    })
+    await flushEffects()
+
+    expect(container.textContent).not.toContain("绑定参数的资源类型或多选设置不一致")
+  })
+
   it("warns when an existing resource binding has mismatched cardinality", async () => {
     workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
     workflowGet.mockResolvedValue({

@@ -140,6 +140,206 @@ describe("validateWorkflow", () => {
     expect(result.errors).toEqual([])
   })
 
+  it("rejects template syntax in script content because bindings use environment variables", () => {
+    const result = validateWorkflow(definitionWithScriptNode({
+      defaultProjectId: "project-1",
+      params: [{ name: "input_file", type: "file", default: null }],
+      nodes: [
+        {
+          id: "script-1",
+          name: "Script",
+          type: "script",
+          position: { x: 0, y: 0 },
+          config: {
+            shell: "posix",
+            script: "printf '%s\\n' '{{input_file}}'",
+            variables: [{ name: "input_file", source: { type: "param", param: "input_file" } }],
+          },
+        },
+        endNode(),
+      ],
+    }))
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      nodeId: "script-1",
+      field: "script",
+      message: expect.stringContaining("环境变量语法"),
+    }))
+  })
+
+  it("accepts resource bindings in script environment variable syntax", () => {
+    const result = validateWorkflow(definitionWithScriptNode({
+      defaultProjectId: "project-1",
+      params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
+      nodes: [
+        {
+          id: "script-1",
+          name: "Script",
+          type: "script",
+          position: { x: 0, y: 0 },
+          config: {
+            shell: "posix",
+            script: "printf '%s\\n' \"$input_files\"",
+            variables: [{ name: "input_files", source: { type: "param", param: "input_files" } }],
+          },
+        },
+        endNode(),
+      ],
+    }))
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
+  it("rejects workflow_call resource bindings with mismatched cardinality", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "input_files",
+      type: "file",
+      default: null,
+      allowMultiple: true,
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [
+        { name: "input_file", type: "file", default: null },
+      ]]]),
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      nodeId: "call",
+      field: "paramBindings",
+      message: expect.stringContaining("资源类型或多选设置不一致"),
+    }))
+  })
+
+  it("rejects workflow_call resource bindings with mismatched resource types", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "input_file",
+      type: "directory",
+      default: null,
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [
+        { name: "input_file", type: "file", default: null },
+      ]]]),
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      nodeId: "call",
+      field: "paramBindings",
+      message: expect.stringContaining("资源类型或多选设置不一致"),
+    }))
+  })
+
+  it("accepts workflow_call resource bindings with matching type and cardinality", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "input_files",
+      type: "file",
+      default: null,
+      allowMultiple: true,
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [
+        { name: "input_file", type: "file", default: null, allowMultiple: true },
+      ]]]),
+    })
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
+  it("accepts legacy static value bindings for single-resource child params", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "input_file",
+      type: "file",
+      default: null,
+    }, {
+      paramBindings: {
+        input_file: { mode: "value", source: { type: "static", value: "/tmp/input.txt" } },
+      },
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [
+        { name: "input_file", type: "file", default: null },
+      ]]]),
+    })
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
+  it("rejects string value bindings for multi-resource child params", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "input_files",
+      type: "file",
+      default: null,
+      allowMultiple: true,
+    }, {
+      paramBindings: {
+        input_file: { mode: "value", source: { type: "node_output", node: "prepare" } },
+      },
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [
+        { name: "input_file", type: "file", default: null, allowMultiple: true },
+      ]]]),
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      nodeId: "call",
+      field: "paramBindings",
+      message: expect.stringContaining("不能绑定 node_output 字符串来源"),
+    }))
+  })
+
+  it("rejects paramTemplates for multi-resource child params", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "input_files",
+      type: "file",
+      default: null,
+      allowMultiple: true,
+    }, {
+      variables: [{ name: "files", source: { type: "static", value: "[]" } }],
+      paramTemplates: { input_file: "{{files}}" },
+      paramBindings: {},
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [
+        { name: "input_file", type: "file", default: null, allowMultiple: true },
+      ]]]),
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      nodeId: "call",
+      field: "paramTemplates",
+      message: expect.stringContaining("多选资源参数「input_file」不能使用 paramTemplates"),
+    }))
+  })
+
+  it("accepts paramTemplates for legacy single-resource child params", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "input_file",
+      type: "file",
+      default: null,
+    }, {
+      variables: [{ name: "file", source: { type: "static", value: "/tmp/input.txt" } }],
+      paramTemplates: { input_file: "{{file}}" },
+      paramBindings: {},
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [
+        { name: "input_file", type: "file", default: null },
+      ]]]),
+    })
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
   it("rejects script nodes that inherit a stale workflow default project", () => {
     const result = validateWorkflow(definitionWithScriptNode({
       defaultProjectId: "deleted-default-project",
@@ -443,6 +643,39 @@ function definitionWithScriptNode(overrides: Partial<WorkflowDefinition> = {}): 
     ],
     edges: [{ id: "edge-1", from: "script-1", to: "end" }],
     ...overrides,
+  }
+}
+
+function definitionWithWorkflowCall(
+  parentParam: WorkflowDefinition["params"][number],
+  configPatch: Record<string, unknown> = {},
+): WorkflowDefinition {
+  return {
+    id: "parent",
+    name: "Parent",
+    version: "v1",
+    createdAt: 0,
+    updatedAt: 0,
+    params: [parentParam],
+    nodes: [
+      {
+        id: "call",
+        name: "Call",
+        type: "workflow_call",
+        position: { x: 0, y: 0 },
+        config: {
+          workflowId: "child",
+          variables: [],
+          paramTemplates: {},
+          paramBindings: {
+            input_file: { mode: "value", source: { type: "param", param: parentParam.name } },
+          },
+          ...configPatch,
+        },
+      },
+      endNode(),
+    ],
+    edges: [{ id: "edge-1", from: "call", to: "end" }],
   }
 }
 

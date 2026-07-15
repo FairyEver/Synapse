@@ -496,6 +496,39 @@ describe("SecretsModule", () => {
     expect(document.body.textContent).not.toContain("super-secret")
   })
 
+  it("requires a fresh scan before retrying a conflicted binding", async () => {
+    const conflictedItem = { ...skillEnvScanResult.items[0], status: "needs_update" as const }
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    mocks.secrets.scanSkillEnvBindings
+      .mockResolvedValueOnce({ scanSessionId: "scan-conflict", items: [conflictedItem] })
+      .mockResolvedValueOnce({ scanSessionId: "scan-refreshed", items: [conflictedItem] })
+    mocks.secrets.queueSkillEnvBindings.mockResolvedValueOnce({
+      items: [{ ...conflictedItem, status: "conflict" as const, message: "配置文件已发生变化。" }],
+    })
+
+    await renderSecretsModule()
+    await act(async () => {
+      clickButtonByLabel("扫描关联 Skill：TOKEN")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("更新选中项")
+      await Promise.resolve()
+    })
+
+    expect(rowText("skill-one")).toContain("文件已变化")
+    expect(document.body.querySelector<HTMLButtonElement>('button[aria-label="选择 Skill：skill-one（TOKEN）"]')?.disabled).toBe(true)
+
+    await act(async () => {
+      clickButton("重新扫描")
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenNthCalledWith(2, { name: "TOKEN" })
+    expect(rowText("skill-one")).toContain("待更新")
+    expect(rowText("skill-one")).not.toContain("文件已变化")
+  })
+
   it("keeps the scanned rows available when the queue request fails", async () => {
     mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
     mocks.secrets.scanSkillEnvBindings.mockResolvedValueOnce(skillEnvScanResult)

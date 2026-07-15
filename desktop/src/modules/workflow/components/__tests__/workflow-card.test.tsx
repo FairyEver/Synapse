@@ -200,6 +200,32 @@ describe("WorkflowCard", () => {
     expect(runButton?.disabled).toBe(true)
     expect(exportButton?.disabled).toBe(true)
   })
+
+  it("allows raw export but not execution for future-schema workflows", async () => {
+    const onRun = vi.fn()
+    const onExport = vi.fn()
+    const container = await renderWorkflowCard({
+      meta: {
+        ...workflowMeta,
+        loadError: "工作流由更高版本创建",
+        rawExportAvailable: true,
+      },
+      onRun,
+      onExport,
+    })
+
+    const runButton = container.querySelector<HTMLButtonElement>('[aria-label="运行工作流"]')
+    const exportButton = container.querySelector<HTMLButtonElement>('[aria-label="导出工作流"]')
+    expect(runButton?.disabled).toBe(true)
+    expect(exportButton?.disabled).toBe(false)
+
+    await act(async () => {
+      exportButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onExport).toHaveBeenCalledOnce()
+    expect(onRun).not.toHaveBeenCalled()
+  })
 })
 
 async function renderWorkflowCard(props: Partial<ComponentProps<typeof WorkflowCard>> = {}): Promise<HTMLDivElement> {

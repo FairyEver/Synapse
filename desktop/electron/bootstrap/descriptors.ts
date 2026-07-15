@@ -235,14 +235,19 @@ type RunWorkflowHandlerOptions = {
   readonly actor?: ActorIdentity
 }
 
-async function loadWorkflowValidationOptions(workflowService: Pick<WorkflowService, "list">) {
+async function loadWorkflowValidationOptions(workflowService: Pick<WorkflowService, "list" | "get">) {
   const [appConfig, workflows] = await Promise.all([
     configStore.load(),
     workflowService.list(),
   ])
+  const readableWorkflows = workflows.filter((workflow) => !workflow.loadError)
+  const definitions = await Promise.all(readableWorkflows.map((workflow) => workflowService.get(workflow.id)))
   return {
     configuredProjectIds: configuredWorkflowProjectIdsFromConfig(appConfig),
-    availableWorkflowIds: workflows.map((workflow) => workflow.id),
+    availableWorkflowIds: readableWorkflows.map((workflow) => workflow.id),
+    workflowParamsById: new Map(
+      definitions.flatMap((definition) => definition ? [[definition.id, definition.params] as const] : []),
+    ),
   }
 }
 
@@ -1334,6 +1339,7 @@ export const providerServiceDescriptor: ServiceDescriptor<ProviderService> = {
               providerId: string; modelTier: string
             }> = []
             for (const meta of metas) {
+              if (meta.loadError) continue
               const def = await workflowService.get(meta.id) as Record<string, unknown> | null
               if (!def) continue
               const defNodes = (def as { nodes?: Array<{ id: string; name: string; config: Record<string, unknown> }> }).nodes
@@ -1988,10 +1994,17 @@ export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> =
   dependsOn: ["core.data-repository", "core.workflow.param-presets"],
   create(ctx) {
     const dataRepo = ctx.registry.get<DataRepository>("core.data-repository")
+    const dataRootPath = path.join(app.getPath("userData"), "data-v1")
     return new WorkflowService(dataRepo, async () => ({
       configuredProjectIds: configuredWorkflowProjectIdsFromConfig(await configStore.load()),
-    }), ctx.registry.get<WorkflowParamPresetService>("core.workflow.param-presets"))
+    }), ctx.registry.get<WorkflowParamPresetService>("core.workflow.param-presets"), {
+      dataRootPath,
+      listLegacyRepositoryPaths: async () => (
+        (await configStore.load()).repositories.map((repository) => repository.localPath)
+      ),
+    })
   },
+  start(service) { return service.initialize() },
 }
 
 export const coreWorkflowPackageDescriptor: ServiceDescriptor<WorkflowPackageService> = {

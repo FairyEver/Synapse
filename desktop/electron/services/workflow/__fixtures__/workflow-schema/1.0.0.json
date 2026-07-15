@@ -1,0 +1,19 @@
+{
+  "meta": { "schemaVersion": "1.0.0" },
+  "id": "current-workflow",
+  "name": "当前工作流",
+  "version": "v_1720000000000_00000000_current",
+  "createdAt": 1720000000000,
+  "updatedAt": 1720000000000,
+  "params": [],
+  "nodes": [
+    {
+      "id": "end",
+      "name": "结束",
+      "type": "end",
+      "position": { "x": 400, "y": 0 },
+      "config": { "outputType": "text", "template": "", "variables": [] }
+    }
+  ],
+  "edges": []
+}

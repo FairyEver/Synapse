@@ -179,6 +179,24 @@ describe("scriptNodeExecutor", () => {
     expect((deps.processRunner?.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]?.env).not.toHaveProperty("PATH", "/tmp/bad")
   })
 
+  it("injects single and multi resource variable strings into the script environment", async () => {
+    const deps = fakeRuntimeDeps()
+    const input = makeInput({ shell: "posix", script: "printf '%s\\n' \"$input_file\" \"$input_files\"" }, deps)
+    input.resolvedVariables = {
+      input_file: "/tmp/input.txt",
+      input_files: '["/tmp/first.txt","/tmp/second.txt"]',
+    }
+
+    await scriptNodeExecutor.execute(input)
+
+    expect(deps.processRunner?.run).toHaveBeenCalledWith(expect.objectContaining({
+      env: expect.objectContaining({
+        input_file: "/tmp/input.txt",
+        input_files: '["/tmp/first.txt","/tmp/second.txt"]',
+      }),
+    }))
+  })
+
   it("logs diagnostics without raw script content", async () => {
     const secretScript = "echo sk-secret-key"
     const deps = fakeRuntimeDeps()

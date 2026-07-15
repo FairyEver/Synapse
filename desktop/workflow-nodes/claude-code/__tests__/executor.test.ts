@@ -364,6 +364,31 @@ describe("claudeCodeNodeExecutor", () => {
     expect(result.outputs?.claudeCodeDebug).toBeDefined()
   })
 
+  it("surfaces stdout API errors instead of unrelated stderr warnings", async () => {
+    const runtimeDeps = makeRuntimeDeps({
+      processRunner: {
+        run: vi.fn().mockResolvedValue({
+          exitCode: 1,
+          signal: null,
+          timedOut: false,
+          durationMs: 10,
+          stdout: "Failed to authenticate. API Error: 403 quota exceeded",
+          stderr: "Warning: no stdin data received in 3s, proceeding without it.",
+        }),
+      },
+    })
+
+    const result = await claudeCodeNodeExecutor.execute(makeInput({}, runtimeDeps))
+
+    expect(result).toMatchObject({
+      status: "failed",
+      output: "",
+    })
+    expect(result.error).toContain("Failed to authenticate")
+    expect(result.error).toContain("403")
+    expect(result.error).not.toContain("no stdin data")
+  })
+
   it("returns empty output for timed out processes while keeping claudeCodeDebug", async () => {
     const runtimeDeps = makeRuntimeDeps({
       processRunner: {

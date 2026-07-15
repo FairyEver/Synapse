@@ -230,8 +230,11 @@ export function SkillEnvUpdateDialog({
               </TableHeader>
               <TableBody>
                 {groupedItems.map(({ groupId: bindingGroupId, groupName, item, itemKey: bindingKey }) => {
+                  const queueResult = queueResults[bindingKey]
+                  const requiresRescan = queueResult?.status === "conflict"
                   const selectable = item.status === "needs_update"
-                    && queueResults[bindingKey]?.status !== "updated"
+                    && queueResult?.status !== "updated"
+                    && !requiresRescan
                   return (
                     <TableRow key={bindingKey}>
                       <TableCell>
@@ -250,11 +253,24 @@ export function SkillEnvUpdateDialog({
                         {item.envPath}
                       </TableCell>
                       <TableCell>
-                        <BindingStatus
-                          item={item}
-                          queueError={queueErrors[bindingGroupId]}
-                          queueResult={queueResults[bindingKey]}
-                        />
+                        <div className="flex items-start gap-2">
+                          <BindingStatus
+                            item={item}
+                            queueError={queueErrors[bindingGroupId]}
+                            queueResult={queueResult}
+                          />
+                          {requiresRescan ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="xs"
+                              disabled={updating}
+                              onClick={() => void rescanGroup(groupName)}
+                            >
+                              重新扫描
+                            </Button>
+                          ) : null}
+                        </div>
                       </TableCell>
                     </TableRow>
                   )

@@ -1,0 +1,38 @@
+export const WORKFLOW_DOCUMENT_SCHEMA_CONTRACT = {
+  meta: { schemaVersion: "required-semver" },
+  fields: {
+    id: "required-string",
+    name: "required-string",
+    description: "optional-string",
+    version: "required-revision-string",
+    createdAt: "required-number",
+    updatedAt: "required-number",
+    defaultProjectId: "optional-string",
+    defaultProviderId: "optional-string",
+    defaultModelTier: "optional-enum:default|haiku|sonnet|opus",
+    defaultNodeTimeoutMins: "optional-positive-integer",
+  },
+  param: {
+    name: "required-string",
+    type: "required-enum:text|number|file|directory|option",
+    default: "required-value",
+    description: "optional-string",
+    options: "optional-string-array",
+    allowCustomOption: "optional-boolean",
+    allowMultiple: "optional-boolean",
+  },
+  node: {
+    id: "required-string",
+    name: "required-string",
+    type: "required-registered-node-type",
+    position: { x: "required-number", y: "required-number" },
+    config: "required-record-validated-by-node-schema",
+  },
+  edge: {
+    id: "required-string",
+    from: "required-string",
+    to: "required-string",
+    branch: "optional-string",
+  },
+  unknownFields: "preserved",
+} as const
