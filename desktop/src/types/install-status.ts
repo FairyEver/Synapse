@@ -16,3 +16,7 @@ export type InstallStatusChangedEvent = {
   contentId: string
   entries: InstallStatusEntry[]
 }
+
+export type InstallStatusUninstallResult = {
+  warning?: string
+}

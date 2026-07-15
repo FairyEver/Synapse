@@ -7,12 +7,17 @@ import { installStatusCacheService } from "../../services/install-status-cache-s
 import { trashScanItem } from "../../services/editor-scan-service"
 import { scanAll } from "../../services/editor-scan-service"
 import { createMainLogger } from "../../services/log-store"
+import type { InstallStatusEntry } from "../../../src/types/install-status"
 
 const logger = createMainLogger("ipc.install-status")
 
 const uninstallSchema = z.object({
   contentId: z.string(),
   editorId: z.string(),
+})
+
+const uninstallResultSchema = z.object({
+  warning: z.string().optional(),
 })
 
 export const installStatusIpcModule: IpcModule = {
@@ -31,7 +36,7 @@ export const installStatusIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:install-status:uninstall",
       request: uninstallSchema,
-      response: z.any(),
+      response: uninstallResultSchema,
       handler: async (ctx, payload: { contentId: string; editorId: string }) => {
         const scan = await scanAll()
         const globalEntry = scan.global.find((e) => e.editorId === payload.editorId)
@@ -51,8 +56,7 @@ export const installStatusIpcModule: IpcModule = {
           permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
         }
 
-        const refreshInstallStatus = async (contentId: string): Promise<void> => {
-          const entries = await installStatusCacheService.refresh(contentId)
+        const emitInstallStatusChanged = (contentId: string, entries: InstallStatusEntry[]): void => {
           const eventBus = ctx.resolve<EventBus>("core.event-bus")
           eventBus.emit({
             domain: "install-status",
@@ -60,6 +64,11 @@ export const installStatusIpcModule: IpcModule = {
             payload: { contentId, entries },
             timestamp: new Date().toISOString(),
           })
+        }
+
+        const refreshInstallStatus = async (contentId: string): Promise<void> => {
+          const entries = await installStatusCacheService.refresh(contentId)
+          emitInstallStatusChanged(contentId, entries)
         }
 
         if (skill) {
@@ -71,6 +80,8 @@ export const installStatusIpcModule: IpcModule = {
                 try {
                   await refreshInstallStatus(contentId)
                 } catch (error) {
+                  const entries = installStatusCacheService.removeGlobalEntry(contentId, payload.editorId)
+                  emitInstallStatusChanged(contentId, entries)
                   logger.warn("Failed to refresh install status after uninstall.", {
                     contentId,
                     editorId: payload.editorId,
@@ -85,7 +96,7 @@ export const installStatusIpcModule: IpcModule = {
           if (uninstallResult?.status !== "trashed") {
             throw new Error(uninstallResult?.error ?? "Skill 卸载失败。")
           }
-          return
+          return uninstallResult.warning ? { warning: uninstallResult.warning } : {}
         }
 
         if (!rule) {
@@ -112,6 +123,7 @@ export const installStatusIpcModule: IpcModule = {
             error,
           })
         }
+        return {}
       },
     },
   },

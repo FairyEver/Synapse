@@ -181,4 +181,19 @@ describe("installStatusCacheService", () => {
     }])
     expect(installStatusCacheService.getForContent("project-skill")).toEqual(entries)
   })
+
+  it("removes one global editor entry without discarding project installs", async () => {
+    mocks.scanAll.mockResolvedValue(createScan())
+    await installStatusCacheService.buildCache()
+
+    expect(installStatusCacheService.removeGlobalEntry("global-skill", "codex")).toEqual([])
+    expect(installStatusCacheService.getForContent("global-skill")).toEqual([])
+    expect(installStatusCacheService.removeGlobalEntry("project-skill", "codex")).toEqual([{
+      editorId: "codex",
+      projectName: "Project",
+      projectPath: "/project",
+      scope: "project",
+      status: "installed",
+    }])
+  })
 })

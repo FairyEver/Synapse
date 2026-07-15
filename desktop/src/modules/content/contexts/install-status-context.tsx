@@ -1,13 +1,13 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import type { SynapseEditorId } from "@/types/editor"
-import type { InstallStatusEntry, InstallStatusMap } from "@/types/install-status"
+import type { InstallStatusEntry, InstallStatusMap, InstallStatusUninstallResult } from "@/types/install-status"
 
 const logger = createRendererLogger("content.install-status")
 
 type InstallStatusContextValue = {
   statusMap: InstallStatusMap
-  uninstall: (contentId: string, editorId: SynapseEditorId) => Promise<void>
+  uninstall: (contentId: string, editorId: SynapseEditorId) => Promise<InstallStatusUninstallResult>
 }
 
 const InstallStatusContext = createContext<InstallStatusContextValue | null>(null)
@@ -51,9 +51,9 @@ function InstallStatusProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  async function uninstall(contentId: string, editorId: SynapseEditorId): Promise<void> {
-    if (!window.synapse) return
-    await window.synapse.installStatus.uninstall({ contentId, editorId })
+  async function uninstall(contentId: string, editorId: SynapseEditorId): Promise<InstallStatusUninstallResult> {
+    if (!window.synapse) return {}
+    return window.synapse.installStatus.uninstall({ contentId, editorId })
   }
 
   return (
@@ -69,9 +69,9 @@ function useInstallStatus(contentId: string): InstallStatusEntry[] {
   return ctx.statusMap[contentId] ?? []
 }
 
-function useUninstallFromEditor(): (contentId: string, editorId: SynapseEditorId) => Promise<void> {
+function useUninstallFromEditor(): (contentId: string, editorId: SynapseEditorId) => Promise<InstallStatusUninstallResult> {
   const ctx = useContext(InstallStatusContext)
-  if (!ctx) return async () => {}
+  if (!ctx) return async () => ({})
   return ctx.uninstall
 }
 

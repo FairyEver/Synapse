@@ -42,8 +42,9 @@ function EditorBadge({
   async function handleUninstall() {
     setBusy(true)
     try {
-      await uninstall(contentId, editorId)
+      const result = await uninstall(contentId, editorId)
       setOpen(false)
+      if (result.warning) toast.warning(result.warning)
     } catch {
       toast.error("卸载失败，请重试。")
     } finally {

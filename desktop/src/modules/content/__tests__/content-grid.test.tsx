@@ -10,10 +10,16 @@ import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
 const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
+  toastError: vi.fn(),
+  toastWarning: vi.fn(),
+  uninstall: vi.fn(),
 }))
 
 vi.mock("sonner", () => ({
-  toast: mocks.toast,
+  toast: Object.assign(mocks.toast, {
+    error: mocks.toastError,
+    warning: mocks.toastWarning,
+  }),
 }))
 
 vi.mock("@/app-shell/identity-context", () => ({
@@ -60,7 +66,7 @@ vi.mock("@/modules/content/contexts/install-status-context", () => ({
 
     return []
   },
-  useUninstallFromEditor: () => vi.fn(async () => undefined),
+  useUninstallFromEditor: () => mocks.uninstall,
 }))
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -260,6 +266,30 @@ describe("ContentGrid", () => {
       (button) => button.textContent?.trim() === "移到废纸篓",
     )).toBe(true)
     expect(document.body.textContent).not.toContain("确认要删除吗")
+  })
+
+  it("shows the shared warning when Skill status refresh fails after trashing", async () => {
+    mocks.uninstall.mockResolvedValue({ warning: "已移到废纸篓，安装状态刷新失败。" })
+    const { container } = await renderGrid([
+      createContentItem("skill", {
+        id: "current-skill",
+        name: "review",
+      }),
+    ])
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[title="Codex"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    await act(async () => {
+      Array.from(document.body.querySelectorAll("button"))
+        .find((button) => button.textContent?.trim() === "移到废纸篓")
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.uninstall).toHaveBeenCalledWith("current-skill", "codex")
+    expect(mocks.toastWarning).toHaveBeenCalledWith("已移到废纸篓，安装状态刷新失败。")
   })
 
   it("does not show update badge when only project installs are stale", async () => {

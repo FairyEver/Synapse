@@ -371,7 +371,7 @@ import type {
   EditorScanTrashRequest,
   EditorScanTrashResult,
 } from "./editor-scan"
-import type { InstallStatusChangedEvent, InstallStatusMap } from "./install-status"
+import type { InstallStatusChangedEvent, InstallStatusMap, InstallStatusUninstallResult } from "./install-status"
 import type {
   SynapseLogClearResult,
   SynapseLogExportResult,
@@ -1305,7 +1305,7 @@ export type SynapseBridge = {
   }
   installStatus: {
     getAll: () => Promise<InstallStatusMap>
-    uninstall: (payload: { contentId: string; editorId: string }) => Promise<void>
+    uninstall: (payload: { contentId: string; editorId: string }) => Promise<InstallStatusUninstallResult>
     onChanged: (listener: (payload: InstallStatusChangedEvent) => void) => () => void
   }
   knowledgeBase: {

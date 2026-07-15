@@ -191,6 +191,17 @@ function getForContent(contentId: string): InstallStatusEntry[] {
   return cache.get(contentId) ?? []
 }
 
+function removeGlobalEntry(contentId: string, editorId: string): InstallStatusEntry[] {
+  const entries = (cache.get(contentId) ?? [])
+    .filter((entry) => entry.scope !== "global" || entry.editorId !== editorId)
+  if (entries.length > 0) {
+    cache.set(contentId, entries)
+  } else {
+    cache.delete(contentId)
+  }
+  return entries
+}
+
 async function refresh(contentId: string): Promise<InstallStatusEntry[]> {
   const scan = await scanAll()
   const [skillVersions, ruleContents] = await Promise.all([
@@ -224,5 +235,6 @@ export const installStatusCacheService = {
   buildCache,
   getAll,
   getForContent,
+  removeGlobalEntry,
   refresh,
 }

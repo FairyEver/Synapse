@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   },
   installStatusCacheService: {
     getAll: vi.fn(),
+    removeGlobalEntry: vi.fn(),
     refresh: vi.fn(),
   },
   logger: {
@@ -59,6 +60,7 @@ describe("installStatusIpcModule", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.installStatusCacheService.getAll.mockReturnValue({})
+    mocks.installStatusCacheService.removeGlobalEntry.mockReturnValue([])
     mocks.installStatusCacheService.refresh.mockResolvedValue([{
       editorId: "codex",
       scope: "global",
@@ -105,7 +107,7 @@ describe("installStatusIpcModule", () => {
     await expect(installStatusIpcModule.methods.uninstall.handler(createContext() as never, {
       contentId: "skill-1",
       editorId: "codex",
-    })).resolves.toBeUndefined()
+    })).resolves.toEqual({ warning: "已移到废纸篓，安装状态刷新失败。" })
 
     expect(mocks.skillUninstallerService.uninstall).toHaveBeenCalledWith(
       [{ path: "/editor/skills/skill", query: { name: "Skill" } }],
@@ -118,7 +120,12 @@ describe("installStatusIpcModule", () => {
     )
     expect(mocks.trashScanItem).not.toHaveBeenCalled()
     expect(mocks.installStatusCacheService.refresh).toHaveBeenCalledWith("skill-1")
-    expect(mocks.eventBus.emit).not.toHaveBeenCalled()
+    expect(mocks.installStatusCacheService.removeGlobalEntry).toHaveBeenCalledWith("skill-1", "codex")
+    expect(mocks.eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "install-status",
+      type: "install-status.changed",
+      payload: { contentId: "skill-1", entries: [] },
+    }))
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       "Failed to refresh install status after uninstall.",
       expect.objectContaining({ contentId: "skill-1", editorId: "codex" }),
