@@ -1,7 +1,7 @@
-import { realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../config"
 import type { ValidationError, WorkflowDefinition, WorkflowParam, WorkflowResourceEntryType, WorkflowResourceRef } from "../../../src/types/workflow"
+import { resolveWorkflowLocalResourceIdentity } from "./workflow-resource-identity"
 
 export interface NormalizedWorkflowRunParams {
   readonly params: Record<string, unknown>
@@ -202,11 +202,10 @@ type ResourceStatResult = { identity: string } | { error: ValidationError }
 
 async function statLocalResource(param: WorkflowParam, resourcePath: string, itemIndex?: number): Promise<ResourceStatResult> {
   try {
-    const resourceStat = await stat(resourcePath)
-    if (param.type === "file" && !resourceStat.isFile()) return itemIndex === undefined ? paramError(param, "必须是文件") : paramItemError(param, itemIndex, "必须是文件")
-    if (param.type === "directory" && !resourceStat.isDirectory()) return itemIndex === undefined ? paramError(param, "必须是文件夹") : paramItemError(param, itemIndex, "必须是文件夹")
-    const canonicalPath = await realpath(resourcePath)
-    return { identity: process.platform === "win32" ? canonicalPath.toLocaleLowerCase() : canonicalPath }
+    const resource = await resolveWorkflowLocalResourceIdentity(resourcePath)
+    if (param.type === "file" && !resource.isFile) return itemIndex === undefined ? paramError(param, "必须是文件") : paramItemError(param, itemIndex, "必须是文件")
+    if (param.type === "directory" && !resource.isDirectory) return itemIndex === undefined ? paramError(param, "必须是文件夹") : paramItemError(param, itemIndex, "必须是文件夹")
+    return { identity: resource.identity }
   } catch {
     return itemIndex === undefined ? paramError(param, "路径不存在或不可访问") : paramItemError(param, itemIndex, "路径不存在或不可访问")
   }

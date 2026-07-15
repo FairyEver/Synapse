@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -95,14 +95,38 @@ describe("WorkflowParamPresetService", () => {
 
   it("stores ordered multi-resource path arrays", async () => {
     const service = createService()
+    const root = mkdtempSync(path.join(os.tmpdir(), "wf-param-resources-"))
+    roots.push(root)
+    const firstPath = path.join(root, "a.txt")
+    const secondPath = path.join(root, "b.txt")
+    writeFileSync(firstPath, "a")
+    writeFileSync(secondPath, "b")
     const saved = await service.save({
       workflowId: "workflow-a",
       name: "多文件",
-      values: { files: ["/tmp/a.txt", "/tmp/b.txt"] },
+      values: { files: [firstPath, secondPath] },
     })
 
-    expect(saved.values).toEqual({ files: ["/tmp/a.txt", "/tmp/b.txt"] })
+    expect(saved.values).toEqual({ files: [firstPath, secondPath] })
     expect(await service.list("workflow-a")).toEqual([expect.objectContaining({ values: saved.values })])
+  })
+
+  it("rejects multi-resource aliases that resolve to the same path", async () => {
+    const service = createService()
+    const root = mkdtempSync(path.join(os.tmpdir(), "wf-param-resources-"))
+    roots.push(root)
+    const filePath = path.join(root, "input.txt")
+    const aliasPath = path.join(root, "input-alias.txt")
+    writeFileSync(filePath, "input")
+    symlinkSync(filePath, aliasPath, "file")
+
+    await expect(service.save({
+      workflowId: "workflow-a",
+      name: "重复文件",
+      values: { files: [filePath, aliasPath] },
+    })).rejects.toThrow("Preset param files contains duplicate paths")
+
+    expect(await service.list("workflow-a")).toEqual([])
   })
 
   it("normalizes invalid stored values out of the namespace", () => {

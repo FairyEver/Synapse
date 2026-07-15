@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto"
-import path from "node:path"
 import type { DataNamespace, DataRepository, WorkflowParamPresetEntryV2, WorkflowParamPresetValueV2 } from "../../runtime/data-repo"
 import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../config"
 import { createMainLogger } from "../log-store"
+import { resolveWorkflowLocalResourceIdentity } from "./workflow-resource-identity"
 
 const logger = createMainLogger("service.workflow-param-presets")
 
@@ -60,7 +60,7 @@ export class WorkflowParamPresetService {
       schemaVersion: 2,
       workflowId,
       name,
-      values: validateAndClonePresetValues(input.values),
+      values: await validateAndClonePresetValues(input.values),
       createdAt,
       updatedAt: now,
     }
@@ -104,18 +104,25 @@ function clonePresetValues(values: Record<string, WorkflowParamPresetValueV2>): 
   return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value]))
 }
 
-function validateAndClonePresetValues(values: Record<string, WorkflowParamPresetValueV2>): Record<string, WorkflowParamPresetValueV2> {
+async function validateAndClonePresetValues(
+  values: Record<string, WorkflowParamPresetValueV2>,
+): Promise<Record<string, WorkflowParamPresetValueV2>> {
   for (const [paramName, value] of Object.entries(values)) {
     if (!Array.isArray(value)) continue
     if (value.length === 0) throw new Error(`Preset param ${paramName} must not be an empty array`)
     if (value.length > WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS) {
       throw new Error(`Preset param ${paramName} exceeds ${WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS} items`)
     }
-    const identities = value.map((resourcePath) => {
+    const identities: string[] = []
+    for (const resourcePath of value) {
       if (!resourcePath.trim()) throw new Error(`Preset param ${paramName} contains an empty path`)
-      const normalized = path.normalize(resourcePath.trim())
-      return process.platform === "win32" ? normalized.toLocaleLowerCase() : normalized
-    })
+      try {
+        const resource = await resolveWorkflowLocalResourceIdentity(resourcePath.trim())
+        identities.push(resource.identity)
+      } catch {
+        throw new Error(`Preset param ${paramName} contains a path that does not exist or cannot be accessed`)
+      }
+    }
     if (new Set(identities).size !== identities.length) throw new Error(`Preset param ${paramName} contains duplicate paths`)
   }
   return clonePresetValues(values)
