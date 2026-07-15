@@ -163,7 +163,7 @@ function SynapseSkillModule() {
   const globalStatusEntries = statusEntries.filter((entry) => entry.scope === "global")
   const batchableEntries = globalStatusEntries.filter((entry) => canBatchInstall(entry.status))
   const batchActionLabel = getBatchActionLabel(batchableEntries)
-  const installSummaryLabel = getInstallSummaryLabel(globalStatusEntries)
+  const installSummaryLabel = statusError ? "安装源不可用" : getInstallSummaryLabel(globalStatusEntries)
 
   const runBatchInstall = async () => {
     if (batchInstalling || batchableEntries.length === 0) return
@@ -306,7 +306,7 @@ function SynapseSkillModule() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            disabled={preparing || batchInstalling}
+                            disabled={Boolean(statusError) || preparing || batchInstalling}
                             onClick={() => void openInstallFlowForEditor(editor.id)}
                           >
                             {entry.status === "not_installed" ? <Download data-icon="inline-start" /> : null}
@@ -319,7 +319,7 @@ function SynapseSkillModule() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            disabled={preparing || batchInstalling}
+                            disabled={Boolean(statusError) || preparing || batchInstalling}
                             onClick={() => void openInstallFlowForEditor(editor.id)}
                           >
                             重新安装
@@ -366,6 +366,7 @@ function SynapseSkillModule() {
                       || adapters.isLoading
                       || preparing
                       || batchInstalling
+                      || Boolean(statusError)
                       || globalEditors.length === 0
                     }
                   >
@@ -376,7 +377,7 @@ function SynapseSkillModule() {
                     <Button
                       type="button"
                       onClick={() => void runBatchInstall()}
-                      disabled={batchInstalling || statusLoading || adapters.isLoading || preparing}
+                      disabled={Boolean(statusError) || batchInstalling || statusLoading || adapters.isLoading || preparing}
                     >
                       {batchInstalling ? <Spinner data-icon="inline-start" /> : null}
                       {batchActionLabel}

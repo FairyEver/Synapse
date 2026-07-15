@@ -223,6 +223,18 @@ describe("SynapseSkillModule", () => {
     expect(document.body.textContent).toContain("处理")
   })
 
+  it("disables installation when the packaged source cannot be loaded", async () => {
+    synapseSkillBridge.prepareInstallSource.mockRejectedValueOnce(new Error("安装源损坏"))
+
+    await renderModule()
+
+    expect(document.body.textContent).toContain("安装源不可用")
+    expect(document.body.textContent).not.toContain("无需操作")
+    const installButton = Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.textContent === "安装")
+    expect(installButton?.disabled).toBe(true)
+  })
+
   it("opens an editor Skill directory from the path row", async () => {
     await renderModule()
 
