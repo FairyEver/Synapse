@@ -53,6 +53,8 @@ Admin removal only hides or restores public Skill repositories from the public s
 
 ## Safety
 
+Listing or reading private Skill repositories, including resolving a public URL from a private `repositoryId`, requires local content-read permission and records an allowed, denied, or failed audit outcome. These audit records contain the capability action, source, and repository id when available, but never repository files or file contents. Opening a public URL from an already known `ownerHandle` and `repositoryName` does not read the private repository.
+
 Uploading reads only publishable local files and writing `.synapse.repository.json` modifies the local Skill folder. These actions go through Synapse permission and audit checks. A denied write permission stops the cloud upload before mutation; a later filesystem write failure or concurrent identity conflict is returned as `identityWritten: false` without overwriting the newer local file.
 
 Changing visibility, forking, and creating an install session also pass the local content-mutation permission boundary before the cloud action and record allowed, denied, or failed audit outcomes. Audit records do not include install session or deep-link values.

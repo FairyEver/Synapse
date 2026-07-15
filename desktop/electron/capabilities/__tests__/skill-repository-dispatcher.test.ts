@@ -104,6 +104,90 @@ describe("skill repository capability dispatcher", () => {
     expect(deps.accountService.getSkillRepository).toHaveBeenCalledWith("repo-1")
   })
 
+  it("authorizes and audits private repository reads without response contents", async () => {
+    const { auditSink, permissionGuard } = createSecurity()
+    const deps = createDeps({ auditSink, permissionGuard })
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+    const context = {
+      source: "mcp-http" as const,
+      actor: { kind: "agent" as const, id: "agent-1" },
+    }
+
+    await dispatcher.dispatch("app.skill_repository.item.list", {}, context)
+    await dispatcher.dispatch("app.skill_repository.item.get", { repositoryId: "repo-1" }, context)
+    await dispatcher.dispatch("app.skill_repository.public.open", { repositoryId: "repo-1" }, context)
+
+    expect(permissionGuard.check).toHaveBeenCalledTimes(3)
+    expect(vi.mocked(permissionGuard.check).mock.calls.map(([request]) => request.context.capabilityAction))
+      .toEqual([
+        "app.skill_repository.item.list",
+        "app.skill_repository.item.get",
+        "app.skill_repository.public.open",
+      ])
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.read",
+      actor: { kind: "agent", id: "agent-1" },
+      resource: "skill-repository:repo-1",
+      context: expect.objectContaining({
+        source: "mcp-http",
+        boundary: "skill-repository.mcp",
+        repositoryId: "repo-1",
+      }),
+    }))
+    expect(vi.mocked(auditSink.record).mock.calls.filter(([event]) => event.outcome === "allowed"))
+      .toHaveLength(3)
+    const auditJson = JSON.stringify(vi.mocked(auditSink.record).mock.calls)
+    expect(auditJson).not.toContain("files")
+    expect(auditJson).not.toContain("Demo")
+  })
+
+  it("blocks denied private repository reads before account service access", async () => {
+    const { auditSink, permissionGuard } = createSecurity({
+      allowed: false,
+      reason: "blocked",
+      policyId: "policy-1",
+    })
+    const deps = createDeps({ auditSink, permissionGuard })
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.item.get",
+      { repositoryId: "repo-1" },
+      { source: "mcp-stdio" },
+    )).rejects.toThrow("blocked")
+
+    expect(deps.accountService.getSkillRepository).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.read",
+      resource: "skill-repository:repo-1",
+      outcome: "denied",
+      metadata: expect.objectContaining({ policyId: "policy-1" }),
+    }))
+  })
+
+  it("audits private repository read failures without error text", async () => {
+    const { auditSink, permissionGuard } = createSecurity()
+    const deps = createDeps({ auditSink, permissionGuard })
+    vi.mocked(deps.accountService.getSkillRepository)
+      .mockRejectedValueOnce(new Error("file-content=private-value"))
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.item.get",
+      { repositoryId: "repo-1" },
+      { source: "mcp-http" },
+    )).rejects.toThrow("private-value")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.read",
+      resource: "skill-repository:repo-1",
+      outcome: "failed",
+      metadata: expect.objectContaining({ errorName: "Error" }),
+    }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls))
+      .not.toContain("private-value")
+  })
+
   it("imports a local skill without repositoryId", async () => {
     const deps = createDeps()
     const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)

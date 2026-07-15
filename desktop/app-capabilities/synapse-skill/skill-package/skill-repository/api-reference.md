@@ -12,6 +12,8 @@ Parameters:
 
 Returns cloud Skill repositories owned by the signed-in account.
 
+This private read requires local content-read permission and writes a redacted audit outcome.
+
 ## Get
 
 `app_skill_repository_get`
@@ -23,6 +25,8 @@ Returns cloud Skill repositories owned by the signed-in account.
 ```
 
 Returns repository metadata and files.
+
+This private read requires local content-read permission and writes a redacted audit outcome without repository files or file contents.
 
 ## Import Local Skill
 
@@ -150,6 +154,8 @@ Or, when the public path is already known:
 ```
 
 Returns `publicUrl`, `ownerHandle`, `repositoryName`, and `repositoryId` when a repository id was used. The browser opens only when `openInBrowser` is true.
+
+When `repositoryId` is used, resolving the private repository requires local content-read permission and writes a redacted audit outcome. Supplying an already known `ownerHandle` and `repositoryName` does not read the private repository.
 
 ## Fork
 

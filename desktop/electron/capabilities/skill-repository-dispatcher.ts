@@ -57,9 +57,9 @@ export function createSkillRepositoryCapabilityDispatcher(deps: SkillRepositoryC
     async dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult> {
       switch (action) {
         case "app.skill_repository.item.list":
-          return listSkillRepositories(deps)
+          return listSkillRepositories(deps, context)
         case "app.skill_repository.item.get":
-          return getSkillRepository(deps, params)
+          return getSkillRepository(deps, params, context)
         case "app.skill_repository.item.import_local":
           return importLocalSkillRepository(deps, params, context)
         case "app.skill_repository.item.update_local":
@@ -69,7 +69,7 @@ export function createSkillRepositoryCapabilityDispatcher(deps: SkillRepositoryC
         case "app.skill_repository.item.open":
           return openSkillRepository(deps, params)
         case "app.skill_repository.public.open":
-          return openPublicSkillRepository(deps, params)
+          return openPublicSkillRepository(deps, params, context)
         case "app.skill_repository.fork.create":
           return forkSkillRepository(deps, params, context)
         case "app.skill_repository.install_session.create":
@@ -81,17 +81,34 @@ export function createSkillRepositoryCapabilityDispatcher(deps: SkillRepositoryC
   }
 }
 
-async function listSkillRepositories(deps: SkillRepositoryCapabilityDispatcherDeps): Promise<DispatchResult> {
-  const repositories = await deps.accountService.listSkillRepositories()
+async function listSkillRepositories(
+  deps: SkillRepositoryCapabilityDispatcherDeps,
+  context: DispatchContext,
+): Promise<DispatchResult> {
+  const repositories = await runSkillRepositoryRead(
+    deps,
+    context,
+    "app.skill_repository.item.list",
+    undefined,
+    () => deps.accountService.listSkillRepositories(),
+  )
   return { ok: true, data: repositories, total: repositories.length }
 }
 
 async function getSkillRepository(
   deps: SkillRepositoryCapabilityDispatcherDeps,
   params: Record<string, unknown>,
+  context: DispatchContext,
 ): Promise<DispatchResult> {
   const repositoryId = requireTrimmedString(params, "repositoryId")
-  return { ok: true, data: await deps.accountService.getSkillRepository(repositoryId) }
+  const repository = await runSkillRepositoryRead(
+    deps,
+    context,
+    "app.skill_repository.item.get",
+    repositoryId,
+    () => deps.accountService.getSkillRepository(repositoryId),
+  )
+  return { ok: true, data: repository }
 }
 
 async function importLocalSkillRepository(
@@ -219,9 +236,10 @@ async function openSkillRepository(
 async function openPublicSkillRepository(
   deps: SkillRepositoryCapabilityDispatcherDeps,
   params: Record<string, unknown>,
+  context: DispatchContext,
 ): Promise<DispatchResult> {
   const openInBrowser = optionalBoolean(params, "openInBrowser")
-  const path = await resolvePublicPath(deps, params)
+  const path = await resolvePublicPath(deps, params, context)
   const { buildSkillRepositoryPublicUrl } = await sharedSkillRepositoryPromise
   const publicUrl = buildSkillRepositoryPublicUrl(deps.publicAppUrl, path.ownerHandle, path.repositoryName)
 
@@ -243,6 +261,7 @@ async function openPublicSkillRepository(
 async function resolvePublicPath(
   deps: SkillRepositoryCapabilityDispatcherDeps,
   params: Record<string, unknown>,
+  context: DispatchContext,
 ): Promise<{ ownerHandle: string; repositoryName: string; repositoryId?: string }> {
   const ownerHandle = optionalTrimmedString(params, "ownerHandle")
   const repositoryName = optionalTrimmedString(params, "repositoryName")
@@ -251,15 +270,23 @@ async function resolvePublicPath(
   }
 
   const repositoryId = requireTrimmedString(params, "repositoryId")
-  const repository = await deps.accountService.getSkillRepository(repositoryId)
-  if (!repository.owner.handle) {
-    throw new Error("This Skill repository cannot build a public URL because the owner has no username.")
-  }
-  return {
-    ownerHandle: repository.owner.handle,
-    repositoryName: repository.name,
+  return runSkillRepositoryRead(
+    deps,
+    context,
+    "app.skill_repository.public.open",
     repositoryId,
-  }
+    async () => {
+      const repository = await deps.accountService.getSkillRepository(repositoryId)
+      if (!repository.owner.handle) {
+        throw new Error("This Skill repository cannot build a public URL because the owner has no username.")
+      }
+      return {
+        ownerHandle: repository.owner.handle,
+        repositoryName: repository.name,
+        repositoryId,
+      }
+    },
+  )
 }
 
 function buildUploadInput(
@@ -358,6 +385,70 @@ async function runSkillRepositoryMutation(
   } catch (error) {
     deps.auditSink?.record({
       action: "content.mutate",
+      actor,
+      resource,
+      outcome: "failed",
+      metadata: {
+        ...metadata,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: error instanceof Error ? error.message.length : String(error).length,
+      },
+    })
+    throw error
+  }
+}
+
+async function runSkillRepositoryRead<T>(
+  deps: SkillRepositoryCapabilityDispatcherDeps,
+  context: DispatchContext,
+  capabilityAction: string,
+  repositoryId: string | undefined,
+  task: () => Promise<T>,
+): Promise<T> {
+  const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
+  const resource = `skill-repository:${repositoryId ?? "list"}`
+  const metadata = {
+    source: context.source ?? "api",
+    capabilityAction,
+    boundary: "skill-repository.mcp",
+    ...(repositoryId ? { repositoryId } : {}),
+  }
+  const permission = await checkCapabilityPermission({
+    permissionGuard: deps.permissionGuard,
+    auditSink: deps.auditSink,
+    action: "content.read",
+    actor,
+    resource,
+    context: metadata,
+  })
+  if (permission && !permission.allowed) {
+    deps.auditSink?.record({
+      action: "content.read",
+      actor,
+      resource,
+      outcome: "denied",
+      metadata: {
+        ...metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
+  }
+
+  try {
+    const result = await task()
+    deps.auditSink?.record({
+      action: "content.read",
+      actor,
+      resource,
+      outcome: "allowed",
+      metadata,
+    })
+    return result
+  } catch (error) {
+    deps.auditSink?.record({
+      action: "content.read",
       actor,
       resource,
       outcome: "failed",
