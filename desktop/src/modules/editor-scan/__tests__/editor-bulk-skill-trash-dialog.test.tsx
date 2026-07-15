@@ -151,13 +151,17 @@ describe("EditorBulkSkillTrashDialog", () => {
     expect(mocks.onOpenChange).toHaveBeenCalledWith(false)
   })
 
-  it("keeps failed items visible after partial success", async () => {
-    mocks.uninstall.mockResolvedValue({
-      results: [
-        { path: "/source/jenkins", status: "trashed" },
-        { path: "/source/release", status: "skipped", error: "没有写入该位置的权限。" },
-      ],
-    })
+  it("retries only failed items after partial success", async () => {
+    mocks.uninstall
+      .mockResolvedValueOnce({
+        results: [
+          { path: "/source/jenkins", status: "trashed" },
+          { path: "/source/release", status: "skipped", error: "没有写入该位置的权限。" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        results: [{ path: "/source/release", status: "trashed" }],
+      })
 
     await renderDialog([createItem("jenkins"), createItem("release")])
 
@@ -168,6 +172,17 @@ describe("EditorBulkSkillTrashDialog", () => {
     expect(mocks.onOpenChange).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain("release")
     expect(document.body.textContent).toContain("没有写入该位置的权限。")
+    expect(document.body.textContent).toContain("重试未处理项")
+
+    await act(async () => clickButton("重试未处理项"))
+
+    expect(mocks.uninstall).toHaveBeenCalledTimes(2)
+    expect(mocks.uninstall).toHaveBeenNthCalledWith(2, {
+      targets: [{ query: { name: "release" }, path: "/source/release" }],
+    })
+    expect(mocks.onTrashed).toHaveBeenNthCalledWith(2, ["global:/source/release"])
+    expect(mocks.success).toHaveBeenCalledWith("已移到废纸篓 1 个 Skill")
+    expect(mocks.onOpenChange).toHaveBeenCalledWith(false)
   })
 
   it("shows a failure when the batch service omits an item result", async () => {

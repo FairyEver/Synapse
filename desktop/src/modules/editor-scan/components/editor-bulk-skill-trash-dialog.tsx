@@ -52,19 +52,19 @@ function EditorBulkSkillTrashDialog({
     () => results.filter((result): result is Extract<BulkSkillTrashResultItem, { status: "failed" }> => result.status === "failed"),
     [results],
   )
-  const displayItems = failedResults.length > 0
+  const attemptItems = failedResults.length > 0
     ? failedResults.map((result) => result.item)
     : items
-  const visibleItems = displayItems.slice(0, 5)
-  const hiddenCount = Math.max(displayItems.length - visibleItems.length, 0)
+  const visibleItems = attemptItems.slice(0, 5)
+  const hiddenCount = Math.max(attemptItems.length - visibleItems.length, 0)
 
   const runTrash = async () => {
-    if (isTrashing || items.length === 0) return
+    if (isTrashing || attemptItems.length === 0) return
 
     const bridge = getSynapseBridge()
     if (!bridge) {
       notifyError("移到废纸篓失败")
-      setResults(items.map((item) => ({
+      setResults(attemptItems.map((item) => ({
         item,
         message: "当前窗口无法处理本机内容。",
         status: "failed",
@@ -77,16 +77,16 @@ function EditorBulkSkillTrashDialog({
 
     try {
       const result = await bridge.skillUninstaller.uninstall({
-        targets: createBulkSkillUninstallTargets(items),
+        targets: createBulkSkillUninstallTargets(attemptItems),
       })
-      nextResults = mapBulkSkillUninstallResults(items, result)
+      nextResults = mapBulkSkillUninstallResults(attemptItems, result)
     } catch (error) {
       logger.error("Bulk Skill uninstall failed.", {
         errorType: error instanceof Error ? error.name : typeof error,
-        itemCount: items.length,
+        itemCount: attemptItems.length,
         operation: "skill-uninstall-batch",
       })
-      nextResults = items.map((item) => ({
+      nextResults = attemptItems.map((item) => ({
         item,
         message: error instanceof Error ? error.message : "移到废纸篓失败。",
         status: "failed",
@@ -108,11 +108,11 @@ function EditorBulkSkillTrashDialog({
       }
     }
 
-    if (summary.trashed === items.length) {
+    if (summary.trashed === attemptItems.length) {
       success(`已移到废纸篓 ${summary.trashed} 个 Skill`)
       onOpenChange(false)
     } else if (summary.trashed > 0) {
-      warning(`已移到废纸篓 ${summary.trashed}/${items.length} 个 Skill`)
+      warning(`已移到废纸篓 ${summary.trashed}/${attemptItems.length} 个 Skill`)
     } else {
       notifyError("移到废纸篓失败")
     }
@@ -172,7 +172,7 @@ function EditorBulkSkillTrashDialog({
             }}
           >
             {isTrashing ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
-            移到废纸篓
+            {failedResults.length > 0 ? "重试未处理项" : "移到废纸篓"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
