@@ -11,7 +11,7 @@ import {
   SECRETS_ITEM_UPSERT_CAPABILITY_ID,
 } from "../shared/capability"
 import type { SecretsService } from "./service"
-import { createSecretsCapabilityDispatcher } from "./dispatcher"
+import { createSecretsCapabilityDispatcher, runAuthorizedSecretOperation } from "./dispatcher"
 import {
   secretCreateInputSchema,
   secretDeleteInputSchema,
@@ -31,6 +31,8 @@ import {
 
 const wiredServices = new WeakSet<SecretsService>()
 const SECRETS_APP_ACTOR = { kind: "user", id: "secrets-app", display: "Secrets App" } as const
+const SECRETS_SKILL_ENV_SCAN_OPERATION = "secrets.skill-env.scan"
+const SECRETS_SKILL_ENV_QUEUE_OPERATION = "secrets.skill-env.queue"
 const secretEnvelopeSchema = z.object({
   secret: z.union([secretValueViewSchema, secretSafeViewSchema]),
 }).passthrough()
@@ -130,28 +132,44 @@ export const secretsIpcModule: IpcModule = {
       kind: "invoke",
       request: secretSkillEnvScanInputSchema,
       response: secretSkillEnvScanResultSchema,
-      handler: (ctx, request) => resolveSecretsService(ctx).scanSkillEnvBindings(
-        secretSkillEnvScanInputSchema.parse(request),
-        {
-          actor: { kind: "user" },
-          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
-          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
-        },
-      ),
+      handler: async (ctx, request) => {
+        const input = secretSkillEnvScanInputSchema.parse(request)
+        const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+        return runAuthorizedSecretOperation({ permissionGuard, auditSink, actor: SECRETS_APP_ACTOR }, {
+          action: "secret.read",
+          operation: SECRETS_SKILL_ENV_SCAN_OPERATION,
+          context: { source: "api", actor: SECRETS_APP_ACTOR },
+          secretName: input.name,
+          includeValue: true,
+        }, () => resolveSecretsService(ctx).scanSkillEnvBindings(input, {
+          actor: SECRETS_APP_ACTOR,
+          permissionGuard,
+          auditSink,
+        }))
+      },
     },
     queueSkillEnvBindings: {
       channel: "synapse:secrets:queue-skill-env-bindings",
       kind: "invoke",
       request: secretSkillEnvQueueInputSchema,
       response: secretSkillEnvQueueResultSchema,
-      handler: (ctx, request) => resolveSecretsService(ctx).queueSkillEnvBindings(
-        secretSkillEnvQueueInputSchema.parse(request),
-        {
-          actor: { kind: "user" },
-          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
-          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
-        },
-      ),
+      handler: async (ctx, request) => {
+        const input = secretSkillEnvQueueInputSchema.parse(request)
+        const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+        return runAuthorizedSecretOperation({ permissionGuard, auditSink, actor: SECRETS_APP_ACTOR }, {
+          action: "secret.write",
+          operation: SECRETS_SKILL_ENV_QUEUE_OPERATION,
+          context: { source: "api", actor: SECRETS_APP_ACTOR },
+          secretName: input.name,
+          includeValue: true,
+        }, () => resolveSecretsService(ctx).queueSkillEnvBindings(input, {
+          actor: SECRETS_APP_ACTOR,
+          permissionGuard,
+          auditSink,
+        }))
+      },
     },
   },
   events: {

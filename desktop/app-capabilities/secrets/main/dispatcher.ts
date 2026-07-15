@@ -100,6 +100,36 @@ export function createSecretsCapabilityDispatcher(deps: {
   }
 }
 
+export async function runAuthorizedSecretOperation<T>(
+  deps: {
+    readonly permissionGuard?: PermissionGuard
+    readonly auditSink?: AuditSink
+    readonly actor?: ActorIdentity
+  },
+  input: {
+    readonly action: Extract<PermissionAction, "secret.read" | "secret.write">
+    readonly operation: string
+    readonly context: DispatchContext
+    readonly secretName: string
+    readonly includeValue: boolean
+  },
+  task: () => Promise<T>,
+): Promise<T> {
+  const audit = await authorizeSecret(
+    deps,
+    input.action,
+    input.operation,
+    input.context,
+    input.secretName,
+    input.includeValue,
+  )
+  return runWithAudit(deps, audit, async () => {
+    const result = await task()
+    recordSecretAudit(deps, audit, "allowed")
+    return result
+  })
+}
+
 async function authorizeSecret(
   deps: {
     readonly permissionGuard?: PermissionGuard

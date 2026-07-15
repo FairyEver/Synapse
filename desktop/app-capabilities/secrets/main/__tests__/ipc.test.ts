@@ -105,6 +105,8 @@ describe("secretsIpcModule", () => {
       "secret.write",
       "secret.write",
       "secret.write",
+      "secret.read",
+      "secret.write",
     ])
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       actor: { kind: "user", id: "secrets-app", display: "Secrets App" },
@@ -117,12 +119,38 @@ describe("secretsIpcModule", () => {
     expect(auditJson).not.toContain("upserted-value")
     expect(service.scanSkillEnvBindings).toHaveBeenCalledWith(
       { name: "TOKEN" },
-      { actor: { kind: "user" }, permissionGuard, auditSink },
+      {
+        actor: { kind: "user", id: "secrets-app", display: "Secrets App" },
+        permissionGuard,
+        auditSink,
+      },
     )
     expect(service.queueSkillEnvBindings).toHaveBeenCalledWith(
       { name: "TOKEN", scanSessionId: "scan-1", itemIds: ["item-1"] },
-      { actor: { kind: "user" }, permissionGuard, auditSink },
+      {
+        actor: { kind: "user", id: "secrets-app", display: "Secrets App" },
+        permissionGuard,
+        auditSink,
+      },
     )
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.read",
+      resource: "secret:user:token",
+      context: {
+        source: "api",
+        secretAction: "secrets.skill-env.scan",
+        includeValue: true,
+      },
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      resource: "secret:user:token",
+      context: {
+        source: "api",
+        secretAction: "secrets.skill-env.queue",
+        includeValue: true,
+      },
+    }))
     expect(service.events.on).toHaveBeenCalledWith("changed", expect.any(Function))
   })
 
@@ -139,6 +167,46 @@ describe("secretsIpcModule", () => {
       action: "secret.read",
       outcome: "denied",
       resource: "secret:user:token",
+    }))
+  })
+
+  it("stops Skill env scans before reading the secret when permission is denied", async () => {
+    const { auditSink, ctx, service } = createHarness(false)
+
+    await expect(secretsIpcModule.methods.scanSkillEnvBindings.handler(ctx as never, {
+      name: "TOKEN",
+    })).rejects.toThrow("denied")
+
+    expect(service.scanSkillEnvBindings).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.read",
+      outcome: "denied",
+      resource: "secret:user:token",
+      metadata: expect.objectContaining({
+        secretAction: "secrets.skill-env.scan",
+        includeValue: true,
+      }),
+    }))
+  })
+
+  it("stops Skill env queues before reading the secret when permission is denied", async () => {
+    const { auditSink, ctx, service } = createHarness(false)
+
+    await expect(secretsIpcModule.methods.queueSkillEnvBindings.handler(ctx as never, {
+      name: "TOKEN",
+      scanSessionId: "scan-1",
+      itemIds: ["item-1"],
+    })).rejects.toThrow("denied")
+
+    expect(service.queueSkillEnvBindings).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      outcome: "denied",
+      resource: "secret:user:token",
+      metadata: expect.objectContaining({
+        secretAction: "secrets.skill-env.queue",
+        includeValue: true,
+      }),
     }))
   })
 })
