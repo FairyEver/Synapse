@@ -754,6 +754,8 @@ export interface DriveBrowserPasswordRequiredDto {
   readonly message: string
 }
 
+export const DRIVE_SHARE_UNLOCK_REQUIRED_ERROR_CODE = "DRIVE_SHARE_UNLOCK_REQUIRED"
+
 export const DRIVE_LINK_SUPPORTED_PATH_PREFIXES = [DRIVE_PUBLIC_PATH_PREFIX, DRIVE_SITE_PATH_PREFIX, DRIVE_PUBLIC_ASSET_PATH_PREFIX] as const
 export const DRIVE_LINK_INTAKE_SCOPES = ["entry", "text", "all"] as const
 export const DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES = 200

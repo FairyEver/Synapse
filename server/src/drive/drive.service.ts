@@ -11,6 +11,7 @@ import {
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
+  DRIVE_SHARE_UNLOCK_REQUIRED_ERROR_CODE,
   DRIVE_MAX_FILE_SIZE_LABEL,
   type DriveAccessSettingsInput,
   type DriveAccessSettingsUpdateInput,
@@ -494,7 +495,7 @@ export class DriveService implements OnApplicationBootstrap {
       password: input.password,
       cookie: input.cookie ?? input.accessCookie,
     })
-    if (access.status !== "ok") throw new UnauthorizedException("需要先解锁分享。")
+    if (access.status !== "ok") throw createDriveShareUnlockRequiredException()
     const share = access.value
     const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
     if (current.type !== DRIVE_ITEM_TYPE.file) throw new BadRequestException("目标不是文件。")
@@ -552,7 +553,7 @@ export class DriveService implements OnApplicationBootstrap {
       shareId: input.shareId,
       cookie: input.cookie ?? input.accessCookie,
     })
-    if (access.status !== "ok") throw new UnauthorizedException("需要先解锁分享。")
+    if (access.status !== "ok") throw createDriveShareUnlockRequiredException()
 
     const { current } = await this.resolveShareBrowserCurrent(access.value, input.itemId)
     this.assertActiveBrowserItem(current)
@@ -3915,6 +3916,13 @@ function emptyDriveBrowserChildrenPage(input?: DriveBrowserChildrenPageInput): D
     items: [],
     page: buildDriveBrowserChildrenPage(pageInput, 0),
   }
+}
+
+function createDriveShareUnlockRequiredException(): UnauthorizedException {
+  return new UnauthorizedException({
+    code: DRIVE_SHARE_UNLOCK_REQUIRED_ERROR_CODE,
+    message: "需要先解锁分享。",
+  })
 }
 
 function isUniqueConstraintError(error: unknown): boolean {

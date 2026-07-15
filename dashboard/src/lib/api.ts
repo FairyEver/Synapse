@@ -56,6 +56,7 @@ import type {
   WebhookDeliveryDto,
   WebhookDeliveryHistoryDto,
 } from '@synapse/shared'
+import { DRIVE_SHARE_UNLOCK_REQUIRED_ERROR_CODE } from '@synapse/shared'
 
 export type AdminSession = {
   email: string
@@ -370,36 +371,43 @@ const desktopAuthorizePath = '/api/auth/desktop/authorize'
 const authExpiredListeners = new Set<() => void>()
 
 export class ApiError extends Error {
+  readonly code?: string
   readonly status: number
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
-async function readErrorMessage(response: Response) {
+async function readErrorDetails(response: Response): Promise<{ readonly code?: string; readonly message: string }> {
   const fallback = response.statusText || '请求失败'
 
   try {
-    const payload = (await response.json()) as { message?: unknown }
+    const payload = (await response.json()) as { code?: unknown; message?: unknown }
+    const code = typeof payload.code === 'string' ? payload.code : undefined
 
     if (typeof payload.message === 'string') {
-      return payload.message
+      return { code, message: payload.message }
     }
 
     if (Array.isArray(payload.message)) {
-      return (
-        payload.message.filter((item) => typeof item === 'string').join('，') ||
-        fallback
-      )
+      return {
+        code,
+        message: payload.message.filter((item) => typeof item === 'string').join('，') || fallback,
+      }
     }
   } catch {
-    return fallback
+    return { message: fallback }
   }
 
-  return fallback
+  return { message: fallback }
+}
+
+async function readErrorMessage(response: Response) {
+  return (await readErrorDetails(response)).message
 }
 
 async function request<T>(path: string, options: RequestOptions = {}) {
@@ -418,11 +426,11 @@ async function request<T>(path: string, options: RequestOptions = {}) {
   })
 
   if (!response.ok) {
-    const message = await readErrorMessage(response)
-    if (shouldNotifyAuthExpired(path, response.status)) {
+    const error = await readErrorDetails(response)
+    if (shouldNotifyAuthExpired(path, response.status, error.code)) {
       notifyAuthExpired()
     }
-    throw new ApiError(message, response.status)
+    throw new ApiError(error.message, response.status, error.code)
   }
 
   return (await response.json()) as T
@@ -441,11 +449,12 @@ function notifyAuthExpired() {
   }
 }
 
-export function shouldNotifyAuthExpired(path: string, status: number) {
+export function shouldNotifyAuthExpired(path: string, status: number, errorCode?: string) {
   if (path === desktopAuthorizePath) {
     return status === 401 || status === 403
   }
   if (status !== 401) return false
+  if (errorCode === DRIVE_SHARE_UNLOCK_REQUIRED_ERROR_CODE) return false
   if (
     !path.startsWith(adminApiBasePath) &&
     !path.startsWith(consoleApiBasePath) &&
