@@ -802,6 +802,31 @@ describe("SecretsModule", () => {
     expect(document.body.textContent).toContain("TOKEN")
   })
 
+  it("submits only one delete request when confirmation is repeated", async () => {
+    let resolveDelete: (() => void) | undefined
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    mocks.secrets.delete.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveDelete = resolve
+    }))
+
+    await renderSecretsModule()
+    await act(async () => {
+      clickButtonByLabel("删除密钥：TOKEN")
+      await Promise.resolve()
+    })
+    act(() => {
+      clickButton("删除")
+      clickButton("删除")
+    })
+
+    expect(mocks.secrets.delete).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveDelete?.()
+      await Promise.resolve()
+    })
+  })
+
   it("shows retry when loading fails", async () => {
     mocks.secrets.list.mockRejectedValueOnce(new Error("load failed"))
 
