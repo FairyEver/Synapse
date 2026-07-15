@@ -90,7 +90,7 @@ For directories, use `"entryType": "directory"` and a directory path. When calli
 
 Set `allowMultiple: true` on a file/directory definition to accept multiple resources. Defaults and run values then use an ordered, non-empty array with at most 100 unique items; one item is still an array. Run arrays may mix absolute local path strings and matching resource objects. Any invalid item rejects the entire run and identifies its index.
 
-When defining defaults with `app_workflow_param_update`, use `null` for required params. For optional file/directory params, use the same resource object shape as above, or an array of those objects when `allowMultiple: true`. Do not inline file bytes into params.
+When defining defaults with `app_workflow_param_update`, use `null` for required params. For optional file/directory params, use the same resource object shape as above, or an array of those objects when `allowMultiple: true`. Local multi-resource defaults must exist, match the declared resource type, and resolve to distinct resources; aliases such as symbolic links cannot bypass duplicate checks. Do not inline file bytes into params.
 
 For `option` params, define `options` as an array of strings and optionally set `allowCustomOption`. Example:
 

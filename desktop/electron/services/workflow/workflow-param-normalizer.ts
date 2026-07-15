@@ -10,6 +10,30 @@ export interface NormalizedWorkflowRunParams {
   readonly errors: ValidationError[]
 }
 
+export async function validateWorkflowResourceDefaults(
+  def: Pick<WorkflowDefinition, "params">,
+): Promise<ValidationError[]> {
+  const errors: ValidationError[] = []
+  for (const param of def.params) {
+    if (param.allowMultiple !== true || !Array.isArray(param.default)) continue
+    const identities = new Set<string>()
+    for (const [index, value] of param.default.entries()) {
+      if (value?.kind !== "local_path") continue
+      const statResult = await statLocalResource(param, value.path, index)
+      if ("error" in statResult) {
+        errors.push(statResult.error)
+        break
+      }
+      if (identities.has(statResult.identity)) {
+        errors.push(paramItemError(param, index, "与前面的资源重复").error)
+        break
+      }
+      identities.add(statResult.identity)
+    }
+  }
+  return errors
+}
+
 export async function normalizeWorkflowRunParams(
   def: Pick<WorkflowDefinition, "params">,
   rawParams: Record<string, unknown>,

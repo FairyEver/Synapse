@@ -346,7 +346,7 @@ Replace the workflow's parameter list entirely.
 
 Use `"entryType": "directory"` for directory params. Defaults store a reference, not file bytes.
 
-Set `allowMultiple: true` only for file/directory params. Its default and run value must be an ordered, non-empty array of at most 100 unique resources, even when it contains one item. Array items may mix absolute local path strings and `local_path` objects at run time; stored defaults use resource objects.
+Set `allowMultiple: true` only for file/directory params. Its default and run value must be an ordered, non-empty array of at most 100 unique resources, even when it contains one item. Array items may mix absolute local path strings and `local_path` objects at run time; stored defaults use resource objects. Local multi-resource defaults are checked against the filesystem before save, including canonical-path duplicate detection, so symbolic-link aliases of the same resource are rejected.
 
 For option / 选项 params, set `options` to an array of strings. The option label and value are the same string. Set `allowCustomOption: true` only when runs may provide a non-empty custom string. Custom run values are not saved back to the workflow definition.
 

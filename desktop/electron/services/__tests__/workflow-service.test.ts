@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { mkdirSync, mkdtempSync, readdirSync } from "node:fs"
-import { readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import os from "node:os"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -177,6 +176,33 @@ describe("WorkflowService", () => {
     const result = await svc.save(def)
     expect("errors" in result).toBe(true)
     expect((result as { errors: unknown[] }).errors.length).toBeGreaterThan(0)
+  })
+  it.skipIf(process.platform === "win32")("rejects multi-resource defaults that resolve to the same local file", async () => {
+    const { svc } = createRepo()
+    const root = tmpDir()
+    const filePath = path.join(root, "input.txt")
+    const aliasPath = path.join(root, "input-alias.txt")
+    writeFileSync(filePath, "input")
+    symlinkSync(filePath, aliasPath)
+    const def = {
+      ...makeDef(),
+      params: [{
+        name: "inputs",
+        type: "file",
+        allowMultiple: true,
+        default: [
+          { kind: "local_path", entryType: "file", path: filePath },
+          { kind: "local_path", entryType: "file", path: aliasPath },
+        ],
+      }],
+    } satisfies WorkflowDefinition
+
+    const result = await svc.save(def)
+
+    expect(result).toEqual({
+      errors: [{ type: "invalid_config", message: "参数「inputs」第 2 项与前面的资源重复" }],
+    })
+    expect(await svc.get(def.id)).toBeNull()
   })
   it("rejects workflows without a valid id before persisting", async () => {
     const { svc } = createRepo()
