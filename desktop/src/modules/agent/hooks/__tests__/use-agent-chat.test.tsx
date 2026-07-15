@@ -144,6 +144,30 @@ afterEach(() => {
 })
 
 describe("useAgentChat", () => {
+  it("requests a bounded archived-session summary window outside configured projects", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          listAllSessions: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookProbe onChange={() => {}} />)
+    })
+    await waitFor(() => bridge.listAllSessions.mock.calls.length > 0)
+
+    expect(bridge.listAllSessions).toHaveBeenCalledWith({
+      excludeProjectIds: ["project-1"],
+      limit: 200,
+    })
+  })
+
   it("loads persona menu from offline cache result", async () => {
     const bridge = (window as unknown as {
       synapse: {

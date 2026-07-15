@@ -11,6 +11,8 @@ interface Conversation extends Record<string, unknown> {
   title: string
   projectId?: string
   archived?: boolean
+  updatedAt?: string
+  history?: Array<{ role: string; content: string }>
 }
 
 const tempDir = () => mkdtemp(path.join(tmpdir(), "synapse-sqlite-"))
@@ -92,6 +94,60 @@ describe("SqliteNamespace (T2.5)", () => {
       await expect(ns.list({ projectId: "project-1" })).resolves.toEqual([
         { id: "c1", title: "target", projectId: "project-1" },
       ])
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("returns a bounded JSON window with exclusions and only the last array item", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const ns = new SqliteNamespace<Conversation>({
+        name: "conversations",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+      })
+      await ns.upsert({
+        id: "current-project",
+        title: "Current",
+        projectId: "project-1",
+        updatedAt: "2026-07-15T03:00:00.000Z",
+        history: [{ role: "user", content: "excluded" }],
+      })
+      await ns.upsert({
+        id: "older-archive",
+        title: "Older",
+        projectId: "project-2",
+        updatedAt: "2026-07-15T01:00:00.000Z",
+        history: [{ role: "user", content: "old" }],
+      })
+      await ns.upsert({
+        id: "newer-archive",
+        title: "Newer",
+        projectId: "project-3",
+        updatedAt: "2026-07-15T02:00:00.000Z",
+        history: [
+          { role: "user", content: "first" },
+          { role: "assistant", content: "last" },
+        ],
+      })
+
+      await expect(ns.listWindow({
+        exclude: { projectId: ["project-1"] },
+        orderBy: "updatedAt",
+        order: "desc",
+        limit: 1,
+        arrayTail: "history",
+      })).resolves.toEqual([{
+        value: expect.objectContaining({
+          id: "newer-archive",
+          history: [{ role: "assistant", content: "last" }],
+        }),
+        arrayLength: 2,
+      }])
       db.close()
     } finally {
       await rm(dir, { recursive: true, force: true })

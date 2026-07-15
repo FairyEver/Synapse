@@ -20,6 +20,21 @@ export interface DataChangeEvent<T = unknown> {
 
 export type DataChangeListener<T> = (change: DataChangeEvent<T>) => void
 
+export type DataQueryScalar = string | number
+
+export interface DataListWindowOptions<T> {
+  readonly exclude?: Partial<Record<keyof T, readonly DataQueryScalar[]>>
+  readonly orderBy?: keyof T
+  readonly order?: "asc" | "desc"
+  readonly limit: number
+  readonly arrayTail?: keyof T
+}
+
+export interface DataListWindowItem<T> {
+  readonly value: T
+  readonly arrayLength?: number
+}
+
 export interface DataNamespace<T> {
   readonly name: string
   /** Schema version stored alongside the data; bump via migration. */
@@ -35,6 +50,8 @@ export interface DataNamespace<T> {
   clearSingleton?(): Promise<void>
   /** List form — for collection namespaces (e.g. projects, conversations). */
   list(filter?: Partial<T>): Promise<T[]>
+  /** Optional bounded SQLite query that can exclude scalar values and retain only the last array item. */
+  listWindow?(options: DataListWindowOptions<T>): Promise<DataListWindowItem<T>[]>
   count?(filter?: Partial<T>): Promise<number>
   get(id: string): Promise<T | null>
   upsert(item: T & { id: string }): Promise<void>

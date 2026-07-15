@@ -1460,7 +1460,7 @@ export type SynapseBridge = {
   agent: {
     status: (projectId: string) => Promise<SynapseAgentStatus>
     listSessions: (projectId: string) => Promise<SynapseAgentSessionSummary[]>
-    listAllSessions: () => Promise<SynapseAgentSessionSummary[]>
+    listAllSessions: (request: { excludeProjectIds?: string[]; limit?: number }) => Promise<SynapseAgentSessionSummary[]>
     openConversationWindow: (
       request: AgentConversationWindowRequest,
     ) => Promise<AgentConversationWindowOpenResult>

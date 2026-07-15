@@ -34,6 +34,11 @@ const sessionsRequestSchema = projectRequestSchema.extend({
   historyLimit: z.number().int().positive().max(200).optional(),
 })
 
+const archivedSessionsRequestSchema = z.object({
+  excludeProjectIds: z.array(z.string().min(1)).max(500).default([]),
+  limit: z.number().int().positive().max(200).default(100),
+})
+
 const createSessionRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
   name: z.string().optional(),
@@ -178,14 +183,27 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
   listAllSessions: {
     kind: "invoke",
     channel: "synapse:agent:list-all-sessions",
-    request: z.object({}),
+    request: archivedSessionsRequestSchema,
     response: z.array(sessionSummarySchema),
-    handler: async (ctx) => {
+    handler: async (ctx, request: z.infer<typeof archivedSessionsRequestSchema>) => {
       const dataRepo = ctx.resolve<DataRepository>("core.data-repository")
       const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
-      const allSessions = await conversations.list()
-      return allSessions
+      if (conversations.listWindow) {
+        const sessions = await conversations.listWindow({
+          exclude: { projectId: request.excludeProjectIds },
+          orderBy: "updatedAt",
+          order: "desc",
+          limit: request.limit,
+          arrayTail: "history",
+        })
+        return sessions.map(({ value, arrayLength }) => sessionSummary(value, arrayLength))
+      }
+
+      const excludedProjectIds = new Set(request.excludeProjectIds)
+      return (await conversations.list())
+        .filter((session) => !excludedProjectIds.has(session.projectId))
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .slice(0, request.limit)
         .map((session) => sessionSummary(session))
     },
   },

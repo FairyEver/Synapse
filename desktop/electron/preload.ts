@@ -1510,7 +1510,8 @@ const synapseBridge: SynapseBridge = {
   agent: {
     status: (projectId) => invoke(IPC_CHANNELS.agent.status)({ projectId }),
     listSessions: (projectId) => invoke(IPC_CHANNELS.agent.listSessions)({ projectId }),
-    listAllSessions: () => invoke(IPC_CHANNELS.agent.listAllSessions)({}),
+    listAllSessions: (request: { excludeProjectIds?: string[]; limit?: number }) =>
+      invoke(IPC_CHANNELS.agent.listAllSessions)(request),
     openConversationWindow: (request) => invoke(IPC_CHANNELS.agent.openConversationWindow)(request),
     focusConversationWindow: (target) => invoke(IPC_CHANNELS.agent.focusConversationWindow)(target),
     replaceConversationWindowTarget: (request) =>

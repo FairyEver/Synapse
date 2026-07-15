@@ -362,7 +362,7 @@ function nodeErrorCode(error: unknown): string | undefined {
   return typeof code === "string" ? code : undefined
 }
 
-export function sessionSummary(session: ConversationEntryV1) {
+export function sessionSummary(session: ConversationEntryV1, historyCount = session.history.length) {
   const last = session.history.at(-1)
   const personaSnapshot = session.agentConfig?.activeMainThreadPersonaSnapshot
   return {
@@ -381,10 +381,10 @@ export function sessionSummary(session: ConversationEntryV1) {
     activeMainThreadPersonaName: personaSnapshot?.name,
     activeMainThreadPersonaSource: personaSnapshot?.source,
     active: session.active,
-    historyCount: session.history.length,
+    historyCount,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
-    lastMessage: last ? historyEntry(session.id, last, session.history.length - 1, session.agentType) : undefined,
+    lastMessage: last ? historyEntry(session.id, last, historyCount - 1, session.agentType) : undefined,
   }
 }
 

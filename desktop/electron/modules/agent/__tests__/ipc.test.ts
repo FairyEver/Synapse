@@ -1577,6 +1577,47 @@ describe("agentIpcModule", () => {
     ])
   })
 
+  it("loads bounded archived session summaries without full histories", async () => {
+    const listWindow = vi.fn().mockResolvedValue([{
+      value: {
+        projectId: "archived-project",
+        id: "archived-conv",
+        schemaVersion: 1,
+        sessionKey: "local:renderer",
+        active: false,
+        history: [{ role: "assistant", content: "latest", timestamp: "2026-07-15T02:00:00.000Z" }],
+        createdAt: "2026-07-15T01:00:00.000Z",
+        updatedAt: "2026-07-15T02:00:00.000Z",
+      },
+      arrayLength: 42,
+    }])
+    const harness = createHarness({
+      dataRepository: {
+        namespace: vi.fn(() => ({ listWindow })),
+      },
+    })
+
+    await expect(harness.invoke("synapse:agent:list-all-sessions", {
+      excludeProjectIds: ["project-1"],
+      limit: 25,
+    })).resolves.toEqual([expect.objectContaining({
+      projectId: "archived-project",
+      id: "archived-conv",
+      historyCount: 42,
+      lastMessage: expect.objectContaining({
+        id: "archived-conv:history:41",
+        content: "latest",
+      }),
+    })])
+    expect(listWindow).toHaveBeenCalledWith({
+      exclude: { projectId: ["project-1"] },
+      orderBy: "updatedAt",
+      order: "desc",
+      limit: 25,
+      arrayTail: "history",
+    })
+  })
+
   it("opens AgentRuntime for configured project ids used by external sessions", async () => {
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{

@@ -36,6 +36,7 @@ import { mkdirSync } from "node:fs"
 
 import { AbstractDataNamespace, type NamespaceBaseDeps } from "../namespace-base"
 import { InvalidNamespaceDataError } from "../errors"
+import type { DataListWindowItem, DataListWindowOptions, DataQueryScalar } from "../types"
 
 const SINGLETON_ID = "__singleton"
 const META_TABLE = "__synapse_meta"
@@ -176,6 +177,57 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
     return this.applyFilter(items, filter)
   }
 
+  async listWindow(options: DataListWindowOptions<T>): Promise<DataListWindowItem<T>[]> {
+    if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 1_000) {
+      throw new InvalidNamespaceDataError(this.name, "list window limit must be between 1 and 1000")
+    }
+
+    const clauses = ["id != ?"]
+    const params: SqliteFilterParam[] = [SINGLETON_ID]
+    for (const [key, excludedValues] of Object.entries(options.exclude ?? {})) {
+      const jsonKey = safeJsonKey(this.name, key)
+      if (!Array.isArray(excludedValues) || excludedValues.length === 0) continue
+      if (excludedValues.length > 500 || !excludedValues.every(isSqliteFilterParam)) {
+        throw new InvalidNamespaceDataError(this.name, "list window exclusions are invalid")
+      }
+      clauses.push(`json_extract(value, '$.${jsonKey}') NOT IN (${excludedValues.map(() => "?").join(", ")})`)
+      params.push(...excludedValues)
+    }
+
+    const orderBy = options.orderBy ? safeJsonKey(this.name, String(options.orderBy)) : "updatedAt"
+    const direction = options.order === "asc" ? "ASC" : "DESC"
+    const arrayTail = options.arrayTail ? safeJsonKey(this.name, String(options.arrayTail)) : undefined
+    const valueExpression = arrayTail
+      ? `CASE
+          WHEN json_type(value, '$.${arrayTail}') = 'array' THEN json_set(
+            value,
+            '$.${arrayTail}',
+            CASE
+              WHEN json_array_length(value, '$.${arrayTail}') > 0
+                THEN json_array(json_extract(value, '$.${arrayTail}[#-1]'))
+              ELSE json('[]')
+            END
+          )
+          ELSE value
+        END`
+      : "value"
+    const lengthExpression = arrayTail
+      ? `json_array_length(value, '$.${arrayTail}')`
+      : "NULL"
+    const rows = this.database.prepare(
+      `SELECT ${valueExpression} AS value, ${lengthExpression} AS array_length
+       FROM ${this.tableName}
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY json_extract(value, '$.${orderBy}') ${direction}, id ${direction}
+       LIMIT ?;`,
+    ).all(...params, options.limit) as Array<{ value?: unknown; array_length?: unknown }>
+
+    return rows.map((row) => ({
+      value: this.parseRow(row.value),
+      ...(typeof row.array_length === "number" ? { arrayLength: row.array_length } : {}),
+    }))
+  }
+
   async count(filter?: Partial<T>): Promise<number> {
     const pushedFilter = buildSqliteFilter(filter)
     if (filter && !pushedFilter) {
@@ -267,6 +319,17 @@ function sanitizeTableName(namespace: string): string {
 }
 
 type SqliteFilterParam = string | number | null
+
+function isSqliteFilterParam(value: DataQueryScalar): value is SqliteFilterParam {
+  return typeof value === "string" || typeof value === "number"
+}
+
+function safeJsonKey(namespace: string, key: string): string {
+  if (!SAFE_JSON_KEY_PATTERN.test(key)) {
+    throw new InvalidNamespaceDataError(namespace, `invalid JSON field name "${key}"`)
+  }
+  return key
+}
 
 function buildSqliteFilter<T>(filter?: Partial<T>): { where: string; params: SqliteFilterParam[] } | null {
   if (!filter) return null

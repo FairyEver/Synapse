@@ -228,10 +228,11 @@ function useChatConnection(
     const bridge = getSynapseBridge()
     if (!bridge) return
     try {
-      const allSessions = await bridge.agent.listAllSessions()
-      const currentProjectIds = new Set(projectIdsRef.current)
-      const orphans = allSessions.filter((session) => !currentProjectIds.has(session.projectId))
-      dispatch({ type: "SET_ARCHIVED_SESSIONS", archivedSessions: orphans })
+      const archivedSessions = await bridge.agent.listAllSessions({
+        excludeProjectIds: projectIdsRef.current,
+        limit: 200,
+      })
+      dispatch({ type: "SET_ARCHIVED_SESSIONS", archivedSessions })
     } catch (rawError) {
       logger.warn("Agent archived sessions refresh failed.", {
         projectIds: projectIdsRef.current,
