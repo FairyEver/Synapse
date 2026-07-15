@@ -55,6 +55,8 @@ Admin removal only hides or restores public Skill repositories from the public s
 
 Uploading reads only publishable local files and writing `.synapse.repository.json` modifies the local Skill folder. These actions go through Synapse permission and audit checks. A denied write permission stops the cloud upload before mutation; a later filesystem write failure is returned as `identityWritten: false`.
 
+Changing visibility, forking, and creating an install session also pass the local content-mutation permission boundary before the cloud action and record allowed, denied, or failed audit outcomes. Audit records do not include install session or deep-link values.
+
 Do not upload arbitrary project folders as Skills. Use a folder that is intended to be a Skill and contains root `SKILL.md`.
 
 Forking and creating install sessions require a signed-in account. Installing consumes the latest repository content; do not promise historical versions or release selection.

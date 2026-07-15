@@ -86,6 +86,8 @@ The response uses the same shape as `app_skill_repository_import_local`, includi
 
 ## Set Visibility
 
+Visibility changes, forks, and install-session creation require local content-mutation permission and write a redacted audit outcome before or after the cloud action. Denied permission prevents the account service call.
+
 `app_skill_repository_set_visibility`
 
 ```json

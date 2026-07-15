@@ -14,6 +14,7 @@ import type {
   SkillRepositoryLocalImportResult,
 } from "../services/skill-repository-upload-service"
 import type { SkillRepositoryIdentityWriteSecurity } from "../services/skill-repository-local-identity"
+import { checkCapabilityPermission } from "./permission-audit"
 
 type SkillRepositoryAccountServicePort = {
   readonly listSkillRepositories: () => Promise<SkillRepositoryItemDto[]>
@@ -64,15 +65,15 @@ export function createSkillRepositoryCapabilityDispatcher(deps: SkillRepositoryC
         case "app.skill_repository.item.update_local":
           return updateLocalSkillRepository(deps, params, context)
         case "app.skill_repository.visibility.update":
-          return setSkillRepositoryVisibility(deps, params)
+          return setSkillRepositoryVisibility(deps, params, context)
         case "app.skill_repository.item.open":
           return openSkillRepository(deps, params)
         case "app.skill_repository.public.open":
           return openPublicSkillRepository(deps, params)
         case "app.skill_repository.fork.create":
-          return forkSkillRepository(deps, params)
+          return forkSkillRepository(deps, params, context)
         case "app.skill_repository.install_session.create":
-          return createInstallSession(deps, params)
+          return createInstallSession(deps, params, context)
         default:
           throw new Error(`Unknown skill repository action: ${action}`)
       }
@@ -120,51 +121,77 @@ async function updateLocalSkillRepository(
 async function setSkillRepositoryVisibility(
   deps: SkillRepositoryCapabilityDispatcherDeps,
   params: Record<string, unknown>,
+  context: DispatchContext,
 ): Promise<DispatchResult> {
   const repositoryId = requireTrimmedString(params, "repositoryId")
   const visibility = requireVisibility(params)
   const openInBrowser = optionalBoolean(params, "openInBrowser")
-  const repository = await deps.accountService.updateSkillRepository(repositoryId, { visibility })
-  const { buildSkillRepositoryManagementUrl } = await sharedSkillRepositoryPromise
-  const managementUrl = buildSkillRepositoryManagementUrl(deps.publicAppUrl, repository.id)
+  return runSkillRepositoryMutation(
+    deps,
+    context,
+    "app.skill_repository.visibility.update",
+    repositoryId,
+    async () => {
+      const repository = await deps.accountService.updateSkillRepository(repositoryId, { visibility })
+      const { buildSkillRepositoryManagementUrl } = await sharedSkillRepositoryPromise
+      const managementUrl = buildSkillRepositoryManagementUrl(deps.publicAppUrl, repository.id)
 
-  if (openInBrowser === true && deps.openExternal) {
-    await deps.openExternal(managementUrl)
-  }
+      if (openInBrowser === true && deps.openExternal) {
+        await deps.openExternal(managementUrl)
+      }
 
-  return {
-    ok: true,
-    data: {
-      repository,
-      managementUrl,
+      return {
+        ok: true,
+        data: {
+          repository,
+          managementUrl,
+        },
+      }
     },
-  }
+  )
 }
 
 async function forkSkillRepository(
   deps: SkillRepositoryCapabilityDispatcherDeps,
   params: Record<string, unknown>,
+  context: DispatchContext,
 ): Promise<DispatchResult> {
   const repositoryId = requireTrimmedString(params, "repositoryId")
-  const result = await deps.accountService.forkSkillRepository(repositoryId, {
-    ...optionalForkStrings(params),
-  })
-  return { ok: true, data: result }
+  const input = optionalForkStrings(params)
+  return runSkillRepositoryMutation(
+    deps,
+    context,
+    "app.skill_repository.fork.create",
+    repositoryId,
+    async () => {
+      const result = await deps.accountService.forkSkillRepository(repositoryId, input)
+      return { ok: true, data: result }
+    },
+  )
 }
 
 async function createInstallSession(
   deps: SkillRepositoryCapabilityDispatcherDeps,
   params: Record<string, unknown>,
+  context: DispatchContext,
 ): Promise<DispatchResult> {
   const repositoryId = requireTrimmedString(params, "repositoryId")
   const openInBrowser = optionalBoolean(params, "openInBrowser")
-  const session = await deps.accountService.createSkillRepositoryInstallSession(repositoryId)
+  return runSkillRepositoryMutation(
+    deps,
+    context,
+    "app.skill_repository.install_session.create",
+    repositoryId,
+    async () => {
+      const session = await deps.accountService.createSkillRepositoryInstallSession(repositoryId)
 
-  if (openInBrowser === true && deps.openExternal) {
-    await deps.openExternal(session.deepLinkUrl)
-  }
+      if (openInBrowser === true && deps.openExternal) {
+        await deps.openExternal(session.deepLinkUrl)
+      }
 
-  return { ok: true, data: session }
+      return { ok: true, data: session }
+    },
+  )
 }
 
 async function openSkillRepository(
@@ -277,6 +304,70 @@ function securityFromDeps(
     actor: context.actor ?? deps.actor ?? DEFAULT_ACTOR,
     auditSink: deps.auditSink,
     permissionGuard: deps.permissionGuard,
+  }
+}
+
+async function runSkillRepositoryMutation(
+  deps: SkillRepositoryCapabilityDispatcherDeps,
+  context: DispatchContext,
+  capabilityAction: string,
+  repositoryId: string,
+  task: () => Promise<DispatchResult>,
+): Promise<DispatchResult> {
+  const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
+  const resource = `skill-repository:${repositoryId}`
+  const metadata = {
+    source: context.source ?? "api",
+    capabilityAction,
+    boundary: "skill-repository.mcp",
+    repositoryId,
+  }
+  const permission = await checkCapabilityPermission({
+    permissionGuard: deps.permissionGuard,
+    auditSink: deps.auditSink,
+    action: "content.mutate",
+    actor,
+    resource,
+    context: metadata,
+  })
+  if (permission && !permission.allowed) {
+    deps.auditSink?.record({
+      action: "content.mutate",
+      actor,
+      resource,
+      outcome: "denied",
+      metadata: {
+        ...metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
+  }
+
+  try {
+    const result = await task()
+    deps.auditSink?.record({
+      action: "content.mutate",
+      actor,
+      resource,
+      outcome: "allowed",
+      metadata,
+    })
+    return result
+  } catch (error) {
+    deps.auditSink?.record({
+      action: "content.mutate",
+      actor,
+      resource,
+      outcome: "failed",
+      metadata: {
+        ...metadata,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: error instanceof Error ? error.message.length : String(error).length,
+      },
+    })
+    throw error
   }
 }
 

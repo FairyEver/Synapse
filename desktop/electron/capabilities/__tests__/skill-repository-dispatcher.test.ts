@@ -356,6 +356,102 @@ describe("skill repository capability dispatcher", () => {
     )
   })
 
+  it("authorizes and audits every cloud mutation without session details", async () => {
+    const { auditSink, permissionGuard } = createSecurity()
+    const deps = createDeps({ auditSink, permissionGuard })
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+    const context = {
+      source: "mcp-http" as const,
+      actor: { kind: "agent" as const, id: "agent-1" },
+    }
+
+    await dispatcher.dispatch(
+      "app.skill_repository.visibility.update",
+      { repositoryId: "repo-1", visibility: "public" },
+      context,
+    )
+    await dispatcher.dispatch(
+      "app.skill_repository.fork.create",
+      { repositoryId: "repo-1", name: "private-fork-name" },
+      context,
+    )
+    await dispatcher.dispatch(
+      "app.skill_repository.install_session.create",
+      { repositoryId: "repo-1" },
+      context,
+    )
+
+    expect(permissionGuard.check).toHaveBeenCalledTimes(3)
+    expect(vi.mocked(permissionGuard.check).mock.calls.map(([request]) => request.context.capabilityAction))
+      .toEqual([
+        "app.skill_repository.visibility.update",
+        "app.skill_repository.fork.create",
+        "app.skill_repository.install_session.create",
+      ])
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.mutate",
+      actor: { kind: "agent", id: "agent-1" },
+      resource: "skill-repository:repo-1",
+      context: expect.objectContaining({
+        source: "mcp-http",
+        boundary: "skill-repository.mcp",
+      }),
+    }))
+    expect(vi.mocked(auditSink.record).mock.calls.filter(([event]) => event.outcome === "allowed"))
+      .toHaveLength(3)
+    const auditJson = JSON.stringify(vi.mocked(auditSink.record).mock.calls)
+    expect(auditJson).not.toContain("private-fork-name")
+    expect(auditJson).not.toContain("install-session-1")
+    expect(auditJson).not.toContain("deepLinkUrl")
+  })
+
+  it("blocks denied cloud mutations before account service access", async () => {
+    const { auditSink, permissionGuard } = createSecurity({
+      allowed: false,
+      reason: "blocked",
+      policyId: "policy-1",
+    })
+    const deps = createDeps({ auditSink, permissionGuard })
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.install_session.create",
+      { repositoryId: "repo-1" },
+      { source: "mcp-stdio" },
+    )).rejects.toThrow("blocked")
+
+    expect(deps.accountService.createSkillRepositoryInstallSession).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.mutate",
+      resource: "skill-repository:repo-1",
+      outcome: "denied",
+      metadata: expect.objectContaining({ policyId: "policy-1" }),
+    }))
+  })
+
+  it("audits cloud mutation failures without error text", async () => {
+    const { auditSink, permissionGuard } = createSecurity()
+    const deps = createDeps({ auditSink, permissionGuard })
+    vi.mocked(deps.accountService.forkSkillRepository)
+      .mockRejectedValueOnce(new Error("session=private-session-value"))
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.fork.create",
+      { repositoryId: "repo-1" },
+      { source: "mcp-http" },
+    )).rejects.toThrow("private-session-value")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.mutate",
+      resource: "skill-repository:repo-1",
+      outcome: "failed",
+      metadata: expect.objectContaining({ errorName: "Error" }),
+    }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls))
+      .not.toContain("private-session-value")
+  })
+
   it("omits upload security when dependencies are incomplete", async () => {
     const deps = createDeps({
       auditSink: {
@@ -385,3 +481,18 @@ describe("skill repository capability dispatcher", () => {
       .rejects.toThrow("Unknown skill repository action")
   })
 })
+
+function createSecurity(
+  permissionResult: Awaited<ReturnType<PermissionGuard["check"]>> = { allowed: true },
+) {
+  const auditSink: AuditSink = {
+    record: vi.fn(),
+    list: vi.fn(() => []),
+    clearForTests: vi.fn(),
+  }
+  const permissionGuard: PermissionGuard = {
+    registerPolicy: vi.fn(),
+    check: vi.fn(async () => permissionResult),
+  }
+  return { auditSink, permissionGuard }
+}
