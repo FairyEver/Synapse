@@ -2189,7 +2189,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
           )
           const normalizedParams = validation.valid
             ? await normalizeWorkflowRunParams(input.definition, input.params)
-            : { params: input.params, errors: validation.errors }
+            : { params: input.params, snapshotParams: input.params, errors: validation.errors }
           if (normalizedParams.errors.length > 0) {
             const endedAt = Date.now()
             const error = normalizedParams.errors.map((validationError) => validationError.message).join("；")
@@ -2207,7 +2207,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
                 startedAt,
                 endedAt,
                 status: "failed",
-                params: input.params,
+                params: normalizedParams.snapshotParams,
                 nodeResults: {},
                 definition: input.definition,
                 error,
@@ -2257,7 +2257,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
               startedAt,
               endedAt,
               status: resultWithWorkflowError.status,
-              params: normalizedParams.params,
+              params: normalizedParams.snapshotParams,
               nodeResults: resultWithWorkflowError.nodeResults,
               definition: input.definition,
               ...(snapshotError ? { error: snapshotError } : {}),

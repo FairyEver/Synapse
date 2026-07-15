@@ -19,6 +19,22 @@ function def(params: WorkflowDefinition["params"]): WorkflowDefinition {
 }
 
 describe("normalizeWorkflowRunParams", () => {
+  it("rejects undeclared params and excludes them from runtime and snapshot values", async () => {
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "topic", type: "text", default: "默认主题" },
+    ]), {
+      topci: "拼写错误",
+    })
+
+    expect(result.errors).toEqual([{
+      type: "invalid_config",
+      message: "运行参数「topci」未在 Workflow 中定义",
+    }])
+    expect(result.params).toEqual({ topic: "默认主题" })
+    expect(result.snapshotParams).toEqual({ topic: "默认主题" })
+    expect(result.stringValues).toEqual({ topic: "默认主题" })
+  })
+
   it("normalizes file and directory shorthand strings to local path refs", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-workflow-params-"))
     const filePath = path.join(root, "input.txt")

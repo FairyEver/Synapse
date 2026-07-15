@@ -139,6 +139,7 @@ describe("createWorkflowDispatcher", () => {
     expect(runExecuteParams?.description).toContain("allowCustomOption=true")
     expect(runExecuteParams?.description).toContain("allowMultiple=true")
     expect(runExecuteParams?.description).toContain("up to 100")
+    expect(runExecuteParams?.description).toContain("Unknown keys are rejected")
     expect(runExecuteParams?.description).toContain("Custom run values are not saved back")
 
     const runGetTool = tools.find((item) => item.name === "workflow_run_get")

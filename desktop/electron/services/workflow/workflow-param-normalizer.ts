@@ -38,10 +38,19 @@ export async function normalizeWorkflowRunParams(
   def: Pick<WorkflowDefinition, "params">,
   rawParams: Record<string, unknown>,
 ): Promise<NormalizedWorkflowRunParams> {
-  const params: Record<string, unknown> = { ...rawParams }
+  const declaredParamNames = new Set(def.params.map((param) => param.name))
+  const declaredRawParams = Object.fromEntries(
+    Object.entries(rawParams).filter(([name]) => declaredParamNames.has(name)),
+  )
+  const params: Record<string, unknown> = { ...declaredRawParams }
   const stringValues: Record<string, string> = {}
-  const snapshotParams: Record<string, unknown> = { ...rawParams }
-  const errors: ValidationError[] = []
+  const snapshotParams: Record<string, unknown> = { ...declaredRawParams }
+  const errors: ValidationError[] = Object.keys(rawParams)
+    .filter((name) => !declaredParamNames.has(name))
+    .map((name) => ({
+      type: "invalid_config",
+      message: `运行参数「${name}」未在 Workflow 中定义`,
+    }))
 
   for (const param of def.params) {
     const hasRawValue = Object.prototype.hasOwnProperty.call(rawParams, param.name)

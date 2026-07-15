@@ -365,7 +365,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
         type: "object",
         properties: {
           workflowId: { type: "string", description: "Workflow ID to execute." },
-          params: { type: "object", description: "Key-value parameters matching the workflow's param definitions. For single file/directory params, pass a local path string or resource ref. When allowMultiple=true, pass an ordered non-empty array of up to 100 unique path strings and/or refs; one item is still an array. For option params, pass a string; closed options must match one configured option value, while allowCustomOption=true accepts a non-empty custom string. Custom run values are not saved back to the workflow definition." },
+          params: { type: "object", description: "Key-value parameters matching the workflow's param definitions. Unknown keys are rejected. For single file/directory params, pass a local path string or resource ref. When allowMultiple=true, pass an ordered non-empty array of up to 100 unique path strings and/or refs; one item is still an array. For option params, pass a string; closed options must match one configured option value, while allowCustomOption=true accepts a non-empty custom string. Custom run values are not saved back to the workflow definition." },
         },
         required: ["workflowId"],
       },

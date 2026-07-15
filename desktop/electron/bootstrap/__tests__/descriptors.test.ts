@@ -767,7 +767,10 @@ describe("bootstrap descriptors (T1.5)", () => {
       id: "child-workflow",
       name: "Child Workflow",
       version: "v1",
-      params: [],
+      params: [
+        { name: "apiToken", type: "text" as const, default: null },
+        { name: "note", type: "text" as const, default: null },
+      ],
       nodes: [
         {
           id: "end",
@@ -801,10 +804,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       definition: childDefinition,
       params: {
         apiToken: "sk-child-param-secret",
-        nested: {
-          password: "plain-child-password",
-          note: "Authorization: Bearer child-raw-token at /Users/example/child-params",
-        },
+        note: "Authorization: Bearer child-raw-token at /Users/example/child-params",
       },
       projectId: "repo-1",
       triggerSource: "workflow-call",
@@ -820,10 +820,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       status: "completed",
       params: {
         apiToken: "[redacted]",
-        nested: {
-          password: "[redacted]",
-          note: "Authorization=[redacted] [redacted] at [path]",
-        },
+        note: "Authorization=[redacted] [redacted] at [path]",
       },
       definition: childDefinition,
       nodeResults: expect.objectContaining({
@@ -835,7 +832,6 @@ describe("bootstrap descriptors (T1.5)", () => {
       }),
     }))
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("sk-child-param-secret")
-    expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("plain-child-password")
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("child-raw-token")
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("/Users/example/child-params")
   })
@@ -919,6 +915,28 @@ describe("bootstrap descriptors (T1.5)", () => {
       params: { report_type: "月报" },
       nodeResults: {},
       error: "参数「report_type」必须是预设选项之一",
+    }))
+
+    const unknownParamResult = await engine.runtimeDeps.workflowCall?.runWorkflow({
+      definition: childDefinition,
+      params: { report_type: "周报", stale_param: "unused" },
+      projectId: "repo-1",
+      triggerSource: "workflow-call",
+      abortSignal: new AbortController().signal,
+      parentRunId: "parent-run",
+      callStack: [{ workflowId: "parent", workflowName: "Parent" }, { workflowId: "child-workflow", workflowName: "Child Workflow" }],
+    })
+
+    expect(unknownParamResult?.result.status).toBe("failed")
+    expect(unknownParamResult?.result.error).toContain("运行参数「stale_param」未在 Workflow 中定义")
+    expect(engine.run).not.toHaveBeenCalled()
+    expect(snapshotService.save).toHaveBeenLastCalledWith(expect.objectContaining({
+      runId: unknownParamResult?.runId,
+      workflowId: "child-workflow",
+      status: "failed",
+      params: { report_type: "周报" },
+      nodeResults: {},
+      error: "运行参数「stale_param」未在 Workflow 中定义",
     }))
 
     const missingProjectDefinition = {
@@ -1630,7 +1648,10 @@ describe("bootstrap descriptors (T1.5)", () => {
         { id: "end-1", type: "end" as const, name: "End", position: { x: 400, y: 200 }, config: { outputType: "text" as const, template: "", variables: [] } },
       ],
       edges: [],
-      params: [],
+      params: [
+        { name: "apiToken", type: "text" as const, default: null },
+        { name: "note", type: "text" as const, default: null },
+      ],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     }
@@ -1671,10 +1692,7 @@ describe("bootstrap descriptors (T1.5)", () => {
 
     await handler("wf-1", {
       apiToken: "sk-param-secret",
-      nested: {
-        password: "plain-password",
-        note: "Authorization: Bearer raw-token at /Users/example/params",
-      },
+      note: "Authorization: Bearer raw-token at /Users/example/params",
     })
 
     await vi.waitFor(() => {
@@ -1683,10 +1701,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(snapshotService.save).toHaveBeenCalledWith(expect.objectContaining({
       params: {
         apiToken: "[redacted]",
-        nested: {
-          password: "[redacted]",
-          note: "Authorization=[redacted] [redacted] at [path]",
-        },
+        note: "Authorization=[redacted] [redacted] at [path]",
       },
       nodeResults: {
         "end-1": expect.objectContaining({
@@ -1699,7 +1714,6 @@ describe("bootstrap descriptors (T1.5)", () => {
     }))
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("sk-param-secret")
-    expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("plain-password")
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("raw-token")
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("/Users/example/repo")
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("/Users/example/params")
