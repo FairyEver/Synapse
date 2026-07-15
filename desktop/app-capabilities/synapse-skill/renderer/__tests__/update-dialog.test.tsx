@@ -109,6 +109,28 @@ describe("SynapseSkillUpdateDialogHost", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Synapse Skill 已更新")
   })
 
+  it("keeps cleanup warnings visible after a successful update", async () => {
+    inspectGlobalSkillInstallations.mockResolvedValue({ entries: createInstallEntries() })
+    installSourceToEditorTargets.mockResolvedValue({
+      results: [
+        {
+          target: { editorId: "codex", scope: "global" },
+          status: "installed",
+          result: { targetPath: "/target", warning: "旧 Skill 备份需要手动检查" },
+        },
+        { target: { editorId: "cursor", scope: "global" }, status: "installed" },
+      ],
+    })
+    await renderDialog()
+
+    await clickButton("更新")
+
+    expect(document.body.textContent).toContain("更新完成，需检查")
+    expect(document.body.textContent).toContain("旧 Skill 备份需要手动检查")
+    expect(document.body.textContent).not.toContain("重试失败项")
+    expect(toastSuccess).not.toHaveBeenCalled()
+  })
+
   it("keeps failed installations and retries only those targets", async () => {
     inspectGlobalSkillInstallations.mockResolvedValue({ entries: createInstallEntries() })
     installSourceToEditorTargets

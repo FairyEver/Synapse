@@ -49,6 +49,7 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
   const [source, setSource] = useState<SynapseSkillInstallerSource | null>(null)
   const [targets, setTargets] = useState<SynapseEditorInstallStatusEntry[]>([])
   const [failures, setFailures] = useState<UpdateFailure[]>([])
+  const [warnings, setWarnings] = useState<UpdateFailure[]>([])
   const [open, setOpen] = useState(false)
   const [updating, setUpdating] = useState(false)
 
@@ -95,6 +96,7 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
 
     setUpdating(true)
     setFailures([])
+    setWarnings([])
     try {
       const result = await installSourceToEditorTargets({
         mode: "update",
@@ -107,8 +109,13 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
       const nextFailures = result.results.flatMap((item) => item.status === "failed"
         ? [{ editorId: item.target.editorId, message: item.error ?? "更新失败" }]
         : [])
+      const nextWarnings = result.results.flatMap((item) => (
+        item.status === "installed" && item.result?.warning
+          ? [{ editorId: item.target.editorId, message: item.result.warning }]
+          : []
+      ))
 
-      if (nextFailures.length === 0) {
+      if (nextFailures.length === 0 && nextWarnings.length === 0) {
         setOpen(false)
         setTargets([])
         toast.success("Synapse Skill 已更新")
@@ -116,8 +123,10 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
       }
 
       const failedEditorIds = new Set(nextFailures.map((item) => item.editorId))
-      setTargets((current) => current.filter((entry) => failedEditorIds.has(entry.editorId)))
+      const visibleEditorIds = new Set([...failedEditorIds, ...nextWarnings.map((item) => item.editorId)])
+      setTargets((current) => current.filter((entry) => visibleEditorIds.has(entry.editorId)))
       setFailures(nextFailures)
+      setWarnings(nextWarnings)
     } catch (error) {
       const message = error instanceof Error ? error.message : "更新失败"
       logger.error("Failed to update global Synapse Skill installations.", error)
@@ -128,7 +137,9 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
   }
 
   const failureByEditorId = new Map(failures.map((failure) => [failure.editorId, failure.message]))
+  const warningByEditorId = new Map(warnings.map((warning) => [warning.editorId, warning.message]))
   const hasFailures = failures.length > 0
+  const hasWarnings = warnings.length > 0
 
   return (
     <Dialog
@@ -149,10 +160,12 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
         }}
       >
         <DialogHeader>
-          <DialogTitle>{hasFailures ? "部分更新失败" : "Synapse Skill 可更新"}</DialogTitle>
+          <DialogTitle>{hasFailures ? "部分更新失败" : hasWarnings ? "更新完成，需检查" : "Synapse Skill 可更新"}</DialogTitle>
           <DialogDescription>
             {hasFailures
               ? `${failures.length} 个全局安装需要重试。`
+              : hasWarnings
+                ? `${warnings.length} 个全局安装需要手动检查。`
               : `检测到 ${targets.length} 个全局安装需要更新。`}
           </DialogDescription>
         </DialogHeader>
@@ -160,6 +173,7 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
         <div className="divide-y divide-border">
           {targets.map((entry) => {
             const failure = failureByEditorId.get(entry.editorId)
+            const warning = warningByEditorId.get(entry.editorId)
             return (
               <div key={entry.editorId} className="flex items-start gap-3 py-3 first:pt-1 last:pb-1">
                 <EditorIcon editorId={entry.editorId} className="mt-0.5 size-7 shrink-0" />
@@ -173,6 +187,7 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
                   {failure ? (
                     <p className="mt-1 text-xs text-destructive" role="alert">{failure}</p>
                   ) : null}
+                  {warning ? <p className="mt-1 text-xs text-muted-foreground">{warning}</p> : null}
                 </div>
               </div>
             )
@@ -181,12 +196,12 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
 
         <DialogFooter>
           <Button type="button" variant="outline" disabled={updating} onClick={closeDialog}>
-            {hasFailures ? "关闭" : "稍后"}
+            {hasFailures || hasWarnings ? "关闭" : "稍后"}
           </Button>
-          <Button type="button" disabled={updating} onClick={() => void updateTargets()}>
+          {!hasWarnings || hasFailures ? <Button type="button" disabled={updating} onClick={() => void updateTargets()}>
             {updating ? <Spinner data-icon="inline-start" /> : null}
             {updating ? "正在更新" : hasFailures ? "重试失败项" : "更新"}
-          </Button>
+          </Button> : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

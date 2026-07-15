@@ -220,10 +220,11 @@ export function SharedInstallerFlow({
     setInstalling(true)
     setError("")
     try {
+      let installWarning: string | undefined
       if (!isCompletionRetryPending) {
         await onInstall?.({ editor: flow.selectedEditor, source: flow.source })
         if (!onInstall) {
-          await installSourceToEditor({
+          const result = await installSourceToEditor({
             editorId: flow.selectedEditor.id,
             overwriteConfirmed,
             projectPath: selection.scope === "project" ? selection.projectPath : undefined,
@@ -235,10 +236,12 @@ export function SharedInstallerFlow({
             skillEnvValues: pendingSkillEnvValuesRef.current,
             variableSubstitutions: pendingLegacySubstitutionsRef.current,
           })
+          installWarning = result.warning
         }
         setIsCompletionRetryPending(true)
       }
       await onInstalled()
+      if (installWarning) warning(installWarning)
       setIsCompletionRetryPending(false)
       flow.markInstalled()
     } catch (err) {

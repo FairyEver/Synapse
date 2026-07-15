@@ -181,13 +181,18 @@ function SynapseSkillModule() {
         })),
       })
       const failedResults = result.results.filter((entry) => entry.status === "failed")
+      const warnings = result.results.flatMap((entry) => (
+        entry.status === "installed" && entry.result?.warning ? [entry.result.warning] : []
+      ))
       const nextErrors: Record<string, string> = {}
       for (const entry of failedResults) {
         nextErrors[entry.target.editorId] = entry.error ?? "安装失败"
       }
       setBatchErrors(nextErrors)
 
-      if (failedResults.length === 0) {
+      if (warnings.length > 0) {
+        toast.warning(warnings.join("；"))
+      } else if (failedResults.length === 0) {
         toast.success("安装完成")
       } else if (failedResults.length === result.results.length) {
         toast.error("安装失败")
