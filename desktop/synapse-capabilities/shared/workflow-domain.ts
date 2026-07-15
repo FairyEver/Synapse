@@ -18,7 +18,7 @@ const workflowCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.workflow.definition.get" as CapabilityId, title: "Get workflow", description: "Get a full workflow definition by ID.", mutates: false },
   { id: "app.workflow.definition.inspect" as CapabilityId, title: "Inspect workflow", description: "Validate a workflow definition and return errors/warnings.", mutates: false },
   { id: "app.workflow.run.get" as CapabilityId, title: "Get run status", description: "Get workflow run status by workflowId and runId.", mutates: false },
-  { id: "app.workflow.run.list" as CapabilityId, title: "List run history", description: "List run history for a workflow.", mutates: false },
+  { id: "app.workflow.run.list" as CapabilityId, title: "List run history", description: "List up to 20 run-history snapshots for a workflow.", mutates: false },
   // Whole write
   { id: "app.workflow.definition.create" as CapabilityId, title: "Create workflow", description: "Create a new empty workflow with a default end node.", mutates: true },
   { id: "app.workflow.definition.update" as CapabilityId, title: "Update workflow", description: "Replace a full workflow definition (validate then save).", mutates: true },
@@ -314,12 +314,12 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     },
     {
       name: "workflow_run_list",
-      description: "List run history (snapshots) for a workflow, newest first.",
+      description: "List bounded run history snapshots for a workflow, newest first. The limit is applied before snapshot content is read and migrated.",
       inputSchema: {
         type: "object",
         properties: {
           workflowId: { type: "string", description: "Workflow ID." },
-          limit: { type: "number", description: "Maximum entries to return. Defaults to 20." },
+          limit: { type: "integer", minimum: 1, maximum: 20, description: "Maximum entries to read and return. Defaults to 20." },
         },
         required: ["workflowId"],
       },

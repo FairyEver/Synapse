@@ -1770,6 +1770,7 @@ describe("workflowIpcModule", () => {
       }),
     ])
     expect(JSON.stringify(history)).not.toContain("other-active-run")
+    expect(snapshots.list).toHaveBeenCalledWith("workflow-1", 20)
     expect(logStoreMock.logger.info).toHaveBeenCalledWith("workflow:runHistory", {
       workflowId: "workflow-1",
       count: 2,

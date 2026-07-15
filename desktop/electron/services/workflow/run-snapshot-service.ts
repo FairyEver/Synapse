@@ -11,7 +11,7 @@ import { migrateWorkflowDocument } from "./workflow-document-migration"
 
 const logger = createMainLogger("service.workflow.snapshots")
 
-const MAX = 20
+const MAX_SNAPSHOTS_PER_WORKFLOW = 20
 
 export class RunSnapshotService {
   constructor(private readonly dataDir: string) {}
@@ -20,7 +20,10 @@ export class RunSnapshotService {
   private runArtifactNodesDir(runId: string) { return path.join(this.runArtifactDir(runId), "nodes") }
   private snapshotTime(s: WorkflowRunSnapshot): number { return s.startedAt || s.endedAt || 0 }
 
-  private async readSnapshotFiles(workflowId: string): Promise<Array<{ file: string; snapshot: WorkflowRunSnapshot }>> {
+  private async readSnapshotFiles(
+    workflowId: string,
+    maxFiles?: number,
+  ): Promise<Array<{ file: string; snapshot: WorkflowRunSnapshot }>> {
     const dir = this.dir(workflowId)
     let files: string[]
     try {
@@ -35,7 +38,10 @@ export class RunSnapshotService {
       })
       throw err
     }
-    const entries = await Promise.all(files.map(async (file) => {
+    const selectedFiles = maxFiles === undefined
+      ? files
+      : await selectNewestSnapshotFiles(dir, files, maxFiles, workflowId)
+    const entries = await Promise.all(selectedFiles.map(async (file) => {
       try {
         const raw = JSON.parse(await readFile(path.join(dir, file), "utf-8"))
         if (!isValidSnapshotShape(raw)) {
@@ -78,7 +84,7 @@ export class RunSnapshotService {
       const snapshots = await this.readSnapshotFiles(s.workflowId)
       const stale = snapshots
         .sort((a, b) => this.snapshotTime(a.snapshot) - this.snapshotTime(b.snapshot))
-        .slice(0, Math.max(0, snapshots.length - MAX))
+        .slice(0, Math.max(0, snapshots.length - MAX_SNAPSHOTS_PER_WORKFLOW))
       const tmpFiles = (await readdir(dir)).filter((file) => file.endsWith(".tmp"))
       const now = Date.now()
       const STALE_TMP_AGE_MS = 60_000
@@ -104,8 +110,12 @@ export class RunSnapshotService {
     }
   }
 
-  async list(workflowId: string): Promise<WorkflowRunSnapshot[]> {
-    return (await this.readSnapshotFiles(workflowId))
+  async list(
+    workflowId: string,
+    limit = MAX_SNAPSHOTS_PER_WORKFLOW,
+  ): Promise<WorkflowRunSnapshot[]> {
+    const boundedLimit = normalizeSnapshotListLimit(limit)
+    return (await this.readSnapshotFiles(workflowId, boundedLimit))
       .sort((a, b) => this.snapshotTime(b.snapshot) - this.snapshotTime(a.snapshot))
       .map(({ snapshot }) => snapshot)
   }
@@ -216,6 +226,36 @@ export class RunSnapshotService {
       return null
     }
   }
+}
+
+async function selectNewestSnapshotFiles(
+  dir: string,
+  files: readonly string[],
+  limit: number,
+  workflowId: string,
+): Promise<string[]> {
+  const candidates: Array<{ file: string; modifiedAt: number }> = []
+  for (const file of files) {
+    try {
+      const info = await stat(path.join(dir, file))
+      if (info.isFile()) candidates.push({ file, modifiedAt: info.mtimeMs })
+    } catch (err) {
+      logger.warn("run snapshot stat failed, skipping", {
+        workflowId,
+        file,
+        ...snapshotErrorMetadata(err),
+      })
+    }
+  }
+  return candidates
+    .sort((a, b) => b.modifiedAt - a.modifiedAt || b.file.localeCompare(a.file))
+    .slice(0, limit)
+    .map(({ file }) => file)
+}
+
+function normalizeSnapshotListLimit(limit: number): number {
+  if (!Number.isFinite(limit)) return MAX_SNAPSHOTS_PER_WORKFLOW
+  return Math.min(MAX_SNAPSHOTS_PER_WORKFLOW, Math.max(1, Math.floor(limit)))
 }
 
 function prepareSnapshotForRead(snapshot: WorkflowRunSnapshot): WorkflowRunSnapshot {

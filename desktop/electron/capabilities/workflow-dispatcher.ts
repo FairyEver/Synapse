@@ -291,8 +291,8 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "workflow.run.list": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const limit = typeof params.limit === "number" ? params.limit : 20
-    const snapshots = await deps.snapshotService.list(workflowId)
-    return { ok: true, data: snapshots.slice(0, limit) }
+    const snapshots = await deps.snapshotService.list(workflowId, limit)
+    return { ok: true, data: snapshots }
   },
 
   "workflow.definition.create": async (params, deps) => {

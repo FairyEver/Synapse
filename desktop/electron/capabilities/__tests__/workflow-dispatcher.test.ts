@@ -149,6 +149,13 @@ describe("createWorkflowDispatcher", () => {
         runId: { type: "string" },
       },
     })
+    const runListTool = tools.find((item) => item.name === "workflow_run_list")
+    expect(runListTool?.description).toContain("before snapshot content is read")
+    expect(runListTool?.inputSchema).toMatchObject({
+      properties: {
+        limit: { type: "integer", minimum: 1, maximum: 20 },
+      },
+    })
     const runDisableTool = tools.find((item) => item.name === "workflow_run_disable")
     expect(runDisableTool?.inputSchema).toMatchObject({
       required: ["workflowId", "runId"],
@@ -166,6 +173,31 @@ describe("createWorkflowDispatcher", () => {
     expect(result.ok).toBe(true)
     expect(result.data).toEqual([{ id: "wf-1", name: "Test", version: "v1", nodeCount: 2, createdAt: 1, updatedAt: 2 }])
     expect(deps.workflowService.list).toHaveBeenCalled()
+  })
+
+  it("passes workflow.run.list limit into bounded snapshot loading", async () => {
+    const snapshot = {
+      runId: "run-1",
+      workflowId: "wf-1",
+      version: "v1",
+      startedAt: 1,
+      status: "completed" as const,
+      params: {},
+      nodeResults: {},
+    }
+    const deps = makeDeps({
+      snapshotService: {
+        list: vi.fn(async () => [snapshot]),
+      } as unknown as WorkflowDispatchDeps["snapshotService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "workflow.run.list",
+      { workflowId: "wf-1", limit: 7 },
+      { source: "api" },
+    )).resolves.toMatchObject({ ok: true, data: [snapshot] })
+    expect(deps.snapshotService.list).toHaveBeenCalledWith("wf-1", 7)
   })
 
   it("workflow.definition.create returns id + versionHash", async () => {

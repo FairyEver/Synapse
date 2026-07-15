@@ -1530,7 +1530,7 @@ export const workflowIpcModule: IpcModule = {
       channel: "synapse:workflow:run-history", kind: "invoke", request: z.object({ workflowId: workflowIdSchema }), response: z.array(workflowRunListItemSchema),
       handler: async (ctx, { workflowId }: { workflowId: string }) => {
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
-        const snapshots = await ctx.resolve<RunSnapshotService>("core.workflow.snapshots").list(workflowId)
+        const snapshots = await ctx.resolve<RunSnapshotService>("core.workflow.snapshots").list(workflowId, 20)
         const activeItems = listActiveRunItems(runStatuses, workflowId)
         const memoryItems = listHistoryMemoryRunItems(runStatuses, workflowId)
         const snapshotItems = snapshots.map(snapshotToListItem)

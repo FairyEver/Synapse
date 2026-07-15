@@ -67,6 +67,8 @@ When you see this URI, parse it as `providerId = <providerId>` and `modelTier = 
 12. Poll `app_workflow_run_get` with the workflowId and runId (2-3 second intervals) until status is `completed`, `failed`, or `cancelled`.
 13. To cancel an active run, call `app_workflow_run_disable` with the same workflowId and runId.
 
+Use `app_workflow_run_list` with an integer `limit` from 1 to 20 when recent run history is needed. Synapse applies this bound before decoding and migrating snapshot contents.
+
 Large node outputs are bounded in renderer events, run status, and persisted snapshots. Treat `[truncated]` markers or `__synapseTruncated: true` as a history-size boundary, not as the value used between nodes during execution.
 
 Strict validation runs after every MCP mutation. Do not create disconnected placeholders and plan to connect them later; that save will be rejected. Use connected `app_workflow_node_create` calls or a full `app_workflow_definition_update` instead.

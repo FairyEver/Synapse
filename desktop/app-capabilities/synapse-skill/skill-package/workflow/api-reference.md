@@ -257,8 +257,9 @@ Node results include `durationMs` when available. For failures, inspect the fail
 
 List run history for a workflow (newest first).
 
-**Params:** `workflowId` (string, required), `limit?` (number, default 20)
+**Params:** `workflowId` (string, required), `limit?` (integer, 1-20, default 20)
 **Returns:** Array of run snapshots
+**Notes:** The limit is applied before snapshot files are decoded, migrated, and sanitized. The renderer run-history path uses the same 20-snapshot bound.
 
 ---
 

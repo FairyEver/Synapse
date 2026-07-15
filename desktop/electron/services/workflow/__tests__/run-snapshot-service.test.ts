@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
@@ -86,6 +86,29 @@ describe("RunSnapshotService", () => {
         kind: "failed",
         sourceVersion: "1.0.0",
       })
+    } finally {
+      await rm(dataDir, { recursive: true, force: true })
+    }
+  })
+
+  it("selects only the newest snapshot file candidates for bounded lists", async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), "synapse-run-snapshots-"))
+    const service = new RunSnapshotService(dataDir)
+    const snapshotDir = path.join(dataDir, "workflow-runs", "workflow-1")
+
+    try {
+      await mkdir(snapshotDir, { recursive: true })
+      for (let index = 1; index <= 21; index += 1) {
+        const file = path.join(snapshotDir, `run-${index}.json`)
+        await writeFile(file, JSON.stringify(snapshot(`run-${index}`, index)), "utf-8")
+        await utimes(file, index, index)
+      }
+
+      await expect(service.list("workflow-1", 2)).resolves.toEqual([
+        expect.objectContaining({ runId: "run-21" }),
+        expect.objectContaining({ runId: "run-20" }),
+      ])
+      await expect(service.list("workflow-1", 100)).resolves.toHaveLength(20)
     } finally {
       await rm(dataDir, { recursive: true, force: true })
     }
