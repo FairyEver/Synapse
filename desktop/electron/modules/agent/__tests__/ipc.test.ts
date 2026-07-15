@@ -565,6 +565,78 @@ describe("agentIpcModule", () => {
     expect(send).not.toHaveBeenCalled()
   })
 
+  it("blocks too many path attachments before scanning files", async () => {
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
+    })
+    const harness = createHarness({ agent: { send } })
+
+    await expect(harness.invoke("synapse:agent:send", {
+      projectId: "project-1",
+      content: "read these files",
+      attachments: Array.from({ length: 21 }, (_, index) => ({
+        kind: "path",
+        path: `/missing-${index}`,
+        entryType: "file",
+      })),
+    })).rejects.toThrow("路径附件最多 20 个。")
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it("blocks directory attachments that exceed the aggregate scan entry budget", async () => {
+    const realTmpDir = await fs.realpath(tmpdir())
+    const root = await fs.mkdtemp(path.join(realTmpDir, "synapse-agent-attachments-wide-"))
+    const send = vi.fn()
+    const harness = createHarness({ agent: { send } })
+
+    try {
+      for (let offset = 0; offset < 4_097; offset += 256) {
+        const count = Math.min(256, 4_097 - offset)
+        await Promise.all(Array.from({ length: count }, (_, index) => (
+          fs.mkdir(path.join(root, `entry-${offset + index}`))
+        )))
+      }
+
+      await expect(harness.invoke("synapse:agent:send", {
+        projectId: "project-1",
+        content: "read this directory",
+        attachments: [{ kind: "path", path: root, entryType: "directory" }],
+      })).rejects.toThrow("文件夹附件内容过多，请缩小范围后重试。")
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it("blocks directory attachments that exceed the scan depth limit", async () => {
+    const realTmpDir = await fs.realpath(tmpdir())
+    const root = await fs.mkdtemp(path.join(realTmpDir, "synapse-agent-attachments-deep-"))
+    const send = vi.fn()
+    const harness = createHarness({ agent: { send } })
+
+    try {
+      let current = root
+      for (let depth = 0; depth < 66; depth += 1) {
+        current = path.join(current, "nested")
+        await fs.mkdir(current)
+      }
+
+      await expect(harness.invoke("synapse:agent:send", {
+        projectId: "project-1",
+        content: "read this directory",
+        attachments: [{ kind: "path", path: root, entryType: "directory" }],
+      })).rejects.toThrow("文件夹附件目录层级过深，请缩小范围后重试。")
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
   it("blocks oversized image attachments before sending to AgentRuntime", async () => {
     const send = vi.fn().mockResolvedValue({
       conversationId: "conv-1",

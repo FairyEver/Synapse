@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { lstat, readdir } from "node:fs/promises"
+import { lstat, opendir } from "node:fs/promises"
 import path from "node:path"
 import { BrowserWindow, dialog } from "electron"
 import { z } from "zod"
@@ -41,6 +41,9 @@ const MAX_CLIENT_SKEW_MS = 60_000
 const MAX_AGENT_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
 const MAX_AGENT_IMAGE_ATTACHMENTS = 8
 const MAX_AGENT_IMAGE_ATTACHMENT_TOTAL_BYTES = 20 * 1024 * 1024
+const MAX_AGENT_PATH_ATTACHMENTS = 20
+const MAX_AGENT_DIRECTORY_SCAN_DEPTH = 64
+const MAX_AGENT_DIRECTORY_SCAN_ENTRIES = 4_096
 const logger = createMainLogger("agent.ipc")
 const agentImageMimeTypeSchema = z.enum(["image/jpeg", "image/png", "image/gif", "image/webp"])
 const binaryAttachmentDataSchema = z.custom<ArrayBuffer | Uint8Array>(
@@ -103,7 +106,12 @@ async function normalizeSendAttachments(
   attachments: SendRequest["attachments"],
 ): Promise<AgentMessage["attachments"]> {
   if (!attachments || attachments.length === 0) return undefined
+  const pathAttachmentCount = attachments.filter((attachment) => attachment.kind === "path").length
+  if (pathAttachmentCount > MAX_AGENT_PATH_ATTACHMENTS) {
+    throw new Error(`路径附件最多 ${MAX_AGENT_PATH_ATTACHMENTS} 个。`)
+  }
   const normalized: AgentAttachment[] = []
+  const directoryScanBudget = { remainingEntries: MAX_AGENT_DIRECTORY_SCAN_ENTRIES }
   let imageCount = 0
   let totalImageBytes = 0
   for (const attachment of attachments) {
@@ -135,7 +143,7 @@ async function normalizeSendAttachments(
       throw new Error("附件路径必须是文件或文件夹。")
     }
     if (stat.isDirectory()) {
-      await assertDirectoryAttachmentHasNoSymlinks(normalizedPath)
+      await assertDirectoryAttachmentHasNoSymlinks(normalizedPath, directoryScanBudget)
     }
     normalized.push({
       ...attachment,
@@ -165,20 +173,30 @@ async function lstatAttachmentPath(attachmentPath: string): Promise<Awaited<Retu
   return finalStat
 }
 
-async function assertDirectoryAttachmentHasNoSymlinks(directoryPath: string): Promise<void> {
-  const pending = [directoryPath]
+async function assertDirectoryAttachmentHasNoSymlinks(
+  directoryPath: string,
+  budget: { remainingEntries: number },
+): Promise<void> {
+  const pending = [{ directoryPath, depth: 0 }]
   while (pending.length > 0) {
-    const currentDirectory = pending.pop()
-    if (!currentDirectory) continue
-    const entries = await readdir(currentDirectory, { withFileTypes: true })
-    for (const entry of entries) {
-      const entryPath = path.join(currentDirectory, entry.name)
+    const current = pending.pop()
+    if (!current) continue
+    const entries = await opendir(current.directoryPath)
+    for await (const entry of entries) {
+      if (budget.remainingEntries <= 0) {
+        throw new Error("文件夹附件内容过多，请缩小范围后重试。")
+      }
+      budget.remainingEntries -= 1
+      const entryPath = path.join(current.directoryPath, entry.name)
       const entryStat = await lstat(entryPath)
       if (entryStat.isSymbolicLink()) {
         throw new Error("文件夹附件不能包含符号链接。")
       }
       if (entryStat.isDirectory()) {
-        pending.push(entryPath)
+        if (current.depth >= MAX_AGENT_DIRECTORY_SCAN_DEPTH) {
+          throw new Error("文件夹附件目录层级过深，请缩小范围后重试。")
+        }
+        pending.push({ directoryPath: entryPath, depth: current.depth + 1 })
       }
     }
   }
