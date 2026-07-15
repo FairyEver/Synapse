@@ -1,4 +1,4 @@
-import type { WorkflowDefinition, WorkflowFutureDocument } from "./workflow"
+import type { WorkflowDefinition } from "./workflow"
 
 export type WorkflowPackageModelTier = "default" | "haiku" | "sonnet" | "opus"
 
@@ -44,12 +44,12 @@ export interface SynapseWorkflowPackageV3<TWorkflow = WorkflowDefinition> {
   modelReferences: WorkflowModelReference[]
 }
 
-export type SynapseWorkflowExportPackageV3 = SynapseWorkflowPackageV3<WorkflowDefinition | WorkflowFutureDocument>
+export type SynapseWorkflowExportPackageV3 = SynapseWorkflowPackageV3
 
 export type SynapseWorkflowPackage =
   | SynapseWorkflowPackageV1
   | SynapseWorkflowPackageV2
-  | SynapseWorkflowExportPackageV3
+  | SynapseWorkflowPackageV3
 
 export interface WorkflowModelMapping {
   sourceRefId: string

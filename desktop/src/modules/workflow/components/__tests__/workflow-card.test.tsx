@@ -215,7 +215,7 @@ describe("WorkflowCard", () => {
     })
 
     const runButton = container.querySelector<HTMLButtonElement>('[aria-label="运行工作流"]')
-    const exportButton = container.querySelector<HTMLButtonElement>('[aria-label="导出工作流"]')
+    const exportButton = container.querySelector<HTMLButtonElement>('[aria-label="导出工作流原文"]')
     expect(runButton?.disabled).toBe(true)
     expect(exportButton?.disabled).toBe(false)
 

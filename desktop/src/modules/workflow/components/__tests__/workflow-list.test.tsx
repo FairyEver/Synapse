@@ -243,7 +243,10 @@ describe("WorkflowList", () => {
   })
 
   it("exports a workflow from the card action", async () => {
-    workflowExportPackage.mockResolvedValue({ path: "/tmp/parameterized.synapse-workflow.json" })
+    workflowExportPackage.mockResolvedValue({
+      path: "/tmp/parameterized.synapse-workflow.json",
+      kind: "package",
+    })
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -260,6 +263,27 @@ describe("WorkflowList", () => {
 
     expect(workflowExportPackage).toHaveBeenCalledWith("workflow-param", "Parameterized")
     expect(toastSuccess).toHaveBeenCalledWith("工作流已导出")
+  })
+
+  it("reports protected raw exports explicitly", async () => {
+    workflowExportPackage.mockResolvedValue({
+      path: "/tmp/future.synapse-workflow-future.json",
+      kind: "future-raw",
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowList onCreate={vi.fn()} />)
+    })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-track="workflow-card-export"]')?.click()
+      await Promise.resolve()
+    })
+
+    expect(toastSuccess).toHaveBeenCalledWith("工作流原文已导出")
   })
 
   it("loads active runs and reopens the runner from the workflow card", async () => {

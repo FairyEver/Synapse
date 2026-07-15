@@ -2,7 +2,7 @@
 
 All tools are accessed via the `synapse-mcp` MCP server.
 
-Workflow definition responses include `meta.schemaVersion` (SemVer). Preserve it on whole-definition updates. Do not confuse it with the `version` save revision. Synapse migrates supported legacy documents before returning them and blocks future or failed documents from fetch, update, and execution. List metadata can expose `loadError`; `rawExportAvailable` refers only to the Synapse UI's protected raw export path.
+Workflow definition responses include `meta.schemaVersion` (SemVer). Preserve it on whole-definition updates. Do not confuse it with the `version` save revision. Synapse migrates supported legacy documents before returning them and blocks future or failed documents from fetch, update, and execution. List metadata can expose `loadError`; `rawExportAvailable` refers only to the Synapse UI's protected raw export path, which writes the untouched workflow JSON document rather than an importable Synapse workflow package.
 
 ---
 

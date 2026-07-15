@@ -1691,7 +1691,10 @@ export type SynapseBridge = {
     openEditor: (id: string, runId?: string) => Promise<void>
     editorState: () => Promise<{ openEditors: string[] }>
     checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
-    exportPackage: (workflowId: string, workflowName?: string) => Promise<{ path: string } | null>
+    exportPackage: (workflowId: string, workflowName?: string) => Promise<{
+      path: string
+      kind: "package" | "future-raw"
+    } | null>
     inspectImportPackage: () => Promise<WorkflowImportPreview | null>
     importPackage: (packagePath: string, mappings: WorkflowModelMapping[], options?: WorkflowImportOptions, packageDigest?: string) => Promise<{ workflowId: string; versionHash: string } | { errors: ValidationError[] }>
     chooseParamFile: () => Promise<string | null>

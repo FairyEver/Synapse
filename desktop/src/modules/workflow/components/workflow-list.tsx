@@ -157,7 +157,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     try {
       const result = await requireBridgeDomain("workflow").exportPackage(id, name)
       if (!result) return
-      toast.success("工作流已导出")
+      toast.success(result.kind === "future-raw" ? "工作流原文已导出" : "工作流已导出")
     } catch (err) {
       logger.warn("Workflow export failed.", {
         boundary: "renderer.workflow.list.export",

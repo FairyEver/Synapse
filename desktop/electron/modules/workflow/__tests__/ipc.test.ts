@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -1406,11 +1406,15 @@ describe("workflowIpcModule", () => {
     const targetPath = path.join(tempRoot, "workflow.synapse-workflow.json")
     electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: targetPath })
     const packageService = {
-      buildExportPackage: vi.fn(async () => ({
-        format: "synapse-workflow-package-v1",
-        exportedAt: "2026-05-26T00:00:00.000Z",
-        workflow: workflowDefinition(),
-        modelReferences: [],
+      buildExportArtifact: vi.fn(async () => ({
+        kind: "package",
+        workflowName: "Workflow",
+        package: {
+          format: "synapse-workflow-package-v1",
+          exportedAt: "2026-05-26T00:00:00.000Z",
+          workflow: workflowDefinition(),
+          modelReferences: [],
+        },
       })),
     }
     const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
@@ -1430,7 +1434,7 @@ describe("workflowIpcModule", () => {
         workflowName: "Workflow",
       })
 
-      expect(result).toEqual({ path: targetPath })
+      expect(result).toEqual({ path: targetPath, kind: "package" })
       expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
         action: "fs.write",
         outcome: "allowed",
@@ -1438,6 +1442,65 @@ describe("workflowIpcModule", () => {
         metadata: {
           source: "workflow.exportPackage.write",
           workflowId: "workflow-1",
+          exportKind: "package",
+        },
+      }))
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
+  it("writes future workflows as protected raw documents instead of packages", async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-future-export-test-"))
+    const targetPath = path.join(tempRoot, "future.synapse-workflow-future.json")
+    const futureDocument = {
+      id: "workflow-future",
+      name: "Future Workflow",
+      meta: { schemaVersion: "9.0.0" },
+      futureOnly: { preserve: true },
+    }
+    electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: targetPath })
+    const packageService = {
+      buildExportArtifact: vi.fn(async () => ({
+        kind: "future-raw",
+        document: futureDocument,
+        sourceVersion: "9.0.0",
+        workflowName: "Future Workflow",
+      })),
+    }
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      if (serviceId === "core.permission-guard") return permissionGuard as T
+      if (serviceId === "core.audit-sink") return auditSink as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    try {
+      const result = await harness.invoke("synapse:workflow:export-package", {
+        workflowId: futureDocument.id,
+        workflowName: futureDocument.name,
+      })
+
+      expect(result).toEqual({ path: targetPath, kind: "future-raw" })
+      expect(JSON.parse(await readFile(targetPath, "utf8"))).toEqual(futureDocument)
+      expect(await readFile(targetPath, "utf8")).not.toContain("synapse-workflow-package")
+      expect(electronMock.dialog.showSaveDialog).toHaveBeenCalledWith(expect.objectContaining({
+        title: "导出未来版本工作流原文",
+        defaultPath: "Future Workflow.synapse-workflow-future.json",
+      }))
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.write",
+        outcome: "allowed",
+        resource: targetPath,
+        metadata: {
+          source: "workflow.exportRawDocument.write",
+          workflowId: futureDocument.id,
+          exportKind: "future-raw",
+          sourceVersion: "9.0.0",
         },
       }))
     } finally {
@@ -1448,11 +1511,15 @@ describe("workflowIpcModule", () => {
   it("uses a Windows-safe default file name for workflow package export", async () => {
     electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: true })
     const packageService = {
-      buildExportPackage: vi.fn(async () => ({
-        format: "synapse-workflow-package-v1",
-        exportedAt: "2026-05-26T00:00:00.000Z",
-        workflow: { ...workflowDefinition(), name: "CON" },
-        modelReferences: [],
+      buildExportArtifact: vi.fn(async () => ({
+        kind: "package",
+        workflowName: "CON",
+        package: {
+          format: "synapse-workflow-package-v1",
+          exportedAt: "2026-05-26T00:00:00.000Z",
+          workflow: { ...workflowDefinition(), name: "CON" },
+          modelReferences: [],
+        },
       })),
     }
     const harness = createInMemoryHarness()

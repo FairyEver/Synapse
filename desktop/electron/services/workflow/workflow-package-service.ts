@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import type { WorkflowDefinition, WorkflowNode } from "../../../src/types/workflow"
+import type { WorkflowDefinition, WorkflowFutureDocument, WorkflowNode } from "../../../src/types/workflow"
 import type {
   SynapseWorkflowPackage,
   SynapseWorkflowExportPackageV3,
@@ -34,6 +34,19 @@ interface WorkflowPackageServiceDeps {
   readonly createId?: () => string
 }
 
+export type WorkflowExportArtifact =
+  | {
+      readonly kind: "package"
+      readonly package: SynapseWorkflowPackageV3
+      readonly workflowName: string
+    }
+  | {
+      readonly kind: "future-raw"
+      readonly document: WorkflowFutureDocument
+      readonly sourceVersion: string
+      readonly workflowName: string
+    }
+
 export class WorkflowPackageService {
   private readonly workflowService: Pick<WorkflowService, "getExportDocument" | "save">
   private readonly providerService: Pick<ProviderService, "listProviders">
@@ -48,25 +61,38 @@ export class WorkflowPackageService {
   }
 
   async buildExportPackage(workflowId: string): Promise<SynapseWorkflowExportPackageV3> {
+    const artifact = await this.buildExportArtifact(workflowId)
+    if (artifact.kind === "future-raw") {
+      throw new Error(`Future workflow ${workflowId} requires raw export`)
+    }
+    return artifact.package
+  }
+
+  async buildExportArtifact(workflowId: string): Promise<WorkflowExportArtifact> {
     const exportDocument = await this.workflowService.getExportDocument(workflowId)
     if (!exportDocument) throw new Error(`Workflow ${workflowId} not found`)
     if (exportDocument.kind === "future") {
       return {
-        format: PACKAGE_FORMAT,
-        formatVersion: PACKAGE_FORMAT_VERSION,
-        exportedAt: this.now().toISOString(),
-        workflow: exportDocument.document,
-        modelReferences: [],
+        kind: "future-raw",
+        document: exportDocument.document,
+        sourceVersion: exportDocument.sourceVersion,
+        workflowName: typeof exportDocument.document.name === "string"
+          ? exportDocument.document.name
+          : "workflow",
       }
     }
     const workflow = exportDocument.document
     const providers = await this.providerService.listProviders()
     return {
-      format: PACKAGE_FORMAT,
-      formatVersion: PACKAGE_FORMAT_VERSION,
-      exportedAt: this.now().toISOString(),
-      workflow,
-      modelReferences: buildModelReferences(workflow, providers),
+      kind: "package",
+      workflowName: workflow.name,
+      package: {
+        format: PACKAGE_FORMAT,
+        formatVersion: PACKAGE_FORMAT_VERSION,
+        exportedAt: this.now().toISOString(),
+        workflow,
+        modelReferences: buildModelReferences(workflow, providers),
+      },
     }
   }
 

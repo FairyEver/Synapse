@@ -854,28 +854,37 @@ export const workflowIpcModule: IpcModule = {
     exportPackage: {
       channel: "synapse:workflow:export-package", kind: "invoke",
       request: z.object({ workflowId: workflowIdSchema, workflowName: z.string().optional() }),
-      response: z.object({ path: z.string() }).nullable(),
+      response: z.object({
+        path: z.string(),
+        kind: z.enum(["package", "future-raw"]),
+      }).nullable(),
       handler: async (ctx, { workflowId, workflowName }: { workflowId: string; workflowName?: string }) => {
-        const pkg = await ctx.resolve<WorkflowPackageService>("core.workflow.package").buildExportPackage(workflowId)
-        const safeName = normalizeContentFileNameSegment(workflowName || pkg.workflow.name || "workflow")
+        const artifact = await ctx.resolve<WorkflowPackageService>("core.workflow.package").buildExportArtifact(workflowId)
+        const isFutureRaw = artifact.kind === "future-raw"
+        const safeName = normalizeContentFileNameSegment(workflowName || artifact.workflowName || "workflow")
+        const dialogTitle = isFutureRaw ? "导出未来版本工作流原文" : "导出工作流"
+        const defaultPath = isFutureRaw
+          ? `${safeName}.synapse-workflow-future.json`
+          : `${safeName}.synapse-workflow.json`
         const parentWindow = focusedWindow()
         const result = parentWindow
           ? await dialog.showSaveDialog(parentWindow, {
-            title: "导出工作流",
-            defaultPath: `${safeName}.synapse-workflow.json`,
+            title: dialogTitle,
+            defaultPath,
             filters: [{ name: "Synapse Workflow", extensions: ["json"] }],
           })
           : await dialog.showSaveDialog({
-            title: "导出工作流",
-            defaultPath: `${safeName}.synapse-workflow.json`,
+            title: dialogTitle,
+            defaultPath,
             filters: [{ name: "Synapse Workflow", extensions: ["json"] }],
           })
         if (result.canceled || !result.filePath) return null
         const action: PermissionAction = "fs.write"
-        const source = "workflow.exportPackage"
+        const source = isFutureRaw ? "workflow.exportRawDocument" : "workflow.exportPackage"
         const auditSink = await checkFilePermission({ ctx, action, resource: result.filePath, source })
+        const content = isFutureRaw ? artifact.document : artifact.package
         try {
-          await writeFile(result.filePath, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8")
+          await writeFile(result.filePath, `${JSON.stringify(content, null, 2)}\n`, "utf-8")
         } catch (error) {
           recordFilePermissionFailure({ auditSink, action, resource: result.filePath, source, error })
           throw error
@@ -886,12 +895,18 @@ export const workflowIpcModule: IpcModule = {
           resource: result.filePath,
           outcome: "allowed",
           metadata: {
-            source: "workflow.exportPackage.write",
+            source: isFutureRaw ? "workflow.exportRawDocument.write" : "workflow.exportPackage.write",
             workflowId,
+            exportKind: artifact.kind,
+            ...(isFutureRaw ? { sourceVersion: artifact.sourceVersion } : {}),
           },
         })
-        logger.info("workflow package exported", { workflowId, fileBase: path.basename(result.filePath) })
-        return { path: result.filePath }
+        logger.info("workflow exported", {
+          workflowId,
+          exportKind: artifact.kind,
+          fileBase: path.basename(result.filePath),
+        })
+        return { path: result.filePath, kind: artifact.kind }
       },
     },
     inspectImportPackage: {

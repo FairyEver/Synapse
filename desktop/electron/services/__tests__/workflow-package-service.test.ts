@@ -253,16 +253,22 @@ describe("WorkflowPackageService", () => {
       meta: { schemaVersion: "2.0.0" },
       futureOnly: { mode: "preserve-exactly" },
     }
-    workflowService.getExportDocument.mockResolvedValueOnce({
+    workflowService.getExportDocument.mockResolvedValue({
       kind: "future",
       document: futureDocument,
       sourceVersion: "2.0.0",
     })
 
-    const pkg = await service.buildExportPackage(futureDocument.id)
+    const artifact = await service.buildExportArtifact(futureDocument.id)
 
-    expect(pkg.workflow).toEqual(futureDocument)
-    expect(pkg.modelReferences).toEqual([])
+    expect(artifact).toEqual({
+      kind: "future-raw",
+      document: futureDocument,
+      sourceVersion: "2.0.0",
+      workflowName: "Future Workflow",
+    })
+    await expect(service.buildExportPackage(futureDocument.id))
+      .rejects.toThrow("requires raw export")
     expect(providerService.listProviders).not.toHaveBeenCalled()
   })
 
