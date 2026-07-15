@@ -40,6 +40,7 @@ export function resolveBindingChildPath(rootPath: string, relativePath: string):
 export async function prepareDriveSyncTargetPath(rootPath: string, targetPath: string): Promise<string> {
   const target = assertInsideBindingRoot(rootPath, targetPath)
   const parent = path.dirname(target)
+  await assertNoSymlinkPathComponents(rootPath, parent)
   await mkdir(parent, { recursive: true })
   await assertNoSymlinkPathComponents(rootPath, parent)
   await assertNotExistingSymlink(target)
@@ -51,6 +52,7 @@ export async function createDriveSyncDirectoryTarget(rootPath: string, targetPat
   const target = assertInsideBindingRoot(root, targetPath)
   const parent = path.dirname(target)
   if (target !== root) {
+    await assertNoSymlinkPathComponents(root, parent)
     await mkdir(parent, { recursive: true })
     await assertNoSymlinkPathComponents(root, parent)
   }

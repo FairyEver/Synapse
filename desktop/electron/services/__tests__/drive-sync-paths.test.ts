@@ -1,10 +1,15 @@
+import { lstat, mkdtemp, rm, symlink } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import { describe, expect, it } from "vitest"
 import {
   assertInsideBindingRoot,
+  createDriveSyncDirectoryTarget,
   localPathCollisionKey,
   localPathsOverlap,
   normalizeLocalPath,
   pathCollisionKey,
+  prepareDriveSyncTargetPath,
   resolveBindingChildPath,
   toDriveSyncRelativePath,
 } from "../drive-sync-paths"
@@ -37,5 +42,35 @@ describe("drive sync path utilities", () => {
     expect(localPathsOverlap("/Users/me/Docs", "/users/me/docs")).toBe(true)
     expect(localPathsOverlap("/Users/me/Docs", "/USERS/me/docs/Nested")).toBe(true)
     expect(localPathsOverlap("/Users/me/Docs", "/Users/me/Other")).toBe(false)
+  })
+
+  it("does not create file parent directories through symlinked binding children", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-paths-root-"))
+    const outside = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-paths-outside-"))
+    try {
+      await symlink(outside, path.join(root, "linked"), "dir")
+
+      await expect(prepareDriveSyncTargetPath(root, path.join(root, "linked", "nested", "file.txt")))
+        .rejects.toThrow("同步路径包含符号链接，已停止写入。")
+      await expect(lstat(path.join(outside, "nested"))).rejects.toMatchObject({ code: "ENOENT" })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  it("does not create directory targets through symlinked binding children", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-paths-root-"))
+    const outside = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-paths-outside-"))
+    try {
+      await symlink(outside, path.join(root, "linked"), "dir")
+
+      await expect(createDriveSyncDirectoryTarget(root, path.join(root, "linked", "nested", "folder")))
+        .rejects.toThrow("同步路径包含符号链接，已停止写入。")
+      await expect(lstat(path.join(outside, "nested"))).rejects.toMatchObject({ code: "ENOENT" })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(outside, { recursive: true, force: true })
+    }
   })
 })
