@@ -843,7 +843,7 @@ async function readFileHandleSnapshot(handle: FileHandle, expectedSize: bigint):
 async function prepareAtomicEnvReplacement(
   envPath: string,
   content: string,
-  mode: number,
+  existingMode: number,
   atomicFileOps: NonNullable<SkillEnvBindingServiceDeps["atomicFileOps"]>,
 ): Promise<PreparedAtomicEnvReplacement> {
   const temporaryPath = path.join(path.dirname(envPath), `.synapse-env-${randomUUID()}.tmp`)
@@ -859,7 +859,7 @@ async function prepareAtomicEnvReplacement(
     const handle = await atomicFileOps.open(temporaryPath, flags, 0o600)
     prepared = { path: temporaryPath, handle }
     await writeFileHandleFully(handle, content)
-    await handle.chmod(mode)
+    await handle.chmod(existingMode & 0o600)
     await handle.sync()
     return prepared
   } catch (error) {

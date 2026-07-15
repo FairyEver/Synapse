@@ -983,12 +983,13 @@ describe("SkillEnvBindingService", () => {
     expect(await listSkillEnvTemps(skill)).toEqual([])
   })
 
-  it("preserves env permission bits and leaves no staged file after success", async () => {
+  it("restricts env and staged permission bits after success", async () => {
     const root = await createRoot()
     const skill = await createSkill(root, "demo", "TOKEN=old\n")
     const envPath = path.join(skill, ".env")
     await chmod(envPath, 0o640)
     let stagedOpenCalls = 0
+    let stagedModeBeforeRename: number | undefined
     const harness = createHarness(
       [trustedRoot(root)],
       () => 100,
@@ -998,6 +999,10 @@ describe("SkillEnvBindingService", () => {
         open: async (filePath, flags, mode) => {
           stagedOpenCalls += 1
           return open(filePath, flags, mode)
+        },
+        rename: async (sourcePath, targetPath) => {
+          stagedModeBeforeRename = (await stat(sourcePath)).mode & 0o7777
+          await rename(sourcePath, targetPath)
         },
       }),
     )
@@ -1011,7 +1016,8 @@ describe("SkillEnvBindingService", () => {
 
     expect(stagedOpenCalls).toBe(1)
     expect(result.items).toEqual([expect.objectContaining({ status: "updated" })])
-    expect((await stat(envPath)).mode & 0o7777).toBe(0o640)
+    expect(stagedModeBeforeRename).toBe(0o600)
+    expect((await stat(envPath)).mode & 0o7777).toBe(0o600)
     expect(await listSkillEnvTemps(skill)).toEqual([])
   })
 
