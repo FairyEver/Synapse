@@ -57,23 +57,32 @@ type MarkdownAnnotationOverlayRect = {
   readonly height: number
 }
 
-export function DriveMarkdownRenderer({
-  current,
-  preview,
-  edit,
-  annotationContext,
-  editContext,
-  imageSourceContext,
-}: {
+type DriveMarkdownRendererProps = {
   readonly current: DriveBrowserItemDto
   readonly preview: DriveBrowserPreviewDto
   readonly edit?: DriveBrowserEditDto | null
   readonly annotationContext?: DriveAnnotationContext
   readonly editContext?: DriveRendererEditContext
   readonly imageSourceContext?: DriveMarkdownImageSourceContext
-}) {
-  const renderedHtml = preview.html?.trim()
-  if (!renderedHtml) return <DriveCodeRenderer current={current} preview={preview} edit={edit} editContext={editContext} />
+}
+
+export function DriveMarkdownRenderer(props: DriveMarkdownRendererProps) {
+  const renderedHtml = props.preview.html?.trim()
+  if (!renderedHtml) {
+    return <DriveCodeRenderer current={props.current} preview={props.preview} edit={props.edit} editContext={props.editContext} />
+  }
+  return <DriveMarkdownBody {...props} renderedHtml={renderedHtml} />
+}
+
+function DriveMarkdownBody({
+  current,
+  preview,
+  edit,
+  annotationContext,
+  editContext,
+  imageSourceContext,
+  renderedHtml,
+}: DriveMarkdownRendererProps & { readonly renderedHtml: string }) {
   const outline = preview.outline ?? []
   const layoutRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
