@@ -277,7 +277,11 @@ export class WorkflowEngine {
           const effectiveProjectId = nodeProjectId ?? projectId
 
           const execResult = await executor.execute({
-            config: cfg, resolvedVariables: resolved, paramValues, paramDefinitions: def.params,
+            config: cfg,
+            resolvedVariables: resolved,
+            ...(node.type === "workflow_call" ? { nodeOutputs: { ...nodeOutputs } } : {}),
+            paramValues,
+            paramDefinitions: def.params,
             context: {
               projectId: effectiveProjectId,
               workflowId: def.id,

@@ -122,6 +122,27 @@ describe("workflowCallNodeExecutor", () => {
     }))
   })
 
+  it("resolves a single-resource node_output binding from upstream node outputs", async () => {
+    const runtimeDeps = deps()
+    const input = makeInput({
+      paramTemplates: {},
+      paramBindings: { input_file: { mode: "value", source: { type: "node_output", node: "prepare" } } },
+    }, runtimeDeps)
+    input.resolvedVariables = { prepare: "/tmp/wrong-variable-value.txt" }
+    input.nodeOutputs = { prepare: "/tmp/generated.txt" }
+    vi.mocked(runtimeDeps.workflowCall!.getWorkflowDefinition).mockResolvedValue({
+      ...childDefinition,
+      params: [{ name: "input_file", type: "file", default: null }],
+    })
+
+    const result = await workflowCallNodeExecutor.execute(input)
+
+    expect(result.status).toBe("success")
+    expect(runtimeDeps.workflowCall?.runWorkflow).toHaveBeenCalledWith(expect.objectContaining({
+      params: { input_file: "/tmp/generated.txt" },
+    }))
+  })
+
   it("keeps legacy single-resource template params compatible", async () => {
     const runtimeDeps = deps()
     vi.mocked(runtimeDeps.workflowCall!.getWorkflowDefinition).mockResolvedValue({

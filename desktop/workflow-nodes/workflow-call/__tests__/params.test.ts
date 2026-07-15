@@ -154,7 +154,8 @@ describe("workflow call params", () => {
       childDefinition: child([{ name: "input_dir", type: "directory", default: null }]),
       paramTemplates: {},
       paramBindings: { input_dir: { mode: "value", source: { type: "node_output", node: "prepare" } } },
-      resolvedVariables: { prepare: "/tmp/generated" },
+      resolvedVariables: { prepare: "/tmp/wrong-variable-value" },
+      nodeOutputs: { prepare: "/tmp/generated" },
     })
 
     expect(staticResult).toEqual({ params: { input_file: "/tmp/static.txt" }, errors: [] })

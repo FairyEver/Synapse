@@ -9,6 +9,8 @@ import { claudeCodeNodeManifest } from "../../../../workflow-nodes/claude-code/m
 import { endNodeExecutor } from "../../../../workflow-nodes/end/executor.main"
 import { endNodeManifest } from "../../../../workflow-nodes/end/manifest"
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
+import { workflowCallNodeExecutor } from "../../../../workflow-nodes/workflow-call/executor.main"
+import { workflowCallNodeManifest } from "../../../../workflow-nodes/workflow-call/manifest"
 import { WorkflowEngine } from "../workflow-engine"
 
 const logger = vi.hoisted(() => ({
@@ -133,7 +135,102 @@ describe("WorkflowEngine", () => {
     expect(result.status).toBe("completed")
     expect(receivedConfigs[0]?.timeoutMins).toBe(30)
   })
+
+  it("passes upstream node outputs to workflow call value bindings", async () => {
+    const codexExecutor: NodeExecutor<CodexNodeConfig> = {
+      execute: vi.fn(async () => ({
+        status: "success" as const,
+        output: "/tmp/generated.txt",
+        durationMs: 1,
+      })),
+    }
+    const runWorkflow = vi.fn(async () => ({
+      runId: "child-run",
+      result: { status: "completed" as const, output: "child done", nodeResults: {}, durationMs: 1 },
+    }))
+    nodeTypeRegistry.register(codexNodeManifest, codexExecutor)
+    nodeTypeRegistry.register(workflowCallNodeManifest, workflowCallNodeExecutor)
+    nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
+    const engine = new WorkflowEngine({ sendToAgent: vi.fn() }, undefined, {
+      processRunner: { run: vi.fn() },
+      sendHttpRequest: vi.fn(),
+      workflowCall: {
+        getWorkflowDefinition: vi.fn(async () => childWorkflowWithFileParam()),
+        runWorkflow,
+      },
+    })
+
+    const result = await engine.run(workflowWithNodeOutputCall(), {}, "run-1", vi.fn(), undefined, "project-1")
+
+    expect(result.status).toBe("completed")
+    expect(runWorkflow).toHaveBeenCalledWith(expect.objectContaining({
+      params: { input_file: "/tmp/generated.txt" },
+    }))
+  })
 })
+
+function childWorkflowWithFileParam(): WorkflowDefinition {
+  return {
+    id: "child-1",
+    name: "Child",
+    version: "v1",
+    createdAt: 1,
+    updatedAt: 1,
+    params: [{ name: "input_file", type: "file", default: null }],
+    nodes: [],
+    edges: [],
+  }
+}
+
+function workflowWithNodeOutputCall(): WorkflowDefinition {
+  return {
+    id: "workflow-1",
+    name: "Workflow call",
+    version: "v1",
+    createdAt: 1,
+    updatedAt: 1,
+    defaultProjectId: "project-1",
+    params: [],
+    nodes: [
+      {
+        id: "prepare",
+        name: "Prepare",
+        type: "codex",
+        position: { x: 0, y: 0 },
+        config: { ...defaultCodexNodeConfig, prompt: "Generate" },
+      },
+      {
+        id: "call",
+        name: "Call",
+        type: "workflow_call",
+        position: { x: 200, y: 0 },
+        config: {
+          workflowId: "child-1",
+          variables: [],
+          paramTemplates: {},
+          paramBindings: {
+            input_file: { mode: "value", source: { type: "node_output", node: "prepare" } },
+          },
+        },
+      },
+      {
+        id: "end",
+        name: "End",
+        type: "end",
+        position: { x: 400, y: 0 },
+        config: {
+          outputType: "text",
+          template: "{{result}}",
+          variables: [{ name: "result", source: { type: "node_output", node: "call" } }],
+        },
+      },
+    ],
+    edges: [
+      { id: "edge-1", from: "prepare", to: "call" },
+      { id: "edge-2", from: "call", to: "end" },
+    ],
+  }
+}
 
 function workflowWithCodexNode(): WorkflowDefinition {
   return {

@@ -42,6 +42,7 @@ export const workflowCallNodeExecutor: NodeExecutor<WorkflowCallNodeConfig> = {
       parentParamValues: input.paramValues,
       parentParamDefinitions: input.paramDefinitions,
       resolvedVariables,
+      nodeOutputs: input.nodeOutputs,
     })
     if (paramResult.errors.length > 0) {
       return { status: "failed", output: "", error: paramResult.errors[0], durationMs: Date.now() - start }

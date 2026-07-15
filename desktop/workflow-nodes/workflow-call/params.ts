@@ -10,6 +10,7 @@ export interface BuildWorkflowCallParamsInput {
   parentParamValues?: Record<string, unknown>
   parentParamDefinitions?: readonly WorkflowParam[]
   resolvedVariables: Record<string, string>
+  nodeOutputs?: Readonly<Record<string, string>>
 }
 
 export interface BuildWorkflowCallParamsResult {
@@ -101,7 +102,7 @@ export function validateWorkflowCallValueBinding(
 function resolveValueBinding(source: WorkflowVariableSource, input: BuildWorkflowCallParamsInput): unknown {
   if (source.type === "param") return input.parentParamValues?.[source.param]
   if (source.type === "static") return source.value
-  return input.resolvedVariables[source.node] ?? ""
+  return input.nodeOutputs?.[source.node] ?? ""
 }
 
 function renderTemplateParam(

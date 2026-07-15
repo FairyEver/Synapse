@@ -120,6 +120,7 @@ export interface WorkflowCallRuntimeDeps {
 export interface NodeExecutionInput<TConfig> {
   config: TConfig
   resolvedVariables: Record<string, string>
+  nodeOutputs?: Readonly<Record<string, string>>
   paramValues?: Record<string, unknown>
   paramDefinitions?: readonly WorkflowParam[]
   context: WorkflowRuntimeContext
