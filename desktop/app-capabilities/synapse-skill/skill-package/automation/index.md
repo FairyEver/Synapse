@@ -109,6 +109,8 @@ Default flow:
 
 `concurrency` is the number of slots. `maxRounds` is the number of batches in `batch` mode and the per-slot round count in `continuous` mode, so the planned worker count is `concurrency * maxRounds`. Stop or cancel can make the actual started count lower.
 
+If Synapse restarts while a run is active, the run is recovered as `failed` with an interruption error because worker processes are not resumed across main-process restarts.
+
 Summary injection is disabled by default. Sequence/batch context, previous handoff, summary, recent-summary injection, and file-write instructions are all opt-in; file locking remains enabled if file-write injection is later enabled. If handoff is enabled, batch mode passes the previous batch's handoffs forward, while continuous mode passes the same slot's previous round handoff forward. Summary `recentLimit` defaults to 3 when recent-summary injection is enabled.
 
 ## API Reference

@@ -123,6 +123,8 @@ type TerminalWorkerOutcome = {
   readonly conversationId?: string
 }
 
+const INTERRUPTED_RUN_ERROR = "Synapse 重启，运行已中断"
+
 export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
   const timestamp = () => (deps.now ?? (() => new Date()))().toISOString()
   const createId = deps.idFactory ?? (() => randomUUID())
@@ -130,6 +132,73 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
   const runningRuns = new Map<string, Promise<void>>()
   const terminalRunStatuses = new Set<SwarmRun["status"]>(["success", "partial", "failed", "cancelled"])
   const activeRunStatuses = new Set<SwarmRun["status"]>(["running", "draining"])
+
+  async function initialize(): Promise<void> {
+    const persistedRuns = await deps.runs.list()
+    for (const run of persistedRuns) {
+      if (activeRunStatuses.has(run.status)) {
+        await recoverInterruptedRun(run)
+      }
+    }
+  }
+
+  async function recoverInterruptedRun(run: SwarmRun): Promise<void> {
+    const interruptedAt = timestamp()
+    const persistedWorkers = await deps.workers.list({ runId: run.id } as Partial<SwarmWorkerRun>)
+    const recoveredWorkers: SwarmWorkerRun[] = []
+
+    for (const worker of persistedWorkers) {
+      if (worker.status !== "queued" && worker.status !== "running") {
+        recoveredWorkers.push(worker)
+        continue
+      }
+      const recoveredWorker: SwarmWorkerRun = {
+        ...worker,
+        status: "failed",
+        finishedAt: interruptedAt,
+        lastPhase: "failed",
+        lastMessage: INTERRUPTED_RUN_ERROR,
+        error: INTERRUPTED_RUN_ERROR,
+      }
+      await deps.workers.upsert(recoveredWorker)
+      recoveredWorkers.push(recoveredWorker)
+      emitChanged({
+        taskId: recoveredWorker.taskId,
+        runId: recoveredWorker.runId,
+        workerRunId: recoveredWorker.id,
+        reason: "worker-finished",
+      })
+    }
+
+    const countWorkers = (status: SwarmWorkerRun["status"]) => (
+      recoveredWorkers.filter((worker) => worker.status === status).length
+    )
+    const failedRun: SwarmRun = {
+      ...run,
+      status: "failed",
+      finishedAt: interruptedAt,
+      totals: {
+        started: Math.max(run.totals.started, recoveredWorkers.length),
+        success: Math.max(run.totals.success, countWorkers("success")),
+        failed: Math.max(run.totals.failed, countWorkers("failed")),
+        cancelled: Math.max(run.totals.cancelled, countWorkers("cancelled")),
+        timeout: Math.max(run.totals.timeout, countWorkers("timeout")),
+      },
+      error: INTERRUPTED_RUN_ERROR,
+      stopRequested: true,
+    }
+    await deps.runs.upsert(failedRun)
+
+    const task = await deps.tasks.get(run.taskId)
+    if (task?.lastRunId === run.id) {
+      await deps.tasks.upsert({
+        ...task,
+        lastStatus: "failed",
+        updatedAt: interruptedAt,
+      })
+    }
+    emitChanged({ taskId: run.taskId, runId: run.id, reason: "run-failed" })
+  }
 
   async function listTasks(): Promise<SwarmTask[]> {
     return (await deps.tasks.list()).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
@@ -509,6 +578,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
   }
 
   return {
+    initialize,
     listTasks,
     createTask,
     updateTask,

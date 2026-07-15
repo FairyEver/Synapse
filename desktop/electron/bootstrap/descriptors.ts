@@ -477,6 +477,9 @@ export const coreSwarmTaskDescriptor: ServiceDescriptor<SwarmTaskService> = {
       }),
     })
   },
+  async start(instance) {
+    await instance.initialize()
+  },
 }
 
 export const coreDriveSyncDescriptor: ServiceDescriptor<DriveSyncService> = {

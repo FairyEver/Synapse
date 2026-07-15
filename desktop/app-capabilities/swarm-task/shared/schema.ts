@@ -293,6 +293,7 @@ export const swarmRunSchema = z.object({
   finishedAt: z.string().min(1).optional(),
   totals: swarmRunTotalsSchema,
   outputDirectory: z.string().min(1).optional(),
+  error: z.string().max(4000).optional(),
   stopRequested: z.boolean(),
 }).strict()
 

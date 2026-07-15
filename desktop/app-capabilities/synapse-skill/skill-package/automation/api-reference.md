@@ -396,7 +396,7 @@ Input:
 { "runId": "swarm-run:..." }
 ```
 
-Returns one run with workers. Worker records include phase, status, optional summary, optional handoff, and linked Agent `conversationId` when available. Open linked worker conversations as Agent conversations with platform `"swarm"`.
+Returns one run with workers. A run can include an optional `error`; active runs recovered after a Synapse restart return `status: "failed"` with an interruption error. Worker records include phase, status, optional summary, optional handoff, optional error, and linked Agent `conversationId` when available. Open linked worker conversations as Agent conversations with platform `"swarm"`.
 
 ## Public Summary Boundary
 

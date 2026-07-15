@@ -146,6 +146,61 @@ function serviceHarness(options?: {
 }
 
 describe("createSwarmTaskService", () => {
+  it("recovers persisted active runs as interrupted on startup", async () => {
+    const eventBus = { emit: vi.fn() }
+    const { service, tasks, runs, workers } = serviceHarness({ eventBus })
+    const task = await service.createTask({ name: "任务", config })
+    const run: SwarmRun = {
+      id: "run-interrupted",
+      schemaVersion: 1,
+      taskId: task.id,
+      status: "running",
+      configSnapshot: config,
+      startedAt: "2026-07-06T23:00:00.000Z",
+      totals: { started: 1, success: 0, failed: 0, cancelled: 0, timeout: 0 },
+      outputDirectory: "/repo/swarm-runs/run-interrupted",
+      stopRequested: false,
+    }
+    await runs.upsert(run)
+    await tasks.upsert({ ...task, lastRunId: run.id, lastStatus: "running" })
+    await workers.upsert({
+      id: "worker-interrupted",
+      schemaVersion: 1,
+      taskId: task.id,
+      runId: run.id,
+      workerIndex: 1,
+      roundIndex: 1,
+      status: "running",
+      sessionKey: `swarm:${task.id}:${run.id}`,
+      startedAt: "2026-07-06T23:00:00.000Z",
+      lastPhase: "thinking",
+    })
+
+    await service.initialize()
+
+    expect(await runs.get(run.id)).toMatchObject({
+      status: "failed",
+      error: "Synapse 重启，运行已中断",
+      finishedAt: "2026-07-07T00:00:00.000Z",
+      stopRequested: true,
+      totals: { started: 1, success: 0, failed: 1, cancelled: 0, timeout: 0 },
+    })
+    expect(await workers.get("worker-interrupted")).toMatchObject({
+      status: "failed",
+      error: "Synapse 重启，运行已中断",
+      lastMessage: "Synapse 重启，运行已中断",
+      lastPhase: "failed",
+      finishedAt: "2026-07-07T00:00:00.000Z",
+    })
+    expect(await tasks.get(task.id)).toMatchObject({
+      lastRunId: run.id,
+      lastStatus: "failed",
+    })
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({ runId: run.id, reason: "run-failed" }),
+    }), { backpressure: "coalesce" })
+  })
+
   it("creates an Agent Runtime swarm gateway with swarm session metadata", async () => {
     const pendingResult = deferred<{
       conversationId: string

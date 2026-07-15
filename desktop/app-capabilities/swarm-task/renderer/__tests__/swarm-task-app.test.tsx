@@ -668,6 +668,22 @@ describe("SwarmTaskModule", () => {
     })
   })
 
+  it("shows an interrupted run recovery reason", async () => {
+    const interruptedRun: SwarmRun = {
+      ...swarmTaskFixtures.run,
+      status: "failed",
+      error: "Synapse 重启，运行已中断",
+      finishedAt: "2026-07-07T00:20:00.000Z",
+    }
+    swarmTaskBridge.listRuns.mockResolvedValue([interruptedRun])
+    swarmTaskBridge.getRun.mockResolvedValue(interruptedRun)
+
+    await renderModule()
+    await clickTab("运行")
+
+    await waitForText("Synapse 重启，运行已中断")
+  })
+
   it("refreshes the sidebar status and worker table together from the run tab", async () => {
     await renderModule()
     await clickTab("运行")
