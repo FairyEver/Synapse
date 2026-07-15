@@ -32,6 +32,12 @@ export type ExtractedSwarmOutput = {
   readonly handoff?: string
 }
 
+export const SWARM_PREVIOUS_HANDOFF_MAX_BYTES = 64 * 1024
+export const SWARM_PREVIOUS_HANDOFF_MAX_ITEMS = 20
+
+const handoffTruncatedMarker = "\n[handoff truncated to fit the context budget]"
+const textEncoder = new TextEncoder()
+
 export function buildSwarmWorkerPrompt(input: BuildSwarmWorkerPromptInput): string {
   const sections: string[] = []
   const injection = input.config.promptInjection
@@ -97,13 +103,45 @@ function sequenceBatchSection(input: BuildSwarmWorkerPromptInput): string {
 }
 
 function previousHandoffSection(handoffs: readonly SwarmPromptHandoff[]): string {
+  const selected = handoffs.slice(-SWARM_PREVIOUS_HANDOFF_MAX_ITEMS)
+  let remainingBytes = SWARM_PREVIOUS_HANDOFF_MAX_BYTES
+  let remainingItems = selected.length
+  const rendered = selected.map((item) => {
+    const itemBudget = Math.floor(remainingBytes / remainingItems)
+    const handoff = fitTextToUtf8Budget(item.handoff.trim(), itemBudget)
+    remainingBytes -= utf8ByteLength(handoff)
+    remainingItems -= 1
+    return [
+      `### sequence ${item.sequenceIndex}, slot ${item.slotIndex}, batch ${item.batchIndex}`,
+      handoff,
+    ].join("\n")
+  })
+  const omittedCount = handoffs.length - selected.length
+
   return [
     "## Previous Handoff",
-    ...handoffs.map((item) => [
-      `### sequence ${item.sequenceIndex}, slot ${item.slotIndex}, batch ${item.batchIndex}`,
-      item.handoff.trim(),
-    ].join("\n")),
+    ...(omittedCount > 0 ? [`[${omittedCount} earlier handoffs omitted]`] : []),
+    ...rendered,
   ].join("\n")
+}
+
+function fitTextToUtf8Budget(value: string, maxBytes: number): string {
+  if (utf8ByteLength(value) <= maxBytes) return value
+
+  const contentBudget = Math.max(0, maxBytes - utf8ByteLength(handoffTruncatedMarker))
+  const characters: string[] = []
+  let usedBytes = 0
+  for (const character of value) {
+    const characterBytes = utf8ByteLength(character)
+    if (usedBytes + characterBytes > contentBudget) break
+    characters.push(character)
+    usedBytes += characterBytes
+  }
+  return `${characters.join("")}${handoffTruncatedMarker}`
+}
+
+function utf8ByteLength(value: string): number {
+  return textEncoder.encode(value).byteLength
 }
 
 function fileWriteSection(config: SwarmTaskConfig): string {

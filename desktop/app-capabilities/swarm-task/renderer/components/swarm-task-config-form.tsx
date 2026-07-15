@@ -211,6 +211,9 @@ export function SwarmTaskConfigForm({
             })}
           />
         </div>
+        {value.promptInjection.previousHandoff.enabled ? (
+          <p className="text-xs text-muted-foreground">每个 worker 最多注入 64 KiB 交接上下文，超出会截断。</p>
+        ) : null}
         <Field className="grid gap-2">
           <FieldLabel htmlFor="swarm-task-custom-appendix">附加提示词</FieldLabel>
           <FieldContent>

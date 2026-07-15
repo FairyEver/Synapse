@@ -113,7 +113,7 @@ Default flow:
 
 If Synapse restarts while a run is active, the run is recovered as `failed` with an interruption error because worker processes are not resumed across main-process restarts.
 
-Summary injection is disabled by default. Sequence/batch context, previous handoff, summary, recent-summary injection, and file-write instructions are all opt-in; file locking remains enabled if file-write injection is later enabled. If handoff is enabled, batch mode passes the previous batch's handoffs forward, while continuous mode passes the same slot's previous round handoff forward. Summary `recentLimit` defaults to 3 when recent-summary injection is enabled.
+Summary injection is disabled by default. Sequence/batch context, previous handoff, summary, recent-summary injection, and file-write instructions are all opt-in; file locking remains enabled if file-write injection is later enabled. If handoff is enabled, batch mode passes up to 20 previous-batch handoffs forward, while continuous mode passes the same slot's previous round handoff forward. Previous-handoff context shares a 64 KiB UTF-8 budget per worker prompt and includes truncation or omission markers when bounded. Summary `recentLimit` defaults to 3 when recent-summary injection is enabled.
 
 Worker summaries are persisted only from an explicit `<SYNAPSE_SWARM_SUMMARY>` block and are redacted and bounded before storage. If the block is missing, `summary` is omitted and `summaryFallback` is true; raw worker output is never substituted as the summary.
 

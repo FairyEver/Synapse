@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import {
   buildSwarmWorkerPrompt,
   extractSwarmStructuredOutput,
+  SWARM_PREVIOUS_HANDOFF_MAX_BYTES,
+  SWARM_PREVIOUS_HANDOFF_MAX_ITEMS,
 } from "../prompt-builder"
 import type { SwarmTaskConfig, SwarmWorkerRun } from "../../shared/schema"
 
@@ -135,6 +137,45 @@ describe("buildSwarmWorkerPrompt", () => {
     expect(prompt).not.toContain("<SYNAPSE_SWARM_SUMMARY>")
     expect(prompt).not.toContain("<SYNAPSE_SWARM_HANDOFF>")
     expect(prompt).toContain("## User Prompt")
+  })
+
+  it("bounds aggregate previous handoff context and marks truncation", () => {
+    const previousHandoffs = Array.from({ length: SWARM_PREVIOUS_HANDOFF_MAX_ITEMS + 5 }, (_, index) => ({
+      workerIndex: index + 1,
+      sequenceIndex: index + 1,
+      slotIndex: index + 1,
+      batchIndex: 1,
+      handoff: `handoff-${index + 1}-${"密".repeat(64 * 1024)}-tail-${index + 1}`,
+    }))
+    const prompt = buildSwarmWorkerPrompt({
+      taskId: "task-1",
+      runId: "run-1",
+      workerIndex: 1,
+      roundIndex: 2,
+      sequenceIndex: 26,
+      slotIndex: 1,
+      batchIndex: 2,
+      config: {
+        ...config,
+        promptInjection: {
+          sequenceBatch: { enabled: false },
+          previousHandoff: { enabled: true },
+          summary: { enabled: false, injectRecent: false, recentLimit: 3 },
+          fileWrite: { enabled: false, path: "", mode: "append-only", lock: { enabled: true } },
+          customAppendix: "",
+        },
+      },
+      recentSummaries: [],
+      previousHandoffs,
+    })
+
+    expect(prompt).toContain("[5 earlier handoffs omitted]")
+    expect(prompt).toContain("[handoff truncated to fit the context budget]")
+    expect(prompt).not.toContain("### sequence 5,")
+    expect(prompt).toContain("### sequence 6,")
+    expect(prompt).not.toContain("-tail-25")
+    expect(new TextEncoder().encode(prompt).byteLength)
+      .toBeLessThanOrEqual(SWARM_PREVIOUS_HANDOFF_MAX_BYTES + 8 * 1024)
   })
 
   it("injects update-mode file write rules without lock when lock is disabled", () => {
