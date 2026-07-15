@@ -107,6 +107,35 @@ describe("DriveTrashView", () => {
     expect(document.body.textContent).toContain("second.txt")
   })
 
+  it("ignores stale load-more results after refreshing the trash", async () => {
+    const oldLoadMore = createDeferred<DriveTrashListPageDto>()
+    mocks.listDriveTrash
+      .mockResolvedValueOnce(createTrashPage(
+        [createTrashItem({ id: "file-1", name: "first.txt" })],
+        { hasMore: true, nextOffset: 50, total: 2 },
+      ))
+      .mockReturnValueOnce(oldLoadMore.promise)
+      .mockResolvedValueOnce(createTrashPage([
+        createTrashItem({ id: "file-fresh", name: "fresh.txt" }),
+      ]))
+
+    await render(<DriveTrashView />)
+    await flushAct()
+    await clickButtonText("加载更多")
+    await clickButtonText("刷新")
+
+    expect(document.body.textContent).toContain("fresh.txt")
+
+    oldLoadMore.resolve(createTrashPage(
+      [createTrashItem({ id: "file-stale", name: "stale.txt" })],
+      { offset: 50, total: 2 },
+    ))
+    await flushAct()
+
+    expect(document.body.textContent).toContain("fresh.txt")
+    expect(document.body.textContent).not.toContain("stale.txt")
+  })
+
   it("shows initial and load-more failures without dropping current trash entries", async () => {
     mocks.listDriveTrash
       .mockRejectedValueOnce(new Error("回收站网络错误"))
@@ -289,4 +318,12 @@ function createTrashPage(
       nextOffset: page.nextOffset ?? null,
     },
   }
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
 }
