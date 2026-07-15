@@ -20,7 +20,7 @@ import {
 } from "@synapse/shared"
 import type { SynapseAccountState } from "@/types/account"
 import type { DriveLocalUploadProgressEvent } from "@/types/bridge"
-import { DRIVE_LOCAL_UPLOAD_MAX_FILES } from "@/lib/drive-local-upload-limits"
+import { DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES, DRIVE_LOCAL_UPLOAD_MAX_FILES } from "@/lib/drive-local-upload-limits"
 
 import { DriveModule } from "../index"
 
@@ -2719,6 +2719,27 @@ describe("DriveModule", () => {
     expect(mocks.uploadDriveLocalItems).not.toHaveBeenCalled()
     expect(mocks.toastError).toHaveBeenCalledWith(
       `一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_FILES} 个文件，请拆分后再上传。`,
+      expect.objectContaining({ duration: 5000 }),
+    )
+  })
+
+  it("stops expanding dropped folders when the directory limit is reached", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    const dropzone = getDriveDropzone()
+    const directoryEntries = Array.from({ length: DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES + 1 }, (_, index) => (
+      createDirectoryEntry(`empty-${index}`, [])
+    ))
+
+    dispatchDragEvent(dropzone, "drop", createDataTransfer({
+      items: [createDirectoryTransferItem("bulk", directoryEntries)],
+    }))
+    await flushAct()
+
+    expect(mocks.uploadDriveLocalItems).not.toHaveBeenCalled()
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      `一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES} 个文件夹，请拆分后再上传。`,
       expect.objectContaining({ duration: 5000 }),
     )
   })

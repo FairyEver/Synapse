@@ -6,6 +6,7 @@ import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime
 import { accountService } from "../../services/account-service"
 import { sanitizeError } from "../../services/error-sanitize"
 import {
+  DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES,
   DRIVE_LOCAL_UPLOAD_MAX_FILES,
   DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
 } from "../../../src/lib/drive-local-upload-limits"
@@ -518,7 +519,7 @@ const driveLocalUploadFolderItemSchema = z.object({
   folderName: z.string().min(1),
   directories: z.array(z.object({
     relativePath: driveLocalUploadRelativePathSchema,
-  })).max(DRIVE_LOCAL_UPLOAD_MAX_FILES).optional(),
+  })).max(DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES).optional(),
   files: z.array(z.object({
     path: z.string().min(1),
     relativePath: driveLocalUploadRelativePathSchema,

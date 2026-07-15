@@ -51,9 +51,11 @@ import {
   DriveTableColumns,
 } from "./drive-table-columns"
 import {
+  DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES,
   DRIVE_LOCAL_UPLOAD_MAX_FILES,
   DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
   createDriveLocalUploadTooDeepError,
+  createDriveLocalUploadTooManyDirectoriesError,
   createDriveLocalUploadTooManyFilesError,
 } from "@/lib/drive-local-upload-limits"
 import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
@@ -2988,6 +2990,7 @@ async function buildDriveLocalFolderItemsFromFiles(files: readonly File[]): Prom
     const folder = folders.get(folderName) ?? { files: [], directories: new Set<string>() }
     for (const directory of parentDirectoryPaths(fileRelativePath)) {
       folder.directories.add(directory)
+      assertDriveLocalUploadDirectoryCapacity(folder.directories.size)
     }
     folder.files.push({
       path,
@@ -3106,6 +3109,7 @@ async function collectFilesFromDirectoryEntry({
       }
       if (isDriveDirectoryEntry(child)) {
         const relativePath = `${prefix}${child.name}`
+        assertDriveLocalUploadDirectoryCapacity(directories.length + 1)
         directories.push(relativePath)
         await collectFilesFromDirectoryEntry({
           directories,
@@ -3174,6 +3178,12 @@ function parentDirectoryPaths(relativePath: string): string[] {
 function assertDriveLocalUploadFileCapacity(fileCount: number): void {
   if (fileCount > DRIVE_LOCAL_UPLOAD_MAX_FILES) {
     throw createDriveLocalUploadTooManyFilesError()
+  }
+}
+
+function assertDriveLocalUploadDirectoryCapacity(directoryCount: number): void {
+  if (directoryCount > DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES) {
+    throw createDriveLocalUploadTooManyDirectoriesError()
   }
 }
 
