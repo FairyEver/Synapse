@@ -17,7 +17,7 @@ export const SWARM_TASK_TASK_DELETE_CAPABILITY_ID =
 export const SWARM_TASK_RUN_START_CAPABILITY_ID =
   "app.swarm_task.run.start" as CapabilityId
 export const SWARM_TASK_RUN_STOP_REFILL_CAPABILITY_ID =
-  "app.swarm_task.run.stopRefill" as CapabilityId
+  "app.swarm_task.run.stop_refill" as CapabilityId
 export const SWARM_TASK_RUN_CANCEL_CAPABILITY_ID =
   "app.swarm_task.run.cancel" as CapabilityId
 export const SWARM_TASK_RUN_LIST_CAPABILITY_ID =
@@ -45,7 +45,7 @@ export const SWARM_TASK_MCP_TOOL_NAMES = {
   taskUpdate: "app_swarm_task_task_update",
   taskDelete: "app_swarm_task_task_delete",
   runStart: "app_swarm_task_run_start",
-  runStopRefill: "app_swarm_task_run_stopRefill",
+  runStopRefill: "app_swarm_task_run_stop_refill",
   runCancel: "app_swarm_task_run_cancel",
   runList: "app_swarm_task_run_list",
   runGet: "app_swarm_task_run_get",

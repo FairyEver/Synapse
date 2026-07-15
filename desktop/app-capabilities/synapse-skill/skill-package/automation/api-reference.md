@@ -360,7 +360,7 @@ Input:
 
 `configOverride` is optional and applies only to this run. The run stores a full config snapshot. With the example above, Synapse keeps 2 slots active and each slot can run up to 5 rounds, for at most 10 workers.
 
-### app_swarm_task_run_stopRefill
+### app_swarm_task_run_stop_refill
 
 Input:
 

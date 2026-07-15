@@ -23,7 +23,10 @@ const CAPABILITY_ACTIONS = [
   "restore",
   "generate",
   "play",
+  "start",
   "stop",
+  "stop_refill",
+  "cancel",
   "open",
 ] as const
 

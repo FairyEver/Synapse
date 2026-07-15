@@ -11,6 +11,7 @@ describe("capability naming", () => {
   it("validates canonical ids", () => {
     expect(isCanonicalCapabilityId("database.table.list")).toBe(true)
     expect(isCanonicalCapabilityId("automation.trigger_type.list")).toBe(true)
+    expect(isCanonicalCapabilityId("app.swarm_task.run.stop_refill")).toBe(true)
     expect(isCanonicalCapabilityId("database.table.fetch")).toBe(false)
     expect(isCanonicalCapabilityId("database.table")).toBe(false)
     expect(isCanonicalCapabilityId("database.Table.list")).toBe(false)
