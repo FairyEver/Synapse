@@ -114,6 +114,30 @@ describe("drive upload task model", () => {
     })
   })
 
+  it("keeps the task reference when progress targets an unknown item", () => {
+    const task = createDriveUploadTask({
+      id: "upload-task-1",
+      destinationPath: "根目录",
+      parentId: null,
+      request: {
+        taskId: "upload-task-1",
+        parentId: null,
+        items: [{ kind: "file", path: "/tmp/a.txt", name: "a.txt", mimeType: "text/plain" }],
+      },
+      startedAt: 100,
+    })
+
+    const updated = applyDriveUploadProgressEvent(task, {
+      type: "item-progress",
+      taskId: "upload-task-1",
+      itemKey: "file:/tmp/missing.txt",
+      uploadedBytes: 3,
+      totalBytes: 6,
+    })
+
+    expect(updated).toBe(task)
+  })
+
   it("counts completed empty directories in folder upload tasks", () => {
     const task = createDriveUploadTask({
       id: "upload-task-1",

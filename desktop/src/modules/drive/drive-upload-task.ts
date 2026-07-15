@@ -75,20 +75,25 @@ export function applyDriveUploadProgressEvent(
   if (event.taskId !== task.id) return task
   if (event.type === "task-finished") return finishDriveUploadTask(task, event.result)
 
-  return withCounts({
+  const itemIndex = task.items.findIndex((item) => item.key === event.itemKey)
+  const item = task.items[itemIndex]
+  if (itemIndex < 0 || !item) return task
+
+  const items = [...task.items]
+  items[itemIndex] = {
+    ...item,
+    status: itemStatusFromEvent(event),
+    uploadedBytes: event.type === "item-progress" ? event.uploadedBytes : item.uploadedBytes,
+    totalBytes: event.type === "item-progress" ? event.totalBytes : item.totalBytes,
+    message: "message" in event ? event.message ?? null : null,
+  }
+  const nextTask = {
     ...task,
-    items: task.items.map((item) => (
-      item.key === event.itemKey
-        ? {
-          ...item,
-          status: itemStatusFromEvent(event),
-          uploadedBytes: event.type === "item-progress" ? event.uploadedBytes : item.uploadedBytes,
-          totalBytes: event.type === "item-progress" ? event.totalBytes : item.totalBytes,
-          message: "message" in event ? event.message ?? null : null,
-        }
-        : item
-    )),
-  })
+    items,
+  }
+  return event.type === "item-started" || event.type === "item-progress"
+    ? nextTask
+    : withCounts(nextTask)
 }
 
 export function finishDriveUploadTask(

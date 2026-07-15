@@ -2662,11 +2662,29 @@ function createUploadProgressTransform(
   onProgress: (uploadedBytes: number, totalBytes: number) => void,
 ): Transform {
   let uploadedBytes = 0
+  let lastReportedBytes = 0
+  let lastReportedAt = Date.now()
+
+  const reportProgress = (force = false): void => {
+    if (uploadedBytes === lastReportedBytes) return
+
+    const now = Date.now()
+    if (!force && now - lastReportedAt < 100) return
+
+    lastReportedBytes = uploadedBytes
+    lastReportedAt = now
+    onProgress(uploadedBytes, totalBytes)
+  }
+
   return new Transform({
     transform(chunk: Buffer | string, encoding, callback) {
       uploadedBytes += typeof chunk === "string" ? Buffer.byteLength(chunk, encoding as BufferEncoding) : chunk.byteLength
-      onProgress(uploadedBytes, totalBytes)
+      reportProgress(uploadedBytes >= totalBytes)
       callback(null, chunk)
+    },
+    flush(callback) {
+      reportProgress(true)
+      callback()
     },
   })
 }

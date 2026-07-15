@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -114,7 +115,7 @@ function UploadMetric({ label, value }: { readonly label: string; readonly value
   )
 }
 
-function UploadTaskItemRow({ item }: { readonly item: DriveUploadTaskItem }) {
+const UploadTaskItemRow = memo(function UploadTaskItemRow({ item }: { readonly item: DriveUploadTaskItem }) {
   return (
     <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50">
       <div className="min-w-0 flex-1">
@@ -128,7 +129,7 @@ function UploadTaskItemRow({ item }: { readonly item: DriveUploadTaskItem }) {
       </Badge>
     </div>
   )
-}
+})
 
 function EndTruncatedText({ value, className }: { readonly value: string; readonly className?: string }) {
   return (
