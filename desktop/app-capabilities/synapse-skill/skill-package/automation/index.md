@@ -96,6 +96,8 @@ Use Swarm Task when the user wants a reusable multi-Agent prompt run. A task sto
 
 Do not use Swarm Task for direct terminal control. Workers are Agent conversations created by Synapse; worker details live in linked Agent conversations with platform `"swarm"`.
 
+Swarm Task MCP reads, mutations, and run starts pass permission checks before the action runs and write audit outcomes. A permission denial means the action did not start. After any other tool failure, inspect the current task or run state before retrying.
+
 Default flow:
 
 1. Use `app_swarm_task_task_list` to find an existing task by name.

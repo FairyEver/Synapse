@@ -73,10 +73,22 @@ function createService(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function createSecurity() {
+  return {
+    permissionGuard: {
+      check: vi.fn(async () => ({ allowed: true as const })),
+    },
+    auditSink: {
+      record: vi.fn(),
+    },
+  }
+}
+
 describe("createSwarmTaskCapabilityDispatcher", () => {
   it("routes task actions through the swarm task service", async () => {
     const service = createService()
-    const dispatcher = createSwarmTaskCapabilityDispatcher({ service: service as never })
+    const security = createSecurity()
+    const dispatcher = createSwarmTaskCapabilityDispatcher({ service: service as never, ...security })
 
     await expect(dispatcher.dispatch(SWARM_TASK_TASK_LIST_CAPABILITY_ID, {}, { source: "mcp-http" }))
       .resolves.toEqual({ ok: true, data: [task], affected: 0 })
@@ -102,11 +114,22 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
     expect(JSON.stringify(task)).not.toContain("targetFilePolicy")
     expect(JSON.stringify(task)).not.toContain("injectOptions")
     expect(JSON.stringify(task)).not.toContain("summaryFile")
+    expect(security.permissionGuard.check.mock.calls.map(([request]) => request.action)).toEqual([
+      "automation.read",
+      "automation.read",
+      "automation.mutate",
+      "automation.mutate",
+      "automation.mutate",
+    ])
+    expect(security.auditSink.record).toHaveBeenCalledTimes(5)
+    expect(security.auditSink.record.mock.calls.every(([event]) => event.outcome === "allowed")).toBe(true)
+    expect(JSON.stringify(security.auditSink.record.mock.calls)).not.toContain(baseConfig.prompt)
   })
 
   it("routes run actions through the swarm task service", async () => {
     const service = createService()
-    const dispatcher = createSwarmTaskCapabilityDispatcher({ service: service as never })
+    const security = createSecurity()
+    const dispatcher = createSwarmTaskCapabilityDispatcher({ service: service as never, ...security })
 
     await expect(dispatcher.dispatch(SWARM_TASK_RUN_START_CAPABILITY_ID, {
       taskId: "task-1",
@@ -130,6 +153,15 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
     expect(service.cancelRun).toHaveBeenCalledWith("run-1")
     expect(service.listRuns).toHaveBeenCalledWith("task-1", 5)
     expect(service.getRun).toHaveBeenCalledWith("run-1")
+    expect(security.permissionGuard.check.mock.calls.map(([request]) => request.action)).toEqual([
+      "agent.spawn",
+      "automation.mutate",
+      "automation.mutate",
+      "automation.read",
+      "automation.read",
+    ])
+    expect(security.auditSink.record).toHaveBeenCalledTimes(5)
+    expect(security.auditSink.record.mock.calls.every(([event]) => event.outcome === "allowed")).toBe(true)
   })
 
   it("fails missing run mutations while keeping nullable reads", async () => {
@@ -139,7 +171,8 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
       cancelRun: vi.fn(async () => null),
       getRun: vi.fn(async () => null),
     })
-    const dispatcher = createSwarmTaskCapabilityDispatcher({ service: service as never })
+    const security = createSecurity()
+    const dispatcher = createSwarmTaskCapabilityDispatcher({ service: service as never, ...security })
 
     await expect(dispatcher.dispatch(SWARM_TASK_TASK_DELETE_CAPABILITY_ID, {
       taskId: "missing",
@@ -155,6 +188,59 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
     }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: null, affected: 0 })
 
     expect(service.deleteTask).not.toHaveBeenCalled()
+    expect(security.auditSink.record.mock.calls.filter(([event]) => event.outcome === "failed")).toHaveLength(2)
+  })
+
+  it("blocks a denied run start before mutating the service", async () => {
+    const service = createService()
+    const security = createSecurity()
+    security.permissionGuard.check.mockResolvedValueOnce({ allowed: false, reason: "denied" })
+    const dispatcher = createSwarmTaskCapabilityDispatcher({ service: service as never, ...security })
+
+    await expect(dispatcher.dispatch(SWARM_TASK_RUN_START_CAPABILITY_ID, {
+      taskId: "task-1",
+    }, {
+      source: "mcp-http",
+      actor: { kind: "agent", id: "agent-1" },
+    })).rejects.toThrow("denied")
+
+    expect(service.startRun).not.toHaveBeenCalled()
+    expect(security.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "agent.spawn",
+      actor: { kind: "agent", id: "agent-1" },
+      resource: "swarm-task:task:task-1",
+    }))
+    expect(security.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "agent.spawn",
+      outcome: "denied",
+    }))
+  })
+
+  it("audits service failures without prompt or error text", async () => {
+    const service = createService({
+      startRun: vi.fn(async () => {
+        throw new Error("sensitive prompt and worker output")
+      }),
+    })
+    const security = createSecurity()
+    const dispatcher = createSwarmTaskCapabilityDispatcher({ service: service as never, ...security })
+
+    await expect(dispatcher.dispatch(SWARM_TASK_RUN_START_CAPABILITY_ID, {
+      taskId: "task-1",
+      configOverride: { prompt: "private prompt" },
+    }, { source: "mcp-http" })).rejects.toThrow("sensitive prompt and worker output")
+
+    expect(security.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "agent.spawn",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        taskId: "task-1",
+        errorName: "Error",
+      }),
+    }))
+    const auditJson = JSON.stringify(security.auditSink.record.mock.calls)
+    expect(auditJson).not.toContain("private prompt")
+    expect(auditJson).not.toContain("sensitive prompt and worker output")
   })
 
   it("rejects unknown swarm task actions", async () => {

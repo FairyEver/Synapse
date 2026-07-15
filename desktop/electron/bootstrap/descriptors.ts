@@ -1041,6 +1041,9 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     })
     const swarmTaskDispatcher = createSwarmTaskCapabilityDispatcher({
       service: ctx.registry.get<SwarmTaskService>(SWARM_TASK_SERVICE_ID),
+      permissionGuard,
+      auditSink,
+      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
     })
     const secretsDispatcher = createSecretsCapabilityDispatcher({
       service: ctx.registry.get<SecretsService>("core.secrets"),

@@ -243,6 +243,8 @@ Input:
 
 ## Swarm Tasks
 
+All Swarm Task tools check the matching read, mutation, or Agent-start permission before calling the service and record allowed, denied, or failed audit outcomes. Audit metadata contains task/run identifiers, not prompts, configs, or worker output.
+
 ### app_swarm_task_task_list
 
 Input:
