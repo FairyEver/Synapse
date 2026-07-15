@@ -1409,7 +1409,7 @@ class DiagnosticsService {
     const recentlyViewedCount = Object.values(config.global.recentlyViewed).reduce((sum, values) => sum + values.length, 0)
     const secrets = await this.collectSecretInventorySummary()
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       generatedAt,
       repositories: {
         count: config.repositories.length,
@@ -1442,19 +1442,17 @@ class DiagnosticsService {
     }
   }
 
-  private async collectSecretInventorySummary(): Promise<{ count: number; names: string[] }> {
+  private async collectSecretInventorySummary(): Promise<{ count: number }> {
     try {
       const items = await this.deps.dataRepository
         .namespace<SecretItemEntryV1>(SECRETS_ITEMS_NAMESPACE)
         .list()
       return {
         count: items.length,
-        names: items.map((item) => item.name),
       }
     } catch {
       return {
         count: 0,
-        names: [],
       }
     }
   }

@@ -1022,9 +1022,15 @@ describe("DiagnosticsService.exportBundle", () => {
     expect(configSummaryPath).toBeDefined()
     expect(findWrittenPath(writtenFiles, `${packagePathSuffix}/config/config-backup.json`)).toBeUndefined()
     const configSummary = writtenFiles.get(configSummaryPath ?? "") ?? ""
+    const parsedConfigSummary = JSON.parse(configSummary) as {
+      schemaVersion: number
+      secrets: unknown
+    }
+    expect(parsedConfigSummary.schemaVersion).toBe(2)
+    expect(parsedConfigSummary.secrets).toEqual({ count: 1 })
     expect(configSummary).toContain('"repositories"')
     expect(configSummary).toContain('"secrets"')
-    expect(configSummary).toContain("API_TOKEN")
+    expect(configSummary).not.toContain("API_TOKEN")
     expect(configSummary).not.toContain('"variables"')
     expect(configSummary).not.toContain("/repo")
     expect(configSummary).not.toContain("/missing-project")
