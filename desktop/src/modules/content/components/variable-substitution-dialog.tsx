@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { FormDialog } from "@/components/form-dialog"
@@ -13,7 +18,10 @@ type VariableSubstitutionDialogProps = {
   placeholders: string[]
   secrets: SecretSafeView[]
   initialValues: Record<string, string>
-  onConfirm: (substitutions: Record<string, string>) => Promise<void> | void
+  onConfirm: (
+    substitutions: Record<string, string>,
+    secretNames: Record<string, string>,
+  ) => Promise<void> | void
   showOneShotWarning?: boolean
 }
 
@@ -35,7 +43,9 @@ function VariableSubstitutionDialog({
   onConfirm,
   showOneShotWarning = false,
 }: VariableSubstitutionDialogProps) {
+  const formId = useId()
   const [values, setValues] = useState<Record<string, string>>({})
+  const [replacedSecretNames, setReplacedSecretNames] = useState<Set<string>>(new Set())
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const resolvedInitialValues = useMemo(() => {
@@ -49,6 +59,7 @@ function VariableSubstitutionDialog({
   useEffect(() => {
     if (open) {
       setValues(resolvedInitialValues)
+      setReplacedSecretNames(new Set())
       setIsSubmitting(false)
     }
   }, [open, resolvedInitialValues])
@@ -64,11 +75,19 @@ function VariableSubstitutionDialog({
 
     setIsSubmitting(true)
     try {
-      await onConfirm(values)
+      const confirmedValues: Record<string, string> = {}
+      const confirmedSecretNames: Record<string, string> = {}
+      for (const name of placeholders) {
+        const secret = matchSecret(name, secrets)
+        const reusing = secret?.hasValue && !replacedSecretNames.has(name)
+        if (reusing) confirmedSecretNames[name] = secret.name
+        else confirmedValues[name] = values[name] ?? ""
+      }
+      await onConfirm(confirmedValues, confirmedSecretNames)
     } finally {
       setIsSubmitting(false)
     }
-  }, [isSubmitting, onConfirm, values])
+  }, [isSubmitting, onConfirm, placeholders, replacedSecretNames, secrets, values])
 
   return (
     <Dialog
@@ -91,22 +110,48 @@ function VariableSubstitutionDialog({
         }}
       >
         <div className="flex flex-col">
-          {placeholders.map((name, index) => (
-            <div key={name}>
-              {index > 0 ? <Separator className="my-3" /> : null}
-              <div className="flex flex-col gap-2">
-                <Label className="font-mono text-xs text-muted-foreground">
-                  {"${{ "}{name}{" }}"}
-                </Label>
-                <Input
-                  placeholder={matchSecret(name, secrets)?.hasValue ? "已保存" : "替换值"}
-                  disabled={isSubmitting}
-                  value={values[name] ?? ""}
-                  onChange={(e) => handleValueChange(name, e.target.value)}
-                />
+          {placeholders.map((name, index) => {
+            const inputId = `${formId}-${index}`
+            const savedSecret = matchSecret(name, secrets)
+            const reusing = Boolean(savedSecret?.hasValue) && !replacedSecretNames.has(name)
+            return (
+              <div key={name}>
+                {index > 0 ? <Separator className="my-3" /> : null}
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor={inputId} className="font-mono text-xs text-muted-foreground">
+                    {"${{ "}{name}{" }}"}
+                  </Label>
+                  <InputGroup>
+                    <InputGroupInput
+                      id={inputId}
+                      placeholder={reusing ? "已保存" : "替换值"}
+                      disabled={isSubmitting || reusing}
+                      value={reusing ? "" : values[name] ?? ""}
+                      onChange={(event) => handleValueChange(name, event.target.value)}
+                    />
+                    {savedSecret?.hasValue ? (
+                      <InputGroupAddon align="inline-end">
+                        <InputGroupButton
+                          disabled={isSubmitting}
+                          onClick={() => {
+                            setReplacedSecretNames((current) => {
+                              const next = new Set(current)
+                              if (reusing) next.add(name)
+                              else next.delete(name)
+                              return next
+                            })
+                            handleValueChange(name, "")
+                          }}
+                        >
+                          {reusing ? "替换" : "使用已保存"}
+                        </InputGroupButton>
+                      </InputGroupAddon>
+                    ) : null}
+                  </InputGroup>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </FormDialog>
     </Dialog>

@@ -3,7 +3,12 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import { FormDialog } from "@/components/form-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import type { SynapseSkillEnvDeclaration } from "@/types/installers"
@@ -13,7 +18,10 @@ type SkillEnvValuesDialogProps = {
   declarations: SynapseSkillEnvDeclaration[]
   initialValues: Record<string, string>
   isProjectScope: boolean
-  onConfirm: (values: Record<string, string>) => Promise<void> | void
+  onConfirm: (
+    values: Record<string, string>,
+    secretNames: Record<string, string>,
+  ) => Promise<void> | void
   onOpenChange: (open: boolean) => void
   open: boolean
   secrets: SecretSafeView[]
@@ -35,6 +43,7 @@ function SkillEnvValuesDialog({
 }: SkillEnvValuesDialogProps) {
   const formId = useId()
   const [values, setValues] = useState<Record<string, string>>({})
+  const [replacedSecretNames, setReplacedSecretNames] = useState<Set<string>>(new Set())
   const [isSubmitting, setIsSubmitting] = useState(false)
   const resolvedInitialValues = useMemo(() => Object.fromEntries(
     declarations.map(({ name }) => [name, initialValues[name] ?? ""]),
@@ -43,6 +52,7 @@ function SkillEnvValuesDialog({
   useEffect(() => {
     if (open) {
       setValues(resolvedInitialValues)
+      setReplacedSecretNames(new Set())
       setIsSubmitting(false)
     }
   }, [open, resolvedInitialValues])
@@ -52,13 +62,19 @@ function SkillEnvValuesDialog({
 
     setIsSubmitting(true)
     try {
-      await onConfirm(Object.fromEntries(
-        declarations.map(({ name }) => [name, values[name] ?? ""]),
-      ))
+      const confirmedValues: Record<string, string> = {}
+      const confirmedSecretNames: Record<string, string> = {}
+      for (const { name } of declarations) {
+        const secret = matchSecret(name, secrets)
+        const reusing = secret?.hasValue && !replacedSecretNames.has(name)
+        if (reusing) confirmedSecretNames[name] = secret.name
+        else confirmedValues[name] = values[name] ?? ""
+      }
+      await onConfirm(confirmedValues, confirmedSecretNames)
     } finally {
       setIsSubmitting(false)
     }
-  }, [declarations, isSubmitting, onConfirm, values])
+  }, [declarations, isSubmitting, onConfirm, replacedSecretNames, secrets, values])
 
   return (
     <Dialog
@@ -88,6 +104,8 @@ function SkillEnvValuesDialog({
           ) : null}
           {declarations.map(({ name }, index) => {
             const inputId = `${formId}-${index}`
+            const savedSecret = matchSecret(name, secrets)
+            const reusing = Boolean(savedSecret?.hasValue) && !replacedSecretNames.has(name)
             return (
               <div key={name}>
                 {index > 0 ? <Separator className="my-3" /> : null}
@@ -95,15 +113,35 @@ function SkillEnvValuesDialog({
                   <Label htmlFor={inputId} className="font-mono text-xs text-muted-foreground">
                     {name}
                   </Label>
-                  <Input
-                    id={inputId}
-                    placeholder={matchSecret(name, secrets)?.hasValue ? "已保存" : "配置值"}
-                    disabled={isSubmitting}
-                    value={values[name] ?? ""}
-                    onChange={(event) => {
-                      setValues((current) => ({ ...current, [name]: event.target.value }))
-                    }}
-                  />
+                  <InputGroup>
+                    <InputGroupInput
+                      id={inputId}
+                      placeholder={reusing ? "已保存" : "配置值"}
+                      disabled={isSubmitting || reusing}
+                      value={reusing ? "" : values[name] ?? ""}
+                      onChange={(event) => {
+                        setValues((current) => ({ ...current, [name]: event.target.value }))
+                      }}
+                    />
+                    {savedSecret?.hasValue ? (
+                      <InputGroupAddon align="inline-end">
+                        <InputGroupButton
+                          disabled={isSubmitting}
+                          onClick={() => {
+                            setReplacedSecretNames((current) => {
+                              const next = new Set(current)
+                              if (reusing) next.add(name)
+                              else next.delete(name)
+                              return next
+                            })
+                            setValues((current) => ({ ...current, [name]: "" }))
+                          }}
+                        >
+                          {reusing ? "替换" : "使用已保存"}
+                        </InputGroupButton>
+                      </InputGroupAddon>
+                    ) : null}
+                  </InputGroup>
                 </div>
               </div>
             )

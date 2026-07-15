@@ -9,6 +9,10 @@ import type {
 } from "../../../src/types/installers"
 import type { EventBus } from "../../runtime/event-bus"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import { createSecretsCapabilityDispatcher } from "../../../app-capabilities/secrets/main/dispatcher"
+import type { SecretsService } from "../../../app-capabilities/secrets/main/service"
+import { SECRETS_ITEM_GET_CAPABILITY_ID } from "../../../app-capabilities/secrets/shared/capability"
+import { secretValueViewSchema } from "../../../app-capabilities/secrets/shared/schema"
 import { editorInstallService } from "../../services/editor-install-service"
 import { installerSourceService } from "../../services/installer-source-service"
 import { createMainLogger } from "../../services/log-store"
@@ -64,10 +68,91 @@ const installSourceToEditorSchema = z.object({
   replaceConfirmed: z.boolean().optional(),
   replacedSourceIdentity: z.string().optional(),
   scope: z.enum(["global", "project"]),
+  skillEnvSecretNames: z.record(z.string(), z.string()).optional(),
   skillEnvValues: z.record(z.string(), z.string()).optional(),
   source: installerSourceSchema,
+  variableSecretNames: z.record(z.string(), z.string()).optional(),
   variableSubstitutions: z.record(z.string(), z.string()).optional(),
 }).strict()
+
+const secretDispatchDataSchema = z.object({
+  secret: secretValueViewSchema,
+}).strict()
+
+async function resolveInstallerSecretReferences(
+  payload: SynapseInstallSourceToEditorPayload,
+  deps: {
+    auditSink: AuditSink
+    permissionGuard: PermissionGuard
+    resolveSecretsService: () => SecretsService
+  },
+): Promise<SynapseInstallSourceToEditorPayload> {
+  const {
+    skillEnvSecretNames,
+    variableSecretNames,
+    ...installPayload
+  } = payload
+  const references = [
+    ...Object.entries(skillEnvSecretNames ?? {}),
+    ...Object.entries(variableSecretNames ?? {}),
+  ]
+  if (references.length === 0) return installPayload
+
+  const dispatcher = createSecretsCapabilityDispatcher({
+    service: deps.resolveSecretsService(),
+    auditSink: deps.auditSink,
+    permissionGuard: deps.permissionGuard,
+    actor: { kind: "user", id: "installer", display: "Synapse Installer" },
+  })
+  const resolvedValues = new Map<string, string>()
+  for (const secretName of new Set(references.map(([, name]) => name))) {
+    const result = await dispatcher.dispatch(
+      SECRETS_ITEM_GET_CAPABILITY_ID,
+      { name: secretName, includeValue: true },
+      { source: "api" },
+    )
+    if (!result.ok) throw new Error(result.error ?? "读取已保存密钥失败。")
+    resolvedValues.set(secretName, secretDispatchDataSchema.parse(result.data).secret.value)
+  }
+
+  return {
+    ...installPayload,
+    skillEnvValues: mergeReferencedValues(
+      installPayload.skillEnvValues,
+      skillEnvSecretNames,
+      resolvedValues,
+    ),
+    variableSubstitutions: mergeReferencedValues(
+      installPayload.variableSubstitutions,
+      variableSecretNames,
+      resolvedValues,
+    ),
+  }
+}
+
+function mergeReferencedValues(
+  values: Record<string, string> | undefined,
+  secretNames: Record<string, string> | undefined,
+  resolvedValues: ReadonlyMap<string, string>,
+): Record<string, string> | undefined {
+  if (!secretNames || Object.keys(secretNames).length === 0) return values
+  return {
+    ...values,
+    ...Object.fromEntries(Object.entries(secretNames).map(([name, secretName]) => [
+      name,
+      requireResolvedSecretValue(resolvedValues, secretName),
+    ])),
+  }
+}
+
+function requireResolvedSecretValue(
+  resolvedValues: ReadonlyMap<string, string>,
+  secretName: string,
+): string {
+  const value = resolvedValues.get(secretName)
+  if (value === undefined) throw new Error("读取已保存密钥失败。")
+  return value
+}
 
 const installSourceTargetSchema = z.object({
   editorId: z.string().min(1),
@@ -130,10 +215,17 @@ export const installersIpcModule: IpcModule = {
       channel: "synapse:installers:install-source-to-editor",
       request: installSourceToEditorSchema,
       handler: async (ctx, payload: SynapseInstallSourceToEditorPayload) => {
-        const result = await editorInstallService.installSourceToEditor(payload, {
+        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+        const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+        const resolvedPayload = await resolveInstallerSecretReferences(payload, {
+          auditSink,
+          permissionGuard,
+          resolveSecretsService: () => ctx.resolve<SecretsService>("core.secrets"),
+        })
+        const result = await editorInstallService.installSourceToEditor(resolvedPayload, {
           actor: { kind: "user" },
-          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
-          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+          auditSink,
+          permissionGuard,
         })
 
         if (payload.source.origin === "repository" && payload.source.repositoryContentId) {

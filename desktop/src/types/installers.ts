@@ -71,8 +71,10 @@ export type SynapseInstallSourceToEditorPayload = {
   replaceConfirmed?: boolean
   replacedSourceIdentity?: string
   scope: SynapseEditorInstallScope
+  skillEnvSecretNames?: Record<string, string>
   skillEnvValues?: Record<string, string>
   source: SynapseInstallerSource
+  variableSecretNames?: Record<string, string>
   variableSubstitutions?: Record<string, string>
 }
 

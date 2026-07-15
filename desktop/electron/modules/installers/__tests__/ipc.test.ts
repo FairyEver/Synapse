@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   inspectSkillEnvSource: vi.fn(),
   prepareInlineRuleSource: vi.fn(),
   prepareLocalSkillSource: vi.fn(),
+  secretGet: vi.fn(),
+  permissionCheck: vi.fn(),
+  auditRecord: vi.fn(),
 }))
 
 vi.mock("../../../services/editor-install-service", () => ({
@@ -24,6 +27,14 @@ vi.mock("../../../services/install-status-cache-service", () => ({
   installStatusCacheService: {
     refresh: vi.fn(async () => []),
   },
+}))
+
+vi.mock("../../../services/log-store", () => ({
+  createMainLogger: () => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  }),
 }))
 
 vi.mock("../../../services/installer-source-service", () => ({
@@ -83,6 +94,13 @@ beforeEach(() => {
     legacyPlaceholders: ["INLINE_TOKEN"],
   })
   mocks.inspectGlobalSkillInstallations.mockResolvedValue({ entries: [] })
+  mocks.secretGet.mockImplementation(async ({ name }: { name: string }) => ({
+    id: `secret-${name}`,
+    name,
+    hasValue: true,
+    value: `${name.toLowerCase()}-value`,
+  }))
+  mocks.permissionCheck.mockResolvedValue({ allowed: true })
 })
 
 describe("installersIpcModule", () => {
@@ -226,6 +244,74 @@ describe("installersIpcModule", () => {
       }),
     )
   })
+
+  it("resolves saved secret references in main through permission and audit", async () => {
+    const harness = createHarness()
+
+    await harness.invoke("synapse:installers:install-source-to-editor", {
+      editorId: "codex",
+      scope: "global",
+      source: {
+        kind: "skill",
+        origin: "repository",
+        sourceIdentity: "skill-1",
+        repositoryContentId: "skill-1",
+        name: "team-skill",
+      },
+      skillEnvSecretNames: { GITEE_TOKEN: "GITEE_TOKEN" },
+      skillEnvValues: { REGION: "cn" },
+      variableSecretNames: { INLINE_TOKEN: "INLINE_TOKEN" },
+    })
+
+    expect(mocks.installSourceToEditor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skillEnvValues: { GITEE_TOKEN: "gitee_token-value", REGION: "cn" },
+        variableSubstitutions: { INLINE_TOKEN: "inline_token-value" },
+      }),
+      expect.objectContaining({ actor: { kind: "user" } }),
+    )
+    expect(mocks.installSourceToEditor.mock.calls[0]?.[0]).not.toEqual(expect.objectContaining({
+      skillEnvSecretNames: expect.anything(),
+      variableSecretNames: expect.anything(),
+    }))
+    expect(mocks.secretGet).toHaveBeenCalledTimes(2)
+    expect(mocks.permissionCheck).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.read",
+      actor: expect.objectContaining({ kind: "user", id: "installer" }),
+    }))
+    expect(mocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.read",
+      outcome: "allowed",
+    }))
+    expect(JSON.stringify(mocks.permissionCheck.mock.calls)).not.toContain("gitee_token-value")
+    expect(JSON.stringify(mocks.auditRecord.mock.calls)).not.toContain("gitee_token-value")
+  })
+
+  it("blocks install when saved secret access is denied", async () => {
+    mocks.permissionCheck.mockResolvedValueOnce({ allowed: false, reason: "denied" })
+    const harness = createHarness()
+
+    await expect(harness.invoke("synapse:installers:install-source-to-editor", {
+      editorId: "codex",
+      scope: "global",
+      source: {
+        kind: "rule",
+        origin: "inline",
+        sourceIdentity: "inline-rule:abc",
+        inlineSourceId: "source-1",
+        name: "team.rule",
+        body: "TOKEN=${{ TOKEN }}",
+      },
+      variableSecretNames: { TOKEN: "TOKEN" },
+    })).rejects.toThrow("denied")
+
+    expect(mocks.secretGet).not.toHaveBeenCalled()
+    expect(mocks.installSourceToEditor).not.toHaveBeenCalled()
+    expect(mocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.read",
+      outcome: "denied",
+    }))
+  })
 })
 
 function createHarness() {
@@ -233,10 +319,11 @@ function createHarness() {
   harness.registry.register(installersIpcModule, {
     moduleId: "installers",
     resolve: <T,>(_serviceId: string): T => {
-      if (_serviceId === "core.audit-sink") return { record: vi.fn() } as T
-      if (_serviceId === "core.permission-guard") return { check: vi.fn(async () => ({ allowed: true })) } as T
+      if (_serviceId === "core.audit-sink") return { record: mocks.auditRecord } as T
+      if (_serviceId === "core.permission-guard") return { check: mocks.permissionCheck } as T
+      if (_serviceId === "core.secrets") return { get: mocks.secretGet } as T
       if (_serviceId === "core.event-bus") return { emit: vi.fn() } as T
-      throw new Error("installer source IPC should not resolve broad services")
+      throw new Error(`Unexpected service: ${_serviceId}`)
     },
   })
   return harness

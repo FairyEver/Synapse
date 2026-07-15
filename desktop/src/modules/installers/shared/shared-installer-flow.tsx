@@ -148,7 +148,9 @@ export function SharedInstallerFlow({
   const flow = useInstallerFlow({ editors, initialEditor, kind, source: initialSource })
   const variableConfirmPassedRef = useRef(false)
   const pendingInstallOptionsRef = useRef<InstallFlowOptions>({})
+  const pendingSkillEnvSecretNamesRef = useRef<Record<string, string> | undefined>(undefined)
   const pendingSkillEnvValuesRef = useRef<Record<string, string> | undefined>(undefined)
+  const pendingLegacySecretNamesRef = useRef<Record<string, string> | undefined>(undefined)
   const pendingLegacySubstitutionsRef = useRef<Record<string, string> | undefined>(undefined)
   const pendingInstallWarningRef = useRef<string | undefined>(undefined)
   const [selection, setSelection] = useState<EditorWriteTargetSelection | null>(null)
@@ -157,7 +159,6 @@ export function SharedInstallerFlow({
   const [detectedPlaceholders, setDetectedPlaceholders] = useState<string[]>([])
   const [skillEnvDeclarations, setSkillEnvDeclarations] = useState<SynapseSkillEnvDeclaration[]>([])
   const [userSecrets, setUserSecrets] = useState<SecretSafeView[]>([])
-  const [secretInitialValues, setSecretInitialValues] = useState<Record<string, string>>({})
   const [skillEnvInitialValues, setSkillEnvInitialValues] = useState<Record<string, string>>({})
   const [legacyInitialValues, setLegacyInitialValues] = useState<Record<string, string>>({})
   const [isSkillEnvConfirmOpen, setIsSkillEnvConfirmOpen] = useState(false)
@@ -195,7 +196,9 @@ export function SharedInstallerFlow({
   }, [flow.source])
 
   const resetVariableInstallAttempt = useCallback(() => {
+    pendingSkillEnvSecretNamesRef.current = undefined
     pendingSkillEnvValuesRef.current = undefined
+    pendingLegacySecretNamesRef.current = undefined
     pendingLegacySubstitutionsRef.current = undefined
     variableConfirmPassedRef.current = false
     pendingInstallOptionsRef.current = {}
@@ -234,7 +237,9 @@ export function SharedInstallerFlow({
             scope: selection.scope,
             source: flow.source,
             installFormValues,
+            skillEnvSecretNames: pendingSkillEnvSecretNamesRef.current,
             skillEnvValues: pendingSkillEnvValuesRef.current,
+            variableSecretNames: pendingLegacySecretNamesRef.current,
             variableSubstitutions: pendingLegacySubstitutionsRef.current,
           })
           pendingInstallWarningRef.current = result.warning
@@ -274,15 +279,11 @@ export function SharedInstallerFlow({
           const placeholders = detectPlaceholders(content, { includeCodeBlocks: true })
           if (placeholders.length > 0) {
             const list = await secretsBridge.list()
-            const initialValues = Object.fromEntries(await Promise.all(placeholders.map(async (name) => {
-              const existing = list.secrets.find((secret) => secret.name.toLowerCase() === name.toLowerCase())
-              if (!existing?.hasValue) return [name, ""] as const
-              const valueView = await secretsBridge.get({ name: existing.name, includeValue: true })
-              return [name, "value" in valueView ? valueView.value : ""] as const
-            })))
             setUserSecrets(list.secrets)
-            setSecretInitialValues(initialValues)
-            setLegacyInitialValues(initialValues)
+            setLegacyInitialValues(Object.fromEntries(placeholders.map((name) => [
+              name,
+              findValueByName(pendingLegacySubstitutionsRef.current, name) ?? "",
+            ])))
             pendingInstallOptionsRef.current = options
             setDetectedPlaceholders(placeholders)
             setIsVariableConfirmOpen(true)
@@ -299,36 +300,19 @@ export function SharedInstallerFlow({
 
           if (names.length > 0) {
             const list = await secretsBridge.list()
-            const requestedSecretsByName = new Map<string, SecretSafeView>()
-            for (const name of names) {
-              const existing = list.secrets.find((secret) => secret.name === name)
-                ?? list.secrets.find((secret) => secret.name.toLowerCase() === name.toLowerCase())
-              if (existing?.hasValue) {
-                requestedSecretsByName.set(existing.name.toLowerCase(), existing)
-              }
-            }
-            const savedValues = Object.fromEntries(await Promise.all(
-              [...requestedSecretsByName.values()].map(async (secret) => {
-                const valueView = await secretsBridge.get({ name: secret.name, includeValue: true })
-                return [secret.name, "value" in valueView ? valueView.value : ""] as const
-              }),
-            ))
             const envInitialValues = Object.fromEntries(inspection.declarations.map(({ name, defaultValue }) => [
               name,
               findValueByName(pendingSkillEnvValuesRef.current, name)
-                ?? findValueByName(savedValues, name)
                 ?? defaultValue
                 ?? "",
             ]))
             const nextLegacyInitialValues = Object.fromEntries(inspection.legacyPlaceholders.map((name) => [
               name,
               findValueByName(pendingLegacySubstitutionsRef.current, name)
-                ?? findValueByName(savedValues, name)
                 ?? "",
             ]))
 
             setUserSecrets(list.secrets)
-            setSecretInitialValues(savedValues)
             setSkillEnvInitialValues(envInitialValues)
             setLegacyInitialValues(nextLegacyInitialValues)
             pendingInstallOptionsRef.current = options
@@ -394,7 +378,7 @@ export function SharedInstallerFlow({
       pendingLegacySubstitutionsRef.current,
       pendingSkillEnvValuesRef.current,
     )
-    const changes = buildUserSecretChangeSet(userSecrets, confirmedValues, secretInitialValues)
+    const changes = buildUserSecretChangeSet(userSecrets, confirmedValues)
     if (hasUserSecretChanges(changes)) {
       setPendingSecretChanges(changes)
       setIsSkillEnvConfirmOpen(false)
@@ -408,8 +392,12 @@ export function SharedInstallerFlow({
     await handleInstall(pendingInstallOptionsRef.current)
   }
 
-  const handleSkillEnvConfirm = async (values: Record<string, string>) => {
+  const handleSkillEnvConfirm = async (
+    values: Record<string, string>,
+    secretNames: Record<string, string>,
+  ) => {
     pendingSkillEnvValuesRef.current = values
+    pendingSkillEnvSecretNamesRef.current = Object.keys(secretNames).length > 0 ? secretNames : undefined
     setIsSkillEnvConfirmOpen(false)
 
     if (detectedPlaceholders.length > 0) {
@@ -420,11 +408,15 @@ export function SharedInstallerFlow({
     await continueInstallAfterValueConfirmation()
   }
 
-  const handleVariableConfirm = async (substitutions: Record<string, string>) => {
+  const handleVariableConfirm = async (
+    substitutions: Record<string, string>,
+    secretNames: Record<string, string>,
+  ) => {
     const filtered = Object.fromEntries(
       Object.entries(substitutions).filter(([, value]) => value.length > 0),
     )
     pendingLegacySubstitutionsRef.current = Object.keys(filtered).length > 0 ? filtered : undefined
+    pendingLegacySecretNamesRef.current = Object.keys(secretNames).length > 0 ? secretNames : undefined
     await continueInstallAfterValueConfirmation()
   }
 

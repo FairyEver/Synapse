@@ -441,9 +441,12 @@ describe("SharedInstallerFlow", () => {
     })
 
     expect(document.body.textContent).toContain("Skill 配置")
-    expect(inputByLabel("GITEE_TOKEN")?.value).toBe("saved-token")
+    expect(inputByLabel("GITEE_TOKEN")?.value).toBe("")
+    expect(inputByLabel("GITEE_TOKEN")?.disabled).toBe(true)
     expect(inputByLabel("API_BASE_URL")?.value).toBe("https://example.com")
     expect(inputByLabel("OPTIONAL_EMPTY")?.value).toBe("")
+    expect(document.body.textContent).not.toContain("saved-token")
+    expect(mocks.secrets.get).not.toHaveBeenCalled()
 
     await act(async () => {
       clickButton("继续安装")
@@ -455,10 +458,10 @@ describe("SharedInstallerFlow", () => {
 
     expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
       skillEnvValues: {
-        GITEE_TOKEN: "saved-token",
         API_BASE_URL: "https://example.com",
         OPTIONAL_EMPTY: "",
       },
+      skillEnvSecretNames: { GITEE_TOKEN: "GITEE_TOKEN" },
     }))
   })
 
@@ -474,13 +477,6 @@ describe("SharedInstallerFlow", () => {
       ],
       total: 2,
     })
-    mocks.secrets.get.mockImplementation(async ({ name }: { name: string }) => ({
-      id: name === "GITEE_TOKEN" ? "secret-1" : "secret-2",
-      name,
-      description: "saved",
-      hasValue: true,
-      value: name === "GITEE_TOKEN" ? "saved-token" : "inline-token",
-    }))
     mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
     await renderFlow(repositorySkillSource)
 
@@ -512,9 +508,11 @@ describe("SharedInstallerFlow", () => {
     })
 
     expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
-      skillEnvValues: { GITEE_TOKEN: "saved-token" },
-      variableSubstitutions: { INLINE_TOKEN: "inline-token" },
+      skillEnvSecretNames: { GITEE_TOKEN: "GITEE_TOKEN" },
+      skillEnvValues: {},
+      variableSecretNames: { INLINE_TOKEN: "INLINE_TOKEN" },
     }))
+    expect(mocks.secrets.get).not.toHaveBeenCalled()
   })
 
   it("deduplicates same-name secret updates and prefers the sustainable ENV value", async () => {
@@ -540,6 +538,7 @@ describe("SharedInstallerFlow", () => {
 
     const envInput = inputByLabel("GITEE_TOKEN")
     await act(async () => {
+      clickButton("替换")
       if (envInput) setInputValue(envInput, "env-token")
     })
     await act(async () => {
@@ -549,6 +548,7 @@ describe("SharedInstallerFlow", () => {
 
     const legacyInput = document.querySelector<HTMLInputElement>("input")
     await act(async () => {
+      clickButton("替换")
       if (legacyInput) setInputValue(legacyInput, "legacy-token")
     })
     await act(async () => {
@@ -570,6 +570,10 @@ describe("SharedInstallerFlow", () => {
     expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
       skillEnvValues: { GITEE_TOKEN: "env-token" },
       variableSubstitutions: { gitee_token: "legacy-token" },
+    }))
+    expect(mocks.installSourceToEditor.mock.calls[0]?.[0]).not.toEqual(expect.objectContaining({
+      skillEnvSecretNames: expect.anything(),
+      variableSecretNames: expect.anything(),
     }))
   })
 
@@ -614,9 +618,11 @@ describe("SharedInstallerFlow", () => {
     expect(document.body.textContent).toContain("变量替换")
     expect(document.body.textContent).toContain("${{ GITEE_TOKEN }}")
     const input = document.querySelector<HTMLInputElement>("input")
-    expect(input?.value).toBe("saved-token")
+    expect(input?.value).toBe("")
+    expect(input?.disabled).toBe(true)
+    expect(document.body.textContent).not.toContain("saved-token")
     expect(mocks.secrets.list).toHaveBeenCalled()
-    expect(mocks.secrets.get).toHaveBeenCalledWith({ name: "GITEE_TOKEN", includeValue: true })
+    expect(mocks.secrets.get).not.toHaveBeenCalled()
     expect(mocks.installSourceToEditor).not.toHaveBeenCalled()
 
     await act(async () => {
@@ -625,7 +631,7 @@ describe("SharedInstallerFlow", () => {
     })
 
     expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
-      variableSubstitutions: { GITEE_TOKEN: "saved-token" },
+      variableSecretNames: { GITEE_TOKEN: "GITEE_TOKEN" },
     }))
   })
 
