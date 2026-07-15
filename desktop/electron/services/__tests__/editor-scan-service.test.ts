@@ -219,6 +219,49 @@ describe("editor scan quick publish", () => {
       .rejects.toMatchObject({ code: "ENOENT" })
   })
 
+  it("skips linking when only Skill frontmatter changed after the publish check", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "release-helper")
+    await mkdir(skillDir)
+    await writeFile(path.join(skillDir, "SKILL.md"), [
+      "---",
+      "name: release-helper",
+      "category: development",
+      "---",
+      "# Release Helper",
+    ].join("\n"))
+    vi.spyOn(editorScanRoots, "listTrustedSkillRoots").mockResolvedValue([{
+      editors: [{ id: "codex", label: "Codex" }],
+      scope: "global",
+      path: root,
+    }])
+    const { security } = createAllowingSecurity()
+    const draft = await prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: skillDir,
+      itemName: "release-helper",
+      purpose: "publish",
+    }, security)
+    expect(draft.itemType).toBe("skill")
+    if (draft.itemType !== "skill" || !draft.publishSessionId) return
+    await writeFile(path.join(skillDir, "SKILL.md"), [
+      "---",
+      "name: release-helper",
+      "category: operations",
+      "---",
+      "# Release Helper",
+    ].join("\n"))
+
+    await expect(finalizeQuickPublish({
+      contentId: "skill-1",
+      mode: "new",
+      repositoryVersion: "20260713010101",
+      sessionId: draft.publishSessionId,
+    }, security)).resolves.toMatchObject({ status: "source-changed" })
+    await expect(readFile(path.join(skillDir, ".synapse.json"), "utf8"))
+      .rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("checks read permission before returning scanned item content and attachments", async () => {
     const root = await createTempDir()
     const rulePath = path.join(root, "AGENTS.md")

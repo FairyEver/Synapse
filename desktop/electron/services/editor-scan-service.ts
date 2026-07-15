@@ -814,7 +814,10 @@ async function finalizeQuickPublish(
   await assertTrustedEditorReadTarget(security, session.itemPath, auditMetadata, "skill")
 
   const currentDraft = await readSkillDraftFromDirectory(session.itemPath, undefined, { mode: "publish" })
-  if (currentDraft.publishFingerprint !== session.publishFingerprint) {
+  if (
+    currentDraft.publishFingerprint !== session.publishFingerprint
+    || currentDraft.sourceFingerprint !== session.sourceFingerprint
+  ) {
     quickPublishSessions.delete(request.sessionId)
     return { status: "source-changed", message: "内容已保存，但本地 Skill 在预检后发生变化，未更新关联。" }
   }
@@ -852,7 +855,10 @@ async function finalizeQuickPublish(
   }
 
   const finalDraft = await readSkillDraftFromDirectory(session.itemPath, undefined, { mode: "publish" })
-  if (finalDraft.publishFingerprint !== session.publishFingerprint) {
+  if (
+    finalDraft.publishFingerprint !== session.publishFingerprint
+    || finalDraft.sourceFingerprint !== session.sourceFingerprint
+  ) {
     quickPublishSessions.delete(request.sessionId)
     return { status: "source-changed", message: "内容已保存，但本地 Skill 在关联写入前发生变化，未更新关联。" }
   }
