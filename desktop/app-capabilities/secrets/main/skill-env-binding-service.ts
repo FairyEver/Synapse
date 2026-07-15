@@ -403,7 +403,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
     const base = queueItemBase(stored.publicItem)
     const auditMetadata = {
       operation: "skill-env-binding-queue",
-      secretName: name,
+      usesSecret: true,
       editorIds: stored.publicItem.editors.map(({ id }) => id),
       scope: stored.publicItem.scope,
       skillName: stored.publicItem.skillName,

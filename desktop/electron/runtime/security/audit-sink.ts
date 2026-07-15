@@ -213,7 +213,7 @@ function isSensitiveKey(key: string): boolean {
   if (normalized.includes("cookie")) return true
   if (normalized === "args" || normalized.endsWith("args")) return true
   if (/^(prompt|message|content|body|text|reason|stack)$/.test(normalized)) return true
-  return /\b(token|secret|authorization|api[_-]?key|password|bearer)\b/i.test(key)
+  return /(token|secret|authorization|apikey|password|bearer)/.test(normalized)
 }
 
 function projectIdFromMetadata(metadata: Record<string, unknown> | undefined): string | undefined {

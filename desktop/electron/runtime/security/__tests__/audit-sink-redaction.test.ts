@@ -4,6 +4,39 @@ import type { AuditEntryV1, DataNamespace } from "../../data-repo"
 import { DataRepositoryAuditSink } from "../index"
 
 describe("DataRepositoryAuditSink metadata redaction", () => {
+  it("redacts camelCase and separated secret metadata keys", async () => {
+    const namespace = new FakeAuditNamespace()
+    const sink = new DataRepositoryAuditSink({
+      audit: namespace,
+      idFactory: () => "audit-secret-keys",
+      now: () => new Date("2026-05-19T00:00:00.000Z"),
+    })
+
+    sink.record({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "skill-env-binding",
+      outcome: "allowed",
+      metadata: {
+        secretName: "PRODUCTION_TOKEN",
+        api_key_name: "INTERNAL_API_KEY",
+        accessTokenLabel: "tenant-token",
+        projectId: "project-1",
+      },
+    })
+    await sink.flushForTests()
+
+    expect(namespace.items[0]?.metadata).toEqual({
+      secretName: "[redacted]",
+      api_key_name: "[redacted]",
+      accessTokenLabel: "[redacted]",
+      projectId: "project-1",
+    })
+    expect(JSON.stringify(namespace.items)).not.toContain("PRODUCTION_TOKEN")
+    expect(JSON.stringify(namespace.items)).not.toContain("INTERNAL_API_KEY")
+    expect(JSON.stringify(namespace.items)).not.toContain("tenant-token")
+  })
+
   it("redacts session key metadata variants before persistence", async () => {
     const namespace = new FakeAuditNamespace()
     const sink = new DataRepositoryAuditSink({

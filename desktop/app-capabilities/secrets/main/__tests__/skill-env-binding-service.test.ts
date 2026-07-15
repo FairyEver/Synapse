@@ -240,6 +240,11 @@ describe("SkillEnvBindingService", () => {
     expect(await readFile(path.join(second, ".env"), "utf8")).toBe('TOKEN="new-secret"\n')
     expect(JSON.stringify(result)).not.toContain("new-secret")
     expect(JSON.stringify(harness.auditEvents)).not.toContain("new-secret")
+    expect(JSON.stringify(harness.auditEvents)).not.toContain("TOKEN")
+    expect(harness.auditEvents.filter(({ action }) => action === "fs.write"))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ metadata: expect.objectContaining({ usesSecret: true }) }),
+      ]))
   })
 
   it("updates only the exact key and rejects symlink changes before writes", async () => {
