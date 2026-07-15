@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -22,6 +23,30 @@ afterEach(async () => {
 })
 
 describe("legacy workflow migration storage", () => {
+  it("selects the newest numeric legacy version before older parseable files", async () => {
+    const repositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-order-"))
+    roots.push(repositoryPath)
+    const workflowDirectory = path.join(repositoryPath, "workflows", "legacy-workflow")
+    await mkdir(workflowDirectory, { recursive: true })
+    await writeFile(path.join(workflowDirectory, "v_9.json"), JSON.stringify({
+      id: "legacy-workflow",
+      name: "older",
+    }), "utf8")
+    await writeFile(path.join(workflowDirectory, "v_10.json"), JSON.stringify({
+      id: "legacy-workflow",
+      name: "newer",
+    }), "utf8")
+    readFileMock.mockImplementation(async (filePath) => readFileSync(filePath))
+
+    await expect(listLegacyWorkflowSources([repositoryPath])).resolves.toEqual([
+      expect.objectContaining({
+        workflowId: "legacy-workflow",
+        fileName: "v_10.json",
+        document: expect.objectContaining({ name: "newer" }),
+      }),
+    ])
+  })
+
   it("isolates a version file read error and continues scanning", async () => {
     const repositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-scan-"))
     roots.push(repositoryPath)

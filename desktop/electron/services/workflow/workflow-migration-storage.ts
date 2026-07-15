@@ -11,6 +11,11 @@ import {
   WORKFLOW_SCHEMA_VERSION,
 } from "./workflow-document-migration"
 
+const legacyVersionFileCollator = new Intl.Collator("en", {
+  numeric: true,
+  sensitivity: "base",
+})
+
 export interface LegacyWorkflowSource {
   readonly repositoryPath: string
   readonly workflowId: string
@@ -97,7 +102,7 @@ export async function listLegacyWorkflowSources(
         files = (await readdir(workflowDirectory, { withFileTypes: true }))
           .filter((entry) => entry.isFile() && /^v_.+\.json$/i.test(entry.name))
           .map((entry) => entry.name)
-          .sort((left, right) => right.localeCompare(left))
+          .sort(compareLegacyVersionFileNamesNewestFirst)
       } catch (error) {
         if (errorCode(error) === "ENOENT") continue
         onIssue?.({
@@ -144,6 +149,11 @@ export async function listLegacyWorkflowSources(
     }
   }
   return results
+}
+
+function compareLegacyVersionFileNamesNewestFirst(left: string, right: string): number {
+  const naturalOrder = legacyVersionFileCollator.compare(right, left)
+  return naturalOrder || right.localeCompare(left)
 }
 
 function digestBytes(bytes: Uint8Array): string {
