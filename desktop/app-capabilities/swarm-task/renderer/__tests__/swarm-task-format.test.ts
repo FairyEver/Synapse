@@ -18,6 +18,8 @@ describe("swarm task format helpers", () => {
     expect(formatWorkerStatus("queued")).toBe("排队中")
     expect(formatWorkerStatus("timeout")).toBe("超时")
     expect(formatWorkerPhase("permission")).toBe("权限")
+    expect(formatWorkerPhase("cancelled")).toBe("已取消")
+    expect(formatWorkerPhase("timeout")).toBe("超时")
     expect(formatWorkerPhase(undefined)).toBe("-")
   })
 

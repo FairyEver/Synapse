@@ -25,6 +25,8 @@ export const swarmWorkerPhaseSchema = z.enum([
   "permission",
   "completed",
   "failed",
+  "cancelled",
+  "timeout",
 ])
 
 export const swarmFileWriteModeSchema = z.enum(["append-only", "update"])

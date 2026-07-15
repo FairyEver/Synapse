@@ -531,7 +531,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
         ? { conversationId: outcome.conversationId ?? latestWorker.conversationId }
         : {}),
       finishedAt: timestamp(),
-      lastPhase: outcome.status === "success" ? "completed" : "failed",
+      lastPhase: outcome.status === "success" ? "completed" : outcome.status,
       ...(finalMessage ? { lastMessage: finalMessage } : {}),
       ...(summary ? { summary, summaryFallback } : {}),
       ...(handoffEnabled && extracted.handoff ? { handoff: extracted.handoff } : {}),

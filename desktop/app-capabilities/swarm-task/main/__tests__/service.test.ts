@@ -729,8 +729,35 @@ describe("createSwarmTaskService", () => {
     const latestTask = await tasks.get(task.id)
 
     expect(cancelledRun).toMatchObject({ id: run.id, status: "cancelled" })
-    expect(workerRuns[0]).toMatchObject({ status: "cancelled" })
+    expect(workerRuns[0]).toMatchObject({ status: "cancelled", lastPhase: "cancelled" })
     expect(latestTask).toMatchObject({ lastRunId: run.id, lastStatus: "cancelled" })
+  })
+
+  it("persists timeout worker state without marking its phase as failed", async () => {
+    const { service } = serviceHarness({
+      agent: {
+        sendWorker: vi.fn(async () => ({
+          conversationId: "conversation-timeout",
+          resultText: "",
+          status: "timeout",
+          events: [],
+        })),
+      },
+    })
+    const task = await service.createTask({ name: "任务", config })
+
+    const run = await service.startRun({
+      taskId: task.id,
+      configOverride: { concurrency: 1, maxRounds: 1 },
+    })
+
+    await vi.waitFor(async () => {
+      expect(await service.getRun(run.id)).toMatchObject({ status: "failed" })
+    })
+
+    expect(await service.listWorkerRuns(run.id)).toEqual([
+      expect.objectContaining({ status: "timeout", lastPhase: "timeout" }),
+    ])
   })
 
   it("persists failed worker state when the gateway rejects", async () => {
@@ -766,6 +793,7 @@ describe("createSwarmTaskService", () => {
 
     expect(workerRuns[0]).toMatchObject({
       status: "failed",
+      lastPhase: "failed",
       error: "gateway exploded",
       lastMessage: "gateway exploded",
     })
