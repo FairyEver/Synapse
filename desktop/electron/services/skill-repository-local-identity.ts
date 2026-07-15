@@ -27,6 +27,13 @@ export type SkillRepositoryIdentityReadSecurity = SkillRepositoryIdentityWriteSe
 
 type SkillRepositoryIdentityAuditOutcome = "allowed" | "denied" | "failed"
 
+export class SkillRepositoryIdentityChangedError extends Error {
+  constructor() {
+    super("本地 Skill 的云仓库关联已发生变化，请重新扫描后再试。")
+    this.name = "SkillRepositoryIdentityChangedError"
+  }
+}
+
 export async function ensureSkillRepositoryIdentityWriteAllowed(
   sourceDirectoryPath: string,
   security?: SkillRepositoryIdentityWriteSecurity,
@@ -40,6 +47,7 @@ export async function ensureSkillRepositoryIdentityWriteAllowed(
 export async function writeSkillRepositoryIdentity(
   sourceDirectoryPath: string,
   identity: SkillRepositoryIdentity,
+  expectedRaw: string | null,
   security?: SkillRepositoryIdentityWriteSecurity,
 ): Promise<void> {
   const targetPath = path.join(sourceDirectoryPath, SKILL_REPOSITORY_ID_FILE_NAME)
@@ -56,6 +64,8 @@ export async function writeSkillRepositoryIdentity(
     await mkdir(sourceDirectoryPath, { recursive: true })
     tempPath = path.join(sourceDirectoryPath, `${SKILL_REPOSITORY_ID_FILE_NAME}.${randomUUID()}.tmp`)
     await writeFile(tempPath, `${JSON.stringify(identity, null, 2)}\n`, "utf8")
+    const currentRaw = await readSkillRepositoryIdentityRaw(sourceDirectoryPath)
+    if (currentRaw !== expectedRaw) throw new SkillRepositoryIdentityChangedError()
     await rename(tempPath, targetPath)
     tempPath = null
     recordIdentityAudit(security, "fs.write", targetPath, "allowed", metadata)
@@ -66,6 +76,25 @@ export async function writeSkillRepositoryIdentity(
     recordIdentityAudit(security, "fs.write", targetPath, "failed", metadata)
     throw error
   }
+}
+
+export async function readSkillRepositoryIdentityRaw(
+  sourceDirectoryPath: string,
+  security?: SkillRepositoryIdentityReadSecurity,
+): Promise<string | null> {
+  const filePath = path.join(sourceDirectoryPath, SKILL_REPOSITORY_ID_FILE_NAME)
+  const metadata = {
+    operation: "skill-repository.identity.read-snapshot",
+    identitySource: "current",
+  }
+  const raw = await readIdentityRaw(sourceDirectoryPath, filePath, SKILL_REPOSITORY_ID_FILE_NAME, metadata, security)
+  if (raw !== null) {
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "allowed", {
+      ...metadata,
+      identityFound: true,
+    })
+  }
+  return raw
 }
 
 export async function readSkillRepositoryIdentity(
@@ -127,32 +156,8 @@ async function readIdentityFile(
     operation: "skill-repository.identity.read",
     identitySource,
   }
-  let expected: BigIntStats
-  try {
-    expected = await lstat(filePath, { bigint: true })
-  } catch (error) {
-    if (isFileNotFoundError(error)) return null
-    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
-    throw error
-  }
-  if (expected.isSymbolicLink()) {
-    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
-    throw new Error(`Skill 云仓库身份文件不能是符号链接：${fileName}`)
-  }
-  if (!expected.isFile()) {
-    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
-    throw new Error(`Skill 云仓库身份必须是普通文件：${fileName}`)
-  }
-
-  if (security) await checkIdentityReadPermission(security, filePath, metadata)
-
-  let raw: string
-  try {
-    raw = await readVerifiedIdentityFile(sourceDirectoryPath, filePath, expected)
-  } catch (error) {
-    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
-    throw error
-  }
+  const raw = await readIdentityRaw(sourceDirectoryPath, filePath, fileName, metadata, security)
+  if (raw === null) return null
 
   let parsed: unknown
   try {
@@ -211,6 +216,42 @@ async function readIdentityFile(
     repositoryId: identity.id,
   })
   return identity
+}
+
+async function readIdentityRaw(
+  sourceDirectoryPath: string,
+  filePath: string,
+  fileName: string,
+  metadata: Record<string, unknown>,
+  security?: SkillRepositoryIdentityReadSecurity,
+): Promise<string | null> {
+  let expected: BigIntStats
+  try {
+    expected = await lstat(filePath, { bigint: true })
+  } catch (error) {
+    if (isFileNotFoundError(error)) return null
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
+    throw error
+  }
+  if (expected.isSymbolicLink()) {
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
+    throw new Error(`Skill 云仓库身份文件不能是符号链接：${fileName}`)
+  }
+  if (!expected.isFile()) {
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
+    throw new Error(`Skill 云仓库身份必须是普通文件：${fileName}`)
+  }
+
+  if (security) await checkIdentityReadPermission(security, filePath, metadata)
+
+  let raw: string
+  try {
+    raw = await readVerifiedIdentityFile(sourceDirectoryPath, filePath, expected)
+  } catch (error) {
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
+    throw error
+  }
+  return raw
 }
 
 async function readVerifiedIdentityFile(

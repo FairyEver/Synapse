@@ -24,8 +24,8 @@ Skill Repository stores Skills only. Rules and prompt sharing are intentionally 
 
 1. For an existing local Skill folder, call `app_skill_repository_import_local` with `sourceDirectoryPath`.
 2. The local folder must contain root `SKILL.md`. Synapse excludes runtime `.env` files, both identity files, other hidden entries, and symlinks; excluded runtime env files are not read.
-3. If the upload succeeds, Synapse attempts to write `.synapse.repository.json` through its local permission and audit boundary. Check `identityWritten`; if it is false, the cloud upload succeeded but the local folder was not linked.
-4. For later updates, prefer `app_skill_repository_update_local` when the target `repositoryId` is known. `app_skill_repository_import_local` uses `.synapse.repository.json` when present. Identity files must be ordinary non-symlink files inside the Skill directory; identity reads use the local permission and audit boundary, and an untrusted identity stops the upload before any cloud update. A legacy cloud identity in `.synapse.json` remains readable and migrates after a successful upload without overwriting a normal Resource Repository identity.
+3. If the upload succeeds, Synapse attempts to write `.synapse.repository.json` through its local permission and audit boundary. Check `identityWritten`; if it is false, the cloud upload succeeded but the local folder was not linked. A concurrent local identity change is preserved and also returns `identityWritten: false`.
+4. For later updates, prefer `app_skill_repository_update_local` when the target `repositoryId` is known. `app_skill_repository_import_local` uses `.synapse.repository.json` when present. Identity files must be ordinary non-symlink files inside the Skill directory; identity reads use the local permission and audit boundary, and an untrusted identity stops the upload before any cloud update. Synapse rechecks the current identity immediately before replacing it, so a later request cannot overwrite a newer local association. A legacy cloud identity in `.synapse.json` remains readable and migrates after a successful upload without overwriting a normal Resource Repository identity.
 5. Use `app_skill_repository_set_visibility` when the user explicitly wants a repository to become private or public.
 6. Use `app_skill_repository_open` to get the management URL. It opens the user's browser only when `openInBrowser` is true.
 7. Use `app_skill_repository_open_public` to get the public page URL for a public repository.
@@ -53,7 +53,7 @@ Admin removal only hides or restores public Skill repositories from the public s
 
 ## Safety
 
-Uploading reads only publishable local files and writing `.synapse.repository.json` modifies the local Skill folder. These actions go through Synapse permission and audit checks. A denied write permission stops the cloud upload before mutation; a later filesystem write failure is returned as `identityWritten: false`.
+Uploading reads only publishable local files and writing `.synapse.repository.json` modifies the local Skill folder. These actions go through Synapse permission and audit checks. A denied write permission stops the cloud upload before mutation; a later filesystem write failure or concurrent identity conflict is returned as `identityWritten: false` without overwriting the newer local file.
 
 Changing visibility, forking, and creating an install session also pass the local content-mutation permission boundary before the cloud action and record allowed, denied, or failed audit outcomes. Audit records do not include install session or deep-link values.
 

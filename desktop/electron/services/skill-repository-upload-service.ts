@@ -15,6 +15,7 @@ import { AccountAuthenticationRequiredError, accountService } from "./account-se
 import {
   ensureSkillRepositoryIdentityWriteAllowed,
   readSkillRepositoryIdentity,
+  readSkillRepositoryIdentityRaw,
   removeLegacySkillRepositoryIdentity,
   writeSkillRepositoryIdentity,
   type SkillRepositoryIdentityWriteSecurity,
@@ -71,6 +72,7 @@ type SkillRepositoryUploadServiceDeps = {
   readonly openExternal?: (url: string) => Promise<void> | void
   readonly ensureIdentityWriteAllowed?: typeof ensureSkillRepositoryIdentityWriteAllowed
   readonly readIdentity?: typeof readSkillRepositoryIdentity
+  readonly readIdentityRaw?: typeof readSkillRepositoryIdentityRaw
   readonly removeLegacyIdentity?: typeof removeLegacySkillRepositoryIdentity
   readonly writeIdentity?: typeof writeSkillRepositoryIdentity
 }
@@ -81,6 +83,7 @@ export class SkillRepositoryUploadService {
   private readonly openExternal?: (url: string) => Promise<void> | void
   private readonly ensureIdentityWriteAllowed: typeof ensureSkillRepositoryIdentityWriteAllowed
   private readonly readIdentity: typeof readSkillRepositoryIdentity
+  private readonly readIdentityRaw: typeof readSkillRepositoryIdentityRaw
   private readonly removeLegacyIdentity: typeof removeLegacySkillRepositoryIdentity
   private readonly writeIdentity: typeof writeSkillRepositoryIdentity
 
@@ -90,6 +93,7 @@ export class SkillRepositoryUploadService {
     this.openExternal = deps.openExternal
     this.ensureIdentityWriteAllowed = deps.ensureIdentityWriteAllowed ?? ensureSkillRepositoryIdentityWriteAllowed
     this.readIdentity = deps.readIdentity ?? readSkillRepositoryIdentity
+    this.readIdentityRaw = deps.readIdentityRaw ?? readSkillRepositoryIdentityRaw
     this.removeLegacyIdentity = deps.removeLegacyIdentity ?? removeLegacySkillRepositoryIdentity
     this.writeIdentity = deps.writeIdentity ?? writeSkillRepositoryIdentity
   }
@@ -112,6 +116,7 @@ export class SkillRepositoryUploadService {
 
     const { buildSkillRepositoryManagementUrl, normalizeSkillRepositoryName } = await sharedSkillRepositoryPromise
     const name = normalizeSkillRepositoryName(input.name ?? source.metadata.name ?? path.basename(source.sourceDirectoryPath))
+    const expectedIdentityRaw = await this.readIdentityRaw(source.sourceDirectoryPath, security)
     const localIdentity = await this.readIdentity(source.sourceDirectoryPath, security)
     await this.ensureIdentityWriteAllowed(source.sourceDirectoryPath, security)
     const localRepositoryId = localIdentity?.id
@@ -147,7 +152,7 @@ export class SkillRepositoryUploadService {
         kind: "cloud-skill-repository",
         owner,
         name: repository.name,
-      }, security)
+      }, expectedIdentityRaw, security)
       try {
         const verifiedIdentity = await this.readIdentity(source.sourceDirectoryPath, security)
         if (verifiedIdentity?.id !== repository.id || verifiedIdentity.name !== repository.name) {
@@ -205,6 +210,7 @@ export class SkillRepositoryUploadService {
     }
     if (!identity.id) throw new Error("Skill 仓库 ID 不能为空。")
 
+    const expectedIdentityRaw = await this.readIdentityRaw(source.sourceDirectoryPath, security)
     const currentIdentity = await this.readIdentity(source.sourceDirectoryPath, security)
     const currentMatchesTarget = currentIdentity?.id === identity.id
       && currentIdentity.name === identity.name
@@ -214,7 +220,7 @@ export class SkillRepositoryUploadService {
     }
 
     await this.ensureIdentityWriteAllowed(source.sourceDirectoryPath, security)
-    await this.writeIdentity(source.sourceDirectoryPath, identity, security)
+    await this.writeIdentity(source.sourceDirectoryPath, identity, expectedIdentityRaw, security)
 
     let identityMigrated = false
     let identityMigrationWarning: string | undefined

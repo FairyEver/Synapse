@@ -23,6 +23,7 @@ const serviceLogger = vi.hoisted(() => {
 const readSkillDraftFromDirectory = vi.hoisted(() => vi.fn())
 const ensureSkillRepositoryIdentityWriteAllowed = vi.hoisted(() => vi.fn())
 const readSkillRepositoryIdentity = vi.hoisted(() => vi.fn())
+const readSkillRepositoryIdentityRaw = vi.hoisted(() => vi.fn())
 const removeLegacySkillRepositoryIdentity = vi.hoisted(() => vi.fn())
 const writeSkillRepositoryIdentity = vi.hoisted(() => vi.fn())
 
@@ -69,6 +70,7 @@ vi.mock("../skill-repository-local-identity", async (importOriginal) => {
     ...actual,
     ensureSkillRepositoryIdentityWriteAllowed,
     readSkillRepositoryIdentity,
+    readSkillRepositoryIdentityRaw,
     removeLegacySkillRepositoryIdentity,
     writeSkillRepositoryIdentity,
   }
@@ -104,6 +106,7 @@ describe("SkillRepositoryUploadService", () => {
     vi.clearAllMocks()
     readSkillDraftFromDirectory.mockResolvedValue(skillDraft())
     ensureSkillRepositoryIdentityWriteAllowed.mockResolvedValue(undefined)
+    readSkillRepositoryIdentityRaw.mockResolvedValue(null)
     readSkillRepositoryIdentity.mockReset()
     readSkillRepositoryIdentity.mockResolvedValueOnce(null).mockResolvedValue(identity)
     removeLegacySkillRepositoryIdentity.mockResolvedValue(false)
@@ -150,7 +153,7 @@ describe("SkillRepositoryUploadService", () => {
       kind: "cloud-skill-repository",
       owner: "liyang",
       name: "demo-skill",
-    }, undefined)
+    }, null, undefined)
     expect(removeLegacySkillRepositoryIdentity).toHaveBeenCalledWith("/skills/demo", undefined)
     expect(openExternal).not.toHaveBeenCalled()
   })
@@ -225,7 +228,7 @@ describe("SkillRepositoryUploadService", () => {
       kind: "cloud-skill-repository",
       owner: "liyang",
       name: "demo-skill",
-    }, undefined)
+    }, null, undefined)
   })
 
   it("preflights identity write permission before cloud import", async () => {
@@ -286,6 +289,28 @@ describe("SkillRepositoryUploadService", () => {
     expect(importSkillRepository).toHaveBeenCalled()
   })
 
+  it("keeps cloud upload success recoverable when the local identity changes during import", async () => {
+    readSkillRepositoryIdentityRaw.mockResolvedValue("identity-before-upload")
+    writeSkillRepositoryIdentity.mockRejectedValueOnce(new Error("本地 Skill 的云仓库关联已发生变化，请重新扫描后再试。"))
+    const importSkillRepository = vi.fn(async () => repositoryDetail())
+    const service = new SkillRepositoryUploadService({
+      accountService: { getState: () => authenticatedState, importSkillRepository },
+    })
+
+    await expect(service.importLocal({ sourceDirectoryPath: "/skills/demo" })).resolves.toMatchObject({
+      repositoryId: "repo-1",
+      identityWritten: false,
+      identityWriteError: "本地 Skill 的云仓库关联已发生变化，请重新扫描后再试。",
+      identityBeforeUploadId: null,
+    })
+    expect(writeSkillRepositoryIdentity).toHaveBeenCalledWith(
+      "/skills/demo",
+      identity,
+      "identity-before-upload",
+      undefined,
+    )
+  })
+
   it("retries only the local identity write without importing the cloud repository again", async () => {
     const importSkillRepository = vi.fn()
     const service = new SkillRepositoryUploadService({
@@ -302,7 +327,7 @@ describe("SkillRepositoryUploadService", () => {
     })).resolves.toEqual({ identityWritten: true, identityMigrated: false })
 
     expect(importSkillRepository).not.toHaveBeenCalled()
-    expect(writeSkillRepositoryIdentity).toHaveBeenCalledWith("/skills/demo", identity, undefined)
+    expect(writeSkillRepositoryIdentity).toHaveBeenCalledWith("/skills/demo", identity, null, undefined)
   })
 
   it("blocks identity retry when the local source or identity changed", async () => {
