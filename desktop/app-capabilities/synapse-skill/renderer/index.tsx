@@ -257,14 +257,14 @@ function SynapseSkillModule() {
       }
       setBatchErrors(nextErrors)
 
-      if (warnings.length > 0) {
-        toast.warning(warnings.join("；"))
-      } else if (failedResults.length === 0) {
-        toast.success("安装完成")
-      } else if (failedResults.length === result.results.length) {
+      if (failedResults.length === result.results.length) {
         toast.error("安装失败")
+      } else if (failedResults.length > 0) {
+        toast.warning(["部分安装失败", ...warnings].join("；"))
+      } else if (warnings.length > 0) {
+        toast.warning(warnings.join("；"))
       } else {
-        toast.warning("部分安装失败")
+        toast.success("安装完成")
       }
       await refreshStatus()
     } catch (error) {

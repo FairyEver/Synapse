@@ -62,6 +62,11 @@ const inspectGlobalSkillInstallations = vi.hoisted(() => vi.fn(async () => ({
   ],
 })))
 const showItemInFolder = vi.hoisted(() => vi.fn(async () => undefined))
+const toast = vi.hoisted(() => ({
+  error: vi.fn(),
+  success: vi.fn(),
+  warning: vi.fn(),
+}))
 
 vi.mock("@/app-shell/config", () => ({
   useAppConfig: () => ({
@@ -123,7 +128,7 @@ vi.mock("@/modules/installers/shared/shared-installer-flow", () => ({
 }))
 
 vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() },
+  toast,
 }))
 
 import { SynapseSkillModule } from "../index"
@@ -143,6 +148,9 @@ beforeEach(() => {
   loadEditors.mockClear()
   inspectGlobalSkillInstallations.mockClear()
   showItemInFolder.mockClear()
+  toast.error.mockClear()
+  toast.success.mockClear()
+  toast.warning.mockClear()
 })
 
 afterEach(() => {
@@ -295,6 +303,29 @@ describe("SynapseSkillModule", () => {
     await vi.waitFor(() => {
       expect(document.body.textContent).not.toContain("目标目录不可写")
     })
+  })
+
+  it("prioritizes partial failure when a batch also returns a warning", async () => {
+    installSourceToEditorTargets.mockResolvedValueOnce({
+      results: [
+        {
+          target: { editorId: "codex", scope: "global" },
+          status: "installed",
+          result: { warning: "旧目录需要人工检查" },
+        },
+        {
+          target: { editorId: "cursor", scope: "global" },
+          status: "failed",
+          error: "目标目录不可写",
+        },
+      ],
+    })
+    await renderModule()
+
+    await clickButton("安装缺失项")
+
+    expect(toast.warning).toHaveBeenCalledWith("部分安装失败；旧目录需要人工检查")
+    expect(toast.success).not.toHaveBeenCalled()
   })
 
   it("clears a stale batch error after refresh confirms the target is installed", async () => {
