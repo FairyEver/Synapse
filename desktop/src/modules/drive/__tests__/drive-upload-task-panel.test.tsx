@@ -46,7 +46,7 @@ describe("DriveUploadTaskPanel", () => {
     }), {
       type: "item-completed",
       taskId: "upload-task-1",
-      itemKey: "file:/Users/me/Desktop/report.pdf",
+      itemKey: "item:0",
     })
 
     await render(
@@ -80,7 +80,7 @@ describe("DriveUploadTaskPanel", () => {
     }), {
       type: "item-failed",
       taskId: "upload-task-1",
-      itemKey: "file:/tmp/report.txt",
+      itemKey: "item:0",
       message: "上传失败。",
     }), { completed: 0, failed: 1, skipped: 0, message: "上传失败。" }, 200)
     const onRetry = vi.fn()
@@ -120,7 +120,7 @@ describe("DriveUploadTaskPanel", () => {
     }), {
       type: "item-failed",
       taskId: "upload-task-1",
-      itemKey: "file:/tmp/a.txt",
+      itemKey: "item:0",
       message: "上传失败。",
     })
 

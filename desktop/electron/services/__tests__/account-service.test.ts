@@ -284,10 +284,11 @@ describe("AccountService", () => {
     })
 
     expect(events).toEqual([
-      { type: "item-started", taskId: "upload-task-1", itemKey: `file:${filePath}` },
-      { type: "item-progress", taskId: "upload-task-1", itemKey: `file:${filePath}`, uploadedBytes: 6, totalBytes: 6 },
-      { type: "item-completed", taskId: "upload-task-1", itemKey: `file:${filePath}` },
+      { type: "item-started", taskId: "upload-task-1", itemKey: "item:0" },
+      { type: "item-progress", taskId: "upload-task-1", itemKey: "item:0", uploadedBytes: 6, totalBytes: 6 },
+      { type: "item-completed", taskId: "upload-task-1", itemKey: "item:0" },
     ])
+    expect(JSON.stringify(events)).not.toContain(filePath)
   })
 
   it("coalesces upload progress emitted within one reporting interval", async () => {

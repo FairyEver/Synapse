@@ -2387,7 +2387,7 @@ describe("DriveModule", () => {
       emitDriveLocalUploadProgress({
         type: "item-started",
         taskId: lastUploadTaskId(),
-        itemKey: "file:/tmp/report.txt",
+        itemKey: "item:0",
       })
       await flushPromises()
     })
@@ -2397,7 +2397,7 @@ describe("DriveModule", () => {
       emitDriveLocalUploadProgress({
         type: "item-completed",
         taskId: lastUploadTaskId(),
-        itemKey: "file:/tmp/report.txt",
+        itemKey: "item:0",
       })
       upload.resolve({ completed: 1, failed: 0, skipped: 0 })
       await flushPromises()
@@ -2437,7 +2437,7 @@ describe("DriveModule", () => {
       emitDriveLocalUploadProgress({
         type: "item-failed",
         taskId: firstTaskId,
-        itemKey: "file:/tmp/report.txt",
+        itemKey: "item:0",
         message: "上传失败。",
       })
       upload.resolve({ completed: 0, failed: 1, skipped: 0, message: "上传失败。" })

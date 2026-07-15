@@ -66,17 +66,17 @@ describe("drive upload task model", () => {
     const started = applyDriveUploadProgressEvent(task, {
       type: "item-started",
       taskId: "upload-task-1",
-      itemKey: "file:/tmp/a.txt",
+      itemKey: "item:0",
     })
     const completed = applyDriveUploadProgressEvent(started, {
       type: "item-completed",
       taskId: "upload-task-1",
-      itemKey: "file:/tmp/a.txt",
+      itemKey: "item:0",
     })
     const failed = applyDriveUploadProgressEvent(completed, {
       type: "item-failed",
       taskId: "upload-task-1",
-      itemKey: "file:/tmp/b.txt",
+      itemKey: "item:1",
       message: "上传失败。",
     })
 
@@ -102,7 +102,7 @@ describe("drive upload task model", () => {
     const updated = applyDriveUploadProgressEvent(task, {
       type: "item-progress",
       taskId: "upload-task-1",
-      itemKey: "file:/tmp/a.txt",
+      itemKey: "item:0",
       uploadedBytes: 3,
       totalBytes: 6,
     })
@@ -131,7 +131,7 @@ describe("drive upload task model", () => {
     const updated = applyDriveUploadProgressEvent(task, {
       type: "item-progress",
       taskId: "upload-task-1",
-      itemKey: "file:/tmp/missing.txt",
+      itemKey: "item:missing",
       uploadedBytes: 3,
       totalBytes: 6,
     })
@@ -190,7 +190,7 @@ describe("drive upload task model", () => {
     const failed = applyDriveUploadProgressEvent(task, {
       type: "item-failed",
       taskId: "upload-task-1",
-      itemKey: "file:/tmp/b.txt",
+      itemKey: "item:1",
       message: "上传失败。",
     })
 
@@ -223,13 +223,13 @@ describe("drive upload task model", () => {
     const firstFailed = applyDriveUploadProgressEvent(task, {
       type: "item-failed",
       taskId: "upload-task-1",
-      itemKey: "folder:project/a.txt",
+      itemKey: "item:0:0",
       message: "上传失败。",
     })
     const bothFailed = applyDriveUploadProgressEvent(firstFailed, {
       type: "item-failed",
       taskId: "upload-task-1",
-      itemKey: "folder:project/docs/b.txt",
+      itemKey: "item:0:1",
       message: "上传失败。",
     })
 

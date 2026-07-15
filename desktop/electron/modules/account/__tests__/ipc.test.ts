@@ -417,7 +417,7 @@ describe("accountIpcModule", () => {
         readonly itemKey: string
       }) => void
     }) => {
-      options?.onProgress?.({ type: "item-started", taskId: "upload-task-1", itemKey: "file:/tmp/report.txt" })
+      options?.onProgress?.({ type: "item-started", taskId: "upload-task-1", itemKey: "item:0" })
       return { completed: 1, failed: 0, skipped: 0 }
     })
     const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
@@ -452,8 +452,9 @@ describe("accountIpcModule", () => {
     expect(emitted).toContainEqual(expect.objectContaining({
       domain: "account",
       type: "account.driveLocalUploadProgress",
-      payload: { type: "item-started", taskId: "upload-task-1", itemKey: "file:/tmp/report.txt" },
+      payload: { type: "item-started", taskId: "upload-task-1", itemKey: "item:0" },
     }))
+    expect(JSON.stringify(emitted)).not.toContain("/tmp/report.txt")
     expect(emitted).toContainEqual(expect.objectContaining({
       domain: "account",
       type: "account.driveLocalUploadProgress",

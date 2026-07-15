@@ -47,7 +47,7 @@ export type CreateDriveUploadTaskInput = {
 }
 
 export function createDriveUploadTask(input: CreateDriveUploadTaskInput): DriveUploadTask {
-  const items = input.request.items.flatMap(flattenUploadItem)
+  const items = input.request.items.flatMap((item, itemIndex) => flattenUploadItem(item, itemIndex))
   const totalDirectories = input.request.items.reduce(
     (total, item) => total + (item.kind === "folder" ? 1 + (item.directories?.length ?? 0) : 0),
     0,
@@ -181,14 +181,14 @@ export function getDriveUploadStatusBadge(task: DriveUploadTask | null): {
   return { label, tone: "neutral", ariaLabel: label }
 }
 
-function flattenUploadItem(item: DriveLocalUploadItem): DriveUploadTaskItem[] {
-  if (item.kind === "file") return [taskItemFromFile(item)]
-  return item.files.map((file) => taskItemFromFolderFile(item, file))
+function flattenUploadItem(item: DriveLocalUploadItem, itemIndex: number): DriveUploadTaskItem[] {
+  if (item.kind === "file") return [taskItemFromFile(item, itemIndex)]
+  return item.files.map((file, fileIndex) => taskItemFromFolderFile(item, file, itemIndex, fileIndex))
 }
 
-function taskItemFromFile(item: DriveLocalUploadFileItem): DriveUploadTaskItem {
+function taskItemFromFile(item: DriveLocalUploadFileItem, itemIndex: number): DriveUploadTaskItem {
   return {
-    key: `file:${item.path}`,
+    key: driveLocalUploadItemKey(itemIndex),
     name: item.name,
     relativePath: null,
     localPath: item.path,
@@ -204,10 +204,12 @@ function taskItemFromFile(item: DriveLocalUploadFileItem): DriveUploadTaskItem {
 function taskItemFromFolderFile(
   folder: DriveLocalUploadFolderItem,
   file: DriveLocalUploadFolderItem["files"][number],
+  itemIndex: number,
+  fileIndex: number,
 ): DriveUploadTaskItem {
   const name = file.relativePath.split("/").filter(Boolean).at(-1) ?? file.relativePath
   return {
-    key: `folder:${folder.folderName}/${file.relativePath}`,
+    key: driveLocalUploadItemKey(itemIndex, fileIndex),
     name,
     relativePath: `${folder.folderName}/${file.relativePath}`,
     localPath: file.path,
@@ -223,6 +225,10 @@ function taskItemFromFolderFile(
       files: [file],
     },
   }
+}
+
+function driveLocalUploadItemKey(itemIndex: number, fileIndex?: number): string {
+  return fileIndex === undefined ? `item:${itemIndex}` : `item:${itemIndex}:${fileIndex}`
 }
 
 function itemStatusFromEvent(event: Exclude<DriveLocalUploadProgressEvent, { readonly type: "task-finished" }>): DriveUploadTaskItemStatus {
