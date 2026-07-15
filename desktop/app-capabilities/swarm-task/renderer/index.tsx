@@ -353,11 +353,14 @@ export function SwarmTaskModule() {
     }
   }, [draftConfig, draftConfigIsRunnable, selectedTask, swarmTaskBridge])
 
-  const startRun = useCallback(async () => {
+  const startRun = useCallback(async (configOverride?: SwarmTaskConfig) => {
     if (!selectedTask || !draftConfigIsRunnable) return
     try {
       setRunning(true)
-      await swarmTaskBridge.startRun({ taskId: selectedTask.id })
+      await swarmTaskBridge.startRun({
+        taskId: selectedTask.id,
+        ...(configOverride ? { configOverride } : {}),
+      })
       setActiveTab("active")
       await refreshCurrentSnapshot()
     } catch (error) {
@@ -505,6 +508,7 @@ export function SwarmTaskModule() {
                 onDraftConfigChange={setDraftConfig}
                 onSaveConfig={() => void saveConfig()}
                 onStartRun={() => void startRun()}
+                onStartDraftRun={() => void startRun(draftConfig)}
                 onRefreshRun={() => void refreshCurrentSnapshot()}
                 onStopRefill={() => void stopRefill()}
                 onCancelRun={() => void cancelRun()}

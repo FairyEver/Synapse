@@ -443,7 +443,27 @@ describe("SwarmTaskModule", () => {
       taskId: "task-1",
       patch: { currentConfig: swarmTaskFixtures.taskA.currentConfig },
     })
-    expect(swarmTaskBridge.startRun).toHaveBeenCalledWith({ taskId: "task-1" })
+    expect(swarmTaskBridge.startRun).toHaveBeenCalledWith({
+      taskId: "task-1",
+      configOverride: swarmTaskFixtures.taskA.currentConfig,
+    })
+  })
+
+  it("starts the current unsaved draft from the config tab", async () => {
+    await renderModule()
+    await clickTab("配置")
+
+    await setTextareaValue("Run the unsaved draft.")
+    await clickButton("运行任务")
+
+    expect(swarmTaskBridge.updateTask).not.toHaveBeenCalled()
+    expect(swarmTaskBridge.startRun).toHaveBeenCalledWith({
+      taskId: "task-1",
+      configOverride: {
+        ...swarmTaskFixtures.taskA.currentConfig,
+        prompt: "Run the unsaved draft.",
+      },
+    })
   })
 
   it("shows project names in the config form instead of internal project ids", async () => {
@@ -833,7 +853,10 @@ describe("SwarmTaskModule", () => {
     await clickButton("运行任务")
 
     expect(swarmTaskBridge.startRun).toHaveBeenCalledTimes(1)
-    expect(swarmTaskBridge.startRun).toHaveBeenCalledWith({ taskId: "task-2" })
+    expect(swarmTaskBridge.startRun).toHaveBeenCalledWith({
+      taskId: "task-2",
+      configOverride: swarmTaskFixtures.taskB.currentConfig,
+    })
   })
 
   it("does not render stale workers while loading a newly selected task", async () => {
@@ -968,6 +991,16 @@ async function clickButton(text: string, index = 0): Promise<void> {
 
 function getTextarea(): HTMLTextAreaElement | null {
   return document.body.querySelector("textarea")
+}
+
+async function setTextareaValue(value: string): Promise<void> {
+  const textarea = getTextarea()
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
+  await act(async () => {
+    setter?.call(textarea, value)
+    textarea?.dispatchEvent(new Event("input", { bubbles: true }))
+    await Promise.resolve()
+  })
 }
 
 async function waitForTextareaValue(value: string): Promise<void> {
