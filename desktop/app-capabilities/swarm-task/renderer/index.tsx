@@ -373,10 +373,14 @@ export function SwarmTaskModule() {
   }, [draftConfigIsRunnable, refreshCurrentSnapshot, selectedTask, swarmTaskBridge])
 
   const openConversation = useCallback(async (worker: SwarmWorkerRun) => {
-    if (!selectedTask?.currentConfig.projectId || !worker.conversationId || worker.taskId !== selectedTask.id) return
+    const owningRun = selectedActiveRun?.id === worker.runId
+      ? selectedActiveRun
+      : selectedRunHistory.find((run) => run.id === worker.runId)
+    const projectId = owningRun?.configSnapshot.projectId
+    if (!selectedTask || !projectId || !worker.conversationId || worker.taskId !== selectedTask.id) return
     try {
       const result = await agentBridge.openConversation({
-        projectId: selectedTask.currentConfig.projectId,
+        projectId,
         conversationId: worker.conversationId,
         sessionKey: worker.sessionKey,
         platform: "swarm",
@@ -389,7 +393,7 @@ export function SwarmTaskModule() {
       logger.error("Failed to open swarm worker conversation.", error)
       toast.error(message)
     }
-  }, [agentBridge, selectedTask])
+  }, [agentBridge, selectedActiveRun, selectedRunHistory, selectedTask])
 
   const stopRefill = useCallback(async () => {
     if (!activeRun) return

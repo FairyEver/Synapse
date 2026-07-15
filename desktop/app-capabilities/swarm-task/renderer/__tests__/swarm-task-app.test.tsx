@@ -646,6 +646,28 @@ describe("SwarmTaskModule", () => {
     })
   })
 
+  it("opens a historical worker with its run snapshot project", async () => {
+    swarmTaskBridge.listTasks.mockResolvedValueOnce([{
+      ...swarmTaskFixtures.taskA,
+      currentConfig: {
+        ...swarmTaskFixtures.taskA.currentConfig,
+        projectId: "project-2",
+      },
+    }])
+
+    await renderModule()
+    await clickTab("运行")
+    await waitForButton("打开会话")
+    await clickButton("打开会话")
+
+    expect(agentBridge.openConversation).toHaveBeenCalledWith({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "session-1",
+      platform: "swarm",
+    })
+  })
+
   it("refreshes the sidebar status and worker table together from the run tab", async () => {
     await renderModule()
     await clickTab("运行")
