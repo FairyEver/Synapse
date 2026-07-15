@@ -48,12 +48,16 @@ export type CreateDriveUploadTaskInput = {
 
 export function createDriveUploadTask(input: CreateDriveUploadTaskInput): DriveUploadTask {
   const items = input.request.items.flatMap(flattenUploadItem)
+  const totalDirectories = input.request.items.reduce(
+    (total, item) => total + (item.kind === "folder" ? 1 + (item.directories?.length ?? 0) : 0),
+    0,
+  )
   return withCounts({
     id: input.id,
     parentId: input.parentId,
     destinationPath: input.destinationPath,
     status: "running",
-    totalItems: items.length,
+    totalItems: items.length + totalDirectories,
     completedItems: 0,
     failedItems: 0,
     skippedItems: 0,
@@ -100,7 +104,7 @@ export function finishDriveUploadTask(
   })
   return {
     ...reconciled,
-    completedItems: Math.max(reconciled.completedItems, result.completed),
+    completedItems: Math.max(reconciled.completedItems, result.completed + (result.completedDirectories ?? 0)),
     failedItems: Math.max(reconciled.failedItems, result.failed),
     skippedItems: Math.max(reconciled.skippedItems, result.skipped),
   }

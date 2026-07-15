@@ -34,7 +34,7 @@ describe("drive upload task model", () => {
       startedAt: 100,
     })
 
-    expect(task.totalItems).toBe(3)
+    expect(task.totalItems).toBe(4)
     expect(task.destinationPath).toBe("/专利申请/流式图表解析")
     expect(task.items.map((item) => item.name)).toEqual(["report.pdf", "a.png", "b.md"])
     expect(task.items.map((item) => item.relativePath)).toEqual([null, "flowcharts/a.png", "flowcharts/docs/b.md"])
@@ -112,6 +112,39 @@ describe("drive upload task model", () => {
       uploadedBytes: 3,
       totalBytes: 6,
     })
+  })
+
+  it("counts completed empty directories in folder upload tasks", () => {
+    const task = createDriveUploadTask({
+      id: "upload-task-1",
+      destinationPath: "根目录",
+      parentId: null,
+      request: {
+        taskId: "upload-task-1",
+        parentId: null,
+        items: [{
+          kind: "folder",
+          folderName: "project",
+          directories: [
+            { relativePath: "docs" },
+            { relativePath: "docs/empty" },
+            { relativePath: "assets" },
+          ],
+          files: [],
+        }],
+      },
+      startedAt: 100,
+    })
+    const finished = finishDriveUploadTask(task, {
+      completed: 0,
+      completedDirectories: 4,
+      failed: 0,
+      skipped: 0,
+    }, 200)
+
+    expect(task.totalItems).toBe(4)
+    expect(finished.completedItems).toBe(4)
+    expect(getDriveUploadStatusBadge(finished)?.label).toBe("已上传 4 项")
   })
 
   it("retries only failed items against the original parent id", () => {
