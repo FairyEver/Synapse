@@ -199,6 +199,30 @@ describe("SynapseSkillModule", () => {
     expect(document.body.textContent).toContain("synapse-skill:codex:global")
   })
 
+  it("summarizes conflicting targets as requiring action", async () => {
+    const conflictResult = {
+      entries: [
+        {
+          editorId: "codex",
+          editorLabel: "Codex",
+          scope: "global",
+          status: "conflict",
+          targetPath: "/Users/test/.agents/skills/synapse-skill",
+          message: "目标已被其它内容占用",
+        },
+      ],
+    }
+    inspectGlobalSkillInstallations
+      .mockResolvedValueOnce(conflictResult)
+      .mockResolvedValueOnce(conflictResult)
+
+    await renderModule()
+
+    expect(document.body.textContent).toContain("1 个需处理")
+    expect(document.body.textContent).not.toContain("无需操作")
+    expect(document.body.textContent).toContain("处理")
+  })
+
   it("opens an editor Skill directory from the path row", async () => {
     await renderModule()
 

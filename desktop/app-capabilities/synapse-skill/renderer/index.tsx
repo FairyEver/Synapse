@@ -67,9 +67,13 @@ function getBatchMode(entries: SynapseEditorInstallStatusEntry[]): "install" | "
 function getInstallSummaryLabel(entries: SynapseEditorInstallStatusEntry[]): string {
   const missingCount = entries.filter((entry) => entry.status === "not_installed").length
   const updateCount = entries.filter((entry) => entry.status === "needs_update").length
+  const actionCount = entries.filter((entry) => (
+    entry.status === "conflict" || entry.status === "external_same_name"
+  )).length
   const parts = [
     missingCount > 0 ? `${missingCount} 个待安装` : null,
     updateCount > 0 ? `${updateCount} 个待更新` : null,
+    actionCount > 0 ? `${actionCount} 个需处理` : null,
   ].filter(Boolean)
   return parts.length > 0 ? parts.join(" · ") : "无需操作"
 }
