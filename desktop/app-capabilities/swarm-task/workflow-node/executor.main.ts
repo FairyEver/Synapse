@@ -21,10 +21,17 @@ export const swarmTaskNodeExecutor: NodeExecutor<SwarmTaskNodeConfig> = {
 
       const taskId = interpolatePrompt(input.config.taskId, input.resolvedVariables)
       input.onProgress?.("starting", "启动蜂群任务…")
+      if (input.context.abortSignal.aborted) {
+        throw new Error("工作流已取消")
+      }
       const run = await service.startRun({
         taskId,
         configOverride: buildConfigOverride(input.config, input.resolvedVariables),
       })
+      if (input.context.abortSignal.aborted) {
+        await service.cancelRun(run.id)
+        throw new Error("工作流已取消")
+      }
 
       if (!input.config.waitForCompletion) {
         return buildResult(run, Date.now() - start)

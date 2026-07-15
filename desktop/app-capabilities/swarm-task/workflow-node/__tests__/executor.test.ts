@@ -85,6 +85,55 @@ describe("swarmTaskNodeExecutor", () => {
     expect(service.getRun).not.toHaveBeenCalled()
   })
 
+  it("does not start a run when the workflow is already aborted", async () => {
+    const abortController = new AbortController()
+    abortController.abort()
+    const service = {
+      startRun: vi.fn().mockResolvedValue(baseRun),
+      getRun: vi.fn(),
+      cancelRun: vi.fn(),
+    }
+
+    const result = await swarmTaskNodeExecutor.execute(createInput({
+      taskId: "task-1",
+      waitForCompletion: false,
+      variables: [],
+    }, service, abortController))
+
+    expect(result).toMatchObject({
+      status: "cancelled",
+      error: "工作流已取消",
+    })
+    expect(service.startRun).not.toHaveBeenCalled()
+    expect(service.cancelRun).not.toHaveBeenCalled()
+  })
+
+  it("cancels a newly started run when the workflow aborts during startup", async () => {
+    const abortController = new AbortController()
+    const service = {
+      startRun: vi.fn(async () => {
+        abortController.abort()
+        return baseRun
+      }),
+      getRun: vi.fn(),
+      cancelRun: vi.fn().mockResolvedValue(baseRun),
+    }
+
+    const result = await swarmTaskNodeExecutor.execute(createInput({
+      taskId: "task-1",
+      waitForCompletion: false,
+      variables: [],
+    }, service, abortController))
+
+    expect(result).toMatchObject({
+      status: "cancelled",
+      error: "工作流已取消",
+    })
+    expect(service.startRun).toHaveBeenCalledTimes(1)
+    expect(service.cancelRun).toHaveBeenCalledWith("run-1")
+    expect(service.getRun).not.toHaveBeenCalled()
+  })
+
   it("polls until a terminal run succeeds when wait is enabled", async () => {
     const terminalRun: SwarmRun = {
       ...baseRun,
