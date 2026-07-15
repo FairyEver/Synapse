@@ -83,7 +83,10 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   const queryKeySignatureRef = useRef(queryKeySignature)
   const unlockedKeySignatureRef = useRef(unlockedKeySignature)
   const queryKey = useMemo(() => ['drive-browser', queryKeyPayload], [queryKeyPayload])
-  const unlockedSnapshot = keyedSnapshotForSignature(unlockedSnapshotState, unlockedKeySignature)
+  const shouldValidateInitialPassword = input.context === 'share' && Boolean(input.initialPassword)
+  const unlockedSnapshot = shouldValidateInitialPassword
+    ? null
+    : keyedSnapshotForSignature(unlockedSnapshotState, unlockedKeySignature)
   const pagedSnapshot = keyedSnapshotForSignature(pagedSnapshotState, queryKeySignature)
 
   const query = useQuery({
