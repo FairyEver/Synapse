@@ -355,7 +355,7 @@ export function SecretsModule() {
         setSecretValueDialog({ secret, value: valueView.value })
       }
     } catch (error) {
-      logger.error("Failed to reveal secret value.", { name: secret.name, ...errorDiagnostic(error) })
+      logger.error("Failed to reveal secret value.", errorDiagnostic(error))
       setSecretReveals((reveals) => {
         if (requestGeneration !== secretRevealGeneration.current) return reveals
         return {
@@ -376,7 +376,7 @@ export function SecretsModule() {
       toast.success("已复制")
       return true
     } catch (error) {
-      logger.error("Failed to copy secret value.", { name: secretValueDialog.secret.name, ...errorDiagnostic(error) })
+      logger.error("Failed to copy secret value.", errorDiagnostic(error))
       toast.error("复制失败")
       return false
     }

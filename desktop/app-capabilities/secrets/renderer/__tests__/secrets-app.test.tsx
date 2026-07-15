@@ -259,11 +259,11 @@ describe("SecretsModule", () => {
     expect(mocks.logger.error).toHaveBeenCalledWith(
       "Failed to reveal secret value.",
       expect.objectContaining({
-        name: "TOKEN",
         errorName: "Error",
         errorMessageLength: "read failed: super-secret".length,
       }),
     )
+    expect(mocks.logger.error.mock.calls.at(-1)?.[1]).not.toHaveProperty("name")
     expect(mocks.logger.error.mock.calls.at(-1)?.[1]).not.toHaveProperty("error")
   })
 
@@ -291,11 +291,11 @@ describe("SecretsModule", () => {
     expect(mocks.logger.error).toHaveBeenCalledWith(
       "Failed to copy secret value.",
       expect.objectContaining({
-        name: "TOKEN",
         errorName: "Error",
         errorMessageLength: "clipboard denied: super-secret".length,
       }),
     )
+    expect(mocks.logger.error.mock.calls.at(-1)?.[1]).not.toHaveProperty("name")
     expect(mocks.logger.error.mock.calls.at(-1)?.[1]).not.toHaveProperty("error")
   })
 
