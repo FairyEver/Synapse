@@ -167,7 +167,7 @@ export function SkillEnvUpdateDialog({
         for (const item of result.items) {
           const key = itemKey(group.name, item.id)
           nextResults[key] = { status: item.status, message: item.message }
-          completedKeys.push(key)
+          if (item.status === "updated") completedKeys.push(key)
         }
       } catch (error) {
         if (activeSessionRef.current !== sessionSignature) return
@@ -230,7 +230,8 @@ export function SkillEnvUpdateDialog({
               </TableHeader>
               <TableBody>
                 {groupedItems.map(({ groupId: bindingGroupId, groupName, item, itemKey: bindingKey }) => {
-                  const selectable = item.status === "needs_update" && queueResults[bindingKey] === undefined
+                  const selectable = item.status === "needs_update"
+                    && queueResults[bindingKey]?.status !== "updated"
                   return (
                     <TableRow key={bindingKey}>
                       <TableCell>
