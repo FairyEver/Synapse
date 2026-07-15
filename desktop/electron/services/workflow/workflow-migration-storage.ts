@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
-import { lstat, opendir, readFile } from "node:fs/promises"
+import type { Dir, Stats } from "node:fs"
+import { lstat, opendir, readFile, realpath } from "node:fs/promises"
 import path from "node:path"
 import {
   WORKFLOW_LEGACY_RECOVERY_MAX_DIRECTORIES,
@@ -47,6 +48,12 @@ export interface LegacyWorkflowScanOptions {
   readonly maxVersionBytes?: number
   readonly timeoutMs?: number
   readonly now?: () => number
+}
+
+interface TrustedLegacyDirectory {
+  readonly directoryPath: string
+  readonly realPath: string
+  readonly stats: Stats
 }
 
 export class WorkflowMigrationStorage {
@@ -150,10 +157,32 @@ export async function listLegacyWorkflowSources(
   let scannedWorkflowDirectories = 0
   for (const repositoryPath of uniqueRepositoryPaths.slice(0, limits.maxRepositories)) {
     if (timedOut()) break
-    const root = path.join(repositoryPath, "workflows")
-    let workflowDirectories
+    let repositoryDirectory: TrustedLegacyDirectory
     try {
-      workflowDirectories = await opendir(root)
+      const repositoryRealPath = await realpath(repositoryPath)
+      repositoryDirectory = await inspectTrustedLegacyDirectory(
+        repositoryRealPath,
+        undefined,
+        "Configured legacy workflow repository must be a stable regular directory.",
+      )
+    } catch (error) {
+      if (errorCode(error) === "ENOENT") continue
+      onIssue?.({ operation: "read_repository", error: normalizeError(error) })
+      continue
+    }
+    const root = path.join(repositoryDirectory.realPath, "workflows")
+    let workflowDirectories
+    let workflowsDirectory: TrustedLegacyDirectory
+    try {
+      workflowsDirectory = await inspectTrustedLegacyDirectory(
+        root,
+        repositoryDirectory.realPath,
+        "Legacy workflows root must be a stable regular directory inside its configured repository.",
+      )
+      workflowDirectories = await openTrustedLegacyDirectory(
+        workflowsDirectory,
+        repositoryDirectory.realPath,
+      )
     } catch (error) {
       if (errorCode(error) === "ENOENT") continue
       onIssue?.({ operation: "read_repository", error: normalizeError(error) })
@@ -162,6 +191,16 @@ export async function listLegacyWorkflowSources(
 
     try {
       for await (const directory of workflowDirectories) {
+        await assertTrustedLegacyDirectoryUnchanged(repositoryDirectory)
+        await assertTrustedLegacyDirectoryUnchanged(workflowsDirectory, repositoryDirectory.realPath)
+        if (directory.isSymbolicLink()) {
+          onIssue?.({
+            operation: "read_workflow",
+            workflowId: directory.name,
+            error: new Error("Legacy workflow directory cannot be a symbolic link."),
+          })
+          continue
+        }
         if (!directory.isDirectory()) continue
         if (timedOut()) return results
         if (scannedWorkflowDirectories >= limits.maxWorkflowDirectories) {
@@ -176,9 +215,15 @@ export async function listLegacyWorkflowSources(
         scannedWorkflowDirectories += 1
         const workflowDirectory = path.join(root, directory.name)
         let versionFiles
+        let trustedWorkflowDirectory: TrustedLegacyDirectory
         try {
-          versionFiles = await listNewestLegacyVersionFiles(
+          trustedWorkflowDirectory = await inspectTrustedLegacyDirectory(
             workflowDirectory,
+            workflowsDirectory.realPath,
+            "Legacy workflow source must be a stable regular directory inside the workflows root.",
+          )
+          versionFiles = await listNewestLegacyVersionFiles(
+            trustedWorkflowDirectory,
             limits.maxVersionsPerWorkflow,
             timedOut,
           )
@@ -204,6 +249,19 @@ export async function listLegacyWorkflowSources(
 
         for (const fileName of versionFiles.files) {
           if (timedOut()) return results
+          try {
+            await assertTrustedLegacyDirectoryUnchanged(
+              trustedWorkflowDirectory,
+              workflowsDirectory.realPath,
+            )
+          } catch (error) {
+            onIssue?.({
+              operation: "read_workflow",
+              workflowId: directory.name,
+              error: normalizeError(error),
+            })
+            break
+          }
           const versionPath = path.join(workflowDirectory, fileName)
           let bytes
           try {
@@ -276,14 +334,15 @@ export async function listLegacyWorkflowSources(
 }
 
 async function listNewestLegacyVersionFiles(
-  workflowDirectory: string,
+  workflowDirectory: TrustedLegacyDirectory,
   maximum: number,
   timedOut: () => boolean,
 ): Promise<{ readonly files: string[]; readonly observed: number; readonly timedOut: boolean }> {
-  const directory = await opendir(workflowDirectory)
+  const directory = await openTrustedLegacyDirectory(workflowDirectory)
   const files: string[] = []
   let observed = 0
   for await (const entry of directory) {
+    await assertTrustedLegacyDirectoryUnchanged(workflowDirectory)
     if (timedOut()) return { files, observed, timedOut: true }
     if (!entry.isFile() || !/^v_.+\.json$/i.test(entry.name)) continue
     observed += 1
@@ -292,6 +351,60 @@ async function listNewestLegacyVersionFiles(
     if (files.length > maximum) files.pop()
   }
   return { files, observed, timedOut: false }
+}
+
+async function openTrustedLegacyDirectory(
+  directory: TrustedLegacyDirectory,
+  boundaryRealPath?: string,
+): Promise<Dir> {
+  const handle = await opendir(directory.directoryPath)
+  try {
+    await assertTrustedLegacyDirectoryUnchanged(directory, boundaryRealPath)
+    return handle
+  } catch (error) {
+    await handle.close().catch(() => undefined)
+    throw error
+  }
+}
+
+async function inspectTrustedLegacyDirectory(
+  directoryPath: string,
+  boundaryRealPath: string | undefined,
+  errorMessage: string,
+): Promise<TrustedLegacyDirectory> {
+  const stats = await lstat(directoryPath)
+  if (stats.isSymbolicLink() || !stats.isDirectory()) throw new Error(errorMessage)
+  const realPath = await realpath(directoryPath)
+  if (boundaryRealPath && !isPathInside(boundaryRealPath, realPath)) throw new Error(errorMessage)
+  const trusted = { directoryPath, realPath, stats }
+  await assertTrustedLegacyDirectoryUnchanged(trusted, boundaryRealPath)
+  return trusted
+}
+
+async function assertTrustedLegacyDirectoryUnchanged(
+  directory: TrustedLegacyDirectory,
+  boundaryRealPath?: string,
+): Promise<void> {
+  const [currentStats, currentRealPath] = await Promise.all([
+    lstat(directory.directoryPath),
+    realpath(directory.directoryPath),
+  ])
+  if (
+    currentStats.isSymbolicLink()
+    || !currentStats.isDirectory()
+    || currentStats.dev !== directory.stats.dev
+    || currentStats.ino !== directory.stats.ino
+    || currentRealPath !== directory.realPath
+    || (boundaryRealPath !== undefined && !isPathInside(boundaryRealPath, currentRealPath))
+  ) {
+    throw new Error("Legacy workflow recovery directory changed or escaped its configured repository.")
+  }
+}
+
+function isPathInside(rootPath: string, targetPath: string): boolean {
+  const relative = path.relative(rootPath, targetPath)
+  return relative === ""
+    || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
 }
 
 function resolveLegacyWorkflowScanOptions(options: LegacyWorkflowScanOptions) {

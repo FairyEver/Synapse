@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs"
-import { mkdir, mkdtemp, rm, truncate, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, symlink, truncate, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -194,5 +194,86 @@ describe("legacy workflow migration storage", () => {
       observed: 2,
       maximum: 1,
     }))
+  })
+
+  it("rejects a symlinked workflows root without reading external versions", async () => {
+    const repositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-linked-root-"))
+    const externalPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-external-root-"))
+    roots.push(repositoryPath, externalPath)
+    const externalWorkflowDirectory = path.join(externalPath, "legacy-workflow")
+    await mkdir(externalWorkflowDirectory, { recursive: true })
+    await writeFile(
+      path.join(externalWorkflowDirectory, "v_100.json"),
+      JSON.stringify({ id: "external-workflow" }),
+      "utf8",
+    )
+    await symlink(externalPath, path.join(repositoryPath, "workflows"), "dir")
+    const issues: LegacyWorkflowScanIssue[] = []
+
+    await expect(listLegacyWorkflowSources([repositoryPath], (issue) => issues.push(issue)))
+      .resolves.toEqual([])
+
+    expect(readFileMock).not.toHaveBeenCalled()
+    expect(issues).toEqual([
+      expect.objectContaining({
+        operation: "read_repository",
+        error: expect.objectContaining({
+          message: "Legacy workflows root must be a stable regular directory inside its configured repository.",
+        }),
+      }),
+    ])
+    expect(issues.map((issue) => issue.error.message).join(" ")).not.toContain(externalPath)
+  })
+
+  it("uses a configured repository symlink target as the fixed scan boundary", async () => {
+    const realRepositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-real-repository-"))
+    const configuredParent = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-linked-repository-"))
+    roots.push(realRepositoryPath, configuredParent)
+    const configuredRepositoryPath = path.join(configuredParent, "repository")
+    const workflowDirectory = path.join(realRepositoryPath, "workflows", "legacy-workflow")
+    await mkdir(workflowDirectory, { recursive: true })
+    await writeFile(
+      path.join(workflowDirectory, "v_100.json"),
+      JSON.stringify({ id: "legacy-workflow" }),
+      "utf8",
+    )
+    await symlink(realRepositoryPath, configuredRepositoryPath, "dir")
+    readFileMock.mockImplementation(async (filePath) => readFileSync(filePath))
+
+    await expect(listLegacyWorkflowSources([configuredRepositoryPath])).resolves.toEqual([
+      expect.objectContaining({
+        repositoryPath: configuredRepositoryPath,
+        workflowId: "legacy-workflow",
+      }),
+    ])
+  })
+
+  it("rejects a symlinked workflow directory without reading external versions", async () => {
+    const repositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-linked-directory-"))
+    const externalPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-external-directory-"))
+    roots.push(repositoryPath, externalPath)
+    const workflowsRoot = path.join(repositoryPath, "workflows")
+    await mkdir(workflowsRoot, { recursive: true })
+    await writeFile(
+      path.join(externalPath, "v_100.json"),
+      JSON.stringify({ id: "external-workflow" }),
+      "utf8",
+    )
+    await symlink(externalPath, path.join(workflowsRoot, "linked-workflow"), "dir")
+    const issues: LegacyWorkflowScanIssue[] = []
+
+    await expect(listLegacyWorkflowSources([repositoryPath], (issue) => issues.push(issue)))
+      .resolves.toEqual([])
+
+    expect(readFileMock).not.toHaveBeenCalled()
+    expect(issues).toEqual([
+      expect.objectContaining({
+        operation: "read_workflow",
+        workflowId: "linked-workflow",
+        error: expect.objectContaining({
+          message: "Legacy workflow directory cannot be a symbolic link.",
+        }),
+      }),
+    ])
   })
 })
