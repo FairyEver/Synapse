@@ -3237,6 +3237,26 @@ describe("DriveModule", () => {
     expect(dialog.textContent).not.toContain("docs")
   })
 
+  it("loads additional share pages until the active type is found", async () => {
+    mocks.listDriveShares
+      .mockResolvedValueOnce(createDrivePublicLinksPage([
+        createDriveShare({ id: "share-folder", shareId: "shr_folder", itemName: "docs", itemType: "folder" }),
+      ], { hasMore: true, nextOffset: 1 }))
+      .mockResolvedValueOnce(createDrivePublicLinksPage([
+        createDriveShare({ id: "share-file", shareId: "shr_file", itemName: "notes.md", itemType: "file" }),
+      ]))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await flushAct()
+
+    expect(mocks.listDriveShares).toHaveBeenNthCalledWith(1, { offset: 0, limit: 20 })
+    expect(mocks.listDriveShares).toHaveBeenNthCalledWith(2, { offset: 1, limit: 20 })
+    expect(document.body.textContent).toContain("notes.md")
+    expect(document.body.textContent).not.toContain("暂无分享")
+  })
+
   it("loads share data in the public links dialog", async () => {
     mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
       createDriveShare({ id: "share-1", itemName: "notes.md", itemType: "file" }),

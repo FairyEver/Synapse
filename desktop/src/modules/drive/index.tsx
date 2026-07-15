@@ -2407,6 +2407,23 @@ function DrivePublicLinksDialog({
     void loadShares({ generation })
   }, [loadShares, open])
 
+  useEffect(() => {
+    const nextOffset = shareState.page?.nextOffset
+    if (
+      !open
+      || !shareState.loaded
+      || shareState.loading
+      || shareState.loadingMore
+      || shareState.error
+      || visibleShares.length > 0
+      || !shareState.page?.hasMore
+      || nextOffset === null
+      || nextOffset === undefined
+    ) return
+
+    void loadShares({ offset: nextOffset, append: true, generation: shareLoadGenerationRef.current })
+  }, [loadShares, open, shareState.error, shareState.loaded, shareState.loading, shareState.loadingMore, shareState.page, visibleShares.length])
+
   const reloadAfterPublicLinkChange = useCallback(async () => {
     await loadShares()
     await onDriveItemsChanged()
@@ -2507,6 +2524,7 @@ function DrivePublicLinkList({
 }) {
   if (loading) return <DrivePublicLinkTableSkeleton />
   if (error) return <DriveDialogErrorState message={error} onRetry={onRetry} />
+  if (shares.length === 0 && page?.hasMore && page.nextOffset !== null) return <DrivePublicLinkTableSkeleton />
   if (shares.length === 0) return <DriveDialogEmptyState title={emptyTitle} />
 
   return (
