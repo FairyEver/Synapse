@@ -84,3 +84,6 @@ export const SKILL_UNINSTALL_SCAN_TIMEOUT_MS = 30_000
 
 // Skill 卸载器目录读取并发数：限制递归扫描对本机文件系统的瞬时压力。
 export const SKILL_UNINSTALL_SCAN_CONCURRENCY = 8
+
+// Skill 卸载器单个 SKILL.md 最大字节数：避免扫描异常大文件时占用过多主进程内存和磁盘 IO。
+export const SKILL_UNINSTALL_SCAN_MAX_SKILL_MD_BYTES = 1024 * 1024

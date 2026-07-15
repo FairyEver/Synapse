@@ -4,6 +4,7 @@ import {
   SKILL_UNINSTALL_SCAN_CONCURRENCY,
   SKILL_UNINSTALL_SCAN_MAX_DEPTH,
   SKILL_UNINSTALL_SCAN_MAX_DIRECTORIES,
+  SKILL_UNINSTALL_SCAN_MAX_SKILL_MD_BYTES,
   SKILL_UNINSTALL_SCAN_TIMEOUT_MS,
 } from "../../../config"
 import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
@@ -25,6 +26,7 @@ const DIRECTORY_LIMIT_WARNING = "目录数量超过上限，当前结果可能�
 const DEPTH_LIMIT_WARNING = "目录层级超过上限，当前结果可能不完整。"
 const DIRECTORY_READ_WARNING = "部分目录无法读取，当前结果可能不完整。"
 const SKILL_READ_WARNING = "部分 Skill 文件无法读取，当前结果可能不完整。"
+const SKILL_SIZE_WARNING = "部分 Skill 文件超过大小上限，当前结果可能不完整。"
 const STOPPED: unique symbol = Symbol("stopped")
 
 export type ScanSkillRoot = {
@@ -50,6 +52,7 @@ type ScanSkillRootsCommonInput = {
   readonly limits?: Partial<{
     maxDepth: number
     maxDirectories: number
+    maxSkillFileBytes: number
     timeoutMs: number
     concurrency: number
   }>
@@ -96,7 +99,8 @@ function matchesQuery(targetPath: string, content: string, queryName: string): b
 async function inspectSkillFile(
   directoryPath: string,
   fileSystem: SkillFileSystem,
-): Promise<{ status: "absent" | "unreadable" } | { status: "readable"; content: string }> {
+  maxBytes: number,
+): Promise<{ status: "absent" | "too-large" | "unreadable" } | { status: "readable"; content: string }> {
   const skillPath = path.join(directoryPath, "SKILL.md")
   let stats
   try {
@@ -105,8 +109,12 @@ async function inspectSkillFile(
     return { status: isMissing(error) ? "absent" : "unreadable" }
   }
   if (!stats.isFile() || stats.isSymbolicLink()) return { status: "absent" }
+  if (stats.size > maxBytes) return { status: "too-large" }
   try {
-    return { status: "readable", content: await fileSystem.readFile(skillPath, "utf8") }
+    const content = await fileSystem.readFile(skillPath, "utf8")
+    return Buffer.byteLength(content, "utf8") > maxBytes
+      ? { status: "too-large" }
+      : { status: "readable", content }
   } catch {
     return { status: "unreadable" }
   }
@@ -156,7 +164,11 @@ export async function isSkillTargetDiscoverable(input: {
         break
       }
       if (index === traversedDirectories.length - 1) continue
-      const ancestorSkill = await inspectSkillFile(ancestor, skillFileSystem)
+      const ancestorSkill = await inspectSkillFile(
+        ancestor,
+        skillFileSystem,
+        SKILL_UNINSTALL_SCAN_MAX_SKILL_MD_BYTES,
+      )
       if (ancestorSkill.status === "readable") {
         hiddenByAncestorSkill = true
         break
@@ -164,7 +176,11 @@ export async function isSkillTargetDiscoverable(input: {
     }
     if (hiddenByAncestorSkill) continue
 
-    const targetSkill = await inspectSkillFile(targetRealPath, skillFileSystem)
+    const targetSkill = await inspectSkillFile(
+      targetRealPath,
+      skillFileSystem,
+      SKILL_UNINSTALL_SCAN_MAX_SKILL_MD_BYTES,
+    )
     if (targetSkill.status !== "readable") continue
     if (matchesQuery(targetRealPath, targetSkill.content, input.query.name)) return true
   }
@@ -201,6 +217,7 @@ async function scanSkillRootsInternal(
 ): Promise<ScanSkillRootsInternalResult> {
   const maxDepth = input.limits?.maxDepth ?? SKILL_UNINSTALL_SCAN_MAX_DEPTH
   const maxDirectories = input.limits?.maxDirectories ?? SKILL_UNINSTALL_SCAN_MAX_DIRECTORIES
+  const maxSkillFileBytes = input.limits?.maxSkillFileBytes ?? SKILL_UNINSTALL_SCAN_MAX_SKILL_MD_BYTES
   const timeoutMs = input.limits?.timeoutMs ?? SKILL_UNINSTALL_SCAN_TIMEOUT_MS
   const concurrency = Math.max(1, Math.floor(input.limits?.concurrency ?? SKILL_UNINSTALL_SCAN_CONCURRENCY))
   const targetName = input.query ? normalizeName(input.query.name) : undefined
@@ -290,9 +307,10 @@ async function scanSkillRootsInternal(
     }
     if (candidateRealPath === STOPPED) return
     const candidatePath = path.resolve(entry.path)
-    const skillInspection = await waitFor(inspectSkillFile(entry.path, skillFileSystem))
+    const skillInspection = await waitFor(inspectSkillFile(entry.path, skillFileSystem, maxSkillFileBytes))
     if (skillInspection === STOPPED) return
     if (skillInspection.status === "unreadable") warnings.add(SKILL_READ_WARNING)
+    if (skillInspection.status === "too-large") warnings.add(SKILL_SIZE_WARNING)
 
     if (skillInspection.status === "readable") {
       const content = skillInspection.content

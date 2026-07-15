@@ -19,6 +19,7 @@
 
 - 未指定搜索目录时，Synapse 只扫描已注册 Agent 的全局 Skill 根目录。
 - 指定搜索目录时，Synapse 在该目录下受限递归查找 `SKILL.md`，排除依赖、版本控制、缓存和构建目录，不跟随符号链接。
+- 单个 `SKILL.md` 最大读取 1 MiB；超限文件不会读入主进程，扫描会标记结果不完整并继续检查下级目录。
 - Skill 名称按目录名或 `SKILL.md` frontmatter `name` 忽略大小写精确匹配。
 - Synapse 安装和外部安装的 Skill 都可以由用户选择后移入系统废纸篓。
 

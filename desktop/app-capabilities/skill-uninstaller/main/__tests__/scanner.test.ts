@@ -334,6 +334,31 @@ describe("scanSkillRoots", () => {
     }
   })
 
+  it("does not read an oversized SKILL.md and continues scanning below it", async () => {
+    const root = await fixture()
+    const parent = await skill(root, "parent", "other")
+    const nested = await skill(parent, "nested/jenkins")
+    const parentSkill = path.join(parent, "SKILL.md")
+    await writeFile(parentSkill, "x".repeat(129))
+    const readSkillFile = vi.fn((targetPath: string, encoding: "utf8") => readFile(targetPath, encoding))
+
+    const result = await scanSkillRoots({
+      query: { name: "jenkins" },
+      roots: [{ path: root, editorIds: [] }],
+      classifyEditors: () => [],
+      limits: { maxSkillFileBytes: 128 },
+      skillFileSystem: {
+        lstat,
+        readFile: readSkillFile,
+      },
+    })
+
+    expect(readSkillFile).not.toHaveBeenCalledWith(parentSkill, "utf8")
+    expect(result.candidates.map((candidate) => candidate.path)).toEqual([nested])
+    expect(result.complete).toBe(false)
+    expect(result.warnings).toContain("部分 Skill 文件超过大小上限，当前结果可能不完整。")
+  })
+
   it("continues below a directory when lstat of its SKILL.md fails", async () => {
     const root = await fixture()
     const parent = path.join(root, "parent")
