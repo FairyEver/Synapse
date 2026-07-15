@@ -61,6 +61,10 @@ export const secretUpsertInputSchema = z.object({
   description: z.string().optional(),
 })
 
+export const secretMcpUpsertInputSchema = secretUpsertInputSchema.extend({
+  value: z.string(),
+})
+
 export const secretDeleteInputSchema = z.object({
   name: secretNameSchema,
 })

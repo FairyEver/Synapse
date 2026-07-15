@@ -92,7 +92,7 @@ Input:
 }
 ```
 
-Creates or updates a secret by name. `value` is required when creating a new secret. The response never includes `value`.
+Creates or updates a secret by name. `value` is required for this MCP tool. Use `app_secrets_item_update` when only changing the description of an existing secret. The response never includes `value`.
 
 ### app_secrets_item_delete
 

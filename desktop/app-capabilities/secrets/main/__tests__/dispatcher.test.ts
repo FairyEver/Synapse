@@ -192,6 +192,28 @@ describe("createSecretsCapabilityDispatcher", () => {
     expect(service.update).not.toHaveBeenCalled()
   })
 
+  it("requires a value for MCP upsert while preserving API metadata updates", async () => {
+    const { dispatcher, permissionGuard, service } = createHarness()
+
+    await expect(dispatcher.dispatch(SECRETS_ITEM_UPSERT_CAPABILITY_ID, {
+      name: "TOKEN",
+      description: "metadata only",
+    }, { source: "mcp-http" })).rejects.toThrow()
+
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(service.upsert).not.toHaveBeenCalled()
+
+    await expect(dispatcher.dispatch(SECRETS_ITEM_UPSERT_CAPABILITY_ID, {
+      name: "TOKEN",
+      description: "metadata only",
+    }, { source: "api" })).resolves.toMatchObject({ ok: true, affected: 1 })
+
+    expect(service.upsert).toHaveBeenCalledWith({
+      name: "TOKEN",
+      description: "metadata only",
+    })
+  })
+
   it("audits failures without raw error messages", async () => {
     const { auditEvents, dispatcher } = createHarness({
       service: {

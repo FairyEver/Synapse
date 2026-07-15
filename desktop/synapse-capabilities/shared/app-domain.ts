@@ -693,15 +693,15 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: SECRETS_MCP_TOOL_NAMES.upsert,
-      description: "Create or update a user-scoped local secret by name.",
+      description: "Create or update a user-scoped local secret by name and value. Use update for metadata-only changes.",
       inputSchema: {
         type: "object",
         properties: {
           name: secretNameProperty,
-          value: stringField("Secret value. Required when creating a new secret."),
+          value: stringField("Secret value."),
           description: stringField("Optional secret description. Empty clears the description on update."),
         },
-        required: ["name"],
+        required: ["name", "value"],
         additionalProperties: false,
       },
     },

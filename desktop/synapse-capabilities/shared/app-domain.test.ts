@@ -102,6 +102,15 @@ describe("App capability domain", () => {
     })
   })
 
+  it("requires a value in the secret upsert MCP schema", () => {
+    const upsertTool = buildAppTools().find((tool) => tool.name === SECRETS_MCP_TOOL_NAMES.upsert)
+
+    expect(upsertTool?.description).toContain("metadata-only")
+    expect(upsertTool?.inputSchema).toMatchObject({
+      required: ["name", "value"],
+    })
+  })
+
   it("does not expose session-level agent control in terminal MCP create schema", () => {
     const tools = new Map(buildAppTools().map((tool) => [tool.name, tool]))
     const createSchema = tools.get(TERMINAL_MCP_TOOL_NAMES.sessionCreate)?.inputSchema

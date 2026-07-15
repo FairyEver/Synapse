@@ -13,6 +13,7 @@ import {
   secretCreateInputSchema,
   secretDeleteInputSchema,
   secretGetInputSchema,
+  secretMcpUpsertInputSchema,
   secretUpdateInputSchema,
   secretUpsertInputSchema,
 } from "../shared/schema"
@@ -76,7 +77,9 @@ export function createSecretsCapabilityDispatcher(deps: {
           })
         }
         case SECRETS_ITEM_UPSERT_CAPABILITY_ID: {
-          const input = secretUpsertInputSchema.parse(params)
+          const input = context.source === "mcp-http" || context.source === "mcp-stdio"
+            ? secretMcpUpsertInputSchema.parse(params)
+            : secretUpsertInputSchema.parse(params)
           const audit = await authorizeSecret(deps, "secret.write", action, context, input.name, false)
           return runWithAudit(deps, audit, async () => {
             const result = await deps.service.upsert(input)
