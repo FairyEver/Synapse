@@ -82,6 +82,13 @@ describe("App capability domain", () => {
     })
   })
 
+  it("describes terminal group list saved command and permission behavior", () => {
+    const tool = buildAppTools().find((item) => item.name === TERMINAL_MCP_TOOL_NAMES.groupList)
+
+    expect(tool?.description).toContain("saved command settings")
+    expect(tool?.description).toContain("permission approval")
+  })
+
   it("keeps secret names immutable in the update MCP schema", () => {
     const updateTool = buildAppTools().find((tool) => tool.name === SECRETS_MCP_TOOL_NAMES.update)
 

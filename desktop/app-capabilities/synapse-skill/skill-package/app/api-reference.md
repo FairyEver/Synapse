@@ -35,13 +35,13 @@ Output:
 
 `app_terminal_group_list`
 
-List terminal groups.
+List terminal groups and their saved command settings. This read requires terminal permission approval.
 
 Input: none.
 
 Output:
 
-- Terminal groups.
+- Terminal groups, including `settings.commands` command names and command text when configured.
 
 `app_terminal_group_rename`
 

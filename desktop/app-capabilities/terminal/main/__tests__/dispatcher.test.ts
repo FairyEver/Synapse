@@ -30,6 +30,77 @@ describe("createTerminalCapabilityDispatcher", () => {
     expect(listGroups).not.toHaveBeenCalled()
   })
 
+  it("authorizes group list without auditing saved command text", async () => {
+    const group = createGroup({
+      settings: {
+        commands: [createCommand({ command: "export TOKEN=secret-value" })],
+      },
+    })
+    const listGroups = vi.fn(() => [group])
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: true })),
+    }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { listGroups } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    await expect(dispatcher.dispatch(TERMINAL_GROUP_LIST_CAPABILITY_ID, {}, { source: "mcp-http" }))
+      .resolves.toEqual({ ok: true, data: [group], affected: 0 })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "terminal:groups",
+      context: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_GROUP_LIST_CAPABILITY_ID,
+        boundary: "terminal.mcp.listGroups",
+      },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "terminal:groups",
+      outcome: "allowed",
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("secret-value")
+  })
+
+  it("records denied group list audits without reading saved commands", async () => {
+    const listGroups = vi.fn()
+    const permissionGuard = {
+      check: vi.fn(async () => ({
+        allowed: false,
+        reason: "blocked by policy",
+        policyId: "terminal-deny",
+      })),
+    }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { listGroups } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    await expect(dispatcher.dispatch(TERMINAL_GROUP_LIST_CAPABILITY_ID, {}, { source: "mcp-http" }))
+      .rejects.toThrow("blocked by policy")
+
+    expect(listGroups).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "terminal:groups",
+      outcome: "denied",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_GROUP_LIST_CAPABILITY_ID,
+        boundary: "terminal.mcp.listGroups",
+        reason: "blocked by policy",
+        policyId: "terminal-deny",
+      },
+    }))
+  })
+
   it("rejects extra params for session list", async () => {
     const listSessions = vi.fn(() => [])
     const dispatcher = createTerminalCapabilityDispatcher({

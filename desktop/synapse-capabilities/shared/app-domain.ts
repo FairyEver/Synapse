@@ -79,7 +79,7 @@ const appCapabilities: readonly CapabilityDefinition[] = [
   {
     id: TERMINAL_GROUP_LIST_CAPABILITY_ID,
     title: "List terminal groups",
-    description: "List Synapse terminal groups.",
+    description: "List Synapse terminal groups and saved command settings after terminal permission approval.",
     mutates: false,
   },
   {
@@ -390,7 +390,7 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: TERMINAL_MCP_TOOL_NAMES.groupList,
-      description: "List Synapse terminal groups.",
+      description: "List Synapse terminal groups and saved command settings after terminal permission approval.",
       inputSchema: strictEmptyInputSchema,
     },
     {

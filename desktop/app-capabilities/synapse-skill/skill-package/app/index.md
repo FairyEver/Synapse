@@ -21,6 +21,7 @@ Use Terminal tools when you need to work inside a Synapse-managed shell session.
 Rules:
 
 - Create a session with `app_terminal_session_create`, then read retained output with `app_terminal_session_read`.
+- Use `app_terminal_group_list` when you need group ids or saved command settings. The read requires terminal permission approval.
 - Use `app_terminal_group_create`, `app_terminal_group_updateSettings`, `app_terminal_group_rename`, and `app_terminal_group_delete` to organize sessions.
 - Use `app_terminal_group_updateSettings` when future sessions in a group should start from a default directory.
 - Use `app_terminal_groupCommand_create`, `app_terminal_groupCommand_update`, and `app_terminal_groupCommand_delete` to manage saved commands in a group.

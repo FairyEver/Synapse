@@ -61,6 +61,11 @@ export function createTerminalCapabilityDispatcher(deps: {
       }
       if (action === TERMINAL_GROUP_LIST_CAPABILITY_ID) {
         terminalEmptyInputSchema.parse(params)
+        await authorizeTerminalControl(deps, context, {
+          capabilityAction: TERMINAL_GROUP_LIST_CAPABILITY_ID,
+          resource: "terminal:groups",
+          boundary: "terminal.mcp.listGroups",
+        })
         return { ok: true, data: deps.service.listGroups(), affected: 0 }
       }
       if (action === TERMINAL_GROUP_RENAME_CAPABILITY_ID) {
