@@ -4,6 +4,7 @@ import path from "node:path"
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
 import type { EventBus } from "../../../electron/runtime/event-bus"
 import type { AgentEvent, AgentMessage, AgentRuntimeService } from "../../../electron/services/agent-runtime"
+import { createMainLogger } from "../../../electron/services/log-store"
 import {
   normalizeSwarmTaskConfig,
   swarmRunStartInputSchema,
@@ -124,6 +125,7 @@ type TerminalWorkerOutcome = {
 }
 
 const INTERRUPTED_RUN_ERROR = "Synapse 重启，运行已中断"
+const logger = createMainLogger("app.swarm-task")
 
 export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
   const timestamp = () => (deps.now ?? (() => new Date()))().toISOString()
@@ -310,11 +312,20 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
 
     const activeConversationIds = await snapshotActiveWorkerConversationIds(run.id)
     await scheduler.cancel(runId)
-    await Promise.all(
+    const cancellationResults = await Promise.allSettled(
       activeConversationIds.map((conversationId) =>
         deps.agent.cancelConversation(run.configSnapshot.projectId, conversationId),
       ),
     )
+    const failedCancellationCount = cancellationResults.filter((result) => result.status === "rejected").length
+    if (failedCancellationCount > 0) {
+      logger.warn("Some swarm worker conversations could not be cancelled.", {
+        taskId: run.taskId,
+        runId: run.id,
+        failedCancellationCount,
+        conversationCount: activeConversationIds.length,
+      })
+    }
     const latestRun = await deps.runs.get(runId)
     if (!latestRun) {
       await runningRuns.get(runId)?.catch(() => undefined)

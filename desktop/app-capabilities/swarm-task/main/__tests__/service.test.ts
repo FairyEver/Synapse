@@ -850,6 +850,46 @@ describe("createSwarmTaskService", () => {
     })
   })
 
+  it("persists cancellation when cancelling a worker conversation fails", async () => {
+    const pending = deferred<{
+      conversationId: string
+      resultText: string
+      status: "success" | "failed" | "cancelled" | "timeout"
+      events: []
+    }>()
+    const { service, tasks, gateway } = serviceHarness({
+      agent: {
+        sendWorker: vi.fn(async ({ onConversationId, abortSignal }) => {
+          await onConversationId?.("conversation-cancel-fails")
+          abortSignal?.addEventListener("abort", () => {
+            const error = new Error("aborted")
+            error.name = "AbortError"
+            pending.reject(error)
+          }, { once: true })
+          return pending.promise
+        }),
+        cancelConversation: vi.fn(async () => {
+          throw new Error("runtime unavailable")
+        }),
+      },
+    })
+    const task = await service.createTask({ name: "任务", config })
+    const run = await service.startRun({
+      taskId: task.id,
+      configOverride: { concurrency: 1, maxRounds: 1 },
+    })
+
+    await vi.waitFor(async () => {
+      expect(await service.listWorkerRuns(run.id)).toEqual([
+        expect.objectContaining({ conversationId: "conversation-cancel-fails" }),
+      ])
+    })
+
+    await expect(service.cancelRun(run.id)).resolves.toMatchObject({ status: "cancelled" })
+    expect(gateway.cancelConversation).toHaveBeenCalledWith("project-1", "conversation-cancel-fails")
+    expect(await tasks.get(task.id)).toMatchObject({ lastStatus: "cancelled" })
+  })
+
   it("cancels the published conversation even if the worker persists cancelled immediately after abort", async () => {
     const baseWorkers = namespace<SwarmWorkerRun>()
     const delayedWorkers = {
