@@ -271,18 +271,54 @@ const swarmTaskConfigSchema = {
   type: "object",
   properties: {
     projectId: stringField("Agent project id.", { minLength: 1 }),
-    workspacePath: stringField("Absolute workspace path used by swarm workers.", { minLength: 1 }),
     prompt: stringField("Worker prompt.", { minLength: 1, maxLength: 256 * 1024 }),
     presetId: stringField("Optional preset id. Defaults to general.", { minLength: 1 }),
-    injectOptions: {
+    promptInjection: {
       type: "object",
       properties: {
-        workerIdentity: booleanField("Inject worker identity."),
-        roundContext: booleanField("Inject round context."),
-        runContext: booleanField("Inject run context."),
-        outputProtocol: booleanField("Inject output protocol."),
-        parallelContext: booleanField("Inject parallel context."),
-        gitContext: booleanField("Inject git context."),
+        sequenceBatch: {
+          type: "object",
+          properties: {
+            enabled: booleanField("Inject sequence and batch context."),
+          },
+          additionalProperties: false,
+        },
+        previousHandoff: {
+          type: "object",
+          properties: {
+            enabled: booleanField("Inject the previous worker handoff."),
+          },
+          additionalProperties: false,
+        },
+        summary: {
+          type: "object",
+          properties: {
+            enabled: booleanField("Ask workers to emit a summary."),
+            injectRecent: booleanField("Inject recent summaries into later rounds."),
+            recentLimit: positiveIntField("Number of recent summaries to inject.", 20),
+          },
+          additionalProperties: false,
+        },
+        fileWrite: {
+          type: "object",
+          properties: {
+            enabled: booleanField("Inject file write instructions."),
+            path: stringField("Project-relative or absolute target file path.", { maxLength: 4096 }),
+            mode: {
+              type: "string",
+              enum: ["append-only", "section-update", "free-edit"],
+              description: "How workers may write the target file.",
+            },
+            lock: {
+              type: "object",
+              properties: {
+                enabled: booleanField("Require workers to coordinate writes with a lock."),
+              },
+              additionalProperties: false,
+            },
+          },
+          additionalProperties: false,
+        },
         customAppendix: stringField("Custom prompt appendix.", { maxLength: 16 * 1024 }),
       },
       additionalProperties: false,
@@ -294,52 +330,23 @@ const swarmTaskConfigSchema = {
     },
     concurrency: positiveIntField("Maximum parallel workers.", 20),
     maxRounds: positiveIntField("Maximum rounds.", 500),
-    output: {
-      type: "object",
-      properties: {
-        mode: {
-          type: "string",
-          enum: ["managed-directory", "target-file", "both"],
-          description: "Where workers write outputs.",
-        },
-        managedDirectory: stringField("Optional managed output directory.", { minLength: 1 }),
-        targetFile: stringField("Optional target output file.", { minLength: 1 }),
-        targetFilePolicy: {
-          type: "string",
-          enum: ["append-only", "section-update", "free-edit"],
-          description: "How workers may write the target file.",
-        },
-      },
-      additionalProperties: false,
-    },
-    summary: {
-      type: "object",
-      properties: {
-        enabled: booleanField("Ask workers to emit a summary."),
-        injectRecent: booleanField("Inject recent summaries into later rounds."),
-        recentLimit: positiveIntField("Number of recent summaries to inject.", 20),
-      },
-      additionalProperties: false,
-    },
-    handoff: {
-      type: "object",
-      properties: {
-        enabled: booleanField("Ask each worker to leave a handoff for the next round."),
-      },
-      additionalProperties: false,
-    },
     agent: {
       type: "object",
       properties: {
         providerId: stringField("Optional provider id.", { minLength: 1 }),
         modelTier: stringField("Optional model tier.", { minLength: 1 }),
         permissionMode: stringField("Optional permission mode.", { minLength: 1 }),
-        mainThreadPersonaId: stringField("Optional persona id.", { minLength: 1 }),
+        mainThreadPersonaId: {
+          oneOf: [
+            stringField("Optional persona id.", { minLength: 1 }),
+            { type: "null" },
+          ],
+        },
       },
       additionalProperties: false,
     },
   },
-  required: ["projectId", "workspacePath", "prompt"],
+  required: ["projectId", "prompt"],
   additionalProperties: false,
 } as const
 

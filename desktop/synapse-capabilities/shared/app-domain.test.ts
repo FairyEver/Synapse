@@ -188,19 +188,41 @@ describe("App capability domain", () => {
 
   it("defines Swarm Task create and start schemas", () => {
     const tools = new Map(buildAppTools().map((tool) => [tool.name, tool]))
+    const taskCreateSchema = tools.get(SWARM_TASK_MCP_TOOL_NAMES.taskCreate)?.inputSchema
+    const configSchema = taskCreateSchema?.properties.config as {
+      properties: Record<string, unknown>
+      required: readonly string[]
+    }
 
-    expect(tools.get(SWARM_TASK_MCP_TOOL_NAMES.taskCreate)?.inputSchema).toMatchObject({
+    expect(taskCreateSchema).toMatchObject({
       type: "object",
       properties: {
         name: expect.objectContaining({ type: "string", minLength: 1, maxLength: 120 }),
         config: expect.objectContaining({
           type: "object",
-          required: ["projectId", "workspacePath", "prompt"],
+          required: ["projectId", "prompt"],
+          properties: expect.objectContaining({
+            promptInjection: expect.objectContaining({
+              type: "object",
+              properties: expect.objectContaining({
+                sequenceBatch: expect.any(Object),
+                previousHandoff: expect.any(Object),
+                summary: expect.any(Object),
+                fileWrite: expect.any(Object),
+                customAppendix: expect.any(Object),
+              }),
+              additionalProperties: false,
+            }),
+          }),
         }),
       },
       required: ["name", "config"],
       additionalProperties: false,
     })
+    expect(configSchema.properties).not.toHaveProperty("workspacePath")
+    expect(configSchema.properties).not.toHaveProperty("injectOptions")
+    expect(configSchema.properties).not.toHaveProperty("output")
+    expect(configSchema.properties).not.toHaveProperty("handoff")
     expect(tools.get(SWARM_TASK_MCP_TOOL_NAMES.runStart)?.inputSchema).toMatchObject({
       type: "object",
       properties: {
