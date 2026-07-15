@@ -68,7 +68,7 @@ export function MultiResourcePathField({ entryType, paths, onChange, disabled }:
           <Button type="button" variant="ghost" className="h-10" onClick={() => onChange([])} disabled={disabled}>清空</Button>
         </div>
       </div>
-      <ItemGroup className="min-w-0 gap-0">
+      <ItemGroup className="min-w-0 gap-0 has-data-[size=xs]:gap-0">
         {paths.map((selectedPath, index) => (
           <Item key={`${selectedPath}-${index}`} size="xs" className="min-w-0 flex-nowrap px-0 py-0">
             <ItemContent className="min-w-0">

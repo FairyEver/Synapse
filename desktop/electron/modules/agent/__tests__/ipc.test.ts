@@ -1647,7 +1647,6 @@ describe("agentIpcModule", () => {
     expect(switchSession).toHaveBeenCalledWith(
       "local:renderer",
       "conv-1",
-      "local-renderer",
     )
 
     expect(await harness.invoke("synapse:agent:delete-session", {

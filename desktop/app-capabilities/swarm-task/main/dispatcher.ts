@@ -59,11 +59,13 @@ export function createSwarmTaskCapabilityDispatcher(deps: {
       if (action === SWARM_TASK_RUN_STOP_REFILL_CAPABILITY_ID) {
         const parsed = swarmRunIdInputSchema.parse(params)
         const run = await deps.service.stopRefill(parsed.runId)
+        if (!run) return { ok: false, error: `蜂群运行不存在：${parsed.runId}` }
         return { ok: true, data: run, affected: run ? 1 : 0 }
       }
       if (action === SWARM_TASK_RUN_CANCEL_CAPABILITY_ID) {
         const parsed = swarmRunIdInputSchema.parse(params)
         const run = await deps.service.cancelRun(parsed.runId)
+        if (!run) return { ok: false, error: `蜂群运行不存在：${parsed.runId}` }
         return { ok: true, data: run, affected: run ? 1 : 0 }
       }
       if (action === SWARM_TASK_RUN_LIST_CAPABILITY_ID) {

@@ -158,7 +158,7 @@ Use a **document_template_docx_generate** node with `templatePath`, `outputPath`
 
 ## Running a Swarm Task
 
-Use a **swarm_task_run** node with a saved `taskId`. Optional run-only fields are `promptOverride`, `runModeOverride`, `maxRoundsOverride`, and `concurrencyOverride`; `variables` can supply values to the prompt override. `waitForCompletion` defaults to false: the node normally returns the run ID immediately, while true waits for a terminal result. Result outputs include the run ID, status, totals, and output directory.
+Use a **swarm_task_run** node with a saved `taskId`. Optional run-only fields are `promptOverride`, `runModeOverride`, `maxRoundsOverride`, and `concurrencyOverride`; `variables` can supply values to the prompt override. `waitForCompletion` defaults to false: the node normally returns the run ID immediately, while true waits for a terminal result. Result outputs include the run ID, status, totals, and output directory. A terminal `partial` run fails the workflow node so downstream success paths do not continue after worker failures, cancellations, or timeouts.
 
 ## Running Codex
 

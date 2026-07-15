@@ -2,6 +2,8 @@
 
 Use Synapse Secrets MCP tools to manage user-scoped local secrets used by `${{ NAME }}` placeholders.
 
+Prefix a placeholder with a backslash, as in `\${{ NAME }}`, when installed content must keep it as literal text. Installer substitution preserves both the backslash and placeholder.
+
 ## Scope Boundary
 
 Use this guide only for Synapse local secrets stored in the `密钥库` app.

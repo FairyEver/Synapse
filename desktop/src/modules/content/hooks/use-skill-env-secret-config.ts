@@ -20,6 +20,7 @@ type SkillEnvSecretConfigField = {
   readonly mode: SkillEnvSecretConfigMode
   readonly name: string
   readonly saveState: SkillEnvSecretConfigSaveState
+  readonly touched: boolean
   readonly value: string
   readonly valueOrigin: SkillEnvSecretConfigValueOrigin
   readonly visible: boolean
@@ -68,6 +69,7 @@ function createField(
       mode: "reuse",
       name,
       saveState: "idle",
+      touched: false,
       value: "",
       valueOrigin: "input",
       visible: false,
@@ -81,6 +83,7 @@ function createField(
     mode: secret ? "replace" : "new",
     name,
     saveState: "idle",
+    touched: false,
     value: defaultValue,
     valueOrigin: defaultValue ? "default" : "input",
     visible: false,
@@ -158,6 +161,7 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
     updateField(name, (field) => ({
       ...field,
       saveState: "idle",
+      touched: true,
       value,
       valueOrigin: "input",
     }))
@@ -172,6 +176,7 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
       ...field,
       mode: "replace",
       saveState: "idle",
+      touched: false,
       value: "",
       valueOrigin: "input",
       visible: false,
@@ -183,6 +188,7 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
       ...field,
       mode: "reuse",
       saveState: "idle",
+      touched: false,
       value: "",
       valueOrigin: "input",
       visible: false,
@@ -215,15 +221,21 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
 
   const save = useCallback(async (): Promise<SkillEnvSecretConfigSaveOutcome> => {
     if (saving) return { kind: "partial", failedCount: 0, savedCount: 0 }
-    const candidates = fields.filter((field) => field.mode !== "reuse" && field.value.length > 0)
+    const candidates = fields.filter((field) => (
+      field.mode !== "reuse" && (field.value.length > 0 || field.touched)
+    ))
+    const reusedNames = fields
+      .filter((field) => field.mode === "reuse" && field.existingHasValue)
+      .map((field) => field.existingSecretName ?? field.name)
 
     if (candidates.length === 0) {
-      if (pendingScanNames.length === 0) {
+      const namesToScan = uniqueNames([...pendingScanNames, ...reusedNames])
+      if (namesToScan.length === 0) {
         return { kind: "complete", groups: updateGroups, savedCount: 0 }
       }
       setSaving(true)
       setNotice("")
-      const pendingScanResult = await scanNames(pendingScanNames)
+      const pendingScanResult = await scanNames(namesToScan)
       const mergedGroups = mergeScanGroups(updateGroups, pendingScanResult.groups)
       setUpdateGroups(mergedGroups)
       setPendingScanNames(pendingScanResult.failedNames)
@@ -273,7 +285,7 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
       setFields([...nextFields])
     }
 
-    const scanResult = await scanNames([...pendingScanNames, ...savedNames])
+    const scanResult = await scanNames([...pendingScanNames, ...reusedNames, ...savedNames])
     const mergedGroups = mergeScanGroups(updateGroups, scanResult.groups)
     setUpdateGroups(mergedGroups)
     setPendingScanNames(scanResult.failedNames)

@@ -274,6 +274,7 @@ describe("RunParamsDialog", () => {
     const itemGroup = document.body.querySelector<HTMLElement>('[data-slot="item-group"]')
     const firstItem = document.body.querySelector<HTMLElement>('[data-slot="item"]')
     expect(itemGroup?.className).toContain("gap-0")
+    expect(itemGroup?.className).toContain("has-data-[size=xs]:gap-0")
     expect(firstItem?.className).toContain("flex-nowrap")
     expect(firstItem?.className).toContain("py-0")
 

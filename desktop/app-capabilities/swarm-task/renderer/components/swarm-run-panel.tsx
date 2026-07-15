@@ -89,6 +89,7 @@ export function SwarmRunPanel({
           </Button>
         </div>
       </div>
+      {run.error ? <p className="shrink-0 text-sm text-destructive">{run.error}</p> : null}
 
       <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-card">
         <Table className="table-fixed">

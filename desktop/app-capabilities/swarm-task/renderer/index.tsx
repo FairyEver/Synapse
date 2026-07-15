@@ -299,9 +299,11 @@ export function SwarmTaskModule() {
       const matchesRun = Boolean(event.runId && event.runId === selectedActiveRun?.id)
       if (!selectedTaskId || matchesTask || matchesRun) {
         void refreshCurrentSnapshot()
+      } else if (["task-created", "task-updated", "task-deleted"].includes(event.reason)) {
+        void reloadTasks({ showLoading: false })
       }
     })
-  ), [refreshCurrentSnapshot, selectedActiveRun?.id, selectedTaskId, swarmTaskBridge])
+  ), [refreshCurrentSnapshot, reloadTasks, selectedActiveRun?.id, selectedTaskId, swarmTaskBridge])
 
   const shouldPollRun = useMemo(() => (
     Boolean(selectedTask && (
@@ -353,11 +355,14 @@ export function SwarmTaskModule() {
     }
   }, [draftConfig, draftConfigIsRunnable, selectedTask, swarmTaskBridge])
 
-  const startRun = useCallback(async () => {
+  const startRun = useCallback(async (configOverride?: SwarmTaskConfig) => {
     if (!selectedTask || !draftConfigIsRunnable) return
     try {
       setRunning(true)
-      await swarmTaskBridge.startRun({ taskId: selectedTask.id })
+      await swarmTaskBridge.startRun({
+        taskId: selectedTask.id,
+        ...(configOverride ? { configOverride } : {}),
+      })
       setActiveTab("active")
       await refreshCurrentSnapshot()
     } catch (error) {
@@ -370,10 +375,14 @@ export function SwarmTaskModule() {
   }, [draftConfigIsRunnable, refreshCurrentSnapshot, selectedTask, swarmTaskBridge])
 
   const openConversation = useCallback(async (worker: SwarmWorkerRun) => {
-    if (!selectedTask?.currentConfig.projectId || !worker.conversationId || worker.taskId !== selectedTask.id) return
+    const owningRun = selectedActiveRun?.id === worker.runId
+      ? selectedActiveRun
+      : selectedRunHistory.find((run) => run.id === worker.runId)
+    const projectId = owningRun?.configSnapshot.projectId
+    if (!selectedTask || !projectId || !worker.conversationId || worker.taskId !== selectedTask.id) return
     try {
       const result = await agentBridge.openConversation({
-        projectId: selectedTask.currentConfig.projectId,
+        projectId,
         conversationId: worker.conversationId,
         sessionKey: worker.sessionKey,
         platform: "swarm",
@@ -386,7 +395,7 @@ export function SwarmTaskModule() {
       logger.error("Failed to open swarm worker conversation.", error)
       toast.error(message)
     }
-  }, [agentBridge, selectedTask])
+  }, [agentBridge, selectedActiveRun, selectedRunHistory, selectedTask])
 
   const stopRefill = useCallback(async () => {
     if (!activeRun) return
@@ -505,6 +514,7 @@ export function SwarmTaskModule() {
                 onDraftConfigChange={setDraftConfig}
                 onSaveConfig={() => void saveConfig()}
                 onStartRun={() => void startRun()}
+                onStartDraftRun={() => void startRun(draftConfig)}
                 onRefreshRun={() => void refreshCurrentSnapshot()}
                 onStopRefill={() => void stopRefill()}
                 onCancelRun={() => void cancelRun()}

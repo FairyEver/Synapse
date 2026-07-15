@@ -113,6 +113,7 @@ export function SecretsModule() {
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState<SecretFormState>(emptyFormState)
   const [deleting, setDeleting] = useState<DeleteSecretDialogState | null>(null)
+  const [deleteRequestIds, setDeleteRequestIds] = useState<ReadonlySet<string>>(new Set())
   const [skillEnvUpdateGroups, setSkillEnvUpdateGroups] = useState<readonly SkillEnvUpdateScanGroup[]>([])
   const [secretReveals, setSecretReveals] = useState<SecretRevealStateById>({})
   const [secretValueDialog, setSecretValueDialog] = useState<SecretValueDialogState | null>(null)
@@ -121,6 +122,7 @@ export function SecretsModule() {
   const skillEnvScanGeneration = useRef(0)
   const deleteScanGeneration = useRef(0)
   const deleteTargetIdRef = useRef<string | null>(null)
+  const deleteRequestIdsRef = useRef(new Set<string>())
 
   const secretsBridge = useMemo(() => requireBridgeDomain("secrets"), [])
 
@@ -263,7 +265,7 @@ export function SecretsModule() {
       toast.success("已保存")
       setFormOpen(false)
       setForm(emptyFormState)
-      if ((form.mode === "create" && form.value.length > 0) || (form.mode === "edit" && form.updateValue)) {
+      if (form.mode === "create" || (form.mode === "edit" && form.updateValue)) {
         await scanAndOpenSkillEnvUpdate(saved.name)
       }
     } catch (error) {
@@ -278,6 +280,9 @@ export function SecretsModule() {
 
   const deleteSecret = async (secret: SecretSafeView, scanGeneration: number) => {
     if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
+    if (deleteRequestIdsRef.current.has(secret.id)) return
+    deleteRequestIdsRef.current.add(secret.id)
+    setDeleteRequestIds(new Set(deleteRequestIdsRef.current))
     try {
       await secretsBridge.delete({ name: secret.name })
       setSecrets((current) => {
@@ -293,6 +298,9 @@ export function SecretsModule() {
     } catch (error) {
       logger.error("Failed to delete secret.", errorDiagnostic(error))
       toast.error("删除失败")
+    } finally {
+      deleteRequestIdsRef.current.delete(secret.id)
+      setDeleteRequestIds(new Set(deleteRequestIdsRef.current))
     }
   }
 
@@ -418,6 +426,7 @@ export function SecretsModule() {
             </Empty>
           ) : (
             <SecretsTable
+              deleteRequestIds={deleteRequestIds}
               secrets={secrets}
               reveals={secretReveals}
               onDelete={(secret, event) => void startDeleteSecret(secret, event)}
@@ -515,6 +524,7 @@ function SecretsTableSkeleton() {
 }
 
 function SecretsTable({
+  deleteRequestIds,
   secrets,
   reveals,
   onDelete,
@@ -522,6 +532,7 @@ function SecretsTable({
   onRevealToggle,
   onScan,
 }: {
+  readonly deleteRequestIds: ReadonlySet<string>
   readonly secrets: SecretSafeView[]
   readonly reveals: SecretRevealStateById
   readonly onDelete: (secret: SecretSafeView, event: MouseEvent<HTMLElement>) => void
@@ -592,6 +603,7 @@ function SecretsTable({
                   variant="ghost"
                   size="icon-xs"
                   aria-label={`删除密钥：${secret.name}`}
+                  disabled={deleteRequestIds.has(secret.id)}
                   onClick={(event) => onDelete(secret, event)}
                 >
                   <Trash2 className="size-3.5" />

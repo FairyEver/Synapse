@@ -20,4 +20,12 @@ describe("variable substitution", () => {
     expect(applyVariableSubstitutions(content, { TOKEN: "secret" }, { includeCodeBlocks: true }))
       .toBe("```text\nTOKEN=secret\n```")
   })
+
+  it("preserves escaped placeholders while replacing active placeholders", () => {
+    const content = "TOKEN=${{ TOKEN }}\nEXAMPLE=\\${{ LITERAL }}"
+
+    expect(detectPlaceholders(content, { includeCodeBlocks: true })).toEqual(["TOKEN"])
+    expect(applyVariableSubstitutions(content, { TOKEN: "secret" }, { includeCodeBlocks: true }))
+      .toBe("TOKEN=secret\nEXAMPLE=\\${{ LITERAL }}")
+  })
 })

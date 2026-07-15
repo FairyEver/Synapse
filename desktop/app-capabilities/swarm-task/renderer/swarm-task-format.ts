@@ -34,7 +34,9 @@ export function formatWorkerPhase(phase: SwarmWorkerPhase | undefined): string {
   if (phase === "command") return "命令"
   if (phase === "permission") return "权限"
   if (phase === "completed") return "完成"
-  return "失败"
+  if (phase === "failed") return "失败"
+  if (phase === "timeout") return "超时"
+  return "已取消"
 }
 
 export function formatRunMode(mode: SwarmRunMode): string {

@@ -324,8 +324,8 @@ describe("SecretsModule", () => {
     expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "GITEE_TOKEN" })
   })
 
-  it("does not scan after creating a secret with an empty value", async () => {
-    const emptySecret = { ...savedSecret, name: "EMPTY", hasValue: false }
+  it("scans after creating a secret with an empty stored value", async () => {
+    const emptySecret = { ...savedSecret, name: "EMPTY", hasValue: true }
     mocks.secrets.create.mockResolvedValueOnce(emptySecret)
 
     await renderSecretsModule()
@@ -338,7 +338,7 @@ describe("SecretsModule", () => {
       await Promise.resolve()
     })
 
-    expect(mocks.secrets.scanSkillEnvBindings).not.toHaveBeenCalled()
+    expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "EMPTY" })
   })
 
   it("edits metadata without pre-filling the old value", async () => {
@@ -800,6 +800,31 @@ describe("SecretsModule", () => {
     )
     expect(mocks.logger.error.mock.calls.at(-1)?.[1]).not.toHaveProperty("error")
     expect(document.body.textContent).toContain("TOKEN")
+  })
+
+  it("submits only one delete request when confirmation is repeated", async () => {
+    let resolveDelete: (() => void) | undefined
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    mocks.secrets.delete.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveDelete = resolve
+    }))
+
+    await renderSecretsModule()
+    await act(async () => {
+      clickButtonByLabel("删除密钥：TOKEN")
+      await Promise.resolve()
+    })
+    act(() => {
+      clickButton("删除")
+      clickButton("删除")
+    })
+
+    expect(mocks.secrets.delete).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveDelete?.()
+      await Promise.resolve()
+    })
   })
 
   it("shows retry when loading fails", async () => {

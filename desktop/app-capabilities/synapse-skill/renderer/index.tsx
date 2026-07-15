@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Download, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "../../../src/app-shell/config"
-import { inspectGlobalSkillInstallations } from "../../../src/app-shell/installers"
+import {
+  inspectGlobalSkillInstallations,
+  installSourceToEditorTargets,
+} from "../../../src/app-shell/installers"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { EditorIcon } from "../../../src/components/editor-icon"
 import { Badge } from "../../../src/components/ui/badge"
@@ -44,12 +47,33 @@ function canOpenSingleTargetFlow(status: SynapseEditorInstallStatusEntry["status
     || status === "external_same_name"
 }
 
+function canBatchInstall(status: SynapseEditorInstallStatusEntry["status"] | undefined): boolean {
+  return status === "not_installed" || status === "needs_update"
+}
+
+function getBatchActionLabel(entries: SynapseEditorInstallStatusEntry[]): string {
+  const hasMissing = entries.some((entry) => entry.status === "not_installed")
+  const hasUpdate = entries.some((entry) => entry.status === "needs_update")
+  if (hasMissing && hasUpdate) return "安装并更新"
+  if (hasUpdate) return "更新已安装项"
+  if (hasMissing) return "安装缺失项"
+  return "全部已安装"
+}
+
+function getBatchMode(entries: SynapseEditorInstallStatusEntry[]): "install" | "update" {
+  return entries.some((entry) => entry.status === "needs_update") ? "update" : "install"
+}
+
 function getInstallSummaryLabel(entries: SynapseEditorInstallStatusEntry[]): string {
   const missingCount = entries.filter((entry) => entry.status === "not_installed").length
   const updateCount = entries.filter((entry) => entry.status === "needs_update").length
+  const actionCount = entries.filter((entry) => (
+    entry.status === "conflict" || entry.status === "external_same_name"
+  )).length
   const parts = [
     missingCount > 0 ? `${missingCount} 个待安装` : null,
     updateCount > 0 ? `${updateCount} 个待更新` : null,
+    actionCount > 0 ? `${actionCount} 个需处理` : null,
   ].filter(Boolean)
   return parts.length > 0 ? parts.join(" · ") : "无需操作"
 }
@@ -69,6 +93,8 @@ function SynapseSkillModule() {
   const [statusError, setStatusError] = useState("")
   const [statusLoading, setStatusLoading] = useState(false)
   const [preparing, setPreparing] = useState(false)
+  const [batchInstalling, setBatchInstalling] = useState(false)
+  const [batchErrors, setBatchErrors] = useState<Record<string, string>>({})
   const adapters = useEditorAdaptersForContentType({
     contentType: "skill",
     enabled: true,
@@ -135,7 +161,53 @@ function SynapseSkillModule() {
   }
 
   const globalStatusEntries = statusEntries.filter((entry) => entry.scope === "global")
-  const installSummaryLabel = getInstallSummaryLabel(globalStatusEntries)
+  const batchableEntries = globalStatusEntries.filter((entry) => canBatchInstall(entry.status))
+  const batchActionLabel = getBatchActionLabel(batchableEntries)
+  const installSummaryLabel = statusError ? "安装源不可用" : getInstallSummaryLabel(globalStatusEntries)
+
+  const runBatchInstall = async () => {
+    if (batchInstalling || batchableEntries.length === 0) return
+
+    setBatchInstalling(true)
+    setBatchErrors({})
+    try {
+      const installSource = await ensureSource()
+      const result = await installSourceToEditorTargets({
+        mode: getBatchMode(batchableEntries),
+        source: installSource,
+        targets: batchableEntries.map((entry) => ({
+          editorId: entry.editorId,
+          scope: entry.scope,
+        })),
+      })
+      const failedResults = result.results.filter((entry) => entry.status === "failed")
+      const warnings = result.results.flatMap((entry) => (
+        entry.status === "installed" && entry.result?.warning ? [entry.result.warning] : []
+      ))
+      const nextErrors: Record<string, string> = {}
+      for (const entry of failedResults) {
+        nextErrors[entry.target.editorId] = entry.error ?? "安装失败"
+      }
+      setBatchErrors(nextErrors)
+
+      if (warnings.length > 0) {
+        toast.warning(warnings.join("；"))
+      } else if (failedResults.length === 0) {
+        toast.success("安装完成")
+      } else if (failedResults.length === result.results.length) {
+        toast.error("安装失败")
+      } else {
+        toast.warning("部分安装失败")
+      }
+      await refreshStatus()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "安装失败"
+      logger.error("Failed to batch install Synapse Skill.", error)
+      toast.error(message)
+    } finally {
+      setBatchInstalling(false)
+    }
+  }
 
   const openInstallFlow = async () => {
     setPreparing(true)
@@ -194,7 +266,13 @@ function SynapseSkillModule() {
             <CardContent className="grid gap-4 p-4 sm:p-5">
               <div className="flex items-center justify-between gap-3">
                 <p className="font-medium">全局安装状态</p>
-                <Button type="button" variant="ghost" size="sm" onClick={refreshStatus} disabled={statusLoading}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={refreshStatus}
+                  disabled={statusLoading || batchInstalling}
+                >
                   {statusLoading ? <Spinner data-icon="inline-start" /> : <RefreshCw />}
                   刷新
                 </Button>
@@ -207,6 +285,7 @@ function SynapseSkillModule() {
                 ) : globalEditors.map((editor) => {
                   const entry = statusEntries.find((item) => item.editorId === editor.id)
                   const targetPath = entry?.targetPath ?? null
+                  const batchError = batchErrors[editor.id]
                   const showStatusBadge = !entry
                     || (entry.status !== "installed" && entry.status !== "not_installed")
                   return (
@@ -232,7 +311,7 @@ function SynapseSkillModule() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            disabled={preparing}
+                            disabled={Boolean(statusError) || preparing || batchInstalling}
                             onClick={() => void openInstallFlowForEditor(editor.id)}
                           >
                             {entry.status === "not_installed" ? <Download data-icon="inline-start" /> : null}
@@ -245,29 +324,36 @@ function SynapseSkillModule() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            disabled={preparing}
+                            disabled={Boolean(statusError) || preparing || batchInstalling}
                             onClick={() => void openInstallFlowForEditor(editor.id)}
                           >
                             重新安装
                           </Button>
                         ) : null}
                       </div>
-                      {targetPath ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="col-start-2 h-6 max-w-full min-w-0 justify-start bg-transparent px-0 text-left text-xs font-normal text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent sm:col-span-2"
-                          title={targetPath}
-                          aria-label={`打开 ${editor.label} Skill 目录`}
-                          onClick={() => void openTargetPath(targetPath)}
-                        >
-                          <span className="truncate">{targetPath}</span>
-                        </Button>
-                      ) : entry?.message ? (
-                        <p className="col-start-2 break-all text-sm text-muted-foreground sm:col-span-2">
-                          {entry.message}
-                        </p>
+                      {targetPath || batchError || entry?.message ? (
+                        <div className="col-start-2 grid min-w-0 gap-1 sm:col-span-2">
+                          {targetPath ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 max-w-full min-w-0 justify-start bg-transparent px-0 text-left text-xs font-normal text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
+                              title={targetPath}
+                              aria-label={`打开 ${editor.label} Skill 目录`}
+                              onClick={() => void openTargetPath(targetPath)}
+                            >
+                              <span className="truncate">{targetPath}</span>
+                            </Button>
+                          ) : null}
+                          {batchError ? (
+                            <p className="break-all text-sm text-destructive" aria-live="polite">
+                              {batchError}
+                            </p>
+                          ) : entry?.message ? (
+                            <p className="break-all text-sm text-muted-foreground">{entry.message}</p>
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
                   )
@@ -275,19 +361,34 @@ function SynapseSkillModule() {
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
                 <p className="text-sm text-muted-foreground tabular-nums">{installSummaryLabel}</p>
-                <Button
-                  type="button"
-                  onClick={() => void openInstallFlow()}
-                  disabled={
-                    statusLoading
-                    || adapters.isLoading
-                    || preparing
-                    || globalEditors.length === 0
-                  }
-                >
-                  {preparing ? <Spinner data-icon="inline-start" /> : <Download data-icon="inline-start" />}
-                  安装
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant={batchableEntries.length > 0 ? "outline" : "default"}
+                    onClick={() => void openInstallFlow()}
+                    disabled={
+                      statusLoading
+                      || adapters.isLoading
+                      || preparing
+                      || batchInstalling
+                      || Boolean(statusError)
+                      || globalEditors.length === 0
+                    }
+                  >
+                    {preparing ? <Spinner data-icon="inline-start" /> : <Download data-icon="inline-start" />}
+                    安装
+                  </Button>
+                  {batchableEntries.length > 0 ? (
+                    <Button
+                      type="button"
+                      onClick={() => void runBatchInstall()}
+                      disabled={Boolean(statusError) || batchInstalling || statusLoading || adapters.isLoading || preparing}
+                    >
+                      {batchInstalling ? <Spinner data-icon="inline-start" /> : null}
+                      {batchActionLabel}
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             </CardContent>
           </Card>

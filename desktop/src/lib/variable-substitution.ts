@@ -52,7 +52,7 @@ export function applyVariableSubstitutions(
     PLACEHOLDER_REGEX,
     (original: string, escape: string | undefined, name: string, offset: number) => {
       if (escape === "\\") {
-        return original.slice(1)
+        return original
       }
 
       if (!options.includeCodeBlocks && isInsideCodeBlock(content, offset)) {

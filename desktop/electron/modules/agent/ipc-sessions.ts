@@ -323,7 +323,6 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
         const session = await agent.switchSession(
           sessionKey,
           request.conversationId,
-          LOCAL_RENDERER_PLATFORM,
         )
         return sessionSummary(session)
       } catch (rawError) {

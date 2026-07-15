@@ -133,6 +133,15 @@ function buildResult(run: SwarmRun, durationMs: number): NodeExecutionResult {
       durationMs,
     }
   }
+  if (run.status === "partial") {
+    return {
+      status: "failed",
+      output: run.id,
+      outputs,
+      error: `蜂群任务部分完成：${run.totals.success} 个成功，${run.totals.failed} 个失败，${run.totals.cancelled} 个取消，${run.totals.timeout} 个超时`,
+      durationMs,
+    }
+  }
   if (run.status === "cancelled") {
     return {
       status: "cancelled",

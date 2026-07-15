@@ -367,6 +367,7 @@ Input:
 ```
 
 Requests the run to stop launching new workers. Active workers may continue.
+Returns a failed result when `runId` does not exist.
 
 ### app_swarm_task_run_cancel
 
@@ -377,6 +378,7 @@ Input:
 ```
 
 Cancels the run and active workers when possible.
+Returns a failed result when `runId` does not exist.
 
 ### app_swarm_task_run_list
 
@@ -396,7 +398,7 @@ Input:
 { "runId": "swarm-run:..." }
 ```
 
-Returns one run with workers. Worker records include phase, status, optional summary, optional handoff, and linked Agent `conversationId` when available. Open linked worker conversations as Agent conversations with platform `"swarm"`.
+Returns one run with workers. A run can include an optional `error`; active runs recovered after a Synapse restart return `status: "failed"` with an interruption error. Worker records include phase, status, optional summary, optional handoff, optional error, and linked Agent `conversationId` when available. Terminal worker phases distinguish `completed`, `failed`, `cancelled`, and `timeout`. Open linked worker conversations as Agent conversations with platform `"swarm"`.
 
 ## Public Summary Boundary
 

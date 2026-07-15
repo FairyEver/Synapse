@@ -148,6 +148,34 @@ describe("swarmTaskNodeExecutor", () => {
     })
   })
 
+  it("maps a partial terminal run to a failed workflow node", async () => {
+    const partialRun: SwarmRun = {
+      ...baseRun,
+      status: "partial",
+      totals: { started: 4, success: 1, failed: 1, cancelled: 1, timeout: 1 },
+    }
+    const service = {
+      startRun: vi.fn().mockResolvedValue(baseRun),
+      getRun: vi.fn().mockResolvedValue(partialRun),
+      cancelRun: vi.fn(),
+    }
+
+    const result = await swarmTaskNodeExecutor.execute(createInput({
+      taskId: "task-1",
+      waitForCompletion: true,
+      variables: [],
+    }, service))
+
+    expect(result).toMatchObject({
+      status: "failed",
+      error: "蜂群任务部分完成：1 个成功，1 个失败，1 个取消，1 个超时",
+      outputs: {
+        status: "partial",
+        totals: partialRun.totals,
+      },
+    })
+  })
+
   it("cancels the swarm run when the workflow aborts while waiting", async () => {
     const abortController = new AbortController()
     let resolveCancel: ((run: SwarmRun) => void) | null = null

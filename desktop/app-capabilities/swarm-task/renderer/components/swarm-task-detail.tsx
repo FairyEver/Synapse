@@ -27,6 +27,7 @@ type SwarmTaskDetailProps = {
   readonly onDraftConfigChange: (next: SwarmTaskConfig) => void
   readonly onSaveConfig: () => void
   readonly onStartRun: () => void
+  readonly onStartDraftRun: () => void
   readonly onRefreshRun: () => void
   readonly onStopRefill: () => void
   readonly onCancelRun: () => void
@@ -50,6 +51,7 @@ export function SwarmTaskDetail({
   onDraftConfigChange,
   onSaveConfig,
   onStartRun,
+  onStartDraftRun,
   onRefreshRun,
   onStopRefill,
   onCancelRun,
@@ -92,7 +94,7 @@ export function SwarmTaskDetail({
                 <Button type="button" variant="outline" onClick={onSaveConfig} disabled={saving || !canSaveConfig}>
                   保存配置
                 </Button>
-                <Button type="button" onClick={onStartRun} disabled={running || !canStartRun}>
+                <Button type="button" onClick={onStartDraftRun} disabled={running || !canStartRun}>
                   运行任务
                 </Button>
               </div>
@@ -145,6 +147,9 @@ function SwarmTaskOverview({
             ["并发上限", String(config.concurrency)],
             [roundLabel, String(config.maxRounds)],
             ["计划 worker", String(config.concurrency * config.maxRounds)],
+            ...(config.promptInjection.customAppendix.trim()
+              ? [["附加提示词", "已配置"]] as ReadonlyArray<readonly [string, string]>
+              : []),
             ...(config.promptInjection.fileWrite.enabled
               ? [["文件", config.promptInjection.fileWrite.path]] as ReadonlyArray<readonly [string, string]>
               : []),
