@@ -39,7 +39,7 @@ type SoundNotifierServiceEvents = {
     presetId: SoundNotifierPresetId
     repeatCount: number
     intervalMs: number
-  }]
+  }, delivery: { recipientCount: number }]
 }
 
 class TypedSoundNotifierEventEmitter extends EventEmitter {
@@ -81,15 +81,13 @@ export function createSoundNotifierService(deps: SoundNotifierServiceDeps) {
   async function play(input: SoundNotifierPlayInput): Promise<SoundNotifierPlayResult> {
     const playback = resolvePlayback(input)
 
-    emitPlayRequested(playback)
-    return { played: true, ...playback }
+    return { played: emitPlayRequested(playback) > 0, ...playback }
   }
 
   async function preview(input: SoundNotifierPlayInput): Promise<SoundNotifierPlayResult> {
     const playback = resolvePlayback(input)
 
-    emitPlayRequested(playback)
-    return { played: true, ...playback }
+    return { played: emitPlayRequested(playback) > 0, ...playback }
   }
 
   function resolvePlayback(input: SoundNotifierPlayInput): {
@@ -115,8 +113,10 @@ export function createSoundNotifierService(deps: SoundNotifierServiceDeps) {
     presetId: SoundNotifierPresetId
     repeatCount: number
     intervalMs: number
-  }): void {
-    events.emit("playRequested", payload)
+  }): number {
+    const delivery = { recipientCount: 0 }
+    events.emit("playRequested", payload, delivery)
+    return delivery.recipientCount
   }
 
   return {

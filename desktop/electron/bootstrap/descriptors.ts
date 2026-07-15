@@ -436,8 +436,9 @@ export const coreSoundNotifierDescriptor: ServiceDescriptor<SoundNotifierService
     service.events.on("changed", (payload) => {
       windowManager.broadcast(soundNotifierIpcModule.events.changed.channel, payload)
     })
-    service.events.on("playRequested", (payload) => {
+    service.events.on("playRequested", (payload, delivery) => {
       const sent = windowManager.broadcast(soundNotifierIpcModule.events.playRequested.channel, payload)
+      delivery.recipientCount = sent
       if (sent === 0) {
         logger.warn("Sound notifier playback request had no renderer window.", {
           eventType: payload.eventType,

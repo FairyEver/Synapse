@@ -19,7 +19,7 @@ describe("SoundNotifierService", () => {
         schemaVersion: 3,
       },
     }).deps)
-    const playRequested = vi.fn()
+    const playRequested = vi.fn((_payload: unknown, delivery: { recipientCount: number }) => { delivery.recipientCount = 1 })
     service.events.on("playRequested", playRequested)
 
     await expect(service.play({})).resolves.toEqual({
@@ -35,7 +35,7 @@ describe("SoundNotifierService", () => {
       presetId: "soft-chime",
       repeatCount: 1,
       intervalMs: 1000,
-    })
+    }, { recipientCount: 1 })
   })
 
   it("queues playback by semantic event type", async () => {
@@ -44,7 +44,7 @@ describe("SoundNotifierService", () => {
         schemaVersion: 3,
       },
     }).deps)
-    const playRequested = vi.fn()
+    const playRequested = vi.fn((_payload: unknown, delivery: { recipientCount: number }) => { delivery.recipientCount = 1 })
     service.events.on("playRequested", playRequested)
 
     await expect(service.play({
@@ -64,7 +64,7 @@ describe("SoundNotifierService", () => {
       presetId: "attention",
       repeatCount: 3,
       intervalMs: 1500,
-    })
+    }, { recipientCount: 1 })
   })
 
   it("keeps legacy preset id playback compatible", async () => {
@@ -73,6 +73,7 @@ describe("SoundNotifierService", () => {
         schemaVersion: 3,
       },
     }).deps)
+    service.events.on("playRequested", (_payload, delivery) => { delivery.recipientCount = 1 })
 
     await expect(service.play({ presetId: "done" })).resolves.toEqual({
       played: true,
@@ -81,6 +82,12 @@ describe("SoundNotifierService", () => {
       repeatCount: 1,
       intervalMs: 1000,
     })
+  })
+
+  it("reports playback as undelivered when no renderer receives the event", async () => {
+    const service = createSoundNotifierService(createHarness().deps)
+
+    await expect(service.play({ presetId: "done" })).resolves.toMatchObject({ played: false })
   })
 
   it("rejects playback requests that mix event type and preset id", async () => {
@@ -105,7 +112,7 @@ describe("SoundNotifierService", () => {
         schemaVersion: 3,
       },
     }).deps)
-    const playRequested = vi.fn()
+    const playRequested = vi.fn((_payload: unknown, delivery: { recipientCount: number }) => { delivery.recipientCount = 1 })
     service.events.on("playRequested", playRequested)
 
     await expect(service.preview({
@@ -125,7 +132,7 @@ describe("SoundNotifierService", () => {
       presetId: "long-done",
       repeatCount: 2,
       intervalMs: 2500,
-    })
+    }, { recipientCount: 1 })
   })
 })
 
