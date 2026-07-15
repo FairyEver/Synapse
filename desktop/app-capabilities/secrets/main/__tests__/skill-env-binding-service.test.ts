@@ -768,7 +768,11 @@ describe("SkillEnvBindingService", () => {
 
     expect(contentReadCalls).toBe(0)
     expect(result.items).toEqual([
-      expect.objectContaining({ skillName: "demo", status: "unwritable" }),
+      expect.objectContaining({
+        message: "Skill .env 不能超过 1 MiB。",
+        skillName: "demo",
+        status: "unwritable",
+      }),
     ])
   })
 

@@ -330,6 +330,10 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
           pushUnavailableForAll(skillName, envPath, "unsafe_link", "配置文件路径不安全。")
           continue
         }
+        if (error instanceof SkillRuntimeEnvSizeError) {
+          pushUnavailableForAll(skillName, envPath, "unwritable", SKILL_RUNTIME_ENV_SIZE_LIMIT_MESSAGE)
+          continue
+        }
         pushUnavailableForAll(skillName, envPath, "unwritable", "配置文件不可读或不可写。")
         continue
       }
@@ -768,7 +772,11 @@ async function openValidatedBinding(
     }
   } catch (error) {
     await handle?.close().catch(() => undefined)
-    if (error instanceof UnsafeBindingError || error instanceof BindingContentChangedError) throw error
+    if (
+      error instanceof UnsafeBindingError
+      || error instanceof BindingContentChangedError
+      || error instanceof SkillRuntimeEnvSizeError
+    ) throw error
     const causeCode = error && typeof error === "object" && "code" in error && typeof error.code === "string"
       ? error.code
       : undefined
@@ -849,7 +857,7 @@ function hashContent(content: string): string {
 
 async function readFileHandleSnapshot(handle: FileHandle, expectedSize: bigint): Promise<string> {
   if (expectedSize < 0n || expectedSize > SKILL_RUNTIME_ENV_MAX_BYTES) {
-    throw new BindingIoError("configuration file exceeds the size limit")
+    throw new SkillRuntimeEnvSizeError()
   }
   const byteLength = Number(expectedSize)
   const content = Buffer.allocUnsafe(byteLength)
