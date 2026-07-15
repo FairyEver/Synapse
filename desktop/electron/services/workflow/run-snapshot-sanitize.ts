@@ -72,6 +72,10 @@ export function sanitizeWorkflowOutputForHistory<T>(output: T): T {
 export function sanitizeWorkflowDefinitionForSnapshot(definition: WorkflowDefinition): WorkflowDefinition {
   return {
     ...definition,
+    params: definition.params.map((param) => ({
+      ...param,
+      default: sanitizeSnapshotValue(param.default) as typeof param.default,
+    })),
     nodes: definition.nodes.map(sanitizeWorkflowNodeForSnapshot),
   }
 }

@@ -155,6 +155,72 @@ describe("sanitizeNodeResultsForSnapshot", () => {
 })
 
 describe("sanitizeWorkflowDefinitionForSnapshot", () => {
+  it("redacts text and resource defaults while preserving parameter structure", () => {
+    const definition: WorkflowDefinition = {
+      id: "workflow-1",
+      name: "Parameter defaults",
+      version: "1.0.0",
+      createdAt: 1,
+      updatedAt: 2,
+      params: [
+        {
+          name: "token",
+          type: "text",
+          description: "Access token",
+          default: "Authorization: Bearer raw-default-token from /Users/liyang/private.txt",
+        },
+        {
+          name: "input",
+          type: "file",
+          default: { kind: "local_path", entryType: "file", path: "/Users/liyang/input.txt" },
+        },
+        {
+          name: "inputs",
+          type: "file",
+          allowMultiple: true,
+          default: [
+            { kind: "local_path", entryType: "file", path: "/Users/liyang/first.txt" },
+            { kind: "local_path", entryType: "file", path: "/Users/liyang/second.txt" },
+          ],
+        },
+        { name: "count", type: "number", default: 3 },
+      ],
+      edges: [],
+      nodes: [],
+    }
+
+    const sanitized = sanitizeWorkflowDefinitionForSnapshot(definition)
+    const raw = JSON.stringify(sanitized)
+
+    expect(sanitized.params).toEqual([
+      {
+        name: "token",
+        type: "text",
+        description: "Access token",
+        default: "Authorization=[redacted] [redacted] from [path]",
+      },
+      {
+        name: "input",
+        type: "file",
+        default: { kind: "local_path", entryType: "file", path: "[path]" },
+      },
+      {
+        name: "inputs",
+        type: "file",
+        allowMultiple: true,
+        default: [
+          { kind: "local_path", entryType: "file", path: "[path]" },
+          { kind: "local_path", entryType: "file", path: "[path]" },
+        ],
+      },
+      { name: "count", type: "number", default: 3 },
+    ])
+    expect(raw).not.toContain("raw-default-token")
+    expect(raw).not.toContain("/Users/liyang")
+    expect(definition.params[0]?.default).toContain("raw-default-token")
+    expect((definition.params[2]?.default as Array<{ path: string }>)[0]?.path).toBe("/Users/liyang/first.txt")
+  })
+
   it("redacts Code X config override values from persisted definitions", () => {
     const definition: WorkflowDefinition = {
       id: "workflow-1",
