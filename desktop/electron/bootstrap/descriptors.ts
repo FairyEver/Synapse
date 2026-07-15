@@ -2179,10 +2179,17 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
       workflowCall: {
         getWorkflowDefinition: (id) => registry.get<WorkflowService>("core.workflow").get(id),
         runWorkflow: async (input) => {
+          const workflowService = registry.get<WorkflowService>("core.workflow")
           const snapshots = registry.get<RunSnapshotService>("core.workflow.snapshots")
           const runId = randomUUID()
           const startedAt = Date.now()
-          const normalizedParams = await normalizeWorkflowRunParams(input.definition, input.params)
+          const validation = validateWorkflow(
+            input.definition,
+            await loadWorkflowValidationOptions(workflowService),
+          )
+          const normalizedParams = validation.valid
+            ? await normalizeWorkflowRunParams(input.definition, input.params)
+            : { params: input.params, errors: validation.errors }
           if (normalizedParams.errors.length > 0) {
             const endedAt = Date.now()
             const error = normalizedParams.errors.map((validationError) => validationError.message).join("；")

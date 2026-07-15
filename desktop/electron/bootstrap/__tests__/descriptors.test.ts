@@ -745,7 +745,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       createMainLogger: () => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
     }))
     const { coreWorkflowEngineDescriptor } = await importBootstrap()
-    const workflowService = { get: vi.fn() }
+    const workflowService = { get: vi.fn(), list: vi.fn(async () => []) }
     const snapshotService = { save: vi.fn(async () => undefined) }
     const containers = { open: vi.fn() }
     const permissionGuard = { check: vi.fn() }
@@ -840,9 +840,9 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("/Users/example/child-params")
   })
 
-  it("nested workflow calls reject invalid closed option params before engine run", async () => {
+  it("nested workflow calls reject invalid params and definitions before engine run", async () => {
     const { coreWorkflowEngineDescriptor } = await importBootstrap()
-    const workflowService = { get: vi.fn() }
+    const workflowService = { get: vi.fn(), list: vi.fn(async () => []) }
     const snapshotService = { save: vi.fn(async () => undefined) }
     const containers = { open: vi.fn() }
     const permissionGuard = { check: vi.fn() }
@@ -885,7 +885,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       runtimeDeps: {
         workflowCall?: {
           runWorkflow: (input: {
-            definition: typeof childDefinition
+            definition: Record<string, unknown>
             params: Record<string, unknown>
             projectId?: string
             triggerSource: string
@@ -920,11 +920,56 @@ describe("bootstrap descriptors (T1.5)", () => {
       nodeResults: {},
       error: "参数「report_type」必须是预设选项之一",
     }))
+
+    const missingProjectDefinition = {
+      ...childDefinition,
+      id: "child-missing-project",
+      params: [],
+      nodes: [
+        {
+          id: "script",
+          name: "Script",
+          type: "script",
+          position: { x: 0, y: 0 },
+          config: { shell: "posix", script: "pwd", variables: [] },
+        },
+        {
+          id: "end",
+          name: "结束",
+          type: "end",
+          position: { x: 200, y: 0 },
+          config: { outputType: "text", template: "", variables: [] },
+        },
+      ],
+      edges: [{ id: "script-end", from: "script", to: "end" }],
+    }
+    const invalidDefinitionResult = await engine.runtimeDeps.workflowCall?.runWorkflow({
+      definition: missingProjectDefinition,
+      params: {},
+      projectId: "parent-repo",
+      triggerSource: "workflow-call",
+      abortSignal: new AbortController().signal,
+      parentRunId: "parent-run",
+      callStack: [{ workflowId: "parent", workflowName: "Parent" }, { workflowId: "child-missing-project", workflowName: "Child Workflow" }],
+    })
+
+    expect(invalidDefinitionResult?.result.status).toBe("failed")
+    expect(invalidDefinitionResult?.result.error).toContain("项目")
+    expect(invalidDefinitionResult?.result.nodeResults).toEqual({})
+    expect(engine.run).not.toHaveBeenCalled()
+    expect(snapshotService.save).toHaveBeenLastCalledWith(expect.objectContaining({
+      runId: invalidDefinitionResult?.runId,
+      workflowId: "child-missing-project",
+      status: "failed",
+      params: {},
+      nodeResults: {},
+      error: expect.stringContaining("项目"),
+    }))
   })
 
   it("nested workflow calls pass normalized option params into engine", async () => {
     const { coreWorkflowEngineDescriptor } = await importBootstrap()
-    const workflowService = { get: vi.fn() }
+    const workflowService = { get: vi.fn(), list: vi.fn(async () => []) }
     const snapshotService = { save: vi.fn(async () => undefined) }
     const containers = { open: vi.fn() }
     const permissionGuard = { check: vi.fn() }
@@ -1011,7 +1056,7 @@ describe("bootstrap descriptors (T1.5)", () => {
 
   it("nested workflow calls return run-level workflow failed errors", async () => {
     const { coreWorkflowEngineDescriptor } = await importBootstrap()
-    const workflowService = { get: vi.fn() }
+    const workflowService = { get: vi.fn(), list: vi.fn(async () => []) }
     const snapshotService = { save: vi.fn(async () => undefined) }
     const containers = { open: vi.fn() }
     const permissionGuard = { check: vi.fn() }
