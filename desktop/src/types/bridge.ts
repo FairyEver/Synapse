@@ -359,6 +359,8 @@ import type {
   EditorScanQuickPublishRequest,
   EditorScanFinalizeQuickPublishRequest,
   EditorScanFinalizeQuickPublishResult,
+  EditorScanSkillRepositoryIdentityRetryRequest,
+  EditorScanSkillRepositoryIdentityRetryResult,
   EditorScanSkillRepositoryUploadRequest,
   EditorScanSkillRepositoryUploadResult,
   EditorScanResult,
@@ -1282,6 +1284,9 @@ export type SynapseBridge = {
     uploadSkillToSkillRepository: (
       request: EditorScanSkillRepositoryUploadRequest,
     ) => Promise<EditorScanSkillRepositoryUploadResult>
+    retrySkillRepositoryIdentity: (
+      request: EditorScanSkillRepositoryIdentityRetryRequest,
+    ) => Promise<EditorScanSkillRepositoryIdentityRetryResult>
   }
   editorCopy: {
     copy: (payload: SynapseCopyToEditorPayload) => Promise<SynapseEditorCopyResult>

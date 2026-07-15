@@ -233,8 +233,21 @@ describe("scan item detail dialog layout", () => {
 
     expect(source).toContain("bridge.editorScan.uploadSkillToSkillRepository")
     expect(source).toContain("buildUploadSkillToSkillRepositoryRequest(item)")
-    expect(source).toContain("bridge.shell.openExternal(result.managementUrl)")
-    expect(source).toContain("setSkillRepositoryManagementUrl(result.managementUrl)")
+    expect(source).toContain("openSkillRepositoryManagement(result.managementUrl)")
+    expect(source).toContain("bridge.shell.openExternal(managementUrl)")
+    expect(source).toContain("setSkillRepositoryManagementUrl(managementUrl)")
     expect(source).toContain("复制链接")
+  })
+
+  it("offers a local-only retry when Skill Repository identity writing fails", async () => {
+    const source = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("bridge.editorScan.retrySkillRepositoryIdentity")
+    expect(source).toContain("buildRetrySkillRepositoryIdentityRequest")
+    expect(source).toContain("重试关联")
+    expect(source).toContain("本地关联写入失败。")
   })
 })

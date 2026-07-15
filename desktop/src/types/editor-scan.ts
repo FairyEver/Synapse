@@ -190,7 +190,28 @@ export type EditorScanSkillRepositoryUploadResult = {
   managementUrl: string
   identityWritten: boolean
   identityWriteError?: string
+  identityBeforeUploadId?: string | null
   identityMigrated: boolean
   identityMigrationWarning?: string
   sourceImportSummary: EditorScanSourceImportSummary
+}
+
+export type EditorScanSkillRepositoryIdentityRetryRequest = {
+  itemType: "skill"
+  itemPath: string
+  itemName: string
+  editorId: SynapseEditorId
+  scope: EditorScanScope
+  projectPath?: string | null
+  repositoryId: string
+  name: string
+  owner: string | null
+  expectedSourceFingerprint: string
+  expectedIdentityId: string | null
+}
+
+export type EditorScanSkillRepositoryIdentityRetryResult = {
+  identityWritten: true
+  identityMigrated: boolean
+  identityMigrationWarning?: string
 }

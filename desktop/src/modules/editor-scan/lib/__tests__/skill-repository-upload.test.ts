@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import type { ScanItemForDetail } from "@/types/editor-scan"
 import {
+  buildRetrySkillRepositoryIdentityRequest,
   buildUploadSkillToSkillRepositoryRequest,
   getUploadSkillToSkillRepositoryDisabledReason,
 } from "../skill-repository-upload"
@@ -46,5 +47,33 @@ describe("Skill Repository upload helpers", () => {
     expect(() => buildUploadSkillToSkillRepositoryRequest(item)).toThrow(
       "上传到 Skill Repository 需要根目录 SKILL.md",
     )
+  })
+
+  it("builds a local-only identity retry from the completed upload", () => {
+    const request = buildRetrySkillRepositoryIdentityRequest(createSkillItem(), {
+      repositoryId: "repo-1",
+      name: "review",
+      owner: "alice",
+      managementUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+      identityWritten: false,
+      identityWriteError: "disk full",
+      identityBeforeUploadId: null,
+      identityMigrated: false,
+      sourceImportSummary: {
+        controlFilesExcluded: [],
+        fileCount: 1,
+        hiddenEntryCount: 0,
+        runtimeEnvExcluded: false,
+        symlinkCount: 0,
+        totalBytes: 10,
+      },
+    }, "sha256:source")
+
+    expect(request).toMatchObject({
+      itemPath: "/tmp/skills/review",
+      repositoryId: "repo-1",
+      expectedSourceFingerprint: "sha256:source",
+      expectedIdentityId: null,
+    })
   })
 })

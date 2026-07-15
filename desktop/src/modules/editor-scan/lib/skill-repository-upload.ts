@@ -1,5 +1,7 @@
 import type {
+  EditorScanSkillRepositoryIdentityRetryRequest,
   EditorScanSkillRepositoryUploadRequest,
+  EditorScanSkillRepositoryUploadResult,
   ScanItemForDetail,
 } from "@/types/editor-scan"
 
@@ -39,6 +41,24 @@ function buildUploadSkillToSkillRepositorySuccessMessage(): string {
   return "已上传到 Skill Repository"
 }
 
+function buildRetrySkillRepositoryIdentityRequest(
+  item: ScanItemForDetail,
+  result: EditorScanSkillRepositoryUploadResult,
+  expectedSourceFingerprint: string | undefined,
+): EditorScanSkillRepositoryIdentityRetryRequest {
+  if (!expectedSourceFingerprint) {
+    throw new Error("缺少已确认的本地 Skill 版本，请重新上传。")
+  }
+  return {
+    ...buildUploadSkillToSkillRepositoryRequest(item),
+    repositoryId: result.repositoryId,
+    name: result.name,
+    owner: result.owner,
+    expectedSourceFingerprint,
+    expectedIdentityId: result.identityBeforeUploadId ?? null,
+  }
+}
+
 function buildUploadSkillToSkillRepositoryErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) {
     return error.message
@@ -50,6 +70,7 @@ export {
   buildUploadSkillToSkillRepositoryErrorMessage,
   buildUploadSkillToSkillRepositoryRequest,
   buildUploadSkillToSkillRepositorySuccessMessage,
+  buildRetrySkillRepositoryIdentityRequest,
   canUploadSkillToSkillRepository,
   getUploadSkillToSkillRepositoryDisabledReason,
 }

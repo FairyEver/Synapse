@@ -61,6 +61,7 @@ import { SharedInstallerFlow } from "@/modules/installers/shared/shared-installe
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
 import type {
   EditorScanQuickPublishDraft,
+  EditorScanSkillRepositoryIdentityRetryRequest,
   EditorScanSkillFileEntry,
   ScanItemForDetail,
 } from "@/types/editor-scan"
@@ -72,6 +73,7 @@ import {
   formatQuickPublishSourceLabel,
 } from "../lib/quick-publish"
 import {
+  buildRetrySkillRepositoryIdentityRequest,
   buildUploadSkillToSkillRepositoryErrorMessage,
   buildUploadSkillToSkillRepositoryRequest,
   buildUploadSkillToSkillRepositorySuccessMessage,
@@ -88,6 +90,12 @@ function logSafeItemPath(filePath: string): string {
 }
 
 type AttachmentDiff = { added: number; changed: number; removed: number }
+
+type SkillRepositoryIdentityRetryState = {
+  request: EditorScanSkillRepositoryIdentityRetryRequest
+  managementUrl: string
+  error: string | null
+}
 
 async function buildAttachmentDiff(
   draft: Extract<EditorScanQuickPublishDraft, { itemType: "skill" }>,
@@ -168,6 +176,8 @@ function ScanItemDetailDialog({
   const [isSkillRepositoryUploadConfirmOpen, setIsSkillRepositoryUploadConfirmOpen] = useState(false)
   const [skillRepositoryPublishDraft, setSkillRepositoryPublishDraft] = useState<Extract<EditorScanQuickPublishDraft, { itemType: "skill" }> | null>(null)
   const [skillRepositoryManagementUrl, setSkillRepositoryManagementUrl] = useState<string | null>(null)
+  const [skillRepositoryIdentityRetry, setSkillRepositoryIdentityRetry] = useState<SkillRepositoryIdentityRetryState | null>(null)
+  const [isSkillRepositoryIdentityRetryBusy, setIsSkillRepositoryIdentityRetryBusy] = useState(false)
 
   useEffect(() => {
     if (!open) {
@@ -189,6 +199,8 @@ function ScanItemDetailDialog({
       setIsSkillRepositoryUploadConfirmOpen(false)
       setSkillRepositoryPublishDraft(null)
       setSkillRepositoryManagementUrl(null)
+      setSkillRepositoryIdentityRetry(null)
+      setIsSkillRepositoryIdentityRetryBusy(false)
       return
     }
     const timer = setTimeout(() => setContentReady(true), 200)
@@ -605,8 +617,30 @@ function ScanItemDetailDialog({
     }
   }, [item])
 
+  const openSkillRepositoryManagement = useCallback(async (managementUrl: string) => {
+    const bridge = getSynapseBridge()
+    if (!bridge) {
+      setSkillRepositoryManagementUrl(managementUrl)
+      notifyError("无法打开 Synapse。")
+      return
+    }
+    try {
+      await bridge.shell.openExternal(managementUrl)
+    } catch (openError) {
+      logger.warn("Skill Repository management URL open failed.", {
+        editorId: item?.editorId,
+        error: openError,
+        itemType: item?.type,
+        pathBasename: item?.path ? logSafeItemPath(item.path) : undefined,
+        scope: item?.scope,
+      })
+      setSkillRepositoryManagementUrl(managementUrl)
+      notifyError("无法打开 Synapse。")
+    }
+  }, [item, notifyError])
+
   const handleUploadSkillToSkillRepository = useCallback(async () => {
-    if (!item) return
+    if (!item || !skillRepositoryPublishDraft) return
     const disabled = getUploadSkillToSkillRepositoryDisabledReason(item)
     if (disabled) return
     setIsSkillRepositoryUploadBusy(true)
@@ -627,30 +661,27 @@ function ScanItemDetailDialog({
       setIsSkillRepositoryUploadConfirmOpen(false)
       success(buildUploadSkillToSkillRepositorySuccessMessage())
       if (!result.identityWritten) {
-        warning("云仓库已上传，但本地云仓库关联写入失败。")
+        setSkillRepositoryIdentityRetry({
+          request: buildRetrySkillRepositoryIdentityRequest(
+            item,
+            result,
+            skillRepositoryPublishDraft.sourceFingerprint,
+          ),
+          managementUrl: result.managementUrl,
+          error: null,
+        })
       } else if (result.identityMigrationWarning) {
         warning("云仓库已上传，旧身份文件清理失败，不影响本次上传。")
       }
       logger.info("Skill Repository upload completed from scan detail.", {
         editorId: item.editorId,
+        identityWritten: result.identityWritten,
         itemType: item.type,
         pathBasename: logSafeItemPath(item.path),
         scope: item.scope,
       })
 
-      try {
-        await bridge.shell.openExternal(result.managementUrl)
-      } catch (openError) {
-        logger.warn("Skill Repository management URL open failed.", {
-          editorId: item.editorId,
-          error: openError,
-          itemType: item.type,
-          pathBasename: logSafeItemPath(item.path),
-          scope: item.scope,
-        })
-        setSkillRepositoryManagementUrl(result.managementUrl)
-        notifyError("无法打开 Synapse。")
-      }
+      if (result.identityWritten) await openSkillRepositoryManagement(result.managementUrl)
     } catch (error) {
       logger.warn("Skill Repository upload from scan detail failed.", {
         editorId: item.editorId,
@@ -663,7 +694,49 @@ function ScanItemDetailDialog({
     } finally {
       setIsSkillRepositoryUploadBusy(false)
     }
-  }, [item, notifyError, skillRepositoryPublishDraft?.sourceFingerprint, success, warning])
+  }, [item, openSkillRepositoryManagement, skillRepositoryPublishDraft, success, warning])
+
+  const handleRetrySkillRepositoryIdentity = useCallback(async () => {
+    if (!skillRepositoryIdentityRetry) return
+    setIsSkillRepositoryIdentityRetryBusy(true)
+    setSkillRepositoryIdentityRetry((current) => current ? { ...current, error: null } : null)
+    try {
+      const bridge = getSynapseBridge()
+      if (!bridge) throw new Error("当前窗口无法处理本机内容。")
+      const result = await bridge.editorScan.retrySkillRepositoryIdentity(skillRepositoryIdentityRetry.request)
+      const managementUrl = skillRepositoryIdentityRetry.managementUrl
+      logger.info("Skill Repository identity retry completed from scan detail.", {
+        editorId: skillRepositoryIdentityRetry.request.editorId,
+        itemType: skillRepositoryIdentityRetry.request.itemType,
+        pathBasename: logSafeItemPath(skillRepositoryIdentityRetry.request.itemPath),
+        scope: skillRepositoryIdentityRetry.request.scope,
+      })
+      setSkillRepositoryIdentityRetry(null)
+      success("本地关联已恢复。")
+      if (result.identityMigrationWarning) {
+        warning("本地关联已恢复，旧身份文件清理失败。")
+      }
+      try {
+        await onChanged?.()
+      } catch {
+        warning("本地关联已恢复，列表刷新失败。")
+      }
+      await openSkillRepositoryManagement(managementUrl)
+    } catch (error) {
+      logger.warn("Skill Repository identity retry failed from scan detail.", {
+        editorId: skillRepositoryIdentityRetry.request.editorId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        itemType: skillRepositoryIdentityRetry.request.itemType,
+        pathBasename: logSafeItemPath(skillRepositoryIdentityRetry.request.itemPath),
+        scope: skillRepositoryIdentityRetry.request.scope,
+      })
+      setSkillRepositoryIdentityRetry((current) => current
+        ? { ...current, error: buildUploadSkillToSkillRepositoryErrorMessage(error) }
+        : null)
+    } finally {
+      setIsSkillRepositoryIdentityRetryBusy(false)
+    }
+  }, [onChanged, openSkillRepositoryManagement, skillRepositoryIdentityRetry, success, warning])
 
   if (!item) return null
 
@@ -831,6 +904,35 @@ function ScanItemDetailDialog({
             >
               {isSkillRepositoryUploadBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
               确认上传
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={skillRepositoryIdentityRetry !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !isSkillRepositoryIdentityRetryBusy) setSkillRepositoryIdentityRetry(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>云仓库已上传</AlertDialogTitle>
+            <AlertDialogDescription>
+              {skillRepositoryIdentityRetry?.error ?? "本地关联写入失败。"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSkillRepositoryIdentityRetryBusy}>关闭</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isSkillRepositoryIdentityRetryBusy}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleRetrySkillRepositoryIdentity()
+              }}
+            >
+              {isSkillRepositoryIdentityRetryBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
+              重试关联
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

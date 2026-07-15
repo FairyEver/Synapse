@@ -131,6 +131,7 @@ const IPC_CHANNELS = {
     "finalizeQuickPublish": "synapse:editor-scan:finalize-quick-publish",
     "trashItem": "synapse:editor-scan:trash-item",
     "uploadSkillToSkillRepository": "synapse:editor-scan:upload-skill-to-skill-repository",
+    "retrySkillRepositoryIdentity": "synapse:editor-scan:retry-skill-repository-identity",
   },
   "editor-copy": {
     "resolveTarget": "synapse:editor-copy:resolve-target",
@@ -1298,6 +1299,8 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["editor-scan"].trashItem)(request),
     uploadSkillToSkillRepository: (request) =>
       invoke(IPC_CHANNELS["editor-scan"].uploadSkillToSkillRepository)(request),
+    retrySkillRepositoryIdentity: (request) =>
+      invoke(IPC_CHANNELS["editor-scan"].retrySkillRepositoryIdentity)(request),
   },
   editorCopy: {
     resolveTarget: invoke(IPC_CHANNELS["editor-copy"].resolveTarget),

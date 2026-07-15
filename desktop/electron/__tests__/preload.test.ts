@@ -563,6 +563,30 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps Skill Repository identity retry to the local-only IPC channel", async () => {
+    const bridge = await loadPreloadBridge()
+    const request = {
+      itemType: "skill" as const,
+      itemPath: "/tmp/skills/review",
+      itemName: "review",
+      editorId: "claude-code" as const,
+      scope: "project" as const,
+      projectPath: "/tmp/project",
+      repositoryId: "repo-1",
+      name: "review",
+      owner: "alice",
+      expectedSourceFingerprint: "sha256:source",
+      expectedIdentityId: null,
+    }
+
+    await bridge.editorScan.retrySkillRepositoryIdentity(request)
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:editor-scan:retry-skill-repository-identity",
+      request,
+    )
+  })
+
   it("maps checked Skill publish finalization to the narrow IPC channel", async () => {
     const bridge = await loadPreloadBridge()
     const request = {

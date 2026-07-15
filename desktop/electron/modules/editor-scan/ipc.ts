@@ -10,6 +10,7 @@ import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type {
+  EditorScanSkillRepositoryIdentityRetryRequest,
   EditorScanSkillRepositoryUploadRequest,
   EditorScanFinalizeQuickPublishRequest,
   EditorScanQuickPublishRequest,
@@ -192,9 +193,30 @@ const uploadSkillToSkillRepositoryResultSchema = z.object({
   managementUrl: z.string().url(),
   identityWritten: z.boolean(),
   identityWriteError: z.string().optional(),
+  identityBeforeUploadId: z.string().nullable().optional(),
   identityMigrated: z.boolean(),
   identityMigrationWarning: z.string().optional(),
   sourceImportSummary: sourceImportSummarySchema,
+})
+
+const retrySkillRepositoryIdentityRequestSchema = z.object({
+  itemType: z.literal("skill"),
+  itemPath: z.string().min(1),
+  itemName: z.string().min(1),
+  editorId: z.string().min(1),
+  scope: z.enum(["global", "project"]),
+  projectPath: z.string().nullable().optional(),
+  repositoryId: z.string().min(1),
+  name: z.string().min(1),
+  owner: z.string().nullable(),
+  expectedSourceFingerprint: z.string().min(1),
+  expectedIdentityId: z.string().nullable(),
+}).strict()
+
+const retrySkillRepositoryIdentityResultSchema = z.object({
+  identityWritten: z.literal(true),
+  identityMigrated: z.boolean(),
+  identityMigrationWarning: z.string().optional(),
 })
 
 export const editorScanIpcModule: IpcModule = {
@@ -308,6 +330,36 @@ export const editorScanIpcModule: IpcModule = {
           },
           security,
         )
+      },
+    },
+    retrySkillRepositoryIdentity: {
+      kind: "invoke",
+      channel: "synapse:editor-scan:retry-skill-repository-identity",
+      request: retrySkillRepositoryIdentityRequestSchema,
+      response: retrySkillRepositoryIdentityResultSchema,
+      handler: async (ctx, request: EditorScanSkillRepositoryIdentityRetryRequest) => {
+        const security = {
+          actor: { kind: "user" } as const,
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+        }
+        await assertTrustedEditorReadTarget(security, request.itemPath, {
+          contentType: request.itemType,
+          itemName: request.itemName,
+          operation: "retry-skill-repository-identity",
+        }, "skill")
+        const mainFile = await resolveSkillMainFile(request.itemPath)
+        if (!mainFile || path.basename(mainFile) !== "SKILL.md") {
+          throw new Error("关联 Skill Repository 需要根目录 SKILL.md。")
+        }
+        return skillRepositoryUploadService.retryLocalIdentity({
+          sourceDirectoryPath: request.itemPath,
+          repositoryId: request.repositoryId,
+          name: request.name,
+          owner: request.owner,
+          expectedSourceFingerprint: request.expectedSourceFingerprint,
+          expectedIdentityId: request.expectedIdentityId,
+        }, security)
       },
     },
   },

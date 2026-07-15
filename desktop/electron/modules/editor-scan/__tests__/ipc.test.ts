@@ -5,6 +5,7 @@ import { createInMemoryHarness } from "../../../runtime/ipc"
 const mocks = vi.hoisted(() => ({
   uploadService: {
     importLocal: vi.fn(),
+    retryLocalIdentity: vi.fn(),
   },
   contentSkillSourceService: {
     resolveSkillMainFile: vi.fn(),
@@ -54,6 +55,10 @@ describe("editorScanIpcModule", () => {
         symlinkCount: 0,
         totalBytes: 10,
       },
+    })
+    mocks.uploadService.retryLocalIdentity.mockResolvedValue({
+      identityWritten: true,
+      identityMigrated: false,
     })
     mocks.contentSkillSourceService.resolveSkillMainFile.mockResolvedValue("/tmp/skills/review/SKILL.md")
     mocks.editorScanService.assertTrustedEditorReadTarget.mockResolvedValue(undefined)
@@ -154,6 +159,48 @@ describe("editorScanIpcModule", () => {
         contentType: "skill",
         itemName: "review",
         operation: "upload-skill-to-skill-repository",
+      },
+      "skill",
+    )
+  })
+
+  it("retries only the local Skill Repository identity through a dedicated channel", async () => {
+    const harness = createHarness()
+    const request = {
+      itemType: "skill" as const,
+      itemPath: "/tmp/skills/review",
+      itemName: "review",
+      editorId: "claude-code",
+      scope: "project" as const,
+      projectPath: "/tmp/project",
+      repositoryId: "repo-1",
+      name: "review",
+      owner: "alice",
+      expectedSourceFingerprint: "sha256:source",
+      expectedIdentityId: null,
+    }
+
+    await expect(harness.invoke("synapse:editor-scan:retry-skill-repository-identity", request)).resolves.toEqual({
+      identityWritten: true,
+      identityMigrated: false,
+    })
+
+    expect(mocks.uploadService.retryLocalIdentity).toHaveBeenCalledWith({
+      sourceDirectoryPath: "/tmp/skills/review",
+      repositoryId: "repo-1",
+      name: "review",
+      owner: "alice",
+      expectedSourceFingerprint: "sha256:source",
+      expectedIdentityId: null,
+    }, expect.objectContaining({ actor: { kind: "user" } }))
+    expect(mocks.uploadService.importLocal).not.toHaveBeenCalled()
+    expect(mocks.editorScanService.assertTrustedEditorReadTarget).toHaveBeenCalledWith(
+      expect.objectContaining({ actor: { kind: "user" } }),
+      "/tmp/skills/review",
+      {
+        contentType: "skill",
+        itemName: "review",
+        operation: "retry-skill-repository-identity",
       },
       "skill",
     )

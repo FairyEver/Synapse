@@ -39,9 +39,25 @@ export type SkillRepositoryLocalImportResult = {
   readonly managementUrl: string
   readonly identityWritten: boolean
   readonly identityWriteError?: string
+  readonly identityBeforeUploadId?: string | null
   readonly identityMigrated: boolean
   readonly identityMigrationWarning?: string
   readonly sourceImportSummary: ContentSkillSourceDraft["sourceImportSummary"]
+}
+
+export type SkillRepositoryLocalIdentityRetryInput = {
+  readonly sourceDirectoryPath: string
+  readonly repositoryId: string
+  readonly name: string
+  readonly owner: string | null
+  readonly expectedSourceFingerprint: string
+  readonly expectedIdentityId: string | null
+}
+
+export type SkillRepositoryLocalIdentityRetryResult = {
+  readonly identityWritten: true
+  readonly identityMigrated: boolean
+  readonly identityMigrationWarning?: string
 }
 
 type SkillRepositoryUploadAccountPort = {
@@ -159,6 +175,66 @@ export class SkillRepositoryUploadService {
       identityMigrated,
       sourceImportSummary: source.sourceImportSummary,
       ...(identityWriteError ? { identityWriteError } : {}),
+      ...(!identityWritten ? { identityBeforeUploadId: localIdentity?.id ?? null } : {}),
+      ...(identityMigrationWarning ? { identityMigrationWarning } : {}),
+    }
+  }
+
+  async retryLocalIdentity(
+    input: SkillRepositoryLocalIdentityRetryInput,
+    security?: ContentSkillSourceSecurityDeps & SkillRepositoryIdentityWriteSecurity,
+  ): Promise<SkillRepositoryLocalIdentityRetryResult> {
+    if (this.account.getState().status !== "authenticated") {
+      throw new AccountAuthenticationRequiredError()
+    }
+
+    const source = await readSkillDraftFromDirectory(input.sourceDirectoryPath, security, { mode: "publish" })
+    if (source.sourceFingerprint !== input.expectedSourceFingerprint) {
+      throw new Error("本地 Skill 在上传后发生变化，请重新检查后再关联。")
+    }
+    if (path.basename(source.mainFilePath) !== "SKILL.md") {
+      throw new Error("Skill 必须包含根目录 SKILL.md。")
+    }
+
+    const { normalizeSkillRepositoryName } = await sharedSkillRepositoryPromise
+    const identity = {
+      id: input.repositoryId.trim(),
+      kind: "cloud-skill-repository" as const,
+      owner: input.owner?.trim() || null,
+      name: normalizeSkillRepositoryName(input.name),
+    }
+    if (!identity.id) throw new Error("Skill 仓库 ID 不能为空。")
+
+    const currentIdentity = await this.readIdentity(source.sourceDirectoryPath, security)
+    const currentMatchesTarget = currentIdentity?.id === identity.id
+      && currentIdentity.name === identity.name
+      && currentIdentity.owner === identity.owner
+    if (!currentMatchesTarget && (currentIdentity?.id ?? null) !== input.expectedIdentityId) {
+      throw new Error("本地 Skill 的云仓库关联已发生变化，请重新扫描后再试。")
+    }
+
+    await this.ensureIdentityWriteAllowed(source.sourceDirectoryPath, security)
+    await this.writeIdentity(source.sourceDirectoryPath, identity, security)
+
+    let identityMigrated = false
+    let identityMigrationWarning: string | undefined
+    try {
+      const verifiedIdentity = await this.readIdentity(source.sourceDirectoryPath, security)
+      if (
+        verifiedIdentity?.id !== identity.id
+        || verifiedIdentity.name !== identity.name
+        || verifiedIdentity.owner !== identity.owner
+      ) {
+        throw new Error("新云仓库身份验证失败。")
+      }
+      identityMigrated = await this.removeLegacyIdentity(source.sourceDirectoryPath, security)
+    } catch (error) {
+      identityMigrationWarning = errorMessage(error)
+    }
+
+    return {
+      identityWritten: true,
+      identityMigrated,
       ...(identityMigrationWarning ? { identityMigrationWarning } : {}),
     }
   }

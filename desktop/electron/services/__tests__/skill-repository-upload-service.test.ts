@@ -281,8 +281,53 @@ describe("SkillRepositoryUploadService", () => {
       repositoryId: "repo-1",
       identityWritten: false,
       identityWriteError: "disk full",
+      identityBeforeUploadId: null,
     })
     expect(importSkillRepository).toHaveBeenCalled()
+  })
+
+  it("retries only the local identity write without importing the cloud repository again", async () => {
+    const importSkillRepository = vi.fn()
+    const service = new SkillRepositoryUploadService({
+      accountService: { getState: () => authenticatedState, importSkillRepository },
+    })
+
+    await expect(service.retryLocalIdentity({
+      sourceDirectoryPath: "/skills/demo",
+      repositoryId: "repo-1",
+      name: "demo-skill",
+      owner: "liyang",
+      expectedSourceFingerprint: "sha256:source",
+      expectedIdentityId: null,
+    })).resolves.toEqual({ identityWritten: true, identityMigrated: false })
+
+    expect(importSkillRepository).not.toHaveBeenCalled()
+    expect(writeSkillRepositoryIdentity).toHaveBeenCalledWith("/skills/demo", identity, undefined)
+  })
+
+  it("blocks identity retry when the local source or identity changed", async () => {
+    const service = new SkillRepositoryUploadService({
+      accountService: { getState: () => authenticatedState, importSkillRepository: vi.fn() },
+    })
+    const input = {
+      sourceDirectoryPath: "/skills/demo",
+      repositoryId: "repo-1",
+      name: "demo-skill",
+      owner: "liyang",
+      expectedSourceFingerprint: "sha256:older",
+      expectedIdentityId: null,
+    }
+
+    await expect(service.retryLocalIdentity(input)).rejects.toThrow("本地 Skill 在上传后发生变化")
+    expect(writeSkillRepositoryIdentity).not.toHaveBeenCalled()
+
+    readSkillRepositoryIdentity.mockReset()
+    readSkillRepositoryIdentity.mockResolvedValue({ ...identity, id: "repo-concurrent" })
+    await expect(service.retryLocalIdentity({
+      ...input,
+      expectedSourceFingerprint: "sha256:source",
+    })).rejects.toThrow("云仓库关联已发生变化")
+    expect(writeSkillRepositoryIdentity).not.toHaveBeenCalled()
   })
 
   it("uploads attachment bytes by originalName and rejects missing attachment bytes", async () => {
