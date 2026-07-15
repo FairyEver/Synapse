@@ -193,6 +193,27 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
     ])
     expect(security.auditSink.record).toHaveBeenCalledTimes(5)
     expect(security.auditSink.record.mock.calls.every(([event]) => event.outcome === "allowed")).toBe(true)
+    expect(security.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "swarm-task:task:task-1",
+      context: expect.objectContaining({
+        capabilityAction: SWARM_TASK_RUN_LIST_CAPABILITY_ID,
+        taskId: "task-1",
+      }),
+    }))
+  })
+
+  it("rejects an unscoped run list before permission checks or service reads", async () => {
+    const service = createService()
+    const security = createSecurity()
+    const dispatcher = createSwarmTaskCapabilityDispatcher({ service: service as never, ...security })
+
+    await expect(dispatcher.dispatch(SWARM_TASK_RUN_LIST_CAPABILITY_ID, {
+      limit: 5,
+    }, { source: "mcp-http" })).rejects.toThrow()
+
+    expect(security.permissionGuard.check).not.toHaveBeenCalled()
+    expect(service.listRuns).not.toHaveBeenCalled()
   })
 
   it("fails missing run mutations while keeping nullable reads", async () => {

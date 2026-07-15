@@ -390,7 +390,7 @@ Input:
 { "taskId": "swarm-task:...", "limit": 20 }
 ```
 
-All fields are optional. Returns recent runs. `limit` caps at 200.
+`taskId` is required. Returns recent runs for that task only. `limit` is optional and caps at 200.
 
 ### app_swarm_task_run_get
 

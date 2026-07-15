@@ -351,7 +351,7 @@ export const swarmRunStartInputSchema = z.object({
 }).strict()
 
 export const swarmRunListInputSchema = z.object({
-  taskId: z.string().min(1).optional(),
+  taskId: z.string().min(1),
   limit: z.number().int().min(1).max(200).optional(),
 }).strict()
 

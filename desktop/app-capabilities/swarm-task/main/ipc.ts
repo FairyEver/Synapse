@@ -83,10 +83,10 @@ export const swarmTaskIpcModule: IpcModule = {
     listRuns: {
       channel: "synapse:swarm-task:runs:list",
       kind: "invoke",
-      request: swarmRunListInputSchema.optional(),
+      request: swarmRunListInputSchema,
       response: swarmRunListResultSchema,
-      handler: (ctx, request: z.infer<typeof swarmRunListInputSchema> | undefined) =>
-        resolveSwarmTaskService(ctx).listRuns(request?.taskId, request?.limit),
+      handler: (ctx, request: z.infer<typeof swarmRunListInputSchema>) =>
+        resolveSwarmTaskService(ctx).listRuns(request.taskId, request.limit),
     },
     getRun: {
       channel: "synapse:swarm-task:runs:get",

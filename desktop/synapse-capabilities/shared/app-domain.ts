@@ -805,13 +805,14 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: SWARM_TASK_MCP_TOOL_NAMES.runList,
-      description: "List Swarm Task runs.",
+      description: "List recent runs for one Swarm Task.",
       inputSchema: {
         type: "object",
         properties: {
-          taskId: stringField("Optional Swarm Task id.", { minLength: 1 }),
+          taskId: stringField("Swarm Task id.", { minLength: 1 }),
           limit: positiveIntField("Optional maximum runs to return.", 200),
         },
+        required: ["taskId"],
         additionalProperties: false,
       },
     },
@@ -914,7 +915,7 @@ function swarmTaskCapabilityDescription(id: string): string {
     case SWARM_TASK_RUN_CANCEL_CAPABILITY_ID:
       return "Cancel a Swarm Task run."
     case SWARM_TASK_RUN_LIST_CAPABILITY_ID:
-      return "List Swarm Task runs."
+      return "List runs for one Swarm Task."
     case SWARM_TASK_RUN_GET_CAPABILITY_ID:
       return "Get one Swarm Task run with its worker records."
     default:

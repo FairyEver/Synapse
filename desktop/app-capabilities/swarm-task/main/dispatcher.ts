@@ -108,10 +108,7 @@ export function createSwarmTaskCapabilityDispatcher(deps: SwarmTaskDispatcherDep
       }
       if (action === SWARM_TASK_RUN_LIST_CAPABILITY_ID) {
         const parsed = swarmRunListInputSchema.parse(params)
-        const audit = parsed.taskId
-          ? taskAuditInput("automation.read", action, parsed.taskId)
-          : { action: "automation.read" as const, capabilityAction: action, resource: "swarm-task:runs" }
-        return runSwarmAction(deps, context, audit, async () => (
+        return runSwarmAction(deps, context, taskAuditInput("automation.read", action, parsed.taskId), async () => (
           { ok: true, data: await deps.service.listRuns(parsed.taskId, parsed.limit), affected: 0 }
         ))
       }

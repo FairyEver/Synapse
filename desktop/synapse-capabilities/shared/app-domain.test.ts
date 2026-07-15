@@ -191,6 +191,15 @@ describe("App capability domain", () => {
     expect(MCP_TOOL_ACTIONS[SWARM_TASK_MCP_TOOL_NAMES.taskList]).toBe(SWARM_TASK_TASK_LIST_CAPABILITY_ID)
     expect(appToolNames).toEqual(expect.arrayContaining(Object.values(SWARM_TASK_MCP_TOOL_NAMES)))
     expect(allToolNames).toEqual(expect.arrayContaining(Object.values(SWARM_TASK_MCP_TOOL_NAMES)))
+
+    const runListSchema = buildAppTools()
+      .find((tool) => tool.name === SWARM_TASK_MCP_TOOL_NAMES.runList)?.inputSchema
+    expect(runListSchema).toMatchObject({
+      required: ["taskId"],
+      properties: {
+        taskId: expect.objectContaining({ type: "string", minLength: 1 }),
+      },
+    })
   })
 
   it("defines Swarm Task create and start schemas", () => {
