@@ -2,7 +2,16 @@ import { z } from "zod"
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
 import type { WindowManager } from "../../../electron/runtime/window"
 import type { AuditSink, PermissionGuard } from "../../../electron/runtime/security"
+import {
+  SECRETS_ITEM_CREATE_CAPABILITY_ID,
+  SECRETS_ITEM_DELETE_CAPABILITY_ID,
+  SECRETS_ITEM_GET_CAPABILITY_ID,
+  SECRETS_ITEM_LIST_CAPABILITY_ID,
+  SECRETS_ITEM_UPDATE_CAPABILITY_ID,
+  SECRETS_ITEM_UPSERT_CAPABILITY_ID,
+} from "../shared/capability"
 import type { SecretsService } from "./service"
+import { createSecretsCapabilityDispatcher } from "./dispatcher"
 import {
   secretCreateInputSchema,
   secretDeleteInputSchema,
@@ -21,8 +30,14 @@ import {
 } from "../shared/schema"
 
 const wiredServices = new WeakSet<SecretsService>()
+const SECRETS_APP_ACTOR = { kind: "user", id: "secrets-app", display: "Secrets App" } as const
+const secretEnvelopeSchema = z.object({
+  secret: z.union([secretValueViewSchema, secretSafeViewSchema]),
+}).passthrough()
 
-function resolveSecretsService(ctx: Parameters<IpcModule["methods"][string]["handler"]>[0]): SecretsService {
+type SecretsIpcContext = Parameters<IpcModule["methods"][string]["handler"]>[0]
+
+function resolveSecretsService(ctx: SecretsIpcContext): SecretsService {
   const service = ctx.resolve<SecretsService>("core.secrets")
   if (!wiredServices.has(service)) {
     const windowManager = ctx.resolve<WindowManager>("core.window-manager")
@@ -34,6 +49,25 @@ function resolveSecretsService(ctx: Parameters<IpcModule["methods"][string]["han
   return service
 }
 
+async function dispatchSecretsAction(
+  ctx: SecretsIpcContext,
+  action: string,
+  params: Record<string, unknown>,
+): Promise<unknown> {
+  const dispatcher = createSecretsCapabilityDispatcher({
+    service: resolveSecretsService(ctx),
+    permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+    auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+    actor: SECRETS_APP_ACTOR,
+  })
+  const result = await dispatcher.dispatch(action, params, {
+    source: "api",
+    actor: SECRETS_APP_ACTOR,
+  })
+  if (!result.ok) throw new Error(result.error ?? "密钥操作失败。")
+  return result.data
+}
+
 export const secretsIpcModule: IpcModule = {
   id: "secrets",
   methods: {
@@ -42,42 +76,54 @@ export const secretsIpcModule: IpcModule = {
       kind: "invoke",
       request: z.void(),
       response: secretListResultSchema,
-      handler: (ctx) => resolveSecretsService(ctx).list(),
+      handler: async (ctx) => secretListResultSchema.parse(
+        await dispatchSecretsAction(ctx, SECRETS_ITEM_LIST_CAPABILITY_ID, {}),
+      ),
     },
     get: {
       channel: "synapse:secrets:get",
       kind: "invoke",
       request: secretGetInputSchema,
       response: z.union([secretValueViewSchema, secretSafeViewSchema]),
-      handler: (ctx, request) => resolveSecretsService(ctx).get(secretGetInputSchema.parse(request)),
+      handler: async (ctx, request) => secretEnvelopeSchema.parse(
+        await dispatchSecretsAction(ctx, SECRETS_ITEM_GET_CAPABILITY_ID, secretGetInputSchema.parse(request)),
+      ).secret,
     },
     create: {
       channel: "synapse:secrets:create",
       kind: "invoke",
       request: secretCreateInputSchema,
       response: secretSafeViewSchema,
-      handler: (ctx, request) => resolveSecretsService(ctx).create(secretCreateInputSchema.parse(request)),
+      handler: async (ctx, request) => secretSafeViewSchema.parse(secretEnvelopeSchema.parse(
+        await dispatchSecretsAction(ctx, SECRETS_ITEM_CREATE_CAPABILITY_ID, secretCreateInputSchema.parse(request)),
+      ).secret),
     },
     update: {
       channel: "synapse:secrets:update",
       kind: "invoke",
       request: secretUpdateInputSchema,
       response: secretSafeViewSchema,
-      handler: (ctx, request) => resolveSecretsService(ctx).update(secretUpdateInputSchema.parse(request)),
+      handler: async (ctx, request) => secretSafeViewSchema.parse(secretEnvelopeSchema.parse(
+        await dispatchSecretsAction(ctx, SECRETS_ITEM_UPDATE_CAPABILITY_ID, secretUpdateInputSchema.parse(request)),
+      ).secret),
     },
     upsert: {
       channel: "synapse:secrets:upsert",
       kind: "invoke",
       request: secretUpsertInputSchema,
       response: secretUpsertResultSchema,
-      handler: (ctx, request) => resolveSecretsService(ctx).upsert(secretUpsertInputSchema.parse(request)),
+      handler: async (ctx, request) => secretUpsertResultSchema.parse(
+        await dispatchSecretsAction(ctx, SECRETS_ITEM_UPSERT_CAPABILITY_ID, secretUpsertInputSchema.parse(request)),
+      ),
     },
     delete: {
       channel: "synapse:secrets:delete",
       kind: "invoke",
       request: secretDeleteInputSchema,
       response: secretSafeViewSchema,
-      handler: (ctx, request) => resolveSecretsService(ctx).delete(secretDeleteInputSchema.parse(request)),
+      handler: async (ctx, request) => secretSafeViewSchema.parse(secretEnvelopeSchema.parse(
+        await dispatchSecretsAction(ctx, SECRETS_ITEM_DELETE_CAPABILITY_ID, secretDeleteInputSchema.parse(request)),
+      ).secret),
     },
     scanSkillEnvBindings: {
       channel: "synapse:secrets:scan-skill-env-bindings",

@@ -1,6 +1,37 @@
 import { describe, expect, it, vi } from "vitest"
 import { secretsIpcModule } from "../ipc"
 
+function createHarness(allow = true) {
+  const service = {
+    events: { on: vi.fn() },
+    list: vi.fn(async () => ({ secrets: [], total: 0 })),
+    get: vi.fn(async () => ({ id: "id-1", name: "TOKEN", hasValue: true, value: "revealed-value" })),
+    create: vi.fn(async () => ({ id: "id-1", name: "TOKEN", hasValue: true })),
+    update: vi.fn(async () => ({ id: "id-1", name: "TOKEN", hasValue: true })),
+    upsert: vi.fn(async () => ({ secret: { id: "id-1", name: "TOKEN", hasValue: true }, created: true })),
+    delete: vi.fn(async () => ({ id: "id-1", name: "TOKEN", hasValue: true })),
+    scanSkillEnvBindings: vi.fn(async () => ({ scanSessionId: "scan-1", items: [] })),
+    queueSkillEnvBindings: vi.fn(async () => ({ items: [] })),
+  }
+  const broadcast = vi.fn()
+  const permissionGuard = {
+    check: vi.fn(async () => allow
+      ? { allowed: true as const }
+      : { allowed: false as const, reason: "denied", policyId: "test-deny" }),
+  }
+  const auditSink = { record: vi.fn() }
+  const ctx = {
+    resolve: vi.fn((id: string) => {
+      if (id === "core.secrets") return service
+      if (id === "core.window-manager") return { broadcast }
+      if (id === "core.permission-guard") return permissionGuard
+      if (id === "core.audit-sink") return auditSink
+      throw new Error(id)
+    }),
+  }
+  return { auditSink, broadcast, ctx, permissionGuard, service }
+}
+
 describe("secretsIpcModule", () => {
   it("registers secrets channels", () => {
     expect(secretsIpcModule.id).toBe("secrets")
@@ -43,35 +74,16 @@ describe("secretsIpcModule", () => {
   })
 
   it("dispatches methods through the core service", async () => {
-    const service = {
-      events: { on: vi.fn() },
-      list: vi.fn(async () => ({ secrets: [], total: 0 })),
-      get: vi.fn(async () => ({ id: "id-1", name: "TOKEN", hasValue: true })),
-      create: vi.fn(async () => ({ id: "id-1", name: "TOKEN", hasValue: true })),
-      update: vi.fn(async () => ({ id: "id-1", name: "TOKEN", hasValue: true })),
-      upsert: vi.fn(async () => ({ secret: { id: "id-1", name: "TOKEN", hasValue: true }, created: true })),
-      delete: vi.fn(async () => ({ id: "id-1", name: "TOKEN", hasValue: true })),
-      scanSkillEnvBindings: vi.fn(async () => ({ scanSessionId: "scan-1", items: [] })),
-      queueSkillEnvBindings: vi.fn(async () => ({ items: [] })),
-    }
-    const broadcast = vi.fn()
-    const permissionGuard = { check: vi.fn() }
-    const auditSink = { record: vi.fn() }
-    const ctx = {
-      resolve: vi.fn((id: string) => {
-        if (id === "core.secrets") return service
-        if (id === "core.window-manager") return { broadcast }
-        if (id === "core.permission-guard") return permissionGuard
-        if (id === "core.audit-sink") return auditSink
-        throw new Error(id)
-      }),
-    }
+    const { auditSink, ctx, permissionGuard, service } = createHarness()
 
     await expect(secretsIpcModule.methods.list.handler(ctx as never, undefined)).resolves.toEqual({ secrets: [], total: 0 })
-    await secretsIpcModule.methods.get.handler(ctx as never, { name: "TOKEN" })
-    await secretsIpcModule.methods.create.handler(ctx as never, { name: "TOKEN", value: "secret" })
+    await expect(secretsIpcModule.methods.get.handler(ctx as never, {
+      name: "TOKEN",
+      includeValue: true,
+    })).resolves.toMatchObject({ value: "revealed-value" })
+    await secretsIpcModule.methods.create.handler(ctx as never, { name: "TOKEN", value: "created-value" })
     await secretsIpcModule.methods.update.handler(ctx as never, { name: "TOKEN", description: "api" })
-    await secretsIpcModule.methods.upsert.handler(ctx as never, { name: "TOKEN", value: "secret" })
+    await secretsIpcModule.methods.upsert.handler(ctx as never, { name: "TOKEN", value: "upserted-value" })
     await secretsIpcModule.methods.delete.handler(ctx as never, { name: "TOKEN" })
     await secretsIpcModule.methods.scanSkillEnvBindings.handler(ctx as never, { name: "TOKEN" })
     await secretsIpcModule.methods.queueSkillEnvBindings.handler(ctx as never, {
@@ -81,11 +93,28 @@ describe("secretsIpcModule", () => {
     })
 
     expect(service.list).toHaveBeenCalled()
-    expect(service.get).toHaveBeenCalledWith({ name: "TOKEN" })
-    expect(service.create).toHaveBeenCalledWith({ name: "TOKEN", value: "secret" })
+    expect(service.get).toHaveBeenCalledWith({ name: "TOKEN", includeValue: true })
+    expect(service.create).toHaveBeenCalledWith({ name: "TOKEN", value: "created-value" })
     expect(service.update).toHaveBeenCalledWith({ name: "TOKEN", description: "api" })
-    expect(service.upsert).toHaveBeenCalledWith({ name: "TOKEN", value: "secret" })
+    expect(service.upsert).toHaveBeenCalledWith({ name: "TOKEN", value: "upserted-value" })
     expect(service.delete).toHaveBeenCalledWith({ name: "TOKEN" })
+    expect(permissionGuard.check.mock.calls.map(([request]) => request.action)).toEqual([
+      "secret.read",
+      "secret.read",
+      "secret.write",
+      "secret.write",
+      "secret.write",
+      "secret.write",
+    ])
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      actor: { kind: "user", id: "secrets-app", display: "Secrets App" },
+      context: expect.objectContaining({ includeValue: true }),
+    }))
+    expect(auditSink.record.mock.calls.every(([event]) => event.outcome === "allowed")).toBe(true)
+    const auditJson = JSON.stringify(auditSink.record.mock.calls)
+    expect(auditJson).not.toContain("revealed-value")
+    expect(auditJson).not.toContain("created-value")
+    expect(auditJson).not.toContain("upserted-value")
     expect(service.scanSkillEnvBindings).toHaveBeenCalledWith(
       { name: "TOKEN" },
       { actor: { kind: "user" }, permissionGuard, auditSink },
@@ -95,5 +124,21 @@ describe("secretsIpcModule", () => {
       { actor: { kind: "user" }, permissionGuard, auditSink },
     )
     expect(service.events.on).toHaveBeenCalledWith("changed", expect.any(Function))
+  })
+
+  it("stops value reads before the service when permission is denied", async () => {
+    const { auditSink, ctx, service } = createHarness(false)
+
+    await expect(secretsIpcModule.methods.get.handler(ctx as never, {
+      name: "TOKEN",
+      includeValue: true,
+    })).rejects.toThrow("denied")
+
+    expect(service.get).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.read",
+      outcome: "denied",
+      resource: "secret:user:TOKEN",
+    }))
   })
 })
