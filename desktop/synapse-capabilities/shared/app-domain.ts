@@ -37,6 +37,7 @@ import { SECRET_NAME_REGEX } from "../../app-capabilities/secrets/shared/schema"
 import {
   SWARM_TASK_DEFAULT_CONCURRENCY,
   SWARM_TASK_DEFAULT_MAX_ROUNDS,
+  swarmFileWriteModeSchema,
 } from "../../app-capabilities/swarm-task/shared/schema"
 import {
   SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
@@ -318,7 +319,7 @@ const swarmTaskConfigSchema = {
             path: stringField("Project-relative target file path. Absolute paths and parent traversal are rejected.", { maxLength: 4096 }),
             mode: {
               type: "string",
-              enum: ["append-only", "section-update", "free-edit"],
+              enum: swarmFileWriteModeSchema.options,
               description: "How workers may write the target file.",
             },
             lock: {

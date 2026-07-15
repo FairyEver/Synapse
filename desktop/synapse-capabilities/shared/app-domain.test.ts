@@ -248,6 +248,15 @@ describe("App capability domain", () => {
     expect(configSchema.properties).not.toHaveProperty("injectOptions")
     expect(configSchema.properties).not.toHaveProperty("output")
     expect(configSchema.properties).not.toHaveProperty("handoff")
+    expect(configSchema.properties.promptInjection).toMatchObject({
+      properties: {
+        fileWrite: {
+          properties: {
+            mode: { enum: ["append-only", "update"] },
+          },
+        },
+      },
+    })
     expect(tools.get(SWARM_TASK_MCP_TOOL_NAMES.runStart)?.inputSchema).toMatchObject({
       type: "object",
       properties: {
