@@ -4,7 +4,7 @@ import { Readable } from "node:stream"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
 import { DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES } from "./drive-browser"
-import type { DriveChangeLogService } from "./drive-change-log"
+import { DriveChangeLogService } from "./drive-change-log"
 import { DriveService } from "./drive.service"
 import type { DriveStoragePort } from "./drive-storage"
 
@@ -1979,7 +1979,18 @@ describe("DriveService", () => {
 
   it("prepares folder upload manifests with nested folders and file sessions", async () => {
     const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    const createUploadInstruction = vi.fn(async () => {
+      expect(await prisma.driveChange.findMany()).toEqual([])
+      return {
+        method: "PUT" as const,
+        url: "https://cos.example/upload",
+        expiresAt: new Date("2026-06-07T12:15:00.000Z"),
+        headers: { "Content-Type": "text/plain" },
+      }
+    })
+    const storage = { ...storageMock, createUploadInstruction }
+    const changes = new DriveChangeLogService(prisma as unknown as PrismaService)
+    const service = new DriveService(prisma as unknown as PrismaService, storage, undefined, undefined, changes)
     const prepareUpload = vi.spyOn(service, "prepareUpload")
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
 
@@ -2001,6 +2012,7 @@ describe("DriveService", () => {
     expect(prepareUpload).not.toHaveBeenCalled()
     const rootChildren = await service.listItems("user-1", result.root.id)
     expect(rootChildren.map((item) => item.name).sort()).toEqual(["brief.txt", "docs"])
+    expect(await prisma.driveChange.findMany()).toHaveLength(2)
   })
 
   it("prepares folder uploads that contain zero-byte files", async () => {
@@ -2156,18 +2168,25 @@ describe("DriveService", () => {
   it("rolls back folder upload prepare artifacts when a later file fails", async () => {
     const prisma = createPrismaMemory()
     const createUploadInstruction = vi.fn()
-      .mockResolvedValueOnce({
-        method: "PUT" as const,
-        url: "https://cos.example/upload-1",
-        expiresAt: new Date("2026-06-07T12:15:00.000Z"),
-        headers: { "Content-Type": "text/plain" },
+      .mockImplementationOnce(async () => {
+        expect(await prisma.driveChange.findMany()).toEqual([])
+        return {
+          method: "PUT" as const,
+          url: "https://cos.example/upload-1",
+          expiresAt: new Date("2026-06-07T12:15:00.000Z"),
+          headers: { "Content-Type": "text/plain" },
+        }
       })
-      .mockRejectedValueOnce(new Error("COS unavailable"))
+      .mockImplementationOnce(async () => {
+        expect(await prisma.driveChange.findMany()).toEqual([])
+        throw new Error("COS unavailable")
+      })
     const storage: DriveStoragePort = {
       ...storageMock,
       createUploadInstruction,
     }
-    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    const changes = new DriveChangeLogService(prisma as unknown as PrismaService)
+    const service = new DriveService(prisma as unknown as PrismaService, storage, undefined, undefined, changes)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
 
     await expect(service.prepareFolderUpload("user-1", {
@@ -2189,6 +2208,7 @@ describe("DriveService", () => {
     const items = await prisma.driveItem.findMany()
     expect(items).toHaveLength(4)
     expect(items.every((item: any) => item.deletedAt instanceof Date)).toBe(true)
+    expect(await prisma.driveChange.findMany()).toEqual([])
   })
 
   it("streams public share browser downloads without minting storage urls", async () => {
@@ -3786,6 +3806,7 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
   const shares = new Map<string, any>()
   const shareEditors = new Map<string, any>()
   const versions = new Map<string, any>()
+  const changes = new Map<string, any>()
   const now = () => new Date("2026-06-07T12:00:00.000Z")
   const id = (prefix: string) => `${prefix}-${nextId++}`
   const withShares = (item: any) => ({
@@ -3823,6 +3844,7 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
           [shares, cloneMap(shares)],
           [shareEditors, cloneMap(shareEditors)],
           [versions, cloneMap(versions)],
+          [changes, cloneMap(changes)],
         ] as const
         try {
           return await input(prisma)
@@ -3973,6 +3995,28 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
       findMany: async ({ where, select }: any = {}) => {
         const found = [...sessions.values()].filter((session) => matchesWhere(session, where ?? {}))
         return select ? found.map((session) => selectFields(session, select)) : found
+      },
+    },
+    driveChange: {
+      create: async ({ data }: any) => {
+        const change = {
+          id: id("change"),
+          sequence: BigInt(changes.size + 1),
+          occurredAt: now(),
+          ...data,
+        }
+        changes.set(change.id, change)
+        return change
+      },
+      findMany: async ({ where }: any = {}) => [...changes.values()].filter((change) => matchesWhere(change, where ?? {})),
+      deleteMany: async ({ where }: any) => {
+        let count = 0
+        for (const [changeId, change] of changes) {
+          if (!matchesWhere(change, where)) continue
+          changes.delete(changeId)
+          count += 1
+        }
+        return { count }
       },
     },
     driveFileVersion: {

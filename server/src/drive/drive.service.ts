@@ -905,13 +905,15 @@ export class DriveService implements OnApplicationBootstrap {
     }
     let root: DriveItemDto | null = null
     let preservedItemIds = new Set<string>()
+    const createdFolders: DriveItemDto[] = []
     const preparedSessionIds: string[] = []
     const entries: DriveFolderUploadPrepareResult["entries"] = []
 
     try {
-      const rootResult = await this.ensureFolderForUpload(userId, { parentId: input.parentId, name: input.folderName }, auditContext)
+      const rootResult = await this.ensureFolderForUpload(userId, { parentId: input.parentId, name: input.folderName }, auditContext, true)
       const rootFolder = rootResult.folder
       root = rootFolder
+      if (rootResult.created) createdFolders.push(rootFolder)
       preservedItemIds = rootResult.created
         ? new Set<string>()
         : new Set(await this.listDriveSubtreeItemIds(this.prisma, userId, rootFolder.id))
@@ -927,8 +929,9 @@ export class DriveService implements OnApplicationBootstrap {
             parentId = existingId
             continue
           }
-          const folderResult = await this.ensureFolderForUpload(userId, { parentId, name: folderName }, auditContext)
+          const folderResult = await this.ensureFolderForUpload(userId, { parentId, name: folderName }, auditContext, true)
           const folder = folderResult.folder
+          if (folderResult.created) createdFolders.push(folder)
           folderIdsByPath.set(currentPath, folder.id)
           parentId = folder.id
         }
@@ -1003,6 +1006,10 @@ export class DriveService implements OnApplicationBootstrap {
         })
       }
 
+      for (const folder of createdFolders) {
+        await this.recordFolderCreatedChange(userId, folder)
+        await this.recordFolderCreatedAudit(userId, folder, auditContext)
+      }
       return { root: rootFolder, rootCreated: rootResult.created, entries }
     } catch (error) {
       if (root) await this.rollbackFolderUploadPrepare(userId, root.id, preservedItemIds, preparedSessionIds)
@@ -1151,7 +1158,20 @@ export class DriveService implements OnApplicationBootstrap {
     return { ok: true }
   }
 
-  async createFolder(userId: string, input: { parentId: string | null; name: string }, auditContext: DriveAuditContext = {}): Promise<DriveItemDto> {
+  async createFolder(
+    userId: string,
+    input: { parentId: string | null; name: string },
+    auditContext: DriveAuditContext = {},
+  ): Promise<DriveItemDto> {
+    return this.createFolderInternal(userId, input, auditContext, false)
+  }
+
+  private async createFolderInternal(
+    userId: string,
+    input: { parentId: string | null; name: string },
+    auditContext: DriveAuditContext,
+    deferSideEffects: boolean,
+  ): Promise<DriveItemDto> {
     const name = normalizeDriveName(input.name)
     if (input.parentId) await this.requireOwnedFolder(userId, input.parentId)
     const existingFolder = await this.prisma.driveItem.findFirst({
@@ -1172,31 +1192,19 @@ export class DriveService implements OnApplicationBootstrap {
         },
         include: driveItemWithShares,
       })
-      await this.recordDriveChange({
-        userId,
-        itemId: created.id,
-        parentId: created.parentId,
-        type: "created",
-        name: created.name,
-        actor: userId,
-      }, tx)
+      if (!deferSideEffects) await this.recordFolderCreatedChange(userId, toDriveItemDto(created), tx)
       return created
     })
-    await this.recordDriveAudit({
-      userId,
-      action: "drive.folder.create",
-      targetType: "drive.item",
-      targetId: folder.id,
-      detail: { userId, itemId: folder.id, parentId: folder.parentId, name: folder.name },
-      ipAddress: auditContext.ipAddress,
-    })
-    return toDriveItemDto(folder)
+    const dto = toDriveItemDto(folder)
+    if (!deferSideEffects) await this.recordFolderCreatedAudit(userId, dto, auditContext)
+    return dto
   }
 
   private async ensureFolderForUpload(
     userId: string,
     input: { parentId: string | null; name: string },
     auditContext: DriveAuditContext = {},
+    deferSideEffects = false,
   ): Promise<{ readonly folder: DriveItemDto; readonly created: boolean }> {
     const name = normalizeDriveName(input.name)
     if (input.parentId) await this.requireOwnedFolder(userId, input.parentId)
@@ -1205,7 +1213,7 @@ export class DriveService implements OnApplicationBootstrap {
       include: driveItemWithShares,
     })
     if (existingFolder) return { folder: toDriveItemDto(existingFolder), created: false }
-    return { folder: await this.createFolder(userId, { parentId: input.parentId, name }, auditContext), created: true }
+    return { folder: await this.createFolderInternal(userId, { parentId: input.parentId, name }, auditContext, deferSideEffects), created: true }
   }
 
   async renameItem(userId: string, itemId: string, name: string, auditContext: DriveAuditContext = {}): Promise<DriveItemDto> {
@@ -2934,6 +2942,9 @@ export class DriveService implements OnApplicationBootstrap {
         })
       }
       if (rollbackItemIds.length > 0) {
+        await tx.driveChange.deleteMany({
+          where: { userId, itemId: { in: rollbackItemIds } },
+        })
         await tx.driveItem.updateMany({
           where: { id: { in: rollbackItemIds }, userId, deletedAt: null },
           data: {
@@ -3366,6 +3377,28 @@ export class DriveService implements OnApplicationBootstrap {
       return
     }
     await this.changes.append(input)
+  }
+
+  private async recordFolderCreatedChange(userId: string, folder: DriveItemDto, client?: DrivePrismaClient): Promise<void> {
+    await this.recordDriveChange({
+      userId,
+      itemId: folder.id,
+      parentId: folder.parentId,
+      type: "created",
+      name: folder.name,
+      actor: userId,
+    }, client)
+  }
+
+  private async recordFolderCreatedAudit(userId: string, folder: DriveItemDto, auditContext: DriveAuditContext): Promise<void> {
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.folder.create",
+      targetType: "drive.item",
+      targetId: folder.id,
+      detail: { userId, itemId: folder.id, parentId: folder.parentId, name: folder.name },
+      ipAddress: auditContext.ipAddress,
+    })
   }
 }
 
