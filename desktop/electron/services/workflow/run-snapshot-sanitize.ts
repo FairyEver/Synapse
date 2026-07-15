@@ -3,6 +3,10 @@ import { sanitizeError } from "../error-sanitize"
 
 const SENSITIVE_OUTPUT_KEY_PATTERN = /^(authorization|cookie|set-cookie|.*(?:secret|token|password|credential|api[-_]?key|session[-_]?key).*)$/i
 const DEBUG_PATH_KEYS = new Set(["cwd", "stdoutPath", "stderrPath", "promptPath", "lastMessagePath"])
+const WORKFLOW_HISTORY_OUTPUT_MAX_BYTES = 10_000
+const WORKFLOW_HISTORY_OUTPUT_MAX_COLLECTION_ITEMS = 200
+const WORKFLOW_HISTORY_OUTPUT_MAX_DEPTH = 12
+const TRUNCATED_OUTPUT_MARKER = "[truncated]"
 
 export function sanitizeNodeResultsForSnapshot(
   nodeResults: Record<string, NodeRunResult>,
@@ -17,7 +21,7 @@ export function sanitizeNodeResultsForSnapshot(
 export function sanitizeWorkflowRunSnapshot(snapshot: WorkflowRunSnapshot): WorkflowRunSnapshot {
   return {
     ...snapshot,
-    params: sanitizeSnapshotValue(snapshot.params) as WorkflowRunSnapshot["params"],
+    params: sanitizeWorkflowOutputForHistory(snapshot.params),
     nodeResults: sanitizeNodeResultsForSnapshot(snapshot.nodeResults),
     ...(snapshot.definition ? { definition: sanitizeWorkflowDefinitionForSnapshot(snapshot.definition) } : {}),
     ...(snapshot.error !== undefined ? { error: sanitizeError(snapshot.error) } : {}),
@@ -66,7 +70,9 @@ export function sanitizeWorkflowEventForRenderer(event: WorkflowEvent): Workflow
 }
 
 export function sanitizeWorkflowOutputForHistory<T>(output: T): T {
-  return sanitizeSnapshotValue(output) as T
+  return sanitizeBoundedSnapshotValue(output, {
+    remainingBytes: WORKFLOW_HISTORY_OUTPUT_MAX_BYTES,
+  }) as T
 }
 
 export function sanitizeWorkflowDefinitionForSnapshot(definition: WorkflowDefinition): WorkflowDefinition {
@@ -127,7 +133,7 @@ function sanitizeNodeResultForSnapshot(result: NodeRunResult): NodeRunResult {
   return {
     ...result,
     ...(result.input ? { input: sanitizeNodeInput(result.input) } : {}),
-    ...(result.output !== undefined ? { output: sanitizeError(result.output) } : {}),
+    ...(result.output !== undefined ? { output: sanitizeWorkflowOutputForHistory(result.output) } : {}),
     ...(result.outputs ? { outputs: sanitizeNodeOutputs(result.outputs) } : {}),
     ...(result.error !== undefined ? { error: sanitizeError(result.error) } : {}),
   }
@@ -141,7 +147,7 @@ function sanitizeWorkflowRunResultForRenderer(result: WorkflowRunResult): Workfl
   return {
     ...result,
     nodeResults: sanitizeNodeResultsForSnapshot(result.nodeResults),
-    ...(result.output !== undefined ? { output: sanitizeError(result.output) } : {}),
+    ...(result.output !== undefined ? { output: sanitizeWorkflowOutputForHistory(result.output) } : {}),
   }
 }
 
@@ -156,12 +162,14 @@ function sanitizeNodeInput(input: NodeRunResult["input"]): NodeRunResult["input"
 
 function sanitizeNodeOutputs(outputs: NonNullable<NodeRunResult["outputs"]>): NodeRunResult["outputs"] {
   const agentConversation = outputs.agentConversation
-  const sanitizedOutputs = sanitizeSnapshotValue(outputs)
+  const sanitizedOutputs = sanitizeWorkflowOutputForHistory(outputs)
   if (!isRecord(sanitizedOutputs)) return sanitizedOutputs as NodeRunResult["outputs"]
   if (!isRecord(agentConversation)) return sanitizedOutputs as NodeRunResult["outputs"]
 
-  sanitizedOutputs.agentConversation = sanitizeAgentConversationOutput(agentConversation)
-  return sanitizedOutputs as NodeRunResult["outputs"]
+  return {
+    ...sanitizedOutputs,
+    agentConversation: sanitizeAgentConversationOutput(agentConversation),
+  } as unknown as NodeRunResult["outputs"]
 }
 
 function sanitizeSnapshotValue(
@@ -196,14 +204,84 @@ function sanitizeSnapshotValue(
   return sanitizedRecord
 }
 
-function sanitizeAgentConversationOutput(agentConversation: Record<string, unknown>): Record<string, unknown> {
-  const sanitizedAgentConversation: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(agentConversation)) {
-    if (key !== "sessionKey") {
-      sanitizedAgentConversation[key] = sanitizeSnapshotValue(value, new WeakMap(), key)
-    }
+type OutputBudget = { remainingBytes: number }
+
+function sanitizeBoundedSnapshotValue(
+  value: unknown,
+  budget: OutputBudget,
+  seen = new WeakSet<object>(),
+  key = "",
+  depth = 0,
+): unknown {
+  if (typeof value === "string") {
+    return sanitizeBoundedSnapshotString(value, key, budget)
   }
-  return sanitizedAgentConversation
+  if (typeof value === "bigint" || value === null || value === undefined) return value
+  if (typeof value !== "object") return value
+  if (depth >= WORKFLOW_HISTORY_OUTPUT_MAX_DEPTH || budget.remainingBytes <= 0) {
+    return TRUNCATED_OUTPUT_MARKER
+  }
+  if (seen.has(value)) return "[circular]"
+  seen.add(value)
+
+  if (Array.isArray(value)) {
+    const sanitizedArray: unknown[] = []
+    const itemLimit = Math.min(value.length, WORKFLOW_HISTORY_OUTPUT_MAX_COLLECTION_ITEMS)
+    for (let index = 0; index < itemLimit && budget.remainingBytes > 0; index += 1) {
+      sanitizedArray.push(sanitizeBoundedSnapshotValue(value[index], budget, seen, key, depth + 1))
+    }
+    if (sanitizedArray.length < value.length) sanitizedArray.push(TRUNCATED_OUTPUT_MARKER)
+    seen.delete(value)
+    return sanitizedArray
+  }
+
+  const sanitizedRecord: Record<string, unknown> = {}
+  const entries = Object.entries(value)
+  const entryLimit = Math.min(entries.length, WORKFLOW_HISTORY_OUTPUT_MAX_COLLECTION_ITEMS)
+  let processedEntries = 0
+  for (let index = 0; index < entryLimit && budget.remainingBytes > 0; index += 1) {
+    const [entryKey, entryValue] = entries[index]
+    const keyBytes = Buffer.byteLength(entryKey, "utf8")
+    if (keyBytes > budget.remainingBytes) break
+    budget.remainingBytes -= keyBytes
+    sanitizedRecord[entryKey] = sanitizeBoundedSnapshotValue(entryValue, budget, seen, entryKey, depth + 1)
+    processedEntries += 1
+  }
+  if (processedEntries < entries.length) sanitizedRecord.__synapseTruncated = true
+  seen.delete(value)
+  return sanitizedRecord
+}
+
+function sanitizeBoundedSnapshotString(value: string, key: string, budget: OutputBudget): string {
+  if (isSensitiveSnapshotKey(key) && value) {
+    return consumeStringBudget("[redacted]", budget)
+  }
+  const boundedValue = consumeStringBudget(value, budget)
+  if (DEBUG_PATH_KEYS.has(key)) return boundedValue
+  return sanitizeError(boundedValue)
+}
+
+function consumeStringBudget(value: string, budget: OutputBudget): string {
+  const bytes = Buffer.from(value, "utf8")
+  if (bytes.byteLength <= budget.remainingBytes) {
+    budget.remainingBytes -= bytes.byteLength
+    return value
+  }
+  const marker = `\n${TRUNCATED_OUTPUT_MARKER}`
+  const markerBytes = Buffer.byteLength(marker, "utf8")
+  const prefixBudget = Math.max(0, budget.remainingBytes - markerBytes)
+  let prefix = bytes.subarray(0, prefixBudget).toString("utf8")
+  while (prefix.endsWith("\uFFFD")) {
+    prefix = prefix.slice(0, -1)
+  }
+  budget.remainingBytes = 0
+  return `${prefix}${marker}`
+}
+
+function sanitizeAgentConversationOutput(agentConversation: Record<string, unknown>): Record<string, unknown> {
+  return sanitizeWorkflowOutputForHistory(Object.fromEntries(
+    Object.entries(agentConversation).filter(([key]) => key !== "sessionKey"),
+  ))
 }
 
 function isSensitiveSnapshotKey(key: string): boolean {

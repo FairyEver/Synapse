@@ -1,9 +1,69 @@
 import { describe, expect, it } from "vitest"
 
-import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowRunSnapshot } from "../run-snapshot-sanitize"
+import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowEventForRenderer, sanitizeWorkflowOutputForHistory, sanitizeWorkflowRunSnapshot } from "../run-snapshot-sanitize"
 import type { NodeRunResult, WorkflowDefinition, WorkflowRunSnapshot } from "../../../../src/types/workflow"
 
 describe("sanitizeNodeResultsForSnapshot", () => {
+  it("bounds large node outputs without mutating engine results", () => {
+    const largeOutput = "中".repeat(40_000)
+    const result: NodeRunResult = {
+      nodeId: "script-1",
+      status: "success",
+      input: { variables: {} },
+      output: largeOutput,
+      outputs: { stdout: largeOutput },
+    }
+
+    const sanitized = sanitizeNodeResultsForSnapshot({ "script-1": result })["script-1"]
+
+    expect(sanitized?.output?.endsWith("[truncated]")).toBe(true)
+    expect((sanitized?.outputs?.stdout as string).endsWith("[truncated]")).toBe(true)
+    expect(Buffer.byteLength(sanitized?.output ?? "", "utf8")).toBeLessThanOrEqual(10_000)
+    expect(Buffer.byteLength(JSON.stringify(sanitized?.outputs), "utf8")).toBeLessThan(11_000)
+    expect(result.output).toBe(largeOutput)
+    expect(result.outputs?.stdout).toBe(largeOutput)
+  })
+
+  it("bounds output collection size and depth", () => {
+    const items = Array.from({ length: 500 }, (_, index) => ({ index }))
+    const deep: Record<string, unknown> = {}
+    let cursor = deep
+    for (let depth = 0; depth < 20; depth += 1) {
+      cursor.next = {}
+      cursor = cursor.next as Record<string, unknown>
+    }
+
+    const sanitizedItems = sanitizeWorkflowOutputForHistory(items) as unknown[]
+    const sanitizedDeep = sanitizeWorkflowOutputForHistory(deep)
+
+    expect(sanitizedItems).toHaveLength(201)
+    expect(sanitizedItems.at(-1)).toBe("[truncated]")
+    expect(JSON.stringify(sanitizedDeep)).toContain("[truncated]")
+    expect(items).toHaveLength(500)
+  })
+
+  it("bounds node completion event output before renderer delivery", () => {
+    const output = "x".repeat(100_000)
+
+    const sanitized = sanitizeWorkflowEventForRenderer({
+      type: "node:completed",
+      runId: "run-1",
+      nodeId: "script-1",
+      output,
+      result: {
+        nodeId: "script-1",
+        status: "success",
+        input: { variables: {} },
+        output,
+      },
+    })
+
+    expect(sanitized.type).toBe("node:completed")
+    if (sanitized.type !== "node:completed") return
+    expect((sanitized.output as string).endsWith("[truncated]")).toBe(true)
+    expect(sanitized.result?.output?.endsWith("[truncated]")).toBe(true)
+  })
+
   it("removes agent conversation session keys from persisted outputs", () => {
     const result: NodeRunResult = {
       nodeId: "prompt-1",

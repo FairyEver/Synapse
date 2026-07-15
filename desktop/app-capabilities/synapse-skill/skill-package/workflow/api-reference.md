@@ -246,6 +246,8 @@ Validate a workflow definition without saving.
 
 Get execution status for a run owned by a workflow.
 
+**Notes:** Renderer events, run status, and persisted snapshots bound large node-output fields. A value ending in `[truncated]`, an array ending in `[truncated]`, or an object with `__synapseTruncated: true` is a bounded history representation; the Workflow engine still uses the complete value while executing downstream nodes.
+
 **Params:** `workflowId` (string, required), `runId` (string, required)
 **Returns:** `{ status, nodeResults, error? }` or snapshot from history, or `null`
 **Notes:** Authorizes the read against `workflowId`, then checks in-memory active runs and persisted snapshots. Returns `null` when the run does not belong to that workflow.
