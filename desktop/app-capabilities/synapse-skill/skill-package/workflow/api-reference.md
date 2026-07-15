@@ -240,7 +240,7 @@ Validate a workflow definition without saving.
 
 **Params:** `definition` (object, required) — full WorkflowDefinition
 **Returns:** `{ valid, errors, warnings }`
-**Notes:** Validation errors may include `nodeId`, `nodeName`, `field`, `retryable`, and `details` such as `missingField`, `providerId`, `modelTier`, `projectId`, and `timeoutMs`.
+**Notes:** Inspection applies the same definition and local multi-resource default checks as save, including filesystem type, accessibility, and canonical-path uniqueness. Validation errors may include `nodeId`, `nodeName`, `field`, `retryable`, and `details` such as `missingField`, `providerId`, `modelTier`, `projectId`, and `timeoutMs`.
 
 ### app_workflow_run_get
 

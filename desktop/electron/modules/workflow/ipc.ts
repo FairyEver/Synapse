@@ -12,7 +12,7 @@ import type { WorkflowEngine } from "../../services/workflow/workflow-engine"
 import type { RunSnapshotService } from "../../services/workflow/run-snapshot-service"
 import type { WorkflowWindowManager } from "../../services/workflow/window-manager"
 import type { EventBus } from "../../runtime/event-bus"
-import { configuredWorkflowProjectIdsFromConfig, validateWorkflow, type WorkflowValidationOptions } from "../../services/workflow/workflow-validator"
+import { configuredWorkflowProjectIdsFromConfig, validateWorkflow, validateWorkflowWithResourceDefaults, type WorkflowValidationOptions } from "../../services/workflow/workflow-validator"
 import { normalizeWorkflowRunParams } from "../../services/workflow/workflow-param-normalizer"
 import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../config"
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
@@ -1215,7 +1215,7 @@ export const workflowIpcModule: IpcModule = {
         const d = def as { id: string; nodes: unknown[] }
         logger.info("workflow:validate requested", { id: d.id, nodeCount: d.nodes.length })
         const workflowService = resolveWorkflowValidationService(ctx)
-        const result = validateWorkflow(def as never, await loadWorkflowValidationOptions(workflowService))
+        const result = await validateWorkflowWithResourceDefaults(def as never, await loadWorkflowValidationOptions(workflowService))
         logger.info("workflow:validate result", { id: d.id, valid: result.valid, errorCount: result.errors.length, warnCount: result.warnings.length })
         if (!result.valid) logger.warn("workflow:validate errors", { id: d.id, errors: result.errors })
         return result

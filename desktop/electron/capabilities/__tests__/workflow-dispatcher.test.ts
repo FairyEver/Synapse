@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import { z } from "zod"
 
 const logStoreMock = vi.hoisted(() => ({
@@ -487,6 +490,48 @@ describe("createWorkflowDispatcher", () => {
         }),
       ]),
     }))
+  })
+
+  it.skipIf(process.platform === "win32")("reports aliased multi-resource defaults during definition inspection", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "workflow-inspect-"))
+    try {
+      const filePath = path.join(root, "input.txt")
+      const aliasPath = path.join(root, "input-alias.txt")
+      await writeFile(filePath, "input")
+      await symlink(filePath, aliasPath)
+      const dispatcher = createWorkflowDispatcher(makeDeps())
+      const definition: WorkflowDefinition = {
+        id: "workflow-1",
+        name: "Workflow",
+        version: "v1",
+        createdAt: 1,
+        updatedAt: 2,
+        params: [{
+          name: "inputs",
+          type: "file",
+          allowMultiple: true,
+          default: [
+            { kind: "local_path", entryType: "file", path: filePath },
+            { kind: "local_path", entryType: "file", path: aliasPath },
+          ],
+        }],
+        nodes: [endNode()],
+        edges: [],
+      }
+
+      const result = await dispatcher.dispatch(
+        "workflow.definition.inspect",
+        { definition },
+        { source: "api" },
+      )
+
+      expect(result.data).toEqual(expect.objectContaining({
+        valid: false,
+        errors: [{ type: "invalid_config", message: "参数「inputs」第 2 项与前面的资源重复" }],
+      }))
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   it("rejects workflow_call multi-resource templates before an MCP node update is saved", async () => {

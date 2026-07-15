@@ -9,7 +9,7 @@ import type {
   WorkflowMigrationStateStatus,
 } from "../../runtime/data-repo"
 import { AtomicSourceChangedError, JsonNamespace } from "../../runtime/data-repo"
-import { validateWorkflow, type WorkflowValidationOptions } from "./workflow-validator"
+import { validateWorkflowWithResourceDefaults, type WorkflowValidationOptions } from "./workflow-validator"
 import { createMainLogger } from "../log-store"
 import { errorLogMeta as baseErrorLogMeta } from "../error-sanitize"
 import { sanitizeAgentError } from "./workflow-utils"
@@ -25,7 +25,6 @@ import {
   listLegacyWorkflowSources,
   WorkflowMigrationStorage,
 } from "./workflow-migration-storage"
-import { validateWorkflowResourceDefaults } from "./workflow-param-normalizer"
 
 const logger = createMainLogger("service.workflow")
 
@@ -220,20 +219,10 @@ export class WorkflowService {
         workflowEntries.map((entry) => [entry.id, entry.params as WorkflowParam[]]),
       ),
     }
-    const validation = validateWorkflow(current, validationOptions)
+    const validation = await validateWorkflowWithResourceDefaults(current, validationOptions)
     if (!validation.valid) {
       logger.warn("workflow save blocked by validation", { id: current.id, name: current.name, errorCount: validation.errors.length, errors: validation.errors })
       return { errors: validation.errors }
-    }
-    const resourceDefaultErrors = await validateWorkflowResourceDefaults(current)
-    if (resourceDefaultErrors.length > 0) {
-      logger.warn("workflow save blocked by resource default validation", {
-        id: current.id,
-        name: current.name,
-        errorCount: resourceDefaultErrors.length,
-        errors: resourceDefaultErrors,
-      })
-      return { errors: resourceDefaultErrors }
     }
     const versionHash = this.versionHash(current)
     const now = this.migrationOptions.now?.() ?? Date.now()

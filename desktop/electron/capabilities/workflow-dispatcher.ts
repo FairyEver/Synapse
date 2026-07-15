@@ -5,7 +5,7 @@ import type { RunSnapshotService } from "../services/workflow/run-snapshot-servi
 import type { NodeTypeRegistry } from "../../workflow-nodes/registry"
 import type { EventBus } from "../runtime/event-bus/types"
 import type { WorkflowDefinition, WorkflowRunSnapshot, WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
-import { validateWorkflow, type WorkflowValidationOptions } from "../services/workflow/workflow-validator"
+import { validateWorkflowWithResourceDefaults, type WorkflowValidationOptions } from "../services/workflow/workflow-validator"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import { createMainLogger } from "../services/log-store"
 import { sanitizeError } from "../services/error-sanitize"
@@ -33,7 +33,7 @@ export type WorkflowDispatchDeps = {
 }
 
 async function validateWorkflowForDispatch(deps: Pick<WorkflowDispatchDeps, "loadValidationOptions">, definition: WorkflowDefinition) {
-  return validateWorkflow(definition, await deps.loadValidationOptions?.())
+  return validateWorkflowWithResourceDefaults(definition, await deps.loadValidationOptions?.())
 }
 
 function requireString(params: Record<string, unknown>, key: string): string {

@@ -30,6 +30,7 @@ const electronMock = vi.hoisted(() => ({
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
 import type { WorkflowRunStatus } from "../../../../src/types/workflow"
 import { configStore } from "../../../services/config-store"
+import { validateWorkflowWithResourceDefaults } from "../../../services/workflow/workflow-validator"
 import { workflowIpcModule } from "../ipc"
 
 vi.mock("electron", () => electronMock)
@@ -46,6 +47,7 @@ vi.mock("../../../services/config-store", () => ({
 
 vi.mock("../../../services/workflow/workflow-validator", () => ({
   validateWorkflow: vi.fn(() => ({ valid: true, errors: [], warnings: [] })),
+  validateWorkflowWithResourceDefaults: vi.fn(async () => ({ valid: true, errors: [], warnings: [] })),
   validateRunParams: vi.fn(() => []),
   buildEffectiveRunParams: vi.fn((_def: unknown, params: Record<string, unknown>) => params),
   configuredWorkflowProjectIdsFromConfig: vi.fn(() => ["project-1"]),
@@ -1014,6 +1016,31 @@ describe("workflowIpcModule", () => {
         details: { minimumLength: 1 },
       }],
     })
+  })
+
+  it("returns resource-default errors from workflow validation", async () => {
+    const validationResult = {
+      valid: false,
+      errors: [{ type: "invalid_config" as const, message: "参数「inputs」第 2 项与前面的资源重复" }],
+      warnings: [],
+    }
+    vi.mocked(validateWorkflowWithResourceDefaults).mockResolvedValueOnce(validationResult)
+    const workflow = { list: vi.fn(async () => []) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+    const definition = workflowDefinition()
+
+    const result = await harness.invoke("synapse:workflow:validate", definition)
+
+    expect(result).toEqual(validationResult)
+    expect(validateWorkflowWithResourceDefaults).toHaveBeenCalledWith(
+      definition,
+      expect.objectContaining({ configuredProjectIds: ["project-1"] }),
+    )
   })
 
   it("logs cancel signal only when an active AbortController exists, warns otherwise", async () => {

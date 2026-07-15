@@ -16,6 +16,7 @@ import {
   isResourceParamType,
   validateWorkflowParamConfiguration,
 } from "./workflow-param-validator"
+import { validateWorkflowResourceDefaults } from "./workflow-param-normalizer"
 
 const logger = createMainLogger("service.workflow.validator")
 
@@ -602,6 +603,21 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
   }
 
   return { valid: errors.length === 0, errors, warnings }
+}
+
+export async function validateWorkflowWithResourceDefaults(
+  def: WorkflowDefinition,
+  options: WorkflowValidationOptions = {},
+): Promise<ValidationResult> {
+  const result = validateWorkflow(def, options)
+  if (!result.valid) return result
+  const resourceDefaultErrors = await validateWorkflowResourceDefaults(def)
+  if (resourceDefaultErrors.length === 0) return result
+  return {
+    valid: false,
+    errors: [...result.errors, ...resourceDefaultErrors],
+    warnings: result.warnings,
+  }
 }
 
 export function validateRunParams(def: WorkflowDefinition, params: Record<string, unknown>): ValidationError[] {
