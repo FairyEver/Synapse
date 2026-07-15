@@ -941,6 +941,7 @@ export class AccountService {
     let completed = 0
     let completedDirectories = 0
     let failed = 0
+    let failedDirectories = 0
     let skipped = 0
     let firstError: string | undefined
     const progress = { taskId: input.taskId, onProgress: options.onProgress }
@@ -952,6 +953,7 @@ export class AccountService {
       completed += result.completed
       completedDirectories += result.completedDirectories ?? 0
       failed += result.failed
+      failedDirectories += result.failedDirectories ?? 0
       skipped += result.skipped
       firstError ??= result.message
     }
@@ -960,6 +962,7 @@ export class AccountService {
       completed,
       ...(completedDirectories > 0 ? { completedDirectories } : {}),
       failed,
+      ...(failedDirectories > 0 ? { failedDirectories } : {}),
       skipped,
       ...(firstError ? { message: firstError } : {}),
     }
@@ -1201,7 +1204,12 @@ export class AccountService {
           message,
         })
       }
-      return { completed: 0, failed: files.length, skipped, message }
+      return {
+        completed: 0,
+        failed: files.length,
+        skipped,
+        message,
+      }
     }
 
     let prepared: DriveFolderUploadPrepareResult
@@ -1225,7 +1233,13 @@ export class AccountService {
           message,
         })
       }
-      return { completed: 0, failed: files.length, skipped, message }
+      return {
+        completed: 0,
+        failed: files.length,
+        ...(files.length === 0 ? { failedDirectories: directories.length + 1 } : {}),
+        skipped,
+        message,
+      }
     }
 
     const preparedByPath = new Map(prepared.entries.map((entry) => [entry.relativePath, entry]))

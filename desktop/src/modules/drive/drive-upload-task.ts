@@ -101,16 +101,17 @@ export function finishDriveUploadTask(
   result: DriveLocalUploadResult,
   finishedAt = Date.now(),
 ): DriveUploadTask {
+  const failedCount = result.failed + (result.failedDirectories ?? 0)
   const reconciled = withCounts({
     ...task,
-    status: result.failed > 0 ? "failed" : "completed",
+    status: failedCount > 0 ? "failed" : "completed",
     finishedAt,
     message: result.message ?? null,
   })
   return {
     ...reconciled,
     completedItems: Math.max(reconciled.completedItems, result.completed + (result.completedDirectories ?? 0)),
-    failedItems: Math.max(reconciled.failedItems, result.failed),
+    failedItems: Math.max(reconciled.failedItems, failedCount),
     skippedItems: Math.max(reconciled.skippedItems, result.skipped),
   }
 }

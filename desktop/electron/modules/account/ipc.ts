@@ -551,6 +551,7 @@ const driveLocalUploadResultSchema = z.object({
   completed: z.number().int().nonnegative(),
   completedDirectories: z.number().int().nonnegative().optional(),
   failed: z.number().int().nonnegative(),
+  failedDirectories: z.number().int().nonnegative().optional(),
   skipped: z.number().int().nonnegative(),
   message: z.string().optional(),
 })

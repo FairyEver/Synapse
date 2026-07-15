@@ -1021,6 +1021,30 @@ describe("AccountService", () => {
     expect(service.completeDriveUpload).not.toHaveBeenCalled()
   })
 
+  it("reports directory-only folder prepare failures as failures", async () => {
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "prepareDriveFolderUpload").mockRejectedValue(new Error("network down"))
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: null,
+      items: [{
+        kind: "folder",
+        folderName: "项目A",
+        directories: [
+          { relativePath: "empty" },
+          { relativePath: "nested/leaf" },
+        ],
+        files: [],
+      }],
+    })).resolves.toEqual({
+      completed: 0,
+      failed: 0,
+      failedDirectories: 3,
+      skipped: 0,
+      message: "上传失败。",
+    })
+  })
+
   it("cleans up a newly prepared folder root when every local folder upload fails", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-folder-failed-"))
     const firstPath = path.join(dir, "a.md")

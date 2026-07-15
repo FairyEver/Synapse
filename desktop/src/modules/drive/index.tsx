@@ -570,7 +570,7 @@ function DriveModuleContent() {
       const resultWithSkipped = withSkipped(result, skipped)
       setUploadTask((current) => current?.id === taskId ? finishDriveUploadTask(current, resultWithSkipped) : current)
       const message = uploadResultMessage(resultWithSkipped)
-      if (resultWithSkipped.failed > 0) {
+      if (driveUploadFailedCount(resultWithSkipped) > 0) {
         toast.error(message, { duration: ERROR_NOTIFICATION_DURATION_MS })
       } else {
         toast(message)
@@ -3378,14 +3378,19 @@ function formatDriveShareAccessSummary(item: {
 
 function uploadResultMessage(result: DriveLocalUploadResult): string {
   const completedLabel = formatUploadCompleted(result)
-  if (result.failed === 0) {
+  const failedCount = driveUploadFailedCount(result)
+  if (failedCount === 0) {
     return result.skipped > 0
       ? `已上传 ${completedLabel}，跳过 ${result.skipped} 个`
       : `已上传 ${completedLabel}`
   }
   return result.message
-    ? `上传完成 ${completedLabel}，失败 ${result.failed} 个：${result.message}`
-    : `上传完成 ${completedLabel}，失败 ${result.failed} 个`
+    ? `上传完成 ${completedLabel}，失败 ${failedCount} 个：${result.message}`
+    : `上传完成 ${completedLabel}，失败 ${failedCount} 个`
+}
+
+function driveUploadFailedCount(result: DriveLocalUploadResult): number {
+  return result.failed + (result.failedDirectories ?? 0)
 }
 
 function withSkipped(result: DriveLocalUploadResult, skipped: number): DriveLocalUploadResult {

@@ -166,6 +166,38 @@ describe("DriveUploadTaskPanel", () => {
     expect(document.body.textContent).toContain("已完成3")
   })
 
+  it("shows directory-only prepare failures without an unavailable retry action", async () => {
+    const task = finishDriveUploadTask(createDriveUploadTask({
+      id: "upload-task-1",
+      destinationPath: "根目录",
+      parentId: null,
+      request: {
+        taskId: "upload-task-1",
+        parentId: null,
+        items: [{
+          kind: "folder",
+          folderName: "project",
+          directories: [{ relativePath: "docs" }, { relativePath: "docs/empty" }],
+          files: [],
+        }],
+      },
+      startedAt: 100,
+    }), { completed: 0, failed: 0, failedDirectories: 3, skipped: 0, message: "上传失败。" }, 200)
+
+    await render(
+      <DriveUploadTaskPanel
+        task={task}
+        open
+        onOpenChange={() => undefined}
+        onRetry={() => undefined}
+      />,
+    )
+
+    expect(document.body.textContent).toContain("上传失败")
+    expect(document.body.textContent).toContain("失败3")
+    expect(document.body.textContent).not.toContain("重试失败项")
+  })
+
   it("keeps upload status visible when paths are long", async () => {
     const longRelativePath = [
       "very-long-project-name-with-many-segments",
