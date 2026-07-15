@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, stat, symlink, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
@@ -11,6 +11,7 @@ import {
   readSkillRepositoryIdentityRaw,
   removeLegacySkillRepositoryIdentity,
   SkillRepositoryIdentityChangedError,
+  SkillRepositorySourceDirectoryChangedError,
   writeSkillRepositoryIdentity,
 } from "../skill-repository-local-identity"
 
@@ -139,7 +140,7 @@ describe("writeSkillRepositoryIdentity", () => {
     ])
   })
 
-  it("records failed audit when the atomic write fails after permission", async () => {
+  it("records failed audit when the source path is not a directory", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-id-failed-"))
     const filePath = path.join(dir, "not-a-directory")
     await writeFile(filePath, "occupied", "utf8")
@@ -157,6 +158,7 @@ describe("writeSkillRepositoryIdentity", () => {
       outcome: "failed",
       metadata: {
         operation: "skill-repository.identity.write",
+        reason: "source-directory-changed",
         repositoryId: "repo-1",
         repositoryName: "demo-skill",
       },
@@ -191,6 +193,16 @@ describe("writeSkillRepositoryIdentity", () => {
 
     await expect(readFile(targetPath, "utf8")).resolves.toBe(concurrentRaw)
     expect((await readdir(dir)).filter((entry) => entry.endsWith(".tmp"))).toEqual([])
+  })
+
+  it("does not recreate a source directory that disappeared before identity write", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-id-missing-"))
+    await rm(dir, { recursive: true })
+
+    await expect(writeSkillRepositoryIdentity(dir, identity, null))
+      .rejects.toBeInstanceOf(SkillRepositorySourceDirectoryChangedError)
+
+    await expect(stat(dir)).rejects.toMatchObject({ code: "ENOENT" })
   })
 })
 

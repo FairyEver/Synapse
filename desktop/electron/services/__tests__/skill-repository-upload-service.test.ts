@@ -311,6 +311,25 @@ describe("SkillRepositoryUploadService", () => {
     )
   })
 
+  it("keeps cloud upload success recoverable when the local source changes during import", async () => {
+    readSkillDraftFromDirectory
+      .mockResolvedValueOnce(skillDraft())
+      .mockResolvedValueOnce(skillDraft({ sourceFingerprint: "sha256:changed" }))
+    const importSkillRepository = vi.fn(async () => repositoryDetail())
+    const service = new SkillRepositoryUploadService({
+      accountService: { getState: () => authenticatedState, importSkillRepository },
+    })
+
+    await expect(service.importLocal({ sourceDirectoryPath: "/skills/demo" })).resolves.toMatchObject({
+      repositoryId: "repo-1",
+      identityWritten: false,
+      identityWriteError: "本地 Skill 在上传期间发生变化，请重新扫描后再关联。",
+      identityBeforeUploadId: null,
+    })
+    expect(importSkillRepository).toHaveBeenCalled()
+    expect(writeSkillRepositoryIdentity).not.toHaveBeenCalled()
+  })
+
   it("retries only the local identity write without importing the cloud repository again", async () => {
     const importSkillRepository = vi.fn()
     const service = new SkillRepositoryUploadService({

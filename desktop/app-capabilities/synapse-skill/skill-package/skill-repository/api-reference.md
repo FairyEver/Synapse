@@ -67,7 +67,7 @@ Returns the repository id, repository name, owner handle, management URL, and lo
 }
 ```
 
-If `identityWritten` is false, the cloud upload succeeded but Synapse could not write `.synapse.repository.json` locally. This includes a concurrent local identity change detected after the cloud upload started. The result may include `identityWriteError`. `identityMigrated` reports successful legacy identity migration; cleanup problems appear as `identityMigrationWarning` without changing the successful cloud upload result.
+If `identityWritten` is false, the cloud upload succeeded but Synapse could not write `.synapse.repository.json` locally. This includes a source directory that was removed or changed and a concurrent local identity change detected after the cloud upload started. Synapse does not recreate a missing source directory. The result may include `identityWriteError`. `identityMigrated` reports successful legacy identity migration; cleanup problems appear as `identityMigrationWarning` without changing the successful cloud upload result.
 
 ## Update Local Skill
 

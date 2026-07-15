@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { constants, type BigIntStats } from "node:fs"
-import { lstat, mkdir, open, realpath, rename, rm, writeFile } from "node:fs/promises"
+import { lstat, open, realpath, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
@@ -34,6 +34,13 @@ export class SkillRepositoryIdentityChangedError extends Error {
   }
 }
 
+export class SkillRepositorySourceDirectoryChangedError extends Error {
+  constructor() {
+    super("本地 Skill 在上传期间发生变化，请重新扫描后再关联。")
+    this.name = "SkillRepositorySourceDirectoryChangedError"
+  }
+}
+
 export async function ensureSkillRepositoryIdentityWriteAllowed(
   sourceDirectoryPath: string,
   security?: SkillRepositoryIdentityWriteSecurity,
@@ -61,11 +68,15 @@ export async function writeSkillRepositoryIdentity(
   if (security) await checkIdentityWritePermission(security, targetPath, metadata)
 
   try {
-    await mkdir(sourceDirectoryPath, { recursive: true })
+    const expectedSourceDirectory = await inspectSourceDirectory(sourceDirectoryPath)
     tempPath = path.join(sourceDirectoryPath, `${SKILL_REPOSITORY_ID_FILE_NAME}.${randomUUID()}.tmp`)
     await writeFile(tempPath, `${JSON.stringify(identity, null, 2)}\n`, "utf8")
     const currentRaw = await readSkillRepositoryIdentityRaw(sourceDirectoryPath)
     if (currentRaw !== expectedRaw) throw new SkillRepositoryIdentityChangedError()
+    const currentSourceDirectory = await inspectSourceDirectory(sourceDirectoryPath)
+    if (!sameDirectoryIdentity(expectedSourceDirectory, currentSourceDirectory)) {
+      throw new SkillRepositorySourceDirectoryChangedError()
+    }
     await rename(tempPath, targetPath)
     tempPath = null
     recordIdentityAudit(security, "fs.write", targetPath, "allowed", metadata)
@@ -73,9 +84,28 @@ export async function writeSkillRepositoryIdentity(
     if (tempPath) {
       await rm(tempPath, { force: true }).catch(() => undefined)
     }
-    recordIdentityAudit(security, "fs.write", targetPath, "failed", metadata)
+    recordIdentityAudit(security, "fs.write", targetPath, "failed", {
+      ...metadata,
+      ...(error instanceof SkillRepositorySourceDirectoryChangedError
+        ? { reason: "source-directory-changed" }
+        : {}),
+    })
     throw error
   }
+}
+
+async function inspectSourceDirectory(sourceDirectoryPath: string): Promise<BigIntStats> {
+  let sourceDirectory: BigIntStats
+  try {
+    sourceDirectory = await lstat(sourceDirectoryPath, { bigint: true })
+  } catch (error) {
+    if (isFileNotFoundError(error)) throw new SkillRepositorySourceDirectoryChangedError()
+    throw error
+  }
+  if (sourceDirectory.isSymbolicLink() || !sourceDirectory.isDirectory()) {
+    throw new SkillRepositorySourceDirectoryChangedError()
+  }
+  return sourceDirectory
 }
 
 export async function readSkillRepositoryIdentityRaw(
@@ -303,6 +333,12 @@ function sameFileSnapshot(expected: BigIntStats, actual: BigIntStats): boolean {
     && expected.size === actual.size
     && expected.mtimeNs === actual.mtimeNs
     && expected.ctimeNs === actual.ctimeNs
+}
+
+function sameDirectoryIdentity(expected: BigIntStats, actual: BigIntStats): boolean {
+  return expected.dev === actual.dev
+    && expected.ino === actual.ino
+    && expected.mode === actual.mode
 }
 
 function isPathInside(rootPath: string, targetPath: string): boolean {

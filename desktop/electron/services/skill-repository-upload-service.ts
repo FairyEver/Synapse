@@ -147,6 +147,17 @@ export class SkillRepositoryUploadService {
     let identityMigrated = false
     let identityMigrationWarning: string | undefined
     try {
+      const currentSource = await readSkillDraftFromDirectory(
+        source.sourceDirectoryPath,
+        security,
+        { mode: "publish" },
+      )
+      if (
+        path.basename(currentSource.mainFilePath) !== "SKILL.md"
+        || currentSource.sourceFingerprint !== source.sourceFingerprint
+      ) {
+        throw new Error("本地 Skill 在上传期间发生变化，请重新扫描后再关联。")
+      }
       await this.writeIdentity(source.sourceDirectoryPath, {
         id: repository.id,
         kind: "cloud-skill-repository",

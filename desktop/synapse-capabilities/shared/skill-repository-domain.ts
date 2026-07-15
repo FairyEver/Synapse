@@ -123,8 +123,8 @@ const repositoryNameProperty = {
 
 const handleRequiredInstruction =
   "If the server returns USER_HANDLE_REQUIRED, ask the user to set their username. Do not set username automatically."
-const identityConflictInstruction =
-  "If .synapse.repository.json changes while the cloud upload is running, Synapse preserves the newer local identity and returns identityWritten=false."
+const localAssociationConflictInstruction =
+  "If the source directory or .synapse.repository.json changes while the cloud upload is running, Synapse preserves the newer local state, does not recreate a missing directory, and returns identityWritten=false."
 
 export function buildSkillRepositoryTools(): McpToolDefinition[] {
   return [
@@ -149,7 +149,7 @@ export function buildSkillRepositoryTools(): McpToolDefinition[] {
     },
     {
       name: "app_skill_repository_import_local",
-      description: `Upload a local Skill as a private cloud Skill repository. A local .synapse.repository.json or legacy .synapse.json identity must be a regular non-symlink file inside the Skill directory; untrusted identity files stop the upload before any cloud update. ${identityConflictInstruction} ${handleRequiredInstruction}`,
+      description: `Upload a local Skill as a private cloud Skill repository. A local .synapse.repository.json or legacy .synapse.json identity must be a regular non-symlink file inside the Skill directory; untrusted identity files stop the upload before any cloud update. ${localAssociationConflictInstruction} ${handleRequiredInstruction}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -164,7 +164,7 @@ export function buildSkillRepositoryTools(): McpToolDefinition[] {
     },
     {
       name: "app_skill_repository_update_local",
-      description: `Upload a local Skill into an existing private cloud Skill repository. ${identityConflictInstruction} ${handleRequiredInstruction}`,
+      description: `Upload a local Skill into an existing private cloud Skill repository. ${localAssociationConflictInstruction} ${handleRequiredInstruction}`,
       inputSchema: {
         type: "object",
         properties: {
