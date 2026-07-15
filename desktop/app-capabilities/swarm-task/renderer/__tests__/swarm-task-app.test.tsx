@@ -637,15 +637,16 @@ describe("SwarmTaskModule", () => {
     expect((await waitForButton("运行任务")).disabled).toBe(false)
   })
 
-  it("allows absolute file write paths before saving", async () => {
+  it("rejects absolute file write paths before saving", async () => {
     await renderModule()
     await clickTab("配置")
 
     await clickSwitch("文件写入")
     await setInputValue(await waitForInput("文件路径"), "/Users/liyang/Downloads/demo.md")
 
-    expect((await waitForButton("保存配置")).disabled).toBe(false)
-    expect((await waitForButton("运行任务")).disabled).toBe(false)
+    expect((await waitForButton("保存配置")).disabled).toBe(true)
+    expect((await waitForButton("运行任务")).disabled).toBe(true)
+    expect(document.body.textContent).toContain("请输入不含 .. 的项目相对路径")
   })
 
   it("rejects file write paths with parent traversal before saving", async () => {
@@ -657,7 +658,7 @@ describe("SwarmTaskModule", () => {
 
     expect((await waitForButton("保存配置")).disabled).toBe(true)
     expect((await waitForButton("运行任务")).disabled).toBe(true)
-    expect(document.body.textContent).toContain("路径不能包含 ..")
+    expect(document.body.textContent).toContain("请输入不含 .. 的项目相对路径")
 
     await clickButton("保存配置")
     await clickButton("运行任务")

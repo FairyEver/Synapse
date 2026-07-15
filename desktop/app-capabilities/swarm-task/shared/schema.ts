@@ -38,6 +38,7 @@ export function isSwarmFileWritePathAllowed(value: string): boolean {
   const normalizedPath = value.trim()
   if (!normalizedPath) return true
   if (normalizedPath.includes("\0")) return false
+  if (/^(?:[\\/]|[A-Za-z]:)/.test(normalizedPath)) return false
   return !normalizedPath.split(/[\\/]+/).includes("..")
 }
 

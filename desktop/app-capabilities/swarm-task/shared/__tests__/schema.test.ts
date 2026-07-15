@@ -52,20 +52,27 @@ describe("swarmTaskConfigSchema", () => {
     expect(parsed.maxRounds).toBe(3)
   })
 
-  it("accepts project-relative and absolute file write paths", () => {
+  it("accepts project-relative file write paths", () => {
     expect(swarmTaskConfigSchema.parse(baseConfig).promptInjection.fileWrite.path)
       .toBe("reports/swarm.md")
+  })
 
-    expect(swarmTaskConfigSchema.parse({
+  it.each([
+    "/Users/liyang/Downloads/demo.md",
+    "C:\\Users\\liyang\\Downloads\\demo.md",
+    "C:Downloads\\demo.md",
+    "\\\\server\\share\\demo.md",
+  ])("rejects non-project-relative file write path %s", (fileWritePath) => {
+    expect(() => swarmTaskConfigSchema.parse({
       ...baseConfig,
       promptInjection: {
         ...baseConfig.promptInjection,
         fileWrite: {
           ...baseConfig.promptInjection.fileWrite,
-          path: "/Users/liyang/Downloads/demo.md",
+          path: fileWritePath,
         },
       },
-    }).promptInjection.fileWrite.path).toBe("/Users/liyang/Downloads/demo.md")
+    })).toThrow()
   })
 
   it("rejects parent traversal in file write paths", () => {

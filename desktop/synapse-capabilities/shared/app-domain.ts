@@ -315,7 +315,7 @@ const swarmTaskConfigSchema = {
           type: "object",
           properties: {
             enabled: booleanField("Inject file write instructions."),
-            path: stringField("Project-relative or absolute target file path.", { maxLength: 4096 }),
+            path: stringField("Project-relative target file path. Absolute paths and parent traversal are rejected.", { maxLength: 4096 }),
             mode: {
               type: "string",
               enum: ["append-only", "section-update", "free-edit"],

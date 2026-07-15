@@ -469,6 +469,24 @@ describe("createSwarmTaskService", () => {
     expect(gateway.sendWorker).not.toHaveBeenCalled()
   })
 
+  it("rejects absolute file write path overrides before workers start", async () => {
+    const { service, gateway } = serviceHarness()
+    const task = await service.createTask({ name: "任务", config })
+
+    await expect(service.startRun({
+      taskId: task.id,
+      configOverride: {
+        promptInjection: {
+          fileWrite: {
+            enabled: true,
+            path: "/tmp/swarm-result.md",
+          },
+        },
+      },
+    })).rejects.toThrow("file write path is invalid")
+    expect(gateway.sendWorker).not.toHaveBeenCalled()
+  })
+
   it("merges nested partial config overrides into a full snapshot", async () => {
     const { service } = serviceHarness()
     const task = await service.createTask({

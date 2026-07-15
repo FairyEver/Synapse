@@ -275,9 +275,9 @@ export function SwarmTaskConfigForm({
                     },
                   })}
                 />
-                <p className="text-xs text-muted-foreground">项目相对路径或绝对路径</p>
+                <p className="text-xs text-muted-foreground">项目相对路径</p>
                 {fileWritePathInvalid ? (
-                  <p className="text-xs text-destructive">路径不能包含 ..</p>
+                  <p className="text-xs text-destructive">请输入不含 .. 的项目相对路径</p>
                 ) : null}
               </FieldContent>
             </Field>
