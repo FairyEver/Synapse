@@ -3155,6 +3155,30 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已删除")
   })
 
+  it("ignores repeated Alt-click deletes while the item is pending", async () => {
+    const deletion = createDeferred<void>()
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
+    ])
+    mocks.deleteDriveItem.mockReturnValueOnce(deletion.promise)
+    await render(<DriveModule />)
+    await flushAct()
+
+    const deleteButton = rowButton("report.txt", "删除")
+    if (!deleteButton) throw new Error("Delete button not found")
+    await act(async () => {
+      deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, altKey: true }))
+      deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, altKey: true }))
+      await flushPromises()
+    })
+
+    expect(mocks.deleteDriveItem).toHaveBeenCalledTimes(1)
+    expect(rowButton("report.txt", "删除")?.disabled).toBe(true)
+
+    deletion.resolve()
+    await flushAct()
+  })
+
   it("defaults public link management to the share list without publication tabs", async () => {
     mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
       createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),

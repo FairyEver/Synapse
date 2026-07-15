@@ -316,6 +316,11 @@ function DriveModuleContent() {
     busyIdsRef: disablingShareIdsRef,
     setBusyId: setDisablingShareId,
   } = useBusyIdSet()
+  const {
+    busyIds: deletingItemIds,
+    busyIdsRef: deletingItemIdsRef,
+    setBusyId: setDeletingItemId,
+  } = useBusyIdSet()
   const [submitting, setSubmitting] = useState(false)
   const [uploadTask, setUploadTask] = useState<DriveUploadTask | null>(null)
   const [uploadPanelOpen, setUploadPanelOpen] = useState(false)
@@ -680,6 +685,8 @@ function DriveModuleContent() {
   }, [loadItems, moveParentId, moveTarget])
 
   const deleteDriveItem = useCallback(async (item: DriveItemDto): Promise<boolean> => {
+    if (deletingItemIdsRef.current.has(item.id)) return false
+    setDeletingItemId(item.id, true)
     setSubmitting(true)
     try {
       await requireSynapseBridge().account.deleteDriveItem({
@@ -693,9 +700,10 @@ function DriveModuleContent() {
       toast(errorMessage(rawError, "删除失败"))
       return false
     } finally {
+      setDeletingItemId(item.id, false)
       setSubmitting(false)
     }
-  }, [loadDriveUsage, loadItems])
+  }, [deletingItemIdsRef, loadDriveUsage, loadItems, setDeletingItemId])
 
   const handleDelete = useCallback((item: DriveItemDto, event?: Pick<MouseEvent<HTMLElement>, "altKey">) => {
     if (event && shouldBypassDeleteConfirm(event)) {
@@ -955,6 +963,7 @@ function DriveModuleContent() {
         onOpenShareDetails={handleOpenShareDetails}
         onDisableShare={handleDisableShare}
         disablingShareIds={disablingShareIds}
+        deletingItemIds={deletingItemIds}
         onUploadDroppedFiles={handleDroppedFiles}
         uploadDisabled={uploadActionsDisabled}
       />
@@ -1534,6 +1543,7 @@ function DriveFileList({
   onOpenShareDetails,
   onDisableShare,
   disablingShareIds,
+  deletingItemIds,
   onUploadDroppedFiles,
   uploadDisabled,
 }: {
@@ -1558,6 +1568,7 @@ function DriveFileList({
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly disablingShareIds: ReadonlySet<string>
+  readonly deletingItemIds: ReadonlySet<string>
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
   readonly uploadDisabled: boolean
 }) {
@@ -1641,6 +1652,7 @@ function DriveFileList({
                   onOpenShareDetails={onOpenShareDetails}
                   onDisableShare={onDisableShare}
                   disablingShare={item.activeShareId ? disablingShareIds.has(item.activeShareId) : false}
+                  deleting={deletingItemIds.has(item.id)}
                 />
               ))}
             </TableBody>
@@ -1887,6 +1899,7 @@ function DriveFileListRow({
   onOpenShareDetails,
   onDisableShare,
   disablingShare,
+  deleting,
 }: {
   readonly drivePath: string
   readonly item: DriveItemDto
@@ -1902,6 +1915,7 @@ function DriveFileListRow({
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly disablingShare: boolean
+  readonly deleting: boolean
 }) {
   const isFolder = item.type === "folder"
   const statusBadges = getDriveStatusBadges(item)
@@ -2020,7 +2034,7 @@ function DriveFileListRow({
           <Button type="button" variant="ghost" size="xs" disabled={!canOpen} onClick={() => onOpenItem(item)}>
             预览
           </Button>
-          <Button type="button" variant="ghost" size="xs" onClick={(event) => onDelete(item, event)}>
+          <Button type="button" variant="ghost" size="xs" disabled={deleting} onClick={(event) => onDelete(item, event)}>
             删除
           </Button>
           <DriveItemMenu
