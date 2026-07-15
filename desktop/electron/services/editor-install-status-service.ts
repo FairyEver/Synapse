@@ -181,24 +181,35 @@ export class EditorInstallStatusService {
       (adapter) => adapter.supportsGlobal && adapter.supportedContentTypes.includes("skill"),
     )
     const entries = await Promise.all(adapters.map(async (adapter) => {
-      const config = adapter.getScanPathConfig()
-      const globalSkillPaths = config.globalSkillPaths
-        ?? (config.globalSkillsPath ? [config.globalSkillsPath] : [])
-      const [target, scan] = await Promise.all([
-        editorAdapterService.resolveTarget(createResolvePayload(payload, adapter.id, "global")),
-        scanSkillDirectories(globalSkillPaths),
-      ])
-      if (scan.skillScanError) {
-        throw new Error(`${adapter.label} 全局 Skill 检测失败：${scan.skillScanError}`)
-      }
+      try {
+        const config = adapter.getScanPathConfig()
+        const globalSkillPaths = config.globalSkillPaths
+          ?? (config.globalSkillsPath ? [config.globalSkillsPath] : [])
+        const [target, scan] = await Promise.all([
+          editorAdapterService.resolveTarget(createResolvePayload(payload, adapter.id, "global")),
+          scanSkillDirectories(globalSkillPaths),
+        ])
+        if (scan.skillScanError) {
+          throw new Error(`${adapter.label} 全局 Skill 检测失败：${scan.skillScanError}`)
+        }
 
-      return createEntry({
-        editorId: adapter.id,
-        editorLabel: adapter.label,
-        scope: "global",
-        target,
-        scanStatus: statusFromSkill(findByContentIdOrName(scan.skills, payload), payload),
-      })
+        return createEntry({
+          editorId: adapter.id,
+          editorLabel: adapter.label,
+          scope: "global",
+          target,
+          scanStatus: statusFromSkill(findByContentIdOrName(scan.skills, payload), payload),
+        })
+      } catch (error) {
+        return {
+          editorId: adapter.id,
+          editorLabel: adapter.label,
+          scope: "global" as const,
+          status: "unavailable" as const,
+          targetPath: null,
+          message: error instanceof Error ? error.message : `${adapter.label} 全局 Skill 检测失败`,
+        }
+      }
     }))
 
     return { entries }

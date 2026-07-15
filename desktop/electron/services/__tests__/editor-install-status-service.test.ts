@@ -163,21 +163,27 @@ describe("EditorInstallStatusService", () => {
     expect(result.entries[0]?.status).toBe(expectedStatus)
   })
 
-  it("fails global inspection when a Skill root cannot be scanned", async () => {
+  it("marks only the editor unavailable when its Skill root cannot be scanned", async () => {
     mocks.scanSkillDirectories.mockResolvedValue({
       skills: [],
       duplicateSkillNames: [],
       skillScanError: "Skill 目录读取失败",
     })
 
-    await expect(new EditorInstallStatusService().resolveGlobalSkillInstallations({
+    const result = await new EditorInstallStatusService().resolveGlobalSkillInstallations({
       contentType: "skill",
       contentId: "synapse-skill",
       contentName: "synapse-skill",
       title: "Synapse Skill",
       sourceFingerprint: "sha256:current",
       projects: [],
-    })).rejects.toThrow("Codex 全局 Skill 检测失败")
+    })
+
+    expect(result.entries).toContainEqual(expect.objectContaining({
+      editorId: "codex",
+      status: "unavailable",
+      message: expect.stringContaining("Codex 全局 Skill 检测失败"),
+    }))
   })
 
   it("marks a Codex project rule with the same synapse content id and content as installed", async () => {
