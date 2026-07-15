@@ -1234,6 +1234,7 @@ export class ConversationRouter {
     await new Promise<void>((resolve) => {
       let settled = false
       const abort = (): void => {
+        if (!this.sessionManager.claimPendingPermissionResolution(pending)) return
         this.sessionManager.settlePendingPermission(pending)
         if (isAskUserQuestionEvent(event)) {
           const status = String(abortSignal?.reason ?? "").includes("timeout")
@@ -1276,7 +1277,7 @@ export class ConversationRouter {
         return
       }
       timeout = setTimeout(() => {
-        if (settled) return
+        if (settled || !this.sessionManager.claimPendingPermissionResolution(pending)) return
         liveSession.respondPermission(event.requestId, {
           behavior: "deny",
           message: permissionTimeoutMessage(event),

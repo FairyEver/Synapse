@@ -529,6 +529,20 @@ export class SessionManager {
     pending.resolve()
   }
 
+  claimPendingPermissionResolution(pending: PendingPermissionState): boolean {
+    if (this.deps.pendingPermissions.get(pending.requestId) !== pending || pending.resolutionClaimed) {
+      return false
+    }
+    pending.resolutionClaimed = true
+    return true
+  }
+
+  releasePendingPermissionResolution(pending: PendingPermissionState): void {
+    if (this.deps.pendingPermissions.get(pending.requestId) === pending) {
+      pending.resolutionClaimed = false
+    }
+  }
+
   settleQueued(state: RuntimeSessionState | undefined): void {
     if (!state) return
     const queued = state.queue.splice(0)

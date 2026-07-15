@@ -821,95 +821,111 @@ export class AgentRuntimeService {
     }
 
     if (isAskUserQuestionTool(pending.toolName)) {
-      let updatedInput: Record<string, unknown> | undefined
+      if (!this.sessionManager.claimPendingPermissionResolution(pending)) {
+        throw new Error(AGENT_PERMISSION_NOT_PENDING_MESSAGE)
+      }
       try {
-        updatedInput = askUserQuestionUpdatedInput(pending, request)
-      } catch (error) {
-        await this.persistUserQuestionResolution(pending, {
-          status: "skipped",
-          resolvedAt: this.isoNow(),
-        }, true)
+        let updatedInput: Record<string, unknown> | undefined
+        try {
+          updatedInput = askUserQuestionUpdatedInput(pending, request)
+        } catch (error) {
+          await this.persistUserQuestionResolution(pending, {
+            status: "skipped",
+            resolvedAt: this.isoNow(),
+          }, true)
+          await pending.liveSession.respondPermission(request.requestId, {
+            behavior: "deny",
+            message: ASK_USER_QUESTION_EMPTY_ANSWER_MESSAGE,
+          })
+          this.sessionManager.settlePendingPermission(pending)
+          throw error
+        }
+        await this.persistUserQuestionResolution(
+          pending,
+          askUserQuestionResolution(pending, request, this.isoNow()),
+          true,
+        )
         await pending.liveSession.respondPermission(request.requestId, {
-          behavior: "deny",
-          message: ASK_USER_QUESTION_EMPTY_ANSWER_MESSAGE,
+          behavior: request.behavior,
+          updatedInput,
+          message: askUserQuestionResponseMessage(request),
         })
         this.sessionManager.settlePendingPermission(pending)
+        return
+      } catch (error) {
+        this.sessionManager.releasePendingPermissionResolution(pending)
         throw error
       }
-      await this.persistUserQuestionResolution(
-        pending,
-        askUserQuestionResolution(pending, request, this.isoNow()),
-        true,
-      )
-      await pending.liveSession.respondPermission(request.requestId, {
-        behavior: request.behavior,
-        updatedInput,
-        message: askUserQuestionResponseMessage(request),
-      })
-      this.sessionManager.settlePendingPermission(pending)
-      return
     }
 
     if (request.updatedInput !== undefined) {
       throw new Error(AGENT_PERMISSION_UPDATED_INPUT_UNSUPPORTED_MESSAGE)
     }
+    if (!this.sessionManager.claimPendingPermissionResolution(pending)) {
+      throw new Error(AGENT_PERMISSION_NOT_PENDING_MESSAGE)
+    }
 
     const action = permissionActionForTool(pending.toolName)
     const resource = pending.toolInput ?? pending.toolName
 
-    if (request.behavior === "allow") {
-      if (request.actor.kind !== "user") {
-        const reason = "Only a user actor can allow an agent permission request"
-        this.recordPermissionAudit(action, request.actor, resource, "denied", pending, {
-          reason: "non-user actors cannot allow agent permission requests",
-        })
-        await this.denyAndSettlePendingPermission(pending, request, action, resource, reason)
-        throw new Error(reason)
-      }
-      if (this.deps.permissionGuard) {
-        const permission = await this.deps.permissionGuard.check({
-          action,
-          actor: request.actor,
-          resource,
-          context: {
-            projectId: pending.projectId,
-            sessionKey: pending.sessionKey,
-            requestId: pending.requestId,
-            toolName: pending.toolName,
-            toolInputRaw: pending.toolInputRaw,
-          },
-        })
-        if (!permission.allowed) {
+    try {
+      if (request.behavior === "allow") {
+        if (request.actor.kind !== "user") {
+          const reason = "Only a user actor can allow an agent permission request"
           this.recordPermissionAudit(action, request.actor, resource, "denied", pending, {
-            reason: permission.reason,
-            policyId: permission.policyId,
+            reason: "non-user actors cannot allow agent permission requests",
           })
-          await this.denyAndSettlePendingPermission(pending, request, action, resource, permission.reason)
-          throw new Error(permission.reason)
+          await this.denyAndSettlePendingPermission(pending, request, action, resource, reason)
+          throw new Error(reason)
+        }
+        if (this.deps.permissionGuard) {
+          const permission = await this.deps.permissionGuard.check({
+            action,
+            actor: request.actor,
+            resource,
+            context: {
+              projectId: pending.projectId,
+              sessionKey: pending.sessionKey,
+              requestId: pending.requestId,
+              toolName: pending.toolName,
+              toolInputRaw: pending.toolInputRaw,
+            },
+          })
+          if (!permission.allowed) {
+            this.recordPermissionAudit(action, request.actor, resource, "denied", pending, {
+              reason: permission.reason,
+              policyId: permission.policyId,
+            })
+            await this.denyAndSettlePendingPermission(pending, request, action, resource, permission.reason)
+            throw new Error(permission.reason)
+          }
         }
       }
-    }
 
-    try {
-      await pending.liveSession.respondPermission(request.requestId, {
-        behavior: request.behavior,
-        updatedInput: request.updatedInput,
-        message: request.message,
-      })
-      this.recordPermissionAudit(
-        action,
-        request.actor,
-        resource,
-        request.behavior === "allow" ? "allowed" : "denied",
-        pending,
-        { behavior: request.behavior },
-      )
-      this.sessionManager.settlePendingPermission(pending)
+      try {
+        await pending.liveSession.respondPermission(request.requestId, {
+          behavior: request.behavior,
+          updatedInput: request.updatedInput,
+          message: request.message,
+        })
+        this.recordPermissionAudit(
+          action,
+          request.actor,
+          resource,
+          request.behavior === "allow" ? "allowed" : "denied",
+          pending,
+          { behavior: request.behavior },
+        )
+        this.sessionManager.settlePendingPermission(pending)
+      } catch (error) {
+        this.recordPermissionAudit(action, request.actor, resource, "failed", pending, {
+          behavior: request.behavior,
+          ...summarizePermissionResponseError(error),
+        })
+        throw error
+      }
     } catch (error) {
-      this.recordPermissionAudit(action, request.actor, resource, "failed", pending, {
-        behavior: request.behavior,
-        ...summarizePermissionResponseError(error),
-      })
+      this.sessionManager.releasePendingPermissionResolution(pending)
       throw error
     }
   }

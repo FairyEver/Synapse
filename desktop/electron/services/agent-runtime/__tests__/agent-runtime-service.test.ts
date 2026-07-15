@@ -1023,6 +1023,53 @@ describe("AgentRuntimeService", () => {
     }))
   })
 
+  it("lets a claimed AskUserQuestion answer win when its timeout fires during persistence", async () => {
+    const conversations = new BlockingQuestionResolutionNamespace()
+    const questions = [{
+      question: "继续吗？",
+      options: [{ label: "继续" }],
+      multiSelect: false,
+    }]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "continued after answer")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      permissionTimeoutMs: 25,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs answer"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+    const response = service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      updatedInput: { answers: { "question-0": "继续" } },
+      actor: { kind: "user" },
+    })
+
+    await conversations.waitForResolutionWrite()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(session.responses).toEqual([])
+    conversations.releaseResolutionWrite()
+
+    await response
+    const result = await turn
+    expect(session.responses).toEqual([{
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      updatedInput: {
+        questions,
+        answers: { "继续吗？": "继续" },
+      },
+    }])
+    const stored = await conversations.get(result.conversationId)
+    expect(stored?.history.find((entry) => entry.metadata?.requestId === "conversation-a-permission-1")?.metadata)
+      .toMatchObject({ userQuestionResolution: { status: "answered" } })
+  })
+
   it("keeps AskUserQuestion pending when its answer cannot be persisted", async () => {
     const conversations = new FailingQuestionResolutionNamespace()
     const logger = {

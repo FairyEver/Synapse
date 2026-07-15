@@ -45,6 +45,7 @@ export interface QueuedTurn {
 export interface PendingPermissionState extends AgentPendingPermission {
   readonly stateKey: string
   readonly liveSession: AgentLiveSession
+  resolutionClaimed?: boolean
   resolve(): void
 }
 
