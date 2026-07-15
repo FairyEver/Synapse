@@ -147,7 +147,7 @@ export function buildSkillRepositoryTools(): McpToolDefinition[] {
     },
     {
       name: "app_skill_repository_import_local",
-      description: `Upload a local Skill as a private cloud Skill repository. ${handleRequiredInstruction}`,
+      description: `Upload a local Skill as a private cloud Skill repository. A local .synapse.repository.json or legacy .synapse.json identity must be a regular non-symlink file inside the Skill directory; untrusted identity files stop the upload before any cloud update. ${handleRequiredInstruction}`,
       inputSchema: {
         type: "object",
         properties: {

@@ -183,7 +183,7 @@ describe("SkillRepositoryUploadService", () => {
 
     await service.importLocal({ sourceDirectoryPath: "/skills/demo" })
 
-    expect(readSkillRepositoryIdentity).toHaveBeenCalledWith("/skills/demo")
+    expect(readSkillRepositoryIdentity).toHaveBeenCalledWith("/skills/demo", undefined)
     expect(importSkillRepository).toHaveBeenCalledWith(expect.objectContaining({
       repositoryId: "repo-local",
     }))
@@ -239,6 +239,21 @@ describe("SkillRepositoryUploadService", () => {
       .rejects.toThrow("denied by policy")
 
     expect(ensureSkillRepositoryIdentityWriteAllowed).toHaveBeenCalledWith("/skills/demo", undefined)
+    expect(importSkillRepository).not.toHaveBeenCalled()
+  })
+
+  it("stops before cloud import when the local identity is untrusted", async () => {
+    readSkillRepositoryIdentity.mockReset()
+    readSkillRepositoryIdentity.mockRejectedValue(new Error("Skill 云仓库身份文件不能是符号链接"))
+    const importSkillRepository = vi.fn()
+    const service = new SkillRepositoryUploadService({
+      accountService: { getState: () => authenticatedState, importSkillRepository },
+    })
+
+    await expect(service.importLocal({ sourceDirectoryPath: "/skills/demo" }))
+      .rejects.toThrow("身份文件不能是符号链接")
+
+    expect(ensureSkillRepositoryIdentityWriteAllowed).not.toHaveBeenCalled()
     expect(importSkillRepository).not.toHaveBeenCalled()
   })
 

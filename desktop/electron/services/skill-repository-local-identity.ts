@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { constants, type BigIntStats } from "node:fs"
+import { lstat, mkdir, open, realpath, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
@@ -21,6 +22,8 @@ export type SkillRepositoryIdentityWriteSecurity = {
   readonly auditSink: Pick<AuditSink, "record">
   readonly permissionGuard: Pick<PermissionGuard, "check">
 }
+
+export type SkillRepositoryIdentityReadSecurity = SkillRepositoryIdentityWriteSecurity
 
 type SkillRepositoryIdentityAuditOutcome = "allowed" | "denied" | "failed"
 
@@ -55,20 +58,33 @@ export async function writeSkillRepositoryIdentity(
     await writeFile(tempPath, `${JSON.stringify(identity, null, 2)}\n`, "utf8")
     await rename(tempPath, targetPath)
     tempPath = null
-    recordIdentityAudit(security, targetPath, "allowed", metadata)
+    recordIdentityAudit(security, "fs.write", targetPath, "allowed", metadata)
   } catch (error) {
     if (tempPath) {
       await rm(tempPath, { force: true }).catch(() => undefined)
     }
-    recordIdentityAudit(security, targetPath, "failed", metadata)
+    recordIdentityAudit(security, "fs.write", targetPath, "failed", metadata)
     throw error
   }
 }
 
-export async function readSkillRepositoryIdentity(sourceDirectoryPath: string): Promise<SkillRepositoryIdentity | null> {
-  const current = await readIdentityFile(path.join(sourceDirectoryPath, SKILL_REPOSITORY_ID_FILE_NAME))
+export async function readSkillRepositoryIdentity(
+  sourceDirectoryPath: string,
+  security?: SkillRepositoryIdentityReadSecurity,
+): Promise<SkillRepositoryIdentity | null> {
+  const current = await readIdentityFile(
+    sourceDirectoryPath,
+    SKILL_REPOSITORY_ID_FILE_NAME,
+    "current",
+    security,
+  )
   if (current) return current
-  return readIdentityFile(path.join(sourceDirectoryPath, LEGACY_SKILL_REPOSITORY_ID_FILE_NAME))
+  return readIdentityFile(
+    sourceDirectoryPath,
+    LEGACY_SKILL_REPOSITORY_ID_FILE_NAME,
+    "legacy",
+    security,
+  )
 }
 
 export async function removeLegacySkillRepositoryIdentity(
@@ -76,7 +92,12 @@ export async function removeLegacySkillRepositoryIdentity(
   security?: SkillRepositoryIdentityWriteSecurity,
 ): Promise<boolean> {
   const legacyPath = path.join(sourceDirectoryPath, LEGACY_SKILL_REPOSITORY_ID_FILE_NAME)
-  const legacyIdentity = await readIdentityFile(legacyPath)
+  const legacyIdentity = await readIdentityFile(
+    sourceDirectoryPath,
+    LEGACY_SKILL_REPOSITORY_ID_FILE_NAME,
+    "legacy",
+    security,
+  )
   if (!legacyIdentity) return false
 
   const metadata = {
@@ -87,20 +108,49 @@ export async function removeLegacySkillRepositoryIdentity(
 
   try {
     await rm(legacyPath)
-    recordIdentityAudit(security, legacyPath, "allowed", metadata)
+    recordIdentityAudit(security, "fs.write", legacyPath, "allowed", metadata)
     return true
   } catch (error) {
-    recordIdentityAudit(security, legacyPath, "failed", metadata)
+    recordIdentityAudit(security, "fs.write", legacyPath, "failed", metadata)
     throw error
   }
 }
 
-async function readIdentityFile(filePath: string): Promise<SkillRepositoryIdentity | null> {
-  let raw: string
+async function readIdentityFile(
+  sourceDirectoryPath: string,
+  fileName: string,
+  identitySource: "current" | "legacy",
+  security?: SkillRepositoryIdentityReadSecurity,
+): Promise<SkillRepositoryIdentity | null> {
+  const filePath = path.join(sourceDirectoryPath, fileName)
+  const metadata = {
+    operation: "skill-repository.identity.read",
+    identitySource,
+  }
+  let expected: BigIntStats
   try {
-    raw = await readFile(filePath, "utf8")
+    expected = await lstat(filePath, { bigint: true })
   } catch (error) {
     if (isFileNotFoundError(error)) return null
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
+    throw error
+  }
+  if (expected.isSymbolicLink()) {
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
+    throw new Error(`Skill 云仓库身份文件不能是符号链接：${fileName}`)
+  }
+  if (!expected.isFile()) {
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
+    throw new Error(`Skill 云仓库身份必须是普通文件：${fileName}`)
+  }
+
+  if (security) await checkIdentityReadPermission(security, filePath, metadata)
+
+  let raw: string
+  try {
+    raw = await readVerifiedIdentityFile(sourceDirectoryPath, filePath, expected)
+  } catch (error) {
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
     throw error
   }
 
@@ -108,28 +158,135 @@ async function readIdentityFile(filePath: string): Promise<SkillRepositoryIdenti
   try {
     parsed = JSON.parse(raw)
   } catch {
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "allowed", {
+      ...metadata,
+      identityFound: false,
+    })
     return null
   }
 
-  if (!parsed || typeof parsed !== "object") return null
+  if (!parsed || typeof parsed !== "object") {
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "allowed", {
+      ...metadata,
+      identityFound: false,
+    })
+    return null
+  }
   const candidate = parsed as Record<string, unknown>
-  if (candidate.kind !== "cloud-skill-repository") return null
-  if (typeof candidate.id !== "string" || !candidate.id.trim()) return null
-  if (typeof candidate.name !== "string" || !candidate.name.trim()) return null
+  if (
+    candidate.kind !== "cloud-skill-repository"
+    || typeof candidate.id !== "string"
+    || !candidate.id.trim()
+    || typeof candidate.name !== "string"
+    || !candidate.name.trim()
+  ) {
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "allowed", {
+      ...metadata,
+      identityFound: false,
+    })
+    return null
+  }
 
   const { normalizeSkillRepositoryName } = await sharedSkillRepositoryPromise
   let name: string
   try {
     name = normalizeSkillRepositoryName(candidate.name)
   } catch {
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "allowed", {
+      ...metadata,
+      identityFound: false,
+    })
     return null
   }
 
-  return {
+  const identity: SkillRepositoryIdentity = {
     id: candidate.id.trim(),
     kind: "cloud-skill-repository",
     owner: typeof candidate.owner === "string" && candidate.owner.trim() ? candidate.owner.trim() : null,
     name,
+  }
+  recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "allowed", {
+    ...metadata,
+    identityFound: true,
+    repositoryId: identity.id,
+  })
+  return identity
+}
+
+async function readVerifiedIdentityFile(
+  sourceDirectoryPath: string,
+  filePath: string,
+  expected: BigIntStats,
+): Promise<string> {
+  const [sourceRealPath, fileRealPath] = await Promise.all([
+    realpath(sourceDirectoryPath),
+    realpath(filePath),
+  ])
+  if (!isPathInside(sourceRealPath, fileRealPath)) {
+    throw new Error("Skill 云仓库身份文件必须位于 Skill 源目录内。")
+  }
+
+  const noFollowFlag = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0
+  const nonBlockingFlag = typeof constants.O_NONBLOCK === "number" ? constants.O_NONBLOCK : 0
+  const handle = await open(filePath, constants.O_RDONLY | noFollowFlag | nonBlockingFlag)
+  try {
+    const opened = await handle.stat({ bigint: true })
+    if (!opened.isFile() || !sameFileSnapshot(expected, opened)) {
+      throw new Error("Skill 云仓库身份文件在读取前发生变化。")
+    }
+    const raw = await handle.readFile({ encoding: "utf8" })
+    const [afterRead, pathAfterRead, realPathAfterRead] = await Promise.all([
+      handle.stat({ bigint: true }),
+      lstat(filePath, { bigint: true }),
+      realpath(filePath),
+    ])
+    if (
+      pathAfterRead.isSymbolicLink()
+      || !pathAfterRead.isFile()
+      || !sameFileSnapshot(expected, afterRead)
+      || !sameFileSnapshot(expected, pathAfterRead)
+      || !isPathInside(sourceRealPath, realPathAfterRead)
+    ) {
+      throw new Error("Skill 云仓库身份文件在读取期间发生变化。")
+    }
+    return raw
+  } finally {
+    await handle.close()
+  }
+}
+
+function sameFileSnapshot(expected: BigIntStats, actual: BigIntStats): boolean {
+  return expected.dev === actual.dev
+    && expected.ino === actual.ino
+    && expected.mode === actual.mode
+    && expected.size === actual.size
+    && expected.mtimeNs === actual.mtimeNs
+    && expected.ctimeNs === actual.ctimeNs
+}
+
+function isPathInside(rootPath: string, targetPath: string): boolean {
+  const relative = path.relative(rootPath, targetPath)
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+}
+
+async function checkIdentityReadPermission(
+  security: SkillRepositoryIdentityReadSecurity,
+  resource: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  const permission = await security.permissionGuard.check({
+    action: "fs.read.outside-userdata",
+    actor: security.actor,
+    resource,
+    context: metadata,
+  })
+  if (!permission.allowed) {
+    recordIdentityAudit(security, "fs.read.outside-userdata", resource, "denied", {
+      ...metadata,
+      reason: permission.reason,
+      policyId: permission.policyId,
+    })
+    throw new Error(permission.reason)
   }
 }
 
@@ -145,7 +302,7 @@ async function checkIdentityWritePermission(
     context: metadata,
   })
   if (!permission.allowed) {
-    recordIdentityAudit(security, resource, "denied", {
+    recordIdentityAudit(security, "fs.write", resource, "denied", {
       ...metadata,
       reason: permission.reason,
       policyId: permission.policyId,
@@ -156,12 +313,13 @@ async function checkIdentityWritePermission(
 
 function recordIdentityAudit(
   security: SkillRepositoryIdentityWriteSecurity | undefined,
+  action: "fs.read.outside-userdata" | "fs.write",
   resource: string,
   outcome: SkillRepositoryIdentityAuditOutcome,
   metadata: Record<string, unknown>,
 ): void {
   security?.auditSink.record({
-    action: "fs.write",
+    action,
     actor: security.actor,
     resource,
     outcome,

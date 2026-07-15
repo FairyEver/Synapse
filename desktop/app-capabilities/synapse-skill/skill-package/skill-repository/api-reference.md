@@ -40,7 +40,7 @@ Returns repository metadata and files.
 
 `sourceDirectoryPath` is required. The other fields are optional. If `name`, `title`, or `description` is omitted, Synapse uses Skill metadata or local defaults where available.
 
-Use this for the first upload of a local Skill folder. Synapse excludes runtime `.env` files, `.synapse.json`, `.synapse.repository.json`, other hidden entries, and symlinks. If local `.synapse.repository.json` contains a cloud Skill repository id, the tool can update that repository instead of creating a new one. Legacy cloud identity in `.synapse.json` remains compatible until the next successful upload migrates it.
+Use this for the first upload of a local Skill folder. Synapse excludes runtime `.env` files, `.synapse.json`, `.synapse.repository.json`, other hidden entries, and symlinks. If local `.synapse.repository.json` contains a cloud Skill repository id, the tool can update that repository instead of creating a new one. The identity file must be an ordinary non-symlink file inside the Skill directory; Synapse checks and audits the read, and stops before any cloud update if the identity is untrusted or changes while being read. Legacy cloud identity in `.synapse.json` follows the same checks and remains compatible until the next successful upload migrates it.
 
 Returns the repository id, repository name, owner handle, management URL, and local identity write status:
 

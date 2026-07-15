@@ -96,7 +96,7 @@ export class SkillRepositoryUploadService {
 
     const { buildSkillRepositoryManagementUrl, normalizeSkillRepositoryName } = await sharedSkillRepositoryPromise
     const name = normalizeSkillRepositoryName(input.name ?? source.metadata.name ?? path.basename(source.sourceDirectoryPath))
-    const localIdentity = await this.readIdentity(source.sourceDirectoryPath)
+    const localIdentity = await this.readIdentity(source.sourceDirectoryPath, security)
     await this.ensureIdentityWriteAllowed(source.sourceDirectoryPath, security)
     const localRepositoryId = localIdentity?.id
     const explicitRepositoryId = input.repositoryId ?? undefined
@@ -133,7 +133,7 @@ export class SkillRepositoryUploadService {
         name: repository.name,
       }, security)
       try {
-        const verifiedIdentity = await this.readIdentity(source.sourceDirectoryPath)
+        const verifiedIdentity = await this.readIdentity(source.sourceDirectoryPath, security)
         if (verifiedIdentity?.id !== repository.id || verifiedIdentity.name !== repository.name) {
           throw new Error("新云仓库身份验证失败，已保留旧身份文件。")
         }

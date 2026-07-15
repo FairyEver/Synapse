@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readdir, readFile, stat, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
@@ -183,6 +183,67 @@ describe("readSkillRepositoryIdentity", () => {
     await writeFile(path.join(dir, ".synapse.repository.json"), JSON.stringify(identity), "utf8")
 
     await expect(readSkillRepositoryIdentity(dir)).resolves.toEqual(identity)
+  })
+
+  it("checks read permission and audits the trusted identity source", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-read-audit-"))
+    const targetPath = path.join(dir, ".synapse.repository.json")
+    await writeFile(targetPath, JSON.stringify(identity), "utf8")
+    const permissionRequests: PermissionRequest[] = []
+    const permissionGuard = permissionGuardReturning({ allowed: true }, permissionRequests)
+    const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+    const auditSink = auditSinkRecording(auditEvents)
+
+    await expect(readSkillRepositoryIdentity(dir, { actor, auditSink, permissionGuard })).resolves.toEqual(identity)
+
+    expect(permissionRequests).toEqual([{
+      action: "fs.read.outside-userdata",
+      actor,
+      resource: targetPath,
+      context: {
+        operation: "skill-repository.identity.read",
+        identitySource: "current",
+      },
+    }])
+    expect(auditEvents).toEqual([{
+      action: "fs.read.outside-userdata",
+      actor,
+      resource: targetPath,
+      outcome: "allowed",
+      metadata: {
+        operation: "skill-repository.identity.read",
+        identitySource: "current",
+        identityFound: true,
+        repositoryId: "repo-1",
+      },
+    }])
+  })
+
+  it.each([
+    ".synapse.repository.json",
+    ".synapse.json",
+  ])("rejects symbolic-link identity file %s", async (fileName) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-read-symlink-"))
+    const externalDir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-read-external-"))
+    const externalPath = path.join(externalDir, "identity.json")
+    await writeFile(externalPath, JSON.stringify(identity), "utf8")
+    await symlink(externalPath, path.join(dir, fileName), "file")
+    const permissionGuard = permissionGuardReturning({ allowed: true })
+    const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+    const auditSink = auditSinkRecording(auditEvents)
+
+    await expect(readSkillRepositoryIdentity(dir, { actor, auditSink, permissionGuard }))
+      .rejects.toThrow("身份文件不能是符号链接")
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: path.join(dir, fileName),
+      outcome: "failed",
+      metadata: {
+        operation: "skill-repository.identity.read",
+        identitySource: fileName === ".synapse.repository.json" ? "current" : "legacy",
+      },
+    }))
   })
 
   it("returns null for missing, malformed, legacy, and invalid-name identity files", async () => {
