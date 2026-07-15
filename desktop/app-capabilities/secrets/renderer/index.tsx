@@ -265,7 +265,7 @@ export function SecretsModule() {
       toast.success("已保存")
       setFormOpen(false)
       setForm(emptyFormState)
-      if ((form.mode === "create" && form.value.length > 0) || (form.mode === "edit" && form.updateValue)) {
+      if (form.mode === "create" || (form.mode === "edit" && form.updateValue)) {
         await scanAndOpenSkillEnvUpdate(saved.name)
       }
     } catch (error) {

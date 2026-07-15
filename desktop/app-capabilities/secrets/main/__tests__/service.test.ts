@@ -96,7 +96,7 @@ describe("SecretsService", () => {
     await expect(service.list()).resolves.toEqual({
       secrets: [
         { id: "id-1", name: "TOKEN", description: "api token", hasValue: true },
-        { id: "id-2", name: "EMPTY", hasValue: false },
+        { id: "id-2", name: "EMPTY", hasValue: true },
       ],
       total: 2,
     })

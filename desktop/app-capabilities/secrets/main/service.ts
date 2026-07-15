@@ -279,7 +279,7 @@ function toSafeView(item: SecretItemEntryV1): SecretSafeView {
     id: item.id,
     name: item.name,
     ...(item.description ? { description: item.description } : undefined),
-    hasValue: item.value.length > 0,
+    hasValue: true,
   }
 }
 

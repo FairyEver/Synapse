@@ -324,8 +324,8 @@ describe("SecretsModule", () => {
     expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "GITEE_TOKEN" })
   })
 
-  it("does not scan after creating a secret with an empty value", async () => {
-    const emptySecret = { ...savedSecret, name: "EMPTY", hasValue: false }
+  it("scans after creating a secret with an empty stored value", async () => {
+    const emptySecret = { ...savedSecret, name: "EMPTY", hasValue: true }
     mocks.secrets.create.mockResolvedValueOnce(emptySecret)
 
     await renderSecretsModule()
@@ -338,7 +338,7 @@ describe("SecretsModule", () => {
       await Promise.resolve()
     })
 
-    expect(mocks.secrets.scanSkillEnvBindings).not.toHaveBeenCalled()
+    expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "EMPTY" })
   })
 
   it("edits metadata without pre-filling the old value", async () => {
