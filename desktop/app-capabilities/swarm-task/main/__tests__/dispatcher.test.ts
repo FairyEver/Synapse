@@ -12,7 +12,7 @@ import {
   SWARM_TASK_TASK_LIST_CAPABILITY_ID,
   SWARM_TASK_TASK_UPDATE_CAPABILITY_ID,
 } from "../../shared/capability"
-import type { SwarmRun, SwarmTask } from "../../shared/schema"
+import type { SwarmRun, SwarmTask, SwarmWorkerRun } from "../../shared/schema"
 import { createSwarmTaskCapabilityDispatcher } from "../dispatcher"
 
 const baseConfig = {
@@ -57,6 +57,21 @@ const run: SwarmRun = {
   stopRequested: false,
 }
 
+const worker: SwarmWorkerRun = {
+  id: "worker-1",
+  schemaVersion: 1,
+  taskId: "task-1",
+  runId: "run-1",
+  workerIndex: 1,
+  roundIndex: 1,
+  status: "success",
+  conversationId: "conversation-1",
+  sessionKey: "internal-session-key",
+  lastPhase: "completed",
+  summary: "Summary",
+  handoff: "Handoff",
+}
+
 function createService(overrides: Record<string, unknown> = {}) {
   return {
     listTasks: vi.fn(async () => [task]),
@@ -68,7 +83,7 @@ function createService(overrides: Record<string, unknown> = {}) {
     cancelRun: vi.fn(async () => run),
     listRuns: vi.fn(async () => [run]),
     getRun: vi.fn(async () => run),
-    listWorkerRuns: vi.fn(async () => []),
+    listWorkerRuns: vi.fn(async () => [worker]),
     ...overrides,
   }
 }
@@ -144,15 +159,31 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
       taskId: "task-1",
       limit: 5,
     }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: [run], affected: 0 })
-    await expect(dispatcher.dispatch(SWARM_TASK_RUN_GET_CAPABILITY_ID, {
+    const runGetResult = await dispatcher.dispatch(SWARM_TASK_RUN_GET_CAPABILITY_ID, {
       runId: "run-1",
-    }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: run, affected: 1 })
+    }, { source: "mcp-http" })
+    expect(runGetResult).toEqual({
+      ok: true,
+      data: {
+        ...run,
+        workers: [expect.objectContaining({
+          id: "worker-1",
+          conversationId: "conversation-1",
+          lastPhase: "completed",
+          summary: "Summary",
+          handoff: "Handoff",
+        })],
+      },
+      affected: 1,
+    })
+    expect(JSON.stringify(runGetResult)).not.toContain("internal-session-key")
 
     expect(service.startRun).toHaveBeenCalledWith({ taskId: "task-1" })
     expect(service.stopRefill).toHaveBeenCalledWith("run-1")
     expect(service.cancelRun).toHaveBeenCalledWith("run-1")
     expect(service.listRuns).toHaveBeenCalledWith("task-1", 5)
     expect(service.getRun).toHaveBeenCalledWith("run-1")
+    expect(service.listWorkerRuns).toHaveBeenCalledWith("run-1")
     expect(security.permissionGuard.check.mock.calls.map(([request]) => request.action)).toEqual([
       "agent.spawn",
       "automation.mutate",
@@ -188,6 +219,7 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
     }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: null, affected: 0 })
 
     expect(service.deleteTask).not.toHaveBeenCalled()
+    expect(service.listWorkerRuns).not.toHaveBeenCalled()
     expect(security.auditSink.record.mock.calls.filter(([event]) => event.outcome === "failed")).toHaveLength(2)
   })
 

@@ -817,7 +817,7 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: SWARM_TASK_MCP_TOOL_NAMES.runGet,
-      description: "Get one Swarm Task run by id.",
+      description: "Get one Swarm Task run by id with its worker records.",
       inputSchema: {
         type: "object",
         properties: {
@@ -916,7 +916,7 @@ function swarmTaskCapabilityDescription(id: string): string {
     case SWARM_TASK_RUN_LIST_CAPABILITY_ID:
       return "List Swarm Task runs."
     case SWARM_TASK_RUN_GET_CAPABILITY_ID:
-      return "Get one Swarm Task run."
+      return "Get one Swarm Task run with its worker records."
     default:
       return "Run a Swarm Task capability."
   }

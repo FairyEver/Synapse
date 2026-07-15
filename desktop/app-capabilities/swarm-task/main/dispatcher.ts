@@ -21,6 +21,7 @@ import {
   swarmTaskIdInputSchema,
   swarmTaskUpdateInputSchema,
 } from "../shared/schema"
+import type { SwarmWorkerRun } from "../shared/schema"
 import type { SwarmTaskService } from "./service"
 
 const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
@@ -118,12 +119,20 @@ export function createSwarmTaskCapabilityDispatcher(deps: SwarmTaskDispatcherDep
         const parsed = swarmRunIdInputSchema.parse(params)
         return runSwarmAction(deps, context, runAuditInput("automation.read", action, parsed.runId), async () => {
           const run = await deps.service.getRun(parsed.runId)
-          return { ok: true, data: run, affected: run ? 1 : 0 }
+          if (!run) return { ok: true, data: null, affected: 0 }
+          const workers = (await deps.service.listWorkerRuns(parsed.runId)).map(toMcpWorkerRun)
+          return { ok: true, data: { ...run, workers }, affected: 1 }
         })
       }
       throw new Error(`Unknown swarm task action: ${action}`)
     },
   }
+}
+
+function toMcpWorkerRun(worker: SwarmWorkerRun): Omit<SwarmWorkerRun, "sessionKey"> {
+  const { sessionKey, ...publicWorker } = worker
+  void sessionKey
+  return publicWorker
 }
 
 function taskAuditInput(action: PermissionAction, capabilityAction: string, taskId: string) {

@@ -104,7 +104,7 @@ Default flow:
 2. Use `app_swarm_task_task_create` for a new reusable config.
 3. Use `app_swarm_task_task_update` for a focused config change.
 4. Use `app_swarm_task_run_start` to run a saved task. Pass `configOverride` only for this run's temporary changes.
-5. Use `app_swarm_task_run_list` and `app_swarm_task_run_get` for current state and history.
+5. Use `app_swarm_task_run_list` and `app_swarm_task_run_get` for current state and history. `run_get` includes worker records and linked Agent `conversationId` values when available.
 6. Use `app_swarm_task_run_stopRefill` to stop launching later batches or slot refills while allowing active workers to finish.
 7. Use `app_swarm_task_run_cancel` to cancel a run.
 8. Use `app_swarm_task_task_delete` only when the task has no running or draining run; it removes the saved task and its run history.
