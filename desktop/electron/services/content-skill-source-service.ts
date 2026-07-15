@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
-import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises"
+import type { Stats } from "node:fs"
+import { lstat, open, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
 import {
@@ -143,14 +144,21 @@ async function readSkillDraftFromDirectory(
     if (directoryInfo.isSymbolicLink() || !directoryInfo.isDirectory()) {
       throwInvalid("sourceDirectoryPath", "Skill 源路径必须是文件夹。")
     }
+    const sourceRealPath = await realpath(dirPath)
 
     const mainFilePath = await resolveSkillMainFile(dirPath)
     if (!mainFilePath) {
       throwInvalid("sourceDirectoryPath", "未找到 Skill 主文件。")
     }
 
-    const mainFileSize = await inspectSkillMainFileSize(mainFilePath)
-    const content = await readFile(mainFilePath, "utf8")
+    const mainFileStat = await inspectSkillMainFile(mainFilePath)
+    const content = Buffer.from(await readVerifiedRegularFile(
+      sourceRealPath,
+      mainFilePath,
+      mainFileStat,
+      "content",
+      "Skill 主文件在读取期间发生变化。",
+    )).toString("utf8")
     if (!content.trim()) {
       throwInvalid("content", "Skill 主说明为空。")
     }
@@ -164,9 +172,9 @@ async function readSkillDraftFromDirectory(
       hiddenEntryCount: 0,
       runtimeEnvExcluded: false,
       symlinkCount: 0,
-      totalSize: mainFileSize,
+      totalSize: mainFileStat.size,
     }
-    await collectSkillFiles(dirPath, dirPath, skip, state, 0, options.mode ?? "install")
+    await collectSkillFiles(dirPath, sourceRealPath, dirPath, skip, state, 0, options.mode ?? "install")
     state.files.sort((a, b) => a.originalName.localeCompare(b.originalName))
     assertUniqueSkillAttachmentPaths(state.files)
     recordSkillSourceAudit(security, dirPath, "allowed", auditMetadata)
@@ -194,8 +202,8 @@ async function readSkillDraftFromDirectory(
   }
 }
 
-async function inspectSkillMainFileSize(mainFilePath: string): Promise<number> {
-  let fileStat: Awaited<ReturnType<typeof lstat>>
+async function inspectSkillMainFile(mainFilePath: string): Promise<Stats> {
+  let fileStat: Stats
   try {
     fileStat = await lstat(mainFilePath)
   } catch (error) {
@@ -210,11 +218,12 @@ async function inspectSkillMainFileSize(mainFilePath: string): Promise<number> {
     throwInvalid("content", "Skill 主文件超过 10MB。")
   }
 
-  return fileStat.size
+  return fileStat
 }
 
 async function collectSkillFiles(
   baseDir: string,
+  baseRealPath: string,
   currentDir: string,
   skip: Set<string>,
   state: SkillFileCollectionState,
@@ -260,7 +269,7 @@ async function collectSkillFiles(
     }
 
     const fullPath = path.join(currentDir, name)
-    let fileStat: Awaited<ReturnType<typeof lstat>>
+    let fileStat: Stats
     try {
       fileStat = await lstat(fullPath)
     } catch (error) {
@@ -285,25 +294,26 @@ async function collectSkillFiles(
       if (state.directoryCount > CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT) {
         throwInvalid("files", `Skill 附件目录数量超过 ${CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT} 个。`)
       }
-      await collectSkillFiles(baseDir, fullPath, skip, state, nextDepth, mode)
+      await collectSkillFiles(baseDir, baseRealPath, fullPath, skip, state, nextDepth, mode)
       continue
     }
 
     if (!fileStat.isFile()) continue
-    await collectSkillFile(baseDir, fullPath, fileStat.size, state)
+    await collectSkillFile(baseDir, baseRealPath, fullPath, fileStat, state)
   }
 }
 
 async function collectSkillFile(
   baseDir: string,
+  baseRealPath: string,
   fullPath: string,
-  size: number,
+  fileStat: Stats,
   state: SkillFileCollectionState,
 ): Promise<void> {
   const relativeName = normalizeContentAttachmentPath(toPortableRelativePath(path.relative(baseDir, fullPath)))
   if (!relativeName) return
 
-  if (size > CONTENT_SKILL_ATTACHMENT_MAX_SIZE) {
+  if (fileStat.size > CONTENT_SKILL_ATTACHMENT_MAX_SIZE) {
     throwInvalid("files", `附件超过 10MB：${relativeName}`)
   }
 
@@ -312,17 +322,23 @@ async function collectSkillFile(
     throwInvalid("files", `附件数量超过 ${CONTENT_SKILL_ATTACHMENT_MAX_COUNT} 个。`)
   }
 
-  state.totalSize += size
+  state.totalSize += fileStat.size
   if (state.totalSize > CONTENT_SKILL_ATTACHMENT_TOTAL_MAX_SIZE) {
     throwInvalid("files", "Skill 文件总大小超过 50MB。")
   }
 
   try {
-    const bytes = await readFile(fullPath)
+    const bytes = await readVerifiedRegularFile(
+      baseRealPath,
+      fullPath,
+      fileStat,
+      "files",
+      `Skill 附件在读取期间发生变化：${relativeName}`,
+    )
     state.files.push({
       originalName: relativeName,
-      size,
-      bytes: new Uint8Array(bytes),
+      size: bytes.byteLength,
+      bytes,
     })
   } catch (error) {
     if (error instanceof ContentCapabilityError) throw error
@@ -332,6 +348,63 @@ async function collectSkillFile(
     })
     throwInvalid("files", `无法读取 Skill 附件：${relativeName}`)
   }
+}
+
+async function readVerifiedRegularFile(
+  baseRealPath: string,
+  filePath: string,
+  expected: Stats,
+  field: "content" | "files",
+  changedMessage: string,
+): Promise<Uint8Array> {
+  const resolvedPath = await realpath(filePath)
+  if (!isPathInside(baseRealPath, resolvedPath)) {
+    throwInvalid(field, changedMessage)
+  }
+  const handle = await open(filePath, "r")
+  try {
+    const opened = await handle.stat()
+    if (!opened.isFile() || !sameFileSnapshot(expected, opened)) {
+      throwInvalid(field, changedMessage)
+    }
+
+    const buffer = Buffer.allocUnsafe(expected.size + 1)
+    let offset = 0
+    while (offset < buffer.byteLength) {
+      const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, offset)
+      if (bytesRead === 0) break
+      offset += bytesRead
+    }
+
+    const [afterRead, pathAfterRead] = await Promise.all([
+      handle.stat(),
+      lstat(filePath),
+    ])
+    if (
+      offset !== expected.size
+      || pathAfterRead.isSymbolicLink()
+      || !pathAfterRead.isFile()
+      || !sameFileSnapshot(expected, afterRead)
+      || !sameFileSnapshot(expected, pathAfterRead)
+    ) {
+      throwInvalid(field, changedMessage)
+    }
+    return Uint8Array.from(buffer.subarray(0, offset))
+  } finally {
+    await handle.close()
+  }
+}
+
+function sameFileSnapshot(
+  expected: Stats,
+  actual: Stats,
+): boolean {
+  return expected.dev === actual.dev
+    && expected.ino === actual.ino
+    && expected.mode === actual.mode
+    && expected.size === actual.size
+    && expected.mtimeMs === actual.mtimeMs
+    && expected.ctimeMs === actual.ctimeMs
 }
 
 function controlFileName(name: string): boolean {

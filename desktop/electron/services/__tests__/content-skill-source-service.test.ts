@@ -9,6 +9,20 @@ const logger = vi.hoisted(() => ({
   info: vi.fn(),
   error: vi.fn(),
 }))
+const fsHooks = vi.hoisted(() => ({
+  beforeOpen: undefined as undefined | ((filePath: string) => Promise<void>),
+}))
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>()
+  return {
+    ...actual,
+    open: async (...args: Parameters<typeof actual.open>) => {
+      await fsHooks.beforeOpen?.(String(args[0]))
+      return actual.open(...args)
+    },
+  }
+})
 
 vi.mock("electron", () => ({
   app: {
@@ -50,6 +64,7 @@ describe("content skill source service", () => {
     logger.warn.mockClear()
     logger.info.mockClear()
     logger.error.mockClear()
+    fsHooks.beforeOpen = undefined
   })
 
   afterEach(async () => {
@@ -237,6 +252,27 @@ describe("content skill source service", () => {
     await symlink(path.join(outside, "secret.md"), path.join(root, "SKILL.md"))
 
     await expect(readSkillDraftFromDirectory(root)).rejects.toThrow("Skill 主文件不能是符号链接")
+  })
+
+  it("rejects an attachment replaced by a symlink between inspection and opening", async () => {
+    const root = await createTempRoot()
+    const outside = await createTempRoot()
+    const attachmentPath = path.join(root, "references", "guide.md")
+    const outsidePath = path.join(outside, "private.txt")
+    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+    await writeText(attachmentPath, "safe attachment")
+    await writeText(outsidePath, "outside private content")
+    fsHooks.beforeOpen = async (filePath) => {
+      if (filePath !== attachmentPath) return
+      fsHooks.beforeOpen = undefined
+      await rm(attachmentPath)
+      await symlink(outsidePath, attachmentPath)
+    }
+
+    await expect(readSkillDraftFromDirectory(root, undefined, { mode: "publish" }))
+      .rejects.toThrow("Skill 附件在读取期间发生变化：references/guide.md")
+
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("outside private content")
   })
 
   itCanCreateBackslashFile("rejects duplicate paths after normalization", async () => {
