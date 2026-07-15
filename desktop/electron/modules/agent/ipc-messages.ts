@@ -41,23 +41,6 @@ const MAX_CLIENT_SKEW_MS = 60_000
 const MAX_AGENT_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
 const MAX_AGENT_IMAGE_ATTACHMENTS = 8
 const MAX_AGENT_IMAGE_ATTACHMENT_TOTAL_BYTES = 20 * 1024 * 1024
-const DIRECTORY_ATTACHMENT_SYMLINK_SCAN_IGNORED_DIRS = new Set([
-  ".git",
-  ".hg",
-  ".svn",
-  ".next",
-  ".nuxt",
-  ".output",
-  ".pnpm-store",
-  ".turbo",
-  ".vite",
-  "build",
-  "coverage",
-  "dist",
-  "node_modules",
-  "out",
-  "target",
-])
 const logger = createMainLogger("agent.ipc")
 const agentImageMimeTypeSchema = z.enum(["image/jpeg", "image/png", "image/gif", "image/webp"])
 const binaryAttachmentDataSchema = z.custom<ArrayBuffer | Uint8Array>(
@@ -189,9 +172,6 @@ async function assertDirectoryAttachmentHasNoSymlinks(directoryPath: string): Pr
     if (!currentDirectory) continue
     const entries = await readdir(currentDirectory, { withFileTypes: true })
     for (const entry of entries) {
-      if (entry.isDirectory() && DIRECTORY_ATTACHMENT_SYMLINK_SCAN_IGNORED_DIRS.has(entry.name)) {
-        continue
-      }
       const entryPath = path.join(currentDirectory, entry.name)
       const entryStat = await lstat(entryPath)
       if (entryStat.isSymbolicLink()) {

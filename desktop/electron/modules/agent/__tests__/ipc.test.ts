@@ -527,15 +527,15 @@ describe("agentIpcModule", () => {
     expect(send).not.toHaveBeenCalled()
   })
 
-  it.skipIf(process.platform === "win32")("allows project directory attachments with dependency directory symlinks", async () => {
+  it.skipIf(process.platform === "win32")("blocks directory attachments with symlinks inside dependency directories", async () => {
     const realTmpDir = await fs.realpath(tmpdir())
     const root = await fs.mkdtemp(path.join(realTmpDir, "synapse-agent-attachments-"))
-    const packageStore = path.join(root, ".pnpm", "vite")
+    const outside = await fs.mkdtemp(path.join(realTmpDir, "synapse-agent-attachments-outside-"))
     const nodeModules = path.join(root, "node_modules")
-    await fs.mkdir(packageStore, { recursive: true })
     await fs.mkdir(nodeModules)
     await fs.writeFile(path.join(root, "package.json"), "{}")
-    await fs.symlink(packageStore, path.join(nodeModules, "vite"), "dir")
+    await fs.writeFile(path.join(outside, "secret.md"), "secret")
+    await fs.symlink(outside, path.join(nodeModules, "private-package"), "dir")
     const send = vi.fn().mockResolvedValue({
       conversationId: "conv-1",
       resultText: "done",
@@ -548,7 +548,7 @@ describe("agentIpcModule", () => {
     })
 
     try {
-      await harness.invoke("synapse:agent:send", {
+      await expect(harness.invoke("synapse:agent:send", {
         projectId: "project-1",
         content: "read this project",
         attachments: [{
@@ -556,18 +556,13 @@ describe("agentIpcModule", () => {
           path: root,
           entryType: "directory",
         }],
-      })
+      })).rejects.toThrow("文件夹附件不能包含符号链接。")
     } finally {
       await fs.rm(root, { recursive: true, force: true })
+      await fs.rm(outside, { recursive: true, force: true })
     }
 
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({
-      attachments: [expect.objectContaining({
-        entryType: "directory",
-        kind: "path",
-        path: root,
-      })],
-    }))
+    expect(send).not.toHaveBeenCalled()
   })
 
   it("blocks oversized image attachments before sending to AgentRuntime", async () => {
