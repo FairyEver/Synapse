@@ -340,6 +340,76 @@ describe("validateWorkflow", () => {
     expect(result.errors).toEqual([])
   })
 
+  it.each([
+    { name: "topic", type: "text" as const, default: null },
+    { name: "limit", type: "number" as const, default: null },
+    { name: "format", type: "option" as const, default: null, options: ["json"] },
+    { name: "input_file", type: "file" as const, default: null },
+    { name: "input_directories", type: "directory" as const, default: null, allowMultiple: true },
+  ])("rejects workflow_call missing required child param $name", (childParam) => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "parent_value",
+      type: "text",
+      default: null,
+    }, {
+      paramTemplates: {},
+      paramBindings: {},
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [childParam]]]),
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      nodeId: "call",
+      field: "paramBindings",
+      message: expect.stringContaining(`必填参数「${childParam.name}」未配置`),
+    }))
+  })
+
+  it("accepts workflow_call child params with defaults without mappings", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "parent_value",
+      type: "text",
+      default: null,
+    }, {
+      paramTemplates: {},
+      paramBindings: {},
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [{
+        name: "input_files",
+        type: "file",
+        allowMultiple: true,
+        default: [{ kind: "local_path", entryType: "file", path: "/tmp/input.txt" }],
+      }]]]),
+    })
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
+  it("rejects blank workflow_call templates for required child params", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "parent_value",
+      type: "text",
+      default: null,
+    }, {
+      paramTemplates: { topic: "   " },
+      paramBindings: {},
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [{ name: "topic", type: "text", default: null }]]]),
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      nodeId: "call",
+      field: "paramBindings",
+      message: expect.stringContaining("必填参数「topic」未配置"),
+    }))
+  })
+
   it("rejects script nodes that inherit a stale workflow default project", () => {
     const result = validateWorkflow(definitionWithScriptNode({
       defaultProjectId: "deleted-default-project",

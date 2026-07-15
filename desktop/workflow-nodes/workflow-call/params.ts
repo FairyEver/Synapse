@@ -59,7 +59,7 @@ export function buildWorkflowCallParams(input: BuildWorkflowCallParamsInput): Bu
     }
 
     if (!hasTemplate) {
-      if (paramHasDefault(param)) {
+      if (workflowParamHasDefault(param)) {
         params[param.name] = param.default
       } else {
         errors.push(`子工作流参数「${param.name}」缺少必填值`)
@@ -122,10 +122,10 @@ function renderTemplateParam(
   }
 
   if (param.type === "text" || param.type === "file" || param.type === "directory" || param.type === "option") {
-    if (rendered.trim().length === 0 && !paramHasDefault(param)) {
+    if (rendered.trim().length === 0 && !workflowParamHasDefault(param)) {
       return { error: `子工作流参数「${param.name}」缺少必填值` }
     }
-    if (rendered.trim().length === 0 && paramHasDefault(param)) {
+    if (rendered.trim().length === 0 && workflowParamHasDefault(param)) {
       return { hasValue: true, value: param.default }
     }
     return { hasValue: true, value: rendered }
@@ -133,7 +133,7 @@ function renderTemplateParam(
 
   const trimmed = rendered.trim()
   if (trimmed.length === 0) {
-    if (paramHasDefault(param)) return { hasValue: true, value: param.default }
+    if (workflowParamHasDefault(param)) return { hasValue: true, value: param.default }
     return { error: `子工作流参数「${param.name}」缺少必填值` }
   }
 
@@ -144,6 +144,6 @@ function renderTemplateParam(
   return { hasValue: true, value: numberValue }
 }
 
-function paramHasDefault(param: WorkflowParam): boolean {
+export function workflowParamHasDefault(param: Pick<WorkflowParam, "default">): boolean {
   return param.default !== undefined && param.default !== null && (!Array.isArray(param.default) || param.default.length > 0)
 }

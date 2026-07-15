@@ -5,7 +5,11 @@ import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { createMainLogger } from "../log-store"
 import { computeEndReachable } from "./workflow-utils"
 import { agentTimeoutMinsToMs, resolveAgentTimeoutMins } from "../../../workflow-nodes/agent-timeout"
-import { extractWorkflowCallTemplateVariables, validateWorkflowCallValueBinding } from "../../../workflow-nodes/workflow-call/params"
+import {
+  extractWorkflowCallTemplateVariables,
+  validateWorkflowCallValueBinding,
+  workflowParamHasDefault,
+} from "../../../workflow-nodes/workflow-call/params"
 import { isSafeWorkflowNodeId } from "./workflow-id"
 import {
   isMultiResourceParam,
@@ -387,6 +391,30 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
       }
 
       const rawBindings = cfg.paramBindings
+      const bindingRecord = rawBindings && typeof rawBindings === "object" && !Array.isArray(rawBindings)
+        ? rawBindings as Record<string, unknown>
+        : undefined
+      if (childParams) {
+        for (const childParam of childParams) {
+          if (workflowParamHasDefault(childParam)) continue
+          const template = templateRecord?.[childParam.name]
+          const rawBinding = bindingRecord?.[childParam.name]
+          const binding = rawBinding && typeof rawBinding === "object" && !Array.isArray(rawBinding)
+            ? rawBinding as Partial<WorkflowParamBinding>
+            : undefined
+          const hasTemplate = typeof template === "string" && template.trim().length > 0
+          const hasBinding = binding?.mode === "value" && Boolean(binding.source)
+            || binding?.mode === "template" && typeof binding.template === "string" && binding.template.trim().length > 0
+          if (hasTemplate || hasBinding) continue
+          errors.push({
+            type: "invalid_config",
+            nodeId: node.id,
+            nodeName: node.name,
+            field: "paramBindings",
+            message: `节点「${node.name}」的子工作流必填参数「${childParam.name}」未配置，请添加参数模板或绑定`,
+          })
+        }
+      }
       if (childParams && rawBindings && typeof rawBindings === "object" && !Array.isArray(rawBindings)) {
         for (const [childParamName, rawBinding] of Object.entries(rawBindings as Record<string, unknown>)) {
           if (!rawBinding || typeof rawBinding !== "object" || Array.isArray(rawBinding)) continue
@@ -581,7 +609,7 @@ export function validateRunParams(def: WorkflowDefinition, params: Record<string
   for (const param of def.params) {
     const value = params[param.name]
     const hasValue = paramHasValue(params, param.name)
-    const hasDefault = paramHasDefault(param)
+    const hasDefault = workflowParamHasDefault(param)
     if (!hasValue) {
       if (!hasDefault) {
         errors.push({ type: "missing_param", message: `缺少必填参数「${param.name}」` })
@@ -613,7 +641,7 @@ export function buildEffectiveRunParams(def: WorkflowDefinition, params: Record<
   const effective = { ...params }
   for (const param of def.params) {
     const hasValue = paramHasValue(effective, param.name)
-    const hasDefault = paramHasDefault(param)
+    const hasDefault = workflowParamHasDefault(param)
     if (!hasValue && hasDefault) effective[param.name] = param.default
   }
   return effective
@@ -625,12 +653,6 @@ function paramHasValue(params: Record<string, unknown>, name: string): boolean {
     && value !== undefined
     && value !== null
     && (!Array.isArray(value) || value.length > 0)
-}
-
-function paramHasDefault(param: { default?: unknown }): boolean {
-  return param.default !== undefined
-    && param.default !== null
-    && (!Array.isArray(param.default) || param.default.length > 0)
 }
 
 function validateRunResourceParam(param: WorkflowParam, value: unknown, errors: ValidationError[]): void {
