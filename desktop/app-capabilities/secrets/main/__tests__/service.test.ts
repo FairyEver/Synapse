@@ -130,6 +130,35 @@ describe("SecretsService", () => {
       .rejects.toThrow("密钥已存在")
   })
 
+  it("serializes concurrent creates by normalized name", async () => {
+    const harness = createHarness()
+    const service = createSecretsService(harness.deps)
+
+    const results = await Promise.allSettled([
+      service.create({ name: "TOKEN", value: "first" }),
+      service.create({ name: "token", value: "second" }),
+    ])
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1)
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1)
+    expect(harness.items.records.size).toBe(1)
+  })
+
+  it("serializes concurrent upserts into one physical record", async () => {
+    const harness = createHarness()
+    const service = createSecretsService(harness.deps)
+
+    const results = await Promise.all([
+      service.upsert({ name: "TOKEN", value: "first" }),
+      service.upsert({ name: "token", value: "second" }),
+    ])
+
+    expect(results.map((result) => result.created)).toEqual([true, false])
+    expect(harness.items.records.size).toBe(1)
+    await expect(service.get({ name: "TOKEN", includeValue: true }))
+      .resolves.toMatchObject({ value: "second" })
+  })
+
   it("rejects attempts to rename an existing secret", () => {
     expect(secretUpdateInputSchema.safeParse({
       name: "TOKEN",
@@ -181,6 +210,37 @@ describe("SecretsService", () => {
       name: "TOKEN",
       hasValue: true,
     })
+    await expect(service.list()).resolves.toEqual({ secrets: [], total: 0 })
+  })
+
+  it("fails closed on stored duplicate names and deletes every duplicate", async () => {
+    const harness = createHarness()
+    await harness.items.upsert({
+      id: "duplicate-1",
+      schemaVersion: 1,
+      name: "TOKEN",
+      value: "first-secret",
+      createdAt: "2026-07-08T00:00:00.000Z",
+      updatedAt: "2026-07-08T00:00:00.000Z",
+    })
+    await harness.items.upsert({
+      id: "duplicate-2",
+      schemaVersion: 1,
+      name: "token",
+      value: "second-secret",
+      createdAt: "2026-07-09T00:00:00.000Z",
+      updatedAt: "2026-07-09T00:00:00.000Z",
+    })
+    const service = createSecretsService(harness.deps)
+
+    await expect(service.get({ name: "TOKEN", includeValue: true }))
+      .rejects.toThrow("检测到重复密钥名称")
+    expect(JSON.stringify(vi.mocked(harness.deps.logger.warn).mock.calls))
+      .not.toContain("first-secret")
+    expect(JSON.stringify(vi.mocked(harness.deps.logger.warn).mock.calls))
+      .not.toContain("second-secret")
+
+    await expect(service.delete({ name: "token" })).resolves.toMatchObject({ name: "TOKEN" })
     await expect(service.list()).resolves.toEqual({ secrets: [], total: 0 })
   })
 

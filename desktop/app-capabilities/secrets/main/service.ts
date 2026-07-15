@@ -71,6 +71,7 @@ export function createSecretsService(deps: SecretsServiceDeps) {
   const events = new TypedSecretsEventEmitter()
   const timestamp = () => (deps.now ?? (() => new Date()))().toISOString()
   const createId = () => deps.createId?.() ?? randomUUID()
+  const nameMutationTails = new Map<string, Promise<void>>()
 
   async function initialize(): Promise<void> {
     await migrateLegacyConfig()
@@ -91,6 +92,10 @@ export function createSecretsService(deps: SecretsServiceDeps) {
 
   async function create(input: SecretCreateInput): Promise<SecretSafeView> {
     const name = normalizeName(input.name)
+    return withNameMutation(name, () => createLocked(name, input))
+  }
+
+  async function createLocked(name: string, input: Omit<SecretCreateInput, "name">): Promise<SecretSafeView> {
     await assertNameAvailable(name)
     const now = timestamp()
     const item: SecretItemEntryV1 = {
@@ -109,6 +114,11 @@ export function createSecretsService(deps: SecretsServiceDeps) {
   }
 
   async function update(input: SecretUpdateInput): Promise<SecretSafeView> {
+    const name = normalizeName(input.name)
+    return withNameMutation(name, () => updateLocked({ ...input, name }))
+  }
+
+  async function updateLocked(input: SecretUpdateInput): Promise<SecretSafeView> {
     const existing = await requireByName(input.name)
     const description = Object.prototype.hasOwnProperty.call(input, "description")
       ? normalizeDescription(input.description)
@@ -127,32 +137,43 @@ export function createSecretsService(deps: SecretsServiceDeps) {
 
   async function upsert(input: SecretUpsertInput): Promise<SecretUpsertResult> {
     const name = normalizeName(input.name)
-    const existing = await findByName(name)
+    return withNameMutation(name, async () => {
+      const existing = await findByName(name)
 
-    if (!existing) {
-      if (input.value === undefined) throw new Error("创建密钥时必须提供值。")
-      const secret = await create({
-        name,
-        value: input.value,
-        ...(normalizeDescription(input.description) ? { description: normalizeDescription(input.description) } : undefined),
+      if (!existing) {
+        if (input.value === undefined) throw new Error("创建密钥时必须提供值。")
+        const secret = await createLocked(name, {
+          value: input.value,
+          ...(normalizeDescription(input.description) ? { description: normalizeDescription(input.description) } : undefined),
+        })
+        return { secret, created: true }
+      }
+
+      const secret = await updateLocked({
+        name: existing.name,
+        ...(input.value !== undefined ? { value: input.value } : undefined),
+        ...(Object.prototype.hasOwnProperty.call(input, "description") ? { description: input.description } : undefined),
       })
-      return { secret, created: true }
-    }
-
-    const secret = await update({
-      name: existing.name,
-      ...(input.value !== undefined ? { value: input.value } : undefined),
-      ...(Object.prototype.hasOwnProperty.call(input, "description") ? { description: input.description } : undefined),
+      return { secret, created: false }
     })
-    return { secret, created: false }
   }
 
   async function deleteItem(input: SecretDeleteInput): Promise<SecretSafeView> {
-    const existing = await requireByName(input.name)
-    const safe = toSafeView(existing)
-    await deps.items.remove(existing.id)
-    await emitChanged()
-    return safe
+    const name = normalizeName(input.name)
+    return withNameMutation(name, async () => {
+      const existing = await findAllByName(name)
+      if (existing.length === 0) throw new Error(`密钥不存在：${name}`)
+      const safe = toSafeView(existing[0]!)
+      await Promise.all(existing.map((item) => deps.items.remove(item.id)))
+      if (existing.length > 1) {
+        deps.logger.warn("Duplicate secret records were removed by logical name.", {
+          name,
+          duplicateCount: existing.length,
+        })
+      }
+      await emitChanged()
+      return safe
+    })
   }
 
   async function scanSkillEnvBindings(
@@ -243,8 +264,21 @@ export function createSecretsService(deps: SecretsServiceDeps) {
   }
 
   async function findByName(name: string): Promise<SecretItemEntryV1 | null> {
+    const matches = await findAllByName(name)
+    if (matches.length > 1) {
+      const normalizedName = normalizeName(name)
+      deps.logger.warn("Duplicate secret records were detected.", {
+        name: normalizedName,
+        duplicateCount: matches.length,
+      })
+      throw new Error(`检测到重复密钥名称：${normalizedName}，请先删除后重新创建。`)
+    }
+    return matches[0] ?? null
+  }
+
+  async function findAllByName(name: string): Promise<SecretItemEntryV1[]> {
     const normalized = normalizeName(name).toLowerCase()
-    return (await deps.items.list()).find((item) => item.name.toLowerCase() === normalized) ?? null
+    return (await deps.items.list()).filter((item) => item.name.toLowerCase() === normalized)
   }
 
   async function requireByName(name: string): Promise<SecretItemEntryV1> {
@@ -260,6 +294,26 @@ export function createSecretsService(deps: SecretsServiceDeps) {
       item.name.toLowerCase() === normalized && item.name.toLowerCase() !== allowed,
     )
     if (duplicate) throw new Error(`密钥已存在：${name}`)
+  }
+
+  async function withNameMutation<T>(name: string, task: () => Promise<T>): Promise<T> {
+    const normalized = normalizeName(name).toLowerCase()
+    const previous = nameMutationTails.get(normalized) ?? Promise.resolve()
+    let release = () => {}
+    const current = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const tail = previous.then(() => current)
+    nameMutationTails.set(normalized, tail)
+    await previous
+    try {
+      return await task()
+    } finally {
+      release()
+      if (nameMutationTails.get(normalized) === tail) {
+        nameMutationTails.delete(normalized)
+      }
+    }
   }
 
   return {
