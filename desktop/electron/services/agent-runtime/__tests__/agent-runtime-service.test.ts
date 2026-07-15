@@ -979,6 +979,46 @@ describe("AgentRuntimeService", () => {
     }))
   })
 
+  it("persists an AskUserQuestion answer before continuing with later events", async () => {
+    const conversations = new BlockingQuestionResolutionNamespace()
+    const questions = [{
+      question: "继续吗？",
+      options: [{ label: "继续" }],
+      multiSelect: false,
+    }]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "continued after answer")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs answer"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+    const response = service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      updatedInput: { answers: { "question-0": "继续" } },
+      actor: { kind: "user" },
+    })
+
+    await conversations.waitForResolutionWrite()
+    await expect(resolveSoon(turn)).resolves.toBe("timeout")
+    conversations.releaseResolutionWrite()
+
+    await response
+    const result = await turn
+    const stored = await conversations.get(result.conversationId)
+    expect(stored?.history.find((entry) => entry.metadata?.requestId === "conversation-a-permission-1")?.metadata)
+      .toMatchObject({ userQuestionResolution: { status: "answered" } })
+    expect(stored?.history).toContainEqual(expect.objectContaining({
+      content: "continued after answer",
+    }))
+  })
+
   it("normalizes multi-select arrays for the SDK and stored resolution", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const questions = [{
@@ -2667,6 +2707,40 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
 
   private emit(event: DataChangeEvent<T>): void {
     for (const listener of this.listeners) listener(event)
+  }
+}
+
+class BlockingQuestionResolutionNamespace extends MemoryNamespace<ConversationEntryV1> {
+  private resolutionWriteStarted: (() => void) | undefined
+  private releaseResolution: (() => void) | undefined
+  private readonly resolutionStarted = new Promise<void>((resolve) => {
+    this.resolutionWriteStarted = resolve
+  })
+  private readonly resolutionReleased = new Promise<void>((resolve) => {
+    this.releaseResolution = resolve
+  })
+  private blocked = false
+
+  constructor() {
+    super("conversations")
+  }
+
+  override async upsert(item: ConversationEntryV1): Promise<void> {
+    const containsResolution = item.history.some((entry) => entry.metadata?.userQuestionResolution !== undefined)
+    if (containsResolution && !this.blocked) {
+      this.blocked = true
+      this.resolutionWriteStarted?.()
+      await this.resolutionReleased
+    }
+    await super.upsert(item)
+  }
+
+  async waitForResolutionWrite(): Promise<void> {
+    await this.resolutionStarted
+  }
+
+  releaseResolutionWrite(): void {
+    this.releaseResolution?.()
   }
 }
 

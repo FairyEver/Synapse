@@ -574,13 +574,13 @@ export class AgentRuntimeService {
     const pendingQuestion = state.pending && isAskUserQuestionTool(state.pending.toolName)
       ? state.pending
       : undefined
-    this.sessionManager.settlePending(state)
     if (pendingQuestion) {
       await this.persistUserQuestionResolution(pendingQuestion, {
         status: "cancelled",
         resolvedAt: this.isoNow(),
       })
     }
+    this.sessionManager.settlePending(state)
 
     if (state.liveSession) {
       const gracefulSent = await this.sessionManager.interrupt(conversationId)
@@ -828,11 +828,11 @@ export class AgentRuntimeService {
           behavior: "deny",
           message: ASK_USER_QUESTION_EMPTY_ANSWER_MESSAGE,
         })
-        this.sessionManager.settlePendingPermission(pending)
         await this.persistUserQuestionResolution(pending, {
           status: "skipped",
           resolvedAt: this.isoNow(),
         })
+        this.sessionManager.settlePendingPermission(pending)
         throw error
       }
       await pending.liveSession.respondPermission(request.requestId, {
@@ -840,11 +840,11 @@ export class AgentRuntimeService {
         updatedInput,
         message: askUserQuestionResponseMessage(request),
       })
-      this.sessionManager.settlePendingPermission(pending)
       await this.persistUserQuestionResolution(
         pending,
         askUserQuestionResolution(pending, request, this.isoNow()),
       )
+      this.sessionManager.settlePendingPermission(pending)
       return
     }
 
