@@ -7,7 +7,7 @@ import type { WorkflowDefinition, WorkflowParam, WorkflowRunResult, WorkflowNode
 export interface PortDefinition { id: string; label: string }
 export interface ConfigFieldDescriptor {
   name: string
-  kind: "text" | "select" | "variable-binding-list" | "branch-list" | "record" | "number"
+  kind: "text" | "select" | "variable-binding-list" | "branch-list" | "record" | "number" | "boolean"
   label: string
   optional?: boolean
 }

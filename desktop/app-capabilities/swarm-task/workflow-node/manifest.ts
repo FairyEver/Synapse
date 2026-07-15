@@ -25,7 +25,7 @@ export const swarmTaskNodeManifest: NodeManifest<SwarmTaskNodeConfig> = {
     { name: "runModeOverride", kind: "select", label: "运行模式", optional: true },
     { name: "maxRoundsOverride", kind: "number", label: "批次/每槽轮次", optional: true },
     { name: "concurrencyOverride", kind: "number", label: "并发上限", optional: true },
-    { name: "waitForCompletion", kind: "record", label: "等待完成", optional: true },
+    { name: "waitForCompletion", kind: "boolean", label: "等待完成", optional: true },
     { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
   ],
   configSchema: swarmTaskNodeConfigSchema,

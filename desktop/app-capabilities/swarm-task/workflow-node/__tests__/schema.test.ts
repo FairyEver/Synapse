@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import { swarmTaskNodeManifest } from "../manifest"
 import { swarmTaskNodeConfigSchema } from "../schema"
 
 describe("swarmTaskNodeConfigSchema", () => {
@@ -29,6 +30,15 @@ describe("swarmTaskNodeConfigSchema", () => {
       concurrencyOverride: 2,
       waitForCompletion: true,
       variables: [],
+    })
+  })
+
+  it("describes waitForCompletion as a boolean field", () => {
+    expect(swarmTaskNodeManifest.configFields).toContainEqual({
+      name: "waitForCompletion",
+      kind: "boolean",
+      label: "等待完成",
+      optional: true,
     })
   })
 })

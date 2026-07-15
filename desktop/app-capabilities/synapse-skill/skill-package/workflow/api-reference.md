@@ -108,6 +108,8 @@ Starts a saved Swarm Task. No provider needed. Config fields:
 - `waitForCompletion` (boolean, default false) — return after starting or wait for a terminal result
 - `variables` (array) — variable bindings used by the prompt override
 
+Node discovery reports `waitForCompletion` with `configFields.kind: "boolean"`; do not treat this switch as a record/object field.
+
 The node output is the Swarm run ID. Result outputs include `runId`, `status`, totals, and `outputDirectory`; when `waitForCompletion` is false, the initial result returns immediately after the run starts. When waiting, a terminal `partial` run returns a failed node result while preserving `status: "partial"` and totals in the result outputs.
 
 ### codex
