@@ -529,6 +529,46 @@ describe("createSwarmTaskService", () => {
     expect(workerRuns.every((worker) => worker.summary === "done")).toBe(true)
   })
 
+  it("lists a bounded worker page without loading every worker record", async () => {
+    const worker: SwarmWorkerRun = {
+      id: "worker-101",
+      schemaVersion: 1,
+      taskId: "task-1",
+      runId: "run-1",
+      workerIndex: 1,
+      roundIndex: 101,
+      status: "success",
+      sessionKey: "swarm:task-1:run-1:worker-101",
+    }
+    const baseWorkers = namespace<SwarmWorkerRun>()
+    const list = vi.fn(baseWorkers.list)
+    const listWindow = vi.fn(async () => [{ value: worker }])
+    const count = vi.fn(async () => 250)
+    const workers = { ...baseWorkers, list, listWindow, count }
+    const { service } = serviceHarness({ workers })
+
+    await expect(service.listWorkerRunsPage({
+      runId: "run-1",
+      offset: 100,
+      limit: 100,
+    })).resolves.toEqual({
+      items: [worker],
+      total: 250,
+      offset: 100,
+      limit: 100,
+    })
+
+    expect(listWindow).toHaveBeenCalledWith({
+      filter: { runId: "run-1" },
+      orderBy: ["roundIndex", "workerIndex"],
+      order: "asc",
+      limit: 100,
+      offset: 100,
+    })
+    expect(count).toHaveBeenCalledWith({ runId: "run-1" })
+    expect(list).not.toHaveBeenCalled()
+  })
+
   it("stores a redacted run error when background finalization fails", async () => {
     const pendingResult = deferred<{
       conversationId: string

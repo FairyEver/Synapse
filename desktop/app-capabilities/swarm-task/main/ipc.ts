@@ -14,7 +14,8 @@ import {
   swarmTaskListResultSchema,
   swarmTaskSchema,
   swarmTaskUpdateInputSchema,
-  swarmWorkerRunListResultSchema,
+  swarmWorkerRunListInputSchema,
+  swarmWorkerRunPageSchema,
 } from "../shared/schema"
 import type { SwarmTaskService } from "./service"
 
@@ -99,10 +100,10 @@ export const swarmTaskIpcModule: IpcModule = {
     listWorkerRuns: {
       channel: "synapse:swarm-task:worker-runs:list",
       kind: "invoke",
-      request: swarmRunIdInputSchema,
-      response: swarmWorkerRunListResultSchema,
-      handler: (ctx, request: z.infer<typeof swarmRunIdInputSchema>) =>
-        resolveSwarmTaskService(ctx).listWorkerRuns(request.runId),
+      request: swarmWorkerRunListInputSchema,
+      response: swarmWorkerRunPageSchema,
+      handler: (ctx, request: z.infer<typeof swarmWorkerRunListInputSchema>) =>
+        resolveSwarmTaskService(ctx).listWorkerRunsPage(request),
     },
   },
   events: {

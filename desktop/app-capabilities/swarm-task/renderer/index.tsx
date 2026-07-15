@@ -40,6 +40,7 @@ import {
   isSwarmFileWritePathAllowed,
   SWARM_TASK_DEFAULT_CONCURRENCY,
   SWARM_TASK_DEFAULT_MAX_ROUNDS,
+  SWARM_WORKER_RUN_PAGE_SIZE,
   type SwarmRun,
   type SwarmTask,
   type SwarmTaskConfig,
@@ -82,6 +83,8 @@ export function SwarmTaskModule() {
   const swarmTaskBridge = useMemo(() => requireBridgeDomain("swarmTask"), [])
   const agentBridge = useMemo(() => requireBridgeDomain("agent"), [])
   const runDataRequestIdRef = useRef(0)
+  const activeRunIdRef = useRef<string | null>(null)
+  const workerPageRef = useRef(1)
   const taskNameInputRef = useRef<HTMLInputElement>(null)
 
   const [tasks, setTasks] = useState<SwarmTask[]>([])
@@ -91,6 +94,8 @@ export function SwarmTaskModule() {
   const [runHistory, setRunHistory] = useState<SwarmRun[]>([])
   const [activeRun, setActiveRun] = useState<SwarmRun | null>(null)
   const [workerRuns, setWorkerRuns] = useState<SwarmWorkerRun[]>([])
+  const [workerRunTotal, setWorkerRunTotal] = useState(0)
+  const [workerPage, setWorkerPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [loadingRun, setLoadingRun] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -131,9 +136,13 @@ export function SwarmTaskModule() {
     runDataRequestIdRef.current = requestId
 
     if (!task) {
+      activeRunIdRef.current = null
+      workerPageRef.current = 1
       setRunHistory([])
       setActiveRun(null)
       setWorkerRuns([])
+      setWorkerRunTotal(0)
+      setWorkerPage(1)
       setLoadingRun(false)
       return
     }
@@ -144,11 +153,22 @@ export function SwarmTaskModule() {
       const latestRun = task.lastRunId
         ? await swarmTaskBridge.getRun(task.lastRunId)
         : runs[0] ?? null
-      const nextWorkerRuns = latestRun ? await swarmTaskBridge.listWorkerRuns(latestRun.id) : []
+      const nextWorkerPage = latestRun?.id === activeRunIdRef.current ? workerPageRef.current : 1
+      const nextWorkerRuns = latestRun
+        ? await swarmTaskBridge.listWorkerRuns({
+            runId: latestRun.id,
+            offset: (nextWorkerPage - 1) * SWARM_WORKER_RUN_PAGE_SIZE,
+            limit: SWARM_WORKER_RUN_PAGE_SIZE,
+          })
+        : { items: [], total: 0, offset: 0, limit: SWARM_WORKER_RUN_PAGE_SIZE }
       if (runDataRequestIdRef.current !== requestId) return
+      activeRunIdRef.current = latestRun?.id ?? null
+      workerPageRef.current = nextWorkerPage
       setRunHistory(runs)
       setActiveRun(latestRun)
-      setWorkerRuns(nextWorkerRuns)
+      setWorkerRuns(nextWorkerRuns.items)
+      setWorkerRunTotal(nextWorkerRuns.total)
+      setWorkerPage(nextWorkerPage)
     } catch (error) {
       if (runDataRequestIdRef.current !== requestId) return
       const message = errorMessage(error, "加载运行失败")
@@ -300,6 +320,13 @@ export function SwarmTaskModule() {
     ) ?? nextTasks[0] ?? null
     await reloadRunData(nextTask)
   }, [reloadRunData, reloadTasks, selectedTaskId])
+
+  const changeWorkerPage = useCallback((nextPage: number) => {
+    if (!selectedTask || nextPage < 1) return
+    workerPageRef.current = nextPage
+    setWorkerPage(nextPage)
+    void reloadRunData(selectedTask)
+  }, [reloadRunData, selectedTask])
 
   useEffect(() => (
     swarmTaskBridge.onChanged((event) => {
@@ -512,6 +539,9 @@ export function SwarmTaskModule() {
                 draftConfig={draftConfig}
                 activeRun={selectedActiveRun}
                 workerRuns={selectedWorkerRuns}
+                workerRunTotal={workerRunTotal}
+                workerPage={workerPage}
+                workerPageSize={SWARM_WORKER_RUN_PAGE_SIZE}
                 runHistory={selectedRunHistory}
                 loadingRun={loadingRun}
                 saving={saving}
@@ -524,6 +554,7 @@ export function SwarmTaskModule() {
                 onStartRun={() => void startRun()}
                 onStartDraftRun={() => void startRun(draftConfig)}
                 onRefreshRun={() => void refreshCurrentSnapshot()}
+                onWorkerPageChange={changeWorkerPage}
                 onStopRefill={() => void stopRefill()}
                 onCancelRun={() => void cancelRun()}
                 onOpenConversation={(worker) => void openConversation(worker)}

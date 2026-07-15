@@ -150,7 +150,12 @@ const swarmTaskBridge = vi.hoisted(() => ({
   cancelRun: vi.fn(async () => swarmTaskFixtures.run),
   listRuns: vi.fn(async () => [swarmTaskFixtures.run]),
   getRun: vi.fn(async () => swarmTaskFixtures.run),
-  listWorkerRuns: vi.fn(async () => [swarmTaskFixtures.worker]),
+  listWorkerRuns: vi.fn(async () => ({
+    items: [swarmTaskFixtures.worker],
+    total: 1,
+    offset: 0,
+    limit: 100,
+  })),
   onChanged: vi.fn((listener) => {
     swarmTaskEvents.changedListener = listener
     return () => {
@@ -249,7 +254,12 @@ beforeEach(() => {
   swarmTaskBridge.getRun.mockClear()
   swarmTaskBridge.getRun.mockImplementation(async () => swarmTaskFixtures.run)
   swarmTaskBridge.listWorkerRuns.mockClear()
-  swarmTaskBridge.listWorkerRuns.mockImplementation(async () => [swarmTaskFixtures.worker])
+  swarmTaskBridge.listWorkerRuns.mockImplementation(async () => ({
+    items: [swarmTaskFixtures.worker],
+    total: 1,
+    offset: 0,
+    limit: 100,
+  }))
   swarmTaskBridge.onChanged.mockClear()
   swarmTaskBridge.onChanged.mockImplementation((listener) => {
     swarmTaskEvents.changedListener = listener
@@ -716,13 +726,41 @@ describe("SwarmTaskModule", () => {
     swarmTaskBridge.listTasks.mockImplementation(async () => [swarmTaskFixtures.successTask, swarmTaskFixtures.taskB])
     swarmTaskBridge.listRuns.mockImplementation(async () => [swarmTaskFixtures.successRun])
     swarmTaskBridge.getRun.mockImplementation(async () => swarmTaskFixtures.successRun)
-    swarmTaskBridge.listWorkerRuns.mockImplementation(async () => [swarmTaskFixtures.successWorker])
+    swarmTaskBridge.listWorkerRuns.mockImplementation(async () => ({
+      items: [swarmTaskFixtures.successWorker], total: 1, offset: 0, limit: 100,
+    }))
 
     await clickButton("刷新", 0)
 
     await waitForText("已完成")
     expect(taskStatusIcon("任务 A", "完成")).toBeTruthy()
     expect(taskButtonByText("任务 A")?.textContent).not.toContain("完成")
+  })
+
+  it("loads only the selected worker page", async () => {
+    swarmTaskBridge.listWorkerRuns.mockImplementation(async (input: { runId: string; offset: number; limit: number }) => ({
+      items: [{
+        ...swarmTaskFixtures.worker,
+        id: input.offset === 0 ? "worker-page-1" : "worker-page-2",
+        lastMessage: input.offset === 0 ? "第一页 worker" : "第二页 worker",
+      }],
+      total: 150,
+      offset: input.offset,
+      limit: input.limit,
+    }))
+
+    await renderModule()
+    await clickTab("运行")
+    await waitForText("第一页 worker")
+    await clickButton("下一页")
+    await waitForText("第二页 worker")
+
+    expect(swarmTaskBridge.listWorkerRuns).toHaveBeenLastCalledWith({
+      runId: "run-1",
+      offset: 100,
+      limit: 100,
+    })
+    expect(document.body.textContent).toContain("2 / 2")
   })
 
   it("refreshes the current run when a swarm task change event arrives", async () => {
@@ -734,7 +772,9 @@ describe("SwarmTaskModule", () => {
     swarmTaskBridge.listTasks.mockImplementation(async () => [swarmTaskFixtures.successTask, swarmTaskFixtures.taskB])
     swarmTaskBridge.listRuns.mockImplementation(async () => [swarmTaskFixtures.successRun])
     swarmTaskBridge.getRun.mockImplementation(async () => swarmTaskFixtures.successRun)
-    swarmTaskBridge.listWorkerRuns.mockImplementation(async () => [swarmTaskFixtures.successWorker])
+    swarmTaskBridge.listWorkerRuns.mockImplementation(async () => ({
+      items: [swarmTaskFixtures.successWorker], total: 1, offset: 0, limit: 100,
+    }))
 
     await act(async () => {
       swarmTaskEvents.changedListener?.({
@@ -775,7 +815,9 @@ describe("SwarmTaskModule", () => {
     swarmTaskBridge.listTasks.mockImplementation(async () => [swarmTaskFixtures.successTask, swarmTaskFixtures.taskB])
     swarmTaskBridge.listRuns.mockImplementation(async () => [swarmTaskFixtures.successRun])
     swarmTaskBridge.getRun.mockImplementation(async () => swarmTaskFixtures.successRun)
-    swarmTaskBridge.listWorkerRuns.mockImplementation(async () => [swarmTaskFixtures.successWorker])
+    swarmTaskBridge.listWorkerRuns.mockImplementation(async () => ({
+      items: [swarmTaskFixtures.successWorker], total: 1, offset: 0, limit: 100,
+    }))
 
     await act(async () => {
       vi.advanceTimersByTime(2_000)
@@ -1008,11 +1050,14 @@ describe("SwarmTaskModule", () => {
     swarmTaskBridge.getRun.mockImplementation(async (runId: string) => (
       runId === "run-2" ? swarmTaskFixtures.runB : swarmTaskFixtures.run
     ))
-    swarmTaskBridge.listWorkerRuns.mockImplementation(async (runId: string) => (
-      runId === "run-2"
+    swarmTaskBridge.listWorkerRuns.mockImplementation(async ({ runId }: { runId: string }) => ({
+      items: runId === "run-2"
         ? [{ ...swarmTaskFixtures.worker, id: "worker-2", taskId: "task-2", runId: "run-2", lastMessage: "任务 B worker" }]
-        : [swarmTaskFixtures.worker]
-    ))
+        : [swarmTaskFixtures.worker],
+      total: 1,
+      offset: 0,
+      limit: 100,
+    }))
 
     await renderModule()
     await clickTab("运行")

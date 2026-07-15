@@ -3,6 +3,7 @@ import { z } from "zod"
 export const swarmRunModeSchema = z.enum(["batch", "continuous"])
 export const SWARM_TASK_DEFAULT_CONCURRENCY = 1
 export const SWARM_TASK_DEFAULT_MAX_ROUNDS = 1
+export const SWARM_WORKER_RUN_PAGE_SIZE = 100
 export const swarmRunStatusSchema = z.enum(["running", "draining", "success", "partial", "failed", "cancelled"])
 export const swarmWorkerRunStatusSchema = z.enum(["queued", "running", "success", "failed", "cancelled", "timeout"])
 export const swarmTaskChangedReasonSchema = z.enum([
@@ -357,6 +358,12 @@ export const swarmRunListInputSchema = z.object({
   limit: z.number().int().min(1).max(200).optional(),
 }).strict()
 
+export const swarmWorkerRunListInputSchema = z.object({
+  runId: z.string().min(1),
+  offset: z.number().int().min(0).default(0),
+  limit: z.number().int().min(1).max(200).default(SWARM_WORKER_RUN_PAGE_SIZE),
+}).strict()
+
 export const swarmRunGetInputSchema = z.object({
   taskId: z.string().min(1),
   runId: z.string().min(1),
@@ -365,6 +372,12 @@ export const swarmRunGetInputSchema = z.object({
 export const swarmTaskListResultSchema = z.array(swarmTaskSchema)
 export const swarmRunListResultSchema = z.array(swarmRunSchema)
 export const swarmWorkerRunListResultSchema = z.array(swarmWorkerRunSchema)
+export const swarmWorkerRunPageSchema = z.object({
+  items: swarmWorkerRunListResultSchema,
+  total: z.number().int().min(0),
+  offset: z.number().int().min(0),
+  limit: z.number().int().min(1).max(200),
+}).strict()
 
 export const swarmTaskChangedEventPayloadSchema = z.object({
   taskId: z.string().min(1).optional(),
@@ -397,3 +410,5 @@ export type SwarmTaskUpdateInput = z.infer<typeof swarmTaskUpdateInputSchema>
 export type SwarmRunStartInput = z.infer<typeof swarmRunStartInputSchema>
 export type SwarmRunListInput = z.infer<typeof swarmRunListInputSchema>
 export type SwarmRunGetInput = z.infer<typeof swarmRunGetInputSchema>
+export type SwarmWorkerRunListInput = z.infer<typeof swarmWorkerRunListInputSchema>
+export type SwarmWorkerRunPage = z.infer<typeof swarmWorkerRunPageSchema>

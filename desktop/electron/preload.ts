@@ -1010,7 +1010,7 @@ const synapseBridge: SynapseBridge = {
     cancelRun: (runId) => invoke(IPC_CHANNELS.swarmTask.cancelRun)({ runId }),
     listRuns: (input = {}) => invoke(IPC_CHANNELS.swarmTask.listRuns)(input),
     getRun: (runId) => invoke(IPC_CHANNELS.swarmTask.getRun)({ runId }),
-    listWorkerRuns: (runId) => invoke(IPC_CHANNELS.swarmTask.listWorkerRuns)({ runId }),
+    listWorkerRuns: (input) => invoke(IPC_CHANNELS.swarmTask.listWorkerRuns)(input),
     onChanged: createDomainEventPayloadSubscription<SwarmTaskChangedEvent>(
       subscribe,
       "swarm-task",

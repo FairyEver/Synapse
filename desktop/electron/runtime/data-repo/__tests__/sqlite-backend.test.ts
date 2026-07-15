@@ -154,6 +154,35 @@ describe("SqliteNamespace (T2.5)", () => {
     }
   })
 
+  it("filters, orders, and offsets a bounded JSON window in SQLite", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const ns = new SqliteNamespace<Conversation>({
+        name: "conversations",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+      })
+      await ns.upsert({ id: "c3", title: "Same", projectId: "project-1", updatedAt: "2026-07-15T03:00:00.000Z" })
+      await ns.upsert({ id: "c1", title: "Same", projectId: "project-1", updatedAt: "2026-07-15T01:00:00.000Z" })
+      await ns.upsert({ id: "c2", title: "Other", projectId: "project-2", updatedAt: "2026-07-15T02:00:00.000Z" })
+
+      await expect(ns.listWindow({
+        filter: { projectId: "project-1" },
+        orderBy: ["title", "updatedAt"],
+        order: "asc",
+        limit: 1,
+        offset: 1,
+      })).resolves.toEqual([{
+        value: expect.objectContaining({ id: "c3", projectId: "project-1" }),
+      }])
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("singleton mode stores under reserved id", async () => {
     const dir = await tempDir()
     try {
@@ -379,6 +408,37 @@ describe("SqliteNamespace (T2.5)", () => {
       await ns.upsert({ id: "c1", title: "x" })
       await ns.upsert({ id: "c2", title: "y" })
       expect(ns.rowCount()).toBeGreaterThanOrEqual(2)
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("indexes swarm workers by run and display order", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const _ns = new SqliteNamespace<Conversation>({
+        name: "app.swarm-task.worker-runs",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+        indexes: sqliteIndexesFor("app.swarm-task.worker-runs"),
+      })
+      void _ns
+
+      const plan = db
+        .prepare(`
+          EXPLAIN QUERY PLAN
+          SELECT value FROM ns_app_swarm_task_worker_runs
+          WHERE id != ? AND json_extract(value, '$.runId') = ?
+          ORDER BY json_extract(value, '$.roundIndex'), json_extract(value, '$.workerIndex'), id
+          LIMIT ? OFFSET ?;
+        `)
+        .all("__singleton", "run-1", 100, 0) as Array<{ detail: string }>
+
+      expect(plan.some((row) => row.detail.includes("USING INDEX"))).toBe(true)
+      expect(plan.some((row) => row.detail.includes("SCAN ns_app_swarm_task_worker_runs"))).toBe(false)
       db.close()
     } finally {
       await rm(dir, { recursive: true, force: true })

@@ -39,7 +39,7 @@ describe("swarmTaskIpcModule", () => {
       cancelRun: vi.fn(async () => null),
       listRuns: vi.fn(async () => []),
       getRun: vi.fn(async () => null),
-      listWorkerRuns: vi.fn(async () => []),
+      listWorkerRunsPage: vi.fn(async () => ({ items: [], total: 0, offset: 0, limit: 100 })),
     }
     const ctx = {
       resolve: (id: string) => {
@@ -66,7 +66,7 @@ describe("swarmTaskIpcModule", () => {
     await swarmTaskIpcModule.methods.cancelRun.handler(ctx as never, { runId: "run-1" })
     await swarmTaskIpcModule.methods.listRuns.handler(ctx as never, { taskId: "task-1", limit: 5 })
     await swarmTaskIpcModule.methods.getRun.handler(ctx as never, { runId: "run-1" })
-    await swarmTaskIpcModule.methods.listWorkerRuns.handler(ctx as never, { runId: "run-1" })
+    await swarmTaskIpcModule.methods.listWorkerRuns.handler(ctx as never, { runId: "run-1", offset: 100, limit: 100 })
 
     expect(service.listTasks).toHaveBeenCalled()
     expect(service.createTask).toHaveBeenCalledWith({
@@ -86,6 +86,6 @@ describe("swarmTaskIpcModule", () => {
     expect(service.cancelRun).toHaveBeenCalledWith("run-1")
     expect(service.listRuns).toHaveBeenCalledWith("task-1", 5)
     expect(service.getRun).toHaveBeenCalledWith("run-1")
-    expect(service.listWorkerRuns).toHaveBeenCalledWith("run-1")
+    expect(service.listWorkerRunsPage).toHaveBeenCalledWith({ runId: "run-1", offset: 100, limit: 100 })
   })
 })

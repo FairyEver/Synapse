@@ -1427,7 +1427,7 @@ describe("preload bridge", () => {
     await bridge.swarmTask.cancelRun("run-1")
     await bridge.swarmTask.listRuns({ taskId: "task-1", limit: 5 })
     await bridge.swarmTask.getRun("run-1")
-    await bridge.swarmTask.listWorkerRuns("run-1")
+    await bridge.swarmTask.listWorkerRuns({ runId: "run-1", offset: 100, limit: 100 })
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       1,
@@ -1483,7 +1483,7 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       10,
       "synapse:swarm-task:worker-runs:list",
-      { runId: "run-1" },
+      { runId: "run-1", offset: 100, limit: 100 },
     )
   })
 })

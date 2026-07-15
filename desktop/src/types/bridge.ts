@@ -76,7 +76,8 @@ import type {
   SwarmTaskChangedEvent,
   SwarmTaskCreateInput,
   SwarmTaskUpdateInput,
-  SwarmWorkerRun,
+  SwarmWorkerRunListInput,
+  SwarmWorkerRunPage,
 } from "../../app-capabilities/swarm-task/shared/schema"
 import type {
   SynapseTerminalCreateGroupCommandInput,
@@ -1025,7 +1026,7 @@ export type SynapseBridge = {
     cancelRun: (runId: string) => Promise<SwarmRun | null>
     listRuns: (input?: { taskId?: string; limit?: number }) => Promise<SwarmRun[]>
     getRun: (runId: string) => Promise<SwarmRun | null>
-    listWorkerRuns: (runId: string) => Promise<SwarmWorkerRun[]>
+    listWorkerRuns: (input: SwarmWorkerRunListInput) => Promise<SwarmWorkerRunPage>
     onChanged: (listener: (event: SwarmTaskChangedEvent) => void) => () => void
   }
   terminal: {

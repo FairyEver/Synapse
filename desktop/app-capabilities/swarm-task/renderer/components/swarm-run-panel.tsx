@@ -1,4 +1,4 @@
-import { ExternalLink, RefreshCw, Square, StopCircle } from "lucide-react"
+import { ChevronLeft, ChevronRight, ExternalLink, RefreshCw, Square, StopCircle } from "lucide-react"
 import { Button } from "../../../../src/components/ui/button"
 import {
   Empty,
@@ -19,8 +19,12 @@ import { formatRunStatus, formatRunTotals, formatWorkerPhase, formatWorkerStatus
 type SwarmRunPanelProps = {
   readonly run: SwarmRun | null
   readonly workers: readonly SwarmWorkerRun[]
+  readonly workerTotal: number
+  readonly workerPage: number
+  readonly workerPageSize: number
   readonly loading: boolean
   readonly onRefresh: () => void
+  readonly onWorkerPageChange: (page: number) => void
   readonly onStopRefill: () => void
   readonly onCancelRun: () => void
   readonly onOpenConversation: (worker: SwarmWorkerRun) => void
@@ -31,8 +35,12 @@ const terminalRunStatuses = new Set<SwarmRunStatus>(["success", "partial", "fail
 export function SwarmRunPanel({
   run,
   workers,
+  workerTotal,
+  workerPage,
+  workerPageSize,
   loading,
   onRefresh,
+  onWorkerPageChange,
   onStopRefill,
   onCancelRun,
   onOpenConversation,
@@ -48,6 +56,7 @@ export function SwarmRunPanel({
   }
 
   const stopNewWorkersLabel = run.configSnapshot.runMode === "continuous" ? "停止补位" : "停止新轮次"
+  const workerPageCount = Math.max(1, Math.ceil(workerTotal / workerPageSize))
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4">
@@ -130,6 +139,31 @@ export function SwarmRunPanel({
           </TableBody>
         </Table>
       </div>
+      {workerPageCount > 1 ? (
+        <div className="flex shrink-0 items-center justify-end gap-2">
+          <span className="text-sm text-muted-foreground tabular-nums">{workerPage} / {workerPageCount}</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={loading || workerPage <= 1}
+            onClick={() => onWorkerPageChange(workerPage - 1)}
+          >
+            <ChevronLeft data-icon="inline-start" />
+            上一页
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={loading || workerPage >= workerPageCount}
+            onClick={() => onWorkerPageChange(workerPage + 1)}
+          >
+            下一页
+            <ChevronRight data-icon="inline-end" />
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }

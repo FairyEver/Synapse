@@ -17,6 +17,9 @@ type SwarmTaskDetailProps = {
   readonly draftConfig: SwarmTaskConfig
   readonly activeRun: SwarmRun | null
   readonly workerRuns: readonly SwarmWorkerRun[]
+  readonly workerRunTotal: number
+  readonly workerPage: number
+  readonly workerPageSize: number
   readonly runHistory: readonly SwarmRun[]
   readonly loadingRun: boolean
   readonly saving: boolean
@@ -29,6 +32,7 @@ type SwarmTaskDetailProps = {
   readonly onStartRun: () => void
   readonly onStartDraftRun: () => void
   readonly onRefreshRun: () => void
+  readonly onWorkerPageChange: (page: number) => void
   readonly onStopRefill: () => void
   readonly onCancelRun: () => void
   readonly onOpenConversation: (worker: SwarmWorkerRun) => void
@@ -41,6 +45,9 @@ export function SwarmTaskDetail({
   draftConfig,
   activeRun,
   workerRuns,
+  workerRunTotal,
+  workerPage,
+  workerPageSize,
   runHistory,
   loadingRun,
   saving,
@@ -53,6 +60,7 @@ export function SwarmTaskDetail({
   onStartRun,
   onStartDraftRun,
   onRefreshRun,
+  onWorkerPageChange,
   onStopRefill,
   onCancelRun,
   onOpenConversation,
@@ -105,8 +113,12 @@ export function SwarmTaskDetail({
           <SwarmRunPanel
             run={activeRun}
             workers={workerRuns}
+            workerTotal={workerRunTotal}
+            workerPage={workerPage}
+            workerPageSize={workerPageSize}
             loading={loadingRun}
             onRefresh={onRefreshRun}
+            onWorkerPageChange={onWorkerPageChange}
             onStopRefill={onStopRefill}
             onCancelRun={onCancelRun}
             onOpenConversation={onOpenConversation}

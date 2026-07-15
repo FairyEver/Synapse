@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest"
 import {
   SWARM_TASK_DEFAULT_CONCURRENCY,
   SWARM_TASK_DEFAULT_MAX_ROUNDS,
+  SWARM_WORKER_RUN_PAGE_SIZE,
   swarmTaskConfigSchema,
+  swarmWorkerRunListInputSchema,
 } from "../schema"
 
 const baseConfig = {
@@ -77,5 +79,14 @@ describe("swarmTaskConfigSchema", () => {
         },
       },
     })).toThrow()
+  })
+
+  it("bounds worker run page requests", () => {
+    expect(swarmWorkerRunListInputSchema.parse({ runId: "run-1" })).toEqual({
+      runId: "run-1",
+      offset: 0,
+      limit: SWARM_WORKER_RUN_PAGE_SIZE,
+    })
+    expect(() => swarmWorkerRunListInputSchema.parse({ runId: "run-1", limit: 201 })).toThrow()
   })
 })

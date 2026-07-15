@@ -16,6 +16,7 @@ import {
   swarmTaskConfigSchema,
   swarmTaskCreateInputSchema,
   swarmTaskUpdateInputSchema,
+  swarmWorkerRunListInputSchema,
   type SwarmRun,
   type SwarmRunStartInput,
   type SwarmTask,
@@ -24,6 +25,8 @@ import {
   type SwarmTaskCreateInput,
   type SwarmTaskUpdateInput,
   type SwarmWorkerRun,
+  type SwarmWorkerRunListInput,
+  type SwarmWorkerRunPage,
 } from "../shared/schema"
 import {
   buildSwarmWorkerPrompt,
@@ -57,7 +60,7 @@ export type SwarmAgentGateway = {
 export type SwarmTaskServiceDeps = {
   readonly tasks: Pick<DataNamespace<SwarmTask>, "list" | "get" | "upsert" | "remove">
   readonly runs: Pick<DataNamespace<SwarmRun>, "list" | "get" | "upsert" | "remove">
-  readonly workers: Pick<DataNamespace<SwarmWorkerRun>, "list" | "get" | "upsert" | "remove">
+  readonly workers: Pick<DataNamespace<SwarmWorkerRun>, "list" | "listWindow" | "count" | "get" | "upsert" | "remove">
   readonly agent: SwarmAgentGateway
   readonly resolveProjectPath: (projectId: string) => Promise<string>
   readonly outputRoot: string
@@ -376,6 +379,37 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       .sort((left, right) => left.roundIndex - right.roundIndex || left.workerIndex - right.workerIndex)
   }
 
+  async function listWorkerRunsPage(input: SwarmWorkerRunListInput): Promise<SwarmWorkerRunPage> {
+    const parsed = swarmWorkerRunListInputSchema.parse(input)
+    if (deps.workers.listWindow && deps.workers.count) {
+      const filter = { runId: parsed.runId }
+      const [window, total] = await Promise.all([
+        deps.workers.listWindow({
+          filter,
+          orderBy: ["roundIndex", "workerIndex"],
+          order: "asc",
+          limit: parsed.limit,
+          offset: parsed.offset,
+        }),
+        deps.workers.count(filter as Partial<SwarmWorkerRun>),
+      ])
+      return {
+        items: window.map((entry) => entry.value),
+        total,
+        offset: parsed.offset,
+        limit: parsed.limit,
+      }
+    }
+
+    const workers = await listWorkerRuns(parsed.runId)
+    return {
+      items: workers.slice(parsed.offset, parsed.offset + parsed.limit),
+      total: workers.length,
+      offset: parsed.offset,
+      limit: parsed.limit,
+    }
+  }
+
   async function finishRunInBackground(taskId: string, run: SwarmRun): Promise<void> {
     try {
       const result = await scheduler.start({ taskId, runId: run.id, config: run.configSnapshot })
@@ -616,6 +650,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     listRuns,
     getRun,
     listWorkerRuns,
+    listWorkerRunsPage,
   }
 }
 

@@ -36,7 +36,7 @@ import { mkdirSync } from "node:fs"
 
 import { AbstractDataNamespace, type NamespaceBaseDeps } from "../namespace-base"
 import { InvalidNamespaceDataError } from "../errors"
-import type { DataListWindowItem, DataListWindowOptions, DataQueryScalar } from "../types"
+import type { DataListWindowItem, DataListWindowOptions } from "../types"
 
 const SINGLETON_ID = "__singleton"
 const META_TABLE = "__synapse_meta"
@@ -181,9 +181,21 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
     if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 1_000) {
       throw new InvalidNamespaceDataError(this.name, "list window limit must be between 1 and 1000")
     }
+    const offset = options.offset ?? 0
+    if (!Number.isSafeInteger(offset) || offset < 0) {
+      throw new InvalidNamespaceDataError(this.name, "list window offset must be a non-negative safe integer")
+    }
 
     const clauses = ["id != ?"]
     const params: SqliteFilterParam[] = [SINGLETON_ID]
+    for (const [key, value] of Object.entries(options.filter ?? {})) {
+      if (!isSqliteFilterParam(value)) {
+        throw new InvalidNamespaceDataError(this.name, "list window filters are invalid")
+      }
+      const jsonKey = safeJsonKey(this.name, key)
+      clauses.push(`json_extract(value, '$.${jsonKey}') = ?`)
+      params.push(value)
+    }
     for (const [key, excludedValues] of Object.entries(options.exclude ?? {})) {
       const jsonKey = safeJsonKey(this.name, key)
       if (!Array.isArray(excludedValues) || excludedValues.length === 0) continue
@@ -194,8 +206,18 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
       params.push(...excludedValues)
     }
 
-    const orderBy = options.orderBy ? safeJsonKey(this.name, String(options.orderBy)) : "updatedAt"
+    const requestedOrderKeys = Array.isArray(options.orderBy)
+      ? options.orderBy
+      : [options.orderBy ?? "updatedAt"]
+    if (requestedOrderKeys.length === 0 || requestedOrderKeys.length > 4) {
+      throw new InvalidNamespaceDataError(this.name, "list window ordering is invalid")
+    }
+    const orderKeys = requestedOrderKeys.map((key) => safeJsonKey(this.name, String(key)))
     const direction = options.order === "asc" ? "ASC" : "DESC"
+    const orderClause = [
+      ...orderKeys.map((key) => `json_extract(value, '$.${key}') ${direction}`),
+      `id ${direction}`,
+    ].join(", ")
     const arrayTail = options.arrayTail ? safeJsonKey(this.name, String(options.arrayTail)) : undefined
     const valueExpression = arrayTail
       ? `CASE
@@ -218,9 +240,9 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
       `SELECT ${valueExpression} AS value, ${lengthExpression} AS array_length
        FROM ${this.tableName}
        WHERE ${clauses.join(" AND ")}
-       ORDER BY json_extract(value, '$.${orderBy}') ${direction}, id ${direction}
-       LIMIT ?;`,
-    ).all(...params, options.limit) as Array<{ value?: unknown; array_length?: unknown }>
+       ORDER BY ${orderClause}
+       LIMIT ? OFFSET ?;`,
+    ).all(...params, options.limit, offset) as Array<{ value?: unknown; array_length?: unknown }>
 
     return rows.map((row) => ({
       value: this.parseRow(row.value),
