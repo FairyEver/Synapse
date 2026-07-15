@@ -384,7 +384,7 @@ The path must exist and match the param kind before the run starts. For a file/d
 
 Cancel a running workflow execution.
 
-**Params:** `runId` (string, required)
+**Params:** `workflowId` (string, required), `runId` (string, required)
 **Returns:** `{ runId, cancelRequested }`
 
-**Notes:** `cancelRequested` is true when Synapse found an active run and sent an abort signal. It is false when the run is no longer active; the request still succeeds idempotently.
+**Notes:** Authorizes the mutation against `workflowId` and verifies the active run belongs to that workflow before sending an abort signal. `cancelRequested` is true when Synapse found the matching active run and sent the signal. It is false when the run is no longer active or belongs to another workflow; the request still succeeds idempotently.

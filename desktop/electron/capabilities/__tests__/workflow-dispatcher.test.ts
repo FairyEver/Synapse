@@ -146,6 +146,14 @@ describe("createWorkflowDispatcher", () => {
         runId: { type: "string" },
       },
     })
+    const runDisableTool = tools.find((item) => item.name === "workflow_run_disable")
+    expect(runDisableTool?.inputSchema).toMatchObject({
+      required: ["workflowId", "runId"],
+      properties: {
+        workflowId: { type: "string" },
+        runId: { type: "string" },
+      },
+    })
   })
 
   it("workflow.definition.list dispatches correctly", async () => {
@@ -1154,32 +1162,101 @@ describe("createWorkflowDispatcher", () => {
     }))
   })
 
-  it("workflow.run.disable calls cancelRun", async () => {
-    const deps = makeDeps()
+  it("workflow.run.disable authorizes the owning workflow before cancelling", async () => {
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const auditSink = {
+      record: vi.fn(),
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    const deps = makeDeps({
+      permissionGuard,
+      auditSink,
+      getRunStatus: vi.fn(async () => ({
+        runId: "run-1",
+        workflowId: "wf-1",
+        status: "running",
+        nodeResults: {},
+        startedAt: 1,
+      } satisfies WorkflowRunStatus)),
+    })
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch("workflow.run.disable", { runId: "run-1" }, { source: "api" })
+    const result = await dispatcher.dispatch(
+      "workflow.run.disable",
+      { workflowId: "wf-1", runId: "run-1" },
+      { source: "mcp-http" },
+    )
     expect(result.ok).toBe(true)
     expect(result.data).toEqual({ runId: "run-1", cancelRequested: true })
+    expect(deps.getRunStatus).toHaveBeenCalledWith("run-1")
     expect(deps.cancelRun).toHaveBeenCalledWith("run-1")
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "workflow.mutate",
+      resource: "workflow:wf-1",
+      context: expect.objectContaining({
+        workflowAction: "workflow.run.disable",
+        workflowId: "wf-1",
+        runId: "run-1",
+      }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "workflow.mutate",
+      resource: "workflow:wf-1",
+      outcome: "allowed",
+    }))
   })
 
   it("workflow.run.disable rejects unsafe run ids before cancelling", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
 
-    await expect(dispatcher.dispatch("workflow.run.disable", { runId: "bad/run" }, { source: "api" }))
+    await expect(dispatcher.dispatch(
+      "workflow.run.disable",
+      { workflowId: "wf-1", runId: "bad/run" },
+      { source: "api" },
+    ))
       .rejects
       .toThrow("Invalid workflow run id")
+    expect(deps.getRunStatus).not.toHaveBeenCalled()
     expect(deps.cancelRun).not.toHaveBeenCalled()
   })
 
   it("workflow.run.disable stays idempotent when the run is no longer active", async () => {
     const deps = makeDeps({ cancelRun: vi.fn(() => false) })
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch("workflow.run.disable", { runId: "run-missing" }, { source: "api" })
+    const result = await dispatcher.dispatch(
+      "workflow.run.disable",
+      { workflowId: "wf-1", runId: "run-missing" },
+      { source: "api" },
+    )
 
     expect(result).toEqual({ ok: true, data: { runId: "run-missing", cancelRequested: false } })
-    expect(deps.cancelRun).toHaveBeenCalledWith("run-missing")
+    expect(deps.cancelRun).not.toHaveBeenCalled()
+  })
+
+  it("workflow.run.disable does not cancel a run owned by another workflow", async () => {
+    const deps = makeDeps({
+      getRunStatus: vi.fn(async () => ({
+        runId: "run-1",
+        workflowId: "wf-other",
+        status: "running",
+        nodeResults: {},
+        startedAt: 1,
+      } satisfies WorkflowRunStatus)),
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const result = await dispatcher.dispatch(
+      "workflow.run.disable",
+      { workflowId: "wf-1", runId: "run-1" },
+      { source: "api" },
+    )
+
+    expect(result).toEqual({ ok: true, data: { runId: "run-1", cancelRequested: false } })
+    expect(deps.cancelRun).not.toHaveBeenCalled()
   })
 
   it("reads workflow.node.delete state only through the mutation lock", async () => {

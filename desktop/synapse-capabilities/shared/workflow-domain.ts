@@ -372,11 +372,14 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     },
     {
       name: "workflow_run_disable",
-      description: "Cancel a running workflow execution by sending an abort signal. Returns { runId, cancelRequested }, where cancelRequested=false means the run was not in the active run table and the request was treated as an idempotent success.",
+      description: "Cancel a running workflow execution owned by a specific workflow. Returns { runId, cancelRequested }, where cancelRequested=false means the run was not active or did not belong to that workflow and the request was treated as an idempotent success.",
       inputSchema: {
         type: "object",
-        properties: { runId: { type: "string", description: "Run ID to cancel." } },
-        required: ["runId"],
+        properties: {
+          workflowId: { type: "string", description: "Workflow ID used to execute the run." },
+          runId: { type: "string", description: "Run ID to cancel." },
+        },
+        required: ["workflowId", "runId"],
       },
     },
     // Atomic write

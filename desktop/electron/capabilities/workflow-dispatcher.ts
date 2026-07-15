@@ -371,7 +371,12 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 
   "workflow.run.disable": async (params, deps) => {
+    const workflowId = requireString(params, "workflowId")
     const runId = requireWorkflowRunId(params, "runId")
+    const status = await deps.getRunStatus(runId)
+    if (!status || status.workflowId !== workflowId) {
+      return { ok: true, data: { runId, cancelRequested: false } }
+    }
     const cancelRequested = deps.cancelRun(runId)
     return { ok: true, data: { runId, cancelRequested } }
   },
