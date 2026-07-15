@@ -2581,7 +2581,7 @@ describe("ConversationRouter", () => {
 
   it("uses answer wording when a side session receives AskUserQuestion", async () => {
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
-    const { router } = createRouter({
+    const { conversations, router } = createRouter({
       agentEvents,
       session: new ScriptedSession([
         {
@@ -2608,6 +2608,7 @@ describe("ConversationRouter", () => {
 
     const result = await router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 100)
     const persisted = await agentEvents.list()
+    const saved = await conversations.get(result.conversationId)
 
     expect(result).toMatchObject({
       timedOut: false,
@@ -2617,6 +2618,8 @@ describe("ConversationRouter", () => {
     expect(persisted[1]?.payload).toEqual(expect.objectContaining({
       message: "中继会话请求了用户回复，已停止本次操作。",
     }))
+    expect(saved?.history.find((entry) => entry.metadata?.requestId === "question-1")?.metadata)
+      .toMatchObject({ userQuestionResolution: { status: "skipped" } })
   })
 
   it("keeps persisted tool metadata and event payloads bounded and sanitized", async () => {

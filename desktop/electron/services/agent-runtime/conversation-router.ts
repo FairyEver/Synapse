@@ -1066,6 +1066,12 @@ export class ConversationRouter {
             behavior: "deny",
             message: permissionRelayDenyMessage(event),
           })
+          if (isAskUserQuestionEvent(event)) {
+            await this.persistUserQuestionResolution(conversation.id, event.requestId, {
+              status: "skipped",
+              resolvedAt: this.isoNow(),
+            })
+          }
           error = permissionRelayErrorMessage(event)
           await this.sessionManager.closeCurrentTurn(conversation.id)
           break
