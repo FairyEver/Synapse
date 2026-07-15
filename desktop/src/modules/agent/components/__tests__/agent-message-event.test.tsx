@@ -83,6 +83,45 @@ afterEach(() => {
 })
 
 describe("AgentMessageEvent", () => {
+  it("redacts sensitive assistant content before rendering and copying", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const localPath = "/Users/liyang/project/file.ts"
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-sensitive",
+            kind: "message",
+            role: "assistant",
+            content: `Authorization: Bearer sk-assistant-secret\nOpen ${localPath}`,
+            timestamp: "2026-07-16T03:00:00.000Z",
+          }}
+          profile={profile}
+          onOpenReference={vi.fn()}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain("Authorization: Bearer [redacted]")
+    expect(container.textContent).toContain(localPath)
+    expect(container.textContent).not.toContain("sk-assistant-secret")
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[aria-label="复制"]')?.click()
+      await Promise.resolve()
+    })
+    expect(writeText).toHaveBeenCalledWith(`Authorization: Bearer [redacted]\nOpen ${localPath}`)
+  })
+
   it("renders Obsidian wikilinks as bold plain text", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -380,7 +419,7 @@ describe("AgentMessageEvent", () => {
         messageId: "message-123",
         role: "assistant",
         contentLength: 37,
-        codeLength: 27,
+        codeLength: 25,
       },
     })
     expect(JSON.stringify(track.mock.calls)).not.toContain("do-not-log")

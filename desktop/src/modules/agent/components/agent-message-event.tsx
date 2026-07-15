@@ -6,6 +6,7 @@ import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import { MARKDOWN_BODY_CLASSNAME } from "@/components/markdown-viewer"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
+import { redactSensitiveText } from "@/lib/agent-redaction"
 import { sanitizeUrl } from "@/lib/url-sanitize"
 import type {
   SynapseAgentDisplayProfile,
@@ -122,7 +123,8 @@ function AssistantMessageBody({
   readonly onOpenReference: (reference: string) => void
 }) {
   const streaming = item.streaming === true
-  const preprocessed = wrapLocalReferences(renderLocalMarkdownImagesAsReferences(renderObsidianWikilinksAsBoldText(item.content)))
+  const safeContent = redactSensitiveText(item.content)
+  const preprocessed = wrapLocalReferences(renderLocalMarkdownImagesAsReferences(renderObsidianWikilinksAsBoldText(safeContent)))
   const hasUsage = Boolean(item.metadata?.usage)
 
   const handleClick = async (event: MouseEvent<HTMLDivElement>) => {
@@ -221,7 +223,7 @@ function AssistantMessageBody({
       ) : null}
       <AgentMessageToolbar
         timestamp={item.timestamp}
-        content={item.content}
+        content={safeContent}
         messageId={item.id}
         role={item.role === "user" || item.role === "assistant" ? item.role : undefined}
         className="mt-2 pt-1 opacity-0 transition-opacity group-hover/message:opacity-100"
