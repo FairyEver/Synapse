@@ -4,7 +4,7 @@ import type { ProviderService } from "../../provider"
 import { ClaudeSDKSession } from "../claude-sdk-session"
 import type { AgentSessionRepository } from "../session-repository"
 import { SessionManager, validateWorkspaceDirectory, type CreateAgentLiveSessionInput } from "../session-manager"
-import type { RuntimeSessionState } from "../session-lifecycle"
+import type { PendingPermissionState, RuntimeSessionState } from "../session-lifecycle"
 import type {
   AgentEvent,
   AgentLiveSession,
@@ -1140,6 +1140,98 @@ describe("SessionManager", () => {
 
     expect(state.closing).toBe(false)
     expect(state.liveSession).toBeUndefined()
+  })
+
+  it("persists a pending AskUserQuestion cancellation before closing session state", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const pendingPermissions = new Map<string, PendingPermissionState>()
+    const resolveUserQuestion = vi.fn(async () => baseConversation())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: { resolveUserQuestion } as unknown as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions,
+      now: () => new Date("2026-07-15T12:00:00.000Z"),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+    const pending = {
+      requestId: "question-1",
+      projectId: "project-1",
+      sessionKey: "session-1",
+      conversationId: "conversation-1",
+      toolName: "AskUserQuestion",
+      createdAt: "2026-07-15T11:59:00.000Z",
+      stateKey: "conversation-1",
+      liveSession: new FakeLiveSession(),
+      resolve: vi.fn(),
+    } satisfies PendingPermissionState
+    state.pending = pending
+    pendingPermissions.set(pending.requestId, pending)
+
+    await manager.closeState("conversation-1")
+
+    expect(resolveUserQuestion).toHaveBeenCalledWith("conversation-1", "question-1", {
+      status: "cancelled",
+      resolvedAt: "2026-07-15T12:00:00.000Z",
+    })
+    expect(pending.resolve).toHaveBeenCalledOnce()
+    expect(pendingPermissions.has("question-1")).toBe(false)
+    expect(states.has("conversation-1")).toBe(false)
+  })
+
+  it("logs cancellation persistence failures and still closes the session state", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const pendingPermissions = new Map<string, PendingPermissionState>()
+    const logger = structuredLogger()
+    const rawError = "database rejected secret question text"
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {
+        resolveUserQuestion: vi.fn(async () => { throw new Error(rawError) }),
+      } as unknown as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions,
+      logger,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+    const pending = {
+      requestId: "question-1",
+      projectId: "project-1",
+      sessionKey: "session-1",
+      conversationId: "conversation-1",
+      toolName: "AskUserQuestion",
+      createdAt: "2026-07-15T11:59:00.000Z",
+      stateKey: "conversation-1",
+      liveSession: new FakeLiveSession(),
+      resolve: vi.fn(),
+    } satisfies PendingPermissionState
+    state.pending = pending
+    pendingPermissions.set(pending.requestId, pending)
+
+    await expect(manager.closeState("conversation-1")).resolves.toBeUndefined()
+
+    expect(pending.resolve).toHaveBeenCalledOnce()
+    expect(states.has("conversation-1")).toBe(false)
+    expect(logger.warn).toHaveBeenCalledWith("Agent user question resolution persistence failed.", {
+      boundary: "agent-runtime.user-question-resolution",
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      requestId: "question-1",
+      status: "cancelled",
+      errorName: "Error",
+      errorLength: rawError.length,
+    })
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret question text")
   })
 
   it("logs idle session reclaim with SDK session correlation", async () => {

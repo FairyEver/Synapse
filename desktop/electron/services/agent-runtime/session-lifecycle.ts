@@ -221,7 +221,6 @@ export class SessionLifecycleManager {
     if (state.busy || state.activeTurns > 0 || state.queue.length > 0) {
       return
     }
-    this.deps.sessionManager.settlePending(state)
     await this.deps.sessionManager.closeCurrentTurn(conversation.id)
   }
 

@@ -442,6 +442,7 @@ export class SessionManager {
   async closeCurrentTurn(conversationId: string): Promise<void> {
     const state = this.deps.states.get(conversationId)
     if (!state) return
+    await this.persistPendingUserQuestionCancellation(state.pending)
     this.settlePending(state)
     if (!state.liveSession) return
     state.closing = true
@@ -483,10 +484,34 @@ export class SessionManager {
     const state = this.deps.states.get(conversationId)
     if (!state) return
     state.closing = true
-    this.settlePending(state)
     this.settleQueued(state)
     await this.closeCurrentTurn(conversationId)
     this.deps.states.delete(conversationId)
+  }
+
+  private async persistPendingUserQuestionCancellation(
+    pending: PendingPermissionState | undefined,
+  ): Promise<void> {
+    if (!pending || pending.toolName !== "AskUserQuestion") return
+    try {
+      await this.deps.repository.resolveUserQuestion(
+        pending.conversationId,
+        pending.requestId,
+        {
+          status: "cancelled",
+          resolvedAt: (this.deps.now?.() ?? new Date()).toISOString(),
+        },
+      )
+    } catch (error) {
+      this.deps.logger?.warn("Agent user question resolution persistence failed.", {
+        boundary: "agent-runtime.user-question-resolution",
+        projectId: pending.projectId,
+        conversationId: pending.conversationId,
+        requestId: pending.requestId,
+        status: "cancelled",
+        ...errorDiagnostic(error),
+      })
+    }
   }
 
   settlePending(state: RuntimeSessionState | undefined): void {
