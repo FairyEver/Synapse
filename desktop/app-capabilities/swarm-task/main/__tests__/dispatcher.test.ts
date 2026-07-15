@@ -160,6 +160,7 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
       limit: 5,
     }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: [run], affected: 0 })
     const runGetResult = await dispatcher.dispatch(SWARM_TASK_RUN_GET_CAPABILITY_ID, {
+      taskId: "task-1",
       runId: "run-1",
     }, { source: "mcp-http" })
     expect(runGetResult).toEqual({
@@ -201,6 +202,15 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
         taskId: "task-1",
       }),
     }))
+    expect(security.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "swarm-task:task:task-1",
+      context: expect.objectContaining({
+        capabilityAction: SWARM_TASK_RUN_GET_CAPABILITY_ID,
+        taskId: "task-1",
+        runId: "run-1",
+      }),
+    }))
   })
 
   it("rejects an unscoped run list before permission checks or service reads", async () => {
@@ -214,6 +224,38 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
 
     expect(security.permissionGuard.check).not.toHaveBeenCalled()
     expect(service.listRuns).not.toHaveBeenCalled()
+  })
+
+  it("rejects an unscoped run read before permission checks or service reads", async () => {
+    const service = createService()
+    const security = createSecurity()
+    const dispatcher = createSwarmTaskCapabilityDispatcher({ service: service as never, ...security })
+
+    await expect(dispatcher.dispatch(SWARM_TASK_RUN_GET_CAPABILITY_ID, {
+      runId: "run-1",
+    }, { source: "mcp-http" })).rejects.toThrow()
+
+    expect(security.permissionGuard.check).not.toHaveBeenCalled()
+    expect(service.getRun).not.toHaveBeenCalled()
+    expect(service.listWorkerRuns).not.toHaveBeenCalled()
+  })
+
+  it("returns null when a run does not belong to the authorized task", async () => {
+    const service = createService()
+    const security = createSecurity()
+    const dispatcher = createSwarmTaskCapabilityDispatcher({ service: service as never, ...security })
+
+    await expect(dispatcher.dispatch(SWARM_TASK_RUN_GET_CAPABILITY_ID, {
+      taskId: "task-2",
+      runId: "run-1",
+    }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: null, affected: 0 })
+
+    expect(service.getRun).toHaveBeenCalledWith("run-1")
+    expect(service.listWorkerRuns).not.toHaveBeenCalled()
+    expect(security.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "swarm-task:task:task-2",
+    }))
   })
 
   it("fails missing run mutations while keeping nullable reads", async () => {
@@ -236,6 +278,7 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
       runId: "missing",
     }, { source: "mcp-http" })).resolves.toEqual({ ok: false, error: "蜂群运行不存在：missing" })
     await expect(dispatcher.dispatch(SWARM_TASK_RUN_GET_CAPABILITY_ID, {
+      taskId: "task-1",
       runId: "missing",
     }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: null, affected: 0 })
 

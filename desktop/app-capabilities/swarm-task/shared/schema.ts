@@ -357,6 +357,11 @@ export const swarmRunListInputSchema = z.object({
   limit: z.number().int().min(1).max(200).optional(),
 }).strict()
 
+export const swarmRunGetInputSchema = z.object({
+  taskId: z.string().min(1),
+  runId: z.string().min(1),
+}).strict()
+
 export const swarmTaskListResultSchema = z.array(swarmTaskSchema)
 export const swarmRunListResultSchema = z.array(swarmRunSchema)
 export const swarmWorkerRunListResultSchema = z.array(swarmWorkerRunSchema)
@@ -391,3 +396,4 @@ export type SwarmTaskCreateInput = z.infer<typeof swarmTaskCreateInputSchema>
 export type SwarmTaskUpdateInput = z.infer<typeof swarmTaskUpdateInputSchema>
 export type SwarmRunStartInput = z.infer<typeof swarmRunStartInputSchema>
 export type SwarmRunListInput = z.infer<typeof swarmRunListInputSchema>
+export type SwarmRunGetInput = z.infer<typeof swarmRunGetInputSchema>

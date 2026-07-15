@@ -14,6 +14,7 @@ import {
   SWARM_TASK_TASK_UPDATE_CAPABILITY_ID,
 } from "../shared/capability"
 import {
+  swarmRunGetInputSchema,
   swarmRunIdInputSchema,
   swarmRunListInputSchema,
   swarmRunStartInputSchema,
@@ -113,13 +114,18 @@ export function createSwarmTaskCapabilityDispatcher(deps: SwarmTaskDispatcherDep
         ))
       }
       if (action === SWARM_TASK_RUN_GET_CAPABILITY_ID) {
-        const parsed = swarmRunIdInputSchema.parse(params)
-        return runSwarmAction(deps, context, runAuditInput("automation.read", action, parsed.runId), async () => {
-          const run = await deps.service.getRun(parsed.runId)
-          if (!run) return { ok: true, data: null, affected: 0 }
-          const workers = (await deps.service.listWorkerRuns(parsed.runId)).map(toMcpWorkerRun)
-          return { ok: true, data: { ...run, workers }, affected: 1 }
-        })
+        const parsed = swarmRunGetInputSchema.parse(params)
+        return runSwarmAction(
+          deps,
+          context,
+          taskAuditInput("automation.read", action, parsed.taskId, { runId: parsed.runId }),
+          async () => {
+            const run = await deps.service.getRun(parsed.runId)
+            if (!run || run.taskId !== parsed.taskId) return { ok: true, data: null, affected: 0 }
+            const workers = (await deps.service.listWorkerRuns(parsed.runId)).map(toMcpWorkerRun)
+            return { ok: true, data: { ...run, workers }, affected: 1 }
+          },
+        )
       }
       throw new Error(`Unknown swarm task action: ${action}`)
     },
@@ -132,12 +138,17 @@ function toMcpWorkerRun(worker: SwarmWorkerRun): Omit<SwarmWorkerRun, "sessionKe
   return publicWorker
 }
 
-function taskAuditInput(action: PermissionAction, capabilityAction: string, taskId: string) {
+function taskAuditInput(
+  action: PermissionAction,
+  capabilityAction: string,
+  taskId: string,
+  metadata: Record<string, unknown> = {},
+) {
   return {
     action,
     capabilityAction,
     resource: `swarm-task:task:${taskId}`,
-    metadata: { taskId },
+    metadata: { taskId, ...metadata },
   }
 }
 

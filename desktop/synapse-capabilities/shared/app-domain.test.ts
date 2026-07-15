@@ -200,6 +200,15 @@ describe("App capability domain", () => {
         taskId: expect.objectContaining({ type: "string", minLength: 1 }),
       },
     })
+    const runGetSchema = buildAppTools()
+      .find((tool) => tool.name === SWARM_TASK_MCP_TOOL_NAMES.runGet)?.inputSchema
+    expect(runGetSchema).toMatchObject({
+      required: ["taskId", "runId"],
+      properties: {
+        taskId: expect.objectContaining({ type: "string", minLength: 1 }),
+        runId: expect.objectContaining({ type: "string", minLength: 1 }),
+      },
+    })
   })
 
   it("defines Swarm Task create and start schemas", () => {

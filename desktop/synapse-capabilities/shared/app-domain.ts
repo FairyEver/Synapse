@@ -836,13 +836,14 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: SWARM_TASK_MCP_TOOL_NAMES.runGet,
-      description: "Get one Swarm Task run by id with its worker records.",
+      description: "Get one run for a specific Swarm Task with its worker records.",
       inputSchema: {
         type: "object",
         properties: {
+          taskId: stringField("Owning Swarm Task id.", { minLength: 1 }),
           runId: stringField("Swarm run id.", { minLength: 1 }),
         },
-        required: ["runId"],
+        required: ["taskId", "runId"],
         additionalProperties: false,
       },
     },
