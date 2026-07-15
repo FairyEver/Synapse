@@ -42,6 +42,12 @@ const synapseSkillBridge = vi.hoisted(() => ({
   })),
 }))
 
+const installSourceToEditorTargets = vi.hoisted(() => vi.fn(async () => ({
+  results: [{
+    target: { editorId: "codex", scope: "global" },
+    status: "installed",
+  }],
+})))
 const loadEditors = vi.hoisted(() => vi.fn(async () => undefined))
 const inspectGlobalSkillInstallations = vi.hoisted(() => vi.fn(async () => ({
   entries: [
@@ -69,6 +75,7 @@ vi.mock("@/app-shell/config", () => ({
 
 vi.mock("@/app-shell/installers", () => ({
   inspectGlobalSkillInstallations,
+  installSourceToEditorTargets,
 }))
 
 vi.mock("@/app-shell/logging", () => ({
@@ -129,6 +136,7 @@ let roots: Root[] = []
 
 beforeEach(() => {
   synapseSkillBridge.prepareInstallSource.mockClear()
+  installSourceToEditorTargets.mockClear()
   loadEditors.mockClear()
   inspectGlobalSkillInstallations.mockClear()
   showItemInFolder.mockClear()
@@ -206,6 +214,48 @@ describe("SynapseSkillModule", () => {
 
     expect(synapseSkillBridge.prepareInstallSource).toHaveBeenCalled()
     expect(document.body.textContent).toContain("synapse-skill:none:global")
+  })
+
+  it("installs missing global targets in one batch", async () => {
+    await renderModule()
+
+    await clickButton("安装缺失项")
+
+    expect(installSourceToEditorTargets).toHaveBeenCalledWith(expect.objectContaining({
+      mode: "install",
+      targets: [{ editorId: "codex", scope: "global" }],
+    }))
+  })
+
+  it("shows failed batch targets and allows retry", async () => {
+    installSourceToEditorTargets
+      .mockResolvedValueOnce({
+        results: [{
+          target: { editorId: "codex", scope: "global" },
+          status: "failed",
+          error: "目标目录不可写",
+        }],
+      })
+      .mockResolvedValueOnce({
+        results: [{
+          target: { editorId: "codex", scope: "global" },
+          status: "installed",
+        }],
+      })
+    await renderModule()
+
+    await clickButton("安装缺失项")
+
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toContain("目标目录不可写")
+    })
+
+    await clickButton("安装缺失项")
+
+    expect(installSourceToEditorTargets).toHaveBeenCalledTimes(2)
+    await vi.waitFor(() => {
+      expect(document.body.textContent).not.toContain("目标目录不可写")
+    })
   })
 })
 
