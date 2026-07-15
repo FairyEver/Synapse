@@ -496,6 +496,30 @@ describe("SecretsModule", () => {
     expect(document.body.textContent).not.toContain("super-secret")
   })
 
+  it("does not log secret names when binding scan fails", async () => {
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    mocks.secrets.scanSkillEnvBindings.mockRejectedValueOnce(new Error("scan failed: super-secret"))
+
+    await renderSecretsModule()
+    await act(async () => {
+      clickButtonByLabel("扫描关联 Skill：TOKEN")
+      await Promise.resolve()
+    })
+
+    expect(mocks.toast.error).toHaveBeenCalledWith("扫描失败，请重试。")
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      "Failed to scan Skill env bindings.",
+      expect.objectContaining({
+        errorName: "Error",
+        errorMessageLength: "scan failed: super-secret".length,
+      }),
+    )
+    expect(mocks.logger.error.mock.calls.at(-1)?.[1]).not.toHaveProperty("name")
+    expect(mocks.logger.error.mock.calls.at(-1)?.[1]).not.toHaveProperty("error")
+    expect(JSON.stringify(mocks.logger.error.mock.calls)).not.toContain("TOKEN")
+    expect(JSON.stringify(mocks.logger.error.mock.calls)).not.toContain("super-secret")
+  })
+
   it("requires a fresh scan before retrying a conflicted binding", async () => {
     const conflictedItem = { ...skillEnvScanResult.items[0], status: "needs_update" as const }
     mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
@@ -680,6 +704,17 @@ describe("SecretsModule", () => {
 
     expect(mocks.secrets.delete).not.toHaveBeenCalled()
     expect(mocks.toast.error).toHaveBeenCalledWith("扫描失败，请重试。")
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      "Failed to scan Skill env bindings.",
+      expect.objectContaining({
+        errorName: "Error",
+        errorMessageLength: "scan failed: super-secret".length,
+      }),
+    )
+    expect(mocks.logger.error.mock.calls.at(-1)?.[1]).not.toHaveProperty("name")
+    expect(mocks.logger.error.mock.calls.at(-1)?.[1]).not.toHaveProperty("error")
+    expect(JSON.stringify(mocks.logger.error.mock.calls)).not.toContain("TOKEN")
+    expect(JSON.stringify(mocks.logger.error.mock.calls)).not.toContain("super-secret")
     expect(document.body.textContent).toContain("TOKEN")
     expect(document.body.textContent).not.toContain("删除密钥")
   })

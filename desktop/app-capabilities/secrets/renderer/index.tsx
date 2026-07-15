@@ -214,7 +214,7 @@ export function SecretsModule() {
     try {
       return await secretsBridge.scanSkillEnvBindings({ name })
     } catch (error) {
-      logger.error("Failed to scan Skill env bindings.", { name, ...errorDiagnostic(error) })
+      logger.error("Failed to scan Skill env bindings.", errorDiagnostic(error))
       toast.error("扫描失败，请重试。")
       return null
     }
@@ -315,7 +315,7 @@ export function SecretsModule() {
       scanResult = await secretsBridge.scanSkillEnvBindings({ name: secret.name })
     } catch (error) {
       if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
-      logger.error("Failed to scan Skill env bindings.", { name: secret.name, ...errorDiagnostic(error) })
+      logger.error("Failed to scan Skill env bindings.", errorDiagnostic(error))
       toast.error("扫描失败，请重试。")
       return
     }
