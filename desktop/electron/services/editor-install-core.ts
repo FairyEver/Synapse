@@ -24,6 +24,7 @@ import { configStore } from "./config-store"
 import { contentService } from "./content-service"
 import {
   findSkillDirectoryByContentId,
+  isSkillDirectoryOwnedByContentId,
 } from "./editor-adapters/skill-identity"
 import {
   createEditorWriteErrorLogMeta,
@@ -377,7 +378,9 @@ export class EditorInstallCore {
                 content: applyVariableSubstitutions(detail.content, payload.variableSubstitutions, { includeCodeBlocks: true }),
               }
             : detail
-          const existingSkillDirectoryPath = backupPathForRestore ?? target.targetPath
+          const existingSkillDirectoryPath = backupPathForRestore
+            ?? (target.status === "ready" && target.targetExists ? target.targetPath : previousSkillDirectoryPath)
+            ?? target.targetPath
 
           try {
             let skillEnvGuard: SkillEnvMaterializationGuard | null = null
@@ -490,14 +493,31 @@ export class EditorInstallCore {
             previousSkillDirectoryPath
             && !isSameEditorPath(previousSkillDirectoryPath, target.targetPath)
           ) {
+            let previousBackupPath: string | null = null
+            const previousBackupAuditMetadata = {
+              ...auditMetadata,
+              operation: "install-previous-backup",
+              targetName: path.basename(previousSkillDirectoryPath),
+            }
             try {
-              await rm(previousSkillDirectoryPath, { recursive: true, force: true })
+              if (!await isSkillDirectoryOwnedByContentId(previousSkillDirectoryPath, payload.contentId)) {
+                installWarning = "旧 Skill 目录身份已变化，已保留，请手动检查。"
+              } else {
+                previousBackupPath = await getAvailableDesktopSkillBackupPath(previousSkillDirectoryPath)
+                await checkEditorWritePermission(security, previousBackupPath, previousBackupAuditMetadata)
+                await mkdir(path.dirname(previousBackupPath), { recursive: true })
+                await moveDirectoryAllowingCrossDevice(previousSkillDirectoryPath, previousBackupPath)
+                recordEditorWriteAudit(security, previousBackupPath, "allowed", previousBackupAuditMetadata)
+                installWarning = `Skill 改名完成，旧目录已备份到桌面：${path.basename(previousBackupPath)}`
+              }
             } catch (err) {
-              logger.warn("Failed to clean up previous skill directory", {
+              const auditPath = previousBackupPath ?? previousSkillDirectoryPath
+              recordEditorWriteAudit(security, auditPath, "failed", previousBackupAuditMetadata)
+              logger.warn("Failed to backup previous skill directory", {
                 targetPath: path.basename(previousSkillDirectoryPath),
                 ...createEditorWriteErrorLogMeta(err),
               })
-              installWarning = "旧 Skill 目录清理失败，编辑器可能残留旧文件。"
+              installWarning = "旧 Skill 目录备份失败，原目录已保留，请手动检查。"
             }
           }
 

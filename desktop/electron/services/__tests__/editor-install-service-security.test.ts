@@ -288,6 +288,113 @@ describe("EditorInstallService security", () => {
     )
   })
 
+  it("preserves the old .env and backs up the previous directory when a Skill is renamed", async () => {
+    const root = await createTempRoot()
+    const previousSkillDirectoryPath = path.join(root, "skills", "old-skill")
+    const targetPath = path.join(root, "skills", "test-skill")
+    const backupPath = path.join(testDesktopPath, "old-skill-synapse备份")
+    await mkdir(previousSkillDirectoryPath, { recursive: true })
+    await writeFile(path.join(previousSkillDirectoryPath, ".synapse.json"), JSON.stringify({ id: "skill-1" }), "utf8")
+    await writeFile(path.join(previousSkillDirectoryPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+    await writeFile(path.join(previousSkillDirectoryPath, ".env"), "TOKEN=existing\nCUSTOM=user-only\n", "utf8")
+    await writeFile(path.join(previousSkillDirectoryPath, "notes.txt"), "keep me\n", "utf8")
+
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: false,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockImplementation(async (
+      { stagingDirectoryPath }: { stagingDirectoryPath: string },
+    ) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# Renamed Skill\n", "utf8")
+      await writeFile(path.join(stagingDirectoryPath, ".env.example"), "TOKEN=\nNEW_KEY=default\n", "utf8")
+    })
+
+    const auditSink = new InMemoryAuditSink()
+    await expect(editorInstallService.installToEditor({
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      skillEnvValues: { NEW_KEY: "confirmed" },
+      scope: "global",
+    }, {
+      actor: { kind: "user" },
+      auditSink,
+      permissionGuard: createPermissionGuard(),
+    })).resolves.toMatchObject({
+      contentId: "skill-1",
+      targetPath,
+      warning: "Skill 改名完成，旧目录已备份到桌面：old-skill-synapse备份",
+    })
+
+    await expect(readFile(path.join(targetPath, ".env"), "utf8"))
+      .resolves.toBe('TOKEN=existing\nCUSTOM=user-only\nNEW_KEY="confirmed"\n')
+    await expect(readFile(path.join(backupPath, "notes.txt"), "utf8")).resolves.toBe("keep me\n")
+    await expect(lstat(previousSkillDirectoryPath)).rejects.toMatchObject({ code: "ENOENT" })
+    expect(auditSink.list()).toContainEqual(expect.objectContaining({
+      outcome: "allowed",
+      resource: backupPath,
+      metadata: expect.objectContaining({ operation: "install-previous-backup" }),
+    }))
+  })
+
+  it("keeps a renamed Skill directory when its identity changes before backup", async () => {
+    const root = await createTempRoot()
+    const previousSkillDirectoryPath = path.join(root, "skills", "old-skill")
+    const targetPath = path.join(root, "skills", "test-skill")
+    const backupPath = path.join(testDesktopPath, "old-skill-synapse备份")
+    await mkdir(previousSkillDirectoryPath, { recursive: true })
+    await writeFile(path.join(previousSkillDirectoryPath, ".synapse.json"), JSON.stringify({ id: "skill-1" }), "utf8")
+
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: false,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockImplementation(async (
+      { stagingDirectoryPath }: { stagingDirectoryPath: string },
+    ) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# Renamed Skill\n", "utf8")
+      await writeFile(
+        path.join(previousSkillDirectoryPath, ".synapse.json"),
+        JSON.stringify({ id: "another-skill" }),
+        "utf8",
+      )
+    })
+
+    await expect(editorInstallService.installToEditor({
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      scope: "global",
+    }, {
+      actor: { kind: "user" },
+      auditSink: new InMemoryAuditSink(),
+      permissionGuard: createPermissionGuard(),
+    })).resolves.toMatchObject({
+      targetPath,
+      warning: "旧 Skill 目录身份已变化，已保留，请手动检查。",
+    })
+
+    await expect(lstat(previousSkillDirectoryPath)).resolves.toBeDefined()
+    await expect(lstat(backupPath)).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("moves the old Skill to the desktop when replacing it", async () => {
     const root = await createTempRoot()
     const targetPath = path.join(root, "skills", "test-skill")

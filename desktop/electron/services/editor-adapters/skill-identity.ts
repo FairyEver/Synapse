@@ -1,4 +1,4 @@
-import { readFile, readdir } from "node:fs/promises"
+import { lstat, readFile, readdir } from "node:fs/promises"
 import path from "node:path"
 import { arePathsEqualForCompare } from "../../../src/lib/path-compare"
 import { isFileNotFoundError, pathExists } from "../fs-utils"
@@ -52,6 +52,26 @@ async function readSkillIdFile(skillDirectoryPath: string): Promise<string | nul
 
     throw error
   }
+}
+
+async function isSkillDirectoryOwnedByContentId(
+  skillDirectoryPath: string,
+  contentId: string,
+): Promise<boolean> {
+  try {
+    const entry = await lstat(skillDirectoryPath)
+    if (!entry.isDirectory() || entry.isSymbolicLink()) {
+      return false
+    }
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return false
+    }
+
+    throw error
+  }
+
+  return areSkillContentIdsEquivalent(await readSkillIdFile(skillDirectoryPath), contentId)
 }
 
 async function findSkillDirectoryByContentId(
@@ -168,5 +188,6 @@ export {
   areSkillContentIdsEquivalent,
   checkSkillNameConflict,
   findSkillDirectoryByContentId,
+  isSkillDirectoryOwnedByContentId,
   resolveSkillTargetPath,
 }
