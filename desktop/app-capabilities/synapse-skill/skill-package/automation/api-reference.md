@@ -367,6 +367,7 @@ Input:
 ```
 
 Requests the run to stop launching new workers. Active workers may continue.
+Returns a failed result when `runId` does not exist.
 
 ### app_swarm_task_run_cancel
 
@@ -377,6 +378,7 @@ Input:
 ```
 
 Cancels the run and active workers when possible.
+Returns a failed result when `runId` does not exist.
 
 ### app_swarm_task_run_list
 

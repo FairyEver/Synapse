@@ -132,7 +132,7 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
     expect(service.getRun).toHaveBeenCalledWith("run-1")
   })
 
-  it("returns affected 0 for missing task delete and missing nullable run actions", async () => {
+  it("fails missing run mutations while keeping nullable reads", async () => {
     const service = createService({
       listTasks: vi.fn(async () => []),
       stopRefill: vi.fn(async () => null),
@@ -146,10 +146,10 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
     }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: { ok: true }, affected: 0 })
     await expect(dispatcher.dispatch(SWARM_TASK_RUN_STOP_REFILL_CAPABILITY_ID, {
       runId: "missing",
-    }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: null, affected: 0 })
+    }, { source: "mcp-http" })).resolves.toEqual({ ok: false, error: "蜂群运行不存在：missing" })
     await expect(dispatcher.dispatch(SWARM_TASK_RUN_CANCEL_CAPABILITY_ID, {
       runId: "missing",
-    }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: null, affected: 0 })
+    }, { source: "mcp-http" })).resolves.toEqual({ ok: false, error: "蜂群运行不存在：missing" })
     await expect(dispatcher.dispatch(SWARM_TASK_RUN_GET_CAPABILITY_ID, {
       runId: "missing",
     }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: null, affected: 0 })
