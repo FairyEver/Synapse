@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState, type ReactNode } from "react"
 
 import { readContent, resolveEditorInstallTarget } from "@/app-shell/content"
 import { inspectSkillEnvSource, installSourceToEditor } from "@/app-shell/installers"
+import { createRendererLogger } from "@/app-shell/logging"
 import { EditorIcon } from "@/components/editor-icon"
 import {
   AlertDialog,
@@ -80,6 +81,8 @@ type InstallFlowOptions = {
   overwriteConfirmed?: boolean
   replaceConfirmed?: boolean
 }
+
+const logger = createRendererLogger("installer.flow")
 
 function getKindLabel(kind: SynapseInstallerKind | undefined) {
   if (kind === "skill") {
@@ -428,15 +431,24 @@ export function SharedInstallerFlow({
 
   const handleSaveVariableChanges = async () => {
     if (isSavingVariables) return
+    const secretsToSave = pendingSecretChanges
+      ? [...pendingSecretChanges.newSecrets, ...pendingSecretChanges.updatedSecrets]
+      : []
+    let savedCount = 0
     setIsSavingVariables(true)
     try {
-      if (pendingSecretChanges) {
-        for (const secret of [...pendingSecretChanges.newSecrets, ...pendingSecretChanges.updatedSecrets]) {
-          await secretsBridge.upsert(secret)
-        }
+      for (const secret of secretsToSave) {
+        await secretsBridge.upsert(secret)
+        savedCount += 1
       }
-    } catch {
-      warning("密钥未保存，安装会继续。")
+    } catch (saveError) {
+      logger.error("Failed to save installer substitution secrets.", {
+        errorName: saveError instanceof Error ? saveError.name : typeof saveError,
+        savedCount,
+        totalCount: secretsToSave.length,
+      })
+      warning("密钥保存失败，请重试或仅本次使用。")
+      return
     } finally {
       setIsSavingVariables(false)
     }

@@ -709,6 +709,54 @@ describe("SharedInstallerFlow", () => {
     }))
   })
 
+  it("keeps the save decision open when saving a variable fails", async () => {
+    mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
+    mocks.secrets.upsert
+      .mockRejectedValueOnce(new Error("storage unavailable: GITEE_TOKEN"))
+      .mockResolvedValueOnce({ id: "secret-1", name: "GITEE_TOKEN", hasValue: true })
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [],
+      legacyPlaceholders: ["GITEE_TOKEN"],
+    })
+    mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
+    await renderFlow(repositorySkillSource)
+
+    await act(async () => {
+      clickButton("Codex")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("选择目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    const input = document.querySelector<HTMLInputElement>("input")
+    await act(async () => {
+      if (input) setInputValue(input, "new-token")
+      clickButton("继续安装")
+    })
+
+    await act(async () => {
+      clickButton("保存并继续")
+      await Promise.resolve()
+    })
+
+    expect(mocks.warning).toHaveBeenCalledWith("密钥保存失败，请重试或仅本次使用。")
+    expect(document.body.textContent).toContain("保存密钥")
+    expect(mocks.installSourceToEditor).not.toHaveBeenCalled()
+
+    await act(async () => {
+      clickButton("保存并继续")
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.upsert).toHaveBeenCalledTimes(2)
+    expect(mocks.installSourceToEditor).toHaveBeenCalledTimes(1)
+  })
+
   it("passes rule install form values through the shared installer", async () => {
     const projectEditor = {
       ...editor,
