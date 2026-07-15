@@ -246,6 +246,45 @@ describe("SecretsService", () => {
     })
   })
 
+  it("migrates compatible legacy variables while preserving invalid names for retry", async () => {
+    const legacyConfig = createDefaultConfig()
+    legacyConfig.global.variables = [
+      { name: "TOKEN", value: "valid-secret" },
+      { name: "invalid-name", value: "preserved-secret" },
+    ]
+    const harness = createHarness({ config: legacyConfig })
+    const service = createSecretsService(harness.deps)
+
+    await expect(service.initialize()).resolves.toBeUndefined()
+
+    await expect(service.get({ name: "TOKEN", includeValue: true })).resolves.toMatchObject({
+      value: "valid-secret",
+    })
+    expect(harness.config.global.variables).toEqual([
+      { name: "invalid-name", value: "preserved-secret" },
+    ])
+    expect(await harness.settings.getSingleton()).toEqual({
+      schemaVersion: 1,
+      legacyConfigMigratedAt: null,
+    })
+    expect(harness.deps.logger.warn).toHaveBeenCalledWith(
+      "Some legacy variables were not migrated because their names are incompatible.",
+      { incompatibleCount: 1, migratedCount: 1 },
+    )
+    expect(JSON.stringify(vi.mocked(harness.deps.logger.warn).mock.calls))
+      .not.toContain("preserved-secret")
+
+    harness.config.global.variables = [{ name: "REPAIRED_NAME", value: "preserved-secret" }]
+    await expect(service.initialize()).resolves.toBeUndefined()
+
+    await expect(service.get({ name: "REPAIRED_NAME", includeValue: true })).resolves.toMatchObject({
+      value: "preserved-secret",
+    })
+    expect(harness.config.global.variables).toEqual([])
+    expect((await harness.settings.getSingleton())?.legacyConfigMigratedAt)
+      .toBe("2026-07-09T00:00:00.000Z")
+  })
+
   it("does not clear legacy config when migration persistence fails", async () => {
     const legacyConfig = createDefaultConfig()
     legacyConfig.global.variables = [{ name: "TOKEN", value: "secret" }]

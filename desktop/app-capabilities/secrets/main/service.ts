@@ -6,7 +6,7 @@ import type {
   SecretItemEntryV1,
   SecretSettingsEntryV1,
 } from "../../../electron/runtime/data-repo/schemas/secrets"
-import type { SynapseConfig, SynapseConfigPatch } from "../../../src/types/config"
+import type { SynapseConfig, SynapseConfigPatch, SynapseVariable } from "../../../src/types/config"
 import type { SkillEnvBindingSecurity, SkillEnvBindingService } from "./skill-env-binding-service"
 import {
   SECRET_NAME_REGEX,
@@ -188,10 +188,16 @@ export function createSecretsService(deps: SecretsServiceDeps) {
     const config = await deps.loadConfig()
     const legacyVariables = config.global.variables
     const existingNames = new Set((await deps.items.list()).map((item) => item.name.toLowerCase()))
+    const incompatibleVariables: SynapseVariable[] = []
     const now = timestamp()
+    let migratedCount = 0
 
     for (const variable of legacyVariables) {
-      const name = normalizeName(variable.name)
+      const name = variable.name.trim()
+      if (!name || !SECRET_NAME_REGEX.test(name)) {
+        incompatibleVariables.push(variable)
+        continue
+      }
       const normalized = name.toLowerCase()
       if (existingNames.has(normalized)) continue
       await deps.items.upsert({
@@ -204,9 +210,20 @@ export function createSecretsService(deps: SecretsServiceDeps) {
         updatedAt: now,
       })
       existingNames.add(normalized)
+      migratedCount += 1
     }
 
-    await deps.updateConfig({ global: { variables: [] } })
+    if (incompatibleVariables.length !== legacyVariables.length) {
+      await deps.updateConfig({ global: { variables: incompatibleVariables } })
+    }
+    if (incompatibleVariables.length > 0) {
+      deps.logger.warn("Some legacy variables were not migrated because their names are incompatible.", {
+        incompatibleCount: incompatibleVariables.length,
+        migratedCount,
+      })
+      if (migratedCount > 0) await emitChanged()
+      return
+    }
     await deps.settings.setSingleton({
       ...settings,
       legacyConfigMigratedAt: now,
