@@ -109,6 +109,11 @@ export interface WorkflowRunResult {
   durationMs: number
   output?: string
 }
+export interface WorkflowRunDefinitionMigration {
+  kind: "failed" | "unsupported_future"
+  sourceVersion?: string
+  targetVersion?: string
+}
 export interface WorkflowRunStatus {
   runId: string
   workflowId: string
@@ -120,6 +125,7 @@ export interface WorkflowRunStatus {
   error?: string
   params?: Record<string, unknown>
   definition?: WorkflowDefinition
+  definitionMigration?: WorkflowRunDefinitionMigration
 }
 export interface WorkflowRunListItem {
   runId: string
@@ -132,6 +138,7 @@ export interface WorkflowRunListItem {
   error?: string
   params?: Record<string, unknown>
   definition?: WorkflowDefinition
+  definitionMigration?: WorkflowRunDefinitionMigration
 }
 export type WorkflowEvent =
   | { type: "workflow:started"; runId: string; workflowId: string }
@@ -160,4 +167,5 @@ export interface WorkflowRunSnapshot {
   nodeResults: Record<string, NodeRunResult>
   error?: string
   definition?: WorkflowDefinition
+  definitionMigration?: WorkflowRunDefinitionMigration
 }

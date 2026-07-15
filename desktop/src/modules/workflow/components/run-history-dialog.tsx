@@ -171,6 +171,9 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
                         <Badge variant={STATUS_VARIANT[s.status] ?? "outline"} className="text-xs shrink-0">
                           {STATUS_LABEL[s.status] ?? s.status}
                         </Badge>
+                        {s.definitionMigration && (
+                          <Badge variant="outline" className="text-xs shrink-0">结构不可读</Badge>
+                        )}
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-muted-foreground truncate">{formatTime(s.startedAt)}</p>
                           {firstError && (

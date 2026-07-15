@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
@@ -24,6 +24,68 @@ describe("RunSnapshotService", () => {
       await expectExists(path.join(dataDir, "workflow-runs", "run-00"), false)
       await expectExists(path.join(dataDir, "workflow-runs", "workflow-1", "run-20.json"), true)
       await expectExists(path.join(dataDir, "workflow-runs", "run-20", "nodes", "node-1", "codex", "stdout.log"), true)
+    } finally {
+      await rm(dataDir, { recursive: true, force: true })
+    }
+  })
+
+  it("protects future snapshot definitions without rewriting the stored snapshot", async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), "synapse-run-snapshots-"))
+    const service = new RunSnapshotService(dataDir)
+    const file = path.join(dataDir, "workflow-runs", "workflow-1", "run-future.json")
+    const raw = {
+      ...snapshot("run-future", 1),
+      definition: {
+        id: "workflow-1",
+        name: "Future workflow",
+        version: "v2",
+        meta: { schemaVersion: "2.0.0" },
+        nodes: [],
+        edges: [],
+        params: [],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    }
+
+    try {
+      await mkdir(path.dirname(file), { recursive: true })
+      await writeFile(file, JSON.stringify(raw), "utf-8")
+
+      const loaded = await service.get("run-future", "workflow-1")
+
+      expect(loaded?.definition).toBeUndefined()
+      expect(loaded?.definitionMigration).toEqual({
+        kind: "unsupported_future",
+        sourceVersion: "2.0.0",
+        targetVersion: "1.0.0",
+      })
+      await expect(readFile(file, "utf-8")).resolves.toBe(JSON.stringify(raw))
+    } finally {
+      await rm(dataDir, { recursive: true, force: true })
+    }
+  })
+
+  it("returns an explicit diagnostic when a snapshot definition migration fails", async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), "synapse-run-snapshots-"))
+    const service = new RunSnapshotService(dataDir)
+    const file = path.join(dataDir, "workflow-runs", "workflow-1", "run-invalid.json")
+    const raw = {
+      ...snapshot("run-invalid", 1),
+      definition: { meta: { schemaVersion: "1.0.0" } },
+    }
+
+    try {
+      await mkdir(path.dirname(file), { recursive: true })
+      await writeFile(file, JSON.stringify(raw), "utf-8")
+
+      const loaded = await service.get("run-invalid", "workflow-1")
+
+      expect(loaded?.definition).toBeUndefined()
+      expect(loaded?.definitionMigration).toEqual({
+        kind: "failed",
+        sourceVersion: "1.0.0",
+      })
     } finally {
       await rm(dataDir, { recursive: true, force: true })
     }

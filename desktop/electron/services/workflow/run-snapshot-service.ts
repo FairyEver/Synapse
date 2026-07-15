@@ -219,31 +219,42 @@ export class RunSnapshotService {
 }
 
 function prepareSnapshotForRead(snapshot: WorkflowRunSnapshot): WorkflowRunSnapshot {
-  if (!snapshot.definition) return sanitizeWorkflowRunSnapshot(snapshot)
-  const result = migrateWorkflowDocument(snapshot.definition)
+  const { definitionMigration: _storedDiagnostic, ...snapshotWithoutDiagnostic } = snapshot
+  void _storedDiagnostic
+  if (!snapshotWithoutDiagnostic.definition) return sanitizeWorkflowRunSnapshot(snapshotWithoutDiagnostic)
+  const result = migrateWorkflowDocument(snapshotWithoutDiagnostic.definition)
   if (result.kind === "current") {
-    return sanitizeWorkflowRunSnapshot({ ...snapshot, definition: result.document })
+    return sanitizeWorkflowRunSnapshot({ ...snapshotWithoutDiagnostic, definition: result.document })
   }
-  logger.warn("run snapshot workflow definition migration failed, definition omitted", {
+  logger.warn("run snapshot workflow definition migration failed, definition protected", {
     runId: snapshot.runId,
     workflowId: snapshot.workflowId,
     sourceVersion: result.sourceVersion,
     errorName: result.error.name,
   })
-  const { definition: _definition, ...withoutDefinition } = snapshot
+  const { definition: _definition, ...withoutDefinition } = snapshotWithoutDiagnostic
   void _definition
-  return sanitizeWorkflowRunSnapshot(withoutDefinition)
+  return sanitizeWorkflowRunSnapshot({
+    ...withoutDefinition,
+    definitionMigration: {
+      kind: result.kind,
+      sourceVersion: result.sourceVersion,
+      ...(result.kind === "unsupported_future" ? { targetVersion: result.targetVersion } : {}),
+    },
+  })
 }
 
 function prepareSnapshotForSave(snapshot: WorkflowRunSnapshot): WorkflowRunSnapshot {
-  if (!snapshot.definition) return sanitizeWorkflowRunSnapshot(snapshot)
-  const result = migrateWorkflowDocument(snapshot.definition)
+  const { definitionMigration: _readDiagnostic, ...snapshotWithoutDiagnostic } = snapshot
+  void _readDiagnostic
+  if (!snapshotWithoutDiagnostic.definition) return sanitizeWorkflowRunSnapshot(snapshotWithoutDiagnostic)
+  const result = migrateWorkflowDocument(snapshotWithoutDiagnostic.definition)
   if (result.kind !== "current") {
     throw new Error("Workflow snapshot definition could not be migrated before save.", {
       cause: result.error,
     })
   }
-  return sanitizeWorkflowRunSnapshot({ ...snapshot, definition: result.document })
+  return sanitizeWorkflowRunSnapshot({ ...snapshotWithoutDiagnostic, definition: result.document })
 }
 
 function snapshotErrorMetadata(error: unknown): {

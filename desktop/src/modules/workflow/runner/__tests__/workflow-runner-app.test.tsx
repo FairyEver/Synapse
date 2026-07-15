@@ -215,6 +215,46 @@ describe("WorkflowRunnerApp", () => {
     expect(container.querySelector("[data-testid='dag-view']")).toBeInstanceOf(HTMLButtonElement)
   })
 
+  it("protects historical runs whose snapshot definition comes from a future version", async () => {
+    const runStatus = vi.fn(async () => ({
+      status: "completed",
+      params: {},
+      nodeResults: {},
+      definitionMigration: {
+        kind: "unsupported_future",
+        sourceVersion: "2.0.0",
+        targetVersion: "1.0.0",
+      },
+    }))
+    const get = vi.fn(async () => workflowDefinition())
+    const openEditor = vi.fn(async () => undefined)
+    installWorkflowBridge({ runStatus, get, openEditor })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowRunnerApp />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(get).not.toHaveBeenCalled()
+    expect(container.textContent).toContain("无法显示历史工作流结构")
+    expect(container.textContent).toContain("此记录由较新版本创建，请升级 Synapse 后再查看。")
+    expect(container.querySelector("[data-testid='dag-view']")).toBeNull()
+
+    const openButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("打开当前工作流"))
+    await act(async () => {
+      openButton?.click()
+      await Promise.resolve()
+    })
+    expect(openEditor).toHaveBeenCalledWith("workflow-1")
+  })
+
   it("logs cancel IPC failures without raw backend error text", async () => {
     const rawMessage = "cancel failed with token=secret-value and /Users/example/repo"
     const cancel = vi.fn(async () => {
@@ -539,6 +579,7 @@ describe("WorkflowRunnerApp", () => {
 function installWorkflowBridge(overrides: {
   readonly cancel?: (runId: string) => Promise<unknown>
   readonly get?: (workflowId: string) => Promise<unknown>
+  readonly openEditor?: (workflowId: string) => Promise<unknown>
   readonly onEvent?: (listener: (event: WorkflowEvent) => void) => () => void
   readonly onRunnerSwitchRun?: (listener: (payload: { runId: string }) => void) => () => void
   readonly rerun?: (runId: string, params: Record<string, unknown>) => Promise<unknown>
@@ -561,7 +602,7 @@ function installWorkflowBridge(overrides: {
       onRunnerSwitchRun: overrides.onRunnerSwitchRun ?? vi.fn(() => vi.fn()),
       cancel: overrides.cancel ?? vi.fn(),
       rerun: overrides.rerun ?? vi.fn(),
-      openEditor: vi.fn(),
+      openEditor: overrides.openEditor ?? vi.fn(),
     },
   }
 }

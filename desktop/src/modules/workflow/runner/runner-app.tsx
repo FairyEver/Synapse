@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { WorkflowDefinition, NodeRunResult, WorkflowRunStatus } from "@/types/workflow"
+import type { WorkflowDefinition, NodeRunResult, WorkflowRunDefinitionMigration, WorkflowRunStatus } from "@/types/workflow"
 import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
 import { createRendererLogger } from "@/app-shell/logging"
 import "../../../../workflow-nodes/register.renderer"
@@ -57,6 +57,7 @@ export function WorkflowRunnerApp() {
   const [rerunning, setRerunning] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [definitionMigration, setDefinitionMigration] = useState<WorkflowRunDefinitionMigration | null>(null)
   const [retrySignal, setRetrySignal] = useState(0)
   const [confirmRerunActiveRunId, setConfirmRerunActiveRunId] = useState<string | null>(null)
   const [hydratedRunId, setHydratedRunId] = useState<string | null>(null)
@@ -81,9 +82,16 @@ export function WorkflowRunnerApp() {
           return
         }
         setLoadError(null)
-        logger.info("hydrated run metadata", { runId, hasDefinition: !!status.definition, hasParams: !!status.params })
+        setDefinitionMigration(status.definitionMigration ?? null)
+        logger.info("hydrated run metadata", {
+          runId,
+          hasDefinition: !!status.definition,
+          hasParams: !!status.params,
+          definitionMigration: status.definitionMigration?.kind,
+        })
         setHydratedRunId(runId)
-        if (status.definition) setDefinition(status.definition)
+        if (status.definitionMigration) setDefinition(null)
+        else if (status.definition) setDefinition(status.definition)
         if (status.params) setRunParams(status.params)
       } catch (err) {
         if (cancelled) return
@@ -105,7 +113,7 @@ export function WorkflowRunnerApp() {
     // to fetching the latest definition from the workflow store. This ensures
     // the Runner shows at least the DAG structure even if the run snapshot
     // has been pruned from disk, rather than staying on "加载中…" forever.
-    if (definition) return
+    if (definition || definitionMigration) return
     if (!workflowId) return
     // Skip fallback while runStatus is still hydrating. Once hydration has
     // returned for this runId without a definition, fetch the latest workflow
@@ -131,7 +139,7 @@ export function WorkflowRunnerApp() {
       }
     })()
     return () => { cancelled = true }
-  }, [workflowId, definition, runId, loadError, hydratedRunId, retrySignal])
+  }, [workflowId, definition, definitionMigration, runId, loadError, hydratedRunId, retrySignal])
 
   useEffect(() => {
     if (!workflowId) return
@@ -150,6 +158,7 @@ export function WorkflowRunnerApp() {
           // a stale definition (from a previous workflow version) would render
           // an incorrect DAG topology until the async fetch completes.
           setDefinition(null)
+          setDefinitionMigration(null)
           setRunParams({})
         }
       }
@@ -165,6 +174,7 @@ export function WorkflowRunnerApp() {
         setSelectedNodeId(null)
         // Same rationale: clear stale definition/params from previous run
         setDefinition(null)
+        setDefinitionMigration(null)
         setRunParams({})
       }
     })
@@ -267,6 +277,7 @@ export function WorkflowRunnerApp() {
       // Clear definition and params so the runner shows loading state until
       // hydration fetches the new run's metadata (same pattern as workflow:started).
       setDefinition(null)
+      setDefinitionMigration(null)
       setRunParams({})
       syncRunnerUrl(workflowId, result.runId)
       setRunId(result.runId)
@@ -298,6 +309,7 @@ export function WorkflowRunnerApp() {
         return
       }
       setDefinition(null)
+      setDefinitionMigration(null)
       setRunParams({})
       syncRunnerUrl(workflowId, result.runId)
       setRunId(result.runId)
@@ -351,6 +363,7 @@ export function WorkflowRunnerApp() {
     logger.info("retry loading run", { runId, workflowId })
     setLoadError(null)
     setDefinition(null)
+    setDefinitionMigration(null)
     setRetrySignal((s) => s + 1)
   }, [runId, workflowId])
 
@@ -418,6 +431,31 @@ export function WorkflowRunnerApp() {
   }
 
   if (!definition) {
+    if (definitionMigration) {
+      const description = definitionMigration.kind === "unsupported_future"
+        ? "此记录由较新版本创建，请升级 Synapse 后再查看。"
+        : "历史工作流结构读取失败，请重试。"
+      return (
+        <div className="flex h-screen items-center justify-center p-4">
+          <div className="flex max-w-sm flex-col gap-3">
+            <Alert variant="destructive">
+              <AlertCircle data-icon="inline-start" />
+              <AlertTitle>无法显示历史工作流结构</AlertTitle>
+              <AlertDescription>{description}</AlertDescription>
+            </Alert>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={handleRetry}>
+                <RefreshCw data-icon="inline-start" />
+                重试
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleOpenEditor}>
+                打开当前工作流
+              </Button>
+            </div>
+          </div>
+        </div>
+      )
+    }
     if (loadError) {
       return (
         <div className="flex items-center justify-center h-screen">

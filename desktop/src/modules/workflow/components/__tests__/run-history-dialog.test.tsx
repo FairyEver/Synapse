@@ -118,6 +118,34 @@ describe("RunHistoryDialog", () => {
     expect(document.body.textContent).toContain("工作流准备失败")
   })
 
+  it("marks history records whose workflow structure is unreadable", async () => {
+    window.synapse = {
+      workflow: {
+        runHistory: vi.fn().mockResolvedValue([
+          createRunItem({
+            definitionMigration: {
+              kind: "unsupported_future",
+              sourceVersion: "2.0.0",
+              targetVersion: "1.0.0",
+            },
+          }),
+        ]),
+      },
+    } as unknown as Window["synapse"]
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<RunHistoryDialog open workflowId="workflow-1" onClose={vi.fn()} />)
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("结构不可读")
+  })
+
   it("keeps the history list within a wider dialog layout", async () => {
     window.synapse = {
       workflow: {

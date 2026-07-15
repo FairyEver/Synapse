@@ -108,6 +108,7 @@ function runStatusToListItem(status: WorkflowRunStatus): WorkflowRunListItem {
     error: sanitized.error,
     params: sanitized.params,
     definition: sanitized.definition,
+    definitionMigration: sanitized.definitionMigration,
   }
 }
 
@@ -123,6 +124,7 @@ function snapshotToListItem(snapshot: WorkflowRunSnapshot): WorkflowRunListItem 
     error: snapshot.error,
     params: snapshot.params,
     definition: snapshot.definition,
+    definitionMigration: snapshot.definitionMigration,
   }
 }
 
@@ -523,6 +525,11 @@ const workflowRunStatusSchema: z.ZodType<WorkflowRunStatus> = z.object({
   error: z.string().optional(),
   params: z.record(z.string(), z.unknown()).optional(),
   definition: workflowDefinitionSchema.optional() as z.ZodType<WorkflowDefinition | undefined>,
+  definitionMigration: z.object({
+    kind: z.enum(["failed", "unsupported_future"]),
+    sourceVersion: z.string().optional(),
+    targetVersion: z.string().optional(),
+  }).optional(),
 })
 
 const workflowRunListItemSchema: z.ZodType<WorkflowRunListItem> = z.object({
@@ -536,6 +543,11 @@ const workflowRunListItemSchema: z.ZodType<WorkflowRunListItem> = z.object({
   error: z.string().optional(),
   params: z.record(z.string(), z.unknown()).optional(),
   definition: workflowDefinitionSchema.optional() as z.ZodType<WorkflowDefinition | undefined>,
+  definitionMigration: z.object({
+    kind: z.enum(["failed", "unsupported_future"]),
+    sourceVersion: z.string().optional(),
+    targetVersion: z.string().optional(),
+  }).optional(),
 })
 
 const validationErrorSchema = z.object({
@@ -1351,18 +1363,38 @@ export const workflowIpcModule: IpcModule = {
         let def: import("../../../src/types/workflow").WorkflowDefinition | undefined
         let workflowId: string | undefined
         let previousParams: Record<string, unknown> | undefined
+        let definitionMigration: import("../../../src/types/workflow").WorkflowRunDefinitionMigration | undefined
 
         const memoryStatus = runStatuses.get(previousRunId)
-        if (memoryStatus?.definition) {
+        if (memoryStatus) {
           def = memoryStatus.definition
           workflowId = memoryStatus.workflowId
           previousParams = memoryStatus.params
+          definitionMigration = memoryStatus.definitionMigration
         } else {
           const snapshot = await snapshots.findByRunId(previousRunId)
-          if (snapshot?.definition) {
+          if (snapshot) {
             def = snapshot.definition
             workflowId = snapshot.workflowId
             previousParams = snapshot.params
+            definitionMigration = snapshot.definitionMigration
+          }
+        }
+
+        if (definitionMigration) {
+          logger.warn("workflow:rerun blocked by unreadable history definition", {
+            previousRunId,
+            workflowId,
+            migrationKind: definitionMigration.kind,
+            sourceVersion: definitionMigration.sourceVersion,
+          })
+          return {
+            errors: [{
+              type: "invalid_config",
+              message: definitionMigration.kind === "unsupported_future"
+                ? "该运行记录由较新版本创建，当前版本无法重新运行"
+                : "该运行记录的工作流结构读取失败，无法重新运行",
+            }],
           }
         }
 
@@ -1537,12 +1569,14 @@ export const workflowIpcModule: IpcModule = {
             durationMs: snap.endedAt ? snap.endedAt - snap.startedAt : undefined,
             params: snap.params,
             definition: snap.definition,
+            definitionMigration: snap.definitionMigration,
             ...(error ? { error } : {}),
           }
           logger.info("run-status hydrated from snapshot", {
             runId, workflowId: snap.workflowId, status: snap.status,
             nodeCount: Object.keys(snap.nodeResults).length,
             hasDefinition: !!snap.definition,
+            ...(snap.definitionMigration ? { definitionMigration: snap.definitionMigration.kind } : {}),
             ...(recoveredErrorFromNodeResults ? { recoveredErrorFromNodeResults: true } : {}),
           })
           return hydrated

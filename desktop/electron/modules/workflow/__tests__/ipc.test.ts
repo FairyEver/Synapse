@@ -683,6 +683,43 @@ describe("workflowIpcModule", () => {
     expect(engine.run).not.toHaveBeenCalled()
   })
 
+  it("blocks rerun when the history definition cannot be migrated", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    const snapshots = {
+      findByRunId: vi.fn(async () => ({
+        runId: "previous-run",
+        workflowId: "workflow-1",
+        version: "v2",
+        status: "completed" as const,
+        startedAt: 1,
+        endedAt: 2,
+        params: {},
+        nodeResults: {},
+        definitionMigration: {
+          kind: "unsupported_future" as const,
+          sourceVersion: "2.0.0",
+          targetVersion: "1.0.0",
+        },
+      })),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:workflow:rerun", { previousRunId: "previous-run", params: {} })
+
+    expect(result).toEqual({
+      errors: [{
+        type: "invalid_config",
+        message: "该运行记录由较新版本创建，当前版本无法重新运行",
+      }],
+    })
+  })
+
   it("blocks rerun when only a redacted HTTP or script history definition is available", async () => {
     const runStatuses = new Map<string, WorkflowRunStatus>()
     const snapshots = {
@@ -1502,6 +1539,45 @@ describe("workflowIpcModule", () => {
     })
   })
 
+  it("hydrates snapshot definition migration diagnostics through run-status", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    const snapshots = {
+      findByRunId: vi.fn(async () => ({
+        runId: "run-future",
+        workflowId: "workflow-1",
+        version: "v2",
+        status: "completed" as const,
+        startedAt: 1,
+        endedAt: 2,
+        params: {},
+        nodeResults: {},
+        definitionMigration: {
+          kind: "unsupported_future" as const,
+          sourceVersion: "2.0.0",
+          targetVersion: "1.0.0",
+        },
+      })),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const status = await harness.invoke("synapse:workflow:run-status", { runId: "run-future" })
+
+    expect(status).toEqual(expect.objectContaining({
+      definition: undefined,
+      definitionMigration: {
+        kind: "unsupported_future",
+        sourceVersion: "2.0.0",
+        targetVersion: "1.0.0",
+      },
+    }))
+  })
+
   it("stores node progress labels in live run status", async () => {
     const runStatuses = new Map<string, WorkflowRunStatus>()
     const eventBus = { emit: vi.fn() }
@@ -1568,7 +1644,7 @@ describe("workflowIpcModule", () => {
         endedAt: 20,
         params: {},
         nodeResults: {},
-        definition: activeDefinition,
+        definitionMigration: { kind: "failed" as const, sourceVersion: "0.9.0" },
       }]),
     }
     const harness = createInMemoryHarness()
@@ -1596,6 +1672,7 @@ describe("workflowIpcModule", () => {
         status: "completed",
         startedAt: 10,
         endedAt: 20,
+        definitionMigration: { kind: "failed", sourceVersion: "0.9.0" },
       }),
     ])
     expect(JSON.stringify(history)).not.toContain("other-active-run")
