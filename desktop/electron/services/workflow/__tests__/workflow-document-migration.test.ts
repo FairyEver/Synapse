@@ -6,6 +6,7 @@ import {
   migrateWorkflowDocument,
   WORKFLOW_SCHEMA_VERSION,
 } from "../workflow-document-migration"
+import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../../config"
 
 const fixtures = path.join(__dirname, "..", "__fixtures__", "workflow-schema")
 
@@ -77,6 +78,56 @@ describe("workflow document migration", () => {
     const source = await fixture("1.0.0") as Record<string, unknown>
     source.params = [{ name: "topic", type: "text", default: null }]
     mutate(source)
+    expect(migrateWorkflowDocument(source)).toMatchObject({ kind: "failed" })
+  })
+
+  it.each([
+    ["empty multi-resource defaults", {
+      name: "files",
+      type: "file",
+      allowMultiple: true,
+      default: [],
+    }],
+    ["oversized multi-resource defaults", {
+      name: "files",
+      type: "file",
+      allowMultiple: true,
+      default: Array.from({ length: WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS + 1 }, (_, index) => ({
+        kind: "local_path",
+        entryType: "file",
+        path: `/tmp/file-${index}.txt`,
+      })),
+    }],
+    ["resource type mismatches", {
+      name: "files",
+      type: "file",
+      allowMultiple: true,
+      default: [{ kind: "local_path", entryType: "directory", path: "/tmp/folder" }],
+    }],
+    ["duplicate multi-resource defaults", {
+      name: "files",
+      type: "file",
+      allowMultiple: true,
+      default: [
+        { kind: "local_path", entryType: "file", path: "/tmp/file.txt" },
+        { kind: "local_path", entryType: "file", path: "/tmp/file.txt" },
+      ],
+    }],
+    ["resource arrays without allowMultiple", {
+      name: "files",
+      type: "file",
+      default: [{ kind: "local_path", entryType: "file", path: "/tmp/file.txt" }],
+    }],
+    ["allowMultiple on non-resource params", {
+      name: "topic",
+      type: "text",
+      allowMultiple: true,
+      default: "value",
+    }],
+  ])("rejects %s before marking a document current", async (_case, param) => {
+    const source = await fixture("0.0.0") as Record<string, unknown>
+    source.params = [param]
+
     expect(migrateWorkflowDocument(source)).toMatchObject({ kind: "failed" })
   })
 })

@@ -5,9 +5,10 @@ import {
   type DataMigrationRegistry,
   type VersionedData,
 } from "@synapse/shared/versioned-data-migrator"
-import type { WorkflowDefinition } from "../../../src/types/workflow"
+import type { WorkflowDefinition, WorkflowParam } from "../../../src/types/workflow"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { LOCAL_CLAUDE_CODE_PROVIDER_ID } from "../provider/types"
+import { validateWorkflowParamConfiguration } from "./workflow-param-validator"
 
 export const WORKFLOW_SCHEMA_VERSION = "1.0.0"
 export const WORKFLOW_LEGACY_BASELINE_VERSION = "0.0.0"
@@ -186,6 +187,10 @@ function assertCurrentWorkflowDocument(value: unknown): asserts value is Version
     }
     assertOptionalBoolean(param.allowCustomOption, `params[${index}].allowCustomOption`)
     assertOptionalBoolean(param.allowMultiple, `params[${index}].allowMultiple`)
+    const errors = validateWorkflowParamConfiguration(param as unknown as WorkflowParam)
+    if (errors[0]) {
+      throw new Error(`Workflow param ${index} is invalid: ${errors[0].message}`)
+    }
   }
 
   const knownNodeTypes = new Set(nodeTypeRegistry.listTypes())
