@@ -156,6 +156,66 @@ describe("WorkflowModule", () => {
     expect(workflowInspectImportPackage).toHaveBeenCalledTimes(1)
   })
 
+  it("shows a sanitized actionable import preview error", async () => {
+    workflowInspectImportPackage.mockRejectedValue(
+      new Error("工作流包文件过大 token=sk-secret /Users/example/package.json"),
+    )
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => { root.render(<WorkflowModule />) })
+
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("导入"))
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(toastError).toHaveBeenCalledWith("工作流包文件过大 token=[redacted] [path]")
+    expect(JSON.stringify(toastError.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(toastError.mock.calls)).not.toContain("/Users/example")
+  })
+
+  it("shows a sanitized actionable import confirmation error", async () => {
+    workflowInspectImportPackage.mockResolvedValue({
+      packagePath: "/tmp/workflow.synapse-workflow.json",
+      packageDigest: "sha256:preview",
+      workflow: {
+        id: "workflow-imported",
+        name: "Imported",
+        nodeCount: 1,
+        modelReferenceCount: 0,
+        requiresProjectMapping: true,
+      },
+      modelReferences: [],
+      providerOptions: [],
+      suggestedMappings: [],
+    })
+    workflowImportPackage.mockRejectedValue(new Error("工作流包已变化，请重新选择文件。"))
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => { root.render(<WorkflowModule />) })
+
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("导入"))
+        ?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("确认导入"))
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(toastError).toHaveBeenCalledWith("工作流包已变化，请重新选择文件。")
+  })
+
   it("keeps successful import state when opening the imported workflow fails", async () => {
     workflowInspectImportPackage.mockResolvedValue({
       packagePath: "/tmp/workflow.synapse-workflow.json",

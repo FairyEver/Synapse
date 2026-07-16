@@ -64,11 +64,12 @@ export function WorkflowModule() {
       const preview = await requireBridgeDomain("workflow").inspectImportPackage()
       if (preview) setImportPreview(preview)
     } catch (err) {
+      const diagnostic = errorDiagnostic(err)
       logger.warn("Workflow import preview failed.", {
         boundary: "renderer.workflow.import.preview",
-        ...errorDiagnostic(err),
+        ...diagnostic,
       })
-      toast.error("导入失败，请重试")
+      toast.error(diagnostic.errorMessage ?? "导入失败，请重试")
     }
   }
 
@@ -95,11 +96,12 @@ export function WorkflowModule() {
         toast.error("工作流已导入，但打开编辑器失败")
       }
     } catch (err) {
+      const diagnostic = errorDiagnostic(err)
       logger.warn("Workflow import failed.", {
         boundary: "renderer.workflow.import",
-        ...errorDiagnostic(err),
+        ...diagnostic,
       })
-      toast.error("导入失败，请重试")
+      toast.error(diagnostic.errorMessage ?? "导入失败，请重试")
     } finally {
       setImporting(false)
     }
