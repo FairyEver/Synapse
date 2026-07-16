@@ -1144,7 +1144,9 @@ describe("preload bridge", () => {
     }
     const secretMaps = {
       skillEnvValues: { BAILIAN: "RAW_ENV_SECRET" },
+      skillEnvSecretNames: { REGION: "prod-bailian-main" },
       variableSubstitutions: { SERVICE: "RAW_VARIABLE_SECRET" },
+      variableSecretNames: { TENANT: "aliyun-primary" },
     }
 
     await expect(bridge.installers.installSourceToEditor({
@@ -1168,7 +1170,9 @@ describe("preload bridge", () => {
         details: expect.objectContaining({
           request: expect.objectContaining({
             skillEnvValues: { type: "sensitive-map", keyCount: 1 },
+            skillEnvSecretNames: { type: "sensitive-map", keyCount: 1 },
             variableSubstitutions: { type: "sensitive-map", keyCount: 1 },
+            variableSecretNames: { type: "sensitive-map", keyCount: 1 },
           }),
         }),
       }))
@@ -1176,8 +1180,12 @@ describe("preload bridge", () => {
     const serializedLogs = JSON.stringify(logCalls)
     expect(serializedLogs).not.toContain("RAW_ENV_SECRET")
     expect(serializedLogs).not.toContain("RAW_VARIABLE_SECRET")
+    expect(serializedLogs).not.toContain("prod-bailian-main")
+    expect(serializedLogs).not.toContain("aliyun-primary")
     expect(serializedLogs).not.toContain("BAILIAN")
+    expect(serializedLogs).not.toContain("REGION")
     expect(serializedLogs).not.toContain("SERVICE")
+    expect(serializedLogs).not.toContain("TENANT")
   })
 
   it("does not log local file paths when local drive upload IPC fails", async () => {

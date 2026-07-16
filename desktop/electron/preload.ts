@@ -651,7 +651,7 @@ const SENSITIVE_IPC_FIELD_PATTERN =
   /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization)/i
 const SENSITIVE_IPC_TEXT_FIELD_PATTERN =
   /(content|prompt|message|body|text|params|definition|payload)/i
-const SENSITIVE_IPC_MAP_FIELD_PATTERN = /^(skillEnvValues|variableSubstitutions)$/i
+const SENSITIVE_IPC_MAP_FIELD_PATTERN = /^(skillEnvValues|variableSubstitutions|skillEnvSecretNames|variableSecretNames)$/i
 const URL_LIKE_IPC_FIELD_PATTERN =
   /(url|uri|remote|href|link)/i
 const URL_TEXT_PATTERN =

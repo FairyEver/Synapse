@@ -166,7 +166,9 @@ describe("createElectronTransportInstall", () => {
     const handler = electronMock.handlers.get("synapse:installers:install-source-to-editor")
     await handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
       skillEnvValues: { BAILIAN: "RAW_ENV_SECRET" },
+      skillEnvSecretNames: { REGION: "prod-bailian-main" },
       variableSubstitutions: { SERVICE: "RAW_VARIABLE_SECRET" },
+      variableSecretNames: { TENANT: "aliyun-primary" },
     })
 
     expect(logger.error).toHaveBeenCalledWith(
@@ -174,15 +176,21 @@ describe("createElectronTransportInstall", () => {
       expect.objectContaining({
         request: {
           skillEnvValues: { type: "sensitive-map", keyCount: 1 },
+          skillEnvSecretNames: { type: "sensitive-map", keyCount: 1 },
           variableSubstitutions: { type: "sensitive-map", keyCount: 1 },
+          variableSecretNames: { type: "sensitive-map", keyCount: 1 },
         },
       }),
     )
     const serializedLog = JSON.stringify(logger.error.mock.calls)
     expect(serializedLog).not.toContain("RAW_ENV_SECRET")
     expect(serializedLog).not.toContain("RAW_VARIABLE_SECRET")
+    expect(serializedLog).not.toContain("prod-bailian-main")
+    expect(serializedLog).not.toContain("aliyun-primary")
     expect(serializedLog).not.toContain("BAILIAN")
+    expect(serializedLog).not.toContain("REGION")
     expect(serializedLog).not.toContain("SERVICE")
+    expect(serializedLog).not.toContain("TENANT")
   })
 
   it("returns sanitized user-facing failure envelopes without logging secrets", async () => {
