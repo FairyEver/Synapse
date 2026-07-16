@@ -1582,14 +1582,14 @@ const synapseBridge: SynapseBridge = {
     run: (id: string, params: Record<string, unknown>) => invoke(IPC_CHANNELS.workflow.run)({ id, params }),
     runDefinition: (def: unknown, params: Record<string, unknown>, force?: boolean) =>
       invoke(IPC_CHANNELS.workflow.runDefinition)({ definition: def, params, force }),
-    rerun: (previousRunId: string, params: Record<string, unknown>, force?: boolean) =>
-      invoke(IPC_CHANNELS.workflow.rerun)({ previousRunId, params, force }),
+    rerun: (previousRunId: string, params: Record<string, unknown>, force?: boolean, workflowId?: string) =>
+      invoke(IPC_CHANNELS.workflow.rerun)({ previousRunId, params, force, workflowId }),
     openRunner: (workflowId: string, runId: string) =>
       invoke(IPC_CHANNELS.workflow.openRunner)({ workflowId, runId }),
     cancel: (runId: string) => invoke(IPC_CHANNELS.workflow.cancel)({ runId }),
     activeRuns: () => invoke(IPC_CHANNELS.workflow.activeRuns)(),
     runHistory: (workflowId: string) => invoke(IPC_CHANNELS.workflow.runHistory)({ workflowId }),
-    runStatus: (runId: string) => invoke(IPC_CHANNELS.workflow.runStatus)({ runId }),
+    runStatus: (runId: string, workflowId?: string) => invoke(IPC_CHANNELS.workflow.runStatus)({ runId, workflowId }),
     openEditor: (id: string, runId?: string) => invoke(IPC_CHANNELS.workflow.openEditor)({ id, runId }),
     editorState: invoke(IPC_CHANNELS.workflow.editorState),
     checkCanSync: invoke(IPC_CHANNELS.workflow.checkCanSync),

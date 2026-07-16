@@ -1337,13 +1337,13 @@ export const workflowIpcModule: IpcModule = {
     },
     rerun: {
       channel: "synapse:workflow:rerun", kind: "invoke",
-      request: z.object({ previousRunId: workflowRunIdSchema, params: z.record(z.string(), z.unknown()), force: z.boolean().optional() }),
+      request: z.object({ previousRunId: workflowRunIdSchema, workflowId: workflowIdSchema.optional(), params: z.record(z.string(), z.unknown()), force: z.boolean().optional() }),
       response: z.union([
         z.object({ runId: z.string() }),
         z.object({ errors: z.array(validationErrorSchema) }),
         z.object({ conflict: z.literal(true), activeRunId: z.string() }),
       ]),
-      handler: async (ctx, { previousRunId, params, force }: { previousRunId: string; params: Record<string, unknown>; force?: boolean }) => {
+      handler: async (ctx, { previousRunId, workflowId: requestedWorkflowId, params, force }: { previousRunId: string; workflowId?: string; params: Record<string, unknown>; force?: boolean }) => {
         logger.info("workflow:rerun requested", { previousRunId })
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
         const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
@@ -1360,7 +1360,9 @@ export const workflowIpcModule: IpcModule = {
           previousParams = memoryStatus.params
           definitionMigration = memoryStatus.definitionMigration
         } else {
-          const snapshot = await snapshots.findByRunId(previousRunId)
+          const snapshot = requestedWorkflowId
+            ? await snapshots.get(previousRunId, requestedWorkflowId)
+            : await snapshots.findByRunId(previousRunId)
           if (snapshot) {
             def = snapshot.definition
             workflowId = snapshot.workflowId
@@ -1518,8 +1520,8 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     runStatus: {
-      channel: "synapse:workflow:run-status", kind: "invoke", request: z.object({ runId: workflowRunIdSchema }), response: workflowRunStatusSchema.nullable(),
-      handler: async (ctx, { runId }: { runId: string }) => {
+      channel: "synapse:workflow:run-status", kind: "invoke", request: z.object({ runId: workflowRunIdSchema, workflowId: workflowIdSchema.optional() }), response: workflowRunStatusSchema.nullable(),
+      handler: async (ctx, { runId, workflowId }: { runId: string; workflowId?: string }) => {
         const live = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses").get(runId)
         if (live) {
           logger.info("run-status served from memory", { runId, workflowId: live.workflowId, status: live.status })
@@ -1529,7 +1531,8 @@ export const workflowIpcModule: IpcModule = {
         // are still on disk (up to MAX = 20 snapshots per workflow). Without this, opening an
         // older run from the history dialog would render an empty runner (no definition,
         // no node results, stuck at "running"). Hydrate from the snapshot store instead.
-        const snap = await ctx.resolve<RunSnapshotService>("core.workflow.snapshots").findByRunId(runId)
+        const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
+        const snap = workflowId ? await snapshots.get(runId, workflowId) : await snapshots.findByRunId(runId)
         if (snap) {
           // Prefer the snapshot's own error field (now persisted on new snapshots),
           // then fall back to reconstructing from the first failed node's result

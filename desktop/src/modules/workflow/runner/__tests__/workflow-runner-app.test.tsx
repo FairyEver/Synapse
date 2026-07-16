@@ -140,7 +140,7 @@ describe("WorkflowRunnerApp", () => {
       await Promise.resolve()
     })
 
-    expect(runStatus).toHaveBeenCalledWith("run-1")
+    expect(runStatus).toHaveBeenCalledWith("run-1", "workflow-1")
     expect(rendererLogger.warn).toHaveBeenCalledWith("runner hydration failed: runStatus rejected, triggering fallback", {
       workflowId: "workflow-1",
       runId: "run-1",
@@ -174,7 +174,7 @@ describe("WorkflowRunnerApp", () => {
       await Promise.resolve()
     })
 
-    expect(runStatus).toHaveBeenCalledWith("run-1")
+    expect(runStatus).toHaveBeenCalledWith("run-1", "workflow-1")
     expect(get).toHaveBeenCalledWith("workflow-1")
     expect(rendererLogger.warn).toHaveBeenCalledWith("runner fallback definition failed", {
       workflowId: "workflow-1",
@@ -210,7 +210,7 @@ describe("WorkflowRunnerApp", () => {
       await Promise.resolve()
     })
 
-    expect(runStatus).toHaveBeenCalledWith("run-1")
+    expect(runStatus).toHaveBeenCalledWith("run-1", "workflow-1")
     expect(get).toHaveBeenCalledWith("workflow-1")
     expect(container.querySelector("[data-testid='dag-view']")).toBeInstanceOf(HTMLButtonElement)
   })
@@ -378,7 +378,7 @@ describe("WorkflowRunnerApp", () => {
     })
 
     expect(runStatus).toHaveBeenCalledTimes(1)
-    expect(runStatus).toHaveBeenCalledWith("run-1")
+    expect(runStatus).toHaveBeenCalledWith("run-1", "workflow-1")
     expect(emitWorkflowEvent).toBeInstanceOf(Function)
 
     await act(async () => {
@@ -414,7 +414,7 @@ describe("WorkflowRunnerApp", () => {
       await Promise.resolve()
     })
 
-    expect(runStatus).toHaveBeenCalledWith("run-1")
+    expect(runStatus).toHaveBeenCalledWith("run-1", "workflow-1")
     expect(emitRunnerSwitch).toBeInstanceOf(Function)
 
     await act(async () => {
@@ -425,7 +425,7 @@ describe("WorkflowRunnerApp", () => {
 
     expect(new URLSearchParams(window.location.search).get("runId")).toBe("run-2")
     expect(new URLSearchParams(window.location.search).get("workflowId")).toBe("workflow-1")
-    expect(runStatus).toHaveBeenCalledWith("run-2")
+    expect(runStatus).toHaveBeenCalledWith("run-2", "workflow-1")
   })
 
   it("updates the runner URL after rerun starts a new run", async () => {
@@ -467,7 +467,7 @@ describe("WorkflowRunnerApp", () => {
       await Promise.resolve()
     })
 
-    expect(rerun).toHaveBeenCalledWith("run-1", {})
+    expect(rerun).toHaveBeenCalledWith("run-1", {}, undefined, "workflow-1")
     expect(new URLSearchParams(window.location.search).get("runId")).toBe("run-2")
     expect(new URLSearchParams(window.location.search).get("workflowId")).toBe("workflow-1")
   })

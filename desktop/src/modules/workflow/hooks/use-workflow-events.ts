@@ -25,6 +25,7 @@ export interface WorkflowEventCallbacks {
 export function useWorkflowEvents(
   runId: string | null,
   callbacks: WorkflowEventCallbacks,
+  workflowId?: string,
 ) {
   // Keep a stable ref to callbacks so the subscription always uses the latest
   const cbRef = useRef(callbacks)
@@ -41,7 +42,7 @@ export function useWorkflowEvents(
     // Hydrate current state to cover events emitted before subscription.
     // This closes the race window between engine.run() start and subscription setup.
     void (async () => {
-      const status = await window.synapse?.workflow.runStatus(runId)
+      const status = await window.synapse?.workflow.runStatus(runId, workflowId)
       if (cancelled || !status) return
       const skippedByLive = [] as string[]
       for (const [nodeId, nr] of Object.entries(status.nodeResults)) {
@@ -129,7 +130,7 @@ export function useWorkflowEvents(
     })
 
     return () => { cancelled = true; unsub?.() }
-  }, [runId])
+  }, [runId, workflowId])
 }
 
 function workflowErrorLogMeta(error: string | undefined): { readonly errorName: string; readonly errorLength: number; readonly errorMessage?: string } {

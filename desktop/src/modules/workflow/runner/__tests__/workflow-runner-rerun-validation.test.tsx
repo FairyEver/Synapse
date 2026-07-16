@@ -108,7 +108,7 @@ describe("WorkflowRunnerApp rerun validation", () => {
       await Promise.resolve()
     })
 
-    expect(rerun).toHaveBeenCalledWith("run-1", {})
+    expect(rerun).toHaveBeenCalledWith("run-1", {}, undefined, "workflow-1")
     expect(container.querySelector("[data-testid='run-error']")?.textContent)
       .toBe("重新运行失败：校验未通过")
     expect(rendererLogger.warn).toHaveBeenCalledWith("rerun failed", {

@@ -74,7 +74,7 @@ export function WorkflowRunnerApp() {
     setLoadError(null)
     void (async () => {
       try {
-        const status = await window.synapse?.workflow.runStatus(runId)
+        const status = await window.synapse?.workflow.runStatus(runId, workflowId)
         if (cancelled) return
         if (!status) {
           logger.warn("runner hydration failed: runStatus returned null, triggering fallback", { runId, workflowId })
@@ -231,7 +231,7 @@ export function WorkflowRunnerApp() {
     onSnapshotSaveFailed: () => {
       setLoadError("运行已结束，但历史保存失败")
     },
-  })
+  }, workflowId)
 
   const handleCancel = useCallback(async () => {
     if (!runId) return
@@ -254,7 +254,7 @@ export function WorkflowRunnerApp() {
     setRerunning(true)
     logger.info("rerun requested", { runId, paramKeys: Object.keys(runParams) })
     try {
-      const result = await window.synapse?.workflow.rerun(runId, runParams)
+      const result = await window.synapse?.workflow.rerun(runId, runParams, undefined, workflowId)
       if (!result) {
         logger.warn("rerun returned empty result — IPC bridge unavailable", { runId })
         setRunError("重新运行失败：IPC 通道不可用")
@@ -295,7 +295,7 @@ export function WorkflowRunnerApp() {
     } finally {
       setRerunning(false)
     }
-  }, [runId, runParams])
+  }, [runId, runParams, workflowId])
 
   const handleConfirmRerun = useCallback(async () => {
     if (!runId || !confirmRerunActiveRunId) return
@@ -303,7 +303,7 @@ export function WorkflowRunnerApp() {
     setRerunning(true)
     logger.info("confirmed rerun with force", { runId, activeRunId: confirmRerunActiveRunId })
     try {
-      const result = await window.synapse?.workflow.rerun(runId, runParams, true)
+      const result = await window.synapse?.workflow.rerun(runId, runParams, true, workflowId)
       if (!result || "conflict" in result || "errors" in result) {
         setRunError("重新运行失败，请重试")
         return
@@ -327,7 +327,7 @@ export function WorkflowRunnerApp() {
     } finally {
       setRerunning(false)
     }
-  }, [runId, runParams, confirmRerunActiveRunId])
+  }, [runId, runParams, confirmRerunActiveRunId, workflowId])
 
   const handleOpenEditor = useCallback(() => {
     void window.synapse?.workflow.openEditor(workflowId).catch((err) => {

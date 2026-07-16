@@ -724,7 +724,7 @@ describe("workflowIpcModule", () => {
   it("blocks rerun when the history definition cannot be migrated", async () => {
     const runStatuses = new Map<string, WorkflowRunStatus>()
     const snapshots = {
-      findByRunId: vi.fn(async () => ({
+      get: vi.fn(async () => ({
         runId: "previous-run",
         workflowId: "workflow-1",
         version: "v2",
@@ -739,6 +739,7 @@ describe("workflowIpcModule", () => {
           targetVersion: "1.0.0",
         },
       })),
+      findByRunId: vi.fn(),
     }
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
@@ -748,7 +749,11 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const result = await harness.invoke("synapse:workflow:rerun", { previousRunId: "previous-run", params: {} })
+    const result = await harness.invoke("synapse:workflow:rerun", {
+      previousRunId: "previous-run",
+      workflowId: "workflow-1",
+      params: {},
+    })
 
     expect(result).toEqual({
       errors: [{
@@ -756,6 +761,8 @@ describe("workflowIpcModule", () => {
         message: "该运行记录由较新版本创建，当前版本无法重新运行",
       }],
     })
+    expect(snapshots.get).toHaveBeenCalledWith("previous-run", "workflow-1")
+    expect(snapshots.findByRunId).not.toHaveBeenCalled()
   })
 
   it("blocks rerun when only a redacted HTTP or script history definition is available", async () => {
@@ -1698,7 +1705,7 @@ describe("workflowIpcModule", () => {
   it("hydrates snapshot definition migration diagnostics through run-status", async () => {
     const runStatuses = new Map<string, WorkflowRunStatus>()
     const snapshots = {
-      findByRunId: vi.fn(async () => ({
+      get: vi.fn(async () => ({
         runId: "run-future",
         workflowId: "workflow-1",
         version: "v2",
@@ -1713,6 +1720,7 @@ describe("workflowIpcModule", () => {
           targetVersion: "1.0.0",
         },
       })),
+      findByRunId: vi.fn(),
     }
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
@@ -1722,7 +1730,10 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const status = await harness.invoke("synapse:workflow:run-status", { runId: "run-future" })
+    const status = await harness.invoke("synapse:workflow:run-status", {
+      runId: "run-future",
+      workflowId: "workflow-1",
+    })
 
     expect(status).toEqual(expect.objectContaining({
       definition: undefined,
@@ -1732,6 +1743,8 @@ describe("workflowIpcModule", () => {
         targetVersion: "1.0.0",
       },
     }))
+    expect(snapshots.get).toHaveBeenCalledWith("run-future", "workflow-1")
+    expect(snapshots.findByRunId).not.toHaveBeenCalled()
   })
 
   it("stores node progress labels in live run status", async () => {
