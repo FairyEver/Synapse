@@ -656,7 +656,7 @@ describe("content capability dispatcher", () => {
       latestHistoryDirname: "newer-history",
       latestModifiedAt: "2026-05-22T00:00:00.000Z",
       latestModifiedByDisplayName: "Other User",
-    })
+    } as never)
     const dispatcher = createContentCapabilityDispatcher(deps)
 
     await expect(dispatcher.dispatch("content.skill.update", {
