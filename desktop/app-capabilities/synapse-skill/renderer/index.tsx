@@ -19,7 +19,7 @@ import { useEditorAdaptersForContentType } from "../../../src/modules/content/ho
 import { SharedInstallerFlow } from "../../../src/modules/installers/shared/shared-installer-flow"
 import type { SynapseEditorAdapterSummary } from "../../../src/types/editor"
 import type { SynapseEditorInstallStatusEntry, SynapseEditorInstallStatusValue } from "../../../src/types/editor-install-status"
-import type { SynapseSkillInstallerSource } from "../../../src/types/installers"
+import type { SynapseInstallSourceTargetResult, SynapseSkillInstallerSource } from "../../../src/types/installers"
 
 const logger = createRendererLogger("synapse-skill.app")
 
@@ -116,8 +116,11 @@ function getBatchActionLabel(entries: SynapseEditorInstallStatusEntry[]): string
   return "全部已安装"
 }
 
-function getBatchMode(entries: SynapseEditorInstallStatusEntry[]): "install" | "update" {
-  return entries.some((entry) => installStatusPolicies[entry.status].batchMode === "update") ? "update" : "install"
+function getBatchGroups(entries: SynapseEditorInstallStatusEntry[]) {
+  return (["install", "update"] as const).flatMap((mode) => {
+    const matchingEntries = entries.filter((entry) => installStatusPolicies[entry.status].batchMode === mode)
+    return matchingEntries.length > 0 ? [{ mode, entries: matchingEntries }] : []
+  })
 }
 
 function getInstallSummaryLabel(entries: SynapseEditorInstallStatusEntry[]): string {
@@ -239,16 +242,20 @@ function SynapseSkillModule() {
     setBatchErrors({})
     try {
       const installSource = await ensureSource()
-      const result = await installSourceToEditorTargets({
-        mode: getBatchMode(batchableEntries),
-        source: installSource,
-        targets: batchableEntries.map((entry) => ({
-          editorId: entry.editorId,
-          scope: entry.scope,
-        })),
-      })
-      const failedResults = result.results.filter((entry) => entry.status === "failed")
-      const warnings = result.results.flatMap((entry) => (
+      const batchResults: SynapseInstallSourceTargetResult[] = []
+      for (const group of getBatchGroups(batchableEntries)) {
+        const result = await installSourceToEditorTargets({
+          mode: group.mode,
+          source: installSource,
+          targets: group.entries.map((entry) => ({
+            editorId: entry.editorId,
+            scope: entry.scope,
+          })),
+        })
+        batchResults.push(...result.results)
+      }
+      const failedResults = batchResults.filter((entry) => entry.status === "failed")
+      const warnings = batchResults.flatMap((entry) => (
         entry.status === "installed" && entry.result?.warning ? [entry.result.warning] : []
       ))
       const nextErrors: Record<string, string> = {}
@@ -257,7 +264,7 @@ function SynapseSkillModule() {
       }
       setBatchErrors(nextErrors)
 
-      if (failedResults.length === result.results.length) {
+      if (failedResults.length === batchResults.length) {
         toast.error("安装失败")
       } else if (failedResults.length > 0) {
         toast.warning(["部分安装失败", ...warnings].join("；"))

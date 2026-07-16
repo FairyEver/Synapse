@@ -16,6 +16,15 @@ const codexEditor: SynapseEditorAdapterSummary = {
   supportedContentTypes: ["skill"],
 }
 
+const claudeEditor: SynapseEditorAdapterSummary = {
+  id: "claude" as SynapseEditorAdapterSummary["id"],
+  label: "Claude Code",
+  order: 2,
+  supportsGlobal: true,
+  supportsProject: true,
+  supportedContentTypes: ["skill"],
+}
+
 const preparedSource = {
   kind: "skill",
   origin: "prepared",
@@ -101,7 +110,7 @@ vi.mock("@/lib/electron-bridge", () => ({
 
 vi.mock("@/modules/content/hooks/use-editor-adapters-for-content-type", () => ({
   useEditorAdaptersForContentType: () => ({
-    filteredAdapters: [codexEditor],
+    filteredAdapters: [codexEditor, claudeEditor],
     isLoading: false,
     error: null,
     load: loadEditors,
@@ -270,6 +279,51 @@ describe("SynapseSkillModule", () => {
 
     expect(installSourceToEditorTargets).toHaveBeenCalledWith(expect.objectContaining({
       mode: "install",
+      targets: [{ editorId: "codex", scope: "global" }],
+    }))
+  })
+
+  it("splits mixed install and update targets into correctly audited modes", async () => {
+    const mixedResult = {
+      entries: [
+        {
+          editorId: "codex",
+          editorLabel: "Codex",
+          scope: "global",
+          status: "needs_update",
+          targetPath: "/Users/test/.agents/skills/synapse-skill",
+          message: null,
+        },
+        {
+          editorId: "claude",
+          editorLabel: "Claude Code",
+          scope: "global",
+          status: "not_installed",
+          targetPath: "/Users/test/.claude/skills/synapse-skill",
+          message: null,
+        },
+      ],
+    }
+    inspectGlobalSkillInstallations
+      .mockResolvedValueOnce(mixedResult)
+      .mockResolvedValueOnce(mixedResult)
+    installSourceToEditorTargets
+      .mockResolvedValueOnce({
+        results: [{ target: { editorId: "claude", scope: "global" }, status: "installed" }],
+      })
+      .mockResolvedValueOnce({
+        results: [{ target: { editorId: "codex", scope: "global" }, status: "installed" }],
+      })
+
+    await renderModule()
+    await clickButton("安装并更新")
+
+    expect(installSourceToEditorTargets).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      mode: "install",
+      targets: [{ editorId: "claude", scope: "global" }],
+    }))
+    expect(installSourceToEditorTargets).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      mode: "update",
       targets: [{ editorId: "codex", scope: "global" }],
     }))
   })
