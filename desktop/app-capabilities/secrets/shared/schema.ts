@@ -105,6 +105,7 @@ export const secretSkillEnvScanInputSchema = z.object({
 export const secretSkillEnvScanResultSchema = z.object({
   scanSessionId: z.string().min(1),
   items: z.array(skillEnvBindingItemSchema),
+  truncated: z.boolean().optional(),
 }).strict()
 
 export const secretSkillEnvBatchScanInputSchema = z.object({

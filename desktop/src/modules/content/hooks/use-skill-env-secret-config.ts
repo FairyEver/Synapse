@@ -30,10 +30,12 @@ type SkillEnvSecretConfigSaveOutcome =
   | { readonly kind: "complete"; readonly groups: readonly SkillEnvUpdateScanGroup[]; readonly savedCount: number }
   | { readonly kind: "partial"; readonly failedCount: number; readonly savedCount: number }
   | { readonly kind: "scan_error"; readonly savedCount: number }
+  | { readonly kind: "scan_truncated"; readonly savedCount: number }
 
 type ScanNamesResult = {
   readonly failedNames: string[]
   readonly groups: SkillEnvUpdateScanGroup[]
+  readonly truncated: boolean
 }
 
 const logger = createRendererLogger("content.skill-env-secret-config")
@@ -224,13 +226,17 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
     try {
       const result = await secretsBridge.scanSkillEnvBindingsBatch({ names: requestedNames })
       const scannedNames = new Set(result.groups.map(({ name }) => name))
+      const truncatedNames = new Set(result.groups
+        .filter(({ scanResult }) => scanResult.truncated === true)
+        .map(({ name }) => name))
       return {
-        failedNames: requestedNames.filter((name) => !scannedNames.has(name)),
+        failedNames: requestedNames.filter((name) => !scannedNames.has(name) || truncatedNames.has(name)),
         groups: result.groups.flatMap(({ name, scanResult }) => (
           scanResult.items.some((entry) => entry.status !== "up_to_date")
             ? [{ name, scanResult }]
             : []
         )),
+        truncated: truncatedNames.size > 0,
       }
     } catch (error) {
       logger.error("Failed to scan installed Skill environment bindings.", {
@@ -238,7 +244,7 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
         nameCount: requestedNames.length,
         ...errorDiagnostic(error),
       })
-      return { failedNames: requestedNames, groups: [] }
+      return { failedNames: requestedNames, groups: [], truncated: false }
     }
   }, [item.id, secretsBridge])
 
@@ -262,8 +268,8 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
       setPendingScanNames(pendingScanResult.failedNames)
       setSaving(false)
       if (pendingScanResult.failedNames.length > 0) {
-        setNotice("扫描关联 Skill 失败，请重试。")
-        return { kind: "scan_error", savedCount: 0 }
+        setNotice(pendingScanResult.truncated ? "关联 Skill 过多，请整理后重新扫描。" : "扫描关联 Skill 失败，请重试。")
+        return { kind: pendingScanResult.truncated ? "scan_truncated" : "scan_error", savedCount: 0 }
       }
       return { kind: "complete", groups: mergedGroups, savedCount: 0 }
     }
@@ -318,8 +324,8 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
       return { kind: "partial", failedCount, savedCount }
     }
     if (scanResult.failedNames.length > 0) {
-      setNotice("密钥已保存，但扫描关联 Skill 失败。")
-      return { kind: "scan_error", savedCount }
+      setNotice(scanResult.truncated ? "密钥已保存；关联 Skill 过多，请整理后重新扫描。" : "密钥已保存，但扫描关联 Skill 失败。")
+      return { kind: scanResult.truncated ? "scan_truncated" : "scan_error", savedCount }
     }
     return { kind: "complete", groups: mergedGroups, savedCount }
   }, [fields, item.id, pendingScanNames, saving, scanNames, secretsBridge, updateGroups])
@@ -337,8 +343,8 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
     setSaving(false)
 
     if (result.failedNames.length > 0) {
-      setNotice("扫描关联 Skill 失败，请重试。")
-      return { kind: "scan_error", savedCount: 0 }
+      setNotice(result.truncated ? "关联 Skill 过多，请整理后重新扫描。" : "扫描关联 Skill 失败，请重试。")
+      return { kind: result.truncated ? "scan_truncated" : "scan_error", savedCount: 0 }
     }
     return { kind: "complete", groups: mergedGroups, savedCount: 0 }
   }, [pendingScanNames, saving, scanNames, updateGroups])

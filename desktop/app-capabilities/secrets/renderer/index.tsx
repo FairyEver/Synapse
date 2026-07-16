@@ -212,7 +212,9 @@ export function SecretsModule() {
 
   const scanSkillEnvBindings = useCallback(async (name: string): Promise<SecretSkillEnvScanResult | null> => {
     try {
-      return await secretsBridge.scanSkillEnvBindings({ name })
+      const result = await secretsBridge.scanSkillEnvBindings({ name })
+      if (result.truncated) toast.warning("关联 Skill 过多，请整理后重新扫描。")
+      return result
     } catch (error) {
       logger.error("Failed to scan Skill env bindings.", errorDiagnostic(error))
       toast.error("扫描失败，请重试。")
@@ -321,6 +323,10 @@ export function SecretsModule() {
     }
 
     if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
+    if (scanResult.truncated) {
+      toast.warning("关联 Skill 过多，请整理后重新扫描。")
+      return
+    }
     if (bypassConfirmation) {
       void deleteSecret(secret, scanGeneration)
       return

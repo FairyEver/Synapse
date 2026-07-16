@@ -1,7 +1,12 @@
 import { createHash, randomUUID } from "node:crypto"
-import { access, constants, lstat as fsLstat, open, readdir, realpath, rename, rm } from "node:fs/promises"
+import { access, constants, lstat as fsLstat, open, opendir, realpath, rename, rm } from "node:fs/promises"
 import type { FileHandle } from "node:fs/promises"
 import path from "node:path"
+
+import {
+  SKILL_ENV_BINDING_SCAN_MAX_ROOT_ENTRIES,
+  SKILL_ENV_BINDING_SCAN_MAX_SKILLS_PER_ROOT,
+} from "../../../config"
 
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import type { TrustedSkillRoot } from "../../../electron/services/editor-scan-roots"
@@ -55,6 +60,10 @@ export type SkillEnvBindingServiceDeps = {
     remove(filePath: string): Promise<void>
   }
   readonly platform?: NodeJS.Platform
+  readonly scanLimits?: {
+    readonly maxRootEntries: number
+    readonly maxSkillsPerRoot: number
+  }
 }
 
 type StoredBinding = {
@@ -100,6 +109,11 @@ type SkillEnvBindingScanRequest = {
 type SkillEnvBindingScanGroup = {
   readonly name: string
   readonly scanResult: SecretSkillEnvScanResult
+}
+
+type SkillEnvBindingRootScanResult = {
+  readonly itemsByName: ReadonlyMap<string, StoredBinding[]>
+  readonly truncated: boolean
 }
 
 type ValidatedBinding = {
@@ -160,6 +174,10 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
   const now = () => deps.now?.() ?? Date.now()
   const createId = () => deps.createId?.() ?? randomUUID()
   const platform = deps.platform ?? process.platform
+  const scanLimits = deps.scanLimits ?? {
+    maxRootEntries: SKILL_ENV_BINDING_SCAN_MAX_ROOT_ENTRIES,
+    maxSkillsPerRoot: SKILL_ENV_BINDING_SCAN_MAX_SKILLS_PER_ROOT,
+  }
   const atomicFileOps = deps.atomicFileOps ?? {
     open: (filePath: string, flags: number, mode: number) => open(filePath, flags, mode),
     rename,
@@ -190,10 +208,13 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
     const batchId = createId()
     pruneSessions(timestamp)
     const storedItemsByName = new Map(requests.map(({ name }) => [name, new Map<string, StoredBinding>()]))
+    let truncated = false
 
     for (const root of await deps.listRoots()) {
       if (!(await allowRootRead(root, security, "skill-env-binding-scan"))) continue
-      const rootItemsByName = await scanRoot(root, requests)
+      const rootResult = await scanRoot(root, requests)
+      truncated ||= rootResult.truncated
+      const rootItemsByName = rootResult.itemsByName
       for (const [name, rootItems] of rootItemsByName) {
         const storedItems = storedItemsByName.get(name)
         if (!storedItems) continue
@@ -209,6 +230,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         name,
         scanResult: {
           scanSessionId,
+          ...(truncated ? { truncated: true } : undefined),
           items: Array.from(storedItems.values())
             .map(({ publicItem }) => publicItem)
             .sort((left, right) => left.skillName.localeCompare(right.skillName)
@@ -253,22 +275,26 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
   async function scanRoot(
     root: TrustedSkillRoot,
     requests: readonly SkillEnvBindingScanRequest[],
-  ): Promise<ReadonlyMap<string, StoredBinding[]>> {
+  ): Promise<SkillEnvBindingRootScanResult> {
     const itemsByName = createStoredItemsByName(requests)
-    let entries
+    let directory
     let rootIdentity: FileIdentity
     let rootRealPath: string
     try {
       const rootInfo = await lstat(root.path)
-      if (!rootInfo.isDirectory()) return itemsByName
+      if (!rootInfo.isDirectory()) return { itemsByName, truncated: false }
       rootIdentity = toFileIdentity(rootInfo)
       rootRealPath = await realpath(root.path)
-      entries = await readdir(root.path, { withFileTypes: true })
+      directory = await opendir(root.path)
       const rootAfter = await lstat(root.path)
-      if (rootAfter.isSymbolicLink() || !sameIdentity(rootIdentity, toFileIdentity(rootAfter))) return itemsByName
+      if (rootAfter.isSymbolicLink() || !sameIdentity(rootIdentity, toFileIdentity(rootAfter))) {
+        await directory.close().catch(() => undefined)
+        return { itemsByName, truncated: false }
+      }
     } catch {
+      await directory?.close().catch(() => undefined)
       deps.logger.warn("Failed to scan trusted Skill root.", { scope: root.scope })
-      return itemsByName
+      return { itemsByName, truncated: false }
     }
 
     const pushUnavailableForAll = (
@@ -288,14 +314,29 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
       }
     }
 
-    for (const entry of entries) {
+    let rootEntryCount = 0
+    let skillCount = 0
+    let truncated = false
+    for await (const entry of directory) {
+      if (rootEntryCount >= scanLimits.maxRootEntries) {
+        truncated = true
+        break
+      }
+      rootEntryCount += 1
       if (!entry.isDirectory() || entry.isSymbolicLink()) continue
+      if (skillCount >= scanLimits.maxSkillsPerRoot) {
+        truncated = true
+        break
+      }
+      skillCount += 1
       try {
         const rootBeforeCandidate = await lstat(root.path)
         if (rootBeforeCandidate.isSymbolicLink()
-          || !sameIdentity(rootIdentity, toFileIdentity(rootBeforeCandidate))) return createStoredItemsByName(requests)
+          || !sameIdentity(rootIdentity, toFileIdentity(rootBeforeCandidate))) {
+          return { itemsByName: createStoredItemsByName(requests), truncated: false }
+        }
       } catch {
-        return createStoredItemsByName(requests)
+        return { itemsByName: createStoredItemsByName(requests), truncated: false }
       }
       const skillName = entry.name
       const skillPath = path.join(root.path, skillName)
@@ -325,7 +366,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         if (!sameIdentity(rootIdentity, validated.rootIdentity)
           || rootRealPath !== validated.rootRealPath) {
           await validated.handle.close().catch(() => undefined)
-          return createStoredItemsByName(requests)
+          return { itemsByName: createStoredItemsByName(requests), truncated: false }
         }
       } catch (error) {
         if (error instanceof UnsafeBindingError) {
@@ -392,7 +433,14 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         }
       }
     }
-    return itemsByName
+    if (truncated) {
+      deps.logger.warn("Skill env binding scan was truncated.", {
+        scope: root.scope,
+        maxRootEntries: scanLimits.maxRootEntries,
+        maxSkillsPerRoot: scanLimits.maxSkillsPerRoot,
+      })
+    }
+    return { itemsByName, truncated }
   }
 
   async function updateOne(

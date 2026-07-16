@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   toast: {
     error: vi.fn(),
     success: vi.fn(),
+    warning: vi.fn(),
   },
   logger: {
     error: vi.fn(),
@@ -322,6 +323,26 @@ describe("SecretsModule", () => {
       description: "gitee",
     })
     expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "GITEE_TOKEN" })
+  })
+
+  it("warns when an installed Skill binding scan is truncated", async () => {
+    mocks.secrets.create.mockResolvedValueOnce({ ...savedSecret, name: "GITEE_TOKEN" })
+    mocks.secrets.scanSkillEnvBindings.mockResolvedValueOnce({
+      scanSessionId: "scan-limited",
+      items: [],
+      truncated: true,
+    })
+    await renderSecretsModule()
+
+    await act(async () => clickButton("新增密钥"))
+    await act(async () => {
+      setInputValue("#secret-name", "GITEE_TOKEN")
+      setInputValue("#secret-value", "new-token")
+      clickButton("保存")
+      await Promise.resolve()
+    })
+
+    expect(mocks.toast.warning).toHaveBeenCalledWith("关联 Skill 过多，请整理后重新扫描。")
   })
 
   it("scans after creating a secret with an empty stored value", async () => {

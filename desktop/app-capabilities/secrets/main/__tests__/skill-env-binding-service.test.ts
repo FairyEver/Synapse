@@ -185,6 +185,30 @@ describe("SkillEnvBindingService", () => {
     expect(result.items).toEqual([])
   })
 
+  it("stops scanning after the per-root Skill limit and reports truncation", async () => {
+    const root = await createRoot()
+    await createSkill(root, "first", "TOKEN=old\n")
+    await createSkill(root, "second", "TOKEN=old\n")
+    const harness = createHarness(
+      [trustedRoot(root)],
+      () => 100,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { maxRootEntries: 10, maxSkillsPerRoot: 1 },
+    )
+
+    const result = await harness.service.scan("TOKEN", "new", harness.security)
+
+    expect(result.truncated).toBe(true)
+    expect(result.items).toHaveLength(1)
+    expect(harness.logger.warn).toHaveBeenCalledWith(
+      "Skill env binding scan was truncated.",
+      expect.objectContaining({ maxRootEntries: 10, maxSkillsPerRoot: 1 }),
+    )
+  })
+
   it("fails closed when a trusted root is replaced with a symlink", async () => {
     const realRoot = await createRoot()
     await createSkill(realRoot, "demo", "TOKEN=old\n")
@@ -1560,6 +1584,7 @@ function createHarness(
   beforeBindingOpen?: (phase: "scan" | "queue") => Promise<void>,
   atomicFileOps?: AtomicFileOps,
   platform?: NodeJS.Platform,
+  scanLimits?: { readonly maxRootEntries: number; readonly maxSkillsPerRoot: number },
 ) {
   const auditEvents: Parameters<AuditSink["record"]>[0][] = []
   const permissionRequests: Parameters<PermissionGuard["check"]>[0][] = []
@@ -1586,6 +1611,7 @@ function createHarness(
     beforeBindingOpen,
     atomicFileOps,
     platform,
+    scanLimits,
     logger,
   }
   const service = createSkillEnvBindingService(deps)
