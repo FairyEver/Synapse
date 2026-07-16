@@ -120,7 +120,11 @@ describe("SynapseSkillService", () => {
       name: "synapse-skill",
       title: "Synapse Skill",
       category: "system",
+      description: source.description,
     })
+    expect(source.description.trim()).not.toBe("")
+    expect(source.mainContent).toMatch(/^---\nname: synapse-skill\ndescription: .+\n---\n/)
+    expect(detail.content).not.toContain("name: synapse-skill")
     expect(detail.content).toContain("database/index.md")
     expect(detail.content).toContain("workflow/index.md")
     expect(detail.content).toContain("static site publishing or republishing")

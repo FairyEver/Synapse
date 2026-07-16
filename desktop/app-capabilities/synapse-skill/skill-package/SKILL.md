@@ -1,3 +1,8 @@
+---
+name: synapse-skill
+description: Use when operating Synapse through MCP tools, including Database, Drive, Workflow, Automation, Content, Skill Repository, model price rules, secrets, repositories, and app capabilities.
+---
+
 # Synapse Skill
 
 Use this skill when the user wants to operate Synapse through MCP tools.
