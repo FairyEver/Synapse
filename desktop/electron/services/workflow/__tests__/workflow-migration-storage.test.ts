@@ -1,12 +1,15 @@
 import { readFileSync } from "node:fs"
+import type { Dir } from "node:fs"
 import { mkdir, mkdtemp, rm, symlink, truncate, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const readFileMock = vi.hoisted(() => vi.fn())
+const opendirMock = vi.hoisted(() => vi.fn())
 vi.mock("node:fs/promises", async (importOriginal) => ({
   ...await importOriginal<typeof import("node:fs/promises")>(),
+  opendir: opendirMock,
   readFile: readFileMock,
 }))
 
@@ -17,12 +20,47 @@ import {
 
 const roots: string[] = []
 
+beforeEach(async () => {
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+  opendirMock.mockImplementation((...args: unknown[]) => (
+    actual.opendir as unknown as (...openArgs: unknown[]) => unknown
+  )(...args))
+})
+
 afterEach(async () => {
+  opendirMock.mockReset()
   readFileMock.mockReset()
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
 describe("legacy workflow migration storage", () => {
+  it("preserves both validation and directory handle close failures", async () => {
+    const repositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-close-failure-"))
+    roots.push(repositoryPath)
+    const workflowsRoot = path.join(repositoryPath, "workflows")
+    await mkdir(workflowsRoot, { recursive: true })
+    const closeError = new Error("directory close failed")
+    opendirMock.mockImplementationOnce(async (directoryPath: string) => {
+      await rm(directoryPath, { recursive: true, force: true })
+      await mkdir(directoryPath, { recursive: true })
+      return {
+        close: vi.fn().mockRejectedValue(closeError),
+      } as unknown as Dir
+    })
+    const issues: LegacyWorkflowScanIssue[] = []
+
+    await expect(listLegacyWorkflowSources([repositoryPath], (issue) => issues.push(issue)))
+      .resolves.toEqual([])
+
+    expect(issues).toHaveLength(1)
+    expect(issues[0]).toMatchObject({ operation: "read_repository" })
+    expect(issues[0]?.error).toBeInstanceOf(AggregateError)
+    expect((issues[0]?.error as AggregateError).errors).toEqual([
+      expect.any(Error),
+      closeError,
+    ])
+  })
+
   it("selects the newest numeric legacy version before older parseable files", async () => {
     const repositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-order-"))
     roots.push(repositoryPath)

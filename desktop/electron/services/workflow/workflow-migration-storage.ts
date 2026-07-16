@@ -362,7 +362,16 @@ async function openTrustedLegacyDirectory(
     await assertTrustedLegacyDirectoryUnchanged(directory, boundaryRealPath)
     return handle
   } catch (error) {
-    await handle.close().catch(() => undefined)
+    try {
+      await handle.close()
+    } catch (closeError) {
+      const validationError = normalizeError(error)
+      throw new AggregateError(
+        [validationError, normalizeError(closeError)],
+        validationError.message,
+        { cause: closeError },
+      )
+    }
     throw error
   }
 }

@@ -1,10 +1,29 @@
 import { chmod, mkdtemp, readFile, rm, writeFile, mkdir, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 
 const trashItem = vi.hoisted(() => vi.fn())
+const fsMocks = vi.hoisted(() => ({ open: vi.fn() }))
+const serviceLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  error: vi.fn(),
+  fatal: vi.fn(),
+  info: vi.fn(),
+  trace: vi.fn(),
+  warn: vi.fn(),
+  child: vi.fn(),
+}))
+serviceLogger.child.mockReturnValue(serviceLogger)
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>()
+  return {
+    ...actual,
+    open: (...args: unknown[]) => fsMocks.open(...args),
+  }
+})
 
 vi.mock("electron", () => ({
   app: {
@@ -17,6 +36,10 @@ vi.mock("electron", () => ({
   shell: {
     trashItem,
   },
+}))
+
+vi.mock("../log-store", () => ({
+  createMainLogger: () => serviceLogger,
 }))
 
 import { scanCodexRules, scanCursorRules } from "../../../src/definitions/editor/shared-rule-scanners"
@@ -42,6 +65,19 @@ import {
 } from "../editor-scan-service"
 
 const tempDirs: string[] = []
+
+beforeEach(async () => {
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+  fsMocks.open.mockImplementation((...args: unknown[]) => (
+    actual.open as unknown as (...openArgs: unknown[]) => unknown
+  )(...args))
+  serviceLogger.debug.mockClear()
+  serviceLogger.error.mockClear()
+  serviceLogger.fatal.mockClear()
+  serviceLogger.info.mockClear()
+  serviceLogger.trace.mockClear()
+  serviceLogger.warn.mockClear()
+})
 
 async function createTempDir(): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-editor-scan-"))
@@ -709,6 +745,30 @@ describe("editor scan quick publish", () => {
     expect(result.skills[0]?.preview).not.toContain("beyond the preview limit")
     expect((result.skills[0]?.preview ?? "").length)
       .toBeLessThanOrEqual(EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxPreviewChars)
+  })
+
+  it("reports a preview handle close failure without dropping the scanned Skill", async () => {
+    const root = await createTempDir()
+    const skillDirectory = path.join(root, "reviewer")
+    await mkdir(skillDirectory, { recursive: true })
+    await writeFile(path.join(skillDirectory, "SKILL.md"), "# Reviewer\n")
+    const preview = Buffer.from("# Reviewer\n")
+    fsMocks.open.mockResolvedValueOnce({
+      close: vi.fn().mockRejectedValue(new Error("close failed with local detail")),
+      read: vi.fn(async (buffer: Buffer) => {
+        preview.copy(buffer)
+        return { buffer, bytesRead: preview.byteLength }
+      }),
+    })
+
+    await expect(scanSkillDirectories([root])).resolves.toMatchObject({
+      skills: [expect.objectContaining({ name: "reviewer", preview: "# Reviewer" })],
+    })
+    expect(serviceLogger.warn).toHaveBeenCalledWith("Failed to close Skill preview file handle.", {
+      errorName: "Error",
+      fileName: "SKILL.md",
+    })
+    expect(JSON.stringify(serviceLogger.warn.mock.calls)).not.toContain("local detail")
   })
 
   it("caps the number of Skill directories scanned per root", async () => {

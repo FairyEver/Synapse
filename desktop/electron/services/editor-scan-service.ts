@@ -385,7 +385,16 @@ async function readPreview(filePath: string, signal?: AbortSignal): Promise<stri
     throwIfScanCancelled(signal)
     return ""
   } finally {
-    await handle?.close().catch(() => undefined)
+    if (handle) {
+      try {
+        await handle.close()
+      } catch (error) {
+        logger.warn("Failed to close Skill preview file handle.", {
+          errorName: error instanceof Error ? error.name : typeof error,
+          fileName: path.basename(filePath),
+        })
+      }
+    }
   }
 }
 
