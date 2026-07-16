@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react"
 import { AlertTriangle, FileCode2, LoaderCircle } from "lucide-react"
 import { openContentEditWindow, readAttachmentFile } from "@/app-shell/content"
+import { useIdentity } from "@/app-shell/identity-context"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { useRepositoryManager } from "@/app-shell/use-repository-manager"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -33,6 +34,7 @@ import {
 } from "@/modules/content/components/content-detail-window-layout"
 import { useContentDetailState } from "@/modules/content/hooks/use-content-detail-state"
 import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
+import { canManageContentDeletion } from "@/modules/content/lib/content-mutation"
 import { PromptVersionView } from "@/modules/prompts/components/prompt-version-view"
 import { RuleVersionView } from "@/modules/rules/components/rule-version-view"
 import { SkillVersionView } from "@/modules/skills/components/skill-version-view"
@@ -530,6 +532,10 @@ function SkillDetailWindowPage({
   request: Extract<SynapseContentWindowRequest, { kind: "detail" }>
 }) {
   const logger = useMemo(() => createRendererLogger("skills.detail.window"), [])
+  const { localIdentityState } = useIdentity()
+  const currentUserId = localIdentityState?.status === "ready"
+    ? localIdentityState.identity.userId
+    : null
   const { warning: notifyWarning } = useAppNotifications()
   const deleteState = useContentWindowDeleteState("skill", logger)
   const [activeFilePath, setActiveFilePath] = useState(MAIN_SKILL_FILE_PATH)
@@ -676,7 +682,11 @@ function SkillDetailWindowPage({
       <ContentDetailWindowShell
         summary={(
           <ContentDetailWindowSummary
-            canDelete={canEditContentDetail(detailState.detail)}
+            canDelete={Boolean(
+              detailState.detail
+              && canEditContentDetail(detailState.detail)
+              && canManageContentDeletion(detailState.detail, currentUserId),
+            )}
             canEdit={canEditContentDetail(detailState.detail)}
             detail={detailState.detail}
             onDelete={(event) => requestContentDelete(event, detailState.detail, deleteState)}

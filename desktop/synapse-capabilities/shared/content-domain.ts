@@ -25,7 +25,7 @@ const contentCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.resource_repository.skill.list" as CapabilityId, title: "List skills", description: "List Synapse Skill resources.", mutates: false },
   { id: "app.resource_repository.skill.get" as CapabilityId, title: "Get skill", description: "Get one Synapse Skill resource by id.", mutates: false },
   { id: "app.resource_repository.skill.create" as CapabilityId, title: "Create skill", description: "Create a Synapse Skill resource.", mutates: true },
-  { id: "app.resource_repository.skill.update" as CapabilityId, title: "Update skill", description: "Update a Synapse Skill created by the current repo profile.", mutates: true },
+  { id: "app.resource_repository.skill.update" as CapabilityId, title: "Update skill", description: "Update a Synapse Skill in the current writable Resource Repository.", mutates: true },
   { id: "app.resource_repository.skill.delete" as CapabilityId, title: "Delete skill", description: "Delete a Synapse Skill created by the current repo profile.", mutates: true },
   { id: "app.resource_repository.prompt.list" as CapabilityId, title: "List prompts", description: "List Synapse Prompt resources.", mutates: false },
   { id: "app.resource_repository.prompt.get" as CapabilityId, title: "Get prompt", description: "Get one Synapse Prompt resource by id.", mutates: false },
@@ -239,7 +239,7 @@ function updateTool(type: ContentResourceType): McpToolDefinition {
     name: `content_${type}_update`,
     description:
       type === "skill"
-        ? `Update a Synapse skill created by the current repo profile. First call content_skill_get and pass latestHistoryDirname as baseHistoryDirname. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. When sourceDirectoryPath is used and appearance fields are omitted, the current icon/image appearance is preserved. files and sourceDirectoryPath are mutually exclusive. ${SKILL_SOURCE_DIRECTORY_LIMITS} Force update is not supported.`
+        ? `Update a Synapse skill in the current writable Resource Repository, including a Skill created by another repository profile. First call content_skill_get and pass latestHistoryDirname as baseHistoryDirname. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. When sourceDirectoryPath is used and appearance fields are omitted, the current icon/image appearance is preserved. files and sourceDirectoryPath are mutually exclusive. ${SKILL_SOURCE_DIRECTORY_LIMITS} Force update is not supported.`
         : `Update a Synapse ${type} created by the current repo profile. First call content_${type}_get and pass latestHistoryDirname as baseHistoryDirname. Force update is not supported.`,
     inputSchema: type === "skill" ? {
       type: "object",

@@ -14,6 +14,13 @@ function countSavedContentMutations(results: SynapseContentMutationResult[]): nu
   return results.filter(isContentMutationSaved).length
 }
 
+function canManageContentDeletion(
+  item: Pick<SynapseContentMeta, "createdBy" | "type">,
+  currentUserId: string | null,
+): boolean {
+  return item.type !== "skill" || item.createdBy === currentUserId
+}
+
 function summarizeContentMutationConflictTitles(items: SynapseContentMeta[], limit = 3): string {
   const titles = items.slice(0, limit).map((item) => `「${item.title}」`)
   const remainingCount = items.length - titles.length
@@ -23,6 +30,7 @@ function summarizeContentMutationConflictTitles(items: SynapseContentMeta[], lim
 }
 
 export {
+  canManageContentDeletion,
   countSavedContentMutations,
   isContentMutationSaved,
   summarizeContentMutationConflictTitles,

@@ -18,6 +18,7 @@ import { SkillEnvSecretConfigDialog } from "@/modules/content/components/skill-e
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
 type ContentGridProps = {
+  canManageDeletedItem?: (item: SynapseContentMeta) => boolean
   contentType: SynapseContentType
   isDeletedView: boolean
   items: SynapseContentMeta[]
@@ -39,12 +40,14 @@ function isCardActivationKey(key: string): boolean {
 }
 
 function DeletedContentCard({
+  canManage,
   contentType,
   item,
   onRestore,
   onPurge,
   disabled,
 }: {
+  canManage: boolean
   contentType: SynapseContentType
   item: SynapseContentMeta
   onRestore: () => void
@@ -78,7 +81,7 @@ function DeletedContentCard({
           还剩 {remainingDays} 天 · 由 {deletedByLabel} 删除
         </p>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      {canManage ? <div className="flex shrink-0 items-center gap-1">
         <Button
           type="button"
           variant="ghost"
@@ -103,7 +106,7 @@ function DeletedContentCard({
         >
           <Trash2 className="size-4" />
         </Button>
-      </div>
+      </div> : null}
     </div>
   )
 }
@@ -345,6 +348,7 @@ function SkillContentListCard({
 }
 
 function ContentGrid({
+  canManageDeletedItem = () => true,
   contentType,
   isDeletedView,
   items,
@@ -362,6 +366,7 @@ function ContentGrid({
         {items.map((item) => (
           <DeletedContentCard
             key={item.id}
+            canManage={canManageDeletedItem(item)}
             contentType={contentType}
             item={item}
             disabled={busyItemId === item.id}

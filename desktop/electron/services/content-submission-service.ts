@@ -36,6 +36,17 @@ const GIT_REMOTE_OPERATION_TIMEOUT_MS = 60_000
 
 type PushProgressListener = (statusText: string) => void
 
+function assertSkillDeletionOwner(
+  contentType: SynapseContentType,
+  createdBy: string,
+  userId: string,
+  action: "删除" | "恢复" | "永久删除",
+): void {
+  if (contentType === "skill" && createdBy !== userId) {
+    throw new Error(`只有创建者可以${action} Skill。`)
+  }
+}
+
 function toCommitMessage(action: "create" | "update" | "delete" | "restore" | "purge", result: ContentWriteResult): string {
   return `[synapse] ${action} ${result.type} ${result.id.slice(0, 8)}`
 }
@@ -421,6 +432,8 @@ class ContentSubmissionService {
       throw new Error(`找不到对应的 ${getContentTypeDefinition(payload.type).singularLabel} 内容。`)
     }
 
+    assertSkillDeletionOwner(payload.type, latestDetail.createdBy, identity.userId, "删除")
+
     if (!payload.force && latestDetail.latestHistoryDirname !== payload.baseHistoryDirname) {
       return {
         id: payload.id,
@@ -459,6 +472,8 @@ class ContentSubmissionService {
     if (!latestDetail) {
       throw new Error(`找不到对应的 ${getContentTypeDefinition(payload.type).singularLabel} 内容。`)
     }
+
+    assertSkillDeletionOwner(payload.type, latestDetail.createdBy, identity.userId, "恢复")
 
     if (latestDetail.latestHistoryDirname !== payload.baseHistoryDirname) {
       return {
@@ -500,6 +515,8 @@ class ContentSubmissionService {
     if (!latestDetail) {
       throw new Error(`找不到对应的 ${getContentTypeDefinition(payload.type).singularLabel} 内容。`)
     }
+
+    assertSkillDeletionOwner(payload.type, latestDetail.createdBy, identity.userId, "永久删除")
 
     if (latestDetail.latestHistoryDirname !== payload.baseHistoryDirname || !latestDetail.deleted) {
       return {

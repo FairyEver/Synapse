@@ -618,14 +618,91 @@ describe("content capability dispatcher", () => {
     })
   })
 
-  it("rejects update and delete for resources created by another user", async () => {
+  it("allows updating a Skill created by another repository profile", async () => {
     const deps = createDeps({
-      detail: contentDetail({ createdBy: "other-user" }),
+      detail: contentDetail({
+        createdBy: "other-user",
+        id: "skill-1",
+        name: "team-skill",
+        type: "skill",
+      }),
     })
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    await expect(dispatcher.dispatch("content.rule.delete", {
-      id: "rule-1",
+    await expect(dispatcher.dispatch("content.skill.update", {
+      id: "skill-1",
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+      name: "team-skill",
+      title: "Team Skill",
+      description: "Description",
+      category: "development",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Skill",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+
+    expect(deps.contentWriter.updateContent).toHaveBeenCalled()
+  })
+
+  it("keeps version conflict protection when another repository profile updates a Skill", async () => {
+    const deps = createDeps({
+      detail: contentDetail({ createdBy: "other-user", id: "skill-1", type: "skill" }),
+    })
+    deps.contentWriter.updateContent.mockResolvedValueOnce({
+      id: "skill-1",
+      type: "skill",
+      status: "conflict",
+      latestHistoryDirname: "newer-history",
+      latestModifiedAt: "2026-05-22T00:00:00.000Z",
+      latestModifiedByDisplayName: "Other User",
+    })
+    const dispatcher = createContentCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch("content.skill.update", {
+      id: "skill-1",
+      baseHistoryDirname: "stale-history",
+      name: "team-skill",
+      title: "Team Skill",
+      description: "Description",
+      category: "development",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Skill",
+    }, { source: "mcp-stdio" })).rejects.toMatchObject({ code: "CONTENT_CONFLICT" })
+  })
+
+  it.each(["rule", "prompt"] as const)("rejects updating a %s created by another user", async (contentType) => {
+    const deps = createDeps({
+      detail: contentDetail({ createdBy: "other-user", type: contentType }),
+    })
+    const dispatcher = createContentCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(`content.${contentType}.update`, {
+      id: `${contentType}-1`,
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+      name: "team-rule",
+      title: "Team Content",
+      description: "Description",
+      category: "coding",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Content",
+    }, { source: "mcp-stdio" })).rejects.toThrow(ContentCapabilityError)
+
+    expect(deps.contentWriter.updateContent).not.toHaveBeenCalled()
+  })
+
+  it("rejects deleting a Skill created by another user", async () => {
+    const deps = createDeps({
+      detail: contentDetail({ createdBy: "other-user", id: "skill-1", type: "skill" }),
+    })
+    const dispatcher = createContentCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch("content.skill.delete", {
+      id: "skill-1",
       baseHistoryDirname: "20260521000000Z__user__abc123",
     }, { source: "mcp-stdio" })).rejects.toThrow(ContentCapabilityError)
     expect(deps.contentWriter.deleteContent).not.toHaveBeenCalled()

@@ -121,7 +121,7 @@ Update payloads use the same fields as create, plus:
 }
 ```
 
-Updates are rejected unless the current repository profile created the resource.
+Skill updates are allowed for any profile that can write the current Resource Repository, including when another profile created the Skill. Rule and Prompt updates are rejected unless the current repository profile created the resource.
 
 When updating an existing local Skill directory, prefer `sourceDirectoryPath` instead of rebuilding the body and attachments with inline `files`. For `app_resource_repository_skill_update` with `sourceDirectoryPath`, omit appearance fields when you want to preserve the current built-in icon or image icon.
 
@@ -138,7 +138,7 @@ A successful mutation may first create a local repository version while remote s
 }
 ```
 
-Deletes are rejected unless the current repository profile created the resource.
+Deletes are rejected unless the current repository profile created the resource. For Skills, the same creator-only rule also applies to restore and permanent deletion in the Resource Repository UI.
 
 ## Image Icons
 

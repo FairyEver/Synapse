@@ -323,7 +323,9 @@ async function updateContent(
   security?: ContentIconImageSecurityDeps,
 ): Promise<DispatchResult> {
   const id = requireTrimmedString(params.id, "id")
-  const currentDetail = await assertOwnedByCurrentUser(deps, contentType, id)
+  const currentDetail = contentType === "skill"
+    ? await deps.contentReader.getDetail(contentType, id)
+    : await assertOwnedByCurrentUser(deps, contentType, id)
 
   const merged = await mergeSkillSourceParams(deps, contentType, params, currentDetail, security)
   const payload = normalizeUpdateContentParams(contentType, merged.params)

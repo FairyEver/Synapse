@@ -56,6 +56,8 @@ describe("Content capability domain", () => {
     expect(update?.inputSchema).not.toHaveProperty("anyOf")
     expect(update?.inputSchema).not.toHaveProperty("allOf")
     expect(update?.description).toContain("sourceDirectoryPath")
+    expect(update?.description).toContain("including a Skill created by another repository profile")
+    expect(update?.description).not.toContain("skill created by the current repo profile")
   })
 
   it("exposes rule and skill name constraints in create schemas", () => {

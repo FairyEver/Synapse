@@ -130,7 +130,49 @@ async function renderGrid(items: SynapseContentMeta[], contentType: SynapseConte
   return { container, onOpenItem }
 }
 
+async function renderDeletedGrid(
+  items: SynapseContentMeta[],
+  canManageDeletedItem: (item: SynapseContentMeta) => boolean,
+) {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+  const onPurgeItem = vi.fn()
+  const onRestoreItem = vi.fn()
+
+  await act(async () => {
+    root.render(
+      <ContentGrid
+        busyItemId={null}
+        canManageDeletedItem={canManageDeletedItem}
+        contentType="skill"
+        isDeletedView
+        items={items}
+        onOpenItem={vi.fn()}
+        onPurgeItem={onPurgeItem}
+        onRestoreItem={onRestoreItem}
+      />,
+    )
+  })
+
+  return { container, onPurgeItem, onRestoreItem }
+}
+
 describe("ContentGrid", () => {
+  it("hides restore and purge actions for Skills the current user did not create", async () => {
+    const owned = createContentItem("skill", { id: "owned", title: "Owned" })
+    const other = createContentItem("skill", { createdBy: "other-user", id: "other", title: "Other" })
+    const { container } = await renderDeletedGrid(
+      [owned, other],
+      (item) => item.createdBy === "user-1",
+    )
+
+    const cards = Array.from(container.querySelectorAll(":scope > div > div"))
+    expect(cards.find((card) => card.textContent?.includes("Owned"))?.querySelectorAll("button")).toHaveLength(2)
+    expect(cards.find((card) => card.textContent?.includes("Other"))?.querySelectorAll("button")).toHaveLength(0)
+  })
+
   it("opens a skill item when the card body is clicked but keeps nested actions isolated", async () => {
     const { container, onOpenItem } = await renderGrid([
       createContentItem("skill", { name: "agent-tooling" }),

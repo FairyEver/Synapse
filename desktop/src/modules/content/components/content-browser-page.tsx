@@ -50,6 +50,7 @@ import { useContentRecentlyViewed } from "@/modules/content/hooks/use-content-re
 import { useContentSortOrder } from "@/modules/content/hooks/use-content-sort-order"
 import { useDeletedContent } from "@/modules/content/hooks/use-deleted-content"
 import {
+  canManageContentDeletion,
   countSavedContentMutations,
   isContentMutationSaved,
   summarizeContentMutationConflictTitles,
@@ -234,7 +235,11 @@ function ContentBrowserPage({
   const itemsInActiveCategory = useMemo(() => {
     if (activeCategoryId === SYNAPSE_DELETED_CATEGORY_ID) {
       if (deletedFilter === "mine" && currentUserId) {
-        return deletedContent.items.filter((item) => item.modifiedBy === currentUserId)
+        return deletedContent.items.filter((item) => (
+          contentType === "skill"
+            ? item.createdBy === currentUserId
+            : item.modifiedBy === currentUserId
+        ))
       }
       return deletedContent.items
     }
@@ -262,6 +267,11 @@ function ContentBrowserPage({
     }
     return sortContentItems(itemsInActiveCategory, sortOrder)
   }, [activeCategoryId, contentSearch, itemsInActiveCategory, deferredSearchQuery, sortOrder])
+
+  const manageableDeletedItems = useMemo(
+    () => filteredItems.filter((item) => canManageContentDeletion(item, currentUserId)),
+    [currentUserId, filteredItems],
+  )
 
   const summaryLabel = useMemo(() => {
     if (isDeletedView) return `共 ${filteredItems.length} 项`
@@ -359,6 +369,7 @@ function ContentBrowserPage({
           : `新建 ${definition.singularLabel}`
 
   const handleRestoreItem = async (item: SynapseContentMeta) => {
+    if (!canManageContentDeletion(item, currentUserId)) return
     if (busyItemId) return
     setBusyItemId(item.id)
     const startedAt = performance.now()
@@ -383,6 +394,7 @@ function ContentBrowserPage({
   }
 
   const purgeItem = async (item: SynapseContentMeta) => {
+    if (!canManageContentDeletion(item, currentUserId)) return
     if (purgeBusy) return
     setPurgeBusy(true)
     const startedAt = performance.now()
@@ -429,7 +441,7 @@ function ContentBrowserPage({
   const handleBatchConfirm = async () => {
     if (busyBatchAction) return
     const action = batchAction
-    const targets = [...filteredItems]
+    const targets = [...manageableDeletedItems]
     setBatchAction(null)
     if (!action || targets.length === 0) return
     const startedAt = performance.now()
@@ -560,7 +572,8 @@ function ContentBrowserPage({
                 batchAction={batchAction}
                 busyBatchAction={busyBatchAction}
                 deletedFilter={deletedFilter}
-                filteredItemCount={filteredItems.length}
+                filteredItemCount={manageableDeletedItems.length}
+                mineLabel={contentType === "skill" ? "我创建的" : "我删除的"}
                 onBatchActionChange={(action) => {
                   if (action) logger.info("Batch action dialog opened.", { action, contentType })
                   setBatchAction(action)
@@ -578,6 +591,7 @@ function ContentBrowserPage({
               <ContentStateView {...state} />
             ) : (
               <ContentGrid
+                canManageDeletedItem={(item) => canManageContentDeletion(item, currentUserId)}
                 contentType={contentType}
                 isDeletedView={isDeletedView}
                 items={filteredItems}

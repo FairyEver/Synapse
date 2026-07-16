@@ -18,6 +18,7 @@ type ContentBulkActionsProps = {
   busyBatchAction: "restore" | "purge" | null
   deletedFilter: "mine" | "all"
   filteredItemCount: number
+  mineLabel?: string
   onBatchActionChange: (action: "restore" | "purge" | null) => void
   onBatchConfirm: () => void
   onDeletedFilterChange: (filter: "mine" | "all") => void
@@ -32,6 +33,7 @@ function ContentBulkActions({
   busyBatchAction,
   deletedFilter,
   filteredItemCount,
+  mineLabel = "我删除的",
   onBatchActionChange,
   onBatchConfirm,
   onDeletedFilterChange,
@@ -51,7 +53,7 @@ function ContentBulkActions({
           onValueChange={(value) => onDeletedFilterChange(value as "mine" | "all")}
         >
           <TabsList className="h-8">
-            <TabsTrigger value="mine">我删除的</TabsTrigger>
+            <TabsTrigger value="mine">{mineLabel}</TabsTrigger>
             <TabsTrigger value="all">全部</TabsTrigger>
           </TabsList>
         </Tabs>
@@ -112,8 +114,8 @@ function ContentBulkActions({
             </AlertDialogTitle>
             <AlertDialogDescription>
               {batchAction === "restore"
-                ? `将恢复当前列表中的 ${filteredItemCount} 项内容。`
-                : `此操作不可撤销，当前列表中的 ${filteredItemCount} 项内容将被彻底清除。`}
+                ? `将恢复 ${filteredItemCount} 项内容。`
+                : `此操作不可撤销，将永久删除 ${filteredItemCount} 项内容。`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

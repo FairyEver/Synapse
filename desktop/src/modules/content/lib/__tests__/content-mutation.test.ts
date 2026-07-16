@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  canManageContentDeletion,
   countSavedContentMutations,
   isContentMutationSaved,
   summarizeContentMutationConflictTitles,
@@ -52,6 +53,14 @@ function contentItem(id: string, title: string): SynapseContentMeta {
 }
 
 describe("content mutation helpers", () => {
+  it("restricts the Skill deletion lifecycle to its creator", () => {
+    const skill = { ...contentItem("skill-1", "Skill"), type: "skill" as const }
+
+    expect(canManageContentDeletion(skill, "user")).toBe(true)
+    expect(canManageContentDeletion(skill, "other-user")).toBe(false)
+    expect(canManageContentDeletion(contentItem("rule-1", "Rule"), "other-user")).toBe(true)
+  })
+
   it("treats conflict results as not saved", () => {
     expect(isContentMutationSaved(savedResult)).toBe(true)
     expect(isContentMutationSaved(conflictResult)).toBe(false)
