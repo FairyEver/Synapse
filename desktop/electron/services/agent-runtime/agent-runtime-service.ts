@@ -80,6 +80,7 @@ import type {
   AgentEvent,
   AgentMessage,
   AgentPendingPermission,
+  AgentPermissionDecision,
   AgentPermissionResponseRequest,
   AgentUserQuestionResolution,
   AgentRuntimeRelayResult,
@@ -829,27 +830,27 @@ export class AgentRuntimeService {
         try {
           updatedInput = askUserQuestionUpdatedInput(pending, request)
         } catch (error) {
-          await this.persistUserQuestionResolution(pending, {
+          const resolution: AgentUserQuestionResolution = {
             status: "skipped",
             resolvedAt: this.isoNow(),
-          }, true)
-          await pending.liveSession.respondPermission(request.requestId, {
+          }
+          await this.prepareUserQuestionResolution(pending, resolution)
+          await this.respondToUserQuestion(pending, {
             behavior: "deny",
             message: ASK_USER_QUESTION_EMPTY_ANSWER_MESSAGE,
           })
+          await this.persistUserQuestionResolution(pending, resolution, true)
           this.sessionManager.settlePendingPermission(pending)
           throw error
         }
-        await this.persistUserQuestionResolution(
-          pending,
-          askUserQuestionResolution(pending, request, this.isoNow()),
-          true,
-        )
-        await pending.liveSession.respondPermission(request.requestId, {
+        const resolution = askUserQuestionResolution(pending, request, this.isoNow())
+        await this.prepareUserQuestionResolution(pending, resolution)
+        await this.respondToUserQuestion(pending, {
           behavior: request.behavior,
           updatedInput,
           message: askUserQuestionResponseMessage(request),
         })
+        await this.persistUserQuestionResolution(pending, resolution, true)
         this.sessionManager.settlePendingPermission(pending)
         return
       } catch (error) {
@@ -1318,6 +1319,50 @@ export class AgentRuntimeService {
       if (required) {
         throw new Error(AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE, { cause: error })
       }
+    }
+  }
+
+  private async prepareUserQuestionResolution(
+    pending: PendingPermissionState,
+    resolution: AgentUserQuestionResolution,
+  ): Promise<void> {
+    try {
+      const conversation = await this.repository.prepareUserQuestionResolution(
+        pending.conversationId,
+        pending.requestId,
+        resolution,
+      )
+      if (!conversation) throw new Error("AskUserQuestion history entry is unavailable")
+      this.emitConversationUpdated(conversation)
+    } catch (error) {
+      this.deps.logger?.warn("Agent user question response attempt persistence failed.", {
+        boundary: "agent-runtime.user-question-response-attempt",
+        projectId: pending.projectId,
+        conversationId: pending.conversationId,
+        requestId: pending.requestId,
+        status: resolution.status,
+        error: agentRuntimeErrorMessage(error),
+      })
+      throw new Error(AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE, { cause: error })
+    }
+  }
+
+  private async respondToUserQuestion(
+    pending: PendingPermissionState,
+    decision: AgentPermissionDecision,
+  ): Promise<void> {
+    try {
+      await pending.liveSession.respondPermission(pending.requestId, decision)
+    } catch (error) {
+      this.deps.logger?.warn("Agent user question SDK response failed.", {
+        boundary: "agent-runtime.user-question-sdk-response",
+        projectId: pending.projectId,
+        conversationId: pending.conversationId,
+        requestId: pending.requestId,
+        behavior: decision.behavior,
+        error: agentRuntimeErrorMessage(error),
+      })
+      throw error
     }
   }
 

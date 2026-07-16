@@ -338,12 +338,33 @@ export class AgentSessionRepository {
     const current = conversation.history[historyIndex]
     if (current?.metadata?.userQuestionResolution) return null
     const history = conversation.history.map((entry, index) =>
+      index === historyIndex ? resolvedUserQuestionHistoryEntry(entry, resolution) : entry)
+    const updated = {
+      ...conversation,
+      history,
+      updatedAt: this.isoNow(),
+    }
+    await this.conversations.upsert(updated)
+    return updated
+  }
+
+  async prepareUserQuestionResolution(
+    conversationIdValue: string,
+    requestId: string,
+    resolution: AgentUserQuestionResolution,
+  ): Promise<ConversationEntryV1 | null> {
+    const conversation = await this.requireConversation(conversationIdValue)
+    const historyIndex = findPermissionRequestHistoryIndex(conversation.history, requestId)
+    if (historyIndex === -1) return null
+    const current = conversation.history[historyIndex]
+    if (current?.metadata?.userQuestionResolution) return null
+    const history = conversation.history.map((entry, index) =>
       index === historyIndex
         ? {
             ...entry,
             metadata: {
               ...(entry.metadata ?? {}),
-              userQuestionResolution: resolution,
+              userQuestionResolutionAttempt: resolution,
             },
           }
         : entry)
@@ -803,6 +824,21 @@ function findPermissionRequestHistoryIndex(
     }
   }
   return -1
+}
+
+function resolvedUserQuestionHistoryEntry(
+  entry: ConversationEntryV1["history"][number],
+  resolution: AgentUserQuestionResolution,
+): ConversationEntryV1["history"][number] {
+  const metadata = { ...(entry.metadata ?? {}) }
+  delete metadata.userQuestionResolutionAttempt
+  return {
+    ...entry,
+    metadata: {
+      ...metadata,
+      userQuestionResolution: resolution,
+    },
+  }
 }
 
 function usageSourceFields(

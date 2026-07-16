@@ -1164,9 +1164,9 @@ describe("AgentRuntimeService", () => {
     expect(session.responses).toEqual([])
     expect(service.listPendingPermissions()).toHaveLength(1)
     expect(logger.warn).toHaveBeenCalledWith(
-      "Agent user question resolution persistence failed.",
+      "Agent user question response attempt persistence failed.",
       expect.objectContaining({
-        boundary: "agent-runtime.user-question-resolution",
+        boundary: "agent-runtime.user-question-response-attempt",
         requestId: "conversation-a-permission-1",
         status: "answered",
       }),
@@ -1176,6 +1176,72 @@ describe("AgentRuntimeService", () => {
     await service.respondPermission(request)
     expect(session.responses).toHaveLength(1)
     await expect(turn).resolves.toMatchObject({ resultText: "continued after retry" })
+  })
+
+  it("does not mark AskUserQuestion answered when the SDK response fails", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const logger = {
+      debug: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+    }
+    const questions = [{
+      question: "继续吗？",
+      options: [{ label: "继续" }],
+      multiSelect: false,
+    }]
+    const session = new FailingQuestionResponseSession(
+      "conversation-a-permission-1",
+      questions,
+      "continued after retry",
+    )
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      logger: logger as never,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs answer"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+    const request = {
+      requestId: "conversation-a-permission-1",
+      behavior: "allow" as const,
+      updatedInput: { answers: { "question-0": "继续" } },
+      actor: { kind: "user" as const },
+    }
+
+    await expect(service.respondPermission(request)).rejects.toThrow("SDK response unavailable")
+    expect(service.listPendingPermissions()).toHaveLength(1)
+    const pendingHistory = (await conversations.list())[0]?.history.find(
+      (entry) => entry.metadata?.requestId === request.requestId,
+    )
+    expect(pendingHistory?.metadata?.userQuestionResolution).toBeUndefined()
+    expect(pendingHistory?.metadata?.userQuestionResolutionAttempt).toMatchObject({
+      status: "answered",
+    })
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Agent user question SDK response failed.",
+      expect.objectContaining({
+        boundary: "agent-runtime.user-question-sdk-response",
+        requestId: request.requestId,
+        behavior: "allow",
+      }),
+    )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("继续")
+
+    await service.respondPermission(request)
+    const result = await turn
+    const stored = await conversations.get(result.conversationId)
+    const resolvedHistory = stored?.history.find(
+      (entry) => entry.metadata?.requestId === request.requestId,
+    )
+    expect(resolvedHistory?.metadata?.userQuestionResolution).toMatchObject({ status: "answered" })
+    expect(resolvedHistory?.metadata?.userQuestionResolutionAttempt).toBeUndefined()
   })
 
   it("does not wait for an AskUserQuestion whose history entry failed to persist", async () => {
@@ -2787,6 +2853,21 @@ class QuestionSession implements AgentLiveSession {
   }
 }
 
+class FailingQuestionResponseSession extends QuestionSession {
+  private shouldFail = true
+
+  override async respondPermission(
+    requestId: string,
+    decision: AgentPermissionDecision,
+  ): Promise<void> {
+    if (this.shouldFail) {
+      this.shouldFail = false
+      throw new Error("SDK response unavailable")
+    }
+    await super.respondPermission(requestId, decision)
+  }
+}
+
 class PermissionFailureSession implements AgentLiveSession {
   readonly agentType = "claude-sdk"
   private waiter: ((event: AgentEvent | null) => void) | undefined
@@ -2909,7 +2990,10 @@ class BlockingQuestionResolutionNamespace extends MemoryNamespace<ConversationEn
   }
 
   override async upsert(item: ConversationEntryV1): Promise<void> {
-    const containsResolution = item.history.some((entry) => entry.metadata?.userQuestionResolution !== undefined)
+    const containsResolution = item.history.some((entry) => (
+      entry.metadata?.userQuestionResolution !== undefined
+      || entry.metadata?.userQuestionResolutionAttempt !== undefined
+    ))
     if (containsResolution && !this.blocked) {
       this.blocked = true
       this.resolutionWriteStarted?.()
@@ -2935,7 +3019,10 @@ class FailingQuestionResolutionNamespace extends MemoryNamespace<ConversationEnt
   }
 
   override async upsert(item: ConversationEntryV1): Promise<void> {
-    const containsResolution = item.history.some((entry) => entry.metadata?.userQuestionResolution !== undefined)
+    const containsResolution = item.history.some((entry) => (
+      entry.metadata?.userQuestionResolution !== undefined
+      || entry.metadata?.userQuestionResolutionAttempt !== undefined
+    ))
     if (containsResolution && !this.failed) {
       this.failed = true
       throw new Error("resolution storage unavailable")
