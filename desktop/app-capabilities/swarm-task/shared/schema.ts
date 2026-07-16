@@ -3,6 +3,7 @@ import { z } from "zod"
 export const swarmRunModeSchema = z.enum(["batch", "continuous"])
 export const SWARM_TASK_DEFAULT_CONCURRENCY = 1
 export const SWARM_TASK_DEFAULT_MAX_ROUNDS = 1
+export const SWARM_MCP_WORKER_RUN_PAGE_SIZE = 20
 export const SWARM_WORKER_RUN_PAGE_SIZE = 100
 export const swarmRunStatusSchema = z.enum(["running", "draining", "success", "partial", "failed", "cancelled"])
 export const swarmWorkerRunStatusSchema = z.enum(["queued", "running", "success", "failed", "cancelled", "timeout"])
@@ -368,6 +369,8 @@ export const swarmWorkerRunListInputSchema = z.object({
 export const swarmRunGetInputSchema = z.object({
   taskId: z.string().min(1),
   runId: z.string().min(1),
+  workerOffset: z.number().int().min(0).default(0),
+  workerLimit: z.number().int().min(1).max(200).default(SWARM_MCP_WORKER_RUN_PAGE_SIZE),
 }).strict()
 
 export const swarmTaskListResultSchema = z.array(swarmTaskSchema)

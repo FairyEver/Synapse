@@ -84,6 +84,12 @@ function createService(overrides: Record<string, unknown> = {}) {
     listRuns: vi.fn(async () => [run]),
     getRun: vi.fn(async () => run),
     listWorkerRuns: vi.fn(async () => [worker]),
+    listWorkerRunsPage: vi.fn(async (input: { runId: string; offset: number; limit: number }) => ({
+      items: [worker],
+      total: 21,
+      offset: input.offset,
+      limit: input.limit,
+    })),
     ...overrides,
   }
 }
@@ -162,6 +168,8 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
     const runGetResult = await dispatcher.dispatch(SWARM_TASK_RUN_GET_CAPABILITY_ID, {
       taskId: "task-1",
       runId: "run-1",
+      workerOffset: 20,
+      workerLimit: 10,
     }, { source: "mcp-http" })
     expect(runGetResult).toEqual({
       ok: true,
@@ -174,6 +182,12 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
           summary: "Summary",
           handoff: "Handoff",
         })],
+        workerPage: {
+          total: 21,
+          offset: 20,
+          limit: 10,
+          hasMore: false,
+        },
       },
       affected: 1,
     })
@@ -184,7 +198,8 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
     expect(service.cancelRun).toHaveBeenCalledWith("run-1")
     expect(service.listRuns).toHaveBeenCalledWith("task-1", 5)
     expect(service.getRun).toHaveBeenCalledWith("run-1")
-    expect(service.listWorkerRuns).toHaveBeenCalledWith("run-1")
+    expect(service.listWorkerRunsPage).toHaveBeenCalledWith({ runId: "run-1", offset: 20, limit: 10 })
+    expect(service.listWorkerRuns).not.toHaveBeenCalled()
     expect(security.permissionGuard.check.mock.calls.map(([request]) => request.action)).toEqual([
       "agent.spawn",
       "automation.mutate",
@@ -237,7 +252,7 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
 
     expect(security.permissionGuard.check).not.toHaveBeenCalled()
     expect(service.getRun).not.toHaveBeenCalled()
-    expect(service.listWorkerRuns).not.toHaveBeenCalled()
+    expect(service.listWorkerRunsPage).not.toHaveBeenCalled()
   })
 
   it("returns null when a run does not belong to the authorized task", async () => {
@@ -251,7 +266,7 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
     }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: null, affected: 0 })
 
     expect(service.getRun).toHaveBeenCalledWith("run-1")
-    expect(service.listWorkerRuns).not.toHaveBeenCalled()
+    expect(service.listWorkerRunsPage).not.toHaveBeenCalled()
     expect(security.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "automation.read",
       resource: "swarm-task:task:task-2",
@@ -283,7 +298,7 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
     }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: null, affected: 0 })
 
     expect(service.deleteTask).not.toHaveBeenCalled()
-    expect(service.listWorkerRuns).not.toHaveBeenCalled()
+    expect(service.listWorkerRunsPage).not.toHaveBeenCalled()
     expect(security.auditSink.record.mock.calls.filter(([event]) => event.outcome === "failed")).toHaveLength(2)
   })
 

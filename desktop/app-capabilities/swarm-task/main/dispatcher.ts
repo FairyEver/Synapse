@@ -122,8 +122,26 @@ export function createSwarmTaskCapabilityDispatcher(deps: SwarmTaskDispatcherDep
           async () => {
             const run = await deps.service.getRun(parsed.runId)
             if (!run || run.taskId !== parsed.taskId) return { ok: true, data: null, affected: 0 }
-            const workers = (await deps.service.listWorkerRuns(parsed.runId)).map(toMcpWorkerRun)
-            return { ok: true, data: { ...run, workers }, affected: 1 }
+            const page = await deps.service.listWorkerRunsPage({
+              runId: parsed.runId,
+              offset: parsed.workerOffset,
+              limit: parsed.workerLimit,
+            })
+            const workers = page.items.map(toMcpWorkerRun)
+            return {
+              ok: true,
+              data: {
+                ...run,
+                workers,
+                workerPage: {
+                  total: page.total,
+                  offset: page.offset,
+                  limit: page.limit,
+                  hasMore: page.offset + workers.length < page.total,
+                },
+              },
+              affected: 1,
+            }
           },
         )
       }

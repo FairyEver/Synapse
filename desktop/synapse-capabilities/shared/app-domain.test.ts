@@ -216,6 +216,8 @@ describe("App capability domain", () => {
       properties: {
         taskId: expect.objectContaining({ type: "string", minLength: 1 }),
         runId: expect.objectContaining({ type: "string", minLength: 1 }),
+        workerOffset: expect.objectContaining({ type: "integer", minimum: 0, default: 0 }),
+        workerLimit: expect.objectContaining({ type: "integer", minimum: 1, maximum: 200, default: 20 }),
       },
     })
   })

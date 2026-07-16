@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  SWARM_MCP_WORKER_RUN_PAGE_SIZE,
   SWARM_TASK_DEFAULT_CONCURRENCY,
   SWARM_TASK_DEFAULT_MAX_ROUNDS,
   SWARM_WORKER_RUN_PAGE_SIZE,
+  swarmRunGetInputSchema,
   swarmTaskConfigSchema,
   swarmWorkerRunListInputSchema,
 } from "../schema"
@@ -95,5 +97,19 @@ describe("swarmTaskConfigSchema", () => {
       limit: SWARM_WORKER_RUN_PAGE_SIZE,
     })
     expect(() => swarmWorkerRunListInputSchema.parse({ runId: "run-1", limit: 201 })).toThrow()
+  })
+
+  it("defaults and bounds MCP run worker pages", () => {
+    expect(swarmRunGetInputSchema.parse({ taskId: "task-1", runId: "run-1" })).toEqual({
+      taskId: "task-1",
+      runId: "run-1",
+      workerOffset: 0,
+      workerLimit: SWARM_MCP_WORKER_RUN_PAGE_SIZE,
+    })
+    expect(() => swarmRunGetInputSchema.parse({
+      taskId: "task-1",
+      runId: "run-1",
+      workerLimit: 201,
+    })).toThrow()
   })
 })

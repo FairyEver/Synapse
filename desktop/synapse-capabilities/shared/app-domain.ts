@@ -35,6 +35,7 @@ import {
 } from "../../app-capabilities/secrets/shared/capability"
 import { SECRET_NAME_REGEX } from "../../app-capabilities/secrets/shared/schema"
 import {
+  SWARM_MCP_WORKER_RUN_PAGE_SIZE,
   SWARM_TASK_DEFAULT_CONCURRENCY,
   SWARM_TASK_DEFAULT_MAX_ROUNDS,
   swarmFileWriteModeSchema,
@@ -837,12 +838,20 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: SWARM_TASK_MCP_TOOL_NAMES.runGet,
-      description: "Get one run for a specific Swarm Task with its worker records.",
+      description: "Get one run for a specific Swarm Task with a bounded page of worker records. Use workerOffset and workerLimit to page through workers.",
       inputSchema: {
         type: "object",
         properties: {
           taskId: stringField("Owning Swarm Task id.", { minLength: 1 }),
           runId: stringField("Swarm run id.", { minLength: 1 }),
+          workerOffset: {
+            ...nonnegativeIntField("Optional worker page offset. Defaults to 0."),
+            default: 0,
+          },
+          workerLimit: {
+            ...positiveIntField("Optional worker page size. Defaults to 20 and caps at 200.", 200),
+            default: SWARM_MCP_WORKER_RUN_PAGE_SIZE,
+          },
         },
         required: ["taskId", "runId"],
         additionalProperties: false,
@@ -937,7 +946,7 @@ function swarmTaskCapabilityDescription(id: string): string {
     case SWARM_TASK_RUN_LIST_CAPABILITY_ID:
       return "List runs for one Swarm Task."
     case SWARM_TASK_RUN_GET_CAPABILITY_ID:
-      return "Get one Swarm Task run with its worker records."
+      return "Get one Swarm Task run with a bounded worker page."
     default:
       return "Run a Swarm Task capability."
   }

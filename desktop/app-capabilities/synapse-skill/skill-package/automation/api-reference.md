@@ -397,10 +397,10 @@ Input:
 Input:
 
 ```json
-{ "taskId": "swarm-task:...", "runId": "swarm-run:..." }
+{ "taskId": "swarm-task:...", "runId": "swarm-run:...", "workerOffset": 0, "workerLimit": 20 }
 ```
 
-Both fields are required. The run must belong to the authorized task; a missing or mismatched run returns `null`. Otherwise, returns the run fields with a `workers` array. A run can include an optional `error`; active runs recovered after a Synapse restart return `status: "failed"` with an interruption error. Worker records include phase, status, optional summary, optional handoff, optional error, and linked Agent `conversationId` when available. A summary is stored only from an explicit `<SYNAPSE_SWARM_SUMMARY>` block, after redaction and length limiting. If that block is missing, `summary` is omitted and `summaryFallback` is true; raw worker output is not used as a fallback summary. Internal worker session keys are not returned. Terminal worker phases distinguish `completed`, `failed`, `cancelled`, and `timeout`. Open linked worker conversations as Agent conversations with platform `"swarm"`.
+`taskId` and `runId` are required. `workerOffset` defaults to 0. `workerLimit` defaults to 20 and caps at 200. The run must belong to the authorized task; a missing or mismatched run returns `null`. Otherwise, returns the run fields with the current bounded `workers` array and `workerPage: { total, offset, limit, hasMore }`. Increase `workerOffset` until `workerPage.hasMore` is false to read later pages. A run can include an optional `error`; active runs recovered after a Synapse restart return `status: "failed"` with an interruption error. Worker records include phase, status, optional summary, optional handoff, optional error, and linked Agent `conversationId` when available. A summary is stored only from an explicit `<SYNAPSE_SWARM_SUMMARY>` block, after redaction and length limiting. If that block is missing, `summary` is omitted and `summaryFallback` is true; raw worker output is not used as a fallback summary. Internal worker session keys are not returned. Terminal worker phases distinguish `completed`, `failed`, `cancelled`, and `timeout`. Open linked worker conversations as Agent conversations with platform `"swarm"`.
 
 ## Public Summary Boundary
 
