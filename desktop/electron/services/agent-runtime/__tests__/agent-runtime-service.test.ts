@@ -1664,6 +1664,43 @@ describe("AgentRuntimeService", () => {
       .toMatchObject({ userQuestionResolution: { status: "timed_out" } })
   })
 
+  it("keeps AskUserQuestion timed out when the SDK auto-deny fails", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const questions = [{
+      question: "该怎么处理？",
+      options: [{ label: "跳过" }, { label: "重试" }],
+      multiSelect: false,
+    }]
+    const session = new FailingQuestionResponseSession(
+      "conversation-a-permission-1",
+      questions,
+      "unused",
+    )
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      permissionTimeoutMs: 1,
+      now: fixedNow,
+    })
+
+    const result = await service.send(baseMessage("needs choice"))
+
+    expect(result.error).toBeTruthy()
+    expect(result.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "error",
+        turnOutcome: expect.objectContaining({ status: "timed_out" }),
+      }),
+    ]))
+    expect(session.closed).toBe(true)
+    const stored = await conversations.get(result.conversationId)
+    expect(stored?.history.find((entry) => entry.metadata?.requestId === "conversation-a-permission-1")?.metadata)
+      .toMatchObject({ userQuestionResolution: { status: "timed_out" } })
+  })
+
   it("records a pending AskUserQuestion as cancelled when the turn stops", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const questions = [{

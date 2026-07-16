@@ -798,7 +798,44 @@ export class ConversationRouter {
       assistantHistoryPersisted = await this.saveEventHistory(conversation.id, preparedEvent) || assistantHistoryPersisted
 
       if (preparedEvent.type === "permissionRequest") {
-        await this.awaitPendingPermission(state, message, conversation.id, preparedEvent, liveSession, abortSignal)
+        const questionTimeoutFailed = await this.awaitPendingPermission(
+          state,
+          message,
+          conversation.id,
+          preparedEvent,
+          liveSession,
+          abortSignal,
+        )
+        if (questionTimeoutFailed) {
+          const lifecycle = state.activeLifecycle
+          if (lifecycle) {
+            markTimeoutRequested(lifecycle, { source: "runtime", now: () => this.isoNow() })
+            const outcome = normalizeExecutorEvent(lifecycle, {
+              type: "executor.closed",
+              diagnostic: {
+                source: "agent-runtime",
+                kind: "closed",
+                message: AGENT_USER_QUESTION_TIMEOUT_MESSAGE,
+              },
+            })
+            const projected = outcomeToAgentEvent({
+              outcome,
+              conversationId: conversation.id,
+              providerId: message.providerId ?? conversation.providerId,
+              sdkSessionId: liveSession.currentSessionId(),
+              timestamp: this.isoNow(),
+            })
+            events.push(projected)
+            this.emitEvent(message, conversation.id, projected)
+            await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
+            await this.saveEventSdkSession(conversation.id, projected, liveSession)
+            await this.saveEventHistory(conversation.id, projected)
+            error = outcomeMessage(outcome)
+          } else {
+            error = AGENT_USER_QUESTION_TIMEOUT_MESSAGE
+          }
+          break
+        }
         continue
       }
     }
@@ -1229,8 +1266,10 @@ export class ConversationRouter {
     event: AgentPermissionRequestEvent,
     liveSession: AgentLiveSession,
     abortSignal?: AbortSignal,
-  ): Promise<void> {
+  ): Promise<boolean> {
     let timeout: ReturnType<typeof setTimeout> | undefined
+    let timeoutFailureRecovery: Promise<void> | undefined
+    let questionTimeoutFailed = false
     await new Promise<void>((resolve) => {
       let settled = false
       const abort = (): void => {
@@ -1297,10 +1336,22 @@ export class ConversationRouter {
             toolName: event.toolName,
             ...errorSummary(error),
           })
-          void this.sessionManager.closeCurrentTurn(conversationId)
+          questionTimeoutFailed = isAskUserQuestionEvent(event)
+          timeoutFailureRecovery = (async () => {
+            if (questionTimeoutFailed) {
+              await this.persistUserQuestionResolution(conversationId, event.requestId, {
+                status: "timed_out",
+                resolvedAt: this.isoNow(),
+              })
+            }
+            this.sessionManager.settlePendingPermission(pending)
+            await this.sessionManager.closeCurrentTurn(conversationId)
+          })()
         })
       }, this.permissionTimeoutMs)
     })
+    await timeoutFailureRecovery
+    return questionTimeoutFailed
   }
 
   private async saveEventSdkSession(
