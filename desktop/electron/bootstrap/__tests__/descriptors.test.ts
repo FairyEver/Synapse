@@ -1923,10 +1923,15 @@ describe("bootstrap descriptors (T1.5)", () => {
     ])
   })
 
-  it("coreWorkflowPackageDescriptor depends on workflow and provider services", async () => {
+  it("coreWorkflowPackageDescriptor depends on workflow, provider, and export security services", async () => {
     const { coreWorkflowPackageDescriptor } = await importBootstrap()
     expect(coreWorkflowPackageDescriptor.id).toBe("core.workflow.package")
-    expect(coreWorkflowPackageDescriptor.dependsOn).toEqual(["core.workflow", "provider"])
+    expect(coreWorkflowPackageDescriptor.dependsOn).toEqual([
+      "core.workflow",
+      "provider",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
   })
 
   it("coreUpdateDescriptor is degraded and depends on core.config + core.window-manager", async () => {

@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto"
+import { writeFile } from "node:fs/promises"
+import path from "node:path"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import { normalizeContentFileNameSegment } from "../../../src/lib/content-attachments"
 import type { WorkflowDefinition, WorkflowFutureDocument, WorkflowNode } from "../../../src/types/workflow"
 import type {
   SynapseWorkflowPackage,
@@ -30,8 +34,20 @@ const logger = createMainLogger("service.workflow.package")
 interface WorkflowPackageServiceDeps {
   readonly workflowService: Pick<WorkflowService, "getExportDocument" | "save">
   readonly providerService: Pick<ProviderService, "listProviders">
+  readonly permissionGuard: Pick<PermissionGuard, "check">
+  readonly auditSink: Pick<AuditSink, "record">
   readonly now?: () => Date
   readonly createId?: () => string
+}
+
+export interface WorkflowExportDestinationOptions {
+  readonly title: string
+  readonly defaultPath: string
+}
+
+export interface WorkflowExportResult {
+  readonly path: string
+  readonly kind: WorkflowExportArtifact["kind"]
 }
 
 export type WorkflowExportArtifact =
@@ -50,12 +66,16 @@ export type WorkflowExportArtifact =
 export class WorkflowPackageService {
   private readonly workflowService: Pick<WorkflowService, "getExportDocument" | "save">
   private readonly providerService: Pick<ProviderService, "listProviders">
+  private readonly permissionGuard: Pick<PermissionGuard, "check">
+  private readonly auditSink: Pick<AuditSink, "record">
   private readonly now: () => Date
   private readonly createId: () => string
 
   constructor(deps: WorkflowPackageServiceDeps) {
     this.workflowService = deps.workflowService
     this.providerService = deps.providerService
+    this.permissionGuard = deps.permissionGuard
+    this.auditSink = deps.auditSink
     this.now = deps.now ?? (() => new Date())
     this.createId = deps.createId ?? randomUUID
   }
@@ -94,6 +114,91 @@ export class WorkflowPackageService {
         modelReferences: buildModelReferences(workflow, providers),
       },
     }
+  }
+
+  async exportToFile(options: {
+    readonly workflowId: string
+    readonly workflowName?: string
+    readonly chooseDestination: (options: WorkflowExportDestinationOptions) => Promise<string | null>
+  }): Promise<WorkflowExportResult | null> {
+    const artifact = await this.buildExportArtifact(options.workflowId)
+    const isFutureRaw = artifact.kind === "future-raw"
+    const safeName = normalizeContentFileNameSegment(options.workflowName || artifact.workflowName || "workflow")
+    const filePath = await options.chooseDestination({
+      title: isFutureRaw ? "导出未来版本工作流原文" : "导出工作流",
+      defaultPath: isFutureRaw
+        ? `${safeName}.synapse-workflow-future.json`
+        : `${safeName}.synapse-workflow.json`,
+    })
+    if (!filePath) return null
+
+    const action = "fs.write" as const
+    const source = isFutureRaw ? "workflow.exportRawDocument" : "workflow.exportPackage"
+    const permission = await this.permissionGuard.check({
+      action,
+      actor: { kind: "user" },
+      resource: filePath,
+      context: { source },
+    })
+    if (!permission.allowed) {
+      this.auditSink.record({
+        action,
+        actor: { kind: "user" },
+        resource: filePath,
+        outcome: "denied",
+        metadata: {
+          source,
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      })
+      throw new Error(permission.reason)
+    }
+    this.auditSink.record({
+      action,
+      actor: { kind: "user" },
+      resource: filePath,
+      outcome: "allowed",
+      metadata: { source },
+    })
+
+    const content = isFutureRaw ? artifact.document : artifact.package
+    try {
+      await writeFile(filePath, `${JSON.stringify(content, null, 2)}\n`, "utf-8")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.auditSink.record({
+        action,
+        actor: { kind: "user" },
+        resource: filePath,
+        outcome: "failed",
+        metadata: {
+          source,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorLength: message.length,
+        },
+      })
+      throw error
+    }
+
+    this.auditSink.record({
+      action,
+      actor: { kind: "user" },
+      resource: filePath,
+      outcome: "allowed",
+      metadata: {
+        source: isFutureRaw ? "workflow.exportRawDocument.write" : "workflow.exportPackage.write",
+        workflowId: options.workflowId,
+        exportKind: artifact.kind,
+        ...(isFutureRaw ? { sourceVersion: artifact.sourceVersion } : {}),
+      },
+    })
+    logger.info("workflow exported", {
+      workflowId: options.workflowId,
+      exportKind: artifact.kind,
+      fileBase: path.basename(filePath),
+    })
+    return { path: filePath, kind: artifact.kind }
   }
 
   async buildImportPreview(packagePath: string, pkg: SynapseWorkflowPackage, packageDigest: string): Promise<WorkflowImportPreview> {

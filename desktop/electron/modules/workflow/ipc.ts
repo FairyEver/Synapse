@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { readFile, stat, writeFile } from "node:fs/promises"
+import { readFile, stat } from "node:fs/promises"
 import path from "node:path"
 import { BrowserWindow, dialog } from "electron"
 import { z } from "zod"
@@ -18,7 +18,6 @@ import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../config"
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
 import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
 import type { SynapseWorkflowPackage, WorkflowImportOptions, WorkflowModelMapping } from "../../../src/types/workflow-package"
-import { normalizeContentFileNameSegment } from "../../../src/lib/content-attachments"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
@@ -860,54 +859,22 @@ export const workflowIpcModule: IpcModule = {
         kind: z.enum(["package", "future-raw"]),
       }).nullable(),
       handler: async (ctx, { workflowId, workflowName }: { workflowId: string; workflowName?: string }) => {
-        const artifact = await ctx.resolve<WorkflowPackageService>("core.workflow.package").buildExportArtifact(workflowId)
-        const isFutureRaw = artifact.kind === "future-raw"
-        const safeName = normalizeContentFileNameSegment(workflowName || artifact.workflowName || "workflow")
-        const dialogTitle = isFutureRaw ? "导出未来版本工作流原文" : "导出工作流"
-        const defaultPath = isFutureRaw
-          ? `${safeName}.synapse-workflow-future.json`
-          : `${safeName}.synapse-workflow.json`
-        const parentWindow = focusedWindow()
-        const result = parentWindow
-          ? await dialog.showSaveDialog(parentWindow, {
-            title: dialogTitle,
-            defaultPath,
-            filters: [{ name: "Synapse Workflow", extensions: ["json"] }],
-          })
-          : await dialog.showSaveDialog({
-            title: dialogTitle,
-            defaultPath,
-            filters: [{ name: "Synapse Workflow", extensions: ["json"] }],
-          })
-        if (result.canceled || !result.filePath) return null
-        const action: PermissionAction = "fs.write"
-        const source = isFutureRaw ? "workflow.exportRawDocument" : "workflow.exportPackage"
-        const auditSink = await checkFilePermission({ ctx, action, resource: result.filePath, source })
-        const content = isFutureRaw ? artifact.document : artifact.package
-        try {
-          await writeFile(result.filePath, `${JSON.stringify(content, null, 2)}\n`, "utf-8")
-        } catch (error) {
-          recordFilePermissionFailure({ auditSink, action, resource: result.filePath, source, error })
-          throw error
-        }
-        auditSink.record({
-          action,
-          actor: { kind: "user" },
-          resource: result.filePath,
-          outcome: "allowed",
-          metadata: {
-            source: isFutureRaw ? "workflow.exportRawDocument.write" : "workflow.exportPackage.write",
-            workflowId,
-            exportKind: artifact.kind,
-            ...(isFutureRaw ? { sourceVersion: artifact.sourceVersion } : {}),
+        return ctx.resolve<WorkflowPackageService>("core.workflow.package").exportToFile({
+          workflowId,
+          workflowName,
+          chooseDestination: async ({ title, defaultPath }) => {
+            const parentWindow = focusedWindow()
+            const dialogOptions: Electron.SaveDialogOptions = {
+              title,
+              defaultPath,
+              filters: [{ name: "Synapse Workflow", extensions: ["json"] }],
+            }
+            const result = parentWindow
+              ? await dialog.showSaveDialog(parentWindow, dialogOptions)
+              : await dialog.showSaveDialog(dialogOptions)
+            return result.canceled || !result.filePath ? null : result.filePath
           },
         })
-        logger.info("workflow exported", {
-          workflowId,
-          exportKind: artifact.kind,
-          fileBase: path.basename(result.filePath),
-        })
-        return { path: result.filePath, kind: artifact.kind }
       },
     },
     inspectImportPackage: {

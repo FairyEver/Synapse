@@ -2015,11 +2015,13 @@ export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> =
 export const coreWorkflowPackageDescriptor: ServiceDescriptor<WorkflowPackageService> = {
   id: "core.workflow.package",
   criticality: "degraded",
-  dependsOn: ["core.workflow", PROVIDER_SERVICE_ID],
+  dependsOn: ["core.workflow", PROVIDER_SERVICE_ID, "core.permission-guard", "core.audit-sink"],
   create(ctx) {
     return new WorkflowPackageService({
       workflowService: ctx.registry.get<WorkflowService>("core.workflow"),
       providerService: ctx.registry.get<ProviderService>(PROVIDER_SERVICE_ID),
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
     })
   },
 }

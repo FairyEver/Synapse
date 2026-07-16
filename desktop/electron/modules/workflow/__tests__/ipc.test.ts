@@ -31,6 +31,8 @@ import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/
 import type { WorkflowDefinition, WorkflowRunStatus } from "../../../../src/types/workflow"
 import { configStore } from "../../../services/config-store"
 import { validateWorkflowWithResourceDefaults } from "../../../services/workflow/workflow-validator"
+import { WorkflowPackageService } from "../../../services/workflow/workflow-package-service"
+import type { WorkflowExportDocumentResult } from "../../../services/workflow/workflow-service"
 import { workflowIpcModule } from "../ipc"
 
 vi.mock("electron", () => electronMock)
@@ -77,6 +79,22 @@ describe("workflowIpcModule", () => {
       },
     } as never)
   })
+
+  function createExportPackageService(
+    exportDocument: WorkflowExportDocumentResult,
+    permissionGuard: { check: ReturnType<typeof vi.fn> },
+    auditSink: { record: ReturnType<typeof vi.fn> },
+  ): WorkflowPackageService {
+    return new WorkflowPackageService({
+      workflowService: {
+        getExportDocument: vi.fn(async () => exportDocument),
+        save: vi.fn(),
+      },
+      providerService: { listProviders: vi.fn(async () => []) },
+      permissionGuard,
+      auditSink,
+    })
+  }
 
   it("opens native pickers for workflow file and directory params", async () => {
     electronMock.dialog.showOpenDialog
@@ -1465,25 +1483,16 @@ describe("workflowIpcModule", () => {
     const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-export-test-"))
     const targetPath = path.join(tempRoot, "workflow.synapse-workflow.json")
     electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: targetPath })
-    const packageService = {
-      buildExportArtifact: vi.fn(async () => ({
-        kind: "package",
-        workflowName: "Workflow",
-        package: {
-          format: "synapse-workflow-package-v1",
-          exportedAt: "2026-05-26T00:00:00.000Z",
-          workflow: workflowDefinition(),
-          modelReferences: [],
-        },
-      })),
-    }
     const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
     const auditSink = { record: vi.fn() }
+    const packageService = createExportPackageService(
+      { kind: "current", document: workflowDefinition() },
+      permissionGuard,
+      auditSink,
+    )
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow.package") return packageService as T
-      if (serviceId === "core.permission-guard") return permissionGuard as T
-      if (serviceId === "core.audit-sink") return auditSink as T
       throw new Error(`Unknown service: ${serviceId}`)
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
@@ -1520,21 +1529,20 @@ describe("workflowIpcModule", () => {
       futureOnly: { preserve: true },
     }
     electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: targetPath })
-    const packageService = {
-      buildExportArtifact: vi.fn(async () => ({
-        kind: "future-raw",
-        document: futureDocument,
-        sourceVersion: "9.0.0",
-        workflowName: "Future Workflow",
-      })),
-    }
     const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
     const auditSink = { record: vi.fn() }
+    const packageService = createExportPackageService(
+      {
+        kind: "future",
+        document: futureDocument,
+        sourceVersion: "9.0.0",
+      },
+      permissionGuard,
+      auditSink,
+    )
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow.package") return packageService as T
-      if (serviceId === "core.permission-guard") return permissionGuard as T
-      if (serviceId === "core.audit-sink") return auditSink as T
       throw new Error(`Unknown service: ${serviceId}`)
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
@@ -1570,18 +1578,11 @@ describe("workflowIpcModule", () => {
 
   it("uses a Windows-safe default file name for workflow package export", async () => {
     electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: true })
-    const packageService = {
-      buildExportArtifact: vi.fn(async () => ({
-        kind: "package",
-        workflowName: "CON",
-        package: {
-          format: "synapse-workflow-package-v1",
-          exportedAt: "2026-05-26T00:00:00.000Z",
-          workflow: { ...workflowDefinition(), name: "CON" },
-          modelReferences: [],
-        },
-      })),
-    }
+    const packageService = createExportPackageService(
+      { kind: "current", document: { ...workflowDefinition(), name: "CON" } },
+      { check: vi.fn(async () => ({ allowed: true })) },
+      { record: vi.fn() },
+    )
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow.package") return packageService as T
