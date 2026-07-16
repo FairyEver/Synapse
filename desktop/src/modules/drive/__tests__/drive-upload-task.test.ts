@@ -172,6 +172,38 @@ describe("drive upload task model", () => {
     expect(getDriveUploadStatusBadge(finished)?.label).toBe("已上传 4 项")
   })
 
+  it("retries the original folder when a directory-only upload preparation fails", () => {
+    const folder = {
+      kind: "folder" as const,
+      folderName: "project",
+      directories: [{ relativePath: "docs" }, { relativePath: "docs/empty" }],
+      files: [],
+    }
+    const task = createDriveUploadTask({
+      id: "upload-task-1",
+      destinationPath: "根目录",
+      parentId: "folder-1",
+      request: {
+        taskId: "upload-task-1",
+        parentId: "folder-1",
+        items: [folder],
+      },
+      startedAt: 100,
+    })
+    const failed = finishDriveUploadTask(task, {
+      completed: 0,
+      failed: 0,
+      failedDirectories: 3,
+      skipped: 0,
+      message: "上传失败。",
+    }, 200)
+
+    expect(buildDriveUploadRetryRequest(failed)).toEqual({
+      parentId: "folder-1",
+      items: [folder],
+    })
+  })
+
   it("retries only failed items against the original parent id", () => {
     const task = createDriveUploadTask({
       id: "upload-task-1",

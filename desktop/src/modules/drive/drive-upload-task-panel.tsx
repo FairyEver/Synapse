@@ -13,7 +13,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
-import type { DriveUploadTask, DriveUploadTaskItem, DriveUploadTaskItemStatus } from "./drive-upload-task"
+import {
+  buildDriveUploadRetryRequest,
+  type DriveUploadTask,
+  type DriveUploadTaskItem,
+  type DriveUploadTaskItemStatus,
+} from "./drive-upload-task"
 
 export function DriveUploadTaskPanel({
   task,
@@ -35,7 +40,7 @@ export function DriveUploadTaskPanel({
   const currentItem = task?.items.find((item) => item.status === "uploading")
     ?? task?.items.find((item) => item.status === "queued")
     ?? null
-  const canRetry = Boolean(task && task.status !== "running" && task.items.some((item) => item.status === "failed") && onRetry)
+  const canRetry = Boolean(task && task.status !== "running" && buildDriveUploadRetryRequest(task) && onRetry)
   const canClear = Boolean(task && task.status !== "running" && onClear)
 
   return (

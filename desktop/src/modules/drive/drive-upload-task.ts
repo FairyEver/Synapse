@@ -31,8 +31,10 @@ export type DriveUploadTask = {
   readonly totalItems: number
   readonly completedItems: number
   readonly failedItems: number
+  readonly failedDirectories: number
   readonly skippedItems: number
   readonly items: readonly DriveUploadTaskItem[]
+  readonly sourceItems: readonly DriveLocalUploadItem[]
   readonly startedAt: number
   readonly finishedAt: number | null
   readonly message: string | null
@@ -60,8 +62,10 @@ export function createDriveUploadTask(input: CreateDriveUploadTaskInput): DriveU
     totalItems: items.length + totalDirectories,
     completedItems: 0,
     failedItems: 0,
+    failedDirectories: 0,
     skippedItems: 0,
     items,
+    sourceItems: input.request.items,
     startedAt: input.startedAt ?? Date.now(),
     finishedAt: null,
     message: null,
@@ -105,6 +109,7 @@ export function finishDriveUploadTask(
   const reconciled = withCounts({
     ...task,
     status: failedCount > 0 ? "failed" : "completed",
+    failedDirectories: result.failedDirectories ?? 0,
     finishedAt,
     message: result.message ?? null,
   })
@@ -136,7 +141,6 @@ export function failDriveUploadTask(
 
 export function buildDriveUploadRetryRequest(task: DriveUploadTask): DriveLocalUploadRequest | null {
   const failedItems = task.items.filter((item) => item.status === "failed")
-  if (failedItems.length === 0) return null
   const items: DriveLocalUploadItem[] = []
   const folders = new Map<string, { readonly index: number; readonly item: DriveLocalUploadFolderItem }>()
   for (const failedItem of failedItems) {
@@ -158,6 +162,12 @@ export function buildDriveUploadRetryRequest(task: DriveUploadTask): DriveLocalU
     folders.set(sourceItem.folderName, { index: folder.index, item: mergedFolder })
     items[folder.index] = mergedFolder
   }
+  if (task.failedDirectories > 0) {
+    for (const sourceItem of task.sourceItems) {
+      if (sourceItem.kind === "folder" && sourceItem.files.length === 0) items.push(sourceItem)
+    }
+  }
+  if (items.length === 0) return null
   return {
     parentId: task.parentId,
     items,
