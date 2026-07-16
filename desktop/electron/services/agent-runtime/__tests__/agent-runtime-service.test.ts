@@ -11,6 +11,7 @@ import type {
 import type { ProviderService } from "../../provider"
 import { AgentRuntimeService, conversationId, permissionActionForTool } from "../agent-runtime-service"
 import {
+  AGENT_PERMISSION_NOT_PENDING_MESSAGE,
   AGENT_PERMISSION_UPDATED_INPUT_UNSUPPORTED_MESSAGE,
   AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE,
 } from "../agent-error-messages"
@@ -1241,6 +1242,48 @@ describe("AgentRuntimeService", () => {
       (entry) => entry.metadata?.requestId === request.requestId,
     )
     expect(resolvedHistory?.metadata?.userQuestionResolution).toMatchObject({ status: "answered" })
+    expect(resolvedHistory?.metadata?.userQuestionResolutionAttempt).toBeUndefined()
+  })
+
+  it("cancels AskUserQuestion when the SDK no longer has the pending request", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const questions = [{
+      question: "继续吗？",
+      options: [{ label: "继续" }],
+      multiSelect: false,
+    }]
+    const session = new StaleQuestionResponseSession(
+      "conversation-a-permission-1",
+      questions,
+      "unused",
+    )
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs answer"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+    const requestId = "conversation-a-permission-1"
+
+    await expect(service.respondPermission({
+      requestId,
+      behavior: "allow",
+      updatedInput: { answers: { "question-0": "继续" } },
+      actor: { kind: "user" },
+    })).rejects.toThrow(AGENT_PERMISSION_NOT_PENDING_MESSAGE)
+
+    expect(service.listPendingPermissions()).toEqual([])
+    await expect(turn).resolves.toBeDefined()
+    const stored = (await conversations.list())[0]
+    const resolvedHistory = stored?.history.find(
+      (entry) => entry.metadata?.requestId === requestId,
+    )
+    expect(resolvedHistory?.metadata?.userQuestionResolution).toMatchObject({ status: "cancelled" })
     expect(resolvedHistory?.metadata?.userQuestionResolutionAttempt).toBeUndefined()
   })
 
@@ -2865,6 +2908,13 @@ class FailingQuestionResponseSession extends QuestionSession {
       throw new Error("SDK response unavailable")
     }
     await super.respondPermission(requestId, decision)
+  }
+}
+
+class StaleQuestionResponseSession extends QuestionSession {
+  override async respondPermission(): Promise<void> {
+    await this.close()
+    throw new Error(AGENT_PERMISSION_NOT_PENDING_MESSAGE)
   }
 }
 

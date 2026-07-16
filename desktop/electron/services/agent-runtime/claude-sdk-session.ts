@@ -26,6 +26,7 @@ import type {
 import {
   AGENT_INVALID_ASK_USER_QUESTION_INPUT_MESSAGE,
   AGENT_PERMISSION_CANCELLED_MESSAGE,
+  AGENT_PERMISSION_NOT_PENDING_MESSAGE,
   AGENT_QUERY_FINISHED_PERMISSION_MESSAGE,
   AGENT_SESSION_CLOSED_MESSAGE,
   AGENT_TURN_PERMISSION_CANCELLED_MESSAGE,
@@ -242,7 +243,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   ): Promise<void> {
     const pending = this.permissions.get(requestId)
     if (!pending) {
-      this.logger?.warn("Claude SDK permission response ignored.", {
+      this.logger?.warn("Claude SDK permission response rejected.", {
         boundary: "claude-sdk-permission-response",
         projectId: this.projectId,
         conversationId: this.conversationId,
@@ -251,7 +252,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
         requestId,
         behavior: decision.behavior,
       })
-      return
+      throw new Error(AGENT_PERMISSION_NOT_PENDING_MESSAGE)
     }
 
     this.permissions.delete(requestId)

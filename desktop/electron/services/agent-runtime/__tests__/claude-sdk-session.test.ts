@@ -960,17 +960,17 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
-  it("logs stale permission responses when the SDK pending request is missing", async () => {
+  it("rejects stale permission responses when the SDK pending request is missing", async () => {
     const { factory } = createQueryFactory()
     const logger = { warn: vi.fn() }
     const session = createSession(factory, { logger, sdkSessionId: "sdk-1" })
 
-    await session.respondPermission("conversation-1-permission-stale", {
+    await expect(session.respondPermission("conversation-1-permission-stale", {
       behavior: "deny",
       message: "denied because prompt contained secret",
-    })
+    })).rejects.toThrow("该权限请求已不在等待中。")
 
-    expect(logger.warn).toHaveBeenCalledWith("Claude SDK permission response ignored.", {
+    expect(logger.warn).toHaveBeenCalledWith("Claude SDK permission response rejected.", {
       boundary: "claude-sdk-permission-response",
       projectId: "project-1",
       conversationId: "conversation-1",

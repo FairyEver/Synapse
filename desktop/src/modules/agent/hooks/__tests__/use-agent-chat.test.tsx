@@ -1118,7 +1118,7 @@ describe("useAgentChat", () => {
         createdAt: "2026-05-13T00:02:00.000Z",
       }])
       .mockResolvedValueOnce([])
-    bridge.respondPermission.mockRejectedValue(new Error('Permission request "permission-1" is not pending'))
+    bridge.respondPermission.mockRejectedValue(new Error("该权限请求已不在等待中。"))
 
     let chat: ReturnType<typeof useAgentChat> | undefined
     const container = document.createElement("div")

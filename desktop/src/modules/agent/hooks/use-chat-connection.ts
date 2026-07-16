@@ -1115,7 +1115,8 @@ function isAttachmentFailureMessage(message: string): boolean {
 
 function isPermissionNotPendingError(error: unknown): boolean {
   const message = errorMessage(error)
-  return message.includes("Permission request") && message.includes("is not pending")
+  return message === "该权限请求已不在等待中。"
+    || (message.includes("Permission request") && message.includes("is not pending"))
 }
 
 function formatSessionNameTime(date: Date): string {

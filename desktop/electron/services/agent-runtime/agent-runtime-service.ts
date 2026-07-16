@@ -854,7 +854,18 @@ export class AgentRuntimeService {
         this.sessionManager.settlePendingPermission(pending)
         return
       } catch (error) {
-        this.sessionManager.releasePendingPermissionResolution(pending)
+        if (isPermissionNotPendingResponseError(error)) {
+          try {
+            await this.persistUserQuestionResolution(pending, {
+              status: "cancelled",
+              resolvedAt: this.isoNow(),
+            }, true)
+          } finally {
+            this.sessionManager.settlePendingPermission(pending)
+          }
+        } else {
+          this.sessionManager.releasePendingPermissionResolution(pending)
+        }
         throw error
       }
     }
@@ -1708,6 +1719,10 @@ function summarizePermissionResponseError(error: unknown): { errorName: string; 
     errorName: typeof error,
     errorLength: message.length,
   }
+}
+
+function isPermissionNotPendingResponseError(error: unknown): boolean {
+  return error instanceof Error && error.message === AGENT_PERMISSION_NOT_PENDING_MESSAGE
 }
 
 function summarizeScheduledResumeError(error: unknown): { errorName: string; errorLength: number; errorMessage: string } {
