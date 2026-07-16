@@ -87,7 +87,7 @@ describe("AboutPanel cheat codes", () => {
     expect(isInsideSelectableText(getElementWithText("正在下载更新..."))).toBe(true)
     expect(isInsideSelectableText(getElementWithText("最新版本：v0.2.284"))).toBe(true)
     expect(isInsideSelectableText(getElementWithText("下载进度"))).toBe(true)
-    expect(isInsideSelectableText(getElementWithText(/已下载 6\.70 MB \/ 58\.3 MB/))).toBe(true)
+    expect(isInsideSelectableText(getElementWithText(/已下载 6\.7 MB \/ 58\.3 MB/))).toBe(true)
   })
 
   it("copies the visible app version when clicked", async () => {

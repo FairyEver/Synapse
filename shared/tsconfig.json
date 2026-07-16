@@ -11,5 +11,11 @@
     "rootDir": "src",
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/index.ts", "src/live.ts", "src/urls.ts", "src/webhook.ts"]
+  "include": [
+    "src/index.ts",
+    "src/live.ts",
+    "src/urls.ts",
+    "src/versioned-data-migrator.cts",
+    "src/webhook.ts"
+  ]
 }

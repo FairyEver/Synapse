@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
 
 const logStoreMock = vi.hoisted(() => ({
   logger: {
@@ -28,6 +28,7 @@ const electronMock = vi.hoisted(() => ({
 }))
 
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
+import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import type { WorkflowDefinition, WorkflowRunStatus } from "../../../../src/types/workflow"
 import { configStore } from "../../../services/config-store"
 import { validateWorkflowWithResourceDefaults } from "../../../services/workflow/workflow-validator"
@@ -82,8 +83,8 @@ describe("workflowIpcModule", () => {
 
   function createExportPackageService(
     exportDocument: WorkflowExportDocumentResult,
-    permissionGuard: { check: ReturnType<typeof vi.fn> },
-    auditSink: { record: ReturnType<typeof vi.fn> },
+    permissionGuard: { check: Mock<PermissionGuard["check"]> },
+    auditSink: { record: Mock<AuditSink["record"]> },
   ): WorkflowPackageService {
     return new WorkflowPackageService({
       workflowService: {
@@ -1483,8 +1484,8 @@ describe("workflowIpcModule", () => {
     const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-export-test-"))
     const targetPath = path.join(tempRoot, "workflow.synapse-workflow.json")
     electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: targetPath })
-    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
-    const auditSink = { record: vi.fn() }
+    const permissionGuard = { check: vi.fn<PermissionGuard["check"]>(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn<AuditSink["record"]>() }
     const packageService = createExportPackageService(
       { kind: "current", document: workflowDefinition() },
       permissionGuard,
@@ -1529,8 +1530,8 @@ describe("workflowIpcModule", () => {
       futureOnly: { preserve: true },
     }
     electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: targetPath })
-    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
-    const auditSink = { record: vi.fn() }
+    const permissionGuard = { check: vi.fn<PermissionGuard["check"]>(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn<AuditSink["record"]>() }
     const packageService = createExportPackageService(
       {
         kind: "future",
@@ -1580,8 +1581,8 @@ describe("workflowIpcModule", () => {
     electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: true })
     const packageService = createExportPackageService(
       { kind: "current", document: { ...workflowDefinition(), name: "CON" } },
-      { check: vi.fn(async () => ({ allowed: true })) },
-      { record: vi.fn() },
+      { check: vi.fn<PermissionGuard["check"]>(async () => ({ allowed: true })) },
+      { record: vi.fn<AuditSink["record"]>() },
     )
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {

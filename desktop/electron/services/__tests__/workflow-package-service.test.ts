@@ -203,7 +203,7 @@ function createService() {
   const service = new WorkflowPackageService({
     workflowService,
     providerService,
-    permissionGuard: { check: vi.fn(async () => ({ allowed: true })) },
+    permissionGuard: { check: vi.fn(async () => ({ allowed: true as const })) },
     auditSink: { record: vi.fn() },
     now: () => new Date(nowIso),
     createId: () => "workflow-imported",

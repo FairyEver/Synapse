@@ -194,9 +194,8 @@ describe("RunSnapshotService", () => {
     const root = await tmpDir()
     const wfDir = path.join(root, "workflow-runs", "wf")
     await mkdir(wfDir, { recursive: true })
-    // Create a "file" that's actually a directory — readFile fails with EISDIR on macOS,
-    // and the error message contains the file path
-    await mkdir(path.join(wfDir, "run-1.json"), { recursive: true })
+    // Keep a local path in malformed JSON so the parse error exercises log sanitization.
+    await writeFile(path.join(wfDir, "run-1.json"), `${root}/private.json`, "utf-8")
 
     const svc = new RunSnapshotService(root)
     await svc.list("wf")
