@@ -131,6 +131,10 @@ describe("Skill Repository capability domain", () => {
       },
     })
     expect(tools.get("app_skill_repository_open_public")?.inputSchema).toMatchObject({
+      anyOf: [
+        { required: ["repositoryId"] },
+        { required: ["ownerHandle", "repositoryName"] },
+      ],
       properties: {
         repositoryId: expect.objectContaining({ type: "string" }),
         ownerHandle: expect.objectContaining({ type: "string" }),
