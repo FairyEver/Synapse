@@ -1,7 +1,8 @@
 import { z } from "zod"
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
+import { SYNAPSE_SKILL_SERVICE_ID } from "../shared/capability"
 import { synapseSkillInstallerSourceSchema } from "../shared/schema"
-import { synapseSkillService } from "./service"
+import type { SynapseSkillService } from "./service"
 
 const synapseSkillIpcModule: IpcModule = {
   id: "synapseSkill",
@@ -11,7 +12,9 @@ const synapseSkillIpcModule: IpcModule = {
       kind: "invoke",
       request: z.void().optional(),
       response: synapseSkillInstallerSourceSchema,
-      handler: async () => synapseSkillService.prepareInstallSource(),
+      handler: async (ctx) => ctx.resolve<SynapseSkillService>(
+        SYNAPSE_SKILL_SERVICE_ID,
+      ).prepareInstallSource(),
     },
   },
   events: {},

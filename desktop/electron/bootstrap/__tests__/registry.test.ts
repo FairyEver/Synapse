@@ -100,6 +100,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.secrets",
         "core.side-channel",
         "core.sound-notifier",
+        "core.synapse-skill",
         "core.terminal",
         "core.update",
         "core.usage-analysis",
@@ -150,6 +151,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.terminal")?.dependsOn).toEqual([])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
     expect(byId.get("core.sound-notifier")?.dependsOn).toEqual(["core.data-repository", "core.window-manager"])
+    expect(byId.get("core.synapse-skill")?.dependsOn).toEqual([])
     expect(byId.get("core.drive-sync")?.dependsOn).toEqual([
       "core.data-repository",
       "core.permission-guard",

@@ -39,6 +39,8 @@ import { createSoundNotifierCapabilityDispatcher } from "../../app-capabilities/
 import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
 import { createSoundNotifierService, type SoundNotifierService } from "../../app-capabilities/sound-notifier/main/service"
 import { SOUND_NOTIFIER_SETTINGS_NAMESPACE } from "../../app-capabilities/sound-notifier/shared/capability"
+import { createSynapseSkillService, type SynapseSkillService } from "../../app-capabilities/synapse-skill/main/service"
+import { SYNAPSE_SKILL_SERVICE_ID } from "../../app-capabilities/synapse-skill/shared/capability"
 import { createTerminalCapabilityDispatcher } from "../../app-capabilities/terminal/main/dispatcher"
 import { createTerminalService, type TerminalService } from "../../app-capabilities/terminal/main/service"
 import { createTerminalStore } from "../../app-capabilities/terminal/main/store"
@@ -351,6 +353,14 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
   },
   async stop(instance) {
     await instance.stop()
+  },
+}
+
+export const coreSynapseSkillDescriptor: ServiceDescriptor<SynapseSkillService> = {
+  id: SYNAPSE_SKILL_SERVICE_ID,
+  criticality: "degraded",
+  create() {
+    return createSynapseSkillService()
   },
 }
 

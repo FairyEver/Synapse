@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => {
   const automation = {}
   const auditSink = {}
   const permissionGuard = {}
+  const synapseSkillService = {}
   const windowManager = {}
   const registry = {
     get: vi.fn((id: string) => {
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => {
       if (id === "core.automation") return automation
       if (id === "core.audit-sink") return auditSink
       if (id === "core.permission-guard") return permissionGuard
+      if (id === "core.synapse-skill") return synapseSkillService
       if (id === "core.window-manager") return windowManager
       if (id === "knowledge-base.storage-migration-service") return {}
       throw new Error(`Unknown service: ${id}`)
@@ -44,6 +46,9 @@ const mocks = vi.hoisted(() => {
     installStatusCacheService: {
       buildCache: vi.fn(async () => undefined),
     },
+    editorInstallService: {
+      addPreparedSourceProvider: vi.fn(),
+    },
     liveConnectionService: {
       handleAccountState: vi.fn(),
       setEventBus: vi.fn(),
@@ -55,6 +60,7 @@ const mocks = vi.hoisted(() => {
     },
     registerAgentArtifactProtocol: vi.fn(),
     registry,
+    synapseSkillService,
     windowManager,
   }
 })
@@ -73,6 +79,10 @@ vi.mock("../../services/account-service", () => ({
 
 vi.mock("../../services/install-status-cache-service", () => ({
   installStatusCacheService: mocks.installStatusCacheService,
+}))
+
+vi.mock("../../services/editor-install-service", () => ({
+  editorInstallService: mocks.editorInstallService,
 }))
 
 vi.mock("../../services/live-connection-service-instance", () => ({
@@ -138,6 +148,8 @@ describe("initializeReadyApp", () => {
       windowManager: mocks.windowManager,
       isAppQuitting: expect.any(Function),
     })
+    expect(mocks.editorInstallService.addPreparedSourceProvider).toHaveBeenCalledOnce()
+    expect(mocks.registry.get).toHaveBeenCalledWith("core.synapse-skill")
   })
 
   it("skips the normal main window before routing a cold-start install protocol URL", async () => {

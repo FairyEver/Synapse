@@ -19,7 +19,9 @@ import { attachBeforeQuitHandler } from "./before-quit"
 import { createIpcRegistry } from "./ipc-registry"
 import { createMainWindow, type MainWindowState } from "./main-window"
 import { buildServiceRegistry } from "./registry"
-import { synapseSkillPreparedSourceProvider } from "../../app-capabilities/synapse-skill/main/prepared-source-provider"
+import { createSynapseSkillPreparedSourceProvider } from "../../app-capabilities/synapse-skill/main/prepared-source-provider"
+import type { SynapseSkillService } from "../../app-capabilities/synapse-skill/main/service"
+import { SYNAPSE_SKILL_SERVICE_ID } from "../../app-capabilities/synapse-skill/shared/capability"
 
 const logger = createMainLogger("bootstrap.app-ready")
 
@@ -57,7 +59,6 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     logger,
     resolve: (serviceId) => registry.get(serviceId),
   }
-  editorInstallService.addPreparedSourceProvider(synapseSkillPreparedSourceProvider)
   createIpcRegistry(ipcCtx)
 
   void installStatusCacheService.buildCache().catch((error) => {
@@ -83,6 +84,17 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
       message: "部分服务启动失败。",
       detail: result.degraded.map((failure) => `${failure.id}: ${failure.error?.message ?? "未知错误"}`).join("\n"),
       buttons: ["知道了"],
+    })
+  }
+
+  try {
+    const synapseSkillService = registry.get<SynapseSkillService>(SYNAPSE_SKILL_SERVICE_ID)
+    editorInstallService.addPreparedSourceProvider(
+      createSynapseSkillPreparedSourceProvider(synapseSkillService),
+    )
+  } catch (error) {
+    logger.warn("Synapse Skill prepared source provider not installed.", {
+      errorName: error instanceof Error ? error.name : typeof error,
     })
   }
 

@@ -213,8 +213,6 @@ class SynapseSkillService {
   }
 }
 
-const synapseSkillService = new SynapseSkillService()
-
 function createSynapseSkillService(deps?: SynapseSkillServiceDeps): SynapseSkillService {
   return new SynapseSkillService(deps)
 }
@@ -223,6 +221,5 @@ export {
   SynapseSkillService,
   computePackageFingerprint,
   createSynapseSkillService,
-  synapseSkillService,
   type SynapseSkillServiceDeps,
 }

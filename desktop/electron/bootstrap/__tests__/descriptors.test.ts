@@ -115,6 +115,14 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreAppIconDescriptor.dependsOn).toBeUndefined()
   })
 
+  it("coreSynapseSkillDescriptor creates a registry-owned service", async () => {
+    const { coreSynapseSkillDescriptor } = await importBootstrap()
+    expect(coreSynapseSkillDescriptor.id).toBe("core.synapse-skill")
+    expect(coreSynapseSkillDescriptor.criticality).toBe("degraded")
+    expect(coreSynapseSkillDescriptor.dependsOn).toBeUndefined()
+    expect(coreSynapseSkillDescriptor.create(makeFakeContext())).toBeDefined()
+  })
+
   it("coreDatabaseDescriptor is degraded, depends on config, event bus, automation, and action runtime, has stop", async () => {
     const { coreDatabaseDescriptor } = await importBootstrap()
     expect(coreDatabaseDescriptor.id).toBe("core.database")
