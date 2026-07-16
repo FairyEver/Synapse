@@ -603,6 +603,20 @@ describe("RunParamsDialog", () => {
     expect(JSON.stringify(mocks.track.mock.calls)).not.toContain("secret")
   })
 
+  it("does not run when backend preset validation fails", async () => {
+    mocks.presetSave.mockRejectedValueOnce(new Error("参数「workspace」路径不存在或不可访问"))
+    const { onConfirm } = await renderDialog()
+
+    await act(async () => { clickButton("保存为预设并运行") })
+    await act(async () => {
+      setControlValue(document.body.querySelector<HTMLInputElement>('input[aria-label="预设名称"]'), "无效路径")
+    })
+    await act(async () => { clickButton("保存并运行") })
+
+    expect(onConfirm).not.toHaveBeenCalled()
+    expect(mocks.toastError).toHaveBeenCalledWith("参数「workspace」路径不存在或不可访问")
+  })
+
   it("requires overwrite confirmation for duplicate preset names", async () => {
     mocks.presetList.mockResolvedValue([
       { id: "preset-1", workflowId: "workflow-1", name: "课程", values: { topic: "old" }, createdAt: 1, updatedAt: 1 },

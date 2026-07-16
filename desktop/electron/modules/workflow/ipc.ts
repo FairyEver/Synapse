@@ -1054,6 +1054,12 @@ export const workflowIpcModule: IpcModule = {
           valueKeyCount: Object.keys(input.values).length,
           overwrite: Boolean(input.overwritePresetId),
         })
+        const workflow = await ctx.resolve<WorkflowService>("core.workflow").get(input.workflowId)
+        if (!workflow) throw new Error(`Workflow ${input.workflowId} not found`)
+        const normalizedParams = await normalizeWorkflowRunParams(workflow, input.values)
+        if (normalizedParams.errors.length > 0) {
+          throw new Error(normalizedParams.errors.map((error) => error.message).join("；"))
+        }
         return ctx.resolve<WorkflowParamPresetService>("core.workflow.param-presets").save(input)
       },
     },

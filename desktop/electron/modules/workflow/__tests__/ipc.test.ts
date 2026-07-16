@@ -1986,8 +1986,15 @@ describe("workflowIpcModule", () => {
       save: vi.fn(async (input: unknown) => ({ id: "preset-2", workflowId: "workflow-1", name: "新预设", values: (input as { values: Record<string, string> }).values, resourceEntryTypes: {}, createdAt: 3, updatedAt: 3 })),
       delete: vi.fn(async () => undefined),
     }
+    const workflow = {
+      get: vi.fn(async () => ({
+        ...workflowDefinition(),
+        params: [{ name: "topic", type: "text", default: "" }],
+      })),
+    }
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
       if (serviceId === "core.workflow.param-presets") return presets as T
       throw new Error(`Unknown service: ${serviceId}`)
     }
@@ -2008,6 +2015,31 @@ describe("workflowIpcModule", () => {
     expect(presets.delete).toHaveBeenCalledWith("preset-2")
     expect(JSON.stringify(logStoreMock.logger.info.mock.calls)).not.toContain("secret text")
     expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("secret text")
+  })
+
+  it("rejects invalid resource params before saving a workflow preset", async () => {
+    const missingDirectory = path.join(tmpdir(), `synapse-missing-preset-${Date.now()}`)
+    const workflow = {
+      get: vi.fn(async () => ({
+        ...workflowDefinition(),
+        params: [{ name: "workspace", type: "directory", default: null }],
+      })),
+    }
+    const presets = { save: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.param-presets") return presets as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    await expect(harness.invoke("synapse:workflow:param-presets:save", {
+      workflowId: "workflow-1",
+      name: "无效目录",
+      values: { workspace: missingDirectory },
+    })).rejects.toThrow("参数「workspace」路径不存在或不可访问")
+    expect(presets.save).not.toHaveBeenCalled()
   })
 
 })

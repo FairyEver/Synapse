@@ -298,12 +298,12 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
       } finally {
         setSubmitting(false)
       }
-    } catch {
+    } catch (error) {
       if (existing && !overwritePresetId) {
         setSaveDialogOpen(false)
         setOverwriteConfirm(existing)
       } else {
-        toast.error("保存预设失败")
+        toast.error(error instanceof Error ? error.message : "保存预设失败")
       }
     } finally {
       setSavingPreset(false)
