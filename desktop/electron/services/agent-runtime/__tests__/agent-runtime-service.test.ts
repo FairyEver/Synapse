@@ -121,6 +121,62 @@ describe("AgentRuntimeService", () => {
     }))
   })
 
+  it("keeps the Agent turn running when generated title persistence fails", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn() }
+    const session = new ScriptedSession([{
+      type: "result",
+      content: "done",
+      done: true,
+      sdkSessionId: "sdk-1",
+    }], "sdk-1")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService(
+        "anthropic",
+        { ANTHROPIC_API_KEY: "sk-test" },
+      ) as unknown as ProviderService,
+      createSession: async (input) => {
+        await input.onConversationTitle?.("Private quarterly plan")
+        return session
+      },
+      logger: logger as never,
+      now: fixedNow,
+    })
+    const repository = (service as unknown as {
+      repository: { renameSessionFromGeneratedTitle(conversationId: string, title: string): Promise<unknown> }
+    }).repository
+    const rawError = new Error("title write failed for Private quarterly plan token=sk-secret at /Users/example")
+    vi.spyOn(repository, "renameSessionFromGeneratedTitle").mockRejectedValue(rawError)
+    const conversation = await service.createSession({
+      sessionKey: "s1",
+      platform: "local",
+      name: "新会话 15:20",
+      agentType: "claude-code",
+    })
+
+    await expect(service.sendToConversation(baseMessage("hello"), conversation.id)).resolves.toMatchObject({
+      resultText: "done",
+    })
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Agent generated conversation title persistence failed.",
+      {
+        boundary: "agent-runtime.conversation-title.generated",
+        projectId: "project-1",
+        conversationId: conversation.id,
+        errorName: "Error",
+        errorLength: rawError.message.length,
+      },
+    )
+    const serializedLogs = JSON.stringify(logger.warn.mock.calls)
+    expect(serializedLogs).not.toContain("Private quarterly plan")
+    expect(serializedLogs).not.toContain("sk-secret")
+    expect(serializedLogs).not.toContain("/Users/example")
+  })
+
   it("falls back to the first user message when the SDK emits no transcript title", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const eventBus = { emit: vi.fn() }

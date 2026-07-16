@@ -89,7 +89,7 @@ import type {
   ScheduledAgentSendResult,
 } from "./types"
 import type { SkillRegistry } from "./skill-registry"
-import { sanitizeError } from "../error-sanitize"
+import { errorLogMeta, sanitizeError } from "../error-sanitize"
 import {
   KnowledgeBaseLintPreflightService,
   formatKnowledgeBaseLintPreflightAppendix,
@@ -1017,8 +1017,17 @@ export class AgentRuntimeService {
     conversationId: string,
     title: string,
   ): Promise<void> {
-    const updated = await this.repository.renameSessionFromGeneratedTitle(conversationId, title)
-    if (updated) this.emitConversationUpdated(updated)
+    try {
+      const updated = await this.repository.renameSessionFromGeneratedTitle(conversationId, title)
+      if (updated) this.emitConversationUpdated(updated)
+    } catch (error) {
+      this.deps.logger?.warn("Agent generated conversation title persistence failed.", {
+        boundary: "agent-runtime.conversation-title.generated",
+        projectId: this.deps.projectId,
+        conversationId,
+        ...errorLogMeta(error),
+      })
+    }
   }
 
   async clearCurrentAgentSessionId(
