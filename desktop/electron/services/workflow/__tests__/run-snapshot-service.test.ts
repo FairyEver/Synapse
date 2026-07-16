@@ -39,7 +39,7 @@ describe("RunSnapshotService", () => {
         id: "workflow-1",
         name: "Future workflow",
         version: "v2",
-        meta: { schemaVersion: "2.0.0" },
+        meta: { schemaVersion: "3.0.0" },
         nodes: [],
         edges: [],
         params: [],
@@ -57,8 +57,8 @@ describe("RunSnapshotService", () => {
       expect(loaded?.definition).toBeUndefined()
       expect(loaded?.definitionMigration).toEqual({
         kind: "unsupported_future",
-        sourceVersion: "2.0.0",
-        targetVersion: "1.0.0",
+        sourceVersion: "3.0.0",
+        targetVersion: "2.0.0",
       })
       await expect(readFile(file, "utf-8")).resolves.toBe(JSON.stringify(raw))
     } finally {

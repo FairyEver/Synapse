@@ -414,34 +414,4 @@ describe("SqliteNamespace (T2.5)", () => {
     }
   })
 
-  it("indexes swarm workers by run and display order", async () => {
-    const dir = await tempDir()
-    try {
-      const db = openSqliteDatabase(path.join(dir, "data.db"))
-      const _ns = new SqliteNamespace<Conversation>({
-        name: "app.swarm-task.worker-runs",
-        schemaVersion: 1,
-        backend: "sqlite",
-        database: db,
-        indexes: sqliteIndexesFor("app.swarm-task.worker-runs"),
-      })
-      void _ns
-
-      const plan = db
-        .prepare(`
-          EXPLAIN QUERY PLAN
-          SELECT value FROM ns_app_swarm_task_worker_runs
-          WHERE id != ? AND json_extract(value, '$.runId') = ?
-          ORDER BY json_extract(value, '$.roundIndex'), json_extract(value, '$.workerIndex'), id
-          LIMIT ? OFFSET ?;
-        `)
-        .all("__singleton", "run-1", 100, 0) as Array<{ detail: string }>
-
-      expect(plan.some((row) => row.detail.includes("USING INDEX"))).toBe(true)
-      expect(plan.some((row) => row.detail.includes("SCAN ns_app_swarm_task_worker_runs"))).toBe(false)
-      db.close()
-    } finally {
-      await rm(dir, { recursive: true, force: true })
-    }
-  })
 })

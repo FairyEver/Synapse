@@ -32,8 +32,16 @@ describe("workflow document migration", () => {
     expect(result.document).toMatchObject({ legacyTopLevelField: "keep-me" })
   })
 
-  it("validates a current historical fixture without rewriting its source", async () => {
+  it("migrates the previous major fixture without rewriting its source", async () => {
     const source = await fixture("1.0.0")
+    const original = structuredClone(source)
+    const result = migrateWorkflowDocument(source)
+    expect(result).toMatchObject({ kind: "current", migrated: true })
+    expect(source).toEqual(original)
+  })
+
+  it("validates the current historical fixture without rewriting its source", async () => {
+    const source = await fixture("2.0.0")
     const original = structuredClone(source)
     const result = migrateWorkflowDocument(source)
     expect(result).toMatchObject({ kind: "current", migrated: false })
@@ -41,13 +49,29 @@ describe("workflow document migration", () => {
   })
 
   it("isolates future documents", async () => {
-    const source = await fixture("1.0.0") as Record<string, unknown>
-    source.meta = { schemaVersion: "2.0.0" }
+    const source = await fixture("2.0.0") as Record<string, unknown>
+    source.meta = { schemaVersion: "3.0.0" }
     expect(migrateWorkflowDocument(source)).toMatchObject({
       kind: "unsupported_future",
-      sourceVersion: "2.0.0",
+      sourceVersion: "3.0.0",
       targetVersion: WORKFLOW_SCHEMA_VERSION,
     })
+  })
+
+  it("isolates previous-major documents that use a removed node type", async () => {
+    const source = await fixture("1.0.0") as Record<string, unknown>
+    const nodes = source.nodes as Array<Record<string, unknown>>
+    nodes.unshift({
+      id: "removed-node",
+      name: "已移除节点",
+      type: "removed_node_type",
+      position: { x: 0, y: 0 },
+      config: {},
+    })
+    const original = structuredClone(source)
+
+    expect(migrateWorkflowDocument(source)).toMatchObject({ kind: "failed" })
+    expect(source).toEqual(original)
   })
 
   it("rejects unsupported legacy agent values without changing the source", async () => {
@@ -91,7 +115,7 @@ describe("workflow document migration", () => {
       (source.params as Array<Record<string, unknown>>)[0]!.allowMultiple = "yes"
     }],
   ])("rejects a current document with invalid %s structure", async (_field, mutate) => {
-    const source = await fixture("1.0.0") as Record<string, unknown>
+    const source = await fixture("2.0.0") as Record<string, unknown>
     source.params = [{ name: "topic", type: "text", default: null }]
     mutate(source)
     expect(migrateWorkflowDocument(source)).toMatchObject({ kind: "failed" })

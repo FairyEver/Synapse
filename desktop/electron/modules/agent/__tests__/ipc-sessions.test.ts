@@ -423,52 +423,6 @@ describe("agent session IPC methods", () => {
     expect(await conversations.get("orphan-conv")).toBeNull()
   })
 
-  it("opens an existing swarm conversation in the main Agent tab", async () => {
-    const conversations = createConversationNamespace([
-      storedConversation({
-        id: "conv-swarm",
-        platform: "swarm",
-        sessionKey: "swarm:task-1:run-1",
-      }),
-    ])
-    const windowManager = createWindowManager()
-    const ctx = createContext({
-      agent: {},
-      dataRepo: {
-        namespace: vi.fn(() => conversations),
-      } as unknown as DataRepository,
-      windowManager,
-    })
-
-    await expect(sessionMethods.openConversation.handler(ctx, {
-      projectId: "project-1",
-      conversationId: "conv-swarm",
-      sessionKey: "swarm:task-1:run-1",
-      platform: "swarm",
-    })).resolves.toEqual({ opened: true })
-
-    expect(windowManager.open).toHaveBeenCalledWith("main")
-    expect(windowManager.broadcast).toHaveBeenCalledWith(
-      "synapse:open-agent-session",
-      {
-        projectId: "project-1",
-        conversationId: "conv-swarm",
-        sessionKey: "swarm:task-1:run-1",
-        sourceFilter: "swarm",
-      },
-      expect.any(Function),
-    )
-    const filter = windowManager.broadcast.mock.calls[0]?.[2]
-    expect(filter?.({ role: "main" })).toBe(true)
-    expect(filter?.({ role: "detail" })).toBe(false)
-    expect(logStoreMock.logger.info).toHaveBeenCalledWith("Agent conversation opened.", {
-      projectId: "project-1",
-      conversationId: "conv-swarm",
-      sessionKey: "swarm:task-1:run-1",
-      platform: "swarm",
-    })
-  })
-
   it("opens an existing workflow conversation in the main Agent tab", async () => {
     const conversations = createConversationNamespace([
       storedConversation({

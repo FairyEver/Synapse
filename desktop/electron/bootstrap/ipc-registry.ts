@@ -38,7 +38,6 @@ import { terminalIpcModule } from "../../app-capabilities/terminal/main/ipc"
 import { quickInputIpcModule } from "../../app-capabilities/quick-input/main/ipc"
 import { agentPersonasIpcModule } from "../../app-capabilities/agent-personas/main/ipc"
 import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
-import { swarmTaskIpcModule } from "../../app-capabilities/swarm-task/main/ipc"
 import { synapseSkillIpcModule } from "../../app-capabilities/synapse-skill/main/ipc"
 import { secretsIpcModule } from "../../app-capabilities/secrets/main/ipc"
 import { skillUninstallerIpcModule } from "../../app-capabilities/skill-uninstaller/main/ipc"
@@ -84,7 +83,6 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(skillUninstallerIpcModule, ctx)
   registry.register(agentPersonasIpcModule, ctx)
   registry.register(soundNotifierIpcModule, ctx)
-  registry.register(swarmTaskIpcModule, ctx)
   registry.register(synapseSkillIpcModule, ctx)
   registry.register(opsIpcModule, ctx)
 
@@ -127,7 +125,6 @@ export const registeredIpcModules: readonly IpcModule[] = [
   skillUninstallerIpcModule,
   agentPersonasIpcModule,
   soundNotifierIpcModule,
-  swarmTaskIpcModule,
   synapseSkillIpcModule,
   opsIpcModule,
 ]

@@ -72,16 +72,6 @@ import type {
   SynapseSoundNotifierSettingsPatch,
 } from "./sound-notifier"
 import type {
-  SwarmRun,
-  SwarmRunStartInput,
-  SwarmTask,
-  SwarmTaskChangedEvent,
-  SwarmTaskCreateInput,
-  SwarmTaskUpdateInput,
-  SwarmWorkerRunListInput,
-  SwarmWorkerRunPage,
-} from "../../app-capabilities/swarm-task/shared/schema"
-import type {
   SynapseTerminalCreateGroupCommandInput,
   SynapseTerminalCreateGroupInput,
   SynapseTerminalCreateSessionInput,
@@ -1020,19 +1010,6 @@ export type SynapseBridge = {
     preview: (input?: SynapseSoundNotifierPlayInput) => Promise<SynapseSoundNotifierPlayResult>
     onChanged: (listener: (event: SynapseSoundNotifierChangedEvent) => void) => () => void
     onPlayRequested: (listener: (event: SynapseSoundNotifierPlayRequestedEvent) => void) => () => void
-  }
-  swarmTask: {
-    listTasks: () => Promise<SwarmTask[]>
-    createTask: (input: SwarmTaskCreateInput) => Promise<SwarmTask>
-    updateTask: (input: SwarmTaskUpdateInput) => Promise<SwarmTask>
-    deleteTask: (taskId: string) => Promise<void>
-    startRun: (input: SwarmRunStartInput) => Promise<SwarmRun>
-    stopRefill: (runId: string) => Promise<SwarmRun | null>
-    cancelRun: (runId: string) => Promise<SwarmRun | null>
-    listRuns: (input?: { taskId?: string; limit?: number }) => Promise<SwarmRun[]>
-    getRun: (runId: string) => Promise<SwarmRun | null>
-    listWorkerRuns: (input: SwarmWorkerRunListInput) => Promise<SwarmWorkerRunPage>
-    onChanged: (listener: (event: SwarmTaskChangedEvent) => void) => () => void
   }
   terminal: {
     chooseDefaultCwd: () => Promise<string | null>

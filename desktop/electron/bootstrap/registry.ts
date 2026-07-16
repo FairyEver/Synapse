@@ -46,7 +46,6 @@ import {
   coreRelayDescriptor,
   coreSideChannelDescriptor,
   coreSoundNotifierDescriptor,
-  coreSwarmTaskDescriptor,
   coreTerminalDescriptor,
   coreUsageAnalysisDescriptor,
   coreHttpTestDescriptor,
@@ -115,7 +114,6 @@ export function buildServiceRegistry(
   registry.register(coreSecretsDescriptor)
   registry.register(coreAgentPersonasDescriptor)
   registry.register(coreSoundNotifierDescriptor)
-  registry.register(coreSwarmTaskDescriptor)
   registry.register(coreDriveSyncDescriptor)
   registry.register(coreRelayDescriptor)
   registry.register(coreAutomationIngressDescriptor)

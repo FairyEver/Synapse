@@ -29,15 +29,6 @@ import {
 import { SECRET_NAME_REGEX } from "../../app-capabilities/secrets/shared/schema"
 import { SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME } from "../../app-capabilities/sound-notifier/shared/capability"
 import {
-  SWARM_TASK_CAPABILITY_IDS,
-  SWARM_TASK_MCP_TOOL_NAMES,
-  SWARM_TASK_RUN_STOP_REFILL_CAPABILITY_ID,
-} from "../../app-capabilities/swarm-task/shared/capability"
-import {
-  SWARM_TASK_DEFAULT_CONCURRENCY,
-  SWARM_TASK_DEFAULT_MAX_ROUNDS,
-} from "../../app-capabilities/swarm-task/shared/schema"
-import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
   getActionDomainId,
@@ -68,7 +59,6 @@ describe("App capability domain", () => {
       ...Object.values(TERMINAL_MCP_TOOL_NAMES),
       SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
       ...Object.values(SECRETS_MCP_TOOL_NAMES),
-      ...Object.values(SWARM_TASK_MCP_TOOL_NAMES),
     ])
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_session_resize).toBe("app.terminal.session.resize")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_rename).toBe("app.terminal.group.rename")
@@ -201,31 +191,6 @@ describe("Secrets app capability surface", () => {
         pattern: SECRET_NAME_REGEX.source,
       }))
     }
-  })
-})
-
-describe("Swarm Task app capability surface", () => {
-  it("uses canonical capability ids and derived MCP tool names", () => {
-    expect(SWARM_TASK_CAPABILITY_IDS.every(isCanonicalCapabilityId)).toBe(true)
-    expect(SWARM_TASK_RUN_STOP_REFILL_CAPABILITY_ID).toBe("app.swarm_task.run.stop_refill")
-    expect(SWARM_TASK_MCP_TOOL_NAMES.runStopRefill).toBe("app_swarm_task_run_stop_refill")
-    expect(APP_MCP_TOOL_ACTIONS[SWARM_TASK_MCP_TOOL_NAMES.runStopRefill])
-      .toBe(SWARM_TASK_RUN_STOP_REFILL_CAPABILITY_ID)
-  })
-
-  it("advertises the same safe worker-count defaults as the runtime", () => {
-    const createTool = buildAppTools().find((tool) => tool.name === SWARM_TASK_MCP_TOOL_NAMES.taskCreate)
-
-    expect(createTool?.inputSchema).toMatchObject({
-      properties: {
-        config: {
-          properties: {
-            concurrency: { default: SWARM_TASK_DEFAULT_CONCURRENCY },
-            maxRounds: { default: SWARM_TASK_DEFAULT_MAX_ROUNDS },
-          },
-        },
-      },
-    })
   })
 })
 

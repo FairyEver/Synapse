@@ -459,7 +459,7 @@ describe("WorkflowService", () => {
     expect(persisted.items["missing-id-workflow"]).toEqual(missingId)
   })
   it.each([
-    ["future", { meta: { schemaVersion: "2.0.0" } }],
+    ["future", { meta: { schemaVersion: "3.0.0" } }],
     ["failed", { nodes: undefined }],
   ])("does not overwrite an isolated %s workflow through save", async (_case, override) => {
     const dir = tmpDir()
@@ -485,7 +485,7 @@ describe("WorkflowService", () => {
     const original = {
       ...makeDef(),
       id: "future-export-workflow",
-      meta: { schemaVersion: "2.0.0" },
+      meta: { schemaVersion: "3.0.0" },
       futureOnly: { mode: "preserve-exactly" },
     }
     writeFileSync(path.join(dir, "workflows.json"), JSON.stringify({
@@ -498,7 +498,7 @@ describe("WorkflowService", () => {
     await expect(svc.getExportDocument(original.id)).resolves.toEqual({
       kind: "future",
       document: original,
-      sourceVersion: "2.0.0",
+      sourceVersion: "3.0.0",
     })
     await expect(svc.get(original.id)).rejects.toThrow("更高的数据版本")
   })
@@ -530,8 +530,8 @@ describe("WorkflowService", () => {
     const backups = readdirSync(path.join(dir, "workflow-migration-backups"))
     expect(backups).toHaveLength(1)
     expect(readFileSync(path.join(dir, "workflow-migration-backups", backups[0]!), "utf8")).toBe(original)
-    expect((await svc.get(def.id))?.meta?.schemaVersion).toBe("1.0.0")
-    expect((await svc.get(second.id))?.meta?.schemaVersion).toBe("1.0.0")
+    expect((await svc.get(def.id))?.meta?.schemaVersion).toBe("2.0.0")
+    expect((await svc.get(second.id))?.meta?.schemaVersion).toBe("2.0.0")
   })
   it("recovers the newest valid workflow from configured legacy repository storage only once", async () => {
     const dir = tmpDir()
@@ -551,7 +551,7 @@ describe("WorkflowService", () => {
     await expect(first.get(def.id)).resolves.toMatchObject({
       id: def.id,
       name: def.name,
-      meta: { schemaVersion: "1.0.0" },
+      meta: { schemaVersion: "2.0.0" },
     })
     expect(readFileSync(path.join(legacyDir, "v_100_valid.json"), "utf8")).toBe(JSON.stringify(def))
 

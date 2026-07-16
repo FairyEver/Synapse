@@ -71,7 +71,7 @@ const openConversationRequestSchema = z.object({
   projectId: z.string().min(1),
   conversationId: z.string().min(1),
   sessionKey: z.string().min(1),
-  platform: z.enum(["automation", "workflow", "scheduled", "swarm"]),
+  platform: z.enum(["automation", "workflow", "scheduled"]),
 })
 
 const agentConversationTargetSchema = z.object({

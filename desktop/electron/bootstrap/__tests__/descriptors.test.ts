@@ -133,7 +133,6 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.audit-sink",
       "core.terminal",
       "core.sound-notifier",
-      "core.swarm-task",
       "provider",
     ])
     expect(coreDatabaseDescriptor.stop).toBeTypeOf("function")
@@ -167,14 +166,14 @@ describe("bootstrap descriptors (T1.5)", () => {
         debug: vi.fn(),
       }),
     }))
-    const swarmTaskService = { startRun: vi.fn(), getRun: vi.fn() }
+    const runtimeService = { run: vi.fn() }
     const ctx = {
       ...makeFakeContext(),
       registry: {
         get: vi.fn((id: string) => {
           if (id === "core.permission-guard") return { check: vi.fn() }
           if (id === "core.audit-sink") return { record: vi.fn() }
-          if (id === "core.swarm-task") return swarmTaskService
+          if (id === "test.service") return runtimeService
           throw new Error(`unexpected service ${id}`)
         }),
       },
@@ -186,7 +185,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       }
     }
 
-    expect(engine.runtimeDeps?.resolveService?.("core.swarm-task")).toBe(swarmTaskService)
+    expect(engine.runtimeDeps?.resolveService?.("test.service")).toBe(runtimeService)
   })
 
   it("gitAccessServiceDescriptor is degraded and depends on Git access foundations", async () => {
@@ -216,18 +215,6 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreAutomationDescriptor.create).toBeTypeOf("function")
     expect(coreAutomationDescriptor.start).toBeTypeOf("function")
     expect(coreAutomationDescriptor.stop).toBeTypeOf("function")
-  })
-
-  it("coreSwarmTaskDescriptor is degraded and depends on data repository, events, and project containers", async () => {
-    const { coreSwarmTaskDescriptor } = await importBootstrap()
-    expect(coreSwarmTaskDescriptor.id).toBe("core.swarm-task")
-    expect(coreSwarmTaskDescriptor.criticality).toBe("degraded")
-    expect(coreSwarmTaskDescriptor.dependsOn).toEqual([
-      "core.data-repository",
-      "core.event-bus",
-      "core.project-containers",
-    ])
-    expect(coreSwarmTaskDescriptor.create).toBeTypeOf("function")
   })
 
   it("coreWorkflowEngineDescriptor redacts infrastructure errors from Agent dependency logs and result", async () => {

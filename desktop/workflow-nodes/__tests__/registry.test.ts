@@ -95,26 +95,6 @@ describe("NodeTypeRegistry", () => {
     expect(manifest.type).toBe("document_template_docx_generate")
   })
 
-  it("registers swarm task manifest in renderer registry", async () => {
-    await import("../register.renderer")
-    const { nodeTypeRegistry } = await import("../registry")
-
-    const manifest = nodeTypeRegistry.getManifest("swarm_task_run")
-
-    expect(manifest.title).toBe("蜂群任务")
-    expect(manifest.type).toBe("swarm_task_run")
-  })
-
-  it("registers swarm task card wrappers for editor and runner canvases", async () => {
-    const [{ nodeTypes }, { runnerNodeTypes }] = await Promise.all([
-      import("../../src/modules/workflow/editor/node-wrappers"),
-      import("../../src/modules/workflow/runner/runner-node-wrappers"),
-    ])
-
-    expect(nodeTypes.swarm_task_run).toBeTypeOf("function")
-    expect(runnerNodeTypes.swarm_task_run).toBeTypeOf("function")
-  })
-
   it("registers claude code manifest and executor in main registry", async () => {
     vi.doMock("electron", () => ({
       app: {
@@ -169,30 +149,4 @@ describe("NodeTypeRegistry", () => {
     expect(nodeTypeRegistry.getExecutor("document_template_docx_generate")).toBe(documentTemplateNodeExecutor)
   })
 
-  it("registers swarm task manifest and executor in main registry", async () => {
-    vi.doMock("electron", () => ({
-      app: {
-        getPath: () => "/tmp",
-        getAppPath: () => "/tmp",
-      },
-    }))
-
-    vi.doMock("../../electron/services/log-store", () => ({
-      createMainLogger: () => ({
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        debug: vi.fn(),
-      }),
-    }))
-
-    await import("../register.main")
-    const [{ nodeTypeRegistry }, { swarmTaskNodeExecutor }] = await Promise.all([
-      import("../registry"),
-      import("../../app-capabilities/swarm-task/workflow-node/executor.main"),
-    ])
-
-    expect(nodeTypeRegistry.getManifest("swarm_task_run").title).toBe("蜂群任务")
-    expect(nodeTypeRegistry.getExecutor("swarm_task_run")).toBe(swarmTaskNodeExecutor)
-  })
 })

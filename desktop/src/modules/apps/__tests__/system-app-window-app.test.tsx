@@ -97,10 +97,6 @@ vi.mock("../../../../app-capabilities/quick-input/renderer", () => ({
   QuickInputModule: () => <div>快捷输入窗口</div>,
 }))
 
-vi.mock("../../../../app-capabilities/swarm-task/renderer", () => ({
-  SwarmTaskModule: () => <div>蜂群任务窗口</div>,
-}))
-
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
     apps: {

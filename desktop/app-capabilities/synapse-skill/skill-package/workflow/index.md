@@ -20,14 +20,13 @@ Workflow definitions returned by Synapse contain `meta.schemaVersion`, a SemVer 
 - **script** — Executes a shell script (posix/cmd/powershell) in the effective project workspace and returns stdout as output. Supports env vars, timeout, and login shell mode. Requires workflow `defaultProjectId`; no provider needed.
 - **workflow_call** — Calls another saved workflow, maps parent context into the child workflow params, and returns the child workflow End output. No provider needed on the call node.
 - **document_template_docx_generate** — Generates a DOCX from a template using a JSON file or inline JSON data, then returns the generated output path. No provider needed.
-- **swarm_task_run** — Starts a saved Swarm Task with optional run overrides and can return immediately or wait for completion. No provider needed.
 - **codex** — Runs local `codex exec` in the selected project or an optional task working directory, passes the prompt through stdin, and returns Codex's final reply text. Requires an execution project, but does not use Synapse provider/model fields.
 - **claude_code** — Runs local `claude -p` in the selected project or an optional task working directory, passes the prompt as the print query, and returns Claude Code's final reply text. Requires an execution project, but does not use Synapse provider/model fields.
 - **end** — Terminal node (every workflow has exactly one). Defines the final output template. Cannot be deleted.
 
 ## Provider / Model Configuration
 
-Only **prompt** and **switch** nodes require a provider (AI service), model tier, and execution project. **script**, **codex**, and **claude_code** nodes require an execution project but do not use `providerId` or `modelTier`. **http_request**, **workflow_call**, **document_template_docx_generate**, and **swarm_task_run** execute without provider configuration on that node. Inside a workflow called by **workflow_call**, child prompt/switch nodes still need effective project/provider/model settings, and child script/codex/claude_code nodes still need an effective project. Configure project/provider/model with these exact field names:
+Only **prompt** and **switch** nodes require a provider (AI service), model tier, and execution project. **script**, **codex**, and **claude_code** nodes require an execution project but do not use `providerId` or `modelTier`. **http_request**, **workflow_call**, and **document_template_docx_generate** execute without provider configuration on that node. Inside a workflow called by **workflow_call**, child prompt/switch nodes still need effective project/provider/model settings, and child script/codex/claude_code nodes still need an effective project. Configure project/provider/model with these exact field names:
 
 - **Workflow defaults** — Set `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optionally `defaultNodeTimeoutMins` on the workflow definition. Prompt/switch nodes inherit project/provider/model/timeout defaults unless they override; script nodes use `defaultProjectId` as their execution project; codex/claude_code nodes inherit project and timeout defaults unless they override. When no timeout is configured for prompt/switch/codex/claude_code, the default is 60 minutes.
 - **Node overrides** — Set `projectId`, `providerId`, `modelTier`, and optionally `timeoutMins` directly on prompt/switch config. For codex config, set Codex CLI fields such as `projectId`, `workingDirectory`, `timeoutMins`, `enableSearch`, `additionalWritableDirs`, `images`, `configOverrides`, and debug or safety flags. For claude_code config, set Claude Code CLI fields such as `projectId`, `workingDirectory`, `timeoutMins`, `permissionMode`, `model`, `settingSources`, `settingsPath`, `mcpConfigPath`, `allowedTools`, `disallowedTools`, `additionalDirectories`, and debug flags. Do not set `providerId` or `modelTier` on codex or claude_code nodes.
@@ -51,7 +50,7 @@ When you see this URI, parse it as `providerId = <providerId>` and `modelTier = 
 ## Creating a Workflow (Standard Flow)
 
 1. Call `app_workflow_node_type_list` to see available node types.
-2. Call `app_workflow_node_type_describe` for every node type you will configure. Include every field listed in `configSchema.required`, including required booleans and arrays. Use `nodeType: "prompt"` or `"switch"` before choosing any AI node config; use the exact node type `"workflow_call"` (not `"app_workflow_call"`) before creating a nested workflow call node; use `nodeType: "document_template_docx_generate"` before configuring document generation; use `nodeType: "swarm_task_run"` before configuring a Swarm Task run; use `nodeType: "codex"` before setting Codex CLI options; use `nodeType: "claude_code"` before setting Claude Code CLI options.
+2. Call `app_workflow_node_type_describe` for every node type you will configure. Include every field listed in `configSchema.required`, including required booleans and arrays. Use `nodeType: "prompt"` or `"switch"` before choosing any AI node config; use the exact node type `"workflow_call"` (not `"app_workflow_call"`) before creating a nested workflow call node; use `nodeType: "document_template_docx_generate"` before configuring document generation; use `nodeType: "codex"` before setting Codex CLI options; use `nodeType: "claude_code"` before setting Claude Code CLI options.
 3. Call `app_workflow_definition_create` with `name`, `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` when known. This returns `{ id, versionHash }` and creates a workflow with a default end node.
 4. If defaults were not set during create, call `app_workflow_definition_get`, update the full definition with `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins`, then call `app_workflow_definition_update`.
 5. Call `app_workflow_param_update` to define input parameters.
@@ -164,10 +163,6 @@ At runtime, the call node reads and validates the child workflow's latest saved 
 ## Generating a DOCX
 
 Use a **document_template_docx_generate** node with `templatePath`, `outputPath`, `dataSource`, `overwrite`, and `variables`. Set `dataPath` when `dataSource` is `dataPath`, or `dataJson` when it is `inline`. Paths and inline JSON support `{{variable}}` interpolation. The node output is the generated output path; generation metadata is available in the result outputs.
-
-## Running a Swarm Task
-
-Use a **swarm_task_run** node with a saved `taskId`. Optional run-only fields are `promptOverride`, `runModeOverride`, `maxRoundsOverride`, and `concurrencyOverride`; `variables` can supply values to the prompt override. `waitForCompletion` defaults to false: the node normally returns the run ID immediately, while true waits for a terminal result. Result outputs include the run ID, status, totals, and output directory. A terminal `partial` run fails the workflow node so downstream success paths do not continue after worker failures, cancellations, or timeouts.
 
 ## Running Codex
 

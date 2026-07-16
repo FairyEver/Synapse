@@ -39,9 +39,6 @@ import { createSoundNotifierCapabilityDispatcher } from "../../app-capabilities/
 import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
 import { createSoundNotifierService, type SoundNotifierService } from "../../app-capabilities/sound-notifier/main/service"
 import { SOUND_NOTIFIER_SETTINGS_NAMESPACE } from "../../app-capabilities/sound-notifier/shared/capability"
-import { createSwarmTaskCapabilityDispatcher } from "../../app-capabilities/swarm-task/main/dispatcher"
-import { createAgentRuntimeSwarmGateway, createSwarmTaskService, type SwarmTaskService } from "../../app-capabilities/swarm-task/main/service"
-import { SWARM_TASK_SERVICE_ID } from "../../app-capabilities/swarm-task/shared/capability"
 import { createTerminalCapabilityDispatcher } from "../../app-capabilities/terminal/main/dispatcher"
 import { createTerminalService, type TerminalService } from "../../app-capabilities/terminal/main/service"
 import { createTerminalStore } from "../../app-capabilities/terminal/main/store"
@@ -112,11 +109,6 @@ import {
   type ProviderService,
 } from "../services/provider"
 import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
-import {
-  SWARM_TASK_RUNS_NAMESPACE,
-  SWARM_TASKS_NAMESPACE,
-  SWARM_TASK_WORKER_RUNS_NAMESPACE,
-} from "../runtime/data-repo"
 import type {
   AgentPersonaRemoteCacheEntryV1,
   ConversationEntryV1,
@@ -130,9 +122,6 @@ import type {
   SecretItemEntryV1,
   SecretSettingsEntryV1,
   SoundNotifierSettingsEntryV3,
-  SwarmRunEntryV1,
-  SwarmTaskEntryV1,
-  SwarmWorkerRunEntryV1,
 } from "../runtime/data-repo"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { SideChannelService } from "../services/side-channel"
@@ -452,39 +441,6 @@ export const coreSoundNotifierDescriptor: ServiceDescriptor<SoundNotifierService
       }
     })
     return service
-  },
-}
-
-export const coreSwarmTaskDescriptor: ServiceDescriptor<SwarmTaskService> = {
-  id: SWARM_TASK_SERVICE_ID,
-  criticality: "degraded",
-  dependsOn: ["core.data-repository", "core.event-bus", "core.project-containers"],
-  create(ctx) {
-    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
-    return createSwarmTaskService({
-      tasks: dataRepository.namespace<SwarmTaskEntryV1>(SWARM_TASKS_NAMESPACE),
-      runs: dataRepository.namespace<SwarmRunEntryV1>(SWARM_TASK_RUNS_NAMESPACE),
-      workers: dataRepository.namespace<SwarmWorkerRunEntryV1>(SWARM_TASK_WORKER_RUNS_NAMESPACE),
-      outputRoot: path.join(app.getPath("userData"), "swarm-runs"),
-      eventBus: ctx.registry.get<EventBus>("core.event-bus"),
-      resolveProjectPath: async (projectId) => {
-        const config = await configStore.load()
-        const project = config.global.projects.find((item) => item.id === projectId)
-        if (!project) {
-          throw new Error("项目不可用")
-        }
-        return project.path
-      },
-      agent: createAgentRuntimeSwarmGateway({
-        resolveAgent: async (projectId) => {
-          const { agent } = await resolveProjectAgent(ctx.registry.get.bind(ctx.registry), projectId)
-          return agent
-        },
-      }),
-    })
-  },
-  async start(instance) {
-    await instance.initialize()
   },
 }
 
@@ -897,7 +853,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     "core.audit-sink",
     "core.terminal",
     "core.sound-notifier",
-    SWARM_TASK_SERVICE_ID,
     PROVIDER_SERVICE_ID,
   ],
   async create(ctx) {
@@ -1041,12 +996,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const soundNotifierDispatcher = createSoundNotifierCapabilityDispatcher({
       service: ctx.registry.get<SoundNotifierService>("core.sound-notifier"),
     })
-    const swarmTaskDispatcher = createSwarmTaskCapabilityDispatcher({
-      service: ctx.registry.get<SwarmTaskService>(SWARM_TASK_SERVICE_ID),
-      permissionGuard,
-      auditSink,
-      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
-    })
     const secretsDispatcher = createSecretsCapabilityDispatcher({
       service: ctx.registry.get<SecretsService>("core.secrets"),
       permissionGuard,
@@ -1057,7 +1006,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       documentTemplate: documentTemplateDispatcher,
       secrets: secretsDispatcher,
       soundNotifier: soundNotifierDispatcher,
-      swarmTask: swarmTaskDispatcher,
     })
 
     const actionRouter = createSynapseActionRouter({

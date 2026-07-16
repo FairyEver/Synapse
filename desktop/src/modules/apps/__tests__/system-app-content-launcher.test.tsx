@@ -108,10 +108,6 @@ vi.mock("../../../../app-capabilities/rule-installer/renderer", () => ({
   RuleInstallerModule: () => <div>Rule 安装器内容</div>,
 }))
 
-vi.mock("../../../../app-capabilities/swarm-task/renderer", () => ({
-  SwarmTaskModule: () => <div>蜂群任务内容</div>,
-}))
-
 vi.mock("../../../../app-capabilities/sound-notifier/renderer", () => ({
   SoundNotifierModule: () => <div>Sound Notifier 内容</div>,
 }))
@@ -197,20 +193,6 @@ describe("SystemAppContent launcher", () => {
     })
 
     expect(onConsumed).toHaveBeenCalledWith("request-1")
-  })
-
-  it("renders swarm-task through the system app host", async () => {
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
-
-    await act(async () => {
-      root.render(<SystemAppContent appId="swarm-task" />)
-      await Promise.resolve()
-    })
-
-    expect(document.body.textContent).toContain("蜂群任务内容")
   })
 
   it("renders skill-uninstaller through the system app host", async () => {

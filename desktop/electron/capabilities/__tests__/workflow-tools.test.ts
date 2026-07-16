@@ -76,19 +76,16 @@ describe("workflow MCP tool definitions", () => {
   it("teaches agents that app-provided Workflow node types are supported", () => {
     const listDescription = toolByName("workflow_node_type_list").description
     expect(listDescription).toContain("document_template_docx_generate")
-    expect(listDescription).toContain("swarm_task_run")
 
     const describeProperties = toolByName("workflow_node_type_describe").inputSchema.properties
     const describeNodeType = objectProperty(describeProperties, "nodeType")
     expect(stringProperty(describeNodeType, "description")).toContain("document_template_docx_generate")
-    expect(stringProperty(describeNodeType, "description")).toContain("swarm_task_run")
 
     const createProperties = toolByName("workflow_node_create").inputSchema.properties
     const nodeSchema = objectProperty(createProperties, "node")
     const nodeProperties = objectProperty(nodeSchema, "properties")
     const typeSchema = objectProperty(nodeProperties, "type")
     expect(stringProperty(typeSchema, "description")).toContain("document_template_docx_generate")
-    expect(stringProperty(typeSchema, "description")).toContain("swarm_task_run")
   })
 
   it("documents workflow_call, codex, and claude_code config fields in the full definition schema", () => {
@@ -143,7 +140,6 @@ describe("workflow MCP tool definitions", () => {
     const configProperties = objectProperty(configSchema, "properties")
 
     expect(configDescription).toContain("document_template_docx_generate")
-    expect(configDescription).toContain("swarm_task_run")
     for (const property of [
       "templatePath",
       "outputPath",
@@ -151,12 +147,6 @@ describe("workflow MCP tool definitions", () => {
       "dataPath",
       "dataJson",
       "overwrite",
-      "taskId",
-      "promptOverride",
-      "runModeOverride",
-      "maxRoundsOverride",
-      "concurrencyOverride",
-      "waitForCompletion",
       "variables",
     ]) {
       expect(configProperties).toHaveProperty(property)

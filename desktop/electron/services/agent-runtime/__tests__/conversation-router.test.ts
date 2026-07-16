@@ -2247,7 +2247,7 @@ describe("ConversationRouter", () => {
 
   it("uses the persisted conversation platform for renderer follow-up turns", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const existing = conversation({ platform: "swarm" })
+    const existing = conversation({ platform: "automation" })
     await conversations.upsert(existing)
     const { eventBus, events } = createEventBusRecorder()
     const permissionGuard = {
@@ -2278,10 +2278,10 @@ describe("ConversationRouter", () => {
     expect(result.error).toBeUndefined()
     expect(permissionGuard.check).not.toHaveBeenCalled()
     expect(afterTurn).toHaveBeenCalledWith(expect.objectContaining({
-      message: expect.objectContaining({ platform: "swarm" }),
+      message: expect.objectContaining({ platform: "automation" }),
     }))
     expect(replyTargets.rememberReplyTarget).toHaveBeenCalledWith(expect.objectContaining({
-      transport: { kind: "swarm" },
+      transport: { kind: "automation" },
     }))
     expect(events).toEqual(expect.arrayContaining([
       expect.objectContaining({

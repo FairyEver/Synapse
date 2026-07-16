@@ -7,7 +7,6 @@ const callerPersistenceIds = [
   ["src/modules/editor-scan/index.tsx", "editor-scan"],
   ["src/modules/database/index.tsx", "database"],
   ["app-capabilities/terminal/renderer/index.tsx", "terminal"],
-  ["app-capabilities/swarm-task/renderer/index.tsx", "swarm-task"],
 ] as const
 
 describe("resizable sidebar persistence callers", () => {

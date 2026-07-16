@@ -32,7 +32,6 @@ import type { AutomationChangedEvent } from "../src/types/automation"
 import type { WorkflowEvent } from "../src/types/workflow"
 import type { SynapseCheatCodeStateChangedEvent } from "../src/types/cheat-code"
 import type { SynapseKnowledgeBaseStorageMigrationProgress } from "../src/types/knowledge-base"
-import type { SwarmTaskChangedEvent } from "../app-capabilities/swarm-task/shared/schema"
 import type { SynapseGitUserFacingFailure } from "../src/types/git"
 import type {
   SynapseTerminalDataEvent,
@@ -464,19 +463,6 @@ const IPC_CHANNELS = {
     "preview": "synapse:sound-notifier:preview",
     "changed": "synapse:sound-notifier:changed",
     "playRequested": "synapse:sound-notifier:play-requested",
-  },
-  "swarmTask": {
-    "listTasks": "synapse:swarm-task:tasks:list",
-    "createTask": "synapse:swarm-task:tasks:create",
-    "updateTask": "synapse:swarm-task:tasks:update",
-    "deleteTask": "synapse:swarm-task:tasks:delete",
-    "startRun": "synapse:swarm-task:runs:start",
-    "stopRefill": "synapse:swarm-task:runs:stop-refill",
-    "cancelRun": "synapse:swarm-task:runs:cancel",
-    "listRuns": "synapse:swarm-task:runs:list",
-    "getRun": "synapse:swarm-task:runs:get",
-    "listWorkerRuns": "synapse:swarm-task:worker-runs:list",
-    "changed": "synapse:events:swarm-task",
   },
   "terminal": {
     "chooseDefaultCwd": "synapse:terminal:group:choose-default-cwd",
@@ -1001,23 +987,6 @@ const synapseBridge: SynapseBridge = {
     onPlayRequested: createRawPayloadSubscription(
       subscribe,
       IPC_CHANNELS.soundNotifier.playRequested,
-    ),
-  },
-  swarmTask: {
-    listTasks: () => invoke(IPC_CHANNELS.swarmTask.listTasks)(),
-    createTask: (input) => invoke(IPC_CHANNELS.swarmTask.createTask)(input),
-    updateTask: (input) => invoke(IPC_CHANNELS.swarmTask.updateTask)(input),
-    deleteTask: (taskId) => invoke(IPC_CHANNELS.swarmTask.deleteTask)({ taskId }),
-    startRun: (input) => invoke(IPC_CHANNELS.swarmTask.startRun)(input),
-    stopRefill: (runId) => invoke(IPC_CHANNELS.swarmTask.stopRefill)({ runId }),
-    cancelRun: (runId) => invoke(IPC_CHANNELS.swarmTask.cancelRun)({ runId }),
-    listRuns: (input = {}) => invoke(IPC_CHANNELS.swarmTask.listRuns)(input),
-    getRun: (runId) => invoke(IPC_CHANNELS.swarmTask.getRun)({ runId }),
-    listWorkerRuns: (input) => invoke(IPC_CHANNELS.swarmTask.listWorkerRuns)(input),
-    onChanged: createDomainEventPayloadSubscription<SwarmTaskChangedEvent>(
-      subscribe,
-      "swarm-task",
-      "swarm-task.changed",
     ),
   },
   terminal: {

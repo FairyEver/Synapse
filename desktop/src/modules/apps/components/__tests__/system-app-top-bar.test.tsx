@@ -25,7 +25,7 @@ describe("SystemAppTopBar", () => {
   it("keeps center content in a stable three-column header", async () => {
     await renderTopBar(roots, (
       <SystemAppTopBar
-        left={<h2>蜂群任务</h2>}
+        left={<h2>工作流</h2>}
         center={<div data-testid="tabs">任务</div>}
         actions={<SystemAppTopBarActionButton onClick={vi.fn()}>刷新</SystemAppTopBarActionButton>}
       />
@@ -33,7 +33,7 @@ describe("SystemAppTopBar", () => {
 
     const toolbar = document.querySelector("[data-system-app-top-bar]")
     expect(toolbar?.className).toContain("grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)]")
-    expect(document.querySelector("[data-system-app-top-bar-left]")?.textContent).toContain("蜂群任务")
+    expect(document.querySelector("[data-system-app-top-bar-left]")?.textContent).toContain("工作流")
     expect(document.querySelector("[data-system-app-top-bar-center]")?.textContent).toContain("任务")
     expect(document.querySelector("[data-system-app-top-bar-actions]")?.textContent).toContain("刷新")
   })

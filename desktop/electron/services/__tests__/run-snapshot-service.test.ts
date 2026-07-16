@@ -257,7 +257,7 @@ describe("RunSnapshotService", () => {
 
     const listed = await new RunSnapshotService(root).list("wf")
 
-    expect(listed[0]?.definition?.meta?.schemaVersion).toBe("1.0.0")
+    expect(listed[0]?.definition?.meta?.schemaVersion).toBe("2.0.0")
     expect(await readFile(target, "utf8")).toBe(raw)
   })
 

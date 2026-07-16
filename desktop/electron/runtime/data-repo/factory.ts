@@ -130,10 +130,6 @@ export function sqliteIndexesFor(namespace: string): readonly string[] {
       return ["json_extract(value, '$.sortOrder'), id"]
     case "app.agent-personas.items":
       return ["json_extract(value, '$.createdAt'), id"]
-    case "app.swarm-task.worker-runs":
-      return [
-        "json_extract(value, '$.runId'), json_extract(value, '$.roundIndex'), json_extract(value, '$.workerIndex'), id",
-      ]
     default:
       return []
   }

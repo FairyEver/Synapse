@@ -19,7 +19,6 @@ import { resourceRepositoryAppDefinition } from "../resource-repository/app-defi
 import { settingsAppDefinition } from "../settings/app-definition"
 import { usageMonitorAppDefinition } from "../usage-analysis/app-definition"
 import { workflowAppDefinition } from "../workflow/app-definition"
-import { swarmTaskAppDefinition } from "../../../app-capabilities/swarm-task/renderer/app-definition"
 import { launcherAppDefinition } from "./launcher-app-definition"
 import type { SynapseSystemAppDefinition, SynapseSystemAppId } from "./types"
 import { isSystemAppId } from "./types"
@@ -47,7 +46,6 @@ const systemAppDefinitions = [
   editorScanAppDefinition,
   usageMonitorAppDefinition,
   modelPriceAppDefinition,
-  swarmTaskAppDefinition,
 ] as const satisfies readonly SynapseSystemAppDefinition[]
 
 export function listSystemAppDefinitions(): readonly SynapseSystemAppDefinition[] {

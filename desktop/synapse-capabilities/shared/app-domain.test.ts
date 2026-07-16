@@ -10,12 +10,6 @@ import {
   SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
   SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
 } from "../../app-capabilities/sound-notifier/shared/capability"
-import {
-  SWARM_TASK_CAPABILITY_IDS,
-  SWARM_TASK_MCP_TOOL_NAMES,
-  SWARM_TASK_TASK_CREATE_CAPABILITY_ID,
-  SWARM_TASK_TASK_LIST_CAPABILITY_ID,
-} from "../../app-capabilities/swarm-task/shared/capability"
 import { SECRETS_MCP_TOOL_NAMES } from "../../app-capabilities/secrets/shared/capability"
 import { APP_DOMAIN, APP_MCP_TOOL_ACTIONS, buildAppTools } from "./app-domain"
 import { assertCanonicalCapabilityId, capabilityIdToMcpTool } from "./naming"
@@ -184,97 +178,4 @@ describe("App capability domain", () => {
       .toContain("legacy")
   })
 
-  it("registers Swarm Task MCP tools in the app domain and global registry", () => {
-    const appCapabilityIds = APP_DOMAIN.capabilities.map((capability) => capability.id)
-    const appToolNames = buildAppTools().map((tool) => tool.name)
-    const allToolNames = buildAllMcpTools().map((tool) => tool.name)
-
-    for (const capabilityId of SWARM_TASK_CAPABILITY_IDS) {
-      expect(appCapabilityIds).toContain(capabilityId)
-      expect(getActionDomainId(capabilityId)).toBe("app")
-    }
-
-    expect(APP_MCP_TOOL_ACTIONS[SWARM_TASK_MCP_TOOL_NAMES.taskCreate]).toBe(SWARM_TASK_TASK_CREATE_CAPABILITY_ID)
-    expect(APP_MCP_TOOL_ACTIONS[SWARM_TASK_MCP_TOOL_NAMES.taskList]).toBe(SWARM_TASK_TASK_LIST_CAPABILITY_ID)
-    expect(MCP_TOOL_ACTIONS[SWARM_TASK_MCP_TOOL_NAMES.taskCreate]).toBe(SWARM_TASK_TASK_CREATE_CAPABILITY_ID)
-    expect(MCP_TOOL_ACTIONS[SWARM_TASK_MCP_TOOL_NAMES.taskList]).toBe(SWARM_TASK_TASK_LIST_CAPABILITY_ID)
-    expect(appToolNames).toEqual(expect.arrayContaining(Object.values(SWARM_TASK_MCP_TOOL_NAMES)))
-    expect(allToolNames).toEqual(expect.arrayContaining(Object.values(SWARM_TASK_MCP_TOOL_NAMES)))
-
-    const runListSchema = buildAppTools()
-      .find((tool) => tool.name === SWARM_TASK_MCP_TOOL_NAMES.runList)?.inputSchema
-    expect(runListSchema).toMatchObject({
-      required: ["taskId"],
-      properties: {
-        taskId: expect.objectContaining({ type: "string", minLength: 1 }),
-      },
-    })
-    const runGetSchema = buildAppTools()
-      .find((tool) => tool.name === SWARM_TASK_MCP_TOOL_NAMES.runGet)?.inputSchema
-    expect(runGetSchema).toMatchObject({
-      required: ["taskId", "runId"],
-      properties: {
-        taskId: expect.objectContaining({ type: "string", minLength: 1 }),
-        runId: expect.objectContaining({ type: "string", minLength: 1 }),
-        workerOffset: expect.objectContaining({ type: "integer", minimum: 0, default: 0 }),
-        workerLimit: expect.objectContaining({ type: "integer", minimum: 1, maximum: 200, default: 20 }),
-      },
-    })
-  })
-
-  it("defines Swarm Task create and start schemas", () => {
-    const tools = new Map(buildAppTools().map((tool) => [tool.name, tool]))
-    const taskCreateSchema = tools.get(SWARM_TASK_MCP_TOOL_NAMES.taskCreate)?.inputSchema
-    const configSchema = taskCreateSchema?.properties.config as {
-      properties: Record<string, unknown>
-      required: readonly string[]
-    }
-
-    expect(taskCreateSchema).toMatchObject({
-      type: "object",
-      properties: {
-        name: expect.objectContaining({ type: "string", minLength: 1, maxLength: 120 }),
-        config: expect.objectContaining({
-          type: "object",
-          required: ["projectId", "prompt"],
-          properties: expect.objectContaining({
-            promptInjection: expect.objectContaining({
-              type: "object",
-              properties: expect.objectContaining({
-                sequenceBatch: expect.any(Object),
-                previousHandoff: expect.any(Object),
-                summary: expect.any(Object),
-                fileWrite: expect.any(Object),
-                customAppendix: expect.any(Object),
-              }),
-              additionalProperties: false,
-            }),
-          }),
-        }),
-      },
-      required: ["name", "config"],
-      additionalProperties: false,
-    })
-    expect(configSchema.properties).not.toHaveProperty("workspacePath")
-    expect(configSchema.properties).not.toHaveProperty("injectOptions")
-    expect(configSchema.properties).not.toHaveProperty("output")
-    expect(configSchema.properties).not.toHaveProperty("handoff")
-    expect(configSchema.properties.promptInjection).toMatchObject({
-      properties: {
-        fileWrite: {
-          properties: {
-            mode: { enum: ["append-only", "update"] },
-          },
-        },
-      },
-    })
-    expect(tools.get(SWARM_TASK_MCP_TOOL_NAMES.runStart)?.inputSchema).toMatchObject({
-      type: "object",
-      properties: {
-        taskId: expect.objectContaining({ type: "string", minLength: 1 }),
-      },
-      required: ["taskId"],
-      additionalProperties: false,
-    })
-  })
 })

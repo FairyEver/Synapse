@@ -1,13 +1,12 @@
 export const OPEN_AGENT_SESSION_EVENT = "synapse:open-agent-session"
 
-export type SynapseAgentConversationPlatform = "automation" | "workflow" | "scheduled" | "swarm"
+export type SynapseAgentConversationPlatform = "automation" | "workflow" | "scheduled"
 
 export type SynapseAgentConversationSourceFilter =
   | "user"
   | "scheduled"
   | "automation"
   | "workflow"
-  | "swarm"
   | "webhook"
   | "relay"
   | "bridge"

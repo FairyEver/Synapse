@@ -958,7 +958,6 @@ export const SYSTEM_APP_IDS = [
   "editor-scan",
   "usage-monitor",
   "model-price",
-  "swarm-task",
 ] as const
 ```
 
