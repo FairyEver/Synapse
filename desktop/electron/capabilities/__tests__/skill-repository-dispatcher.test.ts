@@ -115,13 +115,15 @@ describe("skill repository capability dispatcher", () => {
 
     await dispatcher.dispatch("app.skill_repository.item.list", {}, context)
     await dispatcher.dispatch("app.skill_repository.item.get", { repositoryId: "repo-1" }, context)
+    await dispatcher.dispatch("app.skill_repository.item.open", { repositoryId: "repo-1" }, context)
     await dispatcher.dispatch("app.skill_repository.public.open", { repositoryId: "repo-1" }, context)
 
-    expect(permissionGuard.check).toHaveBeenCalledTimes(3)
+    expect(permissionGuard.check).toHaveBeenCalledTimes(4)
     expect(vi.mocked(permissionGuard.check).mock.calls.map(([request]) => request.context.capabilityAction))
       .toEqual([
         "app.skill_repository.item.list",
         "app.skill_repository.item.get",
+        "app.skill_repository.item.open",
         "app.skill_repository.public.open",
       ])
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
@@ -135,7 +137,7 @@ describe("skill repository capability dispatcher", () => {
       }),
     }))
     expect(vi.mocked(auditSink.record).mock.calls.filter(([event]) => event.outcome === "allowed"))
-      .toHaveLength(3)
+      .toHaveLength(4)
     const auditJson = JSON.stringify(vi.mocked(auditSink.record).mock.calls)
     expect(auditJson).not.toContain("files")
     expect(auditJson).not.toContain("Demo")
@@ -267,6 +269,33 @@ describe("skill repository capability dispatcher", () => {
     expect(deps.openExternal).toHaveBeenCalledWith(
       "https://synapse.example.test/console/skill-repositories/repo-1",
     )
+  })
+
+  it("blocks denied management URL reads before opening the browser", async () => {
+    const { auditSink, permissionGuard } = createSecurity({
+      allowed: false,
+      reason: "blocked",
+      policyId: "policy-1",
+    })
+    const deps = createDeps({ auditSink, permissionGuard })
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.item.open",
+      { repositoryId: "repo-1", openInBrowser: true },
+      { source: "mcp-stdio" },
+    )).rejects.toThrow("blocked")
+
+    expect(deps.openExternal).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.read",
+      resource: "skill-repository:repo-1",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        capabilityAction: "app.skill_repository.item.open",
+        policyId: "policy-1",
+      }),
+    }))
   })
 
   it("sets repository visibility and optionally opens management URL", async () => {

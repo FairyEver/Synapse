@@ -67,7 +67,7 @@ export function createSkillRepositoryCapabilityDispatcher(deps: SkillRepositoryC
         case "app.skill_repository.visibility.update":
           return setSkillRepositoryVisibility(deps, params, context)
         case "app.skill_repository.item.open":
-          return openSkillRepository(deps, params)
+          return openSkillRepository(deps, params, context)
         case "app.skill_repository.public.open":
           return openPublicSkillRepository(deps, params, context)
         case "app.skill_repository.fork.create":
@@ -214,23 +214,32 @@ async function createInstallSession(
 async function openSkillRepository(
   deps: SkillRepositoryCapabilityDispatcherDeps,
   params: Record<string, unknown>,
+  context: DispatchContext,
 ): Promise<DispatchResult> {
   const repositoryId = requireTrimmedString(params, "repositoryId")
   const openInBrowser = optionalBoolean(params, "openInBrowser")
-  const { buildSkillRepositoryManagementUrl } = await sharedSkillRepositoryPromise
-  const managementUrl = buildSkillRepositoryManagementUrl(deps.publicAppUrl, repositoryId)
+  return runSkillRepositoryRead(
+    deps,
+    context,
+    "app.skill_repository.item.open",
+    repositoryId,
+    async () => {
+      const { buildSkillRepositoryManagementUrl } = await sharedSkillRepositoryPromise
+      const managementUrl = buildSkillRepositoryManagementUrl(deps.publicAppUrl, repositoryId)
 
-  if (openInBrowser === true && deps.openExternal) {
-    await deps.openExternal(managementUrl)
-  }
+      if (openInBrowser === true && deps.openExternal) {
+        await deps.openExternal(managementUrl)
+      }
 
-  return {
-    ok: true,
-    data: {
-      repositoryId,
-      managementUrl,
+      return {
+        ok: true,
+        data: {
+          repositoryId,
+          managementUrl,
+        },
+      }
     },
-  }
+  )
 }
 
 async function openPublicSkillRepository(
