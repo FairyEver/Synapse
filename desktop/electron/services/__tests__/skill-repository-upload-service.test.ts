@@ -153,7 +153,7 @@ describe("SkillRepositoryUploadService", () => {
       kind: "cloud-skill-repository",
       owner: "liyang",
       name: "demo-skill",
-    }, null, undefined)
+    }, null, undefined, { validateSource: expect.any(Function) })
     expect(removeLegacySkillRepositoryIdentity).toHaveBeenCalledWith("/skills/demo", undefined)
     expect(openExternal).not.toHaveBeenCalled()
   })
@@ -228,7 +228,7 @@ describe("SkillRepositoryUploadService", () => {
       kind: "cloud-skill-repository",
       owner: "liyang",
       name: "demo-skill",
-    }, null, undefined)
+    }, null, undefined, { validateSource: expect.any(Function) })
   })
 
   it("preflights identity write permission before cloud import", async () => {
@@ -308,6 +308,7 @@ describe("SkillRepositoryUploadService", () => {
       identity,
       "identity-before-upload",
       undefined,
+      { validateSource: expect.any(Function) },
     )
   })
 
@@ -330,6 +331,30 @@ describe("SkillRepositoryUploadService", () => {
     expect(writeSkillRepositoryIdentity).not.toHaveBeenCalled()
   })
 
+  it("rechecks the source inside the final identity write boundary", async () => {
+    readSkillDraftFromDirectory
+      .mockResolvedValueOnce(skillDraft())
+      .mockResolvedValueOnce(skillDraft())
+      .mockResolvedValueOnce(skillDraft({ sourceFingerprint: "sha256:changed-at-commit" }))
+    writeSkillRepositoryIdentity.mockImplementationOnce(async (...args: unknown[]) => {
+      const options = args[4] as { validateSource?: () => Promise<void> } | undefined
+      await options?.validateSource?.()
+    })
+    const importSkillRepository = vi.fn(async () => repositoryDetail())
+    const service = new SkillRepositoryUploadService({
+      accountService: { getState: () => authenticatedState, importSkillRepository },
+    })
+
+    await expect(service.importLocal({ sourceDirectoryPath: "/skills/demo" })).resolves.toMatchObject({
+      repositoryId: "repo-1",
+      identityWritten: false,
+      identityWriteError: "本地 Skill 在上传期间发生变化，请重新扫描后再关联。",
+      identityBeforeUploadId: null,
+    })
+    expect(writeSkillRepositoryIdentity).toHaveBeenCalledOnce()
+    expect(readSkillDraftFromDirectory).toHaveBeenCalledTimes(3)
+  })
+
   it("retries only the local identity write without importing the cloud repository again", async () => {
     const importSkillRepository = vi.fn()
     const service = new SkillRepositoryUploadService({
@@ -346,7 +371,13 @@ describe("SkillRepositoryUploadService", () => {
     })).resolves.toEqual({ identityWritten: true, identityMigrated: false })
 
     expect(importSkillRepository).not.toHaveBeenCalled()
-    expect(writeSkillRepositoryIdentity).toHaveBeenCalledWith("/skills/demo", identity, null, undefined)
+    expect(writeSkillRepositoryIdentity).toHaveBeenCalledWith(
+      "/skills/demo",
+      identity,
+      null,
+      undefined,
+      { validateSource: expect.any(Function) },
+    )
   })
 
   it("blocks identity retry when the local source or identity changed", async () => {

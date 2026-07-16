@@ -17,6 +17,7 @@ import {
   readSkillRepositoryIdentity,
   readSkillRepositoryIdentityRaw,
   removeLegacySkillRepositoryIdentity,
+  SkillRepositorySourceDirectoryChangedError,
   writeSkillRepositoryIdentity,
   type SkillRepositoryIdentityWriteSecurity,
 } from "./skill-repository-local-identity"
@@ -147,23 +148,19 @@ export class SkillRepositoryUploadService {
     let identityMigrated = false
     let identityMigrationWarning: string | undefined
     try {
-      const currentSource = await readSkillDraftFromDirectory(
+      const validateSource = () => this.assertSourceUnchanged(
         source.sourceDirectoryPath,
+        source.sourceFingerprint,
+        "本地 Skill 在上传期间发生变化，请重新扫描后再关联。",
         security,
-        { mode: "publish" },
       )
-      if (
-        path.basename(currentSource.mainFilePath) !== "SKILL.md"
-        || currentSource.sourceFingerprint !== source.sourceFingerprint
-      ) {
-        throw new Error("本地 Skill 在上传期间发生变化，请重新扫描后再关联。")
-      }
+      await validateSource()
       await this.writeIdentity(source.sourceDirectoryPath, {
         id: repository.id,
         kind: "cloud-skill-repository",
         owner,
         name: repository.name,
-      }, expectedIdentityRaw, security)
+      }, expectedIdentityRaw, security, { validateSource })
       try {
         const verifiedIdentity = await this.readIdentity(source.sourceDirectoryPath, security)
         if (verifiedIdentity?.id !== repository.id || verifiedIdentity.name !== repository.name) {
@@ -231,7 +228,14 @@ export class SkillRepositoryUploadService {
     }
 
     await this.ensureIdentityWriteAllowed(source.sourceDirectoryPath, security)
-    await this.writeIdentity(source.sourceDirectoryPath, identity, expectedIdentityRaw, security)
+    await this.writeIdentity(source.sourceDirectoryPath, identity, expectedIdentityRaw, security, {
+      validateSource: () => this.assertSourceUnchanged(
+        source.sourceDirectoryPath,
+        source.sourceFingerprint,
+        "本地 Skill 在上传后发生变化，请重新检查后再关联。",
+        security,
+      ),
+    })
 
     let identityMigrated = false
     let identityMigrationWarning: string | undefined
@@ -253,6 +257,25 @@ export class SkillRepositoryUploadService {
       identityWritten: true,
       identityMigrated,
       ...(identityMigrationWarning ? { identityMigrationWarning } : {}),
+    }
+  }
+
+  private async assertSourceUnchanged(
+    sourceDirectoryPath: string,
+    expectedSourceFingerprint: string,
+    message: string,
+    security?: ContentSkillSourceSecurityDeps & SkillRepositoryIdentityWriteSecurity,
+  ): Promise<void> {
+    const currentSource = await readSkillDraftFromDirectory(
+      sourceDirectoryPath,
+      security,
+      { mode: "publish" },
+    )
+    if (
+      path.basename(currentSource.mainFilePath) !== "SKILL.md"
+      || currentSource.sourceFingerprint !== expectedSourceFingerprint
+    ) {
+      throw new SkillRepositorySourceDirectoryChangedError(message)
     }
   }
 }

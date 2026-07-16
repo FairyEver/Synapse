@@ -25,6 +25,10 @@ export type SkillRepositoryIdentityWriteSecurity = {
 
 export type SkillRepositoryIdentityReadSecurity = SkillRepositoryIdentityWriteSecurity
 
+export type SkillRepositoryIdentityWriteOptions = {
+  readonly validateSource?: () => Promise<void>
+}
+
 type SkillRepositoryIdentityAuditOutcome = "allowed" | "denied" | "failed"
 
 export class SkillRepositoryIdentityChangedError extends Error {
@@ -35,8 +39,8 @@ export class SkillRepositoryIdentityChangedError extends Error {
 }
 
 export class SkillRepositorySourceDirectoryChangedError extends Error {
-  constructor() {
-    super("本地 Skill 在上传期间发生变化，请重新扫描后再关联。")
+  constructor(message = "本地 Skill 在上传期间发生变化，请重新扫描后再关联。") {
+    super(message)
     this.name = "SkillRepositorySourceDirectoryChangedError"
   }
 }
@@ -56,6 +60,7 @@ export async function writeSkillRepositoryIdentity(
   identity: SkillRepositoryIdentity,
   expectedRaw: string | null,
   security?: SkillRepositoryIdentityWriteSecurity,
+  options?: SkillRepositoryIdentityWriteOptions,
 ): Promise<void> {
   const targetPath = path.join(sourceDirectoryPath, SKILL_REPOSITORY_ID_FILE_NAME)
   let tempPath: string | null = null
@@ -77,6 +82,7 @@ export async function writeSkillRepositoryIdentity(
     if (!sameDirectoryIdentity(expectedSourceDirectory, currentSourceDirectory)) {
       throw new SkillRepositorySourceDirectoryChangedError()
     }
+    await options?.validateSource?.()
     await rename(tempPath, targetPath)
     tempPath = null
     recordIdentityAudit(security, "fs.write", targetPath, "allowed", metadata)

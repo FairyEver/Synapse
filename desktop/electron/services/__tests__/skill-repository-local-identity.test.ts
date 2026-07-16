@@ -195,6 +195,29 @@ describe("writeSkillRepositoryIdentity", () => {
     expect((await readdir(dir)).filter((entry) => entry.endsWith(".tmp"))).toEqual([])
   })
 
+  it("does not commit the identity when the guarded Skill source changed before rename", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-id-source-conflict-"))
+    const targetPath = path.join(dir, ".synapse.repository.json")
+    const previousIdentity = { ...identity, id: "repo-previous" }
+    const previousRaw = `${JSON.stringify(previousIdentity, null, 2)}\n`
+    await writeFile(targetPath, previousRaw, "utf8")
+    const validateSource = vi.fn(async () => {
+      throw new SkillRepositorySourceDirectoryChangedError()
+    })
+
+    await expect(writeSkillRepositoryIdentity(
+      dir,
+      identity,
+      previousRaw,
+      undefined,
+      { validateSource },
+    )).rejects.toBeInstanceOf(SkillRepositorySourceDirectoryChangedError)
+
+    expect(validateSource).toHaveBeenCalledOnce()
+    await expect(readFile(targetPath, "utf8")).resolves.toBe(previousRaw)
+    expect((await readdir(dir)).filter((entry) => entry.endsWith(".tmp"))).toEqual([])
+  })
+
   it("does not recreate a source directory that disappeared before identity write", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-id-missing-"))
     await rm(dir, { recursive: true })
