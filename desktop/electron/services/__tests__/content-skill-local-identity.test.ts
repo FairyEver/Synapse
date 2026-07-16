@@ -48,6 +48,46 @@ describe("content skill local identity", () => {
     await expect(readFile(target, "utf8")).resolves.toContain("changed")
   })
 
+  it("requires read permission for the final identity concurrency check", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-content-skill-id-read-denied-"))
+    const target = path.join(root, ".synapse.json")
+    const original = JSON.stringify({ id: "old" })
+    const auditSink = auditSinkStub()
+    const permissionGuard: PermissionGuard = {
+      check: vi.fn(async request => request.action === "fs.write"
+        ? { allowed: true as const }
+        : { allowed: false as const, reason: "identity read denied" }),
+      registerPolicy: vi.fn(),
+    }
+    await writeFile(target, original, "utf8")
+
+    await expect(writeContentSkillIdentity(root, {
+      id: "skill-1",
+      repositoryVersion: "20260713010101",
+      sourceFingerprint: "sha256:source",
+    }, original, { actor, auditSink, permissionGuard })).rejects.toThrow("identity read denied")
+
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      action: "fs.write",
+      resource: target,
+    }))
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: target,
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "denied",
+      resource: target,
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "failed",
+      resource: target,
+    }))
+    await expect(readFile(target, "utf8")).resolves.toBe(original)
+  })
+
   it.skipIf(process.platform === "win32")("rejects a symlinked resource identity", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-content-skill-id-link-"))
     const outside = await mkdtemp(path.join(os.tmpdir(), "synapse-content-skill-id-outside-"))

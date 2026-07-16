@@ -189,7 +189,7 @@ async function writeContentSkillIdentity(
 
   try {
     await writeFile(tempPath, `${JSON.stringify(identity, null, 2)}\n`, { encoding: "utf8", mode: 0o600 })
-    const currentRaw = await readContentSkillIdentityRaw(sourceDirectoryPath)
+    const currentRaw = await readContentSkillIdentityRaw(sourceDirectoryPath, security)
     if (currentRaw !== expectedRaw) {
       throw new ContentSkillIdentityChangedError()
     }
