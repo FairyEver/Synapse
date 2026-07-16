@@ -358,6 +358,7 @@ import type {
   SynapseResolveEditorInstallStatusPayload,
 } from "./editor-install-status"
 import type {
+  EditorScanCancelResult,
   EditorScanQuickPublishDraft,
   EditorScanQuickPublishRequest,
   EditorScanFinalizeQuickPublishRequest,
@@ -367,6 +368,7 @@ import type {
   EditorScanSkillRepositoryUploadRequest,
   EditorScanSkillRepositoryUploadResult,
   EditorScanResult,
+  EditorScanRequest,
   EditorScanSkillFileEntry,
   EditorScanTrashRequest,
   EditorScanTrashResult,
@@ -1275,7 +1277,8 @@ export type SynapseBridge = {
     createDirectory: (dirPath: string) => Promise<void>
   }
   editorScan: {
-    scanAll: () => Promise<EditorScanResult>
+    scanAll: (request: EditorScanRequest) => Promise<EditorScanResult>
+    cancelScan: (request: EditorScanRequest) => Promise<EditorScanCancelResult>
     readItemContent: (filePath: string) => Promise<string>
     listSkillFiles: (dirPath: string) => Promise<EditorScanSkillFileEntry[]>
     prepareQuickPublishDraft: (

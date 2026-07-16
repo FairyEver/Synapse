@@ -125,6 +125,7 @@ const IPC_CHANNELS = {
   },
   "editor-scan": {
     "scanAll": "synapse:editor-scan:scan-all",
+    "cancelScan": "synapse:editor-scan:cancel-scan",
     "readItemContent": "synapse:editor-scan:read-item-content",
     "listSkillFiles": "synapse:editor-scan:list-skill-files",
     "prepareQuickPublishDraft": "synapse:editor-scan:prepare-quick-publish-draft",
@@ -1289,6 +1290,7 @@ const synapseBridge: SynapseBridge = {
   },
   editorScan: {
     scanAll: invoke(IPC_CHANNELS["editor-scan"].scanAll),
+    cancelScan: invoke(IPC_CHANNELS["editor-scan"].cancelScan),
     readItemContent: (filePath: string) =>
       invoke(IPC_CHANNELS["editor-scan"].readItemContent)({ filePath }),
     listSkillFiles: (dirPath: string) =>

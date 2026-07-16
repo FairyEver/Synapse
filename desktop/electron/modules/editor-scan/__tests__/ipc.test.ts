@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   editorScanService: {
     assertTrustedEditorReadTarget: vi.fn(),
     finalizeQuickPublish: vi.fn(),
+    scanAll: vi.fn(),
     trashScanItem: vi.fn(),
   },
 }))
@@ -26,7 +27,7 @@ vi.mock("../../../services/content-skill-source-service", () => ({
 }))
 
 vi.mock("../../../services/editor-scan-service", () => ({
-  scanAll: vi.fn(),
+  scanAll: mocks.editorScanService.scanAll,
   readItemContent: vi.fn(),
   listSkillFiles: vi.fn(),
   assertTrustedEditorReadTarget: mocks.editorScanService.assertTrustedEditorReadTarget,
@@ -88,6 +89,27 @@ describe("editorScanIpcModule", () => {
     })).rejects.toThrow()
 
     expect(mocks.editorScanService.trashScanItem).not.toHaveBeenCalled()
+  })
+
+  it("cancels an active scan by request id", async () => {
+    const harness = createHarness()
+    const requestId = "4ca12db4-dcf0-4bfd-905a-4bf65f63204f"
+    let capturedSignal: AbortSignal | undefined
+    mocks.editorScanService.scanAll.mockImplementationOnce((signal: AbortSignal) => {
+      capturedSignal = signal
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new Error("Editor scan cancelled.")), { once: true })
+      })
+    })
+
+    const scanResult = expect(harness.invoke("synapse:editor-scan:scan-all", { requestId }))
+      .rejects.toThrow("Editor scan cancelled.")
+    await vi.waitFor(() => expect(capturedSignal).toBeDefined())
+
+    await expect(harness.invoke("synapse:editor-scan:cancel-scan", { requestId }))
+      .resolves.toEqual({ cancelled: true })
+    expect(capturedSignal?.aborted).toBe(true)
+    await scanResult
   })
 
   it("finalizes a checked Skill publish through the main process", async () => {

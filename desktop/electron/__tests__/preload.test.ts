@@ -563,6 +563,25 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps cancellable editor scans to their narrow IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+    const request = { requestId: "4ca12db4-dcf0-4bfd-905a-4bf65f63204f" }
+
+    await bridge.editorScan.scanAll(request)
+    await bridge.editorScan.cancelScan(request)
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      1,
+      "synapse:editor-scan:scan-all",
+      request,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      2,
+      "synapse:editor-scan:cancel-scan",
+      request,
+    )
+  })
+
   it("maps Skill Repository identity retry to the local-only IPC channel", async () => {
     const bridge = await loadPreloadBridge()
     const request = {

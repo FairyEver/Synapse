@@ -24,6 +24,7 @@ interface PromptEditorProps {
 
 function useClaudeCodeGlobalSkillNames(): { skillNames: string[]; refresh: () => void } {
   const [skillNames, setSkillNames] = useState<string[]>([])
+  const activeScanRequestRef = useRef<string | null>(null)
   const requestIdRef = useRef(0)
 
   const refresh = useCallback(() => {
@@ -31,13 +32,35 @@ function useClaudeCodeGlobalSkillNames(): { skillNames: string[]; refresh: () =>
     requestIdRef.current = requestId
 
     void (async () => {
+      const editorScan = window.synapse?.editorScan
+      if (!editorScan) return
+      const previousRequestId = activeScanRequestRef.current
+      if (previousRequestId) {
+        try {
+          await editorScan.cancelScan({ requestId: previousRequestId })
+        } catch (error) {
+          logger.warn("Failed to cancel the previous Skill shortcut scan.", {
+            errorName: error instanceof Error ? error.name : typeof error,
+          })
+        }
+      }
+      const scanRequest = { requestId: crypto.randomUUID() }
+      activeScanRequestRef.current = scanRequest.requestId
       try {
-        const scan = await window.synapse?.editorScan?.scanAll?.()
+        const scan = await editorScan.scanAll(scanRequest)
         if (requestIdRef.current === requestId) {
           setSkillNames(extractClaudeCodeGlobalSkillNames(scan))
         }
       } catch (error) {
-        logger.warn("Failed to load Claude Code global skills.", { error })
+        if (requestIdRef.current === requestId) {
+          logger.warn("Failed to load Claude Code global skills.", {
+            errorName: error instanceof Error ? error.name : typeof error,
+          })
+        }
+      } finally {
+        if (activeScanRequestRef.current === scanRequest.requestId) {
+          activeScanRequestRef.current = null
+        }
       }
     })()
   }, [])
@@ -47,6 +70,15 @@ function useClaudeCodeGlobalSkillNames(): { skillNames: string[]; refresh: () =>
 
     return () => {
       requestIdRef.current += 1
+      const requestId = activeScanRequestRef.current
+      activeScanRequestRef.current = null
+      const editorScan = window.synapse?.editorScan
+      if (!requestId || !editorScan) return
+      void editorScan.cancelScan({ requestId }).catch((error) => {
+        logger.warn("Failed to cancel the Skill shortcut scan on unmount.", {
+          errorName: error instanceof Error ? error.name : typeof error,
+        })
+      })
     }
   }, [refresh])
 

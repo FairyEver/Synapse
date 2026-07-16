@@ -9,6 +9,7 @@ import type { EditorScanResult } from "@/types/editor-scan"
 import { useEditorScan } from "../hooks/use-editor-scan"
 
 const mocks = vi.hoisted(() => ({
+  cancelScan: vi.fn(),
   logger: {
     error: vi.fn(),
     warn: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock("@/app-shell/logging", () => ({
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
     editorScan: {
+      cancelScan: mocks.cancelScan,
       scanAll: mocks.scanAll,
     },
   }),
@@ -124,5 +126,36 @@ describe("useEditorScan", () => {
       await staleRefresh
     })
     expect(document.querySelector('[data-testid="editor-label"]')?.textContent).toBe("latest")
+    expect(mocks.cancelScan).toHaveBeenCalledTimes(1)
+    expect(mocks.cancelScan).toHaveBeenCalledWith(mocks.scanAll.mock.calls[1]?.[0])
+  })
+
+  it("cancels the active scan when the page unmounts", async () => {
+    const pending = createDeferred<EditorScanResult>()
+    mocks.scanAll.mockReturnValueOnce(pending.promise)
+    mocks.cancelScan.mockResolvedValue({ cancelled: true })
+
+    function Probe() {
+      useEditorScan()
+      return null
+    }
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<Probe />)
+    })
+    const request = mocks.scanAll.mock.calls[0]?.[0]
+
+    await act(async () => {
+      root.unmount()
+      await Promise.resolve()
+    })
+    roots = roots.filter((candidate) => candidate !== root)
+
+    expect(mocks.cancelScan).toHaveBeenCalledWith(request)
   })
 })

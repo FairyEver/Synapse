@@ -67,6 +67,14 @@ export type EditorScanResult = {
   projects: EditorScanProjectResult[]
 }
 
+export type EditorScanRequest = {
+  requestId: string
+}
+
+export type EditorScanCancelResult = {
+  cancelled: boolean
+}
+
 export type EditorScanSkillFileEntry = {
   name: string
   size: number

@@ -29,6 +29,7 @@ import { configStore } from "../config-store"
 import { contentHistoryService } from "../content-history-service"
 import * as editorScanRoots from "../editor-scan-roots"
 import {
+  EditorScanCancelledError,
   EDITOR_SCAN_SKILL_FILE_LIST_LIMITS,
   EDITOR_SCAN_SKILL_PREVIEW_LIMITS,
   finalizeQuickPublish,
@@ -356,6 +357,25 @@ describe("editor scan quick publish", () => {
     } finally {
       await chmod(blockedHome, 0o700)
     }
+  })
+
+  it("stops before scanning when the request is already cancelled", async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(scanAll(controller.signal)).rejects.toBeInstanceOf(EditorScanCancelledError)
+  })
+
+  it("stops an in-progress Skill directory scan after cancellation", async () => {
+    const root = await createTempDir()
+    await mkdir(path.join(root, "reviewer"), { recursive: true })
+    await writeFile(path.join(root, "reviewer", "SKILL.md"), "# Reviewer\n")
+    const controller = new AbortController()
+
+    const result = scanSkillDirectories([root], controller.signal)
+    controller.abort()
+
+    await expect(result).rejects.toBeInstanceOf(EditorScanCancelledError)
   })
 
   it("reads installed skill repository version from .synapse.json", async () => {

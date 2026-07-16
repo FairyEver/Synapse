@@ -17,18 +17,33 @@ function useEditorScan() {
     loading: false,
     error: null,
   })
-  const hasFetched = useRef(false)
+  const activeScanRequestRef = useRef<string | null>(null)
   const currentReqRef = useRef(0)
 
   const scan = useCallback(async () => {
     const reqId = ++currentReqRef.current
     setState((prev) => ({ ...prev, loading: true, error: null }))
-    try {
-      const bridge = getSynapseBridge()
-      if (!bridge) {
-        throw new Error("Bridge not available")
+    const bridge = getSynapseBridge()
+    if (!bridge) {
+      const error = new Error("Bridge not available")
+      logger.error("Editor scan failed.", error)
+      setState((prev) => ({ ...prev, loading: false, error: error.message }))
+      throw error
+    }
+    const previousRequestId = activeScanRequestRef.current
+    if (previousRequestId) {
+      try {
+        await bridge.editorScan.cancelScan({ requestId: previousRequestId })
+      } catch (error) {
+        logger.warn("Previous editor scan cancellation failed.", {
+          errorName: error instanceof Error ? error.name : typeof error,
+        })
       }
-      const result = await bridge.editorScan.scanAll()
+    }
+    const request = { requestId: crypto.randomUUID() }
+    activeScanRequestRef.current = request.requestId
+    try {
+      const result = await bridge.editorScan.scanAll(request)
       if (reqId !== currentReqRef.current) return
       setState({ data: result, loading: false, error: null })
     } catch (error) {
@@ -40,14 +55,29 @@ function useEditorScan() {
         error: error instanceof Error ? error.message : "扫描失败",
       }))
       throw error
+    } finally {
+      if (activeScanRequestRef.current === request.requestId) {
+        activeScanRequestRef.current = null
+      }
     }
   }, [])
 
   useEffect(() => {
-    if (!hasFetched.current) {
-      hasFetched.current = true
-      void scan().catch((error) => {
-        logger.warn("Initial editor scan failed.", { error })
+    void scan().catch((error) => {
+      logger.warn("Initial editor scan failed.", {
+        errorName: error instanceof Error ? error.name : typeof error,
+      })
+    })
+    return () => {
+      currentReqRef.current += 1
+      const requestId = activeScanRequestRef.current
+      activeScanRequestRef.current = null
+      const bridge = getSynapseBridge()
+      if (!requestId || !bridge) return
+      void bridge.editorScan.cancelScan({ requestId }).catch((error) => {
+        logger.warn("Editor scan cancellation on unmount failed.", {
+          errorName: error instanceof Error ? error.name : typeof error,
+        })
       })
     }
   }, [scan])

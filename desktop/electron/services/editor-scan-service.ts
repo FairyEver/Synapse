@@ -61,6 +61,13 @@ const EDITOR_SCAN_SKILL_PREVIEW_LIMITS = {
   projectConcurrency: 4,
 } as const
 
+export class EditorScanCancelledError extends Error {
+  constructor() {
+    super("Editor scan cancelled.")
+    this.name = "EditorScanCancelledError"
+  }
+}
+
 type QuickPublishSession = {
   expectedIdentityRaw: string | null
   expiresAt: number
@@ -361,24 +368,33 @@ function previewLines(text: string): string {
     .slice(0, EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxPreviewChars)
 }
 
-async function readPreview(filePath: string): Promise<string> {
+function throwIfScanCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new EditorScanCancelledError()
+}
+
+async function readPreview(filePath: string, signal?: AbortSignal): Promise<string> {
   let handle
   try {
+    throwIfScanCancelled(signal)
     handle = await open(filePath, "r")
     const buffer = Buffer.allocUnsafe(EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxPreviewBytes)
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
+    throwIfScanCancelled(signal)
     return previewLines(buffer.subarray(0, bytesRead).toString("utf8"))
   } catch {
+    throwIfScanCancelled(signal)
     return ""
   } finally {
     await handle?.close().catch(() => undefined)
   }
 }
 
-async function countDirectoryEntries(dirPath: string): Promise<number> {
+async function countDirectoryEntries(dirPath: string, signal?: AbortSignal): Promise<number> {
+  throwIfScanCancelled(signal)
   let count = 0
   const directory = await opendir(dirPath)
   for await (const entry of directory) {
+    throwIfScanCancelled(signal)
     if (!entry.name) continue
     count += 1
     if (count >= EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxChildrenPerSkill) break
@@ -427,13 +443,15 @@ type SkillDirectoryScanResult = {
   error?: string
 }
 
-async function scanSkillsDirectory(dirPath: string): Promise<SkillDirectoryScanResult> {
+async function scanSkillsDirectory(dirPath: string, signal?: AbortSignal): Promise<SkillDirectoryScanResult> {
+  throwIfScanCancelled(signal)
   if (!(await pathExists(dirPath))) return { items: [] }
 
   let directory
   try {
     directory = await opendir(dirPath)
   } catch (error) {
+    throwIfScanCancelled(signal)
     logger.warn("Failed to read skill scan root.", { dirPath, error })
     return { items: [], error: SKILL_SCAN_READ_ERROR }
   }
@@ -444,6 +462,7 @@ async function scanSkillsDirectory(dirPath: string): Promise<SkillDirectoryScanR
   let truncated = false
 
   for await (const entry of directory) {
+    throwIfScanCancelled(signal)
     if (rootEntryCount >= EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxRootEntries) {
       truncated = true
       break
@@ -459,16 +478,18 @@ async function scanSkillsDirectory(dirPath: string): Promise<SkillDirectoryScanR
 
     try {
       const meta = await readSynapseSkillMeta(skillDir)
+      throwIfScanCancelled(signal)
       const source: EditorScanItemSource = meta ? "synapse" : "external"
 
-      const fileCount = await countDirectoryEntries(skillDir)
+      const fileCount = await countDirectoryEntries(skillDir, signal)
       const previewFile = await resolveSkillMainFile(
         skillDir,
         EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxChildrenPerSkill,
       )
+      throwIfScanCancelled(signal)
       if (!previewFile && !meta) continue
 
-      const preview = previewFile ? await readPreview(previewFile) : ""
+      const preview = previewFile ? await readPreview(previewFile, signal) : ""
       const mainFileName = previewFile ? path.basename(previewFile) : null
 
       items.push({
@@ -484,6 +505,7 @@ async function scanSkillsDirectory(dirPath: string): Promise<SkillDirectoryScanR
         trash: { mode: "path" },
       })
     } catch (error) {
+      throwIfScanCancelled(signal)
       logger.warn("Failed to scan skill directory.", { dirName: path.basename(skillDir), error })
     }
   }
@@ -516,13 +538,15 @@ function getEditorScanPaths(): EditorScanPaths[] {
   })
 }
 
-async function scanGlobalEditor(ep: EditorScanPaths): Promise<EditorScanGlobalResult> {
+async function scanGlobalEditor(ep: EditorScanPaths, signal?: AbortSignal): Promise<EditorScanGlobalResult> {
   try {
+    throwIfScanCancelled(signal)
     const detected = await pathExists(ep.detectionDir)
     const [skillScan, rules] = await Promise.all([
-      scanSkillDirectories(ep.globalSkillPaths),
-      scanRulesForEditor(ep.editorId, ep.globalRulesPath),
+      scanSkillDirectories(ep.globalSkillPaths, signal),
+      scanRulesForEditor(ep.editorId, ep.globalRulesPath, signal),
     ])
+    throwIfScanCancelled(signal)
     return {
       editorId: ep.editorId,
       editorLabel: ep.editorLabel,
@@ -534,6 +558,7 @@ async function scanGlobalEditor(ep: EditorScanPaths): Promise<EditorScanGlobalRe
       rulesSupported: ep.rulesSupported,
     }
   } catch (error) {
+    throwIfScanCancelled(signal)
     logger.warn("global editor scan failed", {
       editorId: ep.editorId,
       error,
@@ -552,6 +577,7 @@ async function scanGlobalEditor(ep: EditorScanPaths): Promise<EditorScanGlobalRe
 
 async function scanSkillDirectories(
   dirPaths: readonly string[],
+  signal?: AbortSignal,
 ): Promise<{ skills: EditorScanSkillItem[]; duplicateSkillNames: string[]; skillScanError?: string }> {
   const skills: EditorScanSkillItem[] = []
   const seenNames = new Set<string>()
@@ -559,7 +585,8 @@ async function scanSkillDirectories(
   const errors: string[] = []
 
   for (const dirPath of dirPaths) {
-    const result = await scanSkillsDirectory(dirPath)
+    throwIfScanCancelled(signal)
+    const result = await scanSkillsDirectory(dirPath, signal)
     if (result.error) errors.push(result.error)
 
     for (const item of result.items) {
@@ -583,9 +610,13 @@ async function scanSkillDirectories(
 async function scanRulesForEditor(
   editorId: SynapseEditorId,
   rulesPath: string | null,
+  signal?: AbortSignal,
 ): Promise<EditorScanRuleItem[]> {
+  throwIfScanCancelled(signal)
   const scanStrategy = editorScanStrategyById.get(editorId)
-  return scanStrategy ? scanStrategy.scanRules(rulesPath) : []
+  const result = scanStrategy ? await scanStrategy.scanRules(rulesPath) : []
+  throwIfScanCancelled(signal)
+  return result
 }
 
 function getProjectEditorPaths(
@@ -611,8 +642,10 @@ function getProjectEditorPaths(
 async function scanProject(
   projectPath: string,
   projectName: string,
+  signal?: AbortSignal,
 ): Promise<EditorScanProjectResult> {
   try {
+    throwIfScanCancelled(signal)
     const exists = await pathExists(projectPath)
     if (!exists) {
       return { projectPath, projectName, pathExists: false, editors: [] }
@@ -622,9 +655,10 @@ async function scanProject(
     const editorResults = await Promise.allSettled(
       editorPaths.map(async (ep): Promise<EditorScanProjectEntry> => {
         const [skillScan, rules] = await Promise.all([
-          scanSkillDirectories([ep.skillsPath]),
-          scanRulesForEditor(ep.editorId, ep.rulesPath),
+          scanSkillDirectories([ep.skillsPath], signal),
+          scanRulesForEditor(ep.editorId, ep.rulesPath, signal),
         ])
+        throwIfScanCancelled(signal)
         return {
           editorId: ep.editorId,
           editorLabel: ep.editorLabel,
@@ -636,6 +670,7 @@ async function scanProject(
     )
 
     const editors: EditorScanProjectEntry[] = []
+    throwIfScanCancelled(signal)
     for (const result of editorResults) {
       if (result.status === "fulfilled") {
         editors.push(result.value)
@@ -646,6 +681,7 @@ async function scanProject(
 
     return { projectPath, projectName, pathExists: true, editors }
   } catch (error) {
+    throwIfScanCancelled(signal)
     logger.warn("project scan failed", { projectPath, error })
     return { projectPath, projectName, pathExists: false, editors: [] }
   }
@@ -653,11 +689,12 @@ async function scanProject(
 
 // --- main export ---
 
-async function scanAll(): Promise<EditorScanResult> {
+async function scanAll(signal?: AbortSignal): Promise<EditorScanResult> {
+  throwIfScanCancelled(signal)
   const editorPaths = getEditorScanPaths()
 
   const globalPromise = Promise.all(
-    editorPaths.map(scanGlobalEditor),
+    editorPaths.map((editorPath) => scanGlobalEditor(editorPath, signal)),
   )
 
   const config = await configStore.load()
@@ -666,13 +703,18 @@ async function scanAll(): Promise<EditorScanResult> {
   const projectsPromise = (async () => {
     const settled: PromiseSettledResult<EditorScanProjectResult>[] = []
     for (let index = 0; index < projects.length; index += EDITOR_SCAN_SKILL_PREVIEW_LIMITS.projectConcurrency) {
+      throwIfScanCancelled(signal)
       const batch = projects.slice(index, index + EDITOR_SCAN_SKILL_PREVIEW_LIMITS.projectConcurrency)
-      settled.push(...await Promise.allSettled(batch.map((project) => scanProject(project.path, project.name))))
+      settled.push(...await Promise.allSettled(
+        batch.map((project) => scanProject(project.path, project.name, signal)),
+      ))
+      throwIfScanCancelled(signal)
     }
     return settled
   })()
 
   const [global, projectSettled] = await Promise.all([globalPromise, projectsPromise])
+  throwIfScanCancelled(signal)
 
   const projectResults: EditorScanProjectResult[] = []
   for (const result of projectSettled) {

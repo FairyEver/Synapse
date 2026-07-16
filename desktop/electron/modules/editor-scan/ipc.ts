@@ -29,6 +29,8 @@ import { skillRepositoryUploadService } from "../../services/skill-repository-up
 import { resolveSkillMainFile } from "../../services/content-skill-source-service"
 
 // Schemas
+const editorScanRequestSchema = z.object({ requestId: z.string().uuid() }).strict()
+const editorScanCancelResultSchema = z.object({ cancelled: z.boolean() })
 const editorScanItemSourceSchema = z.enum(["synapse", "external"])
 
 const editorScanTrashInfoSchema = z.discriminatedUnion("mode", [
@@ -219,16 +221,39 @@ const retrySkillRepositoryIdentityResultSchema = z.object({
   identityMigrationWarning: z.string().optional(),
 })
 
+const activeScanControllers = new Map<string, AbortController>()
+
 export const editorScanIpcModule: IpcModule = {
   id: "editor-scan",
   methods: {
     scanAll: {
       kind: "invoke",
       channel: "synapse:editor-scan:scan-all",
-      request: z.void(),
+      request: editorScanRequestSchema,
       response: editorScanResultSchema,
-      handler: async (_ctx) => {
-        return scanAll()
+      handler: async (_ctx, request: { requestId: string }) => {
+        const controller = new AbortController()
+        activeScanControllers.get(request.requestId)?.abort()
+        activeScanControllers.set(request.requestId, controller)
+        try {
+          return await scanAll(controller.signal)
+        } finally {
+          if (activeScanControllers.get(request.requestId) === controller) {
+            activeScanControllers.delete(request.requestId)
+          }
+        }
+      },
+    },
+    cancelScan: {
+      kind: "invoke",
+      channel: "synapse:editor-scan:cancel-scan",
+      request: editorScanRequestSchema,
+      response: editorScanCancelResultSchema,
+      handler: async (_ctx, request: { requestId: string }) => {
+        const controller = activeScanControllers.get(request.requestId)
+        if (!controller) return { cancelled: false }
+        controller.abort()
+        return { cancelled: true }
       },
     },
     readItemContent: {

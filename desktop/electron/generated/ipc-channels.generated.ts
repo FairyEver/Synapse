@@ -140,6 +140,7 @@ export const IPC_CHANNELS = {
   },
   "editor-scan": {
     "scanAll": "synapse:editor-scan:scan-all",
+    "cancelScan": "synapse:editor-scan:cancel-scan",
     "readItemContent": "synapse:editor-scan:read-item-content",
     "listSkillFiles": "synapse:editor-scan:list-skill-files",
     "prepareQuickPublishDraft": "synapse:editor-scan:prepare-quick-publish-draft",
