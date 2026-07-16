@@ -375,7 +375,7 @@ describe("createWorkflowDispatcher", () => {
     const releaseFirstSave = deferred<{ versionHash: string }>()
     const baseDefinition: WorkflowDefinition = {
       id: "wf-1", name: "Test", description: "", version: "v1",
-      createdAt: 1, updatedAt: 2, params: [],
+      createdAt: 1, updatedAt: 2, meta: { schemaVersion: "1.0.0" }, params: [],
       nodes: [endNode("n1")],
       edges: [],
     }
@@ -473,6 +473,29 @@ describe("createWorkflowDispatcher", () => {
       { definition: definitionWithoutId },
       { source: "api" },
     )).rejects.toThrow("Missing or invalid 'definition.id'")
+    expect(deps.workflowService.save).not.toHaveBeenCalled()
+  })
+
+  it("rejects workflow.definition.update before saving when schema metadata is missing", async () => {
+    const deps = makeDeps()
+    const dispatcher = createWorkflowDispatcher(deps)
+    const definition = {
+      id: "wf-1", name: "Test", description: "", version: "v1",
+      createdAt: 1, updatedAt: 2, params: [],
+      nodes: [endNode("n1")],
+      edges: [],
+    }
+
+    await expect(dispatcher.dispatch(
+      "workflow.definition.update",
+      { definition },
+      { source: "api" },
+    )).rejects.toThrow("Missing or invalid 'definition.meta': expected object")
+    await expect(dispatcher.dispatch(
+      "workflow.definition.update",
+      { definition: { ...definition, meta: {} } },
+      { source: "api" },
+    )).rejects.toThrow("Missing or invalid 'definition.meta.schemaVersion': expected non-empty string")
     expect(deps.workflowService.save).not.toHaveBeenCalled()
   })
 
@@ -718,7 +741,7 @@ describe("createWorkflowDispatcher", () => {
     }
     const definition: WorkflowDefinition = {
       id: "wf-1", name: "Updated", description: "", version: "v1",
-      createdAt: 1, updatedAt: 2, params: [],
+      createdAt: 1, updatedAt: 2, meta: { schemaVersion: "1.0.0" }, params: [],
       nodes: [endNode("n1")],
       edges: [],
     }

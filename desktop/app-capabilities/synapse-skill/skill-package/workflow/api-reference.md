@@ -277,7 +277,7 @@ Create a new empty workflow with a default end node.
 
 Replace a full workflow definition. Validates before saving.
 
-**Params:** `definition` (object, required) — must include `id`
+**Params:** `definition` (object, required) — must include `id` and the complete Synapse-managed `meta` object with `meta.schemaVersion`
 **Returns:** `{ versionHash }`
 **Notes:** Config is replaced entirely, not merged. Include `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` to set workflow-level defaults.
 

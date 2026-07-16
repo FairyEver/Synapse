@@ -326,6 +326,8 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "workflow.definition.update": async (params, deps) => {
     const rawDefinition = requireObject(params, "definition")
     const workflowId = requireNestedString(rawDefinition, "definition", "id")
+    const meta = requireNestedObject(rawDefinition, "definition", "meta")
+    requireNestedString(meta, "definition.meta", "schemaVersion")
     return withWorkflowMutationLock(deps, workflowId, async () => {
       const existing = await deps.workflowService.get(workflowId)
       if (!existing) throw new Error(`Workflow not found: ${workflowId}`)

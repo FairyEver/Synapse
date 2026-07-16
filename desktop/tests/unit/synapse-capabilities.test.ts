@@ -261,11 +261,16 @@ describe("Workflow MCP tool schemas", () => {
 
     const updateDefinition = tool("workflow_definition_update").inputSchema.properties.definition as {
       properties?: Record<string, unknown>
+      required?: string[]
     }
     expect(updateDefinition.properties).toHaveProperty("defaultProjectId")
     expect(updateDefinition.properties).toHaveProperty("defaultProviderId")
     expect(updateDefinition.properties).toHaveProperty("defaultModelTier")
     expect(updateDefinition.properties).toHaveProperty("defaultNodeTimeoutMins")
+    expect(updateDefinition.required).toContain("meta")
+    expect(updateDefinition.properties?.meta).toEqual(expect.objectContaining({
+      required: ["schemaVersion"],
+    }))
   })
 
   it("documents executable workflow errors with node and timeout diagnostics", () => {

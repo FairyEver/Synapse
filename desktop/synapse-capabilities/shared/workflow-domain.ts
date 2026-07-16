@@ -256,7 +256,7 @@ const workflowDefinitionSchema = {
       },
     },
   },
-  required: ["id", "name", "params", "nodes", "edges"],
+  required: ["meta", "id", "name", "params", "nodes", "edges"],
 }
 
 export function buildWorkflowTools(): McpToolDefinition[] {
@@ -341,7 +341,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     },
     {
       name: "workflow_definition_update",
-      description: "Replace a full workflow definition. The definition must include the workflow id. Validates before saving.",
+      description: "Replace a full workflow definition. The definition must include the workflow id and Synapse-managed meta.schemaVersion. Validates before saving.",
       inputSchema: {
         type: "object",
         properties: { definition: workflowDefinitionSchema },
