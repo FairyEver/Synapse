@@ -14,6 +14,7 @@ import {
   readBinaryFile,
   writeBinaryFileAtomic,
 } from "../../runtime/data-repo"
+import { isPathInside } from "../fs-utils"
 import {
   WORKFLOW_LEGACY_BASELINE_VERSION,
   WORKFLOW_SCHEMA_VERSION,
@@ -408,12 +409,6 @@ async function assertTrustedLegacyDirectoryUnchanged(
   ) {
     throw new Error("Legacy workflow recovery directory changed or escaped its configured repository.")
   }
-}
-
-function isPathInside(rootPath: string, targetPath: string): boolean {
-  const relative = path.relative(rootPath, targetPath)
-  return relative === ""
-    || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
 }
 
 function resolveLegacyWorkflowScanOptions(options: LegacyWorkflowScanOptions) {

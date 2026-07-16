@@ -4,7 +4,7 @@ import { lstat, open, realpath, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
-import { isFileNotFoundError } from "./fs-utils"
+import { hasSameFileSnapshot, isFileNotFoundError, isPathInside } from "./fs-utils"
 
 const sharedSkillRepositoryPromise = import("@synapse/shared")
 export const SKILL_REPOSITORY_ID_FILE_NAME = ".synapse.repository.json"
@@ -308,7 +308,7 @@ async function readVerifiedIdentityFile(
   const handle = await open(filePath, constants.O_RDONLY | noFollowFlag | nonBlockingFlag)
   try {
     const opened = await handle.stat({ bigint: true })
-    if (!opened.isFile() || !sameFileSnapshot(expected, opened)) {
+    if (!opened.isFile() || !hasSameFileSnapshot(expected, opened)) {
       throw new Error("Skill 云仓库身份文件在读取前发生变化。")
     }
     const raw = await handle.readFile({ encoding: "utf8" })
@@ -320,8 +320,8 @@ async function readVerifiedIdentityFile(
     if (
       pathAfterRead.isSymbolicLink()
       || !pathAfterRead.isFile()
-      || !sameFileSnapshot(expected, afterRead)
-      || !sameFileSnapshot(expected, pathAfterRead)
+      || !hasSameFileSnapshot(expected, afterRead)
+      || !hasSameFileSnapshot(expected, pathAfterRead)
       || !isPathInside(sourceRealPath, realPathAfterRead)
     ) {
       throw new Error("Skill 云仓库身份文件在读取期间发生变化。")
@@ -332,24 +332,10 @@ async function readVerifiedIdentityFile(
   }
 }
 
-function sameFileSnapshot(expected: BigIntStats, actual: BigIntStats): boolean {
-  return expected.dev === actual.dev
-    && expected.ino === actual.ino
-    && expected.mode === actual.mode
-    && expected.size === actual.size
-    && expected.mtimeNs === actual.mtimeNs
-    && expected.ctimeNs === actual.ctimeNs
-}
-
 function sameDirectoryIdentity(expected: BigIntStats, actual: BigIntStats): boolean {
   return expected.dev === actual.dev
     && expected.ino === actual.ino
     && expected.mode === actual.mode
-}
-
-function isPathInside(rootPath: string, targetPath: string): boolean {
-  const relative = path.relative(rootPath, targetPath)
-  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
 }
 
 async function checkIdentityReadPermission(
