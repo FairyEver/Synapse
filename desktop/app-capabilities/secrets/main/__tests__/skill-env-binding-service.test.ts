@@ -123,6 +123,58 @@ describe("SkillEnvBindingService", () => {
     ])
   })
 
+  it("updates multiple keys in the same env file without conflicting with its own batch", async () => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\nREGION=old\n")
+    const harness = createHarness([trustedRoot(root)])
+    const groups = await harness.service.scanMany([
+      { name: "TOKEN", value: "new-token" },
+      { name: "REGION", value: "new-region" },
+    ], harness.security)
+
+    const results = []
+    for (const { name, scanResult } of groups) {
+      results.push(await harness.service.enqueue({
+        name,
+        scanSessionId: scanResult.scanSessionId,
+        itemIds: [scanResult.items[0].id],
+      }, async () => name === "TOKEN" ? "new-token" : "new-region", harness.security))
+    }
+
+    expect(results.map(({ items }) => items[0].status)).toEqual(["updated", "updated"])
+    expect(await readFile(path.join(skill, ".env"), "utf8"))
+      .toBe('TOKEN="new-token"\nREGION="new-region"\n')
+  })
+
+  it("still detects an external change between same-file batch updates", async () => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\nREGION=old\n")
+    const envPath = path.join(skill, ".env")
+    const harness = createHarness([trustedRoot(root)])
+    const groups = await harness.service.scanMany([
+      { name: "TOKEN", value: "new-token" },
+      { name: "REGION", value: "new-region" },
+    ], harness.security)
+    const [tokenGroup, regionGroup] = groups
+
+    await harness.service.enqueue({
+      name: tokenGroup.name,
+      scanSessionId: tokenGroup.scanResult.scanSessionId,
+      itemIds: [tokenGroup.scanResult.items[0].id],
+    }, async () => "new-token", harness.security)
+    await writeFile(envPath, 'TOKEN="new-token"\nREGION=external\n')
+    const result = await harness.service.enqueue({
+      name: regionGroup.name,
+      scanSessionId: regionGroup.scanResult.scanSessionId,
+      itemIds: [regionGroup.scanResult.items[0].id],
+    }, async () => "new-region", harness.security)
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "conflict" }),
+    ])
+    expect(await readFile(envPath, "utf8")).toBe('TOKEN="new-token"\nREGION=external\n')
+  })
+
   it("does not recurse below direct child Skill directories", async () => {
     const root = await createRoot()
     await createSkill(path.join(root, "group"), "nested", "TOKEN=old\n")
@@ -1415,7 +1467,7 @@ describe("SkillEnvBindingService", () => {
       itemIds: [scan.items[0].id],
     }, async () => "new", harness.security)
 
-    expect(sourceOpenFlags).toHaveLength(2)
+    expect(sourceOpenFlags).toHaveLength(3)
     if (constants.O_NONBLOCK !== 0) {
       expect(sourceOpenFlags.every((flags) => (flags & constants.O_NONBLOCK) === constants.O_NONBLOCK))
         .toBe(true)

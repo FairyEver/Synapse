@@ -87,8 +87,9 @@ function emptyBindingEvidence(): Pick<StoredBinding, "rootIdentity" | "skillIden
 
 type ScanSession = {
   readonly createdAt: number
+  readonly batchId: string
   readonly name: string
-  readonly items: ReadonlyMap<string, StoredBinding>
+  readonly items: Map<string, StoredBinding>
 }
 
 type SkillEnvBindingScanRequest = {
@@ -186,6 +187,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
     security: SkillEnvBindingSecurity,
   ): Promise<SkillEnvBindingScanGroup[]> {
     const timestamp = now()
+    const batchId = createId()
     pruneSessions(timestamp)
     const storedItemsByName = new Map(requests.map(({ name }) => [name, new Map<string, StoredBinding>()]))
 
@@ -202,7 +204,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
     return requests.map(({ name }) => {
       const storedItems = storedItemsByName.get(name) ?? new Map<string, StoredBinding>()
       const scanSessionId = createId()
-      sessions.set(scanSessionId, { createdAt: timestamp, name, items: storedItems })
+      sessions.set(scanSessionId, { createdAt: timestamp, batchId, name, items: storedItems })
       return {
         name,
         scanResult: {
@@ -240,7 +242,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
       const currentRoots = await deps.listRoots()
       const results: SkillEnvBindingQueueItem[] = []
       for (const stored of selected as StoredBinding[]) {
-        results.push(await updateOne(stored, input.name, value, currentRoots, security))
+        results.push(await updateOne(stored, input.name, value, session.batchId, currentRoots, security))
       }
       return { items: results }
     })
@@ -397,6 +399,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
     stored: StoredBinding,
     name: string,
     value: string,
+    batchId: string,
     currentRoots: readonly TrustedSkillRoot[],
     security: SkillEnvBindingSecurity,
   ): Promise<SkillEnvBindingQueueItem> {
@@ -562,6 +565,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
             skillName: stored.publicItem.skillName,
           })
         }
+        await refreshBatchBindingSnapshots(batchId, stored, nextContent)
         return recordQueueResult(base, "updated", undefined, security, {
           ...auditMetadata,
           ...(committedHandleCloseFailed ? { committedHandleCloseFailed: true } : undefined),
@@ -598,6 +602,49 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         return recordQueueResult(base, "failed", "配置文件写入失败。", security, metadata, "failed")
       }
       return recordQueueResult(base, "failed", "配置文件写入失败。", security, auditMetadata, "failed")
+    }
+  }
+
+  async function refreshBatchBindingSnapshots(
+    batchId: string,
+    committedBinding: StoredBinding,
+    expectedContent: string,
+  ): Promise<void> {
+    let validated: ValidatedBinding | undefined
+    try {
+      validated = await openValidatedBinding(
+        committedBinding.root,
+        committedBinding.publicItem.skillName,
+        committedBinding.publicItem.envPath,
+        "read",
+        deps.openFile,
+      )
+      const fileHash = hashContent(validated.content)
+      if (fileHash !== hashContent(expectedContent)) return
+
+      for (const session of sessions.values()) {
+        if (session.batchId !== batchId) continue
+        for (const [itemId, binding] of session.items) {
+          if (binding.publicItem.envPath !== committedBinding.publicItem.envPath) continue
+          session.items.set(itemId, {
+            ...binding,
+            fileHash,
+            rootIdentity: validated.rootIdentity,
+            skillIdentity: validated.skillIdentity,
+            envIdentity: validated.envIdentity,
+            rootRealPath: validated.rootRealPath,
+            skillRealPath: validated.skillRealPath,
+            envRealPath: validated.envRealPath,
+          })
+        }
+      }
+    } catch {
+      deps.logger.warn("Failed to refresh queued Skill env binding snapshots.", {
+        scope: committedBinding.publicItem.scope,
+        skillName: committedBinding.publicItem.skillName,
+      })
+    } finally {
+      await validated?.handle.close().catch(() => undefined)
     }
   }
 
