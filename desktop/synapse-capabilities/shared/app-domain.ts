@@ -266,7 +266,7 @@ export function buildAppTools(): McpToolDefinition[] {
           },
         },
         required: ["templatePath", "outputPath"],
-        anyOf: [
+        oneOf: [
           { required: ["dataPath"] },
           { required: ["data"] },
         ],

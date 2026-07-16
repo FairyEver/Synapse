@@ -11,6 +11,7 @@ import {
   SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
 } from "../../app-capabilities/sound-notifier/shared/capability"
 import { SECRETS_MCP_TOOL_NAMES } from "../../app-capabilities/secrets/shared/capability"
+import { DOCUMENT_TEMPLATE_MCP_TOOL_NAME } from "../../app-capabilities/document-template/shared/capability"
 import { APP_DOMAIN, APP_MCP_TOOL_ACTIONS, buildAppTools } from "./app-domain"
 import { assertCanonicalCapabilityId, capabilityIdToMcpTool } from "./naming"
 import { MCP_TOOL_ACTIONS, buildAllMcpTools, getActionDomainId } from "./registry"
@@ -41,6 +42,19 @@ describe("App capability domain", () => {
     expect(APP_MCP_TOOL_ACTIONS[TERMINAL_MCP_TOOL_NAMES.sessionResize]).toBe(
       TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
     )
+  })
+
+  it("requires exactly one document template data source", () => {
+    const tool = buildAppTools().find((item) => item.name === DOCUMENT_TEMPLATE_MCP_TOOL_NAME)
+
+    expect(tool?.inputSchema).toMatchObject({
+      required: ["templatePath", "outputPath"],
+      oneOf: [
+        { required: ["dataPath"] },
+        { required: ["data"] },
+      ],
+    })
+    expect(tool?.inputSchema).not.toHaveProperty("anyOf")
   })
 
   it("maps public terminal rename and delete tools to their capabilities", () => {
