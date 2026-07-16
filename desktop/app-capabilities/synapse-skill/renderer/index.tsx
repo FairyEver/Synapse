@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Download, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "../../../src/app-shell/config"
@@ -154,7 +154,9 @@ function removeBatchError(errors: Record<string, string>, editorId: string | und
 
 function SynapseSkillModule() {
   const { config } = useAppConfig()
-  const [source, setSource] = useState<SynapseSkillInstallerSource | null>(null)
+  const sourceRef = useRef<SynapseSkillInstallerSource | null>(null)
+  const sourcePromiseRef = useRef<Promise<SynapseSkillInstallerSource> | null>(null)
+  const refreshRequestIdRef = useRef(0)
   const [flowSource, setFlowSource] = useState<SynapseSkillInstallerSource | null>(null)
   const [initialEditor, setInitialEditor] = useState<SynapseEditorAdapterSummary | null>(null)
   const [statusEntries, setStatusEntries] = useState<SynapseEditorInstallStatusEntry[]>([])
@@ -174,27 +176,37 @@ function SynapseSkillModule() {
   )
 
   const ensureSource = useCallback(async () => {
-    if (source) return source
-    const nextSource = await requireBridgeDomain("synapseSkill").prepareInstallSource()
-    setSource(nextSource)
-    return nextSource
-  }, [source])
+    if (sourceRef.current) return sourceRef.current
+    sourcePromiseRef.current ??= requireBridgeDomain("synapseSkill").prepareInstallSource()
+    try {
+      const nextSource = await sourcePromiseRef.current
+      sourceRef.current = nextSource
+      return nextSource
+    } finally {
+      sourcePromiseRef.current = null
+    }
+  }, [])
 
   const refreshStatus = useCallback(async () => {
+    const requestId = ++refreshRequestIdRef.current
     setStatusLoading(true)
     setStatusError("")
     try {
       const installSource = await ensureSource()
       const result = await inspectGlobalSkillInstallations(installSource)
+      if (requestId !== refreshRequestIdRef.current) return
       const globalEntries = result.entries.filter((entry) => entry.scope === "global")
       setStatusEntries(globalEntries)
       setBatchErrors((current) => retainBatchErrorsForRetryableEditors(current, globalEntries))
     } catch (error) {
+      if (requestId !== refreshRequestIdRef.current) return
       const message = error instanceof Error ? error.message : "读取安装状态失败"
       logger.error("Failed to load Synapse Skill install status.", error)
       setStatusError(message)
     } finally {
-      setStatusLoading(false)
+      if (requestId === refreshRequestIdRef.current) {
+        setStatusLoading(false)
+      }
     }
   }, [ensureSource])
 

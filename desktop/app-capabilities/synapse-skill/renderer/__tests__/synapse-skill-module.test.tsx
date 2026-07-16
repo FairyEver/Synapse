@@ -177,6 +177,8 @@ describe("SynapseSkillModule", () => {
     await renderModule()
 
     expect(loadEditors).toHaveBeenCalled()
+    expect(synapseSkillBridge.prepareInstallSource).toHaveBeenCalledTimes(1)
+    expect(inspectGlobalSkillInstallations).toHaveBeenCalledTimes(1)
     expect(inspectGlobalSkillInstallations).toHaveBeenCalledWith(preparedSource)
     expect(document.body.textContent).toContain("全局安装状态")
     expect(document.body.textContent).toContain("Codex")
@@ -206,9 +208,7 @@ describe("SynapseSkillModule", () => {
         },
       ],
     }
-    inspectGlobalSkillInstallations
-      .mockResolvedValueOnce(installedResult)
-      .mockResolvedValueOnce(installedResult)
+    inspectGlobalSkillInstallations.mockResolvedValueOnce(installedResult)
     await renderModule()
 
     expect(document.body.textContent).not.toContain("已安装")
@@ -232,9 +232,7 @@ describe("SynapseSkillModule", () => {
         },
       ],
     }
-    inspectGlobalSkillInstallations
-      .mockResolvedValueOnce(conflictResult)
-      .mockResolvedValueOnce(conflictResult)
+    inspectGlobalSkillInstallations.mockResolvedValueOnce(conflictResult)
 
     await renderModule()
 
@@ -400,7 +398,6 @@ describe("SynapseSkillModule", () => {
       }],
     }
     inspectGlobalSkillInstallations
-      .mockResolvedValueOnce(missingResult)
       .mockResolvedValueOnce(missingResult)
       .mockResolvedValueOnce(missingResult)
       .mockResolvedValueOnce(installedResult)
