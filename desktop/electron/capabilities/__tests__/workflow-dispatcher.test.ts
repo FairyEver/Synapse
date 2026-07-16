@@ -559,6 +559,29 @@ describe("createWorkflowDispatcher", () => {
     }))
   })
 
+  it("inspects omitted parameter defaults with the same normalization as write tools", async () => {
+    const dispatcher = createWorkflowDispatcher(makeDeps())
+    const definition = {
+      id: "workflow-1",
+      name: "Workflow",
+      version: "v1",
+      createdAt: 1,
+      updatedAt: 2,
+      params: [{ name: "topic", type: "text" }],
+      nodes: [endNode()],
+      edges: [],
+    }
+
+    const result = await dispatcher.dispatch(
+      "workflow.definition.inspect",
+      { definition },
+      { source: "api" },
+    )
+
+    expect(result.data).toEqual(expect.objectContaining({ valid: true, errors: [] }))
+    expect(definition.params[0]).not.toHaveProperty("default")
+  })
+
   it.skipIf(process.platform === "win32")("reports aliased multi-resource defaults during definition inspection", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "workflow-inspect-"))
     try {

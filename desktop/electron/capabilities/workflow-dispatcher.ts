@@ -70,6 +70,15 @@ function requireArray(params: Record<string, unknown>, key: string): unknown[] {
   return v
 }
 
+function normalizeWorkflowParamDefaults(params: unknown): void {
+  if (!Array.isArray(params)) return
+  for (const param of params) {
+    if (param && typeof param === "object" && (param as { default?: unknown }).default === undefined) {
+      (param as { default: unknown }).default = null
+    }
+  }
+}
+
 function optionalEdgeSpecs(
   params: Record<string, unknown>,
   key: "incomingEdges" | "outgoingEdges",
@@ -267,7 +276,8 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 
   "workflow.definition.inspect": async (params, deps) => {
-    const definition = requireObject(params, "definition") as unknown as WorkflowDefinition
+    const definition = structuredClone(requireObject(params, "definition")) as unknown as WorkflowDefinition
+    normalizeWorkflowParamDefaults(definition.params)
     const result = await validateWorkflowForDispatch(deps, definition)
     return { ok: true, data: result }
   },
@@ -340,13 +350,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
       if (typeof definition.updatedAt !== "number") definition.updatedAt = now
       if (!definition.version) definition.version = ""
       // Ensure every param has a `default` (required by IPC schema)
-      if (Array.isArray(definition.params)) {
-        for (const p of definition.params) {
-          if ((p as { default?: unknown }).default === undefined) {
-            (p as { default: unknown }).default = null
-          }
-        }
-      }
+      normalizeWorkflowParamDefaults(definition.params)
       const saveResult = await deps.workflowService.save(definition)
       if ("errors" in saveResult) throw new Error(`Save failed: ${(saveResult as WorkflowSaveError).errors.map((e) => e.message).join("; ")}`)
       emitDefinitionUpdated(deps.eventBus, workflowId, "mcp", (saveResult as WorkflowSaveResult).versionHash)
@@ -498,11 +502,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "workflow.param.update": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const newParams = requireArray(params, "params")
-    for (const p of newParams) {
-      if (p && typeof p === "object" && (p as { default?: unknown }).default === undefined) {
-        (p as { default: unknown }).default = null
-      }
-    }
+    normalizeWorkflowParamDefaults(newParams)
     return atomicMutate(deps, workflowId, (def) => {
       def.params = newParams as WorkflowDefinition["params"]
     })
