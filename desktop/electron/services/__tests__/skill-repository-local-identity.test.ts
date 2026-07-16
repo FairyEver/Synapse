@@ -195,6 +195,49 @@ describe("writeSkillRepositoryIdentity", () => {
     expect((await readdir(dir)).filter((entry) => entry.endsWith(".tmp"))).toEqual([])
   })
 
+  it("requires read permission for the final identity concurrency check", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-id-read-denied-"))
+    const targetPath = path.join(dir, ".synapse.repository.json")
+    const previousIdentity = { ...identity, id: "repo-previous" }
+    const previousRaw = `${JSON.stringify(previousIdentity, null, 2)}\n`
+    await writeFile(targetPath, previousRaw, "utf8")
+    const permissionRequests: PermissionRequest[] = []
+    const permissionGuard: PermissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async (request) => {
+        permissionRequests.push(request)
+        return request.action === "fs.write"
+          ? { allowed: true as const }
+          : { allowed: false as const, reason: "identity read denied", policyId: "policy-read" }
+      }),
+    }
+    const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+    const auditSink = auditSinkRecording(auditEvents)
+
+    await expect(writeSkillRepositoryIdentity(
+      dir,
+      identity,
+      previousRaw,
+      { actor, auditSink, permissionGuard },
+    )).rejects.toThrow("identity read denied")
+
+    expect(permissionRequests.map((request) => request.action)).toEqual([
+      "fs.write",
+      "fs.read.outside-userdata",
+    ])
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "denied",
+      resource: targetPath,
+    }))
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "fs.write",
+      outcome: "failed",
+      resource: targetPath,
+    }))
+    await expect(readFile(targetPath, "utf8")).resolves.toBe(previousRaw)
+  })
+
   it("does not commit the identity when the guarded Skill source changed before rename", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-id-source-conflict-"))
     const targetPath = path.join(dir, ".synapse.repository.json")

@@ -76,7 +76,7 @@ export async function writeSkillRepositoryIdentity(
     const expectedSourceDirectory = await inspectSourceDirectory(sourceDirectoryPath)
     tempPath = path.join(sourceDirectoryPath, `${SKILL_REPOSITORY_ID_FILE_NAME}.${randomUUID()}.tmp`)
     await writeFile(tempPath, `${JSON.stringify(identity, null, 2)}\n`, "utf8")
-    const currentRaw = await readSkillRepositoryIdentityRaw(sourceDirectoryPath)
+    const currentRaw = await readSkillRepositoryIdentityRaw(sourceDirectoryPath, security)
     if (currentRaw !== expectedRaw) throw new SkillRepositoryIdentityChangedError()
     const currentSourceDirectory = await inspectSourceDirectory(sourceDirectoryPath)
     if (!sameDirectoryIdentity(expectedSourceDirectory, currentSourceDirectory)) {
