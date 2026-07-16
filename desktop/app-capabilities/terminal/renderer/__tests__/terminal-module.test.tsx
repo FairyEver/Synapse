@@ -722,6 +722,7 @@ describe("TerminalModule", () => {
     expect(terminalBridge.readSession).toHaveBeenLastCalledWith({
       sessionId: "session-1",
       afterSeq: 0,
+      limitBytes: 1024 * 1024,
     })
   })
 
@@ -958,6 +959,7 @@ describe("TerminalModule", () => {
     expect(terminalBridge.readSession).toHaveBeenLastCalledWith({
       sessionId: "session-2",
       afterSeq: 0,
+      limitBytes: 1024 * 1024,
     })
   })
 
@@ -977,6 +979,7 @@ describe("TerminalModule", () => {
     expect(terminalBridge.readSession).toHaveBeenLastCalledWith({
       sessionId: "session-2",
       afterSeq: 0,
+      limitBytes: 1024 * 1024,
     })
   })
 
@@ -1249,6 +1252,7 @@ describe("TerminalModule", () => {
     expect(terminalBridge.readSession).toHaveBeenCalledWith({
       sessionId: "session-1",
       afterSeq: 0,
+      limitBytes: 1024 * 1024,
     })
     expect(xtermState.instances[0]?.write).toHaveBeenCalledWith("ready\r\n")
     expect(terminalBridge.runStartupCommand).not.toHaveBeenCalled()
@@ -1373,6 +1377,63 @@ describe("TerminalModule", () => {
     expect(writes).toContain("during-read\r\n")
     expect(writes?.filter((data) => data === "during-read\r\n")).toHaveLength(1)
   })
+
+  it("restores every retained output page after switching back to a running session", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [
+      createSession({
+        id: "session-1",
+        groupId: "group-1",
+        title: "构建终端",
+        updatedAt: "2026-06-24T00:02:00.000Z",
+      }),
+      createSession({
+        id: "session-2",
+        groupId: "group-1",
+        title: "日志终端",
+        updatedAt: "2026-06-24T00:01:00.000Z",
+      }),
+    ]
+
+    await renderModule()
+    await clickSession("日志终端")
+
+    bridgeState.sessions = bridgeState.sessions.map((session) => session.id === "session-1"
+      ? { ...session, lastOutputSeq: 3 }
+      : session)
+    bridgeState.chunks = [
+      createChunk({ sessionId: "session-1", seq: 1, data: "before-switch\r\n" }),
+      createChunk({ sessionId: "session-1", seq: 2, data: "while-hidden-1\r\n" }),
+      createChunk({ sessionId: "session-1", seq: 3, data: "while-hidden-2\r\n" }),
+    ]
+    terminalBridge.readSession.mockImplementation(async ({ sessionId, afterSeq = 0 }) => {
+      const retainedChunks = bridgeState.chunks.filter((chunk) =>
+        chunk.sessionId === sessionId && chunk.seq > afterSeq)
+      const chunks = retainedChunks.slice(0, 1)
+      return {
+        session: getSession(sessionId),
+        chunks,
+        nextSeq: chunks.at(-1)?.seq ?? afterSeq,
+        truncated: false,
+        firstSeq: retainedChunks[0]?.seq ?? 0,
+      }
+    })
+    terminalBridge.readSession.mockClear()
+
+    await clickSession("构建终端")
+
+    const restoredWrites = xtermState.instances.at(-1)?.write.mock.calls.map(([data]) => data)
+    expect(restoredWrites).toEqual([
+      "before-switch\r\n",
+      "while-hidden-1\r\n",
+      "while-hidden-2\r\n",
+    ])
+    expect(terminalBridge.readSession.mock.calls).toEqual([
+      [{ sessionId: "session-1", afterSeq: 0, limitBytes: 1024 * 1024 }],
+      [{ sessionId: "session-1", afterSeq: 1, limitBytes: 1024 * 1024 }],
+      [{ sessionId: "session-1", afterSeq: 2, limitBytes: 1024 * 1024 }],
+    ])
+  })
 })
 
 async function renderModule(): Promise<void> {
@@ -1433,6 +1494,17 @@ async function doubleClickSession(title: string): Promise<void> {
     .find((element) => element.textContent?.includes(title))
   await act(async () => {
     row?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))
+    await Promise.resolve()
+  })
+}
+
+async function clickSession(title: string): Promise<void> {
+  const row = Array.from(document.body.querySelectorAll<HTMLElement>('[role="button"][data-track="terminal-session-select"]'))
+    .find((element) => element.textContent?.includes(title))
+  await act(async () => {
+    row?.click()
+    await Promise.resolve()
+    await Promise.resolve()
     await Promise.resolve()
   })
 }

@@ -1,9 +1,16 @@
-import { useEffect, useId, useMemo, useState } from "react"
+import { type ReactNode, useEffect, useId, useMemo, useState } from "react"
 import { CircleHelp } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+  FieldTitle,
+} from "@/components/ui/field"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
@@ -125,25 +132,25 @@ function AgentUserQuestionCard({
   }
 
   return (
-    <div
+    <Card
       data-agent-permission-request-id={item.requestId}
       className={cn(
-        "my-1 overflow-hidden rounded-lg border border-border bg-card",
+        "my-1 min-w-0 max-w-full gap-0 py-0",
         isLatestPending && interactive && "ring-2 ring-primary",
       )}
     >
-      <div className="flex items-center gap-2 bg-muted/30 px-3 py-2">
+      <CardHeader className="flex min-w-0 flex-row items-center gap-2 rounded-none px-3 py-2">
         <CircleHelp className="size-4 shrink-0 text-muted-foreground" />
-        <span className="text-sm font-semibold">{questions[0]?.header ?? "需要选择"}</span>
+        <CardTitle className="min-w-0 text-sm font-semibold text-balance">需要回答</CardTitle>
         <div className="ml-auto flex items-center gap-1.5">
           {!interactive ? (
             <Badge variant="secondary">{resolutionStatusLabel(item.resolution)}</Badge>
           ) : null}
         </div>
-      </div>
+      </CardHeader>
 
       {questions.length > 0 ? (
-        <div className="flex flex-col gap-4 border-t border-border p-3">
+        <CardContent className="flex min-w-0 flex-col gap-4 border-t border-border px-3 py-3">
           {questions.map((question, index) => (
             <QuestionBlock
               key={`${question.question}:${index}`}
@@ -157,19 +164,20 @@ function AgentUserQuestionCard({
               onToggleMulti={toggleMulti}
             />
           ))}
-        </div>
+        </CardContent>
       ) : body ? (
-        <div className="border-t border-border bg-muted p-3">
+        <CardContent className="min-w-0 border-t border-border bg-muted px-3 py-3">
           <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-5 text-foreground">{body}</pre>
-        </div>
+        </CardContent>
       ) : null}
 
       {interactive ? (
-        <div className="flex items-center gap-2 border-t border-border px-3 py-2">
+        <CardFooter className="gap-2 rounded-none px-3 py-2">
           <Button
             type="button"
             variant="outline"
             size="sm"
+            className="relative after:absolute after:inset-x-0 after:-inset-y-1.5"
             disabled={submitting}
             onClick={() => void handleSkip()}
           >
@@ -178,14 +186,15 @@ function AgentUserQuestionCard({
           <Button
             type="button"
             size="sm"
+            className="relative after:absolute after:inset-x-0 after:-inset-y-1.5"
             disabled={!complete || submitting}
             onClick={() => void handleSubmit()}
           >
-            提交
+            提交回答
           </Button>
-        </div>
+        </CardFooter>
       ) : null}
-    </div>
+    </Card>
   )
 }
 
@@ -213,35 +222,33 @@ function QuestionBlock({
     ? selected.filter((value) => !options.some((option) => option.label === value))
     : []
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-col gap-1">
+    <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex flex-col gap-0.5">
         {question.header ? (
-          <Badge variant="secondary" className="h-5 text-xs">{question.header}</Badge>
+          <p className="break-words text-xs font-medium leading-5 text-muted-foreground text-pretty">
+            {question.header}
+          </p>
         ) : null}
-        <p className="text-sm font-medium">{question.question}</p>
+        <p className="break-words text-sm font-medium text-balance">{question.question}</p>
       </div>
       {question.multiSelect ? (
         <div className="grid gap-2">
           {options.map((option, optionIndex) => {
             const optionId = `agent-question-${idPrefix}-${optionIndex}`
             return (
-              <Label
+              <QuestionOption
                 key={optionId}
-                htmlFor={optionId}
-                className={cn(
-                  "flex cursor-pointer items-start gap-2 rounded-md border border-border p-2",
-                  disabled && "cursor-default",
-                  selected.includes(option.label) && "bg-muted/50",
-                )}
-              >
-                <Checkbox
+                id={optionId}
+                label={option.label}
+                description={option.description}
+                disabled={disabled}
+                control={<Checkbox
                   id={optionId}
                   checked={selected.includes(option.label)}
                   disabled={disabled}
                   onCheckedChange={(checked) => onToggleMulti(index, option.label, checked === true)}
-                />
-                <OptionText label={option.label} description={option.description} />
-              </Label>
+                />}
+              />
             )
           })}
         </div>
@@ -254,18 +261,14 @@ function QuestionBlock({
           {options.map((option, optionIndex) => {
             const optionId = `agent-question-${idPrefix}-${optionIndex}`
             return (
-              <Label
+              <QuestionOption
                 key={optionId}
-                htmlFor={optionId}
-                className={cn(
-                  "flex cursor-pointer items-start gap-2 rounded-md border border-border p-2",
-                  disabled && "cursor-default",
-                  selected.includes(option.label) && "bg-muted/50",
-                )}
-              >
-                <RadioGroupItem id={optionId} value={option.label} />
-                <OptionText label={option.label} description={option.description} />
-              </Label>
+                id={optionId}
+                label={option.label}
+                description={option.description}
+                disabled={disabled}
+                control={<RadioGroupItem id={optionId} value={option.label} />}
+              />
             )
           })}
         </RadioGroup>
@@ -277,20 +280,41 @@ function QuestionBlock({
   )
 }
 
-function OptionText({
+function QuestionOption({
+  id,
   label,
   description,
+  disabled,
+  control,
 }: {
+  readonly id: string
   readonly label: string
   readonly description?: string
+  readonly disabled: boolean
+  readonly control: ReactNode
 }) {
   return (
-    <span className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-sm font-medium">{label}</span>
-      {description ? (
-        <span className="text-xs leading-5 text-muted-foreground">{description}</span>
-      ) : null}
-    </span>
+    <FieldLabel
+      htmlFor={id}
+      className={cn(
+        "min-w-0 transition-[background-color,border-color,scale] duration-150 ease-out motion-reduce:transition-none",
+        disabled
+          ? "cursor-default"
+          : "cursor-pointer hover:bg-muted/50 active:scale-[0.96] motion-reduce:active:scale-100",
+      )}
+    >
+      <Field orientation="horizontal" className="min-w-0">
+        {control}
+        <FieldContent className="min-w-0">
+          <FieldTitle className="w-auto min-w-0 break-words text-pretty">{label}</FieldTitle>
+          {description ? (
+            <FieldDescription className="break-words text-xs leading-5 text-pretty">
+              {description}
+            </FieldDescription>
+          ) : null}
+        </FieldContent>
+      </Field>
+    </FieldLabel>
   )
 }
 

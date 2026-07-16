@@ -473,7 +473,7 @@ describe("ProviderModelSelectDialog", () => {
     expect(confirmButton?.disabled).toBe(true)
   })
 
-  it("submits confirm input with Enter", async () => {
+  it("focuses the confirm input and submits it with Enter", async () => {
     bridge.agent.listProviders.mockResolvedValue([
       provider({ id: "anthropic", name: "Claude Official", active: true, model: "claude-main", sonnetModel: "claude-sonnet" }),
     ])
@@ -490,8 +490,10 @@ describe("ProviderModelSelectDialog", () => {
     })
 
     const input = document.querySelector<HTMLInputElement>("input[aria-label='会话名称']")
+    expect(document.activeElement).toBe(input)
+
     await act(async () => {
-      input?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
     })
 
     expect(props.onSelect).toHaveBeenCalledWith(expect.objectContaining({

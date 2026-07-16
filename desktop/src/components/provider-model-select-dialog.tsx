@@ -81,6 +81,7 @@ function ProviderModelSelectDialog({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmInputValue, setConfirmInputValue] = useState(confirmInput?.initialValue ?? "")
+  const confirmInputRef = useRef<HTMLInputElement>(null)
   const requestIdRef = useRef(0)
 
   const visibleProviders = useMemo(
@@ -182,6 +183,12 @@ function ProviderModelSelectDialog({
     setSelectedTier(tier)
   }
 
+  const handleOpenAutoFocus = (event: Event) => {
+    if (!confirmInput) return
+    event.preventDefault()
+    confirmInputRef.current?.focus()
+  }
+
   const handleConfirm = useCallback(async () => {
     if (!selectedProviderId || !selectedTier || !canConfirm) return
     setSaving(true)
@@ -225,7 +232,11 @@ function ProviderModelSelectDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
+      <DialogContent
+        className="sm:max-w-lg"
+        aria-describedby={undefined}
+        onOpenAutoFocus={handleOpenAutoFocus}
+      >
         <DialogHeader>
           <DialogTitle>选择供应商 + 模型</DialogTitle>
         </DialogHeader>
@@ -319,6 +330,7 @@ function ProviderModelSelectDialog({
           </Button>
           {confirmInput ? (
             <Input
+              ref={confirmInputRef}
               aria-label={confirmInput.ariaLabel}
               value={confirmInputValue}
               placeholder={confirmInput.placeholder}

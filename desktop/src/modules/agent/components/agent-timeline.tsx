@@ -51,7 +51,7 @@ function AgentTimeline({
     <div className="relative flex min-h-0 min-w-0 flex-1">
       <div ref={viewportRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         {displayNodes.length === 0 ? (
-          <div data-allow-select="true" className="mx-auto flex min-h-full min-w-0 max-w-4xl items-center justify-center pr-4 pb-34 pt-4 text-center">
+          <div data-allow-select="true" className="mx-auto flex min-h-full min-w-0 max-w-4xl items-center justify-center px-4 pb-34 pt-4 text-center">
             {sending ? (
               <AgentRunStatus label="Agent 正在启动" />
             ) : (
@@ -59,7 +59,7 @@ function AgentTimeline({
             )}
           </div>
         ) : (
-          <div data-allow-select="true" className="mx-auto flex min-w-0 max-w-4xl flex-col gap-2 pr-4 pb-34 pt-4">
+          <div data-allow-select="true" className="mx-auto flex min-w-0 max-w-4xl flex-col gap-2 px-4 pb-34 pt-4">
             {displayNodes.map((node) => {
               if (node.kind === "processGroup") {
                 const defaultOpen = displayNodes.length === 1 || defaultProcessGroupOpen(node, { sending })

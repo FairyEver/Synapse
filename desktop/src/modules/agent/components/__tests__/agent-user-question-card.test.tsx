@@ -55,6 +55,31 @@ afterEach(() => {
 })
 
 describe("AgentUserQuestionCard", () => {
+  it("keeps the card and long option content within the timeline width", () => {
+    const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn()
+    const container = renderCard(onRespond, {
+      ...questionItem,
+      questions: [{
+        ...questions[0],
+        question: "一个需要在较窄会话区域内正常换行的问题？",
+        options: [{
+          label: "一个需要正常换行且不能撑破答案卡片宽度的选项",
+          description: "说明文字也应保持在答案卡片内部。",
+        }],
+      }],
+    })
+
+    const card = container.querySelector("[data-agent-permission-request-id]")
+    const header = container.querySelector("[data-slot='card-header']")
+    const label = container.querySelector("label")
+    expect(card?.getAttribute("data-size")).toBe("default")
+    expect(card?.className).toContain("min-w-0")
+    expect(card?.className).toContain("max-w-full")
+    expect(header?.className).not.toContain("bg-muted")
+    expect(label?.className).toContain("active:scale-[0.96]")
+    expect(label?.textContent).toContain("一个需要正常换行")
+  })
+
   it("renders all questions without an internal scroll container", () => {
     const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn()
     const container = renderCard(onRespond, {
@@ -86,6 +111,16 @@ describe("AgentUserQuestionCard", () => {
     expect(container.textContent).toContain("周末怎么安排？")
     expect(container.textContent).toContain("学哪门语言？")
     expect(container.innerHTML).not.toContain("max-h-72")
+  })
+
+  it("presents question headers as supporting text instead of badges", () => {
+    const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn()
+    const container = renderCard(onRespond)
+    const header = Array.from(container.querySelectorAll("p"))
+      .find((candidate) => candidate.textContent === "处理方式")
+
+    expect(header?.className).toContain("text-muted-foreground")
+    expect(header?.closest("[data-slot='badge']")).toBeNull()
   })
 
   it("keeps option control ids unique when request ids repeat", () => {

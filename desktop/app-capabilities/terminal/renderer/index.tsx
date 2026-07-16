@@ -75,6 +75,7 @@ import {
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
+const TERMINAL_READ_PAGE_BYTES = 1024 * 1024
 const TERMINAL_WRITE_CHUNK_SIZE = 60 * 1024
 
 const logger = createRendererLogger("terminal.app")
@@ -640,20 +641,36 @@ export function TerminalModule() {
       })
     })
 
-    terminalBridge.readSession({
-      sessionId: terminalSessionId,
-      afterSeq: 0,
-    }).then((result) => {
-      if (disposed) return
-      for (const chunk of result.chunks) {
-        writeChunk(chunk)
+    const restoreRetainedOutput = async () => {
+      let afterSeq = 0
+      let targetSeq: number | null = null
+
+      while (!disposed) {
+        const result = await terminalBridge.readSession({
+          sessionId: terminalSessionId,
+          afterSeq,
+          limitBytes: TERMINAL_READ_PAGE_BYTES,
+        })
+        if (disposed) return
+
+        targetSeq ??= result.session.lastOutputSeq
+        for (const chunk of result.chunks) {
+          writeChunk(chunk)
+        }
+
+        if (result.nextSeq >= targetSeq || result.nextSeq <= afterSeq) break
+        afterSeq = result.nextSeq
       }
+
+      if (disposed) return
       initialReadComplete = true
       for (const chunk of pendingChunks.sort((a, b) => a.seq - b.seq)) {
         writeChunk(chunk)
       }
       pendingChunks.length = 0
-    }).catch((error) => {
+    }
+
+    void restoreRetainedOutput().catch((error) => {
       logger.error("Failed to read terminal output.", error)
       if (!disposed) {
         setTerminalReadError("读取终端输出失败")

@@ -90,6 +90,12 @@ describe("AgentTimeline", () => {
     expect(html).not.toContain('data-slot="scroll-area"')
   })
 
+  it("keeps horizontal space around timeline cards so focus rings are not clipped", () => {
+    const html = renderTimeline()
+    expect(html).toContain("px-4")
+    expect(html).not.toContain("pr-4")
+  })
+
   it("renders an AgentPhaseRow for phase items", () => {
     const items: SynapseAgentTimelineItem[] = [
       {
