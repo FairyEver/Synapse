@@ -381,8 +381,12 @@ export class EditorInstallCore {
                 content: applyVariableSubstitutions(detail.content, payload.variableSubstitutions, { includeCodeBlocks: true }),
               }
             : detail
-          const existingSkillDirectoryPath = backupPathForRestore
-            ?? (target.status === "ready" && target.targetExists ? target.targetPath : previousSkillDirectoryPath)
+          const renamedSkillDirectoryPath = previousSkillDirectoryPath
+            && !isSameEditorPath(previousSkillDirectoryPath, target.targetPath)
+            ? previousSkillDirectoryPath
+            : null
+          const existingSkillDirectoryPath = renamedSkillDirectoryPath
+            ?? backupPathForRestore
             ?? target.targetPath
 
           try {
