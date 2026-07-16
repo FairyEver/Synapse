@@ -9,6 +9,7 @@ vi.mock("../../../../electron/services/log-store", () => ({
 }))
 
 import type { AuditSink, PermissionGuard } from "../../../../electron/runtime/security"
+import { SKILL_UNINSTALL_MAX_METADATA_BYTES } from "../../../../config"
 import { SkillUninstallerService, type SkillUninstallerSecurity } from "../service"
 
 type SecurityHarness = {
@@ -328,5 +329,25 @@ describe("SkillUninstallerService", () => {
       warning: "已移到废纸篓，安装状态刷新失败。",
     })
     expect(onTrashedContentId).toHaveBeenCalledWith("content-1")
+  })
+
+  it("does not read an oversized identity during uninstall revalidation", async () => {
+    const targetPath = await createSkill(tempRoot, "jenkins")
+    await writeFile(
+      path.join(targetPath, ".synapse.json"),
+      "x".repeat(SKILL_UNINSTALL_MAX_METADATA_BYTES + 1),
+    )
+    const trashItem = vi.fn().mockResolvedValue(undefined)
+    const onTrashedContentId = vi.fn()
+    const { security } = createSecurity()
+    const service = new SkillUninstallerService({ trashItem })
+
+    const result = await service.uninstall([
+      { query: { name: "jenkins", searchRootPath: tempRoot }, path: targetPath },
+    ], security, { onTrashedContentId })
+
+    expect(result.results[0]).toEqual({ path: targetPath, status: "trashed" })
+    expect(trashItem).toHaveBeenCalledWith(targetPath)
+    expect(onTrashedContentId).not.toHaveBeenCalled()
   })
 })

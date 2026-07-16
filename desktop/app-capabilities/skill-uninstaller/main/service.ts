@@ -1,5 +1,5 @@
 import { shell } from "electron"
-import { lstat, readFile, realpath } from "node:fs/promises"
+import { lstat, realpath } from "node:fs/promises"
 import path from "node:path"
 
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../../electron/runtime/security"
@@ -17,6 +17,7 @@ import type {
   SkillUninstallTarget,
 } from "../shared/schema"
 import { isSkillTargetDiscoverable, scanSkillNames, scanSkillRoots } from "./scanner"
+import { readSynapseContentId } from "./synapse-metadata"
 
 const logger = createMainLogger("app.skill-uninstaller")
 const SEARCH_ROOT_ERROR = "搜索目录不存在或无法读取。"
@@ -43,20 +44,6 @@ export type SkillUninstallerServiceDeps = {
 type RevalidatedTarget = {
   readonly path: string
   readonly synapseContentId?: string
-}
-
-async function readSynapseContentId(targetPath: string): Promise<string | undefined> {
-  const metadataPath = path.join(targetPath, ".synapse.json")
-  try {
-    const stats = await lstat(metadataPath)
-    if (!stats.isFile() || stats.isSymbolicLink()) return undefined
-    const metadata = JSON.parse(await readFile(metadataPath, "utf8")) as { id?: unknown }
-    return typeof metadata.id === "string" && metadata.id.trim()
-      ? metadata.id.trim()
-      : undefined
-  } catch {
-    return undefined
-  }
 }
 
 async function resolveAllowedRoots(query: SkillUninstallQuery): Promise<string[]> {
@@ -117,9 +104,12 @@ async function revalidateTarget(target: SkillUninstallTarget): Promise<Revalidat
     throw new Error(TARGET_CHANGED_ERROR)
   }
 
+  const metadata = await readSynapseContentId(targetRealPath)
   return {
     path: target.path,
-    synapseContentId: await readSynapseContentId(targetRealPath),
+    ...(metadata.status === "readable" && metadata.contentId
+      ? { synapseContentId: metadata.contentId }
+      : {}),
   }
 }
 

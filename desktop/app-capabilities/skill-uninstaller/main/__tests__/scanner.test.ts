@@ -2,6 +2,7 @@ import { chmod, lstat, mkdtemp, mkdir, readFile, realpath, symlink, writeFile } 
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { SKILL_UNINSTALL_MAX_METADATA_BYTES } from "../../../../config"
 import { isSkillTargetDiscoverable, scanSkillNames, scanSkillRoots } from "../scanner"
 
 const roots: string[] = []
@@ -357,6 +358,22 @@ describe("scanSkillRoots", () => {
     expect(result.candidates.map((candidate) => candidate.path)).toEqual([nested])
     expect(result.complete).toBe(false)
     expect(result.warnings).toContain("部分 Skill 文件超过大小上限，当前结果可能不完整。")
+  })
+
+  it("does not classify an oversized Synapse identity file as trusted metadata", async () => {
+    const root = await fixture()
+    const target = await skill(root, "jenkins")
+    await writeFile(path.join(target, ".synapse.json"), "x".repeat(SKILL_UNINSTALL_MAX_METADATA_BYTES + 1))
+
+    const result = await scanSkillRoots({
+      query: { name: "jenkins" },
+      roots: [{ path: root, editorIds: [] }],
+      classifyEditors: () => [],
+    })
+
+    expect(result.candidates).toEqual([expect.objectContaining({ path: target, source: "external" })])
+    expect(result.complete).toBe(false)
+    expect(result.warnings).toContain("部分 Skill 身份文件超过大小上限，当前结果可能不完整。")
   })
 
   it("continues below a directory when lstat of its SKILL.md fails", async () => {

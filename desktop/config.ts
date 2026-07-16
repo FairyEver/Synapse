@@ -102,3 +102,6 @@ export const SKILL_UNINSTALL_SCAN_CONCURRENCY = 8
 
 // Skill 卸载器单个 SKILL.md 最大字节数：避免扫描异常大文件时占用过多主进程内存和磁盘 IO。
 export const SKILL_UNINSTALL_SCAN_MAX_SKILL_MD_BYTES = 1024 * 1024
+
+// Skill 卸载器 .synapse.json 身份文件最大字节数：限制扫描和执行复查读取异常元数据的内存与磁盘开销。
+export const SKILL_UNINSTALL_MAX_METADATA_BYTES = 64 * 1024

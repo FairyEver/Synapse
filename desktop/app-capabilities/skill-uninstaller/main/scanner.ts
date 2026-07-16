@@ -14,6 +14,7 @@ import type {
   SkillUninstallQuery,
   SkillUninstallScanResult,
 } from "../shared/schema"
+import { readSynapseContentId } from "./synapse-metadata"
 
 export const SKILL_UNINSTALL_EXCLUDED_DIRECTORIES = new Set([
   "node_modules", ".git", ".svn", ".hg", ".next", ".nuxt", ".cache",
@@ -27,6 +28,7 @@ const DEPTH_LIMIT_WARNING = "目录层级超过上限，当前结果可能不完
 const DIRECTORY_READ_WARNING = "部分目录无法读取，当前结果可能不完整。"
 const SKILL_READ_WARNING = "部分 Skill 文件无法读取，当前结果可能不完整。"
 const SKILL_SIZE_WARNING = "部分 Skill 文件超过大小上限，当前结果可能不完整。"
+const METADATA_SIZE_WARNING = "部分 Skill 身份文件超过大小上限，当前结果可能不完整。"
 const STOPPED: unique symbol = Symbol("stopped")
 
 export type ScanSkillRoot = {
@@ -117,18 +119,6 @@ async function inspectSkillFile(
       : { status: "readable", content }
   } catch {
     return { status: "unreadable" }
-  }
-}
-
-async function readSynapseContentId(candidatePath: string): Promise<string | undefined> {
-  const metadataPath = path.join(candidatePath, ".synapse.json")
-  try {
-    const metadataStats = await lstat(metadataPath)
-    if (!metadataStats.isFile() || metadataStats.isSymbolicLink()) return undefined
-    const metadata = JSON.parse(await readFile(metadataPath, "utf8")) as { id?: unknown }
-    return typeof metadata.id === "string" && metadata.id.trim() ? metadata.id.trim() : undefined
-  } catch {
-    return undefined
   }
 }
 
@@ -337,8 +327,10 @@ async function scanSkillRootsInternal(
       if (matches && input.classifyEditors && !shouldStop()) {
         const classifiedEditorIds = await waitFor(Promise.resolve(input.classifyEditors(candidatePath)))
         if (classifiedEditorIds === STOPPED || shouldStop()) return
-        const synapseContentId = await waitFor(readSynapseContentId(candidatePath))
-        if (synapseContentId === STOPPED || shouldStop()) return
+        const metadata = await waitFor(readSynapseContentId(candidatePath))
+        if (metadata === STOPPED || shouldStop()) return
+        if (metadata.status === "too-large") warnings.add(METADATA_SIZE_WARNING)
+        const synapseContentId = metadata.status === "readable" ? metadata.contentId : undefined
         const current = candidates.get(candidateRealPath)
         const editorIds = [...new Set([...(current?.editorIds ?? []), ...entry.editorIds, ...classifiedEditorIds])]
         candidates.set(candidateRealPath, {
