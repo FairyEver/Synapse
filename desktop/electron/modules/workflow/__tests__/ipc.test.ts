@@ -28,7 +28,7 @@ const electronMock = vi.hoisted(() => ({
 }))
 
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
-import type { WorkflowRunStatus } from "../../../../src/types/workflow"
+import type { WorkflowDefinition, WorkflowRunStatus } from "../../../../src/types/workflow"
 import { configStore } from "../../../services/config-store"
 import { validateWorkflowWithResourceDefaults } from "../../../services/workflow/workflow-validator"
 import { workflowIpcModule } from "../ipc"
@@ -170,7 +170,14 @@ describe("workflowIpcModule", () => {
     const runStatuses = new Map<string, WorkflowRunStatus>()
     const eventBus = { emit: vi.fn() }
     const snapshots = { save: vi.fn(async () => undefined) }
-    const workflow = { get: vi.fn(async () => workflowDefinition()) }
+    const definition = {
+      ...workflowDefinition(),
+      params: [
+        { name: "apiToken", type: "text", default: null },
+        { name: "note", type: "text", default: null },
+      ],
+    }
+    const workflow = { get: vi.fn(async () => definition) }
     const engine = {
       run: vi.fn((_def: unknown, _params: unknown, runId: string, emit: (event: unknown) => void) => {
         emit({
@@ -205,10 +212,7 @@ describe("workflowIpcModule", () => {
       id: "workflow-1",
       params: {
         apiToken: "sk-param-secret",
-        nested: {
-          password: "plain-password",
-          note: "Authorization: Bearer raw-token at /Users/example/params",
-        },
+        note: "Authorization: Bearer raw-token at /Users/example/params",
       },
     })
     await Promise.resolve()
@@ -237,10 +241,7 @@ describe("workflowIpcModule", () => {
     expect(snapshots.save).toHaveBeenCalledWith(expect.objectContaining({
       params: {
         apiToken: "[redacted]",
-        nested: {
-          password: "[redacted]",
-          note: "Authorization=[redacted] [redacted] at [path]",
-        },
+        note: "Authorization=[redacted] [redacted] at [path]",
       },
       nodeResults: {
         "prompt-1": expect.objectContaining({
@@ -253,7 +254,6 @@ describe("workflowIpcModule", () => {
     }))
     expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("sk-param-secret")
-    expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("plain-password")
     expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("raw-token")
     expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("/Users/example/repo")
     expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("/Users/example/params")
@@ -263,7 +263,14 @@ describe("workflowIpcModule", () => {
     const runStatuses = new Map<string, WorkflowRunStatus>()
     const eventBus = { emit: vi.fn() }
     const snapshots = { save: vi.fn(async () => undefined) }
-    const workflow = { get: vi.fn(async () => workflowDefinition()) }
+    const definition = {
+      ...workflowDefinition(),
+      params: [
+        { name: "apiKey", type: "text", default: null },
+        { name: "note", type: "text", default: null },
+      ],
+    }
+    const workflow = { get: vi.fn(async () => definition) }
     const engine = {
       run: vi.fn((_def: unknown, _params: unknown, runId: string, emit: (event: unknown) => void) => {
         const nodeResult = {
@@ -532,6 +539,10 @@ describe("workflowIpcModule", () => {
 
   it("logs rerun conflicts and successful rerun starts", async () => {
     const runStatuses = new Map<string, WorkflowRunStatus>()
+    const rerunDefinition: WorkflowDefinition = {
+      ...workflowDefinition(),
+      params: [{ name: "q", type: "text", default: null }],
+    }
     runStatuses.set("previous-run", {
       runId: "previous-run",
       workflowId: "workflow-1",
@@ -540,7 +551,7 @@ describe("workflowIpcModule", () => {
       startedAt: 1,
       endedAt: 2,
       params: { q: "previous" },
-      definition: workflowDefinition(),
+      definition: rerunDefinition,
     })
     runStatuses.set("active-run", {
       runId: "active-run",
@@ -548,7 +559,7 @@ describe("workflowIpcModule", () => {
       status: "running",
       nodeResults: {},
       startedAt: 3,
-      definition: workflowDefinition(),
+      definition: rerunDefinition,
     })
     const eventBus = { emit: vi.fn() }
     const snapshots = { save: vi.fn(async () => undefined), findByRunId: vi.fn(async () => null) }
@@ -592,8 +603,14 @@ describe("workflowIpcModule", () => {
 
   it("uses the current workflow definition when rerun history has redacted Code X config overrides", async () => {
     const runStatuses = new Map<string, WorkflowRunStatus>()
-    const snapshotDefinition = codexWorkflowDefinition("[redacted]")
-    const currentDefinition = codexWorkflowDefinition("reasoning.effort=high")
+    const snapshotDefinition = {
+      ...codexWorkflowDefinition("[redacted]"),
+      params: [{ name: "topic", type: "text", default: null }],
+    }
+    const currentDefinition = {
+      ...codexWorkflowDefinition("reasoning.effort=high"),
+      params: [{ name: "topic", type: "text", default: null }],
+    }
     const snapshots = {
       save: vi.fn(async () => undefined),
       findByRunId: vi.fn(async () => ({
@@ -1278,6 +1295,49 @@ describe("workflowIpcModule", () => {
       })
       expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("package-secret")
       expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("package-secret")
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
+  it("validates the workflow payload before reading its id during import preview", async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-inspect-invalid-payload-test-"))
+    const packagePath = path.join(tempRoot, "invalid-workflow.synapse-workflow.json")
+    const packageData = {
+      format: "synapse-workflow-package-v1",
+      exportedAt: "2026-05-26T00:00:00.000Z",
+      workflow: null,
+      modelReferences: [],
+    }
+    await writeFile(packagePath, `${JSON.stringify(packageData)}\n`, "utf8")
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [packagePath] })
+    const packageError = new Error("Invalid workflow package workflow")
+    const packageService = { buildImportPreview: vi.fn(async () => { throw packageError }) }
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      if (serviceId === "core.permission-guard") return permissionGuard as T
+      if (serviceId === "core.audit-sink") return auditSink as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    try {
+      await expect(harness.invoke("synapse:workflow:inspect-import-package", undefined))
+        .rejects
+        .toThrow("Invalid workflow package workflow")
+
+      expect(packageService.buildImportPreview).toHaveBeenCalledWith(
+        packagePath,
+        expect.objectContaining({ workflow: null }),
+        expect.stringMatching(/^sha256:/),
+      )
+      expect(logStoreMock.logger.info).toHaveBeenCalledWith("workflow:inspectImportPackage requested", {
+        fileBase: "invalid-workflow.synapse-workflow.json",
+        modelReferenceCount: 0,
+      })
     } finally {
       await rm(tempRoot, { recursive: true, force: true })
     }

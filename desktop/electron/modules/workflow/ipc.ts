@@ -954,7 +954,6 @@ export const workflowIpcModule: IpcModule = {
         })
         logger.info("workflow:inspectImportPackage requested", {
           fileBase: path.basename(packagePath),
-          workflowId: packageData.workflow.id,
           modelReferenceCount: packageData.modelReferences.length,
         })
         const preview = await ctx.resolve<WorkflowPackageService>("core.workflow.package").buildImportPreview(packagePath, packageData, packageFile.digest)
