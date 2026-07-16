@@ -116,7 +116,7 @@ const workflowParamTypeSchema = {
   description: "Workflow parameter type. file and directory params receive resource references, not file bytes. option params use the same string for label and value.",
 }
 
-const workflowParamDefaultDescription = "Default value. Use null for required params. For file/directory, use a resource ref such as { kind: 'local_path', entryType: 'file', path: '/abs/file.txt' } or { kind: 'local_path', entryType: 'directory', path: '/abs/dir' }. When allowMultiple=true, use a non-empty array of up to 100 unique refs. For option params, use one of the option strings unless custom values are allowed."
+const workflowParamDefaultDescription = "Default value. Use null for required params. For file/directory, use a resource ref such as { kind: 'local_path', entryType: 'file', path: '/abs/file.txt' } or { kind: 'local_path', entryType: 'directory', path: '/abs/dir' }. When allowMultiple=true, use a non-empty array of up to 100 unique refs. For option params, the default must be one of the configured option strings; allowCustomOption only permits custom values at run time."
 
 const workflowParamSchema = {
   type: "object",

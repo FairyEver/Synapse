@@ -121,6 +121,10 @@ describe("createWorkflowDispatcher", () => {
     }).properties?.params?.items?.properties
 
     expect(paramProperties?.type).toMatchObject({ enum: expect.arrayContaining(["option"]) })
+    expect(paramProperties?.default).toMatchObject({
+      description: expect.stringContaining("default must be one of the configured option strings"),
+    })
+    expect(JSON.stringify(paramProperties?.default)).toContain("only permits custom values at run time")
     expect(paramProperties).toHaveProperty("options")
     expect(paramProperties).toHaveProperty("allowCustomOption")
     expect(paramProperties).toHaveProperty("allowMultiple")
