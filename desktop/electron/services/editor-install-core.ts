@@ -14,6 +14,10 @@ import type {
   SynapseResolveEditorTargetPayload,
 } from "../../src/types/editor"
 import type {
+  SynapseCopyToEditorPayload,
+  SynapseEditorCopyResult,
+} from "../../src/types/editor-copy"
+import type {
   SynapseInstallSourceToEditorPayload,
   SynapseInstallerSource,
   SynapseInstallSourceMode,
@@ -55,6 +59,7 @@ import {
 const logger = createMainLogger("service.editor-install-core")
 
 const MAX_SKILL_BACKUP_PATH_ATTEMPTS = 1000
+const SKILL_CLONE_IGNORED_ENTRY_NAMES = new Set([".git", ".hg", ".svn"])
 
 export type PreparedContentInstallSourceProvider = {
   readPreparedRule(sourceId: string, contentId: string): Promise<string>
@@ -87,9 +92,137 @@ export type InstallerInstallSourceProvider = {
 }
 
 type EditorInstallSourceOverride = {
+  cloneSkillDirectory?: (stagingDirectoryPath: string) => Promise<void>
   copySkillAttachment?: (relativePath: string, targetPath: string) => Promise<void>
   readRuleBody?: () => Promise<string>
   readSkillDetail?: () => Promise<SynapseContentDetail<"skill">>
+}
+
+type EditorInstallOperation = SynapseInstallSourceMode | "clone"
+
+function createSkillCloneInstallPayload(
+  payload: SynapseCopyToEditorPayload,
+): SynapseInstallToEditorPayload {
+  const sourceIdentity = payload.source.synapseContentId?.trim()
+    || payload.source.itemName
+
+  return {
+    contentId: sourceIdentity,
+    contentType: "skill",
+    editorId: payload.targetEditorId,
+    overwriteConfirmed: payload.overwriteConfirmed,
+    projectPath: payload.targetProjectPath,
+    replaceConfirmed: payload.overwriteConfirmed,
+    scope: payload.targetScope,
+    skillName: payload.source.itemName,
+    skillTitle: payload.source.itemName,
+  }
+}
+
+function toSamePathUnavailableCloneTarget(
+  target: Extract<SynapseEditorResolvedTarget, { status: "ready" | "conflict" }>,
+): SynapseEditorResolvedTarget {
+  return {
+    contentType: target.contentType,
+    editorId: target.editorId,
+    label: target.label,
+    message: "目标位置与源位置相同",
+    scope: target.scope,
+    status: "unavailable",
+    targetKind: null,
+    targetPath: null,
+  }
+}
+
+function normalizeSkillCloneTarget(
+  sourcePath: string,
+  target: SynapseEditorResolvedTarget,
+): SynapseEditorResolvedTarget {
+  if (target.status !== "ready" && target.status !== "conflict") {
+    return target
+  }
+
+  if (isSameEditorPath(sourcePath, target.targetPath)) {
+    return toSamePathUnavailableCloneTarget(target)
+  }
+
+  if (target.status === "conflict") {
+    return {
+      contentType: target.contentType,
+      editorId: target.editorId,
+      label: target.label,
+      message: target.message,
+      scope: target.scope,
+      status: "ready",
+      targetExists: true,
+      targetKind: target.targetKind,
+      targetPath: target.targetPath,
+    }
+  }
+
+  return target
+}
+
+async function copySkillInstanceDirectory(
+  sourceDirectoryPath: string,
+  stagingDirectoryPath: string,
+): Promise<void> {
+  const sourceEntry = await lstat(sourceDirectoryPath)
+  if (sourceEntry.isSymbolicLink() || !sourceEntry.isDirectory()) {
+    throw new Error("Skill 复制源必须是普通目录。")
+  }
+
+  await cp(sourceDirectoryPath, stagingDirectoryPath, {
+    dereference: false,
+    filter: (sourcePath) => sourcePath === sourceDirectoryPath
+      || !SKILL_CLONE_IGNORED_ENTRY_NAMES.has(path.basename(sourcePath)),
+    preserveTimestamps: true,
+    recursive: true,
+    verbatimSymlinks: true,
+  })
+}
+
+async function checkSkillCloneReadPermission(
+  deps: EditorWriteSecurityDeps | undefined,
+  resource: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  if (!deps) return
+  const permission = await deps.permissionGuard.check({
+    action: "fs.read.outside-userdata",
+    actor: deps.actor,
+    context: metadata,
+    resource,
+  })
+  if (!permission.allowed) {
+    deps.auditSink.record({
+      action: "fs.read.outside-userdata",
+      actor: deps.actor,
+      metadata: {
+        ...metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+      outcome: "denied",
+      resource,
+    })
+    throw new Error(permission.reason)
+  }
+}
+
+function recordSkillCloneReadAudit(
+  deps: EditorWriteSecurityDeps | undefined,
+  resource: string,
+  outcome: "allowed" | "failed",
+  metadata: Record<string, unknown>,
+): void {
+  deps?.auditSink.record({
+    action: "fs.read.outside-userdata",
+    actor: deps.actor,
+    metadata,
+    outcome,
+    resource,
+  })
 }
 
 function isCrossDeviceRenameError(error: unknown): boolean {
@@ -190,6 +323,84 @@ function toInstallToEditorPayload(payload: SynapseInstallSourceToEditorPayload):
 export class EditorInstallCore {
   constructor(private readonly deps: EditorInstallCoreDeps) {}
 
+  async resolveSkillCloneTarget(
+    payload: SynapseCopyToEditorPayload,
+  ): Promise<SynapseEditorResolvedTarget> {
+    const target = await this.deps.resolveEditorInstallTarget(
+      createSkillCloneInstallPayload(payload),
+    )
+    return normalizeSkillCloneTarget(payload.source.itemPath, target)
+  }
+
+  async cloneSkillToEditor(
+    payload: SynapseCopyToEditorPayload,
+    security?: EditorWriteSecurityDeps,
+  ): Promise<SynapseEditorCopyResult> {
+    const installPayload = createSkillCloneInstallPayload(payload)
+    const target = await this.deps.resolveEditorInstallTarget(installPayload)
+    const normalizedTarget = normalizeSkillCloneTarget(payload.source.itemPath, target)
+    if (normalizedTarget.status === "unavailable") {
+      throw new Error(normalizedTarget.message ?? "当前编辑器暂时不能复制到这个位置。")
+    }
+    if (
+      target.status === "ready"
+      && target.targetExists
+      && !payload.overwriteConfirmed
+    ) {
+      throw new Error("目标位置已有内容。")
+    }
+
+    const readAuditMetadata = {
+      contentType: "skill",
+      operation: "clone",
+      sourceEditorId: payload.source.editorId,
+    }
+    await checkSkillCloneReadPermission(
+      security,
+      payload.source.itemPath,
+      readAuditMetadata,
+    )
+
+    const result = await this.runInstallToEditor(
+      installPayload,
+      security,
+      {
+        cloneSkillDirectory: async (stagingDirectoryPath) => {
+          try {
+            await copySkillInstanceDirectory(payload.source.itemPath, stagingDirectoryPath)
+            recordSkillCloneReadAudit(
+              security,
+              payload.source.itemPath,
+              "allowed",
+              readAuditMetadata,
+            )
+          } catch (error) {
+            recordSkillCloneReadAudit(
+              security,
+              payload.source.itemPath,
+              "failed",
+              readAuditMetadata,
+            )
+            throw error
+          }
+        },
+      },
+      "clone",
+      target,
+    )
+
+    return {
+      contentType: "skill",
+      editorId: result.editorId,
+      label: result.label,
+      overwritten: target.status === "conflict"
+        || (target.status === "ready" && target.targetExists),
+      scope: result.scope,
+      targetKind: result.targetKind,
+      targetPath: result.targetPath,
+    }
+  }
+
   async installToEditor(
     payload: SynapseInstallToEditorPayload,
     security?: EditorWriteSecurityDeps,
@@ -238,9 +449,10 @@ export class EditorInstallCore {
     payload: SynapseInstallToEditorPayload,
     security?: EditorWriteSecurityDeps,
     sourceOverride?: EditorInstallSourceOverride,
-    operation: SynapseInstallSourceMode = "install",
+    operation: EditorInstallOperation = "install",
+    resolvedTarget?: SynapseEditorResolvedTarget,
   ): Promise<SynapseContentInstallResult> {
-    const target = await this.deps.resolveEditorInstallTarget(payload)
+    const target = resolvedTarget ?? await this.deps.resolveEditorInstallTarget(payload)
     const definition = getContentTypeDefinition(payload.contentType)
 
     const isConfirmedConflict = target.status === "conflict" && payload.replaceConfirmed
@@ -313,30 +525,42 @@ export class EditorInstallCore {
             throw new Error(`当前编辑器没有提供 ${definition.singularLabel} 安装策略。`)
           }
 
-          const installStrategy = editorInstallStrategyById.get(payload.editorId)
+          const cloneSkillDirectory = sourceOverride?.cloneSkillDirectory
+          const installStrategy = cloneSkillDirectory
+            ? null
+            : editorInstallStrategyById.get(payload.editorId)
 
-          if (!installStrategy?.prepareSkillDirectory) {
+          if (!cloneSkillDirectory && !installStrategy?.prepareSkillDirectory) {
             throw new Error(`当前编辑器没有提供 ${definition.singularLabel} 安装策略。`)
           }
 
-          const prepareSkillDirectory = installStrategy.prepareSkillDirectory
-          const detail = sourceOverride?.readSkillDetail
+          const prepareSkillDirectory = installStrategy?.prepareSkillDirectory
+          const detail = cloneSkillDirectory
+            ? null
+            : sourceOverride?.readSkillDetail
             ? await sourceOverride.readSkillDetail()
             : payload.preparedSourceId
             ? await this.deps.preparedSourceProvider.readPreparedSkill(payload.preparedSourceId, payload.contentId)
             : await contentService.getSkillDetail(payload.contentId)
-          assertNoRuntimeSkillEnvPath(
-            detail?.attachments.map((attachment) => attachment.originalName) ?? [],
-          )
-          const repositoryRootPath = sourceOverride?.readSkillDetail || payload.preparedSourceId || !detail
+          if (detail) {
+            assertNoRuntimeSkillEnvPath(
+              detail.attachments.map((attachment) => attachment.originalName),
+            )
+          }
+          const repositoryRootPath = cloneSkillDirectory
+            || sourceOverride?.readSkillDetail
+            || payload.preparedSourceId
+            || !detail
             ? null
             : await getActiveRepositoryRootPath()
           const parentDirectoryPath = path.dirname(target.targetPath)
           let backupPathForRestore: string | null = null
-          const previousSkillDirectoryPath = payload.contentType === "skill"
+          const previousSkillDirectoryPath = payload.contentType === "skill" && operation !== "clone"
             ? await findSkillDirectoryByContentId(parentDirectoryPath, payload.contentId)
             : null
-          const isOwnExistingSkillDirectory = Boolean(
+          const isOwnExistingSkillDirectory = (
+            target.status === "ready" && target.ownedTargetExists === true
+          ) || Boolean(
             previousSkillDirectoryPath && isSameEditorPath(previousSkillDirectoryPath, target.targetPath),
           )
 
@@ -392,8 +616,15 @@ export class EditorInstallCore {
           try {
             let skillEnvGuard: SkillEnvMaterializationGuard | null = null
             await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
+              if (cloneSkillDirectory) {
+                await cloneSkillDirectory(stagingDirectoryPath)
+                return
+              }
               if (!detailWithSubstitutions) {
                 throw new Error("Skill 安装源不可用。")
+              }
+              if (!prepareSkillDirectory) {
+                throw new Error(`当前编辑器没有提供 ${definition.singularLabel} 安装策略。`)
               }
               await prepareSkillDirectory({
                 payload,
@@ -442,24 +673,28 @@ export class EditorInstallCore {
               })
             }, {
               beforeSwap: async () => {
+                if (cloneSkillDirectory) return
                 if (!skillEnvGuard) {
                   throw new Error("Skill .env 更新前置校验未注册。")
                 }
                 await skillEnvGuard.validate()
               },
               afterMoveExistingTarget: async (movedTargetPath) => {
+                if (cloneSkillDirectory) return
                 if (!skillEnvGuard) {
                   throw new Error("Skill .env 更新前置校验未注册。")
                 }
                 await skillEnvGuard.validateMovedTarget(movedTargetPath)
               },
               beforeRestoreMovedTarget: async (movedTargetPath) => {
+                if (cloneSkillDirectory) return
                 if (!skillEnvGuard) {
                   throw new Error("Skill .env 更新前置校验未注册。")
                 }
                 await skillEnvGuard.validateMovedTargetForRestore(movedTargetPath)
               },
               beforeDeleteMovedTarget: async (movedTargetPath) => {
+                if (cloneSkillDirectory) return
                 if (!skillEnvGuard) {
                   throw new Error("Skill .env 更新前置校验未注册。")
                 }

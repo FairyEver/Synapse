@@ -56,6 +56,17 @@ function createRuleSource(filePath: string): SynapseEditorCopySource {
   }
 }
 
+function createSkillSource(directoryPath: string): SynapseEditorCopySource {
+  return {
+    editorId: "claude-code",
+    itemName: "review-skill",
+    itemPath: directoryPath,
+    itemType: "skill",
+    scope: "project",
+    synapseContentId: "skill-review",
+  }
+}
+
 function mockConfiguredProjects(paths: string[]): void {
   const config = createDefaultConfig()
   config.global.projects = paths.map((projectPath, index) => ({
@@ -191,6 +202,101 @@ describe("EditorCopyService", () => {
     ])
     expect(JSON.stringify(copyLog)).not.toContain(sourcePath)
     expect(JSON.stringify(copyLog)).not.toContain(targetPath)
+  })
+
+  it("clones the complete Skill instance including runtime env while excluding VCS metadata", async () => {
+    const root = await createTempRoot()
+    const sourceProjectPath = path.join(root, "source-project")
+    const targetProjectPath = path.join(root, "target-project")
+    const sourcePath = path.join(sourceProjectPath, ".claude", "skills", "review-skill")
+    const targetPath = path.join(targetProjectPath, ".agents", "skills", "review-skill")
+    await mkdir(path.join(sourcePath, ".git"), { recursive: true })
+    await mkdir(path.join(sourcePath, "scripts"), { recursive: true })
+    await mkdir(targetProjectPath, { recursive: true })
+    await writeFile(path.join(sourcePath, "SKILL.md"), "# Review Skill\n", "utf8")
+    await writeFile(path.join(sourcePath, ".env"), "TOKEN=source-secret\n", "utf8")
+    await writeFile(path.join(sourcePath, ".hidden-config"), "enabled\n", "utf8")
+    await writeFile(path.join(sourcePath, "scripts", "run.sh"), "exit 0\n", "utf8")
+    await writeFile(path.join(sourcePath, ".git", "config"), "private git metadata\n", "utf8")
+    await writeFile(path.join(sourcePath, ".synapse.json"), JSON.stringify({ id: "skill-review" }), "utf8")
+    mockConfiguredProjects([sourceProjectPath, targetProjectPath])
+
+    const auditSink = new InMemoryAuditSink()
+    const service = new EditorCopyService()
+    const result = await service.copy({
+      source: createSkillSource(sourcePath),
+      targetEditorId: "codex",
+      targetProjectPath,
+      targetScope: "project",
+    }, {
+      actor: { kind: "user" },
+      auditSink,
+      permissionGuard: createPermissionGuard(),
+    })
+
+    expect(result).toMatchObject({
+      contentType: "skill",
+      overwritten: false,
+      targetPath,
+    })
+    await expect(readFile(path.join(targetPath, ".env"), "utf8"))
+      .resolves.toBe("TOKEN=source-secret\n")
+    await expect(readFile(path.join(targetPath, ".hidden-config"), "utf8"))
+      .resolves.toBe("enabled\n")
+    await expect(readFile(path.join(targetPath, "scripts", "run.sh"), "utf8"))
+      .resolves.toBe("exit 0\n")
+    await expect(readFile(path.join(targetPath, ".git", "config"), "utf8"))
+      .rejects.toMatchObject({ code: "ENOENT" })
+    expect(auditSink.list()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        outcome: "allowed",
+        resource: sourcePath,
+      }),
+      expect.objectContaining({
+        action: "fs.write",
+        outcome: "allowed",
+        resource: targetPath,
+      }),
+    ]))
+  })
+
+  it("requires confirmation and replaces an existing same-Skill instance with the source runtime env", async () => {
+    const root = await createTempRoot()
+    const sourceProjectPath = path.join(root, "source-project")
+    const targetProjectPath = path.join(root, "target-project")
+    const sourcePath = path.join(sourceProjectPath, ".claude", "skills", "review-skill")
+    const targetPath = path.join(targetProjectPath, ".agents", "skills", "review-skill")
+    await mkdir(sourcePath, { recursive: true })
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(sourcePath, "SKILL.md"), "# Source Skill\n", "utf8")
+    await writeFile(path.join(sourcePath, ".env"), "TOKEN=source-secret\n", "utf8")
+    await writeFile(path.join(sourcePath, ".synapse.json"), JSON.stringify({ id: "skill-review" }), "utf8")
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Target Skill\n", "utf8")
+    await writeFile(path.join(targetPath, ".env"), "TOKEN=target-secret\n", "utf8")
+    await writeFile(path.join(targetPath, "target-only.txt"), "remove me\n", "utf8")
+    await writeFile(path.join(targetPath, ".synapse.json"), JSON.stringify({ id: "skill-review" }), "utf8")
+    mockConfiguredProjects([sourceProjectPath, targetProjectPath])
+
+    const service = new EditorCopyService()
+    const request = {
+      source: createSkillSource(sourcePath),
+      targetEditorId: "codex" as const,
+      targetProjectPath,
+      targetScope: "project" as const,
+    }
+
+    await expect(service.copy(request)).rejects.toThrow("目标位置已有内容")
+    await expect(service.copy({ ...request, overwriteConfirmed: true })).resolves.toMatchObject({
+      overwritten: true,
+      targetPath,
+    })
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8"))
+      .resolves.toBe("# Source Skill\n")
+    await expect(readFile(path.join(targetPath, ".env"), "utf8"))
+      .resolves.toBe("TOKEN=source-secret\n")
+    await expect(readFile(path.join(targetPath, "target-only.txt"), "utf8"))
+      .rejects.toMatchObject({ code: "ENOENT" })
   })
 
   it("records an allowed fs.write audit after copying to an editor target", async () => {

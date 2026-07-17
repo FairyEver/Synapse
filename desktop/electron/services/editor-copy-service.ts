@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto"
-import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type {
   SynapseCopyToEditorPayload,
@@ -11,22 +10,17 @@ import type {
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
 } from "../../src/types/editor"
-import {
-  assertUniqueContentAttachmentPaths,
-  normalizeContentAttachmentPath,
-} from "../../src/lib/content-attachments"
 import { isWindowsReservedContentNameInput } from "../../src/lib/content-name-input"
 import { editorInstallStrategyById } from "./definitions/generated/main-registry"
 import { editorAdapterService } from "./editor-adapter-service"
 import { configStore } from "./config-store"
+import { editorInstallService } from "./editor-install-service"
 import { pathExists } from "./fs-utils"
 import { createMainLogger } from "./log-store"
 import { prepareQuickPublishDraft } from "./editor-scan-service"
 import {
   formatEditorWriteFailure,
-  normalizeMarkdownContent,
   readExistingTextFile,
-  replaceDirectoryAtomically,
   replaceFileAtomically,
 } from "./editor-file-write-utils"
 import {
@@ -179,6 +173,9 @@ class EditorCopyService {
     payload: SynapseResolveEditorCopyTargetPayload,
   ): Promise<SynapseEditorResolvedTarget> {
     await assertConfiguredProjectPath(payload)
+    if (payload.source.itemType === "skill") {
+      return editorInstallService.resolveSkillCloneTarget(payload)
+    }
     const target = await editorAdapterService.resolveTarget(createResolvePayload(payload))
     return normalizeCopyTarget(payload.source, target)
   }
@@ -187,6 +184,19 @@ class EditorCopyService {
     payload: SynapseCopyToEditorPayload,
     security?: EditorWriteSecurityDeps,
   ): Promise<SynapseEditorCopyResult> {
+    if (payload.source.itemType === "skill") {
+      const result = await editorInstallService.cloneSkillToEditor(payload, security)
+      logger.info("Copied scan item to editor target.", {
+        contentType: payload.source.itemType,
+        sourceEditorId: payload.source.editorId,
+        sourceName: path.basename(payload.source.itemPath),
+        targetEditorId: payload.targetEditorId,
+        targetName: path.basename(result.targetPath),
+        targetScope: payload.targetScope,
+      })
+      return result
+    }
+
     const target = await this.resolveTarget(payload)
 
     if (target.status !== "ready") {
@@ -208,11 +218,7 @@ class EditorCopyService {
     await checkEditorWritePermission(security, target.targetPath, auditMetadata)
 
     try {
-      if (payload.source.itemType === "rule") {
-        await this.copyRule(payload, target, security)
-      } else {
-        await this.copySkill(payload, target, security)
-      }
+      await this.copyRule(payload, target, security)
     } catch (error) {
       recordEditorWriteAudit(security, target.targetPath, "failed", auditMetadata)
       throw formatEditorWriteFailure(error, target.targetPath)
@@ -274,47 +280,6 @@ class EditorCopyService {
     await replaceFileAtomically(target.targetPath, content)
   }
 
-  private async copySkill(
-    payload: SynapseCopyToEditorPayload,
-    target: Extract<SynapseEditorResolvedTarget, { status: "ready" }>,
-    security: EditorWriteSecurityDeps | undefined,
-  ): Promise<void> {
-    if (target.targetKind !== "directory") {
-      throw new Error("当前编辑器没有返回合法的 Skill 复制目标。")
-    }
-
-    const draft = await prepareQuickPublishDraft({
-      itemName: payload.source.itemName,
-      itemPath: payload.source.itemPath,
-      itemType: "skill",
-      metadata: payload.source.metadata,
-    }, security)
-
-    if (draft.itemType !== "skill") {
-      throw new Error("读取 Skill 内容失败。")
-    }
-
-    assertUniqueContentAttachmentPaths(draft.files.map((file) => file.originalName))
-
-    await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
-      await writeFile(
-        path.join(stagingDirectoryPath, "SKILL.md"),
-        normalizeMarkdownContent(draft.content),
-        "utf8",
-      )
-
-      for (const file of draft.files) {
-        const originalName = normalizeContentAttachmentPath(file.originalName)
-        if (!originalName) {
-          throw new Error("附件文件名不能为空。")
-        }
-
-        const targetFilePath = path.join(stagingDirectoryPath, originalName)
-        await mkdir(path.dirname(targetFilePath), { recursive: true })
-        await writeFile(targetFilePath, file.bytes)
-      }
-    })
-  }
 }
 
 const editorCopyService = new EditorCopyService()

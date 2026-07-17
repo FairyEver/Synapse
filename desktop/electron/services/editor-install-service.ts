@@ -15,6 +15,10 @@ import type {
   SynapseInstallSourceToEditorTargetsResult,
 } from "../../src/types/installers"
 import type { SynapseContentDetail } from "../../src/types/content"
+import type {
+  SynapseCopyToEditorPayload,
+  SynapseEditorCopyResult,
+} from "../../src/types/editor-copy"
 import type { SynapseEditorInstallStatusResult } from "../../src/types/editor-install-status"
 import {
   normalizeContentAttachmentPath,
@@ -224,28 +228,39 @@ export class EditorInstallService {
     return editorAdapterService.resolveTarget(payload)
   }
 
+  async resolveSkillCloneTarget(
+    payload: SynapseCopyToEditorPayload,
+  ): Promise<SynapseEditorResolvedTarget> {
+    return this.createCore().resolveSkillCloneTarget(payload)
+  }
+
+  async cloneSkillToEditor(
+    payload: SynapseCopyToEditorPayload,
+    security?: EditorWriteSecurityDeps,
+  ): Promise<SynapseEditorCopyResult> {
+    return this.createCore().cloneSkillToEditor(payload, security)
+  }
+
   async installToEditor(
     payload: SynapseInstallToEditorPayload,
     security?: EditorWriteSecurityDeps,
   ): Promise<SynapseContentInstallResult> {
-    const core = new EditorInstallCore({
-      installerSourceProvider: installerSourceService,
-      preparedSourceProvider: this.preparedSourceProvider,
-      resolveEditorInstallTarget: (nextPayload) => this.resolveEditorInstallTarget(nextPayload),
-    })
-    return core.installToEditor(payload, security)
+    return this.createCore().installToEditor(payload, security)
   }
 
   async installSourceToEditor(
     payload: SynapseInstallSourceToEditorPayload,
     security?: EditorWriteSecurityDeps,
   ): Promise<SynapseContentInstallResult> {
-    const core = new EditorInstallCore({
+    return this.createCore().installSourceToEditor(payload, security)
+  }
+
+  private createCore(): EditorInstallCore {
+    return new EditorInstallCore({
       installerSourceProvider: installerSourceService,
       preparedSourceProvider: this.preparedSourceProvider,
       resolveEditorInstallTarget: (nextPayload) => this.resolveEditorInstallTarget(nextPayload),
     })
-    return core.installSourceToEditor(payload, security)
   }
 
   async installSourceToEditorTargets(
