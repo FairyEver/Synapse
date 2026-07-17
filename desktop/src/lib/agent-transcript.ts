@@ -184,8 +184,9 @@ function isAskUserQuestionEntry(entry: SynapseAgentTimelineItem): boolean {
 
 function userQuestionText(entry: SynapseAgentPermissionRequestTimelineItem): string {
   const questions = entry.questions ?? []
+  const displayedResolution = entry.resolution ?? entry.resolutionAttempt
   const questionText = questions.map((question, index) => {
-    const answer = entry.resolution?.answers?.find((item) => item.questionIndex === index)
+    const answer = displayedResolution?.answers?.find((item) => item.questionIndex === index)
     const lines = [
       question.header ? `${question.header}: ${question.question}` : question.question,
       ...(question.options?.map((option) =>
@@ -194,6 +195,9 @@ function userQuestionText(entry: SynapseAgentPermissionRequestTimelineItem): str
     ]
     return questions.length > 1 ? `${index + 1}. ${lines.join("\n")}` : lines.join("\n")
   }).join("\n\n")
+  if (!entry.resolution && entry.resolutionAttempt) {
+    return [questionText, "状态：提交未确认"].filter(Boolean).join("\n\n")
+  }
   if (!entry.resolution || entry.resolution.status === "answered") return questionText
   return [questionText, `状态：${userQuestionResolutionLabel(entry.resolution.status)}`]
     .filter(Boolean)
@@ -201,6 +205,7 @@ function userQuestionText(entry: SynapseAgentPermissionRequestTimelineItem): str
 }
 
 function userQuestionLabel(entry: SynapseAgentPermissionRequestTimelineItem): string {
+  if (!entry.resolution && entry.resolutionAttempt) return "提交未确认"
   return entry.resolution ? userQuestionResolutionLabel(entry.resolution.status) : "待回答"
 }
 

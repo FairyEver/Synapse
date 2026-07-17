@@ -288,6 +288,49 @@ describe("AgentUserQuestionCard", () => {
     expect(container.textContent).not.toContain("提交")
   })
 
+  it("restores an unconfirmed answer as a retryable selection", async () => {
+    const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn(async () => undefined)
+    const container = renderCard(onRespond, {
+      ...questionItem,
+      resolutionAttempt: {
+        status: "answered",
+        resolvedAt: "2026-05-14T00:01:00.000Z",
+        answers: [{ questionIndex: 0, values: ["重试"] }],
+      },
+    })
+
+    expect(container.textContent).toContain("待重试")
+    expect(optionButton(container, "重试").dataset.state).toBe("checked")
+    expect(optionButton(container, "重试").disabled).toBe(false)
+
+    await act(async () => {
+      buttonByText(container, "提交").click()
+      await Promise.resolve()
+    })
+
+    expect(onRespond).toHaveBeenCalledWith("request-1", "allow", {
+      questions,
+      answers: { "question-0": "重试" },
+    })
+  })
+
+  it("keeps an unconfirmed answer visible when the request is no longer pending", () => {
+    const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn()
+    const container = renderCard(onRespond, {
+      ...questionItem,
+      resolutionAttempt: {
+        status: "answered",
+        resolvedAt: "2026-05-14T00:01:00.000Z",
+        answers: [{ questionIndex: 0, values: ["重试"] }],
+      },
+    }, false)
+
+    expect(container.textContent).toContain("提交未确认")
+    expect(optionButton(container, "重试").dataset.state).toBe("checked")
+    expect(optionButton(container, "重试").disabled).toBe(true)
+    expect(container.textContent).not.toContain("提交回答")
+  })
+
   it("shows unmatched persisted answers instead of dropping them", () => {
     const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn()
     const container = renderCard(onRespond, {

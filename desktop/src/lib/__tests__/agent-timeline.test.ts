@@ -135,6 +135,32 @@ describe("agent timeline conversion", () => {
     }))
   })
 
+  it("restores an unconfirmed user question resolution attempt", () => {
+    expect(historyRecordToTimelineItem("session-1", {
+      role: "system",
+      content: "AskUserQuestion",
+      timestamp: "2026-07-14T00:00:00.000Z",
+      metadata: {
+        agentEventType: "permissionRequest",
+        requestId: "request-1",
+        toolName: "AskUserQuestion",
+        userQuestionResolutionAttempt: {
+          status: "answered",
+          resolvedAt: "2026-07-14T00:01:00.000Z",
+          answers: [{ questionIndex: 0, values: ["重试"] }],
+        },
+      },
+    }, 2, "claude")).toEqual(expect.objectContaining({
+      kind: "permissionRequest",
+      resolution: undefined,
+      resolutionAttempt: {
+        status: "answered",
+        resolvedAt: "2026-07-14T00:01:00.000Z",
+        answers: [{ questionIndex: 0, values: ["重试"] }],
+      },
+    }))
+  })
+
   it("restores image artifacts from stored tool result metadata", () => {
     expect(historyRecordToTimelineItem("session-1", {
       role: "tool",

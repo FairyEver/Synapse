@@ -201,6 +201,7 @@ export function historyRecordToTimelineItem(
         toolInputRaw: recordMetadata(metadata, "toolInputRaw"),
         questions: questionsMetadata(metadata, "questions"),
         resolution: userQuestionResolutionMetadata(metadata, "userQuestionResolution"),
+        resolutionAttempt: userQuestionResolutionMetadata(metadata, "userQuestionResolutionAttempt"),
       }
     case "error":
       return {

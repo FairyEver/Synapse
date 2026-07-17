@@ -347,6 +347,7 @@ export interface SynapseAgentPermissionRequestTimelineItem extends SynapseAgentT
   readonly toolInputRaw?: Record<string, unknown>
   readonly questions?: readonly SynapseAgentUserQuestion[]
   readonly resolution?: SynapseAgentUserQuestionResolution
+  readonly resolutionAttempt?: SynapseAgentUserQuestionResolution
 }
 
 export interface SynapseAgentToolProgressTimelineItem extends SynapseAgentTimelineBase {

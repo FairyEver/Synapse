@@ -45,7 +45,8 @@ function AgentUserQuestionCard({
 }: AgentUserQuestionCardProps) {
   const questions = useMemo(() => userQuestions(item), [item])
   const domIdPrefix = useId()
-  const [answers, setAnswers] = useState<AnswerState>(() => answerStateFromResolution(item.resolution))
+  const displayedResolution = item.resolution ?? item.resolutionAttempt
+  const [answers, setAnswers] = useState<AnswerState>(() => answerStateFromResolution(displayedResolution))
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -55,8 +56,8 @@ function AgentUserQuestionCard({
   }, [submitting, pending])
 
   useEffect(() => {
-    if (item.resolution) setAnswers(answerStateFromResolution(item.resolution))
-  }, [item.resolution])
+    if (displayedResolution) setAnswers(answerStateFromResolution(displayedResolution))
+  }, [displayedResolution])
 
   const complete = questions.length > 0
     && questions.every((question, index) => (answers[index]?.length ?? 0) > 0)
@@ -143,7 +144,9 @@ function AgentUserQuestionCard({
         <CircleHelp className="size-4 shrink-0 text-muted-foreground" />
         <CardTitle className="min-w-0 text-sm font-semibold text-balance">需要回答</CardTitle>
         <div className="ml-auto flex items-center gap-1.5">
-          {!interactive ? (
+          {!item.resolution && item.resolutionAttempt ? (
+            <Badge variant="secondary">{interactive ? "待重试" : "提交未确认"}</Badge>
+          ) : !interactive ? (
             <Badge variant="secondary">{resolutionStatusLabel(item.resolution)}</Badge>
           ) : null}
         </div>
@@ -158,7 +161,7 @@ function AgentUserQuestionCard({
               index={index}
               idPrefix={`${domIdPrefix}-${index}`}
               selected={answers[index] ?? []}
-              resolution={item.resolution}
+              resolution={displayedResolution}
               disabled={!interactive || submitting}
               onSelectSingle={selectSingle}
               onToggleMulti={toggleMulti}

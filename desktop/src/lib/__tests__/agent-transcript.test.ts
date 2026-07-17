@@ -84,4 +84,27 @@ describe("agent transcript helpers", () => {
     expect(transcript).toContain("image/png")
     expect(transcript).toContain("artifact-1")
   })
+
+  it("exports an unconfirmed user question attempt without marking it answered", () => {
+    const transcript = formatAgentTranscript([{
+      id: "question-1",
+      kind: "permissionRequest",
+      requestId: "request-1",
+      toolName: "AskUserQuestion",
+      questions: [{
+        question: "该怎么处理？",
+        options: [{ label: "跳过" }, { label: "重试" }],
+      }],
+      resolutionAttempt: {
+        status: "answered",
+        resolvedAt: "2026-07-14T00:01:00.000Z",
+        answers: [{ questionIndex: 0, values: ["重试"] }],
+      },
+      timestamp: "2026-07-14T00:00:00.000Z",
+    }])
+
+    expect(transcript).toContain("回答：重试")
+    expect(transcript).toContain("状态：提交未确认")
+    expect(transcript).not.toContain("已回答")
+  })
 })
