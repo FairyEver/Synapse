@@ -17,6 +17,7 @@ import {
 export type MaterializeSkillEnvInput = {
   readonly stagingDirectoryPath: string
   readonly existingTargetDirectoryPath: string
+  readonly inheritExistingEnv?: boolean
   readonly values: Readonly<Record<string, string>>
   readonly registerPrecondition?: (guard: SkillEnvMaterializationGuard) => void
 }
@@ -87,6 +88,11 @@ type ExistingEnvSnapshot = {
   readonly content: Buffer
   readonly file: FileSnapshot
 }
+
+type ExistingEnvGuardSnapshot =
+  | { readonly kind: "content"; readonly value: ExistingEnvSnapshot }
+  | { readonly kind: "file"; readonly value: FileSnapshot }
+  | { readonly kind: "missing" }
 
 function hasSameIdentity(left: EntryIdentity, right: EntryIdentity): boolean {
   return left.dev === right.dev && left.ino === right.ino
@@ -262,6 +268,36 @@ async function readExistingEnv(
   }
 }
 
+async function readExistingEnvFileSnapshot(
+  targetPath: string,
+  targetDirectory: TargetDirectoryIdentity,
+): Promise<FileSnapshot | null> {
+  const existingEnvPath = path.join(targetPath, SKILL_RUNTIME_ENV_PATH)
+  await assertSameTargetDirectory(targetPath, targetDirectory)
+  let entry
+  try {
+    entry = await lstat(existingEnvPath, { bigint: true })
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      await assertSameTargetDirectory(targetPath, targetDirectory)
+      return null
+    }
+    throw error
+  }
+  assertRegularEnvEntry(entry)
+  assertUsableIdentity(entry, "Skill .env 文件")
+  await assertEnvPathMatchesOpenedFile(existingEnvPath, entry, targetDirectory)
+  await assertSameTargetDirectory(targetPath, targetDirectory)
+  return {
+    ctimeNs: entry.ctimeNs,
+    dev: entry.dev,
+    ino: entry.ino,
+    mtimeNs: entry.mtimeNs,
+    mode: entry.mode,
+    size: entry.size,
+  }
+}
+
 async function readBoundedEnvSnapshot(
   handle: Awaited<ReturnType<typeof open>>,
   expectedSize: bigint,
@@ -318,19 +354,27 @@ async function assertTargetStillMissing(targetPath: string): Promise<void> {
 function createMaterializationGuard(
   targetPath: string,
   targetDirectory: TargetDirectoryIdentity | null,
-  existingEnv: ExistingEnvSnapshot | null,
+  existingEnv: ExistingEnvGuardSnapshot,
 ): SkillEnvMaterializationGuard {
   async function assertExpectedEnv(targetDirectoryPath: string, directory: TargetDirectoryIdentity): Promise<void> {
-    const currentEnv = await readExistingEnv(targetDirectoryPath, directory)
-    if (existingEnv === null) {
+    if (existingEnv.kind === "content") {
+      const currentEnv = await readExistingEnv(targetDirectoryPath, directory)
+      if (
+        currentEnv === null
+        || !hasSameFileSnapshot(currentEnv.file, existingEnv.value.file)
+        || !currentEnv.content.equals(existingEnv.value.content)
+      ) {
+        throw createChangedEnvError()
+      }
+      return
+    }
+
+    const currentEnv = await readExistingEnvFileSnapshot(targetDirectoryPath, directory)
+    if (existingEnv.kind === "missing") {
       if (currentEnv !== null) throw createChangedEnvError()
       return
     }
-    if (
-      currentEnv === null
-      || !hasSameFileSnapshot(currentEnv.file, existingEnv.file)
-      || !currentEnv.content.equals(existingEnv.content)
-    ) {
+    if (currentEnv === null || !hasSameFileSnapshot(currentEnv, existingEnv.value)) {
       throw createChangedEnvError()
     }
   }
@@ -403,13 +447,24 @@ export async function materializeSkillEnv(
 
   await assertStagingHasNoRuntimeEnv(input.stagingDirectoryPath)
   const targetDirectory = await readTargetDirectoryIdentity(input.existingTargetDirectoryPath)
-  const existing = targetDirectory === null
+  const inheritExistingEnv = input.inheritExistingEnv !== false
+  const existing = targetDirectory === null || !inheritExistingEnv
     ? null
     : await readExistingEnv(input.existingTargetDirectoryPath, targetDirectory)
+  const envGuard: ExistingEnvGuardSnapshot = targetDirectory === null
+    ? { kind: "missing" }
+    : inheritExistingEnv
+      ? existing === null
+        ? { kind: "missing" }
+        : { kind: "content", value: existing }
+      : await readExistingEnvFileSnapshot(input.existingTargetDirectoryPath, targetDirectory)
+        .then((value): ExistingEnvGuardSnapshot => value === null
+          ? { kind: "missing" }
+          : { kind: "file", value })
   input.registerPrecondition?.(createMaterializationGuard(
     input.existingTargetDirectoryPath,
     targetDirectory,
-    existing,
+    envGuard,
   ))
 
   let example: string

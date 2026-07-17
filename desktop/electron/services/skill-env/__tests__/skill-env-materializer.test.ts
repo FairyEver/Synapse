@@ -381,6 +381,24 @@ describe("materializeSkillEnv", () => {
       .rejects.toMatchObject({ code: "ENOENT" })
   })
 
+  it("does not copy an unrelated existing .env when inheritance is disabled", async () => {
+    const paths = await createDirectories()
+    await writeFile(
+      path.join(paths.existingTargetDirectoryPath, ".env"),
+      "TOKEN=other-skill-secret\n",
+      "utf8",
+    )
+
+    await expect(materializeSkillEnv({
+      ...paths,
+      inheritExistingEnv: false,
+      values: {},
+    })).resolves.toBe("absent")
+    expect(fsMocks.open).not.toHaveBeenCalled()
+    await expect(readFile(path.join(paths.stagingDirectoryPath, ".env"), "utf8"))
+      .rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it.each([".env", ".env.local"])("rejects a source-supplied runtime %s already present in staging", async (runtimeEnvName) => {
     const paths = await createDirectories()
     await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")

@@ -467,6 +467,7 @@ describe("EditorInstallService security", () => {
     const backupPath = path.join(testDesktopPath, "old-skill-synapse备份")
     await mkdir(previousSkillDirectoryPath, { recursive: true })
     await writeFile(path.join(previousSkillDirectoryPath, ".synapse.json"), JSON.stringify({ id: "skill-1" }), "utf8")
+    await writeFile(path.join(previousSkillDirectoryPath, ".env"), "TOKEN=previous-secret\n", "utf8")
 
     mocks.resolveTarget.mockResolvedValue({
       contentType: "skill",
@@ -484,6 +485,7 @@ describe("EditorInstallService security", () => {
       { stagingDirectoryPath }: { stagingDirectoryPath: string },
     ) => {
       await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# Renamed Skill\n", "utf8")
+      await writeFile(path.join(stagingDirectoryPath, ".env.example"), "TOKEN=default\n", "utf8")
       await writeFile(
         path.join(previousSkillDirectoryPath, ".synapse.json"),
         JSON.stringify({ id: "another-skill" }),
@@ -507,9 +509,11 @@ describe("EditorInstallService security", () => {
 
     await expect(lstat(previousSkillDirectoryPath)).resolves.toBeDefined()
     await expect(lstat(backupPath)).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(targetPath, ".env"), "utf8"))
+      .resolves.toBe("TOKEN=default\n")
   })
 
-  it("moves the old Skill to the desktop when replacing it", async () => {
+  it("backs up a replaced Skill without inheriting its .env", async () => {
     const root = await createTempRoot()
     const targetPath = path.join(root, "skills", "test-skill")
     const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
@@ -562,7 +566,7 @@ describe("EditorInstallService security", () => {
 
     await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# New Skill\n")
     await expect(readFile(path.join(targetPath, ".env"), "utf8"))
-      .resolves.toBe('TOKEN=existing\nCUSTOM=user-only\nNEW_KEY="confirmed"\n')
+      .resolves.toBe('TOKEN="submitted"\nNEW_KEY="confirmed"\n')
     await expect(readFile(path.join(backupPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
     await expect(readFile(path.join(backupPath, ".env"), "utf8"))
       .resolves.toBe("TOKEN=existing\nCUSTOM=user-only\n")
@@ -696,7 +700,7 @@ describe("EditorInstallService security", () => {
       await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8"))
         .resolves.toBe("# New Skill\n")
       await expect(readFile(path.join(targetPath, ".env"), "utf8"))
-        .resolves.toBe("TOKEN=original\n")
+        .rejects.toMatchObject({ code: "ENOENT" })
       if (mutation === "env") {
         await expect(readFile(path.join(internalBackupPath, ".env"), "utf8"))
           .resolves.toBe("TOKEN=changed-after-install\n")

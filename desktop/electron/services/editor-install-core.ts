@@ -663,9 +663,14 @@ export class EditorInstallCore {
                   })
                 },
               })
+              const inheritExistingEnv = await isSkillDirectoryOwnedByContentId(
+                existingSkillDirectoryPath,
+                payload.contentId,
+              )
               await materializeSkillEnv({
                 stagingDirectoryPath,
                 existingTargetDirectoryPath: existingSkillDirectoryPath,
+                inheritExistingEnv,
                 values: payload.skillEnvValues ?? {},
                 registerPrecondition(guard) {
                   skillEnvGuard = guard
