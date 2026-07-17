@@ -479,6 +479,16 @@ describe("skill repository capability dispatcher", () => {
     }
 
     await dispatcher.dispatch(
+      "app.skill_repository.item.import_local",
+      { sourceDirectoryPath: "/Users/example/private-skill" },
+      context,
+    )
+    await dispatcher.dispatch(
+      "app.skill_repository.item.update_local",
+      { repositoryId: "repo-1", sourceDirectoryPath: "/Users/example/private-skill" },
+      context,
+    )
+    await dispatcher.dispatch(
       "app.skill_repository.visibility.update",
       { repositoryId: "repo-1", visibility: "public" },
       context,
@@ -494,9 +504,11 @@ describe("skill repository capability dispatcher", () => {
       context,
     )
 
-    expect(permissionGuard.check).toHaveBeenCalledTimes(3)
+    expect(permissionGuard.check).toHaveBeenCalledTimes(5)
     expect(vi.mocked(permissionGuard.check).mock.calls.map(([request]) => request.context.capabilityAction))
       .toEqual([
+        "app.skill_repository.item.import_local",
+        "app.skill_repository.item.update_local",
         "app.skill_repository.visibility.update",
         "app.skill_repository.fork.create",
         "app.skill_repository.install_session.create",
@@ -511,11 +523,49 @@ describe("skill repository capability dispatcher", () => {
       }),
     }))
     expect(vi.mocked(auditSink.record).mock.calls.filter(([event]) => event.outcome === "allowed"))
-      .toHaveLength(3)
+      .toHaveLength(5)
     const auditJson = JSON.stringify(vi.mocked(auditSink.record).mock.calls)
+    expect(auditJson).not.toContain("/Users/example/private-skill")
     expect(auditJson).not.toContain("private-fork-name")
     expect(auditJson).not.toContain("install-session-1")
     expect(auditJson).not.toContain("deepLinkUrl")
+  })
+
+  it("blocks denied local uploads before the upload service runs", async () => {
+    const { auditSink, permissionGuard } = createSecurity({
+      allowed: false,
+      reason: "blocked",
+      policyId: "policy-1",
+    })
+    const deps = createDeps({ auditSink, permissionGuard })
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.item.import_local",
+      { sourceDirectoryPath: "/Users/example/private-skill" },
+      { source: "mcp-stdio" },
+    )).rejects.toThrow("blocked")
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.item.update_local",
+      { repositoryId: "repo-1", sourceDirectoryPath: "/Users/example/private-skill" },
+      { source: "mcp-stdio" },
+    )).rejects.toThrow("blocked")
+
+    expect(deps.uploadService.importLocal).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.mutate",
+      resource: "skill-repository:new",
+      outcome: "denied",
+      metadata: expect.objectContaining({ policyId: "policy-1" }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.mutate",
+      resource: "skill-repository:repo-1",
+      outcome: "denied",
+      metadata: expect.objectContaining({ policyId: "policy-1" }),
+    }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls))
+      .not.toContain("/Users/example/private-skill")
   })
 
   it("blocks denied cloud mutations before account service access", async () => {
@@ -563,6 +613,31 @@ describe("skill repository capability dispatcher", () => {
     }))
     expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls))
       .not.toContain("private-session-value")
+  })
+
+  it("audits failed local uploads without source paths, contents, or credentials", async () => {
+    const { auditSink, permissionGuard } = createSecurity()
+    const deps = createDeps({ auditSink, permissionGuard })
+    vi.mocked(deps.uploadService.importLocal)
+      .mockRejectedValueOnce(new Error("/Users/example/private-skill token=secret skill-content=private"))
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.item.import_local",
+      { sourceDirectoryPath: "/Users/example/private-skill" },
+      { source: "mcp-http" },
+    )).rejects.toThrow("skill-content=private")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.mutate",
+      resource: "skill-repository:new",
+      outcome: "failed",
+      metadata: expect.objectContaining({ errorName: "Error" }),
+    }))
+    const auditJson = JSON.stringify(vi.mocked(auditSink.record).mock.calls)
+    expect(auditJson).not.toContain("/Users/example/private-skill")
+    expect(auditJson).not.toContain("token=secret")
+    expect(auditJson).not.toContain("skill-content=private")
   })
 
   it("omits upload security when dependencies are incomplete", async () => {

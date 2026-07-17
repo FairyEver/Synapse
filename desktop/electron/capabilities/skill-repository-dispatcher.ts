@@ -116,11 +116,19 @@ async function importLocalSkillRepository(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): Promise<DispatchResult> {
-  const result = await deps.uploadService.importLocal(
-    buildUploadInput(params),
-    securityFromDeps(deps, context),
+  return runSkillRepositoryMutation(
+    deps,
+    context,
+    "app.skill_repository.item.import_local",
+    "new",
+    async () => {
+      const result = await deps.uploadService.importLocal(
+        buildUploadInput(params),
+        securityFromDeps(deps, context),
+      )
+      return { ok: true, data: result }
+    },
   )
-  return { ok: true, data: result }
 }
 
 async function updateLocalSkillRepository(
@@ -128,11 +136,20 @@ async function updateLocalSkillRepository(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): Promise<DispatchResult> {
-  const result = await deps.uploadService.importLocal(
-    buildUploadInput(params, requireTrimmedString(params, "repositoryId")),
-    securityFromDeps(deps, context),
+  const repositoryId = requireTrimmedString(params, "repositoryId")
+  return runSkillRepositoryMutation(
+    deps,
+    context,
+    "app.skill_repository.item.update_local",
+    repositoryId,
+    async () => {
+      const result = await deps.uploadService.importLocal(
+        buildUploadInput(params, repositoryId),
+        securityFromDeps(deps, context),
+      )
+      return { ok: true, data: result }
+    },
   )
-  return { ok: true, data: result }
 }
 
 async function setSkillRepositoryVisibility(
