@@ -86,6 +86,8 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
   const templateSummary = childParams.length > 0 ? `${childParams.length}个` : undefined
 
   const updateResourceBinding = (param: WorkflowParam, value: string) => {
+    if (value === RESOURCE_STATIC_VALUE || value === RESOURCE_NODE_OUTPUT_VALUE) return
+
     const nextTemplates = { ...templates }
     const nextBindings = { ...bindings }
     delete nextTemplates[param.name]
@@ -145,20 +147,25 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
               parentParam.type === param.type
               && Boolean(parentParam.allowMultiple) === Boolean(param.allowMultiple),
             )
-            const bindingMismatch = resourceBindingMismatch(param, bindings[param.name], workflowParams)
+            const binding = bindings[param.name]
+            const preservedBindingOption = resourceBindingSelectOption(binding, upstreamNodes)
+            const bindingMismatch = resourceBindingMismatch(param, binding, workflowParams)
 
             return (
               <div key={param.name} className="grid gap-1.5">
                 <Label htmlFor={`workflow-call-param-${param.name}`} className="text-xs">{label}</Label>
                 {isResourceParam ? (
                   <Select
-                    value={resourceBindingSelectValue(bindings[param.name])}
+                    value={resourceBindingSelectValue(binding)}
                     onValueChange={(value) => updateResourceBinding(param, value)}
                   >
                     <SelectTrigger id={`workflow-call-param-${param.name}`} aria-label={label} className="w-full">
                       <SelectValue placeholder={param.default !== null ? "使用子工作流默认值" : "选择来源"} />
                     </SelectTrigger>
                     <SelectContent>
+                      {preservedBindingOption ? (
+                        <SelectItem value={preservedBindingOption.value}>{preservedBindingOption.label}</SelectItem>
+                      ) : null}
                       {param.default !== null ? (
                         <SelectItem value={RESOURCE_DEFAULT_VALUE}>使用子工作流默认值</SelectItem>
                       ) : null}
@@ -195,6 +202,8 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
 
 const RESOURCE_DEFAULT_VALUE = "__default__"
 const RESOURCE_PARAM_PREFIX = "param:"
+const RESOURCE_STATIC_VALUE = "__static__"
+const RESOURCE_NODE_OUTPUT_VALUE = "__node_output__"
 
 function extractLooseTemplateNames(template: string): string[] {
   return [...template.matchAll(/\{\{\s*\$?([\p{L}\p{N}_.-]+)\s*\}\}/gu)].map((match) => match[1])
@@ -246,7 +255,31 @@ function resourceBindingSelectValue(binding: WorkflowParamBinding | undefined): 
   if (binding?.mode === "value" && binding.source.type === "param") {
     return `${RESOURCE_PARAM_PREFIX}${binding.source.param}`
   }
+  if (binding?.mode === "value" && binding.source.type === "static") return RESOURCE_STATIC_VALUE
+  if (binding?.mode === "value" && binding.source.type === "node_output") return RESOURCE_NODE_OUTPUT_VALUE
   return ""
+}
+
+function resourceBindingSelectOption(
+  binding: WorkflowParamBinding | undefined,
+  upstreamNodes: readonly { id: string; name: string }[],
+): { value: string; label: string } | null {
+  if (binding?.mode !== "value") return null
+  if (binding.source.type === "static") {
+    return {
+      value: RESOURCE_STATIC_VALUE,
+      label: binding.source.value ? `固定值：${binding.source.value}` : "固定值",
+    }
+  }
+  if (binding.source.type === "node_output") {
+    const nodeId = binding.source.node
+    const nodeName = upstreamNodes.find((node) => node.id === nodeId)?.name ?? nodeId
+    return {
+      value: RESOURCE_NODE_OUTPUT_VALUE,
+      label: nodeName ? `上游节点：${nodeName}` : "上游节点",
+    }
+  }
+  return null
 }
 
 function resourceBindingMismatch(

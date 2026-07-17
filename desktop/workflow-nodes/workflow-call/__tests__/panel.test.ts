@@ -259,7 +259,7 @@ describe("WorkflowCallNodePanel", () => {
     }))
   })
 
-  it("does not flag a legacy static binding for a single-resource child param", async () => {
+  it("shows a legacy static binding for a single-resource child param", async () => {
     workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
     workflowGet.mockResolvedValue({
       id: "child",
@@ -282,6 +282,34 @@ describe("WorkflowCallNodePanel", () => {
     })
     await flushEffects()
 
+    expect(container.textContent).toContain("固定值：/tmp/input.txt")
+    expect(container.textContent).not.toContain("绑定参数的资源类型或多选设置不一致")
+  })
+
+  it("shows an upstream node binding for a single-resource child param", async () => {
+    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    workflowGet.mockResolvedValue({
+      id: "child",
+      name: "子工作流",
+      version: "v1",
+      createdAt: 0,
+      updatedAt: 0,
+      params: [{ name: "input_file", type: "file", default: null }],
+      nodes: [],
+      edges: [],
+    })
+
+    const { container } = renderPanel({
+      workflowId: "child",
+      variables: [],
+      paramTemplates: {},
+      paramBindings: {
+        input_file: { mode: "value", source: { type: "node_output", node: "prepare" } },
+      },
+    })
+    await flushEffects()
+
+    expect(container.textContent).toContain("上游节点：prepare")
     expect(container.textContent).not.toContain("绑定参数的资源类型或多选设置不一致")
   })
 
