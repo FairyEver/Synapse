@@ -721,6 +721,27 @@ describe("SecretsModule", () => {
     expect(document.body.textContent).not.toContain("删除“TOKEN”后不可恢复。")
   })
 
+  it("requires confirmation for an Alt delete when Skill env bindings exist", async () => {
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    mocks.secrets.scanSkillEnvBindings.mockResolvedValueOnce(skillEnvScanResult)
+
+    await renderSecretsModule()
+    await act(async () => {
+      clickButtonByLabel("删除密钥：TOKEN", { altKey: true })
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.delete).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("发现 5 个关联 Skill，删除密钥不会删除这些 .env 键。")
+
+    await act(async () => {
+      clickButton("删除")
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.delete).toHaveBeenCalledWith({ name: "TOKEN" })
+  })
+
   it("keeps the secret when delete scanning fails", async () => {
     mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
     mocks.secrets.scanSkillEnvBindings.mockRejectedValueOnce(new Error("scan failed: super-secret"))

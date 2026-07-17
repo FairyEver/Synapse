@@ -327,7 +327,7 @@ export function SecretsModule() {
       toast.warning("关联 Skill 过多，请整理后重新扫描。")
       return
     }
-    if (bypassConfirmation) {
+    if (bypassConfirmation && scanResult.items.length === 0) {
       void deleteSecret(secret, scanGeneration)
       return
     }
