@@ -97,6 +97,35 @@ describe("workflowIpcModule", () => {
     })
   }
 
+  async function createWorkflowImportFixture(prefix: string) {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), prefix))
+    const packagePath = path.join(tempRoot, "shared.synapse-workflow.json")
+    const packageData = {
+      format: "synapse-workflow-package-v1",
+      exportedAt: "2026-05-26T00:00:00.000Z",
+      workflow: workflowDefinition(),
+      modelReferences: [],
+    }
+    await writeFile(packagePath, `${JSON.stringify(packageData)}\n`, "utf8")
+    return { packagePath, packageData, tempRoot }
+  }
+
+  function createWorkflowImportHarness(
+    packageService: unknown,
+    permissionGuard: Pick<PermissionGuard, "check">,
+    auditSink: Pick<AuditSink, "record">,
+  ) {
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      if (serviceId === "core.permission-guard") return permissionGuard as T
+      if (serviceId === "core.audit-sink") return auditSink as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+    return harness
+  }
+
   it("opens native pickers for workflow file and directory params", async () => {
     electronMock.dialog.showOpenDialog
       .mockResolvedValueOnce({ canceled: false, filePaths: ["/tmp/input.txt"] })
@@ -1163,26 +1192,11 @@ describe("workflowIpcModule", () => {
   })
 
   it("logs workflow package imports at the IPC boundary", async () => {
-    const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-import-test-"))
-    const packagePath = path.join(tempRoot, "shared.synapse-workflow.json")
-    const packageData = {
-      format: "synapse-workflow-package-v1",
-      exportedAt: "2026-05-26T00:00:00.000Z",
-      workflow: workflowDefinition(),
-      modelReferences: [],
-    }
-    await writeFile(packagePath, `${JSON.stringify(packageData)}\n`, "utf8")
+    const { packagePath, tempRoot } = await createWorkflowImportFixture("workflow-import-test-")
     const packageService = { importPackage: vi.fn(async () => ({ workflowId: "workflow-imported", versionHash: "v-imported" })) }
-    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const permissionGuard = { check: vi.fn<PermissionGuard["check"]>(async () => ({ allowed: true })) }
     const auditSink = { record: vi.fn() }
-    const harness = createInMemoryHarness()
-    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
-      if (serviceId === "core.workflow.package") return packageService as T
-      if (serviceId === "core.permission-guard") return permissionGuard as T
-      if (serviceId === "core.audit-sink") return auditSink as T
-      throw new Error(`Unknown service: ${serviceId}`)
-    }
-    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+    const harness = createWorkflowImportHarness(packageService, permissionGuard, auditSink)
 
     try {
       const result = await harness.invoke("synapse:workflow:import-package", { packagePath, mappings: [] })
@@ -1197,16 +1211,100 @@ describe("workflowIpcModule", () => {
         workflowId: "workflow-imported",
         versionHash: "v-imported",
       })
+      expect(permissionGuard.check).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        action: "workflow.mutate",
+        resource: "workflow:import",
+        context: {
+          source: "workflow.importPackage",
+          workflowAction: "workflow.importPackage",
+          boundary: "workflow.ipc",
+        },
+      }))
       expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
         action: "workflow.mutate",
         outcome: "allowed",
-        resource: "workflow-imported",
+        resource: "workflow:import",
         metadata: {
-          fileBase: "shared.synapse-workflow.json",
           source: "workflow.importPackage",
-          versionHash: "v-imported",
+          workflowAction: "workflow.importPackage",
+          boundary: "workflow.ipc",
+          workflowId: "workflow-imported",
         },
       }))
+      const mutationAudits = vi.mocked(auditSink.record).mock.calls
+        .filter(([event]) => event.action === "workflow.mutate")
+      expect(JSON.stringify(mutationAudits)).not.toContain(packagePath)
+      expect(JSON.stringify(mutationAudits)).not.toContain("shared.synapse-workflow.json")
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
+  it("blocks denied workflow package mutations before the import service runs", async () => {
+    const { packagePath, packageData, tempRoot } = await createWorkflowImportFixture("workflow-import-denied-test-")
+    const packageService = { importPackage: vi.fn() }
+    const permissionGuard = {
+      check: vi.fn<PermissionGuard["check"]>()
+        .mockResolvedValueOnce({ allowed: true })
+        .mockResolvedValueOnce({ allowed: false, reason: "workflow denied", policyId: "deny-workflow" }),
+    }
+    const auditSink = { record: vi.fn() }
+    const harness = createWorkflowImportHarness(packageService, permissionGuard, auditSink)
+
+    try {
+      await expect(harness.invoke("synapse:workflow:import-package", { packagePath, mappings: [] }))
+        .rejects.toThrow("workflow denied")
+
+      expect(packageService.importPackage).not.toHaveBeenCalled()
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "workflow.mutate",
+        resource: "workflow:import",
+        outcome: "denied",
+        metadata: expect.objectContaining({
+          policyId: "deny-workflow",
+          workflowAction: "workflow.importPackage",
+        }),
+      }))
+      const mutationAudits = vi.mocked(auditSink.record).mock.calls
+        .filter(([event]) => event.action === "workflow.mutate")
+      const mutationAuditJson = JSON.stringify(mutationAudits)
+      expect(mutationAuditJson).not.toContain(packagePath)
+      expect(mutationAuditJson).not.toContain(packageData.workflow.name)
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
+  it("audits workflow package mutation failures without paths or error contents", async () => {
+    const { packagePath, packageData, tempRoot } = await createWorkflowImportFixture("workflow-import-failed-test-")
+    const packageService = {
+      importPackage: vi.fn(async () => {
+        throw new Error(`${packagePath} token=secret workflow=${packageData.workflow.name}`)
+      }),
+    }
+    const permissionGuard = { check: vi.fn<PermissionGuard["check"]>(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const harness = createWorkflowImportHarness(packageService, permissionGuard, auditSink)
+
+    try {
+      await expect(harness.invoke("synapse:workflow:import-package", { packagePath, mappings: [] }))
+        .rejects.toThrow("token=secret")
+
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "workflow.mutate",
+        resource: "workflow:import",
+        outcome: "failed",
+        metadata: expect.objectContaining({
+          errorName: "Error",
+          errorLength: expect.any(Number),
+        }),
+      }))
+      const mutationAudits = vi.mocked(auditSink.record).mock.calls
+        .filter(([event]) => event.action === "workflow.mutate")
+      const mutationAuditJson = JSON.stringify(mutationAudits)
+      expect(mutationAuditJson).not.toContain(packagePath)
+      expect(mutationAuditJson).not.toContain("token=secret")
+      expect(mutationAuditJson).not.toContain(packageData.workflow.name)
     } finally {
       await rm(tempRoot, { recursive: true, force: true })
     }

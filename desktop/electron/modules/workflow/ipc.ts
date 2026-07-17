@@ -23,6 +23,7 @@ import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
 import { isSafeWorkflowId, isSafeWorkflowNodeId, isSafeWorkflowRunId } from "../../services/workflow/workflow-id"
 import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowEventForRenderer, sanitizeWorkflowOutputForHistory, sanitizeWorkflowRunSnapshot, sanitizeWorkflowRunStatus } from "../../services/workflow/run-snapshot-sanitize"
+import { checkCapabilityPermission } from "../../capabilities/permission-audit"
 import { rendererBaseUrl } from "../shared/renderer-base-url"
 
 const logger = createMainLogger("workflow.ipc")
@@ -275,6 +276,74 @@ function recordFilePermissionFailure(options: {
       source: options.source,
       errorName: options.error instanceof Error ? options.error.name : typeof options.error,
       errorLength: message.length,
+    },
+  })
+}
+
+type WorkflowImportMutationAudit = {
+  readonly auditSink: AuditSink
+  readonly actor: { readonly kind: "user" }
+  readonly resource: "workflow:import"
+  readonly metadata: {
+    readonly source: "workflow.importPackage"
+    readonly workflowAction: "workflow.importPackage"
+    readonly boundary: "workflow.ipc"
+  }
+}
+
+async function authorizeWorkflowImportMutation(
+  ctx: Parameters<IpcModule["methods"][string]["handler"]>[0],
+): Promise<WorkflowImportMutationAudit> {
+  const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+  const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+  const audit: WorkflowImportMutationAudit = {
+    auditSink,
+    actor: { kind: "user" },
+    resource: "workflow:import",
+    metadata: {
+      source: "workflow.importPackage",
+      workflowAction: "workflow.importPackage",
+      boundary: "workflow.ipc",
+    },
+  }
+  const permission = await checkCapabilityPermission({
+    permissionGuard,
+    auditSink,
+    action: "workflow.mutate",
+    actor: audit.actor,
+    resource: audit.resource,
+    context: audit.metadata,
+  })
+  if (permission && !permission.allowed) {
+    auditSink.record({
+      action: "workflow.mutate",
+      actor: audit.actor,
+      resource: audit.resource,
+      outcome: "denied",
+      metadata: {
+        ...audit.metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
+  }
+  return audit
+}
+
+function recordWorkflowImportMutation(
+  audit: WorkflowImportMutationAudit,
+  outcome: "allowed" | "failed",
+  metadata: Record<string, unknown>,
+): void {
+  audit.auditSink.record({
+    action: "workflow.mutate",
+    actor: audit.actor,
+    resource: audit.resource,
+    outcome,
+    metadata: {
+      ...audit.metadata,
+      ...metadata,
     },
   })
 }
@@ -981,24 +1050,21 @@ export const workflowIpcModule: IpcModule = {
           fileBase: path.basename(packagePath),
           mappingCount: mappings.length,
         })
+        const mutationAudit = await authorizeWorkflowImportMutation(ctx)
         try {
           const result = await ctx.resolve<WorkflowPackageService>("core.workflow.package").importPackage(packageData, mappings, options ?? {})
           if ("errors" in result) {
+            recordWorkflowImportMutation(mutationAudit, "failed", {
+              reason: "validation-error",
+              errorCount: result.errors.length,
+            })
             logger.warn("workflow:importPackage blocked by validation", {
               fileBase: path.basename(packagePath),
               errorCount: result.errors.length,
             })
           } else {
-            auditSink.record({
-              action: "workflow.mutate",
-              actor: { kind: "user" },
-              resource: result.workflowId,
-              outcome: "allowed",
-              metadata: {
-                fileBase: path.basename(packagePath),
-                source: "workflow.importPackage",
-                versionHash: result.versionHash,
-              },
+            recordWorkflowImportMutation(mutationAudit, "allowed", {
+              workflowId: result.workflowId,
             })
             logger.info("workflow:importPackage succeeded", {
               fileBase: path.basename(packagePath),
@@ -1008,6 +1074,10 @@ export const workflowIpcModule: IpcModule = {
           }
           return result
         } catch (error) {
+          recordWorkflowImportMutation(mutationAudit, "failed", {
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorLength: (error instanceof Error ? error.message : String(error)).length,
+          })
           logger.warn("workflow:importPackage failed", {
             fileBase: path.basename(packagePath),
             mappingCount: mappings.length,
