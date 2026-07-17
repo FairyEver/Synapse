@@ -12,7 +12,7 @@ import {
 } from "../live-sync"
 import type { ChatAction, ChatState } from "./use-chat-reducer"
 import type { ChatConnectionRefs, ChatConnectionResult } from "./use-chat-connection"
-import { errorLogMeta } from "../utils"
+import { errorLogMeta, pendingPermissionKey } from "../utils"
 
 const logger = createRendererLogger("agent")
 // Token-level SDK deltas can arrive hundreds of times per second; batching
@@ -277,8 +277,7 @@ function useChatEvents(
         dispatch({
           type: "UPDATE_PENDING_PERMISSIONS",
           updater: (current) => {
-            if (current.some((p) => p.requestId === event.requestId)) return current
-            return current.concat({
+            const pendingPermission = {
               requestId: event.requestId,
               projectId: domainEvent.payload.projectId,
               sessionKey: domainEvent.payload.sessionKey,
@@ -288,7 +287,10 @@ function useChatEvents(
               toolInputRaw: event.toolInputRaw,
               questions: event.questions,
               createdAt: domainEvent.timestamp,
-            })
+            }
+            const key = pendingPermissionKey(pendingPermission)
+            if (current.some((permission) => pendingPermissionKey(permission) === key)) return current
+            return current.concat(pendingPermission)
           },
         })
       }

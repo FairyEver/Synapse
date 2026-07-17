@@ -4,13 +4,14 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { localUserTimelineItem } from "@/lib/agent-timeline"
 import type {
+  SynapseAgentPendingPermission,
   SynapseAgentPermissionMode,
   SynapseAgentSessionSummary,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
 import type { AgentConversationTarget } from "@/types/agent-conversation-window"
 import type { SynapseAgentBridgeAttachment } from "@/types/bridge"
-import { DEFAULT_LOCAL_SESSION_KEY } from "../utils"
+import { DEFAULT_LOCAL_SESSION_KEY, pendingPermissionKey } from "../utils"
 import {
   clearConversationUnread,
   shouldApplyTimelineSnapshot,
@@ -35,6 +36,8 @@ type SendMessageOptions = {
   readonly mainThreadPersonaName?: string
   readonly mainThreadPersonaSource?: "builtin" | "user"
 }
+
+type PermissionResponseTarget = Pick<SynapseAgentPendingPermission, "projectId" | "requestId">
 
 type ChatConnectionRefs = {
   readonly projectIdsRef: React.RefObject<string[]>
@@ -77,7 +80,7 @@ type ChatConnectionResult = {
   readonly renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   readonly setPermissionMode: (mode: SynapseAgentPermissionMode, target?: AgentConversationTarget) => Promise<void>
   readonly respondPermission: (
-    requestId: string,
+    target: PermissionResponseTarget,
     behavior: "allow" | "deny",
     updatedInput?: Record<string, unknown>,
     message?: string,
@@ -102,7 +105,7 @@ function useChatConnection(
     pendingConversationIdsRef,
   } = refs
 
-  const respondingPermissionIdsRef = useRef(new Set<string>())
+  const respondingPermissionKeysRef = useRef(new Set<string>())
 
   const replaceTimeline = useCallback((entries: SynapseAgentTimelineItem[]) => {
     timelineVersionRef.current += 1
@@ -830,19 +833,15 @@ function useChatConnection(
   }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef])
 
   const respondPermission = useCallback(async (
-    requestId: string,
+    target: PermissionResponseTarget,
     behavior: "allow" | "deny",
     updatedInput?: Record<string, unknown>,
     message?: string,
   ) => {
-    if (respondingPermissionIdsRef.current.has(requestId)) return
-    respondingPermissionIdsRef.current.add(requestId)
-    const projectId = state.pendingPermissions.find((permission) => permission.requestId === requestId)?.projectId
-      ?? getDefaultProjectId()
-    if (!projectId) {
-      respondingPermissionIdsRef.current.delete(requestId)
-      return
-    }
+    const { projectId, requestId } = target
+    const permissionKey = pendingPermissionKey(target)
+    if (respondingPermissionKeysRef.current.has(permissionKey)) return
+    respondingPermissionKeysRef.current.add(permissionKey)
     const bridge = requireSynapseBridge()
     dispatch({ type: "SET_ERROR", error: null })
     try {
@@ -871,7 +870,8 @@ function useChatConnection(
       if (stalePermission) {
         dispatch({
           type: "UPDATE_PENDING_PERMISSIONS",
-          updater: (current) => current.filter((permission) => permission.requestId !== requestId),
+          updater: (current) => current.filter((permission) =>
+            pendingPermissionKey(permission) !== permissionKey),
         })
       }
       try {
@@ -892,9 +892,9 @@ function useChatConnection(
       })
       throw rawError
     } finally {
-      respondingPermissionIdsRef.current.delete(requestId)
+      respondingPermissionKeysRef.current.delete(permissionKey)
     }
-  }, [dispatch, getDefaultProjectId, refreshPendingPermissions, state.pendingPermissions])
+  }, [dispatch, refreshPendingPermissions])
 
   const cancelTurn = useCallback(async (target?: AgentConversationTarget) => {
     const resolved = resolveActionTarget(target, {
@@ -982,7 +982,14 @@ function useChatConnection(
 }
 
 export { useChatConnection }
-export type { ChatConnectionRefs, ChatConnectionResult, SendMessageOptions, SendMessageTarget, TimelineTarget }
+export type {
+  ChatConnectionRefs,
+  ChatConnectionResult,
+  PermissionResponseTarget,
+  SendMessageOptions,
+  SendMessageTarget,
+  TimelineTarget,
+}
 
 function normalizeSessionProject(
   session: SynapseAgentSessionSummary,

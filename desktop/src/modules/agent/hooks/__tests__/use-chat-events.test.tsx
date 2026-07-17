@@ -7,7 +7,11 @@ import { createRoot, type Root } from "react-dom/client"
 import { act } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { SynapseAgentDomainEvent, SynapseAgentTimelineItem } from "@/types/agent"
+import type {
+  SynapseAgentDomainEvent,
+  SynapseAgentPendingPermission,
+  SynapseAgentTimelineItem,
+} from "@/types/agent"
 import { initialChatState } from "../use-chat-reducer"
 import type { ChatAction, ChatState } from "../use-chat-reducer"
 import { useChatEvents } from "../use-chat-events"
@@ -222,6 +226,59 @@ describe("useChatEvents", () => {
       }),
     )
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret permission refresh detail")
+  })
+
+  it("keeps colliding permission request ids from different projects", async () => {
+    const dispatch: React.Dispatch<ChatAction> = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookProbe dispatch={dispatch} />)
+    })
+
+    const event: SynapseAgentDomainEvent = {
+      domain: "agent",
+      type: "permissionRequest",
+      timestamp: "2026-05-14T00:00:00.000Z",
+      scope: { sessionId: "conversation-1" },
+      payload: {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        platform: "renderer",
+        event: {
+          type: "permissionRequest",
+          requestId: "shared-request",
+          toolName: "Bash",
+        },
+      },
+    }
+
+    await act(async () => {
+      bridgeState.listener?.(event)
+      await Promise.resolve()
+    })
+
+    const updateAction = (dispatch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .map(([action]) => action as ChatAction)
+      .find((action) => action.type === "UPDATE_PENDING_PERMISSIONS")
+    expect(updateAction?.type).toBe("UPDATE_PENDING_PERMISSIONS")
+    if (updateAction?.type !== "UPDATE_PENDING_PERMISSIONS") return
+    const otherProjectPermission: SynapseAgentPendingPermission = {
+      requestId: "shared-request",
+      projectId: "project-2",
+      sessionKey: "local:renderer",
+      conversationId: "conversation-1",
+      toolName: "Bash",
+      createdAt: "2026-05-14T00:00:00.000Z",
+    }
+    expect(updateAction.updater([otherProjectPermission])).toEqual([
+      otherProjectPermission,
+      expect.objectContaining({
+        projectId: "project-1",
+        requestId: "shared-request",
+      }),
+    ])
   })
 
   it("refreshes pending permissions after tool result events", async () => {

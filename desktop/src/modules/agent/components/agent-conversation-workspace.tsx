@@ -55,7 +55,10 @@ import {
   latestConversationActivityTimestamp,
   shouldShowConversationIdleRolloverPrompt,
 } from "../utils/conversation-rollover"
-import type { SendMessageOptions } from "../hooks/use-chat-connection"
+import type {
+  PermissionResponseTarget,
+  SendMessageOptions,
+} from "../hooks/use-chat-connection"
 import { latestTimelineContentSignal, useStickToBottom } from "../hooks/use-stick-to-bottom"
 import { AgentComposer } from "./agent-composer"
 import { AgentSessionRenameDialog } from "./agent-session-rename-dialog"
@@ -89,7 +92,7 @@ export type AgentConversationWorkspaceController = {
     target?: AgentConversationTarget,
   ) => Promise<void>
   readonly respondPermission: (
-    requestId: string,
+    target: PermissionResponseTarget,
     behavior: "allow" | "deny",
     updatedInput?: Record<string, unknown>,
     message?: string,
@@ -691,7 +694,7 @@ function AgentConversationWorkspace({
         pendingPermissions={currentPendingPermissions}
         onOpenReference={openReference}
         onRespondPermission={(requestId, behavior, updatedInput, message) =>
-          chat.respondPermission(requestId, behavior, updatedInput, message)}
+          chat.respondPermission({ projectId: target.projectId, requestId }, behavior, updatedInput, message)}
         viewportRef={stick.viewportRef}
       />
 

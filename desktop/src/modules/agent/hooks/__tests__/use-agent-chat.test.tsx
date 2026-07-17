@@ -1079,7 +1079,10 @@ describe("useAgentChat", () => {
     let responseError: unknown
     await act(async () => {
       try {
-        await chat?.respondPermission("permission-1", "allow")
+        await chat?.respondPermission({
+          projectId: session.projectId,
+          requestId: "permission-1",
+        }, "allow")
       } catch (error) {
         responseError = error
       }
@@ -1139,7 +1142,10 @@ describe("useAgentChat", () => {
     let responseError: unknown
     await act(async () => {
       try {
-        await chat?.respondPermission("permission-1", "allow")
+        await chat?.respondPermission({
+          projectId: session.projectId,
+          requestId: "permission-1",
+        }, "allow")
       } catch (error) {
         responseError = error
       }
@@ -1148,6 +1154,68 @@ describe("useAgentChat", () => {
     expect(responseError).toBeInstanceOf(Error)
     expect(chat?.pendingPermissions).toEqual([])
     expect(chat?.error).toBe("权限请求已失效，请重新发送或继续当前对话")
+  })
+
+  it("routes colliding permission request ids to their own projects", async () => {
+    const secondProjectSession: SynapseAgentSessionSummary = {
+      ...session,
+      projectId: "project-2",
+    }
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          listPendingPermissions: ReturnType<typeof vi.fn>
+          listSessions: ReturnType<typeof vi.fn>
+          respondPermission: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.listSessions.mockImplementation(async (projectId: string) =>
+      projectId === "project-2" ? [secondProjectSession] : [session])
+    bridge.listPendingPermissions.mockImplementation(async (projectId: string) => [{
+      requestId: "shared-request",
+      projectId,
+      sessionKey: session.sessionKey,
+      conversationId: session.id,
+      toolName: "Bash",
+      createdAt: "2026-05-13T00:02:00.000Z",
+    }])
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe
+          scope={{ projectIds: ["project-1", "project-2"], defaultProjectId: "project-1" }}
+          onChange={(next) => {
+            chat = next
+          }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.pendingPermissions.length === 2)
+
+    await act(async () => {
+      await Promise.all([
+        chat?.respondPermission({ projectId: "project-1", requestId: "shared-request" }, "allow"),
+        chat?.respondPermission({ projectId: "project-2", requestId: "shared-request" }, "deny"),
+      ])
+    })
+
+    expect(bridge.respondPermission).toHaveBeenCalledWith({
+      projectId: "project-1",
+      requestId: "shared-request",
+      behavior: "allow",
+    })
+    expect(bridge.respondPermission).toHaveBeenCalledWith({
+      projectId: "project-2",
+      requestId: "shared-request",
+      behavior: "deny",
+    })
   })
 
   it("refreshes pending permissions when selecting a session", async () => {
@@ -1737,8 +1805,14 @@ describe("useAgentChat", () => {
   })
 })
 
-function HookProbe({ onChange }: { readonly onChange: (chat: ReturnType<typeof useAgentChat>) => void }): ReactNode {
-  const chat = useAgentChat(projectScope)
+function HookProbe({
+  onChange,
+  scope = projectScope,
+}: {
+  readonly onChange: (chat: ReturnType<typeof useAgentChat>) => void
+  readonly scope?: AgentProjectScope
+}): ReactNode {
+  const chat = useAgentChat(scope)
   useEffect(() => {
     onChange(chat)
   }, [chat, onChange])

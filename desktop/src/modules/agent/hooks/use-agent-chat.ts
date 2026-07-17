@@ -15,7 +15,11 @@ import type { UnreadState } from "../live-sync"
 import { chatReducer, initialChatState } from "./use-chat-reducer"
 import type { ChatState } from "./use-chat-reducer"
 import { useChatConnection } from "./use-chat-connection"
-import type { SendMessageOptions, SendMessageTarget } from "./use-chat-connection"
+import type {
+  PermissionResponseTarget,
+  SendMessageOptions,
+  SendMessageTarget,
+} from "./use-chat-connection"
 import { useChatEvents } from "./use-chat-events"
 
 type UseAgentChatState = {
@@ -57,7 +61,7 @@ type UseAgentChatState = {
   sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
   setPermissionMode: (mode: SynapseAgentPermissionMode, target?: AgentConversationTarget) => Promise<void>
   respondPermission: (
-    requestId: string,
+    target: PermissionResponseTarget,
     behavior: "allow" | "deny",
     updatedInput?: Record<string, unknown>,
     message?: string,

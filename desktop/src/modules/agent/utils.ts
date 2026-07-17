@@ -1,4 +1,5 @@
 import type {
+  SynapseAgentPendingPermission,
   SynapseAgentProviderSummary,
   SynapseAgentSessionSummary,
 } from "@/types/agent"
@@ -59,6 +60,12 @@ function defaultSessionId(sessions: readonly SynapseAgentSessionSummary[]): stri
     ?? sessions[0]?.id
 }
 
+function pendingPermissionKey(
+  permission: Pick<SynapseAgentPendingPermission, "projectId" | "requestId">,
+): string {
+  return `${permission.projectId}\0${permission.requestId}`
+}
+
 function thinkingIndicatorText(frame: number): string {
   const dotCount = ((frame % 4) + 4) % 4
   return `thinking${THINKING_DOT.repeat(dotCount)}`
@@ -73,6 +80,7 @@ export {
   formatAgentInputText,
   formatAgentTranscript,
   formatEntryTime,
+  pendingPermissionKey,
   sanitizeAgentRawInput,
   sessionLabel,
   thinkingIndicatorText,
