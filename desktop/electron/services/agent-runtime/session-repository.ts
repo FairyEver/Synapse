@@ -121,7 +121,6 @@ export class AgentSessionRepository {
       active: true,
     } as Partial<ConversationEntryV1>)
     const matching = candidates.find((item) => platform === undefined || item.platform === platform)
-      ?? candidates[0]
     return matching ?? null
   }
 

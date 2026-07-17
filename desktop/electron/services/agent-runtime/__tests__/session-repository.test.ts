@@ -60,6 +60,38 @@ describe("AgentSessionRepository", () => {
     )
   })
 
+  it("keeps active conversations isolated by platform", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+    })
+
+    const local = await repository.getOrCreateActive({
+      projectId: "project-1",
+      sessionKey: "shared-session",
+      platform: "local",
+      workspaceKey: "workspace:a",
+      content: "local message",
+    })
+
+    expect(await repository.getActive("shared-session", "external", "workspace:a")).toBeNull()
+
+    const external = await repository.getOrCreateActive({
+      projectId: "project-1",
+      sessionKey: "shared-session",
+      platform: "external",
+      workspaceKey: "workspace:a",
+      content: "external message",
+    })
+
+    expect(external.id).not.toBe(local.id)
+    expect((await repository.get(local.id))?.platform).toBe("local")
+    expect((await repository.getActive("shared-session", "local", "workspace:a"))?.id).toBe(local.id)
+    expect((await repository.getActive("shared-session", "external", "workspace:a"))?.id).toBe(external.id)
+  })
+
   it("tracks active sessions, history, agent ids, past ids, and resume policy", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({
