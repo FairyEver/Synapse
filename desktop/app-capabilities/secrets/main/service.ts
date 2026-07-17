@@ -169,7 +169,6 @@ export function createSecretsService(deps: SecretsServiceDeps) {
       await Promise.all(existing.map((item) => deps.items.remove(item.id)))
       if (existing.length > 1) {
         deps.logger.warn("Duplicate secret records were removed by logical name.", {
-          name,
           duplicateCount: existing.length,
         })
       }
@@ -294,7 +293,6 @@ export function createSecretsService(deps: SecretsServiceDeps) {
     if (matches.length > 1) {
       const normalizedName = normalizeName(name)
       deps.logger.warn("Duplicate secret records were detected.", {
-        name: normalizedName,
         duplicateCount: matches.length,
       })
       throw new Error(`检测到重复密钥名称：${normalizedName}，请先删除后重新创建。`)

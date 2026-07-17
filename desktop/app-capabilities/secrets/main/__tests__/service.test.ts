@@ -247,13 +247,22 @@ describe("SecretsService", () => {
 
     await expect(service.get({ name: "TOKEN", includeValue: true }))
       .rejects.toThrow("检测到重复密钥名称")
-    expect(JSON.stringify(vi.mocked(harness.deps.logger.warn).mock.calls))
-      .not.toContain("first-secret")
-    expect(JSON.stringify(vi.mocked(harness.deps.logger.warn).mock.calls))
-      .not.toContain("second-secret")
+    expect(harness.deps.logger.warn).toHaveBeenCalledWith(
+      "Duplicate secret records were detected.",
+      { duplicateCount: 2 },
+    )
 
     await expect(service.delete({ name: "token" })).resolves.toMatchObject({ name: "TOKEN" })
     await expect(service.list()).resolves.toEqual({ secrets: [], total: 0 })
+    expect(harness.deps.logger.warn).toHaveBeenCalledWith(
+      "Duplicate secret records were removed by logical name.",
+      { duplicateCount: 2 },
+    )
+    const warningLogs = JSON.stringify(vi.mocked(harness.deps.logger.warn).mock.calls)
+    expect(warningLogs).not.toContain("TOKEN")
+    expect(warningLogs).not.toContain("token")
+    expect(warningLogs).not.toContain("first-secret")
+    expect(warningLogs).not.toContain("second-secret")
   })
 
   it("emits changed events after mutations", async () => {
