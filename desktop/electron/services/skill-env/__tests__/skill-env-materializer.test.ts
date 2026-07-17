@@ -381,10 +381,10 @@ describe("materializeSkillEnv", () => {
       .rejects.toMatchObject({ code: "ENOENT" })
   })
 
-  it("rejects a source-supplied runtime .env already present in staging", async () => {
+  it.each([".env", ".env.local"])("rejects a source-supplied runtime %s already present in staging", async (runtimeEnvName) => {
     const paths = await createDirectories()
     await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
-    await writeFile(path.join(paths.stagingDirectoryPath, ".env"), "TOKEN=source-secret\n", "utf8")
+    await writeFile(path.join(paths.stagingDirectoryPath, runtimeEnvName), "TOKEN=source-secret\n", "utf8")
 
     await expect(materializeSkillEnv({ ...paths, values: { TOKEN: "confirmed" } }))
       .rejects.toThrow("Skill 源目录不能包含 .env，请只提交 .env.example。")

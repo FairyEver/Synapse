@@ -241,7 +241,7 @@ describe("EditorInstallService prepared source", () => {
     await expect(readFile(path.join(targetPath, "references", "icon.bin"), "utf8")).resolves.toBe("icon")
   })
 
-  it("rejects a prepared Skill containing a root runtime .ENV before adapter preparation", async () => {
+  it("rejects a prepared Skill containing a root runtime .ENV.local before adapter preparation", async () => {
     const root = await createTempRoot()
     const targetPath = path.join(root, "skills", "unsafe-prepared")
     const provider = {
@@ -264,7 +264,7 @@ describe("EditorInstallService prepared source", () => {
         latestHistoryDirname: "version-1",
         attachmentCount: 1,
         content: "# Unsafe Skill\n",
-        attachments: [{ originalName: ".ENV", sha256: "a".repeat(64), size: 4 }],
+        attachments: [{ originalName: ".ENV.local", sha256: "a".repeat(64), size: 4 }],
       }),
       beginPreparedInstall: vi.fn(),
       endPreparedInstall: vi.fn(),

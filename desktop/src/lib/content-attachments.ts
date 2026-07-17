@@ -53,25 +53,22 @@ function assertUniqueContentAttachmentPaths(originalNames: readonly string[]): v
 }
 
 function assertNoRuntimeSkillEnvPath(originalNames: readonly string[]): void {
-  const runtimeEnvPathKey = normalizePathForCompare(SKILL_RUNTIME_ENV_PATH, { platform: "win32" })
-  if (originalNames.some((name) => (
-    normalizePathForCompare(normalizeContentAttachmentPath(name), { platform: "win32" })
-      === runtimeEnvPathKey
-  ))) {
+  if (originalNames.some(isRuntimeSkillEnvPath)) {
     throw new Error("Skill 源目录不能包含 .env，请只提交 .env.example。")
   }
 }
 
 function assertNoPublishRuntimeEnvPath(originalNames: readonly string[]): void {
-  const hasRuntimeEnv = originalNames.some((name) => {
-    const normalized = normalizeContentAttachmentPath(name).toLowerCase()
-    if (normalized === SKILL_ENV_EXAMPLE_PATH) return false
-    const basename = normalized.split("/").at(-1) ?? ""
-    return basename === ".env" || basename.startsWith(".env.")
-  })
-  if (hasRuntimeEnv) {
+  if (originalNames.some(isRuntimeSkillEnvPath)) {
     throw new Error("Skill 发布内容不能包含运行时 .env 文件，请只提交根目录 .env.example。")
   }
+}
+
+function isRuntimeSkillEnvPath(originalName: string): boolean {
+  const normalized = normalizeContentAttachmentPath(originalName).toLowerCase()
+  if (normalized === SKILL_ENV_EXAMPLE_PATH) return false
+  const basename = normalized.split("/").at(-1) ?? ""
+  return basename === SKILL_RUNTIME_ENV_PATH || basename.startsWith(`${SKILL_RUNTIME_ENV_PATH}.`)
 }
 
 function toWindowsSafeSegment(segment: string): string {

@@ -135,7 +135,7 @@ describe("content skill source service", () => {
     expect(Buffer.from(draft.files[0]?.bytes ?? []).toString("utf8")).toBe("hello")
   })
 
-  it.each([".ENV", ".EnV"])(
+  it.each([".ENV", ".EnV", ".env.local", ".ENV.production"])(
     "rejects a root runtime %s before hidden-file filtering",
     async (runtimeEnvName) => {
       const root = await createTempRoot()

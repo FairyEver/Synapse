@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  assertNoRuntimeSkillEnvPath,
   assertNoPublishRuntimeEnvPath,
   assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
@@ -77,5 +78,16 @@ describe("normalizeContentAttachmentPath", () => {
       .toThrow("运行时 .env")
     expect(() => assertNoPublishRuntimeEnvPath(["nested/.env.example"]))
       .toThrow("运行时 .env")
+  })
+
+  it("allows only root .env.example in install attachments", () => {
+    expect(() => assertNoRuntimeSkillEnvPath([".env.example", "references/guide.md"]))
+      .not.toThrow()
+    expect(() => assertNoRuntimeSkillEnvPath([".env.local"]))
+      .toThrow("Skill 源目录不能包含 .env")
+    expect(() => assertNoRuntimeSkillEnvPath(["nested/.ENV.production"]))
+      .toThrow("Skill 源目录不能包含 .env")
+    expect(() => assertNoRuntimeSkillEnvPath(["nested/.env.example"]))
+      .toThrow("Skill 源目录不能包含 .env")
   })
 })
