@@ -108,6 +108,7 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
               type="button"
               size="icon-sm"
               variant="ghost"
+              disabled={hasLoadError}
               aria-label="删除工作流"
               data-track="workflow-card-delete-open"
               onClick={(e) => {

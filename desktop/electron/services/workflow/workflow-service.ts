@@ -276,6 +276,7 @@ export class WorkflowService {
 
   async delete(id: string): Promise<void> {
     await this.initialize()
+    await this.assertDeleteAllowed(id)
     logger.info("workflow deleting", { id })
     try {
       await this.workflowsNamespace.remove(id)
@@ -290,6 +291,23 @@ export class WorkflowService {
       })
       throw err
     }
+  }
+
+  private async assertDeleteAllowed(id: string): Promise<void> {
+    await this.initialize()
+    const entry = await this.workflowsNamespace.get(id)
+    if (!entry) return
+
+    const result = migrateWorkflowDocument(entry)
+    if (result.kind === "current") return
+
+    logger.warn("workflow delete blocked for protected document", {
+      boundary: "workflow-service.delete",
+      id,
+      migrationKind: result.kind,
+      ...(result.kind === "unsupported_future" ? { sourceVersion: result.sourceVersion } : {}),
+    })
+    throw workflowDeleteBlockedError(result)
   }
 
   private async migrateCurrentStore(): Promise<void> {
@@ -530,6 +548,13 @@ function workflowReadError(result: Exclude<WorkflowDocumentMigrationResult, { ki
     return new Error(`该工作流使用更高的数据版本（${result.sourceVersion}），请升级 Synapse 后再编辑或运行。`)
   }
   return new Error("工作流数据迁移失败，原始数据已保留。")
+}
+
+function workflowDeleteBlockedError(result: Exclude<WorkflowDocumentMigrationResult, { kind: "current" }>): Error {
+  if (result.kind === "unsupported_future") {
+    return new Error(`无法删除使用更高数据版本（${result.sourceVersion}）的工作流。请先导出原文备份，或升级 Synapse 后再处理。`)
+  }
+  return new Error("无法删除数据迁移失败的工作流。原始数据和迁移诊断已保留，请升级或修复后重试。")
 }
 
 function errorLogMeta(error: unknown): Record<string, unknown> {

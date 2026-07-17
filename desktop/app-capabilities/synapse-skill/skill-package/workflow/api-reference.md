@@ -267,10 +267,11 @@ Replace a full workflow definition. Validates before saving.
 
 ### app_workflow_definition_delete
 
-Delete a app.workflow. Cancels active runs and removes snapshots.
+Delete a current workflow definition. Cancels active runs and removes snapshots.
 
 **Params:** `workflowId` (string, required)
 **Returns:** `{ ok: true }`
+**Notes:** Workflows reported by `app_workflow_definition_list` with `loadError` are protected and cannot be deleted. A future-schema document with `rawExportAvailable` must be preserved through the Synapse UI's raw export path; migration-failed source and diagnostics remain stored for later recovery.
 
 ---
 

@@ -110,6 +110,38 @@ describe("WorkflowService", () => {
 
     expect(cleanup.deleteForWorkflow).toHaveBeenCalledWith(def.id)
   })
+  it.each([
+    ["future", { meta: { schemaVersion: "3.0.0" } }, "先导出原文备份"],
+    ["failed", { nodes: undefined }, "数据迁移失败"],
+  ])("preserves a protected %s workflow and its migration state when deletion is requested", async (_case, override, expectedMessage) => {
+    const dir = tmpDir()
+    const original = { ...makeDef(), id: "protected-delete-workflow", ...override }
+    writeFileSync(path.join(dir, "workflows.json"), JSON.stringify({
+      schemaVersion: 1,
+      singleton: null,
+      items: { [original.id]: original },
+    }), "utf8")
+    const { repo } = createRepoAt(dir)
+    const cleanup = { deleteForWorkflow: vi.fn(async () => undefined) }
+    const svc = new WorkflowService(repo, undefined, cleanup)
+
+    await svc.list()
+    const workflowBefore = readFileSync(path.join(dir, "workflows.json"), "utf8")
+    const migrationStateBefore = readFileSync(path.join(dir, "workflow.migration-state.json"), "utf8")
+
+    await expect(svc.delete(original.id)).rejects.toThrow(expectedMessage)
+
+    expect(readFileSync(path.join(dir, "workflows.json"), "utf8")).toBe(workflowBefore)
+    expect(readFileSync(path.join(dir, "workflow.migration-state.json"), "utf8")).toBe(migrationStateBefore)
+    expect(cleanup.deleteForWorkflow).not.toHaveBeenCalled()
+    expect(logger.warn).toHaveBeenCalledWith(
+      "workflow delete blocked for protected document",
+      expect.objectContaining({
+        boundary: "workflow-service.delete",
+        id: original.id,
+      }),
+    )
+  })
   it("returns empty list when no workflows exist", async () => {
     const { svc } = createRepo()
     const list = await svc.list()

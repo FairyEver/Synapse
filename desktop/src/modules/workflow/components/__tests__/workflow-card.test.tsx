@@ -188,17 +188,27 @@ describe("WorkflowCard", () => {
   it("marks malformed workflows and disables unsafe actions", async () => {
     const onRun = vi.fn()
     const onExport = vi.fn()
+    const onDelete = vi.fn()
     const container = await renderWorkflowCard({
       meta: { ...workflowMeta, loadError: "工作流数据格式异常" },
       onRun,
       onExport,
+      onDelete,
     })
 
     expect(container.textContent).toContain("数据异常")
     const runButton = container.querySelector<HTMLButtonElement>('[aria-label="运行工作流"]')
     const exportButton = container.querySelector<HTMLButtonElement>('[aria-label="导出工作流"]')
+    const deleteButton = container.querySelector<HTMLButtonElement>('[aria-label="删除工作流"]')
     expect(runButton?.disabled).toBe(true)
     expect(exportButton?.disabled).toBe(true)
+    expect(deleteButton?.disabled).toBe(true)
+
+    await act(async () => {
+      deleteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, altKey: true }))
+    })
+
+    expect(onDelete).not.toHaveBeenCalled()
   })
 
   it("allows raw export but not execution for future-schema workflows", async () => {
@@ -216,8 +226,10 @@ describe("WorkflowCard", () => {
 
     const runButton = container.querySelector<HTMLButtonElement>('[aria-label="运行工作流"]')
     const exportButton = container.querySelector<HTMLButtonElement>('[aria-label="导出工作流原文"]')
+    const deleteButton = container.querySelector<HTMLButtonElement>('[aria-label="删除工作流"]')
     expect(runButton?.disabled).toBe(true)
     expect(exportButton?.disabled).toBe(false)
+    expect(deleteButton?.disabled).toBe(true)
 
     await act(async () => {
       exportButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))

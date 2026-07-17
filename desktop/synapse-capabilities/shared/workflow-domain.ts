@@ -22,7 +22,7 @@ const workflowCapabilities: readonly CapabilityDefinition[] = [
   // Whole write
   { id: "app.workflow.definition.create" as CapabilityId, title: "Create workflow", description: "Create a new empty workflow with a default end node.", mutates: true },
   { id: "app.workflow.definition.update" as CapabilityId, title: "Update workflow", description: "Replace a full workflow definition (validate then save).", mutates: true },
-  { id: "app.workflow.definition.delete" as CapabilityId, title: "Delete workflow", description: "Delete a workflow, cancel active runs, and clean up snapshots.", mutates: true },
+  { id: "app.workflow.definition.delete" as CapabilityId, title: "Delete workflow", description: "Delete a current workflow, cancel active runs, and clean up snapshots. Protected future-schema or migration-failed documents cannot be deleted.", mutates: true },
   // Execute
   { id: "app.workflow.run.execute" as CapabilityId, title: "Run workflow", description: "Execute a workflow with parameters. Returns runId for polling.", mutates: true },
   { id: "app.workflow.run.disable" as CapabilityId, title: "Cancel run", description: "Cancel a running workflow execution. Returns whether an active run received the abort signal.", mutates: true },
@@ -344,7 +344,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     },
     {
       name: "workflow_definition_delete",
-      description: "Delete a workflow by ID. Cancels any active runs and removes run snapshots.",
+      description: "Delete a current workflow by ID. Cancels active runs and removes snapshots. Protected future-schema or migration-failed documents cannot be deleted.",
       inputSchema: {
         type: "object",
         properties: { workflowId: { type: "string", description: "Workflow ID to delete." } },
