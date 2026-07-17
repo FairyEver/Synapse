@@ -1,7 +1,7 @@
 {
   "activePromptName": "质量巡检v13",
   "workingDirectory": "/Users/liyang/Documents/code/github/Synapse",
-  "concurrency": 2,
+  "concurrency": 4,
   "timeoutMinutes": 60,
   "maxLogs": 200,
   "provider": "codex",

@@ -8,6 +8,8 @@
 
 **Tech Stack:** TypeScript, React, `yaml` npm package (for config.yaml parsing), Hermes CLI (`hermes -z`)
 
+> **2026-07-17 更正：** 本计划中的 Hermes 专属 Skill frontmatter、category/tags/version 安装表单和附件迁移到 `references/` 的步骤已撤销，不得继续执行。Hermes 与其他已注册 Agent 统一使用标准 Skill 格式，当前决策见 `CONTEXT.md` 和 ADR 0022。
+
 ---
 
 ## File Structure

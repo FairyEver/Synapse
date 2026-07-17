@@ -74,39 +74,24 @@ mcp_servers:
 
 #### 目标路径
 
-`~/.hermes/skills/{category}/{skill-name}/`
+`~/.hermes/skills/{skill-name}/`
 
 目录结构：
 ```
-~/.hermes/skills/{category}/{skill-name}/
+~/.hermes/skills/{skill-name}/
 ├── SKILL.md              # 主文件（YAML frontmatter + Markdown）
-├── .synapse-skill-id.json  # Synapse 追踪文件
-└── references/           # 附件目录
-    └── {attachment files}
+├── .synapse.json         # Synapse 追踪文件
+├── references/           # 参考资料，存在时保留
+├── templates/            # 模板，存在时保留
+├── scripts/              # 脚本，存在时保留
+└── assets/               # 资源，存在时保留
 ```
 
-#### Frontmatter 转换
+#### 标准格式
 
-Synapse 内部格式 → Hermes SKILL.md frontmatter：
+Hermes 与 Antigravity、Claude Code、Codex、Cursor 和 Windsurf 使用同一标准 Skill 格式。安装时复用公共 Skill 目录写入器，不进行 Hermes 专属 frontmatter 转换，也不重排附件路径。
 
-```yaml
----
-name: {skill-name}           # 来自 Synapse skill.name
-description: {description}   # 来自 Synapse skill.description
-version: 1.0.0               # 默认值，或从安装面板获取
-metadata:
-  hermes:
-    tags: [{tags}]           # 从安装面板获取
-    category: {category}     # 从安装面板获取
----
-```
-
-#### 安装面板（forms.tsx）
-
-Hermes 的 skill 安装提供自定义表单，字段：
-- **category**（必填）：技能分类目录名，决定安装到 `~/.hermes/skills/{category}/` 下
-- **tags**（可选）：逗号分隔的标签列表，写入 `metadata.hermes.tags`
-- **version**（可选）：版本号，默认 `1.0.0`
+`metadata.hermes`、`version` 等字段是可选扩展，不构成独立格式，Synapse 不强制生成。Skill 自带的 `references/`、`templates/`、`scripts/`、`assets/` 及其他附件保持原相对路径。
 
 ---
 

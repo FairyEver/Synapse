@@ -20,7 +20,7 @@ afterEach(async () => {
 })
 
 describe("Hermes Skill installation", () => {
-  it("keeps the Hermes layout and writes scanner-compatible metadata", async () => {
+  it("uses the shared Skill layout and writes scanner-compatible metadata", async () => {
     const root = await createTempRoot()
     const stagingDirectoryPath = path.join(root, "staging")
     const existingTargetDirectoryPath = path.join(root, "existing")
@@ -94,7 +94,9 @@ describe("Hermes Skill installation", () => {
         repositoryVersion: "20260710000000",
         sourceFingerprint: "sha256:current",
       }, null, 2))
-    await expect(readFile(path.join(stagingDirectoryPath, "references", "scripts", "run.js"), "utf8"))
+    await expect(readFile(path.join(stagingDirectoryPath, "SKILL.md"), "utf8"))
+      .resolves.toBe("---\nname: hermes-skill\ndescription: Hermes Skill\n---\n\n# Hermes Skill\n")
+    await expect(readFile(path.join(stagingDirectoryPath, "scripts", "run.js"), "utf8"))
       .resolves.toBe("export {}\n")
   })
 })
