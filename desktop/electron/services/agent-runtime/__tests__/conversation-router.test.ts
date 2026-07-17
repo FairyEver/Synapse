@@ -2202,7 +2202,7 @@ describe("ConversationRouter", () => {
     ])
   })
 
-  it("persists the Claude SDK agent type for timeout side sessions", async () => {
+  it("persists the default product agent type for timeout side sessions", async () => {
     const { conversations, router } = createRouter({
       session: new ScriptedSession([
         { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
@@ -2213,11 +2213,32 @@ describe("ConversationRouter", () => {
     const conversation = await conversations.get(result.conversationId)
 
     expect(conversation).toMatchObject({
-      agentType: "claude-sdk",
+      agentType: "claude-code",
       providerId: "anthropic",
       sdkSessionId: "sdk-1",
       resumePolicy: "fresh",
       active: false,
+    })
+  })
+
+  it("persists the requested agent type for new side sessions", async () => {
+    const { conversations, router } = createRouter({
+      session: new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    const result = await router.sendNewSession({
+      ...baseMessage("scheduled"),
+      agentType: "scheduled-agent",
+    }, "Scheduled")
+    const conversation = await conversations.get(result.conversationId)
+
+    expect(conversation).toMatchObject({
+      agentType: "scheduled-agent",
+      providerId: "anthropic",
+      sdkSessionId: "sdk-1",
+      resumePolicy: "fresh",
     })
   })
 
@@ -2736,6 +2757,7 @@ function createRouter(input: {
   const router = new ConversationRouter({
     deps: {
       projectId: "project-1",
+      defaultAgentType: "claude-code",
       workDir: "/repo",
       governance: input.governance,
       agentEvents: input.agentEvents,

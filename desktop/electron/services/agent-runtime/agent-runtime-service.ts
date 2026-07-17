@@ -267,6 +267,7 @@ export class AgentRuntimeService {
     this.conversationRouter = new ConversationRouter({
       deps: {
         projectId: deps.projectId,
+        defaultAgentType: deps.agentType ?? "claude-code",
         workDir: deps.workDir,
         eventBus: deps.eventBus,
         logger: deps.logger,

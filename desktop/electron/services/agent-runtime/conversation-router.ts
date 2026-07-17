@@ -75,6 +75,7 @@ import type { AgentArtifactStore } from "./artifact-store"
 
 export interface ConversationRouterDeps {
   readonly projectId: string
+  readonly defaultAgentType: string
   readonly workDir?: string
   readonly eventBus?: ScopedEventBus
   readonly logger?: StructuredLogger
@@ -200,7 +201,7 @@ export class ConversationRouter {
       channelKey: message.channelKey,
       workspaceKey: message.workspaceKey,
       workspacePath: message.workspacePath,
-      agentType: "claude-sdk",
+      agentType: message.agentType ?? this.deps.defaultAgentType,
       providerId,
       mode: message.modeOverride,
       modelTier: message.modelTier,
@@ -236,7 +237,7 @@ export class ConversationRouter {
       channelKey: message.channelKey,
       workspaceKey: message.workspaceKey,
       workspacePath: message.workspacePath,
-      agentType: "claude-sdk",
+      agentType: message.agentType ?? this.deps.defaultAgentType,
       providerId,
       mode: message.modeOverride,
       modelTier: message.modelTier,
