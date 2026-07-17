@@ -3,6 +3,10 @@ import type {
   SynapseContentMutationResult,
   SynapseContentMutationSuccessResult,
 } from "@/types/content"
+import {
+  canManageRepositoryContentLifecycle,
+  canUpdateRepositoryContent,
+} from "@/lib/content-ownership"
 
 function isContentMutationSaved(
   result: SynapseContentMutationResult,
@@ -18,7 +22,14 @@ function canManageContentDeletion(
   item: Pick<SynapseContentMeta, "createdBy" | "type">,
   currentUserId: string | null,
 ): boolean {
-  return item.type !== "skill" || item.createdBy === currentUserId
+  return canManageRepositoryContentLifecycle(item, currentUserId)
+}
+
+function canUpdateContent(
+  item: Pick<SynapseContentMeta, "createdBy" | "type">,
+  currentUserId: string | null,
+): boolean {
+  return canUpdateRepositoryContent(item, currentUserId)
 }
 
 function summarizeContentMutationConflictTitles(items: SynapseContentMeta[], limit = 3): string {
@@ -31,6 +42,7 @@ function summarizeContentMutationConflictTitles(items: SynapseContentMeta[], lim
 
 export {
   canManageContentDeletion,
+  canUpdateContent,
   countSavedContentMutations,
   isContentMutationSaved,
   summarizeContentMutationConflictTitles,

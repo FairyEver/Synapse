@@ -14,6 +14,7 @@ import type {
   SynapseUpdateContentRequest,
   SynapseUpdateContentPayload,
 } from "../../src/types/content"
+import { isContentCreator } from "../../src/lib/content-ownership"
 import type { EventBus } from "../runtime/event-bus"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import { ContentCapabilityError } from "../services/content-capability-errors"
@@ -521,7 +522,7 @@ async function assertOwnedByCurrentUser(
     deps.contentReader.getDetail(contentType, contentId),
   ])
 
-  if (detail.createdBy !== identity.userId) {
+  if (!isContentCreator(detail, identity.userId)) {
     throw new ContentCapabilityError("CONTENT_FORBIDDEN", "只能更新或删除自己发布的资源。", {
       details: {
         contentId,

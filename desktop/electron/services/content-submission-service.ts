@@ -1,5 +1,8 @@
-import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
+import {
+  canManageRepositoryContentLifecycle,
+  canUpdateRepositoryContent,
+} from "../../src/lib/content-ownership"
 import type {
   SynapseContentMutationResult,
   SynapseContentType,
@@ -36,14 +39,30 @@ const GIT_REMOTE_OPERATION_TIMEOUT_MS = 60_000
 
 type PushProgressListener = (statusText: string) => void
 
-function assertSkillDeletionOwner(
+function getContentOwnershipLabel(contentType: SynapseContentType): string {
+  return contentType === "skill"
+    ? "Skill"
+    : getContentTypeDefinition(contentType).singularLabel
+}
+
+function assertContentUpdateAllowed(
+  contentType: SynapseContentType,
+  createdBy: string,
+  userId: string,
+): void {
+  if (!canUpdateRepositoryContent({ createdBy, type: contentType }, userId)) {
+    throw new Error(`只有创建者可以更新 ${getContentOwnershipLabel(contentType)}。`)
+  }
+}
+
+function assertContentLifecycleOwner(
   contentType: SynapseContentType,
   createdBy: string,
   userId: string,
   action: "删除" | "恢复" | "永久删除",
 ): void {
-  if (contentType === "skill" && createdBy !== userId) {
-    throw new Error(`只有创建者可以${action} Skill。`)
+  if (!canManageRepositoryContentLifecycle({ createdBy, type: contentType }, userId)) {
+    throw new Error(`只有创建者可以${action} ${getContentOwnershipLabel(contentType)}。`)
   }
 }
 
@@ -385,6 +404,8 @@ class ContentSubmissionService {
       throw new Error(`找不到对应的 ${getContentTypeDefinition(contentType).singularLabel} 内容。`)
     }
 
+    assertContentUpdateAllowed(contentType, latestDetail.createdBy, identity.userId)
+
     if (!payload.force && latestDetail.latestHistoryDirname !== payload.baseHistoryDirname) {
       return {
         id: payload.id,
@@ -432,7 +453,7 @@ class ContentSubmissionService {
       throw new Error(`找不到对应的 ${getContentTypeDefinition(payload.type).singularLabel} 内容。`)
     }
 
-    assertSkillDeletionOwner(payload.type, latestDetail.createdBy, identity.userId, "删除")
+    assertContentLifecycleOwner(payload.type, latestDetail.createdBy, identity.userId, "删除")
 
     if (!payload.force && latestDetail.latestHistoryDirname !== payload.baseHistoryDirname) {
       return {
@@ -473,7 +494,7 @@ class ContentSubmissionService {
       throw new Error(`找不到对应的 ${getContentTypeDefinition(payload.type).singularLabel} 内容。`)
     }
 
-    assertSkillDeletionOwner(payload.type, latestDetail.createdBy, identity.userId, "恢复")
+    assertContentLifecycleOwner(payload.type, latestDetail.createdBy, identity.userId, "恢复")
 
     if (latestDetail.latestHistoryDirname !== payload.baseHistoryDirname) {
       return {
@@ -516,7 +537,7 @@ class ContentSubmissionService {
       throw new Error(`找不到对应的 ${getContentTypeDefinition(payload.type).singularLabel} 内容。`)
     }
 
-    assertSkillDeletionOwner(payload.type, latestDetail.createdBy, identity.userId, "永久删除")
+    assertContentLifecycleOwner(payload.type, latestDetail.createdBy, identity.userId, "永久删除")
 
     if (latestDetail.latestHistoryDirname !== payload.baseHistoryDirname || !latestDetail.deleted) {
       return {

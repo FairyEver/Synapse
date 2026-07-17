@@ -34,7 +34,10 @@ import {
 } from "@/modules/content/components/content-detail-window-layout"
 import { useContentDetailState } from "@/modules/content/hooks/use-content-detail-state"
 import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
-import { canManageContentDeletion } from "@/modules/content/lib/content-mutation"
+import {
+  canManageContentDeletion,
+  canUpdateContent,
+} from "@/modules/content/lib/content-mutation"
 import { PromptVersionView } from "@/modules/prompts/components/prompt-version-view"
 import { RuleVersionView } from "@/modules/rules/components/rule-version-view"
 import { SkillVersionView } from "@/modules/skills/components/skill-version-view"
@@ -143,8 +146,18 @@ function useContentWindowDeleteState(
   }
 }
 
-function canEditContentDetail(detail: SynapseContentDetail | null): boolean {
-  return Boolean(detail && !detail.isReadonly)
+function canEditContentDetail(
+  detail: SynapseContentDetail | null,
+  currentUserId: string | null,
+): boolean {
+  return Boolean(detail && !detail.isReadonly && canUpdateContent(detail, currentUserId))
+}
+
+function useCurrentRepositoryUserId(): string | null {
+  const { localIdentityState } = useIdentity()
+  return localIdentityState?.status === "ready"
+    ? localIdentityState.identity.userId
+    : null
 }
 
 function requestContentDelete(
@@ -348,6 +361,7 @@ function RuleDetailWindowPage({
   request: Extract<SynapseContentWindowRequest, { kind: "detail" }>
 }) {
   const logger = useMemo(() => createRendererLogger("rules.detail.window"), [])
+  const currentUserId = useCurrentRepositoryUserId()
   const { warning: notifyWarning } = useAppNotifications()
   const deleteState = useContentWindowDeleteState("rule", logger)
   const detailState = useContentDetailState<"rule">({
@@ -384,18 +398,22 @@ function RuleDetailWindowPage({
   }, [detailState.detail])
 
   const handleEdit = useCallback(() => {
-    if (detailState.detail && canEditContentDetail(detailState.detail)) {
+    if (detailState.detail && canEditContentDetail(detailState.detail, currentUserId)) {
       void openEditFromDetailWindow(detailState.detail, logger, notifyWarning)
     }
-  }, [detailState.detail, logger, notifyWarning])
+  }, [currentUserId, detailState.detail, logger, notifyWarning])
 
   return (
     <>
       <ContentDetailWindowShell
         summary={(
           <ContentDetailWindowSummary
-            canDelete={canEditContentDetail(detailState.detail)}
-            canEdit={canEditContentDetail(detailState.detail)}
+            canDelete={Boolean(
+              detailState.detail
+              && canEditContentDetail(detailState.detail, currentUserId)
+              && canManageContentDeletion(detailState.detail, currentUserId),
+            )}
+            canEdit={canEditContentDetail(detailState.detail, currentUserId)}
             detail={detailState.detail}
             onDelete={(event) => requestContentDelete(event, detailState.detail, deleteState)}
             onEdit={handleEdit}
@@ -440,6 +458,7 @@ function PromptDetailWindowPage({
   request: Extract<SynapseContentWindowRequest, { kind: "detail" }>
 }) {
   const logger = useMemo(() => createRendererLogger("prompts.detail.window"), [])
+  const currentUserId = useCurrentRepositoryUserId()
   const { warning: notifyWarning } = useAppNotifications()
   const deleteState = useContentWindowDeleteState("prompt", logger)
   const detailState = useContentDetailState<"prompt">({
@@ -476,18 +495,22 @@ function PromptDetailWindowPage({
   }, [detailState.detail])
 
   const handleEdit = useCallback(() => {
-    if (detailState.detail && canEditContentDetail(detailState.detail)) {
+    if (detailState.detail && canEditContentDetail(detailState.detail, currentUserId)) {
       void openEditFromDetailWindow(detailState.detail, logger, notifyWarning)
     }
-  }, [detailState.detail, logger, notifyWarning])
+  }, [currentUserId, detailState.detail, logger, notifyWarning])
 
   return (
     <>
       <ContentDetailWindowShell
         summary={(
           <ContentDetailWindowSummary
-            canDelete={canEditContentDetail(detailState.detail)}
-            canEdit={canEditContentDetail(detailState.detail)}
+            canDelete={Boolean(
+              detailState.detail
+              && canEditContentDetail(detailState.detail, currentUserId)
+              && canManageContentDeletion(detailState.detail, currentUserId),
+            )}
+            canEdit={canEditContentDetail(detailState.detail, currentUserId)}
             detail={detailState.detail}
             onDelete={(event) => requestContentDelete(event, detailState.detail, deleteState)}
             onEdit={handleEdit}
@@ -532,10 +555,7 @@ function SkillDetailWindowPage({
   request: Extract<SynapseContentWindowRequest, { kind: "detail" }>
 }) {
   const logger = useMemo(() => createRendererLogger("skills.detail.window"), [])
-  const { localIdentityState } = useIdentity()
-  const currentUserId = localIdentityState?.status === "ready"
-    ? localIdentityState.identity.userId
-    : null
+  const currentUserId = useCurrentRepositoryUserId()
   const { warning: notifyWarning } = useAppNotifications()
   const deleteState = useContentWindowDeleteState("skill", logger)
   const [activeFilePath, setActiveFilePath] = useState(MAIN_SKILL_FILE_PATH)
@@ -578,10 +598,10 @@ function SkillDetailWindowPage({
   }, [detailState.detail])
 
   const handleEdit = useCallback(() => {
-    if (detailState.detail && canEditContentDetail(detailState.detail)) {
+    if (detailState.detail && canEditContentDetail(detailState.detail, currentUserId)) {
       void openEditFromDetailWindow(detailState.detail, logger, notifyWarning)
     }
-  }, [detailState.detail, logger, notifyWarning])
+  }, [currentUserId, detailState.detail, logger, notifyWarning])
 
   const skillAttachments = detailState.displayedVersion?.attachments ?? detailState.detail?.attachments ?? []
   const selectedAttachment = useMemo(() => {
@@ -684,10 +704,10 @@ function SkillDetailWindowPage({
           <ContentDetailWindowSummary
             canDelete={Boolean(
               detailState.detail
-              && canEditContentDetail(detailState.detail)
+              && canEditContentDetail(detailState.detail, currentUserId)
               && canManageContentDeletion(detailState.detail, currentUserId),
             )}
-            canEdit={canEditContentDetail(detailState.detail)}
+            canEdit={canEditContentDetail(detailState.detail, currentUserId)}
             detail={detailState.detail}
             onDelete={(event) => requestContentDelete(event, detailState.detail, deleteState)}
             onEdit={handleEdit}

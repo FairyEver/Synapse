@@ -118,6 +118,7 @@ describe("contentSubmissionService", () => {
       gitPaths: ["/repo/rules/rule-1.md"],
     })
     mocks.contentHistoryService.readCurrentDetail.mockResolvedValue({
+      createdBy: "user-1",
       latestHistoryDirname: "remote-new",
       modifiedAt: "2026-05-20T12:00:00.000Z",
       modifiedByDisplayName: "Remote User",
@@ -202,6 +203,7 @@ describe("contentSubmissionService", () => {
   it("pulls and syncs before purge conflict detection", async () => {
     const { contentSubmissionService } = await import("../content-submission-service")
     mocks.contentHistoryService.readCurrentDetail.mockResolvedValueOnce({
+      createdBy: "user-1",
       latestHistoryDirname: "remote-new",
       modifiedAt: "2026-05-20T12:00:00.000Z",
       modifiedByDisplayName: "Remote User",
@@ -242,6 +244,7 @@ describe("contentSubmissionService", () => {
   it("does not purge content that is no longer deleted after sync", async () => {
     const { contentSubmissionService } = await import("../content-submission-service")
     mocks.contentHistoryService.readCurrentDetail.mockResolvedValueOnce({
+      createdBy: "user-1",
       latestHistoryDirname: "local-old",
       modifiedAt: "2026-05-20T12:00:00.000Z",
       modifiedByDisplayName: "Remote User",
@@ -284,6 +287,87 @@ describe("contentSubmissionService", () => {
       type: "skill",
       baseHistoryDirname: "history-1",
     } as never)).rejects.toThrow(`只有创建者可以${actionLabel} Skill。`)
+
+    expect(mocks.contentWriteService[writerMethod]).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["rule", "规则"],
+    ["prompt", "Prompt"],
+  ] as const)("rejects an update to another user's %s before conflict disclosure", async (contentType, contentLabel) => {
+    const { contentSubmissionService } = await import("../content-submission-service")
+    mocks.contentHistoryService.readCurrentDetail.mockResolvedValueOnce({
+      createdBy: "other-user",
+      latestHistoryDirname: "remote-new",
+      modifiedAt: "2026-05-20T12:00:00.000Z",
+      modifiedByDisplayName: "Other User",
+    })
+
+    await expect(contentSubmissionService.updateContent({
+      contentType,
+      payload: {
+        id: `${contentType}-1`,
+        title: contentLabel,
+        baseHistoryDirname: "local-old",
+      },
+    } as never)).rejects.toThrow(`只有创建者可以更新 ${contentLabel}。`)
+
+    expect(mocks.contentWriteService.updateContent).not.toHaveBeenCalled()
+  })
+
+  it("allows a collaborator to update a Skill", async () => {
+    const { contentSubmissionService } = await import("../content-submission-service")
+    mocks.repositoryStore.getRepositoryState.mockResolvedValue({
+      status: "ready",
+      isGitRepository: false,
+      gitRootPath: null,
+    })
+    mocks.contentHistoryService.readCurrentDetail.mockResolvedValueOnce({
+      createdBy: "other-user",
+      latestHistoryDirname: "history-1",
+      modifiedAt: "2026-05-20T12:00:00.000Z",
+      modifiedByDisplayName: "Other User",
+    })
+    mocks.contentWriteService.updateContent.mockResolvedValueOnce({
+      gitPaths: ["/repo/skills/skill-1"],
+      id: "skill-1",
+      latestHistoryDirname: "history-2",
+      modifiedAt: "2026-05-20T12:01:00.000Z",
+      title: "Skill",
+      type: "skill",
+    })
+
+    await expect(contentSubmissionService.updateContent({
+      contentType: "skill",
+      payload: {
+        id: "skill-1",
+        title: "Skill",
+        baseHistoryDirname: "history-1",
+      },
+    } as never)).resolves.toMatchObject({ status: "saved" })
+
+    expect(mocks.contentWriteService.updateContent).toHaveBeenCalled()
+  })
+
+  it.each([
+    ["deleteContent", "deleteContent", "rule", "规则", "删除"],
+    ["restoreContent", "restoreContent", "prompt", "Prompt", "恢复"],
+    ["purgeContent", "purgeContent", "rule", "规则", "永久删除"],
+  ] as const)("rejects %s for another user's %s", async (serviceMethod, writerMethod, contentType, contentLabel, actionLabel) => {
+    const { contentSubmissionService } = await import("../content-submission-service")
+    mocks.contentHistoryService.readCurrentDetail.mockResolvedValueOnce({
+      createdBy: "other-user",
+      deleted: true,
+      latestHistoryDirname: "history-1",
+      modifiedAt: "2026-05-20T12:00:00.000Z",
+      modifiedByDisplayName: "Other User",
+    })
+
+    await expect(contentSubmissionService[serviceMethod]({
+      id: `${contentType}-1`,
+      type: contentType,
+      baseHistoryDirname: "history-1",
+    } as never)).rejects.toThrow(`只有创建者可以${actionLabel} ${contentLabel}。`)
 
     expect(mocks.contentWriteService[writerMethod]).not.toHaveBeenCalled()
   })
