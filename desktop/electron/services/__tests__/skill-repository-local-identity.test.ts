@@ -11,6 +11,7 @@ import {
   readSkillRepositoryIdentityRaw,
   removeLegacySkillRepositoryIdentity,
   SkillRepositoryIdentityChangedError,
+  SkillRepositoryIdentityInvalidError,
   SkillRepositorySourceDirectoryChangedError,
   writeSkillRepositoryIdentity,
 } from "../skill-repository-local-identity"
@@ -360,6 +361,41 @@ describe("readSkillRepositoryIdentity", () => {
     await expect(readSkillRepositoryIdentity(malformedDir)).resolves.toBeNull()
     await expect(readSkillRepositoryIdentity(legacyDir)).resolves.toBeNull()
     await expect(readSkillRepositoryIdentity(invalidNameDir)).resolves.toBeNull()
+  })
+
+  it.each([
+    ["malformed JSON", "{ not json"],
+    ["wrong kind", JSON.stringify({ ...identity, kind: "resource-repository" })],
+    ["invalid name", JSON.stringify({ ...identity, name: "demo.skill" })],
+  ])("rejects an invalid current identity instead of falling back to legacy: %s", async (_label, currentRaw) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-read-invalid-current-"))
+    const currentPath = path.join(dir, ".synapse.repository.json")
+    const legacyPath = path.join(dir, ".synapse.json")
+    await writeFile(currentPath, currentRaw, "utf8")
+    await writeFile(legacyPath, JSON.stringify({ ...identity, id: "legacy-repo" }), "utf8")
+    const permissionRequests: PermissionRequest[] = []
+    const permissionGuard = permissionGuardReturning({ allowed: true }, permissionRequests)
+    const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+    const auditSink = auditSinkRecording(auditEvents)
+
+    await expect(readSkillRepositoryIdentity(dir, { actor, auditSink, permissionGuard }))
+      .rejects.toBeInstanceOf(SkillRepositoryIdentityInvalidError)
+
+    expect(permissionRequests).toEqual([expect.objectContaining({
+      resource: currentPath,
+      context: expect.objectContaining({ identitySource: "current" }),
+    })])
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: currentPath,
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        identitySource: "current",
+        identityFound: false,
+        reason: "invalid-identity",
+      }),
+    }))
+    expect(auditEvents).not.toContainEqual(expect.objectContaining({ resource: legacyPath }))
   })
 
   it("reads a legacy cloud identity and removes only that legacy kind during migration", async () => {

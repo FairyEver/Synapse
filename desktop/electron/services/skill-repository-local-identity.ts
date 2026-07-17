@@ -38,6 +38,13 @@ export class SkillRepositoryIdentityChangedError extends Error {
   }
 }
 
+export class SkillRepositoryIdentityInvalidError extends Error {
+  constructor() {
+    super("本地 Skill 的当前云仓库身份无效，请修复 .synapse.repository.json 后重新扫描。")
+    this.name = "SkillRepositoryIdentityInvalidError"
+  }
+}
+
 export class SkillRepositorySourceDirectoryChangedError extends Error {
   constructor(message = "本地 Skill 在上传期间发生变化，请重新扫描后再关联。") {
     super(message)
@@ -199,19 +206,11 @@ async function readIdentityFile(
   try {
     parsed = JSON.parse(raw)
   } catch {
-    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "allowed", {
-      ...metadata,
-      identityFound: false,
-    })
-    return null
+    return handleInvalidIdentity(filePath, metadata, identitySource, security)
   }
 
   if (!parsed || typeof parsed !== "object") {
-    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "allowed", {
-      ...metadata,
-      identityFound: false,
-    })
-    return null
+    return handleInvalidIdentity(filePath, metadata, identitySource, security)
   }
   const candidate = parsed as Record<string, unknown>
   if (
@@ -221,11 +220,7 @@ async function readIdentityFile(
     || typeof candidate.name !== "string"
     || !candidate.name.trim()
   ) {
-    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "allowed", {
-      ...metadata,
-      identityFound: false,
-    })
-    return null
+    return handleInvalidIdentity(filePath, metadata, identitySource, security)
   }
 
   const { normalizeSkillRepositoryName } = await sharedSkillRepositoryPromise
@@ -233,11 +228,7 @@ async function readIdentityFile(
   try {
     name = normalizeSkillRepositoryName(candidate.name)
   } catch {
-    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "allowed", {
-      ...metadata,
-      identityFound: false,
-    })
-    return null
+    return handleInvalidIdentity(filePath, metadata, identitySource, security)
   }
 
   const identity: SkillRepositoryIdentity = {
@@ -252,6 +243,28 @@ async function readIdentityFile(
     repositoryId: identity.id,
   })
   return identity
+}
+
+function handleInvalidIdentity(
+  filePath: string,
+  metadata: Record<string, unknown>,
+  identitySource: "current" | "legacy",
+  security?: SkillRepositoryIdentityReadSecurity,
+): null {
+  const shouldReject = identitySource === "current"
+  recordIdentityAudit(
+    security,
+    "fs.read.outside-userdata",
+    filePath,
+    shouldReject ? "failed" : "allowed",
+    {
+      ...metadata,
+      identityFound: false,
+      ...(shouldReject ? { reason: "invalid-identity" } : {}),
+    },
+  )
+  if (shouldReject) throw new SkillRepositoryIdentityInvalidError()
+  return null
 }
 
 async function readIdentityRaw(
