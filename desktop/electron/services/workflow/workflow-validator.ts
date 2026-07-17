@@ -395,6 +395,20 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
       const bindingRecord = rawBindings && typeof rawBindings === "object" && !Array.isArray(rawBindings)
         ? rawBindings as Record<string, unknown>
         : undefined
+      if (childParams && templateRecord && bindingRecord) {
+        for (const childParam of childParams) {
+          const template = templateRecord[childParam.name]
+          const binding = bindingRecord[childParam.name]
+          if (typeof template !== "string" || template.length === 0 || !binding) continue
+          errors.push({
+            type: "invalid_config",
+            nodeId: node.id,
+            nodeName: node.name,
+            field: "paramBindings",
+            message: `节点「${node.name}」的子工作流参数「${childParam.name}」不能同时使用 paramTemplates 和 paramBindings`,
+          })
+        }
+      }
       const bindingTemplateValues = Object.values(bindingRecord ?? {}).flatMap((rawBinding) => {
         if (!rawBinding || typeof rawBinding !== "object" || Array.isArray(rawBinding)) return []
         const binding = rawBinding as Partial<WorkflowParamBinding>

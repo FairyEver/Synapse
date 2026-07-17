@@ -385,6 +385,32 @@ describe("validateWorkflow", () => {
     expect(result.errors).toEqual([])
   })
 
+  it("rejects duplicate template and binding mappings for the same workflow_call child param", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "parent_topic",
+      type: "text",
+      default: null,
+    }, {
+      paramTemplates: { topic: "legacy topic" },
+      paramBindings: {
+        topic: { mode: "value", source: { type: "static", value: "bound topic" } },
+      },
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [
+        { name: "topic", type: "text", default: null },
+      ]]]),
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      type: "invalid_config",
+      nodeId: "call",
+      field: "paramBindings",
+      message: expect.stringContaining("子工作流参数「topic」不能同时使用 paramTemplates 和 paramBindings"),
+    }))
+  })
+
   it.each([
     { name: "topic", type: "text" as const, default: null },
     { name: "limit", type: "number" as const, default: null },
