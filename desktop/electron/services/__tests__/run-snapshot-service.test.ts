@@ -4,6 +4,8 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkflowRunSnapshot } from "../../../src/types/workflow"
+import "../../../workflow-nodes/register.main"
+import { defaultCodexNodeConfig } from "../../../workflow-nodes/codex/schema"
 import { RunSnapshotService } from "../workflow/run-snapshot-service"
 
 const logger = vi.hoisted(() => ({
@@ -149,6 +151,8 @@ describe("RunSnapshotService", () => {
             type: "codex",
             position: { x: 0, y: 0 },
             config: {
+              ...defaultCodexNodeConfig,
+              prompt: "Run Codex",
               configOverrides: [{ key: "ANTHROPIC_API_KEY", value: "sk-raw-secret" }],
             },
           },
@@ -247,7 +251,13 @@ describe("RunSnapshotService", () => {
         createdAt: 1,
         updatedAt: 2,
         params: [],
-        nodes: [{ id: "end", name: "结束", type: "end", position: { x: 0, y: 0 }, config: {} }],
+        nodes: [{
+          id: "end",
+          name: "结束",
+          type: "end",
+          position: { x: 0, y: 0 },
+          config: { outputType: "text", template: "", variables: [] },
+        }],
         edges: [],
       },
     }
