@@ -44,6 +44,7 @@ function makeDeps(overrides: Partial<WorkflowDispatchDeps> = {}): WorkflowDispat
     } as unknown as WorkflowDispatchDeps["workflowService"],
     snapshotService: {
       list: vi.fn(async () => []),
+      get: vi.fn(async () => null),
       findByRunId: vi.fn(async () => null),
       deleteWorkflow: vi.fn(async () => {}),
     } as unknown as WorkflowDispatchDeps["snapshotService"],
@@ -242,7 +243,7 @@ describe("createWorkflowDispatcher", () => {
       getRunStatus: vi.fn(async () => null),
       snapshotService: {
         ...makeDeps().snapshotService,
-        findByRunId: vi.fn(async () => snapshot),
+        get: vi.fn(async () => snapshot),
       } as unknown as WorkflowDispatchDeps["snapshotService"],
     })
     const dispatcher = createWorkflowDispatcher(deps)
@@ -263,6 +264,8 @@ describe("createWorkflowDispatcher", () => {
       definitionMigration: snapshot.definitionMigration,
     })
     expect(result.data).not.toHaveProperty("version")
+    expect(deps.snapshotService.get).toHaveBeenCalledWith("run-snap", "wf-1")
+    expect(deps.snapshotService.findByRunId).not.toHaveBeenCalled()
   })
 
   it("workflow.run.get sanitizes active run status before returning it to MCP callers", async () => {
@@ -351,7 +354,7 @@ describe("createWorkflowDispatcher", () => {
     const deps = makeDeps({
       snapshotService: {
         ...makeDeps().snapshotService,
-        findByRunId: vi.fn(async () => snapshot),
+        get: vi.fn(async () => snapshot),
       } as unknown as WorkflowDispatchDeps["snapshotService"],
     })
     const dispatcher = createWorkflowDispatcher(deps)
@@ -372,6 +375,7 @@ describe("createWorkflowDispatcher", () => {
       .rejects
       .toThrow("Invalid workflow run id")
     expect(deps.getRunStatus).not.toHaveBeenCalled()
+    expect(deps.snapshotService.get).not.toHaveBeenCalled()
     expect(deps.snapshotService.findByRunId).not.toHaveBeenCalled()
   })
 

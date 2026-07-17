@@ -292,7 +292,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
         data: status.workflowId === workflowId ? sanitizeWorkflowRunStatus(status) : null,
       }
     }
-    const snapshot = await deps.snapshotService.findByRunId(runId)
+    const snapshot = await deps.snapshotService.get(runId, workflowId)
     return {
       ok: true,
       data: snapshot?.workflowId === workflowId ? snapshotToRunStatus(snapshot) : null,
