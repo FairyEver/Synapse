@@ -75,7 +75,14 @@ export class WorkflowMigrationStorage {
       backup = this.createAndVerifyBackup(source, sourceDigest)
       this.backupPromises.set(sourceDigest, backup)
     }
-    await backup
+    try {
+      await backup
+    } catch (error) {
+      if (this.backupPromises.get(sourceDigest) === backup) {
+        this.backupPromises.delete(sourceDigest)
+      }
+      throw error
+    }
     return source
   }
 

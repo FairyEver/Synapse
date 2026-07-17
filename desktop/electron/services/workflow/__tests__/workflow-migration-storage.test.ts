@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import type { Dir } from "node:fs"
 import { mkdir, mkdtemp, rm, symlink, truncate, writeFile } from "node:fs/promises"
@@ -14,9 +15,14 @@ vi.mock("node:fs/promises", async (importOriginal) => ({
 }))
 
 import {
+  WorkflowMigrationStorage,
   listLegacyWorkflowSources,
   type LegacyWorkflowScanIssue,
 } from "../workflow-migration-storage"
+import {
+  WORKFLOW_LEGACY_BASELINE_VERSION,
+  WORKFLOW_SCHEMA_VERSION,
+} from "../workflow-document-migration"
 
 const roots: string[] = []
 
@@ -34,6 +40,42 @@ afterEach(async () => {
 })
 
 describe("legacy workflow migration storage", () => {
+  it("retries backup verification after an earlier failure is repaired", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "workflow-migration-backup-retry-"))
+    roots.push(root)
+    const storePath = path.join(root, "workflows.json")
+    const backupDirectoryPath = path.join(root, "backups")
+    const source = Buffer.from('{"workflows":[]}\n')
+    const sourceDigest = createHash("sha256").update(source).digest("hex")
+    const backupPath = path.join(
+      backupDirectoryPath,
+      [
+        "workflows",
+        WORKFLOW_LEGACY_BASELINE_VERSION,
+        "to",
+        WORKFLOW_SCHEMA_VERSION,
+        sourceDigest,
+        "json",
+      ].join("."),
+    )
+    await mkdir(backupDirectoryPath, { recursive: true })
+    await writeFile(storePath, source)
+    await writeFile(backupPath, "corrupt backup")
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+    readFileMock.mockImplementation((...args: unknown[]) => (
+      actual.readFile as unknown as (...readArgs: unknown[]) => Promise<Buffer>
+    )(...args))
+
+    const storage = new WorkflowMigrationStorage(storePath, backupDirectoryPath)
+    await expect(storage.ensureCurrentStoreBackup())
+      .rejects.toThrow("Workflow migration backup verification failed")
+
+    await writeFile(backupPath, source)
+    const retried = await storage.ensureCurrentStoreBackup()
+
+    expect(Buffer.from(retried ?? [])).toEqual(source)
+  })
+
   it("preserves both validation and directory handle close failures", async () => {
     const repositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-close-failure-"))
     roots.push(repositoryPath)
