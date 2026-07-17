@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
-import { readFile, stat } from "node:fs/promises"
+import { constants } from "node:fs"
+import { lstat, open } from "node:fs/promises"
 import path from "node:path"
 import { BrowserWindow, dialog } from "electron"
 import { z } from "zod"
@@ -26,6 +27,7 @@ import type { SynapseWorkflowPackage, WorkflowImportOptions, WorkflowModelMappin
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
+import { hasSameFileSnapshot } from "../../services/fs-utils"
 import { isSafeWorkflowId, isSafeWorkflowNodeId, isSafeWorkflowRunId } from "../../services/workflow/workflow-id"
 import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowEventForRenderer, sanitizeWorkflowOutputForHistory, sanitizeWorkflowRunSnapshot, sanitizeWorkflowRunStatus } from "../../services/workflow/run-snapshot-sanitize"
 import { checkCapabilityPermission } from "../../capabilities/permission-audit"
@@ -383,11 +385,52 @@ function parseWorkflowPackageOrFail(options: {
 }
 
 async function readWorkflowPackageFile(packagePath: string): Promise<{ raw: unknown; digest: string }> {
-  const fileStat = await stat(packagePath)
-  if (fileStat.size > WORKFLOW_PACKAGE_MAX_BYTES) {
+  const expected = await lstat(packagePath, { bigint: true })
+  if (expected.isSymbolicLink()) {
+    throw new Error("工作流包不能是符号链接。")
+  }
+  if (!expected.isFile()) {
+    throw new Error("工作流包必须是普通文件。")
+  }
+  if (expected.size > BigInt(WORKFLOW_PACKAGE_MAX_BYTES)) {
     throw new Error("工作流包文件过大。")
   }
-  const text = await readFile(packagePath, "utf-8")
+
+  const noFollowFlag = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0
+  const nonBlockingFlag = typeof constants.O_NONBLOCK === "number" ? constants.O_NONBLOCK : 0
+  const handle = await open(packagePath, constants.O_RDONLY | noFollowFlag | nonBlockingFlag)
+  let text: string
+  try {
+    const opened = await handle.stat({ bigint: true })
+    if (!opened.isFile() || !hasSameFileSnapshot(expected, opened)) {
+      throw new Error("工作流包在读取前发生变化，请重新选择文件。")
+    }
+
+    const buffer = Buffer.alloc(Number(opened.size))
+    let offset = 0
+    while (offset < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset)
+      if (bytesRead === 0) break
+      offset += bytesRead
+    }
+    text = buffer.subarray(0, offset).toString("utf8")
+
+    const [afterRead, pathAfterRead] = await Promise.all([
+      handle.stat({ bigint: true }),
+      lstat(packagePath, { bigint: true }),
+    ])
+    if (
+      pathAfterRead.isSymbolicLink()
+      || !pathAfterRead.isFile()
+      || !hasSameFileSnapshot(expected, afterRead)
+      || !hasSameFileSnapshot(expected, pathAfterRead)
+    ) {
+      throw new Error("工作流包在读取期间发生变化，请重新选择文件。")
+    }
+  } finally {
+    await handle.close()
+  }
+
   if (Buffer.byteLength(text, "utf8") > WORKFLOW_PACKAGE_MAX_BYTES) {
     throw new Error("工作流包文件过大。")
   }

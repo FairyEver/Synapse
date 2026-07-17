@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -1634,6 +1634,59 @@ describe("workflowIpcModule", () => {
           source: "workflow.importPackage",
           errorName: "Error",
         }),
+      }))
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects a symlinked workflow package during import", async () => {
+    const { packagePath: targetPath, tempRoot } = await createWorkflowImportFixture("workflow-import-symlink-test-")
+    const packagePath = path.join(tempRoot, "linked.synapse-workflow.json")
+    await symlink(targetPath, packagePath)
+    const packageService = { importPackage: vi.fn() }
+    const permissionGuard = { check: vi.fn<PermissionGuard["check"]>(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const harness = createWorkflowImportHarness(packageService, permissionGuard, auditSink)
+
+    try {
+      await expect(harness.invoke("synapse:workflow:import-package", { packagePath, mappings: [] }))
+        .rejects
+        .toThrow("工作流包不能是符号链接。")
+
+      expect(packageService.importPackage).not.toHaveBeenCalled()
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        outcome: "failed",
+        resource: packagePath,
+        metadata: expect.objectContaining({ source: "workflow.importPackage" }),
+      }))
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects a symlinked workflow package during import inspection", async () => {
+    const { packagePath: targetPath, tempRoot } = await createWorkflowImportFixture("workflow-inspect-symlink-test-")
+    const packagePath = path.join(tempRoot, "linked.synapse-workflow.json")
+    await symlink(targetPath, packagePath)
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [packagePath] })
+    const packageService = { buildImportPreview: vi.fn() }
+    const permissionGuard = { check: vi.fn<PermissionGuard["check"]>(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const harness = createWorkflowImportHarness(packageService, permissionGuard, auditSink)
+
+    try {
+      await expect(harness.invoke("synapse:workflow:inspect-import-package", undefined))
+        .rejects
+        .toThrow("工作流包不能是符号链接。")
+
+      expect(packageService.buildImportPreview).not.toHaveBeenCalled()
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        outcome: "failed",
+        resource: packagePath,
+        metadata: expect.objectContaining({ source: "workflow.inspectImportPackage" }),
       }))
     } finally {
       await rm(tempRoot, { recursive: true, force: true })
