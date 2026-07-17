@@ -26,6 +26,16 @@ export interface WorkflowValidationOptions {
   readonly workflowParamsById?: ReadonlyMap<string, readonly WorkflowParam[]>
 }
 
+export function workflowCallTargetIds(def: Pick<WorkflowDefinition, "nodes">): string[] {
+  const ids = new Set<string>()
+  for (const node of def.nodes) {
+    if (node.type !== "workflow_call") continue
+    const workflowId = typeof node.config.workflowId === "string" ? node.config.workflowId.trim() : ""
+    if (workflowId) ids.add(workflowId)
+  }
+  return [...ids]
+}
+
 const TEMPLATE_VARIABLE_RE = /\{\{\s*\$?([\p{L}\p{N}_.-]+)\s*\}\}/gu
 
 export function configuredWorkflowProjectIdsFromConfig(config: Pick<SynapseConfig, "repositories" | "global">): string[] {

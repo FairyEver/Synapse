@@ -78,6 +78,55 @@ function makeDef(): WorkflowDefinition {
 }
 
 describe("WorkflowService", () => {
+  it("does not list unrelated workflow definitions when saving a regular workflow", async () => {
+    const { repo, svc } = createRepo()
+    await svc.initialize()
+    const workflows = repo.namespace<WorkflowEntryV1>("workflows")
+    const list = vi.spyOn(workflows, "list")
+
+    await expect(svc.save(makeDef())).resolves.toHaveProperty("versionHash")
+
+    expect(list).not.toHaveBeenCalled()
+  })
+
+  it("loads only referenced child definitions when saving a workflow call", async () => {
+    const { repo, svc } = createRepo()
+    await svc.initialize()
+    await svc.save({ ...makeDef(), id: "child" })
+    await svc.save({ ...makeDef(), id: "unrelated" })
+    const workflows = repo.namespace<WorkflowEntryV1>("workflows")
+    const get = vi.spyOn(workflows, "get")
+    const list = vi.spyOn(workflows, "list")
+    const parent = {
+      ...makeDef(),
+      id: "parent",
+      nodes: [
+        {
+          id: "call",
+          name: "调用",
+          type: "workflow_call",
+          position: { x: 0, y: 0 },
+          config: { workflowId: "child", variables: [], paramTemplates: {} },
+        },
+        {
+          id: "end",
+          name: "结束",
+          type: "end",
+          position: { x: 400, y: 0 },
+          config: { outputType: "text", template: "", variables: [] },
+        },
+      ],
+      edges: [{ id: "edge-1", from: "call", to: "end" }],
+    } satisfies WorkflowDefinition
+
+    await expect(svc.save(parent)).resolves.toHaveProperty("versionHash")
+
+    expect(get).toHaveBeenCalledWith("parent")
+    expect(get).toHaveBeenCalledWith("child")
+    expect(get).not.toHaveBeenCalledWith("unrelated")
+    expect(list).not.toHaveBeenCalled()
+  })
+
   it("save + list + get roundtrip", async () => {
     const { svc } = createRepo()
     const def = makeDef()

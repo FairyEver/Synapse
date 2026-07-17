@@ -1,6 +1,6 @@
 import path from "node:path"
 import { createHash, randomUUID } from "node:crypto"
-import type { WorkflowDefinition, WorkflowFutureDocument, WorkflowMeta, WorkflowParam, ValidationError } from "../../../src/types/workflow"
+import type { WorkflowDefinition, WorkflowFutureDocument, WorkflowMeta, ValidationError } from "../../../src/types/workflow"
 import type {
   DataNamespace,
   DataRepository,
@@ -9,7 +9,7 @@ import type {
   WorkflowMigrationStateStatus,
 } from "../../runtime/data-repo"
 import { AtomicSourceChangedError, JsonNamespace } from "../../runtime/data-repo"
-import { validateWorkflowWithResourceDefaults, type WorkflowValidationOptions } from "./workflow-validator"
+import { validateWorkflowWithResourceDefaults, workflowCallTargetIds, type WorkflowValidationOptions } from "./workflow-validator"
 import { createMainLogger } from "../log-store"
 import { errorLogMeta as baseErrorLogMeta } from "../error-sanitize"
 import { sanitizeAgentError } from "./workflow-utils"
@@ -187,8 +187,7 @@ export class WorkflowService {
     }
     let workflowEntries: WorkflowDefinition[]
     try {
-      const storedEntries = await this.workflowsNamespace.list()
-      const existing = storedEntries.find((entry) => entry.id === current.id)
+      const existing = await this.workflowsNamespace.get(current.id)
       if (existing) {
         const existingResult = migrateWorkflowDocument(existing)
         if (existingResult.kind !== "current") {
@@ -200,23 +199,26 @@ export class WorkflowService {
           }
         }
       }
-      workflowEntries = storedEntries.flatMap((entry) => {
+      const targetIds = workflowCallTargetIds(current).filter((id) => id !== current.id)
+      const targetEntries = await Promise.all(targetIds.map((id) => this.workflowsNamespace.get(id)))
+      workflowEntries = targetEntries.flatMap((entry) => {
+        if (!entry) return []
         const result = migrateWorkflowDocument(entry)
         return result.kind === "current" ? [result.document] : []
       })
     } catch (err) {
-      logger.warn("workflow save workflow validation context failed", {
+      logger.warn("workflow save referenced workflow validation context failed", {
         id: current.id,
         name: current.name,
         ...errorLogMeta(err),
       })
-      return { errors: [{ type: "invalid_config", message: "保存失败：工作流列表读取失败，请重试" }] }
+      return { errors: [{ type: "invalid_config", message: "保存失败：关联工作流读取失败，请重试" }] }
     }
     validationOptions = {
       ...validationOptions,
       availableWorkflowIds: workflowEntries.map((entry) => entry.id),
       workflowParamsById: new Map(
-        workflowEntries.map((entry) => [entry.id, entry.params as WorkflowParam[]]),
+        workflowEntries.map((entry) => [entry.id, entry.params]),
       ),
     }
     const validation = await validateWorkflowWithResourceDefaults(current, validationOptions)

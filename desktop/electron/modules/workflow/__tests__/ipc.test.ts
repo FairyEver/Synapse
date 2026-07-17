@@ -58,6 +58,11 @@ vi.mock("../../../services/workflow/workflow-validator", () => ({
   validateRunParams: vi.fn(() => []),
   buildEffectiveRunParams: vi.fn((_def: unknown, params: Record<string, unknown>) => params),
   configuredWorkflowProjectIdsFromConfig: vi.fn(() => ["project-1"]),
+  workflowCallTargetIds: vi.fn((definition: WorkflowDefinition) => definition.nodes.flatMap((node) => {
+    if (node.type !== "workflow_call") return []
+    const workflowId = typeof node.config.workflowId === "string" ? node.config.workflowId.trim() : ""
+    return workflowId ? [workflowId] : []
+  })),
 }))
 
 describe("workflowIpcModule", () => {
@@ -1168,6 +1173,7 @@ describe("workflowIpcModule", () => {
       definition,
       expect.objectContaining({ configuredProjectIds: ["project-1"] }),
     )
+    expect(workflow.list).not.toHaveBeenCalled()
   })
 
   it("logs cancel signal only when an active AbortController exists, warns otherwise", async () => {
