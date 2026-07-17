@@ -1,7 +1,13 @@
-import { lstat, readFile, readdir } from "node:fs/promises"
+import { constants, type BigIntStats } from "node:fs"
+import { lstat, open, readdir, realpath } from "node:fs/promises"
 import path from "node:path"
 import { arePathsEqualForCompare } from "../../../src/lib/path-compare"
-import { isFileNotFoundError, pathExists } from "../fs-utils"
+import {
+  hasSameFileSnapshot,
+  isFileNotFoundError,
+  isPathInside,
+  pathExists,
+} from "../fs-utils"
 
 const SYNAPSE_SKILL_ID_FILE_NAME = ".synapse.json"
 const CURRENT_SYNAPSE_SKILL_CONTENT_ID = "synapse-skill"
@@ -43,14 +49,67 @@ function areSkillContentIdsEquivalent(left: string | null, right: string): boole
 
 async function readSkillIdFile(skillDirectoryPath: string): Promise<string | null> {
   try {
-    const raw = await readFile(path.join(skillDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME), "utf8")
-    return parseSkillIdFile(raw)
-  } catch (error) {
-    if (isFileNotFoundError(error)) {
+    const identityPath = path.join(skillDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME)
+    const [directoryEntry, identityEntry] = await Promise.all([
+      lstat(skillDirectoryPath, { bigint: true }),
+      lstat(identityPath, { bigint: true }),
+    ])
+    if (
+      directoryEntry.isSymbolicLink()
+      || !directoryEntry.isDirectory()
+      || identityEntry.isSymbolicLink()
+      || !identityEntry.isFile()
+    ) {
       return null
     }
 
-    throw error
+    const raw = await readVerifiedSkillIdFile(skillDirectoryPath, identityPath, identityEntry)
+    return parseSkillIdFile(raw)
+  } catch {
+    return null
+  }
+}
+
+async function readVerifiedSkillIdFile(
+  skillDirectoryPath: string,
+  identityPath: string,
+  expected: BigIntStats,
+): Promise<string> {
+  const [directoryRealPath, identityRealPath] = await Promise.all([
+    realpath(skillDirectoryPath),
+    realpath(identityPath),
+  ])
+  if (!isPathInside(directoryRealPath, identityRealPath)) {
+    throw new Error("Skill 身份文件必须位于 Skill 目录内。")
+  }
+
+  const noFollowFlag = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0
+  const nonBlockingFlag = typeof constants.O_NONBLOCK === "number" ? constants.O_NONBLOCK : 0
+  const handle = await open(identityPath, constants.O_RDONLY | noFollowFlag | nonBlockingFlag)
+  try {
+    const opened = await handle.stat({ bigint: true })
+    if (!opened.isFile() || !hasSameFileSnapshot(expected, opened)) {
+      throw new Error("Skill 身份文件在读取前发生变化。")
+    }
+
+    const raw = await handle.readFile({ encoding: "utf8" })
+    const [afterRead, pathAfterRead, realPathAfterRead] = await Promise.all([
+      handle.stat({ bigint: true }),
+      lstat(identityPath, { bigint: true }),
+      realpath(identityPath),
+    ])
+    if (
+      pathAfterRead.isSymbolicLink()
+      || !pathAfterRead.isFile()
+      || !hasSameFileSnapshot(expected, afterRead)
+      || !hasSameFileSnapshot(expected, pathAfterRead)
+      || !isPathInside(directoryRealPath, realPathAfterRead)
+    ) {
+      throw new Error("Skill 身份文件在读取期间发生变化。")
+    }
+    return raw
+  } finally {
+    await handle.close()
   }
 }
 

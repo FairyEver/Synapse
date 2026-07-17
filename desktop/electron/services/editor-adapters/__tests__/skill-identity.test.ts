@@ -1,10 +1,11 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   checkSkillNameConflict,
   findSkillDirectoryByContentId,
+  isSkillDirectoryOwnedByContentId,
   resolveSkillTargetPath,
   SYNAPSE_SKILL_ID_FILE_NAME,
 } from "../skill-identity"
@@ -80,6 +81,40 @@ describe("checkSkillNameConflict", () => {
         existingPath: path.join(root, "synapse-skill"),
         hasConflict: true,
       })
+  })
+
+  it("treats a symlinked identity file as an unowned target conflict", async () => {
+    const root = await createTempRoot()
+    const skillDirectoryPath = path.join(root, "review-helper")
+    const externalIdentityPath = path.join(root, "external-identity.json")
+    await mkdir(skillDirectoryPath, { recursive: true })
+    await writeFile(externalIdentityPath, JSON.stringify({ id: "skill-1" }), "utf8")
+    await symlink(externalIdentityPath, path.join(skillDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME))
+
+    await expect(checkSkillNameConflict(root, "review-helper", "skill-1"))
+      .resolves.toEqual({
+        hasConflict: true,
+        existingContentId: "unknown",
+        existingPath: skillDirectoryPath,
+      })
+    await expect(findSkillDirectoryByContentId(root, "skill-1")).resolves.toBeNull()
+    await expect(isSkillDirectoryOwnedByContentId(skillDirectoryPath, "skill-1")).resolves.toBe(false)
+  })
+
+  it("treats a symlinked Skill directory as an unowned target conflict", async () => {
+    const root = await createTempRoot()
+    const externalRoot = await createTempRoot()
+    const externalSkillPath = await createSkillDirectoryWithId(externalRoot, "review-helper", "skill-1")
+    const skillDirectoryPath = path.join(root, "review-helper")
+    await symlink(externalSkillPath, skillDirectoryPath, "dir")
+
+    await expect(checkSkillNameConflict(root, "review-helper", "skill-1"))
+      .resolves.toEqual({
+        hasConflict: true,
+        existingContentId: "unknown",
+        existingPath: skillDirectoryPath,
+      })
+    await expect(isSkillDirectoryOwnedByContentId(skillDirectoryPath, "skill-1")).resolves.toBe(false)
   })
 })
 
