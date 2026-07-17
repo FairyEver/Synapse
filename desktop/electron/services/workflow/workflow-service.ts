@@ -543,7 +543,7 @@ function legacyMigrationStateId(workflowId: string): string {
   return `legacy:${workflowId}`
 }
 
-function workflowReadError(result: Exclude<WorkflowDocumentMigrationResult, { kind: "current" }>): Error {
+export function workflowReadError(result: Exclude<WorkflowDocumentMigrationResult, { kind: "current" }>): Error {
   if (result.kind === "unsupported_future") {
     return new Error(`该工作流使用更高的数据版本（${result.sourceVersion}），请升级 Synapse 后再编辑或运行。`)
   }

@@ -5,7 +5,11 @@ import { BrowserWindow, dialog } from "electron"
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
-import type { WorkflowDefaultProviderModel, WorkflowService } from "../../services/workflow/workflow-service"
+import {
+  workflowReadError,
+  type WorkflowDefaultProviderModel,
+  type WorkflowService,
+} from "../../services/workflow/workflow-service"
 import type { WorkflowParamPresetService } from "../../services/workflow/workflow-param-preset-service"
 import type { WorkflowPackageService } from "../../services/workflow/workflow-package-service"
 import type { WorkflowEngine } from "../../services/workflow/workflow-engine"
@@ -14,6 +18,7 @@ import type { WorkflowWindowManager } from "../../services/workflow/window-manag
 import type { EventBus } from "../../runtime/event-bus"
 import { configuredWorkflowProjectIdsFromConfig, validateWorkflow, validateWorkflowWithResourceDefaults, type WorkflowValidationOptions } from "../../services/workflow/workflow-validator"
 import { normalizeWorkflowRunParams } from "../../services/workflow/workflow-param-normalizer"
+import { migrateWorkflowDocument } from "../../services/workflow/workflow-document-migration"
 import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../config"
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
 import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
@@ -1348,8 +1353,19 @@ export const workflowIpcModule: IpcModule = {
         z.object({ conflict: z.literal(true), activeRunId: z.string() }),
       ]),
       handler: async (ctx, { definition: rawDef, params, force }: { definition: unknown; params: Record<string, unknown>; force?: boolean }) => {
-        const def = rawDef as import("../../../src/types/workflow").WorkflowDefinition
-        logger.info("workflow:runDefinition requested", { workflowId: def.id, paramKeys: Object.keys(params) })
+        const requestedDef = rawDef as import("../../../src/types/workflow").WorkflowDefinition
+        logger.info("workflow:runDefinition requested", { workflowId: requestedDef.id, paramKeys: Object.keys(params) })
+        const migration = migrateWorkflowDocument(rawDef)
+        if (migration.kind !== "current") {
+          const error = workflowReadError(migration)
+          logger.warn("workflow:runDefinition blocked by migration", {
+            workflowId: requestedDef.id,
+            migrationKind: migration.kind,
+            sourceVersion: migration.sourceVersion,
+          })
+          return { errors: [{ type: "invalid_config" as const, message: error.message }] }
+        }
+        const def = migration.document
         const engine = ctx.resolve<WorkflowEngine>("core.workflow.engine")
         const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
         const workflowService = resolveWorkflowValidationService(ctx)

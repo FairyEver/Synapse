@@ -31,7 +31,11 @@ import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import type { WorkflowDefinition, WorkflowRunStatus } from "../../../../src/types/workflow"
 import { configStore } from "../../../services/config-store"
-import { validateWorkflowWithResourceDefaults } from "../../../services/workflow/workflow-validator"
+import {
+  validateWorkflow,
+  validateWorkflowWithResourceDefaults,
+} from "../../../services/workflow/workflow-validator"
+import { WORKFLOW_SCHEMA_VERSION } from "../../../services/workflow/workflow-document-migration"
 import { WorkflowPackageService } from "../../../services/workflow/workflow-package-service"
 import type { WorkflowExportDocumentResult } from "../../../services/workflow/workflow-service"
 import { workflowIpcModule } from "../ipc"
@@ -61,6 +65,7 @@ describe("workflowIpcModule", () => {
     logStoreMock.logger.error.mockClear()
     logStoreMock.logger.info.mockClear()
     logStoreMock.logger.warn.mockClear()
+    vi.mocked(validateWorkflow).mockClear()
     electronMock.dialog.showOpenDialog.mockReset()
     electronMock.dialog.showSaveDialog.mockReset()
     vi.mocked(configStore.load).mockResolvedValue({
@@ -457,7 +462,8 @@ describe("workflowIpcModule", () => {
       params: {},
     })
     expect(engine.run).toHaveBeenCalledWith(
-      expect.anything(), expect.anything(), expect.anything(),
+      expect.objectContaining({ meta: { schemaVersion: WORKFLOW_SCHEMA_VERSION } }),
+      expect.anything(), expect.anything(),
       expect.anything(), expect.anything(), undefined,
       "editor-run-definition", expect.anything(),
     )
@@ -488,6 +494,55 @@ describe("workflowIpcModule", () => {
       expect.anything(), expect.anything(), expect.anything(),
       expect.anything(), expect.anything(), undefined,
       "rerun", expect.anything(),
+    )
+  })
+
+  it.each([
+    {
+      name: "future",
+      schemaVersion: "3.0.0",
+      message: "该工作流使用更高的数据版本（3.0.0），请升级 Synapse 后再编辑或运行。",
+      migrationKind: "unsupported_future",
+      sourceVersion: "3.0.0",
+    },
+    {
+      name: "invalid",
+      schemaVersion: "invalid-version",
+      message: "工作流数据迁移失败，原始数据已保留。",
+      migrationKind: "failed",
+      sourceVersion: undefined,
+    },
+  ])("blocks $name runDefinition documents before validation", async ({
+    schemaVersion,
+    message,
+    migrationKind,
+    sourceVersion,
+  }) => {
+    const harness = createInMemoryHarness()
+    const resolve = vi.fn(() => {
+      throw new Error("run services must not be resolved")
+    }) as IpcHandlerContext["resolve"]
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    await expect(harness.invoke("synapse:workflow:run-definition", {
+      definition: {
+        ...workflowDefinition(),
+        meta: { schemaVersion },
+      },
+      params: {},
+    })).resolves.toEqual({
+      errors: [{ type: "invalid_config", message }],
+    })
+
+    expect(resolve).not.toHaveBeenCalled()
+    expect(validateWorkflow).not.toHaveBeenCalled()
+    expect(logStoreMock.logger.warn).toHaveBeenCalledWith(
+      "workflow:runDefinition blocked by migration",
+      expect.objectContaining({
+        workflowId: "workflow-1",
+        migrationKind,
+        sourceVersion,
+      }),
     )
   })
 
