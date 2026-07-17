@@ -81,11 +81,15 @@ export class RunSnapshotService {
     }
     // Stale cleanup is best-effort — a failure here should not invalidate the save above
     try {
-      const snapshots = await this.readSnapshotFiles(s.workflowId)
-      const stale = snapshots
-        .sort((a, b) => this.snapshotTime(a.snapshot) - this.snapshotTime(b.snapshot))
-        .slice(0, Math.max(0, snapshots.length - MAX_SNAPSHOTS_PER_WORKFLOW))
-      const tmpFiles = (await readdir(dir)).filter((file) => file.endsWith(".tmp"))
+      const files = await readdir(dir)
+      const stale = await selectStaleSnapshotFiles(
+        dir,
+        files.filter((file) => file.endsWith(".json")),
+        MAX_SNAPSHOTS_PER_WORKFLOW,
+        s.workflowId,
+        `${runId}.json`,
+      )
+      const tmpFiles = files.filter((file) => file.endsWith(".tmp"))
       const now = Date.now()
       const STALE_TMP_AGE_MS = 60_000
       const staleTmpFiles = (await Promise.all(
@@ -98,7 +102,10 @@ export class RunSnapshotService {
       )).filter((f): f is string => f !== null)
       await Promise.all([
         ...stale.map(({ file }) => rm(path.join(dir, file), { force: true })),
-        this.deleteRunArtifactDirectories(s.workflowId, stale.map(({ snapshot }) => snapshot.runId)),
+        this.deleteRunArtifactDirectories(
+          s.workflowId,
+          stale.flatMap(({ runId: staleRunId }) => staleRunId ? [staleRunId] : []),
+        ),
         ...staleTmpFiles.map((file) => rm(path.join(dir, file), { force: true })),
       ])
     } catch (err) {
@@ -234,6 +241,35 @@ async function selectNewestSnapshotFiles(
   limit: number,
   workflowId: string,
 ): Promise<string[]> {
+  return (await statSnapshotFiles(dir, files, workflowId))
+    .sort((a, b) => b.modifiedAt - a.modifiedAt || b.file.localeCompare(a.file))
+    .slice(0, limit)
+    .map(({ file }) => file)
+}
+
+async function selectStaleSnapshotFiles(
+  dir: string,
+  files: readonly string[],
+  keepCount: number,
+  workflowId: string,
+  protectedFile: string,
+): Promise<Array<{ file: string; runId?: string }>> {
+  return (await statSnapshotFiles(dir, files, workflowId))
+    .sort((left, right) => {
+      if (left.file === right.file) return 0
+      if (left.file === protectedFile) return -1
+      if (right.file === protectedFile) return 1
+      return right.modifiedAt - left.modifiedAt || right.file.localeCompare(left.file)
+    })
+    .slice(keepCount)
+    .map(({ file }) => ({ file, runId: runIdFromSnapshotFile(file) }))
+}
+
+async function statSnapshotFiles(
+  dir: string,
+  files: readonly string[],
+  workflowId: string,
+): Promise<Array<{ file: string; modifiedAt: number }>> {
   const candidates: Array<{ file: string; modifiedAt: number }> = []
   for (const file of files) {
     try {
@@ -248,9 +284,15 @@ async function selectNewestSnapshotFiles(
     }
   }
   return candidates
-    .sort((a, b) => b.modifiedAt - a.modifiedAt || b.file.localeCompare(a.file))
-    .slice(0, limit)
-    .map(({ file }) => file)
+}
+
+function runIdFromSnapshotFile(file: string): string | undefined {
+  if (!file.endsWith(".json")) return undefined
+  try {
+    return assertSafeWorkflowRunId(file.slice(0, -".json".length))
+  } catch {
+    return undefined
+  }
 }
 
 function normalizeSnapshotListLimit(limit: number): number {

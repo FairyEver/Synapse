@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
@@ -109,6 +109,34 @@ describe("RunSnapshotService", () => {
         expect.objectContaining({ runId: "run-20" }),
       ])
       await expect(service.list("workflow-1", 100)).resolves.toHaveLength(20)
+    } finally {
+      await rm(dataDir, { recursive: true, force: true })
+    }
+  })
+
+  it("prunes stale snapshot files without parsing historical contents", async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), "synapse-run-snapshots-"))
+    const service = new RunSnapshotService(dataDir)
+    const snapshotDir = path.join(dataDir, "workflow-runs", "workflow-1")
+    const staleArtifactDir = path.join(dataDir, "workflow-runs", "run-1", "nodes", "node-1")
+
+    try {
+      await mkdir(snapshotDir, { recursive: true })
+      await mkdir(staleArtifactDir, { recursive: true })
+      for (let index = 1; index <= 21; index += 1) {
+        const file = path.join(snapshotDir, `run-${index}.json`)
+        await writeFile(file, "invalid historical snapshot", "utf-8")
+        await utimes(file, index, index)
+      }
+
+      await service.save(snapshot("run-current", 100))
+
+      const snapshotFiles = (await readdir(snapshotDir)).filter((file) => file.endsWith(".json"))
+      expect(snapshotFiles).toHaveLength(20)
+      await expectExists(path.join(snapshotDir, "run-1.json"), false)
+      await expectExists(path.join(snapshotDir, "run-2.json"), false)
+      await expectExists(path.join(snapshotDir, "run-current.json"), true)
+      await expectExists(path.join(dataDir, "workflow-runs", "run-1"), false)
     } finally {
       await rm(dataDir, { recursive: true, force: true })
     }
