@@ -94,6 +94,25 @@ describe("SkillEnvBindingService", () => {
     expect(JSON.stringify(harness.auditEvents)).not.toContain("new-secret")
   })
 
+  it("does not associate malformed env files with unrelated secret names", async () => {
+    const root = await createRoot()
+    await createSkill(root, "demo", "RELATED=old\nBROKEN='unterminated\n")
+    const harness = createHarness([trustedRoot(root)])
+
+    const groups = await harness.service.scanMany([
+      { name: "RELATED", value: "new" },
+      { name: "UNRELATED", value: "new" },
+    ], harness.security)
+
+    expect(groups.map(({ name, scanResult }) => ({
+      name,
+      items: scanResult.items.map(({ skillName, status }) => ({ skillName, status })),
+    }))).toEqual([
+      { name: "RELATED", items: [{ skillName: "demo", status: "invalid" }] },
+      { name: "UNRELATED", items: [] },
+    ])
+  })
+
   it("scans multiple secret names through one root and env read", async () => {
     const root = await createRoot()
     await createSkill(root, "demo", "TOKEN=old\nREGION=cn\n")

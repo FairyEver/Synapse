@@ -417,7 +417,9 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
           })
         }
       } catch {
+        const declaredNames = findDeclaredDotenvNames(content)
         for (const { name } of requests) {
+          if (!declaredNames.has(name)) continue
           const base = createPublicItem(createId(), root, skillName, envPath)
           itemsByName.get(name)?.push({
             publicItem: { ...base, status: "invalid", message: "配置文件格式无效。" },
@@ -697,6 +699,26 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
   }
 
   return { scan, scanMany, enqueue }
+}
+
+function findDeclaredDotenvNames(content: string): ReadonlySet<string> {
+  const names = new Set<string>()
+  let openQuote: "'" | '"' | "`" | undefined
+  for (const line of content.split(/\r?\n/)) {
+    if (openQuote) {
+      if (line.includes(openQuote)) openQuote = undefined
+      continue
+    }
+    const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/)
+    if (!match) continue
+    names.add(match[1])
+    const value = match[2]
+    const quote = value[0]
+    if ((quote === "'" || quote === '"' || quote === "`") && !value.slice(1).includes(quote)) {
+      openQuote = quote
+    }
+  }
+  return names
 }
 
 function createStoredItemsByName(
