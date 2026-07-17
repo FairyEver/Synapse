@@ -16,7 +16,18 @@ async function fixture(version: string): Promise<unknown> {
 
 describe("workflow document migration", () => {
   it("migrates the historical unversioned document without losing unknown fields", async () => {
-    const result = migrateWorkflowDocument(await fixture("0.0.0"))
+    const source = await fixture("0.0.0") as Record<string, unknown>
+    const promptNode = (source.nodes as Array<Record<string, unknown>>)
+      .find((node) => node.type === "prompt")
+    if (!promptNode || typeof promptNode.config !== "object" || promptNode.config === null) {
+      throw new Error("Fixture is missing the prompt node config.")
+    }
+    Object.assign(promptNode.config, {
+      prompt: "处理 {{topic}}",
+      variables: [],
+    })
+
+    const result = migrateWorkflowDocument(source)
     expect(result.kind).toBe("current")
     if (result.kind !== "current") return
 
@@ -25,11 +36,20 @@ describe("workflow document migration", () => {
     expect(result.document.defaultModelTier).toBe("default")
     expect(result.document.params[0]).toMatchObject({ default: null, legacyParamField: "keep-me" })
     expect(result.document.nodes[0]?.config).toMatchObject({
-      prompt: "",
+      prompt: "处理 {{topic}}",
+      variables: [],
       legacyConfigField: "keep-me",
     })
     expect(result.document.nodes[0]?.config).not.toHaveProperty("agent")
     expect(result.document).toMatchObject({ legacyTopLevelField: "keep-me" })
+  })
+
+  it("isolates the historical unversioned fixture when its node config is incomplete", async () => {
+    const source = await fixture("0.0.0")
+    const original = structuredClone(source)
+
+    expect(migrateWorkflowDocument(source)).toMatchObject({ kind: "failed" })
+    expect(source).toEqual(original)
   })
 
   it("migrates the previous major fixture without rewriting its source", async () => {
@@ -73,6 +93,25 @@ describe("workflow document migration", () => {
     expect(migrateWorkflowDocument(source)).toMatchObject({ kind: "failed" })
     expect(source).toEqual(original)
   })
+
+  it.each(["0.0.0", "1.0.0", "2.0.0"])(
+    "isolates %s documents whose node config violates the registered schema",
+    async (version) => {
+      const source = await fixture(version) as Record<string, unknown>
+      const nodes = source.nodes as Array<Record<string, unknown>>
+      const promptNode = nodes.find((node) => node.type === "prompt")
+      if (promptNode && typeof promptNode.config === "object" && promptNode.config !== null) {
+        Object.assign(promptNode.config, { prompt: "处理 {{topic}}", variables: [] })
+      }
+      const endNode = nodes.find((node) => node.type === "end")
+      if (!endNode) throw new Error("Fixture is missing the end node.")
+      endNode.config = { outputType: "text", template: 42, variables: [] }
+      const original = structuredClone(source)
+
+      expect(migrateWorkflowDocument(source)).toMatchObject({ kind: "failed" })
+      expect(source).toEqual(original)
+    },
+  )
 
   it("rejects unsupported legacy agent values without changing the source", async () => {
     const source = await fixture("0.0.0") as Record<string, unknown>

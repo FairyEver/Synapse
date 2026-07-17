@@ -206,13 +206,17 @@ function assertCurrentWorkflowDocument(value: unknown): asserts value is Version
     assertNonEmptyString(node.id, `nodes[${index}].id`)
     assertString(node.name, `nodes[${index}].name`)
     assertNonEmptyString(node.type, `nodes[${index}].type`)
-    if (knownNodeTypes.size > 0 && !knownNodeTypes.has(node.type)) {
+    if (!knownNodeTypes.has(node.type)) {
       throw new Error(`Unknown workflow node type "${node.type}".`)
     }
     if (!isRecord(node.position)) throw new Error(`Workflow node ${index} position is invalid.`)
     assertNumber(node.position.x, `nodes[${index}].position.x`)
     assertNumber(node.position.y, `nodes[${index}].position.y`)
     if (!isRecord(node.config)) throw new Error(`Workflow node ${index} config is invalid.`)
+    const configResult = nodeTypeRegistry.getManifest(node.type).configSchema.safeParse(node.config)
+    if (!configResult.success) {
+      throw new Error(`Workflow node "${node.id}" config does not match type "${node.type}".`)
+    }
   }
 
   for (const [index, edge] of value.edges.entries()) {

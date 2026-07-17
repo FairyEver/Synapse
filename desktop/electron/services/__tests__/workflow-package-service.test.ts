@@ -7,6 +7,9 @@ import type {
   WorkflowModelMapping,
 } from "../../../src/types/workflow-package"
 import type { CCProvider } from "../provider/types"
+import "../../../workflow-nodes/register.main"
+import { defaultClaudeCodeNodeConfig } from "../../../workflow-nodes/claude-code/schema"
+import { defaultCodexNodeConfig } from "../../../workflow-nodes/codex/schema"
 import { WorkflowPackageService } from "../workflow/workflow-package-service"
 import type { WorkflowExportDocumentResult } from "../workflow/workflow-service"
 
@@ -81,7 +84,7 @@ function codexOnlyPackage(): SynapseWorkflowPackageV1 {
           name: "Code X",
           type: "codex",
           position: { x: 0, y: 0 },
-          config: { prompt: "Run codex" },
+          config: { ...structuredClone(defaultCodexNodeConfig), prompt: "Run codex" },
         },
         {
           id: "end",
@@ -115,7 +118,11 @@ function claudeCodeOnlyPackage(): SynapseWorkflowPackageV1 {
           name: "Claude Code",
           type: "claude_code",
           position: { x: 0, y: 0 },
-          config: { prompt: "Run Claude Code", projectId: "exporter-claude-code-project" },
+          config: {
+            ...structuredClone(defaultClaudeCodeNodeConfig),
+            prompt: "Run Claude Code",
+            projectId: "exporter-claude-code-project",
+          },
         },
         {
           id: "end",
@@ -374,7 +381,11 @@ describe("WorkflowPackageService", () => {
             name: "Code X",
             type: "codex",
             position: { x: 600, y: 0 },
-            config: { prompt: "Run codex", projectId: "exporter-codex-project" },
+            config: {
+              ...structuredClone(defaultCodexNodeConfig),
+              prompt: "Run codex",
+              projectId: "exporter-codex-project",
+            },
           },
         ],
       },
