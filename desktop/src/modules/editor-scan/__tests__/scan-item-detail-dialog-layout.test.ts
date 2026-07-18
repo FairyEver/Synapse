@@ -247,6 +247,7 @@ describe("scan item detail dialog layout", () => {
 
     expect(source).toContain("bridge.editorScan.retrySkillRepositoryIdentity")
     expect(source).toContain("buildRetrySkillRepositoryIdentityRequest")
+    expect(source).toContain("error: result.identityWriteError ?? null")
     expect(source).toContain("重试关联")
     expect(source).toContain("本地关联写入失败。")
   })

@@ -668,13 +668,14 @@ function ScanItemDetailDialog({
             skillRepositoryPublishDraft.sourceFingerprint,
           ),
           managementUrl: result.managementUrl,
-          error: null,
+          error: result.identityWriteError ?? null,
         })
       } else if (result.identityMigrationWarning) {
         warning("云仓库已上传，旧身份文件清理失败，不影响本次上传。")
       }
       logger.info("Skill Repository upload completed from scan detail.", {
         editorId: item.editorId,
+        identityWriteError: result.identityWriteError,
         identityWritten: result.identityWritten,
         itemType: item.type,
         pathBasename: logSafeItemPath(item.path),
