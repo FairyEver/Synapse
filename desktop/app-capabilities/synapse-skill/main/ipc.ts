@@ -16,6 +16,15 @@ const synapseSkillIpcModule: IpcModule = {
         SYNAPSE_SKILL_SERVICE_ID,
       ).prepareInstallSource(),
     },
+    releaseInstallSource: {
+      channel: "synapse:synapse-skill:install-source:release",
+      kind: "invoke",
+      request: z.object({ preparedSourceId: z.string().min(1) }),
+      response: z.void(),
+      handler: async (ctx, { preparedSourceId }: { preparedSourceId: string }) => ctx.resolve<SynapseSkillService>(
+        SYNAPSE_SKILL_SERVICE_ID,
+      ).releaseInstallSource(preparedSourceId),
+    },
   },
   events: {},
 }

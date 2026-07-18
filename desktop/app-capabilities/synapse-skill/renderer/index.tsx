@@ -23,6 +23,13 @@ import type { SynapseInstallSourceTargetResult, SynapseSkillInstallerSource } fr
 
 const logger = createRendererLogger("synapse-skill.app")
 
+function releaseInstallSource(source: SynapseSkillInstallerSource): void {
+  if (!source.preparedSourceId) return
+  void requireBridgeDomain("synapseSkill").releaseInstallSource(source.preparedSourceId).catch((error) => {
+    logger.warn("Failed to release Synapse Skill install source.", error)
+  })
+}
+
 type InstallStatusPolicy = {
   readonly label: string
   readonly badgeVariant: "default" | "secondary" | "destructive" | "outline"
@@ -156,6 +163,7 @@ function SynapseSkillModule() {
   const { config } = useAppConfig()
   const sourceRef = useRef<SynapseSkillInstallerSource | null>(null)
   const sourcePromiseRef = useRef<Promise<SynapseSkillInstallerSource> | null>(null)
+  const disposedRef = useRef(false)
   const refreshRequestIdRef = useRef(0)
   const [flowSource, setFlowSource] = useState<SynapseSkillInstallerSource | null>(null)
   const [initialEditor, setInitialEditor] = useState<SynapseEditorAdapterSummary | null>(null)
@@ -180,12 +188,30 @@ function SynapseSkillModule() {
     sourcePromiseRef.current ??= requireBridgeDomain("synapseSkill").prepareInstallSource()
     try {
       const nextSource = await sourcePromiseRef.current
-      sourceRef.current = nextSource
+      if (disposedRef.current) {
+        releaseInstallSource(nextSource)
+      } else {
+        sourceRef.current = nextSource
+      }
       return nextSource
     } finally {
       sourcePromiseRef.current = null
     }
   }, [])
+
+  const releaseCurrentSource = useCallback(() => {
+    const source = sourceRef.current
+    sourceRef.current = null
+    if (source) releaseInstallSource(source)
+  }, [])
+
+  useEffect(() => {
+    disposedRef.current = false
+    return () => {
+      disposedRef.current = true
+      releaseCurrentSource()
+    }
+  }, [releaseCurrentSource])
 
   const refreshStatus = useCallback(async () => {
     const requestId = ++refreshRequestIdRef.current
@@ -204,11 +230,12 @@ function SynapseSkillModule() {
       logger.error("Failed to load Synapse Skill install status.", error)
       setStatusError(message)
     } finally {
+      releaseCurrentSource()
       if (requestId === refreshRequestIdRef.current) {
         setStatusLoading(false)
       }
     }
-  }, [ensureSource])
+  }, [ensureSource, releaseCurrentSource])
 
   useEffect(() => {
     void adapters.load()
@@ -291,6 +318,7 @@ function SynapseSkillModule() {
       logger.error("Failed to batch install Synapse Skill.", error)
       toast.error(message)
     } finally {
+      releaseCurrentSource()
       setBatchInstalling(false)
     }
   }
@@ -326,12 +354,14 @@ function SynapseSkillModule() {
                   projects={config.global.projects}
                   source={flowSource}
                   onCancel={() => {
+                    releaseCurrentSource()
                     setFlowSource(null)
                     setInitialEditor(null)
                   }}
                   onInstalled={async () => {
                     setBatchErrors((current) => removeBatchError(current, initialEditor?.id))
                     toast.success("安装完成")
+                    releaseCurrentSource()
                     setFlowSource(null)
                     setInitialEditor(null)
                     await refreshStatus()

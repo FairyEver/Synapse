@@ -56,6 +56,40 @@ describe("SynapseSkillService", () => {
     expect(source.sourceFingerprint).toMatch(/^sha256:[a-f0-9]{64}$/)
   })
 
+  it("releases an idle prepared source", async () => {
+    const packageRoot = await createPackageRoot()
+    const service = createSynapseSkillService({ packageRoot })
+    const source = await service.prepareInstallSource()
+
+    await service.releaseInstallSource(source.preparedSourceId)
+
+    expect(service.hasPreparedSource(source.preparedSourceId, source.sourceIdentity)).toBe(false)
+    await expect(service.readPreparedSkill(source.preparedSourceId, source.sourceIdentity))
+      .rejects.toThrow("安装源不可用")
+  })
+
+  it("defers release across adjacent installs in a batch", async () => {
+    vi.useFakeTimers()
+    try {
+      const packageRoot = await createPackageRoot()
+      const service = createSynapseSkillService({ packageRoot })
+      const source = await service.prepareInstallSource()
+
+      await service.beginPreparedInstall(source.preparedSourceId, source.sourceIdentity)
+      await service.releaseInstallSource(source.preparedSourceId)
+      await service.endPreparedInstall(source.preparedSourceId, source.sourceIdentity)
+      await service.beginPreparedInstall(source.preparedSourceId, source.sourceIdentity)
+      await vi.runAllTimersAsync()
+      expect(service.hasPreparedSource(source.preparedSourceId, source.sourceIdentity)).toBe(true)
+
+      await service.endPreparedInstall(source.preparedSourceId, source.sourceIdentity)
+      await vi.runAllTimersAsync()
+      expect(service.hasPreparedSource(source.preparedSourceId, source.sourceIdentity)).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("reads prepared skill detail with nested attachments", async () => {
     const packageRoot = await createPackageRoot()
     const service = createSynapseSkillService({ packageRoot })

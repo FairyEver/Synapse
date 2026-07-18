@@ -106,6 +106,7 @@ export const IPC_CHANNELS = {
   },
   "synapse-skill": {
     "prepareInstallSource": "synapse:synapse-skill:install-source:prepare",
+    "releaseInstallSource": "synapse:synapse-skill:install-source:release",
   },
   "skill-uninstaller": {
     "scan": "synapse:skill-uninstaller:scan",

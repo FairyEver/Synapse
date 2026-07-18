@@ -16,6 +16,7 @@ const preparedSource = {
 } as const
 
 const prepareInstallSource = vi.hoisted(() => vi.fn())
+const releaseInstallSource = vi.hoisted(() => vi.fn(async () => undefined))
 const inspectGlobalSkillInstallations = vi.hoisted(() => vi.fn())
 const installSourceToEditorTargets = vi.hoisted(() => vi.fn())
 const toastSuccess = vi.hoisted(() => vi.fn())
@@ -35,7 +36,7 @@ vi.mock("@/components/editor-icon", () => ({
 
 vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
-    if (domain === "synapseSkill") return { prepareInstallSource }
+    if (domain === "synapseSkill") return { prepareInstallSource, releaseInstallSource }
     throw new Error(`Unexpected bridge domain: ${domain}`)
   },
 }))
@@ -70,6 +71,7 @@ describe("SynapseSkillUpdateDialogHost", () => {
     await renderDialog()
 
     expect(prepareInstallSource).toHaveBeenCalledTimes(1)
+    expect(releaseInstallSource).toHaveBeenCalledWith(preparedSource.preparedSourceId)
     expect(document.body.textContent).not.toContain("Synapse Skill 可更新")
   })
 
@@ -107,6 +109,7 @@ describe("SynapseSkillUpdateDialogHost", () => {
     })
     expect(document.body.textContent).not.toContain("Synapse Skill 可更新")
     expect(toastSuccess).toHaveBeenCalledWith("Synapse Skill 已更新")
+    expect(releaseInstallSource).toHaveBeenCalledWith(preparedSource.preparedSourceId)
   })
 
   it("keeps cleanup warnings visible after a successful update", async () => {

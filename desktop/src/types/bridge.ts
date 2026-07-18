@@ -1223,6 +1223,7 @@ export type SynapseBridge = {
   }
   synapseSkill: {
     prepareInstallSource: () => Promise<SynapseSkillInstallerSource>
+    releaseInstallSource: (preparedSourceId: string) => Promise<void>
   }
   config: {
     exportBackup: () => Promise<SynapseConfigBackupExportResult | null>

@@ -90,6 +90,7 @@ const IPC_CHANNELS = {
   },
   "synapse-skill": {
     "prepareInstallSource": "synapse:synapse-skill:install-source:prepare",
+    "releaseInstallSource": "synapse:synapse-skill:install-source:release",
   },
   "skill-uninstaller": {
     "scan": "synapse:skill-uninstaller:scan",
@@ -1225,6 +1226,7 @@ const synapseBridge: SynapseBridge = {
   },
   synapseSkill: {
     prepareInstallSource: invoke(IPC_CHANNELS["synapse-skill"].prepareInstallSource),
+    releaseInstallSource: (preparedSourceId) => invoke(IPC_CHANNELS["synapse-skill"].releaseInstallSource)({ preparedSourceId }),
   },
   config: {
     exportBackup: invoke(IPC_CHANNELS.config.exportBackup),

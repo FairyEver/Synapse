@@ -49,6 +49,7 @@ const synapseSkillBridge = vi.hoisted(() => ({
     mainContent: "# Synapse Skill",
     sourceFingerprint: "sha256:current",
   })),
+  releaseInstallSource: vi.fn(async () => undefined),
 }))
 
 const installSourceToEditorTargets = vi.hoisted(() => vi.fn(async () => ({
@@ -153,6 +154,7 @@ let roots: Root[] = []
 
 beforeEach(() => {
   synapseSkillBridge.prepareInstallSource.mockClear()
+  synapseSkillBridge.releaseInstallSource.mockClear()
   installSourceToEditorTargets.mockClear()
   loadEditors.mockClear()
   inspectGlobalSkillInstallations.mockClear()
@@ -173,6 +175,16 @@ afterEach(() => {
 })
 
 describe("SynapseSkillModule", () => {
+  it("releases an active prepared source when the system app unmounts", async () => {
+    await renderModule()
+    await clickButton("安装")
+    synapseSkillBridge.releaseInstallSource.mockClear()
+
+    act(() => roots.pop()?.unmount())
+
+    expect(synapseSkillBridge.releaseInstallSource).toHaveBeenCalledWith(preparedSource.preparedSourceId)
+  })
+
   it("shows global editor install status", async () => {
     await renderModule()
 
@@ -180,6 +192,7 @@ describe("SynapseSkillModule", () => {
     expect(synapseSkillBridge.prepareInstallSource).toHaveBeenCalledTimes(1)
     expect(inspectGlobalSkillInstallations).toHaveBeenCalledTimes(1)
     expect(inspectGlobalSkillInstallations).toHaveBeenCalledWith(preparedSource)
+    expect(synapseSkillBridge.releaseInstallSource).toHaveBeenCalledWith(preparedSource.preparedSourceId)
     expect(document.body.textContent).toContain("全局安装状态")
     expect(document.body.textContent).toContain("Codex")
     expect(document.body.textContent).not.toContain("未安装")

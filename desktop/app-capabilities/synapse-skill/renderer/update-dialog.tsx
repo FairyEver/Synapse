@@ -25,6 +25,13 @@ type UpdateFailure = {
   readonly message: string
 }
 
+function releaseInstallSource(source: SynapseSkillInstallerSource): void {
+  if (!source.preparedSourceId) return
+  void requireBridgeDomain("synapseSkill").releaseInstallSource(source.preparedSourceId).catch((error) => {
+    logger.warn("Failed to release Synapse Skill install source.", error)
+  })
+}
+
 function wasDismissedForCurrentProcess(): boolean {
   try {
     return window.sessionStorage.getItem(DISMISSED_SESSION_KEY) === "true"
@@ -46,6 +53,7 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
     source: SynapseSkillInstallerSource
     targets: SynapseEditorInstallStatusEntry[]
   } | null> | null>(null)
+  const sourceRef = useRef<SynapseSkillInstallerSource | null>(null)
   const [source, setSource] = useState<SynapseSkillInstallerSource | null>(null)
   const [targets, setTargets] = useState<SynapseEditorInstallStatusEntry[]>([])
   const [failures, setFailures] = useState<UpdateFailure[]>([])
@@ -58,14 +66,18 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
 
     if (!checkPromiseRef.current) {
       checkPromiseRef.current = (async () => {
+        let nextSource: SynapseSkillInstallerSource | null = null
         try {
-          const nextSource = await requireBridgeDomain("synapseSkill").prepareInstallSource()
+          nextSource = await requireBridgeDomain("synapseSkill").prepareInstallSource()
           const result = await inspectGlobalSkillInstallations(nextSource)
           const nextTargets = result.entries.filter(
             (entry) => entry.scope === "global" && entry.status === "needs_update",
           )
-          return nextTargets.length > 0 ? { source: nextSource, targets: nextTargets } : null
+          if (nextTargets.length > 0) return { source: nextSource, targets: nextTargets }
+          releaseInstallSource(nextSource)
+          return null
         } catch (error) {
+          if (nextSource) releaseInstallSource(nextSource)
           logger.error("Failed to inspect global Synapse Skill installations.", error)
           return null
         }
@@ -74,7 +86,12 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
 
     let cancelled = false
     void checkPromiseRef.current.then((result) => {
-      if (cancelled || !result) return
+      if (!result) return
+      if (cancelled) {
+        releaseInstallSource(result.source)
+        return
+      }
+      sourceRef.current = result.source
       setSource(result.source)
       setTargets(result.targets)
       setOpen(true)
@@ -82,12 +99,19 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
 
     return () => {
       cancelled = true
+      const currentSource = sourceRef.current
+      sourceRef.current = null
+      if (currentSource) releaseInstallSource(currentSource)
     }
   }, [enabled])
 
   const closeDialog = () => {
     if (updating) return
     dismissForCurrentProcess()
+    const currentSource = sourceRef.current
+    sourceRef.current = null
+    if (currentSource) releaseInstallSource(currentSource)
+    setSource(null)
     setOpen(false)
   }
 
@@ -122,6 +146,10 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
       ]
 
       if (nextFailures.length === 0 && nextWarnings.length === 0) {
+        const currentSource = sourceRef.current
+        sourceRef.current = null
+        if (currentSource) releaseInstallSource(currentSource)
+        setSource(null)
         setOpen(false)
         setTargets([])
         toast.success("Synapse Skill 已更新")

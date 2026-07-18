@@ -89,6 +89,9 @@ class SynapseSkillService {
   private readonly createId: () => string
   private readonly packageRoot: string
   private readonly preparedById = new Map<string, PreparedSynapseSkill>()
+  private readonly installingSourceIds = new Set<string>()
+  private readonly releaseAfterInstallSourceIds = new Set<string>()
+  private readonly releaseTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   constructor(deps: SynapseSkillServiceDeps = {}) {
     this.createId = deps.createId ?? randomUUID
@@ -187,16 +190,44 @@ class SynapseSkillService {
 
   beginPreparedInstall(sourceId: string, contentId: string): Promise<void> {
     this.requirePrepared(sourceId, contentId)
+    const releaseTimer = this.releaseTimers.get(sourceId)
+    if (releaseTimer) {
+      clearTimeout(releaseTimer)
+      this.releaseTimers.delete(sourceId)
+    }
+    this.installingSourceIds.add(sourceId)
     return Promise.resolve()
   }
 
   endPreparedInstall(sourceId: string, contentId: string): Promise<void> {
     this.requirePrepared(sourceId, contentId)
+    this.installingSourceIds.delete(sourceId)
+    if (this.releaseAfterInstallSourceIds.has(sourceId)) {
+      const existingTimer = this.releaseTimers.get(sourceId)
+      if (existingTimer) clearTimeout(existingTimer)
+      const releaseTimer = setTimeout(() => {
+        this.releaseTimers.delete(sourceId)
+        if (!this.installingSourceIds.has(sourceId)) {
+          this.deletePreparedSource(sourceId)
+        }
+      }, 0)
+      this.releaseTimers.set(sourceId, releaseTimer)
+    }
     return Promise.resolve()
   }
 
   markPreparedInstalled(sourceId: string, contentId: string): Promise<void> {
     this.requirePrepared(sourceId, contentId)
+    return Promise.resolve()
+  }
+
+  releaseInstallSource(sourceId: string): Promise<void> {
+    if (!this.preparedById.has(sourceId)) return Promise.resolve()
+    if (this.installingSourceIds.has(sourceId)) {
+      this.releaseAfterInstallSourceIds.add(sourceId)
+      return Promise.resolve()
+    }
+    this.deletePreparedSource(sourceId)
     return Promise.resolve()
   }
 
@@ -210,6 +241,15 @@ class SynapseSkillService {
       throw new Error("Synapse Skill 安装源不可用。")
     }
     return prepared
+  }
+
+  private deletePreparedSource(sourceId: string): void {
+    const releaseTimer = this.releaseTimers.get(sourceId)
+    if (releaseTimer) clearTimeout(releaseTimer)
+    this.releaseTimers.delete(sourceId)
+    this.preparedById.delete(sourceId)
+    this.installingSourceIds.delete(sourceId)
+    this.releaseAfterInstallSourceIds.delete(sourceId)
   }
 }
 
