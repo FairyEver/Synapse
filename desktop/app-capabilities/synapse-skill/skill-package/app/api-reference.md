@@ -23,7 +23,7 @@ Output:
 
 `app_terminal_group_create`
 
-Create a terminal group.
+Create a terminal group after terminal permission approval.
 
 Input:
 
@@ -45,7 +45,7 @@ Output:
 
 `app_terminal_group_rename`
 
-Rename a terminal group.
+Rename a terminal group after terminal permission approval.
 
 Input:
 

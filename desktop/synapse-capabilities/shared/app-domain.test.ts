@@ -97,6 +97,13 @@ describe("App capability domain", () => {
     expect(tool?.description).toContain("permission approval")
   })
 
+  it("describes terminal group create and rename permission behavior", () => {
+    const tools = new Map(buildAppTools().map((tool) => [tool.name, tool]))
+
+    expect(tools.get(TERMINAL_MCP_TOOL_NAMES.groupCreate)?.description).toContain("permission approval")
+    expect(tools.get(TERMINAL_MCP_TOOL_NAMES.groupRename)?.description).toContain("permission approval")
+  })
+
   it("keeps secret names immutable in the update MCP schema", () => {
     const updateTool = buildAppTools().find((tool) => tool.name === SECRETS_MCP_TOOL_NAMES.update)
 

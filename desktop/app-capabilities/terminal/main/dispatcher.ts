@@ -57,7 +57,13 @@ export function createTerminalCapabilityDispatcher(deps: {
   return {
     async dispatch(action, params, context) {
       if (action === TERMINAL_GROUP_CREATE_CAPABILITY_ID) {
-        return { ok: true, data: await deps.service.createGroup(terminalCreateGroupInputSchema.parse(params)), affected: 1 }
+        const parsed = terminalCreateGroupInputSchema.parse(params)
+        await authorizeTerminalControl(deps, context, {
+          capabilityAction: TERMINAL_GROUP_CREATE_CAPABILITY_ID,
+          resource: "terminal:groups",
+          boundary: "terminal.mcp.createGroup",
+        })
+        return { ok: true, data: await deps.service.createGroup(parsed), affected: 1 }
       }
       if (action === TERMINAL_GROUP_LIST_CAPABILITY_ID) {
         terminalEmptyInputSchema.parse(params)
@@ -69,7 +75,14 @@ export function createTerminalCapabilityDispatcher(deps: {
         return { ok: true, data: deps.service.listGroups(), affected: 0 }
       }
       if (action === TERMINAL_GROUP_RENAME_CAPABILITY_ID) {
-        return { ok: true, data: await deps.service.renameGroup(terminalRenameGroupInputSchema.parse(params)), affected: 1 }
+        const parsed = terminalRenameGroupInputSchema.parse(params)
+        await authorizeTerminalControl(deps, context, {
+          capabilityAction: TERMINAL_GROUP_RENAME_CAPABILITY_ID,
+          resource: parsed.groupId,
+          boundary: "terminal.mcp.renameGroup",
+          groupId: parsed.groupId,
+        })
+        return { ok: true, data: await deps.service.renameGroup(parsed), affected: 1 }
       }
       if (action === TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID) {
         const parsed = terminalUpdateGroupSettingsInputSchema.parse(params)

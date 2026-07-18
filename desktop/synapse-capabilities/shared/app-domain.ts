@@ -60,7 +60,7 @@ const appCapabilities: readonly CapabilityDefinition[] = [
   {
     id: TERMINAL_GROUP_CREATE_CAPABILITY_ID,
     title: "Create terminal group",
-    description: "Create a Synapse terminal group.",
+    description: "Create a Synapse terminal group after terminal permission approval.",
     mutates: true,
   },
   {
@@ -72,7 +72,7 @@ const appCapabilities: readonly CapabilityDefinition[] = [
   {
     id: TERMINAL_GROUP_RENAME_CAPABILITY_ID,
     title: "Rename terminal group",
-    description: "Rename a Synapse terminal group.",
+    description: "Rename a Synapse terminal group after terminal permission approval.",
     mutates: true,
   },
   {
@@ -274,7 +274,7 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: TERMINAL_MCP_TOOL_NAMES.groupCreate,
-      description: "Create a Synapse terminal group.",
+      description: "Create a Synapse terminal group after terminal permission approval.",
       inputSchema: {
         type: "object",
         properties: {
@@ -290,7 +290,7 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: TERMINAL_MCP_TOOL_NAMES.groupRename,
-      description: "Rename a Synapse terminal group.",
+      description: "Rename a Synapse terminal group after terminal permission approval.",
       inputSchema: {
         type: "object",
         properties: {

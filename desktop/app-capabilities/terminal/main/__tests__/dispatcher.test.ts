@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
   TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID,
   TERMINAL_GROUP_COMMAND_LAUNCH_CAPABILITY_ID,
+  TERMINAL_GROUP_CREATE_CAPABILITY_ID,
   TERMINAL_GROUP_DELETE_CAPABILITY_ID,
   TERMINAL_GROUP_LIST_CAPABILITY_ID,
   TERMINAL_GROUP_RENAME_CAPABILITY_ID,
@@ -19,6 +20,34 @@ import {
 import { createTerminalCapabilityDispatcher } from "../dispatcher"
 
 describe("createTerminalCapabilityDispatcher", () => {
+  it("authorizes group creation before persisting it", async () => {
+    const created = createGroup({ name: "构建" })
+    const createGroupFn = vi.fn(async () => created)
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { createGroup: createGroupFn } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    await expect(dispatcher.dispatch(TERMINAL_GROUP_CREATE_CAPABILITY_ID, {
+      name: "构建",
+    }, { source: "mcp-http" })).resolves.toEqual({ ok: true, data: created, affected: 1 })
+
+    expect(createGroupFn).toHaveBeenCalledWith({ name: "构建" })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "terminal:groups",
+      outcome: "allowed",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_GROUP_CREATE_CAPABILITY_ID,
+        boundary: "terminal.mcp.createGroup",
+      },
+    }))
+  })
+
   it("rejects extra params for group list", async () => {
     const listGroups = vi.fn(() => [])
     const dispatcher = createTerminalCapabilityDispatcher({
@@ -493,8 +522,12 @@ describe("createTerminalCapabilityDispatcher", () => {
   it("dispatches group rename with parsed input", async () => {
     const renamed = createGroup({ name: "构建" })
     const renameGroup = vi.fn(async () => renamed)
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
     const dispatcher = createTerminalCapabilityDispatcher({
       service: { renameGroup } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
     })
 
     const result = await dispatcher.dispatch(TERMINAL_GROUP_RENAME_CAPABILITY_ID, {
@@ -506,7 +539,78 @@ describe("createTerminalCapabilityDispatcher", () => {
       groupId: "g1",
       name: "  构建  ",
     })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "g1",
+      outcome: "allowed",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_GROUP_RENAME_CAPABILITY_ID,
+        boundary: "terminal.mcp.renameGroup",
+        groupId: "g1",
+      },
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("构建")
     expect(result).toEqual({ ok: true, data: renamed, affected: 1 })
+  })
+
+  it.each([
+    {
+      action: TERMINAL_GROUP_CREATE_CAPABILITY_ID,
+      params: { name: "构建" },
+      resource: "terminal:groups",
+      boundary: "terminal.mcp.createGroup",
+      serviceMethod: "createGroup",
+      metadata: {},
+    },
+    {
+      action: TERMINAL_GROUP_RENAME_CAPABILITY_ID,
+      params: { groupId: "g1", name: "构建" },
+      resource: "g1",
+      boundary: "terminal.mcp.renameGroup",
+      serviceMethod: "renameGroup",
+      metadata: { groupId: "g1" },
+    },
+  ])("denies $serviceMethod before persistence and records the audit", async ({
+    action,
+    boundary,
+    metadata,
+    params,
+    resource,
+    serviceMethod,
+  }) => {
+    const serviceCall = vi.fn()
+    const permissionGuard = {
+      check: vi.fn(async () => ({
+        allowed: false,
+        reason: "blocked by policy",
+        policyId: "terminal-deny",
+      })),
+    }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { [serviceMethod]: serviceCall } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    await expect(dispatcher.dispatch(action, params, { source: "mcp-http" }))
+      .rejects.toThrow("blocked by policy")
+
+    expect(serviceCall).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource,
+      outcome: "denied",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: action,
+        boundary,
+        ...metadata,
+        reason: "blocked by policy",
+        policyId: "terminal-deny",
+      },
+    }))
   })
 
   it("dispatches group settings update with parsed input", async () => {
