@@ -5,7 +5,7 @@ import path from "node:path"
 
 import { SKILL_REPOSITORY_IDENTITY_MAX_BYTES } from "../../config"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
-import { hasSameFileSnapshot, isFileNotFoundError, isPathInside } from "./fs-utils"
+import { hasSameFileSnapshot, isFileNotFoundError, isPathInside, readFileHandleUpTo } from "./fs-utils"
 
 const sharedSkillRepositoryPromise = import("@synapse/shared")
 export const SKILL_REPOSITORY_ID_FILE_NAME = ".synapse.repository.json"
@@ -367,17 +367,11 @@ async function readVerifiedIdentityFile(
 }
 
 async function readBoundedIdentityFile(handle: Awaited<ReturnType<typeof open>>, fileName: string): Promise<string> {
-  const buffer = Buffer.allocUnsafe(SKILL_REPOSITORY_IDENTITY_MAX_BYTES + 1)
-  let offset = 0
-  while (offset < buffer.byteLength) {
-    const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, offset)
-    if (bytesRead === 0) break
-    offset += bytesRead
-  }
-  if (offset > SKILL_REPOSITORY_IDENTITY_MAX_BYTES) {
+  const buffer = await readFileHandleUpTo(handle, SKILL_REPOSITORY_IDENTITY_MAX_BYTES + 1)
+  if (buffer.byteLength > SKILL_REPOSITORY_IDENTITY_MAX_BYTES) {
     throw new SkillRepositoryIdentityTooLargeError(fileName)
   }
-  return buffer.subarray(0, offset).toString("utf8")
+  return buffer.toString("utf8")
 }
 
 function sameDirectoryIdentity(expected: BigIntStats, actual: BigIntStats): boolean {

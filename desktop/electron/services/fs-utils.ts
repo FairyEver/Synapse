@@ -1,5 +1,5 @@
 import type { BigIntStats } from "node:fs"
-import { access } from "node:fs/promises"
+import { access, type FileHandle } from "node:fs/promises"
 import path from "node:path"
 
 function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
@@ -41,4 +41,18 @@ function hasSameFileSnapshot(expected: BigIntStats, actual: BigIntStats): boolea
     && expected.ctimeNs === actual.ctimeNs
 }
 
-export { hasSameFileSnapshot, isFileNotFoundError, isPathInside, isPermissionError, pathExists }
+async function readFileHandleUpTo(handle: FileHandle, maximumBytes: number): Promise<Buffer> {
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 0) {
+    throw new RangeError("maximumBytes must be a non-negative safe integer")
+  }
+  const buffer = Buffer.allocUnsafe(maximumBytes)
+  let offset = 0
+  while (offset < buffer.byteLength) {
+    const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, offset)
+    if (bytesRead === 0) break
+    offset += bytesRead
+  }
+  return buffer.subarray(0, offset)
+}
+
+export { hasSameFileSnapshot, isFileNotFoundError, isPathInside, isPermissionError, pathExists, readFileHandleUpTo }
