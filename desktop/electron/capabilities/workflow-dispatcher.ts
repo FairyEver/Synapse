@@ -64,6 +64,11 @@ function requireNestedString(params: Record<string, unknown>, parentKey: string,
   return v
 }
 
+function requireWorkflowSchemaVersion(definition: Record<string, unknown>): void {
+  const meta = requireNestedObject(definition, "definition", "meta")
+  requireNestedString(meta, "definition.meta", "schemaVersion")
+}
+
 function requireArray(params: Record<string, unknown>, key: string): unknown[] {
   const v = params[key]
   if (!Array.isArray(v)) throw new Error(`Missing or invalid '${key}': expected array`)
@@ -276,7 +281,9 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 
   "workflow.definition.inspect": async (params, deps) => {
-    const definition = structuredClone(requireObject(params, "definition")) as unknown as WorkflowDefinition
+    const rawDefinition = requireObject(params, "definition")
+    requireWorkflowSchemaVersion(rawDefinition)
+    const definition = structuredClone(rawDefinition) as unknown as WorkflowDefinition
     normalizeWorkflowParamDefaults(definition.params)
     const result = await validateWorkflowForDispatch(deps, definition)
     return { ok: true, data: result }
@@ -336,8 +343,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "workflow.definition.update": async (params, deps) => {
     const rawDefinition = requireObject(params, "definition")
     const workflowId = requireNestedString(rawDefinition, "definition", "id")
-    const meta = requireNestedObject(rawDefinition, "definition", "meta")
-    requireNestedString(meta, "definition.meta", "schemaVersion")
+    requireWorkflowSchemaVersion(rawDefinition)
     return withWorkflowMutationLock(deps, workflowId, async () => {
       const existing = await deps.workflowService.get(workflowId)
       if (!existing) throw new Error(`Workflow not found: ${workflowId}`)

@@ -222,9 +222,9 @@ Get full workflow definition by ID.
 
 Validate a workflow definition without saving.
 
-**Params:** `definition` (object, required) — full WorkflowDefinition
+**Params:** `definition` (object, required) — full WorkflowDefinition including the complete Synapse-managed `meta` object with `meta.schemaVersion`
 **Returns:** `{ valid, errors, warnings }`
-**Notes:** Inspection applies the same definition and local multi-resource default checks as save, including filesystem type, accessibility, and canonical-path uniqueness. Validation errors may include `nodeId`, `nodeName`, `field`, `retryable`, and `details` such as `missingField`, `providerId`, `modelTier`, `projectId`, and `timeoutMs`.
+**Notes:** Inspection rejects missing schema metadata before graph validation, matching whole-definition update. It applies the same definition and local multi-resource default checks as save, including filesystem type, accessibility, and canonical-path uniqueness. Validation errors may include `nodeId`, `nodeName`, `field`, `retryable`, and `details` such as `missingField`, `providerId`, `modelTier`, `projectId`, and `timeoutMs`.
 
 ### app_workflow_run_get
 

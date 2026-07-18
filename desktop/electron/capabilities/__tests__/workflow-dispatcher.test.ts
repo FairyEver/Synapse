@@ -173,6 +173,26 @@ describe("createWorkflowDispatcher", () => {
     })
   })
 
+  it("requires workflow schema metadata in inspect and update MCP schemas", () => {
+    const tools = buildWorkflowTools()
+    for (const toolName of ["workflow_definition_inspect", "workflow_definition_update"]) {
+      const tool = tools.find((item) => item.name === toolName)
+      const definitionSchema = (tool?.inputSchema as {
+        properties?: {
+          definition?: {
+            required?: string[]
+            properties?: { meta?: { required?: string[] } }
+          }
+        }
+      }).properties?.definition
+
+      expect(definitionSchema?.required).toContain("meta")
+      expect(definitionSchema?.properties?.meta?.required).toContain("schemaVersion")
+    }
+    expect(tools.find((item) => item.name === "workflow_definition_inspect")?.description)
+      .toContain("required Synapse-managed meta.schemaVersion")
+  })
+
   it("workflow.definition.list dispatches correctly", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
@@ -507,6 +527,30 @@ describe("createWorkflowDispatcher", () => {
     expect(deps.workflowService.save).not.toHaveBeenCalled()
   })
 
+  it("rejects workflow.definition.inspect before validation when schema metadata is missing", async () => {
+    const loadValidationOptions = vi.fn(async () => ({}))
+    const deps = makeDeps({ loadValidationOptions })
+    const dispatcher = createWorkflowDispatcher(deps)
+    const definition = {
+      id: "wf-1", name: "Test", description: "", version: "v1",
+      createdAt: 1, updatedAt: 2, params: [],
+      nodes: [endNode("n1")],
+      edges: [],
+    }
+
+    await expect(dispatcher.dispatch(
+      "workflow.definition.inspect",
+      { definition },
+      { source: "api" },
+    )).rejects.toThrow("Missing or invalid 'definition.meta': expected object")
+    await expect(dispatcher.dispatch(
+      "workflow.definition.inspect",
+      { definition: { ...definition, meta: {} } },
+      { source: "api" },
+    )).rejects.toThrow("Missing or invalid 'definition.meta.schemaVersion': expected non-empty string")
+    expect(loadValidationOptions).not.toHaveBeenCalled()
+  })
+
   it("reports workflow_call resource binding mismatches during definition inspection", async () => {
     const deps = makeDeps({
       loadValidationOptions: vi.fn(async () => ({
@@ -521,6 +565,7 @@ describe("createWorkflowDispatcher", () => {
       id: "parent",
       name: "Parent",
       version: "v1",
+      meta: { schemaVersion: "1.0.0" },
       createdAt: 1,
       updatedAt: 2,
       params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
@@ -569,6 +614,7 @@ describe("createWorkflowDispatcher", () => {
       id: "workflow-1",
       name: "Workflow",
       version: "v1",
+      meta: { schemaVersion: "1.0.0" },
       createdAt: 1,
       updatedAt: 2,
       params: [{ name: "topic", type: "text" }],
@@ -598,6 +644,7 @@ describe("createWorkflowDispatcher", () => {
         id: "workflow-1",
         name: "Workflow",
         version: "v1",
+        meta: { schemaVersion: "1.0.0" },
         createdAt: 1,
         updatedAt: 2,
         params: [{
@@ -942,7 +989,7 @@ describe("createWorkflowDispatcher", () => {
         params: {
           definition: {
             id: "wf-inspect", name: "Inspect", description: "", version: "v1",
-            createdAt: 1, updatedAt: 2, params: [],
+            createdAt: 1, updatedAt: 2, meta: { schemaVersion: "1.0.0" }, params: [],
             nodes: [endNode("end")],
             edges: [],
           },
