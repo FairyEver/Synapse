@@ -324,7 +324,7 @@ Delete an edge by ID.
 
 Replace the workflow's parameter list entirely.
 
-**Params:** `workflowId` (string, required), `params` (array, required) — each: `{ name, type: "text"|"number"|"file"|"directory"|"option", default?, description?, options?, allowCustomOption?, allowMultiple? }`
+**Params:** `workflowId` (string, required), `params` (array, required) — each: `{ name, type: "text"|"number"|"file"|"directory"|"option", default?, description?, options?, allowCustomOption?, allowMultiple? }`; `allowMultiple` is valid only when `type` is `file` or `directory`
 **Returns:** `{ versionHash, validation? }`
 **Notes:** Pass empty array to clear all params. Use `null` default for required params. For file/directory defaults, use a resource ref:
 

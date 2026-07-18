@@ -140,6 +140,13 @@ const workflowParamSchema = {
     },
   },
   required: ["name", "type"],
+  allOf: [{
+    if: {
+      properties: { type: { enum: ["text", "number", "option"] } },
+      required: ["type"],
+    },
+    then: { not: { required: ["allowMultiple"] } },
+  }],
 }
 
 const workflowDefinitionSchema = {

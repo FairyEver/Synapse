@@ -111,15 +111,17 @@ describe("createWorkflowDispatcher", () => {
     const paramUpdateTool = tools.find((item) => item.name === "workflow_param_update")
     expect(paramUpdateTool).toBeDefined()
 
-    const paramProperties = (paramUpdateTool?.inputSchema as {
+    const paramSchema = (paramUpdateTool?.inputSchema as {
       properties?: {
         params?: {
           items?: {
             properties?: Record<string, unknown>
+            allOf?: unknown[]
           }
         }
       }
-    }).properties?.params?.items?.properties
+    }).properties?.params?.items
+    const paramProperties = paramSchema?.properties
 
     expect(paramProperties?.type).toMatchObject({ enum: expect.arrayContaining(["option"]) })
     expect(paramProperties?.default).toMatchObject({
@@ -129,6 +131,14 @@ describe("createWorkflowDispatcher", () => {
     expect(paramProperties).toHaveProperty("options")
     expect(paramProperties).toHaveProperty("allowCustomOption")
     expect(paramProperties).toHaveProperty("allowMultiple")
+    expect(paramSchema?.allOf).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        if: expect.objectContaining({
+          properties: { type: { enum: ["text", "number", "option"] } },
+        }),
+        then: { not: { required: ["allowMultiple"] } },
+      }),
+    ]))
 
     const nodeTypeListTool = tools.find((item) => item.name === "workflow_node_type_list")
     expect(nodeTypeListTool?.description).toContain("text/number/option")
