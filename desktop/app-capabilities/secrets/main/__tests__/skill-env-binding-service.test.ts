@@ -517,6 +517,42 @@ describe("SkillEnvBindingService", () => {
     ])
   })
 
+  it("does not open the env file with write access when permission is denied", async () => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\n")
+    const openFlags: number[] = []
+    const harness = createHarness([trustedRoot(root)], () => 100, async (filePath, flags) => {
+      openFlags.push(flags)
+      return open(filePath, flags)
+    })
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+    openFlags.length = 0
+    harness.security.permissionGuard.check = vi.fn(async (request) => {
+      harness.permissionRequests.push(request)
+      return request.action === "fs.write"
+        ? { allowed: false as const, policyId: "deny-write" }
+        : { allowed: true as const }
+    })
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, async () => "new", harness.security)
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "failed", message: "没有写入该位置的权限。" }),
+    ])
+    expect(openFlags.length).toBeGreaterThan(0)
+    expect(openFlags.every((flags) => (flags & constants.O_RDWR) !== constants.O_RDWR)).toBe(true)
+    expect(await readFile(path.join(skill, ".env"), "utf8")).toBe("TOKEN=old\n")
+    expect(harness.auditEvents).toContainEqual(expect.objectContaining({
+      action: "fs.write",
+      outcome: "denied",
+      metadata: expect.objectContaining({ policyId: "deny-write" }),
+    }))
+  })
+
   it("completes a short-write sequence before reporting updated", async () => {
     const root = await createRoot()
     const skill = await createSkill(root, "demo", "TOKEN=old-value\nSECOND=keep\n")

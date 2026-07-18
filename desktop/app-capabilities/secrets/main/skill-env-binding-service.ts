@@ -369,7 +369,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
       let validated: ValidatedBinding | undefined
       try {
         await deps.beforeBindingOpen?.("scan")
-        validated = await openValidatedBinding(root, skillName, envPath, "read", deps.openFile)
+        validated = await openValidatedBinding(root, skillName, envPath, deps.openFile)
         if (!sameIdentity(rootIdentity, validated.rootIdentity)
           || rootRealPath !== validated.rootRealPath) {
           await validated.handle.close().catch(() => undefined)
@@ -483,7 +483,6 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         stored.root,
         stored.publicItem.skillName,
         stored.publicItem.envPath,
-        "write",
         deps.openFile,
       )
       let staged: PreparedAtomicEnvReplacement | undefined
@@ -671,7 +670,6 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         committedBinding.root,
         committedBinding.publicItem.skillName,
         committedBinding.publicItem.envPath,
-        "read",
         deps.openFile,
       )
       const fileHash = hashContent(validated.content)
@@ -795,7 +793,6 @@ async function openValidatedBinding(
   root: TrustedSkillRoot,
   skillName: string,
   expectedEnvPath: string,
-  mode: "read" | "write",
   openFile: ((filePath: string, flags: number) => Promise<FileHandle>) | undefined,
 ): Promise<ValidatedBinding> {
   const rootPath = path.resolve(root.path)
@@ -834,9 +831,7 @@ async function openValidatedBinding(
   const nonBlockingFlag = typeof constants.O_NONBLOCK === "number" ? constants.O_NONBLOCK : 0
   let handle: FileHandle | undefined
   try {
-    handle = await (openFile ?? open)(envPath, mode === "write"
-      ? constants.O_RDWR | noFollowFlag | nonBlockingFlag
-      : constants.O_RDONLY | noFollowFlag | nonBlockingFlag)
+    handle = await (openFile ?? open)(envPath, constants.O_RDONLY | noFollowFlag | nonBlockingFlag)
     const handleStat = await handle.stat({ bigint: true })
     const pathStat = await lstat(envPath)
     if (!handleStat.isFile() || pathStat.isSymbolicLink() || !sameIdentity(handleStat, pathStat)) {
