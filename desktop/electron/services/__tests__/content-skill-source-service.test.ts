@@ -44,6 +44,7 @@ import {
   CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT,
 } from "../content-skill-attachment-constraints"
 import { readSkillDraftFromDirectory, resolveSkillMainFile } from "../content-skill-source-service"
+import { SKILL_RUNTIME_ENV_MAX_BYTES } from "../skill-env/file-policy"
 
 const tempRoots: string[] = []
 const itCanCreateBackslashFile = path.sep === "/" ? it : it.skip
@@ -157,6 +158,22 @@ describe("content skill source service", () => {
     expect(draft.files).toEqual([])
     expect(draft.sourceImportSummary.runtimeEnvExcluded).toBe(true)
     expect(JSON.stringify(draft)).not.toContain("SHOULD_NOT_BE_READ")
+  })
+
+  it("rejects an oversized root env example before reading it for publication", async () => {
+    const root = await createTempRoot()
+    const envExamplePath = path.join(root, ".env.example")
+    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+    await writeText(envExamplePath, "TOKEN=\n")
+    await truncate(envExamplePath, Number(SKILL_RUNTIME_ENV_MAX_BYTES) + 1)
+    let envExampleOpened = false
+    fsHooks.beforeOpen = async (filePath) => {
+      if (filePath === envExamplePath) envExampleOpened = true
+    }
+
+    await expect(readSkillDraftFromDirectory(root, undefined, { mode: "publish" }))
+      .rejects.toThrow("Skill .env 不能超过 1 MiB。")
+    expect(envExampleOpened).toBe(false)
   })
 
   it.skipIf(process.platform === "win32")("publishes without reading runtime env files and reports excluded entries", async () => {

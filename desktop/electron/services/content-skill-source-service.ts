@@ -21,6 +21,7 @@ import {
 } from "./content-skill-attachment-constraints"
 import { sanitizeError } from "./error-sanitize"
 import { createMainLogger } from "./log-store"
+import { assertSkillRuntimeEnvByteLength } from "./skill-env/file-policy"
 
 const logger = createMainLogger("service.content-skill-source")
 const SYNAPSE_SKILL_ID_FILE = ".synapse.json"
@@ -321,6 +322,14 @@ async function collectSkillFile(
 ): Promise<void> {
   const relativeName = normalizeContentAttachmentPath(toPortableRelativePath(path.relative(baseDir, fullPath)))
   if (!relativeName) return
+
+  if (isRootSkillEnvExamplePath(relativeName)) {
+    try {
+      assertSkillRuntimeEnvByteLength(fileStat.size)
+    } catch (error) {
+      throwInvalid("files", getErrorMessage(error))
+    }
+  }
 
   if (fileStat.size > CONTENT_SKILL_ATTACHMENT_MAX_SIZE) {
     throwInvalid("files", `附件超过 10MB：${relativeName}`)
