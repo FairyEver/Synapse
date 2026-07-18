@@ -178,6 +178,18 @@ describe("Drive capability domain", () => {
     expect(capabilities.get("app.drive.link.download_file")).toMatchObject({ mutates: true })
   })
 
+  it("describes standalone HTML sharing as the default and folder publishing as explicit", () => {
+    const tools = new Map(buildDriveTools().map((tool) => [tool.name, tool]))
+    const capabilities = new Map(DRIVE_DOMAIN.capabilities.map((capability) => [capability.id, capability]))
+
+    expect(tools.get("app_drive_share_create")?.description).toContain("Prefer this route for a standalone HTML file")
+    expect(tools.get("app_drive_share_create")?.description).toContain("upload destination folder")
+    expect(tools.get("app_drive_site_create")?.description).toContain("explicitly asks to publish the whole folder")
+    expect(tools.get("app_drive_site_create")?.description).toContain("folder containing only index.html is valid")
+    expect(capabilities.get("app.drive.share.create")?.description).toContain("Standalone HTML defaults to this route")
+    expect(capabilities.get("app.drive.site.create")?.description).toContain("folder containing only index.html is valid")
+  })
+
   it("builds public asset and trash tool schemas", () => {
     const tools = new Map(buildDriveTools().map((tool) => [tool.name, tool]))
 

@@ -76,14 +76,16 @@ When using Codex `--json` or raw MCP event logs for debugging, remember tool arg
 
 ## HTML Publishing Route
 
-Choose the public route from the final publishable artifact, not from casual words such as "page", "website", or "site".
+Choose the public route from both the final publishable artifact and the user's explicit intent. A standalone HTML file defaults to a Drive share; casual words such as "page", "website", or "site" do not by themselves request a folder-backed site.
 
 1. Inspect the generated files immediately before uploading.
-2. If the result is one standalone HTML file, call `app_drive_file_upload`, then `app_drive_share_create`. This remains the preferred route when the user calls it a website or site, or when an outer folder contains only that standalone HTML file.
+2. If the user explicitly asks to publish the whole folder or directory as a website or site, upload the local folder with `app_drive_folder_upload` when needed, then call `app_drive_site_create` for the Drive folder.
+   - A folder containing only one `index.html` file is a valid site source. File count does not determine whether explicit whole-folder publishing is allowed.
+   - Merely naming a Drive destination folder for an uploaded HTML file does not mean the user wants that folder published.
+3. Otherwise, if the result is one standalone HTML file, call `app_drive_file_upload`, then `app_drive_share_create`. This is the preferred route even when the user casually calls the file a website or site.
    - Standalone means the HTML does not require sibling local CSS, JavaScript, images, fonts, or other files. Inline content, data URLs, and remote URLs do not make it a multi-file site.
-3. If the result contains multiple HTML pages, a build output bundle, or HTML that depends on local relative assets, call `app_drive_folder_upload`, then `app_drive_site_create` for the uploaded folder.
-4. If local dependencies are missing or the artifact shape cannot be inspected, ask one concise question instead of guessing the route.
-5. Treat natural-language wording as intent, not as an explicit request for a URL type. If the user explicitly requires `/sites/...` after the distinction is clear, follow that request.
+4. If the result contains multiple HTML pages, a build output bundle, or HTML that depends on local relative assets, call `app_drive_folder_upload`, then `app_drive_site_create` for the uploaded folder.
+5. If local dependencies are missing or the artifact shape cannot be inspected, ask one concise question instead of guessing the route.
 
 ## Updating Published HTML
 
@@ -132,7 +134,7 @@ Updating either route does not live-reload pages already open in a visitor's bro
    - Pass `accessMode: "link_read"` for a new read-only link, `accessMode: "link_edit"` when logged-in link holders may edit supported text files, or `accessMode: "specified_users_edit"` with `editorEmails` when only specific logged-in users may edit.
    - Do not pass `editorEmails` for read-only or link-edit links. For `specified_users_edit`, provide one or more email addresses.
    - Use the `app_drive_share_create` result when the user needs the password for a specific share. `app_drive_share_list` lists existing shares without returning passwords.
-11. After applying **HTML Publishing Route**, if the artifact is a Drive folder containing a multi-file static website, build bundle, multi-page HTML prototype, or product prototype site, call `app_drive_site_create`. Sites use `/sites/<siteId>/`, copy the folder at publish time, and do not grant Drive browse or edit access.
+11. After applying **HTML Publishing Route**, call `app_drive_site_create` for a Drive folder containing a multi-file static website, build bundle, multi-page HTML prototype, or product prototype site, or when the user explicitly asks to publish the whole folder as a site. A folder containing only `index.html` is valid in the explicit whole-folder case. Sites use `/sites/<siteId>/`, copy the folder at publish time, and do not grant Drive browse or edit access.
    - Use `sourceFolderItemId`, `name`, `accessMode`, and `expiresIn`.
    - Set `entryPath` only when the homepage is not the default `index.html`.
    - Use `accessMode: "public"` for open sites or `accessMode: "password"` when the user asks for a password. Pass `password` only when the user provides a custom site password. Site MCP results never return passwords, so ask for a custom password when the user needs a known value.
@@ -170,14 +172,14 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 ## Common Requests
 
 - "上传这个文件并给我链接": call `app_drive_file_upload`, then `app_drive_share_create`.
-- "把这个单文件 HTML 做成网站": inspect the artifact, then call `app_drive_file_upload` and `app_drive_share_create` when it is standalone.
+- "把这个单文件 HTML 做成网站": call `app_drive_file_upload`, then `app_drive_share_create` when it is standalone and the user did not explicitly ask to publish its whole folder.
 - "发布这个包含 assets 的构建目录": call `app_drive_folder_upload`, then `app_drive_site_create`.
 - "上传到公开素材": call `app_drive_direct_link_upload`.
 - "上传到图床": call `app_drive_direct_link_upload`.
 - "生成直链": call `app_drive_direct_link_upload`.
 - "生成外链": call `app_drive_direct_link_upload`.
 - "分享云盘文件": call `app_drive_share_create`.
-- "发布这个文件夹为站点": inspect the artifact first; call `app_drive_site_create` only when it is a multi-file site or the user explicitly requires `/sites/...` after the distinction is clear.
+- "发布这个文件夹为站点": inspect the folder, then call `app_drive_site_create`; a folder containing only `index.html` is valid.
 - "把这个多页 HTML 原型发成网站": call `app_drive_site_create`.
 - "重新发布站点": call `app_drive_site_republish`.
 - "更新这个分享网页并同步云盘": overwrite the existing Drive item with `app_drive_file_upload`; keep the existing share and do not call `app_drive_share_create`.

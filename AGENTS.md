@@ -190,6 +190,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 
 ### 模块硬边界摘要
 
+- Drive 公开 HTML 时，独立 HTML 在用户未明确要求发布整个文件夹的情况下默认使用 `/share/...`；多文件静态站点，或用户明确要求把整个文件夹作为网站发布时，使用 `/sites/...`。文件夹即使只有一个 `index.html` 也可以发布为 Site；用户仅指定上传目标文件夹，或泛称“网页 / 网站 / 站点”，不等于要求发布该文件夹。
 - Knowledge Base 是 Synapse 托管项目类型；新建知识库时用户只提供名称，真实目录由 Synapse 创建在 Synapse-managed storage 中，项目路径对用户显示为虚拟 `synapse-kb://<id>`。Synapse-managed storage 默认位于 Electron `userData`，也允许用户配置一个全局知识库存储根；实际运行目录始终由 Synapse 创建为 `<storage-root>/knowledge-bases/<runtimeId>/`，不得暴露为逐库自选项目路径。
 - Knowledge Base 托管运行目录可以包含来自内置 Synapse Knowledge Base 模板的 Claude Code plugin、skill、command、hook、脚本、提示词和 `CLAUDE.md`，因为它不是用户选择的可见项目目录。
 - Knowledge Base 不再通过临时 SDK 注入把资源拼装到用户可见 vault；但托管知识库会话可以、且应当把自身 backing directory 作为 Claude Code SDK local plugin 加载，以激活内置 Synapse Knowledge Base runtime 的 plugin、skill、command 与允许的 hook。Agent 会话仍必须把托管知识库项目解析到其 backing directory，普通项目不得加载知识库 runtime 行为。

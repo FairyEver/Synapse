@@ -29,9 +29,9 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.link.download_file" as CapabilityId, title: "Download Drive link file", description: "Download one file or public asset from a Synapse Drive link to a local path or cache.", mutates: true },
   { id: "app.drive.folder_zip.create" as CapabilityId, title: "Create folder zip", description: "Download a Synapse Drive folder as a local zip file.", mutates: true },
   { id: "app.drive.share.list" as CapabilityId, title: "List shares", description: "List public Synapse Drive share links for the current user.", mutates: false },
-  { id: "app.drive.share.create" as CapabilityId, title: "Create share", description: "Create or reuse a public Synapse Drive share link. Existing shares keep their settings unless access settings are supplied.", mutates: true },
+  { id: "app.drive.share.create" as CapabilityId, title: "Create share", description: "Create or reuse a public Synapse Drive share link. Standalone HTML defaults to this route unless the user explicitly asks to publish the whole folder as a site. Existing shares keep their settings unless access settings are supplied.", mutates: true },
   { id: "app.drive.share.disable" as CapabilityId, title: "Disable share", description: "Disable a Synapse Drive share link.", mutates: true },
-  { id: "app.drive.site.create" as CapabilityId, title: "Create Drive site", description: "Publish a Drive folder as an independent read-only static site at /sites/<siteId>/.", mutates: true },
+  { id: "app.drive.site.create" as CapabilityId, title: "Create Drive site", description: "Publish a multi-file Drive folder, or a whole folder explicitly selected by the user, as an independent read-only static site at /sites/<siteId>/. A folder containing only index.html is valid.", mutates: true },
   { id: "app.drive.site.list" as CapabilityId, title: "List Drive sites", description: "List current user's Drive-published static sites.", mutates: false },
   { id: "app.drive.site.update_access" as CapabilityId, title: "Update Drive site access", description: "Update access mode and expiry settings for a Drive-published site without changing Drive shares.", mutates: true },
   { id: "app.drive.site.disable" as CapabilityId, title: "Disable Drive site", description: "Disable public access to a Drive-published site while keeping its record and deployment.", mutates: true },
@@ -390,7 +390,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_share_create",
-      description: "Create or reuse a public Synapse Drive share link and return the /share/... URL. Existing shares keep their password, expiry, and access mode unless access settings are supplied. accessMode controls read/edit permission without changing the share link.",
+      description: "Create or reuse a public Synapse Drive share link and return the /share/... URL. Prefer this route for a standalone HTML file unless the user explicitly asks to publish the whole containing folder as a site; merely naming an upload destination folder or casually saying page, website, or site is not explicit folder-publishing intent. Existing shares keep their password, expiry, and access mode unless access settings are supplied. accessMode controls read/edit permission without changing the share link.",
       inputSchema: {
         type: "object",
         properties: {
@@ -413,7 +413,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_site_create",
-      description: "Publish a Drive folder as an independent static site at /sites/<siteId>/. The folder is copied at publish time; this does not create a Drive share or grant edit access.",
+      description: "Publish a Drive folder as an independent static site at /sites/<siteId>/. Use this for a multi-file site or when the user explicitly asks to publish the whole folder as a site; a folder containing only index.html is valid. Do not infer whole-folder publishing from a standalone HTML upload, an upload destination folder, or casual words such as page, website, or site. The folder is copied at publish time; this does not create a Drive share or grant edit access.",
       inputSchema: {
         type: "object",
         properties: {

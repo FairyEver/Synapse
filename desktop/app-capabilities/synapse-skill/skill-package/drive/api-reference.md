@@ -212,7 +212,7 @@ Protected `/share` and `/sites` links require `password`; without it, this tool 
 
 Use share tools for `/share/...` links to existing Drive files or folders. Shares can be read-only or editable depending on access settings. Deleted or trashed source items temporarily disable affected share links. Restoring the item reactivates links disabled by that delete operation; manually disabled shares stay disabled.
 
-Use a share for a standalone HTML file, including when the user casually calls it a website or site. Updating the same Drive item changes what the existing `/share/...` link renders; do not create another share for a normal file update.
+Use a share by default for a standalone HTML file, including when the user casually calls it a website or site or names a Drive destination folder for the upload. Use a site instead only when the artifact requires a folder or the user explicitly asks to publish the whole folder. Updating the same Drive item changes what the existing `/share/...` link renders; do not create another share for a normal file update.
 
 ### `app_drive_share_list`
 
@@ -248,7 +248,7 @@ Input:
 
 Use site tools for publishing a Drive folder as a read-only static website at `/sites/<siteId>/`. Site publishing copies the folder at publish or republish time. It does not create a `/share/...` link, does not grant Drive browse or edit access, and does not use `/files/<assetId>` public asset URLs.
 
-Use a site when the publishable artifact is a multi-file folder, build bundle, multi-page site, or HTML that requires local relative assets. A folder containing only one standalone HTML file should use a normal file share unless the user explicitly requires `/sites/...` after the distinction is clear.
+Use a site when the publishable artifact is a multi-file folder, build bundle, multi-page site, or HTML that requires local relative assets, or when the user explicitly asks to publish the whole folder as a website or site. A folder containing only `index.html` is valid in the explicit whole-folder case. Merely naming an upload destination folder or casually saying page, website, or site does not request whole-folder publishing; a standalone HTML file still defaults to a normal share.
 
 ### `app_drive_site_create`
 
