@@ -75,9 +75,22 @@ vi.mock("../config-store", () => ({
 }))
 
 import { EditorInstallService } from "../editor-install-service"
+import type { ContentSkillSourceSecurityDeps } from "../content-skill-source-service"
 import { installerSourceService } from "../installer-source-service"
 
 const tempRoots: string[] = []
+const allowSkillSourceRead = {
+  actor: { kind: "user" },
+  auditSink: {
+    clearForTests() {},
+    list: () => [],
+    record() {},
+  },
+  permissionGuard: {
+    check: async () => ({ allowed: true }),
+    registerPolicy: () => () => {},
+  },
+} satisfies ContentSkillSourceSecurityDeps
 
 async function createTempRoot(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "synapse-installer-source-"))
@@ -170,7 +183,7 @@ describe("EditorInstallCore installer source", () => {
     })
     const source = await installerSourceService.prepareLocalSkillSource({
       sourceDirectoryPath: sourcePath,
-    })
+    }, allowSkillSourceRead)
     const service = new EditorInstallService()
 
     await service.installSourceToEditor({

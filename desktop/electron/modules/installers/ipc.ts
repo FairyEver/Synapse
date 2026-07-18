@@ -199,8 +199,12 @@ export const installersIpcModule: IpcModule = {
       channel: "synapse:installers:prepare-local-skill-source",
       request: prepareLocalSkillSourceSchema,
       response: skillInstallerSourceSchema,
-      handler: (_ctx, payload: SynapsePrepareLocalSkillSourcePayload) =>
-        installerSourceService.prepareLocalSkillSource(payload),
+      handler: (ctx, payload: SynapsePrepareLocalSkillSourcePayload) =>
+        installerSourceService.prepareLocalSkillSource(payload, {
+          actor: { kind: "user" },
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+        }),
     },
     prepareInlineRuleSource: {
       kind: "invoke",

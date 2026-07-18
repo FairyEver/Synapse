@@ -1,11 +1,24 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import type { ContentSkillSourceSecurityDeps } from "../content-skill-source-service"
 import { InstallerSourceService } from "../installer-source-service"
 import { SKILL_RUNTIME_ENV_MAX_BYTES } from "../skill-env/file-policy"
 
 const tempRoots: string[] = []
+const allowSkillSourceRead = {
+  actor: { kind: "user" },
+  auditSink: {
+    clearForTests() {},
+    list: () => [],
+    record() {},
+  },
+  permissionGuard: {
+    check: async () => ({ allowed: true }),
+    registerPolicy: () => () => {},
+  },
+} satisfies ContentSkillSourceSecurityDeps
 
 async function createTempDir(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "synapse-installer-source-"))
@@ -33,7 +46,7 @@ describe("InstallerSourceService", () => {
     await writeFile(path.join(root, "references", "notes.md"), "# Notes\n", "utf8")
 
     const service = new InstallerSourceService()
-    const source = await service.prepareLocalSkillSource({ sourceDirectoryPath: root })
+    const source = await service.prepareLocalSkillSource({ sourceDirectoryPath: root }, allowSkillSourceRead)
 
     expect(source.kind).toBe("skill")
     expect(source.origin).toBe("local-directory")
@@ -49,7 +62,7 @@ describe("InstallerSourceService", () => {
     await writeFile(path.join(root, ".env.example"), "TOKEN=default\n", "utf8")
 
     const service = new InstallerSourceService()
-    const source = await service.prepareLocalSkillSource({ sourceDirectoryPath: root })
+    const source = await service.prepareLocalSkillSource({ sourceDirectoryPath: root }, allowSkillSourceRead)
     const stored = service.getLocalSkill(source.localSourceId!)
 
     expect(stored.draft.files.map((file) => file.originalName)).toContain(".env.example")
@@ -66,8 +79,8 @@ describe("InstallerSourceService", () => {
     await writeFile(path.join(secondRoot, "SKILL.md"), "# Second\n", "utf8")
     const service = new InstallerSourceService({ maxLocalSkillEntries: 1 })
 
-    const first = await service.prepareLocalSkillSource({ sourceDirectoryPath: firstRoot })
-    const second = await service.prepareLocalSkillSource({ sourceDirectoryPath: secondRoot })
+    const first = await service.prepareLocalSkillSource({ sourceDirectoryPath: firstRoot }, allowSkillSourceRead)
+    const second = await service.prepareLocalSkillSource({ sourceDirectoryPath: secondRoot }, allowSkillSourceRead)
 
     expect(() => service.getLocalSkill(first.localSourceId!)).toThrow("本地 Skill 安装源不可用")
     expect(service.getLocalSkill(second.localSourceId!).source).toEqual(second)
@@ -80,7 +93,7 @@ describe("InstallerSourceService", () => {
     await writeFile(path.join(root, "SKILL.md"), "# Skill\n", "utf8")
     let now = 100
     const service = new InstallerSourceService({ now: () => now, sourceTtlMs: 500 })
-    const source = await service.prepareLocalSkillSource({ sourceDirectoryPath: root })
+    const source = await service.prepareLocalSkillSource({ sourceDirectoryPath: root }, allowSkillSourceRead)
 
     now = 600
 
@@ -97,7 +110,7 @@ describe("InstallerSourceService", () => {
     )
 
     const service = new InstallerSourceService()
-    await expect(service.prepareLocalSkillSource({ sourceDirectoryPath: root }))
+    await expect(service.prepareLocalSkillSource({ sourceDirectoryPath: root }, allowSkillSourceRead))
       .rejects.toThrow("Skill .env 不能超过 1 MiB。")
   })
 
@@ -108,7 +121,7 @@ describe("InstallerSourceService", () => {
 
     const service = new InstallerSourceService()
 
-    await expect(service.prepareLocalSkillSource({ sourceDirectoryPath: root }))
+    await expect(service.prepareLocalSkillSource({ sourceDirectoryPath: root }, allowSkillSourceRead))
       .rejects.toThrow("Skill 源目录不能包含 .env，请只提交 .env.example。")
   })
 
@@ -118,8 +131,44 @@ describe("InstallerSourceService", () => {
 
     const service = new InstallerSourceService()
 
-    await expect(service.prepareLocalSkillSource({ sourceDirectoryPath: root }))
+    await expect(service.prepareLocalSkillSource({ sourceDirectoryPath: root }, allowSkillSourceRead))
       .rejects.toThrow("Skill 安装器需要根目录 SKILL.md。")
+  })
+
+  it("checks permission before reading a local Skill source", async () => {
+    const root = await createTempDir()
+    await writeFile(path.join(root, "SKILL.md"), "# Skill\n", "utf8")
+    const auditRecord = vi.fn()
+    const permissionCheck = vi.fn().mockResolvedValue({
+      allowed: false,
+      reason: "denied",
+      policyId: "policy",
+    })
+    const service = new InstallerSourceService()
+
+    await expect(service.prepareLocalSkillSource({ sourceDirectoryPath: root }, {
+      actor: { kind: "user" },
+      auditSink: {
+        clearForTests() {},
+        list: () => [],
+        record: auditRecord,
+      },
+      permissionGuard: {
+        check: permissionCheck,
+        registerPolicy: () => () => {},
+      },
+    })).rejects.toThrow("denied")
+
+    expect(permissionCheck).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: root,
+    }))
+    expect(auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "denied",
+      resource: root,
+    }))
   })
 
   it("prepares an inline Rule source with normalized name", async () => {

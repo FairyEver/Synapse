@@ -131,6 +131,10 @@ describe("installersIpcModule", () => {
     expect(result).toMatchObject({ name: "team-skill" })
     expect(mocks.prepareLocalSkillSource).toHaveBeenCalledWith({
       sourceDirectoryPath: "/tmp/skill",
+    }, {
+      actor: { kind: "user" },
+      auditSink: expect.objectContaining({ record: mocks.auditRecord }),
+      permissionGuard: expect.objectContaining({ check: mocks.permissionCheck }),
     })
   })
 

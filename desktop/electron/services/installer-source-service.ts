@@ -16,8 +16,8 @@ import type {
 } from "../../src/types/installers"
 import {
   readSkillDraftFromDirectory,
-  resolveRootSkillMainFile,
   type ContentSkillSourceDraft,
+  type ContentSkillSourceSecurityDeps,
 } from "./content-skill-source-service"
 import {
   createInlineRuleSourceIdentity,
@@ -97,15 +97,15 @@ class InstallerSourceService {
 
   async prepareLocalSkillSource(
     payload: SynapsePrepareLocalSkillSourcePayload,
+    security: ContentSkillSourceSecurityDeps,
   ): Promise<SynapseSkillInstallerSource> {
     const timestamp = this.now()
     this.pruneSources(timestamp)
-    const rootMainFile = await resolveRootSkillMainFile(payload.sourceDirectoryPath)
-    if (!rootMainFile || path.basename(rootMainFile) !== "SKILL.md") {
+    const draft = await readSkillDraftFromDirectory(payload.sourceDirectoryPath, security)
+    if (path.basename(draft.mainFilePath) !== "SKILL.md") {
       throw new Error("Skill 安装器需要根目录 SKILL.md。")
     }
 
-    const draft = await readSkillDraftFromDirectory(payload.sourceDirectoryPath)
     const realSourceDirectoryPath = await realpath(draft.sourceDirectoryPath)
     const fallbackName = slugifySkillName(path.basename(realSourceDirectoryPath), "synapse-skill")
     const metadataName = normalizeSkillNameInput(draft.metadata.name ?? "")
