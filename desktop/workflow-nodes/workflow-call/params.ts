@@ -84,6 +84,12 @@ export function validateWorkflowCallValueBinding(
   source: WorkflowVariableSource,
   parentParams: readonly WorkflowParam[] | undefined,
 ): string | null {
+  const parentParam = source.type === "param" && parentParams
+    ? parentParams.find((param) => param.name === source.param)
+    : undefined
+  if (source.type === "param" && parentParams && !parentParam) {
+    return `子工作流参数「${childParam.name}」引用的父工作流参数「${source.param}」不存在`
+  }
   if (childParam.type !== "file" && childParam.type !== "directory") return null
   if (source.type !== "param") {
     return childParam.allowMultiple === true
@@ -91,8 +97,7 @@ export function validateWorkflowCallValueBinding(
       : null
   }
   if (!parentParams) return null
-  const parentParam = parentParams?.find((param) => param.name === source.param)
-  if (!parentParam) return `子工作流参数「${childParam.name}」引用的父工作流参数「${source.param}」不存在`
+  if (!parentParam) return null
   if (parentParam.type !== childParam.type || Boolean(parentParam.allowMultiple) !== Boolean(childParam.allowMultiple)) {
     return `子工作流参数「${childParam.name}」与父工作流参数「${source.param}」的资源类型或多选设置不一致`
   }

@@ -218,6 +218,22 @@ describe("workflow call params", () => {
     ])
   })
 
+  it("rejects non-resource value bindings that reference a missing parent param", () => {
+    const result = buildWorkflowCallParams({
+      childDefinition: child([{ name: "topic", type: "text", default: null }]),
+      paramTemplates: {},
+      paramBindings: { topic: { mode: "value", source: { type: "param", param: "missing_parent" } } },
+      parentParamDefinitions: [{ name: "available", type: "text", default: null }],
+      parentParamValues: {},
+      resolvedVariables: {},
+    })
+
+    expect(result.params).toEqual({})
+    expect(result.errors).toEqual([
+      "子工作流参数「topic」引用的父工作流参数「missing_parent」不存在",
+    ])
+  })
+
   it("rejects duplicate template and binding mappings for the same child param", () => {
     const result = buildWorkflowCallParams({
       childDefinition: child([{ name: "topic", type: "text", default: null }]),

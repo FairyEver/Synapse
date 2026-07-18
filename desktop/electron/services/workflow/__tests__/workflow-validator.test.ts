@@ -213,6 +213,30 @@ describe("validateWorkflow", () => {
     }))
   })
 
+  it("rejects workflow_call text bindings that reference missing parent params", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "available",
+      type: "text",
+      default: null,
+    }, {
+      paramBindings: {
+        topic: { mode: "value", source: { type: "param", param: "missing_parent" } },
+      },
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [
+        { name: "topic", type: "text", default: null },
+      ]]]),
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      nodeId: "call",
+      field: "paramBindings",
+      message: expect.stringContaining("父工作流参数「missing_parent」不存在"),
+    }))
+  })
+
   it("rejects workflow_call resource bindings with mismatched resource types", () => {
     const result = validateWorkflow(definitionWithWorkflowCall({
       name: "input_file",
