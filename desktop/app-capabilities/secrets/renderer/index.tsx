@@ -213,6 +213,10 @@ export function SecretsModule() {
   const scanSkillEnvBindings = useCallback(async (name: string): Promise<SecretSkillEnvScanResult | null> => {
     try {
       const result = await secretsBridge.scanSkillEnvBindings({ name })
+      if (result.failed) {
+        toast.error("扫描失败，请重试。")
+        return null
+      }
       if (result.truncated) toast.warning("关联 Skill 过多，请整理后重新扫描。")
       return result
     } catch (error) {
@@ -323,6 +327,10 @@ export function SecretsModule() {
     }
 
     if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
+    if (scanResult.failed) {
+      toast.error("扫描失败，请重试。")
+      return
+    }
     if (scanResult.truncated) {
       toast.warning("关联 Skill 过多，请整理后重新扫描。")
       return

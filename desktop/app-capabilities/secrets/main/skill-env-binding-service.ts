@@ -113,6 +113,7 @@ type SkillEnvBindingScanGroup = {
 
 type SkillEnvBindingRootScanResult = {
   readonly itemsByName: ReadonlyMap<string, StoredBinding[]>
+  readonly failed: boolean
   readonly truncated: boolean
 }
 
@@ -208,11 +209,16 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
     const batchId = createId()
     pruneSessions(timestamp)
     const storedItemsByName = new Map(requests.map(({ name }) => [name, new Map<string, StoredBinding>()]))
+    let failed = false
     let truncated = false
 
     for (const root of await deps.listRoots()) {
-      if (!(await allowRootRead(root, security, "skill-env-binding-scan"))) continue
+      if (!(await allowRootRead(root, security, "skill-env-binding-scan"))) {
+        failed = true
+        continue
+      }
       const rootResult = await scanRoot(root, requests)
+      failed ||= rootResult.failed
       truncated ||= rootResult.truncated
       const rootItemsByName = rootResult.itemsByName
       for (const [name, rootItems] of rootItemsByName) {
@@ -230,6 +236,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         name,
         scanResult: {
           scanSessionId,
+          ...(failed ? { failed: true } : undefined),
           ...(truncated ? { truncated: true } : undefined),
           items: Array.from(storedItems.values())
             .map(({ publicItem }) => publicItem)
@@ -282,19 +289,19 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
     let rootRealPath: string
     try {
       const rootInfo = await lstat(root.path)
-      if (!rootInfo.isDirectory()) return { itemsByName, truncated: false }
+      if (!rootInfo.isDirectory()) return { itemsByName, failed: true, truncated: false }
       rootIdentity = toFileIdentity(rootInfo)
       rootRealPath = await realpath(root.path)
       directory = await opendir(root.path)
       const rootAfter = await lstat(root.path)
       if (rootAfter.isSymbolicLink() || !sameIdentity(rootIdentity, toFileIdentity(rootAfter))) {
         await directory.close().catch(() => undefined)
-        return { itemsByName, truncated: false }
+        return { itemsByName, failed: true, truncated: false }
       }
-    } catch {
+    } catch (error) {
       await directory?.close().catch(() => undefined)
       deps.logger.warn("Failed to scan trusted Skill root.", { scope: root.scope })
-      return { itemsByName, truncated: false }
+      return { itemsByName, failed: !isNotFoundLikeError(error), truncated: false }
     }
 
     const pushUnavailableForAll = (
@@ -333,10 +340,10 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         const rootBeforeCandidate = await lstat(root.path)
         if (rootBeforeCandidate.isSymbolicLink()
           || !sameIdentity(rootIdentity, toFileIdentity(rootBeforeCandidate))) {
-          return { itemsByName: createStoredItemsByName(requests), truncated: false }
+          return { itemsByName: createStoredItemsByName(requests), failed: true, truncated: false }
         }
       } catch {
-        return { itemsByName: createStoredItemsByName(requests), truncated: false }
+        return { itemsByName: createStoredItemsByName(requests), failed: true, truncated: false }
       }
       const skillName = entry.name
       const skillPath = path.join(root.path, skillName)
@@ -366,7 +373,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         if (!sameIdentity(rootIdentity, validated.rootIdentity)
           || rootRealPath !== validated.rootRealPath) {
           await validated.handle.close().catch(() => undefined)
-          return { itemsByName: createStoredItemsByName(requests), truncated: false }
+          return { itemsByName: createStoredItemsByName(requests), failed: true, truncated: false }
         }
       } catch (error) {
         if (error instanceof UnsafeBindingError) {
@@ -440,7 +447,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         maxSkillsPerRoot: scanLimits.maxSkillsPerRoot,
       })
     }
-    return { itemsByName, truncated }
+    return { itemsByName, failed: false, truncated }
   }
 
   async function updateOne(

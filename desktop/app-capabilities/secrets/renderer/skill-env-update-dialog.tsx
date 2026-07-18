@@ -114,6 +114,7 @@ export function SkillEnvUpdateDialog({
     setUpdating(true)
     try {
       const scanResult = await secretsBridge.scanSkillEnvBindings({ name })
+      if (scanResult.failed) throw new Error("Skill env binding scan failed.")
       const nextGroups = activeGroups.map((group) => (
         groupId(group.name) === targetGroupId ? { name: group.name, scanResult } : group
       ))

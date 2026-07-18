@@ -226,11 +226,16 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
     try {
       const result = await secretsBridge.scanSkillEnvBindingsBatch({ names: requestedNames })
       const scannedNames = new Set(result.groups.map(({ name }) => name))
+      const failedNames = new Set(result.groups
+        .filter(({ scanResult }) => scanResult.failed === true)
+        .map(({ name }) => name))
       const truncatedNames = new Set(result.groups
         .filter(({ scanResult }) => scanResult.truncated === true)
         .map(({ name }) => name))
       return {
-        failedNames: requestedNames.filter((name) => !scannedNames.has(name) || truncatedNames.has(name)),
+        failedNames: requestedNames.filter((name) => (
+          !scannedNames.has(name) || failedNames.has(name) || truncatedNames.has(name)
+        )),
         groups: result.groups.flatMap(({ name, scanResult }) => (
           scanResult.items.some((entry) => entry.status !== "up_to_date")
             ? [{ name, scanResult }]

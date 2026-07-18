@@ -226,6 +226,33 @@ describe("SkillEnvSecretConfigDialog", () => {
     expect(document.body.textContent).toContain("重新扫描")
   })
 
+  it("keeps a failed binding scan available for retry", async () => {
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [{ name: "TOKEN", defaultValue: "" }],
+      legacyPlaceholders: [],
+    })
+    mocks.secrets.list.mockResolvedValue({
+      secrets: [{ id: "secret-1", name: "TOKEN", hasValue: true }],
+      total: 1,
+    })
+    mocks.secrets.scanSkillEnvBindingsBatch.mockResolvedValueOnce({
+      groups: [{
+        name: "TOKEN",
+        scanResult: { scanSessionId: "scan-failed", items: [], failed: true },
+      }],
+    })
+
+    await renderDialog()
+    await act(async () => {
+      clickButton("保存到密钥库")
+      await flushPromises()
+    })
+
+    expect(mocks.toast.error).toHaveBeenCalledWith("扫描关联 Skill 失败，请重试。")
+    expect(document.body.textContent).toContain("扫描关联 Skill 失败，请重试。")
+    expect(document.body.textContent).toContain("重新扫描")
+  })
+
   it("blocks a declaration whose key differs only by case from an existing secret", async () => {
     mocks.inspectSkillEnvSource.mockResolvedValue({
       declarations: [{ name: "api_key", defaultValue: "" }],

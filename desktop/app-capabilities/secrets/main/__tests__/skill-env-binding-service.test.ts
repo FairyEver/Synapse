@@ -123,6 +123,48 @@ describe("SkillEnvBindingService", () => {
     ])
   })
 
+  it("reports denied trusted roots as failed scans", async () => {
+    const root = await createRoot()
+    const harness = createHarness([trustedRoot(root)])
+    vi.mocked(harness.permissionGuard.check).mockResolvedValue({
+      allowed: false,
+      policyId: "deny-skill-root",
+    })
+
+    const result = await harness.service.scan("TOKEN", "new", harness.security)
+
+    expect(result).toMatchObject({ failed: true, items: [] })
+    expect(harness.auditEvents).toContainEqual(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "denied",
+    }))
+  })
+
+  it("keeps successful items when another trusted root cannot be scanned", async () => {
+    const readableRoot = await createRoot()
+    await createSkill(readableRoot, "demo", "TOKEN=old\n")
+    const invalidRoot = path.join(await createRoot(), "skills")
+    await writeFile(invalidRoot, "not a directory", "utf8")
+    const harness = createHarness([trustedRoot(readableRoot), trustedRoot(invalidRoot)])
+
+    const result = await harness.service.scan("TOKEN", "new", harness.security)
+
+    expect(result.failed).toBe(true)
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "demo", status: "needs_update" }),
+    ])
+  })
+
+  it("treats a missing editor Skill root as an empty scan", async () => {
+    const missingRoot = path.join(await createRoot(), "missing-skills")
+    const harness = createHarness([trustedRoot(missingRoot)])
+
+    const result = await harness.service.scan("TOKEN", "new", harness.security)
+
+    expect(result.failed).toBeUndefined()
+    expect(result.items).toEqual([])
+  })
+
   it("updates multiple keys in the same env file without conflicting with its own batch", async () => {
     const root = await createRoot()
     const skill = await createSkill(root, "demo", "TOKEN=old\nREGION=old\n")

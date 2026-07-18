@@ -345,6 +345,27 @@ describe("SecretsModule", () => {
     expect(mocks.toast.warning).toHaveBeenCalledWith("关联 Skill 过多，请整理后重新扫描。")
   })
 
+  it("reports a resolved failed binding scan after saving", async () => {
+    mocks.secrets.create.mockResolvedValueOnce({ ...savedSecret, name: "GITEE_TOKEN" })
+    mocks.secrets.scanSkillEnvBindings.mockResolvedValueOnce({
+      scanSessionId: "scan-failed",
+      items: [],
+      failed: true,
+    })
+    await renderSecretsModule()
+
+    await act(async () => clickButton("新增密钥"))
+    await act(async () => {
+      setInputValue("#secret-name", "GITEE_TOKEN")
+      setInputValue("#secret-value", "new-token")
+      clickButton("保存")
+      await Promise.resolve()
+    })
+
+    expect(mocks.toast.error).toHaveBeenCalledWith("扫描失败，请重试。")
+    expect(document.body.textContent).not.toContain("更新 Skill 配置")
+  })
+
   it("scans after creating a secret with an empty stored value", async () => {
     const emptySecret = { ...savedSecret, name: "EMPTY", hasValue: true }
     mocks.secrets.create.mockResolvedValueOnce(emptySecret)
@@ -767,6 +788,25 @@ describe("SecretsModule", () => {
     expect(JSON.stringify(mocks.logger.error.mock.calls)).not.toContain("super-secret")
     expect(document.body.textContent).toContain("TOKEN")
     expect(document.body.textContent).not.toContain("删除密钥")
+  })
+
+  it("keeps the secret when delete scanning returns a failed result", async () => {
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    mocks.secrets.scanSkillEnvBindings.mockResolvedValueOnce({
+      scanSessionId: "scan-failed",
+      items: [],
+      failed: true,
+    })
+
+    await renderSecretsModule()
+    await act(async () => {
+      clickButtonByLabel("删除密钥：TOKEN", { altKey: true })
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.delete).not.toHaveBeenCalled()
+    expect(mocks.toast.error).toHaveBeenCalledWith("扫描失败，请重试。")
+    expect(document.body.textContent).toContain("TOKEN")
   })
 
   it("keeps the latest delete target when scans resolve out of order", async () => {
