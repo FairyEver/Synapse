@@ -87,6 +87,43 @@ const agentErrorKindSchema = z.enum([
   "tool_use_interrupted",
   "webfetch_preflight_failed",
 ])
+const agentTurnDiagnosticSchema = z.object({
+  source: z.enum(["claude-sdk", "agent-runtime", "process-runner"]),
+  kind: z.enum(["aborted", "closed", "error", "tool_use_interrupted"]),
+  message: z.string().optional(),
+})
+const agentTurnOutcomeSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("completed"),
+    message: z.string().optional(),
+  }),
+  z.object({
+    status: z.literal("cancelled"),
+    mode: z.enum(["graceful", "force"]),
+    reason: z.enum(["user_cancelled", "system_cancelled", "force_cancelled"]),
+    message: z.string(),
+    diagnostics: z.array(agentTurnDiagnosticSchema).optional(),
+  }),
+  z.object({
+    status: z.literal("failed"),
+    reason: z.string(),
+    message: z.string(),
+    diagnostics: z.array(agentTurnDiagnosticSchema).optional(),
+  }),
+  z.object({
+    status: z.literal("timed_out"),
+    reason: z.string(),
+    message: z.string(),
+    diagnostics: z.array(agentTurnDiagnosticSchema).optional(),
+  }),
+  z.object({
+    status: z.literal("interrupted"),
+    reason: z.literal("tool_use_interrupted"),
+    recoverable: z.literal(true),
+    message: z.string(),
+    diagnostics: z.array(agentTurnDiagnosticSchema).optional(),
+  }),
+])
 const agentArtifactImageMimeTypeSchema = z.enum([
   "image/png",
   "image/jpeg",
@@ -133,8 +170,11 @@ const resultMetadataSchema = z.object({
   contextRemainingPercent: z.number().optional(),
   workDir: z.string().optional(),
   cancelled: z.boolean().optional(),
+  turnOutcome: agentTurnOutcomeSchema.optional(),
   usage: jsonRecordSchema.optional(),
   turnUsage: jsonRecordSchema.optional(),
+  modelUsage: jsonRecordSchema.optional(),
+  sdkResultUuid: z.string().optional(),
   costUsd: z.number().optional(),
   costCny: z.number().optional(),
   costBreakdownCny: jsonRecordSchema.optional(),
@@ -204,6 +244,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     message: z.string(),
     errorKind: agentErrorKindSchema.optional(),
     recoverable: z.boolean().optional(),
+    turnOutcome: agentTurnOutcomeSchema.optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -514,6 +555,8 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     done: z.literal(true),
     metadata: resultMetadataSchema.optional(),
     usage: jsonRecordSchema.optional(),
+    modelUsage: jsonRecordSchema.optional(),
+    sdkResultUuid: z.string().optional(),
     costUsd: z.number().optional(),
     costCny: z.number().optional(),
     costCurrency: z.literal("CNY").optional(),
@@ -524,6 +567,13 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     message: z.string(),
     errorKind: agentErrorKindSchema.optional(),
     recoverable: z.boolean().optional(),
+    turnOutcome: agentTurnOutcomeSchema.optional(),
+    usage: jsonRecordSchema.optional(),
+    modelUsage: jsonRecordSchema.optional(),
+    sdkResultUuid: z.string().optional(),
+    costUsd: z.number().optional(),
+    costCny: z.number().optional(),
+    costCurrency: z.literal("CNY").optional(),
   }),
   z.object({
     ...agentEventBaseSchema,

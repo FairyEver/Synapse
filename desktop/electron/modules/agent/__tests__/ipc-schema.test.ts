@@ -142,6 +142,59 @@ describe("agent IPC schemas", () => {
     })
   })
 
+  it("preserves terminal turn details on agent events and timeline items", () => {
+    const turnOutcome = {
+      status: "interrupted" as const,
+      reason: "tool_use_interrupted" as const,
+      recoverable: true as const,
+      message: "工具调用被中断",
+      diagnostics: [{
+        source: "claude-sdk" as const,
+        kind: "tool_use_interrupted" as const,
+        message: "stop_reason=tool_use",
+      }],
+    }
+    const resultDetails = {
+      turnOutcome,
+      modelUsage: { "claude-sonnet": { inputTokens: 10, outputTokens: 5 } },
+      sdkResultUuid: "result-1",
+    }
+
+    expect(agentEventSchema.parse({
+      type: "result",
+      content: "done",
+      done: true,
+      metadata: resultDetails,
+      modelUsage: resultDetails.modelUsage,
+      sdkResultUuid: resultDetails.sdkResultUuid,
+    })).toMatchObject({
+      metadata: resultDetails,
+      modelUsage: resultDetails.modelUsage,
+      sdkResultUuid: resultDetails.sdkResultUuid,
+    })
+    expect(agentEventSchema.parse({
+      type: "error",
+      message: turnOutcome.message,
+      errorKind: "tool_use_interrupted",
+      recoverable: true,
+      ...resultDetails,
+    })).toMatchObject(resultDetails)
+    expect(timelineItemSchema.parse({
+      id: "conv-1:history:3",
+      timestamp: "2026-07-18T01:00:00.000Z",
+      kind: "result",
+      content: "done",
+      metadata: resultDetails,
+    })).toMatchObject({ metadata: resultDetails })
+    expect(timelineItemSchema.parse({
+      id: "conv-1:history:4",
+      timestamp: "2026-07-18T01:00:01.000Z",
+      kind: "error",
+      message: turnOutcome.message,
+      turnOutcome,
+    })).toMatchObject({ turnOutcome })
+  })
+
   it("accepts a permission mode on session summaries", () => {
     expect(sessionSummarySchema.parse({
       projectId: "project-1",
