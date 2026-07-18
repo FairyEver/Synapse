@@ -1,9 +1,10 @@
-import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, symlink, truncate, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../runtime/security"
+import { CONTENT_SKILL_IDENTITY_MAX_BYTES } from "../../../config"
 import {
   ContentSkillIdentityChangedError,
   readContentSkillIdentityRaw,
@@ -121,6 +122,28 @@ describe("content skill local identity", () => {
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.read.outside-userdata",
       outcome: "allowed",
+      resource: target,
+    }))
+  })
+
+  it("rejects oversized resource identities before permission or full-file reads", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-content-skill-id-large-"))
+    const target = path.join(root, ".synapse.json")
+    const auditSink = auditSinkStub()
+    const permissionGuard = permissionGuardStub(true)
+    await writeFile(target, "", "utf8")
+    await truncate(target, CONTENT_SKILL_IDENTITY_MAX_BYTES + 1)
+
+    await expect(readContentSkillIdentityRaw(root, { actor, auditSink, permissionGuard }))
+      .rejects.toThrow("本地 Skill 关联文件不能超过 64 KiB。")
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      metadata: expect.objectContaining({
+        maxBytes: CONTENT_SKILL_IDENTITY_MAX_BYTES,
+        reason: "identity-too-large",
+      }),
+      outcome: "failed",
       resource: target,
     }))
   })

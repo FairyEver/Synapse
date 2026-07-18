@@ -4,6 +4,7 @@ import { lstat, open, realpath, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
+import { CONTENT_SKILL_IDENTITY_MAX_BYTES } from "../../config"
 import { hasSameFileSnapshot, isFileNotFoundError, isPathInside } from "./fs-utils"
 import { SYNAPSE_SKILL_ID_FILE } from "./content-skill-source-service"
 
@@ -23,6 +24,13 @@ class ContentSkillIdentityChangedError extends Error {
   constructor() {
     super("本地 Skill 关联文件已变化，请重新检查后再试。")
     this.name = "ContentSkillIdentityChangedError"
+  }
+}
+
+class ContentSkillIdentityTooLargeError extends Error {
+  constructor() {
+    super("本地 Skill 关联文件不能超过 64 KiB。")
+    this.name = "ContentSkillIdentityTooLargeError"
   }
 }
 
@@ -48,6 +56,14 @@ async function readContentSkillIdentityRaw(
     recordContentIdentityAudit(security, "fs.read.outside-userdata", targetPath, "failed", metadata)
     throw new Error("本地 Skill 关联必须是普通文件。")
   }
+  if (expected.size > BigInt(CONTENT_SKILL_IDENTITY_MAX_BYTES)) {
+    recordContentIdentityAudit(security, "fs.read.outside-userdata", targetPath, "failed", {
+      ...metadata,
+      reason: "identity-too-large",
+      maxBytes: CONTENT_SKILL_IDENTITY_MAX_BYTES,
+    })
+    throw new ContentSkillIdentityTooLargeError()
+  }
 
   if (security) await checkContentIdentityReadPermission(security, targetPath, metadata)
 
@@ -56,7 +72,12 @@ async function readContentSkillIdentityRaw(
     recordContentIdentityAudit(security, "fs.read.outside-userdata", targetPath, "allowed", metadata)
     return raw
   } catch (error) {
-    recordContentIdentityAudit(security, "fs.read.outside-userdata", targetPath, "failed", metadata)
+    recordContentIdentityAudit(security, "fs.read.outside-userdata", targetPath, "failed", {
+      ...metadata,
+      ...(error instanceof ContentSkillIdentityTooLargeError
+        ? { reason: "identity-too-large", maxBytes: CONTENT_SKILL_IDENTITY_MAX_BYTES }
+        : {}),
+    })
     throw error
   }
 }
@@ -82,7 +103,7 @@ async function readVerifiedContentIdentityFile(
     if (!opened.isFile() || !hasSameFileSnapshot(expected, opened)) {
       throw new Error("本地 Skill 关联文件在读取前发生变化。")
     }
-    const raw = await handle.readFile({ encoding: "utf8" })
+    const raw = await readBoundedContentIdentityFile(handle)
     const [afterRead, pathAfterRead, realPathAfterRead] = await Promise.all([
       handle.stat({ bigint: true }),
       lstat(targetPath, { bigint: true }),
@@ -101,6 +122,18 @@ async function readVerifiedContentIdentityFile(
   } finally {
     await handle.close()
   }
+}
+
+async function readBoundedContentIdentityFile(handle: Awaited<ReturnType<typeof open>>): Promise<string> {
+  const buffer = Buffer.allocUnsafe(CONTENT_SKILL_IDENTITY_MAX_BYTES + 1)
+  let offset = 0
+  while (offset < buffer.byteLength) {
+    const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, offset)
+    if (bytesRead === 0) break
+    offset += bytesRead
+  }
+  if (offset > CONTENT_SKILL_IDENTITY_MAX_BYTES) throw new ContentSkillIdentityTooLargeError()
+  return buffer.subarray(0, offset).toString("utf8")
 }
 
 async function checkContentIdentityReadPermission(
