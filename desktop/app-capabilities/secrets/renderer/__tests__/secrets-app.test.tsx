@@ -345,6 +345,34 @@ describe("SecretsModule", () => {
     expect(mocks.toast.warning).toHaveBeenCalledWith("关联 Skill 过多，请整理后重新扫描。")
   })
 
+  it("warns without opening an update dialog for unassociated Skill env scan warnings", async () => {
+    mocks.secrets.create.mockResolvedValueOnce({ ...savedSecret, name: "GITEE_TOKEN" })
+    mocks.secrets.scanSkillEnvBindings.mockResolvedValueOnce({
+      scanSessionId: "scan-warning",
+      items: [],
+      warnings: [{
+        skillName: "broken-skill",
+        editors: [{ id: "codex", label: "Codex" }],
+        scope: "global",
+        envPath: "/skills/broken-skill/.env",
+        status: "invalid",
+        message: "配置文件格式无效。",
+      }],
+    })
+    await renderSecretsModule()
+
+    await act(async () => clickButton("新增密钥"))
+    await act(async () => {
+      setInputValue("#secret-name", "GITEE_TOKEN")
+      setInputValue("#secret-value", "new-token")
+      clickButton("保存")
+      await Promise.resolve()
+    })
+
+    expect(mocks.toast.warning).toHaveBeenCalledWith("部分 Skill 配置无法检查。")
+    expect(document.body.textContent).not.toContain("更新 Skill 配置")
+  })
+
   it("reports a resolved failed binding scan after saving", async () => {
     mocks.secrets.create.mockResolvedValueOnce({ ...savedSecret, name: "GITEE_TOKEN" })
     mocks.secrets.scanSkillEnvBindings.mockResolvedValueOnce({

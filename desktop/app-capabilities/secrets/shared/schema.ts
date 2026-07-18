@@ -98,6 +98,13 @@ export const skillEnvBindingItemSchema = z.object({
   message: z.string().max(200).optional(),
 }).strict()
 
+export const skillEnvBindingWarningSchema = skillEnvBindingItemSchema
+  .omit({ id: true, status: true })
+  .extend({
+    status: z.enum(["invalid", "unwritable", "unsafe_link"]),
+  })
+  .strict()
+
 export const secretSkillEnvScanInputSchema = z.object({
   name: secretNameSchema,
 }).strict()
@@ -105,6 +112,7 @@ export const secretSkillEnvScanInputSchema = z.object({
 export const secretSkillEnvScanResultSchema = z.object({
   scanSessionId: z.string().min(1),
   items: z.array(skillEnvBindingItemSchema),
+  warnings: z.array(skillEnvBindingWarningSchema).optional(),
   failed: z.boolean().optional(),
   truncated: z.boolean().optional(),
 }).strict()
@@ -148,6 +156,7 @@ export type SecretUpsertInput = z.infer<typeof secretUpsertInputSchema>
 export type SecretDeleteInput = z.infer<typeof secretDeleteInputSchema>
 export type SecretsChangedEvent = z.infer<typeof secretsChangedEventSchema>
 export type SkillEnvBindingItem = z.infer<typeof skillEnvBindingItemSchema>
+export type SkillEnvBindingWarning = z.infer<typeof skillEnvBindingWarningSchema>
 export type SecretSkillEnvScanInput = z.infer<typeof secretSkillEnvScanInputSchema>
 export type SecretSkillEnvScanResult = z.infer<typeof secretSkillEnvScanResultSchema>
 export type SecretSkillEnvBatchScanInput = z.infer<typeof secretSkillEnvBatchScanInputSchema>

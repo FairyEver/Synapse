@@ -78,8 +78,6 @@ describe("SkillEnvBindingService", () => {
     const result = await harness.service.scan("TOKEN", "new-secret", harness.security)
 
     expect(result.items.map(({ skillName, status }) => ({ skillName, status }))).toEqual([
-      { skillName: "invalid", status: "invalid" },
-      { skillName: "linked", status: "unsafe_link" },
       { skillName: "needs", status: "needs_update" },
       { skillName: "readonly", status: "unwritable" },
     ])
@@ -87,6 +85,10 @@ describe("SkillEnvBindingService", () => {
       editors: [{ id: "codex", label: "Codex" }, { id: "claude-code", label: "Claude Code" }],
       scope: "global",
     })
+    expect(result.warnings).toEqual([
+      expect.objectContaining({ skillName: "invalid", status: "invalid" }),
+      expect.objectContaining({ skillName: "linked", status: "unsafe_link" }),
+    ])
     const publicJson = JSON.stringify(result)
     expect(publicJson).not.toContain("old-secret")
     expect(publicJson).not.toContain("new-secret")
@@ -631,7 +633,8 @@ describe("SkillEnvBindingService", () => {
 
     const result = await harness.service.scan("TOKEN", "new", harness.security)
 
-    expect(result.items).toEqual([
+    expect(result.items).toEqual([])
+    expect(result.warnings).toEqual([
       expect.objectContaining({ skillName: "demo", status: "unwritable" }),
     ])
   })
@@ -926,7 +929,8 @@ describe("SkillEnvBindingService", () => {
     const result = await harness.service.scan("TOKEN", "new", harness.security)
 
     expect(contentReadCalls).toBe(0)
-    expect(result.items).toEqual([
+    expect(result.items).toEqual([])
+    expect(result.warnings).toEqual([
       expect.objectContaining({
         message: "Skill .env 不能超过 1 MiB。",
         skillName: "demo",
@@ -1598,12 +1602,13 @@ describe("SkillEnvBindingService", () => {
     if (constants.O_NONBLOCK !== 0) {
       expect(capturedFlags & constants.O_NONBLOCK).toBe(constants.O_NONBLOCK)
     }
-    expect(result.items).toEqual([
+    expect(result.items).toEqual([])
+    expect(result.warnings).toEqual([
       expect.objectContaining({ skillName: "demo", status: "unsafe_link" }),
     ])
   })
 
-  it.each(["up_to_date", "invalid"] as const)(
+  it.each(["up_to_date"] as const)(
     "rejects a queue request containing a %s scan item before any write",
     async (blockedStatus) => {
       const root = await createRoot()

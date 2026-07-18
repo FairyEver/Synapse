@@ -27,6 +27,7 @@ import type {
   SecretSkillEnvScanResult,
   SkillEnvBindingQueueItem,
   SkillEnvBindingItem,
+  SkillEnvBindingWarning,
 } from "../shared/schema"
 
 const SCAN_SESSION_TTL_MS = 300_000
@@ -83,17 +84,6 @@ type FileIdentity = {
   readonly ino: bigint
 }
 
-function emptyBindingEvidence(): Pick<StoredBinding, "rootIdentity" | "skillIdentity" | "envIdentity" | "rootRealPath" | "skillRealPath" | "envRealPath"> {
-  return {
-    rootIdentity: null,
-    skillIdentity: null,
-    envIdentity: null,
-    rootRealPath: null,
-    skillRealPath: null,
-    envRealPath: null,
-  }
-}
-
 type ScanSession = {
   readonly createdAt: number
   readonly batchId: string
@@ -113,6 +103,7 @@ type SkillEnvBindingScanGroup = {
 
 type SkillEnvBindingRootScanResult = {
   readonly itemsByName: ReadonlyMap<string, StoredBinding[]>
+  readonly warnings: readonly SkillEnvBindingWarning[]
   readonly failed: boolean
   readonly truncated: boolean
 }
@@ -211,6 +202,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
     const storedItemsByName = new Map(requests.map(({ name }) => [name, new Map<string, StoredBinding>()]))
     let failed = false
     let truncated = false
+    const warnings: SkillEnvBindingWarning[] = []
 
     for (const root of await deps.listRoots()) {
       if (!(await allowRootRead(root, security, "skill-env-binding-scan"))) {
@@ -220,6 +212,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
       const rootResult = await scanRoot(root, requests)
       failed ||= rootResult.failed
       truncated ||= rootResult.truncated
+      warnings.push(...rootResult.warnings)
       const rootItemsByName = rootResult.itemsByName
       for (const [name, rootItems] of rootItemsByName) {
         const storedItems = storedItemsByName.get(name)
@@ -227,6 +220,8 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         for (const item of rootItems) storedItems.set(item.publicItem.id, item)
       }
     }
+    warnings.sort((left, right) => left.skillName.localeCompare(right.skillName)
+      || left.envPath.localeCompare(right.envPath))
 
     return requests.map(({ name }) => {
       const storedItems = storedItemsByName.get(name) ?? new Map<string, StoredBinding>()
@@ -238,6 +233,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
           scanSessionId,
           ...(failed ? { failed: true } : undefined),
           ...(truncated ? { truncated: true } : undefined),
+          ...(warnings.length > 0 ? { warnings } : undefined),
           items: Array.from(storedItems.values())
             .map(({ publicItem }) => publicItem)
             .sort((left, right) => left.skillName.localeCompare(right.skillName)
@@ -284,41 +280,34 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
     requests: readonly SkillEnvBindingScanRequest[],
   ): Promise<SkillEnvBindingRootScanResult> {
     const itemsByName = createStoredItemsByName(requests)
+    const warnings: SkillEnvBindingWarning[] = []
     let directory
     let rootIdentity: FileIdentity
     let rootRealPath: string
     try {
       const rootInfo = await lstat(root.path)
-      if (!rootInfo.isDirectory()) return { itemsByName, failed: true, truncated: false }
+      if (!rootInfo.isDirectory()) return { itemsByName, warnings, failed: true, truncated: false }
       rootIdentity = toFileIdentity(rootInfo)
       rootRealPath = await realpath(root.path)
       directory = await opendir(root.path)
       const rootAfter = await lstat(root.path)
       if (rootAfter.isSymbolicLink() || !sameIdentity(rootIdentity, toFileIdentity(rootAfter))) {
         await directory.close().catch(() => undefined)
-        return { itemsByName, failed: true, truncated: false }
+        return { itemsByName, warnings, failed: true, truncated: false }
       }
     } catch (error) {
       await directory?.close().catch(() => undefined)
       deps.logger.warn("Failed to scan trusted Skill root.", { scope: root.scope })
-      return { itemsByName, failed: !isNotFoundLikeError(error), truncated: false }
+      return { itemsByName, warnings, failed: !isNotFoundLikeError(error), truncated: false }
     }
 
-    const pushUnavailableForAll = (
+    const pushUnavailableWarning = (
       skillName: string,
       envPath: string,
       status: "invalid" | "unsafe_link" | "unwritable",
       message: string,
     ) => {
-      for (const { name } of requests) {
-        const base = createPublicItem(createId(), root, skillName, envPath)
-        itemsByName.get(name)?.push({
-          publicItem: { ...base, status, message },
-          root,
-          fileHash: null,
-          ...emptyBindingEvidence(),
-        })
-      }
+      warnings.push({ ...createPublicBindingMetadata(root, skillName, envPath), status, message })
     }
 
     let rootEntryCount = 0
@@ -340,10 +329,10 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         const rootBeforeCandidate = await lstat(root.path)
         if (rootBeforeCandidate.isSymbolicLink()
           || !sameIdentity(rootIdentity, toFileIdentity(rootBeforeCandidate))) {
-          return { itemsByName: createStoredItemsByName(requests), failed: true, truncated: false }
+          return { itemsByName: createStoredItemsByName(requests), warnings, failed: true, truncated: false }
         }
       } catch {
-        return { itemsByName: createStoredItemsByName(requests), failed: true, truncated: false }
+        return { itemsByName: createStoredItemsByName(requests), warnings, failed: true, truncated: false }
       }
       const skillName = entry.name
       const skillPath = path.join(root.path, skillName)
@@ -355,13 +344,13 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         ;[skillInfo, envInfo] = await Promise.all([lstat(skillMdPath), lstat(envPath)])
       } catch (error) {
         if (isNotFoundLikeError(error)) continue
-        pushUnavailableForAll(skillName, envPath, "unwritable", "配置文件读取失败。")
+        pushUnavailableWarning(skillName, envPath, "unwritable", "配置文件读取失败。")
         continue
       }
       if (!skillInfo.isFile() || skillInfo.isSymbolicLink()) continue
 
       if (envInfo.isSymbolicLink()) {
-        pushUnavailableForAll(skillName, envPath, "unsafe_link", "配置文件是符号链接。")
+        pushUnavailableWarning(skillName, envPath, "unsafe_link", "配置文件是符号链接。")
         continue
       }
       if (!envInfo.isFile()) continue
@@ -373,18 +362,18 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         if (!sameIdentity(rootIdentity, validated.rootIdentity)
           || rootRealPath !== validated.rootRealPath) {
           await validated.handle.close().catch(() => undefined)
-          return { itemsByName: createStoredItemsByName(requests), failed: true, truncated: false }
+          return { itemsByName: createStoredItemsByName(requests), warnings, failed: true, truncated: false }
         }
       } catch (error) {
         if (error instanceof UnsafeBindingError) {
-          pushUnavailableForAll(skillName, envPath, "unsafe_link", "配置文件路径不安全。")
+          pushUnavailableWarning(skillName, envPath, "unsafe_link", "配置文件路径不安全。")
           continue
         }
         if (error instanceof SkillRuntimeEnvSizeError) {
-          pushUnavailableForAll(skillName, envPath, "unwritable", SKILL_RUNTIME_ENV_SIZE_LIMIT_MESSAGE)
+          pushUnavailableWarning(skillName, envPath, "unwritable", SKILL_RUNTIME_ENV_SIZE_LIMIT_MESSAGE)
           continue
         }
-        pushUnavailableForAll(skillName, envPath, "unwritable", "配置文件不可读或不可写。")
+        pushUnavailableWarning(skillName, envPath, "unwritable", "配置文件不可读或不可写。")
         continue
       }
       let content: string
@@ -424,20 +413,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
           })
         }
       } catch {
-        for (const { name } of requests) {
-          const base = createPublicItem(createId(), root, skillName, envPath)
-          itemsByName.get(name)?.push({
-            publicItem: { ...base, status: "invalid", message: "配置文件格式无效。" },
-            root,
-            fileHash,
-            rootIdentity: validated.rootIdentity,
-            skillIdentity: validated.skillIdentity,
-            envIdentity: validated.envIdentity,
-            rootRealPath: validated.rootRealPath,
-            skillRealPath: validated.skillRealPath,
-            envRealPath: validated.envRealPath,
-          })
-        }
+        pushUnavailableWarning(skillName, envPath, "invalid", "配置文件格式无效。")
       }
     }
     if (truncated) {
@@ -447,7 +423,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         maxSkillsPerRoot: scanLimits.maxSkillsPerRoot,
       })
     }
-    return { itemsByName, failed: false, truncated }
+    return { itemsByName, warnings, failed: false, truncated }
   }
 
   async function updateOne(
@@ -756,6 +732,16 @@ function createPublicItem(
 ): Omit<SkillEnvBindingItem, "status"> {
   return {
     id,
+    ...createPublicBindingMetadata(root, skillName, envPath),
+  }
+}
+
+function createPublicBindingMetadata(
+  root: TrustedSkillRoot,
+  skillName: string,
+  envPath: string,
+): Omit<SkillEnvBindingWarning, "status" | "message"> {
+  return {
     skillName,
     editors: root.editors.map(({ id: editorId, label }) => ({ id: editorId, label })),
     scope: root.scope,

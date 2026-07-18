@@ -218,6 +218,7 @@ export function SecretsModule() {
         return null
       }
       if (result.truncated) toast.warning("关联 Skill 过多，请整理后重新扫描。")
+      if (result.warnings?.length) toast.warning("部分 Skill 配置无法检查。")
       return result
     } catch (error) {
       logger.error("Failed to scan Skill env bindings.", errorDiagnostic(error))
@@ -335,6 +336,7 @@ export function SecretsModule() {
       toast.warning("关联 Skill 过多，请整理后重新扫描。")
       return
     }
+    if (scanResult.warnings?.length) toast.warning("部分 Skill 配置无法检查。")
     if (bypassConfirmation && scanResult.items.length === 0) {
       void deleteSecret(secret, scanGeneration)
       return
