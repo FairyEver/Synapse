@@ -1,15 +1,17 @@
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import type { Dir } from "node:fs"
-import { mkdir, mkdtemp, rm, symlink, truncate, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rename, rm, symlink, truncate, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const readFileMock = vi.hoisted(() => vi.fn())
+const openMock = vi.hoisted(() => vi.fn())
 const opendirMock = vi.hoisted(() => vi.fn())
 vi.mock("node:fs/promises", async (importOriginal) => ({
   ...await importOriginal<typeof import("node:fs/promises")>(),
+  open: openMock,
   opendir: opendirMock,
   readFile: readFileMock,
 }))
@@ -31,10 +33,14 @@ beforeEach(async () => {
   opendirMock.mockImplementation((...args: unknown[]) => (
     actual.opendir as unknown as (...openArgs: unknown[]) => unknown
   )(...args))
+  openMock.mockImplementation((...args: unknown[]) => (
+    actual.open as unknown as (...openArgs: unknown[]) => unknown
+  )(...args))
 })
 
 afterEach(async () => {
   opendirMock.mockReset()
+  openMock.mockReset()
   readFileMock.mockReset()
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
@@ -134,7 +140,7 @@ describe("legacy workflow migration storage", () => {
     await mkdir(workflowDirectory, { recursive: true })
     await writeFile(path.join(workflowDirectory, "v_100.json"), "{}", "utf8")
     const readError = Object.assign(new Error("denied"), { code: "EACCES" })
-    readFileMock.mockRejectedValueOnce(readError)
+    openMock.mockRejectedValueOnce(readError)
     const issues: LegacyWorkflowScanIssue[] = []
 
     await expect(listLegacyWorkflowSources([repositoryPath], (issue) => issues.push(issue)))
@@ -170,10 +176,42 @@ describe("legacy workflow migration storage", () => {
     )).resolves.toEqual([
       expect.objectContaining({ fileName: "v_100.json", workflowId: "legacy-workflow" }),
     ])
-    expect(readFileMock).not.toHaveBeenCalledWith(oversizedPath)
+    expect(openMock).not.toHaveBeenCalledWith(oversizedPath, expect.any(Number))
     expect(issues).toContainEqual(expect.objectContaining({
       operation: "scan_limit",
       limit: "version_bytes",
+      workflowId: "legacy-workflow",
+    }))
+  })
+
+  it("rejects a version file replaced after validation and continues to an older snapshot", async () => {
+    const repositoryPath = await mkdtemp(path.join(os.tmpdir(), "workflow-legacy-swap-"))
+    roots.push(repositoryPath)
+    const workflowDirectory = path.join(repositoryPath, "workflows", "legacy-workflow")
+    await mkdir(workflowDirectory, { recursive: true })
+    const newestPath = path.join(workflowDirectory, "v_200.json")
+    await writeFile(newestPath, JSON.stringify({ id: "legacy-workflow", name: "checked" }), "utf8")
+    await writeFile(path.join(workflowDirectory, "v_100.json"), JSON.stringify({
+      id: "legacy-workflow",
+      name: "older",
+    }), "utf8")
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+    openMock.mockImplementationOnce(async (...args: unknown[]) => {
+      await rename(newestPath, `${newestPath}.checked`)
+      await writeFile(newestPath, JSON.stringify({ id: "legacy-workflow", name: "swapped" }), "utf8")
+      return (actual.open as unknown as (...openArgs: unknown[]) => unknown)(...args)
+    })
+    const issues: LegacyWorkflowScanIssue[] = []
+
+    await expect(listLegacyWorkflowSources([repositoryPath], (issue) => issues.push(issue)))
+      .resolves.toEqual([
+        expect.objectContaining({
+          fileName: "v_100.json",
+          document: expect.objectContaining({ name: "older" }),
+        }),
+      ])
+    expect(issues).toContainEqual(expect.objectContaining({
+      operation: "read_version",
       workflowId: "legacy-workflow",
     }))
   })
@@ -195,7 +233,7 @@ describe("legacy workflow migration storage", () => {
       (issue) => issues.push(issue),
       { maxVersionsPerWorkflow: 1 },
     )).resolves.toEqual([])
-    expect(readFileMock).toHaveBeenCalledTimes(1)
+    expect(openMock).toHaveBeenCalledTimes(1)
     expect(issues).toContainEqual(expect.objectContaining({
       operation: "scan_limit",
       limit: "versions",

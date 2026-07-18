@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
-import type { Dir, Stats } from "node:fs"
-import { lstat, opendir, readFile, realpath } from "node:fs/promises"
+import { constants, type BigIntStats, type Dir, type Stats } from "node:fs"
+import { lstat, open, opendir, realpath } from "node:fs/promises"
 import path from "node:path"
 import {
   WORKFLOW_LEGACY_RECOVERY_MAX_DIRECTORIES,
@@ -14,7 +14,7 @@ import {
   readBinaryFile,
   writeBinaryFileAtomic,
 } from "../../runtime/data-repo"
-import { isPathInside } from "../fs-utils"
+import { hasSameFileSnapshot, isPathInside } from "../fs-utils"
 import {
   WORKFLOW_LEGACY_BASELINE_VERSION,
   WORKFLOW_SCHEMA_VERSION,
@@ -273,8 +273,8 @@ export async function listLegacyWorkflowSources(
           const versionPath = path.join(workflowDirectory, fileName)
           let bytes
           try {
-            const fileStats = await lstat(versionPath)
-            if (!fileStats.isFile()) {
+            const fileStats = await lstat(versionPath, { bigint: true })
+            if (fileStats.isSymbolicLink() || !fileStats.isFile()) {
               onIssue?.({
                 operation: "read_version",
                 workflowId: directory.name,
@@ -282,18 +282,23 @@ export async function listLegacyWorkflowSources(
               })
               continue
             }
-            if (fileStats.size > limits.maxVersionBytes) {
+            if (fileStats.size > BigInt(limits.maxVersionBytes)) {
               reportLimit(
                 "version_bytes",
                 "Legacy workflow recovery skipped a version file that exceeded the size limit.",
-                fileStats.size,
+                Number(fileStats.size),
                 limits.maxVersionBytes,
                 directory.name,
               )
               continue
             }
             if (timedOut()) return results
-            bytes = await readFile(versionPath)
+            bytes = await readVerifiedLegacyVersionFile(
+              versionPath,
+              trustedWorkflowDirectory.realPath,
+              fileStats,
+              limits.maxVersionBytes,
+            )
             if (bytes.byteLength > limits.maxVersionBytes) {
               reportLimit(
                 "version_bytes",
@@ -339,6 +344,54 @@ export async function listLegacyWorkflowSources(
     }
   }
   return results
+}
+
+async function readVerifiedLegacyVersionFile(
+  filePath: string,
+  boundaryRealPath: string,
+  expected: BigIntStats,
+  maximumBytes: number,
+): Promise<Buffer> {
+  const fileRealPath = await realpath(filePath)
+  if (!isPathInside(boundaryRealPath, fileRealPath)) {
+    throw new Error("Legacy workflow version escaped its workflow directory.")
+  }
+
+  const noFollowFlag = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0
+  const nonBlockingFlag = typeof constants.O_NONBLOCK === "number" ? constants.O_NONBLOCK : 0
+  const handle = await open(filePath, constants.O_RDONLY | noFollowFlag | nonBlockingFlag)
+  try {
+    const opened = await handle.stat({ bigint: true })
+    if (!opened.isFile() || !hasSameFileSnapshot(expected, opened)) {
+      throw new Error("Legacy workflow version changed before it was read.")
+    }
+
+    const buffer = Buffer.allocUnsafe(maximumBytes + 1)
+    let offset = 0
+    while (offset < buffer.byteLength) {
+      const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, offset)
+      if (bytesRead === 0) break
+      offset += bytesRead
+    }
+
+    const [afterRead, pathAfterRead, realPathAfterRead] = await Promise.all([
+      handle.stat({ bigint: true }),
+      lstat(filePath, { bigint: true }),
+      realpath(filePath),
+    ])
+    if (
+      pathAfterRead.isSymbolicLink()
+      || !pathAfterRead.isFile()
+      || !hasSameFileSnapshot(expected, afterRead)
+      || !hasSameFileSnapshot(expected, pathAfterRead)
+      || !isPathInside(boundaryRealPath, realPathAfterRead)
+    ) {
+      throw new Error("Legacy workflow version changed while it was read.")
+    }
+    return buffer.subarray(0, offset)
+  } finally {
+    await handle.close()
+  }
 }
 
 async function listNewestLegacyVersionFiles(
