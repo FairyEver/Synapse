@@ -51,6 +51,7 @@ interface WorkflowMigrationStateWrite {
   readonly sourceDigest: string
   readonly sourceKind: WorkflowMigrationStateEntryV1["sourceKind"]
   readonly status: WorkflowMigrationStateStatus
+  readonly targetDigest?: string
   readonly error?: Error
 }
 
@@ -129,7 +130,11 @@ export class WorkflowService {
     try {
       const entries = await this.migrationStateNamespace.list()
       const diagnostics = entries.flatMap((entry): WorkflowMigrationDiagnostic[] => {
-        if (entry.sourceKind !== "legacy_repository" || entry.status === "legacy_recovered") return []
+        if (
+          entry.sourceKind !== "legacy_repository"
+          || entry.status === "legacy_recovering"
+          || entry.status === "legacy_recovered"
+        ) return []
         return [{
           id: entry.id,
           workflowId: entry.workflowId,
@@ -407,6 +412,25 @@ export class WorkflowService {
       const previousState = states.get(stateId)
       if (previousState?.status === "legacy_recovered" || previousState?.status === "legacy_conflict") continue
 
+      if (previousState?.status === "legacy_recovering" && existingIds.has(source.workflowId)) {
+        const existing = await this.workflowsNamespace.get(source.workflowId)
+        if (existing && workflowDocumentDigest(existing) === previousState.targetDigest) {
+          await this.writeMigrationState({
+            id: stateId,
+            workflowId: source.workflowId,
+            sourceDigest: previousState.sourceDigest,
+            sourceKind: "legacy_repository",
+            status: "legacy_recovered",
+          })
+          completedLegacyWorkflowIds.add(source.workflowId)
+          logger.info("legacy repository workflow recovery state repaired", {
+            workflowId: source.workflowId,
+            sourceDigest: previousState.sourceDigest,
+          })
+          continue
+        }
+      }
+
       if (existingIds.has(source.workflowId)) {
         await this.writeMigrationState({
           id: stateId,
@@ -439,6 +463,15 @@ export class WorkflowService {
         expectedStoreBytes = await this.migrationStorage.ensureCurrentStoreBackup()
         backupPrepared = true
       }
+      const targetDigest = workflowDocumentDigest(result.document)
+      await this.writeMigrationState({
+        id: stateId,
+        workflowId: source.workflowId,
+        sourceDigest: source.digest,
+        sourceKind: "legacy_repository",
+        status: "legacy_recovering",
+        targetDigest,
+      })
       expectedStoreBytes = await this.upsertMigratedWorkflow(
         result.document as WorkflowEntryV1,
         expectedStoreBytes,
@@ -555,6 +588,7 @@ export class WorkflowService {
       sourceKind: input.sourceKind,
       targetSchemaVersion: WORKFLOW_SCHEMA_VERSION,
       status: input.status,
+      ...(input.targetDigest ? { targetDigest: input.targetDigest } : {}),
       ...(input.error ? {
         errorCode: input.error.name,
         errorMessage: sanitizeAgentError(input.error.message).slice(0, 200),

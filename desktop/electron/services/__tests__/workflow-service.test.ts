@@ -684,6 +684,41 @@ describe("WorkflowService", () => {
     await restarted.initialize()
     await expect(restarted.get(def.id)).resolves.toBeNull()
   })
+  it("repairs a recovered legacy workflow after the final migration-state write fails", async () => {
+    const dir = tmpDir()
+    const repositoryPath = tmpDir()
+    const def = { ...makeDef(), id: "legacy-recovery-state-repair", name: "已找回的工作流" }
+    const legacyDir = path.join(repositoryPath, "workflows", def.id)
+    mkdirSync(legacyDir, { recursive: true })
+    writeFileSync(path.join(legacyDir, "v_100_valid.json"), JSON.stringify(def), "utf8")
+    const options: WorkflowServiceMigrationOptions = {
+      dataRootPath: dir,
+      listLegacyRepositoryPaths: async () => [repositoryPath],
+    }
+    const first = createRepoAt(dir, options)
+    const migrationStates = first.repo.namespace<WorkflowMigrationStateEntryV1>("workflow.migration-state")
+    const originalUpsert = migrationStates.upsert.bind(migrationStates)
+    const stateUpsert = vi.spyOn(migrationStates, "upsert").mockImplementation(async (entry) => {
+      if (entry.status === "legacy_recovered") throw new Error("migration state unavailable")
+      await originalUpsert(entry)
+    })
+
+    await expect(first.svc.initialize()).rejects.toThrow("migration state unavailable")
+    stateUpsert.mockRestore()
+
+    await expect(first.repo.namespace<WorkflowEntryV1>("workflows").get(def.id))
+      .resolves.toMatchObject({ id: def.id, name: def.name })
+    await expect(migrationStates.get(`legacy:${def.id}`)).resolves.toMatchObject({
+      status: "legacy_recovering",
+      targetDigest: expect.any(String),
+    })
+
+    const restarted = createRepoAt(dir, options)
+    await expect(restarted.svc.initialize()).resolves.toBeUndefined()
+    await expect(restarted.repo.namespace<WorkflowMigrationStateEntryV1>("workflow.migration-state").get(`legacy:${def.id}`))
+      .resolves.toMatchObject({ status: "legacy_recovered" })
+    await expect(restarted.svc.listMigrationDiagnostics()).resolves.toEqual([])
+  })
   it("isolates a legacy workflow whose document id is unsafe", async () => {
     const dir = tmpDir()
     const repositoryPath = tmpDir()

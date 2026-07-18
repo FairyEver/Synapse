@@ -3,6 +3,7 @@ import type { Migration, NamespaceSchema } from "../types"
 export type WorkflowMigrationStateStatus =
   | "failed"
   | "unsupported_future"
+  | "legacy_recovering"
   | "legacy_recovered"
   | "legacy_conflict"
 
@@ -13,6 +14,7 @@ export interface WorkflowMigrationStateEntryV1 extends Record<string, unknown> {
   sourceDigest: string
   sourceKind: "current" | "legacy_repository"
   targetSchemaVersion: string
+  targetDigest?: string
   status: WorkflowMigrationStateStatus
   errorCode?: string
   errorMessage?: string
@@ -35,7 +37,9 @@ export const workflowMigrationStateSchema: NamespaceSchema<WorkflowMigrationStat
       && typeof entry.sourceDigest === "string"
       && (entry.sourceKind === "current" || entry.sourceKind === "legacy_repository")
       && typeof entry.targetSchemaVersion === "string"
-      && ["failed", "unsupported_future", "legacy_recovered", "legacy_conflict"].includes(String(entry.status))
+      && ["failed", "unsupported_future", "legacy_recovering", "legacy_recovered", "legacy_conflict"].includes(String(entry.status))
+      && (entry.targetDigest === undefined || typeof entry.targetDigest === "string")
+      && (entry.status !== "legacy_recovering" || (typeof entry.targetDigest === "string" && entry.targetDigest.length > 0))
       && (entry.errorCode === undefined || typeof entry.errorCode === "string")
       && (entry.errorMessage === undefined || typeof entry.errorMessage === "string")
       && typeof entry.updatedAt === "number"
