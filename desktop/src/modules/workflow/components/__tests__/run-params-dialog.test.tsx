@@ -301,6 +301,34 @@ describe("RunParamsDialog", () => {
     expect(onConfirm).not.toHaveBeenCalled()
   })
 
+  it("rejects a single-file preset after the parameter changes to single-directory", async () => {
+    mocks.presetResolveResourceEntryTypes.mockResolvedValue({ input: "file" })
+    mocks.presetList.mockResolvedValue([
+      {
+        id: "preset-file",
+        workflowId: "workflow-1",
+        name: "单文件预设",
+        values: { input: "/tmp/input.txt" },
+        resourceEntryTypes: {},
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ])
+    const { onConfirm } = await renderDialog({
+      params: [{ name: "input", type: "directory", default: null }],
+    })
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>("#workflow-run-param-preset")?.click()
+    })
+    await act(async () => { clickOption("单文件预设") })
+
+    expect(mocks.presetResolveResourceEntryTypes).toHaveBeenCalledWith("preset-file")
+    expect(document.body.textContent).toContain("已保存值与当前文件/文件夹类型不兼容，请重新选择")
+    await act(async () => { clickButton("运行") })
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
   it("rejects multi-file last-run values after the parameter changes to multi-directory", async () => {
     const { onConfirm } = await renderDialog({
       params: [{ name: "inputs", type: "directory", default: null, allowMultiple: true }],

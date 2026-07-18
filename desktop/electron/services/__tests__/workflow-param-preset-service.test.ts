@@ -138,6 +138,23 @@ describe("WorkflowParamPresetService", () => {
     })
   })
 
+  it("resolves current types for single-resource string values", async () => {
+    const service = createService()
+    const root = mkdtempSync(path.join(os.tmpdir(), "wf-param-resources-"))
+    roots.push(root)
+    const filePath = path.join(root, "input.txt")
+    writeFileSync(filePath, "input")
+
+    const saved = await service.save({
+      workflowId: "workflow-a",
+      name: "单资源类型",
+      values: { input: filePath },
+    })
+
+    expect(saved.resourceEntryTypes).toEqual({ input: "file" })
+    await expect(service.resolveResourceEntryTypes(saved.id)).resolves.toEqual({ input: "file" })
+  })
+
   it("rejects resource type resolution for a missing preset", async () => {
     const service = createService()
 

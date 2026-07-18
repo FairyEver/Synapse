@@ -257,7 +257,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     const cardinalityErrors = buildResourceCompatibilityErrors(params, preset.values, {})
     setIncompatibleValueErrors(cardinalityErrors)
     setErrors(cardinalityErrors)
-    if (!Object.values(preset.values).some(Array.isArray)) return
+    if (!hasPresetResourceValue(params, preset.values)) return
 
     const presetBridge = window.synapse?.workflowParamPresets
     if (!presetBridge) {
@@ -697,8 +697,12 @@ function buildResourceCompatibilityErrors(
 ): Record<string, string> {
   const errors = buildResourceCardinalityErrors(params, source)
   for (const param of params) {
-    if ((param.type !== "file" && param.type !== "directory") || param.allowMultiple !== true) continue
-    if (errors[param.name] || !Array.isArray(source[param.name])) continue
+    if (param.type !== "file" && param.type !== "directory") continue
+    const sourceValue = source[param.name]
+    const hasCompatibleCardinality = param.allowMultiple === true
+      ? Array.isArray(sourceValue)
+      : typeof sourceValue === "string"
+    if (errors[param.name] || !hasCompatibleCardinality) continue
     const savedEntryType = resourceEntryTypes[param.name]
     if (savedEntryType === "unavailable") {
       errors[param.name] = "已保存资源不存在或无法访问，请重新选择"
@@ -716,12 +720,27 @@ function buildPresetResourceCheckErrors(
 ): Record<string, string> {
   const errors = { ...existingErrors }
   for (const param of params) {
-    if ((param.type !== "file" && param.type !== "directory") || param.allowMultiple !== true) continue
-    if (!errors[param.name] && Array.isArray(source[param.name])) {
+    if (param.type !== "file" && param.type !== "directory") continue
+    const sourceValue = source[param.name]
+    const hasCompatibleCardinality = param.allowMultiple === true
+      ? Array.isArray(sourceValue)
+      : typeof sourceValue === "string"
+    if (!errors[param.name] && hasCompatibleCardinality) {
       errors[param.name] = "无法检查已保存资源，请重新选择"
     }
   }
   return errors
+}
+
+function hasPresetResourceValue(
+  params: WorkflowParam[],
+  source: Record<string, WorkflowParamPresetValue>,
+): boolean {
+  return params.some((param) => {
+    if (param.type !== "file" && param.type !== "directory") return false
+    const sourceValue = source[param.name]
+    return typeof sourceValue === "string" || Array.isArray(sourceValue)
+  })
 }
 
 function buildLastRunCompatibilityErrors(

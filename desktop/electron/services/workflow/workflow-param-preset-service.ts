@@ -127,8 +127,10 @@ async function resolvePresetResourceEntryTypes(
 ): Promise<Record<string, WorkflowParamPresetResourceEntryType>> {
   const entryTypes: Record<string, WorkflowParamPresetResourceEntryType> = {}
   for (const [paramName, value] of Object.entries(values)) {
-    if (!Array.isArray(value)) continue
-    entryTypes[paramName] = await resolvePresetResourceEntryType(value)
+    if (typeof value !== "string" && !Array.isArray(value)) continue
+    entryTypes[paramName] = await resolvePresetResourceEntryType(
+      typeof value === "string" ? [value] : value,
+    )
   }
   return entryTypes
 }
