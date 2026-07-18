@@ -1531,7 +1531,7 @@ describe("agentIpcModule", () => {
       "Agent timeline runtime lookup failed; trying repository fallback.",
       expect.objectContaining({
         projectId: "project-1",
-        sessionKey: "local:renderer",
+        sessionKey: "[redacted]",
         hasConversationId: false,
         limit: 10,
         boundary: "agent.timeline.runtime",
@@ -1543,6 +1543,7 @@ describe("agentIpcModule", () => {
     const details = logStoreMock.logger.warn.mock.calls[0]?.[1] as Record<string, unknown>
     expect(JSON.stringify(details)).not.toContain("/Users/example/project")
     expect(JSON.stringify(details)).not.toContain("deploy secret-token")
+    expect(JSON.stringify(details)).not.toContain("local:renderer")
   })
 
   it("returns readable source labels for external sessions", async () => {

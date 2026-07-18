@@ -18,6 +18,7 @@ import { createZipArchive } from "../../runtime/archive"
 import { createControlledProcessRunner } from "../../runtime/process"
 import type { AgentAttachment, AgentEvent, AgentMessage } from "../../services/agent-runtime"
 import { AgentConversationExportService } from "../../services/agent-runtime/conversation-export-service"
+import { REDACTED } from "../../services/agent-runtime/redaction"
 import type { EventBus } from "../../runtime/event-bus"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
@@ -348,7 +349,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       } catch (rawError) {
         logger.warn("Agent timeline runtime lookup failed; trying repository fallback.", {
           projectId: request.projectId,
-          sessionKey: request.sessionKey,
+          sessionKey: request.sessionKey ? REDACTED : undefined,
           hasConversationId: Boolean(request.conversationId),
           limit: request.limit,
           boundary: "agent.timeline.runtime",
