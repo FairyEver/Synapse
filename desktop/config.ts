@@ -112,6 +112,12 @@ export const SKILL_REPOSITORY_IDENTITY_MAX_BYTES = 64 * 1024
 // 内容 Skill 本地关联文件最大字节数：限制编辑器扫描、快速发布和关联写入复查读取异常 .synapse.json 的资源开销。
 export const CONTENT_SKILL_IDENTITY_MAX_BYTES = 64 * 1024
 
+// Synapse Skill 主进程 prepared source 的最大缓存条目数：限制 renderer 异常退出或释放 IPC 丢失后的累计占用。
+export const SYNAPSE_SKILL_PREPARED_SOURCE_MAX_ENTRIES = 4
+
+// Synapse Skill 主进程 prepared source 的闲置有效期（毫秒）：超过该时长且未安装中的来源会在下次访问时清理。
+export const SYNAPSE_SKILL_PREPARED_SOURCE_TTL_MS = 10 * 60 * 1000
+
 // Skill 环境变量关联扫描单个受信任根最多访问的一级条目数：避免异常大的编辑器 Skill 根长期占用主进程。
 export const SKILL_ENV_BINDING_SCAN_MAX_ROOT_ENTRIES = 1_000
 
