@@ -82,7 +82,7 @@ const repositoryIdProperty = {
 
 const sourceDirectoryPathProperty = {
   type: "string",
-  description: "Absolute local Skill directory containing SKILL.md. Upload excludes .env, .env.* (except root .env.example), .synapse.json, .synapse.repository.json, other hidden entries, and symlinks without reading excluded runtime env files. Current and legacy cloud identity files must not exceed 64 KiB.",
+  description: "Absolute local Skill directory containing SKILL.md. Upload excludes .env, .env.* (except root .env.example), .synapse.json, .synapse.repository.json, other hidden entries, and symlinks without reading excluded runtime env files. The source root must not exceed 1,000 entries. Current and legacy cloud identity files must not exceed 64 KiB.",
 }
 
 const optionalNameProperty = {

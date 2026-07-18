@@ -13,7 +13,7 @@ type ContentResourceType = "rule" | "skill" | "prompt"
 const RULE_NAME_PATTERN = "^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$"
 const SKILL_NAME_PATTERN = "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
 const CONTENT_NAME_MAX_LENGTH = 64
-const SKILL_SOURCE_DIRECTORY_LIMITS = "Safely excludes .env, .env.* (except root .env.example), .synapse.json, .synapse.repository.json, other hidden entries, and symlinks without reading excluded runtime env files. Imports up to 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total. The root .env.example must not exceed 1 MiB."
+const SKILL_SOURCE_DIRECTORY_LIMITS = "Safely excludes .env, .env.* (except root .env.example), .synapse.json, .synapse.repository.json, other hidden entries, and symlinks without reading excluded runtime env files. Imports up to 1,000 root entries, 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total. The root .env.example must not exceed 1 MiB."
 
 const contentCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.resource_repository.type.describe" as CapabilityId, title: "Describe content types", description: "Return content fields, categories, appearance options, and publishing constraints.", mutates: false },

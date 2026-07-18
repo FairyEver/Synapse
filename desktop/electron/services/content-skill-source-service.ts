@@ -18,6 +18,7 @@ import {
   CONTENT_SKILL_ATTACHMENT_TOTAL_MAX_SIZE,
   CONTENT_SKILL_SOURCE_MAX_DEPTH,
   CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT,
+  CONTENT_SKILL_SOURCE_MAX_ROOT_ENTRIES,
 } from "./content-skill-attachment-constraints"
 import { sanitizeError } from "./error-sanitize"
 import { createMainLogger } from "./log-store"
@@ -75,17 +76,20 @@ type SkillFileCollectionState = {
 async function resolveSkillMainFile(dirPath: string, maxEntries?: number): Promise<string | null> {
   let children: string[]
   try {
-    if (maxEntries === undefined) {
-      children = await readdir(dirPath)
-    } else {
-      children = []
-      const directory = await opendir(dirPath)
-      for await (const entry of directory) {
-        children.push(entry.name)
-        if (children.length >= maxEntries) break
+    const entryLimit = maxEntries ?? CONTENT_SKILL_SOURCE_MAX_ROOT_ENTRIES
+    children = []
+    const directory = await opendir(dirPath)
+    for await (const entry of directory) {
+      children.push(entry.name)
+      if (children.length > entryLimit) {
+        if (maxEntries === undefined) {
+          throwInvalid("sourceDirectoryPath", `Skill 源目录根层条目超过 ${entryLimit} 个。`)
+        }
+        break
       }
     }
   } catch (error) {
+    if (error instanceof ContentCapabilityError) throw error
     logger.warn("Failed to read skill source directory.", {
       ...sourcePathDiagnostic(dirPath),
       error: sanitizeSkillSourceError(error),

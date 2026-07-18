@@ -42,6 +42,7 @@ import { ContentCapabilityError } from "../content-capability-errors"
 import {
   CONTENT_SKILL_SOURCE_MAX_DEPTH,
   CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT,
+  CONTENT_SKILL_SOURCE_MAX_ROOT_ENTRIES,
 } from "../content-skill-attachment-constraints"
 import { readSkillDraftFromDirectory, resolveSkillMainFile } from "../content-skill-source-service"
 import { SKILL_RUNTIME_ENV_MAX_BYTES } from "../skill-env/file-policy"
@@ -240,6 +241,18 @@ describe("content skill source service", () => {
     await truncate(mainFilePath, 10 * 1024 * 1024 + 1)
 
     await expect(readSkillDraftFromDirectory(root)).rejects.toThrow("Skill 主文件超过 10MB。")
+  })
+
+  it("rejects oversized root directories during bounded main file discovery", async () => {
+    const root = await createTempRoot()
+    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+    await Promise.all(Array.from(
+      { length: CONTENT_SKILL_SOURCE_MAX_ROOT_ENTRIES },
+      (_, index) => mkdir(path.join(root, `entry-${index}`)),
+    ))
+
+    await expect(readSkillDraftFromDirectory(root))
+      .rejects.toThrow(`Skill 源目录根层条目超过 ${CONTENT_SKILL_SOURCE_MAX_ROOT_ENTRIES} 个。`)
   })
 
   it("rejects source directories that exceed the attachment directory count budget", async () => {
