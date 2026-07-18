@@ -1944,6 +1944,34 @@ describe("workflowIpcModule", () => {
     })
   })
 
+  it("does not return an active run from a different workflow", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    runStatuses.set("active-run", {
+      runId: "active-run",
+      workflowId: "workflow-private",
+      status: "running",
+      nodeResults: {},
+      startedAt: 1,
+      params: { secret: "private-run-param" },
+      definition: workflowDefinition(),
+    })
+    const snapshots = { get: vi.fn(), findByRunId: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    await expect(harness.invoke("synapse:workflow:run-status", {
+      runId: "active-run",
+      workflowId: "workflow-public",
+    })).resolves.toBeNull()
+    expect(snapshots.get).not.toHaveBeenCalled()
+    expect(snapshots.findByRunId).not.toHaveBeenCalled()
+  })
+
   it("hydrates snapshot definition migration diagnostics through run-status", async () => {
     const runStatuses = new Map<string, WorkflowRunStatus>()
     const snapshots = {

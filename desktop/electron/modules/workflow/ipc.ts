@@ -1676,6 +1676,7 @@ export const workflowIpcModule: IpcModule = {
       handler: async (ctx, { runId, workflowId }: { runId: string; workflowId?: string }) => {
         const live = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses").get(runId)
         if (live) {
+          if (workflowId && live.workflowId !== workflowId) return null
           logger.info("run-status served from memory", { runId, workflowId: live.workflowId, status: live.status })
           return sanitizeWorkflowRunStatusForRenderer(live)
         }
