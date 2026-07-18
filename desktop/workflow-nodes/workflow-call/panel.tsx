@@ -29,8 +29,8 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const items = await window.synapse?.workflow.list()
-      if (!cancelled) setWorkflows((items ?? []).filter((item) => item.id !== currentWorkflowId))
+      const result = await window.synapse?.workflow.list()
+      if (!cancelled) setWorkflows((result?.items ?? []).filter((item) => item.id !== currentWorkflowId))
     })()
     return () => { cancelled = true }
   }, [currentWorkflowId])

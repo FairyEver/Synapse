@@ -73,6 +73,20 @@ export interface WorkflowMeta {
   rawExportAvailable?: boolean
   nodeCount: number; createdAt: number; updatedAt: number
 }
+export type WorkflowMigrationDiagnosticStatus = "failed" | "unsupported_future" | "legacy_conflict"
+export interface WorkflowMigrationDiagnostic {
+  id: string
+  workflowId: string
+  status: WorkflowMigrationDiagnosticStatus
+  targetSchemaVersion: string
+  errorCode?: string
+  errorMessage?: string
+  updatedAt: number
+}
+export interface WorkflowListResult {
+  items: WorkflowMeta[]
+  migrationDiagnostics: WorkflowMigrationDiagnostic[]
+}
 export interface WorkflowUsageCostBreakdownCny {
   readonly input: number
   readonly output: number

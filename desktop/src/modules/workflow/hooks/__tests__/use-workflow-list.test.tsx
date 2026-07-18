@@ -41,6 +41,30 @@ afterEach(() => {
 })
 
 describe("useWorkflowList", () => {
+  it("loads workflows and migration diagnostics independently", async () => {
+    const list = vi.fn(async () => ({
+      items: [{ id: "workflow-1", name: "Workflow", version: "v1", nodeCount: 1, createdAt: 1, updatedAt: 2 }],
+      migrationDiagnostics: [{ id: "legacy:workflow-2", workflowId: "workflow-2", status: "failed" as const, targetSchemaVersion: "2.0.0", updatedAt: 3 }],
+    }))
+    ;(window as unknown as { synapse: { workflow: { list: typeof list } } }).synapse = {
+      workflow: { list },
+    }
+    let hook: ReturnType<typeof useWorkflowList> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookProbe onChange={(next) => { hook = next }} />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(hook?.items).toEqual([expect.objectContaining({ id: "workflow-1" })])
+    expect(hook?.migrationDiagnostics).toEqual([expect.objectContaining({ workflowId: "workflow-2", status: "failed" })])
+  })
+
   it("logs list failures without exposing raw backend error text", async () => {
     const rawError = "list failed with token=secret-value and prompt body"
     const list = vi.fn(async () => {

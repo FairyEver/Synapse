@@ -1,6 +1,6 @@
 import path from "node:path"
 import { createHash, randomUUID } from "node:crypto"
-import type { WorkflowDefinition, WorkflowFutureDocument, WorkflowMeta, ValidationError } from "../../../src/types/workflow"
+import type { WorkflowDefinition, WorkflowFutureDocument, WorkflowMeta, WorkflowMigrationDiagnostic, ValidationError } from "../../../src/types/workflow"
 import type {
   DataNamespace,
   DataRepository,
@@ -118,6 +118,33 @@ export class WorkflowService {
     } catch (err) {
       logger.warn("workflow list failed", {
         boundary: "workflow-service.list",
+        ...errorLogMeta(err),
+      })
+      throw err
+    }
+  }
+
+  async listMigrationDiagnostics(): Promise<WorkflowMigrationDiagnostic[]> {
+    await this.initialize()
+    try {
+      const entries = await this.migrationStateNamespace.list()
+      const diagnostics = entries.flatMap((entry): WorkflowMigrationDiagnostic[] => {
+        if (entry.sourceKind !== "legacy_repository" || entry.status === "legacy_recovered") return []
+        return [{
+          id: entry.id,
+          workflowId: entry.workflowId,
+          status: entry.status,
+          targetSchemaVersion: entry.targetSchemaVersion,
+          errorCode: entry.errorCode,
+          errorMessage: entry.errorMessage,
+          updatedAt: entry.updatedAt,
+        }]
+      }).sort((left, right) => right.updatedAt - left.updatedAt || left.workflowId.localeCompare(right.workflowId))
+      logger.info("workflow migration diagnostics loaded", { count: diagnostics.length })
+      return diagnostics
+    } catch (err) {
+      logger.warn("workflow migration diagnostics failed", {
+        boundary: "workflow-service.list-migration-diagnostics",
         ...errorLogMeta(err),
       })
       throw err

@@ -5,7 +5,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { WorkflowDefinition, WorkflowEvent, WorkflowMeta } from "@/types/workflow"
+import type { WorkflowDefinition, WorkflowEvent, WorkflowMeta, WorkflowMigrationDiagnostic } from "@/types/workflow"
 import { WorkflowList } from "../workflow-list"
 
 const {
@@ -27,7 +27,7 @@ const {
   toastSuccess: vi.fn(),
   track: vi.fn(),
   workflowGet: vi.fn(),
-  workflowListState: { items: [] as WorkflowMeta[] },
+  workflowListState: { items: [] as WorkflowMeta[], migrationDiagnostics: [] as WorkflowMigrationDiagnostic[] },
   workflowActiveRuns: vi.fn(),
   workflowExportPackage: vi.fn(),
   workflowOpenEditor: vi.fn(),
@@ -114,6 +114,7 @@ vi.mock("../run-history-dialog", () => ({
 vi.mock("../../hooks/use-workflow-list", () => ({
   useWorkflowList: () => ({
     items: workflowListState.items,
+    migrationDiagnostics: workflowListState.migrationDiagnostics,
     loading: false,
     error: null,
     refresh: vi.fn(),
@@ -139,6 +140,7 @@ const parameterizedWorkflow: WorkflowDefinition = {
 }
 
 beforeEach(() => {
+  workflowListState.migrationDiagnostics = []
   workflowListState.items = [{
     id: "workflow-param",
     name: "Parameterized",
@@ -336,6 +338,36 @@ describe("WorkflowList", () => {
 
     expect(workflowExportPackage).toHaveBeenCalledWith("workflow-future", "Future workflow")
     expect(toastSuccess).toHaveBeenCalledWith("工作流原文已导出")
+  })
+
+  it("shows legacy migration diagnostics without opening a workflow", async () => {
+    workflowListState.items = []
+    workflowListState.migrationDiagnostics = [{
+      id: "legacy:workflow-legacy",
+      workflowId: "workflow-legacy",
+      status: "failed",
+      targetSchemaVersion: "2.0.0",
+      errorMessage: "节点配置无法迁移",
+      updatedAt: 1,
+    }]
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowList onCreate={vi.fn()} />)
+    })
+
+    expect(container.textContent).toContain("旧仓库工作流")
+    expect(container.textContent).toContain("迁移失败")
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[aria-label="查看恢复诊断"]')?.click()
+    })
+
+    expect(document.body.textContent).toContain("节点配置无法迁移")
+    expect(document.body.textContent).toContain("原始文件仍保留在旧内容仓库")
+    expect(workflowOpenEditor).not.toHaveBeenCalled()
   })
 
   it("loads active runs and reopens the runner from the workflow card", async () => {

@@ -217,6 +217,26 @@ describe("WorkflowService", () => {
       "wf-old-edit",
     ])
   })
+  it("lists only unresolved legacy repository migration diagnostics", async () => {
+    const { repo, svc } = createRepo()
+    const migrationStates = repo.namespace<WorkflowMigrationStateEntryV1>("workflow.migration-state")
+    const base = {
+      schemaVersion: 1 as const,
+      sourceDigest: "digest",
+      targetSchemaVersion: "2.0.0",
+    }
+    await migrationStates.upsert({ ...base, id: "legacy:failed", workflowId: "failed", sourceKind: "legacy_repository", status: "failed", errorCode: "MigrationError", errorMessage: "迁移失败详情", updatedAt: 200 })
+    await migrationStates.upsert({ ...base, id: "legacy:future", workflowId: "future", sourceKind: "legacy_repository", status: "unsupported_future", updatedAt: 300 })
+    await migrationStates.upsert({ ...base, id: "legacy:conflict", workflowId: "conflict", sourceKind: "legacy_repository", status: "legacy_conflict", updatedAt: 100 })
+    await migrationStates.upsert({ ...base, id: "legacy:recovered", workflowId: "recovered", sourceKind: "legacy_repository", status: "legacy_recovered", updatedAt: 400 })
+    await migrationStates.upsert({ ...base, id: "current:failed", workflowId: "current", sourceKind: "current", status: "failed", updatedAt: 500 })
+
+    await expect(svc.listMigrationDiagnostics()).resolves.toEqual([
+      expect.objectContaining({ id: "legacy:future", workflowId: "future", status: "unsupported_future" }),
+      expect.objectContaining({ id: "legacy:failed", workflowId: "failed", status: "failed", errorCode: "MigrationError", errorMessage: "迁移失败详情" }),
+      expect.objectContaining({ id: "legacy:conflict", workflowId: "conflict", status: "legacy_conflict" }),
+    ])
+  })
   it("returns null for missing workflow", async () => {
     const { svc } = createRepo()
     expect(await svc.get("nonexistent")).toBeNull()

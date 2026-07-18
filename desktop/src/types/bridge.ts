@@ -447,7 +447,7 @@ import type {
 } from "./automation"
 import type {
   WorkflowDefinition,
-  WorkflowMeta,
+  WorkflowListResult,
   SaveWorkflowParamPresetInput,
   ValidationError,
   ValidationResult,
@@ -1657,7 +1657,7 @@ export type SynapseBridge = {
     }) => Promise<SynapseOpsRecord>
   }
   workflow: {
-    list: () => Promise<WorkflowMeta[]>
+    list: () => Promise<WorkflowListResult>
     get: (id: string) => Promise<WorkflowDefinition | null>
     create: () => Promise<{ id: string; versionHash: string } | { errors: ValidationError[] }>
     save: (def: WorkflowDefinition) => Promise<{ versionHash: string } | { errors: ValidationError[] }>

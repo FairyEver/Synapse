@@ -96,9 +96,13 @@ function setTextareaValue(textarea: HTMLTextAreaElement, value: string): void {
   textarea.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
+function mockWorkflowList(items: Array<{ id: string; name: string; version: string; nodeCount: number; createdAt: number; updatedAt: number }>): void {
+  workflowList.mockResolvedValue({ items, migrationDiagnostics: [] })
+}
+
 describe("WorkflowCallNodePanel", () => {
   it("loads child params and renders parameter templates", async () => {
-    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    mockWorkflowList([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
     workflowGet.mockResolvedValue({
       id: "child",
       name: "子工作流",
@@ -119,7 +123,7 @@ describe("WorkflowCallNodePanel", () => {
   })
 
   it("does not list the current workflow as a child option", async () => {
-    workflowList.mockResolvedValue([
+    mockWorkflowList([
       { id: "parent", name: "父工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 },
       { id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 },
     ])
@@ -141,7 +145,7 @@ describe("WorkflowCallNodePanel", () => {
   })
 
   it("shows a missing child workflow state when the selected workflow no longer exists", async () => {
-    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    mockWorkflowList([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
     workflowGet.mockResolvedValue(null)
 
     const { container } = renderPanel({ workflowId: "deleted-child", variables: [], paramTemplates: {}, paramBindings: {} })
@@ -152,7 +156,7 @@ describe("WorkflowCallNodePanel", () => {
   })
 
   it("updates templates on blur", async () => {
-    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    mockWorkflowList([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
     workflowGet.mockResolvedValue({
       id: "child",
       name: "子工作流",
@@ -183,7 +187,7 @@ describe("WorkflowCallNodePanel", () => {
   })
 
   it("auto-fills same-name parent params and bindings when child params load", async () => {
-    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    mockWorkflowList([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
     workflowGet.mockResolvedValue({
       id: "child",
       name: "子工作流",
@@ -206,7 +210,7 @@ describe("WorkflowCallNodePanel", () => {
   })
 
   it("auto-fills same-name resource params as value bindings", async () => {
-    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    mockWorkflowList([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
     workflowGet.mockResolvedValue({
       id: "child",
       name: "子工作流",
@@ -235,7 +239,7 @@ describe("WorkflowCallNodePanel", () => {
   })
 
   it("does not auto-fill a template when a multi-resource child param has no compatible parent", async () => {
-    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    mockWorkflowList([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
     workflowGet.mockResolvedValue({
       id: "child",
       name: "子工作流",
@@ -260,7 +264,7 @@ describe("WorkflowCallNodePanel", () => {
   })
 
   it("shows a legacy static binding for a single-resource child param", async () => {
-    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    mockWorkflowList([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
     workflowGet.mockResolvedValue({
       id: "child",
       name: "子工作流",
@@ -287,7 +291,7 @@ describe("WorkflowCallNodePanel", () => {
   })
 
   it("shows an upstream node binding for a single-resource child param", async () => {
-    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    mockWorkflowList([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
     workflowGet.mockResolvedValue({
       id: "child",
       name: "子工作流",
@@ -314,7 +318,7 @@ describe("WorkflowCallNodePanel", () => {
   })
 
   it("warns when an existing resource binding has mismatched cardinality", async () => {
-    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    mockWorkflowList([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
     workflowGet.mockResolvedValue({
       id: "child",
       name: "子工作流",

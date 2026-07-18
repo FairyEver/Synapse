@@ -91,6 +91,36 @@ describe("workflowIpcModule", () => {
     } as never)
   })
 
+  it("returns workflows with independent legacy migration diagnostics", async () => {
+    const workflow = {
+      list: vi.fn(async () => [{
+        id: "workflow-1", name: "Workflow", version: "v1", nodeCount: 1, createdAt: 1, updatedAt: 2,
+      }]),
+      listMigrationDiagnostics: vi.fn(async () => [{
+        id: "legacy:workflow-2",
+        workflowId: "workflow-2",
+        status: "legacy_conflict" as const,
+        targetSchemaVersion: "2.0.0",
+        updatedAt: 3,
+      }]),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    await expect(harness.invoke("synapse:workflow:list", undefined)).resolves.toEqual({
+      items: [expect.objectContaining({ id: "workflow-1" })],
+      migrationDiagnostics: [expect.objectContaining({
+        id: "legacy:workflow-2",
+        workflowId: "workflow-2",
+        status: "legacy_conflict",
+      })],
+    })
+  })
+
   function createExportPackageService(
     exportDocument: WorkflowExportDocumentResult,
     permissionGuard: { check: Mock<PermissionGuard["check"]> },

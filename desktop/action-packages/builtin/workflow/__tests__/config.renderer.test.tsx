@@ -15,9 +15,10 @@ const workflowApi = {
 
 describe("WorkflowConfigForm", () => {
   beforeEach(() => {
-    workflowApi.list.mockResolvedValue([
-      { id: "wf-1", name: "每日汇总", version: "v1", nodeCount: 2, createdAt: 1, updatedAt: 2 },
-    ])
+    workflowApi.list.mockResolvedValue({
+      items: [{ id: "wf-1", name: "每日汇总", version: "v1", nodeCount: 2, createdAt: 1, updatedAt: 2 }],
+      migrationDiagnostics: [],
+    })
     workflowApi.get.mockResolvedValue({
       id: "wf-1",
       name: "每日汇总",

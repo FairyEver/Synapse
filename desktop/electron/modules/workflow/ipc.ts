@@ -1199,11 +1199,18 @@ export const workflowIpcModule: IpcModule = {
     },
     list: {
       channel: "synapse:workflow:list", kind: "invoke", request: z.void().optional(),
-      response: z.array(z.object({ id: z.string(), name: z.string(), description: z.string().optional(), version: z.string(), loadError: z.string().optional(), rawExportAvailable: z.boolean().optional(), nodeCount: z.number(), createdAt: z.number(), updatedAt: z.number() })),
+      response: z.object({
+        items: z.array(z.object({ id: z.string(), name: z.string(), description: z.string().optional(), version: z.string(), loadError: z.string().optional(), rawExportAvailable: z.boolean().optional(), nodeCount: z.number(), createdAt: z.number(), updatedAt: z.number() })),
+        migrationDiagnostics: z.array(z.object({ id: z.string(), workflowId: z.string(), status: z.enum(["failed", "unsupported_future", "legacy_conflict"]), targetSchemaVersion: z.string(), errorCode: z.string().optional(), errorMessage: z.string().optional(), updatedAt: z.number() })),
+      }),
       handler: async (ctx) => {
-        const result = await ctx.resolve<WorkflowService>("core.workflow").list()
-        logger.info("workflow:list", { count: result.length })
-        return result
+        const service = ctx.resolve<WorkflowService>("core.workflow")
+        const [items, migrationDiagnostics] = await Promise.all([
+          service.list(),
+          service.listMigrationDiagnostics(),
+        ])
+        logger.info("workflow:list", { count: items.length, migrationDiagnosticCount: migrationDiagnostics.length })
+        return { items, migrationDiagnostics }
       },
     },
     get: {

@@ -38,8 +38,8 @@ export function WorkflowConfigForm({
         cancelled = true
       }
     }
-    workflowBridge.list().then((items) => {
-      if (!cancelled) setWorkflows(items)
+    workflowBridge.list().then((result) => {
+      if (!cancelled) setWorkflows(result.items)
     }).catch(() => {
       if (!cancelled) setWorkflows([])
     })

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { toast } from "sonner"
-import { AlertCircle, FileJson, Loader2, Plus, RefreshCw } from "lucide-react"
+import { AlertCircle, FileJson, Info, Loader2, Plus, RefreshCw } from "lucide-react"
 import { WorkflowCard, type WorkflowCardRunState } from "./workflow-card"
 import { RunParamsDialog } from "./run-params-dialog"
 import { RunHistoryDialog } from "./run-history-dialog"
@@ -8,19 +8,22 @@ import { useWorkflowList } from "../hooks/use-workflow-list"
 import { createRendererLogger } from "@/app-shell/logging"
 import { ModuleContentPanel } from "@/components/module-page"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import {
   Table,
   TableBody,
+  TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { track } from "@/lib/ui-tracking"
-import type { WorkflowDefinition, WorkflowMeta } from "@/types/workflow"
+import type { WorkflowDefinition, WorkflowMeta, WorkflowMigrationDiagnostic, WorkflowMigrationDiagnosticStatus } from "@/types/workflow"
+import { CopyIdButton } from "./copy-id-button"
 import { errorDiagnostic } from "../lib/error-utils"
 import {
   createWorkflowLastRunValues,
@@ -29,6 +32,28 @@ import {
 
 const logger = createRendererLogger("workflow.list")
 type WorkflowBridge = NonNullable<Window["synapse"]>["workflow"]
+
+const MIGRATION_DIAGNOSTIC_DISPLAY: Record<WorkflowMigrationDiagnosticStatus, {
+  readonly label: string
+  readonly message: string
+  readonly recovery: string
+}> = {
+  failed: {
+    label: "迁移失败",
+    message: "旧仓库工作流数据迁移失败。",
+    recovery: "原始文件仍保留在旧内容仓库，请修复数据后重试。",
+  },
+  unsupported_future: {
+    label: "版本过高",
+    message: "旧仓库工作流使用更高的数据版本。",
+    recovery: "原始文件仍保留在旧内容仓库，请升级 Synapse 或使用兼容版本处理。",
+  },
+  legacy_conflict: {
+    label: "ID 冲突",
+    message: "当前数据中已有同 ID 工作流，旧仓库版本未自动恢复。",
+    recovery: "当前工作流未被覆盖；如需恢复旧版本，请先在旧仓库中调整 ID。",
+  },
+}
 
 function openRunner(workflowApi: WorkflowBridge, workflowId: string, runId: string): void {
   void workflowApi.openRunner(workflowId, runId).catch((err) => {
@@ -43,10 +68,11 @@ function openRunner(workflowApi: WorkflowBridge, workflowId: string, runId: stri
 }
 
 export function WorkflowList({ onCreate }: { onCreate: () => void }) {
-  const { items, loading, error, refresh } = useWorkflowList()
+  const { items, migrationDiagnostics, loading, error, refresh } = useWorkflowList()
   const [runTarget, setRunTarget] = useState<WorkflowDefinition | null>(null)
   const [historyWorkflowId, setHistoryWorkflowId] = useState<string | null>(null)
   const [protectedWorkflow, setProtectedWorkflow] = useState<WorkflowMeta | null>(null)
+  const [migrationDiagnostic, setMigrationDiagnostic] = useState<WorkflowMigrationDiagnostic | null>(null)
   const [runningId, setRunningId] = useState<string | null>(null)
   // Track a conflict so we can offer "cancel old & start new" instead of just an error toast.
   const [conflictState, setConflictState] = useState<{ def: WorkflowDefinition; params: Record<string, unknown> } | null>(null)
@@ -268,7 +294,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       </Button>
     </div>
   )
-  if (items.length === 0) return (
+  if (items.length === 0 && migrationDiagnostics.length === 0) return (
     <Empty className="min-h-64 border">
       <EmptyHeader>
         <FileJson className="size-10 text-muted-foreground/50" />
@@ -314,6 +340,36 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
                 onExport={() => void handleExport(meta.id, meta.name)}
                 onDelete={() => void handleDelete(meta.id)} />
             ))}
+            {migrationDiagnostics.map((diagnostic) => (
+              <TableRow
+                key={diagnostic.id}
+                className="cursor-pointer"
+                onClick={() => setMigrationDiagnostic(diagnostic)}
+              >
+                <TableCell className="font-medium">旧仓库工作流</TableCell>
+                <TableCell>
+                  <Badge variant="destructive">{MIGRATION_DIAGNOSTIC_DISPLAY[diagnostic.status].label}</Badge>
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground">—</TableCell>
+                <TableCell>
+                  <CopyIdButton id={diagnostic.workflowId} kind="workflow" />
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="查看恢复诊断"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setMigrationDiagnostic(diagnostic)
+                    }}
+                  >
+                    <Info />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </ModuleContentPanel>
@@ -344,6 +400,28 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
                 导出原文
               </AlertDialogAction>
             ) : null}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={migrationDiagnostic !== null}
+        onOpenChange={(open) => { if (!open) setMigrationDiagnostic(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>旧工作流未恢复</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              {migrationDiagnostic ? (
+                <>
+                  <span className="block">{MIGRATION_DIAGNOSTIC_DISPLAY[migrationDiagnostic.status].message}</span>
+                  {migrationDiagnostic.errorMessage ? <span className="block">详情：{migrationDiagnostic.errorMessage}</span> : null}
+                  <span className="block">{MIGRATION_DIAGNOSTIC_DISPLAY[migrationDiagnostic.status].recovery}</span>
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>关闭</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
