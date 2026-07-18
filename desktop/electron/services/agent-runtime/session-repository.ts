@@ -62,6 +62,7 @@ export class AgentSessionRepository {
   private readonly now: () => Date
   private readonly idFactory: () => string
   private readonly logger: { warn: (message: string, meta?: unknown) => void } | undefined
+  private readonly titleMutationTails = new Map<string, Promise<void>>()
 
   constructor(options: AgentSessionRepositoryOptions) {
     this.projectId = options.projectId
@@ -583,53 +584,76 @@ export class AgentSessionRepository {
   }
 
   async renameSession(conversationIdValue: string, name: string): Promise<ConversationEntryV1> {
-    const conversation = await this.requireConversation(conversationIdValue)
-    const updated: ConversationEntryV1 = {
-      ...conversation,
-      name,
-      titleSource: "manual",
-      updatedAt: this.isoNow(),
-    }
-    await this.conversations.upsert(updated)
-    return updated
+    return this.runTitleMutation(conversationIdValue, async () => {
+      const conversation = await this.requireConversation(conversationIdValue)
+      const updated: ConversationEntryV1 = {
+        ...conversation,
+        name,
+        titleSource: "manual",
+        updatedAt: this.isoNow(),
+      }
+      await this.conversations.upsert(updated)
+      return updated
+    })
   }
 
   async renameSessionFromGeneratedTitle(
     conversationIdValue: string,
     name: string,
   ): Promise<ConversationEntryV1 | null> {
-    const conversation = await this.requireConversation(conversationIdValue)
-    const normalizedName = name.trim()
-    if (
-      !normalizedName
-      || normalizedName === conversation.name
-      || !canReplaceWithGeneratedTitle(conversation)
-    ) return null
-    const updated: ConversationEntryV1 = {
-      ...conversation,
-      name: normalizedName,
-      titleSource: "generated",
-      updatedAt: this.isoNow(),
-    }
-    await this.conversations.upsert(updated)
-    return updated
+    return this.runTitleMutation(conversationIdValue, async () => {
+      const conversation = await this.requireConversation(conversationIdValue)
+      const normalizedName = name.trim()
+      if (
+        !normalizedName
+        || normalizedName === conversation.name
+        || !canReplaceWithGeneratedTitle(conversation)
+      ) return null
+      const updated: ConversationEntryV1 = {
+        ...conversation,
+        name: normalizedName,
+        titleSource: "generated",
+        updatedAt: this.isoNow(),
+      }
+      await this.conversations.upsert(updated)
+      return updated
+    })
   }
 
   async renameSessionFromFirstUserMessage(
     conversationIdValue: string,
   ): Promise<ConversationEntryV1 | null> {
-    const conversation = await this.requireConversation(conversationIdValue)
-    if (!canReplaceWithFallbackTitle(conversation)) return null
-    const name = firstUserMessageTitle(conversation)
-    if (!name) return null
-    const updated: ConversationEntryV1 = {
-      ...conversation,
-      name,
-      titleSource: "fallback",
-      updatedAt: this.isoNow(),
+    return this.runTitleMutation(conversationIdValue, async () => {
+      const conversation = await this.requireConversation(conversationIdValue)
+      if (!canReplaceWithFallbackTitle(conversation)) return null
+      const name = firstUserMessageTitle(conversation)
+      if (!name) return null
+      const updated: ConversationEntryV1 = {
+        ...conversation,
+        name,
+        titleSource: "fallback",
+        updatedAt: this.isoNow(),
+      }
+      await this.conversations.upsert(updated)
+      return updated
+    })
+  }
+
+  private async runTitleMutation<T>(
+    conversationIdValue: string,
+    mutation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.titleMutationTails.get(conversationIdValue) ?? Promise.resolve()
+    const current = previous.then(mutation)
+    const tail = current.then(() => undefined, () => undefined)
+    this.titleMutationTails.set(conversationIdValue, tail)
+    try {
+      return await current
+    } finally {
+      if (this.titleMutationTails.get(conversationIdValue) === tail) {
+        this.titleMutationTails.delete(conversationIdValue)
+      }
     }
-    await this.conversations.upsert(updated)
-    return updated
   }
 
   private async requireConversation(conversationIdValue: string): Promise<ConversationEntryV1> {

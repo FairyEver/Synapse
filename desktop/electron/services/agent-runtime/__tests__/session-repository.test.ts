@@ -423,6 +423,46 @@ describe("AgentSessionRepository", () => {
     })
   })
 
+  it("does not let a concurrent generated title overwrite a manual rename", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+      idFactory: fixedIdFactory(["concurrent-title"]),
+    })
+    const conversation = await repository.createSession({
+      sessionKey: "local:renderer",
+      name: "新对话 15:20",
+    })
+    const originalGet = conversations.get.bind(conversations)
+    let releaseGeneratedRead: () => void = () => {}
+    let generatedReadStarted: () => void = () => {}
+    const generatedRead = new Promise<void>((resolve) => { generatedReadStarted = resolve })
+    const generatedReadBlock = new Promise<void>((resolve) => { releaseGeneratedRead = resolve })
+    let blockNextRead = true
+    vi.spyOn(conversations, "get").mockImplementation(async (id) => {
+      if (blockNextRead) {
+        blockNextRead = false
+        generatedReadStarted()
+        await generatedReadBlock
+      }
+      return originalGet(id)
+    })
+
+    const generatedRename = repository.renameSessionFromGeneratedTitle(conversation.id, "自动标题")
+    await generatedRead
+    const manualRename = repository.renameSession(conversation.id, "手动标题")
+    await new Promise<void>((resolve) => { setTimeout(resolve, 0) })
+    releaseGeneratedRead()
+    await Promise.all([generatedRename, manualRename])
+
+    await expect(conversations.get(conversation.id)).resolves.toMatchObject({
+      name: "手动标题",
+      titleSource: "manual",
+    })
+  })
+
   it("clears active main-thread persona without dropping mode or model tier", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({
