@@ -13,6 +13,7 @@ import {
   removeLegacySkillRepositoryIdentity,
   SkillRepositoryIdentityChangedError,
   SkillRepositoryIdentityInvalidError,
+  SkillRepositoryLegacyIdentityChangedError,
   SkillRepositoryIdentityTooLargeError,
   SkillRepositorySourceDirectoryChangedError,
   writeSkillRepositoryIdentity,
@@ -441,6 +442,35 @@ describe("readSkillRepositoryIdentity", () => {
     await writeFile(legacyPath, JSON.stringify({ id: "resource-content-id" }), "utf8")
     await expect(removeLegacySkillRepositoryIdentity(dir)).resolves.toBe(false)
     await expect(readFile(legacyPath, "utf8")).resolves.toContain("resource-content-id")
+  })
+
+  it("preserves a resource repository identity written before legacy cleanup", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-legacy-conflict-"))
+    const legacyPath = path.join(dir, ".synapse.json")
+    const resourceIdentityRaw = JSON.stringify({ id: "resource-content-id", name: "resource-skill" })
+    await writeFile(legacyPath, JSON.stringify(identity), "utf8")
+    const permissionGuard: PermissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async (request) => {
+        if (request.action === "fs.write") {
+          await writeFile(legacyPath, resourceIdentityRaw, "utf8")
+        }
+        return { allowed: true as const }
+      }),
+    }
+    const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+    const auditSink = auditSinkRecording(auditEvents)
+
+    await expect(removeLegacySkillRepositoryIdentity(dir, { actor, auditSink, permissionGuard }))
+      .rejects.toBeInstanceOf(SkillRepositoryLegacyIdentityChangedError)
+
+    await expect(readFile(legacyPath, "utf8")).resolves.toBe(resourceIdentityRaw)
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "fs.write",
+      resource: legacyPath,
+      outcome: "failed",
+      metadata: expect.objectContaining({ reason: "legacy-identity-changed" }),
+    }))
   })
 
   it("does not expose cloud identity as a resource repository content id", async () => {

@@ -39,6 +39,13 @@ export class SkillRepositoryIdentityChangedError extends Error {
   }
 }
 
+export class SkillRepositoryLegacyIdentityChangedError extends Error {
+  constructor() {
+    super("本地 Skill 的旧云仓库身份已发生变化，已跳过清理，请重新扫描后再试。")
+    this.name = "SkillRepositoryLegacyIdentityChangedError"
+  }
+}
+
 export class SkillRepositoryIdentityInvalidError extends Error {
   constructor() {
     super("本地 Skill 的当前云仓库身份无效，请修复 .synapse.repository.json 后重新扫描。")
@@ -172,26 +179,46 @@ export async function removeLegacySkillRepositoryIdentity(
   security?: SkillRepositoryIdentityWriteSecurity,
 ): Promise<boolean> {
   const legacyPath = path.join(sourceDirectoryPath, LEGACY_SKILL_REPOSITORY_ID_FILE_NAME)
-  const legacyIdentity = await readIdentityFile(
+  const legacySnapshot = await readIdentityFileSnapshot(
     sourceDirectoryPath,
     LEGACY_SKILL_REPOSITORY_ID_FILE_NAME,
     "legacy",
     security,
   )
-  if (!legacyIdentity) return false
+  if (!legacySnapshot) return false
 
   const metadata = {
     operation: "skill-repository.identity.migrate",
-    repositoryId: legacyIdentity.id,
+    repositoryId: legacySnapshot.identity.id,
   }
   if (security) await checkIdentityWritePermission(security, legacyPath, metadata)
 
   try {
+    const recheckMetadata = { ...metadata, operation: "skill-repository.identity.migrate-recheck" }
+    const currentRaw = await readIdentityRaw(
+      sourceDirectoryPath,
+      legacyPath,
+      LEGACY_SKILL_REPOSITORY_ID_FILE_NAME,
+      recheckMetadata,
+      security,
+    )
+    if (currentRaw !== null) {
+      recordIdentityAudit(security, "fs.read.outside-userdata", legacyPath, "allowed", {
+        ...recheckMetadata,
+        identityFound: true,
+      })
+    }
+    if (currentRaw !== legacySnapshot.raw) throw new SkillRepositoryLegacyIdentityChangedError()
     await rm(legacyPath)
     recordIdentityAudit(security, "fs.write", legacyPath, "allowed", metadata)
     return true
   } catch (error) {
-    recordIdentityAudit(security, "fs.write", legacyPath, "failed", metadata)
+    recordIdentityAudit(security, "fs.write", legacyPath, "failed", {
+      ...metadata,
+      ...(error instanceof SkillRepositoryLegacyIdentityChangedError
+        ? { reason: "legacy-identity-changed" }
+        : {}),
+    })
     throw error
   }
 }
@@ -202,6 +229,16 @@ async function readIdentityFile(
   identitySource: "current" | "legacy",
   security?: SkillRepositoryIdentityReadSecurity,
 ): Promise<SkillRepositoryIdentity | null> {
+  const snapshot = await readIdentityFileSnapshot(sourceDirectoryPath, fileName, identitySource, security)
+  return snapshot?.identity ?? null
+}
+
+async function readIdentityFileSnapshot(
+  sourceDirectoryPath: string,
+  fileName: string,
+  identitySource: "current" | "legacy",
+  security?: SkillRepositoryIdentityReadSecurity,
+): Promise<{ readonly identity: SkillRepositoryIdentity; readonly raw: string } | null> {
   const filePath = path.join(sourceDirectoryPath, fileName)
   const metadata = {
     operation: "skill-repository.identity.read",
@@ -250,7 +287,7 @@ async function readIdentityFile(
     identityFound: true,
     repositoryId: identity.id,
   })
-  return identity
+  return { identity, raw }
 }
 
 function handleInvalidIdentity(
