@@ -6,7 +6,7 @@ import type {
   EditorScanProjectResult,
 } from "../../src/types/editor-scan"
 import { contentService } from "./content-service"
-import { scanAll } from "./editor-scan-service"
+import { scanAll, scanGlobalEditorById } from "./editor-scan-service"
 import { createMainLogger } from "./log-store"
 
 const logger = createMainLogger("install-status-cache")
@@ -231,10 +231,39 @@ async function refresh(contentId: string): Promise<InstallStatusEntry[]> {
   return entries
 }
 
+async function refreshGlobal(contentId: string, editorId: string): Promise<InstallStatusEntry[]> {
+  const globalEntry = await scanGlobalEditorById(editorId)
+  if (!globalEntry) {
+    throw new Error(`Editor ${editorId} not found in scan`)
+  }
+
+  const [skillVersions, ruleContents] = await Promise.all([
+    loadSkillVersionMap(),
+    loadRuleContentMap(),
+  ])
+  const scanned = new Map<string, InstallStatusEntry[]>()
+  collectGlobalEntry(scanned, globalEntry, skillVersions, ruleContents)
+
+  const entries = [
+    ...(cache.get(contentId) ?? []).filter((entry) => (
+      entry.scope !== "global" || entry.editorId !== editorId
+    )),
+    ...(scanned.get(contentId) ?? []),
+  ]
+  if (entries.length > 0) {
+    cache.set(contentId, entries)
+  } else {
+    cache.delete(contentId)
+  }
+
+  return entries
+}
+
 export const installStatusCacheService = {
   buildCache,
   getAll,
   getForContent,
   removeGlobalEntry,
   refresh,
+  refreshGlobal,
 }

@@ -584,6 +584,14 @@ async function scanGlobalEditor(ep: EditorScanPaths, signal?: AbortSignal): Prom
   }
 }
 
+async function scanGlobalEditorById(
+  editorId: string,
+  signal?: AbortSignal,
+): Promise<EditorScanGlobalResult | null> {
+  const editorPath = getEditorScanPaths().find((item) => item.editorId === editorId)
+  return editorPath ? scanGlobalEditor(editorPath, signal) : null
+}
+
 async function scanSkillDirectories(
   dirPaths: readonly string[],
   signal?: AbortSignal,
@@ -1135,6 +1143,7 @@ export {
   EDITOR_SCAN_SKILL_FILE_LIST_LIMITS,
   EDITOR_SCAN_SKILL_PREVIEW_LIMITS,
   scanAll,
+  scanGlobalEditorById,
   readItemContent,
   listSkillFiles,
   assertTrustedEditorReadTarget,

@@ -60,6 +60,7 @@ import {
   prepareQuickPublishDraft,
   readItemContent,
   scanAll,
+  scanGlobalEditorById,
   scanSkillDirectories,
   trashScanItem,
 } from "../editor-scan-service"
@@ -415,6 +416,21 @@ describe("editor scan quick publish", () => {
     } finally {
       await chmod(blockedHome, 0o700)
     }
+  })
+
+  it("scans only the requested global editor", async () => {
+    const root = await createTempDir()
+    vi.spyOn(os, "homedir").mockReturnValue(root)
+    await mkdir(path.join(root, ".agents", "skills", "reviewer"), { recursive: true })
+    await writeFile(path.join(root, ".agents", "skills", "reviewer", "SKILL.md"), "# Reviewer\n")
+
+    const result = await scanGlobalEditorById("codex")
+
+    expect(result).toMatchObject({
+      editorId: "codex",
+      skills: [expect.objectContaining({ name: "reviewer" })],
+    })
+    await expect(scanGlobalEditorById("missing-editor")).resolves.toBeNull()
   })
 
   it("stops before scanning when the request is already cancelled", async () => {

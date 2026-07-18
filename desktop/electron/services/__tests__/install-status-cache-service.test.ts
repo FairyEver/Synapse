@@ -5,10 +5,12 @@ const mocks = vi.hoisted(() => ({
   getDetail: vi.fn(),
   listContent: vi.fn(),
   scanAll: vi.fn(),
+  scanGlobalEditorById: vi.fn(),
 }))
 
 vi.mock("../editor-scan-service", () => ({
   scanAll: mocks.scanAll,
+  scanGlobalEditorById: mocks.scanGlobalEditorById,
   trashScanItem: vi.fn(),
 }))
 
@@ -180,6 +182,22 @@ describe("installStatusCacheService", () => {
       status: "installed",
     }])
     expect(installStatusCacheService.getForContent("project-skill")).toEqual(entries)
+  })
+
+  it("refreshes one global editor without scanning configured projects", async () => {
+    mocks.scanAll.mockResolvedValue(createScan())
+    await installStatusCacheService.buildCache()
+    mocks.scanAll.mockClear()
+    mocks.scanGlobalEditorById.mockResolvedValue({
+      ...createScan().global[0],
+      skills: [],
+    })
+
+    const entries = await installStatusCacheService.refreshGlobal("global-skill", "codex")
+
+    expect(entries).toEqual([])
+    expect(mocks.scanGlobalEditorById).toHaveBeenCalledWith("codex")
+    expect(mocks.scanAll).not.toHaveBeenCalled()
   })
 
   it("removes one global editor entry without discarding project installs", async () => {

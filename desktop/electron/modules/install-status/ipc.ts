@@ -4,8 +4,7 @@ import type { EventBus } from "../../runtime/event-bus"
 import type { AuditSink, PermissionGuard } from "../../runtime/security/permission-guard"
 import { skillUninstallerService } from "../../../app-capabilities/skill-uninstaller/main/service"
 import { installStatusCacheService } from "../../services/install-status-cache-service"
-import { trashScanItem } from "../../services/editor-scan-service"
-import { scanAll } from "../../services/editor-scan-service"
+import { scanGlobalEditorById, trashScanItem } from "../../services/editor-scan-service"
 import { createMainLogger } from "../../services/log-store"
 import type { InstallStatusEntry } from "../../../src/types/install-status"
 
@@ -38,8 +37,7 @@ export const installStatusIpcModule: IpcModule = {
       request: uninstallSchema,
       response: uninstallResultSchema,
       handler: async (ctx, payload: { contentId: string; editorId: string }) => {
-        const scan = await scanAll()
-        const globalEntry = scan.global.find((e) => e.editorId === payload.editorId)
+        const globalEntry = await scanGlobalEditorById(payload.editorId)
         if (!globalEntry) {
           throw new Error(`Editor ${payload.editorId} not found in scan`)
         }
@@ -67,7 +65,7 @@ export const installStatusIpcModule: IpcModule = {
         }
 
         const refreshInstallStatus = async (contentId: string): Promise<void> => {
-          const entries = await installStatusCacheService.refresh(contentId)
+          const entries = await installStatusCacheService.refreshGlobal(contentId, payload.editorId)
           emitInstallStatusChanged(contentId, entries)
         }
 

@@ -8,13 +8,13 @@ const mocks = vi.hoisted(() => ({
   installStatusCacheService: {
     getAll: vi.fn(),
     removeGlobalEntry: vi.fn(),
-    refresh: vi.fn(),
+    refreshGlobal: vi.fn(),
   },
   logger: {
     warn: vi.fn(),
   },
   permissionGuard: {},
-  scanAll: vi.fn(),
+  scanGlobalEditorById: vi.fn(),
   skillUninstallerService: {
     uninstall: vi.fn(),
   },
@@ -30,7 +30,7 @@ vi.mock("../../../services/install-status-cache-service", () => ({
 }))
 
 vi.mock("../../../services/editor-scan-service", () => ({
-  scanAll: mocks.scanAll,
+  scanGlobalEditorById: mocks.scanGlobalEditorById,
   trashScanItem: mocks.trashScanItem,
 }))
 
@@ -61,23 +61,20 @@ describe("installStatusIpcModule", () => {
     vi.clearAllMocks()
     mocks.installStatusCacheService.getAll.mockReturnValue({})
     mocks.installStatusCacheService.removeGlobalEntry.mockReturnValue([])
-    mocks.installStatusCacheService.refresh.mockResolvedValue([{
+    mocks.installStatusCacheService.refreshGlobal.mockResolvedValue([{
       editorId: "codex",
       scope: "global",
       status: "not_installed",
     }])
-    mocks.scanAll.mockResolvedValue({
-      global: [{
-        editorId: "codex",
-        rules: [],
-        skills: [{
-          name: "Skill",
-          path: "/editor/skills/skill",
-          synapseContentId: "skill-1",
-          trash: { supported: true },
-        }],
+    mocks.scanGlobalEditorById.mockResolvedValue({
+      editorId: "codex",
+      rules: [],
+      skills: [{
+        name: "Skill",
+        path: "/editor/skills/skill",
+        synapseContentId: "skill-1",
+        trash: { supported: true },
       }],
-      projects: [],
     })
     mocks.skillUninstallerService.uninstall.mockImplementation(async (
       _targets: unknown,
@@ -102,7 +99,7 @@ describe("installStatusIpcModule", () => {
 
   it("routes Skill uninstall through the shared Skill Uninstaller service", async () => {
     const { installStatusIpcModule } = await import("../ipc")
-    mocks.installStatusCacheService.refresh.mockRejectedValueOnce(new Error("scan failed"))
+    mocks.installStatusCacheService.refreshGlobal.mockRejectedValueOnce(new Error("scan failed"))
 
     await expect(installStatusIpcModule.methods.uninstall.handler(createContext() as never, {
       contentId: "skill-1",
@@ -119,7 +116,8 @@ describe("installStatusIpcModule", () => {
       { onTrashedContentId: expect.any(Function) },
     )
     expect(mocks.trashScanItem).not.toHaveBeenCalled()
-    expect(mocks.installStatusCacheService.refresh).toHaveBeenCalledWith("skill-1")
+    expect(mocks.scanGlobalEditorById).toHaveBeenCalledWith("codex")
+    expect(mocks.installStatusCacheService.refreshGlobal).toHaveBeenCalledWith("skill-1", "codex")
     expect(mocks.installStatusCacheService.removeGlobalEntry).toHaveBeenCalledWith("skill-1", "codex")
     expect(mocks.eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
       domain: "install-status",
@@ -134,18 +132,15 @@ describe("installStatusIpcModule", () => {
 
   it("keeps Rule uninstall on the editor scan trash path", async () => {
     const { installStatusIpcModule } = await import("../ipc")
-    mocks.scanAll.mockResolvedValueOnce({
-      global: [{
-        editorId: "codex",
-        rules: [{
-          name: "Rule",
-          path: "/editor/AGENTS.md",
-          synapseContentId: "rule-1",
-          trash: { mode: "rule-section", ruleId: "rule-1" },
-        }],
-        skills: [],
+    mocks.scanGlobalEditorById.mockResolvedValueOnce({
+      editorId: "codex",
+      rules: [{
+        name: "Rule",
+        path: "/editor/AGENTS.md",
+        synapseContentId: "rule-1",
+        trash: { mode: "rule-section", ruleId: "rule-1" },
       }],
-      projects: [],
+      skills: [],
     })
 
     await installStatusIpcModule.methods.uninstall.handler(createContext() as never, {
