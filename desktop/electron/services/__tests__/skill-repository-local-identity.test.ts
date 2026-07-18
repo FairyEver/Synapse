@@ -1,9 +1,10 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, truncate, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
 import type { ActorIdentity, AuditSink, PermissionGuard, PermissionRequest } from "../../runtime/security"
+import { SKILL_REPOSITORY_IDENTITY_MAX_BYTES } from "../../../config"
 import { findSkillDirectoryByContentId } from "../editor-adapters/skill-identity"
 import {
   ensureSkillRepositoryIdentityWriteAllowed,
@@ -12,6 +13,7 @@ import {
   removeLegacySkillRepositoryIdentity,
   SkillRepositoryIdentityChangedError,
   SkillRepositoryIdentityInvalidError,
+  SkillRepositoryIdentityTooLargeError,
   SkillRepositorySourceDirectoryChangedError,
   writeSkillRepositoryIdentity,
 } from "../skill-repository-local-identity"
@@ -340,6 +342,35 @@ describe("readSkillRepositoryIdentity", () => {
       metadata: {
         operation: "skill-repository.identity.read",
         identitySource: fileName === ".synapse.repository.json" ? "current" : "legacy",
+      },
+    }))
+  })
+
+  it.each([
+    [".synapse.repository.json", "current"],
+    [".synapse.json", "legacy"],
+  ] as const)("rejects oversized identity file %s before permission or parsing", async (fileName, identitySource) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-read-oversized-"))
+    const filePath = path.join(dir, fileName)
+    await writeFile(filePath, "{}", "utf8")
+    await truncate(filePath, SKILL_REPOSITORY_IDENTITY_MAX_BYTES + 1)
+    const permissionGuard = permissionGuardReturning({ allowed: true })
+    const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+    const auditSink = auditSinkRecording(auditEvents)
+
+    await expect(readSkillRepositoryIdentity(dir, { actor, auditSink, permissionGuard }))
+      .rejects.toBeInstanceOf(SkillRepositoryIdentityTooLargeError)
+
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: filePath,
+      outcome: "failed",
+      metadata: {
+        operation: "skill-repository.identity.read",
+        identitySource,
+        reason: "identity-too-large",
+        maxBytes: SKILL_REPOSITORY_IDENTITY_MAX_BYTES,
       },
     }))
   })

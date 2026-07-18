@@ -106,6 +106,9 @@ export const SKILL_UNINSTALL_SCAN_MAX_SKILL_MD_BYTES = 1024 * 1024
 // Skill 卸载器 .synapse.json 身份文件最大字节数：限制扫描和执行复查读取异常元数据的内存与磁盘开销。
 export const SKILL_UNINSTALL_MAX_METADATA_BYTES = 64 * 1024
 
+// Skill Repository 本地身份文件最大字节数：限制上传、更新和关联重试读取异常身份文件的内存与磁盘开销。
+export const SKILL_REPOSITORY_IDENTITY_MAX_BYTES = 64 * 1024
+
 // Skill 环境变量关联扫描单个受信任根最多访问的一级条目数：避免异常大的编辑器 Skill 根长期占用主进程。
 export const SKILL_ENV_BINDING_SCAN_MAX_ROOT_ENTRIES = 1_000
 

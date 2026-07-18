@@ -3,6 +3,7 @@ import { constants, type BigIntStats } from "node:fs"
 import { lstat, open, realpath, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 
+import { SKILL_REPOSITORY_IDENTITY_MAX_BYTES } from "../../config"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { hasSameFileSnapshot, isFileNotFoundError, isPathInside } from "./fs-utils"
 
@@ -42,6 +43,13 @@ export class SkillRepositoryIdentityInvalidError extends Error {
   constructor() {
     super("本地 Skill 的当前云仓库身份无效，请修复 .synapse.repository.json 后重新扫描。")
     this.name = "SkillRepositoryIdentityInvalidError"
+  }
+}
+
+export class SkillRepositoryIdentityTooLargeError extends Error {
+  constructor(fileName: string) {
+    super(`本地 Skill 云仓库身份文件不能超过 64 KiB：${fileName}`)
+    this.name = "SkillRepositoryIdentityTooLargeError"
   }
 }
 
@@ -290,6 +298,14 @@ async function readIdentityRaw(
     recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
     throw new Error(`Skill 云仓库身份必须是普通文件：${fileName}`)
   }
+  if (expected.size > BigInt(SKILL_REPOSITORY_IDENTITY_MAX_BYTES)) {
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", {
+      ...metadata,
+      reason: "identity-too-large",
+      maxBytes: SKILL_REPOSITORY_IDENTITY_MAX_BYTES,
+    })
+    throw new SkillRepositoryIdentityTooLargeError(fileName)
+  }
 
   if (security) await checkIdentityReadPermission(security, filePath, metadata)
 
@@ -297,7 +313,12 @@ async function readIdentityRaw(
   try {
     raw = await readVerifiedIdentityFile(sourceDirectoryPath, filePath, expected)
   } catch (error) {
-    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", metadata)
+    recordIdentityAudit(security, "fs.read.outside-userdata", filePath, "failed", {
+      ...metadata,
+      ...(error instanceof SkillRepositoryIdentityTooLargeError
+        ? { reason: "identity-too-large", maxBytes: SKILL_REPOSITORY_IDENTITY_MAX_BYTES }
+        : {}),
+    })
     throw error
   }
   return raw
@@ -324,7 +345,7 @@ async function readVerifiedIdentityFile(
     if (!opened.isFile() || !hasSameFileSnapshot(expected, opened)) {
       throw new Error("Skill 云仓库身份文件在读取前发生变化。")
     }
-    const raw = await handle.readFile({ encoding: "utf8" })
+    const raw = await readBoundedIdentityFile(handle, path.basename(filePath))
     const [afterRead, pathAfterRead, realPathAfterRead] = await Promise.all([
       handle.stat({ bigint: true }),
       lstat(filePath, { bigint: true }),
@@ -343,6 +364,20 @@ async function readVerifiedIdentityFile(
   } finally {
     await handle.close()
   }
+}
+
+async function readBoundedIdentityFile(handle: Awaited<ReturnType<typeof open>>, fileName: string): Promise<string> {
+  const buffer = Buffer.allocUnsafe(SKILL_REPOSITORY_IDENTITY_MAX_BYTES + 1)
+  let offset = 0
+  while (offset < buffer.byteLength) {
+    const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, offset)
+    if (bytesRead === 0) break
+    offset += bytesRead
+  }
+  if (offset > SKILL_REPOSITORY_IDENTITY_MAX_BYTES) {
+    throw new SkillRepositoryIdentityTooLargeError(fileName)
+  }
+  return buffer.subarray(0, offset).toString("utf8")
 }
 
 function sameDirectoryIdentity(expected: BigIntStats, actual: BigIntStats): boolean {
