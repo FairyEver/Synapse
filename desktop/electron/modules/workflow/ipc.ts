@@ -1168,6 +1168,15 @@ export const workflowIpcModule: IpcModule = {
         return ctx.resolve<WorkflowParamPresetService>("core.workflow.param-presets").list(workflowId)
       },
     },
+    paramPresetsResolveResourceEntryTypes: {
+      channel: "synapse:workflow:param-presets:resolve-resource-entry-types", kind: "invoke",
+      request: z.object({ id: z.string() }),
+      response: z.record(z.string(), z.enum(["file", "directory", "mixed", "unavailable"])),
+      handler: async (ctx, { id }: { id: string }) => {
+        logger.info("workflow:paramPresets:resolveResourceEntryTypes", { presetId: id })
+        return ctx.resolve<WorkflowParamPresetService>("core.workflow.param-presets").resolveResourceEntryTypes(id)
+      },
+    },
     paramPresetsSave: {
       channel: "synapse:workflow:param-presets:save", kind: "invoke",
       request: saveWorkflowParamPresetSchema,

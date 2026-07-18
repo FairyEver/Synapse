@@ -416,6 +416,7 @@ export const IPC_CHANNELS = {
     "chooseParamFiles": "synapse:workflow:param-files:choose",
     "chooseParamDirectories": "synapse:workflow:param-directories:choose",
     "paramPresetsList": "synapse:workflow:param-presets:list",
+    "paramPresetsResolveResourceEntryTypes": "synapse:workflow:param-presets:resolve-resource-entry-types",
     "paramPresetsSave": "synapse:workflow:param-presets:save",
     "paramPresetsDelete": "synapse:workflow:param-presets:delete",
     "list": "synapse:workflow:list",

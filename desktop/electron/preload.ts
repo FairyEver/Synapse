@@ -306,6 +306,7 @@ const IPC_CHANNELS = {
     "chooseParamFiles": "synapse:workflow:param-files:choose",
     "chooseParamDirectories": "synapse:workflow:param-directories:choose",
     "paramPresetsList": "synapse:workflow:param-presets:list",
+    "paramPresetsResolveResourceEntryTypes": "synapse:workflow:param-presets:resolve-resource-entry-types",
     "paramPresetsSave": "synapse:workflow:param-presets:save",
     "paramPresetsDelete": "synapse:workflow:param-presets:delete",
     "event": "synapse:workflow:event",
@@ -1624,6 +1625,7 @@ const synapseBridge: SynapseBridge = {
   },
   workflowParamPresets: {
     list: (workflowId: string) => invoke(IPC_CHANNELS.workflow.paramPresetsList)({ workflowId }),
+    resolveResourceEntryTypes: (id: string) => invoke(IPC_CHANNELS.workflow.paramPresetsResolveResourceEntryTypes)({ id }),
     save: (input) => invoke(IPC_CHANNELS.workflow.paramPresetsSave)(input),
     delete: (id: string) => invoke(IPC_CHANNELS.workflow.paramPresetsDelete)({ id }),
   },

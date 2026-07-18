@@ -112,7 +112,7 @@ describe("WorkflowParamPresetService", () => {
     expect(await service.list("workflow-a")).toEqual([expect.objectContaining({ values: saved.values })])
   })
 
-  it("reports current resource types for existing multi-resource presets", async () => {
+  it("lists presets without resource IO and resolves current types on demand", async () => {
     const service = createService()
     const root = mkdtempSync(path.join(os.tmpdir(), "wf-param-resources-"))
     roots.push(root)
@@ -129,9 +129,19 @@ describe("WorkflowParamPresetService", () => {
     rmSync(filePath)
     expect(await service.list("workflow-a")).toEqual([
       expect.objectContaining({
-        resourceEntryTypes: { files: "unavailable", directories: "directory" },
+        resourceEntryTypes: {},
       }),
     ])
+    await expect(service.resolveResourceEntryTypes(saved.id)).resolves.toEqual({
+      files: "unavailable",
+      directories: "directory",
+    })
+  })
+
+  it("rejects resource type resolution for a missing preset", async () => {
+    const service = createService()
+
+    await expect(service.resolveResourceEntryTypes("missing")).rejects.toThrow("Preset not found")
   })
 
   it("rejects multi-resource aliases that resolve to the same path", async () => {

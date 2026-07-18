@@ -986,12 +986,17 @@ describe("preload bridge", () => {
     const bridge = await loadPreloadBridge()
 
     await bridge.workflowParamPresets.list("workflow-1")
+    await bridge.workflowParamPresets.resolveResourceEntryTypes("preset-1")
     await bridge.workflowParamPresets.save({ workflowId: "workflow-1", name: "A", values: { topic: "secret" } })
     await bridge.workflowParamPresets.delete("preset-1")
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:workflow:param-presets:list",
       { workflowId: "workflow-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:workflow:param-presets:resolve-resource-entry-types",
+      { id: "preset-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:workflow:param-presets:save",

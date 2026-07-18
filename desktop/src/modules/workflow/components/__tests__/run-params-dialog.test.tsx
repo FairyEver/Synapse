@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
   toastError: vi.fn(),
   presetList: vi.fn(),
+  presetResolveResourceEntryTypes: vi.fn(),
   presetSave: vi.fn(),
   presetDelete: vi.fn(),
   chooseParamFile: vi.fn(),
@@ -57,6 +58,7 @@ beforeEach(() => {
     }
   }
   mocks.presetList.mockResolvedValue([])
+  mocks.presetResolveResourceEntryTypes.mockResolvedValue({})
   mocks.presetSave.mockResolvedValue({
     id: "preset-saved",
     workflowId: "workflow-1",
@@ -91,6 +93,7 @@ function installBridge() {
     },
     workflowParamPresets: {
       list: mocks.presetList,
+      resolveResourceEntryTypes: mocks.presetResolveResourceEntryTypes,
       save: mocks.presetSave,
       delete: mocks.presetDelete,
     },
@@ -271,6 +274,7 @@ describe("RunParamsDialog", () => {
   })
 
   it("rejects a multi-file preset after the parameter changes to multi-directory", async () => {
+    mocks.presetResolveResourceEntryTypes.mockResolvedValue({ inputs: "file" })
     mocks.presetList.mockResolvedValue([
       {
         id: "preset-files",
@@ -291,6 +295,7 @@ describe("RunParamsDialog", () => {
     })
     await act(async () => { clickOption("文件预设") })
 
+    expect(mocks.presetResolveResourceEntryTypes).toHaveBeenCalledWith("preset-files")
     expect(document.body.textContent).toContain("已保存值与当前文件/文件夹类型不兼容，请重新选择")
     await act(async () => { clickButton("运行") })
     expect(onConfirm).not.toHaveBeenCalled()

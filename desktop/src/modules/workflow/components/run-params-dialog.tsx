@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { Command as CommandPrimitive } from "cmdk"
 import {
   AlertDialog,
@@ -61,6 +61,8 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
   const [presets, setPresets] = useState<WorkflowParamPreset[]>([])
   const [selectedPresetId, setSelectedPresetId] = useState<string>(NO_PRESET_VALUE)
   const [presetsLoading, setPresetsLoading] = useState(false)
+  const [presetResolving, setPresetResolving] = useState(false)
+  const presetResolutionSequence = useRef(0)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [presetName, setPresetName] = useState("")
   const [presetNameError, setPresetNameError] = useState("")
@@ -94,6 +96,8 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     setPresetNameError("")
     setOverwriteConfirm(null)
     setDeleteConfirmOpen(false)
+    setPresetResolving(false)
+    presetResolutionSequence.current += 1
     setValues(buildInitialValues(params, lastValues?.values))
 
     const presetBridge = window.synapse?.workflowParamPresets
@@ -120,6 +124,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
       })
     return () => {
       cancelled = true
+      presetResolutionSequence.current += 1
     }
   }, [open, params, lastValues, workflowId])
 
@@ -225,7 +230,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
 
   async function handleSubmit(event?: FormEvent): Promise<void> {
     event?.preventDefault()
-    if (submitting || savingPreset) return
+    if (submitting || savingPreset || presetResolving) return
     if (!validate()) return
     setSubmitting(true)
     try {
@@ -235,7 +240,10 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     }
   }
 
-  function handlePresetSelect(presetId: string): void {
+  async function handlePresetSelect(presetId: string): Promise<void> {
+    const resolutionSequence = presetResolutionSequence.current + 1
+    presetResolutionSequence.current = resolutionSequence
+    setPresetResolving(false)
     setSelectedPresetId(presetId)
     const preset = presets.find((item) => item.id === presetId)
     if (!preset) {
@@ -246,13 +254,41 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
       return
     }
     setValues(buildInitialValues(params, preset.values))
-    const nextErrors = buildResourceCompatibilityErrors(params, preset.values, preset.resourceEntryTypes)
-    setIncompatibleValueErrors(nextErrors)
-    setErrors(nextErrors)
+    const cardinalityErrors = buildResourceCompatibilityErrors(params, preset.values, {})
+    setIncompatibleValueErrors(cardinalityErrors)
+    setErrors(cardinalityErrors)
+    if (!Object.values(preset.values).some(Array.isArray)) return
+
+    const presetBridge = window.synapse?.workflowParamPresets
+    if (!presetBridge) {
+      const nextErrors = buildPresetResourceCheckErrors(params, preset.values, cardinalityErrors)
+      setIncompatibleValueErrors(nextErrors)
+      setErrors(nextErrors)
+      return
+    }
+    setPresetResolving(true)
+    try {
+      const resourceEntryTypes = await presetBridge.resolveResourceEntryTypes(preset.id)
+      if (presetResolutionSequence.current !== resolutionSequence) return
+      setPresets((current) => current.map((item) => item.id === preset.id
+        ? { ...item, resourceEntryTypes }
+        : item))
+      const nextErrors = buildResourceCompatibilityErrors(params, preset.values, resourceEntryTypes)
+      setIncompatibleValueErrors(nextErrors)
+      setErrors(nextErrors)
+    } catch {
+      if (presetResolutionSequence.current !== resolutionSequence) return
+      toast.error("检查预设失败")
+      const nextErrors = buildPresetResourceCheckErrors(params, preset.values, cardinalityErrors)
+      setIncompatibleValueErrors(nextErrors)
+      setErrors(nextErrors)
+    } finally {
+      if (presetResolutionSequence.current === resolutionSequence) setPresetResolving(false)
+    }
   }
 
   function handleOpenSaveDialog(): void {
-    if (submitting || savingPreset) return
+    if (submitting || savingPreset || presetResolving) return
     if (!validate()) return
     setPresetName(selectedPreset?.name ?? nextPresetName(presets))
     setPresetNameError("")
@@ -312,7 +348,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
   }
 
   async function handleDeletePreset(): Promise<void> {
-    if (!selectedPreset) return
+    if (!selectedPreset || presetResolving) return
     const presetBridge = window.synapse?.workflowParamPresets
     if (!presetBridge) return
     setDeletingPreset(true)
@@ -367,7 +403,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
                     type="button"
                     variant="outline"
                     size="icon"
-                    disabled={!selectedPreset || deletingPreset || submitting || savingPreset}
+                    disabled={!selectedPreset || deletingPreset || submitting || savingPreset || presetResolving}
                     onClick={(event) => {
                       if (shouldBypassDeleteConfirm(event)) {
                         void handleDeletePreset()
@@ -457,11 +493,11 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={onCancel} disabled={submitting || savingPreset}>取消</Button>
               {params.length > 0 && (
-                <Button type="button" variant="outline" onClick={handleOpenSaveDialog} disabled={submitting || savingPreset}>
+                <Button type="button" variant="outline" onClick={handleOpenSaveDialog} disabled={submitting || savingPreset || presetResolving}>
                   保存为预设并运行
                 </Button>
               )}
-              <Button type="submit" disabled={submitting || savingPreset}>运行</Button>
+              <Button type="submit" disabled={submitting || savingPreset || presetResolving}>运行</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -668,6 +704,21 @@ function buildResourceCompatibilityErrors(
       errors[param.name] = "已保存资源不存在或无法访问，请重新选择"
     } else if (savedEntryType && savedEntryType !== param.type) {
       errors[param.name] = "已保存值与当前文件/文件夹类型不兼容，请重新选择"
+    }
+  }
+  return errors
+}
+
+function buildPresetResourceCheckErrors(
+  params: WorkflowParam[],
+  source: Record<string, WorkflowParamPresetValue>,
+  existingErrors: Record<string, string>,
+): Record<string, string> {
+  const errors = { ...existingErrors }
+  for (const param of params) {
+    if ((param.type !== "file" && param.type !== "directory") || param.allowMultiple !== true) continue
+    if (!errors[param.name] && Array.isArray(source[param.name])) {
+      errors[param.name] = "无法检查已保存资源，请重新选择"
     }
   }
   return errors

@@ -34,12 +34,16 @@ export class WorkflowParamPresetService {
 
   async list(workflowId: string): Promise<WorkflowParamPreset[]> {
     const items = await this.presets.list()
-    const entries = items
+    return items
       .filter((preset) => preset.workflowId === workflowId)
       .sort((left, right) => right.updatedAt - left.updatedAt || left.name.localeCompare(right.name))
-    const presets: WorkflowParamPreset[] = []
-    for (const entry of entries) presets.push(await toPublicPreset(entry))
-    return presets
+      .map(toListedPreset)
+  }
+
+  async resolveResourceEntryTypes(id: string): Promise<Record<string, WorkflowParamPresetResourceEntryType>> {
+    const entry = await this.presets.get(id)
+    if (!entry) throw new Error("Preset not found")
+    return resolvePresetResourceEntryTypes(entry.values)
   }
 
   async save(input: SaveWorkflowParamPresetInput): Promise<WorkflowParamPreset> {
@@ -101,6 +105,18 @@ async function toPublicPreset(entry: WorkflowParamPresetEntryV2): Promise<Workfl
     name: entry.name,
     values: clonePresetValues(entry.values),
     resourceEntryTypes: await resolvePresetResourceEntryTypes(entry.values),
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  }
+}
+
+function toListedPreset(entry: WorkflowParamPresetEntryV2): WorkflowParamPreset {
+  return {
+    id: entry.id,
+    workflowId: entry.workflowId,
+    name: entry.name,
+    values: clonePresetValues(entry.values),
+    resourceEntryTypes: {},
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
   }

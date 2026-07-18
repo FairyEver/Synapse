@@ -453,6 +453,7 @@ import type {
   ValidationResult,
   WorkflowEvent,
   WorkflowParamPreset,
+  WorkflowParamPresetResourceEntryType,
   WorkflowRunListItem,
   WorkflowRunStatus,
 } from "./workflow"
@@ -1692,6 +1693,7 @@ export type SynapseBridge = {
   }
   workflowParamPresets: {
     list: (workflowId: string) => Promise<WorkflowParamPreset[]>
+    resolveResourceEntryTypes: (id: string) => Promise<Record<string, WorkflowParamPresetResourceEntryType>>
     save: (input: SaveWorkflowParamPresetInput) => Promise<WorkflowParamPreset>
     delete: (id: string) => Promise<void>
   }
