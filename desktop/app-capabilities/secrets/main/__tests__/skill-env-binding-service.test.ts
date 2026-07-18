@@ -253,6 +253,29 @@ describe("SkillEnvBindingService", () => {
     )
   })
 
+  it("does not count ordinary directories toward the per-root Skill limit", async () => {
+    const root = await createRoot()
+    await mkdir(path.join(root, "ordinary-a"))
+    await mkdir(path.join(root, "ordinary-b"))
+    await createSkill(root, "real-skill", "TOKEN=old\n")
+    const harness = createHarness(
+      [trustedRoot(root)],
+      () => 100,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { maxRootEntries: 10, maxSkillsPerRoot: 1 },
+    )
+
+    const result = await harness.service.scan("TOKEN", "new", harness.security)
+
+    expect(result.truncated).toBeUndefined()
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "real-skill", status: "needs_update" }),
+    ])
+  })
+
   it("fails closed when a trusted root is replaced with a symlink", async () => {
     const realRoot = await createRoot()
     await createSkill(realRoot, "demo", "TOKEN=old\n")

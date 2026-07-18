@@ -320,11 +320,6 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
       }
       rootEntryCount += 1
       if (!entry.isDirectory() || entry.isSymbolicLink()) continue
-      if (skillCount >= scanLimits.maxSkillsPerRoot) {
-        truncated = true
-        break
-      }
-      skillCount += 1
       try {
         const rootBeforeCandidate = await lstat(root.path)
         if (rootBeforeCandidate.isSymbolicLink()
@@ -339,15 +334,28 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
       const envPath = path.join(skillPath, ".env")
       const skillMdPath = path.join(skillPath, "SKILL.md")
       let skillInfo
-      let envInfo
       try {
-        ;[skillInfo, envInfo] = await Promise.all([lstat(skillMdPath), lstat(envPath)])
+        skillInfo = await lstat(skillMdPath)
       } catch (error) {
         if (isNotFoundLikeError(error)) continue
         pushUnavailableWarning(skillName, envPath, "unwritable", "配置文件读取失败。")
         continue
       }
       if (!skillInfo.isFile() || skillInfo.isSymbolicLink()) continue
+      if (skillCount >= scanLimits.maxSkillsPerRoot) {
+        truncated = true
+        break
+      }
+      skillCount += 1
+
+      let envInfo
+      try {
+        envInfo = await lstat(envPath)
+      } catch (error) {
+        if (isNotFoundLikeError(error)) continue
+        pushUnavailableWarning(skillName, envPath, "unwritable", "配置文件读取失败。")
+        continue
+      }
 
       if (envInfo.isSymbolicLink()) {
         pushUnavailableWarning(skillName, envPath, "unsafe_link", "配置文件是符号链接。")
