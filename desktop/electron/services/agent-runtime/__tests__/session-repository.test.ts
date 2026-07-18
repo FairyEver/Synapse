@@ -463,6 +463,47 @@ describe("AgentSessionRepository", () => {
     })
   })
 
+  it("does not let a stale non-title write roll back a manual rename", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+      idFactory: fixedIdFactory(["concurrent-history-title"]),
+    })
+    const conversation = await repository.createSession({
+      sessionKey: "local:renderer",
+      name: "新对话 15:20",
+    })
+    const originalGet = conversations.get.bind(conversations)
+    let releaseStaleRead: () => void = () => {}
+    let staleReadStarted: () => void = () => {}
+    const staleRead = new Promise<void>((resolve) => { staleReadStarted = resolve })
+    const staleReadBlock = new Promise<void>((resolve) => { releaseStaleRead = resolve })
+    let blockNextRead = true
+    vi.spyOn(conversations, "get").mockImplementation(async (id) => {
+      const snapshot = await originalGet(id)
+      if (blockNextRead) {
+        blockNextRead = false
+        staleReadStarted()
+        await staleReadBlock
+      }
+      return snapshot
+    })
+
+    const append = repository.appendHistory(conversation.id, "user", "hello")
+    await staleRead
+    await repository.renameSession(conversation.id, "手动标题")
+    releaseStaleRead()
+    await append
+
+    await expect(conversations.get(conversation.id)).resolves.toMatchObject({
+      name: "手动标题",
+      titleSource: "manual",
+      history: [expect.objectContaining({ role: "user", content: "hello" })],
+    })
+  })
+
   it("clears active main-thread persona without dropping mode or model tier", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({

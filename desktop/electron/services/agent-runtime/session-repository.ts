@@ -91,8 +91,7 @@ export class AgentSessionRepository {
         userMeta: mergeUserMeta(existing.userMeta, message),
         updatedAt: this.isoNow(),
       }
-      await this.conversations.upsert(updated)
-      return updated
+      return this.persistNonTitleUpdate(updated)
     }
 
     return this.createSession({
@@ -301,8 +300,7 @@ export class AgentSessionRepository {
       history: [...conversation.history, entry],
       updatedAt: this.isoNow(),
     }
-    await this.conversations.upsert(updated)
-    return updated
+    return this.persistNonTitleUpdate(updated)
   }
 
   async mergeLastHistoryMetadata(
@@ -323,8 +321,7 @@ export class AgentSessionRepository {
       history,
       updatedAt: this.isoNow(),
     }
-    await this.conversations.upsert(updated)
-    return updated
+    return this.persistNonTitleUpdate(updated)
   }
 
   async resolveUserQuestion(
@@ -344,8 +341,7 @@ export class AgentSessionRepository {
       history,
       updatedAt: this.isoNow(),
     }
-    await this.conversations.upsert(updated)
-    return updated
+    return this.persistNonTitleUpdate(updated)
   }
 
   async prepareUserQuestionResolution(
@@ -373,8 +369,7 @@ export class AgentSessionRepository {
       history,
       updatedAt: this.isoNow(),
     }
-    await this.conversations.upsert(updated)
-    return updated
+    return this.persistNonTitleUpdate(updated)
   }
 
   async saveAgentSession(input: SaveAgentSessionInput): Promise<ConversationEntryV1> {
@@ -391,8 +386,7 @@ export class AgentSessionRepository {
       costCurrency: input.costCurrency,
       updatedAt: this.isoNow(),
     })
-    await this.conversations.upsert(updated)
-    return updated
+    return this.persistNonTitleUpdate(updated)
   }
 
   async saveSdkSession(input: {
@@ -406,8 +400,7 @@ export class AgentSessionRepository {
       agentSessionId: input.sdkSessionId,
       updatedAt: this.isoNow(),
     }
-    await this.conversations.upsert(updated)
-    return updated
+    return this.persistNonTitleUpdate(updated)
   }
 
   async saveUsage(input: {
@@ -426,8 +419,7 @@ export class AgentSessionRepository {
       costCurrency: input.costCurrency ?? conversation.costCurrency,
       updatedAt: this.isoNow(),
     }
-    await this.conversations.upsert(updated)
-    return updated
+    return this.persistNonTitleUpdate(updated)
   }
 
   async recordSdkResultUsage(input: {
@@ -512,8 +504,7 @@ export class AgentSessionRepository {
       },
       updatedAt: this.isoNow(),
     }
-    await this.conversations.upsert(updated)
-    return updated
+    return this.persistNonTitleUpdate(updated)
   }
 
   async saveMainThreadPersona(
@@ -534,8 +525,7 @@ export class AgentSessionRepository {
       agentConfig: nextAgentConfig,
       updatedAt: this.isoNow(),
     }
-    await this.conversations.upsert(updated)
-    return updated
+    return this.persistNonTitleUpdate(updated)
   }
 
   async clearCurrentAgentSessionId(
@@ -551,8 +541,7 @@ export class AgentSessionRepository {
       }),
       sdkSessionId: undefined,
     }
-    await this.conversations.upsert(updated)
-    return updated
+    return this.persistNonTitleUpdate(updated)
   }
 
   async updateUserMeta(
@@ -568,8 +557,7 @@ export class AgentSessionRepository {
       },
       updatedAt: this.isoNow(),
     }
-    await this.conversations.upsert(updated)
-    return updated
+    return this.persistNonTitleUpdate(updated)
   }
 
   async get(conversationIdValue: string): Promise<ConversationEntryV1 | null> {
@@ -654,6 +642,19 @@ export class AgentSessionRepository {
         this.titleMutationTails.delete(conversationIdValue)
       }
     }
+  }
+
+  private async persistNonTitleUpdate(updated: ConversationEntryV1): Promise<ConversationEntryV1> {
+    return this.runTitleMutation(updated.id, async () => {
+      const latest = await this.requireConversation(updated.id)
+      const merged: ConversationEntryV1 = {
+        ...updated,
+        name: latest.name,
+        titleSource: latest.titleSource,
+      }
+      await this.conversations.upsert(merged)
+      return merged
+    })
   }
 
   private async requireConversation(conversationIdValue: string): Promise<ConversationEntryV1> {
