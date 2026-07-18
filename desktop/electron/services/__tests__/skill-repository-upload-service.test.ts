@@ -487,6 +487,23 @@ describe("SkillRepositoryUploadService", () => {
 
     expect(openExternal).toHaveBeenCalledWith("https://synapse.example.test/console/skill-repositories/repo-1")
   })
+
+  it("returns cloud and identity results when opening the management URL fails", async () => {
+    const service = new SkillRepositoryUploadService({
+      accountService: { getState: () => authenticatedState, importSkillRepository: vi.fn(async () => repositoryDetail()) },
+      publicAppUrl: "https://synapse.example.test/",
+      openExternal: vi.fn(async () => { throw new Error("browser failed") }),
+    })
+
+    await expect(service.importLocal({
+      sourceDirectoryPath: "/skills/demo",
+      openInBrowser: true,
+    })).resolves.toMatchObject({
+      repositoryId: "repo-1",
+      identityWritten: true,
+      openWarning: expect.stringContaining("操作已完成"),
+    })
+  })
 })
 
 function skillDraft(overrides: Partial<ContentSkillSourceDraft> = {}): ContentSkillSourceDraft {

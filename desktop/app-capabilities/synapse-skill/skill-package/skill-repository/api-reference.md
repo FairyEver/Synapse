@@ -69,6 +69,8 @@ Returns the repository id, repository name, owner handle, management URL, and lo
 
 If `identityWritten` is false, the cloud upload succeeded but Synapse could not write `.synapse.repository.json` locally. This includes a source directory that was removed or changed and a concurrent local identity change detected after the cloud upload started. Synapse does not recreate a missing source directory. The result may include `identityWriteError`. `identityMigrated` reports successful legacy identity migration; cleanup problems appear as `identityMigrationWarning` without changing the successful cloud upload result.
 
+For every tool with `openInBrowser`, external opening is best-effort. If the result contains `openWarning`, the primary operation already succeeded; do not retry a mutation just to reopen the link. Use the returned `managementUrl`, `publicUrl`, or `deepLinkUrl` manually.
+
 ## Update Local Skill
 
 `app_skill_repository_update_local`

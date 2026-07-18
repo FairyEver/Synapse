@@ -32,6 +32,8 @@ Skill Repository stores Skills only. Rules and prompt sharing are intentionally 
 8. Use `app_skill_repository_fork` when the user wants their own editable copy of a readable repository.
 9. Use `app_skill_repository_create_install_session` when the user wants to install a readable Skill into Synapse Desktop. The response contains a short-lived `deepLinkUrl`.
 
+`openInBrowser` is best-effort. If a successful result includes `openWarning`, the upload, visibility change, URL resolution, or install-session creation already succeeded; do not repeat the mutation. Use the returned `managementUrl`, `publicUrl`, or `deepLinkUrl` manually.
+
 Installing a Skill uses an install session and Desktop deep link. Downloading an individual repository file is a web UI action, not an MCP install flow.
 
 ## Identity Rules

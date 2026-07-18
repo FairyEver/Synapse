@@ -102,7 +102,7 @@ const optionalDescriptionProperty = {
 
 const openInBrowserProperty = {
   type: "boolean",
-  description: "Open the returned URL in the browser only when true.",
+  description: "Best-effort open of the returned URL when true. The primary operation still succeeds if opening fails; check openWarning and use the returned URL manually.",
 }
 
 const visibilityProperty = {

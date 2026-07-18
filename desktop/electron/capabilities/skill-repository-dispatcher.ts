@@ -14,6 +14,7 @@ import type {
   SkillRepositoryLocalImportResult,
 } from "../services/skill-repository-upload-service"
 import type { SkillRepositoryIdentityWriteSecurity } from "../services/skill-repository-local-identity"
+import { openSkillRepositoryExternalLink } from "../services/skill-repository-external-open"
 import { checkCapabilityPermission } from "./permission-audit"
 
 type SkillRepositoryAccountServicePort = {
@@ -170,15 +171,19 @@ async function setSkillRepositoryVisibility(
       const { buildSkillRepositoryManagementUrl } = await sharedSkillRepositoryPromise
       const managementUrl = buildSkillRepositoryManagementUrl(deps.publicAppUrl, repository.id)
 
-      if (openInBrowser === true && deps.openExternal) {
-        await deps.openExternal(managementUrl)
-      }
+      const openWarning = await openSkillRepositoryExternalLink({
+        requested: openInBrowser === true,
+        targetKind: "management",
+        url: managementUrl,
+        openExternal: deps.openExternal,
+      })
 
       return {
         ok: true,
         data: {
           repository,
           managementUrl,
+          ...(openWarning ? { openWarning } : {}),
         },
       }
     },
@@ -219,11 +224,14 @@ async function createInstallSession(
     async () => {
       const session = await deps.accountService.createSkillRepositoryInstallSession(repositoryId)
 
-      if (openInBrowser === true && deps.openExternal) {
-        await deps.openExternal(session.deepLinkUrl)
-      }
+      const openWarning = await openSkillRepositoryExternalLink({
+        requested: openInBrowser === true,
+        targetKind: "install",
+        url: session.deepLinkUrl,
+        openExternal: deps.openExternal,
+      })
 
-      return { ok: true, data: session }
+      return { ok: true, data: { ...session, ...(openWarning ? { openWarning } : {}) } }
     },
   )
 }
@@ -244,15 +252,19 @@ async function openSkillRepository(
       const { buildSkillRepositoryManagementUrl } = await sharedSkillRepositoryPromise
       const managementUrl = buildSkillRepositoryManagementUrl(deps.publicAppUrl, repositoryId)
 
-      if (openInBrowser === true && deps.openExternal) {
-        await deps.openExternal(managementUrl)
-      }
+      const openWarning = await openSkillRepositoryExternalLink({
+        requested: openInBrowser === true,
+        targetKind: "management",
+        url: managementUrl,
+        openExternal: deps.openExternal,
+      })
 
       return {
         ok: true,
         data: {
           repositoryId,
           managementUrl,
+          ...(openWarning ? { openWarning } : {}),
         },
       }
     },
@@ -269,9 +281,12 @@ async function openPublicSkillRepository(
   const { buildSkillRepositoryPublicUrl } = await sharedSkillRepositoryPromise
   const publicUrl = buildSkillRepositoryPublicUrl(deps.publicAppUrl, path.ownerHandle, path.repositoryName)
 
-  if (openInBrowser === true && deps.openExternal) {
-    await deps.openExternal(publicUrl)
-  }
+  const openWarning = await openSkillRepositoryExternalLink({
+    requested: openInBrowser === true,
+    targetKind: "public",
+    url: publicUrl,
+    openExternal: deps.openExternal,
+  })
 
   return {
     ok: true,
@@ -280,6 +295,7 @@ async function openPublicSkillRepository(
       ownerHandle: path.ownerHandle,
       repositoryName: path.repositoryName,
       repositoryId: path.repositoryId,
+      ...(openWarning ? { openWarning } : {}),
     },
   }
 }

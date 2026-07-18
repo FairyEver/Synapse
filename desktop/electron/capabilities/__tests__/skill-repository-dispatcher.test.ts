@@ -321,6 +321,34 @@ describe("skill repository capability dispatcher", () => {
     expect(deps.openExternal).toHaveBeenCalledWith("https://synapse.example.test/console/skill-repositories/repo-1")
   })
 
+  it("returns a successful visibility update when opening the browser fails", async () => {
+    const { auditSink, permissionGuard } = createSecurity()
+    const deps = createDeps({
+      auditSink,
+      permissionGuard,
+      openExternal: vi.fn(async () => { throw new Error("private-url-value") }),
+    })
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.visibility.update",
+      { repositoryId: "repo-1", visibility: "public", openInBrowser: true },
+      { source: "mcp-http" },
+    )).resolves.toMatchObject({
+      ok: true,
+      data: {
+        repository: { id: "repo-1", visibility: "public" },
+        openWarning: expect.stringContaining("操作已完成"),
+      },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.mutate",
+      outcome: "allowed",
+      resource: "skill-repository:repo-1",
+    }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("private-url-value")
+  })
+
   it("returns a public URL from repository id", async () => {
     const deps = createDeps()
     const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
@@ -396,6 +424,25 @@ describe("skill repository capability dispatcher", () => {
     })
     expect(deps.accountService.createSkillRepositoryInstallSession).toHaveBeenCalledWith("repo-1")
     expect(deps.openExternal).toHaveBeenCalledWith("synapse://skill-install?session=install-session-1")
+  })
+
+  it("returns a created install session when opening its deep link fails", async () => {
+    const deps = createDeps({
+      openExternal: vi.fn(async () => { throw new Error("deep-link-open-failed") }),
+    })
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.install_session.create",
+      { repositoryId: "repo-1", openInBrowser: true },
+      { source: "api" },
+    )).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "install-session-1",
+        openWarning: expect.stringContaining("操作已完成"),
+      },
+    })
   })
 
   it("rejects missing or empty required params", async () => {

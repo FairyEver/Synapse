@@ -21,6 +21,7 @@ import {
   writeSkillRepositoryIdentity,
   type SkillRepositoryIdentityWriteSecurity,
 } from "./skill-repository-local-identity"
+import { openSkillRepositoryExternalLink } from "./skill-repository-external-open"
 
 const sharedSkillRepositoryPromise = import("@synapse/shared")
 
@@ -44,6 +45,7 @@ export type SkillRepositoryLocalImportResult = {
   readonly identityBeforeUploadId?: string | null
   readonly identityMigrated: boolean
   readonly identityMigrationWarning?: string
+  readonly openWarning?: string
   readonly sourceImportSummary: ContentSkillSourceDraft["sourceImportSummary"]
 }
 
@@ -175,9 +177,12 @@ export class SkillRepositoryUploadService {
       identityWriteError = errorMessage(error)
     }
 
-    if (input.openInBrowser === true && this.openExternal) {
-      await this.openExternal(managementUrl)
-    }
+    const openWarning = await openSkillRepositoryExternalLink({
+      requested: input.openInBrowser === true,
+      targetKind: "management",
+      url: managementUrl,
+      openExternal: this.openExternal,
+    })
 
     return {
       repositoryId: repository.id,
@@ -190,6 +195,7 @@ export class SkillRepositoryUploadService {
       ...(identityWriteError ? { identityWriteError } : {}),
       ...(!identityWritten ? { identityBeforeUploadId: localIdentity?.id ?? null } : {}),
       ...(identityMigrationWarning ? { identityMigrationWarning } : {}),
+      ...(openWarning ? { openWarning } : {}),
     }
   }
 
