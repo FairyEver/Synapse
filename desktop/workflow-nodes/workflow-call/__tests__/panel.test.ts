@@ -96,7 +96,7 @@ function setTextareaValue(textarea: HTMLTextAreaElement, value: string): void {
   textarea.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
-function mockWorkflowList(items: Array<{ id: string; name: string; version: string; nodeCount: number; createdAt: number; updatedAt: number }>): void {
+function mockWorkflowList(items: Array<{ id: string; name: string; version: string; loadError?: string; nodeCount: number; createdAt: number; updatedAt: number }>): void {
   workflowList.mockResolvedValue({ items, migrationDiagnostics: [] })
 }
 
@@ -153,6 +153,34 @@ describe("WorkflowCallNodePanel", () => {
 
     expect(workflowGet).toHaveBeenCalledWith("deleted-child")
     expect(container.textContent).toContain("子工作流不存在")
+  })
+
+  it("disables protected workflows and shows child loading errors", async () => {
+    const loadError = "工作流版本过高，请升级 Synapse 后再编辑或运行"
+    mockWorkflowList([
+      { id: "protected-child", name: "未来工作流", version: "v1", loadError, nodeCount: 0, createdAt: 0, updatedAt: 0 },
+    ])
+    workflowGet.mockRejectedValue(new Error(loadError))
+
+    const { container } = renderPanel({
+      workflowId: "protected-child",
+      variables: [],
+      paramTemplates: { stale: "旧参数" },
+      paramBindings: {},
+    })
+    await flushEffects()
+
+    expect(container.textContent).toContain(loadError)
+    expect(container.textContent).toContain("暂无参数")
+    expect(container.querySelector("textarea")).toBeNull()
+
+    const trigger = container.querySelector<HTMLElement>("[role='combobox']")
+    await act(async () => {
+      trigger?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }))
+      trigger?.click()
+      await Promise.resolve()
+    })
+    expect(document.body.querySelector<HTMLElement>("[role='option']")?.getAttribute("data-disabled")).toBe("")
   })
 
   it("updates templates on blur", async () => {

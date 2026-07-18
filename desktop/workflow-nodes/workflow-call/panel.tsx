@@ -23,7 +23,7 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
   const [childParams, setChildParams] = useState<WorkflowParam[]>([])
   const [templates, setTemplates] = useState<Record<string, string>>(config.paramTemplates)
   const [bindings, setBindings] = useState<Record<string, WorkflowParamBinding>>(config.paramBindings ?? {})
-  const [selectedWorkflowMissing, setSelectedWorkflowMissing] = useState(false)
+  const [selectedWorkflowError, setSelectedWorkflowError] = useState<string | null>(null)
   const lastCommittedRef = useRef<WorkflowCallNodeConfig>(config)
 
   useEffect(() => {
@@ -40,25 +40,31 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
     void (async () => {
       if (!config.workflowId) {
         setChildParams([])
-        setSelectedWorkflowMissing(false)
+        setSelectedWorkflowError(null)
         return
       }
-      const child = await window.synapse?.workflow.get(config.workflowId)
-      if (cancelled) return
-      if (!child) {
+      setChildParams([])
+      setSelectedWorkflowError(null)
+      try {
+        const child = await window.synapse?.workflow.get(config.workflowId)
+        if (cancelled) return
+        if (!child) {
+          setSelectedWorkflowError("子工作流不存在")
+          return
+        }
+        const nextParams = child.params ?? []
+        setChildParams(nextParams)
+        const withInitialTemplates = buildInitialParamMappings(lastCommittedRef.current, nextParams, workflowParams)
+        if (withInitialTemplates !== lastCommittedRef.current) {
+          lastCommittedRef.current = withInitialTemplates
+          setTemplates(withInitialTemplates.paramTemplates)
+          setBindings(withInitialTemplates.paramBindings ?? {})
+          onChange(withInitialTemplates)
+        }
+      } catch (error) {
+        if (cancelled) return
         setChildParams([])
-        setSelectedWorkflowMissing(true)
-        return
-      }
-      setSelectedWorkflowMissing(false)
-      const nextParams = child?.params ?? []
-      setChildParams(nextParams)
-      const withInitialTemplates = buildInitialParamMappings(lastCommittedRef.current, nextParams, workflowParams)
-      if (withInitialTemplates !== lastCommittedRef.current) {
-        lastCommittedRef.current = withInitialTemplates
-        setTemplates(withInitialTemplates.paramTemplates)
-        setBindings(withInitialTemplates.paramBindings ?? {})
-        onChange(withInitialTemplates)
+        setSelectedWorkflowError(error instanceof Error ? error.message : "子工作流无法加载")
       }
     })()
     return () => { cancelled = true }
@@ -74,7 +80,7 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
     () => workflows.find((workflow) => workflow.id === config.workflowId)?.name,
     [workflows, config.workflowId],
   )
-  const workflowSummary = selectedWorkflowMissing ? "子工作流不存在" : selectedWorkflowName
+  const workflowSummary = selectedWorkflowError ? "子工作流不可用" : selectedWorkflowName
 
   const commit = (patch: Partial<WorkflowCallNodeConfig>) => {
     const next = { ...lastCommittedRef.current, ...patch }
@@ -117,12 +123,14 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
             </SelectTrigger>
             <SelectContent>
               {workflows.map((workflow) => (
-                <SelectItem key={workflow.id} value={workflow.id}>{workflow.name}</SelectItem>
+                <SelectItem key={workflow.id} value={workflow.id} disabled={Boolean(workflow.loadError)}>
+                  {workflow.name}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {selectedWorkflowMissing ? (
-            <p className="text-xs text-destructive">子工作流不存在</p>
+          {selectedWorkflowError ? (
+            <p className="text-xs text-destructive">{selectedWorkflowError}</p>
           ) : null}
         </div>
       </CollapsibleSection>
