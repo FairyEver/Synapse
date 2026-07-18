@@ -220,10 +220,16 @@ function extractLooseTemplateNames(template: string): string[] {
 function buildInitialParamMappings(config: WorkflowCallNodeConfig, childParams: WorkflowParam[], workflowParams: WorkflowParam[]): WorkflowCallNodeConfig {
   const parentParamsByName = new Map(workflowParams.map((param) => [param.name, param]))
   const variableNames = new Set(config.variables.map((variable) => variable.name).filter(Boolean))
-  const nextTemplates = { ...config.paramTemplates }
-  const nextBindings = { ...(config.paramBindings ?? {}) }
+  const childParamNames = new Set(childParams.map((param) => param.name))
+  const nextTemplates = Object.fromEntries(
+    Object.entries(config.paramTemplates).filter(([name]) => childParamNames.has(name)),
+  )
+  const nextBindings = Object.fromEntries(
+    Object.entries(config.paramBindings ?? {}).filter(([name]) => childParamNames.has(name)),
+  )
   const nextVariables: VariableBinding[] = [...config.variables]
-  let changed = false
+  let changed = Object.keys(nextTemplates).length !== Object.keys(config.paramTemplates).length
+    || Object.keys(nextBindings).length !== Object.keys(config.paramBindings ?? {}).length
 
   for (const param of childParams) {
     if (nextTemplates[param.name] !== undefined || nextBindings[param.name] !== undefined) continue

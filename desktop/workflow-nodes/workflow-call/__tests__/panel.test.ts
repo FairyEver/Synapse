@@ -122,6 +122,36 @@ describe("WorkflowCallNodePanel", () => {
     expect(container.querySelector<HTMLTextAreaElement>("textarea")?.value).toBe("请总结 {{topic}}")
   })
 
+  it("removes mappings that do not belong to the selected child workflow", async () => {
+    mockWorkflowList([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    workflowGet.mockResolvedValue({
+      id: "child",
+      name: "子工作流",
+      version: "v1",
+      createdAt: 0,
+      updatedAt: 0,
+      params: [{ name: "topic", type: "text", default: null }],
+      nodes: [],
+      edges: [],
+    })
+    const onChange = vi.fn()
+
+    renderPanel({
+      workflowId: "child",
+      variables: [],
+      paramTemplates: { topic: "{{topic}}", stale_text: "旧模板" },
+      paramBindings: {
+        stale_file: { mode: "value", source: { type: "static", value: "/tmp/old.txt" } },
+      },
+    }, onChange)
+    await flushEffects()
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      paramTemplates: { topic: "{{topic}}" },
+      paramBindings: {},
+    }))
+  })
+
   it("does not list the current workflow as a child option", async () => {
     mockWorkflowList([
       { id: "parent", name: "父工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 },
