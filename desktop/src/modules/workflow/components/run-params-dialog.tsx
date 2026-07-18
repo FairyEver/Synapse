@@ -169,8 +169,8 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
           const paths = resourcePathValues(values[param.name])
           parsed[param.name] = paths.map((resourcePath) => toLocalPathParam(param.type as WorkflowResourceEntryType, resourcePath))
         } else {
-          const resourcePath = stringParamValue(values[param.name]).trim()
-          parsed[param.name] = resourcePath ? toLocalPathParam(param.type, resourcePath) : param.default
+          const resourcePath = stringParamValue(values[param.name])
+          parsed[param.name] = resourcePath.trim() ? toLocalPathParam(param.type, resourcePath) : param.default
         }
       } else if (param.type === "option") {
         const trimmed = stringParamValue(values[param.name]).trim()
@@ -826,6 +826,6 @@ function toLocalPathParam(entryType: WorkflowResourceEntryType, rawPath: string)
   return {
     kind: "local_path",
     entryType,
-    path: rawPath.trim(),
+    path: rawPath,
   }
 }

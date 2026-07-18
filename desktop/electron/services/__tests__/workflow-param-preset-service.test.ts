@@ -112,6 +112,24 @@ describe("WorkflowParamPresetService", () => {
     expect(await service.list("workflow-a")).toEqual([expect.objectContaining({ values: saved.values })])
   })
 
+  it.skipIf(process.platform === "win32")("preserves whitespace when validating adjacent multi-resource paths", async () => {
+    const service = createService()
+    const root = mkdtempSync(path.join(os.tmpdir(), "wf-param-resources-"))
+    roots.push(root)
+    const plainPath = path.join(root, "input.txt")
+    const spacedPath = `${plainPath} `
+    writeFileSync(plainPath, "plain")
+    writeFileSync(spacedPath, "spaced")
+
+    const saved = await service.save({
+      workflowId: "workflow-a",
+      name: "相邻文件名",
+      values: { files: [plainPath, spacedPath] },
+    })
+
+    expect(saved.values).toEqual({ files: [plainPath, spacedPath] })
+  })
+
   it("lists presets without resource IO and resolves current types on demand", async () => {
     const service = createService()
     const root = mkdtempSync(path.join(os.tmpdir(), "wf-param-resources-"))

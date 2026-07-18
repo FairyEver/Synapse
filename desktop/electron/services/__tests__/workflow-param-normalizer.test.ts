@@ -72,6 +72,30 @@ describe("normalizeWorkflowRunParams", () => {
     expect(result.stringValues).toEqual({ input_file: filePath, workspace_dir: dirPath })
   })
 
+  it.skipIf(process.platform === "win32")("preserves whitespace in local resource paths and keeps adjacent paths distinct", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-workflow-params-"))
+    const plainPath = path.join(root, "input.txt")
+    const spacedPath = `${plainPath} `
+    await writeFile(plainPath, "plain")
+    await writeFile(spacedPath, "spaced")
+
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "input", type: "file", default: null },
+      { name: "inputs", type: "file", default: null, allowMultiple: true },
+    ]), {
+      input: spacedPath,
+      inputs: [plainPath, { kind: "local_path", entryType: "file", path: spacedPath }],
+    })
+
+    expect(result.errors).toEqual([])
+    expect(result.params.input).toEqual({ kind: "local_path", entryType: "file", path: spacedPath })
+    expect(result.params.inputs).toEqual([
+      { kind: "local_path", entryType: "file", path: plainPath },
+      { kind: "local_path", entryType: "file", path: spacedPath },
+    ])
+    expect(result.stringValues.input).toBe(spacedPath)
+  })
+
   it("rejects a directory passed to a file parameter", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-workflow-params-"))
     const result = await normalizeWorkflowRunParams(def([{ name: "input", type: "file", default: null }]), { input: root })

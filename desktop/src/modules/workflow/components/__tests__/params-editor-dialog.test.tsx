@@ -74,8 +74,8 @@ describe("ParamsEditorDialog", () => {
         <ParamsEditorDialog
           open
           params={[
-            { name: "input_file", type: "file", default: { kind: "local_path", entryType: "file", path: "/tmp/input.txt" } },
-            { name: "input_dir", type: "directory", default: { kind: "local_path", entryType: "directory", path: "/tmp/work" } },
+            { name: "input_file", type: "file", default: { kind: "local_path", entryType: "file", path: "/tmp/input.txt " } },
+            { name: "input_dir", type: "directory", default: { kind: "local_path", entryType: "directory", path: "/tmp/work " } },
           ]}
           onChange={onChange}
           onClose={onClose}
@@ -91,8 +91,8 @@ describe("ParamsEditorDialog", () => {
     })
 
     expect(onChange).toHaveBeenCalledWith([
-      { name: "input_file", type: "file", default: { kind: "local_path", entryType: "file", path: "/tmp/input.txt" } },
-      { name: "input_dir", type: "directory", default: { kind: "local_path", entryType: "directory", path: "/tmp/work" } },
+      { name: "input_file", type: "file", default: { kind: "local_path", entryType: "file", path: "/tmp/input.txt " } },
+      { name: "input_dir", type: "directory", default: { kind: "local_path", entryType: "directory", path: "/tmp/work " } },
     ])
     expect(onClose).toHaveBeenCalledTimes(1)
   })

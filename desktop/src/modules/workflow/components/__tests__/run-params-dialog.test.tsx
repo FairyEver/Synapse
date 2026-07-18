@@ -413,6 +413,27 @@ describe("RunParamsDialog", () => {
     )
   })
 
+  it("preserves whitespace and keeps adjacent selected resource paths distinct", async () => {
+    mocks.chooseParamFiles.mockResolvedValue(["/tmp/input.txt", "/tmp/input.txt "])
+    const { onConfirm } = await renderDialog({
+      params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
+    })
+
+    await act(async () => { clickButton("选择文件") })
+    await act(async () => { clickButton("运行") })
+
+    expect(mocks.toast).not.toHaveBeenCalled()
+    expect(onConfirm).toHaveBeenCalledWith(
+      {
+        input_files: [
+          { kind: "local_path", entryType: "file", path: "/tmp/input.txt" },
+          { kind: "local_path", entryType: "file", path: "/tmp/input.txt " },
+        ],
+      },
+      { input_files: ["/tmp/input.txt", "/tmp/input.txt "] },
+    )
+  })
+
   it("associates multi-resource controls with their parameter label", async () => {
     await renderDialog({
       params: [{ name: "input_files", description: "输入资料", type: "file", default: null, allowMultiple: true }],

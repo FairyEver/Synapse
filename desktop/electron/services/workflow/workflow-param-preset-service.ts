@@ -170,7 +170,7 @@ async function validateAndClonePresetValues(
     for (const resourcePath of value) {
       if (!resourcePath.trim()) throw new Error(`Preset param ${paramName} contains an empty path`)
       try {
-        const resource = await resolveWorkflowLocalResourceIdentity(resourcePath.trim())
+        const resource = await resolveWorkflowLocalResourceIdentity(resourcePath)
         identities.push(resource.identity)
       } catch {
         throw new Error(`Preset param ${paramName} contains a path that does not exist or cannot be accessed`)

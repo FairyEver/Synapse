@@ -118,6 +118,6 @@ export function MultiResourcePathField({ entryType, paths, onChange, disabled, l
 }
 
 function resourcePathIdentity(resourcePath: string): string {
-  const normalized = resourcePath.trim().replaceAll("\\", "/")
+  const normalized = resourcePath.replaceAll("\\", "/")
   return getRendererPlatform() === "win32" ? normalized.toLocaleLowerCase() : normalized
 }

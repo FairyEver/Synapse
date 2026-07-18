@@ -471,13 +471,12 @@ function textDefaultValue(value: WorkflowParamDefault): string {
 }
 
 function toLocalPathDefault(entryType: WorkflowResourceEntryType, rawPath: string): WorkflowParamDefault {
-  const path = rawPath.trim()
-  if (!path) return null
-  return { kind: "local_path", entryType, path }
+  if (!rawPath.trim()) return null
+  return { kind: "local_path", entryType, path: rawPath }
 }
 
 function toLocalPathRef(entryType: WorkflowResourceEntryType, rawPath: string): WorkflowResourceRef {
-  return { kind: "local_path", entryType, path: rawPath.trim() }
+  return { kind: "local_path", entryType, path: rawPath }
 }
 
 function normalizeOptionValues(options?: readonly string[]): string[] {

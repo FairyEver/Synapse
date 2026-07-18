@@ -173,9 +173,8 @@ function normalizeResourceInput(
   const entryType = resourceEntryType(param)
   if (!entryType) return paramError(param, "必须是文件或文件夹参数")
   if (typeof raw === "string") {
-    const trimmed = raw.trim()
-    if (!path.isAbsolute(trimmed)) return itemIndex === undefined ? paramError(param, "必须是绝对路径") : paramItemError(param, itemIndex, "必须是绝对路径")
-    return { value: { kind: "local_path", entryType, path: path.normalize(trimmed) } }
+    if (!raw.trim() || !path.isAbsolute(raw)) return itemIndex === undefined ? paramError(param, "必须是绝对路径") : paramItemError(param, itemIndex, "必须是绝对路径")
+    return { value: { kind: "local_path", entryType, path: path.normalize(raw) } }
   }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return itemIndex === undefined ? paramError(param, "必须是资源引用") : paramItemError(param, itemIndex, "必须是资源引用")
@@ -191,11 +190,10 @@ function normalizeResourceInput(
   }
   const resourceRef = ref as WorkflowResourceRef
   if (resourceRef.kind !== "local_path") return { value: resourceRef }
-  const trimmed = resourceRef.path.trim()
-  if (!path.isAbsolute(trimmed)) {
+  if (!path.isAbsolute(resourceRef.path)) {
     return itemIndex === undefined ? paramError(param, "必须是绝对路径") : paramItemError(param, itemIndex, "必须是绝对路径")
   }
-  return { value: { ...resourceRef, path: path.normalize(trimmed) } }
+  return { value: { ...resourceRef, path: path.normalize(resourceRef.path) } }
 }
 
 function isWorkflowResourceRef(value: Record<string, unknown>): boolean {

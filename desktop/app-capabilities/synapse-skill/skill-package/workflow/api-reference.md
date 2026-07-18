@@ -366,7 +366,7 @@ Execute a workflow with parameters.
 { "kind": "local_path", "entryType": "file", "path": "/absolute/path/to/file.txt" }
 ```
 
-The path must exist and match the param kind before the run starts. For a file/directory param with `allowMultiple: true`, pass an ordered, non-empty array of at most 100 unique items; each item may be an absolute local path string or matching resource object. One item is still passed as an array. Any invalid item rejects the whole run and reports its array index. Remote or Drive-backed resource kinds should remain explicit objects for future compatibility; unsupported kinds are rejected instead of silently stringified.
+The path must exist and match the param kind before the run starts. Leading and trailing whitespace is part of a local path and is preserved; do not trim it. For a file/directory param with `allowMultiple: true`, pass an ordered, non-empty array of at most 100 unique items; each item may be an absolute local path string or matching resource object. One item is still passed as an array. Any invalid item rejects the whole run and reports its array index. Remote or Drive-backed resource kinds should remain explicit objects for future compatibility; unsupported kinds are rejected instead of silently stringified.
 
 ### app_workflow_run_disable
 
