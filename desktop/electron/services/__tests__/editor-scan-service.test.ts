@@ -374,6 +374,28 @@ describe("editor scan quick publish", () => {
     expect(result.duplicateSkillNames).toEqual(["reviewer"])
   })
 
+  it("can preserve duplicate Skill candidates for installation status checks", async () => {
+    const root = await createTempDir()
+    const primaryDir = path.join(root, ".agents", "skills")
+    const compatDir = path.join(root, ".codex", "skills")
+    await mkdir(path.join(primaryDir, "reviewer"), { recursive: true })
+    await mkdir(path.join(compatDir, "reviewer"), { recursive: true })
+    await writeFile(path.join(primaryDir, "reviewer", "SKILL.md"), "# Primary Reviewer\n")
+    await writeFile(path.join(compatDir, "reviewer", "SKILL.md"), "# Compat Reviewer\n")
+
+    const result = await scanSkillDirectories(
+      [primaryDir, compatDir],
+      undefined,
+      { preserveDuplicateNames: true },
+    )
+
+    expect(result.skills.map((skill) => skill.path)).toEqual([
+      path.join(primaryDir, "reviewer"),
+      path.join(compatDir, "reviewer"),
+    ])
+    expect(result.duplicateSkillNames).toEqual(["reviewer"])
+  })
+
   it("keeps global scans non-fatal when an editor detection directory is inaccessible", async () => {
     const root = await createTempDir()
     const blockedHome = path.join(root, "blocked-home")

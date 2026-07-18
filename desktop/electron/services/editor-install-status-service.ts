@@ -36,6 +36,17 @@ function findByContentIdOrName<T extends { synapseContentId: string | null; name
   )
 }
 
+function findSkillByContentIdOrName(
+  items: EditorScanSkillItem[],
+  payload: SynapseResolveEditorInstallStatusPayload,
+): EditorScanSkillItem | null {
+  return (
+    items.find((item) => areSkillContentIdsEquivalent(item.synapseContentId, payload.contentId))
+    ?? (payload.contentName ? items.find((item) => item.name === payload.contentName) : undefined)
+    ?? null
+  )
+}
+
 function statusFromRule(
   item: EditorScanRuleItem | null,
   payload: SynapseResolveEditorInstallStatusPayload,
@@ -127,7 +138,7 @@ function statusFromScanEntry(
     return statusFromRule(findByContentIdOrName(entry.rules, payload), payload)
   }
 
-  return statusFromSkill(findByContentIdOrName(entry.skills, payload), payload)
+  return statusFromSkill(findSkillByContentIdOrName(entry.skills, payload), payload)
 }
 
 function createResolvePayload(
@@ -187,7 +198,7 @@ export class EditorInstallStatusService {
           ?? (config.globalSkillsPath ? [config.globalSkillsPath] : [])
         const [target, scan] = await Promise.all([
           editorAdapterService.resolveTarget(createResolvePayload(payload, adapter.id, "global")),
-          scanSkillDirectories(globalSkillPaths),
+          scanSkillDirectories(globalSkillPaths, undefined, { preserveDuplicateNames: true }),
         ])
         if (scan.skillScanError) {
           throw new Error(`${adapter.label} 全局 Skill 检测失败：${scan.skillScanError}`)
@@ -198,7 +209,7 @@ export class EditorInstallStatusService {
           editorLabel: adapter.label,
           scope: "global",
           target,
-          scanStatus: statusFromSkill(findByContentIdOrName(scan.skills, payload), payload),
+          scanStatus: statusFromSkill(findSkillByContentIdOrName(scan.skills, payload), payload),
         })
       } catch (error) {
         return {

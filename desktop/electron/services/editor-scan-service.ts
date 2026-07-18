@@ -587,6 +587,7 @@ async function scanGlobalEditor(ep: EditorScanPaths, signal?: AbortSignal): Prom
 async function scanSkillDirectories(
   dirPaths: readonly string[],
   signal?: AbortSignal,
+  options: { readonly preserveDuplicateNames?: boolean } = {},
 ): Promise<{ skills: EditorScanSkillItem[]; duplicateSkillNames: string[]; skillScanError?: string }> {
   const skills: EditorScanSkillItem[] = []
   const seenNames = new Set<string>()
@@ -601,7 +602,7 @@ async function scanSkillDirectories(
     for (const item of result.items) {
       if (seenNames.has(item.name)) {
         duplicateNames.add(item.name)
-        continue
+        if (!options.preserveDuplicateNames) continue
       }
 
       seenNames.add(item.name)

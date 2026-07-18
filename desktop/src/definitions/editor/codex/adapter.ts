@@ -1,7 +1,10 @@
 import path from "node:path"
 import type { EditorAdapter } from "../../main-types"
 import { resolveSkillSlug } from "../../../../electron/services/editor-adapters/skill-slug"
-import { checkSkillNameConflict } from "../../../../electron/services/editor-adapters/skill-identity"
+import {
+  checkSkillNameConflict,
+  findSkillDirectoryByContentId,
+} from "../../../../electron/services/editor-adapters/skill-identity"
 import {
   createConflictTarget,
   createReadyTarget,
@@ -84,6 +87,20 @@ const codexAdapter: EditorAdapter = {
         })
       }
       case "skill": {
+        for (const skillRoot of resolveCodexGlobalSkillPaths()) {
+          const existingOwnedPath = await findSkillDirectoryByContentId(skillRoot, contentId)
+          if (existingOwnedPath) {
+            return createReadyTarget({
+              adapter: codexAdapter,
+              contentType,
+              scope: "global",
+              targetKind: "directory",
+              targetPath: existingOwnedPath,
+              ownedTargetExists: true,
+              targetExists: true,
+            })
+          }
+        }
         const parentDirectoryPath = resolveCodexGlobalSkillsPath()
         const slug = resolveSkillSlug(skillName, skillTitle, contentId)
 

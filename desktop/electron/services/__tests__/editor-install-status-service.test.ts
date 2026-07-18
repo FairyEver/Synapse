@@ -105,7 +105,11 @@ describe("EditorInstallStatusService", () => {
       projects: [],
     })
 
-    expect(mocks.scanSkillDirectories).toHaveBeenCalledWith(["/global/skills"])
+    expect(mocks.scanSkillDirectories).toHaveBeenCalledWith(
+      ["/global/skills"],
+      undefined,
+      { preserveDuplicateNames: true },
+    )
     expect(mocks.scanAll).not.toHaveBeenCalled()
     expect(result.entries).toEqual([
       expect.objectContaining({ editorId: "codex", scope: "global", status: "needs_update" }),
@@ -161,6 +165,47 @@ describe("EditorInstallStatusService", () => {
     })
 
     expect(result.entries[0]?.status).toBe(expectedStatus)
+  })
+
+  it("prefers a matching installation over an earlier external same-name Skill", async () => {
+    mocks.scanSkillDirectories.mockResolvedValue({
+      skills: [
+        {
+          name: "synapse-skill",
+          path: "/primary/synapse-skill",
+          source: "external",
+          synapseContentId: null,
+          repositoryVersion: null,
+          sourceFingerprint: null,
+          preview: "External Skill",
+          fileCount: 1,
+          trash: { mode: "path" },
+        },
+        {
+          name: "synapse-skill",
+          path: "/compat/synapse-skill",
+          source: "synapse",
+          synapseContentId: "builtin__skill__synapse-skill",
+          repositoryVersion: "system",
+          sourceFingerprint: "sha256:old",
+          preview: "Synapse Skill",
+          fileCount: 2,
+          trash: { mode: "path" },
+        },
+      ],
+      duplicateSkillNames: ["synapse-skill"],
+    })
+
+    const result = await new EditorInstallStatusService().resolveGlobalSkillInstallations({
+      contentType: "skill",
+      contentId: "synapse-skill",
+      contentName: "synapse-skill",
+      title: "Synapse Skill",
+      sourceFingerprint: "sha256:new",
+      projects: [],
+    })
+
+    expect(result.entries[0]?.status).toBe("needs_update")
   })
 
   it("marks only the editor unavailable when its Skill root cannot be scanned", async () => {
