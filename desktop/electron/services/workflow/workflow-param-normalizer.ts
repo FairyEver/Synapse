@@ -15,7 +15,14 @@ export async function validateWorkflowResourceDefaults(
 ): Promise<ValidationError[]> {
   const errors: ValidationError[] = []
   for (const param of def.params) {
-    if (param.allowMultiple !== true || !Array.isArray(param.default)) continue
+    if (param.allowMultiple !== true) {
+      const defaultValue = param.default
+      if (!defaultValue || typeof defaultValue !== "object" || Array.isArray(defaultValue) || defaultValue.kind !== "local_path") continue
+      const statResult = await statLocalResource(param, defaultValue.path)
+      if ("error" in statResult) errors.push(statResult.error)
+      continue
+    }
+    if (!Array.isArray(param.default)) continue
     const identities = new Set<string>()
     for (const [index, value] of param.default.entries()) {
       if (value?.kind !== "local_path") continue

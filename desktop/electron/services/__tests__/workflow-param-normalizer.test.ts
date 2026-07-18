@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
-import { normalizeWorkflowRunParams } from "../workflow/workflow-param-normalizer"
+import { normalizeWorkflowRunParams, validateWorkflowResourceDefaults } from "../workflow/workflow-param-normalizer"
 
 function def(params: WorkflowDefinition["params"]): WorkflowDefinition {
   return {
@@ -19,6 +19,22 @@ function def(params: WorkflowDefinition["params"]): WorkflowDefinition {
 }
 
 describe("normalizeWorkflowRunParams", () => {
+  it("validates single local resource defaults before save", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-workflow-params-"))
+    const filePath = path.join(root, "input.txt")
+    const missingPath = path.join(root, "missing.txt")
+    await writeFile(filePath, "hello")
+
+    await expect(validateWorkflowResourceDefaults(def([
+      { name: "valid_file", type: "file", default: { kind: "local_path", entryType: "file", path: filePath } },
+      { name: "missing_file", type: "file", default: { kind: "local_path", entryType: "file", path: missingPath } },
+      { name: "wrong_type", type: "file", default: { kind: "local_path", entryType: "file", path: root } },
+    ]))).resolves.toEqual([
+      { type: "invalid_config", message: "参数「missing_file」路径不存在或不可访问" },
+      { type: "invalid_config", message: "参数「wrong_type」必须是文件" },
+    ])
+  })
+
   it("rejects undeclared params and excludes them from runtime and snapshot values", async () => {
     const result = await normalizeWorkflowRunParams(def([
       { name: "topic", type: "text", default: "默认主题" },

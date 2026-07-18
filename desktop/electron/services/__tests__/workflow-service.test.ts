@@ -305,6 +305,24 @@ describe("WorkflowService", () => {
     })
     expect(await svc.get(def.id)).toBeNull()
   })
+  it("rejects an inaccessible single-resource default before persisting", async () => {
+    const { svc } = createRepo()
+    const def = {
+      ...makeDef(),
+      params: [{
+        name: "input",
+        type: "file",
+        default: { kind: "local_path", entryType: "file", path: path.join(tmpDir(), "missing.txt") },
+      }],
+    } satisfies WorkflowDefinition
+
+    const result = await svc.save(def)
+
+    expect(result).toEqual({
+      errors: [{ type: "invalid_config", message: "参数「input」路径不存在或不可访问" }],
+    })
+    expect(await svc.get(def.id)).toBeNull()
+  })
   it("rejects workflows without a valid id before persisting", async () => {
     const { svc } = createRepo()
     const def = { ...makeDef(), id: "" }
