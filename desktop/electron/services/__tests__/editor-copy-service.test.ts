@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -259,6 +259,43 @@ describe("EditorCopyService", () => {
         resource: targetPath,
       }),
     ]))
+  })
+
+  it.skipIf(process.platform === "win32")("rejects Skill clones that contain descendant symlinks", async () => {
+    const root = await createTempRoot()
+    const sourceProjectPath = path.join(root, "source-project")
+    const targetProjectPath = path.join(root, "target-project")
+    const sourcePath = path.join(sourceProjectPath, ".claude", "skills", "review-skill")
+    const targetPath = path.join(targetProjectPath, ".agents", "skills", "review-skill")
+    const outsidePath = path.join(root, "outside-secret.txt")
+    await mkdir(path.join(sourcePath, "scripts"), { recursive: true })
+    await mkdir(targetProjectPath, { recursive: true })
+    await writeFile(path.join(sourcePath, "SKILL.md"), "# Review Skill\n", "utf8")
+    await writeFile(outsidePath, "secret\n", "utf8")
+    await symlink(outsidePath, path.join(sourcePath, "scripts", "linked-secret.txt"))
+    mockConfiguredProjects([sourceProjectPath, targetProjectPath])
+
+    const auditSink = new InMemoryAuditSink()
+    const service = new EditorCopyService()
+    await expect(service.copy({
+      source: createSkillSource(sourcePath),
+      targetEditorId: "codex",
+      targetProjectPath,
+      targetScope: "project",
+    }, {
+      actor: { kind: "user" },
+      auditSink,
+      permissionGuard: createPermissionGuard(),
+    })).rejects.toThrow("Skill 复制源包含符号链接")
+
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8"))
+      .rejects.toMatchObject({ code: "ENOENT" })
+    expect(auditSink.list()).toContainEqual(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "failed",
+      resource: sourcePath,
+      metadata: expect.objectContaining({ reason: "symlink" }),
+    }))
   })
 
   it("requires confirmation and replaces an existing same-Skill instance with the source runtime env", async () => {

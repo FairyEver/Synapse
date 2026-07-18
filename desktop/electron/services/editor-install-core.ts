@@ -1,5 +1,5 @@
 import { app } from "electron"
-import { cp, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises"
+import { cp, lstat, mkdir, opendir, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
@@ -59,6 +59,9 @@ import {
 const logger = createMainLogger("service.editor-install-core")
 
 const MAX_SKILL_BACKUP_PATH_ATTEMPTS = 1000
+const MAX_SKILL_CLONE_ENTRIES = 10_000
+const MAX_SKILL_CLONE_DIRECTORIES = 1_000
+const MAX_SKILL_CLONE_DEPTH = 32
 const SKILL_CLONE_IGNORED_ENTRY_NAMES = new Set([".git", ".hg", ".svn"])
 
 export type PreparedContentInstallSourceProvider = {
@@ -163,6 +166,53 @@ function normalizeSkillCloneTarget(
   return target
 }
 
+type SkillCloneSourceFailureReason = "depth-limit" | "directory-limit" | "entry-limit" | "special-entry" | "symlink"
+
+class SkillCloneSourceError extends Error {
+  constructor(message: string, readonly reason: SkillCloneSourceFailureReason) {
+    super(message)
+    this.name = "SkillCloneSourceError"
+  }
+}
+
+async function assertSkillCloneTreeSafe(sourceDirectoryPath: string): Promise<void> {
+  const queue: Array<{ readonly directoryPath: string; readonly depth: number }> = [{
+    directoryPath: sourceDirectoryPath,
+    depth: 0,
+  }]
+  let directoryCount = 1
+  let entryCount = 0
+
+  for (const current of queue) {
+    const directory = await opendir(current.directoryPath)
+    for await (const entry of directory) {
+      if (SKILL_CLONE_IGNORED_ENTRY_NAMES.has(entry.name)) continue
+      entryCount += 1
+      if (entryCount > MAX_SKILL_CLONE_ENTRIES) {
+        throw new SkillCloneSourceError("Skill 复制源条目过多，未执行复制。", "entry-limit")
+      }
+      if (entry.isSymbolicLink()) {
+        throw new SkillCloneSourceError("Skill 复制源包含符号链接，未执行复制。", "symlink")
+      }
+      if (entry.isDirectory()) {
+        const depth = current.depth + 1
+        if (depth > MAX_SKILL_CLONE_DEPTH) {
+          throw new SkillCloneSourceError("Skill 复制源目录层级过深，未执行复制。", "depth-limit")
+        }
+        directoryCount += 1
+        if (directoryCount > MAX_SKILL_CLONE_DIRECTORIES) {
+          throw new SkillCloneSourceError("Skill 复制源目录过多，未执行复制。", "directory-limit")
+        }
+        queue.push({ directoryPath: path.join(current.directoryPath, entry.name), depth })
+        continue
+      }
+      if (!entry.isFile()) {
+        throw new SkillCloneSourceError("Skill 复制源包含不支持的文件类型，未执行复制。", "special-entry")
+      }
+    }
+  }
+}
+
 async function copySkillInstanceDirectory(
   sourceDirectoryPath: string,
   stagingDirectoryPath: string,
@@ -172,10 +222,24 @@ async function copySkillInstanceDirectory(
     throw new Error("Skill 复制源必须是普通目录。")
   }
 
+  await assertSkillCloneTreeSafe(sourceDirectoryPath)
+
   await cp(sourceDirectoryPath, stagingDirectoryPath, {
     dereference: false,
-    filter: (sourcePath) => sourcePath === sourceDirectoryPath
-      || !SKILL_CLONE_IGNORED_ENTRY_NAMES.has(path.basename(sourcePath)),
+    filter: async (sourcePath) => {
+      if (
+        sourcePath !== sourceDirectoryPath
+        && SKILL_CLONE_IGNORED_ENTRY_NAMES.has(path.basename(sourcePath))
+      ) return false
+      const entry = await lstat(sourcePath)
+      if (entry.isSymbolicLink()) {
+        throw new SkillCloneSourceError("Skill 复制源包含符号链接，未执行复制。", "symlink")
+      }
+      if (!entry.isDirectory() && !entry.isFile()) {
+        throw new SkillCloneSourceError("Skill 复制源包含不支持的文件类型，未执行复制。", "special-entry")
+      }
+      return true
+    },
     preserveTimestamps: true,
     recursive: true,
     verbatimSymlinks: true,
@@ -379,7 +443,10 @@ export class EditorInstallCore {
               security,
               payload.source.itemPath,
               "failed",
-              readAuditMetadata,
+              {
+                ...readAuditMetadata,
+                ...(error instanceof SkillCloneSourceError ? { reason: error.reason } : {}),
+              },
             )
             throw error
           }
