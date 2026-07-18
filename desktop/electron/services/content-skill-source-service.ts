@@ -4,9 +4,9 @@ import { lstat, open, opendir, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
 import {
-  SKILL_ENV_EXAMPLE_PATH,
   assertNoRuntimeSkillEnvPath,
   assertUniqueContentAttachmentPaths,
+  isRootSkillEnvExamplePath,
   normalizeContentAttachmentPath,
 } from "../../src/lib/content-attachments"
 import type { SynapseCreateSkillFilePayload } from "../../src/types/content"
@@ -260,7 +260,7 @@ async function collectSkillFiles(
 
   for (const name of children) {
     const normalizedHiddenName = name.toLowerCase()
-    const isRootEnvExample = currentDir === baseDir && normalizedHiddenName === SKILL_ENV_EXAMPLE_PATH
+    const isRootEnvExample = currentDir === baseDir && isRootSkillEnvExamplePath(name)
     if (
       !isRootEnvExample
       && (normalizedHiddenName === ".env" || normalizedHiddenName.startsWith(".env."))

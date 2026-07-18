@@ -78,6 +78,8 @@ describe("normalizeContentAttachmentPath", () => {
       .toThrow("运行时 .env")
     expect(() => assertNoPublishRuntimeEnvPath(["nested/.env.example"]))
       .toThrow("运行时 .env")
+    expect(() => assertNoPublishRuntimeEnvPath([".ENV.EXAMPLE"]))
+      .toThrow("运行时 .env")
   })
 
   it("allows only root .env.example in install attachments", () => {
@@ -88,6 +90,8 @@ describe("normalizeContentAttachmentPath", () => {
     expect(() => assertNoRuntimeSkillEnvPath(["nested/.ENV.production"]))
       .toThrow("Skill 源目录不能包含 .env")
     expect(() => assertNoRuntimeSkillEnvPath(["nested/.env.example"]))
+      .toThrow("Skill 源目录不能包含 .env")
+    expect(() => assertNoRuntimeSkillEnvPath([".ENV.EXAMPLE"]))
       .toThrow("Skill 源目录不能包含 .env")
   })
 })

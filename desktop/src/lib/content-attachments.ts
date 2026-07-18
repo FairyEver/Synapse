@@ -64,9 +64,13 @@ function assertNoPublishRuntimeEnvPath(originalNames: readonly string[]): void {
   }
 }
 
+function isRootSkillEnvExamplePath(originalName: string): boolean {
+  return originalName === SKILL_ENV_EXAMPLE_PATH
+}
+
 function isRuntimeSkillEnvPath(originalName: string): boolean {
+  if (isRootSkillEnvExamplePath(originalName)) return false
   const normalized = normalizeContentAttachmentPath(originalName).toLowerCase()
-  if (normalized === SKILL_ENV_EXAMPLE_PATH) return false
   const basename = normalized.split("/").at(-1) ?? ""
   return basename === SKILL_RUNTIME_ENV_PATH || basename.startsWith(`${SKILL_RUNTIME_ENV_PATH}.`)
 }
@@ -95,6 +99,7 @@ export {
   assertNoRuntimeSkillEnvPath,
   assertNoPublishRuntimeEnvPath,
   assertUniqueContentAttachmentPaths,
+  isRootSkillEnvExamplePath,
   normalizeContentAttachmentPath,
   normalizeContentAttachmentSegment,
   normalizeContentFileNameSegment,

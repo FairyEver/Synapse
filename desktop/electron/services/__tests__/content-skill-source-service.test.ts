@@ -135,7 +135,7 @@ describe("content skill source service", () => {
     expect(Buffer.from(draft.files[0]?.bytes ?? []).toString("utf8")).toBe("hello")
   })
 
-  it.each([".ENV", ".EnV", ".env.local", ".ENV.production"])(
+  it.each([".ENV", ".EnV", ".env.local", ".ENV.production", ".ENV.EXAMPLE"])(
     "rejects a root runtime %s before hidden-file filtering",
     async (runtimeEnvName) => {
       const root = await createTempRoot()
@@ -146,6 +146,18 @@ describe("content skill source service", () => {
         .rejects.toThrow("Skill 源目录不能包含 .env，请只提交 .env.example。")
     },
   )
+
+  it("excludes a case-variant env example from published source without reading it", async () => {
+    const root = await createTempRoot()
+    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+    await writeText(path.join(root, ".ENV.EXAMPLE"), "SHOULD_NOT_BE_READ=runtime-only")
+
+    const draft = await readSkillDraftFromDirectory(root, undefined, { mode: "publish" })
+
+    expect(draft.files).toEqual([])
+    expect(draft.sourceImportSummary.runtimeEnvExcluded).toBe(true)
+    expect(JSON.stringify(draft)).not.toContain("SHOULD_NOT_BE_READ")
+  })
 
   it.skipIf(process.platform === "win32")("publishes without reading runtime env files and reports excluded entries", async () => {
     const root = await createTempRoot()
