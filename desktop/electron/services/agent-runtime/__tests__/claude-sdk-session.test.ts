@@ -960,6 +960,32 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("canUseTool rejects AskUserQuestion options with duplicate labels", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory)
+    const canUseTool = getOptions().canUseTool as (
+      toolName: string,
+      input: Record<string, unknown>,
+      context: { signal: AbortSignal },
+    ) => Promise<PermissionResult>
+
+    await expect(canUseTool("AskUserQuestion", {
+      questions: [{
+        question: "该怎么处理？",
+        options: [
+          { label: "重试", description: "重新处理" },
+          { label: "重试", description: "再次尝试" },
+        ],
+        multiSelect: true,
+      }],
+    }, {
+      signal: new AbortController().signal,
+    })).resolves.toEqual({
+      behavior: "deny",
+      message: "用户确认请求格式无效，已停止本次操作。",
+    })
+  })
+
   it("rejects stale permission responses when the SDK pending request is missing", async () => {
     const { factory } = createQueryFactory()
     const logger = { warn: vi.fn() }

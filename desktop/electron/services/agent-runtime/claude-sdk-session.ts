@@ -948,10 +948,12 @@ function parseAskUserQuestions(input: Record<string, unknown>): readonly AgentUs
 function parseAskUserQuestionOptions(value: unknown): readonly AgentUserQuestionOption[] | undefined {
   if (!Array.isArray(value) || value.length < 2 || value.length > 4) return undefined
   const options: AgentUserQuestionOption[] = []
+  const labels = new Set<string>()
   for (const rawOption of value) {
     const record = asRecord(rawOption)
     const label = stringValue(record?.label)
-    if (!label) return undefined
+    if (!label || labels.has(label)) return undefined
+    labels.add(label)
     const description = stringValue(record?.description)
     options.push({
       label,
