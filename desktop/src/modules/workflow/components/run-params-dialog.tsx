@@ -39,6 +39,7 @@ import type {
 } from "@/types/workflow"
 import { MultiResourcePathField } from "./multi-resource-path-field"
 import { useWorkflowResourcePicker } from "../hooks/use-workflow-resource-picker"
+import type { WorkflowLastRunValues } from "../lib/run-param-last-values"
 
 const NO_PRESET_VALUE = "__none__"
 
@@ -46,17 +47,17 @@ interface RunParamsDialogProps {
   open: boolean
   workflowId: string
   params: WorkflowParam[]
-  lastValues?: Record<string, WorkflowParamPresetValue>
+  lastValues?: WorkflowLastRunValues
   onConfirm: (values: Record<string, unknown>, rawValues: Record<string, WorkflowParamPresetValue>) => Promise<void>
   onCancel: () => void
 }
 
 export function RunParamsDialog({ open, workflowId, params, lastValues, onConfirm, onCancel }: RunParamsDialogProps) {
   const { chooseResource } = useWorkflowResourcePicker()
-  const [values, setValues] = useState<Record<string, WorkflowParamPresetValue>>(() => buildInitialValues(params, lastValues))
+  const [values, setValues] = useState<Record<string, WorkflowParamPresetValue>>(() => buildInitialValues(params, lastValues?.values))
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [incompatibleValueErrors, setIncompatibleValueErrors] = useState<Record<string, string>>(() => buildResourceCardinalityErrors(params, lastValues))
+  const [incompatibleValueErrors, setIncompatibleValueErrors] = useState<Record<string, string>>(() => buildLastRunCompatibilityErrors(params, lastValues))
   const [presets, setPresets] = useState<WorkflowParamPreset[]>([])
   const [selectedPresetId, setSelectedPresetId] = useState<string>(NO_PRESET_VALUE)
   const [presetsLoading, setPresetsLoading] = useState(false)
@@ -84,7 +85,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
   useEffect(() => {
     if (!open) return
     setSubmitting(false)
-    const initialErrors = buildResourceCardinalityErrors(params, lastValues)
+    const initialErrors = buildLastRunCompatibilityErrors(params, lastValues)
     setErrors(initialErrors)
     setIncompatibleValueErrors(initialErrors)
     setSelectedPresetId(NO_PRESET_VALUE)
@@ -93,7 +94,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     setPresetNameError("")
     setOverwriteConfirm(null)
     setDeleteConfirmOpen(false)
-    setValues(buildInitialValues(params, lastValues))
+    setValues(buildInitialValues(params, lastValues?.values))
 
     const presetBridge = window.synapse?.workflowParamPresets
     if (!presetBridge || !workflowId || params.length === 0) {
@@ -238,8 +239,8 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     setSelectedPresetId(presetId)
     const preset = presets.find((item) => item.id === presetId)
     if (!preset) {
-      setValues(buildInitialValues(params, lastValues))
-      const nextErrors = buildResourceCardinalityErrors(params, lastValues)
+      setValues(buildInitialValues(params, lastValues?.values))
+      const nextErrors = buildLastRunCompatibilityErrors(params, lastValues)
       setIncompatibleValueErrors(nextErrors)
       setErrors(nextErrors)
       return
@@ -666,6 +667,26 @@ function buildResourceCompatibilityErrors(
     if (savedEntryType === "unavailable") {
       errors[param.name] = "已保存资源不存在或无法访问，请重新选择"
     } else if (savedEntryType && savedEntryType !== param.type) {
+      errors[param.name] = "已保存值与当前文件/文件夹类型不兼容，请重新选择"
+    }
+  }
+  return errors
+}
+
+function buildLastRunCompatibilityErrors(
+  params: WorkflowParam[],
+  lastValues?: WorkflowLastRunValues,
+): Record<string, string> {
+  if (!lastValues) return {}
+  const errors = buildResourceCompatibilityErrors(
+    params,
+    lastValues.values,
+    lastValues.resourceEntryTypes,
+  )
+  for (const param of params) {
+    if ((param.type !== "file" && param.type !== "directory") || param.allowMultiple !== true) continue
+    if (errors[param.name] || !Array.isArray(lastValues.values[param.name])) continue
+    if (!lastValues.resourceEntryTypes[param.name]) {
       errors[param.name] = "已保存值与当前文件/文件夹类型不兼容，请重新选择"
     }
   }

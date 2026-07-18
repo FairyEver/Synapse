@@ -1,8 +1,12 @@
 import { useState } from "react"
 import { Save, Play, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import type { WorkflowDefinition, WorkflowParamPresetValue } from "@/types/workflow"
+import type { WorkflowDefinition } from "@/types/workflow"
 import { RunParamsDialog } from "../components/run-params-dialog"
+import {
+  createWorkflowLastRunValues,
+  type WorkflowLastRunValues,
+} from "../lib/run-param-last-values"
 
 interface CanvasFloatingToolbarProps {
   definition: WorkflowDefinition
@@ -15,7 +19,7 @@ interface CanvasFloatingToolbarProps {
 
 export function CanvasFloatingToolbar({ definition, saving, running, dirty, onSave, onRun }: CanvasFloatingToolbarProps) {
   const [runParamsOpen, setRunParamsOpen] = useState(false)
-  const [lastRunValues, setLastRunValues] = useState<Record<string, WorkflowParamPresetValue>>({})
+  const [lastRunValues, setLastRunValues] = useState<WorkflowLastRunValues>()
   const busy = saving || running
   return (
     <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 bg-background/80 backdrop-blur-sm border rounded-lg shadow-sm px-2 py-1.5">
@@ -34,7 +38,7 @@ export function CanvasFloatingToolbar({ definition, saving, running, dirty, onSa
         params={definition.params}
         lastValues={lastRunValues}
         onConfirm={async (params, rawValues) => {
-          setLastRunValues(rawValues)
+          setLastRunValues(createWorkflowLastRunValues(definition.params, rawValues))
           try {
             await onRun(params)
             setRunParamsOpen(false)

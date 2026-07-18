@@ -161,7 +161,10 @@ describe("RunParamsDialog", () => {
             { name: "topic", type: "text", default: "secret prompt value" },
             { name: "count", type: "number", default: 3 },
           ]}
-          lastValues={{ topic: "last secret value", count: "7" }}
+          lastValues={{
+            values: { topic: "last secret value", count: "7" },
+            resourceEntryTypes: {},
+          }}
           onConfirm={onConfirm}
           onCancel={vi.fn()}
         />,
@@ -219,7 +222,7 @@ describe("RunParamsDialog", () => {
     mocks.chooseParamFiles.mockResolvedValue(["/tmp/reselected.txt"])
     const { onConfirm } = await renderDialog({
       params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
-      lastValues: { input_files: "/tmp/legacy.txt" },
+      lastValues: { values: { input_files: "/tmp/legacy.txt" }, resourceEntryTypes: {} },
     })
 
     expect(document.body.textContent).toContain("已保存值与当前单选/多选设置不兼容，请重新选择")
@@ -237,7 +240,10 @@ describe("RunParamsDialog", () => {
   it("does not take the first array item for a single-resource last-run value", async () => {
     const { onConfirm } = await renderDialog({
       params: [{ name: "input_file", type: "file", default: null }],
-      lastValues: { input_file: ["/tmp/first.txt", "/tmp/second.txt"] },
+      lastValues: {
+        values: { input_file: ["/tmp/first.txt", "/tmp/second.txt"] },
+        resourceEntryTypes: { input_file: "file" },
+      },
     })
 
     expect(document.body.querySelector<HTMLInputElement>("#input_file")?.value).toBe("")
@@ -284,6 +290,20 @@ describe("RunParamsDialog", () => {
       document.body.querySelector<HTMLButtonElement>("#workflow-run-param-preset")?.click()
     })
     await act(async () => { clickOption("文件预设") })
+
+    expect(document.body.textContent).toContain("已保存值与当前文件/文件夹类型不兼容，请重新选择")
+    await act(async () => { clickButton("运行") })
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it("rejects multi-file last-run values after the parameter changes to multi-directory", async () => {
+    const { onConfirm } = await renderDialog({
+      params: [{ name: "inputs", type: "directory", default: null, allowMultiple: true }],
+      lastValues: {
+        values: { inputs: ["/tmp/input.txt"] },
+        resourceEntryTypes: { inputs: "file" },
+      },
+    })
 
     expect(document.body.textContent).toContain("已保存值与当前文件/文件夹类型不兼容，请重新选择")
     await act(async () => { clickButton("运行") })
@@ -530,7 +550,7 @@ describe("RunParamsDialog", () => {
       params: [
         { name: "report_type", type: "option", default: "日报", options: ["日报", "周报"], allowCustomOption: false },
       ],
-      lastValues: { report_type: "季度复盘" },
+      lastValues: { values: { report_type: "季度复盘" }, resourceEntryTypes: {} },
     })
 
     await act(async () => {
@@ -546,7 +566,7 @@ describe("RunParamsDialog", () => {
       params: [
         { name: "report_type", type: "option", default: "日报", options: ["日报", "周报"], allowCustomOption: false },
       ],
-      lastValues: { report_type: "" },
+      lastValues: { values: { report_type: "" }, resourceEntryTypes: {} },
     })
 
     await act(async () => {
