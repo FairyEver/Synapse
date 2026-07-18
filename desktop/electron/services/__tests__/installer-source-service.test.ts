@@ -59,6 +59,34 @@ describe("InstallerSourceService", () => {
       .resolves.toBeNull()
   })
 
+  it("bounds abandoned local Skill sources and releases completed sources", async () => {
+    const firstRoot = await createTempDir()
+    const secondRoot = await createTempDir()
+    await writeFile(path.join(firstRoot, "SKILL.md"), "# First\n", "utf8")
+    await writeFile(path.join(secondRoot, "SKILL.md"), "# Second\n", "utf8")
+    const service = new InstallerSourceService({ maxLocalSkillEntries: 1 })
+
+    const first = await service.prepareLocalSkillSource({ sourceDirectoryPath: firstRoot })
+    const second = await service.prepareLocalSkillSource({ sourceDirectoryPath: secondRoot })
+
+    expect(() => service.getLocalSkill(first.localSourceId!)).toThrow("本地 Skill 安装源不可用")
+    expect(service.getLocalSkill(second.localSourceId!).source).toEqual(second)
+    service.releaseSource(second)
+    expect(() => service.getLocalSkill(second.localSourceId!)).toThrow("本地 Skill 安装源不可用")
+  })
+
+  it("expires abandoned local Skill sources at the TTL boundary", async () => {
+    const root = await createTempDir()
+    await writeFile(path.join(root, "SKILL.md"), "# Skill\n", "utf8")
+    let now = 100
+    const service = new InstallerSourceService({ now: () => now, sourceTtlMs: 500 })
+    const source = await service.prepareLocalSkillSource({ sourceDirectoryPath: root })
+
+    now = 600
+
+    expect(() => service.getLocalSkill(source.localSourceId!)).toThrow("本地 Skill 安装源不可用")
+  })
+
   it("rejects an oversized local .env.example before UTF-8 conversion", async () => {
     const root = await createTempDir()
     await writeFile(path.join(root, "SKILL.md"), "# Skill\n", "utf8")
@@ -69,9 +97,7 @@ describe("InstallerSourceService", () => {
     )
 
     const service = new InstallerSourceService()
-    const source = await service.prepareLocalSkillSource({ sourceDirectoryPath: root })
-
-    await expect(service.readLocalSkillAttachmentText(source, ".env.example"))
+    await expect(service.prepareLocalSkillSource({ sourceDirectoryPath: root }))
       .rejects.toThrow("Skill .env 不能超过 1 MiB。")
   })
 

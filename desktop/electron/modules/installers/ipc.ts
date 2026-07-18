@@ -227,6 +227,7 @@ export const installersIpcModule: IpcModule = {
           auditSink,
           permissionGuard,
         })
+        installerSourceService.releaseSource(payload.source)
 
         if (payload.source.origin === "repository" && payload.source.repositoryContentId) {
           const eventBus = ctx.resolve<EventBus>("core.event-bus")
@@ -255,6 +256,9 @@ export const installersIpcModule: IpcModule = {
           auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
           permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
         })
+        if (result.results.every((item) => item.status === "installed")) {
+          installerSourceService.releaseSource(payload.source)
+        }
 
         const contentId = payload.source.origin === "repository" && payload.source.repositoryContentId
           ? payload.source.repositoryContentId

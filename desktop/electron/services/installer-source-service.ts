@@ -10,6 +10,7 @@ import type { SynapseContentDetail } from "../../src/types/content"
 import type {
   SynapsePrepareInlineRuleSourcePayload,
   SynapsePrepareLocalSkillSourcePayload,
+  SynapseInstallerSource,
   SynapseRuleInstallerSource,
   SynapseSkillInstallerSource,
 } from "../../src/types/installers"
@@ -25,13 +26,27 @@ import {
 import { assertSkillRuntimeEnvByteLength } from "./skill-env/file-policy"
 
 type StoredLocalSkillSource = {
+  byteLength: number
+  lastAccessedAt: number
   draft: ContentSkillSourceDraft
   source: SynapseSkillInstallerSource
 }
 
 type StoredInlineRuleSource = {
+  lastAccessedAt: number
   source: SynapseRuleInstallerSource
 }
+
+type InstallerSourceServiceOptions = {
+  readonly maxLocalSkillBytes?: number
+  readonly maxLocalSkillEntries?: number
+  readonly now?: () => number
+  readonly sourceTtlMs?: number
+}
+
+const DEFAULT_LOCAL_SKILL_CACHE_MAX_BYTES = 100 * 1024 * 1024
+const DEFAULT_LOCAL_SKILL_CACHE_MAX_ENTRIES = 4
+const DEFAULT_INSTALLER_SOURCE_TTL_MS = 10 * 60 * 1000
 
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex")
@@ -51,9 +66,40 @@ class InstallerSourceService {
   private readonly inlineRules = new Map<string, StoredInlineRuleSource>()
   private readonly localSkills = new Map<string, StoredLocalSkillSource>()
 
+  constructor(private readonly options: InstallerSourceServiceOptions = {}) {}
+
+  private now(): number {
+    return this.options.now?.() ?? Date.now()
+  }
+
+  private pruneSources(timestamp = this.now()): void {
+    const ttlMs = this.options.sourceTtlMs ?? DEFAULT_INSTALLER_SOURCE_TTL_MS
+    for (const [id, stored] of this.localSkills) {
+      if (timestamp - stored.lastAccessedAt >= ttlMs) this.localSkills.delete(id)
+    }
+    for (const [id, stored] of this.inlineRules) {
+      if (timestamp - stored.lastAccessedAt >= ttlMs) this.inlineRules.delete(id)
+    }
+  }
+
+  private enforceLocalSkillBudget(): void {
+    const maxEntries = this.options.maxLocalSkillEntries ?? DEFAULT_LOCAL_SKILL_CACHE_MAX_ENTRIES
+    const maxBytes = this.options.maxLocalSkillBytes ?? DEFAULT_LOCAL_SKILL_CACHE_MAX_BYTES
+    let totalBytes = Array.from(this.localSkills.values())
+      .reduce((total, stored) => total + stored.byteLength, 0)
+    while (this.localSkills.size > maxEntries || totalBytes > maxBytes) {
+      const oldest = this.localSkills.entries().next().value as [string, StoredLocalSkillSource] | undefined
+      if (!oldest) break
+      this.localSkills.delete(oldest[0])
+      totalBytes -= oldest[1].byteLength
+    }
+  }
+
   async prepareLocalSkillSource(
     payload: SynapsePrepareLocalSkillSourcePayload,
   ): Promise<SynapseSkillInstallerSource> {
+    const timestamp = this.now()
+    this.pruneSources(timestamp)
     const rootMainFile = await resolveRootSkillMainFile(payload.sourceDirectoryPath)
     if (!rootMainFile || path.basename(rootMainFile) !== "SKILL.md") {
       throw new Error("Skill 安装器需要根目录 SKILL.md。")
@@ -83,13 +129,22 @@ class InstallerSourceService {
       mainContent: draft.content,
     }
 
-    this.localSkills.set(localSourceId, { draft, source })
+    this.localSkills.set(localSourceId, {
+      byteLength: Buffer.byteLength(draft.content, "utf8")
+        + draft.files.reduce((total, file) => total + (file.bytes?.byteLength ?? 0), 0),
+      lastAccessedAt: timestamp,
+      draft,
+      source,
+    })
+    this.enforceLocalSkillBudget()
     return source
   }
 
   async prepareInlineRuleSource(
     payload: SynapsePrepareInlineRuleSourcePayload,
   ): Promise<SynapseRuleInstallerSource> {
+    const timestamp = this.now()
+    this.pruneSources(timestamp)
     const name = normalizeContentNameInput(payload.name)
     const nameError = validateContentNameInput(name)
     if (nameError) {
@@ -113,24 +168,43 @@ class InstallerSourceService {
       body,
     }
 
-    this.inlineRules.set(inlineSourceId, { source })
+    this.inlineRules.set(inlineSourceId, { lastAccessedAt: timestamp, source })
     return source
   }
 
   getInlineRule(inlineSourceId: string): StoredInlineRuleSource {
+    const timestamp = this.now()
+    this.pruneSources(timestamp)
     const stored = this.inlineRules.get(inlineSourceId)
     if (!stored) {
       throw new Error("Rule 安装源不可用。")
     }
+    stored.lastAccessedAt = timestamp
+    this.inlineRules.delete(inlineSourceId)
+    this.inlineRules.set(inlineSourceId, stored)
     return stored
   }
 
   getLocalSkill(localSourceId: string): StoredLocalSkillSource {
+    const timestamp = this.now()
+    this.pruneSources(timestamp)
     const stored = this.localSkills.get(localSourceId)
     if (!stored) {
       throw new Error("本地 Skill 安装源不可用。")
     }
+    stored.lastAccessedAt = timestamp
+    this.localSkills.delete(localSourceId)
+    this.localSkills.set(localSourceId, stored)
     return stored
+  }
+
+  releaseSource(source: SynapseInstallerSource): void {
+    if (source.kind === "skill" && source.localSourceId) {
+      this.localSkills.delete(source.localSourceId)
+    }
+    if (source.kind === "rule" && source.inlineSourceId) {
+      this.inlineRules.delete(source.inlineSourceId)
+    }
   }
 
   async readInlineRule(source: SynapseRuleInstallerSource): Promise<string> {

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   inspectSkillEnvSource: vi.fn(),
   prepareInlineRuleSource: vi.fn(),
   prepareLocalSkillSource: vi.fn(),
+  releaseSource: vi.fn(),
   secretGet: vi.fn(),
   permissionCheck: vi.fn(),
   auditRecord: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock("../../../services/installer-source-service", () => ({
   installerSourceService: {
     prepareInlineRuleSource: mocks.prepareInlineRuleSource,
     prepareLocalSkillSource: mocks.prepareLocalSkillSource,
+    releaseSource: mocks.releaseSource,
   },
 }))
 
@@ -185,18 +187,19 @@ describe("installersIpcModule", () => {
 
   it("installs prepared installer sources through the content install service", async () => {
     const harness = createHarness()
+    const source = {
+      kind: "rule" as const,
+      origin: "inline" as const,
+      sourceIdentity: "inline-rule:abc",
+      inlineSourceId: "source-1",
+      name: "team.rule",
+      body: "# Rule",
+    }
 
     await harness.invoke("synapse:installers:install-source-to-editor", {
       editorId: "codex",
       scope: "global",
-      source: {
-        kind: "rule",
-        origin: "inline",
-        sourceIdentity: "inline-rule:abc",
-        inlineSourceId: "source-1",
-        name: "team.rule",
-        body: "# Rule",
-      },
+      source,
       skillEnvValues: { EMPTY_ALLOWED: "" },
     })
 
@@ -210,6 +213,7 @@ describe("installersIpcModule", () => {
         actor: { kind: "user" },
       }),
     )
+    expect(mocks.releaseSource).toHaveBeenCalledWith(source)
   })
 
   it("routes batch source installs to the editor install service", async () => {
@@ -243,6 +247,34 @@ describe("installersIpcModule", () => {
         actor: { kind: "user" },
       }),
     )
+    expect(mocks.releaseSource).toHaveBeenCalledWith(expect.objectContaining({
+      sourceIdentity: "synapse-skill",
+    }))
+  })
+
+  it("keeps prepared sources when a batch target fails", async () => {
+    mocks.installSourceToEditorTargets.mockResolvedValueOnce({
+      results: [{
+        target: { editorId: "codex", scope: "global" },
+        status: "failed",
+        error: "install failed",
+      }],
+    })
+    const harness = createHarness()
+
+    await harness.invoke("synapse:installers:install-source-to-editor-targets", {
+      mode: "install",
+      source: {
+        kind: "skill",
+        origin: "local-directory",
+        sourceIdentity: "local-skill:abc",
+        localSourceId: "source-2",
+        name: "team-skill",
+      },
+      targets: [{ editorId: "codex", scope: "global" }],
+    })
+
+    expect(mocks.releaseSource).not.toHaveBeenCalled()
   })
 
   it("resolves saved secret references in main through permission and audit", async () => {
@@ -307,6 +339,7 @@ describe("installersIpcModule", () => {
 
     expect(mocks.secretGet).not.toHaveBeenCalled()
     expect(mocks.installSourceToEditor).not.toHaveBeenCalled()
+    expect(mocks.releaseSource).not.toHaveBeenCalled()
     expect(mocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
       action: "secret.read",
       outcome: "denied",
