@@ -1703,6 +1703,7 @@ describe("AgentRuntimeService", () => {
 
   it("records a pending AskUserQuestion as cancelled when the turn stops", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const eventBus = { emit: vi.fn() }
     const questions = [{
       question: "继续吗？",
       options: [{ label: "继续" }, { label: "停止" }],
@@ -1715,18 +1716,24 @@ describe("AgentRuntimeService", () => {
       conversations,
       providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
       createSession: () => session,
+      eventBus: eventBus as never,
       now: fixedNow,
     })
 
     const turn = service.send(baseMessage("needs choice"))
     await waitFor(() => service.listPendingPermissions().length === 1)
     const pending = service.listPendingPermissions()[0]
-    await expect(service.cancelTurn(pending!.conversationId)).resolves.toEqual({ status: "hard-killed" })
+    eventBus.emit.mockClear()
+    await expect(service.forceKillTurn(pending!.conversationId)).resolves.toEqual({ status: "hard-killed" })
     await turn
 
     const stored = await conversations.get(pending!.conversationId)
     expect(stored?.history.find((entry) => entry.metadata?.requestId === "conversation-a-permission-1")?.metadata)
       .toMatchObject({ userQuestionResolution: { status: "cancelled" } })
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: "conversationUpdated",
+      payload: expect.objectContaining({ conversationId: pending!.conversationId }),
+    }))
   })
 
   it("redacts permission response failure audit metadata", async () => {

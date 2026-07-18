@@ -100,6 +100,7 @@ export interface SessionManagerDeps {
   readonly sdkSubagentToolPolicies?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkSubagentToolPolicies | Promise<AgentSdkSubagentToolPolicies>
   readonly onConversationTitle?: (conversationId: string, title: string) => void | Promise<void>
+  readonly onConversationUpdated?: (conversation: ConversationEntryV1) => void
 }
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000
@@ -494,7 +495,7 @@ export class SessionManager {
   ): Promise<void> {
     if (!pending || pending.toolName !== "AskUserQuestion") return
     try {
-      await this.deps.repository.resolveUserQuestion(
+      const conversation = await this.deps.repository.resolveUserQuestion(
         pending.conversationId,
         pending.requestId,
         {
@@ -502,6 +503,7 @@ export class SessionManager {
           resolvedAt: (this.deps.now?.() ?? new Date()).toISOString(),
         },
       )
+      if (conversation) this.deps.onConversationUpdated?.(conversation)
     } catch (error) {
       this.deps.logger?.warn("Agent user question resolution persistence failed.", {
         boundary: "agent-runtime.user-question-resolution",

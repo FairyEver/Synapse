@@ -226,6 +226,7 @@ export class AgentRuntimeService {
       sdkSubagentToolPolicies: deps.sdkSubagentToolPolicies,
       onConversationTitle: (conversationId, title) =>
         this.applyGeneratedConversationTitle(conversationId, title),
+      onConversationUpdated: (conversation) => this.emitConversationUpdated(conversation),
     })
     this.sessionLifecycle = new SessionLifecycleManager({
       projectId: deps.projectId,

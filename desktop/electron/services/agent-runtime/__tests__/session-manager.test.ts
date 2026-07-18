@@ -1145,7 +1145,9 @@ describe("SessionManager", () => {
   it("persists a pending AskUserQuestion cancellation before closing session state", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const pendingPermissions = new Map<string, PendingPermissionState>()
-    const resolveUserQuestion = vi.fn(async () => baseConversation())
+    const conversation = baseConversation()
+    const resolveUserQuestion = vi.fn(async () => conversation)
+    const onConversationUpdated = vi.fn()
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
@@ -1157,6 +1159,7 @@ describe("SessionManager", () => {
       states,
       pendingPermissions,
       now: () => new Date("2026-07-15T12:00:00.000Z"),
+      onConversationUpdated,
     })
     const state = manager.stateForConversation("conversation-1", baseMessage("default"))
     const pending = {
@@ -1179,6 +1182,7 @@ describe("SessionManager", () => {
       status: "cancelled",
       resolvedAt: "2026-07-15T12:00:00.000Z",
     })
+    expect(onConversationUpdated).toHaveBeenCalledWith(conversation)
     expect(pending.resolve).toHaveBeenCalledOnce()
     expect(pendingPermissions.has("question-1")).toBe(false)
     expect(states.has("conversation-1")).toBe(false)
@@ -1188,6 +1192,7 @@ describe("SessionManager", () => {
     const states = new Map<string, RuntimeSessionState>()
     const pendingPermissions = new Map<string, PendingPermissionState>()
     const logger = structuredLogger()
+    const onConversationUpdated = vi.fn()
     const rawError = "database rejected secret question text"
     const manager = new SessionManager({
       projectId: "project-1",
@@ -1202,6 +1207,7 @@ describe("SessionManager", () => {
       states,
       pendingPermissions,
       logger,
+      onConversationUpdated,
     })
     const state = manager.stateForConversation("conversation-1", baseMessage("default"))
     const pending = {
@@ -1221,6 +1227,7 @@ describe("SessionManager", () => {
     await expect(manager.closeState("conversation-1")).resolves.toBeUndefined()
 
     expect(pending.resolve).toHaveBeenCalledOnce()
+    expect(onConversationUpdated).not.toHaveBeenCalled()
     expect(states.has("conversation-1")).toBe(false)
     expect(logger.warn).toHaveBeenCalledWith("Agent user question resolution persistence failed.", {
       boundary: "agent-runtime.user-question-resolution",
