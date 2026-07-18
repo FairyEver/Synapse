@@ -30,6 +30,11 @@ const MAX_STACK_LENGTH = 1200
 const MAX_ARRAY_LENGTH = 20
 const PATH_REDACTED = "[path redacted]"
 const IPC_ERROR_ENVELOPE_KEY = "__synapseIpcError"
+const SECRETS_MUTATION_CHANNELS = new Set([
+  "synapse:secrets:create",
+  "synapse:secrets:update",
+  "synapse:secrets:upsert",
+])
 
 type IpcErrorEnvelope = {
   readonly [IPC_ERROR_ENVELOPE_KEY]: true
@@ -73,6 +78,19 @@ function sensitiveMapSummary(value: unknown): unknown {
   return {
     type: "sensitive-map",
     keyCount: Object.keys(value as Record<string, unknown>).length,
+  }
+}
+
+function sanitizeIpcRequest(channel: string, request: unknown): unknown {
+  if (!SECRETS_MUTATION_CHANNELS.has(channel)) return sanitizeIpcValue("request", request)
+  if (!request || typeof request !== "object" || Array.isArray(request)) {
+    return { inputType: typeof request }
+  }
+  const record = request as Record<string, unknown>
+  return {
+    nameProvided: typeof record.name === "string",
+    valueProvided: typeof record.value === "string",
+    descriptionProvided: typeof record.description === "string",
   }
 }
 
@@ -195,7 +213,7 @@ export function createElectronTransportInstall(options: ElectronTransportInstall
           channel,
           durationMs: Math.round(performance.now() - startedAt),
           error: sanitizeErrorForLog(error),
-          request: sanitizeIpcValue("request", request),
+          request: sanitizeIpcRequest(channel, request),
         })
         return createIpcErrorEnvelope(error)
       }

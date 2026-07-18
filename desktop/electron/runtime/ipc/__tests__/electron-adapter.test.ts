@@ -193,6 +193,42 @@ describe("createElectronTransportInstall", () => {
     expect(serializedLog).not.toContain("TENANT")
   })
 
+  it.each([
+    "synapse:secrets:create",
+    "synapse:secrets:update",
+    "synapse:secrets:upsert",
+  ])("summarizes failed Secrets mutation requests for %s", async (channel) => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const { createElectronTransportInstall } = await import("../electron-adapter")
+    const install = createElectronTransportInstall({ logger })
+    install(channel, async () => {
+      throw new Error("secret storage unavailable")
+    })
+
+    const handler = electronMock.handlers.get(channel)
+    await handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
+      name: "PRIVATE_SECRET_NAME",
+      value: "PRIVATE_SECRET_VALUE",
+      description: "PRIVATE_SECRET_DESCRIPTION",
+    })
+
+    expect(logger.error).toHaveBeenCalledWith(
+      "IPC invoke failed.",
+      expect.objectContaining({
+        channel,
+        request: {
+          nameProvided: true,
+          valueProvided: true,
+          descriptionProvided: true,
+        },
+      }),
+    )
+    const serializedLog = JSON.stringify(logger.error.mock.calls)
+    expect(serializedLog).not.toContain("PRIVATE_SECRET_NAME")
+    expect(serializedLog).not.toContain("PRIVATE_SECRET_VALUE")
+    expect(serializedLog).not.toContain("PRIVATE_SECRET_DESCRIPTION")
+  })
+
   it("returns sanitized user-facing failure envelopes without logging secrets", async () => {
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const { createElectronTransportInstall } = await import("../electron-adapter")
