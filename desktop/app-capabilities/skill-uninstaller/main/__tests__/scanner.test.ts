@@ -187,7 +187,7 @@ describe("scanSkillRoots", () => {
     expect(result.complete).toBe(true)
   })
 
-  it("lets admitted workers finish when another worker reaches the directory limit", async () => {
+  it("lets every root admitted by the directory limit finish", async () => {
     const first = await fixture()
     const second = await fixture()
     const third = await fixture()
@@ -205,6 +205,25 @@ describe("scanSkillRoots", () => {
     })
 
     expect(result.candidates).toHaveLength(2)
+    expect(result.warnings).toContain("目录数量超过上限，当前结果可能不完整。")
+  })
+
+  it("limits child directory admission before scanning a high-fan-out root", async () => {
+    const root = await fixture()
+    await Promise.all([
+      skill(root, "a", "jenkins"),
+      skill(root, "b", "jenkins"),
+      skill(root, "c", "jenkins"),
+    ])
+
+    const result = await scanSkillRoots({
+      query: { name: "jenkins" },
+      roots: [{ path: root, editorIds: [] }],
+      classifyEditors: () => [],
+      limits: { maxDirectories: 2, concurrency: 1 },
+    })
+
+    expect(result.candidates).toHaveLength(1)
     expect(result.warnings).toContain("目录数量超过上限，当前结果可能不完整。")
   })
 

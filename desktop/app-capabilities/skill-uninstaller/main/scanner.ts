@@ -1,4 +1,4 @@
-import { lstat, readFile, readdir, realpath } from "node:fs/promises"
+import { lstat, opendir, readFile, realpath } from "node:fs/promises"
 import path from "node:path"
 import {
   SKILL_UNINSTALL_SCAN_CONCURRENCY,
@@ -217,20 +217,27 @@ async function scanSkillRootsInternal(
   const targetName = input.query ? normalizeName(input.query.name) : undefined
   const skillFileSystem = input.skillFileSystem ?? defaultSkillFileSystem
   const startedAt = Date.now()
-  const queue: QueueEntry[] = input.roots.map((root, rootIndex) => ({
-    path: root.path,
-    depth: 0,
-    editorIds: root.editorIds,
-    rootIndex,
-  }))
+  const queue: QueueEntry[] = []
   const candidates = new Map<string, SkillUninstallCandidate>()
   const names = new Map<string, { name: string; path: string; rootIndex: number }>()
   const warnings = new Set<string>()
+  let admittedDirectories = 0
+  for (const [rootIndex, root] of input.roots.entries()) {
+    if (admittedDirectories >= maxDirectories) {
+      warnings.add(DIRECTORY_LIMIT_WARNING)
+      break
+    }
+    queue.push({
+      path: root.path,
+      depth: 0,
+      editorIds: root.editorIds,
+      rootIndex,
+    })
+    admittedDirectories++
+  }
   let queueIndex = 0
   let activeWorkers = 0
-  let visitedDirectories = 0
   let stopped = false
-  let directoryLimitReached = false
   let hasFatalError = false
   let fatalError: unknown
   let resolveStop!: () => void
@@ -272,13 +279,6 @@ async function scanSkillRootsInternal(
       warnings.add(DEPTH_LIMIT_WARNING)
       return
     }
-    if (visitedDirectories >= maxDirectories) {
-      warnings.add(DIRECTORY_LIMIT_WARNING)
-      directoryLimitReached = true
-      return
-    }
-    visitedDirectories++
-
     let stats
     try {
       stats = await waitFor(lstat(entry.path))
@@ -349,24 +349,42 @@ async function scanSkillRootsInternal(
       return
     }
 
-    let entries
+    let directory
     try {
-      entries = await waitFor(readdir(entry.path, { withFileTypes: true }))
+      directory = await waitFor(opendir(entry.path))
     } catch (error) {
       if (entry.depth === 0 && input.rootErrorsFatal) throw error
       if (entry.depth === 0 && isMissing(error)) return
       warnings.add(DIRECTORY_READ_WARNING)
       return
     }
-    if (entries === STOPPED) return
-    for (const child of entries) {
-      if (!child.isDirectory() || child.isSymbolicLink()) continue
-      queue.push({
-        path: path.join(entry.path, child.name),
-        depth: entry.depth + 1,
-        editorIds: entry.editorIds,
-        rootIndex: entry.rootIndex,
-      })
+    if (directory === STOPPED) return
+    try {
+      for await (const child of directory) {
+        if (shouldStop()) return
+        if (!child.isDirectory() || child.isSymbolicLink()) continue
+        if (SKILL_UNINSTALL_EXCLUDED_DIRECTORIES.has(child.name)) continue
+        const childDepth = entry.depth + 1
+        if (childDepth > maxDepth) {
+          warnings.add(DEPTH_LIMIT_WARNING)
+          continue
+        }
+        if (admittedDirectories >= maxDirectories) {
+          warnings.add(DIRECTORY_LIMIT_WARNING)
+          break
+        }
+        queue.push({
+          path: path.join(entry.path, child.name),
+          depth: childDepth,
+          editorIds: entry.editorIds,
+          rootIndex: entry.rootIndex,
+        })
+        admittedDirectories++
+      }
+    } catch (error) {
+      if (shouldStop()) return
+      if (entry.depth === 0 && input.rootErrorsFatal) throw error
+      warnings.add(DIRECTORY_READ_WARNING)
     }
     shouldStop()
   }
@@ -374,7 +392,7 @@ async function scanSkillRootsInternal(
   try {
     await new Promise<void>((resolve) => {
       function schedule(): void {
-        while (!stopped && !directoryLimitReached && activeWorkers < concurrency && queueIndex < queue.length) {
+        while (!stopped && activeWorkers < concurrency && queueIndex < queue.length) {
           const entry = queue[queueIndex++]
           activeWorkers++
           void scanEntry(entry).then(() => {
@@ -391,7 +409,7 @@ async function scanSkillRootsInternal(
             schedule()
           })
         }
-        if ((stopped || directoryLimitReached || queueIndex >= queue.length) && activeWorkers === 0) resolve()
+        if ((stopped || queueIndex >= queue.length) && activeWorkers === 0) resolve()
       }
       schedule()
     })
