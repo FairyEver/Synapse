@@ -2,6 +2,7 @@ import { interpolatePrompt } from "../../../electron/services/workflow/variable-
 import type { PermissionAction } from "../../../electron/runtime/security"
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult, NodeRuntimeDeps } from "../../../workflow-nodes/types"
 import { createDocumentTemplateService } from "../main/service"
+import { generateDocxInputSchema } from "../shared/schema"
 import type { DocumentTemplateNodeConfig } from "./schema"
 
 export const documentTemplateNodeExecutor: NodeExecutor<DocumentTemplateNodeConfig> = {
@@ -19,20 +20,21 @@ export const documentTemplateNodeExecutor: NodeExecutor<DocumentTemplateNodeConf
       const data = input.config.dataSource === "inline" && dataJson
         ? parseJsonObject(dataJson)
         : undefined
-
-      await authorizeFileAccess(input.runtimeDeps, input, "fs.read.outside-userdata", templatePath, "workflow.documentTemplate.template")
-      if (input.config.dataSource === "dataPath" && dataPath) {
-        await authorizeFileAccess(input.runtimeDeps, input, "fs.read.outside-userdata", dataPath, "workflow.documentTemplate.data")
-      }
-      await authorizeFileAccess(input.runtimeDeps, input, "fs.write.outside-userdata", outputPath, "workflow.documentTemplate.output")
-
-      input.onProgress?.("generating", "模板生成文档")
-      const result = await createDocumentTemplateService().generateDocx({
+      const generationInput = generateDocxInputSchema.parse({
         templatePath,
         outputPath,
         overwrite: input.config.overwrite,
         ...(input.config.dataSource === "dataPath" ? { dataPath } : { data }),
       })
+
+      await authorizeFileAccess(input.runtimeDeps, input, "fs.read.outside-userdata", generationInput.templatePath, "workflow.documentTemplate.template")
+      if (generationInput.dataPath) {
+        await authorizeFileAccess(input.runtimeDeps, input, "fs.read.outside-userdata", generationInput.dataPath, "workflow.documentTemplate.data")
+      }
+      await authorizeFileAccess(input.runtimeDeps, input, "fs.write.outside-userdata", generationInput.outputPath, "workflow.documentTemplate.output")
+
+      input.onProgress?.("generating", "模板生成文档")
+      const result = await createDocumentTemplateService().generateDocx(generationInput)
 
       return {
         status: "success",

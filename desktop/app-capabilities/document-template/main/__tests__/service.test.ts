@@ -228,8 +228,16 @@ describe("DocumentTemplateService", () => {
 
   it("rejects invalid input combinations", async () => {
     await expect(createDocumentTemplateService().generateDocx({
-      templatePath: "/tmp/template.docx",
-      outputPath: "/tmp/output.docx",
+      templatePath: path.resolve("template.docx"),
+      outputPath: path.resolve("output.docx"),
     })).rejects.toThrow("Exactly one of dataPath or data is required")
+  })
+
+  it("rejects relative paths before reading or writing files", async () => {
+    await expect(createDocumentTemplateService().generateDocx({
+      templatePath: "template.docx",
+      outputPath: "output.docx",
+      data: { name: "Ada" },
+    })).rejects.toThrow("必须使用绝对路径")
   })
 })

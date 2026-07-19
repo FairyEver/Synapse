@@ -1,5 +1,10 @@
+import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { documentTemplateIpcModule } from "../ipc"
+
+const templatePath = path.resolve("template.docx")
+const outputPath = path.resolve("output.docx")
+const dataPath = path.resolve("data.json")
 
 describe("documentTemplateIpcModule", () => {
   it("declares document template channels", () => {
@@ -13,18 +18,33 @@ describe("documentTemplateIpcModule", () => {
   it("validates dataPath and inline data alternatives", () => {
     const request = documentTemplateIpcModule.methods.generateDocx.request
     expect(request.safeParse({
-      templatePath: "/tmp/template.docx",
-      outputPath: "/tmp/output.docx",
+      templatePath,
+      outputPath,
       data: { name: "Ada" },
     }).success).toBe(true)
     expect(request.safeParse({
-      templatePath: "/tmp/template.docx",
-      outputPath: "/tmp/output.docx",
-      dataPath: "/tmp/data.json",
+      templatePath,
+      outputPath,
+      dataPath,
     }).success).toBe(true)
     expect(request.safeParse({
-      templatePath: "/tmp/template.docx",
-      outputPath: "/tmp/output.docx",
+      templatePath,
+      outputPath,
+    }).success).toBe(false)
+    expect(request.safeParse({
+      templatePath: "template.docx",
+      outputPath,
+      data: { name: "Ada" },
+    }).success).toBe(false)
+    expect(request.safeParse({
+      templatePath,
+      outputPath: "output.docx",
+      data: { name: "Ada" },
+    }).success).toBe(false)
+    expect(request.safeParse({
+      templatePath,
+      outputPath,
+      dataPath: "data.json",
     }).success).toBe(false)
   })
 })

@@ -1,10 +1,15 @@
+import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import { createDocumentTemplateCapabilityDispatcher } from "../dispatcher"
+
+const templatePath = path.resolve("template.docx")
+const outputPath = path.resolve("output.docx")
+const dataPath = path.resolve("data.json")
 
 describe("createDocumentTemplateCapabilityDispatcher", () => {
   it("dispatches document template generation to the service", async () => {
     const generateDocx = vi.fn(async () => ({
-      outputPath: "/tmp/output.docx",
+      outputPath,
       fileName: "output.docx",
       size: 123,
       generatedAt: "2026-06-23T00:00:00.000Z",
@@ -13,15 +18,15 @@ describe("createDocumentTemplateCapabilityDispatcher", () => {
       service: { generateDocx },
     })
     const params = {
-      templatePath: "/tmp/template.docx",
-      outputPath: "/tmp/output.docx",
+      templatePath,
+      outputPath,
       data: { name: "Ada" },
     }
 
     await expect(dispatcher.dispatch("app.document_template.docx.generate", params, { source: "mcp-http" })).resolves.toEqual({
       ok: true,
       data: {
-        outputPath: "/tmp/output.docx",
+        outputPath,
         fileName: "output.docx",
         size: 123,
         generatedAt: "2026-06-23T00:00:00.000Z",
@@ -33,7 +38,7 @@ describe("createDocumentTemplateCapabilityDispatcher", () => {
 
   it("checks file permissions before dispatching", async () => {
     const generateDocx = vi.fn(async () => ({
-      outputPath: "/tmp/output.docx",
+      outputPath,
       fileName: "output.docx",
       size: 123,
       generatedAt: "2026-06-23T00:00:00.000Z",
@@ -51,25 +56,41 @@ describe("createDocumentTemplateCapabilityDispatcher", () => {
     })
 
     await dispatcher.dispatch("app.document_template.docx.generate", {
-      templatePath: "/tmp/template.docx",
-      outputPath: "/tmp/output.docx",
-      dataPath: "/tmp/data.json",
+      templatePath,
+      outputPath,
+      dataPath,
     }, { source: "mcp-http" })
 
     expect(permissionGuard.check).toHaveBeenCalledTimes(3)
     expect(permissionGuard.check).toHaveBeenNthCalledWith(1, expect.objectContaining({
       action: "fs.read.outside-userdata",
-      resource: "/tmp/template.docx",
+      resource: templatePath,
     }))
     expect(permissionGuard.check).toHaveBeenNthCalledWith(2, expect.objectContaining({
       action: "fs.read.outside-userdata",
-      resource: "/tmp/data.json",
+      resource: dataPath,
     }))
     expect(permissionGuard.check).toHaveBeenNthCalledWith(3, expect.objectContaining({
       action: "fs.write.outside-userdata",
-      resource: "/tmp/output.docx",
+      resource: outputPath,
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({ outcome: "allowed" }))
+  })
+
+  it("rejects relative paths before permission checks", async () => {
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true as const })) }
+    const dispatcher = createDocumentTemplateCapabilityDispatcher({
+      service: { generateDocx: vi.fn() },
+      permissionGuard: permissionGuard as never,
+      auditSink: { record: vi.fn() } as never,
+    })
+
+    await expect(dispatcher.dispatch("app.document_template.docx.generate", {
+      templatePath: "template.docx",
+      outputPath,
+      data: { name: "Ada" },
+    }, { source: "mcp-http" })).rejects.toThrow("必须使用绝对路径")
+    expect(permissionGuard.check).not.toHaveBeenCalled()
   })
 
   it("rejects unknown actions", async () => {
@@ -91,8 +112,8 @@ describe("createDocumentTemplateCapabilityDispatcher", () => {
     })
 
     await expect(dispatcher.dispatch("app.document_template.docx.generate", {
-      templatePath: "/tmp/template.docx",
-      outputPath: "/tmp/output.docx",
+      templatePath,
+      outputPath,
       data: { name: "Ada" },
     }, { source: "mcp-http" })).rejects.toThrow("denied")
   })

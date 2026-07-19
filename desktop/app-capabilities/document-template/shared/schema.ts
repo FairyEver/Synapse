@@ -1,11 +1,16 @@
+import path from "node:path"
 import { z } from "zod"
 
 const inlineDataSchema = z.record(z.string(), z.unknown())
+const absolutePathSchema = z.string().min(1).refine(
+  (value) => path.isAbsolute(value),
+  "必须使用绝对路径",
+)
 
 export const generateDocxInputSchema = z.object({
-  templatePath: z.string().min(1),
-  outputPath: z.string().min(1),
-  dataPath: z.string().min(1).optional(),
+  templatePath: absolutePathSchema,
+  outputPath: absolutePathSchema,
+  dataPath: absolutePathSchema.optional(),
   data: inlineDataSchema.optional(),
   overwrite: z.boolean().optional(),
 }).superRefine((value, ctx) => {
