@@ -54,7 +54,10 @@ export const secretUpdateInputSchema = z.object({
   name: secretNameSchema,
   value: z.string().optional(),
   description: z.string().optional(),
-}).strict()
+}).strict().refine(
+  (input) => input.value !== undefined || input.description !== undefined,
+  "更新密钥时必须提供 value 或 description。",
+)
 
 export const secretUpsertInputSchema = z.object({
   name: secretNameSchema,

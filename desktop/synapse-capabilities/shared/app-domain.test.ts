@@ -110,6 +110,11 @@ describe("App capability domain", () => {
     expect(updateTool?.description).not.toContain("renam")
     expect(updateTool?.inputSchema).toMatchObject({
       type: "object",
+      required: ["name"],
+      anyOf: [
+        { required: ["value"] },
+        { required: ["description"] },
+      ],
       properties: expect.not.objectContaining({
         newName: expect.anything(),
       }),

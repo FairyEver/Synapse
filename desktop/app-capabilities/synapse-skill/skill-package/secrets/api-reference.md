@@ -76,7 +76,7 @@ Input:
 }
 ```
 
-Updates an existing secret value or description. The name identifies the existing secret and cannot be changed. Omit `value` when only changing metadata. The response never includes `value`.
+Updates an existing secret value or description. The name identifies the existing secret and cannot be changed. At least one of `value` or `description` is required; a name-only update is invalid. Omit `value` when only changing metadata. The response never includes `value`.
 
 ### app_secrets_item_upsert
 

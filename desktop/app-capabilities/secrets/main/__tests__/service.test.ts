@@ -179,6 +179,24 @@ describe("SecretsService", () => {
     }).success).toBe(false)
   })
 
+  it("rejects empty updates without writing or broadcasting a change", async () => {
+    const harness = createHarness()
+    const service = createSecretsService(harness.deps)
+    const changed = vi.fn()
+    service.events.on("changed", changed)
+    await service.create({ name: "TOKEN", value: "secret", description: "api" })
+    changed.mockClear()
+
+    await expect(service.update({ name: "TOKEN" }))
+      .rejects.toThrow("必须提供 value 或 description")
+
+    expect(changed).not.toHaveBeenCalled()
+    await expect(service.get({ name: "TOKEN", includeValue: true })).resolves.toMatchObject({
+      value: "secret",
+      description: "api",
+    })
+  })
+
   it("updates value and description while preserving the original name", async () => {
     const service = createSecretsService(createHarness().deps)
     await service.create({ name: "TOKEN", value: "old", description: "old description" })

@@ -23,7 +23,7 @@ The desktop scanner accepts runtime `.env` files up to 1 MiB. The installer appl
 3. Use `app_secrets_item_get` with `includeValue: true` only when the user explicitly needs the stored value.
 4. Use `app_secrets_item_upsert` with `value` when setting a value and creation/update are both acceptable.
 5. Use `app_secrets_item_create` when creation must fail if the name already exists.
-6. Use `app_secrets_item_update` to change an existing secret value or description, including description-only updates.
+6. Use `app_secrets_item_update` to change an existing secret value or description, including description-only updates. Always provide at least one of `value` or `description`; a name-only update is invalid.
 7. Use `app_secrets_item_delete` only after the name is clear.
 
 ## Sensitive Value Rules

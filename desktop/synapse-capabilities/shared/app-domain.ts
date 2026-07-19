@@ -555,7 +555,7 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: SECRETS_MCP_TOOL_NAMES.update,
-      description: "Update an existing user-scoped local secret value or description.",
+      description: "Update an existing user-scoped local secret value or description. Provide at least one of value or description.",
       inputSchema: {
         type: "object",
         properties: {
@@ -564,6 +564,10 @@ export function buildAppTools(): McpToolDefinition[] {
           description: stringField("Optional replacement description. Empty clears the description."),
         },
         required: ["name"],
+        anyOf: [
+          { required: ["value"] },
+          { required: ["description"] },
+        ],
         additionalProperties: false,
       },
     },

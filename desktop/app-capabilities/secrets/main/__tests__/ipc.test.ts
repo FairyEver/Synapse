@@ -88,6 +88,12 @@ describe("secretsIpcModule", () => {
     })
   })
 
+  it("rejects empty secret updates at the IPC boundary", () => {
+    expect(() => secretsIpcModule.methods.update.request.parse({
+      name: "TOKEN",
+    })).toThrow("必须提供 value 或 description")
+  })
+
   it("dispatches methods through the core service", async () => {
     const { auditSink, ctx, permissionGuard, service } = createHarness()
 

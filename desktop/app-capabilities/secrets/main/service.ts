@@ -116,6 +116,9 @@ export function createSecretsService(deps: SecretsServiceDeps) {
   }
 
   async function update(input: SecretUpdateInput): Promise<SecretSafeView> {
+    if (input.value === undefined && input.description === undefined) {
+      throw new Error("更新密钥时必须提供 value 或 description。")
+    }
     const name = normalizeName(input.name)
     return withNameMutation(name, () => updateLocked({ ...input, name }))
   }

@@ -192,6 +192,17 @@ describe("createSecretsCapabilityDispatcher", () => {
     expect(service.update).not.toHaveBeenCalled()
   })
 
+  it("rejects empty secret updates before permission and service access", async () => {
+    const { dispatcher, permissionGuard, service } = createHarness()
+
+    await expect(dispatcher.dispatch(SECRETS_ITEM_UPDATE_CAPABILITY_ID, {
+      name: "TOKEN",
+    }, { source: "mcp-http" })).rejects.toThrow("必须提供 value 或 description")
+
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(service.update).not.toHaveBeenCalled()
+  })
+
   it("requires a value for MCP upsert while preserving API metadata updates", async () => {
     const { dispatcher, permissionGuard, service } = createHarness()
 
