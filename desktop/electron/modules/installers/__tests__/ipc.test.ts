@@ -325,6 +325,46 @@ describe("installersIpcModule", () => {
     expect(JSON.stringify(mocks.auditRecord.mock.calls)).not.toContain("gitee_token-value")
   })
 
+  it("resolves saved secret references before batch installs", async () => {
+    const harness = createHarness()
+
+    await harness.invoke("synapse:installers:install-source-to-editor-targets", {
+      mode: "install",
+      source: {
+        kind: "skill",
+        origin: "prepared",
+        sourceIdentity: "synapse-skill",
+        preparedSourceId: "synapse-skill:test",
+        name: "synapse-skill",
+      },
+      targets: [{ editorId: "codex", scope: "global" }],
+      skillEnvSecretNames: { GITEE_TOKEN: "GITEE_TOKEN" },
+      skillEnvValues: { REGION: "cn" },
+      variableSecretNames: { INLINE_TOKEN: "INLINE_TOKEN" },
+    })
+
+    expect(mocks.installSourceToEditorTargets).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skillEnvValues: { GITEE_TOKEN: "gitee_token-value", REGION: "cn" },
+        variableSubstitutions: { INLINE_TOKEN: "inline_token-value" },
+      }),
+      expect.objectContaining({ actor: { kind: "user" } }),
+    )
+    expect(mocks.installSourceToEditorTargets.mock.calls[0]?.[0]).not.toEqual(expect.objectContaining({
+      skillEnvSecretNames: expect.anything(),
+      variableSecretNames: expect.anything(),
+    }))
+    expect(mocks.secretGet).toHaveBeenCalledTimes(2)
+    expect(mocks.permissionCheck).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.read",
+      actor: expect.objectContaining({ kind: "user", id: "installer" }),
+    }))
+    expect(mocks.auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.read",
+      outcome: "allowed",
+    }))
+  })
+
   it("blocks install when saved secret access is denied", async () => {
     mocks.permissionCheck.mockResolvedValueOnce({ allowed: false, reason: "denied" })
     const harness = createHarness()

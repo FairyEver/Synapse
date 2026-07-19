@@ -81,14 +81,21 @@ const secretDispatchDataSchema = z.object({
   secret: secretValueViewSchema,
 }).strict()
 
-async function resolveInstallerSecretReferences(
-  payload: SynapseInstallSourceToEditorPayload,
+type InstallerSecretReferencePayload = {
+  skillEnvSecretNames?: Record<string, string>
+  skillEnvValues?: Record<string, string>
+  variableSecretNames?: Record<string, string>
+  variableSubstitutions?: Record<string, string>
+}
+
+async function resolveInstallerSecretReferences<T extends InstallerSecretReferencePayload>(
+  payload: T,
   deps: {
     auditSink: AuditSink
     permissionGuard: PermissionGuard
     resolveSecretsService: () => SecretsService
   },
-): Promise<SynapseInstallSourceToEditorPayload> {
+): Promise<Omit<T, "skillEnvSecretNames" | "variableSecretNames">> {
   const {
     skillEnvSecretNames,
     variableSecretNames,
@@ -167,9 +174,11 @@ const installSourceToEditorTargetsSchema = z.object({
   overwriteConfirmed: z.boolean().optional(),
   replaceConfirmed: z.boolean().optional(),
   skillEnvReplacementValues: z.record(z.string(), z.string()).optional(),
+  skillEnvSecretNames: z.record(z.string(), z.string()).optional(),
   skillEnvValues: z.record(z.string(), z.string()).optional(),
   source: installerSourceSchema,
   targets: z.array(installSourceTargetSchema),
+  variableSecretNames: z.record(z.string(), z.string()).optional(),
   variableSubstitutions: z.record(z.string(), z.string()).optional(),
 }).strict()
 
@@ -258,10 +267,17 @@ export const installersIpcModule: IpcModule = {
       channel: "synapse:installers:install-source-to-editor-targets",
       request: installSourceToEditorTargetsSchema,
       handler: async (ctx, payload: SynapseInstallSourceToEditorTargetsPayload) => {
-        const result = await editorInstallService.installSourceToEditorTargets(payload, {
+        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+        const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+        const resolvedPayload = await resolveInstallerSecretReferences(payload, {
+          auditSink,
+          permissionGuard,
+          resolveSecretsService: () => ctx.resolve<SecretsService>("core.secrets"),
+        })
+        const result = await editorInstallService.installSourceToEditorTargets(resolvedPayload, {
           actor: { kind: "user" },
-          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
-          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+          auditSink,
+          permissionGuard,
         })
         if (result.results.every((item) => item.status === "installed")) {
           installerSourceService.releaseSource(payload.source)

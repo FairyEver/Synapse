@@ -95,7 +95,9 @@ export type SynapseInstallSourceToEditorTargetsPayload = {
   overwriteConfirmed?: boolean
   replaceConfirmed?: boolean
   skillEnvReplacementValues?: Record<string, string>
+  skillEnvSecretNames?: Record<string, string>
   skillEnvValues?: Record<string, string>
+  variableSecretNames?: Record<string, string>
   variableSubstitutions?: Record<string, string>
 }
 
