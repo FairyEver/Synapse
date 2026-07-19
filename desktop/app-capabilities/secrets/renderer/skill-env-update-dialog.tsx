@@ -42,7 +42,7 @@ type QueueResultById = Record<
   Pick<SkillEnvBindingQueueItem, "status" | "message">
 >
 
-type QueueErrorKind = "failed" | "session_expired"
+type QueueErrorKind = "failed" | "scan_truncated" | "session_expired"
 
 type GroupedBindingItem = {
   readonly groupId: string
@@ -115,6 +115,13 @@ export function SkillEnvUpdateDialog({
     try {
       const scanResult = await secretsBridge.scanSkillEnvBindings({ name })
       if (scanResult.failed) throw new Error("Skill env binding scan failed.")
+      if (scanResult.truncated) {
+        setQueueErrors((current) => ({ ...current, [targetGroupId]: "scan_truncated" }))
+        setSelectedIds((current) => current.filter(
+          (key) => !key.startsWith(`${targetGroupId}\u0000`),
+        ))
+        return
+      }
       const nextGroups = activeGroups.map((group) => (
         groupId(group.name) === targetGroupId ? { name: group.name, scanResult } : group
       ))
@@ -203,11 +210,13 @@ export function SkillEnvUpdateDialog({
                   return (
                     <div key={id} className="flex items-center justify-between gap-3" role="alert">
                       <p className="text-sm text-destructive">
-                        {kind === "session_expired"
+                        {kind === "scan_truncated"
+                          ? `${group.name} 的关联 Skill 过多，请整理后重新扫描。`
+                          : kind === "session_expired"
                           ? `${group.name} 的扫描会话已过期，请重新扫描。`
                           : `${group.name} 的更新请求失败，请重试。`}
                       </p>
-                      {kind === "session_expired" ? (
+                      {kind === "session_expired" || kind === "scan_truncated" ? (
                         <Button type="button" variant="outline" size="sm" onClick={() => void rescanGroup(group.name)}>
                           重新扫描
                         </Button>
@@ -233,9 +242,12 @@ export function SkillEnvUpdateDialog({
                 {groupedItems.map(({ groupId: bindingGroupId, groupName, item, itemKey: bindingKey }) => {
                   const queueResult = queueResults[bindingKey]
                   const requiresRescan = queueResult?.status === "conflict"
+                  const scanIncomplete = queueErrors[bindingGroupId] === "scan_truncated"
+                    || queueErrors[bindingGroupId] === "session_expired"
                   const selectable = item.status === "needs_update"
                     && queueResult?.status !== "updated"
                     && !requiresRescan
+                    && !scanIncomplete
                   return (
                     <TableRow key={bindingKey}>
                       <TableCell>

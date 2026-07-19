@@ -631,6 +631,44 @@ describe("SecretsModule", () => {
     expect(rowText("skill-one")).not.toContain("文件已变化")
   })
 
+  it("rejects a truncated rescan without accepting partial items", async () => {
+    const conflictedItem = { ...skillEnvScanResult.items[0], status: "needs_update" as const }
+    const partialItem = { ...conflictedItem, id: "partial-item", skillName: "partial-skill" }
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    mocks.secrets.scanSkillEnvBindings
+      .mockResolvedValueOnce({ scanSessionId: "scan-conflict", items: [conflictedItem] })
+      .mockResolvedValueOnce({
+        scanSessionId: "scan-truncated",
+        items: [partialItem],
+        truncated: true,
+      })
+    mocks.secrets.queueSkillEnvBindings.mockResolvedValueOnce({
+      items: [{ ...conflictedItem, status: "conflict" as const, message: "配置文件已发生变化。" }],
+    })
+
+    await renderSecretsModule()
+    await act(async () => {
+      clickButtonByLabel("扫描关联 Skill：TOKEN")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("更新选中项")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("重新扫描")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("TOKEN 的关联 Skill 过多，请整理后重新扫描。")
+    expect(document.body.textContent).toContain("skill-one")
+    expect(document.body.textContent).not.toContain("partial-skill")
+    expect(document.body.querySelector<HTMLButtonElement>('button[aria-label="选择 Skill：skill-one（TOKEN）"]')?.disabled)
+      .toBe(true)
+    expect(buttonByText("更新选中项").disabled).toBe(true)
+    expect(mocks.secrets.queueSkillEnvBindings).toHaveBeenCalledTimes(1)
+  })
+
   it("keeps the scanned rows available when the queue request fails", async () => {
     mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
     mocks.secrets.scanSkillEnvBindings.mockResolvedValueOnce(skillEnvScanResult)
