@@ -1624,7 +1624,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(serialized).not.toContain("/Users/example")
   })
 
-  it("createRunWorkflowHandler sanitizes node results before persisting snapshots", async () => {
+  it("createRunWorkflowHandler sanitizes snapshots and emits typed save failures", async () => {
     vi.doMock("../../services/config-store", () => ({
       configStore: {
         load: vi.fn(async () => ({
@@ -1665,7 +1665,8 @@ describe("bootstrap descriptors (T1.5)", () => {
     const runStatuses = new Map<string, { runId: string; workflowId: string; status: string; nodeResults: Record<string, unknown>; startedAt: number; params?: Record<string, unknown>; definition?: unknown }>()
     const runCompletions = new Map<string, Promise<unknown>>()
     const eventBus = { emit: vi.fn() }
-    const snapshotService = { save: vi.fn() }
+    const snapshotError = new Error("disk failed at /Users/example/private")
+    const snapshotService = { save: vi.fn().mockRejectedValue(snapshotError) }
     const capabilityLogger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const workflowEngine = {
       run: vi.fn(async (_def: unknown, _params: unknown, runId: string, emit: (event: unknown) => void) => {
@@ -1685,10 +1686,11 @@ describe("bootstrap descriptors (T1.5)", () => {
       capabilityLogger: capabilityLogger as never,
     })
 
-    await handler("wf-1", {
+    const result = await handler("wf-1", {
       apiToken: "sk-param-secret",
       note: "Authorization: Bearer raw-token at /Users/example/params",
     })
+    const runId = (result as { runId: string }).runId
 
     await vi.waitFor(() => {
       expect(snapshotService.save).toHaveBeenCalled()
@@ -1716,6 +1718,32 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(JSON.stringify(eventBus.emit.mock.calls)).not.toContain("/Users/example/repo")
     expect(JSON.stringify([...runStatuses.values()])).not.toContain("sk-secret")
     expect(JSON.stringify([...runStatuses.values()])).not.toContain("/Users/example/repo")
+    await vi.waitFor(() => {
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          domain: "workflow",
+          type: "workflow:snapshot-save-failed",
+          payload: {
+            type: "workflow:snapshot-save-failed",
+            runId,
+            workflowId: "wf-1",
+            status: "completed",
+          },
+        }),
+        { backpressure: "block" },
+      )
+    })
+    expect(capabilityLogger.warn).toHaveBeenCalledWith(
+      "failed to persist workflow run snapshot",
+      expect.objectContaining({
+        runId,
+        workflowId: "wf-1",
+        boundary: "workflow-snapshot",
+        errorName: "Error",
+        errorLength: snapshotError.message.length,
+      }),
+    )
+    expect(JSON.stringify(eventBus.emit.mock.calls)).not.toContain(snapshotError.message)
   })
 
   it("createRunWorkflowHandler keeps resolved node input and progress in live run status", async () => {

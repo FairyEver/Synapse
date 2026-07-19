@@ -703,7 +703,12 @@ export function createRunWorkflowHandler(deps: {
         if (!isWorkflowDeleted?.(id)) {
           Promise.resolve(snapshotService.save(sanitizeWorkflowRunSnapshot({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: event.result?.nodeResults ?? nextNodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) }))).catch((err) => {
             capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
-            eventBus.emit({ domain: "workflow", type: "snapshot:failed", payload: { runId, workflowId: id, error: err instanceof Error ? err.message : String(err) }, timestamp: new Date().toISOString() }, { backpressure: "block" })
+            eventBus.emit({
+              domain: "workflow",
+              type: "workflow:snapshot-save-failed",
+              payload: { type: "workflow:snapshot-save-failed", runId, workflowId: id, status },
+              timestamp: new Date().toISOString(),
+            }, { backpressure: "block" })
           })
         }
       }
