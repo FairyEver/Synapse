@@ -130,8 +130,12 @@ export class RunSnapshotService {
   async deleteWorkflow(workflowId: string): Promise<void> {
     const dir = this.dir(workflowId)
     try {
-      const snapshots = await this.readSnapshotFiles(workflowId)
-      await this.deleteRunArtifactDirectories(workflowId, snapshots.map(({ snapshot }) => snapshot.runId))
+      const files = await readdir(dir)
+      const runIds = files.flatMap((file) => {
+        const runId = runIdFromSnapshotFile(file)
+        return runId ? [runId] : []
+      })
+      await this.deleteRunArtifactDirectories(workflowId, runIds)
       await rm(dir, { recursive: true, force: true })
       logger.info("run snapshots deleted for workflow", { workflowId })
     } catch (err) {

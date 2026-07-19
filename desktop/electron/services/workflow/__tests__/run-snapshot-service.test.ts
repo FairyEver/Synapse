@@ -141,6 +141,27 @@ describe("RunSnapshotService", () => {
       await rm(dataDir, { recursive: true, force: true })
     }
   })
+
+  it("deletes workflow snapshots and artifacts without parsing snapshot contents", async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), "synapse-run-snapshots-"))
+    const service = new RunSnapshotService(dataDir)
+    const snapshotDir = path.join(dataDir, "workflow-runs", "workflow-1")
+    const artifactDir = path.join(dataDir, "workflow-runs", "run-corrupt", "nodes", "node-1")
+
+    try {
+      await mkdir(snapshotDir, { recursive: true })
+      await mkdir(artifactDir, { recursive: true })
+      await writeFile(path.join(snapshotDir, "run-corrupt.json"), "invalid snapshot", "utf-8")
+      await writeFile(path.join(artifactDir, "stdout.log"), "output", "utf-8")
+
+      await service.deleteWorkflow("workflow-1")
+
+      await expectExists(snapshotDir, false)
+      await expectExists(path.join(dataDir, "workflow-runs", "run-corrupt"), false)
+    } finally {
+      await rm(dataDir, { recursive: true, force: true })
+    }
+  })
 })
 
 function snapshot(runId: string, startedAt: number): WorkflowRunSnapshot {
