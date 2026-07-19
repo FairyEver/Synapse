@@ -394,7 +394,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
 
   "workflow.run.execute": async (params, deps, security) => {
     const workflowId = requireString(params, "workflowId")
-    const runParams = (params.params as Record<string, unknown>) ?? {}
+    const runParams = "params" in params ? requireObject(params, "params") : {}
     const result = await deps.runWorkflow(workflowId, runParams, { actor: security?.actor })
     if ("errors" in result) return { ok: false, errors: result.errors }
     return { ok: true, data: result }

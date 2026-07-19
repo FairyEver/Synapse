@@ -360,7 +360,7 @@ Execute a workflow with parameters.
 
 **Params:** `workflowId` (string, required), `params?` (object — key-value matching param definitions)
 **Returns:** `{ runId }`
-**Notes:** Poll `app_workflow_run_get` with this `workflowId` and the returned `runId` to track progress. Every key in `params` must match a declared Workflow param; unknown keys are rejected before the run starts. For option params, pass a string. Closed options must match one configured option value; params with `allowCustomOption: true` accept a non-empty custom string. Custom run values are not saved back to the workflow definition. For file/directory params, pass either a local path string or a resource ref. Synapse normalizes strings to:
+**Notes:** Omit `params` when there are no run values; when present, it must be an object. Strings, arrays, `null`, and other non-object parameter bags are rejected before execution. Poll `app_workflow_run_get` with this `workflowId` and the returned `runId` to track progress. Every key in `params` must match a declared Workflow param; unknown keys are rejected before the run starts. For option params, pass a string. Closed options must match one configured option value; params with `allowCustomOption: true` accept a non-empty custom string. Custom run values are not saved back to the workflow definition. For file/directory params, pass either a local path string or a resource ref. Synapse normalizes strings to:
 
 ```json
 { "kind": "local_path", "entryType": "file", "path": "/absolute/path/to/file.txt" }

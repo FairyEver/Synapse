@@ -1243,6 +1243,28 @@ describe("createWorkflowDispatcher", () => {
     })
   })
 
+  it("workflow.run.execute rejects non-object params before starting a run", async () => {
+    const deps = makeDeps()
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    for (const params of ["", [], null]) {
+      await expect(dispatcher.dispatch(
+        "workflow.run.execute",
+        { workflowId: "wf-1", params },
+        { source: "api" },
+      )).rejects.toThrow("Missing or invalid 'params': expected object")
+    }
+
+    expect(deps.runWorkflow).not.toHaveBeenCalled()
+
+    await expect(dispatcher.dispatch(
+      "workflow.run.execute",
+      { workflowId: "wf-1" },
+      { source: "api" },
+    )).resolves.toMatchObject({ ok: true, data: { runId: "run-1" } })
+    expect(deps.runWorkflow).toHaveBeenCalledWith("wf-1", {}, expect.any(Object))
+  })
+
   it("workflow.run.execute forwards mixed multi-resource arrays unchanged for runtime normalization", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)

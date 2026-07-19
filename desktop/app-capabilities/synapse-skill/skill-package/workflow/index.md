@@ -62,7 +62,7 @@ When you see this URI, parse it as `providerId = <providerId>` and `modelTier = 
 8. Update node configs with `app_workflow_node_update`: add final prompt templates, Codex/Claude Code CLI options, workflow_call `paramTemplates`, and `variables`, including `node_output` bindings only after the referenced upstream path exists.
 9. Call `app_workflow_layout_update` after node/edge changes.
 10. Call `app_workflow_definition_inspect` and fix errors before executing.
-11. Call `app_workflow_run_execute` with only params declared by the Workflow. Unknown keys are rejected. Returns `{ runId }`.
+11. Call `app_workflow_run_execute` with only params declared by the Workflow. Omit `params` when there are no values; when provided, `params` must be an object. Unknown keys and non-object parameter bags are rejected before the run starts. Returns `{ runId }`.
 12. Poll `app_workflow_run_get` with the workflowId and runId (2-3 second intervals) until status is `completed`, `failed`, or `cancelled`.
 13. To cancel an active run, call `app_workflow_run_disable` with the same workflowId and runId.
 
