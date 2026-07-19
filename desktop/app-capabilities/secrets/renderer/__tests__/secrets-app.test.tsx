@@ -829,6 +829,39 @@ describe("SecretsModule", () => {
     expect(mocks.secrets.delete).toHaveBeenCalledWith({ name: "TOKEN" })
   })
 
+  it("requires confirmation for an Alt delete when some Skill env files cannot be checked", async () => {
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    mocks.secrets.scanSkillEnvBindings.mockResolvedValueOnce({
+      scanSessionId: "scan-warning",
+      items: [],
+      warnings: [{
+        skillName: "broken-skill",
+        editors: [{ id: "codex", label: "Codex" }],
+        scope: "global",
+        envPath: "/skills/broken-skill/.env",
+        status: "invalid",
+        message: "配置文件格式无效。",
+      }],
+    })
+
+    await renderSecretsModule()
+    await act(async () => {
+      clickButtonByLabel("删除密钥：TOKEN", { altKey: true })
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.delete).not.toHaveBeenCalled()
+    expect(mocks.toast.warning).toHaveBeenCalledWith("部分 Skill 配置无法检查。")
+    expect(document.body.textContent).toContain("部分 Skill 配置无法检查，删除后可能仍有已安装 Skill 保留此 .env 键。")
+
+    await act(async () => {
+      clickButton("删除")
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.delete).toHaveBeenCalledWith({ name: "TOKEN" })
+  })
+
   it("keeps the secret when delete scanning fails", async () => {
     mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
     mocks.secrets.scanSkillEnvBindings.mockRejectedValueOnce(new Error("scan failed: super-secret"))

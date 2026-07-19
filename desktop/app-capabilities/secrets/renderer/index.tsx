@@ -92,6 +92,7 @@ type SecretValueDialogState = {
 type DeleteSecretDialogState = {
   readonly secret: SecretSafeView
   readonly bindingCount: number
+  readonly hasScanWarnings: boolean
   readonly scanGeneration: number
 }
 
@@ -336,12 +337,13 @@ export function SecretsModule() {
       toast.warning("关联 Skill 过多，请整理后重新扫描。")
       return
     }
-    if (scanResult.warnings?.length) toast.warning("部分 Skill 配置无法检查。")
-    if (bypassConfirmation && scanResult.items.length === 0) {
+    const hasScanWarnings = Boolean(scanResult.warnings?.length)
+    if (hasScanWarnings) toast.warning("部分 Skill 配置无法检查。")
+    if (bypassConfirmation && scanResult.items.length === 0 && !hasScanWarnings) {
       void deleteSecret(secret, scanGeneration)
       return
     }
-    setDeleting({ secret, bindingCount: scanResult.items.length, scanGeneration })
+    setDeleting({ secret, bindingCount: scanResult.items.length, hasScanWarnings, scanGeneration })
   }
 
   const toggleSecretReveal = useCallback(async (secret: SecretSafeView) => {
@@ -850,9 +852,7 @@ function DeleteSecretDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>删除密钥</AlertDialogTitle>
           <AlertDialogDescription>
-            {state?.bindingCount
-              ? `发现 ${state.bindingCount} 个关联 Skill，删除密钥不会删除这些 .env 键。`
-              : state ? `删除“${state.secret.name}”后不可恢复。` : "删除后不可恢复。"}
+            {deleteSecretDescription(state)}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -862,6 +862,18 @@ function DeleteSecretDialog({
       </AlertDialogContent>
     </AlertDialog>
   )
+}
+
+function deleteSecretDescription(state: DeleteSecretDialogState | null): string {
+  if (!state) return "删除后不可恢复。"
+  if (state.hasScanWarnings) {
+    return state.bindingCount > 0
+      ? `部分 Skill 配置无法检查；另发现 ${state.bindingCount} 个关联 Skill。删除密钥不会删除这些 .env 键。`
+      : "部分 Skill 配置无法检查，删除后可能仍有已安装 Skill 保留此 .env 键。"
+  }
+  return state.bindingCount > 0
+    ? `发现 ${state.bindingCount} 个关联 Skill，删除密钥不会删除这些 .env 键。`
+    : `删除“${state.secret.name}”后不可恢复。`
 }
 
 function mergeSecret(secrets: SecretSafeView[], secret: SecretSafeView): SecretSafeView[] {
