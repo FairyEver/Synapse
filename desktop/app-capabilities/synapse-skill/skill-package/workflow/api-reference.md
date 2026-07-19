@@ -224,7 +224,7 @@ Validate a workflow definition without saving.
 
 **Params:** `definition` (object, required) — full WorkflowDefinition including the complete Synapse-managed `meta` object with `meta.schemaVersion`
 **Returns:** `{ valid, errors, warnings }`
-**Notes:** Inspection rejects missing schema metadata before graph validation, matching whole-definition update. It applies the same definition and local multi-resource default checks as save, including filesystem type, accessibility, and canonical-path uniqueness. Validation errors may include `nodeId`, `nodeName`, `field`, `retryable`, and `details` such as `missingField`, `providerId`, `modelTier`, `projectId`, and `timeoutMs`.
+**Notes:** Inspection rejects missing schema metadata before graph validation, then applies the same schema migration gate as save. Supported legacy definitions are migrated in memory before validation; future or failed schemas return `valid: false` with an `invalid_config` error and must not be interpreted or edited. It applies the same definition and local multi-resource default checks as save, including filesystem type, accessibility, and canonical-path uniqueness. Validation errors may include `nodeId`, `nodeName`, `field`, `retryable`, and `details` such as `missingField`, `providerId`, `modelTier`, `projectId`, and `timeoutMs`.
 
 ### app_workflow_run_get
 

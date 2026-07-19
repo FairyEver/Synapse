@@ -294,7 +294,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     },
     {
       name: "workflow_definition_inspect",
-      description: "Validate a full workflow definition, including the required Synapse-managed meta.schemaVersion, and return { valid, errors, warnings }. Workflow Call validation rejects missing required child parameter templates or bindings as well as incompatible resource bindings. Errors include nodeId, nodeName, field, details.missingField, providerId/modelTier/projectId, timeoutMs, and retryable when available.",
+      description: "Validate a full workflow definition, including the required Synapse-managed meta.schemaVersion, and return { valid, errors, warnings }. Inspection applies the same schema migration gate as save: supported legacy definitions are migrated in memory, while future or failed schemas return valid=false and must not be interpreted or edited. Workflow Call validation rejects missing required child parameter templates or bindings as well as incompatible resource bindings. Errors include nodeId, nodeName, field, details.missingField, providerId/modelTier/projectId, timeoutMs, and retryable when available.",
       inputSchema: {
         type: "object",
         properties: { definition: workflowDefinitionSchema },

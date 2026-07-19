@@ -561,6 +561,38 @@ describe("createWorkflowDispatcher", () => {
     expect(loadValidationOptions).not.toHaveBeenCalled()
   })
 
+  it("reports future workflow schemas as invalid before graph validation", async () => {
+    const loadValidationOptions = vi.fn(async () => ({}))
+    const dispatcher = createWorkflowDispatcher(makeDeps({ loadValidationOptions }))
+    const definition = {
+      id: "wf-future", name: "Future", description: "", version: "v1",
+      meta: { schemaVersion: "99.0.0" },
+      createdAt: 1, updatedAt: 2, params: [],
+      nodes: [endNode("n1")],
+      edges: [],
+    }
+
+    const result = await dispatcher.dispatch(
+      "workflow.definition.inspect",
+      { definition },
+      { source: "api" },
+    )
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        valid: false,
+        errors: [{
+          type: "invalid_config",
+          message: "该工作流使用更高的数据版本（99.0.0），请升级 Synapse 后再编辑或运行。",
+        }],
+        warnings: [],
+      },
+    })
+    expect(loadValidationOptions).not.toHaveBeenCalled()
+    expect(definition.meta.schemaVersion).toBe("99.0.0")
+  })
+
   it("reports workflow_call resource binding mismatches during definition inspection", async () => {
     const deps = makeDeps({
       loadValidationOptions: vi.fn(async () => ({

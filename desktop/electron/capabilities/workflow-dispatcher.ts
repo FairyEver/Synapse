@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto"
 import { z } from "zod"
-import type { WorkflowService, WorkflowSaveResult, WorkflowSaveError } from "../services/workflow/workflow-service"
+import {
+  workflowReadError,
+  type WorkflowService,
+  type WorkflowSaveResult,
+  type WorkflowSaveError,
+} from "../services/workflow/workflow-service"
+import { migrateWorkflowDocument } from "../services/workflow/workflow-document-migration"
 import type { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import type { NodeTypeRegistry } from "../../workflow-nodes/registry"
 import type { EventBus } from "../runtime/event-bus/types"
@@ -285,7 +291,18 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     requireWorkflowSchemaVersion(rawDefinition)
     const definition = structuredClone(rawDefinition) as unknown as WorkflowDefinition
     normalizeWorkflowParamDefaults(definition.params)
-    const result = await validateWorkflowForDispatch(deps, definition)
+    const migration = migrateWorkflowDocument(definition)
+    if (migration.kind !== "current") {
+      return {
+        ok: true,
+        data: {
+          valid: false,
+          errors: [{ type: "invalid_config", message: workflowReadError(migration).message }],
+          warnings: [],
+        },
+      }
+    }
+    const result = await validateWorkflowForDispatch(deps, migration.document)
     return { ok: true, data: result }
   },
 
