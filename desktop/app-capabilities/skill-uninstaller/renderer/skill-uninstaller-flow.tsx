@@ -86,7 +86,7 @@ export function SkillUninstallerFlow({
 
   const normalizedQuery = useMemo<SkillUninstallQuery>(() => ({
     name: query.name.trim(),
-    ...(query.searchRootPath?.trim() ? { searchRootPath: query.searchRootPath.trim() } : {}),
+    ...(query.searchRootPath?.trim() ? { searchRootPath: query.searchRootPath } : {}),
   }), [query])
 
   const cancelScan = useCallback(async () => {
@@ -115,10 +115,9 @@ export function SkillUninstallerFlow({
     activeNameScanIdRef.current = nextScanId
     setNameOptions({ names: [], loading: true })
     try {
-      const normalizedSearchRootPath = searchRootPath?.trim()
       const result = await skillUninstallerBridge.scanNames({
         scanId: nextScanId,
-        ...(normalizedSearchRootPath ? { searchRootPath: normalizedSearchRootPath } : {}),
+        ...(searchRootPath?.trim() ? { searchRootPath } : {}),
       })
       if (activeNameScanIdRef.current !== nextScanId) return
       setNameOptions({

@@ -161,13 +161,25 @@ describe("SkillUninstallerFlow", () => {
   })
 
   it("refreshes name options after choosing a custom search root", async () => {
-    mocks.chooseDirectory.mockResolvedValue("/chosen")
+    mocks.chooseDirectory.mockResolvedValue("/chosen ")
     await renderFlow({ initialQuery: { name: "" } })
     await click("选择")
 
     expect(mocks.scanNames).toHaveBeenLastCalledWith({
       scanId: expect.any(String),
-      searchRootPath: "/chosen",
+      searchRootPath: "/chosen ",
+    })
+  })
+
+  it("keeps the exact custom root when starting a scan", async () => {
+    mocks.scan.mockResolvedValue({ candidates: [], complete: true, warnings: [] })
+    await renderFlow({ initialQuery: { name: "jenkins", searchRootPath: "/skills " } })
+
+    await click("扫描")
+
+    expect(mocks.scan).toHaveBeenCalledWith({
+      scanId: expect.any(String),
+      query: { name: "jenkins", searchRootPath: "/skills " },
     })
   })
 
@@ -180,7 +192,7 @@ describe("SkillUninstallerFlow", () => {
     await act(async () => {
       searchRootInput.focus()
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
-      setter?.call(searchRootInput, "/typed")
+      setter?.call(searchRootInput, "/typed ")
       searchRootInput.dispatchEvent(new Event("input", { bubbles: true }))
     })
     await act(async () => {
@@ -189,7 +201,7 @@ describe("SkillUninstallerFlow", () => {
 
     expect(mocks.scanNames).toHaveBeenLastCalledWith({
       scanId: expect.any(String),
-      searchRootPath: "/typed",
+      searchRootPath: "/typed ",
     })
   })
 

@@ -81,6 +81,28 @@ describe("SkillUninstallerService", () => {
     }))
   })
 
+  it("keeps the exact custom root while scanning and revalidating a target", async () => {
+    const exactRoot = path.join(tempRoot, "skills ")
+    const otherRoot = path.join(tempRoot, "skills")
+    const exactTarget = await createSkill(exactRoot, "jenkins")
+    await createSkill(otherRoot, "jenkins")
+    const trashItem = vi.fn(async () => undefined)
+    const { security } = createSecurity()
+    const service = new SkillUninstallerService({ trashItem })
+    const query = { name: "jenkins", searchRootPath: exactRoot }
+
+    const scanResult = await service.scan(query, security)
+
+    expect(scanResult.candidates).toEqual([expect.objectContaining({ path: exactTarget })])
+    await expect(service.uninstall([{
+      path: exactTarget,
+      query,
+    }], security)).resolves.toMatchObject({
+      results: [{ path: exactTarget, status: "trashed" }],
+    })
+    expect(trashItem).toHaveBeenCalledWith(exactTarget)
+  })
+
   it("scans canonical Skill names below a permitted custom root", async () => {
     await createSkill(tempRoot, "custom-folder", "canonical-name")
     const { security, permissionCheck, auditRecord } = createSecurity()

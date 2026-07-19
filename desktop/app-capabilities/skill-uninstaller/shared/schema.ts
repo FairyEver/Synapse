@@ -2,10 +2,11 @@ import { z } from "zod"
 import { SKILL_UNINSTALL_MAX_TARGETS } from "../../../config"
 
 const trimmedNonEmptyString = z.string().transform((value) => value.trim()).pipe(z.string().min(1))
+const nonBlankString = z.string().refine((value) => value.trim().length > 0)
 
 export const skillUninstallQuerySchema = z.object({
   name: trimmedNonEmptyString,
-  searchRootPath: trimmedNonEmptyString.optional(),
+  searchRootPath: nonBlankString.optional(),
 }).strict()
 
 export const skillUninstallCandidateSchema = z.object({
@@ -62,7 +63,7 @@ export const skillUninstallScanRequestSchema = z.object({
 
 export const skillUninstallNameScanRequestSchema = z.object({
   scanId: z.string().min(1),
-  searchRootPath: trimmedNonEmptyString.optional(),
+  searchRootPath: nonBlankString.optional(),
 }).strict()
 
 export const skillUninstallCancelRequestSchema = z.object({

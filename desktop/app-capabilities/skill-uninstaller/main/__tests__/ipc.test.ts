@@ -22,8 +22,8 @@ describe("skill uninstaller schemas", () => {
     expect(skillUninstallQuerySchema.parse({ name: "jenkins" })).toEqual({ name: "jenkins" })
     expect(skillUninstallQuerySchema.parse({
       name: "jenkins",
-      searchRootPath: "/repo",
-    })).toEqual({ name: "jenkins", searchRootPath: "/repo" })
+      searchRootPath: " /repo ",
+    })).toEqual({ name: "jenkins", searchRootPath: " /repo " })
   })
 
   it("rejects empty names and empty target paths", () => {
@@ -40,7 +40,11 @@ describe("skill uninstaller schemas", () => {
     expect(skillUninstallNameScanRequestSchema.parse({
       scanId: "names-1",
       searchRootPath: " /repo ",
-    })).toEqual({ scanId: "names-1", searchRootPath: "/repo" })
+    })).toEqual({ scanId: "names-1", searchRootPath: " /repo " })
+    expect(() => skillUninstallNameScanRequestSchema.parse({
+      scanId: "names-1",
+      searchRootPath: "   ",
+    })).toThrow()
   })
 
   it("accepts a non-fatal warning on a trashed result", async () => {
