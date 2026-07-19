@@ -208,6 +208,37 @@ describe("SynapseSkillModule", () => {
     expect(document.body.textContent).toContain("synapse-skill:codex:global")
   })
 
+  it("disables row installation while status refresh is running", async () => {
+    let finishRefresh: ((value: Awaited<ReturnType<typeof inspectGlobalSkillInstallations>>) => void) | undefined
+    await renderModule()
+    inspectGlobalSkillInstallations.mockImplementationOnce(() => new Promise((resolve) => {
+      finishRefresh = resolve
+    }))
+
+    await clickButton("刷新")
+
+    const installButtons = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
+      .filter((button) => button.textContent === "安装")
+    expect(installButtons).toHaveLength(2)
+    expect(installButtons.every((button) => button.disabled)).toBe(true)
+    installButtons[0]?.click()
+    expect(document.querySelector('[data-testid="installer-flow"]')).toBeNull()
+
+    await act(async () => {
+      finishRefresh?.({
+        entries: [{
+          editorId: "codex",
+          editorLabel: "Codex",
+          scope: "global",
+          status: "not_installed",
+          targetPath: "/Users/test/.agents/skills/synapse-skill",
+          message: null,
+        }],
+      })
+      await Promise.resolve()
+    })
+  })
+
   it("shows only a direct reinstall action for installed targets", async () => {
     const installedResult = {
       entries: [

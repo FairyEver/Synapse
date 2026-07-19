@@ -253,6 +253,7 @@ function SynapseSkillModule() {
   }
 
   const openInstallFlowForEditor = async (editorId: SynapseEditorAdapterSummary["id"]) => {
+    if (statusLoading) return
     const editor = globalEditors.find((item) => item.id === editorId) ?? null
     if (!editor) return
     setPreparing(true)
@@ -428,7 +429,7 @@ function SynapseSkillModule() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            disabled={Boolean(statusError) || preparing || batchInstalling}
+                            disabled={Boolean(statusError) || statusLoading || preparing || batchInstalling}
                             onClick={() => void openInstallFlowForEditor(editor.id)}
                           >
                             {statusPolicy.rowAction === "install" ? <Download data-icon="inline-start" /> : null}
