@@ -212,6 +212,13 @@ export function historyRecordToTimelineItem(
         recoverable: booleanMetadata(metadata, "recoverable"),
         turnOutcome: turnOutcomeMetadata(metadata, "turnOutcome"),
       }
+    case "result":
+      return {
+        ...base,
+        kind: "result",
+        content: entry.content,
+        metadata: storedMetadata,
+      }
     case "sdkEvent":
       return {
         ...base,

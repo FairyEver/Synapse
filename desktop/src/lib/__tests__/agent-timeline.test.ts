@@ -161,6 +161,32 @@ describe("agent timeline conversion", () => {
     }))
   })
 
+  it("restores an empty cancelled result as a terminal timeline item", () => {
+    expect(historyRecordToTimelineItem("session-1", {
+      role: "assistant",
+      content: "",
+      timestamp: "2026-07-18T01:00:00.000Z",
+      metadata: {
+        agentEventType: "result",
+        turnOutcome: {
+          status: "cancelled",
+          mode: "graceful",
+          reason: "user_cancelled",
+          message: "已停止本次执行。",
+        },
+      },
+    }, 3, "claude")).toMatchObject({
+      kind: "result",
+      content: "",
+      metadata: {
+        turnOutcome: {
+          status: "cancelled",
+          reason: "user_cancelled",
+        },
+      },
+    })
+  })
+
   it("restores image artifacts from stored tool result metadata", () => {
     expect(historyRecordToTimelineItem("session-1", {
       role: "tool",

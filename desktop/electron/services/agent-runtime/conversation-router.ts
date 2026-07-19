@@ -721,7 +721,9 @@ export class ConversationRouter {
         this.emitEvent(message, conversation.id, finalized.event)
         await this.persistAgentEvent(conversation.id, turnId, events.length, finalized.event)
         await this.saveEventSdkSession(conversation.id, finalized.event, liveSession)
-        await this.saveEventHistory(conversation.id, finalized.event)
+        assistantHistoryPersisted = await this.saveEventHistory(conversation.id, finalized.event, {
+          assistantHistoryPersisted,
+        }) || assistantHistoryPersisted
         await this.repository.saveUsage({
           conversationId: conversation.id,
           usage: resultUsage as ConversationEntryV1["usage"] | undefined,
@@ -778,7 +780,9 @@ export class ConversationRouter {
           this.emitEvent(message, conversation.id, projected)
           await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
           await this.saveEventSdkSession(conversation.id, projected, liveSession)
-          await this.saveEventHistory(conversation.id, projected)
+          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
+            assistantHistoryPersisted,
+          }) || assistantHistoryPersisted
           error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
           break
         }
@@ -830,7 +834,9 @@ export class ConversationRouter {
             this.emitEvent(message, conversation.id, projected)
             await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
             await this.saveEventSdkSession(conversation.id, projected, liveSession)
-            await this.saveEventHistory(conversation.id, projected)
+            assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
+              assistantHistoryPersisted,
+            }) || assistantHistoryPersisted
             error = outcomeMessage(outcome)
           } else {
             error = AGENT_USER_QUESTION_TIMEOUT_MESSAGE
@@ -1024,7 +1030,9 @@ export class ConversationRouter {
           this.emitEvent(message, conversation.id, finalized.event)
           await this.persistAgentEvent(conversation.id, turnId, events.length, finalized.event)
           await this.saveEventSdkSession(conversation.id, finalized.event, liveSession)
-          await this.saveEventHistory(conversation.id, finalized.event)
+          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, finalized.event, {
+            assistantHistoryPersisted,
+          }) || assistantHistoryPersisted
           await this.repository.saveUsage({
             conversationId: conversation.id,
             usage: resultUsage as ConversationEntryV1["usage"] | undefined,
@@ -1081,7 +1089,9 @@ export class ConversationRouter {
           this.emitEvent(message, conversation.id, projected)
           await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
           await this.saveEventSdkSession(conversation.id, projected, liveSession)
-          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected) || assistantHistoryPersisted
+          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
+            assistantHistoryPersisted,
+          }) || assistantHistoryPersisted
           error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
             break
           }
@@ -1145,7 +1155,9 @@ export class ConversationRouter {
           this.emitEvent(message, conversation.id, projected)
           await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
           await this.saveEventSdkSession(conversation.id, projected, liveSession)
-          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected) || assistantHistoryPersisted
+          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
+            assistantHistoryPersisted,
+          }) || assistantHistoryPersisted
           await this.sessionManager.closeCurrentTurn(conversation.id)
           return {
             conversationId: conversation.id,
@@ -1683,10 +1695,18 @@ export class ConversationRouter {
   private async saveEventHistory(
     conversationId: string,
     event: AgentEvent,
+    options: { readonly assistantHistoryPersisted?: boolean } = {},
   ): Promise<boolean> {
-    const entry = historyEntryForAgentEvent(event)
+    const terminalResultEntry = terminalResultHistoryEntry(event)
+    const entry = terminalResultEntry ?? historyEntryForAgentEvent(event)
     if (!entry) return false
     try {
+      if (terminalResultEntry && options.assistantHistoryPersisted) {
+        const mergeMetadata = { ...(entry.metadata ?? {}) }
+        delete mergeMetadata.agentEventType
+        const updated = await this.repository.mergeLastHistoryMetadata(conversationId, "assistant", mergeMetadata)
+        if (updated) return true
+      }
       await this.repository.appendHistory(conversationId, entry.role, entry.content, entry.metadata)
       return entry.role === "assistant"
     } catch (error) {
@@ -2146,6 +2166,22 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
       const exhaustive: never = event
       return exhaustive
     }
+  }
+}
+
+function terminalResultHistoryEntry(event: AgentEvent): Pick<
+  ConversationEntryV1["history"][number],
+  "role" | "content" | "metadata"
+> | null {
+  if (event.type !== "result" || event.content.trim().length > 0 || !event.metadata?.turnOutcome) return null
+  return {
+    role: "assistant",
+    content: "",
+    metadata: compactMetadata({
+      ...event.metadata,
+      agentEventType: event.type,
+      sdkSessionId: event.sdkSessionId,
+    }),
   }
 }
 

@@ -125,7 +125,8 @@ describe("AgentRuntimeService cancelTurn", () => {
     const turn = service.send(baseMessage("hello"))
     await waitForBusy(service, "hello")
 
-    await service.cancelTurn(conversationId("local", "s1", "active"))
+    const convId = conversationId("local", "s1", "active")
+    await service.cancelTurn(convId)
 
     const result = await turn
     expect(result.error).toBe("已停止本次执行。")
@@ -141,6 +142,19 @@ describe("AgentRuntimeService cancelTurn", () => {
       }),
     }))
     expect(JSON.stringify(result.events)).not.toContain("Agent 执行失败")
+    const conversation = await service.getSession(convId)
+    expect(conversation?.history.at(-1)).toMatchObject({
+      role: "assistant",
+      content: "",
+      metadata: {
+        agentEventType: "result",
+        turnOutcome: {
+          status: "cancelled",
+          mode: "graceful",
+          reason: "user_cancelled",
+        },
+      },
+    })
   })
 
   it("is idempotent — second cancelTurn returns current state", async () => {
