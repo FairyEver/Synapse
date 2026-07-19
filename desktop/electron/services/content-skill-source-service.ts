@@ -145,8 +145,8 @@ async function readSkillDraftFromDirectory(
   security?: ContentSkillSourceSecurityDeps,
   options: { mode?: SkillSourceReadMode } = {},
 ): Promise<ContentSkillSourceDraft> {
-  const dirPath = sourceDirectoryPath.trim()
-  if (!dirPath) {
+  const dirPath = sourceDirectoryPath
+  if (!dirPath.trim()) {
     throwInvalid("sourceDirectoryPath", "sourceDirectoryPath 不能为空。")
   }
 

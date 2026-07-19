@@ -137,6 +137,19 @@ describe("content skill source service", () => {
     expect(Buffer.from(draft.files[0]?.bytes ?? []).toString("utf8")).toBe("hello")
   })
 
+  it("preserves surrounding whitespace in the source directory path", async () => {
+    const parent = await createTempRoot()
+    const exactRoot = path.join(parent, "demo ")
+    const trimmedRoot = path.join(parent, "demo")
+    await writeText(path.join(exactRoot, "SKILL.md"), "# Exact Skill")
+    await writeText(path.join(trimmedRoot, "SKILL.md"), "# Other Skill")
+
+    const draft = await readSkillDraftFromDirectory(exactRoot)
+
+    expect(draft.sourceDirectoryPath).toBe(exactRoot)
+    expect(draft.content).toBe("# Exact Skill")
+  })
+
   it.each([".ENV", ".EnV", ".env.local", ".ENV.production", ".ENV.EXAMPLE"])(
     "rejects a root runtime %s before hidden-file filtering",
     async (runtimeEnvName) => {

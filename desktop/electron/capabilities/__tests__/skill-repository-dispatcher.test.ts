@@ -224,7 +224,7 @@ describe("skill repository capability dispatcher", () => {
       },
     })
     expect(deps.uploadService.importLocal).toHaveBeenCalledWith({
-      sourceDirectoryPath: "/skills/demo",
+      sourceDirectoryPath: " /skills/demo ",
       name: "demo",
       title: "Demo",
       description: "Local demo",

@@ -416,7 +416,7 @@ async function mergeSkillSourceParams(
     return { params }
   }
 
-  const sourceDirectoryPath = optionalTrimmedString(params.sourceDirectoryPath)
+  const sourceDirectoryPath = optionalNonBlankString(params.sourceDirectoryPath)
   if (!sourceDirectoryPath) {
     return { params }
   }
@@ -735,6 +735,10 @@ function requireTrimmedString(value: unknown, field: string): string {
 
 function optionalTrimmedString(value: unknown): string {
   return typeof value === "string" ? value.trim() : ""
+}
+
+function optionalNonBlankString(value: unknown): string {
+  return typeof value === "string" && value.trim() ? value : ""
 }
 
 function pickString(...values: unknown[]): string {

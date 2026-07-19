@@ -118,6 +118,8 @@ describe("Skill Repository capability domain", () => {
     expect(JSON.stringify(tools.get("app_skill_repository_import_local")?.inputSchema.properties.sourceDirectoryPath))
       .toContain("must not exceed 1,000 entries")
     expect(JSON.stringify(tools.get("app_skill_repository_import_local")?.inputSchema.properties.sourceDirectoryPath))
+      .toContain("paths are not trimmed")
+    expect(JSON.stringify(tools.get("app_skill_repository_import_local")?.inputSchema.properties.sourceDirectoryPath))
       .not.toContain("high-confidence secrets")
     expect(tools.get("app_skill_repository_set_visibility")?.inputSchema).toMatchObject({
       required: ["repositoryId", "visibility"],

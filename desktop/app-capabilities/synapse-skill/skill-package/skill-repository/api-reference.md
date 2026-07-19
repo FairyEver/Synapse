@@ -42,7 +42,7 @@ This private read requires local content-read permission and writes a redacted a
 }
 ```
 
-`sourceDirectoryPath` is required. The other fields are optional. If `name`, `title`, or `description` is omitted, Synapse uses Skill metadata or local defaults where available.
+`sourceDirectoryPath` is required. Pass the exact path; whitespace-only input is invalid and Synapse does not trim a valid path. The other fields are optional. If `name`, `title`, or `description` is omitted, Synapse uses Skill metadata or local defaults where available.
 
 Use this for the first upload of a local Skill folder. The source root is limited to 1,000 entries. Synapse excludes runtime `.env` files, `.synapse.json`, `.synapse.repository.json`, other hidden entries, and symlinks. Keep root `.env.example` within 1 MiB so Desktop can inspect and materialize its declarations during installation. If local `.synapse.repository.json` contains a cloud Skill repository id, the tool can update that repository instead of creating a new one. Cloud mutation permission and audit target that effective repository id; `skill-repository:new` is checked only for an actual create, including a separate fallback after a stale local identity is not found. The identity file must be an ordinary non-symlink file inside the Skill directory and no larger than 64 KiB; Synapse checks and audits the read, and stops before any cloud update if the identity is untrusted, oversized, or changes while being read. Legacy cloud identity in `.synapse.json` follows the same limit and checks and remains compatible until the next successful upload migrates it. If another process changes `.synapse.repository.json` while the upload is running, Synapse preserves that newer local identity instead of overwriting it.
 

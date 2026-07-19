@@ -47,7 +47,7 @@ For image backgrounds:
 For Skill resources, use one of these attachment modes:
 
 - `files`: explicit attachment list with relative `path` and either `contentText` or `contentBase64`.
-- `sourceDirectoryPath`: import an existing local Skill directory.
+- `sourceDirectoryPath`: import an existing local Skill directory. Pass the exact path; whitespace-only input is invalid and Synapse does not trim a valid path.
 
 Do not provide both `files` and `sourceDirectoryPath`.
 

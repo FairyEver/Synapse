@@ -89,12 +89,11 @@ function SkillSourceInput({
   }
 
   const prepare = async (selectedPath = sourceDirectoryPath) => {
-    const nextPath = selectedPath.trim()
-    if (!nextPath || busy) return
+    if (!selectedPath.trim() || busy) return
     setBusy(true)
     setError("")
     try {
-      const source = await prepareLocalSkillSource({ sourceDirectoryPath: nextPath })
+      const source = await prepareLocalSkillSource({ sourceDirectoryPath: selectedPath })
       onSourceReady(source)
     } catch (err) {
       const message = err instanceof Error ? err.message : "读取 Skill 失败"

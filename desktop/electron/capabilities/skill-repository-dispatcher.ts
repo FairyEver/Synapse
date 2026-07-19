@@ -339,7 +339,7 @@ function buildUploadInput(
 ): SkillRepositoryLocalImportInput {
   const openInBrowser = optionalBoolean(params, "openInBrowser")
   return {
-    sourceDirectoryPath: requireTrimmedString(params, "sourceDirectoryPath"),
+    sourceDirectoryPath: requireNonBlankString(params, "sourceDirectoryPath"),
     ...(repositoryId ? { repositoryId } : {}),
     ...optionalUploadStrings(params),
     ...(openInBrowser === undefined ? {} : { openInBrowser }),
@@ -516,6 +516,14 @@ function requireTrimmedString(params: Record<string, unknown>, key: string): str
     throw new Error(`Missing or invalid '${key}': expected non-empty string`)
   }
   return trimmed
+}
+
+function requireNonBlankString(params: Record<string, unknown>, key: string): string {
+  const value = params[key]
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Missing or invalid '${key}': expected non-empty string`)
+  }
+  return value
 }
 
 function optionalTrimmedString(params: Record<string, unknown>, key: string): string | undefined {

@@ -210,7 +210,7 @@ function createTool(type: ContentResourceType): McpToolDefinition {
       items: skillFileSchema,
       description: "Attachment files. Mutually exclusive with sourceDirectoryPath. Paths are relative to the Skill root and cannot be SKILL.md, runtime .env files, .synapse.json, or .synapse.repository.json.",
     }
-    properties.sourceDirectoryPath = stringField(`Local Skill directory to import. Mutually exclusive with files. ${SKILL_SOURCE_DIRECTORY_LIMITS}`)
+    properties.sourceDirectoryPath = stringField(`Exact local Skill directory to import; whitespace-only input is invalid and non-empty paths are not trimmed. Mutually exclusive with files. ${SKILL_SOURCE_DIRECTORY_LIMITS}`)
   }
 
   return {

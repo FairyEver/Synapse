@@ -294,10 +294,10 @@ describe("content capability dispatcher", () => {
       description: "Skill description.",
       iconType: "image",
       iconImageBase64: Buffer.from("image").toString("base64"),
-      sourceDirectoryPath: "/tmp/demo-skill",
+      sourceDirectoryPath: "/tmp/demo-skill ",
     }, { source: "mcp-stdio" })
 
-    expect(deps.readSkillDraftFromDirectory).toHaveBeenCalledWith("/tmp/demo-skill", undefined, { mode: "publish" })
+    expect(deps.readSkillDraftFromDirectory).toHaveBeenCalledWith("/tmp/demo-skill ", undefined, { mode: "publish" })
     expect(deps.contentWriter.createContent).toHaveBeenCalledWith(expect.objectContaining({
       contentType: "skill",
       payload: expect.objectContaining({

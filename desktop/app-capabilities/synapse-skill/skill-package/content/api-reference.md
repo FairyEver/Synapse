@@ -92,7 +92,7 @@ To import an existing Skill directory:
 }
 ```
 
-`sourceDirectoryPath` imports the Skill main file and attachments. It excludes `.env`, `.env.*` except the exact lowercase root filename `.env.example`, `.synapse.json`, `.synapse.repository.json`, other hidden entries, and symlinks; excluded runtime env files, including case variants such as `.ENV.EXAMPLE`, are never read. Directory imports are limited to 1,000 root entries, 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total. Keep a root `.env.example` within the desktop installer's 1 MiB environment-file limit and 100-declaration limit. Successful source imports may return `sourceImportSummary` with included counts, total size, and exclusion counts.
+`sourceDirectoryPath` imports the Skill main file and attachments. Pass the exact path; whitespace-only input is invalid and Synapse does not trim a valid path. It excludes `.env`, `.env.*` except the exact lowercase root filename `.env.example`, `.synapse.json`, `.synapse.repository.json`, other hidden entries, and symlinks; excluded runtime env files, including case variants such as `.ENV.EXAMPLE`, are never read. Directory imports are limited to 1,000 root entries, 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total. Keep a root `.env.example` within the desktop installer's 1 MiB environment-file limit and 100-declaration limit. Successful source imports may return `sourceImportSummary` with included counts, total size, and exclusion counts.
 
 `app_resource_repository_prompt_create`
 
