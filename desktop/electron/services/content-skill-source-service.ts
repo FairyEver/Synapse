@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import type { Stats } from "node:fs"
-import { lstat, open, opendir, readdir, realpath, stat } from "node:fs/promises"
+import { lstat, open, opendir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
 import {
@@ -18,7 +18,7 @@ import {
   CONTENT_SKILL_ATTACHMENT_TOTAL_MAX_SIZE,
   CONTENT_SKILL_SOURCE_MAX_DEPTH,
   CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT,
-  CONTENT_SKILL_SOURCE_MAX_ROOT_ENTRIES,
+  CONTENT_SKILL_SOURCE_MAX_ENTRIES_PER_DIRECTORY,
 } from "./content-skill-attachment-constraints"
 import { sanitizeError } from "./error-sanitize"
 import { createMainLogger } from "./log-store"
@@ -76,7 +76,7 @@ type SkillFileCollectionState = {
 async function resolveSkillMainFile(dirPath: string, maxEntries?: number): Promise<string | null> {
   let children: string[]
   try {
-    const entryLimit = maxEntries ?? CONTENT_SKILL_SOURCE_MAX_ROOT_ENTRIES
+    const entryLimit = maxEntries ?? CONTENT_SKILL_SOURCE_MAX_ENTRIES_PER_DIRECTORY
     children = []
     const directory = await opendir(dirPath)
     for await (const entry of directory) {
@@ -244,9 +244,9 @@ async function collectSkillFiles(
   depth: number,
   mode: SkillSourceReadMode,
 ): Promise<void> {
-  let children: string[]
+  let directory
   try {
-    children = await readdir(currentDir)
+    directory = await opendir(currentDir)
   } catch (error) {
     logger.warn("Failed to list skill source files.", {
       ...sourcePathDiagnostic(currentDir, baseDir),
@@ -255,65 +255,82 @@ async function collectSkillFiles(
     throwInvalid("files", `无法读取 Skill 附件目录：${formatSkillSourceRelativePath(baseDir, currentDir)}`)
   }
 
-  if (currentDir === baseDir && mode === "install") {
-    try {
-      assertNoRuntimeSkillEnvPath(children)
-    } catch (error) {
-      throwInvalid("files", getErrorMessage(error))
-    }
-  }
-
-  for (const name of children) {
-    const normalizedHiddenName = name.toLowerCase()
-    const isRootEnvExample = currentDir === baseDir && isRootSkillEnvExamplePath(name)
-    if (
-      !isRootEnvExample
-      && (normalizedHiddenName === ".env" || normalizedHiddenName.startsWith(".env."))
-    ) {
-      state.runtimeEnvExcluded = true
-      continue
-    }
-    if (currentDir === baseDir && skip.has(name)) {
-      if (controlFileName(name)) state.controlFilesExcluded.push(name)
-      continue
-    }
-    if (name.startsWith(".") && !isRootEnvExample) {
-      state.hiddenEntryCount += 1
-      continue
-    }
-
-    const fullPath = path.join(currentDir, name)
-    let fileStat: Stats
-    try {
-      fileStat = await lstat(fullPath)
-    } catch (error) {
-      logger.warn("Failed to inspect skill source file.", {
-        ...sourcePathDiagnostic(fullPath, baseDir),
-        error: sanitizeSkillSourceError(error),
-      })
-      throwInvalid("files", `无法检查 Skill 附件：${formatSkillSourceRelativePath(baseDir, fullPath)}`)
-    }
-
-    if (fileStat.isSymbolicLink()) {
-      state.symlinkCount += 1
-      continue
-    }
-
-    if (fileStat.isDirectory()) {
-      const nextDepth = depth + 1
-      if (nextDepth > CONTENT_SKILL_SOURCE_MAX_DEPTH) {
-        throwInvalid("files", `Skill 附件目录深度超过 ${CONTENT_SKILL_SOURCE_MAX_DEPTH} 层。`)
+  let entryCount = 0
+  try {
+    for await (const entry of directory) {
+      entryCount += 1
+      if (entryCount > CONTENT_SKILL_SOURCE_MAX_ENTRIES_PER_DIRECTORY) {
+        throwInvalid(
+          "files",
+          `Skill 附件目录条目超过 ${CONTENT_SKILL_SOURCE_MAX_ENTRIES_PER_DIRECTORY} 个：${formatSkillSourceRelativePath(baseDir, currentDir)}`,
+        )
       }
-      state.directoryCount += 1
-      if (state.directoryCount > CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT) {
-        throwInvalid("files", `Skill 附件目录数量超过 ${CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT} 个。`)
+      const name = entry.name
+      if (currentDir === baseDir && mode === "install") {
+        try {
+          assertNoRuntimeSkillEnvPath([name])
+        } catch (error) {
+          throwInvalid("files", getErrorMessage(error))
+        }
       }
-      await collectSkillFiles(baseDir, baseRealPath, fullPath, skip, state, nextDepth, mode)
-      continue
-    }
+      const normalizedHiddenName = name.toLowerCase()
+      const isRootEnvExample = currentDir === baseDir && isRootSkillEnvExamplePath(name)
+      if (
+        !isRootEnvExample
+        && (normalizedHiddenName === ".env" || normalizedHiddenName.startsWith(".env."))
+      ) {
+        state.runtimeEnvExcluded = true
+        continue
+      }
+      if (currentDir === baseDir && skip.has(name)) {
+        if (controlFileName(name)) state.controlFilesExcluded.push(name)
+        continue
+      }
+      if (name.startsWith(".") && !isRootEnvExample) {
+        state.hiddenEntryCount += 1
+        continue
+      }
 
-    if (!fileStat.isFile()) continue
-    await collectSkillFile(baseDir, baseRealPath, fullPath, fileStat, state)
+      const fullPath = path.join(currentDir, name)
+      let fileStat: Stats
+      try {
+        fileStat = await lstat(fullPath)
+      } catch (error) {
+        logger.warn("Failed to inspect skill source file.", {
+          ...sourcePathDiagnostic(fullPath, baseDir),
+          error: sanitizeSkillSourceError(error),
+        })
+        throwInvalid("files", `无法检查 Skill 附件：${formatSkillSourceRelativePath(baseDir, fullPath)}`)
+      }
+
+      if (fileStat.isSymbolicLink()) {
+        state.symlinkCount += 1
+        continue
+      }
+
+      if (fileStat.isDirectory()) {
+        const nextDepth = depth + 1
+        if (nextDepth > CONTENT_SKILL_SOURCE_MAX_DEPTH) {
+          throwInvalid("files", `Skill 附件目录深度超过 ${CONTENT_SKILL_SOURCE_MAX_DEPTH} 层。`)
+        }
+        state.directoryCount += 1
+        if (state.directoryCount > CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT) {
+          throwInvalid("files", `Skill 附件目录数量超过 ${CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT} 个。`)
+        }
+        await collectSkillFiles(baseDir, baseRealPath, fullPath, skip, state, nextDepth, mode)
+        continue
+      }
+
+      if (!fileStat.isFile()) continue
+      await collectSkillFile(baseDir, baseRealPath, fullPath, fileStat, state)
+    }
+  } catch (error) {
+    if (error instanceof ContentCapabilityError) throw error
+    logger.warn("Failed to list skill source files.", {
+      ...sourcePathDiagnostic(currentDir, baseDir),
+      error: sanitizeSkillSourceError(error),
+    })
+    throwInvalid("files", `无法读取 Skill 附件目录：${formatSkillSourceRelativePath(baseDir, currentDir)}`)
   }
 }
 

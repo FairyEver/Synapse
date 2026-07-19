@@ -42,7 +42,7 @@ import { ContentCapabilityError } from "../content-capability-errors"
 import {
   CONTENT_SKILL_SOURCE_MAX_DEPTH,
   CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT,
-  CONTENT_SKILL_SOURCE_MAX_ROOT_ENTRIES,
+  CONTENT_SKILL_SOURCE_MAX_ENTRIES_PER_DIRECTORY,
 } from "../content-skill-attachment-constraints"
 import { readSkillDraftFromDirectory, resolveSkillMainFile } from "../content-skill-source-service"
 import { SKILL_RUNTIME_ENV_MAX_BYTES } from "../skill-env/file-policy"
@@ -260,12 +260,26 @@ describe("content skill source service", () => {
     const root = await createTempRoot()
     await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
     await Promise.all(Array.from(
-      { length: CONTENT_SKILL_SOURCE_MAX_ROOT_ENTRIES },
+      { length: CONTENT_SKILL_SOURCE_MAX_ENTRIES_PER_DIRECTORY },
       (_, index) => mkdir(path.join(root, `entry-${index}`)),
     ))
 
     await expect(readSkillDraftFromDirectory(root))
-      .rejects.toThrow(`Skill 源目录根层条目超过 ${CONTENT_SKILL_SOURCE_MAX_ROOT_ENTRIES} 个。`)
+      .rejects.toThrow(`Skill 源目录根层条目超过 ${CONTENT_SKILL_SOURCE_MAX_ENTRIES_PER_DIRECTORY} 个。`)
+  })
+
+  it("rejects oversized nested directories while streaming hidden entries", async () => {
+    const root = await createTempRoot()
+    const nested = path.join(root, "nested")
+    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+    await mkdir(nested)
+    await Promise.all(Array.from(
+      { length: CONTENT_SKILL_SOURCE_MAX_ENTRIES_PER_DIRECTORY + 1 },
+      (_, index) => writeText(path.join(nested, `.hidden-${index}`), ""),
+    ))
+
+    await expect(readSkillDraftFromDirectory(root))
+      .rejects.toThrow(`Skill 附件目录条目超过 ${CONTENT_SKILL_SOURCE_MAX_ENTRIES_PER_DIRECTORY} 个：nested`)
   })
 
   it("rejects source directories that exceed the attachment directory count budget", async () => {
