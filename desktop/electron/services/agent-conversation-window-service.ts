@@ -169,6 +169,34 @@ export function createAgentConversationWindowService(deps: Deps) {
       return { focused: true }
     },
 
+    renameConversationWindow(
+      target: Pick<AgentConversationTarget, "projectId" | "conversationId">,
+      titleValue: string,
+    ): boolean {
+      const key = keyForTarget(target)
+      const window = detachedWindows.get(key)
+      const detached = detachedByKey.get(key)
+      if (!window || !detached) {
+        if (!window && detached) removeTrackedWindow(key)
+        return false
+      }
+
+      const title = titleValue.trim() || "对话"
+      try {
+        window.setTitle(title)
+      } catch (error) {
+        deps.logger.warn("Failed to rename agent conversation window.", {
+          projectId: target.projectId,
+          conversationId: target.conversationId,
+          error,
+        })
+        return false
+      }
+      detachedByKey.set(key, { ...detached, title })
+      broadcastDetachedConversations()
+      return true
+    },
+
     closeConversationWindow(
       target: Pick<AgentConversationTarget, "projectId" | "conversationId">,
     ): AgentConversationWindowCloseResult {

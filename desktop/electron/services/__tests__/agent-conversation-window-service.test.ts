@@ -117,6 +117,42 @@ describe("agent conversation window service", () => {
     expect(AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL).toBe("synapse:agent:detached-conversations-changed")
   })
 
+  it("updates a detached window title and broadcasts its new metadata", async () => {
+    const broadcasts: unknown[] = []
+    const window = createFakeWindow()
+    const service = createAgentConversationWindowService({
+      createWindow: () => window as never,
+      baseUrl: () => "http://localhost:5173",
+      getPreloadPath: () => "/preload.js",
+      getIconPath: () => null,
+      now: () => "2026-06-17T00:00:00.000Z",
+      broadcast: (_channel, payload) => {
+        broadcasts.push(payload)
+        return 1
+      },
+      logger: createLoggerMock(),
+    })
+    await service.openConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "旧标题",
+    })
+
+    expect(service.renameConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+    }, "新标题")).toBe(true)
+
+    expect(window.setTitle).toHaveBeenCalledWith("新标题")
+    expect(service.listDetachedConversations()).toEqual([expect.objectContaining({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      title: "新标题",
+    })])
+    expect(broadcasts.at(-1)).toEqual(service.listDetachedConversations())
+  })
+
   it("closes and detaches a conversation window by conversation target", async () => {
     const broadcasts: unknown[] = []
     const window = createFakeWindow()

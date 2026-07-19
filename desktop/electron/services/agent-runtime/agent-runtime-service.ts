@@ -1098,7 +1098,9 @@ export class AgentRuntimeService {
   }
 
   async renameSession(conversationIdValue: string, name: string): Promise<boolean> {
-    return this.sessionLifecycle.renameSession(conversationIdValue, name)
+    const updated = await this.sessionLifecycle.renameSession(conversationIdValue, name)
+    this.emitConversationUpdated(updated)
+    return true
   }
 
   async deleteSession(conversationIdValue: string): Promise<boolean> {

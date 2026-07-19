@@ -122,6 +122,38 @@ describe("AgentRuntimeService", () => {
     }))
   })
 
+  it("broadcasts a manually renamed conversation after persistence", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const eventBus = { emit: vi.fn() }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([], "sdk-1"),
+      eventBus: eventBus as never,
+      now: fixedNow,
+    })
+    const conversation = await service.createSession({
+      sessionKey: "s1",
+      platform: "local",
+      name: "旧标题",
+      agentType: "claude-code",
+    })
+
+    await expect(service.renameSession(conversation.id, "手动标题")).resolves.toBe(true)
+
+    await expect(conversations.get(conversation.id)).resolves.toMatchObject({
+      name: "手动标题",
+      titleSource: "manual",
+    })
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "agent",
+      type: "conversationUpdated",
+      payload: expect.objectContaining({ conversationId: conversation.id }),
+    }))
+  })
+
   it("keeps the Agent turn running when generated title persistence fails", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn() }

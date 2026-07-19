@@ -114,9 +114,8 @@ export class SessionLifecycleManager {
     return this.deps.repository.setActiveSession(sessionKey, conversationIdValue, platform, effectiveWorkspaceKey)
   }
 
-  async renameSession(conversationIdValue: string, name: string): Promise<boolean> {
-    await this.deps.repository.renameSession(conversationIdValue, name)
-    return true
+  async renameSession(conversationIdValue: string, name: string): Promise<ConversationEntryV1> {
+    return this.deps.repository.renameSession(conversationIdValue, name)
   }
 
   async saveMainThreadPersona(

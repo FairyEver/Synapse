@@ -659,6 +659,30 @@ describe("agent session IPC methods", () => {
       }),
     )
   })
+
+  it("refreshes a matching detached window after session rename succeeds", async () => {
+    const renameSession = vi.fn().mockResolvedValue(true)
+    const conversationWindowService = createConversationWindowServiceMock()
+    const ctx = createContext({
+      agent: { renameSession },
+      dataRepo: {
+        namespace: vi.fn(),
+      } as unknown as DataRepository,
+      conversationWindowService,
+    })
+
+    await expect(sessionMethods.renameSession.handler(ctx, {
+      projectId: "project-1",
+      conversationId: "conv-1",
+      name: "新标题",
+    })).resolves.toEqual({ ok: true })
+
+    expect(conversationWindowService.renameConversationWindow).toHaveBeenCalledWith({
+      projectId: "project-1",
+      conversationId: "conv-1",
+      name: "新标题",
+    }, "新标题")
+  })
 })
 
 function createContext(overrides: {
@@ -672,6 +696,7 @@ function createContext(overrides: {
     readonly listDetachedConversations: ReturnType<typeof vi.fn>
     readonly closeConversationWindow: ReturnType<typeof vi.fn>
     readonly replaceConversationWindowTarget?: ReturnType<typeof vi.fn>
+    readonly renameConversationWindow?: ReturnType<typeof vi.fn>
   }
 }): IpcHandlerContext & {
   readonly projectContainers: Pick<ProjectContainerRegistry, "open">
@@ -712,6 +737,7 @@ function createConversationWindowServiceMock() {
     focusConversationWindow: vi.fn(() => ({ focused: true })),
     listDetachedConversations: vi.fn(() => []),
     closeConversationWindow: vi.fn(() => ({ closed: true })),
+    renameConversationWindow: vi.fn(() => false),
   }
 }
 
