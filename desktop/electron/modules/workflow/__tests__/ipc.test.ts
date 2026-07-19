@@ -1826,6 +1826,55 @@ describe("workflowIpcModule", () => {
     }
   })
 
+  it.skipIf(process.platform === "win32")("rejects symlink destinations for package and future raw exports", async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-export-symlink-test-"))
+    const targetPath = path.join(tempRoot, "protected.json")
+    await writeFile(targetPath, "protected", "utf8")
+    const permissionGuard = { check: vi.fn<PermissionGuard["check"]>(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn<AuditSink["record"]>() }
+    const exports: Array<{
+      document: WorkflowExportDocumentResult
+      outputPath: string
+    }> = [
+      {
+        document: { kind: "current", document: workflowDefinition() },
+        outputPath: path.join(tempRoot, "package.json"),
+      },
+      {
+        document: {
+          kind: "future",
+          document: {
+            id: "workflow-future",
+            name: "Future Workflow",
+            meta: { schemaVersion: "9.0.0" },
+          },
+          sourceVersion: "9.0.0",
+        },
+        outputPath: path.join(tempRoot, "future.json"),
+      },
+    ]
+
+    try {
+      for (const item of exports) {
+        await symlink(targetPath, item.outputPath)
+        const packageService = createExportPackageService(item.document, permissionGuard, auditSink)
+        await expect(packageService.exportToFile({
+          workflowId: item.document.document.id,
+          chooseDestination: async () => item.outputPath,
+        })).rejects.toThrow("工作流导出文件不能是符号链接")
+      }
+
+      await expect(readFile(targetPath, "utf8")).resolves.toBe("protected")
+      expect(auditSink.record).toHaveBeenCalledTimes(4)
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.write",
+        outcome: "failed",
+      }))
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
   it("uses a Windows-safe default file name for workflow package export", async () => {
     electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: true })
     const packageService = createExportPackageService(

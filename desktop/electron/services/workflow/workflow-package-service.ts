@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
-import { writeFile } from "node:fs/promises"
+import { constants } from "node:fs"
+import { lstat, open } from "node:fs/promises"
 import path from "node:path"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { normalizeContentFileNameSegment } from "../../../src/lib/content-attachments"
@@ -164,7 +165,7 @@ export class WorkflowPackageService {
 
     const content = isFutureRaw ? artifact.document : artifact.package
     try {
-      await writeFile(filePath, `${JSON.stringify(content, null, 2)}\n`, "utf-8")
+      await writeWorkflowExportFile(filePath, `${JSON.stringify(content, null, 2)}\n`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       this.auditSink.record({
@@ -289,6 +290,43 @@ export class WorkflowPackageService {
     })
     return { workflowId: imported.id, versionHash: saveResult.versionHash }
   }
+}
+
+async function writeWorkflowExportFile(filePath: string, content: string): Promise<void> {
+  const noFollowFlag = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0
+  let handle
+  try {
+    handle = await open(filePath, constants.O_WRONLY | constants.O_CREAT | noFollowFlag)
+  } catch (error) {
+    if (isSymlinkOpenError(error)) {
+      throw new Error("工作流导出文件不能是符号链接。", { cause: error })
+    }
+    throw error
+  }
+
+  try {
+    const [openedStat, outputStat] = await Promise.all([
+      handle.stat({ bigint: true }),
+      lstat(filePath, { bigint: true }),
+    ])
+    if (outputStat.isSymbolicLink()) {
+      throw new Error("工作流导出文件不能是符号链接。")
+    }
+    if (!openedStat.isFile() || !outputStat.isFile()) {
+      throw new Error("工作流导出路径必须是普通文件。")
+    }
+    if (openedStat.dev !== outputStat.dev || openedStat.ino !== outputStat.ino) {
+      throw new Error("工作流导出文件在写入前发生变化。")
+    }
+    await handle.truncate(0)
+    await handle.writeFile(content, "utf8")
+  } finally {
+    await handle.close()
+  }
+}
+
+function isSymlinkOpenError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | undefined)?.code === "ELOOP"
 }
 
 function buildModelReferences(workflow: WorkflowDefinition, providers: readonly CCProvider[]): WorkflowModelReference[] {
