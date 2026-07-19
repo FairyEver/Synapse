@@ -170,6 +170,21 @@ describe("TerminalService", () => {
     })])
   })
 
+  it("rejects a missing group default cwd without persisting it", async () => {
+    const group = createGroup({ name: "默认分组" })
+    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
+    const service = await createStartedService(store)
+
+    await expect(service.updateGroupSettings({
+      groupId: group.id,
+      name: group.name,
+      settings: { defaultCwd: path.join(tempDir, "missing") },
+    })).rejects.toThrow("Terminal cwd must be an existing absolute path")
+
+    expect(service.listGroups()).toEqual([group])
+    expect(store.state.groups).toEqual([group])
+  })
+
   it("migrates legacy startup command into a named group command", async () => {
     const group = createGroup({
       updatedAt: "2026-06-24T00:02:00.000Z",

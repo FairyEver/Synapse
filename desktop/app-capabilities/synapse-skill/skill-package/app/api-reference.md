@@ -64,7 +64,7 @@ Input:
 
 - `groupId` required: terminal group id.
 - `name` required: group name. Leading and trailing whitespace is trimmed.
-- `settings.defaultCwd` optional: absolute working directory for future sessions in this group.
+- `settings.defaultCwd` optional: existing absolute working directory for future sessions in this group.
 
 Output:
 

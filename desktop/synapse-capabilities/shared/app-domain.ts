@@ -311,7 +311,7 @@ export function buildAppTools(): McpToolDefinition[] {
           settings: {
             type: "object",
             properties: {
-              defaultCwd: stringField("Optional absolute working directory for future sessions in this group.", { minLength: 1 }),
+              defaultCwd: stringField("Optional existing absolute working directory for future sessions in this group.", { minLength: 1 }),
             },
             additionalProperties: false,
           },

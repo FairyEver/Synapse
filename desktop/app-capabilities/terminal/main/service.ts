@@ -464,6 +464,7 @@ export function createTerminalService(deps: {
       if (!name) throw new Error("Terminal group name is required")
       if (name.length > 80) throw new Error("Terminal group name is too long")
       const settings = normalizeGroupSettings(input.settings, now())
+      if (settings?.defaultCwd) resolveCwd(settings.defaultCwd)
       const updated: TerminalGroup = {
         ...group,
         name,
