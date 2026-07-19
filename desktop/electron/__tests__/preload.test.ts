@@ -1142,6 +1142,7 @@ describe("preload bridge", () => {
       name: "synapse-skill",
     }
     const secretMaps = {
+      skillEnvReplacementValues: { TOKEN: "RAW_REPLACEMENT_SECRET" },
       skillEnvValues: { BAILIAN: "RAW_ENV_SECRET" },
       skillEnvSecretNames: { REGION: "prod-bailian-main" },
       variableSubstitutions: { SERVICE: "RAW_VARIABLE_SECRET" },
@@ -1168,6 +1169,7 @@ describe("preload bridge", () => {
       expect(logCall[1]).toEqual(expect.objectContaining({
         details: expect.objectContaining({
           request: expect.objectContaining({
+            skillEnvReplacementValues: { type: "sensitive-map", keyCount: 1 },
             skillEnvValues: { type: "sensitive-map", keyCount: 1 },
             skillEnvSecretNames: { type: "sensitive-map", keyCount: 1 },
             variableSubstitutions: { type: "sensitive-map", keyCount: 1 },
@@ -1178,6 +1180,7 @@ describe("preload bridge", () => {
     }
     const serializedLogs = JSON.stringify(logCalls)
     expect(serializedLogs).not.toContain("RAW_ENV_SECRET")
+    expect(serializedLogs).not.toContain("RAW_REPLACEMENT_SECRET")
     expect(serializedLogs).not.toContain("RAW_VARIABLE_SECRET")
     expect(serializedLogs).not.toContain("prod-bailian-main")
     expect(serializedLogs).not.toContain("aliyun-primary")

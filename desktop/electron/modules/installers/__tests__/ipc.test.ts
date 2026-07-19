@@ -295,12 +295,14 @@ describe("installersIpcModule", () => {
         name: "team-skill",
       },
       skillEnvSecretNames: { GITEE_TOKEN: "GITEE_TOKEN" },
+      skillEnvReplacementValues: { REGION: "replacement-region" },
       skillEnvValues: { REGION: "cn" },
       variableSecretNames: { INLINE_TOKEN: "INLINE_TOKEN" },
     })
 
     expect(mocks.installSourceToEditor).toHaveBeenCalledWith(
       expect.objectContaining({
+        skillEnvReplacementValues: { REGION: "replacement-region" },
         skillEnvValues: { GITEE_TOKEN: "gitee_token-value", REGION: "cn" },
         variableSubstitutions: { INLINE_TOKEN: "inline_token-value" },
       }),

@@ -210,6 +210,24 @@ describe("materializeSkillEnv", () => {
       .resolves.toBe(existing)
   })
 
+  it("applies explicit replacement values while preserving other existing keys", async () => {
+    const paths = await createDirectories()
+    const existing = "TOKEN=old\nCUSTOM=user-only\n"
+    await writeFile(path.join(paths.existingTargetDirectoryPath, ".env"), existing, "utf8")
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\nNEW_KEY=default\n", "utf8")
+
+    await expect(materializeSkillEnv({
+      ...paths,
+      replacementValues: { TOKEN: "updated" },
+      values: { TOKEN: "updated", NEW_KEY: "confirmed" },
+    })).resolves.toBe("merged")
+
+    await expect(readFile(path.join(paths.stagingDirectoryPath, ".env"), "utf8"))
+      .resolves.toBe('TOKEN="updated"\nCUSTOM=user-only\nNEW_KEY="confirmed"\n')
+    await expect(readFile(path.join(paths.existingTargetDirectoryPath, ".env"), "utf8"))
+      .resolves.toBe(existing)
+  })
+
   it("preserves CRLF while appending example keys and retaining user-only keys", async () => {
     const paths = await createDirectories()
     await writeFile(

@@ -277,6 +277,7 @@ export class EditorInstallService {
         projectPath: target.projectPath,
         replaceConfirmed: payload.replaceConfirmed,
         scope: target.scope,
+        skillEnvReplacementValues: payload.skillEnvReplacementValues,
         skillEnvValues: payload.skillEnvValues,
         source: payload.source,
         variableSubstitutions: payload.variableSubstitutions,

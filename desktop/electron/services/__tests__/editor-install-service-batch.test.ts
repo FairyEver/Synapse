@@ -95,6 +95,7 @@ describe("EditorInstallService batch source install", () => {
 
     await service.installSourceToEditorTargets({
       mode: "reinstall",
+      skillEnvReplacementValues: { TOKEN: "saved-token" },
       skillEnvValues: { TOKEN: "saved-token" },
       source,
       targets: [
@@ -105,8 +106,16 @@ describe("EditorInstallService batch source install", () => {
 
     expect(payloads).toHaveLength(2)
     expect(payloads).toEqual([
-      expect.objectContaining({ mode: "reinstall", skillEnvValues: { TOKEN: "saved-token" } }),
-      expect.objectContaining({ mode: "reinstall", skillEnvValues: { TOKEN: "saved-token" } }),
+      expect.objectContaining({
+        mode: "reinstall",
+        skillEnvReplacementValues: { TOKEN: "saved-token" },
+        skillEnvValues: { TOKEN: "saved-token" },
+      }),
+      expect.objectContaining({
+        mode: "reinstall",
+        skillEnvReplacementValues: { TOKEN: "saved-token" },
+        skillEnvValues: { TOKEN: "saved-token" },
+      }),
     ])
   })
 })

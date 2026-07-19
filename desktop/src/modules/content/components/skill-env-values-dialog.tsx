@@ -21,6 +21,7 @@ type SkillEnvValuesDialogProps = {
   onConfirm: (
     values: Record<string, string>,
     secretNames: Record<string, string>,
+    replacementValues: Record<string, string>,
   ) => Promise<void> | void
   onOpenChange: (open: boolean) => void
   open: boolean
@@ -68,13 +69,18 @@ function SkillEnvValuesDialog({
     try {
       const confirmedValues: Record<string, string> = {}
       const confirmedSecretNames: Record<string, string> = {}
+      const replacementValues: Record<string, string> = {}
       for (const { name } of declarations) {
         const secret = matchSecret(name, secrets)
         const reusing = secret?.hasValue && !replacedSecretNames.has(name)
         if (reusing) confirmedSecretNames[name] = secret.name
-        else confirmedValues[name] = values[name] ?? ""
+        else {
+          const value = values[name] ?? ""
+          confirmedValues[name] = value
+          if (replacedSecretNames.has(name)) replacementValues[name] = value
+        }
       }
-      await onConfirm(confirmedValues, confirmedSecretNames)
+      await onConfirm(confirmedValues, confirmedSecretNames, replacementValues)
     } finally {
       setIsSubmitting(false)
     }

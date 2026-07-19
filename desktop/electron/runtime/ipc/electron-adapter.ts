@@ -22,7 +22,7 @@ type ElectronTransportInstallOptions = {
 
 const SENSITIVE_FIELD_PATTERN =
   /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization)/i
-const SENSITIVE_MAP_FIELD_PATTERN = /^(skillEnvValues|variableSubstitutions|skillEnvSecretNames|variableSecretNames)$/i
+const SENSITIVE_MAP_FIELD_PATTERN = /^(skillEnvValues|skillEnvReplacementValues|variableSubstitutions|skillEnvSecretNames|variableSecretNames)$/i
 const BODY_FIELD_PATTERN = /^(prompt|message|content|body|text|requestbody|responsebody|requesttext|responsetext)$/
 const PATH_FIELD_PATTERN = /^(path|paths|url|urls|uri|uris|remoteurl|remoteurls|filepath|filepaths|folderpath|folderpaths|relativepath|relativepaths|fullpath|fullpaths|targetpath|targetpaths|sourcepath|sourcepaths|itempath|itempaths|foldername|filename)$/
 const MAX_STRING_LENGTH = 300

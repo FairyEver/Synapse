@@ -63,6 +63,7 @@ export type SynapseInstallToEditorPayload = SynapseResolveEditorTargetPayload & 
    * Used to clear stale install-status badges after the target directory changes owner.
    */
   replacedContentId?: string
+  skillEnvReplacementValues?: Record<string, string>
   skillEnvValues?: Record<string, string>
   variableSubstitutions?: Record<string, string>
 }

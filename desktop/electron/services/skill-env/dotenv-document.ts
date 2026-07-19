@@ -244,6 +244,7 @@ export function mergeDotenvExample(
   existing: string,
   example: string,
   values: Readonly<Record<string, string>>,
+  replacementValues: Readonly<Record<string, string>> = {},
 ): string {
   const existingDocument = parseDotenvDocument(existing)
   const existingNames = new Set(
@@ -254,6 +255,9 @@ export function mergeDotenvExample(
   )
   const patchedExample = patchDotenvValues(example, missingValues)
   const exampleDocument = parseDotenvDocument(patchedExample)
+  const exampleNames = new Set(
+    exampleDocument.entries.map((entry) => normalizedName(entry.name)),
+  )
   const declarations = exampleDocument.entries
     .filter((entry) => !existingNames.has(normalizedName(entry.name)))
     .map((entry) => {
@@ -261,13 +265,16 @@ export function mergeDotenvExample(
       return `${entry.name}=${withNewlineStyle(rawValue, existingDocument.newline)}`
     })
 
-  if (declarations.length === 0) {
-    return existing
-  }
+  const declaredReplacementValues = Object.fromEntries(
+    [...normalizedValues(replacementValues)]
+      .filter(([name]) => exampleNames.has(name)),
+  )
+  const patchedExisting = patchDotenvValues(existing, declaredReplacementValues)
+  if (declarations.length === 0) return patchedExisting
 
   const separator = existing.length > 0 && !existing.endsWith("\n")
     && !existing.endsWith("\r")
     ? existingDocument.newline
     : ""
-  return `${existing}${separator}${declarations.join(existingDocument.newline)}${existingDocument.newline}`
+  return `${patchedExisting}${separator}${declarations.join(existingDocument.newline)}${existingDocument.newline}`
 }

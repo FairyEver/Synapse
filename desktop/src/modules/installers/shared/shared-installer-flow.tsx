@@ -151,6 +151,7 @@ export function SharedInstallerFlow({
   const flow = useInstallerFlow({ editors, initialEditor, kind, source: initialSource })
   const variableConfirmPassedRef = useRef(false)
   const pendingInstallOptionsRef = useRef<InstallFlowOptions>({})
+  const pendingSkillEnvReplacementValuesRef = useRef<Record<string, string> | undefined>(undefined)
   const pendingSkillEnvSecretNamesRef = useRef<Record<string, string> | undefined>(undefined)
   const pendingSkillEnvValuesRef = useRef<Record<string, string> | undefined>(undefined)
   const pendingLegacySecretNamesRef = useRef<Record<string, string> | undefined>(undefined)
@@ -199,6 +200,7 @@ export function SharedInstallerFlow({
   }, [flow.source])
 
   const resetVariableInstallAttempt = useCallback(() => {
+    pendingSkillEnvReplacementValuesRef.current = undefined
     pendingSkillEnvSecretNamesRef.current = undefined
     pendingSkillEnvValuesRef.current = undefined
     pendingLegacySecretNamesRef.current = undefined
@@ -240,6 +242,7 @@ export function SharedInstallerFlow({
             scope: selection.scope,
             source: flow.source,
             installFormValues,
+            skillEnvReplacementValues: pendingSkillEnvReplacementValuesRef.current,
             skillEnvSecretNames: pendingSkillEnvSecretNamesRef.current,
             skillEnvValues: pendingSkillEnvValuesRef.current,
             variableSecretNames: pendingLegacySecretNamesRef.current,
@@ -398,8 +401,12 @@ export function SharedInstallerFlow({
   const handleSkillEnvConfirm = async (
     values: Record<string, string>,
     secretNames: Record<string, string>,
+    replacementValues: Record<string, string>,
   ) => {
     pendingSkillEnvValuesRef.current = values
+    pendingSkillEnvReplacementValuesRef.current = Object.keys(replacementValues).length > 0
+      ? replacementValues
+      : undefined
     pendingSkillEnvSecretNamesRef.current = Object.keys(secretNames).length > 0 ? secretNames : undefined
     setIsSkillEnvConfirmOpen(false)
 

@@ -165,6 +165,7 @@ describe("createElectronTransportInstall", () => {
 
     const handler = electronMock.handlers.get("synapse:installers:install-source-to-editor")
     await handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
+      skillEnvReplacementValues: { TOKEN: "RAW_REPLACEMENT_SECRET" },
       skillEnvValues: { BAILIAN: "RAW_ENV_SECRET" },
       skillEnvSecretNames: { REGION: "prod-bailian-main" },
       variableSubstitutions: { SERVICE: "RAW_VARIABLE_SECRET" },
@@ -175,6 +176,7 @@ describe("createElectronTransportInstall", () => {
       "IPC invoke failed.",
       expect.objectContaining({
         request: {
+          skillEnvReplacementValues: { type: "sensitive-map", keyCount: 1 },
           skillEnvValues: { type: "sensitive-map", keyCount: 1 },
           skillEnvSecretNames: { type: "sensitive-map", keyCount: 1 },
           variableSubstitutions: { type: "sensitive-map", keyCount: 1 },
@@ -184,6 +186,7 @@ describe("createElectronTransportInstall", () => {
     )
     const serializedLog = JSON.stringify(logger.error.mock.calls)
     expect(serializedLog).not.toContain("RAW_ENV_SECRET")
+    expect(serializedLog).not.toContain("RAW_REPLACEMENT_SECRET")
     expect(serializedLog).not.toContain("RAW_VARIABLE_SECRET")
     expect(serializedLog).not.toContain("prod-bailian-main")
     expect(serializedLog).not.toContain("aliyun-primary")

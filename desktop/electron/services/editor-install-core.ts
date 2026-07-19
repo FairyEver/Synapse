@@ -378,6 +378,7 @@ function toInstallToEditorPayload(payload: SynapseInstallSourceToEditorPayload):
     overwriteConfirmed: payload.overwriteConfirmed,
     replaceConfirmed: payload.replaceConfirmed,
     replacedContentId: payload.replacedSourceIdentity,
+    skillEnvReplacementValues: payload.skillEnvReplacementValues,
     skillEnvValues: payload.skillEnvValues,
     variableSubstitutions: payload.variableSubstitutions,
     preparedSourceId: payload.source.preparedSourceId,
@@ -738,6 +739,7 @@ export class EditorInstallCore {
                 stagingDirectoryPath,
                 existingTargetDirectoryPath: existingSkillDirectoryPath,
                 inheritExistingEnv,
+                replacementValues: payload.skillEnvReplacementValues ?? {},
                 values: payload.skillEnvValues ?? {},
                 registerPrecondition(guard) {
                   skillEnvGuard = guard

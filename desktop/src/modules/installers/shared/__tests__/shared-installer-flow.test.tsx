@@ -642,6 +642,7 @@ describe("SharedInstallerFlow", () => {
       value: "env-token",
     })
     expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
+      skillEnvReplacementValues: { GITEE_TOKEN: "env-token" },
       skillEnvValues: { GITEE_TOKEN: "env-token" },
       variableSubstitutions: { gitee_token: "legacy-token" },
     }))

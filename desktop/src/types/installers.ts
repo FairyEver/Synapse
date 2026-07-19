@@ -74,6 +74,7 @@ export type SynapseInstallSourceToEditorPayload = {
   replaceConfirmed?: boolean
   replacedSourceIdentity?: string
   scope: SynapseEditorInstallScope
+  skillEnvReplacementValues?: Record<string, string>
   skillEnvSecretNames?: Record<string, string>
   skillEnvValues?: Record<string, string>
   source: SynapseInstallerSource
@@ -93,6 +94,7 @@ export type SynapseInstallSourceToEditorTargetsPayload = {
   mode: SynapseInstallSourceMode
   overwriteConfirmed?: boolean
   replaceConfirmed?: boolean
+  skillEnvReplacementValues?: Record<string, string>
   skillEnvValues?: Record<string, string>
   variableSubstitutions?: Record<string, string>
 }

@@ -77,4 +77,13 @@ describe("dotenv document", () => {
       { TOKEN: "submitted", NEW_KEY: "confirmed", EMPTY: "filled" },
     )).toBe("TOKEN=existing\nCUSTOM=user-only\nNEW_KEY=\"confirmed\"\nEMPTY=\"filled\"\n")
   })
+
+  it("replaces only explicitly confirmed existing declarations", () => {
+    expect(mergeDotenvExample(
+      "TOKEN=existing\nCUSTOM=user-only\n",
+      "TOKEN=default\nNEW_KEY=default\n",
+      { TOKEN: "submitted", NEW_KEY: "confirmed" },
+      { TOKEN: "submitted", CUSTOM: "must-not-replace" },
+    )).toBe('TOKEN="submitted"\nCUSTOM=user-only\nNEW_KEY="confirmed"\n')
+  })
 })

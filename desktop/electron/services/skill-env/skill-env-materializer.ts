@@ -18,6 +18,7 @@ export type MaterializeSkillEnvInput = {
   readonly stagingDirectoryPath: string
   readonly existingTargetDirectoryPath: string
   readonly inheritExistingEnv?: boolean
+  readonly replacementValues?: Readonly<Record<string, string>>
   readonly values: Readonly<Record<string, string>>
   readonly registerPrecondition?: (guard: SkillEnvMaterializationGuard) => void
 }
@@ -491,7 +492,12 @@ export async function materializeSkillEnv(
 
   const content = existing === null
     ? createDotenvFromExample(example, input.values)
-    : mergeDotenvExample(existing.content.toString("utf8"), example, input.values)
+    : mergeDotenvExample(
+        existing.content.toString("utf8"),
+        example,
+        input.values,
+        input.replacementValues ?? {},
+      )
   assertSkillRuntimeEnvBytes(content)
   await writeStagedEnv(stagedEnvPath, content, existing?.file.mode)
   return existing === null ? "created" : "merged"

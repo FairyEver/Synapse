@@ -201,6 +201,7 @@ describe("EditorInstallService security", () => {
     await mkdir(targetPath, { recursive: true })
     await writeFile(path.join(targetPath, ".synapse.json"), JSON.stringify({ id: "skill-1" }), "utf8")
     await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+    await writeFile(path.join(targetPath, ".env"), "TOKEN=existing\nCUSTOM=user-only\n", "utf8")
 
     mocks.resolveTarget.mockResolvedValue({
       contentType: "skill",
@@ -218,12 +219,15 @@ describe("EditorInstallService security", () => {
       { stagingDirectoryPath }: { stagingDirectoryPath: string },
     ) => {
       await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# Updated Skill\n", "utf8")
+      await writeFile(path.join(stagingDirectoryPath, ".env.example"), "TOKEN=\nNEW_KEY=default\n", "utf8")
     })
 
     const payload: SynapseInstallToEditorPayload = {
       contentId: "skill-1",
       contentType: "skill",
       editorId: "test-editor",
+      skillEnvReplacementValues: { TOKEN: "replacement" },
+      skillEnvValues: { TOKEN: "replacement", NEW_KEY: "confirmed" },
       scope: "global",
     }
 
@@ -237,6 +241,8 @@ describe("EditorInstallService security", () => {
     })
 
     await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# Updated Skill\n")
+    await expect(readFile(path.join(targetPath, ".env"), "utf8"))
+      .resolves.toBe('TOKEN="replacement"\nCUSTOM=user-only\nNEW_KEY="confirmed"\n')
   })
 
   it("records the source install mode in editor write audits", async () => {
