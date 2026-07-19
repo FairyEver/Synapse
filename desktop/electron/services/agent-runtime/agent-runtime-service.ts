@@ -393,12 +393,12 @@ export class AgentRuntimeService {
       return result
     }
 
-    const onExternalAbort = () => ac.abort()
+    const onExternalAbort = () => ac.abort(externalSignal?.reason)
     externalSignal?.addEventListener("abort", onExternalAbort, { once: true })
 
     const timeoutMs = input.timeoutMs
     const timeout = timeoutMs !== undefined && timeoutMs > 0
-      ? setTimeout(() => ac.abort(), timeoutMs)
+      ? setTimeout(() => ac.abort("scheduled-timeout"), timeoutMs)
       : undefined
 
     try {

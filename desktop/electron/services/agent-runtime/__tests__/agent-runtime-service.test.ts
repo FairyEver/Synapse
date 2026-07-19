@@ -2112,6 +2112,40 @@ describe("AgentRuntimeService", () => {
     await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
   })
 
+  it("persists scheduled AskUserQuestion timeouts as timed out", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new QuestionSession("scheduled-question-1", [{
+      question: "继续吗？",
+      options: [{ label: "继续" }, { label: "停止" }],
+      multiSelect: false,
+    }], "unused")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      permissionTimeoutMs: 60_000,
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "plan",
+      prompt: "needs choice",
+      sessionPolicy: "fresh",
+      timeoutMs: 10,
+    })
+
+    expect(result.status).toBe("timeout")
+    await vi.waitFor(async () => {
+      const stored = await conversations.get(result.conversationId)
+      expect(stored?.history.find((entry) => entry.metadata?.requestId === "scheduled-question-1")?.metadata)
+        .toMatchObject({ userQuestionResolution: { status: "timed_out" } })
+    })
+  })
+
   it("logs scheduled agent failures with correlation context", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn() }
