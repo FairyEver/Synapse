@@ -6,12 +6,13 @@
 
 - 工作流是有向无环图（DAG）
 - 节点按拓扑序执行；无依赖关系的节点并行运行
-- 内置节点类型包括 `prompt`、`switch`、`http_request`、`script`、`workflow_call`、`codex`、`claude_code` 和 `end`
+- 内置节点类型包括 `prompt`、`switch`、`http_request`、`script`、`workflow_call`、`document_template_docx_generate`、`codex`、`claude_code` 和 `end`
 - 每个工作流必须有且仅有一个 `end` 节点，不允许环
 - 节点通过有向边连接（`from` → `to`）
 - switch 节点的出边必须携带 `branch` 字段
 - `workflow_call` 节点可调用另一个已保存工作流，并把子工作流 End 输出作为自身输出
 - 调用工作流的节点类型固定为 `workflow_call`，不是 `app_workflow_call`
+- `document_template_docx_generate` 节点使用 DOCX 模板和 JSON 数据生成文档，并把输出文件路径作为节点输出
 - `codex` 节点在执行项目或任务工作目录中运行本机 `codex exec`，并把 Codex 最终回复作为自身输出
 - `claude_code` 节点在执行项目或任务工作目录中运行本机 `claude -p`，并把 Claude Code 最终回复作为自身输出
 
@@ -30,7 +31,7 @@
 | `static` | 硬编码值 | `{ "type": "static", "value": "你是一个翻译助手" }` |
 
 变量在节点执行前解析完毕。变量名支持字母、数字、下划线和中文。
-变量可用于 prompt/switch/codex/claude_code 提示词、end 输出模板、HTTP 文本字段，以及 `workflow_call.paramTemplates`。script 节点会把变量作为环境变量注入，不支持在脚本文本中写 `{{变量名}}`。POSIX 使用 `$变量名`，cmd 使用 `%变量名%`，PowerShell 使用 `$env:变量名`。
+变量可用于 prompt/switch/codex/claude_code 提示词、end 输出模板、HTTP 文本字段、`workflow_call.paramTemplates`，以及 `document_template_docx_generate` 的路径和内联 JSON 字段。script 节点会把变量作为环境变量注入，不支持在脚本文本中写 `{{变量名}}`。POSIX 使用 `$变量名`，cmd 使用 `%变量名%`，PowerShell 使用 `$env:变量名`。
 
 单个文件或文件夹变量注入绝对路径；多选资源变量注入保持顺序的 JSON 路径数组。例如 POSIX 脚本可用 `printf '%s\n' "$input_file"` 读取单文件路径，用 `printf '%s\n' "$input_files"` 输出多文件 JSON 数组。
 
@@ -133,6 +134,24 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 | `paramBindings` | `Record<string, WorkflowParamBinding>` | 文件或文件夹子参数的类型化绑定；父子参数的资源类型和 `allowMultiple` 必须一致 |
 
 配置前先用 `workflow_definition_list` 找到子工作流，再用 `workflow_definition_get` 读取子工作流当前 `params`。`paramTemplates` 和 `paramBindings` 的 key 应来自子工作流参数名，单值与多值资源参数不会自动互转。保存和 `workflow_definition_inspect` 会拒绝父子资源类型或 `allowMultiple` 不一致的直接绑定。子工作流内部 prompt/switch 节点仍需要通过子工作流默认值或子节点覆盖获得 provider/model/project；codex/claude_code 节点仍需要有效项目。
+
+### document_template_docx_generate — DOCX 文档生成节点
+
+不需要 provider。它使用 DOCX 模板和 JSON 文件或内联 JSON 数据生成文档，并把生成文件路径作为节点输出。
+
+配置字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `templatePath` | string | DOCX 模板路径，支持 `{{变量名}}` |
+| `outputPath` | string | 生成文件路径，支持 `{{变量名}}` |
+| `dataSource` | `"dataPath"` \| `"inline"` | 使用 JSON 文件或内联 JSON |
+| `dataPath` | string? | `dataSource` 为 `dataPath` 时必填，支持 `{{变量名}}` |
+| `dataJson` | string? | `dataSource` 为 `inline` 时必填，支持 `{{变量名}}` |
+| `overwrite` | boolean | 是否允许覆盖现有普通文件；符号链接目标始终拒绝 |
+| `variables` | VariableBinding[] | 路径和内联 JSON 使用的变量绑定 |
+
+输出：生成文件的 `outputPath`；生成元数据保存在节点结果 outputs 中。
 
 ### codex — Codex 节点
 
@@ -485,6 +504,7 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 - 严格校验会在每次 MCP 写入后执行，不要先保存未连接的占位节点再补边；复杂图优先本地组装完整定义后用 `workflow_definition_update`
 - 步骤 5 中 `node.config` 必填，并且必须符合 `workflow_node_type_describe` 返回的节点 schema；以 `configSchema.required` 为准，必填的布尔值和数组也不能省略；position 可省略，dispatcher 自动计算布局；`incomingEdges` 为 `{ from, branch? }[]`，`outgoingEdges` 为 `{ to, branch? }[]`
 - 创建 `workflow_call` 前先读取子工作流定义：文本、数字和选项参数使用 `paramTemplates`；文件/文件夹参数优先使用 `paramBindings`。多选资源参数只能直接绑定类型和 `allowMultiple` 一致的父参数
+- 创建 `document_template_docx_generate` 前，先用 `workflow_node_type_describe({ nodeType: "document_template_docx_generate" })` 读取最新 schema，并按 `dataSource` 提供 `dataPath` 或 `dataJson`
 - 创建 `codex` 前，先用 `workflow_node_type_describe({ nodeType: "codex" })` 读取最新 schema；不要给 codex 节点设置 `providerId` 或 `modelTier`
 - 创建 `claude_code` 前，先用 `workflow_node_type_describe({ nodeType: "claude_code" })` 读取最新 schema；不要给 claude_code 节点设置 `providerId` 或 `modelTier`
 - 步骤 8 在新增、删除或重连节点后调用，自动整理为左右层级排列，无需打开 UI
