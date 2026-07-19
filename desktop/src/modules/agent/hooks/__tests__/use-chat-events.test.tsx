@@ -99,7 +99,7 @@ describe("useChatEvents", () => {
       payload: {
         projectId: "project-1",
         conversationId: "conversation-1",
-        sessionKey: "local:renderer",
+        sessionKey: "workflow:private-timeline",
         platform: "renderer",
       },
     }
@@ -115,7 +115,7 @@ describe("useChatEvents", () => {
       expect.objectContaining({
         projectId: "project-1",
         conversationId: "conversation-1",
-        sessionKey: "local:renderer",
+        sessionKey: "[redacted]",
         platform: "renderer",
         boundary: "renderer.agent.live-timeline",
         errorName: "Error",
@@ -123,6 +123,7 @@ describe("useChatEvents", () => {
       }),
     )
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret IPC failure detail")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("workflow:private-timeline")
     expect(dispatch).toHaveBeenCalledWith({ type: "SET_ERROR", error: "加载会话失败" })
     expect(JSON.stringify((dispatch as unknown as ReturnType<typeof vi.fn>).mock.calls))
       .not.toContain("secret IPC failure detail")
@@ -168,6 +169,11 @@ describe("useChatEvents", () => {
       type: "UPDATE_UNREAD",
       updater: expect.any(Function),
     })
+    expect(JSON.stringify(rendererLogger.info.mock.calls)).not.toContain("workflow:run-1")
+    expect(rendererLogger.info).toHaveBeenCalledWith(
+      "Agent conversation update event received.",
+      expect.objectContaining({ sessionKey: "[redacted]", selectedSessionKey: "[redacted]" }),
+    )
   })
 
   it("logs pending permission refresh failures after stream events", async () => {
@@ -194,7 +200,7 @@ describe("useChatEvents", () => {
       scope: { sessionId: "conversation-1" },
       payload: {
         projectId: "project-1",
-        sessionKey: "local:renderer",
+        sessionKey: "scheduled:private-permission",
         platform: "renderer",
         event: {
           type: "permissionRequest",
@@ -217,7 +223,7 @@ describe("useChatEvents", () => {
       expect.objectContaining({
         projectId: "project-1",
         conversationId: "conversation-1",
-        sessionKey: "local:renderer",
+        sessionKey: "[redacted]",
         platform: "renderer",
         eventType: "permissionRequest",
         boundary: "renderer.agent.pending-permissions",
@@ -226,6 +232,7 @@ describe("useChatEvents", () => {
       }),
     )
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret permission refresh detail")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("scheduled:private-permission")
   })
 
   it("keeps colliding permission request ids from different projects", async () => {

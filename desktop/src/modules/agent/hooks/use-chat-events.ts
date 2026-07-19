@@ -18,6 +18,7 @@ const logger = createRendererLogger("agent")
 // Token-level SDK deltas can arrive hundreds of times per second; batching
 // them keeps live text layout stable while preserving event order.
 const STREAM_EVENT_FLUSH_DELAY_MS = 50
+const REDACTED_SESSION_KEY = "[redacted]"
 
 type ChatEventRefs = ChatConnectionRefs
 
@@ -90,7 +91,7 @@ function useChatEvents(
           conversationId: "conversationId" in domainEvent.payload
             ? domainEvent.payload.conversationId
             : undefined,
-          sessionKey: domainEvent.payload.sessionKey,
+          sessionKey: redactSessionKey(domainEvent.payload.sessionKey),
           platform: "platform" in domainEvent.payload ? domainEvent.payload.platform : undefined,
         })
         return
@@ -132,13 +133,13 @@ function useChatEvents(
         if (!shouldApplyPhase) {
           logger.debug("Phase event ignored for inactive conversation.", {
             projectId: payload.projectId,
-            sessionKey: payload.sessionKey,
+            sessionKey: redactSessionKey(payload.sessionKey),
             conversationId: payload.conversationId,
             phase: payload.phase,
             status: payload.status,
             selectedProjectId: selectedProject,
             selectedConversationId: selectedConv,
-            selectedSessionKey: selectedSession,
+            selectedSessionKey: redactSessionKey(selectedSession),
             pendingConversation: payload.conversationId
               ? pendingConversationIdsRef.current.has(payload.conversationId)
               : false,
@@ -179,11 +180,11 @@ function useChatEvents(
         logger.info("Agent conversation update event received.", {
           projectId: domainEvent.payload.projectId,
           conversationId: domainEvent.payload.conversationId,
-          sessionKey: domainEvent.payload.sessionKey,
+          sessionKey: redactSessionKey(domainEvent.payload.sessionKey),
           platform: domainEvent.payload.platform,
           selectedProjectId: selected.projectId,
           selectedConversationId: selected.conversationId,
-          selectedSessionKey: selected.sessionKey,
+          selectedSessionKey: redactSessionKey(selected.sessionKey),
           selectedUpdate,
         })
 
@@ -206,7 +207,7 @@ function useChatEvents(
             logger.error("Agent live timeline refresh failed.", {
               projectId: domainEvent.payload.projectId,
               conversationId: domainEvent.payload.conversationId,
-              sessionKey: domainEvent.payload.sessionKey,
+              sessionKey: redactSessionKey(domainEvent.payload.sessionKey),
               platform: domainEvent.payload.platform,
               boundary: "renderer.agent.live-timeline",
               selectedUpdate,
@@ -268,7 +269,7 @@ function useChatEvents(
         if (!conversationId) {
           logger.warn("Agent permission request ignored without conversation scope.", {
             projectId: domainEvent.payload.projectId,
-            sessionKey: domainEvent.payload.sessionKey,
+            sessionKey: redactSessionKey(domainEvent.payload.sessionKey),
             platform: domainEvent.payload.platform,
             requestId: event.requestId,
           })
@@ -299,7 +300,7 @@ function useChatEvents(
           logger.error("Agent pending permissions refresh failed.", {
             projectId: domainEvent.payload.projectId,
             conversationId: streamEventConversationId(domainEvent),
-            sessionKey: domainEvent.payload.sessionKey,
+            sessionKey: redactSessionKey(domainEvent.payload.sessionKey),
             platform: domainEvent.payload.platform,
             eventType: domainEvent.type,
             boundary: "renderer.agent.pending-permissions",
@@ -352,6 +353,10 @@ function shouldRefreshPendingPermissionsAfterEvent(event: SynapseAgentEvent): bo
     || event.type === "toolResult"
     || event.type === "result"
     || event.type === "error"
+}
+
+function redactSessionKey(sessionKey: string | undefined): string | undefined {
+  return sessionKey ? REDACTED_SESSION_KEY : undefined
 }
 
 function matchesSelectedEvent(
