@@ -3,6 +3,10 @@ import type { SkillRepositoryItemDto } from "@synapse/shared" with { "resolution
 
 import { createSkillRepositoryCapabilityDispatcher } from "../skill-repository-dispatcher"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import type {
+  SkillRepositoryCloudMutationRunner,
+  SkillRepositoryLocalImportInput,
+} from "../../services/skill-repository-upload-service"
 
 const repository = {
   id: "repo-1",
@@ -53,22 +57,31 @@ function createDeps(
       })),
     },
     uploadService: {
-      importLocal: vi.fn(async () => ({
-        repositoryId: "repo-1",
-        name: "demo",
-        owner: "liyang",
-        managementUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
-        identityWritten: true,
-        identityMigrated: false,
-        sourceImportSummary: {
-          controlFilesExcluded: [],
-          fileCount: 1,
-          hiddenEntryCount: 0,
-          runtimeEnvExcluded: false,
-          symlinkCount: 0,
-          totalBytes: 128,
-        },
-      })),
+      importLocal: vi.fn(async (
+        input: SkillRepositoryLocalImportInput,
+        _security?: unknown,
+        runCloudMutation?: SkillRepositoryCloudMutationRunner,
+      ) => {
+        const mutation = async () => ({
+          repositoryId: "repo-1",
+          name: "demo",
+          owner: "liyang",
+          managementUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+          identityWritten: true,
+          identityMigrated: false,
+          sourceImportSummary: {
+            controlFilesExcluded: [],
+            fileCount: 1,
+            hiddenEntryCount: 0,
+            runtimeEnvExcluded: false,
+            symlinkCount: 0,
+            totalBytes: 128,
+          },
+        })
+        return runCloudMutation
+          ? runCloudMutation(input.repositoryId ?? "new", mutation)
+          : mutation()
+      }),
     },
     publicAppUrl: "https://synapse.example.test",
     openExternal: vi.fn(async () => undefined),
@@ -216,7 +229,7 @@ describe("skill repository capability dispatcher", () => {
       title: "Demo",
       description: "Local demo",
       openInBrowser: true,
-    }, undefined)
+    }, undefined, expect.any(Function))
   })
 
   it("updates a local skill with repositoryId", async () => {
@@ -235,7 +248,7 @@ describe("skill repository capability dispatcher", () => {
     expect(deps.uploadService.importLocal).toHaveBeenCalledWith({
       repositoryId: "repo-1",
       sourceDirectoryPath: "/skills/demo",
-    }, undefined)
+    }, undefined, expect.any(Function))
   })
 
   it("returns management URL without opening a browser by default", async () => {
@@ -513,7 +526,44 @@ describe("skill repository capability dispatcher", () => {
         auditSink,
         permissionGuard,
       }),
+      expect.any(Function),
     )
+  })
+
+  it("authorizes import_local against the repository resolved from local identity", async () => {
+    const mutation = vi.fn(async () => ({ repositoryId: "repo-linked" }))
+    const { auditSink, permissionGuard } = createSecurity()
+    vi.mocked(permissionGuard.check).mockImplementation(async request => request.resource === "skill-repository:repo-linked"
+      ? { allowed: false, reason: "linked repository blocked", policyId: "policy-linked" }
+      : { allowed: true })
+    const deps = createDeps({ auditSink, permissionGuard })
+    vi.mocked(deps.uploadService.importLocal).mockImplementationOnce(async (_input, _security, runCloudMutation) => {
+      if (!runCloudMutation) throw new Error("missing mutation authorization")
+      await runCloudMutation("repo-linked", mutation)
+      throw new Error("unreachable")
+    })
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.item.import_local",
+      { sourceDirectoryPath: "/skills/demo" },
+      { source: "mcp-http" },
+    )).rejects.toThrow("linked repository blocked")
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.mutate",
+      resource: "skill-repository:repo-linked",
+      context: expect.objectContaining({
+        capabilityAction: "app.skill_repository.item.import_local",
+        repositoryId: "repo-linked",
+      }),
+    }))
+    expect(mutation).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "skill-repository:repo-linked",
+      outcome: "denied",
+    }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("skill-repository:new")
   })
 
   it("authorizes and audits every cloud mutation without session details", async () => {
@@ -578,7 +628,7 @@ describe("skill repository capability dispatcher", () => {
     expect(auditJson).not.toContain("deepLinkUrl")
   })
 
-  it("blocks denied local uploads before the upload service runs", async () => {
+  it("blocks denied local uploads before the cloud mutation runs", async () => {
     const { auditSink, permissionGuard } = createSecurity({
       allowed: false,
       reason: "blocked",
@@ -598,7 +648,7 @@ describe("skill repository capability dispatcher", () => {
       { source: "mcp-stdio" },
     )).rejects.toThrow("blocked")
 
-    expect(deps.uploadService.importLocal).not.toHaveBeenCalled()
+    expect(deps.uploadService.importLocal).toHaveBeenCalledTimes(2)
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "content.mutate",
       resource: "skill-repository:new",
@@ -666,7 +716,12 @@ describe("skill repository capability dispatcher", () => {
     const { auditSink, permissionGuard } = createSecurity()
     const deps = createDeps({ auditSink, permissionGuard })
     vi.mocked(deps.uploadService.importLocal)
-      .mockRejectedValueOnce(new Error("/Users/example/private-skill token=secret skill-content=private"))
+      .mockImplementationOnce(async (_input, _security, runCloudMutation) => {
+        if (!runCloudMutation) throw new Error("missing mutation authorization")
+        return runCloudMutation("new", async () => {
+          throw new Error("/Users/example/private-skill token=secret skill-content=private")
+        })
+      })
     const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
 
     await expect(dispatcher.dispatch(
@@ -706,6 +761,7 @@ describe("skill repository capability dispatcher", () => {
     expect(deps.uploadService.importLocal).toHaveBeenCalledWith(
       { sourceDirectoryPath: "/skills/demo" },
       undefined,
+      expect.any(Function),
     )
   })
 

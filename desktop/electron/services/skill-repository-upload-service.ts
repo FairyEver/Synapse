@@ -49,6 +49,11 @@ export type SkillRepositoryLocalImportResult = {
   readonly sourceImportSummary: ContentSkillSourceDraft["sourceImportSummary"]
 }
 
+export type SkillRepositoryCloudMutationRunner = <T>(
+  repositoryId: string,
+  mutation: () => Promise<T>,
+) => Promise<T>
+
 export type SkillRepositoryLocalIdentityRetryInput = {
   readonly sourceDirectoryPath: string
   readonly repositoryId: string
@@ -104,6 +109,7 @@ export class SkillRepositoryUploadService {
   async importLocal(
     input: SkillRepositoryLocalImportInput,
     security?: ContentSkillSourceSecurityDeps & SkillRepositoryIdentityWriteSecurity,
+    runCloudMutation?: SkillRepositoryCloudMutationRunner,
   ): Promise<SkillRepositoryLocalImportResult> {
     if (this.account.getState().status !== "authenticated") {
       throw new AccountAuthenticationRequiredError()
@@ -134,13 +140,13 @@ export class SkillRepositoryUploadService {
 
     let repository: SkillRepositoryDetailDto
     try {
-      repository = await this.account.importSkillRepository(importInput)
+      repository = await this.importRepository(importInput, runCloudMutation)
     } catch (error) {
       if (explicitRepositoryId || !localRepositoryId || !isNotFoundError(error)) throw error
-      repository = await this.account.importSkillRepository({
+      repository = await this.importRepository({
         ...importInput,
         repositoryId: undefined,
-      })
+      }, runCloudMutation)
     }
     const owner = repository.owner.handle
     const managementUrl = buildSkillRepositoryManagementUrl(this.publicAppUrl, repository.id)
@@ -197,6 +203,16 @@ export class SkillRepositoryUploadService {
       ...(identityMigrationWarning ? { identityMigrationWarning } : {}),
       ...(openWarning ? { openWarning } : {}),
     }
+  }
+
+  private importRepository(
+    input: SkillRepositoryImportInput,
+    runCloudMutation?: SkillRepositoryCloudMutationRunner,
+  ): Promise<SkillRepositoryDetailDto> {
+    const mutation = () => this.account.importSkillRepository(input)
+    return runCloudMutation
+      ? runCloudMutation(input.repositoryId ?? "new", mutation)
+      : mutation()
   }
 
   async retryLocalIdentity(

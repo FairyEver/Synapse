@@ -10,6 +10,7 @@ import type { DispatchContext, DispatchResult } from "../../synapse-capabilities
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import type { ContentSkillSourceSecurityDeps } from "../services/content-skill-source-service"
 import type {
+  SkillRepositoryCloudMutationRunner,
   SkillRepositoryLocalImportInput,
   SkillRepositoryLocalImportResult,
 } from "../services/skill-repository-upload-service"
@@ -37,6 +38,7 @@ type SkillRepositoryUploadServicePort = {
   readonly importLocal: (
     input: SkillRepositoryLocalImportInput,
     security?: SkillRepositoryUploadSecurity,
+    runCloudMutation?: SkillRepositoryCloudMutationRunner,
   ) => Promise<SkillRepositoryLocalImportResult>
 }
 
@@ -117,19 +119,13 @@ async function importLocalSkillRepository(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): Promise<DispatchResult> {
-  return runSkillRepositoryMutation(
+  const result = await importLocalWithMutationAuthorization(
     deps,
     context,
     "app.skill_repository.item.import_local",
-    "new",
-    async () => {
-      const result = await deps.uploadService.importLocal(
-        buildUploadInput(params),
-        securityFromDeps(deps, context),
-      )
-      return { ok: true, data: result }
-    },
+    buildUploadInput(params),
   )
+  return { ok: true, data: result }
 }
 
 async function updateLocalSkillRepository(
@@ -138,19 +134,25 @@ async function updateLocalSkillRepository(
   context: DispatchContext,
 ): Promise<DispatchResult> {
   const repositoryId = requireTrimmedString(params, "repositoryId")
-  return runSkillRepositoryMutation(
+  const result = await importLocalWithMutationAuthorization(
     deps,
     context,
     "app.skill_repository.item.update_local",
-    repositoryId,
-    async () => {
-      const result = await deps.uploadService.importLocal(
-        buildUploadInput(params, repositoryId),
-        securityFromDeps(deps, context),
-      )
-      return { ok: true, data: result }
-    },
+    buildUploadInput(params, repositoryId),
   )
+  return { ok: true, data: result }
+}
+
+async function importLocalWithMutationAuthorization(
+  deps: SkillRepositoryCapabilityDispatcherDeps,
+  context: DispatchContext,
+  capabilityAction: string,
+  input: SkillRepositoryLocalImportInput,
+): Promise<SkillRepositoryLocalImportResult> {
+  const security = securityFromDeps(deps, context)
+  const runCloudMutation: SkillRepositoryCloudMutationRunner = (repositoryId, mutation) =>
+    runSkillRepositoryMutation(deps, context, capabilityAction, repositoryId, mutation)
+  return deps.uploadService.importLocal(input, security, runCloudMutation)
 }
 
 async function setSkillRepositoryVisibility(
@@ -376,13 +378,13 @@ function securityFromDeps(
   }
 }
 
-async function runSkillRepositoryMutation(
+async function runSkillRepositoryMutation<T>(
   deps: SkillRepositoryCapabilityDispatcherDeps,
   context: DispatchContext,
   capabilityAction: string,
   repositoryId: string,
-  task: () => Promise<DispatchResult>,
-): Promise<DispatchResult> {
+  task: () => Promise<T>,
+): Promise<T> {
   const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
   const resource = `skill-repository:${repositoryId}`
   const metadata = {

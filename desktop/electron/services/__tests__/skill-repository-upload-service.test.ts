@@ -77,7 +77,10 @@ vi.mock("../skill-repository-local-identity", async (importOriginal) => {
 })
 
 import { AccountAuthenticationRequiredError } from "../account-service"
-import { SkillRepositoryUploadService } from "../skill-repository-upload-service"
+import {
+  SkillRepositoryUploadService,
+  type SkillRepositoryCloudMutationRunner,
+} from "../skill-repository-upload-service"
 
 const authenticatedState: SynapseAccountState = {
   status: "authenticated",
@@ -183,13 +186,19 @@ describe("SkillRepositoryUploadService", () => {
     const service = new SkillRepositoryUploadService({
       accountService: { getState: () => authenticatedState, importSkillRepository },
     })
+    const mutationTargets: string[] = []
+    const runCloudMutation: SkillRepositoryCloudMutationRunner = async (repositoryId, mutation) => {
+      mutationTargets.push(repositoryId)
+      return mutation()
+    }
 
-    await service.importLocal({ sourceDirectoryPath: "/skills/demo" })
+    await service.importLocal({ sourceDirectoryPath: "/skills/demo" }, undefined, runCloudMutation)
 
     expect(readSkillRepositoryIdentity).toHaveBeenCalledWith("/skills/demo", undefined)
     expect(importSkillRepository).toHaveBeenCalledWith(expect.objectContaining({
       repositoryId: "repo-local",
     }))
+    expect(mutationTargets).toEqual(["repo-local"])
   })
 
   it("recreates a repository when the local cloud identity is stale", async () => {
@@ -211,8 +220,17 @@ describe("SkillRepositoryUploadService", () => {
     const service = new SkillRepositoryUploadService({
       accountService: { getState: () => authenticatedState, importSkillRepository },
     })
+    const mutationTargets: string[] = []
+    const runCloudMutation: SkillRepositoryCloudMutationRunner = async (repositoryId, mutation) => {
+      mutationTargets.push(repositoryId)
+      return mutation()
+    }
 
-    await expect(service.importLocal({ sourceDirectoryPath: "/skills/demo" })).resolves.toMatchObject({
+    await expect(service.importLocal(
+      { sourceDirectoryPath: "/skills/demo" },
+      undefined,
+      runCloudMutation,
+    )).resolves.toMatchObject({
       repositoryId: "repo-new",
       identityWritten: true,
     })
@@ -223,6 +241,7 @@ describe("SkillRepositoryUploadService", () => {
     expect(importSkillRepository).toHaveBeenNthCalledWith(2, expect.objectContaining({
       repositoryId: undefined,
     }))
+    expect(mutationTargets).toEqual(["repo-stale", "new"])
     expect(writeSkillRepositoryIdentity).toHaveBeenCalledWith("/skills/demo", {
       id: "repo-new",
       kind: "cloud-skill-repository",
