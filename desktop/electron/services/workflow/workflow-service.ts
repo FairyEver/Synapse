@@ -52,6 +52,7 @@ interface WorkflowMigrationStateWrite {
   readonly sourceKind: WorkflowMigrationStateEntryV1["sourceKind"]
   readonly status: WorkflowMigrationStateStatus
   readonly targetDigest?: string
+  readonly rawExportAvailable?: boolean
   readonly error?: Error
 }
 
@@ -142,6 +143,7 @@ export class WorkflowService {
           targetSchemaVersion: entry.targetSchemaVersion,
           errorCode: entry.errorCode,
           errorMessage: entry.errorMessage,
+          rawExportAvailable: entry.rawExportAvailable || undefined,
           updatedAt: entry.updatedAt,
         }]
       }).sort((left, right) => right.updatedAt - left.updatedAt || left.workflowId.localeCompare(right.workflowId))
@@ -193,6 +195,48 @@ export class WorkflowService {
       }
     }
     throw workflowReadError(result)
+  }
+
+  async getLegacyMigrationExportDocument(diagnosticId: string): Promise<WorkflowExportDocumentResult | null> {
+    await this.initialize()
+    const state = await this.migrationStateNamespace.get(diagnosticId)
+    if (
+      !state
+      || state.sourceKind !== "legacy_repository"
+      || state.status !== "unsupported_future"
+      || !state.rawExportAvailable
+      || !this.migrationOptions.listLegacyRepositoryPaths
+    ) return null
+
+    const sources = await listLegacyWorkflowSources(
+      await this.migrationOptions.listLegacyRepositoryPaths(),
+      (issue) => {
+        logger.warn("legacy repository workflow raw export scan entry skipped", {
+          operation: issue.operation,
+          workflowId: issue.workflowId,
+          limit: issue.limit,
+          observed: issue.observed,
+          maximum: issue.maximum,
+          ...errorLogMeta(issue.error),
+        })
+      },
+    )
+    const source = sources.find((candidate) => (
+      candidate.workflowId === state.workflowId
+      && candidate.digest === state.sourceDigest
+    ))
+    if (!source || source.document.id !== state.workflowId) {
+      throw new Error("旧仓库工作流原文已变化或无法读取，请重新打开工作流列表后再试。")
+    }
+    const result = migrateWorkflowDocument(source.document)
+    if (result.kind !== "unsupported_future") {
+      throw new Error("旧仓库工作流原文已变化，不再是可导出的未来版本文档。")
+    }
+    return {
+      kind: "future",
+      document: structuredClone(source.document) as WorkflowFutureDocument,
+      sourceVersion: result.sourceVersion,
+    }
   }
 
   async save(def: WorkflowDefinition): Promise<WorkflowSaveResult | WorkflowSaveError> {
@@ -448,12 +492,16 @@ export class WorkflowService {
         : { ...source.document, id: source.workflowId }
       const result = migrateWorkflowDocument(legacyDocument)
       if (result.kind !== "current") {
+        const rawExportAvailable = result.kind === "unsupported_future"
+          && typeof source.document.id === "string"
+          && source.document.id === source.workflowId
         await this.writeMigrationState({
           id: stateId,
           workflowId: source.workflowId,
           sourceDigest: source.digest,
           sourceKind: "legacy_repository",
           status: result.kind === "unsupported_future" ? "unsupported_future" : "failed",
+          rawExportAvailable,
           error: result.error,
         })
         continue
@@ -589,6 +637,7 @@ export class WorkflowService {
       targetSchemaVersion: WORKFLOW_SCHEMA_VERSION,
       status: input.status,
       ...(input.targetDigest ? { targetDigest: input.targetDigest } : {}),
+      ...(input.rawExportAvailable ? { rawExportAvailable: true } : {}),
       ...(input.error ? {
         errorCode: input.error.name,
         errorMessage: sanitizeAgentError(input.error.message).slice(0, 200),

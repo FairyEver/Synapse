@@ -188,15 +188,19 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     void refresh()
   }
 
-  const handleExport = async (id: string, name: string) => {
+  const handleExport = async (id: string, name: string, migrationDiagnosticId?: string) => {
     try {
-      const result = await requireBridgeDomain("workflow").exportPackage(id, name)
+      const workflowBridge = requireBridgeDomain("workflow")
+      const result = migrationDiagnosticId
+        ? await workflowBridge.exportPackage(id, name, migrationDiagnosticId)
+        : await workflowBridge.exportPackage(id, name)
       if (!result) return
       toast.success(result.kind === "future-raw" ? "工作流原文已导出" : "工作流已导出")
     } catch (err) {
       logger.warn("Workflow export failed.", {
         boundary: "renderer.workflow.list.export",
         workflowId: id,
+        migrationDiagnosticId,
         ...errorDiagnostic(err),
       })
       toast.error("导出失败，请重试")
@@ -422,12 +426,26 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
                   <span className="block">{MIGRATION_DIAGNOSTIC_DISPLAY[migrationDiagnostic.status].message}</span>
                   {migrationDiagnostic.errorMessage ? <span className="block">详情：{migrationDiagnostic.errorMessage}</span> : null}
                   <span className="block">{MIGRATION_DIAGNOSTIC_DISPLAY[migrationDiagnostic.status].recovery}</span>
+                  {migrationDiagnostic.rawExportAvailable ? (
+                    <span className="block">可导出原文备份，并在兼容版本中处理。</span>
+                  ) : null}
                 </>
               ) : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>关闭</AlertDialogCancel>
+            {migrationDiagnostic?.rawExportAvailable ? (
+              <AlertDialogAction
+                onClick={() => {
+                  const target = migrationDiagnostic
+                  setMigrationDiagnostic(null)
+                  void handleExport(target.workflowId, "旧仓库工作流", target.id)
+                }}
+              >
+                导出原文
+              </AlertDialogAction>
+            ) : null}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

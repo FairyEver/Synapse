@@ -16,6 +16,7 @@ export interface WorkflowMigrationStateEntryV1 extends Record<string, unknown> {
   targetSchemaVersion: string
   targetDigest?: string
   status: WorkflowMigrationStateStatus
+  rawExportAvailable?: boolean
   errorCode?: string
   errorMessage?: string
   updatedAt: number
@@ -40,6 +41,7 @@ export const workflowMigrationStateSchema: NamespaceSchema<WorkflowMigrationStat
       && ["failed", "unsupported_future", "legacy_recovering", "legacy_recovered", "legacy_conflict"].includes(String(entry.status))
       && (entry.targetDigest === undefined || typeof entry.targetDigest === "string")
       && (entry.status !== "legacy_recovering" || (typeof entry.targetDigest === "string" && entry.targetDigest.length > 0))
+      && (entry.rawExportAvailable === undefined || typeof entry.rawExportAvailable === "boolean")
       && (entry.errorCode === undefined || typeof entry.errorCode === "string")
       && (entry.errorMessage === undefined || typeof entry.errorMessage === "string")
       && typeof entry.updatedAt === "number"

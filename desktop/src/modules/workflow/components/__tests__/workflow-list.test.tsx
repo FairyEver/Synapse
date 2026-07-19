@@ -411,6 +411,48 @@ describe("WorkflowList", () => {
     expect(workflowOpenEditor).not.toHaveBeenCalled()
   })
 
+  it("exports raw content from an eligible legacy future diagnostic", async () => {
+    workflowListState.items = []
+    workflowListState.migrationDiagnostics = [{
+      id: "legacy:workflow-future",
+      workflowId: "workflow-future",
+      status: "unsupported_future",
+      targetSchemaVersion: "2.0.0",
+      rawExportAvailable: true,
+      updatedAt: 1,
+    }]
+    workflowExportPackage.mockResolvedValue({
+      path: "/tmp/legacy-future.synapse-workflow-future.json",
+      kind: "future-raw",
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowList onCreate={vi.fn()} />)
+    })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[aria-label="查看恢复诊断"]')?.click()
+    })
+
+    expect(document.body.textContent).toContain("可导出原文备份，并在兼容版本中处理。")
+    await act(async () => {
+      Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent?.trim() === "导出原文")
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(workflowExportPackage).toHaveBeenCalledWith(
+      "workflow-future",
+      "旧仓库工作流",
+      "legacy:workflow-future",
+    )
+    expect(toastSuccess).toHaveBeenCalledWith("工作流原文已导出")
+  })
+
   it("loads active runs and reopens the runner from the workflow card", async () => {
     workflowActiveRuns.mockResolvedValue([{
       runId: "active-run",

@@ -163,6 +163,7 @@ function createService() {
       if (id === "codex-source") return { kind: "current" as const, document: codexOnlyWorkflowWithDefaultProvider() }
       return null
     }),
+    getLegacyMigrationExportDocument: vi.fn(async (): Promise<WorkflowExportDocumentResult | null> => null),
     save: vi.fn(async (def: WorkflowDefinition) => {
       saved.push(def)
       return { versionHash: "v_imported" }
@@ -278,6 +279,33 @@ describe("WorkflowPackageService", () => {
     })
     await expect(service.buildExportPackage(futureDocument.id))
       .rejects.toThrow("requires raw export")
+    expect(providerService.listProviders).not.toHaveBeenCalled()
+  })
+
+  it("builds a protected raw artifact from a legacy migration diagnostic", async () => {
+    const { service, workflowService, providerService } = createService()
+    const futureDocument = {
+      id: "legacy-future-workflow",
+      name: "Legacy Future Workflow",
+      meta: { schemaVersion: "3.0.0" },
+      futureOnly: { mode: "preserve-exactly" },
+    }
+    workflowService.getLegacyMigrationExportDocument.mockResolvedValue({
+      kind: "future",
+      document: futureDocument,
+      sourceVersion: "3.0.0",
+    })
+
+    await expect(service.buildExportArtifact(futureDocument.id, `legacy:${futureDocument.id}`))
+      .resolves.toEqual({
+        kind: "future-raw",
+        document: futureDocument,
+        sourceVersion: "3.0.0",
+        workflowName: "Legacy Future Workflow",
+      })
+    expect(workflowService.getLegacyMigrationExportDocument)
+      .toHaveBeenCalledWith(`legacy:${futureDocument.id}`)
+    expect(workflowService.getExportDocument).not.toHaveBeenCalled()
     expect(providerService.listProviders).not.toHaveBeenCalled()
   })
 

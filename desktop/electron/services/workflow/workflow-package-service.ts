@@ -33,7 +33,7 @@ const MODEL_TIERS: readonly WorkflowPackageModelTier[] = ["default", "haiku", "s
 const logger = createMainLogger("service.workflow.package")
 
 interface WorkflowPackageServiceDeps {
-  readonly workflowService: Pick<WorkflowService, "getExportDocument" | "save">
+  readonly workflowService: Pick<WorkflowService, "getExportDocument" | "getLegacyMigrationExportDocument" | "save">
   readonly providerService: Pick<ProviderService, "listProviders">
   readonly permissionGuard: Pick<PermissionGuard, "check">
   readonly auditSink: Pick<AuditSink, "record">
@@ -65,7 +65,7 @@ export type WorkflowExportArtifact =
     }
 
 export class WorkflowPackageService {
-  private readonly workflowService: Pick<WorkflowService, "getExportDocument" | "save">
+  private readonly workflowService: Pick<WorkflowService, "getExportDocument" | "getLegacyMigrationExportDocument" | "save">
   private readonly providerService: Pick<ProviderService, "listProviders">
   private readonly permissionGuard: Pick<PermissionGuard, "check">
   private readonly auditSink: Pick<AuditSink, "record">
@@ -89,8 +89,13 @@ export class WorkflowPackageService {
     return artifact.package
   }
 
-  async buildExportArtifact(workflowId: string): Promise<WorkflowExportArtifact> {
-    const exportDocument = await this.workflowService.getExportDocument(workflowId)
+  async buildExportArtifact(
+    workflowId: string,
+    migrationDiagnosticId?: string,
+  ): Promise<WorkflowExportArtifact> {
+    const exportDocument = migrationDiagnosticId
+      ? await this.workflowService.getLegacyMigrationExportDocument(migrationDiagnosticId)
+      : await this.workflowService.getExportDocument(workflowId)
     if (!exportDocument) throw new Error(`Workflow ${workflowId} not found`)
     if (exportDocument.kind === "future") {
       return {
@@ -120,9 +125,10 @@ export class WorkflowPackageService {
   async exportToFile(options: {
     readonly workflowId: string
     readonly workflowName?: string
+    readonly migrationDiagnosticId?: string
     readonly chooseDestination: (options: WorkflowExportDestinationOptions) => Promise<string | null>
   }): Promise<WorkflowExportResult | null> {
-    const artifact = await this.buildExportArtifact(options.workflowId)
+    const artifact = await this.buildExportArtifact(options.workflowId, options.migrationDiagnosticId)
     const isFutureRaw = artifact.kind === "future-raw"
     const safeName = normalizeContentFileNameSegment(options.workflowName || artifact.workflowName || "workflow")
     const filePath = await options.chooseDestination({

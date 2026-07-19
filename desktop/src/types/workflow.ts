@@ -81,6 +81,7 @@ export interface WorkflowMigrationDiagnostic {
   targetSchemaVersion: string
   errorCode?: string
   errorMessage?: string
+  rawExportAvailable?: boolean
   updatedAt: number
 }
 export interface WorkflowListResult {

@@ -1598,8 +1598,12 @@ const synapseBridge: SynapseBridge = {
     openEditor: (id: string, runId?: string) => invoke(IPC_CHANNELS.workflow.openEditor)({ id, runId }),
     editorState: invoke(IPC_CHANNELS.workflow.editorState),
     checkCanSync: invoke(IPC_CHANNELS.workflow.checkCanSync),
-    exportPackage: (workflowId: string, workflowName?: string) =>
-      invoke(IPC_CHANNELS.workflow.exportPackage)({ workflowId, workflowName }),
+    exportPackage: (workflowId: string, workflowName?: string, migrationDiagnosticId?: string) =>
+      invoke(IPC_CHANNELS.workflow.exportPackage)({
+        workflowId,
+        workflowName,
+        ...(migrationDiagnosticId ? { migrationDiagnosticId } : {}),
+      }),
     inspectImportPackage: () => invoke(IPC_CHANNELS.workflow.inspectImportPackage)(),
     importPackage: (packagePath: string, mappings, options, packageDigest?: string) =>
       invoke(IPC_CHANNELS.workflow.importPackage)({ packagePath, packageDigest, mappings, options }),

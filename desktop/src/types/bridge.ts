@@ -1678,7 +1678,7 @@ export type SynapseBridge = {
     openEditor: (id: string, runId?: string) => Promise<void>
     editorState: () => Promise<{ openEditors: string[] }>
     checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
-    exportPackage: (workflowId: string, workflowName?: string) => Promise<{
+    exportPackage: (workflowId: string, workflowName?: string, migrationDiagnosticId?: string) => Promise<{
       path: string
       kind: "package" | "future-raw"
     } | null>

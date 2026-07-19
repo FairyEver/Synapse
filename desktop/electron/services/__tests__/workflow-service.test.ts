@@ -226,13 +226,13 @@ describe("WorkflowService", () => {
       targetSchemaVersion: "2.0.0",
     }
     await migrationStates.upsert({ ...base, id: "legacy:failed", workflowId: "failed", sourceKind: "legacy_repository", status: "failed", errorCode: "MigrationError", errorMessage: "迁移失败详情", updatedAt: 200 })
-    await migrationStates.upsert({ ...base, id: "legacy:future", workflowId: "future", sourceKind: "legacy_repository", status: "unsupported_future", updatedAt: 300 })
+    await migrationStates.upsert({ ...base, id: "legacy:future", workflowId: "future", sourceKind: "legacy_repository", status: "unsupported_future", rawExportAvailable: true, updatedAt: 300 })
     await migrationStates.upsert({ ...base, id: "legacy:conflict", workflowId: "conflict", sourceKind: "legacy_repository", status: "legacy_conflict", updatedAt: 100 })
     await migrationStates.upsert({ ...base, id: "legacy:recovered", workflowId: "recovered", sourceKind: "legacy_repository", status: "legacy_recovered", updatedAt: 400 })
     await migrationStates.upsert({ ...base, id: "current:failed", workflowId: "current", sourceKind: "current", status: "failed", updatedAt: 500 })
 
     await expect(svc.listMigrationDiagnostics()).resolves.toEqual([
-      expect.objectContaining({ id: "legacy:future", workflowId: "future", status: "unsupported_future" }),
+      expect.objectContaining({ id: "legacy:future", workflowId: "future", status: "unsupported_future", rawExportAvailable: true }),
       expect.objectContaining({ id: "legacy:failed", workflowId: "failed", status: "failed", errorCode: "MigrationError", errorMessage: "迁移失败详情" }),
       expect.objectContaining({ id: "legacy:conflict", workflowId: "conflict", status: "legacy_conflict" }),
     ])
@@ -683,6 +683,43 @@ describe("WorkflowService", () => {
     const restarted = createRepoAt(dir, options).svc
     await restarted.initialize()
     await expect(restarted.get(def.id)).resolves.toBeNull()
+  })
+  it("exports an unchanged future workflow from legacy repository diagnostics", async () => {
+    const dir = tmpDir()
+    const repositoryPath = tmpDir()
+    const futureDocument = {
+      ...makeDef(),
+      id: "legacy-future-export",
+      name: "未来工作流",
+      meta: { schemaVersion: "3.0.0" },
+      futureOnly: { mode: "preserve-exactly" },
+    }
+    const legacyDir = path.join(repositoryPath, "workflows", futureDocument.id)
+    const versionPath = path.join(legacyDir, "v_100_future.json")
+    mkdirSync(legacyDir, { recursive: true })
+    writeFileSync(versionPath, JSON.stringify(futureDocument), "utf8")
+    const svc = createRepoAt(dir, {
+      dataRootPath: dir,
+      listLegacyRepositoryPaths: async () => [repositoryPath],
+    }).svc
+    await svc.initialize()
+
+    await expect(svc.listMigrationDiagnostics()).resolves.toEqual([
+      expect.objectContaining({
+        id: `legacy:${futureDocument.id}`,
+        status: "unsupported_future",
+        rawExportAvailable: true,
+      }),
+    ])
+    await expect(svc.getLegacyMigrationExportDocument(`legacy:${futureDocument.id}`)).resolves.toEqual({
+      kind: "future",
+      document: futureDocument,
+      sourceVersion: "3.0.0",
+    })
+
+    writeFileSync(versionPath, JSON.stringify({ ...futureDocument, futureOnly: { mode: "changed" } }), "utf8")
+    await expect(svc.getLegacyMigrationExportDocument(`legacy:${futureDocument.id}`))
+      .rejects.toThrow("原文已变化或无法读取")
   })
   it("repairs a recovered legacy workflow after the final migration-state write fails", async () => {
     const dir = tmpDir()

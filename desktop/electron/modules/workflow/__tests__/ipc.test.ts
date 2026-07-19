@@ -99,8 +99,9 @@ describe("workflowIpcModule", () => {
       listMigrationDiagnostics: vi.fn(async () => [{
         id: "legacy:workflow-2",
         workflowId: "workflow-2",
-        status: "legacy_conflict" as const,
+        status: "unsupported_future" as const,
         targetSchemaVersion: "2.0.0",
+        rawExportAvailable: true,
         updatedAt: 3,
       }]),
     }
@@ -116,7 +117,8 @@ describe("workflowIpcModule", () => {
       migrationDiagnostics: [expect.objectContaining({
         id: "legacy:workflow-2",
         workflowId: "workflow-2",
-        status: "legacy_conflict",
+        status: "unsupported_future",
+        rawExportAvailable: true,
       })],
     })
   })
@@ -129,6 +131,7 @@ describe("workflowIpcModule", () => {
     return new WorkflowPackageService({
       workflowService: {
         getExportDocument: vi.fn(async () => exportDocument),
+        getLegacyMigrationExportDocument: vi.fn(async () => exportDocument),
         save: vi.fn(),
       },
       providerService: { listProviders: vi.fn(async () => []) },
@@ -1801,6 +1804,7 @@ describe("workflowIpcModule", () => {
       const result = await harness.invoke("synapse:workflow:export-package", {
         workflowId: futureDocument.id,
         workflowName: futureDocument.name,
+        migrationDiagnosticId: `legacy:${futureDocument.id}`,
       })
 
       expect(result).toEqual({ path: targetPath, kind: "future-raw" })

@@ -977,15 +977,24 @@ export const workflowIpcModule: IpcModule = {
   methods: {
     exportPackage: {
       channel: "synapse:workflow:export-package", kind: "invoke",
-      request: z.object({ workflowId: workflowIdSchema, workflowName: z.string().optional() }),
+      request: z.object({
+        workflowId: workflowIdSchema,
+        workflowName: z.string().optional(),
+        migrationDiagnosticId: z.string().min(1).optional(),
+      }),
       response: z.object({
         path: z.string(),
         kind: z.enum(["package", "future-raw"]),
       }).nullable(),
-      handler: async (ctx, { workflowId, workflowName }: { workflowId: string; workflowName?: string }) => {
+      handler: async (ctx, {
+        workflowId,
+        workflowName,
+        migrationDiagnosticId,
+      }: { workflowId: string; workflowName?: string; migrationDiagnosticId?: string }) => {
         return ctx.resolve<WorkflowPackageService>("core.workflow.package").exportToFile({
           workflowId,
           workflowName,
+          migrationDiagnosticId,
           chooseDestination: async ({ title, defaultPath }) => {
             const parentWindow = focusedWindow()
             const dialogOptions: Electron.SaveDialogOptions = {
@@ -1210,7 +1219,7 @@ export const workflowIpcModule: IpcModule = {
       channel: "synapse:workflow:list", kind: "invoke", request: z.void().optional(),
       response: z.object({
         items: z.array(z.object({ id: z.string(), name: z.string(), description: z.string().optional(), version: z.string(), loadError: z.string().optional(), rawExportAvailable: z.boolean().optional(), nodeCount: z.number(), createdAt: z.number(), updatedAt: z.number() })),
-        migrationDiagnostics: z.array(z.object({ id: z.string(), workflowId: z.string(), status: z.enum(["failed", "unsupported_future", "legacy_conflict"]), targetSchemaVersion: z.string(), errorCode: z.string().optional(), errorMessage: z.string().optional(), updatedAt: z.number() })),
+        migrationDiagnostics: z.array(z.object({ id: z.string(), workflowId: z.string(), status: z.enum(["failed", "unsupported_future", "legacy_conflict"]), targetSchemaVersion: z.string(), errorCode: z.string().optional(), errorMessage: z.string().optional(), rawExportAvailable: z.boolean().optional(), updatedAt: z.number() })),
       }),
       handler: async (ctx) => {
         const service = ctx.resolve<WorkflowService>("core.workflow")
