@@ -457,7 +457,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
         onConfirm={async (params, rawValues) => {
           if (!runTarget) return
           const nextValues = createWorkflowLastRunValues(runTarget.params, rawValues)
-          await handleConfirmRun(params, nextValues).catch(() => {})
+          await handleConfirmRun(params, nextValues)
         }}
         onCancel={() => setRunTarget(null)}
       />
