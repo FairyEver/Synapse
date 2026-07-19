@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { SKILL_UNINSTALL_MAX_TARGETS } from "../../../config"
 
 const trimmedNonEmptyString = z.string().transform((value) => value.trim()).pipe(z.string().min(1))
 
@@ -42,6 +43,16 @@ export const skillUninstallBatchResultItemSchema = z.object({
 
 export const skillUninstallBatchResultSchema = z.object({
   results: z.array(skillUninstallBatchResultItemSchema),
+  cancelled: z.boolean().optional(),
+}).strict()
+
+export const skillUninstallRequestSchema = z.object({
+  operationId: z.string().min(1),
+  targets: z.array(skillUninstallTargetSchema).min(1).max(SKILL_UNINSTALL_MAX_TARGETS),
+}).strict()
+
+export const skillUninstallExecutionCancelRequestSchema = z.object({
+  operationId: z.string().min(1),
 }).strict()
 
 export const skillUninstallScanRequestSchema = z.object({
@@ -64,6 +75,10 @@ export type SkillUninstallScanResult = z.infer<typeof skillUninstallScanResultSc
 export type SkillUninstallNameScanResult = z.infer<typeof skillUninstallNameScanResultSchema>
 export type SkillUninstallTarget = z.infer<typeof skillUninstallTargetSchema>
 export type SkillUninstallBatchResult = z.infer<typeof skillUninstallBatchResultSchema>
+export type SkillUninstallRequest = z.infer<typeof skillUninstallRequestSchema>
+export type SkillUninstallExecutionCancelRequest = z.infer<typeof skillUninstallExecutionCancelRequestSchema>
 export type SkillUninstallScanRequest = z.infer<typeof skillUninstallScanRequestSchema>
 export type SkillUninstallNameScanRequest = z.infer<typeof skillUninstallNameScanRequestSchema>
 export type SkillUninstallCancelRequest = z.infer<typeof skillUninstallCancelRequestSchema>
+
+export { SKILL_UNINSTALL_MAX_TARGETS }

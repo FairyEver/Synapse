@@ -225,10 +225,12 @@ export class SkillUninstallerService {
     targets: readonly SkillUninstallTarget[],
     security: SkillUninstallerSecurity,
     hooks: SkillUninstallerHooks = {},
+    signal?: AbortSignal,
   ): Promise<SkillUninstallBatchResult> {
     const results: SkillUninstallBatchResult["results"] = []
 
     for (const target of targets) {
+      if (signal?.aborted) break
       const metadata = { operation: "skill-uninstall" }
       let permission
       try {
@@ -287,7 +289,10 @@ export class SkillUninstallerService {
       }
     }
 
-    return { results }
+    return {
+      results,
+      ...(signal?.aborted ? { cancelled: true } : {}),
+    }
   }
 }
 

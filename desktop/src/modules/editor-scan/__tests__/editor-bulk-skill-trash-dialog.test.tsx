@@ -8,6 +8,7 @@ import { EditorBulkSkillTrashDialog } from "../components/editor-bulk-skill-tras
 import type { EditorScanSkillCopyItem } from "../lib/editor-copy-source"
 
 const mocks = vi.hoisted(() => ({
+  cancelUninstall: vi.fn(),
   error: vi.fn(),
   onOpenChange: vi.fn(),
   onTrashed: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock("@/app-shell/notifications", () => ({
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
     skillUninstaller: {
+      cancelUninstall: mocks.cancelUninstall,
       uninstall: mocks.uninstall,
     },
   }),
@@ -138,6 +140,7 @@ describe("EditorBulkSkillTrashDialog", () => {
 
     expect(mocks.uninstall).toHaveBeenCalledTimes(1)
     expect(mocks.uninstall).toHaveBeenCalledWith({
+      operationId: expect.any(String),
       targets: [
         { query: { name: "jenkins" }, path: "/source/jenkins" },
         {
@@ -178,6 +181,7 @@ describe("EditorBulkSkillTrashDialog", () => {
 
     expect(mocks.uninstall).toHaveBeenCalledTimes(2)
     expect(mocks.uninstall).toHaveBeenNthCalledWith(2, {
+      operationId: expect.any(String),
       targets: [{ query: { name: "release" }, path: "/source/release" }],
     })
     expect(mocks.onTrashed).toHaveBeenNthCalledWith(2, ["global:/source/release"])
@@ -213,5 +217,34 @@ describe("EditorBulkSkillTrashDialog", () => {
 
     expect(mocks.onTrashed).toHaveBeenCalledWith(["global:/source/jenkins"])
     expect(document.body.textContent).toContain("release：未返回卸载结果。")
+  })
+
+  it("stops an active batch and keeps unprocessed items available for retry", async () => {
+    let resolveUninstall!: (result: {
+      results: Array<{ path: string; status: "trashed" }>
+      cancelled: true
+    }) => void
+    mocks.uninstall.mockImplementation(() => new Promise((resolve) => {
+      resolveUninstall = resolve
+    }))
+    mocks.cancelUninstall.mockImplementation(async () => {
+      resolveUninstall({
+        results: [{ path: "/source/jenkins", status: "trashed" }],
+        cancelled: true,
+      })
+      return { cancelled: true }
+    })
+
+    await renderDialog([createItem("jenkins"), createItem("release")])
+    await act(async () => clickButton("移到废纸篓"))
+    expect(document.body.textContent).toContain("已处理 0/2 个 Skill")
+    await act(async () => clickButton("停止处理"))
+
+    expect(mocks.cancelUninstall).toHaveBeenCalledWith({
+      operationId: mocks.uninstall.mock.calls[0]?.[0].operationId,
+    })
+    expect(document.body.textContent).toContain("release：已停止，未处理。")
+    expect(document.body.textContent).toContain("重试未处理项")
+    expect(mocks.warning).toHaveBeenCalledWith("已停止，已移到废纸篓 1/2 个 Skill")
   })
 })

@@ -292,6 +292,28 @@ describe("SkillUninstallerService", () => {
     }))
   })
 
+  it("stops before the next target when uninstall is cancelled", async () => {
+    const firstPath = await createSkill(tempRoot, "first")
+    const secondPath = await createSkill(tempRoot, "second")
+    const controller = new AbortController()
+    const trashItem = vi.fn(async () => {
+      controller.abort("user-cancel")
+    })
+    const { security } = createSecurity()
+    const service = new SkillUninstallerService({ trashItem })
+
+    const result = await service.uninstall([
+      { query: { name: "first", searchRootPath: tempRoot }, path: firstPath },
+      { query: { name: "second", searchRootPath: tempRoot }, path: secondPath },
+    ], security, {}, controller.signal)
+
+    expect(result).toEqual({
+      results: [{ path: firstPath, status: "trashed" }],
+      cancelled: true,
+    })
+    expect(trashItem).toHaveBeenCalledTimes(1)
+  })
+
   it("returns a stable failure when write permission is denied", async () => {
     const targetPath = await createSkill(tempRoot, "jenkins")
     const trashItem = vi.fn()

@@ -96,6 +96,7 @@ const IPC_CHANNELS = {
     "scan": "synapse:skill-uninstaller:scan",
     "scanNames": "synapse:skill-uninstaller:names:scan",
     "cancelScan": "synapse:skill-uninstaller:scan:cancel",
+    "cancelUninstall": "synapse:skill-uninstaller:uninstall:cancel",
     "uninstall": "synapse:skill-uninstaller:uninstall",
   },
   "config": {
@@ -913,6 +914,7 @@ const synapseBridge: SynapseBridge = {
     scan: invoke(IPC_CHANNELS["skill-uninstaller"].scan),
     scanNames: invoke(IPC_CHANNELS["skill-uninstaller"].scanNames),
     cancelScan: invoke(IPC_CHANNELS["skill-uninstaller"].cancelScan),
+    cancelUninstall: invoke(IPC_CHANNELS["skill-uninstaller"].cancelUninstall),
     uninstall: invoke(IPC_CHANNELS["skill-uninstaller"].uninstall),
   },
   quickInput: {

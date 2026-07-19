@@ -27,6 +27,7 @@ import type {
   SkillUninstallCandidate,
   SkillUninstallQuery,
 } from "../shared/schema"
+import { runSkillUninstallBatches } from "../shared/batch"
 import { SkillNameCombobox } from "./skill-name-combobox"
 
 const logger = createRendererLogger("skill-uninstaller.flow")
@@ -70,12 +71,16 @@ export function SkillUninstallerFlow({
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set())
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [uninstalling, setUninstalling] = useState(false)
+  const [cancellingUninstall, setCancellingUninstall] = useState(false)
+  const [uninstallProgress, setUninstallProgress] = useState<{ completed: number; total: number } | null>(null)
   const [failureMessages, setFailureMessages] = useState<Record<string, string>>({})
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null)
   const [nameOptions, setNameOptions] = useState<SkillNameOptionsState>(EMPTY_SKILL_NAME_OPTIONS)
   const activeScanIdRef = useRef<string | null>(null)
   const activeNameScanIdRef = useRef<string | null>(null)
+  const activeUninstallIdRef = useRef<string | null>(null)
+  const uninstallCancelRequestedRef = useRef(false)
   const skillUninstallerBridge = useMemo(getSkillUninstallerBridge, [])
   const repositoryBridge = useMemo(() => requireBridgeDomain("repository"), [])
 
@@ -206,6 +211,12 @@ export function SkillUninstallerFlow({
         logger.warn("Skill uninstall scan cancellation on unmount failed.", { error })
       })
       cancelNameScan()
+      uninstallCancelRequestedRef.current = true
+      const activeUninstallId = activeUninstallIdRef.current
+      activeUninstallIdRef.current = null
+      if (activeUninstallId) void skillUninstallerBridge.cancelUninstall({ operationId: activeUninstallId }).catch((error) => {
+        logger.warn("Skill uninstall cancellation on unmount failed.", { error })
+      })
     }
   }, [cancelNameScan, skillUninstallerBridge])
 
@@ -222,17 +233,44 @@ export function SkillUninstallerFlow({
     })
   }
 
+  const cancelUninstall = async () => {
+    if (!uninstalling || cancellingUninstall) return
+    uninstallCancelRequestedRef.current = true
+    setCancellingUninstall(true)
+    const operationId = activeUninstallIdRef.current
+    if (!operationId) {
+      setCancellingUninstall(false)
+      return
+    }
+    try {
+      await skillUninstallerBridge.cancelUninstall({ operationId })
+    } catch (error) {
+      logger.warn("Skill uninstall cancellation failed.", { error })
+    }
+  }
+
   const submitUninstall = async () => {
     if (selectedCandidates.length === 0 || uninstalling || !scanQuery) return
     setUninstalling(true)
+    setCancellingUninstall(false)
+    setUninstallProgress({ completed: 0, total: selectedCandidates.length })
+    uninstallCancelRequestedRef.current = false
     setErrorMessage(null)
     setNoticeMessage(null)
     try {
-      const result = await skillUninstallerBridge.uninstall({
+      const result = await runSkillUninstallBatches({
         targets: selectedCandidates.map((candidate) => ({
           path: candidate.path,
           query: scanQuery,
         })),
+        invoke: (request) => skillUninstallerBridge.uninstall(request),
+        shouldCancel: () => uninstallCancelRequestedRef.current,
+        onOperationChange: (operationId) => {
+          activeUninstallIdRef.current = operationId
+        },
+        onProgress: (completed) => {
+          setUninstallProgress({ completed, total: selectedCandidates.length })
+        },
       })
       const resultByPath = new Map(result.results.map((item) => [item.path, item]))
       setScanResult((current) => current ? {
@@ -242,12 +280,17 @@ export function SkillUninstallerFlow({
       setFailureMessages(Object.fromEntries(result.results
         .filter((item) => item.status !== "trashed")
         .map((item) => [item.path, item.error ?? "未能移到废纸篓。"])))
-      setSelectedPaths(new Set())
+      setSelectedPaths(result.cancelled
+        ? new Set(selectedCandidates
+            .filter((candidate) => !resultByPath.has(candidate.path))
+            .map((candidate) => candidate.path))
+        : new Set())
       setConfirmOpen(false)
       const incompleteCount = result.results.filter((item) => item.status !== "trashed").length
       const trashedCount = result.results.length - incompleteCount
       const resultWarnings = result.results.flatMap((item) => item.warning ? [item.warning] : [])
       const notices = [
+        ...(result.cancelled ? [`已停止，未处理 ${selectedCandidates.length - result.results.length} 个。`] : []),
         ...(incompleteCount > 0 ? [`已移到废纸篓 ${trashedCount} 个，未完成 ${incompleteCount} 个。`] : []),
         ...new Set(resultWarnings),
       ]
@@ -266,6 +309,10 @@ export function SkillUninstallerFlow({
       logger.error("Skill uninstall failed.", { error })
       setErrorMessage(error instanceof Error ? error.message : "移到废纸篓失败。")
     } finally {
+      activeUninstallIdRef.current = null
+      uninstallCancelRequestedRef.current = false
+      setCancellingUninstall(false)
+      setUninstallProgress(null)
       setUninstalling(false)
     }
   }
@@ -417,8 +464,11 @@ export function SkillUninstallerFlow({
       <UninstallConfirmation
         candidates={selectedCandidates}
         open={confirmOpen}
+        cancelling={cancellingUninstall}
+        progress={uninstallProgress}
         uninstalling={uninstalling}
         onOpenChange={setConfirmOpen}
+        onCancelUninstall={() => void cancelUninstall()}
         onConfirm={() => void submitUninstall()}
       />
       <span className="sr-only" aria-live="polite">{scanId ? "正在扫描" : ""}</span>
@@ -465,14 +515,20 @@ function CandidateRow({
 
 function UninstallConfirmation({
   candidates,
+  cancelling,
   open,
+  progress,
   uninstalling,
+  onCancelUninstall,
   onOpenChange,
   onConfirm,
 }: {
   readonly candidates: SkillUninstallCandidate[]
+  readonly cancelling: boolean
   readonly open: boolean
+  readonly progress: { completed: number; total: number } | null
   readonly uninstalling: boolean
+  readonly onCancelUninstall: () => void
   readonly onOpenChange: (open: boolean) => void
   readonly onConfirm: () => void
 }) {
@@ -485,7 +541,11 @@ function UninstallConfirmation({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>移到废纸篓？</AlertDialogTitle>
-          <AlertDialogDescription>已选 {candidates.length} 个 Skill，可从系统废纸篓恢复。</AlertDialogDescription>
+          <AlertDialogDescription>
+            {progress
+              ? `已处理 ${progress.completed}/${progress.total} 个，可从系统废纸篓恢复。`
+              : `已选 ${candidates.length} 个 Skill，可从系统废纸篓恢复。`}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="flex flex-col gap-1 text-sm">
           {visibleCandidates.map((candidate) => (
@@ -494,7 +554,11 @@ function UninstallConfirmation({
           {remainingCount > 0 ? <span className="text-muted-foreground">还有 {remainingCount} 个</span> : null}
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={uninstalling}>取消</AlertDialogCancel>
+          {uninstalling ? (
+            <Button type="button" variant="outline" disabled={cancelling} onClick={onCancelUninstall}>
+              {cancelling ? "正在停止" : "停止处理"}
+            </Button>
+          ) : <AlertDialogCancel>取消</AlertDialogCancel>}
           <AlertDialogAction
             variant="destructive"
             disabled={uninstalling}

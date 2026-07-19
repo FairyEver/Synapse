@@ -26,11 +26,12 @@ import type {
 import type {
   SkillUninstallBatchResult,
   SkillUninstallCancelRequest,
+  SkillUninstallExecutionCancelRequest,
   SkillUninstallNameScanRequest,
   SkillUninstallNameScanResult,
+  SkillUninstallRequest,
   SkillUninstallScanRequest,
   SkillUninstallScanResult,
-  SkillUninstallTarget,
 } from "../../app-capabilities/skill-uninstaller/shared/schema"
 import type {
   SynapseQuickInputChangedEvent,
@@ -951,7 +952,8 @@ export type SynapseBridge = {
     scan: (request: SkillUninstallScanRequest) => Promise<SkillUninstallScanResult>
     scanNames: (request: SkillUninstallNameScanRequest) => Promise<SkillUninstallNameScanResult>
     cancelScan: (request: SkillUninstallCancelRequest) => Promise<{ cancelled: boolean }>
-    uninstall: (request: { targets: SkillUninstallTarget[] }) => Promise<SkillUninstallBatchResult>
+    cancelUninstall: (request: SkillUninstallExecutionCancelRequest) => Promise<{ cancelled: boolean }>
+    uninstall: (request: SkillUninstallRequest) => Promise<SkillUninstallBatchResult>
   }
   quickInput: {
     list: () => Promise<SynapseQuickInputItem[]>

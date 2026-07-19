@@ -112,6 +112,7 @@ export const IPC_CHANNELS = {
     "scan": "synapse:skill-uninstaller:scan",
     "scanNames": "synapse:skill-uninstaller:names:scan",
     "cancelScan": "synapse:skill-uninstaller:scan:cancel",
+    "cancelUninstall": "synapse:skill-uninstaller:uninstall:cancel",
     "uninstall": "synapse:skill-uninstaller:uninstall",
   },
   "config": {

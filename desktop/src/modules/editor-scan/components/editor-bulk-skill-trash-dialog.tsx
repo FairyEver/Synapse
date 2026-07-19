@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { LoaderCircle } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,6 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { getSynapseBridge } from "@/lib/electron-bridge"
+import { runSkillUninstallBatches } from "../../../../app-capabilities/skill-uninstaller/shared/batch"
 import {
   buildBulkSkillTrashSummary,
   createBulkSkillUninstallTargets,
@@ -40,13 +42,31 @@ function EditorBulkSkillTrashDialog({
   const { error: notifyError, success, warning } = useAppNotifications()
   const [results, setResults] = useState<BulkSkillTrashResultItem[]>([])
   const [isTrashing, setIsTrashing] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null)
+  const activeOperationIdRef = useRef<string | null>(null)
+  const cancelRequestedRef = useRef(false)
 
   useEffect(() => {
     if (!open) {
       setResults([])
       setIsTrashing(false)
+      setIsCancelling(false)
+      setProgress(null)
     }
   }, [open])
+
+  useEffect(() => () => {
+    cancelRequestedRef.current = true
+    const operationId = activeOperationIdRef.current
+    activeOperationIdRef.current = null
+    const bridge = getSynapseBridge()
+    if (operationId && bridge) {
+      void bridge.skillUninstaller.cancelUninstall({ operationId }).catch((error) => {
+        logger.warn("Bulk Skill uninstall cancellation on unmount failed.", { error })
+      })
+    }
+  }, [])
 
   const failedResults = useMemo(
     () => results.filter((result): result is Extract<BulkSkillTrashResultItem, { status: "failed" }> => result.status === "failed"),
@@ -57,6 +77,27 @@ function EditorBulkSkillTrashDialog({
     : items
   const visibleItems = attemptItems.slice(0, 5)
   const hiddenCount = Math.max(attemptItems.length - visibleItems.length, 0)
+
+  const cancelTrash = async () => {
+    if (!isTrashing || isCancelling) return
+    cancelRequestedRef.current = true
+    setIsCancelling(true)
+    const operationId = activeOperationIdRef.current
+    if (!operationId) {
+      setIsCancelling(false)
+      return
+    }
+    const bridge = getSynapseBridge()
+    if (!bridge) {
+      setIsCancelling(false)
+      return
+    }
+    try {
+      await bridge.skillUninstaller.cancelUninstall({ operationId })
+    } catch (error) {
+      logger.warn("Bulk Skill uninstall cancellation failed.", { error })
+    }
+  }
 
   const runTrash = async () => {
     if (isTrashing || attemptItems.length === 0) return
@@ -73,12 +114,25 @@ function EditorBulkSkillTrashDialog({
     }
 
     setIsTrashing(true)
+    setIsCancelling(false)
+    setProgress({ completed: 0, total: attemptItems.length })
+    cancelRequestedRef.current = false
     let nextResults: BulkSkillTrashResultItem[]
+    let cancelled = false
 
     try {
-      const result = await bridge.skillUninstaller.uninstall({
+      const result = await runSkillUninstallBatches({
         targets: createBulkSkillUninstallTargets(attemptItems),
+        invoke: (request) => bridge.skillUninstaller.uninstall(request),
+        shouldCancel: () => cancelRequestedRef.current,
+        onOperationChange: (operationId) => {
+          activeOperationIdRef.current = operationId
+        },
+        onProgress: (completed) => {
+          setProgress({ completed, total: attemptItems.length })
+        },
       })
+      cancelled = result.cancelled === true
       nextResults = mapBulkSkillUninstallResults(attemptItems, result)
     } catch (error) {
       logger.error("Bulk Skill uninstall failed.", {
@@ -111,7 +165,9 @@ function EditorBulkSkillTrashDialog({
       }
     }
 
-    if (summary.trashed === attemptItems.length) {
+    if (cancelled) {
+      warning(`已停止，已移到废纸篓 ${summary.trashed}/${attemptItems.length} 个 Skill`)
+    } else if (summary.trashed === attemptItems.length) {
       if (uninstallWarnings.length > 0) {
         warning(uninstallWarnings.join("；"))
       } else {
@@ -127,6 +183,10 @@ function EditorBulkSkillTrashDialog({
       notifyError("移到废纸篓失败")
     }
 
+    activeOperationIdRef.current = null
+    cancelRequestedRef.current = false
+    setIsCancelling(false)
+    setProgress(null)
     setIsTrashing(false)
   }
 
@@ -144,7 +204,9 @@ function EditorBulkSkillTrashDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>移到废纸篓？</AlertDialogTitle>
           <AlertDialogDescription>
-            <span className="block">已选 {items.length} 个 Skill。</span>
+            <span className="block">
+              {progress ? `已处理 ${progress.completed}/${progress.total} 个 Skill。` : `已选 ${items.length} 个 Skill。`}
+            </span>
             <span className="block">可从系统废纸篓恢复。</span>
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -172,7 +234,16 @@ function EditorBulkSkillTrashDialog({
         ) : null}
 
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isTrashing}>取消</AlertDialogCancel>
+          {isTrashing ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isCancelling}
+              onClick={() => void cancelTrash()}
+            >
+              {isCancelling ? "正在停止" : "停止处理"}
+            </Button>
+          ) : <AlertDialogCancel>取消</AlertDialogCancel>}
           <AlertDialogAction
             variant="destructive"
             disabled={isTrashing}

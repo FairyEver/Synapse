@@ -8,15 +8,17 @@ import { createMainLogger } from "../../../electron/services/log-store"
 import {
   skillUninstallBatchResultSchema,
   skillUninstallCancelRequestSchema,
+  skillUninstallExecutionCancelRequestSchema,
   skillUninstallNameScanRequestSchema,
   skillUninstallNameScanResultSchema,
+  skillUninstallRequestSchema,
   skillUninstallScanRequestSchema,
   skillUninstallScanResultSchema,
-  skillUninstallTargetSchema,
   type SkillUninstallCancelRequest,
+  type SkillUninstallExecutionCancelRequest,
   type SkillUninstallNameScanRequest,
+  type SkillUninstallRequest,
   type SkillUninstallScanRequest,
-  type SkillUninstallTarget,
 } from "../shared/schema"
 import {
   skillUninstallerService,
@@ -38,6 +40,7 @@ export function createSkillUninstallerIpcModule(
   service: Pick<SkillUninstallerService, "scan" | "scanNames" | "uninstall"> = skillUninstallerService,
 ): IpcModule {
   const activeScans = new Map<string, AbortController>()
+  const activeUninstalls = new Map<string, AbortController>()
 
   async function runScan<T>(scanId: string, scan: (signal: AbortSignal) => Promise<T>): Promise<T> {
     activeScans.get(scanId)?.abort()
@@ -87,22 +90,45 @@ export function createSkillUninstallerIpcModule(
           return { cancelled: Boolean(controller) }
         },
       },
+      cancelUninstall: {
+        kind: "invoke",
+        channel: "synapse:skill-uninstaller:uninstall:cancel",
+        request: skillUninstallExecutionCancelRequestSchema,
+        response: z.object({ cancelled: z.boolean() }).strict(),
+        handler: async (_ctx, request: SkillUninstallExecutionCancelRequest) => {
+          const controller = activeUninstalls.get(request.operationId)
+          if (controller && activeUninstalls.get(request.operationId) === controller) {
+            activeUninstalls.delete(request.operationId)
+            controller.abort("user-cancel")
+          }
+          return { cancelled: Boolean(controller) }
+        },
+      },
       uninstall: {
         kind: "invoke",
         channel: "synapse:skill-uninstaller:uninstall",
-        request: z.object({ targets: z.array(skillUninstallTargetSchema) }).strict(),
+        request: skillUninstallRequestSchema,
         response: skillUninstallBatchResultSchema,
-        handler: async (ctx, request: { targets: SkillUninstallTarget[] }) => {
+        handler: async (ctx, request: SkillUninstallRequest) => {
+          activeUninstalls.get(request.operationId)?.abort("superseded")
+          const controller = new AbortController()
+          activeUninstalls.set(request.operationId, controller)
           const eventBus = ctx.resolve<EventBus>("core.event-bus")
-          return service.uninstall(request.targets, securityFrom(ctx), {
-            onTrashedContentId: async (contentId) => {
-              const refreshed = await notifyInstallStatusChanged(eventBus, contentId, {
-                logger,
-                warningMessage: "Failed to refresh install status after Skill uninstall.",
-              })
-              if (refreshed === false) throw new Error("Install status refresh failed.")
-            },
-          })
+          try {
+            return await service.uninstall(request.targets, securityFrom(ctx), {
+              onTrashedContentId: async (contentId) => {
+                const refreshed = await notifyInstallStatusChanged(eventBus, contentId, {
+                  logger,
+                  warningMessage: "Failed to refresh install status after Skill uninstall.",
+                })
+                if (refreshed === false) throw new Error("Install status refresh failed.")
+              },
+            }, controller.signal)
+          } finally {
+            if (activeUninstalls.get(request.operationId) === controller) {
+              activeUninstalls.delete(request.operationId)
+            }
+          }
         },
       },
     },

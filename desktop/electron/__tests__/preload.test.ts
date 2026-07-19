@@ -201,7 +201,9 @@ describe("preload bridge", () => {
     await bridge.skillUninstaller.scan({ scanId: "scan-1", query: { name: "jenkins" } })
     await bridge.skillUninstaller.scanNames({ scanId: "names-1" })
     await bridge.skillUninstaller.cancelScan({ scanId: "scan-1" })
+    await bridge.skillUninstaller.cancelUninstall({ operationId: "uninstall-1" })
     await bridge.skillUninstaller.uninstall({
+      operationId: "uninstall-1",
       targets: [{ query: { name: "jenkins" }, path: "/tmp/jenkins" }],
     })
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
@@ -217,8 +219,12 @@ describe("preload bridge", () => {
       { scanId: "scan-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:skill-uninstaller:uninstall:cancel",
+      { operationId: "uninstall-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:skill-uninstaller:uninstall",
-      { targets: [{ query: { name: "jenkins" }, path: "/tmp/jenkins" }] },
+      { operationId: "uninstall-1", targets: [{ query: { name: "jenkins" }, path: "/tmp/jenkins" }] },
     )
   })
 

@@ -37,7 +37,11 @@ function mapBulkSkillUninstallResults(
   return items.map((item) => {
     const uninstallResult = resultByPath.get(item.path)
     if (!uninstallResult) {
-      return { item, message: "未返回卸载结果。", status: "failed" }
+      return {
+        item,
+        message: result.cancelled ? "已停止，未处理。" : "未返回卸载结果。",
+        status: "failed",
+      }
     }
     if (uninstallResult.status === "trashed") {
       return {

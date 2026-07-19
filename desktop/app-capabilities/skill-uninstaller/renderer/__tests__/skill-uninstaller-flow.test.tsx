@@ -17,6 +17,7 @@ import { SkillUninstallerFlow, type SkillUninstallerFlowProps } from "../skill-u
 HTMLElement.prototype.scrollIntoView = vi.fn()
 
 const mocks = vi.hoisted(() => ({
+  cancelUninstall: vi.fn(),
   cancelScan: vi.fn(),
   chooseDirectory: vi.fn(),
   error: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
     if (domain === "skillUninstaller") {
       return {
+        cancelUninstall: mocks.cancelUninstall,
         cancelScan: mocks.cancelScan,
         scan: mocks.scan,
         scanNames: mocks.scanNames,
@@ -115,6 +117,7 @@ async function clickCheckbox(label: string) {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.cancelScan.mockResolvedValue({ cancelled: true })
+  mocks.cancelUninstall.mockResolvedValue({ cancelled: true })
   mocks.chooseDirectory.mockResolvedValue(null)
   mocks.scanNames.mockResolvedValue({ names: [], complete: true, warnings: [] })
 })
@@ -269,6 +272,7 @@ describe("SkillUninstallerFlow", () => {
     await click("确认移到废纸篓")
 
     expect(mocks.uninstall).toHaveBeenCalledWith({
+      operationId: expect.any(String),
       targets: expect.arrayContaining([
         { query: { name: "jenkins" }, path: "/one/jenkins" },
         { query: { name: "jenkins" }, path: "/two/jenkins" },
@@ -406,8 +410,47 @@ describe("SkillUninstallerFlow", () => {
     await click("确认移到废纸篓")
 
     expect(mocks.uninstall).toHaveBeenCalledWith({
+      operationId: expect.any(String),
       targets: [{ query: { name: "jenkins" }, path: "/one/jenkins" }],
     })
+  })
+
+  it("stops an active uninstall and keeps unprocessed candidates", async () => {
+    let resolveUninstall!: (result: {
+      results: Array<{ path: string; status: "trashed" }>
+      cancelled: true
+    }) => void
+    mocks.scan.mockResolvedValue({
+      candidates: [candidate("/one/jenkins"), candidate("/two/jenkins")],
+      complete: true,
+      warnings: [],
+    })
+    mocks.uninstall.mockImplementation(() => new Promise((resolve) => {
+      resolveUninstall = resolve
+    }))
+    mocks.cancelUninstall.mockImplementation(async () => {
+      resolveUninstall({
+        results: [{ path: "/one/jenkins", status: "trashed" }],
+        cancelled: true,
+      })
+      return { cancelled: true }
+    })
+
+    await renderFlow()
+    await click("扫描")
+    await clickCheckbox("全选")
+    await click("移到废纸篓（2）")
+    await click("确认移到废纸篓")
+    expect(document.body.textContent).toContain("已处理 0/2 个")
+
+    await click("停止处理")
+
+    expect(mocks.cancelUninstall).toHaveBeenCalledWith({
+      operationId: mocks.uninstall.mock.calls[0]?.[0].operationId,
+    })
+    expect(document.body.textContent).not.toContain("/one/jenkins")
+    expect(document.body.textContent).toContain("/two/jenkins")
+    expect(document.body.textContent).toContain("已停止，未处理 1 个。")
   })
 
   it("clears stale scan results when the editable query changes", async () => {

@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 import {
+  SKILL_UNINSTALL_MAX_TARGETS,
   skillUninstallNameScanRequestSchema,
   skillUninstallQuerySchema,
+  skillUninstallRequestSchema,
   skillUninstallTargetSchema,
 } from "../../shared/schema"
 
@@ -58,12 +60,21 @@ describe("skill uninstaller schemas", () => {
     })
   })
 
+  it("bounds each uninstall request", () => {
+    const target = { query: { name: "jenkins" }, path: "/tmp/jenkins" }
+    expect(() => skillUninstallRequestSchema.parse({
+      operationId: "uninstall-1",
+      targets: Array.from({ length: SKILL_UNINSTALL_MAX_TARGETS + 1 }, () => target),
+    })).toThrow()
+  })
+
   it("registers candidate scan, name scan, cancel, and uninstall channels", async () => {
     const { skillUninstallerIpcModule } = await import("../ipc")
     expect(Object.keys(skillUninstallerIpcModule.methods)).toEqual([
       "scan",
       "scanNames",
       "cancelScan",
+      "cancelUninstall",
       "uninstall",
     ])
   })
@@ -120,6 +131,7 @@ describe("skill uninstaller schemas", () => {
     }
 
     await module.methods.uninstall.handler(ctx as never, {
+      operationId: "uninstall-1",
       targets: [{ query: { name: "jenkins" }, path: "/tmp/jenkins" }],
     })
 
@@ -130,5 +142,29 @@ describe("skill uninstaller schemas", () => {
         warningMessage: "Failed to refresh install status after Skill uninstall.",
       }),
     )
+  })
+
+  it("cancels an active uninstall before its next target", async () => {
+    const { createSkillUninstallerIpcModule } = await import("../ipc")
+    let uninstallSignal: AbortSignal | undefined
+    const uninstall = vi.fn((_targets, _security, _hooks, signal: AbortSignal) => {
+      uninstallSignal = signal
+      return new Promise<{ results: []; cancelled: true }>((resolve) => {
+        signal.addEventListener("abort", () => resolve({ results: [], cancelled: true }), { once: true })
+      })
+    })
+    const module = createSkillUninstallerIpcModule({ scan: vi.fn(), scanNames: vi.fn(), uninstall } as never)
+    const ctx = { resolve: vi.fn(() => ({})) }
+
+    const running = module.methods.uninstall.handler(ctx as never, {
+      operationId: "uninstall-1",
+      targets: [{ query: { name: "jenkins" }, path: "/tmp/jenkins" }],
+    })
+    await expect(module.methods.cancelUninstall.handler(ctx as never, { operationId: "uninstall-1" }))
+      .resolves.toEqual({ cancelled: true })
+    await expect(running).resolves.toEqual({ results: [], cancelled: true })
+    expect(uninstallSignal?.aborted).toBe(true)
+    await expect(module.methods.cancelUninstall.handler(ctx as never, { operationId: "uninstall-1" }))
+      .resolves.toEqual({ cancelled: false })
   })
 })
