@@ -237,6 +237,30 @@ describe("validateWorkflow", () => {
     }))
   })
 
+  it("rejects workflow_call text bindings from incompatible parent param types", () => {
+    const result = validateWorkflow(definitionWithWorkflowCall({
+      name: "input_file",
+      type: "file",
+      default: null,
+    }, {
+      paramBindings: {
+        topic: { mode: "value", source: { type: "param", param: "input_file" } },
+      },
+    }), {
+      availableWorkflowIds: ["child"],
+      workflowParamsById: new Map([["child", [
+        { name: "topic", type: "text", default: null },
+      ]]]),
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      nodeId: "call",
+      field: "paramBindings",
+      message: expect.stringContaining("参数类型不一致"),
+    }))
+  })
+
   it("rejects workflow_call resource bindings with mismatched resource types", () => {
     const result = validateWorkflow(definitionWithWorkflowCall({
       name: "input_file",

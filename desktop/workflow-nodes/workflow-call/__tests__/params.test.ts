@@ -234,6 +234,26 @@ describe("workflow call params", () => {
     ])
   })
 
+  it.each([
+    ["text", "number"],
+    ["number", "option"],
+    ["option", "text"],
+  ] as const)("rejects %s child value bindings from %s parent params", (childType, parentType) => {
+    const result = buildWorkflowCallParams({
+      childDefinition: child([{ name: "child_param", type: childType, default: null }]),
+      paramTemplates: {},
+      paramBindings: { child_param: { mode: "value", source: { type: "param", param: "parent_param" } } },
+      parentParamDefinitions: [{ name: "parent_param", type: parentType, default: null }],
+      parentParamValues: { parent_param: "value" },
+      resolvedVariables: {},
+    })
+
+    expect(result.params).toEqual({})
+    expect(result.errors).toEqual([
+      "子工作流参数「child_param」与父工作流参数「parent_param」的参数类型不一致",
+    ])
+  })
+
   it("rejects duplicate template and binding mappings for the same child param", () => {
     const result = buildWorkflowCallParams({
       childDefinition: child([{ name: "topic", type: "text", default: null }]),

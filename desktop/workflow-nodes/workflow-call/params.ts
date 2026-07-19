@@ -90,6 +90,12 @@ export function validateWorkflowCallValueBinding(
   if (source.type === "param" && parentParams && !parentParam) {
     return `子工作流参数「${childParam.name}」引用的父工作流参数「${source.param}」不存在`
   }
+  if (source.type === "param" && parentParam && parentParam.type !== childParam.type) {
+    if (childParam.type === "file" || childParam.type === "directory") {
+      return `子工作流参数「${childParam.name}」与父工作流参数「${source.param}」的资源类型或多选设置不一致`
+    }
+    return `子工作流参数「${childParam.name}」与父工作流参数「${source.param}」的参数类型不一致`
+  }
   if (childParam.type !== "file" && childParam.type !== "directory") return null
   if (source.type !== "param") {
     return childParam.allowMultiple === true
@@ -98,7 +104,7 @@ export function validateWorkflowCallValueBinding(
   }
   if (!parentParams) return null
   if (!parentParam) return null
-  if (parentParam.type !== childParam.type || Boolean(parentParam.allowMultiple) !== Boolean(childParam.allowMultiple)) {
+  if (Boolean(parentParam.allowMultiple) !== Boolean(childParam.allowMultiple)) {
     return `子工作流参数「${childParam.name}」与父工作流参数「${source.param}」的资源类型或多选设置不一致`
   }
   return null
