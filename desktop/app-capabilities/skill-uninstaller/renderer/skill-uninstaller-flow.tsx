@@ -92,6 +92,12 @@ export function SkillUninstallerFlow({
   const cancelScan = useCallback(async () => {
     const activeScanId = activeScanIdRef.current
     if (!activeScanId) return
+    activeScanIdRef.current = null
+    setScanId(null)
+    setScanning(false)
+    setScanResult(null)
+    setScanQuery(null)
+    setSelectedPaths(new Set())
     try {
       await skillUninstallerBridge.cancelScan({ scanId: activeScanId })
     } catch (error) {

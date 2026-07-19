@@ -381,7 +381,7 @@ describe("SkillUninstallerFlow", () => {
     expect(document.body.textContent).toContain("未找到匹配的 Skill。")
   })
 
-  it("keeps partial results returned after cancelling an active scan", async () => {
+  it("discards partial results returned after cancelling an active scan", async () => {
     let resolveScan: ((result: SkillUninstallScanResult) => void) | undefined
     mocks.scan.mockImplementation(() => new Promise<SkillUninstallScanResult>((resolve) => {
       resolveScan = resolve
@@ -403,8 +403,8 @@ describe("SkillUninstallerFlow", () => {
         warnings: ["扫描已取消。"],
       })
     })
-    expect(document.body.textContent).toContain("/late/jenkins")
-    expect(document.body.textContent).toContain("扫描未完成")
+    expect(document.body.textContent).not.toContain("/late/jenkins")
+    expect(document.body.textContent).not.toContain("扫描未完成")
     expect(getButton("扫描")).toBeTruthy()
   })
 
