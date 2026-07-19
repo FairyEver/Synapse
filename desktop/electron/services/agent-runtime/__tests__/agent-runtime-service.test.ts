@@ -1281,6 +1281,60 @@ describe("AgentRuntimeService", () => {
     expect(resolvedHistory?.metadata?.userQuestionResolutionAttempt).toBeUndefined()
   })
 
+  it("retries only final persistence after the SDK accepts an AskUserQuestion answer", async () => {
+    const conversations = new FailingFinalQuestionResolutionNamespace()
+    const questions = [{
+      question: "继续吗？",
+      options: [{ label: "继续" }],
+      multiSelect: false,
+    }]
+    const session = new QuestionSession(
+      "conversation-a-permission-1",
+      questions,
+      "continued after answer",
+    )
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs answer"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+    const request = {
+      requestId: "conversation-a-permission-1",
+      behavior: "allow" as const,
+      updatedInput: { answers: { "question-0": "继续" } },
+      actor: { kind: "user" as const },
+    }
+
+    await expect(service.respondPermission(request))
+      .rejects.toThrow(AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE)
+    expect(session.responses).toHaveLength(1)
+    expect(service.listPendingPermissions()).toHaveLength(1)
+    const storedAfterFailure = (await conversations.list())[0]
+    const unresolvedHistory = storedAfterFailure?.history.find(
+      (entry) => entry.metadata?.requestId === request.requestId,
+    )
+    expect(unresolvedHistory?.metadata?.userQuestionResolution).toBeUndefined()
+    expect(unresolvedHistory?.metadata?.userQuestionResolutionAttempt).toMatchObject({ status: "answered" })
+
+    await service.respondPermission(request)
+
+    expect(session.responses).toHaveLength(1)
+    expect(service.listPendingPermissions()).toEqual([])
+    const result = await turn
+    const stored = await conversations.get(result.conversationId)
+    const resolvedHistory = stored?.history.find(
+      (entry) => entry.metadata?.requestId === request.requestId,
+    )
+    expect(resolvedHistory?.metadata?.userQuestionResolution).toMatchObject({ status: "answered" })
+    expect(resolvedHistory?.metadata?.userQuestionResolutionAttempt).toBeUndefined()
+  })
+
   it("cancels AskUserQuestion when the SDK no longer has the pending request", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const questions = [{
@@ -3156,6 +3210,25 @@ class FailingQuestionResolutionNamespace extends MemoryNamespace<ConversationEnt
     if (containsResolution && !this.failed) {
       this.failed = true
       throw new Error("resolution storage unavailable at /Users/private/workspace/conversations.json")
+    }
+    await super.upsert(item)
+  }
+}
+
+class FailingFinalQuestionResolutionNamespace extends MemoryNamespace<ConversationEntryV1> {
+  private failed = false
+
+  constructor() {
+    super("conversations")
+  }
+
+  override async upsert(item: ConversationEntryV1): Promise<void> {
+    const containsFinalResolution = item.history.some((entry) => (
+      entry.metadata?.userQuestionResolution !== undefined
+    ))
+    if (containsFinalResolution && !this.failed) {
+      this.failed = true
+      throw new Error("final resolution storage unavailable")
     }
     await super.upsert(item)
   }

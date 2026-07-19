@@ -2,7 +2,12 @@ import type { ConversationEntryV1, ConversationMainThreadPersonaSnapshotV1 } fro
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { AgentSessionRepository } from "./session-repository"
 import type { SessionManager } from "./session-manager"
-import type { AgentMessage, AgentLiveSession, AgentPendingPermission } from "./types"
+import type {
+  AgentMessage,
+  AgentLiveSession,
+  AgentPendingPermission,
+  AgentUserQuestionResolution,
+} from "./types"
 import type { ClaudeSDKRuntimeSettings } from "./claude-sdk-session"
 import type { TurnLifecycle } from "./turn-outcome"
 
@@ -46,6 +51,7 @@ export interface PendingPermissionState extends AgentPendingPermission {
   readonly stateKey: string
   readonly liveSession: AgentLiveSession
   resolutionClaimed?: boolean
+  sdkAcceptedUserQuestionResolution?: AgentUserQuestionResolution
   resolve(): void
 }
 

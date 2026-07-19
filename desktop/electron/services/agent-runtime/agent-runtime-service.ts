@@ -829,6 +829,15 @@ export class AgentRuntimeService {
         throw new Error(AGENT_PERMISSION_NOT_PENDING_MESSAGE)
       }
       try {
+        if (pending.sdkAcceptedUserQuestionResolution) {
+          await this.persistUserQuestionResolution(
+            pending,
+            pending.sdkAcceptedUserQuestionResolution,
+            true,
+          )
+          this.sessionManager.settlePendingPermission(pending)
+          return
+        }
         let updatedInput: Record<string, unknown> | undefined
         try {
           updatedInput = askUserQuestionUpdatedInput(pending, request)
@@ -842,6 +851,7 @@ export class AgentRuntimeService {
             behavior: "deny",
             message: ASK_USER_QUESTION_EMPTY_ANSWER_MESSAGE,
           })
+          pending.sdkAcceptedUserQuestionResolution = resolution
           await this.persistUserQuestionResolution(pending, resolution, true)
           this.sessionManager.settlePendingPermission(pending)
           throw error
@@ -853,6 +863,7 @@ export class AgentRuntimeService {
           updatedInput,
           message: askUserQuestionResponseMessage(request),
         })
+        pending.sdkAcceptedUserQuestionResolution = resolution
         await this.persistUserQuestionResolution(pending, resolution, true)
         this.sessionManager.settlePendingPermission(pending)
         return
