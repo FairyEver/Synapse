@@ -203,7 +203,7 @@ function EditorBulkSkillTrashDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>移到废纸篓？</AlertDialogTitle>
-          <AlertDialogDescription>
+          <AlertDialogDescription aria-live="polite">
             <span className="block">
               {progress ? `已处理 ${progress.completed}/${progress.total} 个 Skill。` : `已选 ${items.length} 个 Skill。`}
             </span>

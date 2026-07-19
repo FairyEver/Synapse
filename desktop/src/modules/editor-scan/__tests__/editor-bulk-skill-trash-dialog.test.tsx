@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, type ButtonHTMLAttributes, type ReactNode } from "react"
+import { act, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { EditorBulkSkillTrashDialog } from "../components/editor-bulk-skill-trash-dialog"
@@ -47,7 +47,7 @@ vi.mock("@/components/ui/alert-dialog", () => ({
   AlertDialogAction: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" {...props}>{children}</button>,
   AlertDialogCancel: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" {...props}>{children}</button>,
   AlertDialogContent: ({ children }: { children: ReactNode }) => <section>{children}</section>,
-  AlertDialogDescription: ({ children }: { children: ReactNode }) => <p>{children}</p>,
+  AlertDialogDescription: ({ children, ...props }: HTMLAttributes<HTMLParagraphElement>) => <p {...props}>{children}</p>,
   AlertDialogFooter: ({ children }: { children: ReactNode }) => <footer>{children}</footer>,
   AlertDialogHeader: ({ children }: { children: ReactNode }) => <header>{children}</header>,
   AlertDialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
@@ -238,6 +238,7 @@ describe("EditorBulkSkillTrashDialog", () => {
     await renderDialog([createItem("jenkins"), createItem("release")])
     await act(async () => clickButton("移到废纸篓"))
     expect(document.body.textContent).toContain("已处理 0/2 个 Skill")
+    expect(document.querySelector('[aria-live="polite"]')?.textContent).toContain("已处理 0/2 个 Skill")
     await act(async () => clickButton("停止处理"))
 
     expect(mocks.cancelUninstall).toHaveBeenCalledWith({

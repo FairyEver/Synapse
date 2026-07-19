@@ -546,7 +546,7 @@ function UninstallConfirmation({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>移到废纸篓？</AlertDialogTitle>
-          <AlertDialogDescription>
+          <AlertDialogDescription aria-live="polite">
             {progress
               ? `已处理 ${progress.completed}/${progress.total} 个，可从系统废纸篓恢复。`
               : `已选 ${candidates.length} 个 Skill，可从系统废纸篓恢复。`}

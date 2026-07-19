@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, type ButtonHTMLAttributes, type ReactNode } from "react"
+import { act, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -56,7 +56,7 @@ vi.mock("@/components/ui/alert-dialog", () => ({
   AlertDialogAction: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" {...props}>{children}</button>,
   AlertDialogCancel: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" {...props}>{children}</button>,
   AlertDialogContent: ({ children }: { children: ReactNode }) => <section>{children}</section>,
-  AlertDialogDescription: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  AlertDialogDescription: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
   AlertDialogFooter: ({ children }: { children: ReactNode }) => <footer>{children}</footer>,
   AlertDialogHeader: ({ children }: { children: ReactNode }) => <header>{children}</header>,
   AlertDialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
@@ -454,6 +454,7 @@ describe("SkillUninstallerFlow", () => {
     await click("移到废纸篓（2）")
     await click("确认移到废纸篓")
     expect(document.body.textContent).toContain("已处理 0/2 个")
+    expect(document.querySelector('[aria-live="polite"]')?.textContent).toContain("已处理 0/2 个")
 
     await click("停止处理")
 
