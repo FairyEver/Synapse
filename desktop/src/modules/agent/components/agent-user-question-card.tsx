@@ -82,7 +82,7 @@ function AgentUserQuestionCard({
     setSubmitting(true)
     const answerRecord = Object.fromEntries(
       questions.map((question, index) => [
-        questionAnswerKey(question, index),
+        questionAnswerKey(index),
         question.multiSelect ? answers[index] ?? [] : answers[index]?.[0] ?? "",
       ]),
     )
@@ -364,14 +364,8 @@ function parseQuestions(rawQuestions: readonly unknown[]): readonly SynapseAgent
   return questions
 }
 
-function questionAnswerKey(question: SynapseAgentUserQuestion, index: number): string {
-  return questionId(question as unknown as Record<string, unknown>) ?? `question-${index}`
-}
-
-function questionId(record: Record<string, unknown> | undefined): string | undefined {
-  const id = typeof record?.id === "string" && record.id.trim() ? record.id.trim() : undefined
-  if (id) return id
-  return typeof record?.key === "string" && record.key.trim() ? record.key.trim() : undefined
+function questionAnswerKey(index: number): string {
+  return `question-${index}`
 }
 
 function answerStateFromResolution(

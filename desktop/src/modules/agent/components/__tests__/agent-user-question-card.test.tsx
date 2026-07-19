@@ -205,13 +205,25 @@ describe("AgentUserQuestionCard", () => {
     })
   })
 
-  it("uses question ids and keys when submitting answers", async () => {
+  it("uses stable per-question keys when question ids and keys collide", async () => {
     const identifiedQuestions = [
-      { ...questions[0], id: "question-id" },
+      { ...questions[0], id: "shared-key" },
       {
-        key: "question-key",
+        id: "shared-key",
         question: "继续吗？",
         options: [{ label: "继续" }, { label: "停止" }],
+        multiSelect: false,
+      },
+      {
+        key: "shared-key",
+        question: "采用哪种模式？",
+        options: [{ label: "自动" }, { label: "手动" }],
+        multiSelect: false,
+      },
+      {
+        key: "shared-key",
+        question: "保留结果吗？",
+        options: [{ label: "保留" }, { label: "丢弃" }],
         multiSelect: false,
       },
     ]
@@ -225,6 +237,8 @@ describe("AgentUserQuestionCard", () => {
     act(() => {
       optionButton(container, "重试").click()
       optionButton(container, "继续").click()
+      optionButton(container, "自动").click()
+      optionButton(container, "保留").click()
     })
     await act(async () => {
       buttonByText(container, "提交").click()
@@ -233,7 +247,12 @@ describe("AgentUserQuestionCard", () => {
 
     expect(onRespond).toHaveBeenCalledWith("request-1", "allow", {
       questions: identifiedQuestions,
-      answers: { "question-id": "重试", "question-key": "继续" },
+      answers: {
+        "question-0": "重试",
+        "question-1": "继续",
+        "question-2": "自动",
+        "question-3": "保留",
+      },
     })
   })
 
