@@ -303,6 +303,11 @@ describe("SkillUninstallerService", () => {
     expect(result.results.map((item) => item.status)).toEqual(["failed", "trashed"])
     expect(result.results[0]?.error).toBe("移到废纸篓失败。")
     expect(auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      metadata: { operation: "skill-uninstall-revalidate" },
+      outcome: "allowed",
+    }))
+    expect(auditRecord).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write",
       metadata: { operation: "skill-uninstall" },
       outcome: "failed",
@@ -353,6 +358,59 @@ describe("SkillUninstallerService", () => {
     })
     expect(trashItem).not.toHaveBeenCalled()
     expect(auditRecord).toHaveBeenCalledWith(expect.objectContaining({ outcome: "denied" }))
+  })
+
+  it("blocks revalidation when read permission is denied", async () => {
+    const targetPath = await createSkill(tempRoot, "jenkins")
+    const trashItem = vi.fn()
+    const { security, permissionCheck, auditRecord } = createSecurity()
+    permissionCheck.mockImplementation(async (request: { action: string }) => (
+      request.action === "fs.write"
+        ? { allowed: true as const }
+        : { allowed: false as const, reason: "read denied", policyId: "deny-read" }
+    ))
+    const service = new SkillUninstallerService({ trashItem })
+
+    const result = await service.uninstall([
+      { query: { name: "jenkins", searchRootPath: tempRoot }, path: targetPath },
+    ], security)
+
+    expect(result.results[0]).toEqual({
+      path: targetPath,
+      status: "failed",
+      error: "没有读取该 Skill 的权限。",
+    })
+    expect(trashItem).not.toHaveBeenCalled()
+    expect(auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: targetPath,
+      metadata: { operation: "skill-uninstall-revalidate" },
+      outcome: "denied",
+    }))
+  })
+
+  it("records a failed read audit when the revalidation permission check fails", async () => {
+    const targetPath = await createSkill(tempRoot, "jenkins")
+    const trashItem = vi.fn()
+    const { security, permissionCheck, auditRecord } = createSecurity()
+    permissionCheck.mockImplementation(async (request: { action: string }) => {
+      if (request.action === "fs.write") return { allowed: true as const }
+      throw new Error("permission service unavailable")
+    })
+    const service = new SkillUninstallerService({ trashItem })
+
+    const result = await service.uninstall([
+      { query: { name: "jenkins", searchRootPath: tempRoot }, path: targetPath },
+    ], security)
+
+    expect(result.results[0]).toMatchObject({ status: "failed", error: "没有读取该 Skill 的权限。" })
+    expect(trashItem).not.toHaveBeenCalled()
+    expect(auditRecord).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: targetPath,
+      metadata: { operation: "skill-uninstall-revalidate" },
+      outcome: "failed",
+    }))
   })
 
   it("keeps trash success and returns a warning when install status refresh fails", async () => {

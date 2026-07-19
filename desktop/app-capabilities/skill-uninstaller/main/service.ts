@@ -23,6 +23,7 @@ const logger = createMainLogger("app.skill-uninstaller")
 const SEARCH_ROOT_ERROR = "搜索目录不存在或无法读取。"
 const TARGET_CHANGED_ERROR = "目标已发生变化，已跳过。"
 const TARGET_OUTSIDE_ERROR = "目标不在本次扫描范围内，已跳过。"
+const READ_DENIED_ERROR = "没有读取该 Skill 的权限。"
 const WRITE_DENIED_ERROR = "没有写入该位置的权限。"
 const TRASH_FAILED_ERROR = "移到废纸篓失败。"
 const STATUS_REFRESH_WARNING = "已移到废纸篓，安装状态刷新失败。"
@@ -251,10 +252,31 @@ export class SkillUninstallerService {
         continue
       }
 
+      const readOperation = "skill-uninstall-revalidate"
+      let readPermission
+      try {
+        readPermission = await security.permissionGuard.check({
+          action: "fs.read.outside-userdata",
+          actor: security.actor,
+          context: { operation: readOperation },
+          resource: target.path,
+        })
+      } catch {
+        recordAudit(security, "fs.read.outside-userdata", target.path, "failed", readOperation)
+        results.push({ path: target.path, status: "failed", error: READ_DENIED_ERROR })
+        continue
+      }
+      if (!readPermission.allowed) {
+        recordAudit(security, "fs.read.outside-userdata", target.path, "denied", readOperation)
+        results.push({ path: target.path, status: "failed", error: READ_DENIED_ERROR })
+        continue
+      }
+
       let revalidated: RevalidatedTarget
       try {
         revalidated = await revalidateTarget(target)
       } catch (error) {
+        recordAudit(security, "fs.read.outside-userdata", target.path, "failed", readOperation)
         recordAudit(security, "fs.write", target.path, "failed", "skill-uninstall")
         results.push({
           path: target.path,
@@ -265,6 +287,7 @@ export class SkillUninstallerService {
         })
         continue
       }
+      recordAudit(security, "fs.read.outside-userdata", target.path, "allowed", readOperation)
 
       try {
         await this.deps.trashItem(revalidated.path)
