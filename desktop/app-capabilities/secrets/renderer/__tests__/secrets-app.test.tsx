@@ -394,6 +394,28 @@ describe("SecretsModule", () => {
     expect(document.body.textContent).not.toContain("更新 Skill 配置")
   })
 
+  it("opens the update dialog with usable items from a partially failed binding scan", async () => {
+    mocks.secrets.create.mockResolvedValueOnce({ ...savedSecret, name: "GITEE_TOKEN" })
+    mocks.secrets.scanSkillEnvBindings.mockResolvedValueOnce({
+      ...skillEnvScanResult,
+      failed: true,
+    })
+    await renderSecretsModule()
+
+    await act(async () => clickButton("新增密钥"))
+    await act(async () => {
+      setInputValue("#secret-name", "GITEE_TOKEN")
+      setInputValue("#secret-value", "new-token")
+      clickButton("保存")
+      await Promise.resolve()
+    })
+
+    expect(mocks.toast.warning).toHaveBeenCalledWith("部分 Skill 配置无法检查。")
+    expect(mocks.toast.error).not.toHaveBeenCalledWith("扫描失败，请重试。")
+    expect(document.body.textContent).toContain("更新 Skill 配置")
+    expect(document.body.textContent).toContain("skill-one")
+  })
+
   it("scans after creating a secret with an empty stored value", async () => {
     const emptySecret = { ...savedSecret, name: "EMPTY", hasValue: true }
     mocks.secrets.create.mockResolvedValueOnce(emptySecret)

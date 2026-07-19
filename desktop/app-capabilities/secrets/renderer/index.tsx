@@ -214,12 +214,12 @@ export function SecretsModule() {
   const scanSkillEnvBindings = useCallback(async (name: string): Promise<SecretSkillEnvScanResult | null> => {
     try {
       const result = await secretsBridge.scanSkillEnvBindings({ name })
-      if (result.failed) {
+      if (result.failed && result.items.length === 0) {
         toast.error("扫描失败，请重试。")
         return null
       }
       if (result.truncated) toast.warning("关联 Skill 过多，请整理后重新扫描。")
-      if (result.warnings?.length) toast.warning("部分 Skill 配置无法检查。")
+      if (result.failed || result.warnings?.length) toast.warning("部分 Skill 配置无法检查。")
       return result
     } catch (error) {
       logger.error("Failed to scan Skill env bindings.", errorDiagnostic(error))
