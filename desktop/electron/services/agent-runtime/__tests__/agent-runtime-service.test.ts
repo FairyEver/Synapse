@@ -1170,9 +1170,11 @@ describe("AgentRuntimeService", () => {
         boundary: "agent-runtime.user-question-response-attempt",
         requestId: "conversation-a-permission-1",
         status: "answered",
+        error: expect.stringContaining("[path redacted]"),
       }),
     )
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("继续")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/private/workspace/conversations.json")
 
     await service.respondPermission(request)
     expect(session.responses).toHaveLength(1)
@@ -1231,9 +1233,11 @@ describe("AgentRuntimeService", () => {
         boundary: "agent-runtime.user-question-sdk-response",
         requestId: request.requestId,
         behavior: "allow",
+        error: expect.stringContaining("[path redacted]"),
       }),
     )
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("继续")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/private/workspace/session.json")
 
     await service.respondPermission(request)
     const result = await turn
@@ -2949,7 +2953,7 @@ class FailingQuestionResponseSession extends QuestionSession {
   ): Promise<void> {
     if (this.shouldFail) {
       this.shouldFail = false
-      throw new Error("SDK response unavailable")
+      throw new Error("SDK response unavailable at /Users/private/workspace/session.json")
     }
     await super.respondPermission(requestId, decision)
   }
@@ -3119,7 +3123,7 @@ class FailingQuestionResolutionNamespace extends MemoryNamespace<ConversationEnt
     ))
     if (containsResolution && !this.failed) {
       this.failed = true
-      throw new Error("resolution storage unavailable")
+      throw new Error("resolution storage unavailable at /Users/private/workspace/conversations.json")
     }
     await super.upsert(item)
   }

@@ -104,6 +104,7 @@ import { redactSensitiveText } from "./redaction"
 import { markCancelRequested } from "./turn-outcome"
 import {
   agentRuntimeErrorMessage,
+  agentRuntimeErrorSummary,
   rawAgentRuntimeErrorMessage,
 } from "./error-message"
 
@@ -1327,7 +1328,7 @@ export class AgentRuntimeService {
         conversationId: pending.conversationId,
         requestId: pending.requestId,
         status: resolution.status,
-        error: agentRuntimeErrorMessage(error),
+        error: agentRuntimeErrorSummary(error),
       })
       if (required) {
         throw new Error(AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE, { cause: error })
@@ -1354,7 +1355,7 @@ export class AgentRuntimeService {
         conversationId: pending.conversationId,
         requestId: pending.requestId,
         status: resolution.status,
-        error: agentRuntimeErrorMessage(error),
+        error: agentRuntimeErrorSummary(error),
       })
       throw new Error(AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE, { cause: error })
     }
@@ -1373,7 +1374,7 @@ export class AgentRuntimeService {
         conversationId: pending.conversationId,
         requestId: pending.requestId,
         behavior: decision.behavior,
-        error: agentRuntimeErrorMessage(error),
+        error: agentRuntimeErrorSummary(error),
       })
       throw error
     }
