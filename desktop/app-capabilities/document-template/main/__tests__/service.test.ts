@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import PizZip from "pizzip"
@@ -198,6 +198,29 @@ describe("DocumentTemplateService", () => {
 
       const outputZip = new PizZip(await readFile(outputPath))
       expect(outputZip.file("word/document.xml")?.asText()).toContain("Hello Ada")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it.skipIf(process.platform === "win32")("rejects a symlink output without modifying its target", async () => {
+    const dir = await createTempDir()
+    try {
+      const templatePath = path.join(dir, "template.docx")
+      const targetPath = path.join(dir, "protected.docx")
+      const outputPath = path.join(dir, "output.docx")
+      await writeTemplate(templatePath)
+      await writeFile(targetPath, "protected")
+      await symlink(targetPath, outputPath)
+
+      await expect(createDocumentTemplateService().generateDocx({
+        templatePath,
+        outputPath,
+        data: { name: "Ada" },
+        overwrite: true,
+      })).rejects.toThrow("输出文件不能是符号链接")
+
+      await expect(readFile(targetPath, "utf8")).resolves.toBe("protected")
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

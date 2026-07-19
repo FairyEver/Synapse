@@ -1,5 +1,5 @@
 import { constants } from "node:fs"
-import { access, readFile, stat, writeFile } from "node:fs/promises"
+import { access, lstat, open, readFile, stat } from "node:fs/promises"
 import path from "node:path"
 import Docxtemplater from "docxtemplater"
 import PizZip from "pizzip"
@@ -47,16 +47,15 @@ export function createDocumentTemplateService(now: () => Date = () => new Date()
           mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         }) as Buffer
       } catch (error) {
-        throw new Error(`Word 模板渲染失败：${formatTemplateError(error)}`)
+        throw new Error(`Word 模板渲染失败：${formatTemplateError(error)}`, { cause: error })
       }
 
-      await writeFile(parsed.outputPath, output, { flag: parsed.overwrite ? "w" : "wx" })
-      const outputStat = await stat(parsed.outputPath)
+      const outputSize = await writeOutputFile(parsed.outputPath, output, parsed.overwrite === true)
 
       return {
         outputPath: parsed.outputPath,
         fileName: path.basename(parsed.outputPath),
-        size: outputStat.size,
+        size: outputSize,
         generatedAt: generatedAt.toISOString(),
       }
     },
@@ -86,17 +85,73 @@ async function assertOutputParentDirectory(outputPath: string): Promise<void> {
     }
   } catch (error) {
     if (error instanceof Error && error.message === "输出目录不是文件夹") throw error
-    throw new Error("输出目录不存在")
+    throw new Error("输出目录不存在", { cause: error })
   }
 }
 
 async function assertOutputWritable(outputPath: string, overwrite: boolean): Promise<void> {
   try {
-    await access(outputPath, constants.F_OK)
+    const outputStat = await lstat(outputPath)
+    if (outputStat.isSymbolicLink()) throw new Error("输出文件不能是符号链接")
+    if (!outputStat.isFile()) throw new Error("输出路径必须是普通文件")
     if (!overwrite) throw new Error("输出文件已存在，请启用覆盖后重试")
   } catch (error) {
-    if (error instanceof Error && error.message.includes("输出文件已存在")) throw error
+    if (isFileNotFoundError(error)) return
+    throw error
   }
+}
+
+async function writeOutputFile(outputPath: string, output: Buffer, overwrite: boolean): Promise<number> {
+  const noFollowFlag = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0
+  const flags = constants.O_WRONLY
+    | constants.O_CREAT
+    | noFollowFlag
+    | (overwrite ? 0 : constants.O_EXCL)
+  let handle
+  try {
+    handle = await open(outputPath, flags)
+  } catch (error) {
+    if (isSymlinkOpenError(error)) {
+      throw new Error("输出文件不能是符号链接", { cause: error })
+    }
+    if (!overwrite && isFileExistsError(error)) {
+      throw new Error("输出文件已存在，请启用覆盖后重试", { cause: error })
+    }
+    throw error
+  }
+
+  try {
+    const [openedStat, outputStat] = await Promise.all([
+      handle.stat({ bigint: true }),
+      lstat(outputPath, { bigint: true }),
+    ])
+    if (outputStat.isSymbolicLink()) {
+      throw new Error("输出文件不能是符号链接")
+    }
+    if (!openedStat.isFile() || !outputStat.isFile()) {
+      throw new Error("输出路径必须是普通文件")
+    }
+    if (openedStat.dev !== outputStat.dev || openedStat.ino !== outputStat.ino) {
+      throw new Error("输出文件在写入前发生变化")
+    }
+    await handle.truncate(0)
+    await handle.writeFile(output)
+    return (await handle.stat()).size
+  } finally {
+    await handle.close()
+  }
+}
+
+function isFileNotFoundError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT"
+}
+
+function isFileExistsError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | undefined)?.code === "EEXIST"
+}
+
+function isSymlinkOpenError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | undefined)?.code === "ELOOP"
 }
 
 async function readJsonObject(dataPath: string): Promise<Record<string, unknown>> {

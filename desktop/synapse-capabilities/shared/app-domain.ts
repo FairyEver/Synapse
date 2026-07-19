@@ -249,7 +249,7 @@ export function buildAppTools(): McpToolDefinition[] {
   return [
     {
       name: DOCUMENT_TEMPLATE_MCP_TOOL_NAME,
-      description: "Generate a local .docx file from a .docx template and JSON data. Provide exactly one of dataPath or data. Existing outputPath is rejected unless overwrite is true.",
+      description: "Generate a local .docx file from a .docx template and JSON data. Provide exactly one of dataPath or data. Existing outputPath is rejected unless overwrite is true; symbolic-link outputs are always rejected.",
       inputSchema: {
         type: "object",
         properties: {

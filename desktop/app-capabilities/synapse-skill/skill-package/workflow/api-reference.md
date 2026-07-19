@@ -95,7 +95,7 @@ Generates a DOCX from a template. No provider needed. Config fields:
 - `dataSource` (enum: `dataPath`/`inline`) — selects a JSON file or inline JSON text
 - `dataPath?` (string) — required when `dataSource` is `dataPath`
 - `dataJson?` (string) — required when `dataSource` is `inline`
-- `overwrite` (boolean) — whether an existing output file may be replaced
+- `overwrite` (boolean) — whether an existing regular output file may be replaced; symbolic-link outputs are always rejected
 - `variables` (array) — variable bindings available to path and inline-data templates
 
 The path fields and inline JSON support `{{variable}}` interpolation. The node output is the generated `outputPath`; generation metadata is also available in the node result outputs.

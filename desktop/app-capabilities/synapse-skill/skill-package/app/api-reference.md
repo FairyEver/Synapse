@@ -10,7 +10,7 @@ Input:
 - `outputPath` required: absolute local `.docx` output path.
 - `dataPath` optional: absolute local `.json` file path. Mutually exclusive with `data`.
 - `data` optional: inline JSON object. Mutually exclusive with `dataPath`.
-- `overwrite` optional: when `true`, replace an existing output file. Defaults to `false`.
+- `overwrite` optional: when `true`, replace an existing regular output file. Defaults to `false`. Symbolic-link output paths are always rejected.
 
 Output:
 
