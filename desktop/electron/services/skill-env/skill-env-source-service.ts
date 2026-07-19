@@ -1,3 +1,4 @@
+import { SKILL_ENV_MAX_VARIABLES } from "../../../config"
 import { SKILL_ENV_EXAMPLE_PATH } from "../../../src/lib/content-attachments"
 import { detectPlaceholders } from "../../../src/lib/variable-substitution"
 import type {
@@ -25,9 +26,11 @@ export class SkillEnvSourceService {
     ])
     const legacyPlaceholders = detectPlaceholders(mainContent, { includeCodeBlocks: true })
     if (example !== null) assertSkillRuntimeEnvBytes(example)
-    const declarations = example === null
-      ? []
-      : parseDotenvDocument(example).entries.map(({ name, value }) => ({ name, defaultValue: value }))
+    const entries = example === null ? [] : parseDotenvDocument(example).entries
+    if (entries.length > SKILL_ENV_MAX_VARIABLES) {
+      throw new Error(`Skill .env.example 最多声明 ${SKILL_ENV_MAX_VARIABLES} 个环境变量。`)
+    }
+    const declarations = entries.map(({ name, value }) => ({ name, defaultValue: value }))
 
     return { declarations, legacyPlaceholders }
   }

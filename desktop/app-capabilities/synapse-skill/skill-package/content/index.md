@@ -53,7 +53,7 @@ Do not provide both `files` and `sourceDirectoryPath`.
 
 When using `files`, keep paths relative to the Skill root, such as `references/checklist.md`. Do not use absolute paths, path traversal, `SKILL.md`, runtime `.env` files, `.synapse.json`, or `.synapse.repository.json`. The server normalizes paths, rejects duplicates and Skill install control files, skips unsafe names from source directories, and enforces count and size limits.
 
-When using `sourceDirectoryPath`, Synapse excludes `.env`, `.env.*` except the exact lowercase root filename `.env.example`, both Synapse identity files, other hidden entries, and symlinks. Case variants such as `.ENV.EXAMPLE` are runtime env-like files and are excluded without being read. Source directory imports are limited to 1,000 root entries, 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total. A root `.env.example` must also stay within the desktop installer's 1 MiB environment-file limit. If frontmatter exists in the main file, use its metadata when the user has not provided explicit fields.
+When using `sourceDirectoryPath`, Synapse excludes `.env`, `.env.*` except the exact lowercase root filename `.env.example`, both Synapse identity files, other hidden entries, and symlinks. Case variants such as `.ENV.EXAMPLE` are runtime env-like files and are excluded without being read. Source directory imports are limited to 1,000 root entries, 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total. Keep a root `.env.example` within the desktop installer's 1 MiB environment-file limit and 100-declaration limit. If frontmatter exists in the main file, use its metadata when the user has not provided explicit fields.
 
 ## Resource Fields
 

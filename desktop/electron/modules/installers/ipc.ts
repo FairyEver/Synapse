@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { SKILL_ENV_MAX_VARIABLES } from "../../../config"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type {
   SynapseInstallSourceToEditorPayload,
@@ -190,7 +191,7 @@ export const installersIpcModule: IpcModule = {
         declarations: z.array(z.object({
           name: z.string(),
           defaultValue: z.string(),
-        }).strict()),
+        }).strict()).max(SKILL_ENV_MAX_VARIABLES),
         legacyPlaceholders: z.array(z.string()),
       }).strict(),
       handler: (_ctx, source: SynapseSkillInstallerSource) =>

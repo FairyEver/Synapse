@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { SKILL_ENV_MAX_VARIABLES } from "../../../../config"
 import { secretsIpcModule } from "../ipc"
 
 function createHarness(allow = true) {
@@ -65,6 +66,12 @@ describe("secretsIpcModule", () => {
       names: ["TOKEN"],
       values: ["must-not-cross-ipc"],
     })).toThrow()
+  })
+
+  it("rejects oversized Skill env batch scans before authorization", () => {
+    expect(() => secretsIpcModule.methods.scanSkillEnvBindingsBatch.request.parse({
+      names: Array.from({ length: SKILL_ENV_MAX_VARIABLES + 1 }, (_, index) => `TOKEN_${index}`),
+    })).toThrow(`一次最多扫描 ${SKILL_ENV_MAX_VARIABLES} 个 Skill 环境变量。`)
   })
 
   it("preserves requested secret values when validating get responses", () => {

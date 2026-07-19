@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { SKILL_ENV_MAX_VARIABLES } from "../../../config"
 
 export const SECRET_NAME_REGEX = /^[A-Za-z0-9_]+$/
 
@@ -118,7 +119,10 @@ export const secretSkillEnvScanResultSchema = z.object({
 }).strict()
 
 export const secretSkillEnvBatchScanInputSchema = z.object({
-  names: z.array(secretNameSchema).min(1).refine(
+  names: z.array(secretNameSchema)
+    .min(1)
+    .max(SKILL_ENV_MAX_VARIABLES, `一次最多扫描 ${SKILL_ENV_MAX_VARIABLES} 个 Skill 环境变量。`)
+    .refine(
     (names) => new Set(names.map((name) => name.toLowerCase())).size === names.length,
     "密钥名称不能重复。",
   ),

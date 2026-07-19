@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
+import { SKILL_ENV_MAX_VARIABLES } from "../../../../config"
 import type { SynapseSkillInstallerSource } from "../../../../src/types/installers"
 import { SkillEnvSourceService } from "../skill-env-source-service"
 import { SKILL_RUNTIME_ENV_MAX_BYTES } from "../file-policy"
@@ -56,5 +57,17 @@ describe("SkillEnvSourceService", () => {
 
     await expect(new SkillEnvSourceService(reader).inspect(source))
       .rejects.toThrow("Skill .env 不能超过 1 MiB。")
+  })
+
+  it("rejects .env.example files with too many declarations", async () => {
+    const reader = {
+      readMainContent: vi.fn().mockResolvedValue("# Skill\n"),
+      readTextAttachment: vi.fn().mockResolvedValue(
+        Array.from({ length: SKILL_ENV_MAX_VARIABLES + 1 }, (_, index) => `KEY_${index}=`).join("\n"),
+      ),
+    }
+
+    await expect(new SkillEnvSourceService(reader).inspect(source))
+      .rejects.toThrow(`Skill .env.example 最多声明 ${SKILL_ENV_MAX_VARIABLES} 个环境变量。`)
   })
 })

@@ -19,7 +19,7 @@ Names are immutable after creation. Secret storage resolves names case-insensiti
 
 MCP create, update, and upsert modify encrypted secret storage only and never scan or write installed Skill files. Explicit scanning and the user-confirmed in-memory serial update queue are desktop app IPC/UI capabilities, not MCP actions or tools.
 
-Desktop runtime `.env` scanning, reinstall merging, and queue updates have a 1 MiB file-size limit and fail safely above it. The installer applies the same limit to root `.env.example` before decoding, parsing, or merging declarations. Desktop scanning is available on Windows, but the current Windows queue returns a failure for each write and requires the user to update the local `.env` manually. On macOS and Linux, the desktop queue performs a final validation before a same-directory atomic replacement. MCP tools never scan or write Skill `.env` files and do not bypass these limits.
+Desktop runtime `.env` scanning, reinstall merging, and queue updates have a 1 MiB file-size limit and fail safely above it. The installer applies the same limit to root `.env.example` before decoding, parsing, or merging declarations, and accepts at most 100 environment-variable declarations per Skill. Batch association scans use the same 100-name limit. Desktop scanning is available on Windows, but the current Windows queue returns a failure for each write and requires the user to update the local `.env` manually. On macOS and Linux, the desktop queue performs a final validation before a same-directory atomic replacement. MCP tools never scan or write Skill `.env` files and do not bypass these limits.
 
 ## Tools
 
