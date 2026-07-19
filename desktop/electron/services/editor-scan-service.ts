@@ -925,7 +925,7 @@ async function finalizeQuickPublish(
   await checkEditorReadPermission(security, session.itemPath, auditMetadata)
   await assertTrustedEditorReadTarget(security, session.itemPath, auditMetadata, "skill")
 
-  const currentDraft = await readSkillDraftFromDirectory(session.itemPath, undefined, { mode: "publish" })
+  const currentDraft = await readSkillDraftFromDirectory(session.itemPath, security, { mode: "publish" })
   if (
     currentDraft.publishFingerprint !== session.publishFingerprint
     || currentDraft.sourceFingerprint !== session.sourceFingerprint
@@ -966,7 +966,7 @@ async function finalizeQuickPublish(
     }
   }
 
-  const finalDraft = await readSkillDraftFromDirectory(session.itemPath, undefined, { mode: "publish" })
+  const finalDraft = await readSkillDraftFromDirectory(session.itemPath, security, { mode: "publish" })
   if (
     finalDraft.publishFingerprint !== session.publishFingerprint
     || finalDraft.sourceFingerprint !== session.sourceFingerprint

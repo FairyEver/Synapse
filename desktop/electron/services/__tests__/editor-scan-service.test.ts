@@ -207,7 +207,7 @@ describe("editor scan quick publish", () => {
       title: "Release Helper",
       type: "skill",
     })
-    const { security } = createAllowingSecurity()
+    const { auditEvents, security } = createAllowingSecurity()
 
     const draft = await prepareQuickPublishDraft({
       itemType: "skill",
@@ -225,6 +225,10 @@ describe("editor scan quick publish", () => {
       sessionId: draft.publishSessionId,
     }, security)).resolves.toMatchObject({ status: "identity-written" })
     await expect(readFile(path.join(skillDir, ".synapse.json"), "utf8")).resolves.toContain('"id": "skill-1"')
+    expect(auditEvents.filter((event) => (
+      event.metadata?.operation === "read-skill-source-directory"
+      && event.outcome === "allowed"
+    ))).toHaveLength(2)
   })
 
   it("keeps a saved resource but skips linking when the local source changed", async () => {
