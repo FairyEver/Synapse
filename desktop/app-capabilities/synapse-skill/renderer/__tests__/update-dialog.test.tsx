@@ -235,6 +235,47 @@ describe("SynapseSkillUpdateDialogHost", () => {
     expect(prepareInstallSource).toHaveBeenCalledTimes(1)
     expect(installSourceToEditorTargets).not.toHaveBeenCalled()
   })
+
+  it("prepares a fresh install source after a pending check is disabled", async () => {
+    const refreshedSource = {
+      ...preparedSource,
+      preparedSourceId: "synapse-skill:refreshed",
+      sourceFingerprint: "sha256:refreshed",
+    }
+    let resolveFirstInspection!: (value: { entries: ReturnType<typeof createInstallEntries> }) => void
+    prepareInstallSource
+      .mockResolvedValueOnce(preparedSource)
+      .mockResolvedValueOnce(refreshedSource)
+    inspectGlobalSkillInstallations
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveFirstInspection = resolve
+      }))
+      .mockResolvedValueOnce({ entries: createInstallEntries() })
+    installSourceToEditorTargets.mockResolvedValue({
+      results: [
+        { target: { editorId: "codex", scope: "global" }, status: "installed" },
+        { target: { editorId: "cursor", scope: "global" }, status: "installed" },
+      ],
+    })
+
+    const root = await renderDialog()
+    await rerenderDialog(root, false)
+    await act(async () => {
+      resolveFirstInspection({ entries: createInstallEntries() })
+      await Promise.resolve()
+    })
+    await rerenderDialog(root, true)
+
+    expect(prepareInstallSource).toHaveBeenCalledTimes(2)
+    expect(releaseInstallSource).toHaveBeenCalledWith(preparedSource.preparedSourceId)
+    expect(document.body.textContent).toContain("Synapse Skill 可更新")
+
+    await clickButton("更新")
+
+    expect(installSourceToEditorTargets).toHaveBeenCalledWith(expect.objectContaining({
+      source: refreshedSource,
+    }))
+  })
 })
 
 function createInstallEntries() {
@@ -274,11 +315,16 @@ function createInstallEntries() {
   ]
 }
 
-async function renderDialog(): Promise<void> {
+async function renderDialog(): Promise<Root> {
   const root = createRoot(document.body.appendChild(document.createElement("div")))
   roots.push(root)
+  await rerenderDialog(root, true)
+  return root
+}
+
+async function rerenderDialog(root: Root, enabled: boolean): Promise<void> {
   await act(async () => {
-    root.render(<SynapseSkillUpdateDialogHost />)
+    root.render(<SynapseSkillUpdateDialogHost enabled={enabled} />)
     await Promise.resolve()
     await Promise.resolve()
   })

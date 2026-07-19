@@ -99,6 +99,7 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
 
     return () => {
       cancelled = true
+      checkPromiseRef.current = null
       const currentSource = sourceRef.current
       sourceRef.current = null
       if (currentSource) releaseInstallSource(currentSource)
@@ -108,6 +109,7 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
   const closeDialog = () => {
     if (updating) return
     dismissForCurrentProcess()
+    checkPromiseRef.current = null
     const currentSource = sourceRef.current
     sourceRef.current = null
     if (currentSource) releaseInstallSource(currentSource)
@@ -119,7 +121,7 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
     requestedTargets: SynapseEditorInstallStatusEntry[] = targets,
     retainedWarnings: UpdateFailure[] = [],
   ) => {
-    if (!source || requestedTargets.length === 0 || updating) return
+    if (!source || sourceRef.current !== source || requestedTargets.length === 0 || updating) return
 
     setUpdating(true)
     setFailures([])
@@ -146,6 +148,7 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
       ]
 
       if (nextFailures.length === 0 && nextWarnings.length === 0) {
+        checkPromiseRef.current = null
         const currentSource = sourceRef.current
         sourceRef.current = null
         if (currentSource) releaseInstallSource(currentSource)
@@ -174,6 +177,7 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
   const warningByEditorId = new Map(warnings.map((warning) => [warning.editorId, warning.message]))
   const hasFailures = failures.length > 0
   const hasWarnings = warnings.length > 0
+  const sourceIsActive = source !== null && sourceRef.current === source
 
   const retryFailedTargets = () => {
     const failedEditorIds = new Set(failures.map((failure) => failure.editorId))
@@ -185,7 +189,7 @@ function SynapseSkillUpdateDialogHost({ enabled = true }: { readonly enabled?: b
 
   return (
     <Dialog
-      open={open}
+      open={enabled && sourceIsActive && open}
       data-track="synapse-skill-update-dialog"
       onOpenChange={(nextOpen) => {
         if (!nextOpen) closeDialog()
