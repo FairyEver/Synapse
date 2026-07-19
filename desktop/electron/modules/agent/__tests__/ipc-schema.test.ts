@@ -195,6 +195,23 @@ describe("agent IPC schemas", () => {
     })).toMatchObject({ turnOutcome })
   })
 
+  it("preserves unconfirmed user question resolution attempts on timeline items", () => {
+    const resolutionAttempt = {
+      status: "answered" as const,
+      resolvedAt: "2026-07-18T01:00:00.000Z",
+      answers: [{ questionIndex: 0, values: ["重试"] }],
+    }
+
+    expect(timelineItemSchema.parse({
+      id: "conv-1:history:5",
+      timestamp: "2026-07-18T01:00:00.000Z",
+      kind: "permissionRequest",
+      requestId: "request-1",
+      toolName: "AskUserQuestion",
+      resolutionAttempt,
+    })).toMatchObject({ resolutionAttempt })
+  })
+
   it("accepts a permission mode on session summaries", () => {
     expect(sessionSummarySchema.parse({
       projectId: "project-1",

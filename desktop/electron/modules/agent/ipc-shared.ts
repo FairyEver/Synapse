@@ -228,6 +228,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     toolInputRaw: jsonRecordSchema.optional(),
     questions: z.array(agentUserQuestionSchema).optional(),
     resolution: agentUserQuestionResolutionSchema.optional(),
+    resolutionAttempt: agentUserQuestionResolutionSchema.optional(),
   }),
   z.object({
     ...timelineBaseSchema,
