@@ -89,21 +89,26 @@ vi.mock("../workflow-card", () => ({
 vi.mock("../run-params-dialog", () => ({
   RunParamsDialog: ({
     open,
+    lastValues,
     onConfirm,
   }: {
     open: boolean
+    lastValues?: unknown
     onConfirm: (values: Record<string, unknown>, rawValues: Record<string, string>) => void
   }) => open ? (
-    <button
-      type="button"
-      data-testid="confirm-run-params"
-      onClick={() => onConfirm(
-        { apiKey: "sk-secret", count: 2 },
-        { apiKey: "sk-secret", count: "2" },
-      )}
-    >
-      confirm
-    </button>
+    <>
+      <span data-testid="last-run-values">{JSON.stringify(lastValues)}</span>
+      <button
+        type="button"
+        data-testid="confirm-run-params"
+        onClick={() => onConfirm(
+          { apiKey: "sk-secret", count: 2 },
+          { apiKey: "sk-secret", count: "2" },
+        )}
+      >
+        confirm
+      </button>
+    </>
   ) : null,
 }))
 
@@ -252,6 +257,42 @@ describe("WorkflowList", () => {
     expect(JSON.stringify(toastError.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain("/Users/example/repo")
+  })
+
+  it("remembers run parameters only after the backend starts a run", async () => {
+    workflowRunDefinition.mockResolvedValueOnce({
+      errors: [{ type: "invalid_config", message: "路径不存在或不可访问" }],
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowList onCreate={vi.fn()} />)
+    })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="run-workflow-param"]')?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="confirm-run-params"]')?.click()
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="last-run-values"]')?.textContent).toBe("")
+
+    workflowRunDefinition.mockResolvedValueOnce({ runId: "run-2" })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="confirm-run-params"]')?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="run-workflow-param"]')?.click()
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="last-run-values"]')?.textContent).toContain("sk-secret")
   })
 
   it("exports a workflow from the card action", async () => {

@@ -38,9 +38,10 @@ export function CanvasFloatingToolbar({ definition, saving, running, dirty, onSa
         params={definition.params}
         lastValues={lastRunValues}
         onConfirm={async (params, rawValues) => {
-          setLastRunValues(createWorkflowLastRunValues(definition.params, rawValues))
           try {
-            await onRun(params)
+            const runId = await onRun(params)
+            if (!runId) return
+            setLastRunValues(createWorkflowLastRunValues(definition.params, rawValues))
             setRunParamsOpen(false)
           } catch {
             // Dialog stays open, submitting will be reset

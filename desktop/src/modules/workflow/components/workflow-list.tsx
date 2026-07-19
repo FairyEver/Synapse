@@ -75,7 +75,11 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
   const [migrationDiagnostic, setMigrationDiagnostic] = useState<WorkflowMigrationDiagnostic | null>(null)
   const [runningId, setRunningId] = useState<string | null>(null)
   // Track a conflict so we can offer "cancel old & start new" instead of just an error toast.
-  const [conflictState, setConflictState] = useState<{ def: WorkflowDefinition; params: Record<string, unknown> } | null>(null)
+  const [conflictState, setConflictState] = useState<{
+    def: WorkflowDefinition
+    params: Record<string, unknown>
+    lastValues?: WorkflowLastRunValues
+  } | null>(null)
   // Remember last-used param values per workflow so the dialog can pre-fill them on re-run
   const [lastRunValues, setLastRunValues] = useState<Record<string, WorkflowLastRunValues>>({})
 
@@ -218,7 +222,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     })
   }
 
-  const handleConfirmRun = async (params: Record<string, unknown>) => {
+  const handleConfirmRun = async (params: Record<string, unknown>, nextLastValues: WorkflowLastRunValues) => {
     if (!runTarget) return
     const def = runTarget
     setRunningId(def.id)
@@ -232,10 +236,11 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
         return
       }
       if ("conflict" in result) {
-        setConflictState({ def, params })
+        setConflictState({ def, params, lastValues: nextLastValues })
         setRunTarget(null)
         return
       }
+      setLastRunValues((prev) => ({ ...prev, [def.id]: nextLastValues }))
       openRunner(workflowApi, def.id, result.runId)
       setRunTarget(null)
       void refresh()
@@ -248,7 +253,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
 
   const handleForceRun = async () => {
     if (!conflictState) return
-    const { def, params } = conflictState
+    const { def, params, lastValues } = conflictState
     setConflictState(null)
     setRunningId(def.id)
     try {
@@ -264,6 +269,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
         toast.error("仍有运行中的实例，请先取消")
         return
       }
+      if (lastValues) setLastRunValues((prev) => ({ ...prev, [def.id]: lastValues }))
       openRunner(workflowApi, def.id, forceResult.runId)
       void refresh()
     } catch (err) {
@@ -431,11 +437,9 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
         params={runTarget?.params ?? []}
         lastValues={runTarget ? lastRunValues[runTarget.id] : undefined}
         onConfirm={async (params, rawValues) => {
-          if (runTarget) {
-            const nextValues = createWorkflowLastRunValues(runTarget.params, rawValues)
-            setLastRunValues((prev) => ({ ...prev, [runTarget.id]: nextValues }))
-          }
-          await handleConfirmRun(params).catch(() => {})
+          if (!runTarget) return
+          const nextValues = createWorkflowLastRunValues(runTarget.params, rawValues)
+          await handleConfirmRun(params, nextValues).catch(() => {})
         }}
         onCancel={() => setRunTarget(null)}
       />
