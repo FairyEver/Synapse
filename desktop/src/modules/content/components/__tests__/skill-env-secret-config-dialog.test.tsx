@@ -253,6 +253,46 @@ describe("SkillEnvSecretConfigDialog", () => {
     expect(document.body.textContent).toContain("重新扫描")
   })
 
+  it("keeps a warning-only binding scan available for retry without reporting success", async () => {
+    mocks.inspectSkillEnvSource.mockResolvedValue({
+      declarations: [{ name: "TOKEN", defaultValue: "" }],
+      legacyPlaceholders: [],
+    })
+    mocks.secrets.list.mockResolvedValue({
+      secrets: [{ id: "secret-1", name: "TOKEN", hasValue: true }],
+      total: 1,
+    })
+    mocks.secrets.scanSkillEnvBindingsBatch.mockResolvedValueOnce({
+      groups: [{
+        name: "TOKEN",
+        scanResult: {
+          scanSessionId: "scan-warning",
+          items: [],
+          warnings: [{
+            skillName: "unreadable-skill",
+            editors: [{ id: "codex", label: "Codex" }],
+            scope: "global",
+            envPath: "/skills/unreadable-skill/.env",
+            status: "unwritable",
+          }],
+        },
+      }],
+    })
+    const onOpenChange = vi.fn()
+
+    await renderDialog(onOpenChange)
+    await act(async () => {
+      clickButton("保存到密钥库")
+      await flushPromises()
+    })
+
+    expect(mocks.toast.warning).toHaveBeenCalledWith("部分 Skill 配置无法检查。")
+    expect(mocks.toast.success).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("部分 Skill 配置无法检查，请重新扫描。")
+    expect(document.body.textContent).toContain("重新扫描")
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+  })
+
   it("blocks a declaration whose key differs only by case from an existing secret", async () => {
     mocks.inspectSkillEnvSource.mockResolvedValue({
       declarations: [{ name: "api_key", defaultValue: "" }],

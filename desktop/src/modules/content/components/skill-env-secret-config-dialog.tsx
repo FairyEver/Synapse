@@ -85,6 +85,11 @@ function SkillEnvSecretConfigDialog({ item, onOpenChange }: SkillEnvSecretConfig
       toast.warning("关联 Skill 过多，请整理后重新扫描。")
       return
     }
+    if (outcome.kind === "scan_warning") {
+      toast.warning("部分 Skill 配置无法检查。")
+      if (outcome.groups.length > 0) setUpdateGroups(outcome.groups)
+      return
+    }
 
     toast.success(outcome.savedCount > 0 || outcome.groups.length > 0 ? "已保存到密钥库" : "无需保存")
     if (outcome.groups.length > 0) {

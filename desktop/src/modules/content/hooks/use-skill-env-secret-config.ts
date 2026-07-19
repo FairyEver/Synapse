@@ -31,10 +31,13 @@ type SkillEnvSecretConfigSaveOutcome =
   | { readonly kind: "partial"; readonly failedCount: number; readonly savedCount: number }
   | { readonly kind: "scan_error"; readonly savedCount: number }
   | { readonly kind: "scan_truncated"; readonly savedCount: number }
+  | { readonly kind: "scan_warning"; readonly groups: readonly SkillEnvUpdateScanGroup[]; readonly savedCount: number }
 
 type ScanNamesResult = {
   readonly failedNames: string[]
   readonly groups: SkillEnvUpdateScanGroup[]
+  readonly hasFailures: boolean
+  readonly hasWarnings: boolean
   readonly truncated: boolean
 }
 
@@ -232,15 +235,19 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
       const truncatedNames = new Set(result.groups
         .filter(({ scanResult }) => scanResult.truncated === true)
         .map(({ name }) => name))
+      const hasWarnings = result.groups.some(({ scanResult }) => Boolean(scanResult.warnings?.length))
+      const failedScanNames = requestedNames.filter((name) => (
+        !scannedNames.has(name) || failedNames.has(name) || truncatedNames.has(name)
+      ))
       return {
-        failedNames: requestedNames.filter((name) => (
-          !scannedNames.has(name) || failedNames.has(name) || truncatedNames.has(name)
-        )),
+        failedNames: hasWarnings ? requestedNames : failedScanNames,
         groups: result.groups.flatMap(({ name, scanResult }) => (
           scanResult.items.some((entry) => entry.status !== "up_to_date")
             ? [{ name, scanResult }]
             : []
         )),
+        hasFailures: failedScanNames.length > 0,
+        hasWarnings,
         truncated: truncatedNames.size > 0,
       }
     } catch (error) {
@@ -249,7 +256,13 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
         nameCount: requestedNames.length,
         ...errorDiagnostic(error),
       })
-      return { failedNames: requestedNames, groups: [], truncated: false }
+      return {
+        failedNames: requestedNames,
+        groups: [],
+        hasFailures: true,
+        hasWarnings: false,
+        truncated: false,
+      }
     }
   }, [item.id, secretsBridge])
 
@@ -272,9 +285,13 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
       setUpdateGroups(mergedGroups)
       setPendingScanNames(pendingScanResult.failedNames)
       setSaving(false)
-      if (pendingScanResult.failedNames.length > 0) {
+      if (pendingScanResult.hasFailures) {
         setNotice(pendingScanResult.truncated ? "关联 Skill 过多，请整理后重新扫描。" : "扫描关联 Skill 失败，请重试。")
         return { kind: pendingScanResult.truncated ? "scan_truncated" : "scan_error", savedCount: 0 }
+      }
+      if (pendingScanResult.hasWarnings) {
+        setNotice("部分 Skill 配置无法检查，请重新扫描。")
+        return { kind: "scan_warning", groups: mergedGroups, savedCount: 0 }
       }
       return { kind: "complete", groups: mergedGroups, savedCount: 0 }
     }
@@ -328,9 +345,13 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
       setNotice(savedCount > 0 ? "部分密钥已保存，失败项可重试。" : "保存失败，请重试。")
       return { kind: "partial", failedCount, savedCount }
     }
-    if (scanResult.failedNames.length > 0) {
+    if (scanResult.hasFailures) {
       setNotice(scanResult.truncated ? "密钥已保存；关联 Skill 过多，请整理后重新扫描。" : "密钥已保存，但扫描关联 Skill 失败。")
       return { kind: scanResult.truncated ? "scan_truncated" : "scan_error", savedCount }
+    }
+    if (scanResult.hasWarnings) {
+      setNotice("密钥已保存，但部分 Skill 配置无法检查。")
+      return { kind: "scan_warning", groups: mergedGroups, savedCount }
     }
     return { kind: "complete", groups: mergedGroups, savedCount }
   }, [fields, item.id, pendingScanNames, saving, scanNames, secretsBridge, updateGroups])
@@ -347,9 +368,13 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
     setPendingScanNames(result.failedNames)
     setSaving(false)
 
-    if (result.failedNames.length > 0) {
+    if (result.hasFailures) {
       setNotice(result.truncated ? "关联 Skill 过多，请整理后重新扫描。" : "扫描关联 Skill 失败，请重试。")
       return { kind: result.truncated ? "scan_truncated" : "scan_error", savedCount: 0 }
+    }
+    if (result.hasWarnings) {
+      setNotice("部分 Skill 配置无法检查，请重新扫描。")
+      return { kind: "scan_warning", groups: mergedGroups, savedCount: 0 }
     }
     return { kind: "complete", groups: mergedGroups, savedCount: 0 }
   }, [pendingScanNames, saving, scanNames, updateGroups])
