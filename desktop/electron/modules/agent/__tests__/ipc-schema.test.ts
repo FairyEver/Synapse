@@ -142,6 +142,35 @@ describe("agent IPC schemas", () => {
     })
   })
 
+  it("preserves sanitized tool result content diagnostics", () => {
+    const contentDiagnostics = {
+      kind: "array" as const,
+      itemCount: 2,
+      contentTypes: ["text", "image"],
+      textCharCount: 12,
+      imageCount: 1,
+      images: [{
+        mimeType: "image/png",
+        base64Length: 128,
+        originalSize: 96,
+        dimensions: { width: 32, height: 24 },
+      }],
+    }
+
+    expect(agentEventSchema.parse({
+      type: "toolResult",
+      toolName: "Read",
+      contentDiagnostics,
+    })).toMatchObject({ contentDiagnostics })
+    expect(timelineItemSchema.parse({
+      id: "conv-1:history:diagnostics",
+      timestamp: "2026-07-19T00:00:00.000Z",
+      kind: "toolResult",
+      toolName: "Read",
+      contentDiagnostics,
+    })).toMatchObject({ contentDiagnostics })
+  })
+
   it("preserves terminal turn details on agent events and timeline items", () => {
     const turnOutcome = {
       status: "interrupted" as const,

@@ -138,6 +138,20 @@ export const agentImageArtifactSchema = z.object({
   url: z.string(),
   sha256: z.string().optional(),
 })
+const agentToolResultImageDiagnosticSchema = z.object({
+  mimeType: z.string().optional(),
+  base64Length: z.number().int().nonnegative().optional(),
+  originalSize: z.number().int().nonnegative().optional(),
+  dimensions: z.record(z.string(), z.number()).optional(),
+})
+const agentToolResultContentDiagnosticsSchema = z.object({
+  kind: z.enum(["string", "array", "other"]),
+  itemCount: z.number().int().nonnegative().optional(),
+  contentTypes: z.array(z.string()).optional(),
+  textCharCount: z.number().int().nonnegative(),
+  imageCount: z.number().int().nonnegative(),
+  images: z.array(agentToolResultImageDiagnosticSchema),
+})
 export const agentUserQuestionOptionSchema = z.object({
   label: z.string(),
   description: z.string().optional(),
@@ -214,6 +228,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     toolUseId: z.string().optional(),
     toolName: z.string(),
     content: z.string().optional(),
+    contentDiagnostics: agentToolResultContentDiagnosticsSchema.optional(),
     imageArtifacts: z.array(agentImageArtifactSchema).optional(),
     status: z.string().optional(),
     exitCode: z.number().optional(),
@@ -535,6 +550,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     toolUseId: z.string().optional(),
     toolName: z.string(),
     content: z.string().optional(),
+    contentDiagnostics: agentToolResultContentDiagnosticsSchema.optional(),
     imageArtifacts: z.array(agentImageArtifactSchema).optional(),
     status: z.string().optional(),
     exitCode: z.number().optional(),
