@@ -86,6 +86,33 @@ describe("AgentPersonaService", () => {
     })
   })
 
+  it("reads the current user's synchronized local snapshot without requesting the remote list", async () => {
+    const harness = createCloudHarness({
+      accountState: authenticatedOnline("user-1"),
+      cacheUsers: {
+        "user-1": { syncedAt: "2026-07-01T00:00:00.000Z", items: [remoteUser()] },
+        "user-2": { syncedAt: "2026-07-01T00:00:00.000Z", items: [remoteBuiltin({ id: "other-user-cache" })] },
+      },
+    })
+    const service = createAgentPersonaService(harness.deps)
+
+    await expect(service.listCached()).resolves.toEqual([remoteUser()])
+    expect(harness.remote.list).not.toHaveBeenCalled()
+  })
+
+  it("reports a contextual error when the synchronized local snapshot cannot be read", async () => {
+    const harness = createCloudHarness({ accountState: authenticatedOnline("user-1") })
+    const cacheError = new Error("cache unavailable")
+    vi.spyOn(harness.deps.cache, "read").mockRejectedValue(cacheError)
+    const service = createAgentPersonaService(harness.deps)
+
+    await expect(service.listCached()).rejects.toThrow("智能体本地快照读取失败")
+    expect(harness.deps.logger.error).toHaveBeenCalledWith(
+      "Agent persona local snapshot read failed.",
+      expect.objectContaining({ boundary: "agent-personas.cache.list-current", error: cacheError }),
+    )
+  })
+
   it("does not write cache on failed mutations", async () => {
     const harness = createCloudHarness({
       accountState: authenticatedOffline("user-1"),

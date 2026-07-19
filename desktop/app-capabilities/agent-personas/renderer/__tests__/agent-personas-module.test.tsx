@@ -98,7 +98,11 @@ vi.mock("@/app-shell/logging", () => ({
 }))
 
 vi.mock("@/lib/provider-model", () => ({
-  useProviderModelLabel: () => "",
+  useProviderModelCatalog: () => ({ providers: [], refresh: vi.fn(async () => undefined) }),
+  resolveProviderModelDisplay: (selection: ModelInput) => ({
+    label: selection ? `${selection.providerId} ${selection.modelTier}` : "",
+    status: "available",
+  }),
 }))
 
 vi.mock("../../../../src/components/provider-model-select-dialog", () => ({
@@ -290,7 +294,7 @@ describe("AgentPersonasModule", () => {
     await setFieldValue("#agent-persona-name", "翻译助手")
     await setFieldValue("#agent-persona-description", "处理中英文本。")
     await setFieldValue("#agent-persona-system-prompt", "你是翻译助手。")
-    await clickButton("未指定")
+    await clickButton("跟随对话")
     await clickButton("选择 Sonnet 模型")
     await setSelectValue("#agent-persona-tool-policy-mode", "allowlist")
     await clickButton("选择工具")
@@ -387,7 +391,7 @@ describe("AgentPersonasModule", () => {
     expect(document.body.querySelector("#agent-persona-system-prompt")).toBeNull()
     expect(document.body.querySelector("#agent-persona-tool-policy-readonly")).toBeNull()
 
-    await clickButton("未指定")
+    await clickButton("跟随对话")
     await clickButton("选择 Sonnet 模型")
     await clickButton("保存模型")
 
@@ -396,6 +400,30 @@ describe("AgentPersonasModule", () => {
       providerModel: { providerId: "claude", modelTier: "sonnet" },
     })
     expect(bridge.update).not.toHaveBeenCalled()
+  })
+
+  it("restores a specified built-in model to follow the conversation", async () => {
+    const original = fixtures.items[0]
+    fixtures.items[0] = {
+      ...original,
+      providerModel: { providerId: "claude", modelTier: "sonnet" },
+    }
+
+    try {
+      await renderModule()
+      await clickButtonByLabel("配置模型：中英翻译")
+
+      await clickButtonByLabel("恢复为跟随对话")
+      expect(buttonWithText("跟随对话")).toBeTruthy()
+      await clickButton("保存模型")
+
+      expect(bridge.updateBuiltinModel).toHaveBeenCalledWith({
+        id: "builtin-zh-en-translator",
+        providerModel: null,
+      })
+    } finally {
+      fixtures.items[0] = original
+    }
   })
 })
 

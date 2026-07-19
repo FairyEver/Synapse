@@ -18,6 +18,7 @@ export const AGENT_ABORTED_BEFORE_EXECUTION_MESSAGE = "执行开始前已取消�
 export const AGENT_SCHEDULED_SPAWN_DENIED_MESSAGE = "定时执行没有 Agent 启动权限。"
 export const AGENT_NO_ACTIVE_PROVIDER_MESSAGE = "未配置可用的模型供应商。"
 export const AGENT_PROVIDER_REQUIRED_MESSAGE = "缺少模型供应商配置。"
+export const AGENT_PERSONA_MODEL_UNAVAILABLE_MESSAGE = "智能体指定的模型不可用，请重新指定模型或恢复为跟随对话。"
 export const AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE = "项目工作目录未配置。"
 export const AGENT_COMMAND_EXECUTION_UNAVAILABLE_MESSAGE = "当前环境不支持执行该命令。"
 export const AGENT_COMMAND_EXEC_BODY_MISSING_MESSAGE = "命令缺少可执行内容。"

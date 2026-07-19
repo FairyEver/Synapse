@@ -8,7 +8,7 @@ import { z } from "zod"
 
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
-import type { DataRepository, ConversationEntryV1 } from "../../runtime/data-repo"
+import type { DataRepository } from "../../runtime/data-repo"
 import { quoteWindowsCommandArg } from "../../runtime/process/controlled-runner"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { resolveLocalReference, isResolvedInsideWorkspace } from "../../services/agent-runtime/references"
@@ -27,9 +27,7 @@ import type {
 } from "../../services/provider"
 import { createProviderServiceFromDataRepository, PROVIDER_SERVICE_ID } from "../../services/provider"
 import { ProviderReferenceScanner } from "../../services/provider/provider-reference-scanner"
-import type { ProviderReferenceScannerDeps } from "../../services/provider/provider-reference-scanner"
-import type { WorkflowService } from "../../services/workflow/workflow-service"
-import type { WorkflowDefinition } from "../../../src/types/workflow"
+import { createProviderReferenceScannerDeps } from "../../services/provider/provider-reference-scanner-deps"
 import { normalizeContentFileNameSegment } from "../../../src/lib/content-attachments"
 import { createMainLogger } from "../../services/log-store"
 import { resolveProjectAgent } from "./ipc-shared"
@@ -415,7 +413,7 @@ function resolveGlobalProviderService(resolve: <T>(serviceId: string) => T) {
     permissionGuard: resolve<PermissionGuard>("core.permission-guard"),
     auditSink: resolve<AuditSink>("core.audit-sink"),
     scanReferences: async (providerId) => {
-      const scanner = new ProviderReferenceScanner(buildScannerDeps(resolve))
+      const scanner = new ProviderReferenceScanner(createProviderReferenceScannerDeps(resolve))
       return scanner.scan(providerId)
     },
   })
@@ -661,7 +659,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     response: z.object({
       providerId: z.string(),
       references: z.array(z.object({
-        kind: z.enum(["workflow-node", "conversation"]),
+        kind: z.enum(["workflow-node", "conversation", "agent-persona"]),
         entityId: z.string(),
         entityName: z.string(),
         nodeId: z.string().optional(),
@@ -671,9 +669,10 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
       })),
       workflowNodeCount: z.number(),
       conversationCount: z.number(),
+      agentPersonaCount: z.number(),
     }),
     handler: async (ctx, request: ProviderIdRequest) => {
-      const scanner = new ProviderReferenceScanner(buildScannerDeps(ctx.resolve))
+      const scanner = new ProviderReferenceScanner(createProviderReferenceScannerDeps(ctx.resolve))
       return scanner.scan(request.providerId)
     },
   },
@@ -696,7 +695,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
       targetModelTier: string
       scope: "workflow-node"[]
     }) => {
-      const scanner = new ProviderReferenceScanner(buildScannerDeps(ctx.resolve))
+      const scanner = new ProviderReferenceScanner(createProviderReferenceScannerDeps(ctx.resolve))
       return scanner.migrate({
         sourceProviderId: request.sourceProviderId,
         targetProviderId: request.targetProviderId,
@@ -952,58 +951,5 @@ function shellOpenErrorMetadata(error: unknown): { readonly errorName: string; r
   return {
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
-  }
-}
-
-function buildScannerDeps(resolve: <T>(id: string) => T): ProviderReferenceScannerDeps {
-  return {
-    listWorkflowNodes: async () => {
-      const workflowService = resolve<WorkflowService>("core.workflow")
-      const metas = await workflowService.list()
-      const nodes: Array<{
-        workflowId: string; workflowName: string
-        nodeId: string; nodeName: string
-        providerId: string; modelTier: string
-      }> = []
-      for (const meta of metas) {
-        if (meta.loadError) continue
-        const def = await workflowService.get(meta.id) as WorkflowDefinition | null
-        if (!def) continue
-        for (const node of def.nodes) {
-          const config = node.config as Record<string, unknown>
-          if (typeof config.providerId === "string" && config.providerId) {
-            nodes.push({
-              workflowId: def.id,
-              workflowName: def.name,
-              nodeId: node.id,
-              nodeName: node.name,
-              providerId: config.providerId,
-              modelTier: typeof config.modelTier === "string" ? config.modelTier : "default",
-            })
-          }
-        }
-      }
-      return nodes
-    },
-    updateWorkflowNodeProvider: async (workflowId, nodeId, providerId, modelTier) => {
-      const workflowService = resolve<WorkflowService>("core.workflow")
-      const def = await workflowService.get(workflowId) as WorkflowDefinition | null
-      if (!def) throw new Error(`Workflow not found: ${workflowId}`)
-      const updatedNodes = def.nodes.map((node) => {
-        if (node.id !== nodeId) return node
-        return { ...node, config: { ...node.config, providerId, modelTier } }
-      })
-      await workflowService.save({ ...def, nodes: updatedNodes })
-    },
-    listConversations: async () => {
-      const dataRepo = resolve<DataRepository>("core.data-repository")
-      const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
-      const all = await conversations.list()
-      return all.map((c) => ({
-        id: c.id,
-        name: c.name ?? c.id,
-        providerId: c.providerId,
-      }))
-    },
   }
 }

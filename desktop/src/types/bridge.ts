@@ -1574,7 +1574,7 @@ export type SynapseBridge = {
     ) => Promise<{
       providerId: string
       references: Array<{
-        kind: "workflow-node" | "conversation"
+        kind: "workflow-node" | "conversation" | "agent-persona"
         entityId: string
         entityName: string
         nodeId?: string
@@ -1584,6 +1584,7 @@ export type SynapseBridge = {
       }>
       workflowNodeCount: number
       conversationCount: number
+      agentPersonaCount: number
     }>
     migrateProviderReferences: (
       args: {

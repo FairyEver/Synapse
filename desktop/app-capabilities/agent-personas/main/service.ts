@@ -66,6 +66,20 @@ export function createAgentPersonaService(deps: AgentPersonaServiceDeps) {
     return listForUser(state.profile.user.id)
   }
 
+  async function listCached(): Promise<readonly AgentPersona[]> {
+    const state = deps.account.getState()
+    if (state.status !== "authenticated") return []
+    try {
+      return [...((await deps.cache.read(state.profile.user.id))?.items ?? [])]
+    } catch (error) {
+      deps.logger.error("Agent persona local snapshot read failed.", {
+        boundary: "agent-personas.cache.list-current",
+        error,
+      })
+      throw new Error("智能体本地快照读取失败。", { cause: error })
+    }
+  }
+
   async function create(input: AgentPersonaCreateInput): Promise<AgentPersona> {
     const { userId } = requireOnlineAccount()
     const saved = await deps.remote.create(input)
@@ -133,6 +147,7 @@ export function createAgentPersonaService(deps: AgentPersonaServiceDeps) {
   return {
     events,
     list,
+    listCached,
     create,
     update,
     updateBuiltinModel,

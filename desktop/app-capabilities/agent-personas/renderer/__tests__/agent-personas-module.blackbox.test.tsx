@@ -46,7 +46,8 @@ vi.mock("@/app-shell/logging", () => ({
 }))
 
 vi.mock("@/lib/provider-model", () => ({
-  useProviderModelLabel: () => "",
+  useProviderModelCatalog: () => ({ providers: [], refresh: vi.fn(async () => undefined) }),
+  resolveProviderModelDisplay: () => ({ label: "", status: "unknown" }),
 }))
 
 vi.mock("../../../../src/components/provider-model-select-dialog", () => ({
@@ -172,7 +173,7 @@ describe("AgentPersonasModule black-box behavior", () => {
     expect(document.body.querySelector("#agent-persona-description")).toBeNull()
     expect(document.body.querySelector("#agent-persona-system-prompt")).toBeNull()
     expect(document.body.querySelector("#agent-persona-tool-policy-readonly")).toBeNull()
-    expect(buttonWithText("未指定")).toBeTruthy()
+    expect(buttonWithText("跟随对话")).toBeTruthy()
   })
 })
 

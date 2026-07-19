@@ -462,11 +462,13 @@ export class ProviderService {
         const byKind = {
           workflow: result.references.filter((r) => r.kind === "workflow-node").map((r) => r.entityName),
           conversation: result.references.filter((r) => r.kind === "conversation").map((r) => r.entityName),
+          agentPersona: result.references.filter((r) => r.kind === "agent-persona").map((r) => r.entityName),
         }
         const parts: string[] = []
         if (byKind.workflow.length) parts.push(`${byKind.workflow.length} 个工作流（${byKind.workflow.join("、")}）`)
         if (byKind.conversation.length) parts.push(`${byKind.conversation.length} 个会话（${byKind.conversation.join("、")}）`)
-        throw new Error(`无法删除：该供应商正在被 ${parts.join("、")} 使用，请先迁移引用后再删除。`)
+        if (byKind.agentPersona.length) parts.push(`${byKind.agentPersona.length} 个智能体（${byKind.agentPersona.join("、")}）`)
+        throw new Error(`无法删除：该供应商正在被 ${parts.join("、")} 使用，请先处理引用后再删除。`)
       }
     }
     await this.assertSecretWrite(id, "delete")

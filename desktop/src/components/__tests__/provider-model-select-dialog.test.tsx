@@ -245,6 +245,57 @@ describe("ProviderModelSelectDialog", () => {
     })
   })
 
+  it("keeps the selection empty when fallback preselection is disabled", async () => {
+    bridge.agent.listProviders.mockResolvedValue([
+      provider({
+        id: "anthropic",
+        name: "Claude Official",
+        active: true,
+        model: "claude-main",
+        sonnetModel: "claude-sonnet-4-20250514",
+      }),
+    ])
+    const { root, ...props } = renderDialog({ autoSelectFallback: false })
+
+    await act(async () => {
+      root.render(<ProviderModelSelectDialog {...props} />)
+      await Promise.resolve()
+    })
+
+    expect(document.querySelector('[role="radio"][data-state="checked"]')).toBeNull()
+    const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "确认")
+    expect(confirmButton?.disabled).toBe(true)
+    expect(props.onSelect).not.toHaveBeenCalled()
+  })
+
+  it("does not replace an unavailable persisted tier when fallback preselection is disabled", async () => {
+    bridge.agent.listProviders.mockResolvedValue([
+      provider({
+        id: "anthropic",
+        name: "Claude Official",
+        active: true,
+        model: "claude-main",
+        sonnetModel: "claude-sonnet",
+      }),
+    ])
+    const { root, ...props } = renderDialog({
+      autoSelectFallback: false,
+      defaultSelection: { providerId: "anthropic", modelTier: "opus" },
+    })
+
+    await act(async () => {
+      root.render(<ProviderModelSelectDialog {...props} />)
+      await Promise.resolve()
+    })
+
+    expect(document.querySelector('[role="radio"][data-state="checked"]')).not.toBeNull()
+    const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "确认")
+    expect(confirmButton?.disabled).toBe(true)
+    expect(props.onSelect).not.toHaveBeenCalled()
+  })
+
   it("returns selected providerId and modelTier on confirm", async () => {
     bridge.agent.listProviders.mockResolvedValue([
       provider({

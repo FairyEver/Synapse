@@ -987,6 +987,83 @@ describe("SessionManager", () => {
     expect((state as RuntimeSessionState & { effectiveModel?: string }).effectiveModel).toBe("deepseek-chat")
   })
 
+  it("rejects an unavailable persona model tier instead of using the provider default model", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_MODEL: "deepseek-chat" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      sdkPersonaConfig: async () => ({
+        activePersonaId: "persona-deepseek",
+        activeAgentName: "synapse-persona__persona-deepseek",
+        providerModel: { providerId: "deepseek", modelTier: "sonnet" },
+        agents: {
+          "synapse-persona__persona-deepseek": { description: "Persona", prompt: "Persona" },
+        },
+        definitionsHash: "hash-persona",
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await expect(manager.getOrCreateSession({
+      state,
+      conversation: {
+        ...baseConversation(),
+        providerId: "qwen",
+        agentConfig: { modelTier: "opus", activeMainThreadPersonaId: "persona-deepseek" },
+      },
+      message: baseMessage("default"),
+    })).rejects.toThrow("智能体指定的模型不可用")
+
+    expect(createSession).not.toHaveBeenCalled()
+  })
+
+  it("allows a persona to use the local Claude Code default without an explicit model", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({})),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      sdkPersonaConfig: async () => ({
+        activePersonaId: "persona-local",
+        activeAgentName: "synapse-persona__persona-local",
+        providerModel: { providerId: "local-claude-code", modelTier: "default" },
+        agents: {
+          "synapse-persona__persona-local": { description: "Persona", prompt: "Persona" },
+        },
+        definitionsHash: "hash-persona-local",
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: "local-claude-code",
+      model: undefined,
+    }))
+  })
+
   it("leaves the SDK model unset for local Claude Code default without provider model env", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const createSession = vi.fn(() => new FakeLiveSession())

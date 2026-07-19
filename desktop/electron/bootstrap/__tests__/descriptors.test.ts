@@ -1943,6 +1943,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.permission-guard",
       "core.audit-sink",
       "core.workflow",
+      "core.agent-personas",
     ])
   })
 

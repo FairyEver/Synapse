@@ -41,6 +41,7 @@ type ProviderModelSelectDialogProps = {
   readonly defaultSelection?: ProviderModelSelection
   readonly excludeProviderIds?: readonly string[]
   readonly confirmInput?: ProviderModelSelectDialogConfirmInput
+  readonly autoSelectFallback?: boolean
 }
 
 type ProviderModelSelectDialogConfirmInput = {
@@ -73,6 +74,7 @@ function ProviderModelSelectDialog({
   defaultSelection,
   excludeProviderIds = EMPTY_EXCLUDED_PROVIDERS,
   confirmInput,
+  autoSelectFallback = true,
 }: ProviderModelSelectDialogProps) {
   const [providers, setProviders] = useState<SynapseAgentProvider[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState<string | undefined>(undefined)
@@ -109,7 +111,8 @@ function ProviderModelSelectDialog({
         ? visible.find((p) => p.id === defaultSelection.providerId)
         : undefined
       const activeProvider = visible.find((p) => p.active)
-      const preselectedProvider = defaultProvider ?? activeProvider ?? visible[0]
+      const preselectedProvider = defaultProvider
+        ?? (autoSelectFallback ? activeProvider ?? visible[0] : undefined)
 
       if (preselectedProvider) {
         setSelectedProviderId(preselectedProvider.id)
@@ -117,7 +120,7 @@ function ProviderModelSelectDialog({
           const defaultTierAvailable = isProviderModelTierSelectable(defaultProvider, defaultSelection.modelTier)
           if (defaultTierAvailable) {
             setSelectedTier(defaultSelection.modelTier)
-          } else {
+          } else if (autoSelectFallback) {
             setSelectedTier(pickDefaultTier(preselectedProvider))
           }
         } else {
@@ -140,7 +143,7 @@ function ProviderModelSelectDialog({
         setLoading(false)
       }
     }
-  }, [defaultSelection, excludeProviderIds])
+  }, [autoSelectFallback, defaultSelection, excludeProviderIds])
 
   useEffect(() => {
     if (!open) {

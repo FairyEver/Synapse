@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "../../../src/components/ui/alert-dialog"
 import { Button } from "../../../src/components/ui/button"
+import { ButtonGroup } from "../../../src/components/ui/button-group"
 import { Badge } from "../../../src/components/ui/badge"
 import { Checkbox } from "../../../src/components/ui/checkbox"
 import {
@@ -73,7 +74,11 @@ import {
 } from "../../../src/components/ui/table"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
-import { useProviderModelLabel } from "../../../src/lib/provider-model"
+import {
+  resolveProviderModelDisplay,
+  useProviderModelCatalog,
+  type ProviderModelDisplayProvider,
+} from "../../../src/lib/provider-model"
 import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type {
@@ -144,6 +149,10 @@ export function AgentPersonasModule() {
   const [deleteTarget, setDeleteTarget] = useState<SynapseAgentPersona | null>(null)
 
   const agentPersonasBridge = useMemo(() => requireBridgeDomain("agentPersonas"), [])
+  const {
+    providers: providerModelCatalog,
+    refresh: refreshProviderModelCatalog,
+  } = useProviderModelCatalog()
 
   const reload = useCallback(async () => {
     try {
@@ -344,6 +353,7 @@ export function AgentPersonasModule() {
                 items={visibleItems}
                 tab={activeTab}
                 readOnly={isReadOnly}
+                providerModelCatalog={providerModelCatalog}
                 onConfigureModel={(item) => openItem(item, "configureBuiltinModel")}
                 onEdit={(item) => openItem(item, "edit")}
                 onDelete={startDelete}
@@ -357,6 +367,8 @@ export function AgentPersonasModule() {
         open={formOpen}
         saving={saving}
         modelDialogOpen={modelDialogOpen}
+        providerModelCatalog={providerModelCatalog}
+        refreshProviderModelCatalog={refreshProviderModelCatalog}
         onModelDialogOpenChange={setModelDialogOpen}
         onFormChange={setForm}
         onOpenChange={(open) => {
@@ -406,6 +418,7 @@ function AgentPersonaTable({
   onConfigureModel,
   onDelete,
   onEdit,
+  providerModelCatalog,
   readOnly,
   tab,
 }: {
@@ -413,6 +426,7 @@ function AgentPersonaTable({
   readonly onConfigureModel: (item: SynapseAgentPersona) => void
   readonly onDelete: (item: SynapseAgentPersona, event: MouseEvent<HTMLElement>) => void
   readonly onEdit: (item: SynapseAgentPersona) => void
+  readonly providerModelCatalog: readonly ProviderModelDisplayProvider[] | null
   readonly readOnly: boolean
   readonly tab: AgentPersonaTab
 }) {
@@ -444,6 +458,7 @@ function AgentPersonaTable({
             onConfigureModel={onConfigureModel}
             onDelete={onDelete}
             onEdit={onEdit}
+            providerModelCatalog={providerModelCatalog}
           />
         ))}
       </TableBody>
@@ -456,6 +471,7 @@ function AgentPersonaRow({
   onConfigureModel,
   onDelete,
   onEdit,
+  providerModelCatalog,
   readOnly,
   tab,
 }: {
@@ -463,10 +479,10 @@ function AgentPersonaRow({
   readonly onConfigureModel: (item: SynapseAgentPersona) => void
   readonly onDelete: (item: SynapseAgentPersona, event: MouseEvent<HTMLElement>) => void
   readonly onEdit: (item: SynapseAgentPersona) => void
+  readonly providerModelCatalog: readonly ProviderModelDisplayProvider[] | null
   readonly readOnly: boolean
   readonly tab: AgentPersonaTab
 }) {
-  const modelLabel = useProviderModelLabel(item.providerModel)
   const toolPolicy = normalizeToolPolicy(item.toolPolicy)
   return (
     <TableRow>
@@ -478,7 +494,7 @@ function AgentPersonaRow({
       </TableCell>
       <TableCell className="min-w-0 align-middle">
         <span className="block truncate text-muted-foreground">
-          {item.providerModel ? modelLabel || item.providerModel.providerId : "未指定"}
+          {providerModelLabel(item.providerModel, providerModelCatalog)}
         </span>
       </TableCell>
       <TableCell className="min-w-0 align-middle">
@@ -514,6 +530,8 @@ function AgentPersonaDialog({
   onOpenChange,
   onSubmit,
   open,
+  providerModelCatalog,
+  refreshProviderModelCatalog,
   saving,
 }: {
   readonly form: AgentPersonaFormState
@@ -523,6 +541,8 @@ function AgentPersonaDialog({
   readonly onOpenChange: (open: boolean) => void
   readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void
   readonly open: boolean
+  readonly providerModelCatalog: readonly ProviderModelDisplayProvider[] | null
+  readonly refreshProviderModelCatalog: () => Promise<void>
   readonly saving: boolean
 }) {
   const isBuiltinModelMode = form.mode === "configureBuiltinModel"
@@ -532,8 +552,7 @@ function AgentPersonaDialog({
       ? "配置模型"
       : "新增智能体"
   const saveLabel = isBuiltinModelMode ? "保存模型" : "保存智能体"
-  const modelLabel = useProviderModelLabel(form.providerModel)
-  const modelDisplay = form.providerModel ? modelLabel || form.providerModel.providerId : "未指定"
+  const modelDisplay = providerModelLabel(form.providerModel, providerModelCatalog)
   const toolPolicy = {
     mode: form.toolPolicyMode,
     allowedTools: form.allowedTools,
@@ -620,7 +639,7 @@ function AgentPersonaDialog({
               <Field>
                 <FieldLabel>模型</FieldLabel>
                 <FieldContent>
-                  <div className="flex min-w-0 items-center gap-2">
+                  <ButtonGroup className="w-full min-w-0">
                     <Button
                       type="button"
                       variant="outline"
@@ -638,14 +657,14 @@ function AgentPersonaDialog({
                         type="button"
                         variant="outline"
                         size="icon"
-                        aria-label="清除模型"
+                        aria-label="恢复为跟随对话"
                         disabled={saving}
                         onClick={() => onFormChange((current) => ({ ...current, providerModel: null }))}
                       >
                         <X className="size-4" />
                       </Button>
                     ) : null}
-                  </div>
+                  </ButtonGroup>
                 </FieldContent>
               </Field>
               {isBuiltinModelMode ? (
@@ -674,11 +693,23 @@ function AgentPersonaDialog({
           open={modelDialogOpen}
           onOpenChange={onModelDialogOpenChange}
           defaultSelection={form.providerModel ?? undefined}
-          onSelect={(selection) => onFormChange((current) => ({ ...current, providerModel: selection }))}
+          autoSelectFallback={false}
+          onSelect={(selection) => {
+            onFormChange((current) => ({ ...current, providerModel: selection }))
+            void refreshProviderModelCatalog()
+          }}
         />
       </DialogContent>
     </Dialog>
   )
+}
+
+function providerModelLabel(
+  selection: ProviderModelSelection | null,
+  providers: readonly ProviderModelDisplayProvider[] | null,
+): string {
+  if (!selection) return "跟随对话"
+  return resolveProviderModelDisplay(selection, providers).label || selection.providerId
 }
 
 function AgentPersonaStaticField({

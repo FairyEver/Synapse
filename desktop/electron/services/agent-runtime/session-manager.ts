@@ -2,9 +2,10 @@ import { stat } from "node:fs/promises"
 
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
-import type { CCProvider, ProviderService } from "../provider"
+import { LOCAL_CLAUDE_CODE_PROVIDER_ID, type CCProvider, type ProviderService } from "../provider"
 import {
   AGENT_CANCELLED_MESSAGE,
+  AGENT_PERSONA_MODEL_UNAVAILABLE_MESSAGE,
   AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE,
   AGENT_PROVIDER_REQUIRED_MESSAGE,
   AGENT_SESSION_RESETTING_MESSAGE,
@@ -224,6 +225,9 @@ export class SessionManager {
       const tierModel = resolveTierFromEnv(env, effectiveTier)
       if (tierModel) {
         env.ANTHROPIC_MODEL = tierModel
+      } else if (personaConfig.providerModel
+        && !(providerId === LOCAL_CLAUDE_CODE_PROVIDER_ID && effectiveTier === "default")) {
+        throw new Error(AGENT_PERSONA_MODEL_UNAVAILABLE_MESSAGE)
       }
     }
     const modelMatches = input.state.effectiveModel === env.ANTHROPIC_MODEL

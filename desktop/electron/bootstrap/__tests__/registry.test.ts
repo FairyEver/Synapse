@@ -146,6 +146,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
       "core.workflow",
+      "core.agent-personas",
     ])
     expect(byId.get("core.network-registry")?.dependsOn).toEqual([])
     expect(byId.get("core.terminal")?.dependsOn).toEqual([])

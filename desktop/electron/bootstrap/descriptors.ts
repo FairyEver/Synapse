@@ -111,6 +111,7 @@ import {
   type ProviderService,
 } from "../services/provider"
 import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
+import { createProviderReferenceScannerDeps } from "../services/provider/provider-reference-scanner-deps"
 import type {
   AgentPersonaRemoteCacheEntryV1,
   ConversationEntryV1,
@@ -1289,6 +1290,7 @@ export const providerServiceDescriptor: ServiceDescriptor<ProviderService> = {
     "core.permission-guard",
     "core.audit-sink",
     "core.workflow",
+    "core.agent-personas",
   ],
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
@@ -1297,63 +1299,9 @@ export const providerServiceDescriptor: ServiceDescriptor<ProviderService> = {
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       scanReferences: async (providerId) => {
-        const workflowService = ctx.registry.get<WorkflowService>("core.workflow")
-        const scanner = new ProviderReferenceScanner({
-          listWorkflowNodes: async () => {
-            const metas = await workflowService.list()
-            const nodes: Array<{
-              workflowId: string; workflowName: string
-              nodeId: string; nodeName: string
-              providerId: string; modelTier: string
-            }> = []
-            for (const meta of metas) {
-              if (meta.loadError) continue
-              const def = await workflowService.get(meta.id) as Record<string, unknown> | null
-              if (!def) continue
-              const defNodes = (def as { nodes?: Array<{ id: string; name: string; config: Record<string, unknown> }> }).nodes
-              if (defNodes) {
-                for (const node of defNodes) {
-                  const config = node.config
-                  if (typeof config.providerId === "string" && config.providerId) {
-                    nodes.push({
-                      workflowId: (def as { id: string }).id,
-                      workflowName: (def as { name: string }).name,
-                      nodeId: node.id,
-                      nodeName: node.name,
-                      providerId: config.providerId,
-                      modelTier: typeof config.modelTier === "string" ? config.modelTier : "default",
-                    })
-                  }
-                }
-              }
-              // Workflow-level default provider — not captured by per-node config scan above
-              const defaultProviderId = (def as { defaultProviderId?: string }).defaultProviderId
-              if (defaultProviderId) {
-                nodes.push({
-                  workflowId: (def as { id: string }).id,
-                  workflowName: (def as { name: string }).name,
-                  nodeId: "",
-                  nodeName: "工作流默认供应商",
-                  providerId: defaultProviderId,
-                  modelTier: typeof (def as { defaultModelTier?: string }).defaultModelTier === "string"
-                    ? (def as { defaultModelTier?: string }).defaultModelTier!
-                    : "default",
-                })
-              }
-            }
-            return nodes
-          },
-          updateWorkflowNodeProvider: async () => {},
-          listConversations: async () => {
-            const conversations = dataRepository.namespace<ConversationEntryV1>("conversations")
-            const all = await conversations.list()
-            return all.map((c) => ({
-              id: c.id,
-              name: c.name ?? c.id,
-              providerId: c.providerId,
-            }))
-          },
-        })
+        const scanner = new ProviderReferenceScanner(createProviderReferenceScannerDeps(
+          <T>(id: string) => ctx.registry.get<T>(id),
+        ))
         return scanner.scan(providerId)
       },
     })

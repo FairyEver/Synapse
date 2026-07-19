@@ -1,7 +1,7 @@
 import type { ModelTier } from "../../../src/types/provider-model"
 
 export interface ProviderReference {
-  kind: "workflow-node" | "conversation"
+  kind: "workflow-node" | "conversation" | "agent-persona"
   entityId: string
   entityName: string
   nodeId?: string
@@ -15,6 +15,7 @@ export interface ProviderReferenceScanResult {
   references: ProviderReference[]
   workflowNodeCount: number
   conversationCount: number
+  agentPersonaCount: number
 }
 
 export interface MigrateProviderReferencesInput {
@@ -40,6 +41,11 @@ export interface ProviderReferenceScannerDeps {
     providerId: string, modelTier: string,
   ) => Promise<void>
   listConversations: () => Promise<Array<{ id: string; name: string; providerId?: string }>>
+  listAgentPersonas: () => Promise<Array<{
+    id: string
+    name: string
+    providerModel: { providerId: string; modelTier: string } | null
+  }>>
 }
 
 export class ProviderReferenceScanner {
@@ -76,11 +82,25 @@ export class ProviderReferenceScanner {
       }
     }
 
+    const agentPersonas = await this.deps.listAgentPersonas()
+    for (const persona of agentPersonas) {
+      if (persona.providerModel?.providerId === providerId) {
+        references.push({
+          kind: "agent-persona",
+          entityId: persona.id,
+          entityName: persona.name,
+          providerId,
+          modelTier: persona.providerModel.modelTier,
+        })
+      }
+    }
+
     return {
       providerId,
       references,
       workflowNodeCount: references.filter((r) => r.kind === "workflow-node").length,
       conversationCount: references.filter((r) => r.kind === "conversation").length,
+      agentPersonaCount: references.filter((r) => r.kind === "agent-persona").length,
     }
   }
 

@@ -45,6 +45,7 @@ describe("ProviderService.deleteProvider", () => {
         ],
         workflowNodeCount: 1,
         conversationCount: 0,
+        agentPersonaCount: 0,
       }),
     })
     await service.createProvider({
@@ -57,6 +58,30 @@ describe("ProviderService.deleteProvider", () => {
     })
     await expect(service.deleteProvider("in-use"))
       .rejects.toThrow("无法删除：该供应商正在被 1 个工作流（代码审查） 使用")
+  })
+
+  it("rejects deleting provider that is specified by an agent persona", async () => {
+    const { service } = makeProviderService({
+      scanReferences: async () => ({
+        providerId: "in-use",
+        references: [
+          { kind: "agent-persona", entityId: "persona-1", entityName: "中英翻译", providerId: "in-use", modelTier: "sonnet" },
+        ],
+        workflowNodeCount: 0,
+        conversationCount: 0,
+        agentPersonaCount: 1,
+      }),
+    })
+    await service.createProvider({
+      id: "in-use",
+      name: "In Use",
+      category: "custom",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      env: {},
+    })
+
+    await expect(service.deleteProvider("in-use"))
+      .rejects.toThrow("无法删除：该供应商正在被 1 个智能体（中英翻译） 使用")
   })
 
   it("switches active to local-claude-code before deleting active provider", async () => {

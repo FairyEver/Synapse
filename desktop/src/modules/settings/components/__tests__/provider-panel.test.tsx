@@ -1059,6 +1059,7 @@ describe("ProviderPanel dialog editor", () => {
             ],
             workflowNodeCount: 1,
             conversationCount: 0,
+            agentPersonaCount: 0,
           }),
           deleteProvider,
         },
@@ -1081,6 +1082,44 @@ describe("ProviderPanel dialog editor", () => {
       directDelete.click()
       await Promise.resolve()
     })
+    expect(deleteProvider).not.toHaveBeenCalled()
+  })
+
+  it("blocks deletion and lists agent personas using the provider", async () => {
+    const deleteProvider = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([customProvider()]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+          scanProviderReferences: vi.fn().mockResolvedValue({
+            providerId: "custom-provider",
+            references: [
+              { kind: "agent-persona", entityId: "persona-1", entityName: "翻译助手", providerId: "custom-provider", modelTier: "sonnet" },
+            ],
+            workflowNodeCount: 0,
+            conversationCount: 0,
+            agentPersonaCount: 1,
+          }),
+          deleteProvider,
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      buttonByText(document.body, "删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("智能体 (1)")
+    expect(document.body.textContent).toContain("翻译助手")
+    expect(document.body.textContent).toContain("重新指定模型，或恢复为跟随对话")
+    expect(buttonByText(document.body, "先处理引用").disabled).toBe(true)
     expect(deleteProvider).not.toHaveBeenCalled()
   })
 
@@ -1109,6 +1148,7 @@ describe("ProviderPanel dialog editor", () => {
             ],
             workflowNodeCount: 1,
             conversationCount: 0,
+            agentPersonaCount: 0,
           }),
           migrateProviderReferences,
           deleteProvider,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { ModelTier, ProviderModelSelection } from "@/types/provider-model"
 
@@ -9,6 +9,24 @@ type ProviderModelMap = {
   readonly haikuModel?: string
   readonly sonnetModel?: string
   readonly opusModel?: string
+  readonly archived?: boolean
+}
+
+type ProviderModelDisplayStatus = "available" | "archived" | "unavailable" | "unknown"
+
+type ProviderModelDisplay = {
+  readonly label: string
+  readonly status: ProviderModelDisplayStatus
+}
+
+type ProviderModelDisplayProvider = ProviderModelMap & {
+  readonly id: string
+  readonly name: string
+}
+
+type ProviderModelCatalog = {
+  readonly providers: readonly ProviderModelDisplayProvider[] | null
+  readonly refresh: () => Promise<void>
 }
 
 const LOCAL_CLAUDE_CODE_PROVIDER_ID = "local-claude-code"
@@ -114,6 +132,64 @@ function useProviderModelLabel(
   return label
 }
 
+function useProviderModelCatalog(): ProviderModelCatalog {
+  const [providers, setProviders] = useState<readonly ProviderModelDisplayProvider[] | null>(null)
+  const refresh = useCallback(async () => {
+    try {
+      setProviders(await requireSynapseBridge().agent.listAllProviders())
+    } catch {
+      setProviders(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  return useMemo(() => ({ providers, refresh }), [providers, refresh])
+}
+
+function resolveProviderModelDisplay(
+  selection: ProviderModelSelection,
+  providers: readonly ProviderModelDisplayProvider[] | null,
+): ProviderModelDisplay {
+  if (!providers) {
+    return { label: fallbackProviderModelLabel(selection), status: "unknown" }
+  }
+  const provider = providers.find((item) => item.id === selection.providerId)
+  if (selection.providerName && !provider?.archived) {
+    return { label: fallbackProviderModelLabel(selection), status: "available" }
+  }
+  if (!provider) {
+    return {
+      label: `${fallbackProviderModelLabel(selection)}（不可用）`,
+      status: "unavailable",
+    }
+  }
+
+  const label = formatProviderModelLabel(
+    provider.name,
+    resolveModelName(provider, selection.modelTier),
+    selection.modelTier,
+    provider,
+  )
+  if (!isProviderModelTierSelectable(provider, selection.modelTier)) {
+    return { label: `${label}（不可用）`, status: "unavailable" }
+  }
+  if (provider.archived) {
+    return { label: `${label}（已归档）`, status: "archived" }
+  }
+  return { label, status: "available" }
+}
+
+function fallbackProviderModelLabel(selection: ProviderModelSelection): string {
+  return formatProviderModelLabel(
+    selection.providerName ?? selection.providerId,
+    selection.modelName,
+    selection.modelTier,
+  )
+}
+
 export {
   LOCAL_CLAUDE_CODE_DEFAULT_MODEL_LABEL,
   MODEL_TIER_DISPLAY_LABELS,
@@ -122,5 +198,8 @@ export {
   isProviderModelTierSelectable,
   resolveModelDisplayName,
   resolveModelName,
+  resolveProviderModelDisplay,
+  useProviderModelCatalog,
   useProviderModelLabel,
 }
+export type { ProviderModelCatalog, ProviderModelDisplay, ProviderModelDisplayProvider, ProviderModelDisplayStatus }

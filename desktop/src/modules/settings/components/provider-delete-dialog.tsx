@@ -26,7 +26,7 @@ type ProviderDeleteDialogProps = {
 
 type ScanState =
   | { status: "loading" }
-  | { status: "loaded"; workflowNodeCount: number; conversationCount: number; references: Array<{ kind: string; entityName: string; nodeName?: string }> }
+  | { status: "loaded"; workflowNodeCount: number; conversationCount: number; agentPersonaCount: number; references: Array<{ kind: string; entityId: string; entityName: string; nodeId?: string; nodeName?: string }> }
   | { status: "error"; message: string }
 
 export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: ProviderDeleteDialogProps) {
@@ -47,7 +47,14 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
         status: "loaded",
         workflowNodeCount: result.workflowNodeCount,
         conversationCount: result.conversationCount,
-        references: result.references.map((r) => ({ kind: r.kind, entityName: r.entityName, nodeName: r.nodeName })),
+        agentPersonaCount: result.agentPersonaCount,
+        references: result.references.map((r) => ({
+          kind: r.kind,
+          entityId: r.entityId,
+          entityName: r.entityName,
+          nodeId: r.nodeId,
+          nodeName: r.nodeName,
+        })),
       })
     } catch {
       if (scanRequestIdRef.current !== requestId) return
@@ -112,8 +119,10 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
     }
   }, [provider, onDeleted, onOpenChange])
 
-  const hasReferences = scan.status === "loaded" && (scan.workflowNodeCount + scan.conversationCount) > 0
-  const hasConversationReferences = scan.status === "loaded" && scan.conversationCount > 0
+  const hasReferences = scan.status === "loaded"
+    && (scan.workflowNodeCount + scan.conversationCount + scan.agentPersonaCount) > 0
+  const hasNonMigratableReferences = scan.status === "loaded"
+    && (scan.conversationCount + scan.agentPersonaCount) > 0
   const excludedProviderIds = useMemo(() => provider ? [provider.id] : [], [provider])
 
   return (
@@ -139,8 +148,8 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
                       <div>
                         <p className="font-medium">工作流节点 ({scan.workflowNodeCount})</p>
                         <ul className="ml-4 list-disc text-sm text-muted-foreground">
-                          {scan.references.filter((r) => r.kind === "workflow-node").map((r, i) => (
-                            <li key={i}>{r.entityName}{r.nodeName ? ` → ${r.nodeName}` : ""}</li>
+                          {scan.references.filter((r) => r.kind === "workflow-node").map((r) => (
+                            <li key={`${r.entityId}:${r.nodeId ?? "default"}`}>{r.entityName}{r.nodeName ? ` → ${r.nodeName}` : ""}</li>
                           ))}
                         </ul>
                       </div>
@@ -148,7 +157,18 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
                     {scan.conversationCount > 0 && (
                       <div>
                         <p className="font-medium">Agent 会话 ({scan.conversationCount})</p>
-                        <p className="ml-4 text-sm text-muted-foreground">先处理会话后再删除</p>
+                        <p className="ml-4 text-sm text-muted-foreground">请先为相关会话更换供应商。</p>
+                      </div>
+                    )}
+                    {scan.agentPersonaCount > 0 && (
+                      <div>
+                        <p className="font-medium">智能体 ({scan.agentPersonaCount})</p>
+                        <ul className="ml-4 list-disc text-sm text-muted-foreground">
+                          {scan.references.filter((r) => r.kind === "agent-persona").map((r) => (
+                            <li key={r.entityId}>{r.entityName}</li>
+                          ))}
+                        </ul>
+                        <p className="ml-4 text-sm text-muted-foreground">请重新指定模型，或恢复为跟随对话。</p>
                       </div>
                     )}
                   </>
@@ -158,13 +178,13 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>取消</AlertDialogCancel>
-            {hasReferences && !hasConversationReferences && (
+            {hasReferences && !hasNonMigratableReferences && (
               <Button variant="outline" disabled={busy} onClick={() => setMigrationOpen(true)}>
                 迁移到其他供应商
               </Button>
             )}
             <Button variant="destructive" disabled={busy || scan.status === "loading" || scan.status === "error" || hasReferences} onClick={handleDelete}>
-              {scan.status === "error" ? "扫描失败" : hasConversationReferences ? "无法删除" : hasReferences ? "先迁移引用" : "确认删除"}
+              {scan.status === "error" ? "扫描失败" : hasNonMigratableReferences ? "先处理引用" : hasReferences ? "先迁移引用" : "确认删除"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
