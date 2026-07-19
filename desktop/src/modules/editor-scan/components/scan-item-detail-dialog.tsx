@@ -675,7 +675,6 @@ function ScanItemDetailDialog({
       }
       logger.info("Skill Repository upload completed from scan detail.", {
         editorId: item.editorId,
-        identityWriteError: result.identityWriteError,
         identityWritten: result.identityWritten,
         itemType: item.type,
         pathBasename: logSafeItemPath(item.path),

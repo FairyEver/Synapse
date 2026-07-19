@@ -22,8 +22,11 @@ import {
   type SkillRepositoryIdentityWriteSecurity,
 } from "./skill-repository-local-identity"
 import { openSkillRepositoryExternalLink } from "./skill-repository-external-open"
+import { errorLogMeta, sanitizeError } from "./error-sanitize"
+import { createMainLogger } from "./log-store"
 
 const sharedSkillRepositoryPromise = import("@synapse/shared")
+const logger = createMainLogger("skill-repository-upload")
 
 export type SkillRepositoryLocalImportInput = {
   readonly sourceDirectoryPath: string
@@ -176,11 +179,13 @@ export class SkillRepositoryUploadService {
         }
         identityMigrated = await this.removeLegacyIdentity(source.sourceDirectoryPath, security)
       } catch (error) {
-        identityMigrationWarning = errorMessage(error)
+        identityMigrationWarning = localIdentityErrorMessage(error, "旧身份文件清理失败。")
+        logLocalIdentityError("skill-repository.identity.migrate", repository.id, error)
       }
     } catch (error) {
       identityWritten = false
-      identityWriteError = errorMessage(error)
+      identityWriteError = localIdentityErrorMessage(error, "本地关联写入失败，请重试。")
+      logLocalIdentityError("skill-repository.identity.write", repository.id, error)
     }
 
     const openWarning = await openSkillRepositoryExternalLink({
@@ -216,6 +221,19 @@ export class SkillRepositoryUploadService {
   }
 
   async retryLocalIdentity(
+    input: SkillRepositoryLocalIdentityRetryInput,
+    security?: ContentSkillSourceSecurityDeps & SkillRepositoryIdentityWriteSecurity,
+  ): Promise<SkillRepositoryLocalIdentityRetryResult> {
+    try {
+      return await this.retryLocalIdentityUnsafe(input, security)
+    } catch (error) {
+      if (error instanceof AccountAuthenticationRequiredError) throw error
+      logLocalIdentityError("skill-repository.identity.retry", input.repositoryId, error)
+      throw localIdentitySafeError(error, "本地关联写入失败，请重试。")
+    }
+  }
+
+  private async retryLocalIdentityUnsafe(
     input: SkillRepositoryLocalIdentityRetryInput,
     security?: ContentSkillSourceSecurityDeps & SkillRepositoryIdentityWriteSecurity,
   ): Promise<SkillRepositoryLocalIdentityRetryResult> {
@@ -272,7 +290,8 @@ export class SkillRepositoryUploadService {
       }
       identityMigrated = await this.removeLegacyIdentity(source.sourceDirectoryPath, security)
     } catch (error) {
-      identityMigrationWarning = errorMessage(error)
+      identityMigrationWarning = localIdentityErrorMessage(error, "旧身份文件清理失败。")
+      logLocalIdentityError("skill-repository.identity.migrate", identity.id, error)
     }
 
     return {
@@ -326,6 +345,24 @@ function assertSkillFileBytes(originalName: string, bytes: Uint8Array | undefine
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function localIdentityErrorMessage(error: unknown, fallback: string): string {
+  return sanitizeError(errorMessage(error)) || fallback
+}
+
+function localIdentitySafeError(error: unknown, fallback: string): Error {
+  const safeError = new Error(localIdentityErrorMessage(error, fallback))
+  safeError.name = error instanceof Error ? error.name : typeof error
+  return safeError
+}
+
+function logLocalIdentityError(boundary: string, repositoryId: string, error: unknown): void {
+  logger.warn("Skill Repository local identity operation failed.", {
+    boundary,
+    repositoryId,
+    ...errorLogMeta(error, { includeCode: true, includeMessage: true }),
+  })
 }
 
 function isNotFoundError(error: unknown): boolean {

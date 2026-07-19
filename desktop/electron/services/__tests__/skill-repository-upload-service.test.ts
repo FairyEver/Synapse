@@ -293,7 +293,9 @@ describe("SkillRepositoryUploadService", () => {
   })
 
   it("returns cloud upload success when identity write fails after import", async () => {
-    writeSkillRepositoryIdentity.mockRejectedValueOnce(new Error("disk full"))
+    writeSkillRepositoryIdentity.mockRejectedValueOnce(new Error(
+      "EACCES: permission denied, open '/Users/alice/.claude/skills/demo/.synapse.repository.json'",
+    ))
     const importSkillRepository = vi.fn(async () => repositoryDetail())
     const service = new SkillRepositoryUploadService({
       accountService: { getState: () => authenticatedState, importSkillRepository },
@@ -302,10 +304,11 @@ describe("SkillRepositoryUploadService", () => {
     await expect(service.importLocal({ sourceDirectoryPath: "/skills/demo" })).resolves.toMatchObject({
       repositoryId: "repo-1",
       identityWritten: false,
-      identityWriteError: "disk full",
+      identityWriteError: "EACCES: permission denied, open '[path]'",
       identityBeforeUploadId: null,
     })
     expect(importSkillRepository).toHaveBeenCalled()
+    expect(JSON.stringify(serviceLogger.warn.mock.calls)).not.toContain("/Users/alice")
   })
 
   it("keeps cloud upload success recoverable when the local identity changes during import", async () => {
@@ -397,6 +400,25 @@ describe("SkillRepositoryUploadService", () => {
       undefined,
       { validateSource: expect.any(Function) },
     )
+  })
+
+  it("redacts local paths when retrying the identity write fails", async () => {
+    writeSkillRepositoryIdentity.mockRejectedValueOnce(new Error(
+      "EACCES: permission denied, rename '/Users/alice/.claude/skills/demo/.identity.tmp'",
+    ))
+    const service = new SkillRepositoryUploadService({
+      accountService: { getState: () => authenticatedState, importSkillRepository: vi.fn() },
+    })
+
+    await expect(service.retryLocalIdentity({
+      sourceDirectoryPath: "/skills/demo",
+      repositoryId: "repo-1",
+      name: "demo-skill",
+      owner: "liyang",
+      expectedSourceFingerprint: "sha256:source",
+      expectedIdentityId: null,
+    })).rejects.toThrow("EACCES: permission denied, rename '[path]'")
+    expect(JSON.stringify(serviceLogger.warn.mock.calls)).not.toContain("/Users/alice")
   })
 
   it("blocks identity retry when the local source or identity changed", async () => {
