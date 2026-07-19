@@ -81,10 +81,14 @@ function normalizeName(value: string): string {
 }
 
 function readFrontmatterName(content: string): string | undefined {
-  if (!content.startsWith("---")) return undefined
-  const end = content.indexOf("\n---", 3)
-  if (end < 0) return undefined
-  return parseFrontmatterBlock(content.slice(4, end)).metadata.name?.trim() || undefined
+  const opening = /^---\r?\n/.exec(content)
+  if (!opening) return undefined
+  const bodyStart = opening[0].length
+  const closing = /\r?\n---(?:\r?\n|$)/.exec(content.slice(bodyStart))
+  if (!closing) return undefined
+  return parseFrontmatterBlock(
+    content.slice(bodyStart, bodyStart + closing.index),
+  ).metadata.name?.trim() || undefined
 }
 
 function isMissing(error: unknown): boolean {

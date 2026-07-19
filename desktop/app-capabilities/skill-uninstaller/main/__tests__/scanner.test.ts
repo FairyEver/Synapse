@@ -70,6 +70,34 @@ describe("scanSkillNames", () => {
 })
 
 describe("scanSkillRoots", () => {
+  it("uses CRLF frontmatter names for discovery, scanning, and revalidation", async () => {
+    const root = await fixture()
+    const target = path.join(root, "custom-folder")
+    await mkdir(target, { recursive: true })
+    await writeFile(
+      path.join(target, "SKILL.md"),
+      "---\r\nname: windows-skill\r\ndescription: test\r\n---\r\n# Skill\r\n",
+      "utf8",
+    )
+
+    await expect(scanSkillNames({ roots: [{ path: root, editorIds: [] }] }))
+      .resolves.toMatchObject({ names: ["windows-skill"], complete: true })
+    await expect(scanSkillRoots({
+      query: { name: "WINDOWS-SKILL", searchRootPath: root },
+      roots: [{ path: root, editorIds: [] }],
+      classifyEditors: () => [],
+    })).resolves.toMatchObject({
+      candidates: [expect.objectContaining({ path: target, frontmatterName: "windows-skill" })],
+      complete: true,
+    })
+    const [realRoot, realTarget] = await Promise.all([realpath(root), realpath(target)])
+    await expect(isSkillTargetDiscoverable({
+      query: { name: "windows-skill", searchRootPath: root },
+      roots: [realRoot],
+      targetPath: realTarget,
+    })).resolves.toBe(true)
+  })
+
   it("matches directory or frontmatter name case-insensitively and returns every location", async () => {
     const root = await fixture()
     const first = await skill(root, ".cursor/skills/Jenkins")
