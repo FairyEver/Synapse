@@ -141,6 +141,13 @@ function statusFromScanEntry(
   return statusFromSkill(findSkillByContentIdOrName(entry.skills, payload), payload)
 }
 
+function skillScanErrorFromEntry(
+  entry: Pick<EditorScanProjectEntry, "skillScanError"> | null,
+  payload: SynapseResolveEditorInstallStatusPayload,
+): string | null {
+  return payload.contentType === "skill" ? entry?.skillScanError ?? null : null
+}
+
 function createResolvePayload(
   payload: SynapseResolveEditorInstallStatusPayload,
   editorId: SynapseEditorId,
@@ -165,18 +172,21 @@ function createEntry(params: {
   scope: SynapseEditorInstallScope
   target: SynapseEditorResolvedTarget
   scanStatus: SynapseEditorInstallStatusValue | null
+  skillScanError?: string | null
   projectId?: string
   projectName?: string
 }): SynapseEditorInstallStatusEntry {
+  const targetStatus = statusFromTarget(params.target)
+  const status = targetStatus ?? (params.skillScanError ? "unavailable" : params.scanStatus ?? "not_installed")
   return {
     editorId: params.editorId,
     editorLabel: params.editorLabel,
     scope: params.scope,
     projectId: params.projectId,
     projectName: params.projectName,
-    status: statusFromTarget(params.target) ?? params.scanStatus ?? "not_installed",
-    targetPath: targetPathFromTarget(params.target),
-    message: params.target.message,
+    status,
+    targetPath: status === "unavailable" ? null : targetPathFromTarget(params.target),
+    message: targetStatus ? params.target.message : params.skillScanError ?? params.target.message,
   }
 }
 
@@ -244,6 +254,7 @@ export class EditorInstallStatusService {
         scope: "global",
         target: globalTarget,
         scanStatus: statusFromScanEntry(globalScan, payload),
+        skillScanError: skillScanErrorFromEntry(globalScan, payload),
       }))
 
       for (const project of payload.projects) {
@@ -260,6 +271,7 @@ export class EditorInstallStatusService {
           projectName: project.name,
           target: projectTarget,
           scanStatus: statusFromScanEntry(projectScan, payload),
+          skillScanError: skillScanErrorFromEntry(projectScan, payload),
         }))
       }
     }

@@ -331,6 +331,56 @@ describe("EditorInstallStatusService", () => {
     }))
   })
 
+  it("marks global and project Skill status unavailable when their scans fail", async () => {
+    mocks.scanAll.mockResolvedValue({
+      global: [{
+        editorId: "codex",
+        editorLabel: "Codex",
+        status: "detected",
+        rules: [],
+        rulesSupported: true,
+        skills: [],
+        duplicateSkillNames: [],
+        skillScanError: "全局 Skill 扫描失败",
+      }],
+      projects: [{
+        projectName: "Project",
+        projectPath: "/project",
+        pathExists: true,
+        editors: [{
+          editorId: "codex",
+          editorLabel: "Codex",
+          rules: [],
+          skills: [],
+          skillScanError: "项目 Skill 扫描失败",
+        }],
+      }],
+    })
+
+    const result = await new EditorInstallStatusService().resolveForContent({
+      contentType: "skill",
+      contentId: "skill-1",
+      contentName: "review",
+      projects: [{ id: "project-1", name: "Project", path: "/project" }],
+    })
+
+    expect(result.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        scope: "global",
+        status: "unavailable",
+        targetPath: null,
+        message: "全局 Skill 扫描失败",
+      }),
+      expect.objectContaining({
+        scope: "project",
+        projectId: "project-1",
+        status: "unavailable",
+        targetPath: null,
+        message: "项目 Skill 扫描失败",
+      }),
+    ]))
+  })
+
   it("marks a legacy built-in Synapse Skill id as the current Synapse Skill installation", async () => {
     mocks.scanAll.mockResolvedValue(createScan({
       editorId: "codex",
