@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { AgentPersona } from "../../../../app-capabilities/agent-personas/shared/schema"
+import { AGENT_PERSONA_UNAVAILABLE_MESSAGE } from "../agent-error-messages"
 import {
   createAgentPersonaRuntimeResolver,
   sdkAgentNameForPersona,
@@ -136,17 +137,13 @@ describe("agent persona runtime resolver", () => {
     expect(resolved.agents).toHaveProperty("synapse-persona__builtin-zh-en-translator")
   })
 
-  it("falls back to ordinary mode when the active persona no longer exists", async () => {
+  it("blocks the conversation when the fixed persona no longer exists", async () => {
     const resolver = createAgentPersonaRuntimeResolver({
       listPersonas: async () => [],
     })
 
-    const resolved = await resolver.resolve({
+    await expect(resolver.resolve({
       agentConfig: { activeMainThreadPersonaId: translator.id },
-    })
-
-    expect(resolved.activePersonaId).toBeNull()
-    expect(resolved.activeAgentName).toBeUndefined()
-    expect(resolved.agents).toEqual({})
+    })).rejects.toThrow(AGENT_PERSONA_UNAVAILABLE_MESSAGE)
   })
 })

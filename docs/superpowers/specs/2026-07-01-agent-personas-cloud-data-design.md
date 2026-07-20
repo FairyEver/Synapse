@@ -21,7 +21,7 @@
 ## 目标
 
 - 新增服务端 Agent Persona 一等资源，承载系统内置智能体、用户智能体和用户内置偏好。
-- 桌面智能体 App 和 Agent 对话输入框都改为消费云端列表服务。
+- 桌面智能体 App 和 Agent 新建对话弹窗都改为消费云端列表服务。
 - 保持现有 renderer bridge 语义尽量稳定，减少 Agent 对话运行时和 UI 改动面。
 - 支持登录在线、登录离线、未登录、切换账号四类状态。
 - 明确本地缓存的只读边界，避免离线编辑队列和本地权威数据重新出现。
@@ -45,7 +45,7 @@
   -> 不加载系统内置
   -> 不显示我的智能体
 
-Agent 输入框智能体菜单
+Agent 新建对话弹窗
   -> 不显示云端智能体项
   -> 保持普通对话
 ```
@@ -75,7 +75,7 @@ Agent 输入框智能体菜单
   -> 显示缓存列表
   -> 禁用新增、编辑、删除、保存设置
 
-Agent 输入框智能体菜单
+Agent 新建对话弹窗
   -> 可选择缓存智能体
   -> 可继续运行缓存智能体
 ```
@@ -288,11 +288,11 @@ type AgentPersonaRemoteCacheEntryV1 = {
 
 ## Agent 对话运行时
 
-- 输入框智能体菜单消费同一个 `AgentPersonaService`。
+- 新建对话智能体选择器消费同一个 `AgentPersonaService`。
 - 在线时使用最新云端列表。
 - 离线时允许使用当前用户缓存列表选择和运行。
 - 会话仍保存 `activeMainThreadPersonaId` 和 `activeMainThreadPersonaSnapshot`。
-- 如果保存的 persona id 在当前云端或缓存列表中不存在，菜单回退普通模式。
+- 如果 conversation 保存的 persona id 在当前云端或缓存列表中不存在，保留历史但禁止继续发送，并引导新建对话。
 - 历史消息中的 snapshot 继续用于导出和旧消息显示。
 - SDK agent definitions 仍由当前列表即时派生，不把完整云端数据复制进 conversation。
 
@@ -301,8 +301,8 @@ type AgentPersonaRemoteCacheEntryV1 = {
 ```text
 conversation.activeMainThreadPersonaId = "persona-1"
 当前列表没有 persona-1
-  -> 不传 SDK agent
-  -> UI 显示普通
+  -> 阻止启动 SDK turn
+  -> UI 显示智能体不可用并禁用发送
   -> 不删除 conversation 中保存的旧 snapshot
 ```
 
@@ -342,8 +342,8 @@ Renderer：
 - 在线状态显示系统内置和我的 tab。
 - 离线缓存状态禁用所有写操作。
 - 离线无缓存显示重新连接后加载。
-- Agent 输入框能使用缓存智能体。
-- 缺失 persona id 回退普通模式。
+- Agent 新建对话弹窗能使用缓存智能体。
+- 缺失 persona id 保留历史、禁用发送且不回退普通模式。
 
 ## 实施顺序建议
 
@@ -351,7 +351,7 @@ Renderer：
 2. 桌面 remote client 和只读缓存 schema。
 3. 改造 `AgentPersonaService` 的状态分流。
 4. 改造智能体 App UI 的登录、在线、离线状态。
-5. 改造 Agent 对话 persona 列表消费和缺失回退。
+5. 改造 Agent 新建对话 persona 列表消费和缺失阻断。
 6. 删除或隔离旧本地 DataRepository 来源，保留必要兼容测试证明它不会参与新列表。
 
 ## 发布说明要点

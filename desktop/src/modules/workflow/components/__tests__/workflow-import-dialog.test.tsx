@@ -147,8 +147,7 @@ describe("WorkflowImportDialog", () => {
       await Promise.resolve()
     })
 
-    const haikuButton = Array.from(document.querySelectorAll("button"))
-      .find((node) => node.textContent?.includes("Haiku (gpt-5-mini)"))
+    const haikuButton = document.querySelector<HTMLButtonElement>('button[data-tier="haiku"]')
     await act(async () => {
       haikuButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     })

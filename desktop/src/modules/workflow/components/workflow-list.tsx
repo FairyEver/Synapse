@@ -180,12 +180,13 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     try {
       await requireBridgeDomain("workflow").delete(id, { cleanupImportedChildren })
     } catch (err) {
+      const diagnostic = errorDiagnostic(err)
       logger.warn("Workflow delete failed.", {
         boundary: "renderer.workflow.list.delete",
         workflowId: id,
-        ...errorDiagnostic(err),
+        ...diagnostic,
       })
-      toast.error("删除失败，请重试")
+      toast.error(diagnostic.errorMessage ?? "删除失败，请重试")
       return
     }
     toast.success("工作流已删除")

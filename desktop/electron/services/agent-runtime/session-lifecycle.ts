@@ -91,6 +91,7 @@ export class SessionLifecycleManager {
     readonly providerId?: string
     readonly mode?: string
     readonly modelTier?: string
+    readonly mainThreadPersonaSnapshot?: ConversationMainThreadPersonaSnapshotV1
   }): Promise<ConversationEntryV1> {
     return this.deps.repository.createSession({
       sessionKey: input.sessionKey,
@@ -102,6 +103,7 @@ export class SessionLifecycleManager {
       providerId: input.providerId,
       mode: input.mode,
       modelTier: input.modelTier,
+      mainThreadPersonaSnapshot: input.mainThreadPersonaSnapshot,
       resumePolicy: "resume",
     })
   }
@@ -122,13 +124,6 @@ export class SessionLifecycleManager {
 
   async renameSession(conversationIdValue: string, name: string): Promise<ConversationEntryV1> {
     return this.deps.repository.renameSession(conversationIdValue, name)
-  }
-
-  async saveMainThreadPersona(
-    conversationIdValue: string,
-    snapshot: ConversationMainThreadPersonaSnapshotV1 | null,
-  ): Promise<ConversationEntryV1> {
-    return this.deps.repository.saveMainThreadPersona(conversationIdValue, snapshot)
   }
 
   async deleteSession(conversationIdValue: string): Promise<boolean> {

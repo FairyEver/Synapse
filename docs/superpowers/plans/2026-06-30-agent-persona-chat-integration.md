@@ -1,5 +1,7 @@
 # Agent Persona Chat Integration Implementation Plan
 
+> 已被 `../specs/2026-07-20-agent-persona-conversation-creation-design.md` 取代。本文中的会话中途切换方案不再是当前实现要求，仅保留为历史计划。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let users keep ordinary Agent conversations by default, then choose and persist a main-thread persona from the composer for the current conversation.

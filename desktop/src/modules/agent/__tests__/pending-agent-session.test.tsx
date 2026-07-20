@@ -93,6 +93,9 @@ vi.mock("sonner", () => ({
 vi.mock("@/app-shell/config", () => ({
   useAppConfig: () => ({
     config: {
+      agent: {
+        defaultProviderModel: null,
+      },
       global: {
         projects: mocks.configProjects,
       },
@@ -349,9 +352,6 @@ describe("AgentModule pending prompt sessions", () => {
       sessionKey: targetSession.sessionKey,
     }, {
       attachments,
-      mainThreadPersonaId: null,
-      mainThreadPersonaName: "普通",
-      mainThreadPersonaSource: undefined,
     })
     expect(restoreAttachments).not.toHaveBeenCalled()
 
@@ -737,7 +737,7 @@ describe("AgentModule pending prompt sessions", () => {
       })
     })
 
-    expect(createSession).toHaveBeenCalledWith("project-1", "provider-1", undefined, "opus", undefined)
+    expect(createSession).toHaveBeenCalledWith("project-1", "provider-1", undefined, "opus", undefined, undefined)
     expect(mocks.sidebarProps?.sourceFilter).toBe("user")
   })
 
@@ -870,10 +870,6 @@ describe("AgentModule pending prompt sessions", () => {
       projectId: "project-1",
       conversationId: "conversation-1",
       sessionKey: "local:renderer",
-    }, {
-      mainThreadPersonaId: null,
-      mainThreadPersonaName: "普通",
-      mainThreadPersonaSource: undefined,
     })
     expect(mocks.track).toHaveBeenCalledWith({
       component: "agent",
@@ -918,10 +914,6 @@ describe("AgentModule pending prompt sessions", () => {
       projectId: "project-1",
       conversationId: "conversation-1",
       sessionKey: "local:renderer",
-    }, {
-      mainThreadPersonaId: null,
-      mainThreadPersonaName: "普通",
-      mainThreadPersonaSource: undefined,
     })
     expect(mocks.track).toHaveBeenCalledWith({
       component: "agent",

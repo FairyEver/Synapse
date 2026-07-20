@@ -62,7 +62,6 @@ export interface QueryLike {
   close(): void | Promise<void>
   streamInput?(stream: AsyncIterable<SDKUserMessage>): Promise<void>
   setPermissionMode?(mode: PermissionMode): Promise<void>
-  applyFlagSettings?(settings: Record<string, unknown>): Promise<void>
 }
 
 export type QueryFactory = (input: {
@@ -292,15 +291,6 @@ export class ClaudeSDKSession implements AgentLiveSession {
       throw new Error("当前会话不支持切换权限模式")
     }
     await this.query.setPermissionMode(permissionMode)
-  }
-
-  async setMainThreadAgent(agentName: string | null): Promise<void> {
-    if (this.closed) throw new Error(AGENT_SESSION_CLOSED_MESSAGE)
-    if (!this.query.applyFlagSettings) {
-      throw new Error("当前会话不支持切换智能体")
-    }
-    await this.query.applyFlagSettings({ agent: agentName })
-    this.mainThreadAgentName = agentName ?? undefined
   }
 
   async close(): Promise<void> {

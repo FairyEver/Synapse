@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 import {
   LOCAL_CLAUDE_CODE_DEFAULT_MODEL_LABEL,
+  MODEL_TIER_DISPLAY_LABELS,
+  MODEL_TIER_DISPLAY_ORDER,
+  MODEL_TIER_ORIGINAL_LABELS,
   formatProviderModelLabel,
   isProviderModelTierSelectable,
   resolveModelDisplayName,
@@ -9,6 +12,20 @@ import {
 } from "../provider-model"
 
 describe("provider model helpers", () => {
+  it("maps model tiers to numbered labels without changing their order or identifiers", () => {
+    expect(MODEL_TIER_DISPLAY_ORDER).toEqual(["default", "opus", "sonnet", "haiku"])
+    expect(MODEL_TIER_DISPLAY_ORDER.map((tier) => ({
+      tier,
+      label: MODEL_TIER_DISPLAY_LABELS[tier],
+      originalLabel: MODEL_TIER_ORIGINAL_LABELS[tier],
+    }))).toEqual([
+      { tier: "default", label: "#1", originalLabel: "主模型" },
+      { tier: "opus", label: "#2", originalLabel: "Opus" },
+      { tier: "sonnet", label: "#3", originalLabel: "Sonnet" },
+      { tier: "haiku", label: "#4", originalLabel: "Haiku" },
+    ])
+  })
+
   it("allows local Claude Code default tier without inventing a model name", () => {
     const provider = {
       id: "local-claude-code",
@@ -54,12 +71,12 @@ describe("provider model helpers", () => {
     expect(resolveProviderModelDisplay(
       { providerId: "missing-provider", modelTier: "sonnet" },
       [],
-    )).toEqual({ label: "missing-provider Sonnet（不可用）", status: "unavailable" })
+    )).toEqual({ label: "missing-provider #3（不可用）", status: "unavailable" })
 
     expect(resolveProviderModelDisplay(
       { providerId: "configured-provider", modelTier: "sonnet" },
       [{ id: "configured-provider", name: "百炼", model: "glm-5.1" }],
-    )).toEqual({ label: "百炼 Sonnet（不可用）", status: "unavailable" })
+    )).toEqual({ label: "百炼 #3（不可用）", status: "unavailable" })
 
     expect(resolveProviderModelDisplay(
       {

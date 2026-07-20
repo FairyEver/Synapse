@@ -4,6 +4,7 @@ import type {
   AgentEventEntryV1,
   AgentUsageEntryV1,
   ConversationEntryV1,
+  ConversationMainThreadPersonaSnapshotV1,
   DataNamespace,
 } from "../../runtime/data-repo"
 import type {
@@ -36,6 +37,8 @@ import {
   AGENT_PERMISSION_NOT_PENDING_MESSAGE,
   AGENT_PERMISSION_SESSION_MISMATCH_MESSAGE,
   AGENT_PERMISSION_UPDATED_INPUT_UNSUPPORTED_MESSAGE,
+  AGENT_PERSONA_MODEL_UNAVAILABLE_MESSAGE,
+  AGENT_PERSONA_UNAVAILABLE_MESSAGE,
   AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE,
   AGENT_SCHEDULED_SPAWN_DENIED_MESSAGE,
   AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE,
@@ -153,6 +156,8 @@ export interface AgentRuntimeServiceDeps {
   readonly sdkAgents?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkAgentDefinitions | Promise<AgentSdkAgentDefinitions>
   readonly sdkPersonaConfig?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+    ResolvedPersonaSdkConfig | Promise<ResolvedPersonaSdkConfig>
+  readonly resolvePersonaForSessionCreate?: (personaId: string) =>
     ResolvedPersonaSdkConfig | Promise<ResolvedPersonaSdkConfig>
   readonly sdkSubagentToolPolicies?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkSubagentToolPolicies | Promise<AgentSdkSubagentToolPolicies>
@@ -1011,34 +1016,6 @@ export class AgentRuntimeService {
     return updated
   }
 
-  async updateSessionPersona(input: {
-    readonly conversationId: string
-    readonly personaId: string | null
-  }): Promise<ConversationEntryV1> {
-    const conversation = await this.sessionLifecycle.getSession(input.conversationId)
-    if (!conversation) throw new Error("找不到 Agent 会话。")
-    const candidateConversation = {
-      ...conversation,
-      agentConfig: {
-        ...(conversation.agentConfig ?? {}),
-        activeMainThreadPersonaId: input.personaId,
-      },
-    }
-    const resolved = await this.deps.sdkPersonaConfig?.({
-      projectId: this.deps.projectId,
-      sessionKey: conversation.sessionKey,
-      platform: conversation.platform ?? "local",
-      workspaceKey: conversation.workspaceKey,
-      workspacePath: conversation.workspacePath,
-      content: "",
-    }, candidateConversation)
-    const snapshot = input.personaId ? resolved?.snapshot : null
-    if (input.personaId && !snapshot) throw new Error("智能体不可用")
-    const updated = await this.sessionLifecycle.saveMainThreadPersona(input.conversationId, snapshot ?? null)
-    this.emitConversationUpdated(updated)
-    return updated
-  }
-
   private async applyGeneratedConversationTitle(
     conversationId: string,
     title: string,
@@ -1087,9 +1064,32 @@ export class AgentRuntimeService {
       readonly providerId?: string
       readonly mode?: string
       readonly modelTier?: string
+      readonly personaId?: string | null
     },
   ): Promise<ConversationEntryV1> {
-    return this.sessionLifecycle.createSession(input)
+    let providerId = input.providerId
+    let modelTier = input.modelTier
+    let mainThreadPersonaSnapshot: ConversationMainThreadPersonaSnapshotV1 | undefined
+
+    if (input.personaId) {
+      const resolved = await this.deps.resolvePersonaForSessionCreate?.(input.personaId)
+      if (!resolved?.snapshot || resolved.activePersonaId !== input.personaId) {
+        throw new Error(AGENT_PERSONA_UNAVAILABLE_MESSAGE)
+      }
+      mainThreadPersonaSnapshot = resolved.snapshot
+      if (resolved.providerModel) {
+        await assertProviderModelAvailable(this.deps.providerService, resolved.providerModel)
+        providerId = resolved.providerModel.providerId
+        modelTier = resolved.providerModel.modelTier
+      }
+    }
+
+    return this.sessionLifecycle.createSession({
+      ...input,
+      providerId,
+      modelTier,
+      mainThreadPersonaSnapshot,
+    })
   }
 
   async switchSession(
@@ -1500,6 +1500,30 @@ export class AgentRuntimeService {
       ...summarizeScheduledResumeError(error),
       promptLength: input.prompt.length,
     })
+  }
+}
+
+async function assertProviderModelAvailable(
+  providerService: ProviderService,
+  selection: NonNullable<ResolvedPersonaSdkConfig["providerModel"]>,
+): Promise<void> {
+  try {
+    const provider = await providerService.getProvider(selection.providerId)
+    if (provider.archived) throw new Error(AGENT_PERSONA_MODEL_UNAVAILABLE_MESSAGE)
+    const model = selection.modelTier === "default"
+      ? provider.model
+      : selection.modelTier === "haiku"
+        ? provider.haikuModel
+        : selection.modelTier === "sonnet"
+          ? provider.sonnetModel
+          : provider.opusModel
+    const localDefault = provider.source === "local" && selection.modelTier === "default"
+    if (!localDefault && !model?.trim()) throw new Error(AGENT_PERSONA_MODEL_UNAVAILABLE_MESSAGE)
+  } catch (error) {
+    if (error instanceof Error && error.message === AGENT_PERSONA_MODEL_UNAVAILABLE_MESSAGE) {
+      throw error
+    }
+    throw new Error(AGENT_PERSONA_MODEL_UNAVAILABLE_MESSAGE, { cause: error })
   }
 }
 

@@ -144,9 +144,10 @@ describe("ProviderModelSelectDialog", () => {
       await Promise.resolve()
     })
 
-    expect(document.body.textContent).toContain("Sonnet")
-    expect(document.body.textContent).not.toContain("Opus")
-    expect(document.body.textContent).not.toContain("Haiku")
+    expect(document.body.textContent).toContain("#3")
+    expect(document.body.textContent).not.toContain("#2")
+    expect(document.body.textContent).not.toContain("#4")
+    expect(document.body.textContent).not.toContain("Sonnet")
   })
 
   it("allows local Claude Code default tier without explicit models", async () => {

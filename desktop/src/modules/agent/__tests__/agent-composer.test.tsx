@@ -103,7 +103,7 @@ describe("AgentComposer", () => {
     expect(html).not.toContain("lucide-shield-check")
   })
 
-  it("renders the persona selector in ordinary mode", () => {
+  it("does not render a persona selector in the composer", () => {
     const html = renderToStaticMarkup(
       <AgentComposer
         draft=""
@@ -111,18 +111,6 @@ describe("AgentComposer", () => {
         canSend={false}
         sending={false}
         cancelPhase="idle"
-        personaItems={[{
-          id: "builtin-zh-en-translator",
-          schemaVersion: 1,
-          name: "中英翻译",
-          description: "在中文和英文之间互译。",
-          systemPrompt: "你是中英翻译智能体。",
-          providerModel: null,
-          source: "builtin",
-          readonly: true,
-        }]}
-        activePersonaId={null}
-        onPersonaChange={vi.fn()}
         onDraftChange={vi.fn()}
         onInputKeyDown={vi.fn()}
         onSubmit={vi.fn()}
@@ -131,10 +119,8 @@ describe("AgentComposer", () => {
       />,
     )
 
-    expect(html).toContain("agent-composer__persona-trigger")
-    expect(html).toContain('aria-label="智能体：普通"')
-    expect(html).toContain("普通")
-    expect(html).not.toContain("lucide-bot")
+    expect(html).not.toContain("agent-composer__persona-trigger")
+    expect(html).not.toContain("智能体：")
   })
 
   it("does not render the jump-to-bottom pill unless there are unread messages", () => {
@@ -1323,7 +1309,7 @@ describe("AgentComposer", () => {
     expect(html).toContain('aria-label="重试发送"')
   })
 
-  it("prefixes queued messages with the persona snapshot", () => {
+  it("renders queued messages without per-message persona labels", () => {
     const html = renderToStaticMarkup(
       <AgentComposer
         draft=""
@@ -1342,8 +1328,6 @@ describe("AgentComposer", () => {
             content: "hello",
             createdAt: "2026-06-30T10:00:00.000Z",
             status: "queued",
-            mainThreadPersonaId: "builtin-zh-en-translator",
-            mainThreadPersonaName: "中英翻译",
           },
           {
             id: "pending-ordinary",
@@ -1355,8 +1339,6 @@ describe("AgentComposer", () => {
             content: "普通问题",
             createdAt: "2026-06-30T10:00:01.000Z",
             status: "queued",
-            mainThreadPersonaId: null,
-            mainThreadPersonaName: "普通",
           },
         ]}
         onDraftChange={vi.fn()}
@@ -1371,12 +1353,9 @@ describe("AgentComposer", () => {
 
     const wrapper = document.createElement("div")
     wrapper.innerHTML = html
-    const contents = [...wrapper.querySelectorAll("p")]
-    const translatorContent = contents.find((element) => element.textContent === "hello")
-    const ordinaryContent = contents.find((element) => element.textContent === "普通问题")
-
-    expect(translatorContent?.parentElement?.previousElementSibling?.textContent).toContain("中英翻译")
-    expect(ordinaryContent?.parentElement?.previousElementSibling?.textContent).toContain("普通")
+    expect(wrapper.textContent).toContain("hello")
+    expect(wrapper.textContent).toContain("普通问题")
+    expect(wrapper.textContent).not.toContain("中英翻译")
   })
 
   it("keeps pending message actions visible while long content truncates", () => {
@@ -1399,8 +1378,6 @@ describe("AgentComposer", () => {
             content: longContent,
             createdAt: "2026-07-11T12:00:00.000Z",
             status: "queued",
-            mainThreadPersonaId: null,
-            mainThreadPersonaName: "普通",
           },
         ]}
         onDraftChange={vi.fn()}

@@ -1,4 +1,7 @@
+import type { ReactNode } from "react"
+
 import { Button } from "@/components/ui/button"
+import { ModelTierLabel } from "@/components/model-tier-label"
 import {
   Dialog,
   DialogContent,
@@ -6,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import type { SynapseProviderPackageImportPreview } from "@/types/bridge"
 
 type ProviderPackageImportDialogProps = {
@@ -29,14 +33,16 @@ function ProviderPackageImportDialog({
         </DialogHeader>
 
         {preview ? (
-          <div className="grid gap-3 text-sm sm:grid-cols-2">
-            <ProviderPackagePreviewItem label="名称" value={preview.name} />
-            <ProviderPackagePreviewItem label="ID" value={providerIdPreview(preview)} />
-            <ProviderPackagePreviewItem label="类型" value={preview.category} />
-            <ProviderPackagePreviewItem label="Key 字段" value={preview.apiKeyField} />
-            <ProviderPackagePreviewItem label="请求地址" value={preview.baseUrl} />
-            <ProviderPackagePreviewItem label="主模型" value={preview.model} />
-          </div>
+          <TooltipProvider>
+            <div className="grid gap-3 text-sm sm:grid-cols-2">
+              <ProviderPackagePreviewItem label="名称" value={preview.name} />
+              <ProviderPackagePreviewItem label="ID" value={providerIdPreview(preview)} />
+              <ProviderPackagePreviewItem label="类型" value={preview.category} />
+              <ProviderPackagePreviewItem label="Key 字段" value={preview.apiKeyField} />
+              <ProviderPackagePreviewItem label="请求地址" value={preview.baseUrl} />
+              <ProviderPackagePreviewItem label={<ModelTierLabel tier="default" />} value={preview.model} />
+            </div>
+          </TooltipProvider>
         ) : null}
 
         <DialogFooter>
@@ -56,7 +62,7 @@ function ProviderPackagePreviewItem({
   label,
   value,
 }: {
-  readonly label: string
+  readonly label: ReactNode
   readonly value?: string
 }) {
   return (

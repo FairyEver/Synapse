@@ -1483,13 +1483,11 @@ export type SynapseBridge = {
         providerId?: string
         mode?: SynapseAgentPermissionMode
         modelTier?: string
+        personaId?: string | null
       },
     ) => Promise<SynapseAgentSessionSummary>
     switchSession: (
       args: { projectId: string; sessionKey?: string; conversationId: string },
-    ) => Promise<SynapseAgentSessionSummary>
-    updateSessionPersona: (
-      args: { projectId: string; conversationId: string; personaId: string | null },
     ) => Promise<SynapseAgentSessionSummary>
     deleteSession: (
       args: { projectId: string; conversationId: string },
@@ -1506,9 +1504,6 @@ export type SynapseBridge = {
         attachments?: readonly SynapseAgentBridgeAttachment[]
         clientSubmittedAt?: string
         providerId?: string
-        mainThreadPersonaId?: string | null
-        mainThreadPersonaName?: string
-        mainThreadPersonaSource?: "builtin" | "user"
       },
     ) => Promise<SynapseAgentSendResult>
     listPendingPermissions: (projectId: string) => Promise<SynapseAgentPendingPermission[]>

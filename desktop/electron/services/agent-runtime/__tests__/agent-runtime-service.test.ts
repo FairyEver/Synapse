@@ -26,6 +26,157 @@ import type {
 } from "../types"
 
 describe("AgentRuntimeService", () => {
+  it("creates a fixed-persona conversation with the persona-bound model", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const getProvider = vi.fn(async () => ({
+      id: "bound-provider",
+      name: "Bound Provider",
+      source: "user",
+      archived: false,
+      model: "bound-default",
+      sonnetModel: "bound-sonnet",
+    }))
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: { getProvider } as unknown as ProviderService,
+      resolvePersonaForSessionCreate: vi.fn(async () => ({
+        activePersonaId: "persona-1",
+        activeAgentName: "synapse-persona__persona-1",
+        providerModel: { providerId: "bound-provider", modelTier: "sonnet" as const },
+        snapshot: {
+          id: "persona-1",
+          name: "绑定模型智能体",
+          source: "user" as const,
+          definitionHash: "hash-persona-1",
+        },
+        agents: {},
+        definitionsHash: "hash-persona-1",
+      })),
+      now: fixedNow,
+    })
+
+    const conversation = await service.createSession({
+      sessionKey: "s1",
+      platform: "local",
+      providerId: "manual-provider",
+      modelTier: "haiku",
+      personaId: "persona-1",
+    })
+
+    expect(getProvider).toHaveBeenCalledWith("bound-provider")
+    expect(conversation).toMatchObject({
+      providerId: "bound-provider",
+      agentConfig: {
+        modelTier: "sonnet",
+        activeMainThreadPersonaId: "persona-1",
+        activeMainThreadPersonaSnapshot: {
+          id: "persona-1",
+          name: "绑定模型智能体",
+          source: "user" as const,
+          definitionHash: "hash-persona-1",
+        },
+      },
+    })
+  })
+
+  it("keeps the requested model for an unbound fixed persona", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: {} as ProviderService,
+      resolvePersonaForSessionCreate: vi.fn(async () => ({
+        activePersonaId: "persona-1",
+        activeAgentName: "synapse-persona__persona-1",
+        providerModel: null,
+        snapshot: {
+          id: "persona-1",
+          name: "未绑定智能体",
+          source: "user" as const,
+          definitionHash: "hash-persona-1",
+        },
+        agents: {},
+        definitionsHash: "hash-persona-1",
+      })),
+      now: fixedNow,
+    })
+
+    const conversation = await service.createSession({
+      sessionKey: "s1",
+      platform: "local",
+      providerId: "manual-provider",
+      modelTier: "haiku",
+      personaId: "persona-1",
+    })
+
+    expect(conversation).toMatchObject({
+      providerId: "manual-provider",
+      agentConfig: {
+        modelTier: "haiku",
+        activeMainThreadPersonaId: "persona-1",
+      },
+    })
+  })
+
+  it("does not persist a conversation when its persona or bound model is unavailable", async () => {
+    const missingPersonaConversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const missingPersonaService = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations: missingPersonaConversations,
+      providerService: {} as ProviderService,
+      resolvePersonaForSessionCreate: vi.fn(async () => ({
+        activePersonaId: null,
+        providerModel: null,
+        agents: {},
+        definitionsHash: "empty",
+      })),
+      now: fixedNow,
+    })
+
+    await expect(missingPersonaService.createSession({
+      sessionKey: "missing-persona",
+      personaId: "missing",
+    })).rejects.toThrow("智能体不可用")
+    await expect(missingPersonaConversations.list()).resolves.toEqual([])
+
+    const invalidModelConversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const invalidModelService = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations: invalidModelConversations,
+      providerService: {
+        getProvider: vi.fn(async () => ({
+          id: "archived-provider",
+          archived: true,
+        })),
+      } as unknown as ProviderService,
+      resolvePersonaForSessionCreate: vi.fn(async () => ({
+        activePersonaId: "persona-1",
+        activeAgentName: "synapse-persona__persona-1",
+        providerModel: { providerId: "archived-provider", modelTier: "default" as const },
+        snapshot: {
+          id: "persona-1",
+          name: "不可用智能体",
+          source: "user" as const,
+          definitionHash: "hash-persona-1",
+        },
+        agents: {},
+        definitionsHash: "hash-persona-1",
+      })),
+      now: fixedNow,
+    })
+
+    await expect(invalidModelService.createSession({
+      sessionKey: "invalid-model",
+      personaId: "persona-1",
+    })).rejects.toThrow("模型不可用")
+    await expect(invalidModelConversations.list()).resolves.toEqual([])
+  })
+
   it("routes sends through SDK sessions and persists the sdk session id", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const session = new ScriptedSession([

@@ -66,9 +66,6 @@ export interface AgentMessage {
   readonly agentType?: string
   readonly providerId?: string
   readonly modelTier?: string
-  readonly mainThreadPersonaId?: string | null
-  readonly mainThreadPersonaName?: string
-  readonly mainThreadPersonaSource?: "builtin" | "user"
   readonly userMeta?: Record<string, unknown>
 }
 
@@ -344,7 +341,6 @@ export interface AgentLiveSession {
   close(): Promise<void>
   cancelCurrentTurn?(): Promise<boolean>
   setPermissionMode?(mode: string): Promise<void>
-  setMainThreadAgent?(agentName: string | null): Promise<void>
 }
 
 export interface AgentUsageCostBreakdownCny {

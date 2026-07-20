@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react"
 import { FolderOpenIcon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { ModelTierLabel } from "@/components/model-tier-label"
 import {
   Dialog,
   DialogContent,
@@ -15,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
   SynapseCcSwitchClaudeImportPreviewResult,
@@ -238,25 +240,31 @@ function CcSwitchProviderRow({
 
 function ModelMap({ item }: { readonly item: SynapseCcSwitchClaudeProviderPreviewItem }) {
   const entries = [
-    ["主模型", item.model],
-    ["Opus", item.opusModel],
-    ["Sonnet", item.sonnetModel],
-    ["Haiku", item.haikuModel],
+    ["default", item.model],
+    ["opus", item.opusModel],
+    ["sonnet", item.sonnetModel],
+    ["haiku", item.haikuModel],
   ] as const
 
   return (
-    <div className="min-w-0">
-      <div className="mb-1 text-muted-foreground">模型映射</div>
-      <div className="grid gap-1 sm:grid-cols-2">
-        {entries.map(([label, value]) => (
-          <InfoLine key={label} label={label} value={value || "-"} />
-        ))}
+    <TooltipProvider>
+      <div className="min-w-0">
+        <div className="mb-1 text-muted-foreground">模型映射</div>
+        <div className="grid gap-1 sm:grid-cols-2">
+          {entries.map(([tier, value]) => (
+            <InfoLine
+              key={tier}
+              label={<ModelTierLabel tier={tier} />}
+              value={value || "-"}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   )
 }
 
-function InfoLine({ label, value }: { readonly label: string; readonly value: string }) {
+function InfoLine({ label, value }: { readonly label: ReactNode; readonly value: string }) {
   return (
     <div className="min-w-0">
       <span className="text-muted-foreground">{label}</span>

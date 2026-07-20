@@ -144,23 +144,18 @@ describe("pending message queue", () => {
     expect(retried.attachments).toBe(attachments)
   })
 
-  it("preserves the selected persona snapshot through enqueue and retry transitions", () => {
+  it("does not add per-message persona state through enqueue and retry transitions", () => {
     const queued = enqueuePendingMessage({
       id: "pending-1",
       content: "Translate this",
       target: targetA,
       createdAt: "2026-05-13T10:00:00.000Z",
-      mainThreadPersonaId: "builtin-zh-en-translator",
-      mainThreadPersonaName: "中英翻译",
     })
     const failed = markPendingMessageFailed(queued, "发送失败")
     const retried = enqueuePendingMessage(failed)
 
-    expect(queued.mainThreadPersonaId).toBe("builtin-zh-en-translator")
-    expect(queued.mainThreadPersonaName).toBe("中英翻译")
-    expect(failed.mainThreadPersonaId).toBe("builtin-zh-en-translator")
-    expect(failed.mainThreadPersonaName).toBe("中英翻译")
-    expect(retried.mainThreadPersonaId).toBe("builtin-zh-en-translator")
-    expect(retried.mainThreadPersonaName).toBe("中英翻译")
+    expect(queued).not.toHaveProperty("mainThreadPersonaId")
+    expect(failed).not.toHaveProperty("mainThreadPersonaId")
+    expect(retried).not.toHaveProperty("mainThreadPersonaId")
   })
 })

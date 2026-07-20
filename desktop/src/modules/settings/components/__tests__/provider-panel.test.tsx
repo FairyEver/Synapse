@@ -121,13 +121,13 @@ describe("ProviderPanel dialog editor", () => {
 
     expect([...document.body.querySelectorAll<HTMLButtonElement>('[aria-label^="复制"]')]
       .map((button) => button.getAttribute("aria-label"))).toEqual([
-        "复制主模型 ID",
-        "复制 Opus 模型 ID",
-        "复制 Sonnet 模型 ID",
-        "复制 Haiku 模型 ID",
+        "复制 #1 模型 ID（主模型）",
+        "复制 #2 模型 ID（Opus）",
+        "复制 #3 模型 ID（Sonnet）",
+        "复制 #4 模型 ID（Haiku）",
       ])
 
-    const copyButton = document.body.querySelector<HTMLButtonElement>('[aria-label="复制 Sonnet 模型 ID"]')
+    const copyButton = document.body.querySelector<HTMLButtonElement>('[aria-label="复制 #3 模型 ID（Sonnet）"]')
     expect(copyButton?.textContent).toBe("")
 
     await act(async () => {
@@ -217,10 +217,13 @@ describe("ProviderPanel dialog editor", () => {
     expect(document.body.textContent).toContain("认证字段")
     expect(document.body.textContent).toContain("模型映射")
     expect(document.body.textContent).toContain("如果供应商原生提供 Claude 系列模型，通常无需配置。仅在需要将请求映射到不同模型名称时填写。")
-    expect(document.body.textContent).toContain("主模型")
-    expect(document.body.textContent).toContain("Haiku 默认模型")
-    expect(document.body.textContent).toContain("Sonnet 默认模型")
-    expect(document.body.textContent).toContain("Opus 默认模型")
+    expect(document.body.textContent).toContain("#1")
+    expect(document.body.textContent).toContain("#2")
+    expect(document.body.textContent).toContain("#3")
+    expect(document.body.textContent).toContain("#4")
+    expect(document.body.textContent).not.toContain("Opus 默认模型")
+    expect(document.body.textContent).not.toContain("Sonnet 默认模型")
+    expect(document.body.textContent).not.toContain("Haiku 默认模型")
     expect(document.body.textContent).toContain("配置 JSON")
     expect(textareaByLabel("配置 JSON").value).toContain("ENABLE_TOOL_SEARCH")
     expect(document.body.querySelector("#provider-id")).toBeNull()
@@ -741,13 +744,13 @@ describe("ProviderPanel dialog editor", () => {
     expect(document.body.textContent).toContain("DeepSeek")
     expect(document.body.textContent).toContain("Key 字段")
     expect(document.body.textContent).toContain("ANTHROPIC_AUTH_TOKEN")
-    expect(document.body.textContent).toContain("主模型")
+    expect(document.body.textContent).toContain("#1")
     expect(document.body.textContent).toContain("deepseek-chat")
-    expect(document.body.textContent).toContain("Haiku")
+    expect(document.body.textContent).toContain("#4")
     expect(document.body.textContent).toContain("deepseek-haiku")
-    expect(document.body.textContent).toContain("Sonnet")
+    expect(document.body.textContent).toContain("#3")
     expect(document.body.textContent).toContain("deepseek-sonnet")
-    expect(document.body.textContent).toContain("Opus")
+    expect(document.body.textContent).toContain("#2")
     expect(document.body.textContent).toContain("deepseek-opus")
 
     await act(async () => {
@@ -1029,6 +1032,7 @@ describe("ProviderPanel dialog editor", () => {
     expect(document.body.textContent).toContain("deepseek-chat")
     expect(document.body.textContent).toContain("ANTHROPIC_AUTH_TOKEN")
     expect(document.body.textContent).toContain("deepseek -> deepseek-2")
+    expect(document.body.textContent).toContain("#1")
 
     await act(async () => {
       buttonByText(document.body, "导入").click()

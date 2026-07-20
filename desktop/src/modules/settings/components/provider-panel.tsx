@@ -27,6 +27,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { FormDialog } from "@/components/form-dialog"
+import { ModelTierLabel } from "@/components/model-tier-label"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -53,6 +54,10 @@ import {
 } from "@/components/ui/tooltip"
 import { redactSensitiveValue } from "@/lib/agent-redaction"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import {
+  MODEL_TIER_DISPLAY_LABELS,
+  MODEL_TIER_ORIGINAL_LABELS,
+} from "@/lib/provider-model"
 import { CcSwitchImportDialog } from "./cc-switch-import-dialog"
 import { ProviderDeleteDialog } from "./provider-delete-dialog"
 import { ProviderPackageImportDialog } from "./provider-package-import-dialog"
@@ -676,13 +681,15 @@ function ProviderModelList({ provider }: { readonly provider: SynapseAgentProvid
     <TooltipProvider>
       <div className="flex flex-col gap-1">
         {models.map((model) => (
-          <div key={model.label} className="flex min-w-0 items-center gap-2">
-            <span className="w-14 shrink-0 text-xs text-muted-foreground">{model.label}</span>
+          <div key={model.tier} className="flex min-w-0 items-center gap-2">
+            <ModelTierLabel
+              tier={model.tier}
+              className="w-14 shrink-0 text-xs text-muted-foreground"
+            />
             <span className="min-w-0 truncate">{model.value}</span>
             <CopyProviderModelIdButton
               providerId={provider.id}
               modelTier={model.tier}
-              label={model.label}
             />
           </div>
         ))}
@@ -694,13 +701,11 @@ function ProviderModelList({ provider }: { readonly provider: SynapseAgentProvid
 function CopyProviderModelIdButton({
   providerId,
   modelTier,
-  label,
 }: {
   readonly providerId: string
   readonly modelTier: ModelTier
-  readonly label: string
 }) {
-  const copyLabel = providerModelCopyLabel(label)
+  const copyLabel = providerModelCopyLabel(modelTier)
 
   const handleCopy = () => {
     if (!navigator.clipboard?.writeText) {
@@ -785,15 +790,15 @@ function ProviderTextAction({
   )
 }
 
-function providerModelRows(provider: SynapseAgentProvider): Array<{ label: string; value: string; tier: ModelTier }> {
+function providerModelRows(provider: SynapseAgentProvider): Array<{ value: string; tier: ModelTier }> {
   return [
-    { label: "主模型", value: provider.model, tier: "default" },
-    { label: "Opus", value: provider.opusModel, tier: "opus" },
-    { label: "Sonnet", value: provider.sonnetModel, tier: "sonnet" },
-    { label: "Haiku", value: provider.haikuModel, tier: "haiku" },
+    { value: provider.model, tier: "default" },
+    { value: provider.opusModel, tier: "opus" },
+    { value: provider.sonnetModel, tier: "sonnet" },
+    { value: provider.haikuModel, tier: "haiku" },
   ].flatMap((item) => {
     const value = optionalTrimmed(item.value)
-    return value ? [{ label: item.label, value, tier: item.tier as ModelTier }] : []
+    return value ? [{ value, tier: item.tier as ModelTier }] : []
   })
 }
 
@@ -801,8 +806,8 @@ function providerModelUri(providerId: string, modelTier: ModelTier): string {
   return `synapse-provider-model://${providerId}/${modelTier}`
 }
 
-function providerModelCopyLabel(label: string): string {
-  return label === "主模型" ? "复制主模型 ID" : `复制 ${label} 模型 ID`
+function providerModelCopyLabel(tier: ModelTier): string {
+  return `复制 ${MODEL_TIER_DISPLAY_LABELS[tier]} 模型 ID（${MODEL_TIER_ORIGINAL_LABELS[tier]}）`
 }
 
 function providerCategoryLabel(category: SynapseAgentProviderCategory): string {
@@ -1173,44 +1178,54 @@ function ProviderApiAndModelFields({
             如果供应商原生提供 Claude 系列模型，通常无需配置。仅在需要将请求映射到不同模型名称时填写。
           </FieldDescription>
         </div>
-        <div className="grid grid-cols-4 gap-2">
-          <Field>
-            <FieldLabel htmlFor="provider-model">主模型</FieldLabel>
-            <Input
-              id="provider-model"
-              value={values.model}
-              disabled={disabled}
-              onChange={(event) => onValueChange("model", event.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="provider-opus-model">Opus 默认模型</FieldLabel>
-            <Input
-              id="provider-opus-model"
-              value={values.opusModel}
-              disabled={disabled}
-              onChange={(event) => onValueChange("opusModel", event.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="provider-sonnet-model">Sonnet 默认模型</FieldLabel>
-            <Input
-              id="provider-sonnet-model"
-              value={values.sonnetModel}
-              disabled={disabled}
-              onChange={(event) => onValueChange("sonnetModel", event.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="provider-haiku-model">Haiku 默认模型</FieldLabel>
-            <Input
-              id="provider-haiku-model"
-              value={values.haikuModel}
-              disabled={disabled}
-              onChange={(event) => onValueChange("haikuModel", event.target.value)}
-            />
-          </Field>
-        </div>
+        <TooltipProvider>
+          <div className="grid grid-cols-4 gap-2">
+            <Field>
+              <FieldLabel htmlFor="provider-model">
+                <ModelTierLabel tier="default" />
+              </FieldLabel>
+              <Input
+                id="provider-model"
+                value={values.model}
+                disabled={disabled}
+                onChange={(event) => onValueChange("model", event.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="provider-opus-model">
+                <ModelTierLabel tier="opus" />
+              </FieldLabel>
+              <Input
+                id="provider-opus-model"
+                value={values.opusModel}
+                disabled={disabled}
+                onChange={(event) => onValueChange("opusModel", event.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="provider-sonnet-model">
+                <ModelTierLabel tier="sonnet" />
+              </FieldLabel>
+              <Input
+                id="provider-sonnet-model"
+                value={values.sonnetModel}
+                disabled={disabled}
+                onChange={(event) => onValueChange("sonnetModel", event.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="provider-haiku-model">
+                <ModelTierLabel tier="haiku" />
+              </FieldLabel>
+              <Input
+                id="provider-haiku-model"
+                value={values.haikuModel}
+                disabled={disabled}
+                onChange={(event) => onValueChange("haikuModel", event.target.value)}
+              />
+            </Field>
+          </div>
+        </TooltipProvider>
       </div>
     </>
   )

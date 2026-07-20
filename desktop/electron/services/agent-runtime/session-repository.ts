@@ -35,6 +35,7 @@ export interface CreateAgentSessionInput {
   readonly providerId?: string
   readonly mode?: string
   readonly modelTier?: string
+  readonly mainThreadPersonaSnapshot?: ConversationMainThreadPersonaSnapshotV1
   readonly sdkSessionId?: string
   readonly usage?: ConversationEntryV1["usage"]
   readonly costUsd?: number
@@ -145,8 +146,17 @@ export class AgentSessionRepository {
       workspacePath: input.workspacePath,
       agentType: input.agentType,
       providerId: input.providerId,
-      agentConfig: input.mode || input.modelTier
-        ? { ...(input.mode ? { mode: input.mode } : {}), ...(input.modelTier ? { modelTier: input.modelTier } : {}) }
+      agentConfig: input.mode || input.modelTier || input.mainThreadPersonaSnapshot
+        ? {
+            ...(input.mode ? { mode: input.mode } : {}),
+            ...(input.modelTier ? { modelTier: input.modelTier } : {}),
+            ...(input.mainThreadPersonaSnapshot
+              ? {
+                  activeMainThreadPersonaId: input.mainThreadPersonaSnapshot.id,
+                  activeMainThreadPersonaSnapshot: input.mainThreadPersonaSnapshot,
+                }
+              : {}),
+          }
         : undefined,
       sdkSessionId: input.sdkSessionId,
       usage: input.usage,
@@ -502,27 +512,6 @@ export class AgentSessionRepository {
         ...(conversation.agentConfig ?? {}),
         mode,
       },
-      updatedAt: this.isoNow(),
-    }
-    return this.persistNonTitleUpdate(updated)
-  }
-
-  async saveMainThreadPersona(
-    conversationIdValue: string,
-    snapshot: ConversationMainThreadPersonaSnapshotV1 | null,
-  ): Promise<ConversationEntryV1> {
-    const conversation = await this.requireConversation(conversationIdValue)
-    const nextAgentConfig = {
-      ...(conversation.agentConfig ?? {}),
-      activeMainThreadPersonaId: snapshot?.id ?? null,
-      ...(snapshot ? { activeMainThreadPersonaSnapshot: snapshot } : {}),
-    }
-    if (!snapshot) {
-      delete nextAgentConfig.activeMainThreadPersonaSnapshot
-    }
-    const updated: ConversationEntryV1 = {
-      ...conversation,
-      agentConfig: nextAgentConfig,
       updatedAt: this.isoNow(),
     }
     return this.persistNonTitleUpdate(updated)

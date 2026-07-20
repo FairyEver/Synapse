@@ -12,12 +12,6 @@ import { ArrowUp, ChevronDown, CornerDownRight, FileIcon, FolderIcon, ImageIcon,
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import {
   Dialog,
@@ -31,7 +25,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { track } from "@/lib/ui-tracking"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
-import type { SynapseAgentPersona } from "@/types/agent-persona"
 import type { SynapseQuickInputItem } from "@/types/quick-input"
 import { insertTextAtComposerSelection } from "../composer-insert"
 import { getPermissionModeCapability } from "../permission-mode-capability"
@@ -99,13 +92,10 @@ function AgentComposer({
   onJumpToBottom,
   slashCandidates = [],
   quickInputs = [],
-  personaItems = [],
-  activePersonaId = null,
   knowledgeBaseActions = [],
   onKnowledgeBaseCommand,
   onOpenKnowledgeBaseSourceManager,
   onQuickInputDirectSend,
-  onPersonaChange = () => undefined,
 }: {
   readonly draft: string
   readonly disabled: boolean
@@ -120,8 +110,6 @@ function AgentComposer({
   readonly showConversationRolloverPrompt?: boolean
   readonly slashCandidates?: readonly AgentSlashCandidate[]
   readonly quickInputs?: readonly SynapseQuickInputItem[]
-  readonly personaItems?: readonly SynapseAgentPersona[]
-  readonly activePersonaId?: string | null
   readonly knowledgeBaseActions?: readonly KnowledgeBaseComposerAction[]
   readonly onDraftChange: (value: string) => void
   readonly onInputKeyDown: (
@@ -145,7 +133,6 @@ function AgentComposer({
   readonly onKnowledgeBaseCommand?: (commandText: string) => void
   readonly onOpenKnowledgeBaseSourceManager?: () => void
   readonly onQuickInputDirectSend?: (content: string) => void
-  readonly onPersonaChange?: (personaId: string | null) => void
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -170,7 +157,6 @@ function AgentComposer({
   const visiblePendingMessages = pendingMessages.filter((message) => message.status !== "sending")
   const isNewSessionMode = pendingModeAction === "new-session"
   const attachmentAwareCanSend = canSend || attachments.length > 0
-  const activePersona = personaItems.find((item) => item.id === activePersonaId)
 
   const addAttachments = (next: readonly AgentDraftAttachment[]) => {
     if (next.length === 0) return
@@ -464,10 +450,8 @@ function AgentComposer({
                     key={message.id}
                     className="flex min-w-0 max-w-full items-center gap-2 border-b border-border py-1 last:border-b-0"
                   >
-                    <div className="flex max-w-40 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                    <div className="flex shrink-0 items-center text-sm text-muted-foreground">
                       <CornerDownRight className="size-3.5 shrink-0" />
-                      <span className="truncate">{pendingMessagePersonaName(message)}</span>
-                      <span aria-hidden="true">|</span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate whitespace-nowrap text-sm text-muted-foreground">
@@ -558,13 +542,6 @@ function AgentComposer({
           )}
           leadingActions={(
             <>
-              <AgentPersonaMenu
-                personas={personaItems}
-                activePersonaId={activePersonaId}
-                activePersonaName={activePersona?.name}
-                disabled={disabled}
-                onSelect={onPersonaChange}
-              />
               <QuickInputMenu
                 quickInputs={quickInputs}
                 disabled={disabled}
@@ -677,61 +654,6 @@ function AgentComposer({
 
 function isSupportedImageMimeType(type: string): type is AgentDraftImageAttachment["mimeType"] {
   return SUPPORTED_IMAGE_MIME_TYPES.has(type as AgentDraftImageAttachment["mimeType"])
-}
-
-function pendingMessagePersonaName(message: PendingMessage): string {
-  return message.mainThreadPersonaName?.trim() || "普通"
-}
-
-function AgentPersonaMenu({
-  personas,
-  activePersonaId,
-  activePersonaName,
-  disabled,
-  onSelect,
-}: {
-  readonly personas: readonly SynapseAgentPersona[]
-  readonly activePersonaId: string | null
-  readonly activePersonaName?: string
-  readonly disabled: boolean
-  readonly onSelect: (personaId: string | null) => void
-}) {
-  return (
-    <DropdownMenu data-track="agent-persona-menu">
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          aria-label={`智能体：${activePersonaName ?? "普通"}`}
-          data-track="agent-persona-select"
-          disabled={disabled}
-          className="agent-composer__persona-trigger rounded-lg px-2.5 text-muted-foreground"
-        >
-          <span>{activePersonaName ?? "普通"}</span>
-          <ChevronDown data-icon="inline-end" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <DropdownMenuItem
-          onSelect={() => onSelect(null)}
-          data-track="agent-persona-ordinary"
-          data-active={activePersonaId === null}
-        >
-          普通
-        </DropdownMenuItem>
-        {personas.map((persona) => (
-          <DropdownMenuItem
-            key={persona.id}
-            onSelect={() => onSelect(persona.id)}
-            data-track="agent-persona-item"
-            data-active={activePersonaId === persona.id}
-          >
-            {persona.name}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
 }
 
 async function addImageFiles(

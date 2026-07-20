@@ -249,7 +249,7 @@ export class SessionManager {
       && modelMatches
       && sdkSettingsMatch
     const reusableLiveSession = input.state.liveSession
-    if (canReuseBaseSession && personaDefinitionsMatch && reusableLiveSession) {
+    if (canReuseBaseSession && personaDefinitionsMatch && activeAgentMatches && reusableLiveSession) {
       if (hasUnconfiguredAttachmentDirectories({
         cwd,
         attachments,
@@ -257,9 +257,7 @@ export class SessionManager {
       })) {
         throw new Error(AGENT_ATTACHMENT_DIRECTORIES_UNAVAILABLE_MESSAGE)
       }
-      if (activeAgentMatches || await this.trySwitchMainThreadAgent(input.state, activeAgentName, input.conversation.id)) {
-        return { liveSession: reusableLiveSession, created: false }
-      }
+      return { liveSession: reusableLiveSession, created: false }
     }
 
     const hadLiveSession = Boolean(input.state.liveSession)
@@ -388,40 +386,6 @@ export class SessionManager {
         ...errorDiagnostic(error),
       })
       return undefined
-    }
-  }
-
-  private async trySwitchMainThreadAgent(
-    state: RuntimeSessionState,
-    activeAgentName: string | undefined,
-    conversationId: string,
-  ): Promise<boolean> {
-    const liveSession = state.liveSession
-    if (!liveSession) return false
-    if (!liveSession.setMainThreadAgent) {
-      this.deps.logger?.warn("Agent live session cannot switch main-thread agent.", {
-        boundary: "agent-runtime.live-session.agent-switch",
-        conversationId,
-        providerId: state.providerId,
-        mode: state.modeOverride,
-        sdkSessionId: liveSession.currentSessionId(),
-      })
-      return false
-    }
-    try {
-      await liveSession.setMainThreadAgent(activeAgentName ?? null)
-      state.mainThreadAgentName = activeAgentName
-      return true
-    } catch (error) {
-      this.deps.logger?.warn("Agent live session agent switch failed.", {
-        boundary: "agent-runtime.live-session.agent-switch",
-        conversationId,
-        providerId: state.providerId,
-        mode: state.modeOverride,
-        sdkSessionId: liveSession.currentSessionId(),
-        ...errorDiagnostic(error),
-      })
-      return false
     }
   }
 

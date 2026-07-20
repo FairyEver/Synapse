@@ -757,34 +757,6 @@ describe("ClaudeSDKSession", () => {
     expect(query.setPermissionMode).toHaveBeenCalledWith("acceptEdits")
   })
 
-  it("switches main-thread agent through applyFlagSettings", async () => {
-    const applyFlagSettings = vi.fn()
-    const { factory } = createQueryFactory({ applyFlagSettings })
-    const session = createSession(factory, {
-      agent: "synapse-persona__old",
-      agentDefinitionsHash: "hash-1",
-    })
-
-    await session.setMainThreadAgent?.("synapse-persona__new")
-
-    expect(applyFlagSettings).toHaveBeenCalledWith({ agent: "synapse-persona__new" })
-    expect(session.mainThreadAgentName).toBe("synapse-persona__new")
-  })
-
-  it("clears main-thread agent through applyFlagSettings", async () => {
-    const applyFlagSettings = vi.fn()
-    const { factory } = createQueryFactory({ applyFlagSettings })
-    const session = createSession(factory, {
-      agent: "synapse-persona__old",
-      agentDefinitionsHash: "hash-1",
-    })
-
-    await session.setMainThreadAgent?.(null)
-
-    expect(applyFlagSettings).toHaveBeenCalledWith({ agent: null })
-    expect(session.mainThreadAgentName).toBeUndefined()
-  })
-
   it("rejects invalid runtime permission modes", async () => {
     const { factory, query } = createQueryFactory()
     const session = createSession(factory)

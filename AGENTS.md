@@ -210,6 +210,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - Knowledge Base 不再通过临时 SDK 注入把资源拼装到用户可见 vault；但托管知识库会话可以、且应当把自身 backing directory 作为 Claude Code SDK local plugin 加载，以激活内置 Synapse Knowledge Base runtime 的 plugin、skill、command 与允许的 hook。Agent 会话仍必须把托管知识库项目解析到其 backing directory，普通项目不得加载知识库 runtime 行为。
 - Knowledge Base 专用逻辑必须隔离在知识库模块或知识库专属资源目录内，例如 `desktop/electron/services/knowledge-base/`、`desktop/resources/knowledge-base/` 和最小 renderer 项目能力 UI。不要把知识库专用逻辑散落到普通 Agent 对话、Scheduler、Workflow 或其它触发 Agent 的功能里；普通项目不应加载知识库 plugin、skill、hook、prompt 或快捷动作。
 - Agent 会话创建只能基于已配置项目；新会话必须绑定 `agentType`；运行时状态按 conversation 隔离，不要让同项目多会话共享队列、busy 状态或 live session。
+- Agent 智能体是 conversation 级固定身份，只能在新建对话弹窗选择，创建后不允许在 composer、IPC 或 live session 中切换。普通和未绑定模型的智能体使用新建对话所选模型；已绑定模型的智能体必须使用当前绑定并将其保存为会话基础模型。conversation 固定保存 persona ID 与创建时 snapshot，但每轮运行采用当前可访问的最新 persona 配置；配置变化应关闭并重建 live session，不做 agent 热切换。固定 persona 不存在、无权访问或缓存缺失时不得静默降级为普通对话，必须保留历史查看、复制和导出，禁用发送并引导新建对话。
 - Agent composer slash menu 只负责插入 `/<name>`，不得立即执行或发送；不得改成通用命令面板；不得新增 renderer 侧目录扫描器或改变后端 command/skill 解析语义。
 - 快捷输入是独立系统应用，不属于系统设置页。Agent 对话只消费快捷输入库中的文本，并默认直接发送；不要恢复“直接发送”开关，也不要把快捷输入重新塞回 slash menu 的插入候选里，除非当前对话明确改变这个产品边界。
 - Knowledge Base 资料管理窗口是 `.raw` 文件管理器；上传和拖拽上传必须把用户选择的文件原样复制到当前 `.raw` 文件夹，不得自动转换格式、生成 Markdown 替代文件、额外保留一份 originals 附件，或把普通上传变成 source staging 流程。

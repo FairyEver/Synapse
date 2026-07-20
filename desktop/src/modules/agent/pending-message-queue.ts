@@ -14,9 +14,6 @@ type PendingMessageInput = {
   readonly attachments?: readonly AgentDraftAttachment[]
   readonly target: PendingMessageTarget
   readonly createdAt: string
-  readonly mainThreadPersonaId?: string | null
-  readonly mainThreadPersonaName?: string
-  readonly mainThreadPersonaSource?: "builtin" | "user"
 }
 
 type PendingMessage = PendingMessageInput & {
@@ -37,9 +34,6 @@ function enqueuePendingMessage(input: PendingMessageInput): PendingMessage {
     attachments: input.attachments,
     target: input.target,
     createdAt: input.createdAt,
-    mainThreadPersonaId: input.mainThreadPersonaId,
-    mainThreadPersonaName: input.mainThreadPersonaName,
-    mainThreadPersonaSource: input.mainThreadPersonaSource,
     status: "queued",
   }
 }

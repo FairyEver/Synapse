@@ -32,11 +32,18 @@ type ProviderModelCatalog = {
 const LOCAL_CLAUDE_CODE_PROVIDER_ID = "local-claude-code"
 const LOCAL_CLAUDE_CODE_DEFAULT_MODEL_LABEL = "Claude Code 默认"
 const MODEL_TIER_DISPLAY_LABELS: Record<ModelTier, string> = {
+  default: "#1",
+  haiku: "#4",
+  sonnet: "#3",
+  opus: "#2",
+}
+const MODEL_TIER_ORIGINAL_LABELS: Record<ModelTier, string> = {
   default: "主模型",
   haiku: "Haiku",
   sonnet: "Sonnet",
   opus: "Opus",
 }
+const MODEL_TIER_DISPLAY_ORDER: readonly ModelTier[] = ["default", "opus", "sonnet", "haiku"]
 
 /**
  * Extract the model name string from a provider by tier.
@@ -192,7 +199,9 @@ function fallbackProviderModelLabel(selection: ProviderModelSelection): string {
 
 export {
   LOCAL_CLAUDE_CODE_DEFAULT_MODEL_LABEL,
+  MODEL_TIER_DISPLAY_ORDER,
   MODEL_TIER_DISPLAY_LABELS,
+  MODEL_TIER_ORIGINAL_LABELS,
   formatProviderModelLabel,
   isLocalClaudeCodeProvider,
   isProviderModelTierSelectable,

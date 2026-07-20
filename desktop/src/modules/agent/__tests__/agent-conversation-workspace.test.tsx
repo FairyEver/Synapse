@@ -3,12 +3,27 @@
  */
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import type { SynapseProjectConfig } from "@/types/config"
 import { AgentConversationWorkspace } from "../components/agent-conversation-workspace"
 import type { AgentConversationWorkspaceController } from "../components/agent-conversation-workspace"
+
+vi.mock("@/app-shell/config", () => ({
+  useAppConfig: () => ({
+    config: {
+      agent: {
+        defaultProviderModel: {
+          providerId: "provider-1",
+          providerName: "百炼",
+          modelTier: "sonnet",
+          modelName: "glm-5.1",
+        },
+      },
+    },
+  }),
+}))
 
 vi.mock("../components/agent-composer", () => ({
   AgentComposer: (props: {
@@ -48,6 +63,28 @@ const session: SynapseAgentSessionSummary = {
 }
 
 let roots: Root[] = []
+
+beforeEach(() => {
+  Object.defineProperty(window, "synapse", {
+    configurable: true,
+    writable: true,
+    value: {
+      agent: {
+        listAllProviders: vi.fn(async () => [{
+          id: "provider-1",
+          name: "百炼",
+          category: "official",
+          apiKeyField: "ANTHROPIC_API_KEY",
+          active: true,
+          model: "glm-5.1",
+          sonnetModel: "glm-5.1",
+          createdAt: "2026-07-20T00:00:00.000Z",
+          updatedAt: "2026-07-20T00:00:00.000Z",
+        }]),
+      },
+    },
+  })
+})
 
 afterEach(() => {
   for (const root of roots) {
@@ -163,6 +200,48 @@ describe("AgentConversationWorkspace", () => {
     expect(container.textContent).not.toContain("待回答 1")
   })
 
+  it("shows the fixed persona name in the conversation header", () => {
+    const container = renderWorkspace({
+      mode: "embedded",
+      session: {
+        ...session,
+        activeMainThreadPersonaId: "persona-1",
+        activeMainThreadPersonaName: "固定智能体",
+      },
+      chat: createController({
+        personasLoaded: true,
+        personas: [{
+          id: "persona-1",
+          schemaVersion: 1,
+          name: "固定智能体",
+          description: "固定身份",
+          systemPrompt: "固定身份",
+          providerModel: null,
+          source: "user",
+          readonly: false,
+        }],
+      }),
+    })
+
+    expect(container.textContent).toContain("固定智能体")
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="新建对话"]')?.disabled).toBe(false)
+  })
+
+  it("blocks sending when the fixed persona is unavailable and offers a new conversation", () => {
+    const container = renderWorkspace({
+      mode: "embedded",
+      session: {
+        ...session,
+        activeMainThreadPersonaId: "missing-persona",
+        activeMainThreadPersonaName: "已删除智能体",
+      },
+      chat: createController({ personasLoaded: true, personas: [] }),
+    })
+
+    expect(container.textContent).toContain("该智能体不可用，请新建对话。")
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="新建对话"]')?.disabled).toBe(true)
+  })
+
   it("creates a replacement session from window mode and asks the page to retarget", async () => {
     const createdSession: SynapseAgentSessionSummary = {
       ...session,
@@ -180,6 +259,13 @@ describe("AgentConversationWorkspace", () => {
 
     await act(async () => {
       container.querySelector<HTMLButtonElement>('button[aria-label="新建对话"]')?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      [...document.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "创建对话")
+        ?.click()
+      await Promise.resolve()
     })
 
     expect(createSession).toHaveBeenCalledWith(
@@ -187,6 +273,8 @@ describe("AgentConversationWorkspace", () => {
       "provider-1",
       "default",
       "sonnet",
+      expect.any(String),
+      null,
     )
     expect(onReplaceDetachedTarget).toHaveBeenCalledWith(createdSession)
   })
@@ -208,6 +296,13 @@ describe("AgentConversationWorkspace", () => {
 
     await act(async () => {
       container.querySelector<HTMLButtonElement>('button[aria-label="新建对话"]')?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      [...document.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "创建对话")
+        ?.click()
+      await Promise.resolve()
     })
 
     expect(createSession).toHaveBeenCalled()
@@ -250,6 +345,7 @@ describe("AgentConversationWorkspace", () => {
 
 function renderWorkspace(options: {
   readonly mode: "embedded" | "window"
+  readonly session?: SynapseAgentSessionSummary
   readonly onOpenDetached?: (target: { projectId: string; conversationId: string; sessionKey: string }) => void
   readonly project?: SynapseProjectConfig
   readonly onReplaceDetachedTarget?: (session: SynapseAgentSessionSummary) => Promise<boolean>
@@ -263,7 +359,7 @@ function renderWorkspace(options: {
   act(() => {
     root.render(
       <AgentConversationWorkspace
-        session={session}
+        session={options.session ?? session}
         project={options.project}
         target={{ projectId: "project-1", conversationId: "conversation-1", sessionKey: "local:renderer" }}
         chat={options.chat ?? createController()}
@@ -317,7 +413,7 @@ function createController(
     forceKillTurn: vi.fn(async () => undefined),
     refresh: vi.fn(async () => undefined),
     personas: [],
-    updateSessionPersona: vi.fn(async () => undefined),
+    personasLoaded: true,
     ...overrides,
   }
 }

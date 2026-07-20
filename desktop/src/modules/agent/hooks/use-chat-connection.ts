@@ -32,9 +32,6 @@ type SendMessageTarget = TimelineTarget
 
 type SendMessageOptions = {
   readonly attachments?: readonly AgentDraftAttachment[]
-  readonly mainThreadPersonaId?: string | null
-  readonly mainThreadPersonaName?: string
-  readonly mainThreadPersonaSource?: "builtin" | "user"
 }
 
 type PermissionResponseTarget = Pick<SynapseAgentPendingPermission, "projectId" | "requestId">
@@ -69,12 +66,9 @@ type ChatConnectionResult = {
     mode?: SynapseAgentPermissionMode,
     modelTier?: string,
     name?: string,
+    personaId?: string | null,
   ) => Promise<SynapseAgentSessionSummary | undefined>
   readonly selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
-  readonly updateSessionPersona: (
-    session: SynapseAgentSessionSummary,
-    personaId: string | null,
-  ) => Promise<SynapseAgentSessionSummary | undefined>
   readonly sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
   readonly deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
@@ -221,6 +215,7 @@ function useChatConnection(
           errorName: rawError instanceof Error ? rawError.name : typeof rawError,
           errorLength: errorMessage(rawError).length,
         })
+        dispatch({ type: "SET_PERSONAS", personas: [] })
       })
     return bridge.agentPersonas.onChanged((event) => {
       dispatch({ type: "SET_PERSONAS", personas: event.result?.items ?? event.items })
@@ -415,6 +410,7 @@ function useChatConnection(
     mode?: SynapseAgentPermissionMode,
     modelTier?: string,
     name?: string,
+    personaId?: string | null,
   ) => {
     if (!projectId) return undefined
     const requestId = selectRequestIdRef.current + 1
@@ -432,6 +428,7 @@ function useChatConnection(
         providerId,
         mode,
         modelTier,
+        personaId,
       })
       const createdSession = normalizeSessionProject(created, projectId)
       session = createdSession
@@ -553,41 +550,6 @@ function useChatConnection(
     state.sessions,
   ])
 
-  const updateSessionPersona = useCallback(async (
-    session: SynapseAgentSessionSummary,
-    personaId: string | null,
-  ) => {
-    const bridge = requireSynapseBridge()
-    dispatch({ type: "SET_ERROR", error: null })
-    try {
-      const updated = await bridge.agent.updateSessionPersona({
-        projectId: session.projectId,
-        conversationId: session.id,
-        personaId,
-      })
-      const normalized = normalizeSessionProject(updated, session.projectId)
-      dispatch({ type: "UPDATE_SESSIONS", updater: (current) => sortSessions(current.map((item) =>
-        isSameSession(item, normalized) ? normalized : item)) })
-      dispatch({ type: "UPDATE_ARCHIVED_SESSIONS", updater: (current) => current.map((item) =>
-        isSameSession(item, normalized) ? normalized : item) })
-      if (selectedConversationIdRef.current === normalized.id) {
-        setSelectedSession(normalized)
-      }
-      return normalized
-    } catch (rawError) {
-      logger.error("Agent persona update failed.", {
-        projectId: session.projectId,
-        conversationId: session.id,
-        personaSelected: Boolean(personaId),
-        boundary: "renderer.agent.persona-update",
-        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
-        errorLength: errorMessage(rawError).length,
-      })
-      dispatch({ type: "SET_ERROR", error: "切换失败" })
-      return undefined
-    }
-  }, [dispatch, selectedConversationIdRef, setSelectedSession])
-
   const sendMessage = useCallback(async (
     content: string,
     target?: SendMessageTarget,
@@ -636,9 +598,6 @@ function useChatConnection(
         content: readableContent,
         attachments: serializeDraftAttachments(attachments),
         clientSubmittedAt: now,
-        mainThreadPersonaId: options.mainThreadPersonaId,
-        mainThreadPersonaName: options.mainThreadPersonaName,
-        mainThreadPersonaSource: options.mainThreadPersonaSource,
       })
       // NOTE: send() resolves when the message is enqueued, NOT when the turn
       // completes.  REMOVE_SENDING_CONVERSATION is handled by the terminal
@@ -970,7 +929,6 @@ function useChatConnection(
     refreshPersonas,
     createSession,
     selectSession,
-    updateSessionPersona,
     sendMessage,
     deleteSession,
     renameSession,

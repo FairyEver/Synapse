@@ -47,6 +47,10 @@ vi.mock("../../../services/log-store", () => ({
 }))
 
 describe("agent session IPC methods", () => {
+  it("does not expose a mid-conversation persona update method", () => {
+    expect(sessionMethods).not.toHaveProperty("updateSessionPersona")
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     electronMock.app.getPath.mockReturnValue("/user-data")
@@ -248,6 +252,7 @@ describe("agent session IPC methods", () => {
       projectId: DEFAULT_AGENT_WORKSPACE_PROJECT_ID,
       agentType: "claude-code",
       providerId: "anthropic",
+      personaId: "builtin-zh-en-translator",
     })).resolves.toEqual(expect.objectContaining({
       id: "local-conv",
       projectId: DEFAULT_AGENT_WORKSPACE_PROJECT_ID,
@@ -268,62 +273,8 @@ describe("agent session IPC methods", () => {
     expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
       platform: "local-renderer",
       sessionKey: "local:renderer",
-    }))
-  })
-
-  it("updates a conversation persona through IPC", async () => {
-    const updateSessionPersona = vi.fn().mockResolvedValue(storedConversation({
-      agentConfig: {
-        activeMainThreadPersonaId: "builtin-zh-en-translator",
-        activeMainThreadPersonaSnapshot: {
-          id: "builtin-zh-en-translator",
-          name: "中英翻译",
-          source: "builtin",
-          definitionHash: "hash-translator",
-        },
-      },
-    }))
-    const ctx = createContext({
-      agent: { updateSessionPersona },
-      dataRepo: {
-        namespace: vi.fn(),
-      } as unknown as DataRepository,
-    })
-
-    const result = await sessionMethods.updateSessionPersona.handler(ctx, {
-      projectId: "project-1",
-      conversationId: "conv-1",
       personaId: "builtin-zh-en-translator",
-    }) as { activeMainThreadPersonaId?: string; activeMainThreadPersonaName?: string }
-
-    expect(updateSessionPersona).toHaveBeenCalledWith({
-      conversationId: "conv-1",
-      personaId: "builtin-zh-en-translator",
-    })
-    expect(result.activeMainThreadPersonaId).toBe("builtin-zh-en-translator")
-    expect(result.activeMainThreadPersonaName).toBe("中英翻译")
-  })
-
-  it("clears a conversation persona through IPC", async () => {
-    const updateSessionPersona = vi.fn().mockResolvedValue(storedConversation())
-    const ctx = createContext({
-      agent: { updateSessionPersona },
-      dataRepo: {
-        namespace: vi.fn(),
-      } as unknown as DataRepository,
-    })
-
-    const result = await sessionMethods.updateSessionPersona.handler(ctx, {
-      projectId: "project-1",
-      conversationId: "conv-1",
-      personaId: null,
-    }) as { activeMainThreadPersonaId?: string }
-
-    expect(updateSessionPersona).toHaveBeenCalledWith({
-      conversationId: "conv-1",
-      personaId: null,
-    })
-    expect(result.activeMainThreadPersonaId).toBeUndefined()
+    }))
   })
 
   it("logs session deletion failures with conversation context", async () => {

@@ -305,7 +305,7 @@ describe("AgentSessionRepository", () => {
     expect(session.agentType).toBeUndefined()
   })
 
-  it("saves active main-thread persona on an existing conversation", async () => {
+  it("stores the fixed main-thread persona atomically with conversation creation", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({
       projectId: "project-1",
@@ -315,17 +315,24 @@ describe("AgentSessionRepository", () => {
     const conversation = await repository.createSession({
       sessionKey: "local:renderer",
       agentType: "claude-code",
+      providerId: "anthropic",
+      modelTier: "sonnet",
+      mainThreadPersonaSnapshot: {
+        id: "builtin-zh-en-translator",
+        name: "中英翻译",
+        source: "builtin",
+        definitionHash: "hash-translator",
+      },
     })
 
-    const updated = await repository.saveMainThreadPersona(conversation.id, {
-      id: "builtin-zh-en-translator",
-      name: "中英翻译",
-      source: "builtin",
-      definitionHash: "hash-translator",
+    expect(conversation).toMatchObject({
+      providerId: "anthropic",
+      agentConfig: {
+      modelTier: "sonnet",
+      activeMainThreadPersonaId: "builtin-zh-en-translator",
+      },
     })
-
-    expect(updated.agentConfig?.activeMainThreadPersonaId).toBe("builtin-zh-en-translator")
-    expect(updated.agentConfig?.activeMainThreadPersonaSnapshot).toEqual({
+    expect(conversation.agentConfig?.activeMainThreadPersonaSnapshot).toEqual({
       id: "builtin-zh-en-translator",
       name: "中英翻译",
       source: "builtin",
@@ -504,7 +511,7 @@ describe("AgentSessionRepository", () => {
     })
   })
 
-  it("clears active main-thread persona without dropping mode or model tier", async () => {
+  it("keeps mode and model tier alongside a fixed main-thread persona", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({
       projectId: "project-1",
@@ -516,22 +523,19 @@ describe("AgentSessionRepository", () => {
       agentType: "claude-code",
       mode: "plan",
       modelTier: "sonnet",
-    })
-    await repository.saveMainThreadPersona(conversation.id, {
-      id: "builtin-zh-en-translator",
-      name: "中英翻译",
-      source: "builtin",
-      definitionHash: "hash-translator",
+      mainThreadPersonaSnapshot: {
+        id: "builtin-zh-en-translator",
+        name: "中英翻译",
+        source: "builtin",
+        definitionHash: "hash-translator",
+      },
     })
 
-    const updated = await repository.saveMainThreadPersona(conversation.id, null)
-
-    expect(updated.agentConfig).toMatchObject({
+    expect(conversation.agentConfig).toMatchObject({
       mode: "plan",
       modelTier: "sonnet",
+      activeMainThreadPersonaId: "builtin-zh-en-translator",
     })
-    expect(updated.agentConfig?.activeMainThreadPersonaId).toBeNull()
-    expect(updated.agentConfig?.activeMainThreadPersonaSnapshot).toBeUndefined()
   })
 
   it("keeps active conversations isolated by workspace key", async () => {

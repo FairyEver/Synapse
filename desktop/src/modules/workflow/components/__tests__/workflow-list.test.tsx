@@ -14,6 +14,7 @@ const {
   toastSuccess,
   track,
   workflowGet,
+  workflowDelete,
   workflowListState,
   workflowActiveRuns,
   workflowExportPackage,
@@ -28,6 +29,7 @@ const {
   toastSuccess: vi.fn(),
   track: vi.fn(),
   workflowGet: vi.fn(),
+  workflowDelete: vi.fn(),
   workflowListState: { items: [] as WorkflowMeta[], migrationDiagnostics: [] as WorkflowMigrationDiagnostic[] },
   workflowActiveRuns: vi.fn(),
   workflowExportPackage: vi.fn(),
@@ -67,6 +69,7 @@ vi.mock("../workflow-card", () => ({
     onOpen,
     onRun,
     onOpenActiveRun,
+    onDelete,
   }: {
     meta: { id: string }
     runState?: { status: string; runId?: string }
@@ -74,6 +77,7 @@ vi.mock("../workflow-card", () => ({
     onOpen: () => void
     onRun: () => void
     onOpenActiveRun: (runId: string) => void
+    onDelete: (cleanupImportedChildren?: boolean) => void
   }) => (
     <tr>
       <td>
@@ -83,6 +87,7 @@ vi.mock("../workflow-card", () => ({
           <button type="button" data-testid={`open-active-${meta.id}`} onClick={() => onOpenActiveRun(runState.runId!)}>open active</button>
         ) : null}
         <button type="button" data-track="workflow-card-export" onClick={onExport}>export</button>
+        <button type="button" data-testid={`delete-${meta.id}`} onClick={() => onDelete(true)}>delete</button>
       </td>
     </tr>
   ),
@@ -157,6 +162,7 @@ beforeEach(() => {
     updatedAt: 0,
   }]
   workflowGet.mockResolvedValue(parameterizedWorkflow)
+  workflowDelete.mockResolvedValue(undefined)
   workflowActiveRuns.mockResolvedValue([])
   workflowRunDefinition.mockResolvedValue({ runId: "run-1" })
   workflowOpenRunner.mockResolvedValue(undefined)
@@ -177,6 +183,7 @@ beforeEach(() => {
     value: {
       workflow: {
         get: workflowGet,
+        delete: workflowDelete,
         activeRuns: workflowActiveRuns,
         exportPackage: workflowExportPackage,
         inspectExportPackage: workflowInspectExportPackage,
@@ -201,6 +208,33 @@ afterEach(() => {
 })
 
 describe("WorkflowList", () => {
+  it("shows the specific sanitized reason when deletion fails", async () => {
+    const rawError = "该工作流仍被以下工作流调用：发布流程。请先解除引用。token=sk-secret"
+    workflowDelete.mockRejectedValueOnce(new Error(rawError))
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowList onCreate={vi.fn()} />)
+    })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="delete-workflow-param"]')?.click()
+      await Promise.resolve()
+    })
+
+    expect(workflowDelete).toHaveBeenCalledWith("workflow-param", { cleanupImportedChildren: true })
+    expect(toastError).toHaveBeenCalledWith("该工作流仍被以下工作流调用：发布流程。请先解除引用。token=[redacted]")
+    expect(loggerWarn).toHaveBeenCalledWith("Workflow delete failed.", {
+      boundary: "renderer.workflow.list.delete",
+      workflowId: "workflow-param",
+      errorName: "Error",
+      errorLength: rawError.length,
+      errorMessage: "该工作流仍被以下工作流调用：发布流程。请先解除引用。token=[redacted]",
+    })
+  })
+
   it("tracks parameterized run submissions without recording parameter values", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

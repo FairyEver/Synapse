@@ -150,16 +150,10 @@ describe("SessionLifecycleManager", () => {
     })
   })
 
-  it("persists active main-thread persona through the repository", async () => {
-    const updated = {
-      id: "conversation-1",
-      sessionKey: "session-1",
-      agentConfig: {
-        activeMainThreadPersonaId: "builtin-zh-en-translator",
-      },
-    }
+  it("passes the fixed persona snapshot into session creation", async () => {
+    const updated = { id: "conversation-1", sessionKey: "session-1" }
     const repository = {
-      saveMainThreadPersona: vi.fn(async () => updated),
+      createSession: vi.fn(async () => updated),
     } as unknown as AgentSessionRepository
     const manager = new SessionLifecycleManager({
       projectId: "project-1",
@@ -176,9 +170,19 @@ describe("SessionLifecycleManager", () => {
       definitionHash: "hash-translator",
     }
 
-    await expect(manager.saveMainThreadPersona("conversation-1", snapshot)).resolves.toBe(updated)
+    await expect(manager.createSession({
+      sessionKey: "session-1",
+      providerId: "anthropic",
+      modelTier: "sonnet",
+      mainThreadPersonaSnapshot: snapshot,
+    })).resolves.toBe(updated)
 
-    expect(repository.saveMainThreadPersona).toHaveBeenCalledWith("conversation-1", snapshot)
+    expect(repository.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      sessionKey: "session-1",
+      providerId: "anthropic",
+      modelTier: "sonnet",
+      mainThreadPersonaSnapshot: snapshot,
+    }))
   })
 })
 

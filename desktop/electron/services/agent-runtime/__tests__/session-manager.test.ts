@@ -340,16 +340,13 @@ describe("SessionManager", () => {
         }),
       },
     }))
-    expect(sessions[0]?.setMainThreadAgent).not.toHaveBeenCalled()
     expect(state.mainThreadAgentName).toBe("synapse-persona__builtin-zh-en-translator")
     expect(state.agentDefinitionsHash).toBe("hash-translator")
   })
 
-  it("does not fail a newly-created persona session when hot agent switching is unsupported", async () => {
+  it("creates a persona session without requiring a hot-switch API", async () => {
     const states = new Map<string, RuntimeSessionState>()
-    const createSession = vi.fn(() => new FakeLiveSession({
-      agentSwitchError: new Error("当前会话不支持切换智能体"),
-    }))
+    const createSession = vi.fn(() => new FakeLiveSession())
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
@@ -444,7 +441,7 @@ describe("SessionManager", () => {
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("Secret persona prompt text")
   })
 
-  it("switches the reusable live session when only the active persona changes", async () => {
+  it("recreates the live session when the active persona changes", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const sessions: FakeLiveSession[] = []
     const createSession = vi.fn(() => {
@@ -490,24 +487,24 @@ describe("SessionManager", () => {
     })
 
     expect(first.created).toBe(true)
-    expect(second.created).toBe(false)
-    expect(second.liveSession).toBe(first.liveSession)
-    expect(createSession).toHaveBeenCalledOnce()
-    expect(sessions[0]?.setMainThreadAgent).toHaveBeenCalledWith("synapse-persona__new")
+    expect(second.created).toBe(true)
+    expect(second.liveSession).not.toBe(first.liveSession)
+    expect(createSession).toHaveBeenCalledTimes(2)
+    expect(sessions[0]?.close).toHaveBeenCalledOnce()
     expect(state.mainThreadAgentName).toBe("synapse-persona__new")
   })
 
-  it("recreates without resuming the old SDK session when an active persona switch cannot be applied live", async () => {
+  it("recreates without resuming the old SDK session when a persona becomes active", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const sessions: FakeLiveSession[] = []
     const createSessionInputs: CreateAgentLiveSessionInput[] = []
     const createSession = vi.fn((input: CreateAgentLiveSessionInput) => {
       createSessionInputs.push(input)
-      const session = new FakeLiveSession({ disableAgentSwitch: sessions.length === 0 })
+      const session = new FakeLiveSession()
       sessions.push(session)
       return session
     })
-    let activeAgentName: string | undefined
+    let activeAgentName: string | undefined = undefined
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
@@ -1527,23 +1524,14 @@ class FakeLiveSession implements AgentLiveSession {
     if (this.closeError) throw this.closeError
     this.closed = true
   })
-  readonly setMainThreadAgent?: (agentName: string | null) => Promise<void>
   readonly cancelCurrentTurn?: () => Promise<boolean>
   mainThreadAgentName: string | undefined
   protected closed = false
   private closeError: Error | undefined
 
   constructor(options: {
-    readonly agentSwitchError?: Error
     readonly cancelError?: Error
-    readonly disableAgentSwitch?: boolean
   } = {}) {
-    if (!options.disableAgentSwitch) {
-      this.setMainThreadAgent = vi.fn(async (agentName: string | null) => {
-        if (options.agentSwitchError) throw options.agentSwitchError
-        this.mainThreadAgentName = agentName ?? undefined
-      })
-    }
     if (options.cancelError) {
       this.cancelCurrentTurn = vi.fn(async () => {
         throw options.cancelError

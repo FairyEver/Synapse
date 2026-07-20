@@ -5,6 +5,12 @@ type PathCompareOptions = {
   resolvePath?: (value: string) => string
 }
 
+function inferPathPlatform(value: string, platform?: RuntimePlatform): RuntimePlatform | undefined {
+  if (platform !== undefined) return platform
+
+  return /^(?:[A-Za-z]:(?:[\\/]|$)|\\\\)/u.test(value) ? "win32" : undefined
+}
+
 function normalizePathForCompare(
   value: string,
   options: PathCompareOptions = {},
@@ -14,8 +20,9 @@ function normalizePathForCompare(
 
   const resolved = options.resolvePath ? options.resolvePath(trimmed) : normalizeDotSegments(trimmed, options.platform)
   const normalized = resolved.replace(/[\\/]+$/u, "")
+  const platform = inferPathPlatform(resolved, options.platform)
 
-  return options.platform === "win32"
+  return platform === "win32"
     ? normalized.replace(/\//gu, "\\").toLowerCase()
     : normalized
 }
@@ -37,7 +44,8 @@ function isPathInsideDirectory(
   const child = normalizePathForCompare(childPath, options)
   if (!parent || !child) return parent === child
   if (parent === child) return true
-  const separator = options.platform === "win32" ? "\\" : "/"
+  const platform = inferPathPlatform(parent, options.platform)
+  const separator = platform === "win32" ? "\\" : "/"
   const parentPrefix = parent.endsWith(separator) ? parent : `${parent}${separator}`
   return child.startsWith(parentPrefix)
 }

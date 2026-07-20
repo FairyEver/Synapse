@@ -91,12 +91,6 @@ beforeEach(() => {
       onEvent: vi.fn(() => () => {}),
       respondPermission: vi.fn(async () => undefined),
       setPermissionMode: vi.fn(async () => ({ ...session, mode: "plan" })),
-      updateSessionPersona: vi.fn(async () => ({
-        ...session,
-        activeMainThreadPersonaId: "builtin-zh-en-translator",
-        activeMainThreadPersonaName: "中英翻译",
-        activeMainThreadPersonaSource: "builtin",
-      })),
       send: vi.fn(async () => {
         throw new Error("enqueue failed with prompt=secret")
       }),
@@ -168,7 +162,7 @@ describe("useAgentChat", () => {
     })
   })
 
-  it("loads persona menu from offline cache result", async () => {
+  it("loads new-conversation personas from an offline cache result", async () => {
     const bridge = (window as unknown as {
       synapse: {
         agentPersonas: {
@@ -200,11 +194,34 @@ describe("useAgentChat", () => {
     expect(chat?.personas.map((item) => item.id)).toEqual(["persona-cache"])
   })
 
-  it("updates the active session persona through the bridge", async () => {
+  it("finishes persona loading with an empty list when no cache is available", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agentPersonas: {
+          list: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agentPersonas
+    bridge.list.mockRejectedValue(new Error("offline without cache"))
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookProbe onChange={(next) => { chat = next }} />)
+    })
+    await waitFor(() => chat?.personasLoaded === true)
+
+    expect(chat?.personas).toEqual([])
+  })
+
+  it("passes the selected persona when creating a session", async () => {
     const bridge = (window as unknown as {
       synapse: {
         agent: {
-          updateSessionPersona: ReturnType<typeof vi.fn>
+          createSession: ReturnType<typeof vi.fn>
         }
       }
     }).synapse.agent
@@ -225,16 +242,26 @@ describe("useAgentChat", () => {
     await waitFor(() => chat?.selectedConversationId === session.id)
 
     await act(async () => {
-      await chat?.updateSessionPersona(session, "builtin-zh-en-translator")
+      await chat?.createSession(
+        "project-1",
+        "anthropic",
+        undefined,
+        "sonnet",
+        "新对话",
+        "builtin-zh-en-translator",
+      )
     })
 
-    expect(bridge.updateSessionPersona).toHaveBeenCalledWith({
-      projectId: session.projectId,
-      conversationId: session.id,
+    expect(bridge.createSession).toHaveBeenCalledWith({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      agentType: "claude-code",
+      providerId: "anthropic",
+      modelTier: "sonnet",
+      name: "新对话",
+      mode: undefined,
       personaId: "builtin-zh-en-translator",
     })
-    expect(chat?.sessions[0]?.activeMainThreadPersonaId).toBe("builtin-zh-en-translator")
-    expect(chat?.personas[0]?.name).toBe("中英翻译")
   })
 
   it("removes the optimistic local user message when send enqueue fails", async () => {

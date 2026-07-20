@@ -19,6 +19,7 @@ type ChatState = {
   providers: SynapseAgentProviderState | null
   commands: SynapseAgentPublishedCommand[]
   personas: SynapseAgentPersona[]
+  personasLoaded: boolean
   unreadByConversationId: UnreadState
   selectedProjectId: string | undefined
   selectedConversationId: string | undefined
@@ -67,6 +68,7 @@ const initialChatState: ChatState = {
   providers: null,
   commands: [],
   personas: [],
+  personasLoaded: false,
   unreadByConversationId: {},
   selectedProjectId: undefined,
   selectedConversationId: undefined,
@@ -113,7 +115,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_COMMANDS":
       return { ...state, commands: action.commands }
     case "SET_PERSONAS":
-      return { ...state, personas: action.personas }
+      return { ...state, personas: action.personas, personasLoaded: true }
     case "SET_UNREAD":
       return { ...state, unreadByConversationId: action.unreadByConversationId }
     case "UPDATE_UNREAD":

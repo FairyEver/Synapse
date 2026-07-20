@@ -349,28 +349,16 @@ describe("agent IPC schemas", () => {
     }))
   })
 
-  it("accepts a main-thread persona snapshot on send requests", () => {
-    expect(messageMethods.send.request.parse({
+  it("strips legacy per-message persona fields from send requests", () => {
+    const parsed = messageMethods.send.request.parse({
       projectId: "project-1",
       conversationId: "conversation-1",
       content: "hello",
       mainThreadPersonaId: "builtin-zh-en-translator",
       mainThreadPersonaName: "中英翻译",
-    })).toMatchObject({
-      mainThreadPersonaId: "builtin-zh-en-translator",
-      mainThreadPersonaName: "中英翻译",
     })
-
-    expect(messageMethods.send.request.parse({
-      projectId: "project-1",
-      conversationId: "conversation-1",
-      content: "hello",
-      mainThreadPersonaId: null,
-      mainThreadPersonaName: "普通",
-    })).toMatchObject({
-      mainThreadPersonaId: null,
-      mainThreadPersonaName: "普通",
-    })
+    expect(parsed).not.toHaveProperty("mainThreadPersonaId")
+    expect(parsed).not.toHaveProperty("mainThreadPersonaName")
   })
 
   it("allows attachment-only send requests and rejects empty sends", () => {

@@ -467,7 +467,7 @@ export class ConversationRouter {
         message.content,
         mergeHistoryMetadata(
           attachmentHistoryMetadata(message.attachments),
-          mainThreadPersonaHistoryMetadataForTurn(message, conversation),
+          mainThreadPersonaHistoryMetadata(conversation),
         ),
       )
       this.emitConversationUpdated(conversation)
@@ -957,7 +957,7 @@ export class ConversationRouter {
         message.content,
         mergeHistoryMetadata(
           attachmentHistoryMetadata(message.attachments),
-          mainThreadPersonaHistoryMetadataForTurn(message, conversation),
+          mainThreadPersonaHistoryMetadata(conversation),
         ),
       )
       const sessionHandle = await this.sessionManager.getOrCreateSession({
@@ -1447,7 +1447,7 @@ export class ConversationRouter {
       metadata,
       turnUsage.modelUsage && turnUsage.summary ? { turnUsage: turnUsage.summary } : undefined,
     )
-    metadata = mergeHistoryMetadata(metadata, mainThreadPersonaHistoryMetadataForTurn(input.message, input.conversation))
+    metadata = mergeHistoryMetadata(metadata, mainThreadPersonaHistoryMetadata(input.conversation))
     metadata = this.withNormalizedSdkCostMetadata(input.conversation, input.event, metadata)
     metadata = this.withLocalCostMetadata(
       input.state,
@@ -2279,23 +2279,6 @@ function mainThreadPersonaHistoryMetadata(
       name: snapshot.name,
       source: snapshot.source,
       definitionHash: snapshot.definitionHash,
-    },
-  }
-}
-
-function mainThreadPersonaHistoryMetadataForTurn(
-  message: AgentMessage,
-  conversation: ConversationEntryV1,
-): ConversationEntryV1["history"][number]["metadata"] | undefined {
-  if (message.mainThreadPersonaId === undefined) {
-    return mainThreadPersonaHistoryMetadata(conversation)
-  }
-  if (!message.mainThreadPersonaId) return undefined
-  return {
-    mainThreadPersona: {
-      id: message.mainThreadPersonaId,
-      name: message.mainThreadPersonaName?.trim() || message.mainThreadPersonaId,
-      source: message.mainThreadPersonaSource ?? "user",
     },
   }
 }

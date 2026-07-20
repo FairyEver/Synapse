@@ -245,6 +245,73 @@ describe("EditorInstallService security", () => {
       .resolves.toBe('TOKEN="replacement"\nCUSTOM=user-only\nNEW_KEY="confirmed"\n')
   })
 
+  it("rejects an incomplete repository Skill install and preserves the existing target", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(targetPath, ".synapse.json"), JSON.stringify({ id: "skill-1" }), "utf8")
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+    mocks.configStore.load.mockResolvedValue({
+      activeRepoUuid: "repo-1",
+      repositories: [{
+        uuid: "repo-1",
+        name: "Repo",
+        localPath: root,
+        contentDirs: {},
+      }],
+    })
+    mocks.repositoryStore.getRepositoryState.mockResolvedValue({
+      status: "ready",
+      isGitRepository: true,
+      gitRootPath: root,
+    })
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue({
+      ...createSkillDetail("skill-1"),
+      attachmentCount: 1,
+      attachments: [{
+        originalName: "references/guide.md",
+        sha256: "a".repeat(64),
+        size: 5,
+      }],
+    })
+    mocks.prepareSkillDirectory.mockImplementation(async ({
+      copyAttachment,
+      detail,
+      stagingDirectoryPath,
+    }) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# Incomplete Skill\n", "utf8")
+      await copyAttachment(
+        detail.attachments[0],
+        path.join(stagingDirectoryPath, detail.attachments[0].originalName),
+      )
+    })
+
+    await expect(editorInstallService.installToEditor({
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      scope: "global",
+    }, {
+      actor: { kind: "user" },
+      auditSink: new InMemoryAuditSink(),
+      permissionGuard: createPermissionGuard(),
+    })).rejects.toThrow("Skill 附件复制失败：references/guide.md")
+
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
+    await expect(readFile(path.join(targetPath, "references", "guide.md"), "utf8")).rejects.toThrow()
+  })
+
   it("records the source install mode in editor write audits", async () => {
     const root = await createTempRoot()
     const targetPath = path.join(root, "skills", "test-skill")

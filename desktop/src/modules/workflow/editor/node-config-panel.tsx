@@ -11,7 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowDefinition } from "@/types/workflow"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
-import type { ModelTier } from "@/types/provider-model"
+import { MODEL_TIER_DISPLAY_LABELS } from "@/lib/provider-model"
 import { getPanel } from "../../../../workflow-nodes/panel-registry"
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
 import { useProviderLookup } from "../../../../workflow-nodes/provider-lookup-context"
@@ -199,8 +199,6 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
 }
 
 const NO_PROJECT_VALUE = "__none__"
-const TIER_LABELS: Record<ModelTier, string> = { default: "主模型", haiku: "Haiku", sonnet: "Sonnet", opus: "Opus" }
-
 function GlobalSettingsForm({ definition, projects, onChange }: {
   definition: WorkflowDefinition
   projects: readonly SynapseProjectConfig[]
@@ -241,7 +239,7 @@ function GlobalSettingsForm({ definition, projects, onChange }: {
             <span className="flex min-w-0 items-center gap-1 truncate">
               {providerUnavailable && <AlertTriangle className="size-3 shrink-0 text-destructive" />}
               {definition.defaultProviderId
-                ? `${getProviderName(definition.defaultProviderId) ?? definition.defaultProviderId} · ${getModelDisplayName(definition.defaultProviderId, definition.defaultModelTier ?? "default") ?? getModelName(definition.defaultProviderId, definition.defaultModelTier ?? "default") ?? TIER_LABELS[definition.defaultModelTier ?? "default"]}`
+                ? `${getProviderName(definition.defaultProviderId) ?? definition.defaultProviderId} · ${getModelDisplayName(definition.defaultProviderId, definition.defaultModelTier ?? "default") ?? getModelName(definition.defaultProviderId, definition.defaultModelTier ?? "default") ?? MODEL_TIER_DISPLAY_LABELS[definition.defaultModelTier ?? "default"]}`
                 : "未设置"}
             </span>
             <ChevronDown className="size-3.5 text-muted-foreground" />

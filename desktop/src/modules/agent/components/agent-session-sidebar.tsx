@@ -13,8 +13,9 @@ import {
 import { useAppConfig } from "@/app-shell/config"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import { ArchivedGroup } from "./archived-group"
-import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
+import type { SynapseAgentPersona } from "@/types/agent-persona"
 import type { ProviderModelSelection } from "@/types/provider-model"
+import { AgentSessionCreateDialog } from "./agent-session-create-dialog"
 import { ProjectGroup } from "./project-group"
 import {
   CONVERSATION_SOURCE_OPTIONS,
@@ -38,11 +39,13 @@ type AgentSessionSidebarProps = {
   sourceFilter: ConversationSourceFilter
   unreadByConversationId: Record<string, number>
   sendingConversationIds: ReadonlySet<string>
+  personas?: readonly SynapseAgentPersona[]
   onCreateSession: (
     projectId: string,
     selection: ProviderModelSelection,
     name?: string,
-  ) => void | Promise<void>
+    personaId?: string | null,
+  ) => boolean | void | Promise<boolean | void>
   onSourceFilterChange: (sourceFilter: ConversationSourceFilter) => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
@@ -59,6 +62,7 @@ function AgentSessionSidebar({
   sourceFilter,
   unreadByConversationId,
   sendingConversationIds,
+  personas = [],
   onCreateSession,
   onSourceFilterChange,
   onSelect,
@@ -137,18 +141,15 @@ function AgentSessionSidebar({
           />
         ) : null}
       </div>
-      <ProviderModelSelectDialog
+      <AgentSessionCreateDialog
         open={createTarget !== null}
         onOpenChange={(open) => { if (!open) setCreateTarget(null) }}
         defaultSelection={config.agent.defaultProviderModel ?? undefined}
-        confirmInput={createTarget ? {
-          initialValue: createTarget.initialName,
-          ariaLabel: "会话名称",
-        } : undefined}
-        onSelect={async (selection, meta) => {
-          if (!createTarget) return
-          await onCreateSession(createTarget.project.id, selection, meta?.confirmInputValue)
-          setCreateTarget(null)
+        initialName={createTarget?.initialName ?? ""}
+        personas={personas}
+        onCreate={async ({ name, personaId, selection }) => {
+          if (!createTarget) return false
+          return (await onCreateSession(createTarget.project.id, selection, name, personaId)) !== false
         }}
       />
     </ModuleSidebar>

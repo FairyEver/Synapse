@@ -31,6 +31,7 @@ type UseAgentChatState = {
   providers: SynapseAgentProviderState | null
   commands: SynapseAgentPublishedCommand[]
   personas: SynapseAgentPersona[]
+  personasLoaded: boolean
   unreadByConversationId: UnreadState
   selectedProjectId?: string
   selectedConversationId?: string
@@ -48,16 +49,13 @@ type UseAgentChatState = {
     mode?: SynapseAgentPermissionMode,
     modelTier?: string,
     name?: string,
+    personaId?: string | null,
   ) => Promise<SynapseAgentSessionSummary | undefined>
   selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
   deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   refresh: () => Promise<void>
   refreshPersonas: () => Promise<void>
-  updateSessionPersona: (
-    session: SynapseAgentSessionSummary,
-    personaId: string | null,
-  ) => Promise<SynapseAgentSessionSummary | undefined>
   sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
   setPermissionMode: (mode: SynapseAgentPermissionMode, target?: AgentConversationTarget) => Promise<void>
   respondPermission: (
@@ -84,6 +82,7 @@ function useAgentChat(
     providers,
     commands,
     personas,
+    personasLoaded,
     unreadByConversationId,
     selectedProjectId,
     selectedConversationId,
@@ -153,6 +152,7 @@ function useAgentChat(
     providers,
     commands,
     personas,
+    personasLoaded,
     unreadByConversationId,
     selectedProjectId,
     selectedConversationId,
@@ -170,7 +170,6 @@ function useAgentChat(
     renameSession: connection.renameSession,
     refresh: connection.refresh,
     refreshPersonas: connection.refreshPersonas,
-    updateSessionPersona: connection.updateSessionPersona,
     sendMessage: connection.sendMessage,
     setPermissionMode: connection.setPermissionMode,
     respondPermission: connection.respondPermission,

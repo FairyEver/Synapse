@@ -719,11 +719,14 @@ export class EditorInstallCore {
                       throw new Error("当前还没有选中的本地目录。")
                     }
 
-                    await attachmentsPoolService.copyAttachmentToPath(
+                    const copied = await attachmentsPoolService.copyAttachmentToPath(
                       repositoryRootPath,
                       attachment,
                       attachmentTargetPath,
                     )
+                    if (!copied) {
+                      throw new Error(`Skill 附件复制失败：${attachment.originalName}`)
+                    }
                   }
                   logger.info("Staged skill attachment.", {
                     filePath: path.basename(attachmentTargetPath),

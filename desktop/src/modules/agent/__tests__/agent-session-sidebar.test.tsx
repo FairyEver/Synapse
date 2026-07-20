@@ -88,7 +88,7 @@ describe("AgentSessionSidebar", () => {
       configurable: true,
       value: {
         agent: {
-          listProviders: vi.fn().mockResolvedValue([
+          listAllProviders: vi.fn().mockResolvedValue([
             {
               id: "anthropic",
               name: "Anthropic",
@@ -149,7 +149,7 @@ describe("AgentSessionSidebar", () => {
     })
 
     const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent === "确认")
+      .find((button) => button.textContent === "创建对话")
     await act(async () => {
       confirmButton?.click()
     })
@@ -159,7 +159,7 @@ describe("AgentSessionSidebar", () => {
       providerName: "Anthropic",
       modelTier: "sonnet",
       modelName: "claude-sonnet-4-5",
-    }, "需求复盘")
+    }, "需求复盘", null)
   })
 
   it("allows long session titles to truncate inside the sidebar", () => {
@@ -449,13 +449,13 @@ describe("AgentSessionSidebar", () => {
     expect(html).not.toContain("未读")
   })
 
-  it("requires a provider selection before creating a session", async () => {
+  it("defaults to the active provider when creating a session", async () => {
     const onCreateSession = vi.fn()
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: {
         agent: {
-          listProviders: vi.fn().mockResolvedValue([
+          listAllProviders: vi.fn().mockResolvedValue([
             {
               id: "anthropic",
               name: "Anthropic",
@@ -514,22 +514,11 @@ describe("AgentSessionSidebar", () => {
     })
 
     expect(onCreateSession).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain("选择供应商 + 模型")
+    expect(document.body.textContent).toContain("OpenRouter")
     expect(document.body.textContent).toContain("OpenRouter")
 
-    // Click the Anthropic row to select it
-    const anthropicRow = [...document.querySelectorAll("tr")]
-      .find((row) => row.textContent?.includes("Anthropic"))
-    expect(anthropicRow).toBeDefined()
-
-    await act(async () => {
-      anthropicRow?.click()
-    })
-
-    expect(onCreateSession).not.toHaveBeenCalled()
-
     const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent === "确认")
+      .find((button) => button.textContent === "创建对话")
     expect(confirmButton).toBeDefined()
 
     await act(async () => {
@@ -537,11 +526,11 @@ describe("AgentSessionSidebar", () => {
     })
 
     expect(onCreateSession).toHaveBeenCalledWith("project-1", {
-      providerId: "anthropic",
-      providerName: "Anthropic",
+      providerId: "openrouter",
+      providerName: "OpenRouter",
       modelTier: "sonnet",
       modelName: "claude-sonnet-4-5",
-    }, expect.any(String))
+    }, expect.any(String), null)
   })
 
   it("shows the dialog even when only one provider is available", async () => {
@@ -550,7 +539,7 @@ describe("AgentSessionSidebar", () => {
       configurable: true,
       value: {
         agent: {
-          listProviders: vi.fn().mockResolvedValue([
+          listAllProviders: vi.fn().mockResolvedValue([
             {
               id: "anthropic",
               name: "Anthropic",
@@ -599,10 +588,10 @@ describe("AgentSessionSidebar", () => {
     })
 
     expect(onCreateSession).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain("选择供应商 + 模型")
+    expect(document.body.textContent).toContain("Anthropic")
 
     const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent === "确认")
+      .find((button) => button.textContent === "创建对话")
 
     await act(async () => {
       confirmButton?.click()
@@ -613,7 +602,7 @@ describe("AgentSessionSidebar", () => {
       providerName: "Anthropic",
       modelTier: "sonnet",
       modelName: "claude-sonnet-4-5",
-    }, expect.any(String))
+    }, expect.any(String), null)
   })
 
   it("keeps provider selection open until session creation finishes", async () => {
@@ -625,7 +614,7 @@ describe("AgentSessionSidebar", () => {
       configurable: true,
       value: {
         agent: {
-          listProviders: vi.fn().mockResolvedValue([
+          listAllProviders: vi.fn().mockResolvedValue([
             {
               id: "anthropic",
               name: "Anthropic",
@@ -674,7 +663,7 @@ describe("AgentSessionSidebar", () => {
     })
 
     const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent === "确认")
+      .find((button) => button.textContent === "创建对话")
 
     await act(async () => {
       confirmButton?.click()
@@ -682,15 +671,15 @@ describe("AgentSessionSidebar", () => {
     })
 
     expect(onCreateSession).toHaveBeenCalledTimes(1)
-    expect(document.body.textContent).toContain("正在保存...")
-    expect(document.body.textContent).toContain("选择供应商 + 模型")
+    expect(document.body.textContent).toContain("正在创建")
+    expect(document.body.textContent).toContain("新建对话")
 
     await act(async () => {
       finishCreate?.()
       await Promise.resolve()
     })
 
-    expect(document.body.textContent).not.toContain("选择供应商 + 模型")
+    expect(document.body.textContent).not.toContain("新建对话")
   })
 
   it("logs provider list failures without exposing the raw error message", async () => {
@@ -699,7 +688,7 @@ describe("AgentSessionSidebar", () => {
       configurable: true,
       value: {
         agent: {
-          listProviders: vi.fn().mockRejectedValue(new Error("secret provider backend failed")),
+          listAllProviders: vi.fn().mockRejectedValue(new Error("secret provider backend failed")),
         },
       },
     })
@@ -735,8 +724,8 @@ describe("AgentSessionSidebar", () => {
       await Promise.resolve()
     })
 
-    expect(rendererLogger.warn).toHaveBeenCalledWith("Agent provider list failed.", {
-      boundary: "renderer.provider-model-select",
+    expect(rendererLogger.warn).toHaveBeenCalledWith("Agent session model list failed.", {
+      boundary: "renderer.agent.session-create-model-list",
       errorLength: "secret provider backend failed".length,
       errorName: "Error",
     })
@@ -745,7 +734,7 @@ describe("AgentSessionSidebar", () => {
 
   it("does not create with a stale provider after provider refresh fails", async () => {
     const onCreateSession = vi.fn()
-    const listProviders = vi.fn()
+    const listAllProviders = vi.fn()
       .mockResolvedValueOnce([
         {
           id: "anthropic",
@@ -775,7 +764,7 @@ describe("AgentSessionSidebar", () => {
       configurable: true,
       value: {
         agent: {
-          listProviders,
+          listAllProviders,
         },
       },
     })
@@ -826,6 +815,7 @@ describe("AgentSessionSidebar", () => {
     })
 
     expect(document.body.textContent).toContain("读取 Provider 失败")
+    expect(document.body.textContent).toContain("重试")
     expect(onCreateSession).not.toHaveBeenCalled()
   })
 })

@@ -7,6 +7,7 @@ import type {
 } from "../../../app-capabilities/agent-personas/shared/schema"
 import type { ConversationEntryV1, ConversationMainThreadPersonaSnapshotV1 } from "../../runtime/data-repo"
 import type { AgentSdkAgentDefinitions, AgentSdkSystemPrompt } from "./project-contributions"
+import { AGENT_PERSONA_UNAVAILABLE_MESSAGE } from "./agent-error-messages"
 
 const SDK_AGENT_PREFIX = "synapse-persona__"
 
@@ -47,7 +48,7 @@ export function createAgentPersonaRuntimeResolver(deps: AgentPersonaRuntimeResol
     }
     const persona = personas.find((item) => item.id === activePersonaId)
     if (!persona) {
-      return { activePersonaId: null, providerModel: null, agents, definitionsHash }
+      throw new Error(AGENT_PERSONA_UNAVAILABLE_MESSAGE)
     }
     const activeAgentName = sdkAgentNameForPersona(persona.id)
     const snapshot = snapshotForPersona(persona, agents[activeAgentName])

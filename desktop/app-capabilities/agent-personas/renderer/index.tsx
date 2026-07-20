@@ -657,7 +657,7 @@ function AgentPersonaDialog({
                         type="button"
                         variant="outline"
                         size="icon"
-                        aria-label="恢复为跟随对话"
+                        aria-label="取消模型绑定"
                         disabled={saving}
                         onClick={() => onFormChange((current) => ({ ...current, providerModel: null }))}
                       >
@@ -708,7 +708,7 @@ function providerModelLabel(
   selection: ProviderModelSelection | null,
   providers: readonly ProviderModelDisplayProvider[] | null,
 ): string {
-  if (!selection) return "跟随对话"
+  if (!selection) return "未绑定"
   return resolveProviderModelDisplay(selection, providers).label || selection.providerId
 }
 

@@ -1,5 +1,7 @@
 # Agent 对话智能体人格接入设计
 
+> 已被 `2026-07-20-agent-persona-conversation-creation-design.md` 取代。当前产品不再支持同一对话中切换智能体；本文件仅保留为历史设计记录。
+
 日期：2026-06-30
 
 ## 背景

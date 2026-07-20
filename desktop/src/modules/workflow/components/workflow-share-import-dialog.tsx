@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,8 +11,12 @@ import {
   DialogFrameHeader,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import {
   Select,
   SelectContent,
@@ -23,14 +27,17 @@ import {
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import { resolveModelDisplayName } from "@/lib/provider-model"
 import { createRendererLogger } from "@/app-shell/logging"
+import { FolderOpenIcon } from "lucide-react"
 import { toast } from "sonner"
 import { useWorkflowResourcePicker } from "../hooks/use-workflow-resource-picker"
 import type { ModelTier, ProviderModelSelection } from "@/types/provider-model"
 import type {
   WorkflowShareEnvironmentMapping,
+  WorkflowShareFieldLocation,
   WorkflowShareImportPreview,
   WorkflowShareImportSelections,
   WorkflowShareModelMapping,
+  WorkflowShareOccurrence,
   WorkflowShareProjectMapping,
   WorkflowShareResourceMapping,
 } from "@/types/workflow-package"
@@ -56,12 +63,17 @@ function WorkflowShareImportDialog({
   const [step, setStep] = useState(0)
   const [selections, setSelections] = useState<WorkflowShareImportSelections>(emptySelections())
   const [selectingModelRefId, setSelectingModelRefId] = useState<string | null>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setStep(0)
     setSelectingModelRefId(null)
     setSelections(preview ? buildInitialSelections(preview) : emptySelections())
   }, [preview])
+
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = 0
+  }, [preview, step])
 
   const missing = useMemo(() => preview ? findMissingMappings(preview, selections) : [], [preview, selections])
   const canImport = Boolean(preview?.compatibility.supported) && missing.length === 0
@@ -111,35 +123,39 @@ function WorkflowShareImportDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         aria-describedby={undefined}
-        className="h-[min(760px,calc(100vh-2rem))] p-0 sm:max-w-[920px]"
+        className="max-h-[calc(100vh-2rem)] p-0 sm:max-w-[800px]"
         showCloseButton={false}
         onEscapeKeyDown={(event) => { if (importing) event.preventDefault() }}
         onInteractOutside={(event) => { if (importing) event.preventDefault() }}
       >
-        <DialogFrame>
+        <DialogFrame className="h-auto max-h-[calc(100vh-2rem)]">
           <DialogFrameHeader
             bordered
             title="导入工作流"
-            description={preview?.shareNote || undefined}
             showCloseButton={!importing}
-            center={<span className="text-sm font-medium">{step + 1} / {STEPS.length} · {STEPS[step]}</span>}
+            center={(
+              <span aria-live="polite" className="text-sm font-medium tabular-nums">
+                {step + 1} / {STEPS.length} · {STEPS[step]}
+              </span>
+            )}
           />
-          <DialogFrameBody>
-            <ScrollArea className="h-full">
-              <div className="mx-auto max-w-3xl space-y-4 px-5 py-5">
-                {preview ? renderStep({
-                  preview,
-                  selections,
-                  step,
-                  missing,
-                  onSelectModel: setSelectingModelRefId,
-                  onUpdateModel: updateModel,
-                  onUpdateProject: updateProject,
-                  onUpdateResource: updateResource,
-                  onUpdateEnvironment: updateEnvironment,
-                }) : null}
-              </div>
-            </ScrollArea>
+          <DialogFrameBody
+            ref={bodyRef}
+            className="max-h-[min(30rem,calc(100vh-10rem))] overflow-y-auto overscroll-contain"
+          >
+            <div className="mx-auto max-w-3xl px-5 py-4">
+              {preview ? renderStep({
+                preview,
+                selections,
+                step,
+                missing,
+                onSelectModel: setSelectingModelRefId,
+                onUpdateModel: updateModel,
+                onUpdateProject: updateProject,
+                onUpdateResource: updateResource,
+                onUpdateEnvironment: updateEnvironment,
+              }) : null}
+            </div>
           </DialogFrameBody>
           <DialogFrameFooter>
             <Button type="button" variant="outline" disabled={importing} onClick={() => onOpenChange(false)}>取消</Button>
@@ -196,65 +212,108 @@ function renderStep(props: StepProps) {
 }
 
 function ContentStep({ preview }: { readonly preview: WorkflowShareImportPreview }) {
+  const nodeCount = preview.content.workflows.reduce((sum, workflow) => sum + workflow.nodeCount, 0)
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="secondary">{preview.content.workflows.length} 个工作流</Badge>
-        <Badge variant="secondary">{preview.content.workflows.reduce((sum, workflow) => sum + workflow.nodeCount, 0)} 个节点</Badge>
-        <Badge variant="secondary">格式 {preview.formatVersion}</Badge>
-      </div>
-      <div className="divide-y rounded-lg border">
-        {preview.content.workflows.map((workflow) => (
-          <div key={workflow.ref} className="flex items-center justify-between gap-4 px-4 py-3">
-            <div className="min-w-0">
-              <div className="truncate font-medium">{workflow.name}</div>
-              <div className="text-xs text-muted-foreground">{workflow.nodeCount} 个节点</div>
-            </div>
-            <Badge variant="outline">{formatWorkflowAction(workflow.action)}</Badge>
-          </div>
-        ))}
-      </div>
-      {preview.compatibility.excludedAutomationCount > 0 ? (
-        <Alert><AlertDescription>关联的 Automation 不在分享包中，导入后需要单独配置。</AlertDescription></Alert>
+      <MetaStrip items={[
+        { label: "导入方式", value: formatImportMode(preview.mode) },
+        { label: "工作流", value: preview.content.workflows.length },
+        { label: "节点", value: nodeCount },
+      ]} />
+      {preview.shareNote ? (
+        <StepSection title="分享说明">
+          <p className="text-pretty text-sm text-muted-foreground">{preview.shareNote}</p>
+        </StepSection>
       ) : null}
+      <StepSection title="工作流" count={preview.content.workflows.length}>
+        <WorkflowPlanList preview={preview} showRole />
+      </StepSection>
     </div>
   )
 }
 
 function RiskStep({ preview }: { readonly preview: WorkflowShareImportPreview }) {
-  const risks = [
-    ...preview.compatibility.sensitiveLocations.map((location) => ({ label: "敏感信息", location })),
-    ...preview.compatibility.highRiskLocations.map((location) => ({ label: "高风险配置", location })),
-    ...preview.compatibility.portabilityWarnings.map((location) => ({ label: "兼容提醒", location })),
-  ]
+  const riskGroups: Array<{ readonly title: string; readonly items: readonly WorkflowShareFieldLocation[] }> = [
+    { title: "敏感信息", items: preview.compatibility.sensitiveLocations },
+    { title: "高风险配置", items: preview.compatibility.highRiskLocations },
+    { title: "兼容提醒", items: preview.compatibility.portabilityWarnings },
+  ].filter((group) => group.items.length > 0)
+  const riskCount = riskGroups.reduce((sum, group) => sum + group.items.length, 0)
+  const impactCount = preview.compatibility.excludedAutomationCount
+    + preview.compatibility.automationUpdates.length
+    + preview.summary.incompatiblePresetCount
+  const hasDetails = riskCount > 0
+    || preview.compatibility.requiredCapabilities.length > 0
+    || impactCount > 0
+    || !preview.compatibility.supported
+
   return (
     <div className="space-y-4">
+      <MetaStrip items={[
+        { label: "格式", value: preview.formatVersion },
+        { label: "必需能力", value: preview.compatibility.requiredCapabilities.length },
+        { label: "风险项", value: riskCount },
+      ]} />
       {!preview.sourceVerified ? (
-        <Alert><AlertDescription>文件完整性已校验，但分享者身份未经验证。只导入可信来源的工作流。</AlertDescription></Alert>
+        <Alert>
+          <AlertTitle>来源未验证</AlertTitle>
+          <AlertDescription>文件完整性已校验，但无法验证分享者身份。只导入可信来源的工作流。</AlertDescription>
+        </Alert>
       ) : null}
       {!preview.compatibility.supported ? (
-        <Alert variant="destructive"><AlertDescription>{preview.compatibility.issues.join("；")}</AlertDescription></Alert>
+        <Alert variant="destructive">
+          <AlertTitle>当前环境无法导入</AlertTitle>
+          <AlertDescription>{preview.compatibility.issues.join("；")}</AlertDescription>
+        </Alert>
       ) : null}
-      {risks.length === 0 ? <div className="text-sm text-muted-foreground">未发现需要额外确认的配置。</div> : (
-        <div className="divide-y rounded-lg border">
-          {risks.map(({ label, location }, index) => (
-            <div key={`${label}-${index}`} className="flex items-start justify-between gap-4 px-4 py-3">
-              <div className="min-w-0">
-                <div className="font-medium">{location.nodeName ?? "工作流设置"}</div>
-                <div className="break-all text-xs text-muted-foreground">{location.fieldPath.join(".")}</div>
+      {riskGroups.map((group) => (
+        <StepSection key={group.title} title={group.title} count={group.items.length}>
+          <StepList>
+            {group.items.map((location, index) => (
+              <RiskLocationRow
+                key={`${group.title}-${location.workflowRef}-${location.nodeId ?? "workflow"}-${index}`}
+                location={location}
+                preview={preview}
+              />
+            ))}
+          </StepList>
+        </StepSection>
+      ))}
+      {preview.compatibility.requiredCapabilities.length > 0 ? (
+        <StepSection title="必需能力" count={preview.compatibility.requiredCapabilities.length}>
+          <StepList>
+            {preview.compatibility.requiredCapabilities.map((capability) => (
+              <div key={`${capability.id}-${capability.minVersion}`} className="flex items-start justify-between gap-4 px-4 py-2.5">
+                <span className="min-w-0 break-all font-medium">{capability.id}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">最低 {capability.minVersion}</span>
               </div>
-              <Badge variant="outline">{label}</Badge>
-            </div>
-          ))}
-        </div>
-      )}
-      {preview.compatibility.automationUpdates.length > 0 ? (
-        <Alert><AlertDescription>
-          {preview.compatibility.automationUpdates.map((item) => `${item.name}（${item.reason}）`).join("、")} 将被停用，配置和运行历史保留。
-        </AlertDescription></Alert>
+            ))}
+          </StepList>
+        </StepSection>
       ) : null}
-      {preview.summary.incompatiblePresetCount > 0 ? (
-        <Alert><AlertDescription>{preview.summary.incompatiblePresetCount} 个参数预设与新参数不兼容；预设会保留，不会自动修改。</AlertDescription></Alert>
+      {impactCount > 0 ? (
+        <StepSection title="导入影响" count={impactCount}>
+          <StepList>
+            {preview.compatibility.excludedAutomationCount > 0 ? (
+              <ImpactRow
+                label={`${preview.compatibility.excludedAutomationCount} 个关联 Automation`}
+                description="不包含在分享包中，导入后需要单独配置。"
+              />
+            ) : null}
+            {preview.compatibility.automationUpdates.map((item) => (
+              <ImpactRow key={item.id} label={item.name} description={`${item.reason}。将停用，配置和运行历史保留。`} />
+            ))}
+            {preview.summary.incompatiblePresetCount > 0 ? (
+              <ImpactRow
+                label={`${preview.summary.incompatiblePresetCount} 个参数预设`}
+                description="与新参数不兼容，将保留且不会自动修改。"
+              />
+            ) : null}
+          </StepList>
+        </StepSection>
+      ) : null}
+      {!hasDetails ? (
+        <div className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">未发现需要额外确认的配置。</div>
       ) : null}
     </div>
   )
@@ -262,15 +321,17 @@ function RiskStep({ preview }: { readonly preview: WorkflowShareImportPreview })
 
 function ModelStep({ preview, selections, onSelectModel, onUpdateModel }: StepProps) {
   return (
-    <div className="divide-y rounded-lg border">
+    <MappingList sourceLabel="发送方模型" targetLabel="导入后使用">
       {preview.mappings.models.map((reference) => {
         const mapping = selections.models.find((item) => item.sourceRefId === reference.id)
         const localDefault = mapping?.action === "local-default"
         return (
-          <div key={reference.id} className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-center">
+          <div key={reference.id} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-center">
             <div className="min-w-0">
-              <div className="font-medium">{formatSourceModel(reference)}</div>
-              <div className="text-xs text-muted-foreground">用于 {formatOccurrenceNames(reference.occurrences)}</div>
+              <div className="truncate font-medium">{formatSourceModelName(reference)}</div>
+              <div className="text-pretty text-xs text-muted-foreground">
+                {formatSourceModelContext(reference)} · 用于 {formatOccurrenceNames(reference.occurrences)}
+              </div>
             </div>
             <div className="flex min-w-0 gap-2">
               {reference.environment === "synapse" ? (
@@ -280,9 +341,11 @@ function ModelStep({ preview, selections, onSelectModel, onUpdateModel }: StepPr
               ) : (
                 <Input
                   aria-label={`${formatSourceModel(reference)}目标模型`}
+                  className="min-w-0"
                   disabled={localDefault}
                   value={mapping?.targetModelName ?? ""}
                   onChange={(event) => onUpdateModel({ sourceRefId: reference.id, action: "map", targetModelName: event.target.value })}
+                  placeholder="输入目标模型"
                 />
               )}
               <Button
@@ -298,30 +361,41 @@ function ModelStep({ preview, selections, onSelectModel, onUpdateModel }: StepPr
           </div>
         )
       })}
-    </div>
+    </MappingList>
   )
 }
 
 function ProjectStep({ preview, selections, onUpdateProject }: StepProps) {
   return (
-    <div className="divide-y rounded-lg border">
-      {preview.mappings.projects.map((reference) => {
-        const mapping = selections.projects.find((item) => item.sourceRefId === reference.id)
-        return (
-          <div key={reference.id} className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-center">
-            <div className="min-w-0">
-              <div className="truncate font-medium">{reference.sourceProjectName ?? reference.id}</div>
-              <div className="text-xs text-muted-foreground">用于 {formatOccurrenceNames(reference.occurrences)}</div>
+    <div className="space-y-3">
+      {preview.projectOptions.length === 0 ? (
+        <Alert><AlertDescription>没有可用项目。请先添加项目后再导入。</AlertDescription></Alert>
+      ) : null}
+      <MappingList sourceLabel="发送方项目" targetLabel="本地项目">
+        {preview.mappings.projects.map((reference) => {
+          const mapping = selections.projects.find((item) => item.sourceRefId === reference.id)
+          return (
+            <div key={reference.id} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-center">
+              <div className="min-w-0">
+                <div className="truncate font-medium">{reference.sourceProjectName ?? reference.id}</div>
+                <div className="text-pretty text-xs text-muted-foreground">
+                  {reference.sourceProjectType ? `${reference.sourceProjectType} · ` : ""}用于 {formatOccurrenceNames(reference.occurrences)}
+                </div>
+              </div>
+              <Select
+                disabled={preview.projectOptions.length === 0}
+                value={mapping?.targetProjectId ?? ""}
+                onValueChange={(targetProjectId) => onUpdateProject({ sourceRefId: reference.id, targetProjectId })}
+              >
+                <SelectTrigger className="w-full"><SelectValue placeholder="选择本地项目" /></SelectTrigger>
+                <SelectContent>
+                  {preview.projectOptions.map((project) => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={mapping?.targetProjectId ?? ""} onValueChange={(targetProjectId) => onUpdateProject({ sourceRefId: reference.id, targetProjectId })}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="选择本地项目" /></SelectTrigger>
-              <SelectContent>
-                {preview.projectOptions.map((project) => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-        )
-      })}
+          )
+        })}
+      </MappingList>
     </div>
   )
 }
@@ -346,116 +420,258 @@ function ExternalStep({ preview, selections, onUpdateResource, onUpdateEnvironme
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {preview.mappings.resources.length > 0 ? (
-        <div className="space-y-2">
-          <Label>文件与目录</Label>
-          <Alert><AlertDescription>分享包不附带这些文件。请填入接收方机器上的对应路径。</AlertDescription></Alert>
-          <div className="divide-y rounded-lg border">
+        <StepSection
+          title="文件与目录"
+          count={preview.mappings.resources.length}
+          description="分享包不附带这些文件，请选择当前机器上的对应资源。"
+        >
+          <MappingList sourceLabel="发送方资源" targetLabel="本地资源">
             {preview.mappings.resources.map((reference) => {
               const mapping = selections.resources.find((item) => item.sourceRefId === reference.id)
               return (
-                <div key={reference.id} className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-center">
+                <div key={reference.id} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-center">
                   <div className="min-w-0">
                     <div className="truncate font-medium">{reference.displayName ?? reference.sourceIdentity ?? reference.id}</div>
-                    <div className="text-xs text-muted-foreground">{reference.entryType === "file" ? "文件" : "目录"} · {formatOccurrenceNames(reference.occurrences)}</div>
+                    <div className="text-pretty text-xs text-muted-foreground">
+                      {formatResourceMetadata(reference)} · 用于 {formatOccurrenceNames(reference.occurrences)}
+                    </div>
                   </div>
-                  <div className="flex min-w-0 gap-2">
-                    <Input
+                  <InputGroup>
+                    <InputGroupInput
                       aria-label={`${reference.displayName ?? reference.id}本地路径`}
-                      disabled={mapping?.target.kind === "drive"}
+                      readOnly={mapping?.target.kind === "drive"}
                       value={mapping?.target.kind === "drive"
                         ? `沿用 Drive：${reference.displayName ?? mapping.target.id}`
                         : mapping?.target.path ?? ""}
                       onChange={(event) => onUpdateResource({ sourceRefId: reference.id, target: { kind: "local_path", path: event.target.value } })}
                       placeholder="本地路径"
                     />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => { void selectResource(reference) }}
-                    >
-                      选择本地
-                    </Button>
-                  </div>
+                    <InputGroupAddon align="inline-end">
+                      <InputGroupButton onClick={() => { void selectResource(reference) }}>
+                        <FolderOpenIcon />
+                        选择
+                      </InputGroupButton>
+                    </InputGroupAddon>
+                  </InputGroup>
                 </div>
               )
             })}
-          </div>
-        </div>
+          </MappingList>
+        </StepSection>
       ) : null}
       {preview.mappings.environments.length > 0 ? (
-        <div className="space-y-2">
-          <Label>运行环境</Label>
-          <div className="divide-y rounded-lg border">
+        <StepSection title="运行环境" count={preview.mappings.environments.length}>
+          <MappingList sourceLabel="发送方环境" targetLabel="导入后使用">
             {preview.mappings.environments.map((reference) => {
               const mapping = selections.environments.find((item) => item.sourceRefId === reference.id)
               return (
-                <div key={reference.id} className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_160px_minmax(0,1fr)] md:items-center">
+                <div key={reference.id} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-center">
                   <div className="min-w-0">
                     <div className="truncate font-medium">{reference.kind}</div>
-                    <div className="text-xs text-muted-foreground">{formatOccurrenceNames(reference.occurrences)}</div>
+                    <div className="text-pretty text-xs text-muted-foreground">用于 {formatOccurrenceNames(reference.occurrences)}</div>
                   </div>
-                  <Select value={mapping?.action ?? "reuse"} onValueChange={(action: WorkflowShareEnvironmentMapping["action"]) => onUpdateEnvironment({ sourceRefId: reference.id, action, ...(action === "replace" ? { targetValue: mapping?.targetValue ?? "" } : {}) })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="reuse">保留原值</SelectItem>
-                      <SelectItem value="replace">替换</SelectItem>
-                      <SelectItem value="local-default">本地默认</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    aria-label={`${reference.kind}替换值`}
-                    disabled={mapping?.action !== "replace"}
-                    value={mapping?.targetValue ?? ""}
-                    onChange={(event) => onUpdateEnvironment({ sourceRefId: reference.id, action: "replace", targetValue: event.target.value })}
-                  />
+                  <div className={mapping?.action === "replace" ? "grid min-w-0 gap-2 sm:grid-cols-[10rem_minmax(0,1fr)]" : "min-w-0"}>
+                    <Select value={mapping?.action ?? "reuse"} onValueChange={(action: WorkflowShareEnvironmentMapping["action"]) => onUpdateEnvironment({ sourceRefId: reference.id, action, ...(action === "replace" ? { targetValue: mapping?.targetValue ?? "" } : {}) })}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="reuse">保留原值</SelectItem>
+                        <SelectItem value="replace">替换</SelectItem>
+                        <SelectItem value="local-default">本地默认</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {mapping?.action === "replace" ? (
+                      <Input
+                        aria-label={`${reference.kind}替换值`}
+                        value={mapping.targetValue ?? ""}
+                        onChange={(event) => onUpdateEnvironment({ sourceRefId: reference.id, action: "replace", targetValue: event.target.value })}
+                        placeholder="替换值"
+                      />
+                    ) : null}
+                  </div>
                 </div>
               )
             })}
-          </div>
-        </div>
+          </MappingList>
+        </StepSection>
       ) : null}
     </div>
   )
 }
 
 function ConfirmStep({ preview, missing }: { readonly preview: WorkflowShareImportPreview; readonly missing: string[] }) {
-  const mappingCount = preview.mappings.models.length
-    + preview.mappings.projects.length
-    + preview.mappings.resources.length
-    + preview.mappings.environments.length
+  const changes = [
+    { label: "新建", value: preview.summary.createCount },
+    { label: "更新", value: preview.summary.updateCount },
+    { label: "删除", value: preview.summary.deleteCount },
+    { label: "解除关联", value: preview.summary.detachCount },
+    { label: "停用 Automation", value: preview.compatibility.automationUpdates.length },
+  ].filter((item) => item.value > 0)
+  const dependencies = [
+    { label: "模型", value: preview.mappings.models.length },
+    { label: "项目", value: preview.mappings.projects.length },
+    { label: "文件与目录", value: preview.mappings.resources.length },
+    { label: "运行环境", value: preview.mappings.environments.length },
+  ].filter((item) => item.value > 0)
+  const safeguards = [
+    preview.summary.preserveRunHistory ? "保留运行历史" : null,
+    preview.summary.transactionalBackup ? "导入失败时自动恢复" : null,
+    preview.summary.undoAvailable ? "完成后可撤销本次导入" : null,
+    preview.summary.incompatiblePresetCount > 0
+      ? `${preview.summary.incompatiblePresetCount} 个不兼容参数预设将保留`
+      : null,
+  ].filter((item): item is string => Boolean(item))
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg border px-4 py-4 text-sm md:grid-cols-3">
-        <SummaryValue label="新建" value={preview.summary.createCount} />
-        <SummaryValue label="更新" value={preview.summary.updateCount} />
-        <SummaryValue label="删除" value={preview.summary.deleteCount} />
-        <SummaryValue label="解除分享关联" value={preview.summary.detachCount} />
-        <SummaryValue label="依赖映射" value={mappingCount} />
-        <SummaryValue label="停用 Automation" value={preview.compatibility.automationUpdates.length} />
-      </div>
-      <div className="divide-y rounded-lg border px-4 text-sm">
-        {preview.content.workflows.map((workflow) => (
-          <div key={`${workflow.ref}-${workflow.action}`} className="flex items-center justify-between gap-3 py-2">
-            <span className="truncate">{workflow.name}</span>
-            <span className="shrink-0 text-muted-foreground">{formatImportAction(workflow.action)}</span>
-          </div>
-        ))}
-      </div>
       {missing.length > 0 ? (
-        <Alert variant="destructive"><AlertDescription>还需完成：{missing.join("、")}</AlertDescription></Alert>
+        <Alert variant="destructive">
+          <AlertTitle>映射尚未完成</AlertTitle>
+          <AlertDescription>还需完成：{missing.join("、")}</AlertDescription>
+        </Alert>
       ) : null}
       {!preview.compatibility.supported ? (
-        <Alert variant="destructive"><AlertDescription>{preview.compatibility.issues.join("；")}</AlertDescription></Alert>
+        <Alert variant="destructive">
+          <AlertTitle>当前环境无法导入</AlertTitle>
+          <AlertDescription>{preview.compatibility.issues.join("；")}</AlertDescription>
+        </Alert>
       ) : null}
-      {missing.length === 0 && preview.compatibility.supported ? (
+      {preview.mode === "duplicate" ? (
         <Alert><AlertDescription>
-          {preview.mode === "duplicate"
-            ? "该版本已导入，不会重复修改。"
-            : `${preview.summary.preserveRunHistory ? "运行历史保留；" : ""}${preview.summary.transactionalBackup ? "导入失败会自动恢复，完成后可撤销本次操作。" : ""}`}
+          该版本已导入，不会重复修改。
         </AlertDescription></Alert>
       ) : null}
+      {changes.length > 0 ? (
+        <StepSection title="变更摘要">
+          <MetaStrip items={changes} />
+        </StepSection>
+      ) : null}
+      <StepSection title="工作流" count={preview.content.workflows.length}>
+        <WorkflowPlanList preview={preview} />
+      </StepSection>
+      {dependencies.length > 0 ? (
+        <StepSection title="依赖映射">
+          <MetaStrip items={dependencies} />
+        </StepSection>
+      ) : null}
+      {safeguards.length > 0 ? (
+        <StepSection title="导入保障" count={safeguards.length}>
+          <StepList>
+            {safeguards.map((item) => <div key={item} className="px-4 py-2.5 text-sm">{item}</div>)}
+          </StepList>
+        </StepSection>
+      ) : null}
+    </div>
+  )
+}
+
+function StepSection({
+  children,
+  count,
+  description,
+  title,
+}: {
+  readonly children: ReactNode
+  readonly count?: number
+  readonly description?: string
+  readonly title: string
+}) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <h3 className="text-balance text-sm font-medium">{title}</h3>
+        {count !== undefined ? <span className="text-xs text-muted-foreground tabular-nums">{count}</span> : null}
+      </div>
+      {description ? <p className="text-pretty text-xs text-muted-foreground">{description}</p> : null}
+      {children}
+    </section>
+  )
+}
+
+function StepList({ children }: { readonly children: ReactNode }) {
+  return <div className="divide-y rounded-lg border">{children}</div>
+}
+
+function MappingList({
+  children,
+  sourceLabel,
+  targetLabel,
+}: {
+  readonly children: ReactNode
+  readonly sourceLabel: string
+  readonly targetLabel: string
+}) {
+  return (
+    <StepList>
+      <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground md:grid">
+        <span>{sourceLabel}</span>
+        <span>{targetLabel}</span>
+      </div>
+      {children}
+    </StepList>
+  )
+}
+
+function MetaStrip({ items }: { readonly items: ReadonlyArray<{ readonly label: string; readonly value: ReactNode }> }) {
+  return (
+    <dl className="flex flex-wrap gap-x-5 gap-y-2 rounded-lg bg-muted/50 px-3 py-2 text-sm">
+      {items.map((item) => (
+        <div key={item.label} className="flex items-baseline gap-1.5">
+          <dt className="text-muted-foreground">{item.label}</dt>
+          <dd className="font-medium tabular-nums">{item.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function WorkflowPlanList({ preview, showRole = false }: { readonly preview: WorkflowShareImportPreview; readonly showRole?: boolean }) {
+  const entrypoints = new Set(preview.content.entrypoints)
+  return (
+    <StepList>
+      {preview.content.workflows.map((workflow) => (
+        <div key={workflow.ref} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-medium">{workflow.name}</span>
+            {showRole ? <Badge variant="secondary">{entrypoints.has(workflow.ref) ? "入口" : "依赖"}</Badge> : null}
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <Badge variant="outline">{formatImportAction(workflow.action)}</Badge>
+            <span className="text-xs text-muted-foreground tabular-nums">{workflow.nodeCount} 个节点</span>
+          </div>
+        </div>
+      ))}
+    </StepList>
+  )
+}
+
+function RiskLocationRow({
+  location,
+  preview,
+}: {
+  readonly location: WorkflowShareFieldLocation
+  readonly preview: WorkflowShareImportPreview
+}) {
+  const workflowName = preview.content.workflows.find((workflow) => workflow.ref === location.workflowRef)?.name
+  const message = "message" in location && typeof location.message === "string" ? location.message : undefined
+  return (
+    <div className="px-4 py-2.5">
+      <div className="font-medium">{location.nodeName ?? workflowName ?? "工作流设置"}</div>
+      {location.nodeName && workflowName ? <div className="text-xs text-muted-foreground">{workflowName}</div> : null}
+      {message ? <div className="text-pretty text-xs text-muted-foreground">{message}</div> : null}
+      {location.fieldPath.length > 0 ? (
+        <div className="break-all text-xs text-muted-foreground">{location.fieldPath.join(".")}</div>
+      ) : null}
+    </div>
+  )
+}
+
+function ImpactRow({ label, description }: { readonly label: string; readonly description: string }) {
+  return (
+    <div className="px-4 py-2.5">
+      <div className="font-medium">{label}</div>
+      <div className="text-pretty text-xs text-muted-foreground">{description}</div>
     </div>
   )
 }
@@ -466,10 +682,6 @@ function formatImportAction(action: WorkflowShareImportPreview["content"]["workf
   if (action === "delete") return "删除"
   if (action === "detach") return "保留并解除关联"
   return "保持不变"
-}
-
-function SummaryValue({ label, value }: { readonly label: string; readonly value: string | number }) {
-  return <div><div className="text-muted-foreground">{label}</div><div className="mt-1 font-medium">{value}</div></div>
 }
 
 function emptySelections(): WorkflowShareImportSelections {
@@ -556,17 +768,45 @@ function updateModelMappingFromSelection(
   update({ sourceRefId, action: "map", targetProviderId: selection.providerId, targetModelTier: selection.modelTier })
 }
 
-function formatWorkflowAction(action: WorkflowShareImportPreview["content"]["workflows"][number]["action"]): string {
-  return { create: "新建", update: "更新", keep: "保留", detach: "分离保留", delete: "删除" }[action]
+function formatImportMode(mode: WorkflowShareImportPreview["mode"]): string {
+  if (mode === "update") return "更新"
+  if (mode === "duplicate") return "重复导入"
+  return "新建"
+}
+
+function formatSourceModelName(reference: WorkflowShareImportPreview["mappings"]["models"][number]): string {
+  if (reference.sourceModelName) return reference.sourceModelName
+  if (reference.sourceModelTier === "haiku") return "Haiku"
+  if (reference.sourceModelTier === "sonnet") return "Sonnet"
+  if (reference.sourceModelTier === "opus") return "Opus"
+  return "默认模型"
+}
+
+function formatSourceModelContext(reference: WorkflowShareImportPreview["mappings"]["models"][number]): string {
+  const environment = { synapse: "Synapse", codex: "Codex", "claude-code": "Claude Code" }[reference.environment]
+  const provider = reference.sourceProviderName ?? reference.sourceProviderId
+  return provider ? `${environment} · ${provider}` : environment
 }
 
 function formatSourceModel(reference: WorkflowShareImportPreview["mappings"]["models"][number]): string {
-  const environment = { synapse: "Synapse", codex: "Codex", "claude-code": "Claude Code" }[reference.environment]
-  return `${environment} · ${reference.sourceProviderName ?? reference.sourceProviderId ?? reference.sourceModelName ?? "默认模型"} / ${reference.sourceModelName ?? reference.sourceModelTier ?? "默认"}`
+  return `${formatSourceModelContext(reference)} · ${formatSourceModelName(reference)}`
 }
 
-function formatOccurrenceNames(occurrences: WorkflowShareImportPreview["mappings"]["models"][number]["occurrences"]): string {
-  return Array.from(new Set(occurrences.map((occurrence) => occurrence.nodeName ?? "工作流默认值"))).join("、")
+function formatOccurrenceNames(occurrences: readonly WorkflowShareOccurrence[]): string {
+  const names = Array.from(new Set(occurrences.map((occurrence) => occurrence.nodeName ?? "工作流默认值")))
+  return names.length > 0 ? names.join("、") : "工作流默认值"
+}
+
+function formatResourceMetadata(reference: WorkflowShareImportPreview["mappings"]["resources"][number]): string {
+  const kind = {
+    local_path: "本地资源",
+    drive: "Drive",
+    staged: "临时资源",
+    inline_file: "内嵌文件",
+  }[reference.kind]
+  const entryType = reference.entryType === "file" ? "文件" : "目录"
+  const access = { read: "读取", write: "写入", "read-write": "读写" }[reference.access]
+  return [kind, entryType, access, reference.cardinality === "many" ? "多个" : null].filter(Boolean).join(" · ")
 }
 
 function formatMappedModel(mapping: WorkflowShareModelMapping | undefined, preview: WorkflowShareImportPreview): string {
