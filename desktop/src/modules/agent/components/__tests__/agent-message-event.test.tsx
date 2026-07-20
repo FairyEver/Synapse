@@ -240,6 +240,50 @@ describe("AgentMessageEvent", () => {
     expect(wrapped).toBe("See github.com/FairyEver/Synapse and open [desktop/src/App.tsx](./desktop/src/App.tsx)")
   })
 
+  it("does not render numeric change totals as local references", () => {
+    const content = "git 增量（57/-30），用户总量（+11,586/-3,570）"
+
+    expect(wrapLocalReferences(content)).toBe(content)
+  })
+
+  it("renders file URL markdown links containing spaces as local references", async () => {
+    const onOpenReference = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const localPath = "/Users/liyang/Downloads/Easy Worklog/待发送/2026-07-20-工作总结.md"
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-file-url-with-spaces",
+            kind: "message",
+            role: "assistant",
+            content: `已完成。总结稿路径：[\`${localPath}\`](file://${localPath})`,
+            timestamp: "2026-07-20T10:34:16.000Z",
+          }}
+          profile={profile}
+          onOpenReference={onOpenReference}
+        />,
+      )
+    })
+
+    const link = container.querySelector<HTMLAnchorElement>("a")
+    expect(link?.textContent).toBe(localPath)
+    expect(link?.getAttribute("data-reference")).toBe(localPath)
+    expect(container.textContent).not.toContain("[blocked]")
+    expect(container.textContent).not.toContain("file://")
+
+    await act(async () => {
+      link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onOpenReference).toHaveBeenCalledWith(localPath)
+    expect(shellBridge.openExternal).not.toHaveBeenCalled()
+  })
+
   it("keeps local references inside fenced code blocks unchanged", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

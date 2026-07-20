@@ -20,7 +20,8 @@ import { errorLogMeta } from "../utils"
 
 import "streamdown/styles.css"
 
-const LOCAL_REFERENCE_PATTERN = /(?:\[[^\]]+\]\((?:file:\/\/|[A-Za-z]:[\\/]|[\\/]{2}[^\\/]|\.{1,2}[\\/]|\/|[\w.-]+[\\/])[^)]+\)|(?:file:\/\/|[A-Za-z]:[\\/]|[\\/]{2}[^\\/]|\.{1,2}[\\/]|\/|[\w.-]+[\\/])[^\s`),]+(?::\d+(?::\d+)?)?)/g
+const LOCAL_REFERENCE_PATTERN = /(?:\[[^\]]+\]\((?:file:\/\/|[A-Za-z]:[\\/]|[\\/]{2}[^\\/]|\.{1,2}[\\/]|\/|[\w.-]+[\\/])[^)]+\)|(?:file:\/\/|[A-Za-z]:[\\/]|[\\/]{2}[^\\/]|\.{1,2}[\\/]|\/|[\w.-]+[\\/])[^\s`),，。；：！？（）【】]+(?::\d+(?::\d+)?)?)/g
+const LOCAL_FILE_MARKDOWN_LINK_PATTERN = /(\[[^\]\r\n]+\])\(\s*(file:\/\/[^)\r\n]+?)\s*\)/g
 const OBSIDIAN_WIKILINK_PATTERN = /!?\[\[([^\]\r\n]+)\]\]/g
 const SHORT_UPPERCASE_PATH_PATTERN = /^[A-Z0-9]{2,6}(?:\/[A-Z0-9]{2,6})+$/
 const TRAILING_REFERENCE_PUNCTUATION_PATTERN = /[.,;:!?，。；：！？]+$/
@@ -445,7 +446,10 @@ function markdownFence(line: string): MarkdownFence | undefined {
 }
 
 function wrapLocalReferencesInText(content: string): string {
-  return transformInlinePlainText(content, wrapLocalReferencesInPlainText)
+  return transformInlinePlainText(
+    normalizeLocalFileMarkdownLinks(content),
+    wrapLocalReferencesInPlainText,
+  )
 }
 
 function renderObsidianWikilinksInText(content: string): string {
@@ -490,6 +494,25 @@ function wrapLocalReferencesInPlainText(content: string): string {
     const { reference, suffix } = splitTrailingReferencePunctuation(match)
     return `[${reference}](${markdownLinkDestination(reference)})${suffix}`
   })
+}
+
+function normalizeLocalFileMarkdownLinks(content: string): string {
+  return content.replace(LOCAL_FILE_MARKDOWN_LINK_PATTERN, (_match, label: string, fileUrl: string) => {
+    const reference = localPathFromFileUrl(fileUrl.trim())
+    return `${label}(${markdownLinkDestination(reference)})`
+  })
+}
+
+function localPathFromFileUrl(fileUrl: string): string {
+  const path = fileUrl.slice("file://".length)
+  const localPath = path.startsWith("/") ? path : `//${path}`
+  const windowsPath = localPath.replace(/^\/([A-Za-z]:[\\/])/, "$1")
+
+  try {
+    return decodeURI(windowsPath)
+  } catch {
+    return windowsPath
+  }
 }
 
 function renderObsidianWikilinksInPlainText(content: string): string {
@@ -558,7 +581,7 @@ function markdownLinkHref(reference: string): string {
 
 function markdownLinkDestination(reference: string): string {
   const href = markdownLinkHref(reference)
-  return href.includes("\\") ? `<${href}>` : href
+  return /[\\\s]/.test(href) ? `<${href}>` : href
 }
 
 function isWindowsPathReference(reference: string): boolean {
@@ -583,6 +606,9 @@ function shouldWrapLocalReference(reference: string, offset: number, content: st
   if (isProtocolUrlMatch(reference, content, offset)) {
     return false
   }
+  if (isInsideMarkdownLinkDestination(content, offset)) {
+    return false
+  }
   if (isBareWebDomainPathReference(reference)) {
     return false
   }
@@ -593,11 +619,19 @@ function shouldWrapLocalReference(reference: string, offset: number, content: st
   }
 
   const pathWithoutLine = reference.replace(/:\d+(?::\d+)?$/, "")
+  if (!/[\p{L}_]/u.test(pathWithoutLine)) {
+    return false
+  }
   if (SHORT_UPPERCASE_PATH_PATTERN.test(pathWithoutLine)) {
     return false
   }
 
   return true
+}
+
+function isInsideMarkdownLinkDestination(content: string, offset: number): boolean {
+  const prefix = content.slice(0, offset)
+  return prefix.lastIndexOf("](") > prefix.lastIndexOf(")")
 }
 
 function isProtocolUrlMatch(reference: string, content: string, offset: number): boolean {
@@ -650,6 +684,7 @@ function streamdownLinkReference(href: string | undefined, children: ReactNode):
 function reactNodeText(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") return String(node)
   if (Array.isArray(node)) return node.map(reactNodeText).join("")
+  if (isValidElement<{ children?: ReactNode }>(node)) return reactNodeText(node.props.children)
   return ""
 }
 
