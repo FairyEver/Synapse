@@ -22,7 +22,9 @@ const logger = createMainLogger("updater")
 
 const AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 const AUTO_CHECK_INITIAL_DELAY_MS = 60_000
+const PAGE_ENTRY_CHECK_COOLDOWN_MS = 30_000
 const UPDATE_ERROR_MESSAGE = "检查更新失败，请稍后再试。"
+const UPDATE_DOWNLOAD_ERROR_MESSAGE = "下载更新失败，请重试。"
 
 function isSupportedPlatform(): boolean {
   return process.platform === "darwin" || process.platform === "win32"
@@ -73,8 +75,11 @@ class UpdateService {
   private isCancellingDownload = false
   private activeUpdateMode: "manual" | "auto" | null = null
   private activeUpdateFlowId: number | null = null
+  private availableUpdateInfo: UpdateInfo | null = null
   private cancelledDownloadFlowId: number | null = null
   private nextUpdateFlowId = 0
+  private pageEntryCheckPromise: Promise<SynapseAppUpdateState> | null = null
+  private lastPageEntryCheckCompletedAt: number | null = null
   private lastNotifiedVersion: string | null = null
   private autoCheckTimer: ReturnType<typeof setInterval> | null = null
   private windowManager: WindowManager | null = null
@@ -148,16 +153,17 @@ class UpdateService {
       this.clearUpdateFlow("manual", cancelledFlowId)
     }
 
-    if (this.state.status === "downloading" || this.state.status === "available") {
+    if (this.state.status === "downloading") {
+      const availableVersion = this.availableUpdateInfo?.version ?? this.state.releaseVersion
       this.setState({
-        status: "idle",
-        message: "下载已取消。",
+        status: availableVersion ? "available" : "idle",
+        message: availableVersion ? `新版本 v${availableVersion} 可下载。` : "下载已取消。",
         error: null,
         downloadPercent: null,
         bytesPerSecond: null,
         transferredBytes: null,
         totalBytes: null,
-        canCheck: isUpdateSupportedInCurrentEnvironment(),
+        canCheck: !availableVersion && isUpdateSupportedInCurrentEnvironment(),
       })
     }
   }
@@ -177,7 +183,7 @@ class UpdateService {
       version: this.state.releaseVersion,
     })
 
-    let canQuit = true
+    let canQuit: boolean
     try {
       canQuit = this.beforeInstallQuitHandler?.() ?? true
     } catch (error) {
@@ -248,6 +254,7 @@ class UpdateService {
         version: updateInfo.version,
       })
       if (this.isManualUpdateFlow()) {
+        this.availableUpdateInfo = null
         this.setState({
           status: "not-available",
           message: "当前已经是最新版本。",
@@ -301,6 +308,11 @@ class UpdateService {
           return
         }
 
+        if (this.state.status === "downloading" && flowId !== null) {
+          this.handleDownloadError(flowId)
+          return
+        }
+
         this.handleError(error, flowId ?? undefined)
         return
       }
@@ -339,6 +351,7 @@ class UpdateService {
     }
 
     const flowId = this.beginUpdateFlow("manual")
+    this.availableUpdateInfo = null
 
     try {
       await autoUpdater.checkForUpdates()
@@ -351,22 +364,54 @@ class UpdateService {
     }
   }
 
-  private handleUpdateAvailable(updateInfo: UpdateInfo): void {
-    this.setState({
-      status: "available",
-      message: `发现新版本 v${updateInfo.version}，正在准备下载...`,
-      error: null,
-      releaseVersion: updateInfo.version,
-      lastCheckedAt: new Date().toISOString(),
-      downloadPercent: 0,
-      bytesPerSecond: null,
-      transferredBytes: 0,
-      totalBytes: null,
-      canCheck: false,
-    })
+  async checkForUpdatesOnPageEnter(): Promise<SynapseAppUpdateState> {
+    this.initialize()
 
-    const flowId = this.activeUpdateFlowId
-    if (flowId === null) return
+    if (this.pageEntryCheckPromise) {
+      return this.pageEntryCheckPromise
+    }
+
+    if (
+      this.lastPageEntryCheckCompletedAt !== null
+      && Date.now() - this.lastPageEntryCheckCompletedAt < PAGE_ENTRY_CHECK_COOLDOWN_MS
+    ) {
+      return this.getState()
+    }
+
+    const checkPromise = this.checkForUpdates()
+    this.pageEntryCheckPromise = checkPromise
+
+    try {
+      return await checkPromise
+    } finally {
+      if (this.pageEntryCheckPromise === checkPromise) {
+        this.pageEntryCheckPromise = null
+        this.lastPageEntryCheckCompletedAt = Date.now()
+      }
+    }
+  }
+
+  downloadUpdate(): SynapseAppUpdateState {
+    this.initialize()
+
+    if (!isUpdateSupportedInCurrentEnvironment()) {
+      return this.getState()
+    }
+
+    if (
+      this.state.status === "downloading"
+      || this.state.status === "downloaded"
+      || this.activeUpdateMode !== null
+    ) {
+      return this.getState()
+    }
+
+    const updateInfo = this.availableUpdateInfo
+    if (this.state.status !== "available" || !updateInfo) {
+      throw new Error("没有可下载的新版本，请先检查更新。")
+    }
+
+    const flowId = this.beginUpdateFlow("manual")
     void this.downloadLatestUpdate(updateInfo, flowId).catch((error) => {
       if (this.isDownloadCancelledError(error, flowId)) {
         if (this.isManualUpdateFlow(flowId)) {
@@ -377,8 +422,27 @@ class UpdateService {
       if (!this.isManualUpdateFlow(flowId)) return
 
       logger.error("Failed to download update.", error)
-      this.handleError(error, flowId)
+      this.handleDownloadError(flowId)
     })
+
+    return this.getState()
+  }
+
+  private handleUpdateAvailable(updateInfo: UpdateInfo): void {
+    this.availableUpdateInfo = updateInfo
+    this.setState({
+      status: "available",
+      message: `发现新版本 v${updateInfo.version}。`,
+      error: null,
+      releaseVersion: updateInfo.version,
+      lastCheckedAt: new Date().toISOString(),
+      downloadPercent: null,
+      bytesPerSecond: null,
+      transferredBytes: null,
+      totalBytes: null,
+      canCheck: false,
+    })
+    this.clearUpdateFlow("manual")
   }
 
   private async downloadLatestUpdate(updateInfo: UpdateInfo, flowId: number): Promise<void> {
@@ -429,7 +493,7 @@ class UpdateService {
 
     this.setState({
       status: "downloaded",
-      message: `新版本 v${event.version} 已准备好，重启后安装。`,
+      message: `新版本 v${event.version} 已下载。`,
       error: null,
       releaseVersion: event.version,
       downloadPercent: 100,
@@ -447,22 +511,40 @@ class UpdateService {
       return
     }
 
+    const availableVersion = this.availableUpdateInfo?.version ?? updateInfo?.version ?? this.state.releaseVersion
     this.setState({
-      status: "idle",
-      message: "下载已取消。",
+      status: availableVersion ? "available" : "idle",
+      message: availableVersion ? `新版本 v${availableVersion} 可下载。` : "下载已取消。",
       error: null,
-      releaseVersion: updateInfo?.version ?? this.state.releaseVersion,
+      releaseVersion: availableVersion,
       downloadPercent: null,
       bytesPerSecond: null,
       transferredBytes: null,
       totalBytes: null,
-      canCheck: isUpdateSupportedInCurrentEnvironment(),
+      canCheck: !availableVersion && isUpdateSupportedInCurrentEnvironment(),
+    })
+  }
+
+  private handleDownloadError(flowId: number): void {
+    this.clearDownloadTracking(undefined, flowId)
+    this.clearUpdateFlow("manual", flowId)
+
+    this.setState({
+      status: "available",
+      message: UPDATE_DOWNLOAD_ERROR_MESSAGE,
+      error: UPDATE_DOWNLOAD_ERROR_MESSAGE,
+      downloadPercent: null,
+      bytesPerSecond: null,
+      transferredBytes: null,
+      totalBytes: null,
+      canCheck: false,
     })
   }
 
   private handleError(_error: unknown, flowId?: number): void {
     this.clearDownloadTracking(undefined, flowId)
     this.clearUpdateFlow(undefined, flowId)
+    this.availableUpdateInfo = null
 
     this.setState({
       status: "error",
@@ -530,6 +612,19 @@ class UpdateService {
   }
 
   private handleAutoCheckUpdateAvailable(updateInfo: UpdateInfo): void {
+    this.availableUpdateInfo = updateInfo
+    this.setState({
+      status: "available",
+      message: `发现新版本 v${updateInfo.version}。`,
+      error: null,
+      releaseVersion: updateInfo.version,
+      lastCheckedAt: new Date().toISOString(),
+      downloadPercent: null,
+      bytesPerSecond: null,
+      transferredBytes: null,
+      totalBytes: null,
+      canCheck: false,
+    })
     this.clearUpdateFlow("auto")
 
     if (this.lastNotifiedVersion === updateInfo.version) {

@@ -130,6 +130,7 @@ export interface AgentRuntimeServiceDeps {
   readonly agentArtifactStore?: AgentArtifactStore
   readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
   readonly eventBus?: ScopedEventBus
+  readonly onConversationRenamed?: (conversation: ConversationEntryV1) => void
   readonly logger?: StructuredLogger
   readonly now?: () => Date
   readonly pendingQueueLimit?: number
@@ -1111,6 +1112,16 @@ export class AgentRuntimeService {
   async renameSession(conversationIdValue: string, name: string): Promise<boolean> {
     const updated = await this.sessionLifecycle.renameSession(conversationIdValue, name)
     this.emitConversationUpdated(updated)
+    try {
+      this.deps.onConversationRenamed?.(updated)
+    } catch (error) {
+      this.deps.logger?.warn("Agent detached conversation title refresh failed.", {
+        boundary: "agent-runtime.session-rename.detached-window",
+        projectId: this.deps.projectId,
+        conversationId: conversationIdValue,
+        ...errorLogMeta(error),
+      })
+    }
     return true
   }
 

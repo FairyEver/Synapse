@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { ProjectContext } from "../../../runtime/project-container"
 import type { DataNamespace, DataRepository } from "../../../runtime/data-repo"
 import { ServiceNotFoundError, ServiceNotRunningError } from "../../../runtime/service-registry"
+import { AGENT_CONVERSATION_WINDOW_SERVICE_ID } from "../../agent-conversation-window-service"
 import {
   AgentRuntimeService,
   createAgentRuntimeProjectService,
@@ -212,6 +213,31 @@ describe("createAgentRuntimeProjectService", () => {
 
     expect(close).toHaveBeenCalledOnce()
     expect(states.has("conversation-1")).toBe(false)
+  })
+
+  it("connects manual session renames to the detached conversation window service", async () => {
+    const renameConversationWindow = vi.fn(() => true)
+    const serviceFactory = createAgentRuntimeProjectService()
+    const ctx = createRunnableProjectContext({ renameConversationWindow })
+    const service = await serviceFactory.create(ctx)
+
+    try {
+      const conversation = await service.createSession({
+        sessionKey: "s1",
+        platform: "local",
+        name: "旧标题",
+        agentType: "claude-code",
+      })
+
+      await service.renameSession(conversation.id, "新标题")
+
+      expect(renameConversationWindow).toHaveBeenCalledWith({
+        projectId: "project-1",
+        conversationId: conversation.id,
+      }, "新标题")
+    } finally {
+      service.stopIdleReclaim()
+    }
   })
 
   it("keeps ordinary project sessions isolated from knowledge base plugin runtime", async () => {
@@ -452,6 +478,7 @@ describe("createAgentRuntimeProjectService", () => {
 function createRunnableProjectContext(options: {
   readonly workspacePath?: string
   readonly managedKnowledgeBase?: boolean
+  readonly renameConversationWindow?: ReturnType<typeof vi.fn>
 } = {}): ProjectContext {
   const dataRepository = createMemoryDataRepository()
   const permissionGuard = createPermissionGuard()
@@ -485,6 +512,9 @@ function createRunnableProjectContext(options: {
         if (id === "core.permission-guard") return permissionGuard as T
         if (id === "core.audit-sink") return auditSink as T
         if (id === "core.data-repository") return dataRepository as T
+        if (id === AGENT_CONVERSATION_WINDOW_SERVICE_ID && options.renameConversationWindow) {
+          return { renameConversationWindow: options.renameConversationWindow } as T
+        }
         throw new ServiceNotFoundError(id)
       }),
     },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { LockKeyhole } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -25,8 +25,8 @@ import {
   ProviderModelPicker,
 } from "@/components/provider-model-picker"
 import { createRendererLogger } from "@/app-shell/logging"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { resolveProviderModelDisplay } from "@/lib/provider-model"
+import { useAgentProviderCatalog } from "@/modules/agent/hooks/use-agent-provider-catalog"
 import type { SynapseAgentPersona } from "@/types/agent-persona"
 import type { SynapseAgentProvider } from "@/types/bridge"
 import type { ProviderModelSelection } from "@/types/provider-model"
@@ -60,31 +60,13 @@ function AgentSessionCreateDialog({
   const [name, setName] = useState(initialName)
   const [personaId, setPersonaId] = useState<string | null>(null)
   const [manualSelection, setManualSelection] = useState<ProviderModelSelection | null>(defaultSelection ?? null)
-  const [providers, setProviders] = useState<readonly SynapseAgentProvider[] | null>(null)
-  const [providersLoading, setProvidersLoading] = useState(false)
-  const [providersError, setProvidersError] = useState(false)
   const [saving, setSaving] = useState(false)
-
-  const loadProviders = useCallback(async () => {
-    setProvidersLoading(true)
-    setProvidersError(false)
-    try {
-      const nextProviders = await requireSynapseBridge().agent.listAllProviders()
-      setProviders(nextProviders)
-      setManualSelection((current) =>
-        pickInitialProviderModelSelection(nextProviders, current ?? defaultSelection) ?? null)
-    } catch (rawError) {
-      logger.warn("Agent session model list failed.", {
-        boundary: "renderer.agent.session-create-model-list",
-        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
-        errorLength: errorMessageLength(rawError),
-      })
-      setProviders(null)
-      setProvidersError(true)
-    } finally {
-      setProvidersLoading(false)
-    }
-  }, [defaultSelection])
+  const {
+    providers,
+    isLoading: providersLoading,
+    hasError: providersError,
+    reload: reloadProviders,
+  } = useAgentProviderCatalog(open)
 
   useEffect(() => {
     if (!open) return
@@ -92,8 +74,13 @@ function AgentSessionCreateDialog({
     setPersonaId(null)
     setManualSelection(defaultSelection ?? null)
     setSaving(false)
-    void loadProviders()
-  }, [defaultSelection, initialName, loadProviders, open])
+  }, [defaultSelection, initialName, open])
+
+  useEffect(() => {
+    if (!open || !providers) return
+    setManualSelection((current) =>
+      pickInitialProviderModelSelection(providers, current ?? defaultSelection) ?? null)
+  }, [defaultSelection, open, providers])
 
   useEffect(() => {
     if (!personaId || personas.some((persona) => persona.id === personaId)) return
@@ -211,7 +198,7 @@ function AgentSessionCreateDialog({
                   loading={providersLoading}
                   error={providersError ? "读取 Provider 失败" : null}
                   disabled={saving}
-                  onRetry={() => void loadProviders()}
+                  onRetry={() => void reloadProviders()}
                   onValueChange={setManualSelection}
                   className="max-h-[min(20rem,calc(100vh-16rem))]"
                 />
@@ -228,7 +215,7 @@ function AgentSessionCreateDialog({
               {selectedPersona?.providerModel && providersError ? (
                 <div className="flex items-center gap-2">
                   <p className="text-xs text-destructive">读取 Provider 失败</p>
-                  <Button type="button" variant="outline" size="sm" onClick={() => void loadProviders()}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void reloadProviders()}>
                     重试
                   </Button>
                 </div>
@@ -275,14 +262,14 @@ function PersonaSelectGroup({
             key={persona.id}
             value={persona.id}
             disabled={Boolean(model && model.status !== "available")}
-            className="py-1.5"
+            className="py-1.5 [&>span:last-child]:min-w-0 [&>span:last-child]:flex-1"
           >
-            <span className="flex min-w-0 flex-col items-start gap-0">
-              <span className="max-w-80 truncate">{persona.name}</span>
-              <span className="max-w-80 truncate text-xs text-muted-foreground">
+            <span className="flex w-full min-w-0 flex-col items-start gap-0 overflow-hidden">
+              <span className="w-full truncate">{persona.name}</span>
+              <span className="w-full truncate text-xs text-muted-foreground">
                 {persona.description}
               </span>
-              <span className="max-w-80 truncate text-xs text-muted-foreground">
+              <span className="w-full truncate text-xs text-muted-foreground">
                 {model?.label ?? "未绑定"}
               </span>
             </span>

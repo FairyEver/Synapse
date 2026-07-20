@@ -276,6 +276,7 @@ describe("AgentRuntimeService", () => {
   it("broadcasts a manually renamed conversation after persistence", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const eventBus = { emit: vi.fn() }
+    const onConversationRenamed = vi.fn()
     const service = new AgentRuntimeService({
       projectId: "project-1",
       workDir: "/repo",
@@ -283,6 +284,7 @@ describe("AgentRuntimeService", () => {
       providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
       createSession: () => new ScriptedSession([], "sdk-1"),
       eventBus: eventBus as never,
+      onConversationRenamed,
       now: fixedNow,
     })
     const conversation = await service.createSession({
@@ -303,6 +305,51 @@ describe("AgentRuntimeService", () => {
       type: "conversationUpdated",
       payload: expect.objectContaining({ conversationId: conversation.id }),
     }))
+    expect(onConversationRenamed).toHaveBeenCalledWith(expect.objectContaining({
+      id: conversation.id,
+      projectId: "project-1",
+      name: "手动标题",
+    }))
+  })
+
+  it("keeps a manual rename when detached window title refresh fails", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const rawError = new Error("window failed for Sensitive title token=sk-secret")
+    const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn() }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      onConversationRenamed: () => { throw rawError },
+      logger: logger as never,
+      now: fixedNow,
+    })
+    const conversation = await service.createSession({
+      sessionKey: "s1",
+      platform: "local",
+      name: "旧标题",
+      agentType: "claude-code",
+    })
+
+    await expect(service.renameSession(conversation.id, "Sensitive title")).resolves.toBe(true)
+    await expect(conversations.get(conversation.id)).resolves.toMatchObject({
+      name: "Sensitive title",
+      titleSource: "manual",
+    })
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Agent detached conversation title refresh failed.",
+      {
+        boundary: "agent-runtime.session-rename.detached-window",
+        projectId: "project-1",
+        conversationId: conversation.id,
+        errorName: "Error",
+        errorLength: rawError.message.length,
+      },
+    )
+    const serializedLogs = JSON.stringify(logger.warn.mock.calls)
+    expect(serializedLogs).not.toContain("Sensitive title")
+    expect(serializedLogs).not.toContain("sk-secret")
   })
 
   it("keeps the Agent turn running when generated title persistence fails", async () => {

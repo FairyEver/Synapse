@@ -15,8 +15,10 @@ const {
   workflowCreate,
   workflowExportPackage,
   workflowImportPackage,
+  workflowImportSharePackage,
   workflowInspectImportPackage,
   workflowOpenEditor,
+  workflowUndoShareImport,
 } = vi.hoisted(() => ({
   loggerWarn: vi.fn(),
   toastError: vi.fn(),
@@ -24,8 +26,10 @@ const {
   workflowCreate: vi.fn(),
   workflowExportPackage: vi.fn(),
   workflowImportPackage: vi.fn(),
+  workflowImportSharePackage: vi.fn(),
   workflowInspectImportPackage: vi.fn(),
   workflowOpenEditor: vi.fn(),
+  workflowUndoShareImport: vi.fn(),
 }))
 
 vi.mock("sonner", () => ({
@@ -71,6 +75,20 @@ vi.mock("../components/workflow-import-dialog", () => ({
   ),
 }))
 
+vi.mock("../components/workflow-share-import-dialog", () => ({
+  WorkflowShareImportDialog: ({
+    open,
+    onImport,
+  }: {
+    open: boolean
+    onImport: (selections: { models: []; projects: []; resources: []; environments: [] }) => void
+  }) => (
+    open
+      ? <button type="button" onClick={() => onImport({ models: [], projects: [], resources: [], environments: [] })}>确认分享导入</button>
+      : null
+  ),
+}))
+
 vi.mock("../../../workflow-nodes/register.renderer", () => ({}))
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -85,8 +103,10 @@ beforeEach(() => {
         create: workflowCreate,
         exportPackage: workflowExportPackage,
         importPackage: workflowImportPackage,
+        importSharePackage: workflowImportSharePackage,
         inspectImportPackage: workflowInspectImportPackage,
         openEditor: workflowOpenEditor,
+        undoShareImport: workflowUndoShareImport,
       },
     } as unknown as Window["synapse"],
   })
@@ -270,5 +290,48 @@ describe("WorkflowModule", () => {
       errorLength: "open failed token=sk-secret /Users/example/repo".length,
       errorMessage: "open failed token=[redacted] [path]",
     })
+  })
+
+  it("keeps the undo action available after opening an updated workflow", async () => {
+    workflowInspectImportPackage.mockResolvedValue({
+      packagePath: "/tmp/workflow.synapse-workflow",
+      packageDigest: "sha256:share-preview",
+      lineageId: "lineage-1",
+      mode: "update",
+      content: { entrypoints: ["workflow-ref"], workflows: [] },
+    })
+    workflowImportSharePackage.mockResolvedValue({
+      workflowId: "workflow-imported",
+      mutated: true,
+      undoCreated: true,
+    })
+    workflowOpenEditor.mockResolvedValue(undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowModule />)
+    })
+
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("导入"))
+        ?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("确认分享导入"))
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(workflowOpenEditor).toHaveBeenCalledWith("workflow-imported")
+    expect(toastSuccess).toHaveBeenCalledWith("工作流已更新", expect.objectContaining({
+      duration: Number.POSITIVE_INFINITY,
+      action: expect.objectContaining({ label: "撤销" }),
+    }))
   })
 })

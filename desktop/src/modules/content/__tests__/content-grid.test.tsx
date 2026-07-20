@@ -9,8 +9,28 @@ import { ContentGrid } from "@/modules/content/components/content-grid"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
 const mocks = vi.hoisted(() => ({
+  getEditorAdapters: vi.fn(async () => [
+    {
+      id: "codex",
+      label: "Codex",
+      order: 1,
+      supportsGlobal: true,
+      supportsProject: true,
+      supportedContentTypes: ["skill", "rule"],
+    },
+    {
+      id: "cursor",
+      label: "Cursor",
+      order: 2,
+      supportsGlobal: true,
+      supportsProject: true,
+      supportedContentTypes: ["skill", "rule"],
+    },
+  ]),
+  installSourceToEditorTargets: vi.fn(),
   toast: vi.fn(),
   toastError: vi.fn(),
+  toastSuccess: vi.fn(),
   toastWarning: vi.fn(),
   uninstall: vi.fn(),
 }))
@@ -18,7 +38,25 @@ const mocks = vi.hoisted(() => ({
 vi.mock("sonner", () => ({
   toast: Object.assign(mocks.toast, {
     error: mocks.toastError,
+    success: mocks.toastSuccess,
     warning: mocks.toastWarning,
+  }),
+}))
+
+vi.mock("@/app-shell/content", () => ({
+  getEditorAdapters: mocks.getEditorAdapters,
+}))
+
+vi.mock("@/app-shell/installers", () => ({
+  installSourceToEditorTargets: mocks.installSourceToEditorTargets,
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => ({
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
   }),
 }))
 
@@ -52,6 +90,21 @@ vi.mock("@/modules/content/contexts/install-status-context", () => ({
         scope: "global",
         status: "installed",
       }]
+    }
+
+    if (contentId === "multi-stale-skill") {
+      return [
+        {
+          editorId: "codex",
+          scope: "global",
+          status: "needs_update",
+        },
+        {
+          editorId: "cursor",
+          scope: "global",
+          status: "needs_update",
+        },
+      ]
     }
 
     if (contentId === "project-stale-skill") {
@@ -272,7 +325,7 @@ describe("ContentGrid", () => {
       }),
     ])
 
-    const badge = Array.from(container.querySelectorAll("[title='已安装版本落后']"))
+    const badge = Array.from(container.querySelectorAll("[aria-label='更新 review']"))
       .find((element) => element.textContent === "可更新")
 
     expect(badge).toBeTruthy()
@@ -289,40 +342,198 @@ describe("ContentGrid", () => {
     expect(container.textContent).not.toContain("可更新")
   })
 
-  it("describes editor uninstall as moving content to the system trash", async () => {
+  it("reinstalls a Skill into the selected global install target", async () => {
+    mocks.installSourceToEditorTargets.mockResolvedValue({
+      results: [{ target: { editorId: "codex", scope: "global" }, status: "installed" }],
+    })
     const { container } = await renderGrid([
       createContentItem("skill", {
         id: "current-skill",
         name: "review",
       }),
     ])
-    const editorButton = container.querySelector<HTMLButtonElement>('button[title="Codex"]')
+    const editorButton = container.querySelector<HTMLButtonElement>('[aria-label="在 Codex 中重新安装 review"]')
 
     await act(async () => {
       editorButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
     })
 
-    expect(document.body.textContent).toContain("从 Codex 移到废纸篓？")
-    expect(document.body.textContent).toContain("可从系统废纸篓恢复。")
-    expect(Array.from(document.body.querySelectorAll("button")).some(
-      (button) => button.textContent?.trim() === "移到废纸篓",
-    )).toBe(true)
-    expect(document.body.textContent).not.toContain("确认要删除吗")
+    expect(document.body.textContent).toContain("重新安装 Skill")
+    expect(document.body.textContent).toContain("Codex")
+    expect(document.body.textContent).not.toContain("移到废纸篓")
+    await act(async () => {
+      Array.from(document.body.querySelectorAll("button"))
+        .find((button) => button.textContent?.trim() === "重新安装")
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.installSourceToEditorTargets).toHaveBeenCalledWith({
+      mode: "reinstall",
+      source: {
+        description: "Description",
+        kind: "skill",
+        name: "review",
+        origin: "repository",
+        repositoryContentId: "current-skill",
+        sourceIdentity: "current-skill",
+        title: "Title",
+      },
+      targets: [{ editorId: "codex", scope: "global" }],
+    })
+    expect(mocks.uninstall).not.toHaveBeenCalled()
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Skill 已重新安装")
   })
 
-  it("shows the shared warning when Skill status refresh fails after trashing", async () => {
-    mocks.uninstall.mockResolvedValue({ warning: "已移到废纸篓，安装状态刷新失败。" })
+  it("updates the selected outdated global install targets through the Skill installer", async () => {
+    mocks.installSourceToEditorTargets.mockResolvedValue({
+      results: [{ target: { editorId: "codex", scope: "global" }, status: "installed" }],
+    })
     const { container } = await renderGrid([
       createContentItem("skill", {
-        id: "current-skill",
+        id: "multi-stale-skill",
         name: "review",
       }),
     ])
 
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('button[title="Codex"]')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      container.querySelector<HTMLButtonElement>('[aria-label="更新 review"]')?.click()
+      await Promise.resolve()
     })
+
+    expect(document.body.textContent).toContain("更新 Skill")
+    expect(document.body.textContent).toContain("Codex")
+    expect(document.body.textContent).toContain("Cursor")
+    expect(document.body.querySelectorAll('[data-slot="checkbox"][data-state="checked"]')).toHaveLength(3)
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>("#skill-update-select-all")?.click()
+    })
+    const updateButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.trim() === "更新")
+    expect(updateButton?.disabled).toBe(true)
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>("#skill-update-target-codex")?.click()
+    })
+    await act(async () => {
+      updateButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.installSourceToEditorTargets).toHaveBeenCalledWith({
+      mode: "update",
+      source: {
+        description: "Description",
+        kind: "skill",
+        name: "review",
+        origin: "repository",
+        repositoryContentId: "multi-stale-skill",
+        sourceIdentity: "multi-stale-skill",
+        title: "Title",
+      },
+      targets: [{ editorId: "codex", scope: "global" }],
+    })
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Skill 已更新")
+  })
+
+  it("keeps failed Skill updates available for retry without repeating successful targets", async () => {
+    mocks.installSourceToEditorTargets
+      .mockResolvedValueOnce({
+        results: [
+          { target: { editorId: "codex", scope: "global" }, status: "installed" },
+          { target: { editorId: "cursor", scope: "global" }, status: "failed", error: "目录不可写" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        results: [{ target: { editorId: "cursor", scope: "global" }, status: "installed" }],
+      })
+    const { container } = await renderGrid([
+      createContentItem("skill", {
+        id: "multi-stale-skill",
+        name: "review",
+      }),
+    ])
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[aria-label="更新 review"]')?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      Array.from(document.body.querySelectorAll("button"))
+        .find((button) => button.textContent?.trim() === "更新")
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("部分更新失败")
+    expect(document.body.textContent).toContain("目录不可写")
+    expect(document.body.textContent).not.toContain("Codex")
+
+    await act(async () => {
+      Array.from(document.body.querySelectorAll("button"))
+        .find((button) => button.textContent?.trim() === "重试失败项")
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.installSourceToEditorTargets).toHaveBeenLastCalledWith({
+      mode: "update",
+      source: expect.any(Object),
+      targets: [{ editorId: "cursor", scope: "global" }],
+    })
+  })
+
+  it("keeps successful Skill update warnings visible for manual inspection", async () => {
+    mocks.installSourceToEditorTargets.mockResolvedValue({
+      results: [
+        {
+          target: { editorId: "codex", scope: "global" },
+          status: "installed",
+          result: { warning: "旧 Skill 备份需要手动检查" },
+        },
+        { target: { editorId: "cursor", scope: "global" }, status: "installed" },
+      ],
+    })
+    const { container } = await renderGrid([
+      createContentItem("skill", {
+        id: "multi-stale-skill",
+        name: "review",
+      }),
+    ])
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[aria-label="更新 review"]')?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      Array.from(document.body.querySelectorAll("button"))
+        .find((button) => button.textContent?.trim() === "更新")
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("更新完成，需检查")
+    expect(document.body.textContent).toContain("旧 Skill 备份需要手动检查")
+    expect(document.body.textContent).not.toContain("Cursor")
+    expect(document.body.textContent).not.toContain("重试失败项")
+  })
+
+  it("keeps Rule uninstall on its existing trash flow", async () => {
+    mocks.uninstall.mockResolvedValue({})
+    const { container } = await renderGrid([
+      createContentItem("rule", {
+        id: "current-skill",
+        name: "review",
+      }),
+    ], "rule")
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[title="Codex"]')?.click()
+    })
+
+    expect(document.body.textContent).toContain("从 Codex 移到废纸篓？")
     await act(async () => {
       Array.from(document.body.querySelectorAll("button"))
         .find((button) => button.textContent?.trim() === "移到废纸篓")
@@ -331,7 +542,6 @@ describe("ContentGrid", () => {
     })
 
     expect(mocks.uninstall).toHaveBeenCalledWith("current-skill", "codex")
-    expect(mocks.toastWarning).toHaveBeenCalledWith("已移到废纸篓，安装状态刷新失败。")
   })
 
   it("does not show update badge when only project installs are stale", async () => {

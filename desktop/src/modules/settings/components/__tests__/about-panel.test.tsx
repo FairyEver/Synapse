@@ -66,6 +66,133 @@ afterEach(() => {
 })
 
 describe("AboutPanel cheat codes", () => {
+  it("checks for updates when the panel opens", async () => {
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    expect(getUpdaterBridge().checkForUpdatesOnPageEnter).toHaveBeenCalledTimes(1)
+  })
+
+  it("downloads only after the user confirms the available update", async () => {
+    const updater = getUpdaterBridge()
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({
+        message: "发现新版本 v0.2.190。",
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+    })
+
+    await act(async () => {
+      getButtonWithText("下载并安装").click()
+      await Promise.resolve()
+    })
+
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1)
+    expect(updater.checkForUpdates).not.toHaveBeenCalled()
+  })
+
+  it("installs automatically after a visible three-second countdown", async () => {
+    const updater = getUpdaterBridge()
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({
+        message: "发现新版本 v0.2.190。",
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+    })
+    await act(async () => {
+      getButtonWithText("下载并安装").click()
+      await Promise.resolve()
+    })
+    act(() => {
+      emitUpdaterState(updateState({
+        downloadPercent: 100,
+        message: "新版本 v0.2.190 已下载。",
+        releaseVersion: "0.2.190",
+        status: "downloaded",
+      }))
+    })
+
+    expect(getButtonWithText("3 秒后安装").disabled).toBe(true)
+    expect(getButtonWithText("稍后安装")).toBeTruthy()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000)
+      await Promise.resolve()
+    })
+
+    expect(updater.installUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps the downloaded update ready when automatic installation is postponed", async () => {
+    const updater = getUpdaterBridge()
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+    })
+    await act(async () => {
+      getButtonWithText("下载并安装").click()
+      await Promise.resolve()
+    })
+    act(() => {
+      emitUpdaterState(updateState({
+        downloadPercent: 100,
+        releaseVersion: "0.2.190",
+        status: "downloaded",
+      }))
+    })
+    act(() => {
+      getButtonWithText("稍后安装").click()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000)
+    })
+
+    expect(updater.installUpdate).not.toHaveBeenCalled()
+    expect(getButtonWithText("立即安装")).toBeTruthy()
+  })
+
+  it("does not auto-install when the panel is left before download completes", async () => {
+    const updater = getUpdaterBridge()
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+    })
+    await act(async () => {
+      getButtonWithText("下载并安装").click()
+      await Promise.resolve()
+    })
+
+    const root = roots.pop()
+    act(() => {
+      root?.unmount()
+    })
+    act(() => {
+      emitUpdaterState(updateState({
+        downloadPercent: 100,
+        releaseVersion: "0.2.190",
+        status: "downloaded",
+      }))
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000)
+    })
+
+    expect(updater.installUpdate).not.toHaveBeenCalled()
+  })
+
   it("marks version and update details as selectable text", async () => {
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
@@ -393,6 +520,17 @@ function getUpdateActionButton(): HTMLButtonElement {
   return button
 }
 
+function getButtonWithText(text: string): HTMLButtonElement {
+  const button = Array.from(document.body.querySelectorAll("button"))
+    .find((element) => element.textContent === text)
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`Button ${text} not found`)
+  }
+
+  return button
+}
+
 function hoverTitlePart(index: number): void {
   act(() => {
     getTitlePart(index).dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))
@@ -406,22 +544,24 @@ function leaveTitlePart(index: number): void {
 }
 
 function installUpdaterBridge(): void {
+  const initialState = updateState({
+    canCheck: true,
+    currentVersion: "0.2.189",
+    message: "当前已是最新版本。",
+  })
   const updater = {
     cancelDownload: vi.fn(),
     checkForUpdates: vi.fn(),
-    getState: vi.fn().mockResolvedValue({
-      bytesPerSecond: null,
-      canCheck: false,
+    checkForUpdatesOnPageEnter: vi.fn().mockResolvedValue(initialState),
+    downloadUpdate: vi.fn().mockResolvedValue(updateState({
       currentVersion: "0.2.189",
-      downloadPercent: null,
-      error: null,
-      lastCheckedAt: null,
-      message: "当前已是最新版本。",
-      releaseVersion: null,
-      status: "idle",
-      totalBytes: null,
-      transferredBytes: null,
-    }),
+      downloadPercent: 0,
+      message: "正在下载更新...",
+      releaseVersion: "0.2.190",
+      status: "downloading",
+      transferredBytes: 0,
+    })),
+    getState: vi.fn().mockResolvedValue(initialState),
     installUpdate: vi.fn(),
     onStateChanged: vi.fn((listener: (state: SynapseAppUpdateState) => void) => {
       updaterStateListeners.push(listener)

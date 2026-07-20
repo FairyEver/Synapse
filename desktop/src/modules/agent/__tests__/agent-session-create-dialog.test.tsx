@@ -141,6 +141,26 @@ describe("AgentSessionCreateDialog", () => {
     expect(option?.getAttribute("aria-disabled")).toBe("true")
   })
 
+  it("keeps long persona text inside the select option", async () => {
+    await renderDialog({
+      onCreate: vi.fn(async () => true),
+      personas: [{
+        ...UNBOUND_PERSONA,
+        description: "在中文和英文之间互译，保留原意、语气和格式。",
+      }],
+    })
+
+    await openPersonaSelect()
+    const option = [...document.querySelectorAll<HTMLElement>("[role='option']")]
+      .find((item) => item.textContent?.includes("未绑定智能体"))
+    const text = option?.querySelector<HTMLElement>(".overflow-hidden")
+
+    expect(option?.className).toContain("[&>span:last-child]:min-w-0")
+    expect(text?.className).toContain("w-full")
+    expect([...text?.children ?? []].every((item) => item.className.includes("w-full"))).toBe(true)
+    expect([...text?.children ?? []].every((item) => item.className.includes("truncate"))).toBe(true)
+  })
+
   it("keeps the dialog name and selection when creation fails", async () => {
     const onCreate = vi.fn(async () => false)
     await renderDialog({ onCreate })

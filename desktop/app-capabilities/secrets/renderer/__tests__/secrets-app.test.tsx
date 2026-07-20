@@ -164,6 +164,10 @@ describe("SecretsModule", () => {
     expect(document.body.textContent).toContain("值")
     expect(document.body.textContent).toContain("••••••••")
     expect(document.body.textContent).not.toContain("super-secret")
+
+    const revealButton = document.querySelector<HTMLButtonElement>('button[aria-label="显示密钥值：TOKEN"]')
+    expect(revealButton).not.toBeNull()
+    expect(revealButton?.parentElement?.lastElementChild).toBe(revealButton)
   })
 
   it("opens a dialog with the full secret value and copies it", async () => {

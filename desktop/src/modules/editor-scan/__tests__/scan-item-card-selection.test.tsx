@@ -81,6 +81,19 @@ describe("ScanItemCard selection", () => {
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
+  it("aligns the checkbox and path with the card content column", async () => {
+    await renderCard()
+    const checkbox = document.querySelector<HTMLElement>('button[role="checkbox"]')
+    const cardAction = document.querySelector<HTMLElement>("[data-scan-item-card-action]")
+    const pathButton = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("/skills/jenkins"))
+
+    expect(checkbox?.className).toContain("mt-0.5")
+    expect(cardAction?.parentElement).toBe(pathButton?.parentElement)
+    expect(cardAction?.parentElement?.className).toContain("min-w-0 flex-1")
+    expect(pathButton?.querySelector("svg")).toBeNull()
+  })
+
   it("exposes the card body as a keyboard button", async () => {
     const { onClick } = await renderCard()
     const card = document.querySelector<HTMLElement>("[data-scan-item-card]")

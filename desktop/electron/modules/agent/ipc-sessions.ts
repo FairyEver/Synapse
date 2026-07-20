@@ -415,19 +415,6 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
       try {
         const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
         const ok = await agent.renameSession(request.conversationId, request.name)
-        if (ok) {
-          try {
-            const service = ctx.resolve<AgentConversationWindowService>(AGENT_CONVERSATION_WINDOW_SERVICE_ID)
-            service.renameConversationWindow(request, request.name)
-          } catch (windowError) {
-            logger.warn("Agent detached conversation title refresh failed.", {
-              projectId: request.projectId,
-              conversationId: request.conversationId,
-              boundary: "agent.ipc.rename-session.detached-window",
-              ...errorDiagnostic(windowError),
-            })
-          }
-        }
         return { ok }
       } catch (rawError) {
         logger.warn("Agent session rename failed.", {

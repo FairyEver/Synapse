@@ -56,6 +56,24 @@ export const updateIpcModule: IpcModule = {
         return updateService.checkForUpdates()
       },
     },
+    checkForUpdatesOnPageEnter: {
+      kind: "invoke",
+      channel: "synapse:update:check-for-updates-on-page-enter",
+      request: z.void(),
+      response: updateStateResponseSchema,
+      handler: async (_ctx) => {
+        return updateService.checkForUpdatesOnPageEnter()
+      },
+    },
+    downloadUpdate: {
+      kind: "invoke",
+      channel: "synapse:update:download-update",
+      request: z.void(),
+      response: updateStateResponseSchema,
+      handler: async (_ctx) => {
+        return updateService.downloadUpdate()
+      },
+    },
     cancelDownload: {
       kind: "invoke",
       channel: "synapse:update:cancel-download",

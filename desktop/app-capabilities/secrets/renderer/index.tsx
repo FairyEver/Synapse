@@ -650,7 +650,14 @@ function SecretValueCell({
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
+    <div className="flex min-w-0 items-center justify-between gap-1.5">
+      {reveal?.loading ? (
+        <span className="truncate text-sm text-muted-foreground">读取中</span>
+      ) : reveal?.error ? (
+        <span className="truncate text-sm text-destructive">读取失败</span>
+      ) : (
+        <span className="truncate font-mono text-sm text-muted-foreground">••••••••</span>
+      )}
       <Button
         type="button"
         variant="ghost"
@@ -661,13 +668,6 @@ function SecretValueCell({
       >
         <Eye className="size-3.5" />
       </Button>
-      {reveal?.loading ? (
-        <span className="truncate text-sm text-muted-foreground">读取中</span>
-      ) : reveal?.error ? (
-        <span className="truncate text-sm text-destructive">读取失败</span>
-      ) : (
-        <span className="truncate font-mono text-sm text-muted-foreground">••••••••</span>
-      )}
     </div>
   )
 }

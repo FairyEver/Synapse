@@ -1,5 +1,4 @@
 import type { KeyboardEvent, MouseEvent } from "react"
-import { FolderOpen } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -74,58 +73,60 @@ function ScanItemCard({
           <Checkbox
             aria-label={`选择 ${name}`}
             checked={selected}
+            className="mt-0.5"
             onClick={handleSelectionClick}
             onCheckedChange={(value) => onSelectionChange?.(value === true)}
           />
         ) : null}
-        <div
-          data-scan-item-card-action
-          role="button"
-          tabIndex={0}
-          className="min-w-0 flex-1 cursor-pointer"
-          onClick={onClick}
-          onKeyDown={handleCardActionKeyDown}
-        >
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium">{name}</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant={source === "synapse" ? "default" : "secondary"}
-                    className="shrink-0 text-xs px-1.5 py-0"
-                  >
-                    {source === "synapse" ? "Synapse" : "外部"}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {source === "synapse"
-                    ? "由 Synapse 安装"
-                    : "用户自行管理"}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+        <div className="min-w-0 flex-1">
+          <div
+            data-scan-item-card-action
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer"
+            onClick={onClick}
+            onKeyDown={handleCardActionKeyDown}
+          >
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-medium">{name}</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant={source === "synapse" ? "default" : "secondary"}
+                      className="shrink-0 px-1.5 py-0 text-xs"
+                    >
+                      {source === "synapse" ? "Synapse" : "外部"}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {source === "synapse"
+                      ? "由 Synapse 安装"
+                      : "用户自行管理"}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            {firstLine ? (
+              <p className="mt-1 truncate text-xs text-muted-foreground">
+                {firstLine}
+              </p>
+            ) : null}
+            {metaEntries.length > 0 ? (
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {metaEntries.map(([k, v]) => `${k}: ${v}`).join(" · ")}
+              </p>
+            ) : null}
           </div>
-          {firstLine ? (
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-              {firstLine}
-            </p>
-          ) : null}
-          {metaEntries.length > 0 ? (
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              {metaEntries.map(([k, v]) => `${k}: ${v}`).join(" · ")}
-            </p>
-          ) : null}
+          <button
+            type="button"
+            className="mt-1.5 block max-w-full truncate text-left text-xs text-muted-foreground/50 transition-colors hover:text-foreground"
+            onClick={handleOpenInFinder}
+          >
+            {itemPath}
+          </button>
         </div>
       </div>
-      <button
-        type="button"
-        className="mt-1.5 flex max-w-full items-center gap-1 text-xs text-muted-foreground/50 hover:text-foreground transition-colors"
-        onClick={handleOpenInFinder}
-      >
-        <FolderOpen className="size-3 shrink-0" />
-        <span className="truncate">{itemPath}</span>
-      </button>
     </div>
   )
 }

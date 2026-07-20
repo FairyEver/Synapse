@@ -1383,6 +1383,8 @@ export type SynapseBridge = {
   updater: {
     cancelDownload: () => Promise<void>
     checkForUpdates: () => Promise<SynapseAppUpdateState>
+    checkForUpdatesOnPageEnter: () => Promise<SynapseAppUpdateState>
+    downloadUpdate: () => Promise<SynapseAppUpdateState>
     getState: () => Promise<SynapseAppUpdateState>
     installUpdate: () => Promise<void>
     onStateChanged: (listener: (payload: SynapseAppUpdateState) => void) => () => void

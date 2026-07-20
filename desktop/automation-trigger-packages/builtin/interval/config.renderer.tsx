@@ -5,17 +5,8 @@ import {
 } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
+import { WeekdaySelector } from "../../../src/automation-triggers/weekday-selector"
 import type { IntervalTriggerConfig } from "./schema"
-
-const WEEKDAYS = [
-  { value: 1, label: "一" },
-  { value: 2, label: "二" },
-  { value: 3, label: "三" },
-  { value: 4, label: "四" },
-  { value: 5, label: "五" },
-  { value: 6, label: "六" },
-  { value: 0, label: "日" },
-]
 
 export function IntervalTriggerConfigForm({
   value,
@@ -57,24 +48,14 @@ export function IntervalTriggerConfigForm({
         </FieldContent>
       </Field>
       <Field>
-        <FieldLabel>活跃日</FieldLabel>
+        <FieldLabel id="automation-trigger-interval-active-days-label">活跃日</FieldLabel>
         <FieldContent>
-          <ToggleGroup
-            className="w-full"
-            type="multiple"
-            value={value.activeDays.map(String)}
-            variant="outline"
-            onValueChange={(days) => {
-              const activeDays = days.map(Number).filter((day) => Number.isInteger(day))
-              onChange({ ...value, activeDays })
-            }}
-          >
-            {WEEKDAYS.map((day) => (
-              <ToggleGroupItem key={day.value} className="flex-1" value={String(day.value)}>
-                {day.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+          <WeekdaySelector
+            id="automation-trigger-interval-active-days"
+            aria-labelledby="automation-trigger-interval-active-days-label"
+            value={value.activeDays}
+            onValueChange={(activeDays) => onChange({ ...value, activeDays })}
+          />
         </FieldContent>
       </Field>
     </div>

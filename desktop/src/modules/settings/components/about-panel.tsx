@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { formatBytes as formatByteSize } from "@synapse/shared"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -60,7 +60,7 @@ function formatDuration(totalSeconds: number): string {
 
 function getDownloadDetails(updateState: SynapseAppUpdateState): string | null {
   if (updateState.status === "downloaded") {
-    return "重启后完成安装"
+    return "等待安装"
   }
 
   if (updateState.status !== "downloading") {
@@ -105,7 +105,11 @@ type AboutPanelProps = {
 function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   const [updateState, setUpdateState] = useState<SynapseAppUpdateState>(INITIAL_UPDATE_STATE)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [installCountdown, setInstallCountdown] = useState<number | null>(null)
   const [isRestarting, setIsRestarting] = useState(false)
+  const autoInstallArmedRef = useRef(false)
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const installTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activeTitleColorOffset, setActiveTitleColorOffset] = useState(0)
   const [hoveredTitleIndex, setHoveredTitleIndex] = useState<number | null>(null)
 
@@ -123,29 +127,38 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
 
     let cancelled = false
 
-    void bridge.getState().then((state) => {
-      if (!cancelled) {
-        setUpdateState(state)
-      }
-    }).catch((error) => {
-      logger.error("Failed to read initial app update state.", error)
-
-      if (!cancelled) {
-        const message = error instanceof Error ? error.message : "读取更新信息失败。"
-
-        setUpdateState({
-          ...INITIAL_UPDATE_STATE,
-          status: "error",
-          message,
-          error: message,
-        })
-      }
-    })
-
     const unsubscribe = bridge.onStateChanged((state) => {
       setActionError(null)
       setUpdateState(state)
     })
+
+    const loadAndCheckForUpdates = async () => {
+      try {
+        const state = await bridge.getState()
+        if (cancelled) return
+        setUpdateState(state)
+
+        const checkedState = await bridge.checkForUpdatesOnPageEnter()
+        if (!cancelled) {
+          setUpdateState(checkedState)
+        }
+      } catch (error) {
+        logger.error("Failed to initialize app update state.", error)
+
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : "读取更新信息失败。"
+
+          setUpdateState({
+            ...INITIAL_UPDATE_STATE,
+            status: "error",
+            message,
+            error: message,
+          })
+        }
+      }
+    }
+
+    void loadAndCheckForUpdates()
 
     return () => {
       cancelled = true
@@ -154,16 +167,85 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   }, [])
 
   const isChecking = updateState.status === "checking"
-  const isDownloading = updateState.status === "available" || updateState.status === "downloading"
+  const isAvailable = updateState.status === "available"
+  const isDownloading = updateState.status === "downloading"
   const isDownloaded = updateState.status === "downloaded"
-  const actionLabel = isRestarting ? "重启中..." : isDownloaded ? "重启安装" : isChecking ? "检查中..." : isDownloading ? "下载中..." : "检查更新"
-  const actionDisabled = isRestarting || (isDownloaded ? false : !updateState.canCheck || isChecking || isDownloading)
-  const statusClassName = updateState.status === "error" || actionError
+  const actionLabel = isRestarting
+    ? "安装中..."
+    : installCountdown !== null
+      ? `${installCountdown} 秒后安装`
+      : isDownloaded
+        ? "立即安装"
+        : isAvailable
+          ? "下载并安装"
+          : isChecking
+            ? "检查中..."
+            : "检查更新"
+  const actionDisabled = isRestarting
+    || installCountdown !== null
+    || (!isAvailable && !isDownloaded && (!updateState.canCheck || isChecking || isDownloading))
+  const statusClassName = updateState.status === "error" || updateState.error || actionError
     ? "text-sm text-destructive"
     : "text-sm text-muted-foreground"
+  const statusMessage = installCountdown !== null
+    ? `下载完成，${installCountdown} 秒后自动安装。`
+    : actionError ?? updateState.message
   const downloadDetails = getDownloadDetails(updateState)
   const downloadProgressValue = Math.max(0, Math.min(100, updateState.downloadPercent ?? 0))
   const currentVersionLabel = `v${updateState.currentVersion}`
+
+  const installDownloadedUpdate = useCallback(async () => {
+    const bridge = window.synapse?.updater
+
+    if (!bridge) {
+      return
+    }
+
+    setActionError(null)
+    setIsRestarting(true)
+
+    try {
+      await bridge.installUpdate()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "安装更新失败。"
+
+      logger.error("Failed to install downloaded app update.", error)
+      setActionError(message)
+      setIsRestarting(false)
+    }
+  }, [])
+
+  const clearInstallTimers = useCallback(() => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current)
+      countdownIntervalRef.current = null
+    }
+    if (installTimeoutRef.current) {
+      clearTimeout(installTimeoutRef.current)
+      installTimeoutRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isDownloaded || !autoInstallArmedRef.current) {
+      return
+    }
+
+    setInstallCountdown(3)
+    countdownIntervalRef.current = setInterval(() => {
+      setInstallCountdown((current) => current === null ? null : Math.max(1, current - 1))
+    }, 1_000)
+    installTimeoutRef.current = setTimeout(() => {
+      autoInstallArmedRef.current = false
+      clearInstallTimers()
+      setInstallCountdown(null)
+      void installDownloadedUpdate()
+    }, 3_000)
+
+    return () => {
+      clearInstallTimers()
+    }
+  }, [clearInstallTimers, installDownloadedUpdate, isDownloaded])
 
   const cheatCodeContext = useMemo<CheatCodeContext>(
     () => ({
@@ -236,8 +318,17 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
 
     try {
       if (isDownloaded) {
-        setIsRestarting(true)
-        await bridge.installUpdate()
+        autoInstallArmedRef.current = false
+        clearInstallTimers()
+        setInstallCountdown(null)
+        await installDownloadedUpdate()
+        return
+      }
+
+      if (isAvailable) {
+        autoInstallArmedRef.current = true
+        const nextState = await bridge.downloadUpdate()
+        setUpdateState(nextState)
         return
       }
 
@@ -247,6 +338,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       const message = error instanceof Error ? error.message : "软件更新操作失败。"
 
       logger.error("App update action failed in settings.", error)
+      autoInstallArmedRef.current = false
       setActionError(message)
       setIsRestarting(false)
     }
@@ -260,6 +352,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     }
 
     logger.info("App update download cancelled.")
+    autoInstallArmedRef.current = false
 
     try {
       await bridge.cancelDownload()
@@ -267,6 +360,13 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       logger.error("Failed to cancel download.", error)
       setActionError(error instanceof Error ? error.message : "取消下载失败。")
     }
+  }
+
+  const handlePostponeInstall = () => {
+    logger.info("Automatic update install postponed.")
+    autoInstallArmedRef.current = false
+    clearInstallTimers()
+    setInstallCountdown(null)
   }
 
   const handleCopyCurrentVersion = useCallback(async () => {
@@ -351,7 +451,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
           <div className="flex min-w-0 flex-col gap-2">
             <div className="flex flex-col gap-1" data-allow-select="true">
               <p className="text-sm font-medium">软件更新</p>
-              <p className={statusClassName}>{actionError ?? updateState.message}</p>
+              <p className={statusClassName}>{statusMessage}</p>
               {updateState.releaseVersion && updateState.releaseVersion !== updateState.currentVersion ? (
                 <p className="text-xs text-muted-foreground">最新版本：v{updateState.releaseVersion}</p>
               ) : null}
@@ -369,9 +469,16 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
               >
                 取消下载
               </Button>
+            ) : installCountdown !== null ? (
+              <div className="flex items-center gap-2">
+                <Button disabled>{actionLabel}</Button>
+                <Button variant="outline" onClick={handlePostponeInstall}>
+                  稍后安装
+                </Button>
+              </div>
             ) : (
               <Button
-                variant="outline"
+                variant={isAvailable || isDownloaded ? "default" : "outline"}
                 disabled={actionDisabled}
                 onClick={() => {
                   void handleAction()

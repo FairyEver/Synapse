@@ -611,15 +611,13 @@ describe("agent session IPC methods", () => {
     )
   })
 
-  it("refreshes a matching detached window after session rename succeeds", async () => {
+  it("delegates session rename to the Agent runtime", async () => {
     const renameSession = vi.fn().mockResolvedValue(true)
-    const conversationWindowService = createConversationWindowServiceMock()
     const ctx = createContext({
       agent: { renameSession },
       dataRepo: {
         namespace: vi.fn(),
       } as unknown as DataRepository,
-      conversationWindowService,
     })
 
     await expect(sessionMethods.renameSession.handler(ctx, {
@@ -628,11 +626,7 @@ describe("agent session IPC methods", () => {
       name: "新标题",
     })).resolves.toEqual({ ok: true })
 
-    expect(conversationWindowService.renameConversationWindow).toHaveBeenCalledWith({
-      projectId: "project-1",
-      conversationId: "conv-1",
-      name: "新标题",
-    }, "新标题")
+    expect(renameSession).toHaveBeenCalledWith("conv-1", "新标题")
   })
 })
 

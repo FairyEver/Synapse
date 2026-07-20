@@ -208,7 +208,7 @@ function ContentCardFooter({
       }}
     >
       <div className="min-w-0 flex-1">
-        <EditorInstallBadges contentId={item.id} />
+        <EditorInstallBadges item={item} />
       </div>
       <div className="shrink-0">
         <ContentActionSplitButton

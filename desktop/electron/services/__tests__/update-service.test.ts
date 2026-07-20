@@ -142,39 +142,40 @@ describe("UpdateService", () => {
     }
   })
 
-  it("enters downloading state as soon as manual download starts", async () => {
+  it("waits for explicit confirmation before downloading an available update", async () => {
     const { updateService } = await importUpdateService()
 
-    const state = await updateService.checkForUpdates()
+    const availableState = await updateService.checkForUpdates()
+
+    expect(updaterMock.autoUpdater.downloadUpdate).not.toHaveBeenCalled()
+    expect(availableState).toEqual(expect.objectContaining({
+      releaseVersion: "0.2.32",
+      status: "available",
+    }))
+
+    const downloadingState = updateService.downloadUpdate()
 
     expect(updaterMock.autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
-    expect(state.status).toBe("downloading")
-    expect(state.downloadPercent).toBe(0)
-    expect(state.message).toBe("正在下载更新...")
+    expect(downloadingState.status).toBe("downloading")
+    expect(downloadingState.downloadPercent).toBe(0)
+    expect(downloadingState.message).toBe("正在下载更新...")
   })
 
   it("keeps stale cancellation events from clearing a new manual update flow", async () => {
     const { updateService } = await importUpdateService()
 
     await updateService.checkForUpdates()
+    updateService.downloadUpdate()
     await updateService.cancelDownload()
 
-    updaterMock.autoUpdater.checkForUpdates.mockImplementationOnce(async () => {
-      updaterMock.autoUpdater.emit("checking-for-update")
-      updaterMock.autoUpdater.emit("update-available", {
-        version: "0.2.33",
-        files: [{ url: "Synapse-0.2.33-mac-arm64.zip" }],
-      })
-      return {
-        isUpdateAvailable: true,
-        updateInfo: { version: "0.2.33" },
-        versionInfo: { version: "0.2.33" },
-      }
-    })
+    expect(updateService.getState()).toEqual(expect.objectContaining({
+      releaseVersion: "0.2.32",
+      status: "available",
+    }))
 
-    const retryState = await updateService.checkForUpdates()
+    const retryState = updateService.downloadUpdate()
     expect(retryState).toEqual(expect.objectContaining({
-      releaseVersion: "0.2.33",
+      releaseVersion: "0.2.32",
       status: "downloading",
     }))
 
@@ -185,7 +186,7 @@ describe("UpdateService", () => {
     updaterMock.autoUpdater.emit("error", new Error("cancelled"))
 
     expect(updateService.getState()).toEqual(expect.objectContaining({
-      releaseVersion: "0.2.33",
+      releaseVersion: "0.2.32",
       status: "downloading",
     }))
     expect(updaterMock.autoUpdater.downloadUpdate).toHaveBeenCalledTimes(2)
@@ -233,8 +234,8 @@ describe("UpdateService", () => {
     expect(sent).toContainEqual({
       channel: "synapse:update:state-changed",
       payload: expect.objectContaining({
-        downloadPercent: 0,
-        status: "downloading",
+        releaseVersion: "0.2.32",
+        status: "available",
       }),
     })
   })
@@ -271,7 +272,56 @@ describe("UpdateService", () => {
     await Promise.resolve()
 
     expect(updaterMock.autoUpdater.downloadUpdate).not.toHaveBeenCalled()
-    expect(updateService.getState().status).toBe("idle")
+    expect(updateService.getState()).toEqual(expect.objectContaining({
+      releaseVersion: "0.2.50",
+      status: "available",
+    }))
+  })
+
+  it("deduplicates page-entry checks and applies a 30-second cooldown", async () => {
+    vi.useFakeTimers()
+    const { updateService } = await importUpdateService()
+    const noUpdateCheck = async () => {
+      updaterMock.autoUpdater.emit("checking-for-update")
+      updaterMock.autoUpdater.emit("update-not-available", { version: "0.2.28" })
+      return {
+        isUpdateAvailable: false,
+        updateInfo: { version: "0.2.28" },
+        versionInfo: { version: "0.2.28" },
+      }
+    }
+    updaterMock.autoUpdater.checkForUpdates
+      .mockImplementationOnce(noUpdateCheck)
+      .mockImplementationOnce(noUpdateCheck)
+
+    await Promise.all([
+      updateService.checkForUpdatesOnPageEnter(),
+      updateService.checkForUpdatesOnPageEnter(),
+    ])
+    await updateService.checkForUpdatesOnPageEnter()
+
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(30_000)
+    await updateService.checkForUpdatesOnPageEnter()
+
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2)
+  })
+
+  it("keeps an available update ready to retry after download failure", async () => {
+    const { updateService } = await importUpdateService()
+    updaterMock.autoUpdater.downloadUpdate.mockRejectedValueOnce(new Error("network failed"))
+
+    await updateService.checkForUpdates()
+    updateService.downloadUpdate()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(updateService.getState()).toEqual(expect.objectContaining({
+      error: "下载更新失败，请重试。",
+      releaseVersion: "0.2.32",
+      status: "available",
+    }))
   })
 
   it("keeps automatic update check failures out of visible update state", async () => {
@@ -377,6 +427,7 @@ describe("UpdateService", () => {
       {},
     )
     expect(calls).toEqual([
+      "broadcast:synapse:update:state-changed",
       "open:main",
       "broadcast:synapse:update:open-update-page",
     ])
@@ -406,6 +457,7 @@ describe("UpdateService", () => {
     const beforeInstallQuit = vi.fn()
 
     await updateService.checkForUpdates()
+    updateService.downloadUpdate()
     updaterMock.autoUpdater.emit("update-downloaded", {
       version: "0.2.32",
       downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",
@@ -423,6 +475,7 @@ describe("UpdateService", () => {
     const beforeInstallQuit = vi.fn(() => false)
 
     await updateService.checkForUpdates()
+    updateService.downloadUpdate()
     updaterMock.autoUpdater.emit("update-downloaded", {
       version: "0.2.32",
       downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",

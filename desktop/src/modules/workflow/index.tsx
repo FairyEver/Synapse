@@ -133,6 +133,7 @@ export function WorkflowModule() {
       toast.success(result.mutated === false
         ? "该版本已导入，无需重复处理"
         : importPreview.mode === "update" ? "工作流已更新" : "工作流已导入", result.undoCreated ? {
+        duration: Number.POSITIVE_INFINITY,
         action: {
           label: "撤销",
           onClick: () => {

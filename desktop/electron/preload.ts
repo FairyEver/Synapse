@@ -192,6 +192,8 @@ const IPC_CHANNELS = {
   "update": {
     "getState": "synapse:update:get-state",
     "checkForUpdates": "synapse:update:check-for-updates",
+    "checkForUpdatesOnPageEnter": "synapse:update:check-for-updates-on-page-enter",
+    "downloadUpdate": "synapse:update:download-update",
     "cancelDownload": "synapse:update:cancel-download",
     "installUpdate": "synapse:update:install-update",
   },
@@ -1394,6 +1396,8 @@ const synapseBridge: SynapseBridge = {
   updater: {
     cancelDownload: invoke(IPC_CHANNELS.update.cancelDownload),
     checkForUpdates: invoke(IPC_CHANNELS.update.checkForUpdates),
+    checkForUpdatesOnPageEnter: invoke(IPC_CHANNELS.update.checkForUpdatesOnPageEnter),
+    downloadUpdate: invoke(IPC_CHANNELS.update.downloadUpdate),
     getState: invoke(IPC_CHANNELS.update.getState),
     installUpdate: invoke(IPC_CHANNELS.update.installUpdate),
     onStateChanged: createRawPayloadSubscription<SynapseAppUpdateState>(

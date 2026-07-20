@@ -208,6 +208,8 @@ export const IPC_CHANNELS = {
   "update": {
     "getState": "synapse:update:get-state",
     "checkForUpdates": "synapse:update:check-for-updates",
+    "checkForUpdatesOnPageEnter": "synapse:update:check-for-updates-on-page-enter",
+    "downloadUpdate": "synapse:update:download-update",
     "cancelDownload": "synapse:update:cancel-download",
     "installUpdate": "synapse:update:install-update",
   },

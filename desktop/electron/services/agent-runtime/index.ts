@@ -24,6 +24,10 @@ import { getUsageAnalysisDb } from "../usage-analysis"
 import { listModelPriceRules } from "../model-price"
 import { ReplyOutboxService } from "../reply-target"
 import { KnowledgeBaseIngestCoordinator } from "../knowledge-base/ingest-finalizer"
+import {
+  AGENT_CONVERSATION_WINDOW_SERVICE_ID,
+  type AgentConversationWindowService,
+} from "../agent-conversation-window-service"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
 import { AgentArtifactStore } from "./artifact-store"
 import type { AgentPersonaService } from "../../../app-capabilities/agent-personas/main/service"
@@ -219,6 +223,12 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         providerService,
         agentType: "claude-code",
         eventBus: ctx.eventBus,
+        onConversationRenamed: (conversation) =>
+          ctx.globalRegistry.get<AgentConversationWindowService>(AGENT_CONVERSATION_WINDOW_SERVICE_ID)
+            .renameConversationWindow({
+              projectId: conversation.projectId,
+              conversationId: conversation.id,
+            }, conversation.name ?? ""),
         logger: ctx.logger,
         permissionGuard,
         auditSink,
