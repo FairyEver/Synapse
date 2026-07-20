@@ -254,11 +254,9 @@ describe("Drive capability domain", () => {
         assetId: { type: "string" },
       },
       required: ["itemId"],
-      allOf: [{
-        if: { properties: { kind: { const: "public_asset" } }, required: ["kind"] },
-        then: { required: ["assetId"] },
-      }],
     })
+    expect(tools.get("drive_item_restore")?.description).toContain("pass kind and assetId")
+    expect(tools.get("drive_item_restore")?.inputSchema).not.toHaveProperty("allOf")
   })
 
   it("allows Drive reorganization moves to target the root directory", () => {

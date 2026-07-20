@@ -216,10 +216,6 @@ export function buildSkillRepositoryTools(): McpToolDefinition[] {
           repositoryName: repositoryNameProperty,
           openInBrowser: openInBrowserProperty,
         },
-        anyOf: [
-          { required: ["repositoryId"] },
-          { required: ["ownerHandle", "repositoryName"] },
-        ],
       },
     },
     {

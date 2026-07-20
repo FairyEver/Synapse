@@ -9,24 +9,14 @@ describe("Content capability domain", () => {
     expect(tools.has("content_skill_create")).toBe(true)
   })
 
-  it("expresses validator-required appearance fields in create and update schemas", () => {
+  it("keeps required content fields in create and update schemas", () => {
     const tools = new Map(buildContentTools().map((tool) => [tool.name, tool]))
 
     expect(tools.get("content_rule_create")?.inputSchema).toMatchObject({
       required: ["name", "title", "description", "category", "content"],
-      anyOf: expect.arrayContaining([
-        expect.objectContaining({ required: ["icon"] }),
-        expect.objectContaining({ required: ["iconType", "iconImagePath"] }),
-        expect.objectContaining({ required: ["iconType", "iconImageBase64"] }),
-      ]),
     })
     expect(tools.get("content_prompt_update")?.inputSchema).toMatchObject({
       required: ["id", "baseHistoryDirname", "title", "description", "category", "content"],
-      anyOf: expect.arrayContaining([
-        expect.objectContaining({ required: ["icon"] }),
-        expect.objectContaining({ required: ["iconType", "iconImagePath"] }),
-        expect.objectContaining({ required: ["iconType", "iconImageBase64"] }),
-      ]),
     })
   })
 
@@ -80,20 +70,17 @@ describe("Content capability domain", () => {
       .toContain("dots")
   })
 
-  it("expresses validator-enforced mutual exclusions in schemas", () => {
+  it("documents validator-enforced mutual exclusions without top-level combinators", () => {
     const tools = new Map(buildContentTools().map((tool) => [tool.name, tool]))
     const ruleCreateSchema = tools.get("content_rule_create")?.inputSchema
     const skillCreateSchema = tools.get("content_skill_create")?.inputSchema
     const skillUpdateSchema = tools.get("content_skill_update")?.inputSchema
     const filesProperty = skillCreateSchema?.properties?.files as { readonly items?: unknown } | undefined
 
-    expect(ruleCreateSchema).toMatchObject({
-      allOf: expect.arrayContaining([
-        { not: { required: ["iconImagePath", "iconImageBase64"] } },
-      ]),
-    })
+    expect(ruleCreateSchema).not.toHaveProperty("allOf")
     expect(skillCreateSchema).not.toHaveProperty("allOf")
     expect(skillUpdateSchema).not.toHaveProperty("allOf")
+    expect(JSON.stringify(ruleCreateSchema?.properties)).toContain("Mutually exclusive")
     expect(JSON.stringify(skillCreateSchema?.properties)).toContain("Mutually exclusive")
     expect(filesProperty?.items).not.toHaveProperty("allOf")
     expect(JSON.stringify(filesProperty?.items)).toContain("Mutually exclusive")

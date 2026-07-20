@@ -137,10 +137,6 @@ describe("Skill Repository capability domain", () => {
       },
     })
     expect(tools.get("app_skill_repository_open_public")?.inputSchema).toMatchObject({
-      anyOf: [
-        { required: ["repositoryId"] },
-        { required: ["ownerHandle", "repositoryName"] },
-      ],
       properties: {
         repositoryId: expect.objectContaining({ type: "string" }),
         ownerHandle: expect.objectContaining({ type: "string" }),
@@ -148,6 +144,9 @@ describe("Skill Repository capability domain", () => {
         openInBrowser: expect.objectContaining({ type: "boolean" }),
       },
     })
+    expect(tools.get("app_skill_repository_open_public")?.description)
+      .toContain("either repositoryId or ownerHandle plus repositoryName")
+    expect(tools.get("app_skill_repository_open_public")?.inputSchema).not.toHaveProperty("anyOf")
     expect(tools.get("app_skill_repository_fork")?.inputSchema).toMatchObject({
       required: ["repositoryId"],
       properties: {

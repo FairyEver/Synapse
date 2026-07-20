@@ -44,16 +44,14 @@ describe("App capability domain", () => {
     )
   })
 
-  it("requires exactly one document template data source", () => {
+  it("documents document template data source validation without top-level combinators", () => {
     const tool = buildAppTools().find((item) => item.name === DOCUMENT_TEMPLATE_MCP_TOOL_NAME)
 
     expect(tool?.inputSchema).toMatchObject({
       required: ["templatePath", "outputPath"],
-      oneOf: [
-        { required: ["dataPath"] },
-        { required: ["data"] },
-      ],
     })
+    expect(tool?.description).toContain("exactly one of dataPath or data")
+    expect(tool?.inputSchema).not.toHaveProperty("oneOf")
     expect(tool?.inputSchema).not.toHaveProperty("anyOf")
   })
 
@@ -111,15 +109,13 @@ describe("App capability domain", () => {
     expect(updateTool?.inputSchema).toMatchObject({
       type: "object",
       required: ["name"],
-      anyOf: [
-        { required: ["value"] },
-        { required: ["description"] },
-      ],
       properties: expect.not.objectContaining({
         newName: expect.anything(),
       }),
       additionalProperties: false,
     })
+    expect(updateTool?.description).toContain("at least one of value or description")
+    expect(updateTool?.inputSchema).not.toHaveProperty("anyOf")
   })
 
   it("requires a value in the secret upsert MCP schema", () => {

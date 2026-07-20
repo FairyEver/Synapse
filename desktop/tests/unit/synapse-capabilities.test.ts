@@ -41,6 +41,14 @@ describe("Synapse capability domains", () => {
     expect(DATABASE_DOMAIN.id).toBe("database")
     expect(DATABASE_DOMAIN.capabilities.map((capability) => capability.id)).toContain("app.database.table.list")
   })
+
+  it("keeps every MCP tool schema compatible with clients that reject top-level combinators", () => {
+    for (const tool of buildAllMcpTools()) {
+      expect(tool.inputSchema, tool.name).not.toHaveProperty("oneOf")
+      expect(tool.inputSchema, tool.name).not.toHaveProperty("anyOf")
+      expect(tool.inputSchema, tool.name).not.toHaveProperty("allOf")
+    }
+  })
 })
 
 describe("App capability naming", () => {

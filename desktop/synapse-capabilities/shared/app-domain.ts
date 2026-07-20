@@ -266,10 +266,6 @@ export function buildAppTools(): McpToolDefinition[] {
           },
         },
         required: ["templatePath", "outputPath"],
-        oneOf: [
-          { required: ["dataPath"] },
-          { required: ["data"] },
-        ],
       },
     },
     {
@@ -513,11 +509,6 @@ export function buildAppTools(): McpToolDefinition[] {
             description: `Optional start-to-start interval in milliseconds between repeated plays. Defaults to ${SOUND_NOTIFIER_DEFAULT_INTERVAL_MS}.`,
           },
         },
-        oneOf: [
-          { required: ["eventType"], not: { required: ["presetId"] } },
-          { required: ["presetId"], not: { required: ["eventType"] } },
-          { not: { anyOf: [{ required: ["eventType"] }, { required: ["presetId"] }] } },
-        ],
         additionalProperties: false,
       },
     },
@@ -564,10 +555,6 @@ export function buildAppTools(): McpToolDefinition[] {
           description: stringField("Optional replacement description. Empty clears the description."),
         },
         required: ["name"],
-        anyOf: [
-          { required: ["value"] },
-          { required: ["description"] },
-        ],
         additionalProperties: false,
       },
     },
