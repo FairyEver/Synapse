@@ -26,7 +26,7 @@ export const cheatCodeIpcModule: IpcModule = {
   methods: {
     getStates: {
       kind: "invoke",
-      channel: "synapse:cheat-code:states:get",
+      operationId: "app.cheat_code.states.get",
       request: getStatesRequestSchema,
       response: stateMapSchema,
       handler: async (ctx, request: GetStatesRequest) => {
@@ -40,7 +40,7 @@ export const cheatCodeIpcModule: IpcModule = {
     },
     setState: {
       kind: "invoke",
-      channel: "synapse:cheat-code:state:set",
+      operationId: "app.cheat_code.state.set",
       request: stateResultSchema,
       response: stateResultSchema,
       handler: async (ctx, state: StateResult) => {
@@ -54,7 +54,7 @@ export const cheatCodeIpcModule: IpcModule = {
     },
     toggleState: {
       kind: "invoke",
-      channel: "synapse:cheat-code:state:toggle",
+      operationId: "app.cheat_code.state.toggle",
       request: toggleStateRequestSchema,
       response: stateResultSchema,
       handler: async (ctx, { name }: ToggleStateRequest) => {

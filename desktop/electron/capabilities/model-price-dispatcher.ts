@@ -34,19 +34,19 @@ type MutableModelPriceRulePatch = {
 const RANGE_PRESETS: readonly ModelPriceCoverageRange[] = ["today", "7d", "30d", "90d", "all"]
 const PRICE_FIELDS = ["inputPer1M", "outputPer1M", "cacheReadPer1M", "cacheWritePer1M", "reasoningPer1M"] as const
 const MODEL_PRICE_MUTATION_ACTIONS = new Set([
-  "model_price.preset.import",
-  "model_price.rule.create",
-  "model_price.rule.update",
-  "model_price.rule.clear",
-  "model_price.rule.delete",
-  "model_price.rule.enable",
-  "model_price.rule.disable",
+  "app.model_price.preset.import",
+  "app.model_price.rule.create",
+  "app.model_price.rule.update",
+  "app.model_price.rule.clear",
+  "app.model_price.rule.delete",
+  "app.model_price.rule.enable",
+  "app.model_price.rule.disable",
 ])
 const MODEL_PRICE_READ_ACTIONS = new Set([
-  "model_price.used_model.list",
-  "model_price.preset.list",
-  "model_price.rule.list",
-  "model_price.rule.get",
+  "app.model_price.used_model.list",
+  "app.model_price.preset.list",
+  "app.model_price.rule.list",
+  "app.model_price.rule.get",
 ])
 const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
 const defaultLogger = createMainLogger("capability.model-price-dispatcher")
@@ -142,27 +142,27 @@ function dispatchModelPriceAction(
 ): DispatchResult {
   const service = new ModelPriceService(db)
   switch (action) {
-    case "model_price.used_model.list":
+    case "app.model_price.used_model.list":
       return { ok: true, data: service.listCoverage(readCoverageParams(params)) }
-    case "model_price.preset.list":
+    case "app.model_price.preset.list":
       return { ok: true, data: service.listPresets() }
-    case "model_price.preset.import":
+    case "app.model_price.preset.import":
       return { ok: true, data: service.importPreset(requirePresetId(params)) }
-    case "model_price.rule.list":
+    case "app.model_price.rule.list":
       return { ok: true, data: service.listRules() }
-    case "model_price.rule.get":
+    case "app.model_price.rule.get":
       return { ok: true, data: requireRule(service, requireString(params, "ruleId")) }
-    case "model_price.rule.create":
+    case "app.model_price.rule.create":
       return { ok: true, data: service.createRule(readCreateParams(params)) }
-    case "model_price.rule.update":
+    case "app.model_price.rule.update":
       return { ok: true, data: service.updateRule(requireString(params, "ruleId"), readPatchParams(params)) }
-    case "model_price.rule.clear":
+    case "app.model_price.rule.clear":
       return { ok: true, data: service.clearRules() }
-    case "model_price.rule.delete":
+    case "app.model_price.rule.delete":
       return { ok: true, data: service.deleteRule(requireString(params, "ruleId")) }
-    case "model_price.rule.enable":
+    case "app.model_price.rule.enable":
       return { ok: true, data: service.setRuleEnabled(requireString(params, "ruleId"), true) }
-    case "model_price.rule.disable":
+    case "app.model_price.rule.disable":
       return { ok: true, data: service.setRuleEnabled(requireString(params, "ruleId"), false) }
     default:
       throw new Error(`Unknown action: ${action}`)
@@ -210,11 +210,11 @@ function modelPriceReadSecurity(
 ): ModelPriceDispatchSecurity {
   const ruleId = typeof params.ruleId === "string" && params.ruleId.trim() ? params.ruleId.trim() : undefined
   const auditRuleId = ruleId ? sanitizeError(ruleId) : undefined
-  const resource = action === "model_price.used_model.list"
+  const resource = action === "app.model_price.used_model.list"
     ? "model-price:used-models"
-    : action === "model_price.preset.list"
+    : action === "app.model_price.preset.list"
       ? "model-price-presets"
-      : action === "model_price.rule.list"
+      : action === "app.model_price.rule.list"
         ? "model-price-rules"
         : `model-price-rule:${auditRuleId ?? action}`
   return {
@@ -230,13 +230,13 @@ function modelPriceReadSecurity(
 }
 
 function modelPriceMutationResource(action: string, params: Record<string, unknown>): string {
-  if (action === "model_price.preset.import") {
+  if (action === "app.model_price.preset.import") {
     const presetId = typeof params.presetId === "string" && params.presetId.trim()
       ? sanitizeError(params.presetId.trim())
       : action
     return `model-price-preset:${presetId}`
   }
-  if (action === "model_price.rule.clear") return "model-price-rules"
+  if (action === "app.model_price.rule.clear") return "model-price-rules"
   const ruleId = typeof params.ruleId === "string" && params.ruleId.trim()
     ? sanitizeError(params.ruleId.trim())
     : action

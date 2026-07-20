@@ -7,6 +7,7 @@ import { closeUsageAnalysisDbForTests, getUsageAnalysisDb } from "../db"
 import { initUsageAnalysisSchema } from "../db-schema"
 import { CcUsageAnalysisService, runWithUsageDatabaseLockRetry } from "../cc-service"
 import { CodexUsageAnalysisService } from "../codex-service"
+import { ModelPriceService } from "../../model-price"
 
 const tempDirs: string[] = []
 const WINDOWS_CI_TEST_TIMEOUT = 15_000
@@ -31,88 +32,6 @@ afterEach(() => {
 })
 
 describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
-  it("logs pricing rule saves with rule changes and affected event counts", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
-    tempDirs.push(dir)
-    const db = getUsageAnalysisDb(dir)
-    const logger = createRecordingLogger()
-    const service = new CcUsageAnalysisService({ db, roots: [], logger })
-    db.exec(`
-      INSERT INTO cc_usage_events (
-        id, session_id, timestamp_ms, date, hour, workspace_key, workspace_label, model, provider
-      ) VALUES ('cc-usage-1', 'session-1', 1779843600000, '2026-05-27', '2026-05-27 09', '-repo', '/repo', 'local-model', 'anthropic')
-    `)
-    db.exec(`
-      INSERT INTO cx_usage_events (
-        id, session_id, timestamp_ms, date, hour, workspace_key, workspace_label, model, provider
-      ) VALUES ('cx-usage-1', 'session-2', 1779847200000, '2026-05-27', '2026-05-27 10', '-repo', '/repo', 'local-model', 'openai')
-    `)
-
-    const [savedRule] = service.savePricingRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 57.6 }])
-
-    expect(logger.info).toHaveBeenCalledWith("Usage pricing rules saved.", expect.objectContaining({
-      oldRuleCount: expect.any(Number),
-      newRuleCount: 1,
-      oldRulesHash: expect.any(String),
-      newRulesHash: expect.any(String),
-      addedRuleIds: [savedRule?.id],
-      removedRuleIds: expect.any(Array),
-      changedRuleIds: expect.any(Array),
-      affectedEvents: { cc: 1, cx: 1 },
-      elapsedMs: expect.any(Number),
-    }))
-  })
-
-  it("does not log legacy readable ids as added or removed when only save normalization re-ids a rule", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
-    tempDirs.push(dir)
-    const db = getUsageAnalysisDb(dir)
-    const logger = createRecordingLogger()
-    const service = new CcUsageAnalysisService({ db, roots: [], logger })
-    db.exec(`
-      INSERT INTO model_price_rules (
-        id, model_pattern, input_per_1m, output_per_1m, cache_read_per_1m, cache_write_per_1m,
-        reasoning_per_1m, currency, enabled, source, sort_index, updated_at
-      ) VALUES (
-        'legacy-local-model', 'Local-Model', 14.4, 57.6, 0, 0,
-        0, 'CNY', 1, 'user', 0, '2026-06-09T00:00:00.000Z'
-      )
-    `)
-
-    service.savePricingRules([{ id: "legacy-local-model", modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 57.6 }])
-
-    expect(logger.info).toHaveBeenCalledWith("Usage pricing rules saved.", expect.objectContaining({
-      addedRuleIds: [],
-      removedRuleIds: [],
-      changedRuleIds: [],
-    }))
-  })
-
-  it("logs a changed rule when the same model pattern keeps semantic identity but prices change", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
-    tempDirs.push(dir)
-    const db = getUsageAnalysisDb(dir)
-    const logger = createRecordingLogger()
-    const service = new CcUsageAnalysisService({ db, roots: [], logger })
-    db.exec(`
-      INSERT INTO model_price_rules (
-        id, model_pattern, input_per_1m, output_per_1m, cache_read_per_1m, cache_write_per_1m,
-        reasoning_per_1m, currency, enabled, source, sort_index, updated_at
-      ) VALUES (
-        'legacy-local-model', 'local-model', 14.4, 57.6, 0, 0,
-        0, 'CNY', 1, 'user', 0, '2026-06-09T00:00:00.000Z'
-      )
-    `)
-
-    const [savedRule] = service.savePricingRules([{ id: "legacy-local-model", modelPattern: "local-model", inputPer1M: 18, outputPer1M: 57.6 }])
-
-    expect(logger.info).toHaveBeenCalledWith("Usage pricing rules saved.", expect.objectContaining({
-      addedRuleIds: [],
-      removedRuleIds: [],
-      changedRuleIds: [savedRule?.id],
-    }))
-  })
-
   it("includes stable focus fields in CC details rows", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)
@@ -407,7 +326,7 @@ describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     await service.refresh()
     expect(db.prepare("SELECT total_cost, price_known FROM cx_usage_events").get()).toEqual({ total_cost: 0, price_known: 0 })
 
-    service.savePricingRules([{ modelPattern: "local-codex-model", inputPer1M: 14.4, outputPer1M: 0 }])
+    new ModelPriceService(db).saveRules([{ modelPattern: "local-codex-model", inputPer1M: 14.4, outputPer1M: 0 }])
     const refresh = await service.refresh()
 
     expect(refresh).toMatchObject({ parsedFiles: 1, skippedFiles: 0, usageEvents: 1 })
@@ -471,7 +390,7 @@ describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
       unpricedTokens: 1_500_000,
     })
 
-    service.savePricingRules([{
+    new ModelPriceService(db).saveRules([{
       modelPattern: "local-model",
       inputPer1M: 14.4,
       outputPer1M: 57.6,
@@ -506,7 +425,7 @@ describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     const db = getUsageAnalysisDb(dir)
     const service = new CcUsageAnalysisService({ db, roots: [path.join(dir, ".claude", "projects")] })
     await service.refresh()
-    service.savePricingRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 57.6 }])
+    new ModelPriceService(db).saveRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 57.6 }])
 
     const refresh = await service.refresh()
 
@@ -541,7 +460,7 @@ describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     const db = getUsageAnalysisDb(dir)
     const service = new CcUsageAnalysisService({ db, roots: [path.join(dir, ".claude", "projects")] })
     await service.refresh()
-    service.savePricingRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 0 }])
+    new ModelPriceService(db).saveRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 0 }])
     fs.appendFileSync(file, `${JSON.stringify({
       type: "assistant",
       timestamp: "2026-05-19T02:00:01.000Z",
@@ -587,7 +506,7 @@ describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     const db = getUsageAnalysisDb(dir)
     const service = new CcUsageAnalysisService({ db, roots: [path.join(dir, ".claude", "projects")] })
     await service.refresh()
-    service.savePricingRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 0 }])
+    new ModelPriceService(db).saveRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 0 }])
     fs.appendFileSync(file, `${JSON.stringify({
       type: "assistant",
       sessionId: "session",
@@ -635,7 +554,7 @@ describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     const service = new CcUsageAnalysisService({ db, roots: [path.join(dir, ".claude", "projects")] })
     await service.refresh()
     db.exec("UPDATE cc_scan_files SET parsed_offset = 0, parser_version = 0, pricing_rules_hash = ''")
-    service.savePricingRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 0 }])
+    new ModelPriceService(db).saveRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 0 }])
 
     const refresh = await service.refresh()
 

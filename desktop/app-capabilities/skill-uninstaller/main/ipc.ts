@@ -58,7 +58,7 @@ export function createSkillUninstallerIpcModule(
     methods: {
       scan: {
         kind: "invoke",
-        channel: "synapse:skill-uninstaller:scan",
+        operationId: "app.skill_uninstaller.operation.scan",
         request: skillUninstallScanRequestSchema,
         response: skillUninstallScanResultSchema,
         handler: async (ctx, request: SkillUninstallScanRequest) => runScan(
@@ -68,7 +68,7 @@ export function createSkillUninstallerIpcModule(
       },
       scanNames: {
         kind: "invoke",
-        channel: "synapse:skill-uninstaller:names:scan",
+        operationId: "app.skill_uninstaller.names.scan",
         request: skillUninstallNameScanRequestSchema,
         response: skillUninstallNameScanResultSchema,
         handler: async (ctx, request: SkillUninstallNameScanRequest) => runScan(
@@ -78,7 +78,7 @@ export function createSkillUninstallerIpcModule(
       },
       cancelScan: {
         kind: "invoke",
-        channel: "synapse:skill-uninstaller:scan:cancel",
+        operationId: "app.skill_uninstaller.scan.cancel",
         request: skillUninstallCancelRequestSchema,
         response: z.object({ cancelled: z.boolean() }).strict(),
         handler: async (_ctx, request: SkillUninstallCancelRequest) => {
@@ -92,7 +92,7 @@ export function createSkillUninstallerIpcModule(
       },
       cancelUninstall: {
         kind: "invoke",
-        channel: "synapse:skill-uninstaller:uninstall:cancel",
+        operationId: "app.skill_uninstaller.uninstall.cancel",
         request: skillUninstallExecutionCancelRequestSchema,
         response: z.object({ cancelled: z.boolean() }).strict(),
         handler: async (_ctx, request: SkillUninstallExecutionCancelRequest) => {
@@ -106,7 +106,7 @@ export function createSkillUninstallerIpcModule(
       },
       uninstall: {
         kind: "invoke",
-        channel: "synapse:skill-uninstaller:uninstall",
+        operationId: "app.skill_uninstaller.operation.uninstall",
         request: skillUninstallRequestSchema,
         response: skillUninstallBatchResultSchema,
         handler: async (ctx, request: SkillUninstallRequest) => {

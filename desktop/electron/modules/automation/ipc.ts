@@ -176,13 +176,13 @@ export const automationIpcModule: IpcModule = {
   id: "automation",
   methods: {
     openCreateEditorWindow: {
-      channel: "synapse:automation:editor:open-create",
+      operationId: "app.automation.editor.open_create",
       kind: "invoke",
       request: z.void().optional(),
       response: z.void(),
       handler: async () => {
         await loggedAutomationIpc(
-          "synapse:automation:editor:open-create",
+          "app.automation.editor.open_create",
           "automation.ipc.open-create-editor-window",
           {},
           () => automationWindowService.openCreate(),
@@ -190,13 +190,13 @@ export const automationIpcModule: IpcModule = {
       },
     },
     openEditorWindow: {
-      channel: "synapse:automation:editor:open-edit",
+      operationId: "app.automation.editor.open_edit",
       kind: "invoke",
       request: automationIdRequestSchema,
       response: z.void(),
       handler: async (_ctx, request: AutomationIdRequest) => {
         await loggedAutomationIpc(
-          "synapse:automation:editor:open-edit",
+          "app.automation.editor.open_edit",
           "automation.ipc.open-editor-window",
           { automationId: request.automationId },
           () => automationWindowService.openEdit(request.automationId),
@@ -204,36 +204,36 @@ export const automationIpcModule: IpcModule = {
       },
     },
     listItems: {
-      channel: "synapse:automation:items:list",
+      operationId: "app.automation.item.list",
       kind: "invoke",
       request: z.void().optional(),
       response: z.array(automationItemSchema),
       handler: async (ctx) => loggedAutomationIpc(
-        "synapse:automation:items:list",
+        "app.automation.item.list",
         "automation.ipc.list-items",
         {},
         () => ctx.resolve<AutomationService>("core.automation").automationList(),
       ),
     },
     getItem: {
-      channel: "synapse:automation:items:get",
+      operationId: "app.automation.item.get",
       kind: "invoke",
       request: automationIdRequestSchema,
       response: automationItemSchema.nullable(),
       handler: async (ctx, request: AutomationIdRequest) => loggedAutomationIpc(
-        "synapse:automation:items:get",
+        "app.automation.item.get",
         "automation.ipc.get-item",
         { automationId: request.automationId },
         () => ctx.resolve<AutomationService>("core.automation").automationGet(request.automationId),
       ),
     },
     createItem: {
-      channel: "synapse:automation:items:create",
+      operationId: "app.automation.item.create",
       kind: "invoke",
       request: createAutomationInputSchema,
       response: automationItemSchema,
       handler: async (ctx, request: CreateAutomationInput) => loggedAutomationIpc(
-        "synapse:automation:items:create",
+        "app.automation.item.create",
         "automation.ipc.create-item",
         {
           triggerType: request.trigger.type,
@@ -245,12 +245,12 @@ export const automationIpcModule: IpcModule = {
       ),
     },
     updateItem: {
-      channel: "synapse:automation:items:update",
+      operationId: "app.automation.item.update",
       kind: "invoke",
       request: updateAutomationRequestSchema,
       response: automationItemSchema,
       handler: async (ctx, request: UpdateAutomationRequest) => loggedAutomationIpc(
-        "synapse:automation:items:update",
+        "app.automation.item.update",
         "automation.ipc.update-item",
         {
           automationId: request.id,
@@ -260,24 +260,24 @@ export const automationIpcModule: IpcModule = {
       ),
     },
     deleteItem: {
-      channel: "synapse:automation:items:delete",
+      operationId: "app.automation.item.delete",
       kind: "invoke",
       request: automationIdRequestSchema,
       response: z.object({ deleted: z.boolean() }),
       handler: async (ctx, request: AutomationIdRequest) => loggedAutomationIpc(
-        "synapse:automation:items:delete",
+        "app.automation.item.delete",
         "automation.ipc.delete-item",
         { automationId: request.automationId },
         () => ctx.resolve<AutomationService>("core.automation").automationDelete(request.automationId),
       ),
     },
     setItemEnabled: {
-      channel: "synapse:automation:items:set-enabled",
+      operationId: "app.automation.item.set_enabled",
       kind: "invoke",
       request: automationIdRequestSchema.extend({ enabled: z.boolean() }),
       response: automationItemSchema,
       handler: async (ctx, request: SetAutomationEnabledRequest) => loggedAutomationIpc(
-        "synapse:automation:items:set-enabled",
+        "app.automation.item.set_enabled",
         "automation.ipc.set-item-enabled",
         { automationId: request.automationId, enabled: request.enabled },
         () => request.enabled
@@ -286,19 +286,19 @@ export const automationIpcModule: IpcModule = {
       ),
     },
     runItem: {
-      channel: "synapse:automation:items:run",
+      operationId: "app.automation.run.execute",
       kind: "invoke",
       request: automationIdRequestSchema,
       response: automationRunSchema.nullable(),
       handler: async (ctx, request: AutomationIdRequest) => loggedAutomationIpc(
-        "synapse:automation:items:run",
+        "app.automation.run.execute",
         "automation.ipc.run-item",
         { automationId: request.automationId },
         () => ctx.resolve<AutomationService>("core.automation").runAutomationNow(request.automationId),
       ),
     },
     stopRun: {
-      channel: "synapse:automation:runs:stop",
+      operationId: "app.automation.run.disable",
       kind: "invoke",
       request: z.object({ runId: z.string().min(1) }),
       response: z.object({
@@ -307,21 +307,21 @@ export const automationIpcModule: IpcModule = {
         stopRequested: z.boolean().optional(),
       }),
       handler: async (ctx, request: StopRunRequest) => loggedAutomationIpc(
-        "synapse:automation:runs:stop",
+        "app.automation.run.disable",
         "automation.ipc.stop-run",
         { runId: request.runId },
         () => ctx.resolve<AutomationService>("core.automation").stopRun(request.runId),
       ),
     },
     listRuns: {
-      channel: "synapse:automation:runs:list",
+      operationId: "app.automation.run.list",
       kind: "invoke",
       request: automationIdRequestSchema.extend({
         limit: z.number().int().positive().max(100).optional(),
       }),
       response: z.array(automationRunSchema),
       handler: async (ctx, request: ListRunsRequest) => loggedAutomationIpc(
-        "synapse:automation:runs:list",
+        "app.automation.run.list",
         "automation.ipc.list-runs",
         { automationId: request.automationId, limit: request.limit },
         () => ctx.resolve<AutomationService>("core.automation").automationRunList(request.automationId, { limit: request.limit }),
@@ -331,7 +331,7 @@ export const automationIpcModule: IpcModule = {
   events: {
     changed: {
       kind: "event",
-      channel: "synapse:events:automation",
+      operationId: "app.automation.item.changed",
       payload: automationChangedDomainEventSchema,
     },
   },
@@ -349,7 +349,7 @@ function errorDiagnostic(rawError: unknown): Record<string, unknown> {
 }
 
 async function loggedAutomationIpc<T>(
-  channel: string,
+  operationId: string,
   boundary: string,
   metadata: Record<string, unknown>,
   run: () => Promise<T>,
@@ -357,14 +357,14 @@ async function loggedAutomationIpc<T>(
   const startedAt = Date.now()
   logger.info("Automation IPC request.", {
     boundary,
-    channel,
+    operationId,
     ...metadata,
   })
   try {
     const result = await run()
     logger.info("Automation IPC completed.", {
       boundary,
-      channel,
+      operationId,
       durationMs: Date.now() - startedAt,
       ...metadata,
     })
@@ -372,7 +372,7 @@ async function loggedAutomationIpc<T>(
   } catch (rawError) {
     logger.warn("Automation IPC failed.", {
       boundary,
-      channel,
+      operationId,
       durationMs: Date.now() - startedAt,
       ...metadata,
       ...errorDiagnostic(rawError),

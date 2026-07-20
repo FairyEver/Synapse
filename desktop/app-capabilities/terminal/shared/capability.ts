@@ -9,15 +9,15 @@ export const TERMINAL_GROUP_LIST_CAPABILITY_ID =
 export const TERMINAL_GROUP_RENAME_CAPABILITY_ID =
   "app.terminal.group.rename" as CapabilityId
 export const TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID =
-  "app.terminal.group.updateSettings" as CapabilityId
+  "app.terminal.group.update_settings" as CapabilityId
 export const TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID =
-  "app.terminal.groupCommand.create" as CapabilityId
+  "app.terminal.group_command.create" as CapabilityId
 export const TERMINAL_GROUP_COMMAND_UPDATE_CAPABILITY_ID =
-  "app.terminal.groupCommand.update" as CapabilityId
+  "app.terminal.group_command.update" as CapabilityId
 export const TERMINAL_GROUP_COMMAND_DELETE_CAPABILITY_ID =
-  "app.terminal.groupCommand.delete" as CapabilityId
+  "app.terminal.group_command.delete" as CapabilityId
 export const TERMINAL_GROUP_COMMAND_LAUNCH_CAPABILITY_ID =
-  "app.terminal.groupCommand.launch" as CapabilityId
+  "app.terminal.group_command.launch" as CapabilityId
 export const TERMINAL_GROUP_DELETE_CAPABILITY_ID =
   "app.terminal.group.delete" as CapabilityId
 export const TERMINAL_SESSION_CREATE_CAPABILITY_ID =
@@ -43,11 +43,11 @@ export const TERMINAL_MCP_TOOL_NAMES = {
   groupCreate: "app_terminal_group_create",
   groupList: "app_terminal_group_list",
   groupRename: "app_terminal_group_rename",
-  groupUpdateSettings: "app_terminal_group_updateSettings",
-  groupCommandCreate: "app_terminal_groupCommand_create",
-  groupCommandUpdate: "app_terminal_groupCommand_update",
-  groupCommandDelete: "app_terminal_groupCommand_delete",
-  groupCommandLaunch: "app_terminal_groupCommand_launch",
+  groupUpdateSettings: "app_terminal_group_update_settings",
+  groupCommandCreate: "app_terminal_group_command_create",
+  groupCommandUpdate: "app_terminal_group_command_update",
+  groupCommandDelete: "app_terminal_group_command_delete",
+  groupCommandLaunch: "app_terminal_group_command_launch",
   groupDelete: "app_terminal_group_delete",
   sessionCreate: "app_terminal_session_create",
   sessionList: "app_terminal_session_list",

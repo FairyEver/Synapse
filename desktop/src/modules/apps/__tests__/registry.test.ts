@@ -49,14 +49,12 @@ describe("system app registry", () => {
       namespace: "database",
       capabilities: {
         primaryMcpPrefix: "app_database",
-        legacyMcpPrefixes: ["database"],
       },
     })
     expect(getSystemAppManifest("resource-repository")).toMatchObject({
       namespace: "resource_repository",
       capabilities: {
         primaryMcpPrefix: "app_resource_repository",
-        legacyMcpPrefixes: ["content"],
       },
     })
     expect(getSystemAppManifest("agent-personas")).toMatchObject({

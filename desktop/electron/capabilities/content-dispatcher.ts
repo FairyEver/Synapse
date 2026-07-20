@@ -77,14 +77,14 @@ type SkillSourceMergeResult = {
   sourceImportSummary?: ContentSkillSourceDraft["sourceImportSummary"]
 }
 
-const CONTENT_ACTION_PATTERN = /^content\.(rule|skill|prompt)\.(list|get|create|update|delete)$/u
+const CONTENT_ACTION_PATTERN = /^app\.resource_repository\.(rule|skill|prompt)\.(list|get|create|update|delete)$/u
 const AUTO_DESCRIPTION_MAX_LENGTH = 120
 const logger = createMainLogger("capability.content-dispatcher")
 
 function createContentCapabilityDispatcher(deps: ContentCapabilityDispatcherDeps) {
   return {
     async dispatch(action: string, params: ContentToolParams, context: DispatchContext): Promise<DispatchResult> {
-      if (action === "content.type.describe") {
+      if (action === "app.resource_repository.type.describe") {
         return { ok: true, data: describeContentTypes(params.contentType) }
       }
 

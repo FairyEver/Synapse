@@ -117,7 +117,7 @@ function EditorWriteTargetSelector({
   const [projectTargetState, setProjectTargetState] = useState<InstallTargetState>(createIdleTargetState)
   const lastSelectionKeyRef = useRef<string | null>(null)
   const onSelectionChangeRef = useRef(onSelectionChange)
-  const hasDirectoryPicker = Boolean(window.synapse?.repository)
+  const hasDirectoryPicker = Boolean(window.synapse?.settings.repository)
 
   const selectedProject = projects.find((project) => project.id === projectSelection) ?? null
   const projectPath =
@@ -326,7 +326,7 @@ function EditorWriteTargetSelector({
   }, [activeTarget, activeTargetState, onSelectionChange, projectPath, scope])
 
   const handleBrowseDirectory = async () => {
-    const bridge = window.synapse?.repository
+    const bridge = window.synapse?.settings.repository
 
     if (!bridge) {
       return

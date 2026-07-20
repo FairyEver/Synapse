@@ -15,11 +15,19 @@ import type { DatabaseFolder, DatabaseTableInfo } from "@/types/database"
 const mocks = vi.hoisted(() => ({
   bridge: {
     database: {
-      databaseFolderList: vi.fn(),
-      databaseRowDelete: vi.fn(),
-      databaseRowUpdate: vi.fn(),
-      databaseTableList: vi.fn(),
-      onChanged: vi.fn(() => () => {}),
+      folder: {
+        list: vi.fn(),
+      },
+      row: {
+        delete: vi.fn(),
+        update: vi.fn(),
+      },
+      table: {
+        list: vi.fn(),
+      },
+      operation: {
+        onChanged: vi.fn(() => () => {}),
+      },
     },
   },
 }))
@@ -50,8 +58,8 @@ afterEach(() => {
 
 describe("database refresh hooks", () => {
   it("returns single-row mutation affected counts", async () => {
-    mocks.bridge.database.databaseRowUpdate.mockResolvedValueOnce({ affected: 0 })
-    mocks.bridge.database.databaseRowDelete.mockResolvedValueOnce({ affected: 0 })
+    mocks.bridge.database.row.update.mockResolvedValueOnce({ affected: 0 })
+    mocks.bridge.database.row.delete.mockResolvedValueOnce({ affected: 0 })
 
     await expect(databaseRowUpdate("tasks", 10, { title: "Done" }))
       .resolves.toEqual({ affected: 0 })
@@ -64,7 +72,7 @@ describe("database refresh hooks", () => {
     const second = createDeferred<DatabaseTableInfo[]>()
     let latestTables: DatabaseTableInfo[] = []
     let refresh: (() => Promise<void>) | null = null
-    mocks.bridge.database.databaseTableList
+    mocks.bridge.database.table.list
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise)
 
@@ -75,13 +83,13 @@ describe("database refresh hooks", () => {
     await act(async () => {
       await Promise.resolve()
     })
-    expect(mocks.bridge.database.databaseTableList).toHaveBeenCalledTimes(1)
+    expect(mocks.bridge.database.table.list).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       void refresh?.()
       await Promise.resolve()
     })
-    expect(mocks.bridge.database.databaseTableList).toHaveBeenCalledTimes(2)
+    expect(mocks.bridge.database.table.list).toHaveBeenCalledTimes(2)
 
     await act(async () => {
       second.resolve([tableInfo("new_table")])
@@ -101,7 +109,7 @@ describe("database refresh hooks", () => {
     const second = createDeferred<DatabaseFolder[]>()
     let latestFolders: DatabaseFolder[] = []
     let refresh: (() => Promise<void>) | null = null
-    mocks.bridge.database.databaseFolderList
+    mocks.bridge.database.folder.list
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise)
 
@@ -112,13 +120,13 @@ describe("database refresh hooks", () => {
     await act(async () => {
       await Promise.resolve()
     })
-    expect(mocks.bridge.database.databaseFolderList).toHaveBeenCalledTimes(1)
+    expect(mocks.bridge.database.folder.list).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       void refresh?.()
       await Promise.resolve()
     })
-    expect(mocks.bridge.database.databaseFolderList).toHaveBeenCalledTimes(2)
+    expect(mocks.bridge.database.folder.list).toHaveBeenCalledTimes(2)
 
     await act(async () => {
       second.resolve([folderInfo(2, "New")])

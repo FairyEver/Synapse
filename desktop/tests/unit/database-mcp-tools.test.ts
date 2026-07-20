@@ -22,43 +22,43 @@ function getPropertyDescription(toolName: string, propertyName: string): string 
 
 describe("Database MCP tool descriptions", () => {
   it("guides agents to use table descriptions when choosing a table", () => {
-    expect(getTool("database_table_list").description).toContain("Use description to choose")
-    expect(getTool("database_table_describe").description).toContain("Call this before")
+    expect(getTool("app_database_table_list").description).toContain("Use description to choose")
+    expect(getTool("app_database_table_describe").description).toContain("Call this before")
 
-    const tableDescription = getPropertyDescription("database_row_list", "tableName")
+    const tableDescription = getPropertyDescription("app_database_row_list", "tableName")
     expect(tableDescription).toContain("call app_database_table_list")
     expect(tableDescription).toContain("table.description")
   })
 
   it("exposes the same metadata actions as the canonical service dispatcher", () => {
-    expect(getTool("database_table_update").description).toContain("table description")
-    expect(getTool("database_choice_usage_get").description).toContain("choice")
+    expect(getTool("app_database_table_update").description).toContain("table description")
+    expect(getTool("app_database_choice_usage_get").description).toContain("choice")
 
-    expect(MCP_TOOL_ACTIONS.database_table_update).toBe("app.database.table.update")
-    expect(MCP_TOOL_ACTIONS.database_choice_usage_get).toBe("app.database.choice_usage.get")
+    expect(MCP_TOOL_ACTIONS.app_database_table_update).toBe("app.database.table.update")
+    expect(MCP_TOOL_ACTIONS.app_database_choice_usage_get).toBe("app.database.choice_usage.get")
   })
 
   it("guides agents toward overview, read SQL, and logs before riskier tools", () => {
-    expect(getTool("database_overview_get").description).toContain("Use this first")
-    expect(getTool("database_sql_read").description).toContain("Prefer this over app_database_sql_execute")
-    expect(getTool("database_sql_read").description).toContain("read-only PRAGMA")
-    expect(getTool("database_sql_read").description).toContain("_table_folders")
-    expect(getTool("database_sql_execute").description).toContain("Use only")
-    expect(getTool("database_sql_execute").description).toContain("_table_folder_members")
-    expect(getTool("database_sql_execute").description).toContain("mutating PRAGMA")
-    expect(getTool("database_log_list").description).toContain("recently changed")
+    expect(getTool("app_database_overview_get").description).toContain("Use this first")
+    expect(getTool("app_database_sql_read").description).toContain("Prefer this over app_database_sql_execute")
+    expect(getTool("app_database_sql_read").description).toContain("read-only PRAGMA")
+    expect(getTool("app_database_sql_read").description).toContain("_table_folders")
+    expect(getTool("app_database_sql_execute").description).toContain("Use only")
+    expect(getTool("app_database_sql_execute").description).toContain("_table_folder_members")
+    expect(getTool("app_database_sql_execute").description).toContain("mutating PRAGMA")
+    expect(getTool("app_database_log_list").description).toContain("recently changed")
   })
 
-  it("exposes primary app Database tools and legacy Database aliases", () => {
+  it("exposes only primary app Database tool names", () => {
     const names = buildTools().map((tool) => tool.name)
-    expect(names.some((name) => name.startsWith("app_database_"))).toBe(true)
-    expect(names.some((name) => name.startsWith("database_"))).toBe(true)
+    expect(names.every((name) => name.startsWith("app_database_"))).toBe(true)
+    expect(names).not.toContain("database_table_list")
     expect(MCP_TOOL_ACTIONS.app_database_table_list).toBe("app.database.table.list")
-    expect(MCP_TOOL_ACTIONS.database_table_list).toBe("app.database.table.list")
+    expect(MCP_TOOL_ACTIONS).not.toHaveProperty("database_table_list")
   })
 
   it("bounds row list pagination in the MCP schema", () => {
-    const properties = getTool("database_row_list").inputSchema.properties
+    const properties = getTool("app_database_row_list").inputSchema.properties
     const limit = properties.limit as {
       type?: string
       minimum?: number
@@ -79,7 +79,7 @@ describe("Database MCP tool descriptions", () => {
   })
 
   it("requires grouped where conditions for bulk mutations", () => {
-    for (const toolName of ["database_rows_update", "database_rows_delete"]) {
+    for (const toolName of ["app_database_rows_update", "app_database_rows_delete"]) {
       const where = getTool(toolName).inputSchema.properties.where as {
         anyOf: Array<{
           not?: { required?: string[] }
@@ -94,7 +94,7 @@ describe("Database MCP tool descriptions", () => {
   })
 
   it("requires at least one update field in update tool schemas", () => {
-    for (const toolName of ["database_row_update", "database_rows_update"]) {
+    for (const toolName of ["app_database_row_update", "app_database_rows_update"]) {
       const data = getTool(toolName).inputSchema.properties.data as { minProperties?: number; description?: string }
       expect(data.minProperties).toBe(1)
       expect(data.description).toContain("at least one")

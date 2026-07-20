@@ -3,14 +3,14 @@ import {
   type OpenAgentSessionPayload,
 } from "@/types/agent-navigation"
 
-const OPEN_SETTINGS_TAB_EVENT = "synapse:open-settings-tab"
-const OPEN_SETTINGS_ACCOUNT_EVENT = "synapse:open-settings-account"
-const OPEN_SETTINGS_ABOUT_EVENT = "synapse:open-settings-about"
-const OPEN_SETTINGS_DOCK_EVENT = "synapse:open-settings-dock"
-const OPEN_SETTINGS_STORAGE_EVENT = "synapse:open-settings-storage"
-const APP_TAB_CHANGED_EVENT = "synapse:app-tab-changed"
-const WATCH_NEXT_AGENT_SESSION_EVENT = "synapse:watch-next-agent-session"
-const CANCEL_WATCH_NEXT_AGENT_SESSION_EVENT = "synapse:cancel-watch-next-agent-session"
+const OPEN_SETTINGS_TAB_EVENT = "synapse:app:open_settings_tab:operation"
+const OPEN_SETTINGS_ACCOUNT_EVENT = "synapse:app:open_settings_account:operation"
+const OPEN_SETTINGS_ABOUT_EVENT = "synapse:app:open_settings_about:operation"
+const OPEN_SETTINGS_DOCK_EVENT = "synapse:app:open_settings_dock:operation"
+const OPEN_SETTINGS_STORAGE_EVENT = "synapse:app:open_settings_storage:operation"
+const APP_TAB_CHANGED_EVENT = "synapse:app:app_tab_changed:operation"
+const WATCH_NEXT_AGENT_SESSION_EVENT = "synapse:app:watch_next_agent_session:operation"
+const CANCEL_WATCH_NEXT_AGENT_SESSION_EVENT = "synapse:app:cancel_watch_next_agent_session:operation"
 
 type WatchNextAgentSessionPayload = {
   projectId: string

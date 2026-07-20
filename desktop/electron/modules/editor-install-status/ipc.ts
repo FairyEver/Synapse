@@ -20,7 +20,7 @@ export const editorInstallStatusIpcModule: IpcModule = {
   methods: {
     resolveForContent: {
       kind: "invoke",
-      channel: "synapse:editor-install-status:resolve-for-content",
+      operationId: "app.editor_install_status.operation.resolve_for_content",
       request: requestSchema,
       response: anySchema,
       handler: async (_ctx, payload: SynapseResolveEditorInstallStatusPayload) => {

@@ -424,7 +424,7 @@ function resolveGlobalProviderService(resolve: <T>(serviceId: string) => T) {
 export const toolMethods: Record<string, IpcMethodDescriptor> = {
   getProviders: {
     kind: "invoke",
-    channel: "synapse:agent:get-providers",
+    operationId: "app.agent.operation.get_providers",
     request: providerRequestSchema,
     response: providerStateSchema,
     handler: async (ctx, _request: ProviderRequest) => {
@@ -441,7 +441,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   listProviders: {
     kind: "invoke",
-    channel: "synapse:agent:list-providers",
+    operationId: "app.agent.operation.list_providers",
     request: providerRequestSchema,
     response: z.array(publicProviderSchema),
     handler: async (ctx, _request: ProviderRequest) => {
@@ -451,7 +451,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   listProviderPresets: {
     kind: "invoke",
-    channel: "synapse:agent:list-provider-presets",
+    operationId: "app.agent.operation.list_provider_presets",
     request: providerRequestSchema,
     response: z.array(publicProviderPresetSchema),
     handler: async (ctx, _request: ProviderRequest) => {
@@ -461,7 +461,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   createProvider: {
     kind: "invoke",
-    channel: "synapse:agent:create-provider",
+    operationId: "app.agent.operation.create_provider",
     request: createProviderRequestSchema,
     response: publicProviderSchema,
     handler: async (ctx, request: CreateProviderRequest) => {
@@ -471,7 +471,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   createProviderFromPreset: {
     kind: "invoke",
-    channel: "synapse:agent:create-provider-from-preset",
+    operationId: "app.agent.operation.create_provider_from_preset",
     request: createProviderFromPresetRequestSchema,
     response: publicProviderSchema,
     handler: async (ctx, request: CreateProviderFromPresetRequest) => {
@@ -481,7 +481,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   previewCcSwitchClaudeProviders: {
     kind: "invoke",
-    channel: "synapse:agent:preview-cc-switch-claude-providers",
+    operationId: "app.agent.operation.preview_cc_switch_claude_providers",
     request: previewCcSwitchClaudeProvidersRequestSchema,
     response: ccSwitchImportPreviewResultSchema,
     handler: async (ctx, request: PreviewCcSwitchClaudeProvidersRequest) => {
@@ -493,7 +493,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   importCcSwitchClaudeProviders: {
     kind: "invoke",
-    channel: "synapse:agent:import-cc-switch-claude-providers",
+    operationId: "app.agent.operation.import_cc_switch_claude_providers",
     request: importCcSwitchClaudeProvidersRequestSchema,
     response: ccSwitchImportResultSchema,
     handler: async (ctx, request: ImportCcSwitchClaudeProvidersRequest) => {
@@ -509,7 +509,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   chooseCcSwitchClaudeImportSource: {
     kind: "invoke",
-    channel: "synapse:agent:choose-cc-switch-claude-import-source",
+    operationId: "app.agent.operation.choose_cc_switch_claude_import_source",
     request: z.object({}),
     response: chooseCcSwitchImportSourceResultSchema,
     handler: async () => {
@@ -531,7 +531,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   chooseProviderPackageImportSource: {
     kind: "invoke",
-    channel: "synapse:agent:choose-provider-package-import-source",
+    operationId: "app.agent.operation.choose_provider_package_import_source",
     request: z.object({}),
     response: chooseProviderPackageImportSourceResultSchema,
     handler: async () => {
@@ -553,7 +553,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   chooseProviderPackageExportTarget: {
     kind: "invoke",
-    channel: "synapse:agent:choose-provider-package-export-target",
+    operationId: "app.agent.operation.choose_provider_package_export_target",
     request: z.object({ providerName: z.string().min(1) }),
     response: chooseProviderPackageExportTargetResultSchema,
     handler: async (_ctx, request: { providerName: string }) => {
@@ -573,7 +573,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   previewProviderPackageImport: {
     kind: "invoke",
-    channel: "synapse:agent:preview-provider-package-import",
+    operationId: "app.agent.operation.preview_provider_package_import",
     request: providerPackagePathRequestSchema,
     response: providerPackageImportPreviewSchema,
     handler: async (ctx, request: ProviderPackagePathRequest) => {
@@ -585,7 +585,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   importProviderPackage: {
     kind: "invoke",
-    channel: "synapse:agent:import-provider-package",
+    operationId: "app.agent.operation.import_provider_package",
     request: providerPackageImportRequestSchema,
     response: providerPackageImportResultSchema,
     handler: async (ctx, request: ProviderPackagePathRequest & { readonly contentSha256: string }) => {
@@ -600,7 +600,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   exportProviderPackage: {
     kind: "invoke",
-    channel: "synapse:agent:export-provider-package",
+    operationId: "app.agent.operation.export_provider_package",
     request: exportProviderPackageRequestSchema,
     response: providerPackageExportResultSchema,
     handler: async (ctx, request: ExportProviderPackageRequest) => {
@@ -612,7 +612,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   updateProvider: {
     kind: "invoke",
-    channel: "synapse:agent:update-provider",
+    operationId: "app.agent.operation.update_provider",
     request: updateProviderRequestSchema,
     response: publicProviderSchema,
     handler: async (ctx, request: UpdateProviderRequest) => {
@@ -622,7 +622,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   archiveProvider: {
     kind: "invoke",
-    channel: "synapse:agent:archive-provider",
+    operationId: "app.agent.operation.archive_provider",
     request: providerIdRequestSchema,
     response: okResultSchema,
     handler: async (ctx, request: ProviderIdRequest) => {
@@ -633,7 +633,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   deleteProvider: {
     kind: "invoke",
-    channel: "synapse:agent:delete-provider",
+    operationId: "app.agent.operation.delete_provider",
     request: providerIdRequestSchema,
     response: okResultSchema,
     handler: async (ctx, request: ProviderIdRequest) => {
@@ -644,7 +644,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   listAllProviders: {
     kind: "invoke",
-    channel: "synapse:agent:list-all-providers",
+    operationId: "app.agent.operation.list_all_providers",
     request: providerRequestSchema,
     response: z.array(publicProviderSchema),
     handler: async (ctx, _request: ProviderRequest) => {
@@ -654,7 +654,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   scanProviderReferences: {
     kind: "invoke",
-    channel: "synapse:agent:scan-provider-references",
+    operationId: "app.agent.operation.scan_provider_references",
     request: providerIdRequestSchema,
     response: z.object({
       providerId: z.string(),
@@ -678,7 +678,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   migrateProviderReferences: {
     kind: "invoke",
-    channel: "synapse:agent:migrate-provider-references",
+    operationId: "app.agent.operation.migrate_provider_references",
     request: z.object({
       sourceProviderId: z.string().min(1),
       targetProviderId: z.string().min(1),
@@ -706,7 +706,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   setActiveProvider: {
     kind: "invoke",
-    channel: "synapse:agent:set-active-provider",
+    operationId: "app.agent.operation.set_active_provider",
     request: providerIdRequestSchema,
     response: okResultSchema,
     handler: async (ctx, request: ProviderIdRequest) => {
@@ -717,7 +717,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   getRuntimeStatus: {
     kind: "invoke",
-    channel: "synapse:agent:get-runtime-status",
+    operationId: "app.agent.operation.get_runtime_status",
     request: runtimeStatusRequestSchema,
     response: runtimeStatusSchema,
     handler: async (ctx, request: { projectId?: string }) => {
@@ -752,7 +752,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   getAvailableAgents: {
     kind: "invoke",
-    channel: "synapse:agent:get-available-agents",
+    operationId: "app.agent.operation.get_available_agents",
     request: z.object({}),
     response: z.array(z.object({
       agentType: z.string(),
@@ -770,7 +770,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   listCommands: {
     kind: "invoke",
-    channel: "synapse:agent:list-commands",
+    operationId: "app.agent.operation.list_commands",
     request: projectRequestSchema,
     response: z.array(publishedCommandSchema),
     handler: async (ctx, request: ProjectRequest) => {
@@ -780,7 +780,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   },
   openReference: {
     kind: "invoke",
-    channel: "synapse:agent:open-reference",
+    operationId: "app.agent.operation.open_reference",
     request: openReferenceRequestSchema,
     response: openReferenceResultSchema,
     handler: async (ctx, request: OpenReferenceRequest) => {

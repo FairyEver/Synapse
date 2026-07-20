@@ -24,9 +24,11 @@ const mocks = vi.hoisted(() => ({
   resolveEditorInstallTarget: vi.fn(),
   readyTargetOverrides: {} as Record<string, unknown>,
   secrets: {
-    list: vi.fn(),
-    get: vi.fn(),
-    upsert: vi.fn(),
+    item: {
+      list: vi.fn(),
+      get: vi.fn(),
+      upsert: vi.fn(),
+    },
   },
   updateConfig: vi.fn(),
   warning: vi.fn(),
@@ -225,18 +227,18 @@ let roots: Root[] = []
 
 function resetMockState() {
   mocks.config.global.projects = []
-  mocks.secrets.list.mockResolvedValue({
+  mocks.secrets.item.list.mockResolvedValue({
     secrets: [{ id: "secret-1", name: "GITEE_TOKEN", description: "saved", hasValue: true }],
     total: 1,
   })
-  mocks.secrets.get.mockResolvedValue({
+  mocks.secrets.item.get.mockResolvedValue({
     id: "secret-1",
     name: "GITEE_TOKEN",
     description: "saved",
     hasValue: true,
     value: "saved-token",
   })
-  mocks.secrets.upsert.mockResolvedValue({
+  mocks.secrets.item.upsert.mockResolvedValue({
     id: "secret-1",
     name: "GITEE_TOKEN",
     hasValue: true,
@@ -450,7 +452,7 @@ describe("SharedInstallerFlow", () => {
     expect(inputByLabel("API_BASE_URL")?.value).toBe("https://example.com")
     expect(inputByLabel("OPTIONAL_EMPTY")?.value).toBe("")
     expect(document.body.textContent).not.toContain("saved-token")
-    expect(mocks.secrets.get).not.toHaveBeenCalled()
+    expect(mocks.secrets.item.get).not.toHaveBeenCalled()
 
     await act(async () => {
       clickButton("继续安装")
@@ -474,7 +476,7 @@ describe("SharedInstallerFlow", () => {
       declarations: [{ name: "api_key", defaultValue: "" }],
       legacyPlaceholders: [],
     })
-    mocks.secrets.list.mockResolvedValue({
+    mocks.secrets.item.list.mockResolvedValue({
       secrets: [{ id: "secret-1", name: "API_KEY", hasValue: true }],
       total: 1,
     })
@@ -504,7 +506,7 @@ describe("SharedInstallerFlow", () => {
       declarations: [{ name: "GITEE_TOKEN", defaultValue: "" }],
       legacyPlaceholders: ["INLINE_TOKEN"],
     })
-    mocks.secrets.list.mockResolvedValue({
+    mocks.secrets.item.list.mockResolvedValue({
       secrets: [
         { id: "secret-1", name: "GITEE_TOKEN", description: "saved", hasValue: true },
         { id: "secret-2", name: "INLINE_TOKEN", description: "saved", hasValue: true },
@@ -546,11 +548,11 @@ describe("SharedInstallerFlow", () => {
       skillEnvValues: {},
       variableSecretNames: { INLINE_TOKEN: "INLINE_TOKEN" },
     }))
-    expect(mocks.secrets.get).not.toHaveBeenCalled()
+    expect(mocks.secrets.item.get).not.toHaveBeenCalled()
   })
 
   it("saves a confirmed blank Skill ENV value before installing", async () => {
-    mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
+    mocks.secrets.item.list.mockResolvedValue({ secrets: [], total: 0 })
     mocks.inspectSkillEnvSource.mockResolvedValue({
       declarations: [{ name: "OPTIONAL_EMPTY", defaultValue: "" }],
       legacyPlaceholders: [],
@@ -583,7 +585,7 @@ describe("SharedInstallerFlow", () => {
       await Promise.resolve()
     })
 
-    expect(mocks.secrets.upsert).toHaveBeenCalledWith({ name: "OPTIONAL_EMPTY", value: "" })
+    expect(mocks.secrets.item.upsert).toHaveBeenCalledWith({ name: "OPTIONAL_EMPTY", value: "" })
     expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
       skillEnvValues: { OPTIONAL_EMPTY: "" },
     }))
@@ -636,8 +638,8 @@ describe("SharedInstallerFlow", () => {
       await Promise.resolve()
     })
 
-    expect(mocks.secrets.upsert).toHaveBeenCalledTimes(1)
-    expect(mocks.secrets.upsert).toHaveBeenCalledWith({
+    expect(mocks.secrets.item.upsert).toHaveBeenCalledTimes(1)
+    expect(mocks.secrets.item.upsert).toHaveBeenCalledWith({
       name: "GITEE_TOKEN",
       value: "env-token",
     })
@@ -696,8 +698,8 @@ describe("SharedInstallerFlow", () => {
     expect(input?.value).toBe("")
     expect(input?.disabled).toBe(true)
     expect(document.body.textContent).not.toContain("saved-token")
-    expect(mocks.secrets.list).toHaveBeenCalled()
-    expect(mocks.secrets.get).not.toHaveBeenCalled()
+    expect(mocks.secrets.item.list).toHaveBeenCalled()
+    expect(mocks.secrets.item.get).not.toHaveBeenCalled()
     expect(mocks.installSourceToEditor).not.toHaveBeenCalled()
 
     await act(async () => {
@@ -711,7 +713,7 @@ describe("SharedInstallerFlow", () => {
   })
 
   it("keeps placeholders when submitted variable values are empty", async () => {
-    mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
+    mocks.secrets.item.list.mockResolvedValue({ secrets: [], total: 0 })
     mocks.inspectSkillEnvSource.mockResolvedValue({
       declarations: [],
       legacyPlaceholders: ["GITEE_TOKEN"],
@@ -740,7 +742,7 @@ describe("SharedInstallerFlow", () => {
   })
 
   it("saves new variables before continuing install", async () => {
-    mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
+    mocks.secrets.item.list.mockResolvedValue({ secrets: [], total: 0 })
     mocks.inspectSkillEnvSource.mockResolvedValue({
       declarations: [],
       legacyPlaceholders: ["GITEE_TOKEN"],
@@ -775,7 +777,7 @@ describe("SharedInstallerFlow", () => {
       await Promise.resolve()
     })
 
-    expect(mocks.secrets.upsert).toHaveBeenCalledWith({ name: "GITEE_TOKEN", value: "new-token" })
+    expect(mocks.secrets.item.upsert).toHaveBeenCalledWith({ name: "GITEE_TOKEN", value: "new-token" })
     expect(mocks.updateConfig).not.toHaveBeenCalledWith(expect.objectContaining({
       global: expect.objectContaining({ variables: expect.any(Array) }),
     }))
@@ -785,8 +787,8 @@ describe("SharedInstallerFlow", () => {
   })
 
   it("keeps the save decision open when saving a variable fails", async () => {
-    mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
-    mocks.secrets.upsert
+    mocks.secrets.item.list.mockResolvedValue({ secrets: [], total: 0 })
+    mocks.secrets.item.upsert
       .mockRejectedValueOnce(new Error("storage unavailable: GITEE_TOKEN"))
       .mockResolvedValueOnce({ id: "secret-1", name: "GITEE_TOKEN", hasValue: true })
     mocks.inspectSkillEnvSource.mockResolvedValue({
@@ -828,7 +830,7 @@ describe("SharedInstallerFlow", () => {
       await Promise.resolve()
     })
 
-    expect(mocks.secrets.upsert).toHaveBeenCalledTimes(2)
+    expect(mocks.secrets.item.upsert).toHaveBeenCalledTimes(2)
     expect(mocks.installSourceToEditor).toHaveBeenCalledTimes(1)
   })
 

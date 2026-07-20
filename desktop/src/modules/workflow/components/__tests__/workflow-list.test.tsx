@@ -182,15 +182,19 @@ beforeEach(() => {
     configurable: true,
     value: {
       workflow: {
-        get: workflowGet,
-        delete: workflowDelete,
-        activeRuns: workflowActiveRuns,
-        exportPackage: workflowExportPackage,
-        inspectExportPackage: workflowInspectExportPackage,
-        openEditor: workflowOpenEditor,
-        runDefinition: workflowRunDefinition,
-        openRunner: workflowOpenRunner,
-        onEvent: workflowOnEvent,
+        definition: {
+          get: workflowGet,
+          delete: workflowDelete,
+        },
+        run: { listActive: workflowActiveRuns },
+        operation: {
+          exportPackage: workflowExportPackage,
+          inspectExportPackage: workflowInspectExportPackage,
+          openEditor: workflowOpenEditor,
+          runDefinition: workflowRunDefinition,
+          openRunner: workflowOpenRunner,
+          onEvent: workflowOnEvent,
+        },
       },
     } as unknown as Window["synapse"],
   })
@@ -227,7 +231,7 @@ describe("WorkflowList", () => {
     expect(workflowDelete).toHaveBeenCalledWith("workflow-param", { cleanupImportedChildren: true })
     expect(toastError).toHaveBeenCalledWith("该工作流仍被以下工作流调用：发布流程。请先解除引用。token=[redacted]")
     expect(loggerWarn).toHaveBeenCalledWith("Workflow delete failed.", {
-      boundary: "renderer.workflow.list.delete",
+      boundary: "renderer.workflow.definition.list.delete",
       workflowId: "workflow-param",
       errorName: "Error",
       errorLength: rawError.length,
@@ -260,7 +264,7 @@ describe("WorkflowList", () => {
       name: "workflow-list-run-submit",
       action: "submit",
       metadata: {
-        boundary: "renderer.workflow.list.run-submit",
+        boundary: "renderer.workflow.definition.list.run-submit",
         workflowId: "workflow-param",
         source: "workflow-list",
         force: false,
@@ -295,7 +299,7 @@ describe("WorkflowList", () => {
 
     expect(toastError).toHaveBeenCalledWith("运行失败，请重试")
     expect(loggerWarn).toHaveBeenCalledWith("Workflow list run failed.", {
-      boundary: "renderer.workflow.list.run",
+      boundary: "renderer.workflow.definition.list.run",
       force: false,
       paramCount: 2,
       workflowId: "workflow-param",

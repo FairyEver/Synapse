@@ -36,8 +36,8 @@ describe("ContentItemIcon", () => {
   it("evicts the oldest cached icon image after the cache reaches its limit", async () => {
     const readIconImage = vi.fn(async ({ id }: { id: string }) => `data:image/png;base64,${id}`)
     window.synapse = {
-      content: {
-        readIconImage,
+      resourceRepository: {
+        operation: { readIconImage },
       },
     } as unknown as typeof window.synapse
     const container = document.createElement("div")

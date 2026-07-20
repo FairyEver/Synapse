@@ -9,17 +9,19 @@ import { WorkflowConfigForm } from "../config.renderer"
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const workflowApi = {
-  list: vi.fn(),
-  get: vi.fn(),
+  definition: {
+    list: vi.fn(),
+    get: vi.fn(),
+  },
 }
 
 describe("WorkflowConfigForm", () => {
   beforeEach(() => {
-    workflowApi.list.mockResolvedValue({
+    workflowApi.definition.list.mockResolvedValue({
       items: [{ id: "wf-1", name: "每日汇总", version: "v1", nodeCount: 2, createdAt: 1, updatedAt: 2 }],
       migrationDiagnostics: [],
     })
-    workflowApi.get.mockResolvedValue({
+    workflowApi.definition.get.mockResolvedValue({
       id: "wf-1",
       name: "每日汇总",
       version: "v1",
@@ -52,8 +54,8 @@ describe("WorkflowConfigForm", () => {
       await Promise.resolve()
     })
 
-    expect(workflowApi.list).toHaveBeenCalled()
-    expect(workflowApi.get).toHaveBeenCalledWith("wf-1")
+    expect(workflowApi.definition.list).toHaveBeenCalled()
+    expect(workflowApi.definition.get).toHaveBeenCalledWith("wf-1")
     expect(host.textContent).toContain("每日汇总")
     expect(host.textContent).toContain("主题")
 

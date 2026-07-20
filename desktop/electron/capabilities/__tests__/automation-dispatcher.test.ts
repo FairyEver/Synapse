@@ -238,19 +238,19 @@ describe("automation capability dispatcher", () => {
   it("exposes webhook discovery in Automation MCP tools", () => {
     const tools = buildAutomationTools()
 
-    expect(tools.map((tool) => tool.name)).toContain("automation_webhook_list")
-    expect(tools.find((tool) => tool.name === "automation_webhook_list")?.description)
+    expect(tools.map((tool) => tool.name)).toContain("app_automation_webhook_list")
+    expect(tools.find((tool) => tool.name === "app_automation_webhook_list")?.description)
       .toContain("webhookPublicId")
-    expect(tools.find((tool) => tool.name === "automation_run_disable")?.description)
+    expect(tools.find((tool) => tool.name === "app_automation_run_disable")?.description)
       .toContain("Fails if the run is missing or no longer active")
-    expect(tools.find((tool) => tool.name === "automation_run_disable")?.description)
+    expect(tools.find((tool) => tool.name === "app_automation_run_disable")?.description)
       .toContain("stopRequested")
   })
 
   it("lists trigger and executor descriptors from registries", async () => {
     const { auditSink, dispatcher, permissionGuard } = createHarness()
 
-    await expect(dispatcher.dispatch("automation.trigger_type.list", {}, { source: "api" }))
+    await expect(dispatcher.dispatch("app.automation.trigger_type.list", {}, { source: "api" }))
       .resolves.toMatchObject({
         ok: true,
         total: 1,
@@ -263,7 +263,7 @@ describe("automation capability dispatcher", () => {
         }],
       })
 
-    const result = await dispatcher.dispatch("automation.executor_type.list", {}, { source: "api" })
+    const result = await dispatcher.dispatch("app.automation.executor_type.list", {}, { source: "api" })
     expect(result).toMatchObject({
       ok: true,
       total: 3,
@@ -276,22 +276,22 @@ describe("automation capability dispatcher", () => {
     expect(JSON.stringify(result)).not.toContain("private prompt")
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "automation.read",
-      resource: "automation:automation.trigger_type.list",
-      context: expect.objectContaining({ automationAction: "automation.trigger_type.list" }),
+      resource: "automation:app.automation.trigger_type.list",
+      context: expect.objectContaining({ automationAction: "app.automation.trigger_type.list" }),
     }))
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "automation.read",
-      resource: "automation:automation.executor_type.list",
-      context: expect.objectContaining({ automationAction: "automation.executor_type.list" }),
+      resource: "automation:app.automation.executor_type.list",
+      context: expect.objectContaining({ automationAction: "app.automation.executor_type.list" }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "automation.read",
-      resource: "automation:automation.trigger_type.list",
+      resource: "automation:app.automation.trigger_type.list",
       outcome: "allowed",
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "automation.read",
-      resource: "automation:automation.executor_type.list",
+      resource: "automation:app.automation.executor_type.list",
       outcome: "allowed",
     }))
   })
@@ -301,17 +301,17 @@ describe("automation capability dispatcher", () => {
       permissionResult: { allowed: false, reason: "read denied", policyId: "deny-automation-read" },
     })
 
-    await expect(dispatcher.dispatch("automation.trigger_type.list", {}, { source: "mcp-http" }))
+    await expect(dispatcher.dispatch("app.automation.trigger_type.list", {}, { source: "mcp-http" }))
       .rejects.toThrow("read denied")
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "automation.read",
-      resource: "automation:automation.trigger_type.list",
-      context: expect.objectContaining({ automationAction: "automation.trigger_type.list" }),
+      resource: "automation:app.automation.trigger_type.list",
+      context: expect.objectContaining({ automationAction: "app.automation.trigger_type.list" }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "automation.read",
-      resource: "automation:automation.trigger_type.list",
+      resource: "automation:app.automation.trigger_type.list",
       outcome: "denied",
       metadata: expect.objectContaining({
         policyId: "deny-automation-read",
@@ -323,15 +323,15 @@ describe("automation capability dispatcher", () => {
   it("checks read permission and lists Webhooks for builtin webhook trigger configuration", async () => {
     const { accountService, auditSink, dispatcher, permissionGuard } = createHarness()
 
-    const result = await dispatcher.dispatch("automation.webhook.list", {}, { source: "mcp-http" })
+    const result = await dispatcher.dispatch("app.automation.webhook.list", {}, { source: "mcp-http" })
 
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "automation.read",
       actor: { kind: "user", id: "automation-dispatch:mcp-http" },
-      resource: "automation:automation.webhook.list",
+      resource: "automation:app.automation.webhook.list",
       context: expect.objectContaining({
         source: "mcp-http",
-        automationAction: "automation.webhook.list",
+        automationAction: "app.automation.webhook.list",
       }),
     })
     expect(accountService.listWebhooks).toHaveBeenCalledTimes(1)
@@ -352,7 +352,7 @@ describe("automation capability dispatcher", () => {
     expect(JSON.stringify(result)).not.toContain("maskedUrl")
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "automation.read",
-      resource: "automation:automation.webhook.list",
+      resource: "automation:app.automation.webhook.list",
       outcome: "allowed",
     }))
   })
@@ -360,7 +360,7 @@ describe("automation capability dispatcher", () => {
   it("returns Windows-aware shell defaults for Automation executor discovery", async () => {
     const { dispatcher } = createHarness({ platform: "win32" })
 
-    const result = await dispatcher.dispatch("automation.executor_type.list", {}, { source: "mcp-http" })
+    const result = await dispatcher.dispatch("app.automation.executor_type.list", {}, { source: "mcp-http" })
     const data = result.ok ? result.data : []
     const executors = Array.isArray(data) ? data : []
 
@@ -383,19 +383,19 @@ describe("automation capability dispatcher", () => {
       .mockResolvedValueOnce({ ...baseItem, id: "automation:powershell" })
     vi.mocked(service.automationUpdate).mockResolvedValueOnce({ ...baseItem, executor: { type: "builtin.script", config: { script: "echo ok", shell: "cmd" } } })
 
-    await dispatcher.dispatch("automation.item.create", {
+    await dispatcher.dispatch("app.automation.item.create", {
       name: "Windows command",
       scope: { type: "global" },
       trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
       executor: { type: "builtin.command", config: { command: "echo ok" } },
     }, { source: "mcp-http" })
-    await dispatcher.dispatch("automation.item.update", {
+    await dispatcher.dispatch("app.automation.item.update", {
       automationId: "automation:1",
       patch: {
         executor: { type: "builtin.script", config: { script: "echo ok" } },
       },
     }, { source: "mcp-http" })
-    await dispatcher.dispatch("automation.item.create", {
+    await dispatcher.dispatch("app.automation.item.create", {
       name: "PowerShell command",
       scope: { type: "global" },
       trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
@@ -416,8 +416,8 @@ describe("automation capability dispatcher", () => {
   it("checks read permission when listing and getting public item summaries without raw configs", async () => {
     const { auditSink, dispatcher, permissionGuard } = createHarness()
 
-    const list = await dispatcher.dispatch("automation.item.list", { enabled: true }, { source: "mcp-http" })
-    const get = await dispatcher.dispatch("automation.item.get", { automationId: "automation:1" }, { source: "mcp-http" })
+    const list = await dispatcher.dispatch("app.automation.item.list", { enabled: true }, { source: "mcp-http" })
+    const get = await dispatcher.dispatch("app.automation.item.get", { automationId: "automation:1" }, { source: "mcp-http" })
 
     expect(list).toEqual({
       ok: true,
@@ -432,10 +432,10 @@ describe("automation capability dispatcher", () => {
     expect(JSON.stringify([list, get])).not.toContain("everyMinutes")
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "automation.read",
-      resource: "automation:automation.item.list",
+      resource: "automation:app.automation.item.list",
       context: expect.objectContaining({
         source: "mcp-http",
-        automationAction: "automation.item.list",
+        automationAction: "app.automation.item.list",
       }),
     }))
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
@@ -443,13 +443,13 @@ describe("automation capability dispatcher", () => {
       resource: "automation:automation:1",
       context: expect.objectContaining({
         source: "mcp-http",
-        automationAction: "automation.item.get",
+        automationAction: "app.automation.item.get",
         automationId: "automation:1",
       }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "automation.read",
-      resource: "automation:automation.item.list",
+      resource: "automation:app.automation.item.list",
       outcome: "allowed",
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
@@ -473,14 +473,14 @@ describe("automation capability dispatcher", () => {
       auditSink,
     })
 
-    await expect(dispatcher.dispatch("automation.item.list", {}, { source: "mcp-http" }))
+    await expect(dispatcher.dispatch("app.automation.item.list", {}, { source: "mcp-http" }))
       .rejects.toThrow("blocked")
 
     expect(service.automationList).not.toHaveBeenCalled()
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "automation.read",
       outcome: "denied",
-      resource: "automation:automation.item.list",
+      resource: "automation:app.automation.item.list",
       metadata: expect.objectContaining({ reason: "blocked", policyId: "test-policy" }),
     }))
   })
@@ -489,7 +489,7 @@ describe("automation capability dispatcher", () => {
     const { dispatcher, service } = createHarness()
     const scope = { type: "project" as const, projectId: "project:1" }
 
-    await dispatcher.dispatch("automation.item.list", { enabled: true, scope, limit: 1 }, { source: "mcp-http" })
+    await dispatcher.dispatch("app.automation.item.list", { enabled: true, scope, limit: 1 }, { source: "mcp-http" })
 
     expect(service.automationList).toHaveBeenCalledWith({ enabled: true, scope, limit: 1 })
   })
@@ -509,14 +509,14 @@ describe("automation capability dispatcher", () => {
       executor: { type: "builtin.command", config: { command: "echo ok" } },
     }
 
-    const created = await dispatcher.dispatch("automation.item.create", createInput, { source: "mcp-http" })
-    const updated = await dispatcher.dispatch("automation.item.update", {
+    const created = await dispatcher.dispatch("app.automation.item.create", createInput, { source: "mcp-http" })
+    const updated = await dispatcher.dispatch("app.automation.item.update", {
       automationId: "automation:1",
       patch: { name: "Updated automation" },
     }, { source: "mcp-http" })
-    const enabled = await dispatcher.dispatch("automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" })
-    const disabled = await dispatcher.dispatch("automation.item.disable", { automationId: "automation:1" }, { source: "mcp-http" })
-    const deleted = await dispatcher.dispatch("automation.item.delete", { automationId: "automation:1" }, { source: "mcp-http" })
+    const enabled = await dispatcher.dispatch("app.automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" })
+    const disabled = await dispatcher.dispatch("app.automation.item.disable", { automationId: "automation:1" }, { source: "mcp-http" })
+    const deleted = await dispatcher.dispatch("app.automation.item.delete", { automationId: "automation:1" }, { source: "mcp-http" })
 
     expect(service.automationCreate).toHaveBeenCalledWith(expect.objectContaining({
       name: "New automation",
@@ -533,14 +533,14 @@ describe("automation capability dispatcher", () => {
   it("rejects unknown trigger and executor types before persistence", async () => {
     const { dispatcher, service } = createHarness()
 
-    await expect(dispatcher.dispatch("automation.item.create", {
+    await expect(dispatcher.dispatch("app.automation.item.create", {
       name: "Broken trigger",
       scope: { type: "global" },
       trigger: { type: "builtin.missing-trigger", config: {} },
       executor: { type: "builtin.command", config: { command: "echo ok" } },
     }, { source: "mcp-http" })).rejects.toThrow('Automation trigger "builtin.missing-trigger" is not registered')
 
-    await expect(dispatcher.dispatch("automation.item.create", {
+    await expect(dispatcher.dispatch("app.automation.item.create", {
       name: "Broken executor",
       scope: { type: "global" },
       trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
@@ -555,10 +555,10 @@ describe("automation capability dispatcher", () => {
     vi.mocked(service.runAutomationNow).mockResolvedValueOnce(baseRun)
     vi.mocked(service.stopRun).mockResolvedValueOnce({ stopped: false, stopRequested: true })
 
-    const run = await dispatcher.dispatch("automation.run.execute", { automationId: "automation:1" }, { source: "mcp-http" })
-    const stopped = await dispatcher.dispatch("automation.run.disable", { runId: "automation-run:1" }, { source: "mcp-http" })
-    const runs = await dispatcher.dispatch("automation.run.list", { automationId: "automation:1" }, { source: "mcp-http" })
-    const runtime = await dispatcher.dispatch("automation.runtime.inspect", {}, { source: "mcp-http" })
+    const run = await dispatcher.dispatch("app.automation.run.execute", { automationId: "automation:1" }, { source: "mcp-http" })
+    const stopped = await dispatcher.dispatch("app.automation.run.disable", { runId: "automation-run:1" }, { source: "mcp-http" })
+    const runs = await dispatcher.dispatch("app.automation.run.list", { automationId: "automation:1" }, { source: "mcp-http" })
+    const runtime = await dispatcher.dispatch("app.automation.runtime.inspect", {}, { source: "mcp-http" })
 
     expect(service.runAutomationNow).toHaveBeenCalledWith("automation:1")
     expect(service.stopRun).toHaveBeenCalledWith("automation-run:1")
@@ -582,7 +582,7 @@ describe("automation capability dispatcher", () => {
     const { auditSink, dispatcher, service } = createHarness()
     vi.mocked(service.stopRun).mockResolvedValueOnce({ stopped: false })
 
-    await expect(dispatcher.dispatch("automation.run.disable", { runId: "automation-run:missing" }, { source: "mcp-http" }))
+    await expect(dispatcher.dispatch("app.automation.run.disable", { runId: "automation-run:missing" }, { source: "mcp-http" }))
       .rejects
       .toThrow('Automation run "automation-run:missing" was not active or was not found')
 
@@ -593,7 +593,7 @@ describe("automation capability dispatcher", () => {
       outcome: "failed",
       metadata: expect.objectContaining({
         source: "mcp-http",
-        automationAction: "automation.run.disable",
+        automationAction: "app.automation.run.disable",
         runId: "automation-run:missing",
         errorName: "Error",
       }),
@@ -604,7 +604,7 @@ describe("automation capability dispatcher", () => {
     const { auditSink, dispatcher, service } = createHarness()
     vi.mocked(service.runAutomationNow).mockResolvedValueOnce(null)
 
-    await expect(dispatcher.dispatch("automation.run.execute", { automationId: "automation:missing" }, { source: "mcp-http" }))
+    await expect(dispatcher.dispatch("app.automation.run.execute", { automationId: "automation:missing" }, { source: "mcp-http" }))
       .rejects
       .toThrow('Automation "automation:missing" was not found or did not start')
 
@@ -615,7 +615,7 @@ describe("automation capability dispatcher", () => {
       outcome: "failed",
       metadata: expect.objectContaining({
         source: "mcp-http",
-        automationAction: "automation.run.execute",
+        automationAction: "app.automation.run.execute",
         automationId: "automation:missing",
         errorName: "Error",
       }),
@@ -642,8 +642,8 @@ describe("automation capability dispatcher", () => {
     vi.mocked(service.runAutomationNow).mockResolvedValueOnce(sensitiveRun)
     vi.mocked(service.automationRunList).mockResolvedValueOnce([sensitiveRun])
 
-    const run = await dispatcher.dispatch("automation.run.execute", { automationId: "automation:1" }, { source: "mcp-http" })
-    const runs = await dispatcher.dispatch("automation.run.list", { automationId: "automation:1" }, { source: "mcp-http" })
+    const run = await dispatcher.dispatch("app.automation.run.execute", { automationId: "automation:1" }, { source: "mcp-http" })
+    const runs = await dispatcher.dispatch("app.automation.run.list", { automationId: "automation:1" }, { source: "mcp-http" })
     const serialized = JSON.stringify([run, runs])
 
     expect(serialized).not.toContain("sk-live-token")
@@ -660,7 +660,7 @@ describe("automation capability dispatcher", () => {
     const { auditSink, dispatcher, permissionGuard, service } = createHarness()
     vi.mocked(service.automationDisable).mockResolvedValueOnce({ ...baseItem, enabled: false })
 
-    await dispatcher.dispatch("automation.item.disable", { automationId: "automation:1" }, {
+    await dispatcher.dispatch("app.automation.item.disable", { automationId: "automation:1" }, {
       source: "mcp-http",
       actor: mcpClientActorForSource("mcp-http"),
     })
@@ -671,7 +671,7 @@ describe("automation capability dispatcher", () => {
       resource: "automation:automation:1",
       context: expect.objectContaining({
         source: "mcp-http",
-        automationAction: "automation.item.disable",
+        automationAction: "app.automation.item.disable",
         automationId: "automation:1",
       }),
     })
@@ -697,7 +697,7 @@ describe("automation capability dispatcher", () => {
       auditSink,
     })
 
-    await expect(dispatcher.dispatch("automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" }))
+    await expect(dispatcher.dispatch("app.automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" }))
       .rejects.toThrow("blocked")
 
     expect(service.automationEnable).not.toHaveBeenCalled()
@@ -723,18 +723,18 @@ describe("automation capability dispatcher", () => {
     })
     const unsafeRunId = "run-token=secret-value-/Users/example/private"
 
-    await expect(dispatcher.dispatch("automation.run.disable", { runId: unsafeRunId }, { source: "mcp-http" }))
+    await expect(dispatcher.dispatch("app.automation.run.disable", { runId: unsafeRunId }, { source: "mcp-http" }))
       .rejects.toThrow("blocked")
 
     expect(service.stopRun).not.toHaveBeenCalled()
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "automation:automation.run.disable",
+      resource: "automation:app.automation.run.disable",
       context: expect.not.objectContaining({ runId: unsafeRunId }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "automation.mutate",
       outcome: "denied",
-      resource: "automation:automation.run.disable",
+      resource: "automation:app.automation.run.disable",
       metadata: expect.not.objectContaining({ runId: unsafeRunId }),
     }))
     const serialized = JSON.stringify([
@@ -764,7 +764,7 @@ describe("automation capability dispatcher", () => {
       auditSink,
     })
 
-    await expect(dispatcher.dispatch("automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" }))
+    await expect(dispatcher.dispatch("app.automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" }))
       .rejects.toThrow("guard failed token=secret-value at /Users/liyang/private")
 
     expect(service.automationEnable).not.toHaveBeenCalled()
@@ -773,7 +773,7 @@ describe("automation capability dispatcher", () => {
       outcome: "failed",
       metadata: expect.objectContaining({
         source: "mcp-http",
-        automationAction: "automation.item.enable",
+        automationAction: "app.automation.item.enable",
         automationId: "automation:1",
         reason: "permission-check-error",
         errorName: "Error",
@@ -788,7 +788,7 @@ describe("automation capability dispatcher", () => {
     const { auditSink, dispatcher, service } = createHarness()
     vi.mocked(service.automationEnable).mockRejectedValueOnce(new Error("failed with private prompt"))
 
-    await expect(dispatcher.dispatch("automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" }))
+    await expect(dispatcher.dispatch("app.automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" }))
       .rejects.toThrow("failed with private prompt")
 
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({

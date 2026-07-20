@@ -88,7 +88,7 @@ export const configIpcModule: IpcModule = {
   methods: {
     get: {
       kind: "invoke",
-      channel: "synapse:config:get",
+      operationId: "app.config.operation.get",
       request: z.void(),
       response: configSchema,
       handler: async (_ctx) => {
@@ -104,7 +104,7 @@ export const configIpcModule: IpcModule = {
     },
     update: {
       kind: "invoke",
-      channel: "synapse:config:update",
+      operationId: "app.config.operation.update",
       request: configPatchSchema,
       response: configSchema,
       handler: async (ctx, patch: SynapseConfigPatch) => {
@@ -135,7 +135,7 @@ export const configIpcModule: IpcModule = {
     },
     exportBackup: {
       kind: "invoke",
-      channel: "synapse:config:export-backup",
+      operationId: "app.config.operation.export_backup",
       request: z.void(),
       response: exportResultSchema,
       handler: async (ctx) => {
@@ -200,7 +200,7 @@ export const configIpcModule: IpcModule = {
     },
     importBackup: {
       kind: "invoke",
-      channel: "synapse:config:import-backup",
+      operationId: "app.config.operation.import_backup",
       request: z.void(),
       response: importResultSchema,
       handler: async (ctx) => {
@@ -307,7 +307,7 @@ export const configIpcModule: IpcModule = {
     },
     resetApp: {
       kind: "invoke",
-      channel: "synapse:config:reset-app",
+      operationId: "app.config.operation.reset_app",
       request: z.void(),
       response: z.union([z.object({ success: z.literal(true) }), z.object({ success: z.literal(false), failedCount: z.number(), failedEntries: z.array(z.string()) })]),
       handler: async (ctx) => {

@@ -20,4 +20,4 @@ Prompt 位于资源仓库 App。页面支持按分类浏览、关键词搜索、
 
 ## MCP
 
-Content MCP 支持 Prompt 的 list、get、create、update 和 delete。创建和更新前可调用 `content_type_describe` 获取字段、分类和外观要求。
+Resource Repository MCP 支持 Prompt 的 list、get、create、update 和 delete。创建和更新前可调用 `app_resource_repository_type_describe` 获取字段、分类和外观要求。

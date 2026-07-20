@@ -41,60 +41,60 @@ describe("database dispatcher", () => {
   })
 
   it("rejects non-numeric row list pagination before reaching sqlite", async () => {
-    await expect(dispatchDatabaseAction("database.row.list", {
+    await expect(dispatchDatabaseAction("app.database.row.list", {
       tableName: "tasks",
       limit: "abc",
     })).rejects.toThrow("Missing or invalid 'limit': expected number")
 
-    await expect(dispatchDatabaseAction("database.row.list", {
+    await expect(dispatchDatabaseAction("app.database.row.list", {
       tableName: "tasks",
       offset: Number.POSITIVE_INFINITY,
     })).rejects.toThrow("Missing or invalid 'offset': expected number")
   })
 
   it("rejects unsafe row list pagination bounds before reaching sqlite", async () => {
-    await expect(dispatchDatabaseAction("database.row.list", {
+    await expect(dispatchDatabaseAction("app.database.row.list", {
       tableName: "tasks",
       limit: -1,
     })).rejects.toThrow("Invalid 'limit': expected non-negative integer")
 
-    await expect(dispatchDatabaseAction("database.row.list", {
+    await expect(dispatchDatabaseAction("app.database.row.list", {
       tableName: "tasks",
       offset: -1,
     })).rejects.toThrow("Invalid 'offset': expected non-negative integer")
 
-    await expect(dispatchDatabaseAction("database.row.list", {
+    await expect(dispatchDatabaseAction("app.database.row.list", {
       tableName: "tasks",
       limit: 1.5,
     })).rejects.toThrow("Invalid 'limit': expected non-negative integer")
 
-    await expect(dispatchDatabaseAction("database.row.list", {
+    await expect(dispatchDatabaseAction("app.database.row.list", {
       tableName: "tasks",
       limit: DATABASE_ROW_LIST_MAX_LIMIT + 1,
     })).rejects.toThrow(`Invalid 'limit': expected integer between 0 and ${DATABASE_ROW_LIST_MAX_LIMIT}`)
   })
 
   it("bounds operation log list pagination before reaching sqlite", async () => {
-    await expect(dispatchDatabaseAction("database.log.list", {
+    await expect(dispatchDatabaseAction("app.database.log.list", {
       limit: "abc",
     })).rejects.toThrow("Missing or invalid 'limit': expected number")
 
-    await expect(dispatchDatabaseAction("database.log.list", {
+    await expect(dispatchDatabaseAction("app.database.log.list", {
       limit: -1,
     })).rejects.toThrow("Invalid 'limit': expected non-negative integer")
 
-    await expect(dispatchDatabaseAction("database.log.list", {
+    await expect(dispatchDatabaseAction("app.database.log.list", {
       limit: 1.5,
     })).rejects.toThrow("Invalid 'limit': expected non-negative integer")
 
-    await expect(dispatchDatabaseAction("database.log.list", {
+    await expect(dispatchDatabaseAction("app.database.log.list", {
       limit: DATABASE_OPERATION_LOG_LIST_MAX_LIMIT + 1,
     })).rejects.toThrow(`Invalid 'limit': expected integer between 0 and ${DATABASE_OPERATION_LOG_LIST_MAX_LIMIT}`)
 
-    await dispatchDatabaseAction("database.log.list", {})
+    await dispatchDatabaseAction("app.database.log.list", {})
     expect(mocks.databaseService.databaseLogList).toHaveBeenLastCalledWith(DATABASE_OPERATION_LOG_LIST_DEFAULT_LIMIT)
 
-    await dispatchDatabaseAction("database.log.list", {
+    await dispatchDatabaseAction("app.database.log.list", {
       limit: DATABASE_OPERATION_LOG_LIST_MAX_LIMIT,
     })
     expect(mocks.databaseService.databaseLogList).toHaveBeenLastCalledWith(DATABASE_OPERATION_LOG_LIST_MAX_LIMIT)
@@ -105,7 +105,7 @@ describe("database dispatcher", () => {
       throw new Error("token=sk-test-secret")
     })
 
-    const result = await dispatchDatabaseAction("database.row.create", {
+    const result = await dispatchDatabaseAction("app.database.row.create", {
       data: { title: "private task" },
       tableName: "tasks",
     }, { source: "mcp-http" })
@@ -114,7 +114,7 @@ describe("database dispatcher", () => {
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       "Database mutation operation log write failed.",
       expect.objectContaining({
-        action: "database.row.create",
+        action: "app.database.row.create",
         dryRun: false,
         errorName: "Error",
         source: "mcp-http",
@@ -131,7 +131,7 @@ describe("database dispatcher", () => {
       throw new Error("renderer refresh failed")
     })
 
-    const result = await dispatchDatabaseAction("database.row.create", {
+    const result = await dispatchDatabaseAction("app.database.row.create", {
       data: { title: "private task" },
       tableName: "tasks",
     }, { source: "api" })
@@ -140,7 +140,7 @@ describe("database dispatcher", () => {
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       "Database mutation change notification failed.",
       expect.objectContaining({
-        action: "database.row.create",
+        action: "app.database.row.create",
         dryRun: false,
         errorName: "Error",
         source: "api",
@@ -165,19 +165,19 @@ describe("database dispatcher", () => {
     }
     const unsafeTableName = "tasks-token=secret-value-/Users/example/private"
 
-    await expect(dispatchDatabaseAction("database.row.create", {
+    await expect(dispatchDatabaseAction("app.database.row.create", {
       tableName: unsafeTableName,
     }, { source: "mcp-http" }, { permissionGuard, auditSink }))
       .rejects.toThrow("Missing or invalid 'data': expected object")
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "database:database.row.create",
+      resource: "database:app.database.row.create",
       context: expect.not.objectContaining({ table: unsafeTableName }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "database.mutate",
       outcome: "failed",
-      resource: "database:database.row.create",
+      resource: "database:app.database.row.create",
       metadata: expect.not.objectContaining({ table: unsafeTableName }),
     }))
     const serialized = JSON.stringify([
@@ -205,7 +205,7 @@ describe("database dispatcher", () => {
       clearForTests: vi.fn(),
     }
 
-    const result = await dispatchDatabaseAction("database.row.list", {
+    const result = await dispatchDatabaseAction("app.database.row.list", {
       tableName: "tasks",
       limit: 10,
     }, { source: "mcp-http" }, { permissionGuard, auditSink })
@@ -215,7 +215,7 @@ describe("database dispatcher", () => {
       action: "database.read",
       resource: "database:tasks",
       context: expect.objectContaining({
-        databaseAction: "database.row.list",
+        databaseAction: "app.database.row.list",
         source: "mcp-http",
         table: "tasks",
       }),
@@ -225,7 +225,7 @@ describe("database dispatcher", () => {
       outcome: "allowed",
       resource: "database:tasks",
       metadata: expect.objectContaining({
-        databaseAction: "database.row.list",
+        databaseAction: "app.database.row.list",
         source: "mcp-http",
         table: "tasks",
       }),
@@ -251,16 +251,16 @@ describe("database dispatcher", () => {
       clearForTests: vi.fn(),
     }
 
-    await expect(dispatchDatabaseAction("database.log.list", {}, { source: "mcp-http" }, { permissionGuard, auditSink }))
+    await expect(dispatchDatabaseAction("app.database.log.list", {}, { source: "mcp-http" }, { permissionGuard, auditSink }))
       .rejects.toThrow("read denied")
 
     expect(mocks.databaseService.databaseLogList).not.toHaveBeenCalled()
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "database.read",
       outcome: "denied",
-      resource: "database:database.log.list",
+      resource: "database:app.database.log.list",
       metadata: expect.objectContaining({
-        databaseAction: "database.log.list",
+        databaseAction: "app.database.log.list",
         policyId: "database-read-test",
         reason: "read denied",
         source: "mcp-http",
@@ -282,7 +282,7 @@ describe("database dispatcher", () => {
     }
     const unsafeTableName = "tasks-token=secret-value-/Users/example/private"
 
-    await expect(dispatchDatabaseAction("database.row.list", {
+    await expect(dispatchDatabaseAction("app.database.row.list", {
       tableName: unsafeTableName,
       limit: "abc",
     }, { source: "mcp-http" }, { permissionGuard, auditSink }))
@@ -290,13 +290,13 @@ describe("database dispatcher", () => {
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "database.read",
-      resource: "database:database.row.list",
+      resource: "database:app.database.row.list",
       context: expect.not.objectContaining({ table: unsafeTableName }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "database.read",
       outcome: "failed",
-      resource: "database:database.row.list",
+      resource: "database:app.database.row.list",
       metadata: expect.not.objectContaining({ table: unsafeTableName }),
     }))
     const serialized = JSON.stringify([

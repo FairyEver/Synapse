@@ -276,26 +276,6 @@ export class CcUsageAnalysisService {
     }
   }
 
-  getPricingRules(): ModelPriceRule[] {
-    return new ModelPriceService(this.db).listRules()
-  }
-
-  savePricingRules(rules: readonly ModelPriceRuleInput[]): ModelPriceRule[] {
-    const startedAt = Date.now()
-    const modelPriceService = new ModelPriceService(this.db)
-    const oldRules = modelPriceService.listRules()
-    const savedRules = modelPriceService.saveRules(rules)
-    this.logger.info("Usage pricing rules saved.", {
-      ...createPricingRulesSaveLogMetadata(this.db, oldRules, savedRules),
-      elapsedMs: Date.now() - startedAt,
-    })
-    return savedRules
-  }
-
-  resetPricingRules(): ModelPriceRule[] {
-    return new ModelPriceService(this.db).clearRules()
-  }
-
   getTime(range: UsageRangeInput): UsageTimeBucket[] {
     this.ensureAggregatesReady()
     if (range.preset === "today") {

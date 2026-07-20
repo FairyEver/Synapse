@@ -37,7 +37,7 @@ export function WorkflowModule() {
     setCreating(true)
     try {
       const workflowApi = requireBridgeDomain("workflow")
-      const result = await workflowApi.create()
+      const result = await workflowApi.definition.create()
       if ("errors" in result) {
         toast.error(result.errors[0]?.message ?? "创建工作流失败：校验未通过")
         return
@@ -46,10 +46,10 @@ export function WorkflowModule() {
       setListKey((k) => k + 1)
 
       try {
-        await workflowApi.openEditor(result.id)
+        await workflowApi.operation.openEditor(result.id)
       } catch (err) {
         logger.warn("Workflow created but open editor failed.", {
-          boundary: "renderer.workflow.create",
+          boundary: "renderer.workflow.definition.create",
           workflowId: result.id,
           ...errorDiagnostic(err),
         })
@@ -57,7 +57,7 @@ export function WorkflowModule() {
       }
     } catch (err) {
       logger.warn("Workflow create failed.", {
-        boundary: "renderer.workflow.create",
+        boundary: "renderer.workflow.definition.create",
         ...errorDiagnostic(err),
       })
       toast.error("创建工作流失败，请重试")
@@ -68,7 +68,7 @@ export function WorkflowModule() {
 
   const handleImportStart = async () => {
     try {
-      const preview = await requireBridgeDomain("workflow").inspectImportPackage()
+      const preview = await requireBridgeDomain("workflow").operation.inspectImportPackage()
       if (preview) setImportPreview(preview)
     } catch (err) {
       const diagnostic = errorDiagnostic(err)
@@ -84,7 +84,7 @@ export function WorkflowModule() {
     if (!importPreview || isShareImportPreview(importPreview)) return
     setImporting(true)
     try {
-      const result = await requireBridgeDomain("workflow").importPackage(importPreview.packagePath, mappings, options, importPreview.packageDigest)
+      const result = await requireBridgeDomain("workflow").operation.importPackage(importPreview.packagePath, mappings, options, importPreview.packageDigest)
       if ("errors" in result) {
         toast.error(result.errors[0]?.message ?? "导入失败：校验未通过")
         return
@@ -93,7 +93,7 @@ export function WorkflowModule() {
       setListKey((key) => key + 1)
       toast.success("工作流已导入")
       try {
-        await requireBridgeDomain("workflow").openEditor(result.workflowId)
+        await requireBridgeDomain("workflow").operation.openEditor(result.workflowId)
       } catch (err) {
         logger.warn("Workflow import open editor failed.", {
           boundary: "renderer.workflow.import.openEditor",
@@ -118,7 +118,7 @@ export function WorkflowModule() {
     if (!importPreview || !isShareImportPreview(importPreview)) return
     setImporting(true)
     try {
-      const result = await requireBridgeDomain("workflow").importSharePackage(
+      const result = await requireBridgeDomain("workflow").operation.importSharePackage(
         importPreview.packagePath,
         selections,
         importPreview.packageDigest,
@@ -137,7 +137,7 @@ export function WorkflowModule() {
         action: {
           label: "撤销",
           onClick: () => {
-            void requireBridgeDomain("workflow").undoShareImport(lineageId).then(() => {
+            void requireBridgeDomain("workflow").operation.undoShareImport(lineageId).then(() => {
               setListKey((key) => key + 1)
               toast.success("已撤销本次导入")
             }).catch((err) => {
@@ -152,7 +152,7 @@ export function WorkflowModule() {
         },
       } : undefined)
       try {
-        await requireBridgeDomain("workflow").openEditor(result.workflowId)
+        await requireBridgeDomain("workflow").operation.openEditor(result.workflowId)
       } catch (err) {
         logger.warn("Workflow share import open editor failed.", {
           boundary: "renderer.workflow.share-import.openEditor",

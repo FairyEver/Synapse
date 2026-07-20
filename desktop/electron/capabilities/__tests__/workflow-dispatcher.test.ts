@@ -108,7 +108,7 @@ describe("createWorkflowDispatcher", () => {
 
   it("describes option params in the workflow param update MCP schema", () => {
     const tools = buildWorkflowTools()
-    const paramUpdateTool = tools.find((item) => item.name === "workflow_param_update")
+    const paramUpdateTool = tools.find((item) => item.name === "app_workflow_param_update")
     expect(paramUpdateTool).toBeDefined()
 
     const paramSchema = (paramUpdateTool?.inputSchema as {
@@ -140,13 +140,13 @@ describe("createWorkflowDispatcher", () => {
       }),
     ]))
 
-    const nodeTypeListTool = tools.find((item) => item.name === "workflow_node_type_list")
+    const nodeTypeListTool = tools.find((item) => item.name === "app_workflow_node_type_list")
     expect(nodeTypeListTool?.description).toContain("text/number/option")
 
-    const nodeTypeDescribeTool = tools.find((item) => item.name === "workflow_node_type_describe")
+    const nodeTypeDescribeTool = tools.find((item) => item.name === "app_workflow_node_type_describe")
     expect(nodeTypeDescribeTool?.description).toContain("configSchema.required")
 
-    const runExecuteTool = tools.find((item) => item.name === "workflow_run_execute")
+    const runExecuteTool = tools.find((item) => item.name === "app_workflow_run_execute")
     const runExecuteParams = (runExecuteTool?.inputSchema as {
       properties?: { params?: { description?: string } }
     }).properties?.params
@@ -157,7 +157,7 @@ describe("createWorkflowDispatcher", () => {
     expect(runExecuteParams?.description).toContain("Unknown keys are rejected")
     expect(runExecuteParams?.description).toContain("Custom run values are not saved back")
 
-    const runGetTool = tools.find((item) => item.name === "workflow_run_get")
+    const runGetTool = tools.find((item) => item.name === "app_workflow_run_get")
     expect(runGetTool?.description).toContain("definitionMigration")
     expect(runGetTool?.inputSchema).toMatchObject({
       required: ["workflowId", "runId"],
@@ -166,14 +166,14 @@ describe("createWorkflowDispatcher", () => {
         runId: { type: "string" },
       },
     })
-    const runListTool = tools.find((item) => item.name === "workflow_run_list")
+    const runListTool = tools.find((item) => item.name === "app_workflow_run_list")
     expect(runListTool?.description).toContain("before snapshot content is read")
     expect(runListTool?.inputSchema).toMatchObject({
       properties: {
         limit: { type: "integer", minimum: 1, maximum: 20 },
       },
     })
-    const runDisableTool = tools.find((item) => item.name === "workflow_run_disable")
+    const runDisableTool = tools.find((item) => item.name === "app_workflow_run_disable")
     expect(runDisableTool?.inputSchema).toMatchObject({
       required: ["workflowId", "runId"],
       properties: {
@@ -185,7 +185,7 @@ describe("createWorkflowDispatcher", () => {
 
   it("requires workflow schema metadata in inspect and update MCP schemas", () => {
     const tools = buildWorkflowTools()
-    for (const toolName of ["workflow_definition_inspect", "workflow_definition_update"]) {
+    for (const toolName of ["app_workflow_definition_inspect", "app_workflow_definition_update"]) {
       const tool = tools.find((item) => item.name === toolName)
       const definitionSchema = (tool?.inputSchema as {
         properties?: {
@@ -199,14 +199,14 @@ describe("createWorkflowDispatcher", () => {
       expect(definitionSchema?.required).toContain("meta")
       expect(definitionSchema?.properties?.meta?.required).toContain("schemaVersion")
     }
-    expect(tools.find((item) => item.name === "workflow_definition_inspect")?.description)
+    expect(tools.find((item) => item.name === "app_workflow_definition_inspect")?.description)
       .toContain("required Synapse-managed meta.schemaVersion")
   })
 
-  it("workflow.definition.list dispatches correctly", async () => {
+  it("app.workflow.definition.list dispatches correctly", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch("workflow.definition.list", {}, { source: "api" })
+    const result = await dispatcher.dispatch("app.workflow.definition.list", {}, { source: "api" })
     expect(result.ok).toBe(true)
     expect(result.data).toEqual([{ id: "wf-1", name: "Test", version: "v1", nodeCount: 2, createdAt: 1, updatedAt: 2 }])
     expect(deps.workflowService.list).toHaveBeenCalled()
@@ -230,22 +230,22 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
 
     await expect(dispatcher.dispatch(
-      "workflow.run.list",
+      "app.workflow.run.list",
       { workflowId: "wf-1", limit: 7 },
       { source: "api" },
     )).resolves.toMatchObject({ ok: true, data: [snapshot] })
     expect(deps.snapshotService.list).toHaveBeenCalledWith("wf-1", 7)
   })
 
-  it("workflow.definition.create returns id + versionHash", async () => {
+  it("app.workflow.definition.create returns id + versionHash", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch("workflow.definition.create", {}, { source: "api" })
+    const result = await dispatcher.dispatch("app.workflow.definition.create", {}, { source: "api" })
     expect(result.ok).toBe(true)
     expect(result.data).toEqual({ id: "wf-new", versionHash: "v_new" })
   })
 
-  it("workflow.run.get hydrates snapshot fallback to the run status contract", async () => {
+  it("app.workflow.run.get hydrates snapshot fallback to the run status contract", async () => {
     const snapshot: WorkflowRunSnapshot = {
       runId: "run-snap",
       workflowId: "wf-1",
@@ -278,7 +278,7 @@ describe("createWorkflowDispatcher", () => {
     })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    const result = await dispatcher.dispatch("workflow.run.get", { workflowId: "wf-1", runId: "run-snap" }, { source: "api" })
+    const result = await dispatcher.dispatch("app.workflow.run.get", { workflowId: "wf-1", runId: "run-snap" }, { source: "api" })
 
     expect(result.ok).toBe(true)
     expect(result.data).toEqual({
@@ -298,7 +298,7 @@ describe("createWorkflowDispatcher", () => {
     expect(deps.snapshotService.findByRunId).not.toHaveBeenCalled()
   })
 
-  it("workflow.run.get sanitizes active run status before returning it to MCP callers", async () => {
+  it("app.workflow.run.get sanitizes active run status before returning it to MCP callers", async () => {
     const activeStatus: WorkflowRunStatus = {
       runId: "run-active",
       workflowId: "wf-1",
@@ -350,7 +350,7 @@ describe("createWorkflowDispatcher", () => {
     })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    const result = await dispatcher.dispatch("workflow.run.get", { workflowId: "wf-1", runId: "run-active" }, { source: "mcp-http" })
+    const result = await dispatcher.dispatch("app.workflow.run.get", { workflowId: "wf-1", runId: "run-active" }, { source: "mcp-http" })
 
     expect(result.ok).toBe(true)
     const serialized = JSON.stringify(result.data)
@@ -370,7 +370,7 @@ describe("createWorkflowDispatcher", () => {
     })
   })
 
-  it("workflow.run.get returns null when the run belongs to another workflow", async () => {
+  it("app.workflow.run.get returns null when the run belongs to another workflow", async () => {
     const snapshot = {
       runId: "run-private",
       workflowId: "wf-private",
@@ -389,7 +389,7 @@ describe("createWorkflowDispatcher", () => {
     })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    const result = await dispatcher.dispatch("workflow.run.get", {
+    const result = await dispatcher.dispatch("app.workflow.run.get", {
       workflowId: "wf-public",
       runId: "run-private",
     }, { source: "mcp-http" })
@@ -397,11 +397,11 @@ describe("createWorkflowDispatcher", () => {
     expect(result).toEqual({ ok: true, data: null })
   })
 
-  it("workflow.run.get rejects unsafe run ids before querying snapshots", async () => {
+  it("app.workflow.run.get rejects unsafe run ids before querying snapshots", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
 
-    await expect(dispatcher.dispatch("workflow.run.get", { workflowId: "wf-1", runId: "../escaped-run" }, { source: "api" }))
+    await expect(dispatcher.dispatch("app.workflow.run.get", { workflowId: "wf-1", runId: "../escaped-run" }, { source: "api" }))
       .rejects
       .toThrow("Invalid workflow run id")
     expect(deps.getRunStatus).not.toHaveBeenCalled()
@@ -431,14 +431,14 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
 
     const firstMutation = dispatcher.dispatch(
-      "workflow.node.update",
+      "app.workflow.node.update",
       { workflowId: "wf-1", nodeId: "n1", patch: { name: "Updated End" } },
       { source: "api" },
     )
     await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1))
 
     const definitionUpdate = dispatcher.dispatch(
-      "workflow.definition.update",
+      "app.workflow.definition.update",
       { definition: { ...baseDefinition, name: "Replacement" } },
       { source: "api" },
     )
@@ -476,13 +476,13 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
 
     const firstMutation = dispatcher.dispatch(
-      "workflow.node.update",
+      "app.workflow.node.update",
       { workflowId: "wf-1", nodeId: "n1", patch: { name: "Updated Prompt" } },
       { source: "api" },
     )
     await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1))
 
-    const deletion = dispatcher.dispatch("workflow.definition.delete", { workflowId: "wf-1" }, { source: "api" })
+    const deletion = dispatcher.dispatch("app.workflow.definition.delete", { workflowId: "wf-1" }, { source: "api" })
     await Promise.resolve()
     await Promise.resolve()
 
@@ -507,7 +507,7 @@ describe("createWorkflowDispatcher", () => {
     delete definitionWithoutId.id
 
     await expect(dispatcher.dispatch(
-      "workflow.definition.update",
+      "app.workflow.definition.update",
       { definition: definitionWithoutId },
       { source: "api" },
     )).rejects.toThrow("Missing or invalid 'definition.id'")
@@ -525,12 +525,12 @@ describe("createWorkflowDispatcher", () => {
     }
 
     await expect(dispatcher.dispatch(
-      "workflow.definition.update",
+      "app.workflow.definition.update",
       { definition },
       { source: "api" },
     )).rejects.toThrow("Missing or invalid 'definition.meta': expected object")
     await expect(dispatcher.dispatch(
-      "workflow.definition.update",
+      "app.workflow.definition.update",
       { definition: { ...definition, meta: {} } },
       { source: "api" },
     )).rejects.toThrow("Missing or invalid 'definition.meta.schemaVersion': expected non-empty string")
@@ -549,12 +549,12 @@ describe("createWorkflowDispatcher", () => {
     }
 
     await expect(dispatcher.dispatch(
-      "workflow.definition.inspect",
+      "app.workflow.definition.inspect",
       { definition },
       { source: "api" },
     )).rejects.toThrow("Missing or invalid 'definition.meta': expected object")
     await expect(dispatcher.dispatch(
-      "workflow.definition.inspect",
+      "app.workflow.definition.inspect",
       { definition: { ...definition, meta: {} } },
       { source: "api" },
     )).rejects.toThrow("Missing or invalid 'definition.meta.schemaVersion': expected non-empty string")
@@ -573,7 +573,7 @@ describe("createWorkflowDispatcher", () => {
     }
 
     const result = await dispatcher.dispatch(
-      "workflow.definition.inspect",
+      "app.workflow.definition.inspect",
       { definition },
       { source: "api" },
     )
@@ -632,7 +632,7 @@ describe("createWorkflowDispatcher", () => {
     }
 
     const result = await dispatcher.dispatch(
-      "workflow.definition.inspect",
+      "app.workflow.definition.inspect",
       { definition },
       { source: "api" },
     )
@@ -665,7 +665,7 @@ describe("createWorkflowDispatcher", () => {
     }
 
     const result = await dispatcher.dispatch(
-      "workflow.definition.inspect",
+      "app.workflow.definition.inspect",
       { definition },
       { source: "api" },
     )
@@ -703,7 +703,7 @@ describe("createWorkflowDispatcher", () => {
       }
 
       const result = await dispatcher.dispatch(
-        "workflow.definition.inspect",
+        "app.workflow.definition.inspect",
         { definition },
         { source: "api" },
       )
@@ -759,7 +759,7 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
 
     await expect(dispatcher.dispatch(
-      "workflow.node.update",
+      "app.workflow.node.update",
       { workflowId: "parent", nodeId: "call", patch: { name: "Updated Call" } },
       { source: "mcp-http" },
     )).rejects.toThrow("多选资源参数「input_files」不能使用 paramTemplates")
@@ -779,7 +779,7 @@ describe("createWorkflowDispatcher", () => {
     const deps = makeDeps({ permissionGuard, auditSink })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    const result = await dispatcher.dispatch("workflow.definition.create", {}, {
+    const result = await dispatcher.dispatch("app.workflow.definition.create", {}, {
       source: "mcp-http",
       actor: mcpClientActorForSource("mcp-http"),
     })
@@ -788,20 +788,20 @@ describe("createWorkflowDispatcher", () => {
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "workflow.mutate",
       actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
-      resource: "workflow:workflow.definition.create",
+      resource: "workflow:app.workflow.definition.create",
       context: {
         source: "mcp-http",
-        workflowAction: "workflow.definition.create",
+        workflowAction: "app.workflow.definition.create",
       },
     })
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "workflow.mutate",
       actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
-      resource: "workflow:workflow.definition.create",
+      resource: "workflow:app.workflow.definition.create",
       outcome: "allowed",
       metadata: expect.objectContaining({
         source: "mcp-http",
-        workflowAction: "workflow.definition.create",
+        workflowAction: "app.workflow.definition.create",
       }),
     }))
   })
@@ -819,7 +819,7 @@ describe("createWorkflowDispatcher", () => {
     const deps = makeDeps({ permissionGuard, auditSink })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    const result = await dispatcher.dispatch("workflow.definition.get", { workflowId: "wf-1" }, {
+    const result = await dispatcher.dispatch("app.workflow.definition.get", { workflowId: "wf-1" }, {
       source: "mcp-http",
       actor: mcpClientActorForSource("mcp-http"),
     })
@@ -832,7 +832,7 @@ describe("createWorkflowDispatcher", () => {
       resource: "workflow:wf-1",
       context: {
         source: "mcp-http",
-        workflowAction: "workflow.definition.get",
+        workflowAction: "app.workflow.definition.get",
         workflowId: "wf-1",
       },
     })
@@ -843,7 +843,7 @@ describe("createWorkflowDispatcher", () => {
       outcome: "allowed",
       metadata: expect.objectContaining({
         source: "mcp-http",
-        workflowAction: "workflow.definition.get",
+        workflowAction: "app.workflow.definition.get",
         workflowId: "wf-1",
       }),
     }))
@@ -868,7 +868,7 @@ describe("createWorkflowDispatcher", () => {
     const deps = makeDeps({ permissionGuard, auditSink })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    const result = await dispatcher.dispatch("workflow.definition.update", { definition }, {
+    const result = await dispatcher.dispatch("app.workflow.definition.update", { definition }, {
       source: "mcp-http",
       actor: mcpClientActorForSource("mcp-http"),
     })
@@ -880,7 +880,7 @@ describe("createWorkflowDispatcher", () => {
       resource: "workflow:wf-1",
       context: expect.objectContaining({
         source: "mcp-http",
-        workflowAction: "workflow.definition.update",
+        workflowAction: "app.workflow.definition.update",
         workflowId: "wf-1",
         hasDefinition: true,
       }),
@@ -892,7 +892,7 @@ describe("createWorkflowDispatcher", () => {
       outcome: "allowed",
       metadata: expect.objectContaining({
         source: "mcp-http",
-        workflowAction: "workflow.definition.update",
+        workflowAction: "app.workflow.definition.update",
         workflowId: "wf-1",
         hasDefinition: true,
       }),
@@ -912,7 +912,7 @@ describe("createWorkflowDispatcher", () => {
     const deps = makeDeps({ permissionGuard, auditSink })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    await expect(dispatcher.dispatch("workflow.definition.delete", { workflowId: "wf-1" }, { source: "mcp-http" }))
+    await expect(dispatcher.dispatch("app.workflow.definition.delete", { workflowId: "wf-1" }, { source: "mcp-http" }))
       .rejects
       .toThrow("workflow denied")
 
@@ -923,7 +923,7 @@ describe("createWorkflowDispatcher", () => {
       outcome: "denied",
       metadata: expect.objectContaining({
         source: "mcp-http",
-        workflowAction: "workflow.definition.delete",
+        workflowAction: "app.workflow.definition.delete",
         workflowId: "wf-1",
         policyId: "deny-workflow",
       }),
@@ -943,7 +943,7 @@ describe("createWorkflowDispatcher", () => {
     const deps = makeDeps({ permissionGuard, auditSink })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    await expect(dispatcher.dispatch("workflow.run.list", { workflowId: "wf-1" }, { source: "mcp-http" }))
+    await expect(dispatcher.dispatch("app.workflow.run.list", { workflowId: "wf-1" }, { source: "mcp-http" }))
       .rejects
       .toThrow("workflow read denied")
 
@@ -954,7 +954,7 @@ describe("createWorkflowDispatcher", () => {
       outcome: "denied",
       metadata: expect.objectContaining({
         source: "mcp-http",
-        workflowAction: "workflow.run.list",
+        workflowAction: "app.workflow.run.list",
         workflowId: "wf-1",
         policyId: "deny-workflow-read",
       }),
@@ -978,7 +978,7 @@ describe("createWorkflowDispatcher", () => {
     const deps = makeDeps({ permissionGuard, auditSink })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    await expect(dispatcher.dispatch("workflow.run.get", {
+    await expect(dispatcher.dispatch("app.workflow.run.get", {
       workflowId: "wf-private",
       runId: "run-private",
     }, { source: "mcp-http" })).rejects.toThrow("workflow run denied")
@@ -991,7 +991,7 @@ describe("createWorkflowDispatcher", () => {
       resource: "workflow:wf-private",
       context: {
         source: "mcp-http",
-        workflowAction: "workflow.run.get",
+        workflowAction: "app.workflow.run.get",
         workflowId: "wf-private",
         runId: "run-private",
       },
@@ -1011,23 +1011,23 @@ describe("createWorkflowDispatcher", () => {
   it("denies workflow discovery and inspect reads before calling handlers", async () => {
     const cases = [
       {
-        action: "workflow.node_type.list",
+        action: "app.workflow.node_type.list",
         params: {},
-        resource: "workflow:workflow.node_type.list",
+        resource: "workflow:app.workflow.node_type.list",
         assertNotCalled: (deps: WorkflowDispatchDeps) => {
           expect(deps.nodeTypeRegistry.listTypes).not.toHaveBeenCalled()
         },
       },
       {
-        action: "workflow.node_type.describe",
+        action: "app.workflow.node_type.describe",
         params: { nodeType: "prompt" },
-        resource: "workflow:workflow.node_type.describe",
+        resource: "workflow:app.workflow.node_type.describe",
         assertNotCalled: (deps: WorkflowDispatchDeps) => {
           expect(deps.nodeTypeRegistry.getManifest).not.toHaveBeenCalled()
         },
       },
       {
-        action: "workflow.definition.inspect",
+        action: "app.workflow.definition.inspect",
         params: {
           definition: {
             id: "wf-inspect", name: "Inspect", description: "", version: "v1",
@@ -1093,7 +1093,7 @@ describe("createWorkflowDispatcher", () => {
     const deps = makeDeps({ permissionGuard, auditSink })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    await expect(dispatcher.dispatch("workflow.definition.delete", { workflowId: "wf-1" }, { source: "mcp-http" }))
+    await expect(dispatcher.dispatch("app.workflow.definition.delete", { workflowId: "wf-1" }, { source: "mcp-http" }))
       .rejects
       .toThrow("guard failed with token=secret-prompt at /Users/liyang/private-workflow")
 
@@ -1104,7 +1104,7 @@ describe("createWorkflowDispatcher", () => {
       outcome: "failed",
       metadata: expect.objectContaining({
         source: "mcp-http",
-        workflowAction: "workflow.definition.delete",
+        workflowAction: "app.workflow.definition.delete",
         workflowId: "wf-1",
         reason: "permission-check-error",
         errorName: "Error",
@@ -1144,17 +1144,17 @@ describe("createWorkflowDispatcher", () => {
     })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    await expect(dispatcher.dispatch("workflow.definition.create", {}, { source: "mcp-http" }))
+    await expect(dispatcher.dispatch("app.workflow.definition.create", {}, { source: "mcp-http" }))
       .rejects
       .toThrow("create failed with token=secret-prompt at /Users/liyang/secret-workspace")
 
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "workflow.mutate",
-      resource: "workflow:workflow.definition.create",
+      resource: "workflow:app.workflow.definition.create",
       outcome: "failed",
       metadata: expect.objectContaining({
         source: "mcp-http",
-        workflowAction: "workflow.definition.create",
+        workflowAction: "app.workflow.definition.create",
         errorName: "Error",
         errorLength: "Error: create failed with token=secret-prompt at /Users/liyang/secret-workspace".length,
       }),
@@ -1169,7 +1169,7 @@ describe("createWorkflowDispatcher", () => {
     expect(serializedLog).not.toContain("/Users/liyang/secret-workspace")
   })
 
-  it("workflow.definition.create accepts workflow default project, provider, model tier, and timeout", async () => {
+  it("app.workflow.definition.create accepts workflow default project, provider, model tier, and timeout", async () => {
     const created = {
       id: "wf-new", name: "新工作流", description: "", version: "v_new",
       createdAt: 1, updatedAt: 2, params: [],
@@ -1189,7 +1189,7 @@ describe("createWorkflowDispatcher", () => {
     })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    const result = await dispatcher.dispatch("workflow.definition.create", {
+    const result = await dispatcher.dispatch("app.workflow.definition.create", {
       name: "Review Flow",
       defaultProjectId: "project-1",
       defaultProviderId: "local-claude-code",
@@ -1212,18 +1212,18 @@ describe("createWorkflowDispatcher", () => {
     expect(result.data).toEqual({ id: "wf-new", versionHash: "v_saved" })
   })
 
-  it("workflow.definition.get returns null for missing", async () => {
+  it("app.workflow.definition.get returns null for missing", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch("workflow.definition.get", { workflowId: "nonexistent" }, { source: "api" })
+    const result = await dispatcher.dispatch("app.workflow.definition.get", { workflowId: "nonexistent" }, { source: "api" })
     expect(result.ok).toBe(true)
     expect(result.data).toBeNull()
   })
 
-  it("workflow.node_type.list returns array", async () => {
+  it("app.workflow.node_type.list returns array", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch("workflow.node_type.list", {}, { source: "api" })
+    const result = await dispatcher.dispatch("app.workflow.node_type.list", {}, { source: "api" })
     expect(result.ok).toBe(true)
     expect(Array.isArray(result.data)).toBe(true)
     const data = result.data as Array<{ type: string; title: string }>
@@ -1232,10 +1232,10 @@ describe("createWorkflowDispatcher", () => {
     expect(data[0].title).toBe("AI 对话")
   })
 
-  it("workflow.run.execute calls runWorkflow", async () => {
+  it("app.workflow.run.execute calls runWorkflow", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch("workflow.run.execute", { workflowId: "wf-1", params: { key: "val" } }, { source: "api" })
+    const result = await dispatcher.dispatch("app.workflow.run.execute", { workflowId: "wf-1", params: { key: "val" } }, { source: "api" })
     expect(result.ok).toBe(true)
     expect(result.data).toEqual({ runId: "run-1" })
     expect(deps.runWorkflow).toHaveBeenCalledWith("wf-1", { key: "val" }, {
@@ -1243,13 +1243,13 @@ describe("createWorkflowDispatcher", () => {
     })
   })
 
-  it("workflow.run.execute rejects non-object params before starting a run", async () => {
+  it("app.workflow.run.execute rejects non-object params before starting a run", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
 
     for (const params of ["", [], null]) {
       await expect(dispatcher.dispatch(
-        "workflow.run.execute",
+        "app.workflow.run.execute",
         { workflowId: "wf-1", params },
         { source: "api" },
       )).rejects.toThrow("Missing or invalid 'params': expected object")
@@ -1258,14 +1258,14 @@ describe("createWorkflowDispatcher", () => {
     expect(deps.runWorkflow).not.toHaveBeenCalled()
 
     await expect(dispatcher.dispatch(
-      "workflow.run.execute",
+      "app.workflow.run.execute",
       { workflowId: "wf-1" },
       { source: "api" },
     )).resolves.toMatchObject({ ok: true, data: { runId: "run-1" } })
     expect(deps.runWorkflow).toHaveBeenCalledWith("wf-1", {}, expect.any(Object))
   })
 
-  it("workflow.run.execute forwards mixed multi-resource arrays unchanged for runtime normalization", async () => {
+  it("app.workflow.run.execute forwards mixed multi-resource arrays unchanged for runtime normalization", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
     const files = [
@@ -1274,7 +1274,7 @@ describe("createWorkflowDispatcher", () => {
     ]
 
     const result = await dispatcher.dispatch(
-      "workflow.run.execute",
+      "app.workflow.run.execute",
       { workflowId: "wf-1", params: { files } },
       { source: "api" },
     )
@@ -1283,13 +1283,13 @@ describe("createWorkflowDispatcher", () => {
     expect(deps.runWorkflow).toHaveBeenCalledWith("wf-1", { files }, expect.any(Object))
   })
 
-  it("workflow.run.execute passes the dispatch actor into the workflow run", async () => {
+  it("app.workflow.run.execute passes the dispatch actor into the workflow run", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
     const actor = mcpClientActorForSource("mcp-http")
 
     const result = await dispatcher.dispatch(
-      "workflow.run.execute",
+      "app.workflow.run.execute",
       { workflowId: "wf-1", params: { key: "val" } },
       { source: "mcp-http", actor },
     )
@@ -1298,7 +1298,7 @@ describe("createWorkflowDispatcher", () => {
     expect(deps.runWorkflow).toHaveBeenCalledWith("wf-1", { key: "val" }, { actor })
   })
 
-  it("workflow.run.execute returns structured run validation errors", async () => {
+  it("app.workflow.run.execute returns structured run validation errors", async () => {
     const errors = [
       { type: "invalid_config" as const, message: "Workflow not found" },
       { type: "missing_param" as const, nodeId: "prompt-1", message: "topic is required" },
@@ -1309,7 +1309,7 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
 
     const result = await dispatcher.dispatch(
-      "workflow.run.execute",
+      "app.workflow.run.execute",
       { workflowId: "wf-missing", params: { topic: "" } },
       { source: "api" },
     )
@@ -1339,7 +1339,7 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
 
     const result = await dispatcher.dispatch(
-      "workflow.run.execute",
+      "app.workflow.run.execute",
       { workflowId: "wf-1", params: { key: "val" } },
       { source: "mcp-http" },
     )
@@ -1351,7 +1351,7 @@ describe("createWorkflowDispatcher", () => {
       outcome: "failed",
       metadata: expect.objectContaining({
         source: "mcp-http",
-        workflowAction: "workflow.run.execute",
+        workflowAction: "app.workflow.run.execute",
         workflowId: "wf-1",
         hasRunParams: true,
         errorCount: 1,
@@ -1359,7 +1359,7 @@ describe("createWorkflowDispatcher", () => {
       }),
     }))
     expect(logStoreMock.logger.warn).toHaveBeenCalledWith("workflow mcp dispatch failed", expect.objectContaining({
-      action: "workflow.run.execute",
+      action: "app.workflow.run.execute",
       workflowId: "wf-1",
       hasRunParams: true,
       errorCount: 1,
@@ -1385,7 +1385,7 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
 
     const result = await dispatcher.dispatch(
-      "workflow.run.execute",
+      "app.workflow.run.execute",
       { workflowId: "wf-1", params: { key: "val" } },
       { source: "mcp-http" },
     )
@@ -1398,21 +1398,21 @@ describe("createWorkflowDispatcher", () => {
       outcome: "allowed",
       metadata: expect.objectContaining({
         source: "mcp-http",
-        workflowAction: "workflow.run.execute",
+        workflowAction: "app.workflow.run.execute",
         workflowId: "wf-1",
         hasRunParams: true,
         runId: "run-audit-1",
       }),
     }))
     expect(logStoreMock.logger.info).toHaveBeenCalledWith("workflow mcp dispatch succeeded", expect.objectContaining({
-      action: "workflow.run.execute",
+      action: "app.workflow.run.execute",
       workflowId: "wf-1",
       hasRunParams: true,
       runId: "run-audit-1",
     }))
   })
 
-  it("workflow.run.disable authorizes the owning workflow before cancelling", async () => {
+  it("app.workflow.run.disable authorizes the owning workflow before cancelling", async () => {
     const permissionGuard = {
       registerPolicy: vi.fn(),
       check: vi.fn(async () => ({ allowed: true as const })),
@@ -1435,7 +1435,7 @@ describe("createWorkflowDispatcher", () => {
     })
     const dispatcher = createWorkflowDispatcher(deps)
     const result = await dispatcher.dispatch(
-      "workflow.run.disable",
+      "app.workflow.run.disable",
       { workflowId: "wf-1", runId: "run-1" },
       { source: "mcp-http" },
     )
@@ -1447,7 +1447,7 @@ describe("createWorkflowDispatcher", () => {
       action: "workflow.mutate",
       resource: "workflow:wf-1",
       context: expect.objectContaining({
-        workflowAction: "workflow.run.disable",
+        workflowAction: "app.workflow.run.disable",
         workflowId: "wf-1",
         runId: "run-1",
       }),
@@ -1459,12 +1459,12 @@ describe("createWorkflowDispatcher", () => {
     }))
   })
 
-  it("workflow.run.disable rejects unsafe run ids before cancelling", async () => {
+  it("app.workflow.run.disable rejects unsafe run ids before cancelling", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
 
     await expect(dispatcher.dispatch(
-      "workflow.run.disable",
+      "app.workflow.run.disable",
       { workflowId: "wf-1", runId: "bad/run" },
       { source: "api" },
     ))
@@ -1474,11 +1474,11 @@ describe("createWorkflowDispatcher", () => {
     expect(deps.cancelRun).not.toHaveBeenCalled()
   })
 
-  it("workflow.run.disable stays idempotent when the run is no longer active", async () => {
+  it("app.workflow.run.disable stays idempotent when the run is no longer active", async () => {
     const deps = makeDeps({ cancelRun: vi.fn(() => false) })
     const dispatcher = createWorkflowDispatcher(deps)
     const result = await dispatcher.dispatch(
-      "workflow.run.disable",
+      "app.workflow.run.disable",
       { workflowId: "wf-1", runId: "run-missing" },
       { source: "api" },
     )
@@ -1487,7 +1487,7 @@ describe("createWorkflowDispatcher", () => {
     expect(deps.cancelRun).not.toHaveBeenCalled()
   })
 
-  it("workflow.run.disable does not cancel a run owned by another workflow", async () => {
+  it("app.workflow.run.disable does not cancel a run owned by another workflow", async () => {
     const deps = makeDeps({
       getRunStatus: vi.fn(async () => ({
         runId: "run-1",
@@ -1500,7 +1500,7 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
 
     const result = await dispatcher.dispatch(
-      "workflow.run.disable",
+      "app.workflow.run.disable",
       { workflowId: "wf-1", runId: "run-1" },
       { source: "api" },
     )
@@ -1530,30 +1530,30 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
 
     await dispatcher.dispatch(
-      "workflow.node.delete",
+      "app.workflow.node.delete",
       { workflowId: "wf-1", nodeId: "n1" },
       { source: "api" },
     )
     expect(get).toHaveBeenCalledTimes(1)
   })
 
-  it("workflow.node.create rejects an unconnected node without saving", async () => {
+  it("app.workflow.node.create rejects an unconnected node without saving", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
     await expect(dispatcher.dispatch(
-      "workflow.node.create",
+      "app.workflow.node.create",
       { workflowId: "wf-1", node: { name: "New Node", type: "script", config: { shell: "posix", script: "printf ok", variables: [] } } },
       { source: "api" },
     )).rejects.toThrow("Save failed")
     expect(deps.workflowService.save).not.toHaveBeenCalled()
   })
 
-  it("workflow.node.create rejects missing node config before loading the workflow", async () => {
+  it("app.workflow.node.create rejects missing node config before loading the workflow", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
 
     await expect(dispatcher.dispatch(
-      "workflow.node.create",
+      "app.workflow.node.create",
       { workflowId: "wf-1", node: { name: "Prompt", type: "prompt" } },
       { source: "api" },
     )).rejects.toThrow("Missing or invalid 'node.config'")
@@ -1562,18 +1562,18 @@ describe("createWorkflowDispatcher", () => {
     expect(deps.workflowService.save).not.toHaveBeenCalled()
   })
 
-  it("workflow.node.create does not return a nodeId for invalid nodes", async () => {
+  it("app.workflow.node.create does not return a nodeId for invalid nodes", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
     await expect(dispatcher.dispatch(
-      "workflow.node.create",
+      "app.workflow.node.create",
       { workflowId: "wf-1", node: { name: "Prompt", type: "script", config: { shell: "posix", script: "printf ok", variables: [] } } },
       { source: "api" },
     )).rejects.toThrow("Save failed")
     expect(deps.workflowService.save).not.toHaveBeenCalled()
   })
 
-  it("workflow.node.create rejects invalid mutations without saving or mutating the loaded definition", async () => {
+  it("app.workflow.node.create rejects invalid mutations without saving or mutating the loaded definition", async () => {
     const storedDefinition: WorkflowDefinition = {
       id: "wf-1", name: "Test", description: "", version: "v1",
       createdAt: 1, updatedAt: 2, params: [],
@@ -1591,7 +1591,7 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
 
     await expect(dispatcher.dispatch(
-      "workflow.node.create",
+      "app.workflow.node.create",
       { workflowId: "wf-1", node: { name: "Unconnected", type: "script", config: { shell: "posix", script: "printf ok", variables: [] } } },
       { source: "api" },
     )).rejects.toThrow("Save failed")
@@ -1601,7 +1601,7 @@ describe("createWorkflowDispatcher", () => {
     expect(storedDefinition.nodes[0]?.id).toBe("end")
   })
 
-  it("workflow.node.create can add a node with connecting edges in one validated save", async () => {
+  it("app.workflow.node.create can add a node with connecting edges in one validated save", async () => {
     const deps = makeDeps({
       workflowService: {
         ...makeDeps().workflowService,
@@ -1621,7 +1621,7 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
 
     const result = await dispatcher.dispatch(
-      "workflow.node.create",
+      "app.workflow.node.create",
       {
         workflowId: "wf-1",
         node: { name: "Generate", type: "script", config: { shell: "posix", script: "printf generated", variables: [] } },
@@ -1672,12 +1672,12 @@ describe("createWorkflowDispatcher", () => {
 
     await Promise.all([
       dispatcher.dispatch(
-        "workflow.node.update",
+        "app.workflow.node.update",
         { workflowId: "wf-1", nodeId: "a", patch: { name: "Script A Updated" } },
         { source: "api" },
       ),
       dispatcher.dispatch(
-        "workflow.node.update",
+        "app.workflow.node.update",
         { workflowId: "wf-1", nodeId: "end", patch: { name: "End Updated" } },
         { source: "api" },
       ),
@@ -1689,10 +1689,10 @@ describe("createWorkflowDispatcher", () => {
     ])
   })
 
-  it("workflow.definition.delete calls cancelRunsForWorkflow", async () => {
+  it("app.workflow.definition.delete calls cancelRunsForWorkflow", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch("workflow.definition.delete", { workflowId: "wf-1" }, { source: "api" })
+    const result = await dispatcher.dispatch("app.workflow.definition.delete", { workflowId: "wf-1" }, { source: "api" })
     expect(result.ok).toBe(true)
     expect(deps.cancelRunsForWorkflow).toHaveBeenCalledWith("wf-1")
     expect(deps.cancelRun).not.toHaveBeenCalled()
@@ -1700,7 +1700,7 @@ describe("createWorkflowDispatcher", () => {
     expect(deps.snapshotService.deleteWorkflow).toHaveBeenCalledWith("wf-1")
   })
 
-  it("workflow.edge.create returns edgeId", async () => {
+  it("app.workflow.edge.create returns edgeId", async () => {
     const deps = makeDeps({
       workflowService: {
         ...makeDeps().workflowService,
@@ -1719,7 +1719,7 @@ describe("createWorkflowDispatcher", () => {
     })
     const dispatcher = createWorkflowDispatcher(deps)
     const result = await dispatcher.dispatch(
-      "workflow.edge.create",
+      "app.workflow.edge.create",
       { workflowId: "wf-1", from: "n1", to: "n2" },
       { source: "api" },
     )
@@ -1729,7 +1729,7 @@ describe("createWorkflowDispatcher", () => {
     expect((result.data as Record<string, unknown>).edgeId).toHaveLength(36)
   })
 
-  it("workflow.edge.delete rejects missing edge without saving", async () => {
+  it("app.workflow.edge.delete rejects missing edge without saving", async () => {
     const save = vi.fn(async () => ({ versionHash: "v_456" }))
     const deps = makeDeps({
       workflowService: {
@@ -1750,22 +1750,22 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
 
     await expect(dispatcher.dispatch(
-      "workflow.edge.delete",
+      "app.workflow.edge.delete",
       { workflowId: "wf-1", edgeId: "missing-edge" },
       { source: "api" },
     )).rejects.toThrow("Edge not found: missing-edge")
     expect(save).not.toHaveBeenCalled()
   })
 
-  it("workflow.node.delete rejects deleting end node", async () => {
+  it("app.workflow.node.delete rejects deleting end node", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
     await expect(
-      dispatcher.dispatch("workflow.node.delete", { workflowId: "wf-1", nodeId: "n1" }, { source: "api" }),
+      dispatcher.dispatch("app.workflow.node.delete", { workflowId: "wf-1", nodeId: "n1" }, { source: "api" }),
     ).rejects.toThrow(/Cannot delete the end node/)
   })
 
-  it("workflow.node.delete returns removedEdgeCount", async () => {
+  it("app.workflow.node.delete returns removedEdgeCount", async () => {
     const deps = makeDeps({
       workflowService: {
         ...makeDeps().workflowService,
@@ -1786,7 +1786,7 @@ describe("createWorkflowDispatcher", () => {
     })
     const dispatcher = createWorkflowDispatcher(deps)
     const result = await dispatcher.dispatch(
-      "workflow.node.delete",
+      "app.workflow.node.delete",
       { workflowId: "wf-1", nodeId: "n1" },
       { source: "api" },
     )
@@ -1794,14 +1794,14 @@ describe("createWorkflowDispatcher", () => {
     expect((result.data as Record<string, unknown>).removedEdgeCount).toBe(1)
   })
 
-  it("workflow.node_type.describe returns availableProviders for prompt", async () => {
+  it("app.workflow.node_type.describe returns availableProviders for prompt", async () => {
     const listProviders = vi.fn(async () => [
       { id: "p1", name: "Provider 1", model: "m-default", haikuModel: "m-haiku", sonnetModel: "m-sonnet", opusModel: "m-opus" },
       { id: "p2", name: "Provider 2", model: "m2-default", haikuModel: undefined, sonnetModel: "m2-sonnet", opusModel: undefined },
     ])
     const deps = makeDeps({ listProviders })
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch("workflow.node_type.describe", { nodeType: "prompt" }, { source: "api" })
+    const result = await dispatcher.dispatch("app.workflow.node_type.describe", { nodeType: "prompt" }, { source: "api" })
     expect(result.ok).toBe(true)
     const data = result.data as Record<string, unknown>
     expect(data).toHaveProperty("availableProviders")
@@ -1817,21 +1817,21 @@ describe("createWorkflowDispatcher", () => {
     })
   })
 
-  it("workflow.node_type.describe omits availableProviders for end node", async () => {
+  it("app.workflow.node_type.describe omits availableProviders for end node", async () => {
     const listProviders = vi.fn(async () => [{ id: "p1", name: "P1", model: "m", haikuModel: "h", sonnetModel: "s", opusModel: "o" }])
     const deps = makeDeps({ listProviders })
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch("workflow.node_type.describe", { nodeType: "end" }, { source: "api" })
+    const result = await dispatcher.dispatch("app.workflow.node_type.describe", { nodeType: "end" }, { source: "api" })
     expect(result.ok).toBe(true)
     const data = result.data as Record<string, unknown>
     expect(data).not.toHaveProperty("availableProviders")
   })
 
-  it("workflow.node_type.describe returns codex config schema without providers", async () => {
+  it("app.workflow.node_type.describe returns codex config schema without providers", async () => {
     const listProviders = vi.fn(async () => [{ id: "p1", name: "P1", model: "m", haikuModel: "h", sonnetModel: "s", opusModel: "o" }])
     const deps = makeDeps({ nodeTypeRegistry, listProviders })
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch("workflow.node_type.describe", { nodeType: "codex" }, { source: "api" })
+    const result = await dispatcher.dispatch("app.workflow.node_type.describe", { nodeType: "codex" }, { source: "api" })
     expect(result.ok).toBe(true)
 
     const data = result.data as Record<string, unknown>
@@ -1850,11 +1850,11 @@ describe("createWorkflowDispatcher", () => {
     ]))
   })
 
-  it("workflow.node_type.describe returns claude code config schema without providers", async () => {
+  it("app.workflow.node_type.describe returns claude code config schema without providers", async () => {
     const listProviders = vi.fn(async () => [{ id: "p1", name: "P1", model: "m", haikuModel: "h", sonnetModel: "s", opusModel: "o" }])
     const deps = makeDeps({ nodeTypeRegistry, listProviders })
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch("workflow.node_type.describe", { nodeType: "claude_code" }, { source: "api" })
+    const result = await dispatcher.dispatch("app.workflow.node_type.describe", { nodeType: "claude_code" }, { source: "api" })
     expect(result.ok).toBe(true)
 
     const data = result.data as Record<string, unknown>
@@ -1894,7 +1894,7 @@ describe("createWorkflowDispatcher", () => {
     ]))
   })
 
-  it("workflow.layout.update repositions nodes with dagre LR", async () => {
+  it("app.workflow.layout.update repositions nodes with dagre LR", async () => {
     const deps = makeDeps({
       workflowService: {
         ...makeDeps().workflowService,
@@ -1917,7 +1917,7 @@ describe("createWorkflowDispatcher", () => {
     })
     const dispatcher = createWorkflowDispatcher(deps)
     const result = await dispatcher.dispatch(
-      "workflow.layout.update",
+      "app.workflow.layout.update",
       { workflowId: "wf-1" },
       { source: "mcp-http" },
     )
@@ -1930,7 +1930,7 @@ describe("createWorkflowDispatcher", () => {
     expect(posB.x).toBeLessThan(posC.x)
   })
 
-  it("workflow.layout.update supports TB direction", async () => {
+  it("app.workflow.layout.update supports TB direction", async () => {
     const deps = makeDeps({
       workflowService: {
         ...makeDeps().workflowService,
@@ -1949,7 +1949,7 @@ describe("createWorkflowDispatcher", () => {
     })
     const dispatcher = createWorkflowDispatcher(deps)
     const result = await dispatcher.dispatch(
-      "workflow.layout.update",
+      "app.workflow.layout.update",
       { workflowId: "wf-1", direction: "TB" },
       { source: "mcp-http" },
     )
@@ -1963,7 +1963,7 @@ describe("createWorkflowDispatcher", () => {
   it("throws on unknown action", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
-    await expect(dispatcher.dispatch("workflow.unknown.action", {}, { source: "api" }))
+    await expect(dispatcher.dispatch("app.workflow.unknown.action", {}, { source: "api" }))
       .rejects.toThrow(/Unknown workflow action/)
   })
 })

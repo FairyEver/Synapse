@@ -9,7 +9,7 @@
  *   - optional WindowManager broadcaster injection (T4.2)
  *   - listener-error isolation: throwing listeners don't poison siblings
  *
- * IPC channel scheme: each domain maps to `synapse:events:<domain>`. Renderer
+ * IPC channel scheme: each domain maps to `synapse:app:events:operation:<domain>`. Renderer
  * subscribes to the channel via the EventBusClient (T4.4).
  */
 
@@ -224,7 +224,7 @@ export class EventBusImpl implements EventBus {
 }
 
 export function channelForDomain(domain: EventDomain): string {
-  return `synapse:events:${domain}`
+  return `synapse:app:events:operation:${domain.replaceAll("-", "_")}`
 }
 
 function coalesceKey(event: DomainEvent): string {

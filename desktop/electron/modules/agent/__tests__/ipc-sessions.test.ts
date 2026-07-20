@@ -400,7 +400,7 @@ describe("agent session IPC methods", () => {
 
     expect(windowManager.open).toHaveBeenCalledWith("main")
     expect(windowManager.broadcast).toHaveBeenCalledWith(
-      "synapse:open-agent-session",
+      "synapse:app:open_agent_session:operation",
       {
         projectId: "project-1",
         conversationId: "conv-workflow",

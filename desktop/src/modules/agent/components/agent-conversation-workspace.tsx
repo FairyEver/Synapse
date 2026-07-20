@@ -774,7 +774,7 @@ function useQuickInputItems(initialItems: readonly SynapseQuickInputItem[] = EMP
     let unsubscribe: (() => void) | undefined
     try {
       const bridge = requireBridgeDomain("quickInput")
-      void bridge.list().then((nextItems) => {
+      void bridge.item.list().then((nextItems) => {
         if (!disposed) setItems(nextItems)
       }).catch((rawError: unknown) => {
         logger.warn("Agent quick input load failed.", {
@@ -782,7 +782,7 @@ function useQuickInputItems(initialItems: readonly SynapseQuickInputItem[] = EMP
           ...errorDiagnostic(rawError),
         })
       })
-      unsubscribe = bridge.onChanged((event) => {
+      unsubscribe = bridge.item.onChanged((event) => {
         setItems(event.items)
       })
     } catch (rawError) {

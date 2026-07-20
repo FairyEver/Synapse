@@ -95,7 +95,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const result = await harness.invoke("synapse:agent:send", {
+    const result = await harness.invoke("synapse:app:agent:operation:send", {
       projectId: "project-1",
       content: "hello",
     })
@@ -166,7 +166,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    await harness.invoke("synapse:agent:send", {
+    await harness.invoke("synapse:app:agent:operation:send", {
       projectId: "kb-1",
       content: "hello",
     })
@@ -219,7 +219,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    await expect(harness.invoke("synapse:agent:send", {
+    await expect(harness.invoke("synapse:app:agent:operation:send", {
       projectId: "kb-missing",
       content: "hello",
     })).rejects.toThrow("知识库运行目录不存在")
@@ -276,7 +276,7 @@ describe("agentIpcModule", () => {
       storageMigration,
     })
 
-    await expect(harness.invoke("synapse:agent:send", {
+    await expect(harness.invoke("synapse:app:agent:operation:send", {
       projectId: "kb-1",
       conversationId: "conv-1",
       content: "hello",
@@ -300,7 +300,7 @@ describe("agentIpcModule", () => {
       storageMigration,
     })
 
-    await expect(harness.invoke("synapse:agent:send", {
+    await expect(harness.invoke("synapse:app:agent:operation:send", {
       projectId: "project-1",
       content: "hello",
     })).resolves.toEqual(expect.objectContaining({
@@ -324,7 +324,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    await harness.invoke("synapse:agent:send", {
+    await harness.invoke("synapse:app:agent:operation:send", {
       projectId: "project-1",
       content: "hello",
       providerId: "deepseek",
@@ -352,7 +352,7 @@ describe("agentIpcModule", () => {
     })
 
     try {
-      await harness.invoke("synapse:agent:send", {
+      await harness.invoke("synapse:app:agent:operation:send", {
         projectId: "project-1",
         content: "hello",
         attachments: [
@@ -405,7 +405,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    await expect(harness.invoke("synapse:agent:send", {
+    await expect(harness.invoke("synapse:app:agent:operation:send", {
       projectId: "project-1",
       content: "",
       attachments: [{
@@ -436,7 +436,7 @@ describe("agentIpcModule", () => {
     })
 
     try {
-      await expect(harness.invoke("synapse:agent:send", {
+      await expect(harness.invoke("synapse:app:agent:operation:send", {
         projectId: "project-1",
         content: "",
         attachments: [{
@@ -472,7 +472,7 @@ describe("agentIpcModule", () => {
     })
 
     try {
-      await expect(harness.invoke("synapse:agent:send", {
+      await expect(harness.invoke("synapse:app:agent:operation:send", {
         projectId: "project-1",
         content: "",
         attachments: [{
@@ -510,7 +510,7 @@ describe("agentIpcModule", () => {
     })
 
     try {
-      await expect(harness.invoke("synapse:agent:send", {
+      await expect(harness.invoke("synapse:app:agent:operation:send", {
         projectId: "project-1",
         content: "",
         attachments: [{
@@ -548,7 +548,7 @@ describe("agentIpcModule", () => {
     })
 
     try {
-      await expect(harness.invoke("synapse:agent:send", {
+      await expect(harness.invoke("synapse:app:agent:operation:send", {
         projectId: "project-1",
         content: "read this project",
         attachments: [{
@@ -573,7 +573,7 @@ describe("agentIpcModule", () => {
     })
     const harness = createHarness({ agent: { send } })
 
-    await expect(harness.invoke("synapse:agent:send", {
+    await expect(harness.invoke("synapse:app:agent:operation:send", {
       projectId: "project-1",
       content: "read these files",
       attachments: Array.from({ length: 21 }, (_, index) => ({
@@ -600,7 +600,7 @@ describe("agentIpcModule", () => {
         )))
       }
 
-      await expect(harness.invoke("synapse:agent:send", {
+      await expect(harness.invoke("synapse:app:agent:operation:send", {
         projectId: "project-1",
         content: "read this directory",
         attachments: [{ kind: "path", path: root, entryType: "directory" }],
@@ -625,7 +625,7 @@ describe("agentIpcModule", () => {
         await fs.mkdir(current)
       }
 
-      await expect(harness.invoke("synapse:agent:send", {
+      await expect(harness.invoke("synapse:app:agent:operation:send", {
         projectId: "project-1",
         content: "read this directory",
         attachments: [{ kind: "path", path: root, entryType: "directory" }],
@@ -649,7 +649,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    await expect(harness.invoke("synapse:agent:send", {
+    await expect(harness.invoke("synapse:app:agent:operation:send", {
       projectId: "project-1",
       content: "",
       attachments: [{
@@ -674,7 +674,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    await expect(harness.invoke("synapse:agent:send", {
+    await expect(harness.invoke("synapse:app:agent:operation:send", {
       projectId: "project-1",
       content: "",
       attachments: Array.from({ length: 9 }, () => ({
@@ -699,7 +699,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    await expect(harness.invoke("synapse:agent:send", {
+    await expect(harness.invoke("synapse:app:agent:operation:send", {
       projectId: "project-1",
       content: "",
       attachments: [
@@ -736,7 +736,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    await harness.invoke("synapse:agent:send", {
+    await harness.invoke("synapse:app:agent:operation:send", {
       projectId: "project-1",
       content: "",
       attachments: Array.from({ length: 8 }, () => ({
@@ -833,7 +833,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const result = await harness.invoke("synapse:agent:send", {
+    const result = await harness.invoke("synapse:app:agent:operation:send", {
       projectId: "project-1",
       content: "hello",
     })
@@ -891,7 +891,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const result = await harness.invoke("synapse:agent:get-timeline", {
+    const result = await harness.invoke("synapse:app:agent:operation:get_timeline", {
       projectId: "project-1",
       conversationId: "conv-1",
     }) as {
@@ -946,7 +946,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const result = await harness.invoke("synapse:agent:export-conversation-bundle", {
+    const result = await harness.invoke("synapse:app:agent:operation:export_conversation_bundle", {
       projectId: "project-1",
       conversationId: "conv-1",
       sessionKey: "local:renderer",
@@ -994,7 +994,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const result = await harness.invoke("synapse:agent:get-providers", {
+    const result = await harness.invoke("synapse:app:agent:operation:get_providers", {
       projectId: "project-1",
     })
 
@@ -1047,10 +1047,10 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const listResult = await harness.invoke("synapse:agent:list-providers", {
+    const listResult = await harness.invoke("synapse:app:agent:operation:list_providers", {
       projectId: "project-1",
     })
-    const createResult = await harness.invoke("synapse:agent:create-provider", {
+    const createResult = await harness.invoke("synapse:app:agent:operation:create_provider", {
       projectId: "project-1",
       provider: {
         id: "anthropic",
@@ -1071,7 +1071,7 @@ describe("agentIpcModule", () => {
         encryptedSecret: "encrypted-secret",
       },
     })
-    const updateResult = await harness.invoke("synapse:agent:update-provider", {
+    const updateResult = await harness.invoke("synapse:app:agent:operation:update_provider", {
       projectId: "project-1",
       providerId: "anthropic",
       patch: {
@@ -1086,11 +1086,11 @@ describe("agentIpcModule", () => {
         encryptedSecret: "encrypted-update-secret",
       },
     })
-    const archiveResult = await harness.invoke("synapse:agent:archive-provider", {
+    const archiveResult = await harness.invoke("synapse:app:agent:operation:archive_provider", {
       projectId: "project-1",
       providerId: "anthropic",
     })
-    const activeResult = await harness.invoke("synapse:agent:set-active-provider", {
+    const activeResult = await harness.invoke("synapse:app:agent:operation:set_active_provider", {
       projectId: "project-1",
       providerId: "anthropic",
     })
@@ -1140,7 +1140,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const result = await harness.invoke("synapse:agent:list-provider-presets", {})
+    const result = await harness.invoke("synapse:app:agent:operation:list_provider_presets", {})
 
     expect(listProviderPresets).toHaveBeenCalled()
     expect(result).toEqual([expect.objectContaining({
@@ -1168,7 +1168,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const result = await harness.invoke("synapse:agent:create-provider-from-preset", {
+    const result = await harness.invoke("synapse:app:agent:operation:create_provider_from_preset", {
       presetName: "PackyCode",
       apiKey: "sk-packy",
     })
@@ -1220,8 +1220,8 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const preview = await harness.invoke("synapse:agent:preview-cc-switch-claude-providers", {})
-    const result = await harness.invoke("synapse:agent:import-cc-switch-claude-providers", {
+    const preview = await harness.invoke("synapse:app:agent:operation:preview_cc_switch_claude_providers", {})
+    const result = await harness.invoke("synapse:app:agent:operation:import_cc_switch_claude_providers", {
       source,
       providerIds: ["deepseek"],
     })
@@ -1280,14 +1280,14 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const preview = await harness.invoke("synapse:agent:preview-provider-package-import", {
+    const preview = await harness.invoke("synapse:app:agent:operation:preview_provider_package_import", {
       sourcePath: "/Users/test/deepseek.synapse-provider.json",
     })
-    const imported = await harness.invoke("synapse:agent:import-provider-package", {
+    const imported = await harness.invoke("synapse:app:agent:operation:import_provider_package", {
       sourcePath: "/Users/test/deepseek.synapse-provider.json",
       contentSha256: "a".repeat(64),
     })
-    const exported = await harness.invoke("synapse:agent:export-provider-package", {
+    const exported = await harness.invoke("synapse:app:agent:operation:export_provider_package", {
       providerId: "deepseek",
       targetPath: "/Users/test/deepseek.synapse-provider.json",
     })
@@ -1321,7 +1321,7 @@ describe("agentIpcModule", () => {
     ]
 
     for (const item of cases) {
-      await expect(harness.invoke("synapse:agent:choose-provider-package-export-target", {
+      await expect(harness.invoke("synapse:app:agent:operation:choose_provider_package_export_target", {
         providerName: item.providerName,
       })).resolves.toEqual({})
     }
@@ -1366,7 +1366,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const result = await harness.invoke("synapse:agent:get-runtime-status", {
+    const result = await harness.invoke("synapse:app:agent:operation:get_runtime_status", {
       projectId: "project-1",
     }) as {
       readonly agents: readonly {
@@ -1404,7 +1404,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const result = await harness.invoke("synapse:agent:get-runtime-status", {
+    const result = await harness.invoke("synapse:app:agent:operation:get_runtime_status", {
       projectId: "project-1",
     }) as {
       readonly agents: readonly {
@@ -1454,7 +1454,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const result = await harness.invoke("synapse:agent:get-runtime-status", {
+    const result = await harness.invoke("synapse:app:agent:operation:get_runtime_status", {
       projectId: "project-1",
     }) as {
       readonly agents: readonly {
@@ -1500,7 +1500,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const result = await harness.invoke("synapse:agent:get-timeline", {
+    const result = await harness.invoke("synapse:app:agent:operation:get_timeline", {
       projectId: "project-1",
       conversationId: "conv-1",
     }) as { readonly entries: readonly { readonly content: string }[] }
@@ -1521,7 +1521,7 @@ describe("agentIpcModule", () => {
       agent: { listSessions },
     })
 
-    await expect(harness.invoke("synapse:agent:get-timeline", {
+    await expect(harness.invoke("synapse:app:agent:operation:get_timeline", {
       projectId: "project-1",
       sessionKey: "local:renderer",
       limit: 10,
@@ -1566,7 +1566,7 @@ describe("agentIpcModule", () => {
       agent: { listSessions },
     })
 
-    await expect(harness.invoke("synapse:agent:list-sessions", {
+    await expect(harness.invoke("synapse:app:agent:operation:list_sessions", {
       projectId: "project-1",
     })).resolves.toEqual([
       expect.objectContaining({
@@ -1598,7 +1598,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    await expect(harness.invoke("synapse:agent:list-all-sessions", {
+    await expect(harness.invoke("synapse:app:agent:operation:list_all_sessions", {
       excludeProjectIds: ["project-1"],
       limit: 25,
     })).resolves.toEqual([expect.objectContaining({
@@ -1653,7 +1653,7 @@ describe("agentIpcModule", () => {
       agent: { listSessions },
     })
 
-    await expect(harness.invoke("synapse:agent:list-sessions", {
+    await expect(harness.invoke("synapse:app:agent:operation:list_sessions", {
       projectId: "project-1",
     })).resolves.toEqual([
       expect.objectContaining({
@@ -1696,7 +1696,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    expect(await harness.invoke("synapse:agent:create-session", {
+    expect(await harness.invoke("synapse:app:agent:operation:create_session", {
       projectId: "project-1",
       name: "新会话",
       providerId: "deepseek",
@@ -1725,7 +1725,7 @@ describe("agentIpcModule", () => {
     }
     createSession.mockResolvedValueOnce(bypassSession)
 
-    expect(await harness.invoke("synapse:agent:create-session", {
+    expect(await harness.invoke("synapse:app:agent:operation:create_session", {
       projectId: "project-1",
       mode: "bypassPermissions",
     })).toEqual(expect.objectContaining({
@@ -1741,7 +1741,7 @@ describe("agentIpcModule", () => {
       mode: "bypassPermissions",
     })
 
-    expect(await harness.invoke("synapse:agent:switch-session", {
+    expect(await harness.invoke("synapse:app:agent:operation:switch_session", {
       projectId: "project-1",
       conversationId: "conv-1",
     })).toEqual(expect.objectContaining({
@@ -1758,7 +1758,7 @@ describe("agentIpcModule", () => {
       "conv-1",
     )
 
-    expect(await harness.invoke("synapse:agent:delete-session", {
+    expect(await harness.invoke("synapse:app:agent:operation:delete_session", {
       projectId: "project-1",
       conversationId: "conv-1",
     })).toEqual({ ok: true })
@@ -1797,7 +1797,7 @@ describe("agentIpcModule", () => {
     })
     const harness = createHarness({ agent: { createSession } })
 
-    await harness.invoke("synapse:agent:create-session", {
+    await harness.invoke("synapse:app:agent:operation:create_session", {
       projectId: "project-1",
     })
 
@@ -1838,7 +1838,7 @@ describe("agentIpcModule", () => {
     })
     const harness = createHarness({ agent: { createSession } })
 
-    await harness.invoke("synapse:agent:create-session", {
+    await harness.invoke("synapse:app:agent:operation:create_session", {
       projectId: "project-1",
       mode: "plan",
     })
@@ -1866,7 +1866,7 @@ describe("agentIpcModule", () => {
       },
     })
 
-    const result = await harness.invoke("synapse:agent:set-permission-mode", {
+    const result = await harness.invoke("synapse:app:agent:operation:set_permission_mode", {
       projectId: "project-1",
       conversationId: "conversation-1",
       mode: "plan",
@@ -1893,7 +1893,7 @@ describe("agentIpcModule", () => {
       const harness = createHarness({ agent: { send } })
 
       const past = new Date(Date.now() - 100).toISOString()
-      await harness.invoke("synapse:agent:send", {
+      await harness.invoke("synapse:app:agent:operation:send", {
         projectId: "project-1",
         content: "hi",
         clientSubmittedAt: past,
@@ -1923,7 +1923,7 @@ describe("agentIpcModule", () => {
       })
       const harness = createHarness({ agent: { send, sendToConversation } })
 
-      await harness.invoke("synapse:agent:send", {
+      await harness.invoke("synapse:app:agent:operation:send", {
         projectId: "project-1",
         sessionKey: "local:renderer",
         conversationId: "conv-queued",
@@ -1947,7 +1947,7 @@ describe("agentIpcModule", () => {
       const harness = createHarness({ agent: { send } })
 
       const future = new Date(Date.now() + 5_000).toISOString()
-      await harness.invoke("synapse:agent:send", {
+      await harness.invoke("synapse:app:agent:operation:send", {
         projectId: "project-1",
         content: "hi",
         clientSubmittedAt: future,
@@ -1970,7 +1970,7 @@ describe("agentIpcModule", () => {
       const harness = createHarness({ agent: { send } })
 
       const stale = new Date(Date.now() - 120_000).toISOString()
-      await harness.invoke("synapse:agent:send", {
+      await harness.invoke("synapse:app:agent:operation:send", {
         projectId: "project-1",
         content: "hi",
         clientSubmittedAt: stale,
@@ -1993,7 +1993,7 @@ describe("agentIpcModule", () => {
       const harness = createHarness({ agent: { send } })
 
       await expect(
-        harness.invoke("synapse:agent:send", {
+        harness.invoke("synapse:app:agent:operation:send", {
           projectId: "project-1",
           content: "hi",
           providerId: "anthropic",
@@ -2042,7 +2042,7 @@ describe("agentIpcModule", () => {
       const harness = createHarness({})
 
       await expect(
-        harness.invoke("synapse:agent:send", {
+        harness.invoke("synapse:app:agent:operation:send", {
           projectId: "missing-project",
           sessionKey: "local:renderer",
           conversationId: "conv-missing",

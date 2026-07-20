@@ -395,7 +395,7 @@ export const contentIpcModule: IpcModule = {
   methods: {
     list: {
       kind: "invoke",
-      channel: "synapse:content:list",
+      operationId: "app.resource_repository.item.list",
       request: z.object({ contentType: contentTypeSchema }),
       response: contentRecordListSchema,
       handler: async (_ctx, request: { contentType: SynapseContentType }) => {
@@ -404,7 +404,7 @@ export const contentIpcModule: IpcModule = {
     },
     getContent: {
       kind: "invoke",
-      channel: "synapse:content:get-content",
+      operationId: "app.resource_repository.operation.get_content",
       request: z.object({ contentType: contentTypeSchema, id: z.string() }),
       response: nullableContentRecordSchema,
       handler: async (_ctx, request: { contentType: SynapseContentType; id: string }) => {
@@ -413,7 +413,7 @@ export const contentIpcModule: IpcModule = {
     },
     getDetail: {
       kind: "invoke",
-      channel: "synapse:content:get-detail",
+      operationId: "app.resource_repository.operation.get_detail",
       request: z.object({ contentType: contentTypeSchema, id: z.string() }),
       response: contentRecordSchema,
       handler: async (_ctx, request: { contentType: SynapseContentType; id: string }) => {
@@ -422,7 +422,7 @@ export const contentIpcModule: IpcModule = {
     },
     getAttachmentFile: {
       kind: "invoke",
-      channel: "synapse:content:get-attachment-file",
+      operationId: "app.resource_repository.operation.get_attachment_file",
       request: z.object({
         contentType: contentTypeSchema,
         id: z.string(),
@@ -446,7 +446,7 @@ export const contentIpcModule: IpcModule = {
     },
     getEditorAdapters: {
       kind: "invoke",
-      channel: "synapse:content:get-editor-adapters",
+      operationId: "app.resource_repository.operation.get_editor_adapters",
       request: z.void(),
       response: contentRecordListSchema,
       handler: async (_ctx) => {
@@ -455,7 +455,7 @@ export const contentIpcModule: IpcModule = {
     },
     create: {
       kind: "invoke",
-      channel: "synapse:content:create",
+      operationId: "app.resource_repository.item.create",
       request: createContentRequestSchema,
       response: contentMutationResultSchema,
       handler: async (ctx, request: SynapseCreateContentRequest) => {
@@ -477,7 +477,7 @@ export const contentIpcModule: IpcModule = {
     },
     update: {
       kind: "invoke",
-      channel: "synapse:content:update",
+      operationId: "app.resource_repository.item.update",
       request: updateContentRequestSchema,
       response: contentMutationResultSchema,
       handler: async (ctx, request: SynapseUpdateContentRequest) => {
@@ -506,7 +506,7 @@ export const contentIpcModule: IpcModule = {
     },
     deleteContent: {
       kind: "invoke",
-      channel: "synapse:content:delete-content",
+      operationId: "app.resource_repository.operation.delete_content",
       request: deleteContentPayloadSchema,
       response: contentMutationResultSchema,
       handler: async (ctx, payload: SynapseDeleteContentPayload) => {
@@ -528,7 +528,7 @@ export const contentIpcModule: IpcModule = {
     },
     listDeleted: {
       kind: "invoke",
-      channel: "synapse:content:list-deleted",
+      operationId: "app.resource_repository.operation.list_deleted",
       request: z.object({ contentType: contentTypeSchema }),
       response: contentRecordListSchema,
       handler: async (_ctx, request: { contentType: SynapseContentType }) => {
@@ -537,7 +537,7 @@ export const contentIpcModule: IpcModule = {
     },
     restore: {
       kind: "invoke",
-      channel: "synapse:content:restore",
+      operationId: "app.resource_repository.item.restore",
       request: restoreContentPayloadSchema,
       response: contentMutationResultSchema,
       handler: async (ctx, payload: SynapseRestoreContentPayload) => {
@@ -559,7 +559,7 @@ export const contentIpcModule: IpcModule = {
     },
     purge: {
       kind: "invoke",
-      channel: "synapse:content:purge",
+      operationId: "app.resource_repository.item.purge",
       request: purgeContentPayloadSchema,
       response: contentMutationResultSchema,
       handler: async (ctx, payload: SynapsePurgeContentPayload) => {
@@ -581,7 +581,7 @@ export const contentIpcModule: IpcModule = {
     },
     download: {
       kind: "invoke",
-      channel: "synapse:content:download",
+      operationId: "app.resource_repository.item.download",
       request: z.object({ contentType: contentTypeSchema, id: z.string() }),
       response: z.object({ canceled: z.boolean(), filePath: z.string().nullable() }),
       handler: async (ctx, args: { contentType: SynapseContentType; id: string }) => {
@@ -671,7 +671,7 @@ export const contentIpcModule: IpcModule = {
     },
     readIconImage: {
       kind: "invoke",
-      channel: "synapse:content:read-icon-image",
+      operationId: "app.resource_repository.operation.read_icon_image",
       request: z.object({ contentType: contentTypeSchema, id: z.string() }),
       response: z.string().nullable(),
       handler: async (_ctx, args: { contentType: SynapseContentType; id: string }) => {
@@ -680,7 +680,7 @@ export const contentIpcModule: IpcModule = {
     },
     openDetailWindow: {
       kind: "invoke",
-      channel: "synapse:content:open-detail-window",
+      operationId: "app.resource_repository.operation.open_detail_window",
       request: openContentDetailWindowPayloadSchema,
       response: z.void(),
       handler: async (_ctx, payload: SynapseOpenContentWindowPayload) => {
@@ -689,7 +689,7 @@ export const contentIpcModule: IpcModule = {
     },
     openCreateWindow: {
       kind: "invoke",
-      channel: "synapse:content:open-create-window",
+      operationId: "app.resource_repository.operation.open_create_window",
       request: openContentCreateWindowPayloadSchema,
       response: z.void(),
       handler: async (_ctx, payload: SynapseOpenContentCreateWindowPayload) => {
@@ -698,7 +698,7 @@ export const contentIpcModule: IpcModule = {
     },
     openEditWindow: {
       kind: "invoke",
-      channel: "synapse:content:open-edit-window",
+      operationId: "app.resource_repository.operation.open_edit_window",
       request: openContentEditWindowPayloadSchema,
       response: z.void(),
       handler: async (_ctx, payload: SynapseOpenContentEditWindowPayload) => {
@@ -707,7 +707,7 @@ export const contentIpcModule: IpcModule = {
     },
     readEditorInitPayload: {
       kind: "invoke",
-      channel: "synapse:content:read-editor-init-payload",
+      operationId: "app.resource_repository.operation.read_editor_init_payload",
       request: z.object({ requestId: z.string() }),
       response: z.unknown(),
       handler: async (_ctx, payload: { requestId: string }) => {
@@ -716,7 +716,7 @@ export const contentIpcModule: IpcModule = {
     },
     resolveEditorInstallTarget: {
       kind: "invoke",
-      channel: "synapse:content:resolve-editor-install-target",
+      operationId: "app.resource_repository.operation.resolve_editor_install_target",
       request: resolveEditorTargetPayloadSchema,
       response: contentRecordSchema,
       handler: async (_ctx, payload: SynapseResolveEditorTargetPayload) => {
@@ -725,7 +725,7 @@ export const contentIpcModule: IpcModule = {
     },
     installToEditor: {
       kind: "invoke",
-      channel: "synapse:content:install-to-editor",
+      operationId: "app.resource_repository.operation.install_to_editor",
       request: installToEditorPayloadSchema,
       response: contentRecordSchema,
       handler: async (ctx, payload: SynapseInstallToEditorPayload) => {
@@ -753,7 +753,7 @@ export const contentIpcModule: IpcModule = {
     },
     readEditorInstallFormValues: {
       kind: "invoke",
-      channel: "synapse:content:read-editor-install-form-values",
+      operationId: "app.resource_repository.operation.read_editor_install_form_values",
       request: readEditorInstallFormValuesPayloadSchema,
       response: contentRecordSchema,
       handler: async (ctx, payload: SynapseReadEditorInstallFormValuesPayload) => {
@@ -766,7 +766,7 @@ export const contentIpcModule: IpcModule = {
     },
     getIconPromptTemplate: {
       kind: "invoke",
-      channel: "synapse:content:get-icon-prompt-template",
+      operationId: "app.resource_repository.operation.get_icon_prompt_template",
       request: z.object({ contentType: contentTypeSchema, id: z.string() }),
       response: z.string(),
       handler: async (_ctx, args: { contentType: SynapseContentType; id: string }) => {

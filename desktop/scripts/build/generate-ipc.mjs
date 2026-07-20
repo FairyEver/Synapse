@@ -82,6 +82,7 @@ const MODULE_SOURCES = [
  * whose values are channel strings.
  */
 const EXTRA_CHANNEL_SOURCES = [
+  { id: "database", importPath: "electron/database/channels.ts", exportName: "DATABASE_IPC_CHANNELS" },
   { id: "usage-analysis", importPath: "electron/usage-analysis/channels.ts", exportName: "USAGE_ANALYSIS_CHANNELS" },
   { id: "model-price", importPath: "electron/model-price/channels.ts", exportName: "MODEL_PRICE_CHANNELS" },
 ]
@@ -92,6 +93,22 @@ const OUTPUT_PATH = path.resolve(
   "generated",
   "ipc-channels.generated.ts",
 )
+
+const CANONICAL_IPC_OPERATION_PATTERN = /^app\.[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){2,}$/
+const CANONICAL_IPC_CHANNEL_PATTERN = /^synapse:app:[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*){2,}$/
+
+function assertCanonicalIpcChannel(channel, sourcePath) {
+  if (!CANONICAL_IPC_CHANNEL_PATTERN.test(channel)) {
+    throw new Error(`Invalid canonical IPC channel "${channel}" in ${sourcePath}`)
+  }
+}
+
+function operationIdToChannel(operationId, sourcePath) {
+  if (!CANONICAL_IPC_OPERATION_PATTERN.test(operationId)) {
+    throw new Error(`Invalid canonical IPC operation id "${operationId}" in ${sourcePath}`)
+  }
+  return `synapse:${operationId.replaceAll(".", ":")}`
+}
 
 async function loadModuleDescriptor(importPath) {
   const resolved = path.resolve(desktopRoot, importPath)
@@ -178,11 +195,11 @@ function extractChannels(objectLiteral, sourceFile, resolvedFilePath) {
     }
 
     const name = getPropertyName(property.name, sourceFile)
-    const channel = findObjectProperty(property.initializer, "channel", sourceFile)
+    const operationId = findObjectProperty(property.initializer, "operationId", sourceFile)
 
-    if (name && channel && ts.isStringLiteral(channel.initializer)) {
+    if (name && operationId && ts.isStringLiteral(operationId.initializer)) {
       channels[name] = {
-        channel: channel.initializer.text,
+        channel: operationIdToChannel(operationId.initializer.text, resolvedFilePath),
       }
     }
   }
@@ -307,6 +324,7 @@ async function loadExtraChannels(entry) {
   for (const prop of target.properties) {
     if (ts.isPropertyAssignment(prop) && ts.isStringLiteral(prop.initializer)) {
       const name = getPropertyName(prop.name, sourceFile)
+      assertCanonicalIpcChannel(prop.initializer.text, entry.importPath)
       channels[name] = prop.initializer.text
     }
   }
@@ -385,4 +403,4 @@ if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   })
 }
 
-export { generate, MODULE_SOURCES, OUTPUT_PATH }
+export { assertCanonicalIpcChannel, generate, MODULE_SOURCES, OUTPUT_PATH }

@@ -360,7 +360,7 @@ function DriveModuleContent() {
     setError(null)
     try {
       const bridge = requireSynapseBridge()
-      const nextPage = normalizeDriveItemsPage(await bridge.account.listDriveItems({ parentId: requestParentId }))
+      const nextPage = normalizeDriveItemsPage(await bridge.drive.item.list({ parentId: requestParentId }))
       if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setItems([...nextPage.items])
       setItemsPage(nextPage.page)
@@ -378,7 +378,7 @@ function DriveModuleContent() {
     if (!accountAuthenticated) return
     setUsageState((current) => ({ status: "loading", usage: current.usage }))
     try {
-      const usage = await requireSynapseBridge().account.getDriveUsage()
+      const usage = await requireSynapseBridge().drive.usage.get()
       setUsageState({ status: "ready", usage })
     } catch {
       setUsageState({ status: "error", usage: null })
@@ -399,7 +399,7 @@ function DriveModuleContent() {
     setLoadingMoreItems(true)
     setLoadMoreItemsError(null)
     try {
-      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().drive.item.list({
         parentId: requestParentId,
         offset: itemsPage.nextOffset,
         limit: itemsPage.limit || DRIVE_ITEMS_PAGE_SIZE,
@@ -462,7 +462,7 @@ function DriveModuleContent() {
   }, [])
 
   useEffect(() => {
-    const unsubscribe = requireSynapseBridge().account.onDriveLocalUploadProgress((event) => {
+    const unsubscribe = requireSynapseBridge().drive.upload.onLocalProgress((event) => {
       setUploadTask((current) => current ? applyDriveUploadProgressEvent(current, event) : current)
     })
     return unsubscribe
@@ -482,7 +482,7 @@ function DriveModuleContent() {
     setOpeningFolderId(item.id)
     setError(null)
     try {
-      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({ parentId: item.id }))
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().drive.item.list({ parentId: item.id }))
       if (driveItemsLoadRequestIdRef.current !== requestId) return
       prefetchedParentIdRef.current = item.id
       setItems([...nextPage.items])
@@ -531,7 +531,7 @@ function DriveModuleContent() {
     setLoadingMoreItems(false)
     setLoadMoreItemsError(null)
     try {
-      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({ parentId: requestParentId }))
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().drive.item.list({ parentId: requestParentId }))
       if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setError(null)
       setItems([...nextPage.items])
@@ -566,7 +566,7 @@ function DriveModuleContent() {
       })
       setUploadTask(nextTask)
       setUploadPanelOpen(true)
-      const result = await requireSynapseBridge().account.uploadDriveLocalItems(requestWithTaskId)
+      const result = await requireSynapseBridge().drive.upload.localItems(requestWithTaskId)
       const resultWithSkipped = withSkipped(result, skipped)
       setUploadTask((current) => current?.id === taskId ? finishDriveUploadTask(current, resultWithSkipped) : current)
       const message = uploadResultMessage(resultWithSkipped)
@@ -646,10 +646,10 @@ function DriveModuleContent() {
     setSubmitting(true)
     try {
       if (nameDialog.mode === "create") {
-        await requireSynapseBridge().account.createDriveFolder({ parentId, name })
+        await requireSynapseBridge().drive.folder.create({ parentId, name })
         toast("文件夹已创建")
       } else {
-        await requireSynapseBridge().account.renameDriveItem({ itemId: nameDialog.item.id, name })
+        await requireSynapseBridge().drive.item.rename({ itemId: nameDialog.item.id, name })
         toast("已重命名")
       }
       setNameDialog(null)
@@ -675,7 +675,7 @@ function DriveModuleContent() {
     if (!moveTarget) return
     setSubmitting(true)
     try {
-      await requireSynapseBridge().account.moveDriveItem({
+      await requireSynapseBridge().drive.item.move({
         itemId: moveTarget.id,
         parentId: moveParentId === "root" ? null : moveParentId,
       })
@@ -694,7 +694,7 @@ function DriveModuleContent() {
     setDeletingItemId(item.id, true)
     setSubmitting(true)
     try {
-      await requireSynapseBridge().account.deleteDriveItem({
+      await requireSynapseBridge().drive.item.delete({
         itemId: item.id,
       })
       toast("已删除")
@@ -734,7 +734,7 @@ function DriveModuleContent() {
   const handleOpenShareDetails = useCallback(async (item: DriveItemDto) => {
     if (!item.activeShareId) return
     try {
-      const share = await requireSynapseBridge().account.getDriveShare({ shareId: item.activeShareId })
+      const share = await requireSynapseBridge().drive.share.get({ shareId: item.activeShareId })
       setShareSuccess(driveShareSuccessFromListItem(item, share))
     } catch (rawError) {
       toast(errorMessage(rawError, "分享信息加载失败"))
@@ -744,7 +744,7 @@ function DriveModuleContent() {
 
   const handlePreview = useCallback(async (item: DriveItemDto) => {
     try {
-      const { url } = await requireSynapseBridge().account.getDriveItemPreviewUrl({ itemId: item.id })
+      const { url } = await requireSynapseBridge().drive.item.previewUrl({ itemId: item.id })
       await openDriveUrl(url)
     } catch {
       toast("打开失败")
@@ -758,7 +758,7 @@ function DriveModuleContent() {
     setSubmitting(true)
     try {
       const bridge = requireSynapseBridge()
-      const share = await bridge.account.shareDriveItem({
+      const share = await bridge.drive.share.create({
         itemId: target.item.id,
         ...settings,
       })
@@ -791,7 +791,7 @@ function DriveModuleContent() {
     if (!shareId || disablingShareIdsRef.current.has(shareId)) return
     setDisablingShareId(shareId, true)
     try {
-      await requireSynapseBridge().account.disableDriveShare({ shareId })
+      await requireSynapseBridge().drive.share.disable({ shareId })
       toast("已取消分享")
       await loadItems()
     } catch (rawError) {
@@ -1188,7 +1188,7 @@ function DriveMoveTargetTree({
     }))
 
     try {
-      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().drive.item.list({
         parentId,
         limit: DRIVE_ITEMS_PAGE_SIZE,
       }))
@@ -1235,7 +1235,7 @@ function DriveMoveTargetTree({
     }))
 
     try {
-      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().drive.item.list({
         parentId,
         offset: existing.page.nextOffset,
         limit: existing.page.limit || DRIVE_ITEMS_PAGE_SIZE,
@@ -2374,7 +2374,7 @@ function DrivePublicLinksDialog({
     const generation = input.generation ?? shareLoadGenerationRef.current
     setShareState((current) => ({ ...current, loading: !append, loadingMore: append, error: null }))
     try {
-      const result = await requireSynapseBridge().account.listDriveShares({
+      const result = await requireSynapseBridge().drive.share.list({
         offset: input.offset ?? 0,
         limit: DRIVE_PUBLIC_LINKS_PAGE_SIZE,
       })
@@ -2438,7 +2438,7 @@ function DrivePublicLinksDialog({
     if (disablingShareIdsRef.current.has(shareId)) return
     setDisablingShareId(shareId, true)
     try {
-      await requireSynapseBridge().account.disableDriveShare({ shareId })
+      await requireSynapseBridge().drive.share.disable({ shareId })
       toast("已取消分享")
       await reloadAfterPublicLinkChange()
     } catch (rawError) {
@@ -2976,7 +2976,7 @@ async function buildDriveLocalFolderItemsFromFiles(files: readonly File[]): Prom
   let skipped = 0
 
   for (const file of files) {
-    const path = requireSynapseBridge().account.filePathForDroppedFile(file)
+    const path = requireSynapseBridge().drive.localFile.pathForDroppedFile(file)
     const relativePath = normalizeSlashRelativePath(readRelativeFilePath(file))
     if (!path || !relativePath) {
       skipped += 1
@@ -3015,7 +3015,7 @@ async function buildDriveLocalFolderItemsFromFiles(files: readonly File[]): Prom
 }
 
 function driveLocalFileItemFromFile(file: File): DriveLocalUploadItem | null {
-  const path = requireSynapseBridge().account.filePathForDroppedFile(file)
+  const path = requireSynapseBridge().drive.localFile.pathForDroppedFile(file)
   if (!path) return null
   return {
     kind: "file",
@@ -3041,7 +3041,7 @@ async function driveLocalFolderItemFromDirectoryEntry(entry: DriveFileSystemDire
   }
 
   for (const file of folder.files) {
-    const path = requireSynapseBridge().account.filePathForDroppedFile(file.file)
+    const path = requireSynapseBridge().drive.localFile.pathForDroppedFile(file.file)
     const relativePath = normalizeSlashRelativePath(file.relativePath)
     if (!path || !relativePath) {
       skipped += 1

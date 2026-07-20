@@ -35,10 +35,10 @@ import type {
 const DEFAULT_CONTENT_BRIDGE_ERROR_MESSAGE =
   "当前页面没有加载 Synapse 的内容桥接。请确认你打开的是桌面应用窗口，而不是独立浏览器页面。"
 
-type RendererContentBridge = NonNullable<Window["synapse"]>["content"]
+type RendererContentBridge = NonNullable<Window["synapse"]>["resourceRepository"]
 
 function getContentBridge(): RendererContentBridge | undefined {
-  return getSynapseBridge()?.content
+  return getSynapseBridge()?.resourceRepository
 }
 
 function hasContentBridge(): boolean {
@@ -58,21 +58,21 @@ function requireContentBridge(): RendererContentBridge {
 async function listContent<T extends SynapseContentType>(
   contentType: T,
 ): Promise<SynapseContentMeta<T>[]> {
-  return requireContentBridge().list({ contentType })
+  return requireContentBridge().item.list({ contentType })
 }
 
 async function readContent(
   contentType: SynapseContentType,
   id: string,
 ): Promise<SynapseTextContentFile> {
-  return requireContentBridge().getContent({ contentType, id })
+  return requireContentBridge().operation.getContent({ contentType, id })
 }
 
 async function readDetail(
   contentType: SynapseContentType,
   id: string,
 ): Promise<SynapseContentDetail> {
-  return requireContentBridge().getDetail({ contentType, id })
+  return requireContentBridge().operation.getDetail({ contentType, id })
 }
 
 async function readAttachmentFile(args: {
@@ -81,14 +81,14 @@ async function readAttachmentFile(args: {
   id: string
   originalName: string
 }): Promise<SynapseContentFile | null> {
-  return requireContentBridge().getAttachmentFile(args)
+  return requireContentBridge().operation.getAttachmentFile(args)
 }
 
 async function createContent<T extends SynapseContentType>(
   contentType: T,
   payload: SynapseCreateContentPayload<T>,
 ): Promise<SynapseContentMutationResult> {
-  return requireContentBridge().create({
+  return requireContentBridge().item.create({
     contentType,
     payload,
   } as SynapseCreateContentRequest<T>)
@@ -98,75 +98,75 @@ async function updateContent<T extends SynapseContentType>(
   contentType: T,
   payload: SynapseUpdateContentPayload<T>,
 ): Promise<SynapseContentMutationResult> {
-  return requireContentBridge().update({
+  return requireContentBridge().item.update({
     contentType,
     payload,
   } as SynapseUpdateContentRequest<T>)
 }
 
 async function deleteContent(payload: SynapseDeleteContentPayload): Promise<SynapseContentMutationResult> {
-  return requireContentBridge().deleteContent(payload)
+  return requireContentBridge().operation.deleteContent(payload)
 }
 
 async function listDeletedContent<T extends SynapseContentType>(
   contentType: T,
 ): Promise<SynapseContentMeta<T>[]> {
-  return requireContentBridge().listDeleted({ contentType })
+  return requireContentBridge().operation.listDeleted({ contentType })
 }
 
 async function restoreContent(payload: SynapseRestoreContentPayload): Promise<SynapseContentMutationResult> {
-  return requireContentBridge().restore(payload)
+  return requireContentBridge().item.restore(payload)
 }
 
 async function purgeContent(payload: SynapsePurgeContentPayload): Promise<SynapseContentMutationResult> {
-  return requireContentBridge().purge(payload)
+  return requireContentBridge().item.purge(payload)
 }
 
 async function downloadContent(
   contentType: SynapseContentType,
   id: string,
 ): Promise<SynapseContentDownloadResult> {
-  return requireContentBridge().download({ contentType, id })
+  return requireContentBridge().item.download({ contentType, id })
 }
 
 async function openContentDetailWindow(payload: SynapseOpenContentWindowPayload): Promise<void> {
-  return requireContentBridge().openDetailWindow(payload)
+  return requireContentBridge().operation.openDetailWindow(payload)
 }
 
 async function openContentCreateWindow(payload: SynapseOpenContentCreateWindowPayload): Promise<void> {
-  return requireContentBridge().openCreateWindow(payload)
+  return requireContentBridge().operation.openCreateWindow(payload)
 }
 
 async function openContentEditWindow(payload: SynapseOpenContentEditWindowPayload): Promise<void> {
-  return requireContentBridge().openEditWindow(payload)
+  return requireContentBridge().operation.openEditWindow(payload)
 }
 
 async function readContentEditorInitPayload(
   requestId: string,
 ): Promise<SynapseOpenContentCreateWindowPayload | SynapseOpenContentEditWindowPayload | null> {
-  return requireContentBridge().readEditorInitPayload({ requestId })
+  return requireContentBridge().operation.readEditorInitPayload({ requestId })
 }
 
 async function getEditorAdapters(): Promise<SynapseEditorAdapterSummary[]> {
-  return requireContentBridge().getEditorAdapters()
+  return requireContentBridge().operation.getEditorAdapters()
 }
 
 async function installToEditor(
   payload: SynapseInstallToEditorPayload,
 ): Promise<SynapseContentInstallResult> {
-  return requireContentBridge().installToEditor(payload)
+  return requireContentBridge().operation.installToEditor(payload)
 }
 
 async function resolveEditorInstallTarget(
   payload: SynapseResolveEditorTargetPayload,
 ): Promise<SynapseEditorResolvedTarget> {
-  return requireContentBridge().resolveEditorInstallTarget(payload)
+  return requireContentBridge().operation.resolveEditorInstallTarget(payload)
 }
 
 async function readEditorInstallFormValues(
   payload: SynapseReadEditorInstallFormValuesPayload,
 ): Promise<SynapseReadEditorInstallFormValuesResult> {
-  return requireContentBridge().readEditorInstallFormValues(payload)
+  return requireContentBridge().operation.readEditorInstallFormValues(payload)
 }
 
 const createRule = (payload: SynapseCreateRulePayload) => createContent("rule", payload)
@@ -178,7 +178,7 @@ async function getIconPromptTemplate(
   contentType: SynapseContentType,
   id: string,
 ): Promise<string | null> {
-  return requireContentBridge().getIconPromptTemplate({ contentType, id })
+  return requireContentBridge().operation.getIconPromptTemplate({ contentType, id })
 }
 
 const readRules = () => listContent("rule")

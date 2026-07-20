@@ -16,7 +16,7 @@ export const shellIpcModule: IpcModule = {
   methods: {
     openExternal: {
       kind: "invoke",
-      channel: "synapse:shell:open-external",
+      operationId: "app.shell.external.open",
       request: z.object({ url: z.string().url() }),
       response: z.void(),
       handler: async (ctx, request: { url: string }) => {
@@ -36,7 +36,7 @@ export const shellIpcModule: IpcModule = {
     },
     showItemInFolder: {
       kind: "invoke",
-      channel: "synapse:shell:show-item-in-folder",
+      operationId: "app.shell.item.show_in_folder",
       request: z.object({ fullPath: z.string() }),
       response: z.void(),
       handler: async (ctx, request: { fullPath: string }) => {

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { existsSync } from "node:fs"
+import { statSync } from "node:fs"
 import { chmod, mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
@@ -312,7 +312,11 @@ function parseMarkedPath(stdout: string): string | null {
 const execLoginShellPathCommand: LoginShellPathExec = (file, args, options) => execFileSync(file, args, options)
 
 function syncFileExists(candidate: string): boolean {
-  return existsSync(candidate)
+  try {
+    return statSync(candidate).isFile()
+  } catch {
+    return false
+  }
 }
 
 function pathForPlatform(platform: NodeJS.Platform | string): typeof path.posix {

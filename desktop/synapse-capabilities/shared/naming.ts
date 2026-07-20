@@ -27,11 +27,25 @@ const CAPABILITY_ACTIONS = [
   "stop",
   "stop_refill",
   "cancel",
+  "clear",
+  "apply",
+  "download_file",
+  "ensure",
+  "import",
+  "materialize",
   "open",
+  "preview",
+  "republish",
+  "resolve",
+  "read_text",
+  "update_access",
+  "update_settings",
+  "launch",
 ] as const
 
 export type CapabilityAction = typeof CAPABILITY_ACTIONS[number]
-export type CapabilityId = `${string}.${string}.${CapabilityAction}`
+export type CapabilityId = `app.${string}.${string}.${CapabilityAction}`
+export type IpcOperationId = `app.${string}.${string}.${string}`
 
 const TOKEN_PATTERN = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/
 
@@ -52,7 +66,7 @@ function toPascalToken(token: string): string {
 
 export function isCanonicalCapabilityId(id: string): id is CapabilityId {
   const parts = splitCapabilityId(id)
-  if (parts.length < 3) return false
+  if (parts.length < 4 || parts[0] !== "app") return false
   if (!parts.every((part) => TOKEN_PATTERN.test(part))) return false
   return isKnownAction(parts[parts.length - 1])
 }
@@ -64,7 +78,7 @@ export function assertCanonicalCapabilityId(id: string): asserts id is Capabilit
 }
 
 export function getCapabilityDomain(id: CapabilityId): string {
-  return splitCapabilityId(id)[0]
+  return splitCapabilityId(id)[1]
 }
 
 export function getCapabilityAction(id: CapabilityId): CapabilityAction {
@@ -76,26 +90,45 @@ export function capabilityIdToMcpTool(id: CapabilityId): string {
   return id.replaceAll(".", "_")
 }
 
-export function legacyToolNameForPrimary(
-  primaryName: string,
-  legacyPrefix: string,
-  primaryPrefix: string,
-): string {
-  if (!primaryName.startsWith(`${primaryPrefix}_`)) {
-    throw new Error(`Primary tool ${primaryName} does not start with ${primaryPrefix}_`)
-  }
-  return `${legacyPrefix}_${primaryName.slice(primaryPrefix.length + 1)}`
+export function isCanonicalIpcOperationId(id: string): id is IpcOperationId {
+  const parts = splitCapabilityId(id)
+  return parts.length >= 4 && parts[0] === "app" && parts.every((part) => TOKEN_PATTERN.test(part))
 }
 
-export function primaryToolNameForLegacy(
-  legacyName: string,
-  legacyPrefix: string,
-  primaryPrefix: string,
-): string {
-  if (!legacyName.startsWith(`${legacyPrefix}_`)) {
-    throw new Error(`Legacy tool ${legacyName} does not start with ${legacyPrefix}_`)
+export function assertCanonicalIpcOperationId(id: string): asserts id is IpcOperationId {
+  if (!isCanonicalIpcOperationId(id)) {
+    throw new Error(`Invalid IPC operation id: ${id}`)
   }
-  return `${primaryPrefix}_${legacyName.slice(legacyPrefix.length + 1)}`
+}
+
+export function ipcOperationIdToChannel(id: IpcOperationId): string {
+  assertCanonicalIpcOperationId(id)
+  return `synapse:${id.replaceAll(".", ":")}`
+}
+
+export function isCanonicalIpcChannel(channel: string): boolean {
+  if (!channel.startsWith("synapse:app:")) return false
+  return isCanonicalIpcOperationId(channel.slice("synapse:".length).replaceAll(":", "."))
+}
+
+export function assertCanonicalIpcChannel(channel: string): void {
+  if (!isCanonicalIpcChannel(channel)) {
+    throw new Error(`Invalid IPC channel: ${channel}`)
+  }
+}
+
+export function capabilityIdToIpcChannel(id: CapabilityId): string {
+  assertCanonicalCapabilityId(id)
+  return ipcOperationIdToChannel(id)
+}
+
+export function ipcOperationIdToBridgePath(id: IpcOperationId): string {
+  assertCanonicalIpcOperationId(id)
+  return id
+    .split(".")
+    .slice(1)
+    .map((token) => token.replace(/_([a-z0-9])/g, (_match, part: string) => part.toUpperCase()))
+    .join(".")
 }
 
 export function capabilityIdToServiceMethod(id: CapabilityId): string {

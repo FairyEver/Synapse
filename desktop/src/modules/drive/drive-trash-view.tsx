@@ -84,7 +84,7 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
       setLoadMoreError(null)
     }
     try {
-      const result = await requireSynapseBridge().account.listDriveTrash({
+      const result = await requireSynapseBridge().drive.trash.list({
         offset,
         limit: DRIVE_TRASH_PAGE_SIZE,
       })
@@ -153,7 +153,7 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
   const deleteTrashItem = useCallback(async (target: DriveTrashItemDto) => {
     await runTrashMutation(
       target,
-      () => requireSynapseBridge().account.deleteDriveTrashItem({ itemId: target.id }),
+      () => requireSynapseBridge().drive.trash.delete({ itemId: target.id }),
       "已删除",
       "删除失败",
       onUsageChange,
@@ -208,7 +208,7 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
                 onRestore={() => {
                   void runTrashMutation(
                     item,
-                    () => requireSynapseBridge().account.restoreDriveTrashItem({
+                    () => requireSynapseBridge().drive.trash.restore({
                       itemId: item.id,
                       kind: item.kind,
                       ...(item.assetId ? { assetId: item.assetId } : {}),

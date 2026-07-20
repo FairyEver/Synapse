@@ -98,7 +98,7 @@ function DriveSiteCreateDialog({
     setError(null)
     setForm(createInitialForm(folder, null))
     setLoading(true)
-    requireSynapseBridge().account.preflightDriveSite({ sourceFolderItemId: folder.id })
+    requireSynapseBridge().drive.site.preflight({ sourceFolderItemId: folder.id })
       .then((result) => {
         if (cancelled) return
         setPreflight(result)
@@ -127,7 +127,7 @@ function DriveSiteCreateDialog({
     setSubmitting(true)
     setError(null)
     try {
-      const site = await requireSynapseBridge().account.createDriveSite({
+      const site = await requireSynapseBridge().drive.site.create({
         sourceFolderItemId: folder.id,
         name: form.name.trim(),
         entryPath: form.entryPath,

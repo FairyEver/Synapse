@@ -34,11 +34,11 @@ describe("createElectronTransportInstall", () => {
       "    at send (/Users/liyang/project/agent.ts:1:1)",
     ].join("\n")
 
-    install("synapse:test:fail", async () => {
+    install("synapse:app:test:operation:fail", async () => {
       throw error
     })
 
-    const handler = electronMock.handlers.get("synapse:test:fail")
+    const handler = electronMock.handlers.get("synapse:app:test:operation:fail")
     const result = await handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
       token: "secret",
       value: "ok",
@@ -62,7 +62,7 @@ describe("createElectronTransportInstall", () => {
     expect(logger.error).toHaveBeenCalledWith(
       "IPC invoke failed.",
       expect.objectContaining({
-        channel: "synapse:test:fail",
+        operationId: "app.test.operation.fail",
         durationMs: expect.any(Number),
         error: expect.objectContaining({
           name: "Error",
@@ -99,11 +99,11 @@ describe("createElectronTransportInstall", () => {
     const { createElectronTransportInstall } = await import("../electron-adapter")
     const install = createElectronTransportInstall({ logger })
 
-    install("synapse:account:drive:uploads:local-items", async () => {
+    install("synapse:app:drive:upload:local_items", async () => {
       throw new Error("Local drive upload pipeline is unavailable.")
     })
 
-    const handler = electronMock.handlers.get("synapse:account:drive:uploads:local-items")
+    const handler = electronMock.handlers.get("synapse:app:drive:upload:local_items")
     const result = await handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
       parentId: "folder-1",
       items: [
@@ -137,7 +137,7 @@ describe("createElectronTransportInstall", () => {
     expect(logger.error).toHaveBeenCalledWith(
       "IPC invoke failed.",
       expect.objectContaining({
-        channel: "synapse:account:drive:uploads:local-items",
+        operationId: "app.drive.upload.local_items",
         request: expect.objectContaining({
           parentId: "folder-1",
           items: expect.any(Array),
@@ -159,11 +159,11 @@ describe("createElectronTransportInstall", () => {
     const { createElectronTransportInstall } = await import("../electron-adapter")
     const install = createElectronTransportInstall({ logger })
 
-    install("synapse:installers:install-source-to-editor", async () => {
+    install("synapse:app:installers:operation:install_source_to_editor", async () => {
       throw new Error("install unavailable")
     })
 
-    const handler = electronMock.handlers.get("synapse:installers:install-source-to-editor")
+    const handler = electronMock.handlers.get("synapse:app:installers:operation:install_source_to_editor")
     await handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
       skillEnvReplacementValues: { TOKEN: "RAW_REPLACEMENT_SECRET" },
       skillEnvValues: { BAILIAN: "RAW_ENV_SECRET" },
@@ -197,9 +197,9 @@ describe("createElectronTransportInstall", () => {
   })
 
   it.each([
-    "synapse:secrets:create",
-    "synapse:secrets:update",
-    "synapse:secrets:upsert",
+    "synapse:app:secrets:item:create",
+    "synapse:app:secrets:item:update",
+    "synapse:app:secrets:item:upsert",
   ])("summarizes failed Secrets mutation requests for %s", async (channel) => {
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const { createElectronTransportInstall } = await import("../electron-adapter")
@@ -263,11 +263,11 @@ describe("createElectronTransportInstall", () => {
       },
     })
 
-    install("synapse:git:repositories:clone", async () => {
+    install("synapse:app:git:repositories:clone", async () => {
       throw error
     })
 
-    const handler = electronMock.handlers.get("synapse:git:repositories:clone")
+    const handler = electronMock.handlers.get("synapse:app:git:repositories:clone")
     const result = await handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
       remoteUrl: "https://token:secret@github.com/team/docs.git?token=raw-token",
       targetPath: "/Users/alice/Secrets/docs",

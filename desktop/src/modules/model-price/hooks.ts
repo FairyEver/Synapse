@@ -13,21 +13,21 @@ const logger = createRendererLogger("model-price")
 
 export function useModelPriceCoverage(input: ModelPriceCoverageInput, refreshKey: number): ModelPriceState<ModelPriceCoverageRow[]> {
   return useModelPriceLoader(
-    () => requireSynapseBridge().modelPrice.listCoverage(input),
+    () => requireSynapseBridge().modelPrice.usedModel.list(input),
     [input.source, input.range, input.limit, refreshKey],
   )
 }
 
 export function useModelPriceRules(refreshKey: number): ModelPriceState<ModelPriceRule[]> {
   return useModelPriceLoader(
-    () => requireSynapseBridge().modelPrice.getRules(),
+    () => requireSynapseBridge().modelPrice.rule.list(),
     [refreshKey],
   )
 }
 
 export function useModelPricePresets(refreshKey = 0): ModelPriceState<ModelPricePresetSummary[]> {
   return useModelPriceLoader(
-    () => requireSynapseBridge().modelPrice.listPresets(),
+    () => requireSynapseBridge().modelPrice.preset.list(),
     [refreshKey],
   )
 }

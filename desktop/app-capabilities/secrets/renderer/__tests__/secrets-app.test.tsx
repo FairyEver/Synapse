@@ -38,7 +38,22 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../../src/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
-    if (domain === "secrets") return mocks.secrets
+    if (domain === "secrets") {
+      return {
+        item: {
+          list: mocks.secrets.list,
+          get: mocks.secrets.get,
+          create: mocks.secrets.create,
+          update: mocks.secrets.update,
+          delete: mocks.secrets.delete,
+          onChanged: mocks.secrets.onChanged,
+        },
+        operation: {
+          scanSkillEnvBindings: mocks.secrets.scanSkillEnvBindings,
+          queueSkillEnvBindings: mocks.secrets.queueSkillEnvBindings,
+        },
+      }
+    }
     throw new Error(`Unexpected bridge domain: ${domain}`)
   },
 }))

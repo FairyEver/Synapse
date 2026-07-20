@@ -26,7 +26,7 @@ function useAutomationItems() {
 
     try {
       if (!hasLoadedRef.current) setLoading(true)
-      const nextItems = await requireSynapseBridge().automation.listItems()
+      const nextItems = await requireSynapseBridge().automation.item.list()
       if (!isLatestRefresh()) return
       hasLoadedRef.current = true
       setItems(nextItems)
@@ -52,7 +52,7 @@ function useAutomationItems() {
   }, [refresh])
 
   useEffect(() => {
-    return requireSynapseBridge().automation.onChanged(() => {
+    return requireSynapseBridge().automation.item.onChanged(() => {
       void refresh()
     })
   }, [refresh])
@@ -66,31 +66,31 @@ function useAutomationItems() {
 }
 
 async function createAutomation(input: AutomationCreateInput): Promise<AutomationItem> {
-  return requireSynapseBridge().automation.createItem(input)
+  return requireSynapseBridge().automation.item.create(input)
 }
 
 async function updateAutomation(id: string, patch: AutomationUpdateInput): Promise<AutomationItem> {
-  return requireSynapseBridge().automation.updateItem({ id, patch })
+  return requireSynapseBridge().automation.item.update({ id, patch })
 }
 
 async function deleteAutomation(id: string): Promise<{ deleted: boolean }> {
-  return requireSynapseBridge().automation.deleteItem(id)
+  return requireSynapseBridge().automation.item.delete(id)
 }
 
 async function setAutomationEnabled(id: string, enabled: boolean): Promise<AutomationItem> {
-  return requireSynapseBridge().automation.setItemEnabled({ id, enabled })
+  return requireSynapseBridge().automation.item.setEnabled({ id, enabled })
 }
 
 async function runAutomation(id: string): Promise<AutomationRun | null> {
-  return requireSynapseBridge().automation.runItem(id)
+  return requireSynapseBridge().automation.run.execute(id)
 }
 
 async function stopAutomationRun(runId: string): Promise<AutomationStopRunResult> {
-  return requireSynapseBridge().automation.stopRun(runId)
+  return requireSynapseBridge().automation.run.disable(runId)
 }
 
 async function listAutomationRuns(automationId: string, limit = 100): Promise<AutomationRun[]> {
-  return requireSynapseBridge().automation.listRuns(automationId, { limit })
+  return requireSynapseBridge().automation.run.list(automationId, { limit })
 }
 
 function errorMessageLength(error: unknown): number {

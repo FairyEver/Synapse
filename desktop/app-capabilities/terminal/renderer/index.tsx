@@ -136,8 +136,8 @@ export function TerminalModule() {
 
   const refreshSessions = useCallback(async () => {
     const [nextGroups, nextSessions] = await Promise.all([
-      terminalBridge.listGroups(),
-      terminalBridge.listSessions(),
+      terminalBridge.group.list(),
+      terminalBridge.session.list(),
     ])
     setGroups(nextGroups)
     setSessions(nextSessions)
@@ -167,7 +167,7 @@ export function TerminalModule() {
 
   const createSession = useCallback(async (input: SynapseTerminalCreateSessionInput = {}) => {
     try {
-      const session = await terminalBridge.createSession({
+      const session = await terminalBridge.session.create({
         cols: DEFAULT_COLS,
         rows: DEFAULT_ROWS,
         ...input,
@@ -175,7 +175,7 @@ export function TerminalModule() {
       setSessions((current) => mergeSession(current, session))
       setActiveSessionId(session.id)
       setTerminalReadError(null)
-      terminalBridge.listGroups()
+      terminalBridge.group.list()
         .then(setGroups)
         .catch((error) => {
           logger.warn("Failed to refresh terminal groups after session creation.", error)
@@ -216,13 +216,13 @@ export function TerminalModule() {
     setGroupSaving(true)
     try {
       if (groupDialogMode === "rename" && groupRenameTarget) {
-        const group = await terminalBridge.renameGroup({
+        const group = await terminalBridge.group.rename({
           groupId: groupRenameTarget.id,
           name: groupName,
         })
         setGroups((current) => current.map((item) => item.id === group.id ? group : item))
       } else {
-        const group = await terminalBridge.createGroup({ name })
+        const group = await terminalBridge.group.create({ name })
         setGroups((current) => mergeGroup(current, group))
       }
       setGroupDialogMode(null)
@@ -242,7 +242,7 @@ export function TerminalModule() {
     if (!title) return
     setRenameSaving(true)
     try {
-      const session = await terminalBridge.renameSession({
+      const session = await terminalBridge.session.rename({
         sessionId: renameTarget.id,
         title: renameTitle,
       })
@@ -261,7 +261,7 @@ export function TerminalModule() {
     const targetId = target.id
     setDeletingSessionId(targetId)
     try {
-      await terminalBridge.deleteSession({ sessionId: targetId })
+      await terminalBridge.session.delete({ sessionId: targetId })
       setSessions((current) => {
         const nextSessions = current.filter((session) => session.id !== targetId)
         setActiveSessionId((currentActiveId) => {
@@ -286,7 +286,7 @@ export function TerminalModule() {
       .map((session) => session.id))
     setDeleteGroupSaving(true)
     try {
-      await terminalBridge.deleteGroup({ groupId })
+      await terminalBridge.group.delete({ groupId })
       setGroups((current) => current.filter((group) => group.id !== groupId))
       setSessions((current) => {
         const nextSessions = current.filter((session) => session.groupId !== groupId)
@@ -323,7 +323,7 @@ export function TerminalModule() {
   const chooseGroupSettingsDefaultCwd = useCallback(async () => {
     setGroupSettingsChoosingDirectory(true)
     try {
-      const selectedPath = await terminalBridge.chooseDefaultCwd()
+      const selectedPath = await terminalBridge.group.chooseDefaultCwd()
       if (selectedPath) {
         setGroupSettingsDefaultCwd(selectedPath)
       }
@@ -342,7 +342,7 @@ export function TerminalModule() {
     const defaultCwd = groupSettingsDefaultCwd.trim()
     setGroupSettingsSaving(true)
     try {
-      const group = await terminalBridge.updateGroupSettings({
+      const group = await terminalBridge.group.updateSettings({
         groupId: groupSettingsTarget.id,
         name,
         settings: {
@@ -396,7 +396,7 @@ export function TerminalModule() {
   }, [])
 
   const refreshGroupsForCommandManager = useCallback(async (targetGroupId: string) => {
-    const nextGroups = await terminalBridge.listGroups()
+    const nextGroups = await terminalBridge.group.list()
     setGroups(nextGroups)
     setCommandManagerTarget(nextGroups.find((group) => group.id === targetGroupId) ?? null)
   }, [terminalBridge])
@@ -409,14 +409,14 @@ export function TerminalModule() {
     setCommandSaving(true)
     try {
       if (commandEditTarget) {
-        await terminalBridge.updateGroupCommand({
+        await terminalBridge.groupCommand.update({
           groupId: commandManagerTarget.id,
           commandId: commandEditTarget.id,
           name,
           command,
         })
       } else {
-        await terminalBridge.createGroupCommand({
+        await terminalBridge.groupCommand.create({
           groupId: commandManagerTarget.id,
           name,
           command,
@@ -444,7 +444,7 @@ export function TerminalModule() {
     if (!commandManagerTarget) return
     setCommandDeletingId(command.id)
     try {
-      await terminalBridge.deleteGroupCommand({
+      await terminalBridge.groupCommand.delete({
         groupId: commandManagerTarget.id,
         commandId: command.id,
       })
@@ -466,7 +466,7 @@ export function TerminalModule() {
 
   const launchCommand = useCallback(async (group: SynapseTerminalGroup, command: SynapseTerminalGroupCommand) => {
     try {
-      const session = await terminalBridge.launchGroupCommand({
+      const session = await terminalBridge.groupCommand.launch({
         groupId: group.id,
         commandId: command.id,
         cols: DEFAULT_COLS,
@@ -475,7 +475,7 @@ export function TerminalModule() {
       setSessions((current) => mergeSession(current, session))
       setActiveSessionId(session.id)
       setTerminalReadError(null)
-      terminalBridge.listGroups()
+      terminalBridge.group.list()
         .then(setGroups)
         .catch((error) => {
           logger.warn("Failed to refresh terminal groups after command launch.", error)
@@ -513,7 +513,7 @@ export function TerminalModule() {
     const input = formatDroppedTerminalPaths(validPaths)
     void writeTerminalInputChunks({
       input,
-      write: (data) => terminalBridge.writeSession({
+      write: (data) => terminalBridge.session.write({
         sessionId: terminalSessionId,
         data,
       }),
@@ -540,7 +540,7 @@ export function TerminalModule() {
 
     const data = action.kind === "shell-command" ? encodeTerminalCommandInput(payload) : payload
     try {
-      await terminalBridge.writeSession({
+      await terminalBridge.session.write({
         sessionId: activeSession.id,
         data,
       })
@@ -585,7 +585,7 @@ export function TerminalModule() {
       if (!cols || !rows) return
       if (lastResize.cols === cols && lastResize.rows === rows) return
       lastResize = { cols, rows }
-      void terminalBridge.resizeSession({
+      void terminalBridge.session.resize({
         sessionId: terminalSessionId,
         cols,
         rows,
@@ -600,7 +600,7 @@ export function TerminalModule() {
     resizeObserver.observe(container)
 
     const inputDisposable = xterm.onData((data) => {
-      void terminalBridge.writeSession({
+      void terminalBridge.session.write({
         sessionId: terminalSessionId,
         data,
       }).catch((error) => {
@@ -618,7 +618,7 @@ export function TerminalModule() {
       xterm.write(chunk.data)
     }
 
-    const unsubscribeData = terminalBridge.onData((event) => {
+    const unsubscribeData = terminalBridge.operation.onData((event) => {
       if (event.sessionId !== terminalSessionId || disposed) return
       if (!initialReadComplete) {
         pendingChunks.push(event.chunk)
@@ -627,10 +627,10 @@ export function TerminalModule() {
       writeChunk(event.chunk)
     })
 
-    const unsubscribeSessionChanged = terminalBridge.onSessionChanged((session) => {
+    const unsubscribeSessionChanged = terminalBridge.operation.onSessionChanged((session) => {
       setSessions((current) => mergeSession(current, session))
     })
-    const unsubscribeSessionDeleted = terminalBridge.onSessionDeleted((event) => {
+    const unsubscribeSessionDeleted = terminalBridge.operation.onSessionDeleted((event) => {
       setSessions((current) => {
         const nextSessions = current.filter((session) => session.id !== event.sessionId)
         setActiveSessionId((currentActiveId) => {
@@ -646,7 +646,7 @@ export function TerminalModule() {
       let targetSeq: number | null = null
 
       while (!disposed) {
-        const result = await terminalBridge.readSession({
+        const result = await terminalBridge.session.read({
           sessionId: terminalSessionId,
           afterSeq,
           limitBytes: TERMINAL_READ_PAGE_BYTES,

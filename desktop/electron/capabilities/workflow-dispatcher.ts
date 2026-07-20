@@ -233,7 +233,7 @@ type WorkflowDispatchSecurity = {
 type ActionHandler = (params: Record<string, unknown>, deps: WorkflowDispatchDeps, security: WorkflowDispatchSecurity | null) => Promise<DispatchResult>
 
 const ACTION_HANDLERS: Record<string, ActionHandler> = {
-  "workflow.node_type.list": async (_params, deps) => {
+  "app.workflow.node_type.list": async (_params, deps) => {
     const types = deps.nodeTypeRegistry.listTypes()
     const summaries = types.map((type) => {
       const manifest = deps.nodeTypeRegistry.getManifest(type)
@@ -249,7 +249,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: summaries }
   },
 
-  "workflow.node_type.describe": async (params, deps) => {
+  "app.workflow.node_type.describe": async (params, deps) => {
     const nodeType = requireString(params, "nodeType")
     const manifest = deps.nodeTypeRegistry.getManifest(nodeType)
     const configSchema = z.toJSONSchema(manifest.configSchema, {
@@ -275,18 +275,18 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data }
   },
 
-  "workflow.definition.list": async (_params, deps) => {
+  "app.workflow.definition.list": async (_params, deps) => {
     const list = await deps.workflowService.list()
     return { ok: true, data: list }
   },
 
-  "workflow.definition.get": async (params, deps) => {
+  "app.workflow.definition.get": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const def = await deps.workflowService.get(workflowId)
     return { ok: true, data: def }
   },
 
-  "workflow.definition.inspect": async (params, deps) => {
+  "app.workflow.definition.inspect": async (params, deps) => {
     const rawDefinition = requireObject(params, "definition")
     requireWorkflowSchemaVersion(rawDefinition)
     const definition = structuredClone(rawDefinition) as unknown as WorkflowDefinition
@@ -306,7 +306,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: result }
   },
 
-  "workflow.run.get": async (params, deps) => {
+  "app.workflow.run.get": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const runId = requireWorkflowRunId(params, "runId")
     const status = await deps.getRunStatus(runId)
@@ -323,14 +323,14 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     }
   },
 
-  "workflow.run.list": async (params, deps) => {
+  "app.workflow.run.list": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const limit = typeof params.limit === "number" ? params.limit : 20
     const snapshots = await deps.snapshotService.list(workflowId, limit)
     return { ok: true, data: snapshots }
   },
 
-  "workflow.definition.create": async (params, deps) => {
+  "app.workflow.definition.create": async (params, deps) => {
     const defaultProjectId = optionalNonEmptyString(params, "defaultProjectId")
     const defaultProviderId = optionalNonEmptyString(params, "defaultProviderId")
     const defaultModelTier = optionalModelTier(params)
@@ -357,7 +357,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: { id: result.id, versionHash } }
   },
 
-  "workflow.definition.update": async (params, deps) => {
+  "app.workflow.definition.update": async (params, deps) => {
     const rawDefinition = requireObject(params, "definition")
     const workflowId = requireNestedString(rawDefinition, "definition", "id")
     requireWorkflowSchemaVersion(rawDefinition)
@@ -381,7 +381,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     })
   },
 
-  "workflow.definition.delete": async (params, deps) => {
+  "app.workflow.definition.delete": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     return withWorkflowMutationLock(deps, workflowId, async () => {
       await deps.cancelRunsForWorkflow(workflowId)
@@ -392,7 +392,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     })
   },
 
-  "workflow.run.execute": async (params, deps, security) => {
+  "app.workflow.run.execute": async (params, deps, security) => {
     const workflowId = requireString(params, "workflowId")
     const runParams = "params" in params ? requireObject(params, "params") : {}
     const result = await deps.runWorkflow(workflowId, runParams, { actor: security?.actor })
@@ -400,7 +400,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: result }
   },
 
-  "workflow.run.disable": async (params, deps) => {
+  "app.workflow.run.disable": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const runId = requireWorkflowRunId(params, "runId")
     const status = await deps.getRunStatus(runId)
@@ -411,7 +411,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: { runId, cancelRequested } }
   },
 
-  "workflow.node.create": async (params, deps) => {
+  "app.workflow.node.create": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const node = requireObject(params, "node")
     const nodeConfig = requireNestedObject(node, "node", "config")
@@ -421,7 +421,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     const incomingEdgeIds: string[] = []
     const outgoingEdgeIds: string[] = []
     const result = await atomicMutate(deps, workflowId, (def) => {
-      const position = "position" in node ? requirePosition(node.position, "workflow.node.create") : autoPosition(def.nodes)
+      const position = "position" in node ? requirePosition(node.position, "app.workflow.node.create") : autoPosition(def.nodes)
       const id = randomUUID()
       nodeId = id
       def.nodes.push({
@@ -466,7 +466,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     }
   },
 
-  "workflow.node.update": async (params, deps) => {
+  "app.workflow.node.update": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const nodeId = requireString(params, "nodeId")
     const patch = requireObject(params, "patch")
@@ -474,12 +474,12 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
       const target = def.nodes.find((n) => n.id === nodeId)
       if (!target) throw new Error(`Node not found: ${nodeId}`)
       if (typeof patch.name === "string") target.name = patch.name
-      if ("position" in patch) target.position = requirePosition(patch.position, "workflow.node.update")
+      if ("position" in patch) target.position = requirePosition(patch.position, "app.workflow.node.update")
       if (patch.config) target.config = patch.config as Record<string, unknown>
     })
   },
 
-  "workflow.node.delete": async (params, deps) => {
+  "app.workflow.node.delete": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const nodeId = requireString(params, "nodeId")
     let removedEdgeCount: number
@@ -495,7 +495,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ...result, data: { removedEdgeCount: removedEdgeCount!, ...result.data as Record<string, unknown> } }
   },
 
-  "workflow.edge.create": async (params, deps) => {
+  "app.workflow.edge.create": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const from = requireString(params, "from")
     const to = requireString(params, "to")
@@ -511,7 +511,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ...result, data: { edgeId: edgeId!, ...result.data as Record<string, unknown> } }
   },
 
-  "workflow.edge.delete": async (params, deps) => {
+  "app.workflow.edge.delete": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const edgeId = requireString(params, "edgeId")
     return atomicMutate(deps, workflowId, (def) => {
@@ -522,7 +522,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     })
   },
 
-  "workflow.param.update": async (params, deps) => {
+  "app.workflow.param.update": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const newParams = requireArray(params, "params")
     normalizeWorkflowParamDefaults(newParams)
@@ -531,7 +531,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     })
   },
 
-  "workflow.layout.update": async (params, deps) => {
+  "app.workflow.layout.update": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const direction = typeof params.direction === "string" && (params.direction === "LR" || params.direction === "TB")
       ? params.direction
@@ -545,28 +545,28 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
 }
 
 const MUTATING_WORKFLOW_ACTIONS = new Set([
-  "workflow.definition.create",
-  "workflow.definition.update",
-  "workflow.definition.delete",
-  "workflow.run.execute",
-  "workflow.run.disable",
-  "workflow.node.create",
-  "workflow.node.update",
-  "workflow.node.delete",
-  "workflow.edge.create",
-  "workflow.edge.delete",
-  "workflow.param.update",
-  "workflow.layout.update",
+  "app.workflow.definition.create",
+  "app.workflow.definition.update",
+  "app.workflow.definition.delete",
+  "app.workflow.run.execute",
+  "app.workflow.run.disable",
+  "app.workflow.node.create",
+  "app.workflow.node.update",
+  "app.workflow.node.delete",
+  "app.workflow.edge.create",
+  "app.workflow.edge.delete",
+  "app.workflow.param.update",
+  "app.workflow.layout.update",
 ])
 
 const READING_WORKFLOW_ACTIONS = new Set([
-  "workflow.node_type.list",
-  "workflow.node_type.describe",
-  "workflow.definition.list",
-  "workflow.definition.get",
-  "workflow.definition.inspect",
-  "workflow.run.get",
-  "workflow.run.list",
+  "app.workflow.node_type.list",
+  "app.workflow.node_type.describe",
+  "app.workflow.definition.list",
+  "app.workflow.definition.get",
+  "app.workflow.definition.inspect",
+  "app.workflow.run.get",
+  "app.workflow.run.list",
 ])
 
 function dispatchCorrelation(params: Record<string, unknown>): Record<string, unknown> {
@@ -595,7 +595,7 @@ function dispatchCorrelation(params: Record<string, unknown>): Record<string, un
 }
 
 function dispatchResultCorrelation(action: string, result: DispatchResult): Record<string, unknown> {
-  if (action !== "workflow.run.execute") return {}
+  if (action !== "app.workflow.run.execute") return {}
   if (!result.ok) return dispatchFailureCorrelation(result)
   const data = result.data
   if (!data || typeof data !== "object" || Array.isArray(data)) return {}

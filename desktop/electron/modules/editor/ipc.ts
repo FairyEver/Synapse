@@ -129,7 +129,7 @@ export const editorIpcModule: IpcModule = {
   methods: {
     getGlobalDirectories: {
       kind: "invoke",
-      channel: "synapse:editor:get-global-directories",
+      operationId: "app.editor.operation.get_global_directories",
       request: z.void(),
       response: z.array(globalDirectorySchema),
       handler: async (_ctx) => {
@@ -138,7 +138,7 @@ export const editorIpcModule: IpcModule = {
     },
     createDirectory: {
       kind: "invoke",
-      channel: "synapse:editor:create-directory",
+      operationId: "app.editor.operation.create_directory",
       request: z.object({ dirPath: z.string() }),
       response: z.void(),
       handler: async (ctx, request: { dirPath: string }) => {

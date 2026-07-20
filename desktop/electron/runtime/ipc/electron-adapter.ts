@@ -31,9 +31,9 @@ const MAX_ARRAY_LENGTH = 20
 const PATH_REDACTED = "[path redacted]"
 const IPC_ERROR_ENVELOPE_KEY = "__synapseIpcError"
 const SECRETS_MUTATION_CHANNELS = new Set([
-  "synapse:secrets:create",
-  "synapse:secrets:update",
-  "synapse:secrets:upsert",
+  "synapse:app:secrets:item:create",
+  "synapse:app:secrets:item:update",
+  "synapse:app:secrets:item:upsert",
 ])
 
 type IpcErrorEnvelope = {

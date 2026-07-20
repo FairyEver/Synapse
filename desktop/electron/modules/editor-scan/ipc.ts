@@ -228,7 +228,7 @@ export const editorScanIpcModule: IpcModule = {
   methods: {
     scanAll: {
       kind: "invoke",
-      channel: "synapse:editor-scan:scan-all",
+      operationId: "app.editor_scan.operation.scan_all",
       request: editorScanRequestSchema,
       response: editorScanResultSchema,
       handler: async (_ctx, request: { requestId: string }) => {
@@ -246,7 +246,7 @@ export const editorScanIpcModule: IpcModule = {
     },
     cancelScan: {
       kind: "invoke",
-      channel: "synapse:editor-scan:cancel-scan",
+      operationId: "app.editor_scan.operation.cancel_scan",
       request: editorScanRequestSchema,
       response: editorScanCancelResultSchema,
       handler: async (_ctx, request: { requestId: string }) => {
@@ -258,7 +258,7 @@ export const editorScanIpcModule: IpcModule = {
     },
     readItemContent: {
       kind: "invoke",
-      channel: "synapse:editor-scan:read-item-content",
+      operationId: "app.editor_scan.operation.read_item_content",
       request: z.object({ filePath: z.string() }),
       response: z.string(),
       handler: async (ctx, request: { filePath: string }) => {
@@ -271,7 +271,7 @@ export const editorScanIpcModule: IpcModule = {
     },
     listSkillFiles: {
       kind: "invoke",
-      channel: "synapse:editor-scan:list-skill-files",
+      operationId: "app.editor_scan.operation.list_skill_files",
       request: z.object({ dirPath: z.string() }),
       response: z.array(skillFileInfoSchema),
       handler: async (ctx, request: { dirPath: string }) => {
@@ -284,7 +284,7 @@ export const editorScanIpcModule: IpcModule = {
     },
     prepareQuickPublishDraft: {
       kind: "invoke",
-      channel: "synapse:editor-scan:prepare-quick-publish-draft",
+      operationId: "app.editor_scan.operation.prepare_quick_publish_draft",
       request: quickPublishRequestSchema,
       response: quickPublishDraftSchema,
       handler: async (ctx, request: EditorScanQuickPublishRequest) => {
@@ -297,7 +297,7 @@ export const editorScanIpcModule: IpcModule = {
     },
     finalizeQuickPublish: {
       kind: "invoke",
-      channel: "synapse:editor-scan:finalize-quick-publish",
+      operationId: "app.editor_scan.operation.finalize_quick_publish",
       request: finalizeQuickPublishRequestSchema,
       response: finalizeQuickPublishResultSchema,
       handler: async (ctx, request: EditorScanFinalizeQuickPublishRequest) => {
@@ -310,7 +310,7 @@ export const editorScanIpcModule: IpcModule = {
     },
     trashItem: {
       kind: "invoke",
-      channel: "synapse:editor-scan:trash-item",
+      operationId: "app.editor_scan.operation.trash_item",
       request: trashRequestSchema,
       response: trashResultSchema,
       handler: async (ctx, request: EditorScanTrashRequest) => {
@@ -323,7 +323,7 @@ export const editorScanIpcModule: IpcModule = {
     },
     uploadSkillToSkillRepository: {
       kind: "invoke",
-      channel: "synapse:editor-scan:upload-skill-to-skill-repository",
+      operationId: "app.editor_scan.operation.upload_skill_to_skill_repository",
       request: uploadSkillToSkillRepositoryRequestSchema,
       response: uploadSkillToSkillRepositoryResultSchema,
       handler: async (ctx, request: UploadSkillToSkillRepositoryRequest) => {
@@ -359,7 +359,7 @@ export const editorScanIpcModule: IpcModule = {
     },
     retrySkillRepositoryIdentity: {
       kind: "invoke",
-      channel: "synapse:editor-scan:retry-skill-repository-identity",
+      operationId: "app.editor_scan.operation.retry_skill_repository_identity",
       request: retrySkillRepositoryIdentityRequestSchema,
       response: retrySkillRepositoryIdentityResultSchema,
       handler: async (ctx, request: EditorScanSkillRepositoryIdentityRetryRequest) => {

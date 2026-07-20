@@ -35,7 +35,7 @@ function useDatabaseTables() {
 
     setLoading(true)
     try {
-      const result = await requireSynapseBridge().database.databaseTableList()
+      const result = await requireSynapseBridge().database.table.list()
       if (requestId !== requestIdRef.current) return
       setTables(result)
       setError(null)
@@ -78,7 +78,7 @@ function useDatabaseQuery(table: string | null, page: number, where?: DatabaseWh
 
     setLoading(true)
     try {
-      const result = await requireSynapseBridge().database.databaseRowList({
+      const result = await requireSynapseBridge().database.row.list({
         table,
         where: where ?? undefined,
         limit: pageSize,
@@ -115,7 +115,7 @@ function useDatabaseStatus() {
 
   const refresh = useCallback(async () => {
     try {
-      const result = await requireSynapseBridge().database.databaseStatusGet()
+      const result = await requireSynapseBridge().database.status.get()
       setStatus(result)
       setError(null)
     } catch (loadError) {
@@ -151,7 +151,7 @@ function useDatabaseSchema(table: string | null) {
 
     setLoading(true)
     try {
-      const result = await requireSynapseBridge().database.databaseTableDescribe(table)
+      const result = await requireSynapseBridge().database.table.describe(table)
       if (requestId !== requestIdRef.current) return
       setState({ table, schema: result, error: null })
     } catch (loadError) {
@@ -177,86 +177,86 @@ function useDatabaseSchema(table: string | null) {
 }
 
 async function databaseTableCreate(name: string, columns: Column[], description?: string): Promise<void> {
-  await requireSynapseBridge().database.databaseTableCreate({ name, columns, description })
+  await requireSynapseBridge().database.table.create({ name, columns, description })
 }
 
 async function databaseTableDelete(name: string): Promise<void> {
-  await requireSynapseBridge().database.databaseTableDelete(name)
+  await requireSynapseBridge().database.table.delete(name)
 }
 
 async function databaseTableUpdate(table: string, description: string): Promise<void> {
-  await requireSynapseBridge().database.databaseTableUpdate({ table, description })
+  await requireSynapseBridge().database.table.update({ table, description })
 }
 
 async function databaseColumnCreate(table: string, column: Column & { default?: unknown }): Promise<void> {
-  await requireSynapseBridge().database.databaseColumnCreate({ table, column })
+  await requireSynapseBridge().database.column.create({ table, column })
 }
 
 async function databaseColumnUpdate(table: string, column: string, description: string): Promise<void> {
-  await requireSynapseBridge().database.databaseColumnUpdate({ table, column, description })
+  await requireSynapseBridge().database.column.update({ table, column, description })
 }
 
 async function databaseChoiceUpdate(table: string, column: string, choices: string[]): Promise<void> {
-  await requireSynapseBridge().database.databaseChoiceUpdate({ table, column, choices })
+  await requireSynapseBridge().database.choice.update({ table, column, choices })
 }
 
 async function databaseChoiceUsageGet(table: string, column: string): Promise<Record<string, number>> {
-  return requireSynapseBridge().database.databaseChoiceUsageGet({ table, column })
+  return requireSynapseBridge().database.choiceUsage.get({ table, column })
 }
 
 async function databaseRowCreate(table: string, data: Record<string, unknown>): Promise<{ id: number }> {
-  return requireSynapseBridge().database.databaseRowCreate({ table, data })
+  return requireSynapseBridge().database.row.create({ table, data })
 }
 
 async function databaseRowUpdate(table: string, id: number, data: Record<string, unknown>): Promise<{ affected: number }> {
-  return requireSynapseBridge().database.databaseRowUpdate({ table, id, data })
+  return requireSynapseBridge().database.row.update({ table, id, data })
 }
 
 async function databaseRowDelete(table: string, id: number): Promise<{ affected: number }> {
-  return requireSynapseBridge().database.databaseRowDelete({ table, id })
+  return requireSynapseBridge().database.row.delete({ table, id })
 }
 
 async function databaseExport(): Promise<{ success: boolean; path?: string }> {
-  return requireSynapseBridge().database.databaseExport()
+  return requireSynapseBridge().database.operation.export()
 }
 
 async function databaseImport(): Promise<{ success: boolean }> {
-  return requireSynapseBridge().database.databaseImport()
+  return requireSynapseBridge().database.operation.import()
 }
 
 async function databaseTableExport(table: string): Promise<{ success: boolean; path?: string }> {
-  return requireSynapseBridge().database.databaseTableExport(table)
+  return requireSynapseBridge().database.table.export(table)
 }
 
 async function databaseTableImportInspect(): Promise<
   { success: false }
   | ({ success: true } & DatabaseTableImportInspection)
 > {
-  return requireSynapseBridge().database.databaseTableImportInspect()
+  return requireSynapseBridge().database.tableImport.inspect()
 }
 
 async function databaseTableImport(input: { sourcePath: string; sourceDigest: string }): Promise<{ success: boolean; tableName?: string }> {
-  return requireSynapseBridge().database.databaseTableImport(input)
+  return requireSynapseBridge().database.table.import(input)
 }
 
 async function databaseMcpHttpStatusGet(): Promise<DatabaseMcpHttpStatus> {
-  return requireSynapseBridge().database.databaseMcpHttpStatusGet()
+  return requireSynapseBridge().database.mcpHttpStatus.get()
 }
 
 async function databaseMcpStatusGet(): Promise<DatabaseMcpStatus> {
-  return requireSynapseBridge().database.databaseMcpStatusGet()
+  return requireSynapseBridge().database.mcpStatus.get()
 }
 
 async function databaseMcpServersGet(): Promise<DatabaseMcpServerInfo[]> {
-  return requireSynapseBridge().database.databaseMcpServersGet()
+  return requireSynapseBridge().database.mcpServers.get()
 }
 
 async function databaseMcpSettingsOpen(target: DatabaseMcpTarget): Promise<{ success: boolean; error?: string }> {
-  return requireSynapseBridge().database.databaseMcpSettingsOpen(target)
+  return requireSynapseBridge().database.mcpSettings.open(target)
 }
 
 async function databaseMcpRegister(target: DatabaseMcpTarget): Promise<{ success: boolean; error?: string }> {
-  return requireSynapseBridge().database.databaseMcpRegister(target)
+  return requireSynapseBridge().database.mcp.register(target)
 }
 
 export {

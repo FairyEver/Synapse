@@ -64,17 +64,19 @@ describe("preload bridge", () => {
       return !/^import\s+type\b/.test(statement.trim()) && modulePath.startsWith(".")
     })
 
-    expect(localRuntimeImports).toEqual([])
+    expect(localRuntimeImports).toEqual([
+      'import { IPC_CHANNELS } from "./generated/ipc-channels.generated"',
+    ])
   })
 
   it("subscribes repository listeners to the EventBus domain channel", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()
 
-    bridge.repository.onProgress(listener)
+    bridge.settings.repository.onProgress(listener)
 
     expect(electronMock.ipcRenderer.on).toHaveBeenCalledTimes(1)
-    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:events:repository")
+    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:app:events:operation:repository")
 
     const wrapped = electronMock.ipcRenderer.on.mock.calls[0]?.[1]
     expect(typeof wrapped).toBe("function")
@@ -100,10 +102,10 @@ describe("preload bridge", () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()
 
-    bridge.database.onChanged(listener)
+    bridge.database.operation.onChanged(listener)
 
     expect(electronMock.ipcRenderer.on).toHaveBeenCalledTimes(1)
-    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:events:database")
+    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:app:events:operation:database")
 
     const wrapped = electronMock.ipcRenderer.on.mock.calls[0]?.[1]
     wrapped?.({}, {
@@ -120,10 +122,10 @@ describe("preload bridge", () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()
 
-    bridge.automation.onChanged(listener)
+    bridge.automation.item.onChanged(listener)
 
     expect(electronMock.ipcRenderer.on).toHaveBeenCalledTimes(1)
-    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:events:automation")
+    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:app:events:operation:automation")
 
     const wrapped = electronMock.ipcRenderer.on.mock.calls[0]?.[1]
     wrapped?.({}, {
@@ -139,11 +141,11 @@ describe("preload bridge", () => {
   it("maps automation bridge methods to automation IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
-    await bridge.automation.openCreateEditorWindow()
-    await bridge.automation.openEditorWindow("automation:1")
-    await bridge.automation.listItems()
-    await bridge.automation.getItem("automation:1")
-    await bridge.automation.createItem({
+    await bridge.automation.editor.openCreate()
+    await bridge.automation.editor.openEdit("automation:1")
+    await bridge.automation.item.list()
+    await bridge.automation.item.get("automation:1")
+    await bridge.automation.item.create({
       name: "Daily report",
       scope: { type: "global" },
       trigger: {
@@ -152,46 +154,46 @@ describe("preload bridge", () => {
       },
       executor: { type: "builtin.command", config: { command: "echo ok" } },
     })
-    await bridge.automation.updateItem({ id: "automation:1", patch: { enabled: false } })
-    await bridge.automation.setItemEnabled({ id: "automation:1", enabled: true })
-    await bridge.automation.runItem("automation:1")
-    await bridge.automation.stopRun("automation-run:1")
-    await bridge.automation.listRuns("automation:1", { limit: 20 })
+    await bridge.automation.item.update({ id: "automation:1", patch: { enabled: false } })
+    await bridge.automation.item.setEnabled({ id: "automation:1", enabled: true })
+    await bridge.automation.run.execute("automation:1")
+    await bridge.automation.run.disable("automation-run:1")
+    await bridge.automation.run.list("automation:1", { limit: 20 })
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:automation:editor:open-create",
+      "synapse:app:automation:editor:open_create",
       undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:automation:editor:open-edit",
+      "synapse:app:automation:editor:open_edit",
       { automationId: "automation:1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:automation:items:list",
+      "synapse:app:automation:item:list",
       undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:automation:items:get",
+      "synapse:app:automation:item:get",
       { automationId: "automation:1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:automation:items:update",
+      "synapse:app:automation:item:update",
       { id: "automation:1", patch: { enabled: false } },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:automation:items:set-enabled",
+      "synapse:app:automation:item:set_enabled",
       { automationId: "automation:1", enabled: true },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:automation:items:run",
+      "synapse:app:automation:run:execute",
       { automationId: "automation:1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:automation:runs:stop",
+      "synapse:app:automation:run:disable",
       { runId: "automation-run:1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:automation:runs:list",
+      "synapse:app:automation:run:list",
       { automationId: "automation:1", limit: 20 },
     )
   })
@@ -207,23 +209,23 @@ describe("preload bridge", () => {
       targets: [{ query: { name: "jenkins" }, path: "/tmp/jenkins" }],
     })
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:skill-uninstaller:scan",
+      "synapse:app:skill_uninstaller:operation:scan",
       { scanId: "scan-1", query: { name: "jenkins" } },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:skill-uninstaller:names:scan",
+      "synapse:app:skill_uninstaller:names:scan",
       { scanId: "names-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:skill-uninstaller:scan:cancel",
+      "synapse:app:skill_uninstaller:scan:cancel",
       { scanId: "scan-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:skill-uninstaller:uninstall:cancel",
+      "synapse:app:skill_uninstaller:uninstall:cancel",
       { operationId: "uninstall-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:skill-uninstaller:uninstall",
+      "synapse:app:skill_uninstaller:operation:uninstall",
       { operationId: "uninstall-1", targets: [{ query: { name: "jenkins" }, path: "/tmp/jenkins" }] },
     )
   })
@@ -231,34 +233,34 @@ describe("preload bridge", () => {
   it("maps quick input bridge methods to quick input IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
-    await bridge.quickInput.list()
-    await bridge.quickInput.create({ content: "新的快捷输入" })
-    await bridge.quickInput.update({ id: "quick-1", content: "更新快捷输入" })
-    await bridge.quickInput.delete({ id: "quick-1" })
-    bridge.quickInput.onChanged(vi.fn())
+    await bridge.quickInput.item.list()
+    await bridge.quickInput.item.create({ content: "新的快捷输入" })
+    await bridge.quickInput.item.update({ id: "quick-1", content: "更新快捷输入" })
+    await bridge.quickInput.item.delete({ id: "quick-1" })
+    bridge.quickInput.item.onChanged(vi.fn())
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       1,
-      "synapse:quick-input:list",
+      "synapse:app:quick_input:item:list",
       undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       2,
-      "synapse:quick-input:create",
+      "synapse:app:quick_input:item:create",
       { content: "新的快捷输入" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       3,
-      "synapse:quick-input:update",
+      "synapse:app:quick_input:item:update",
       { id: "quick-1", content: "更新快捷输入" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       4,
-      "synapse:quick-input:delete",
+      "synapse:app:quick_input:item:delete",
       { id: "quick-1" },
     )
     expect(electronMock.ipcRenderer.on).toHaveBeenCalledWith(
-      "synapse:quick-input:changed",
+      "synapse:app:quick_input:item:changed",
       expect.any(Function),
     )
   })
@@ -284,22 +286,22 @@ describe("preload bridge", () => {
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       1,
-      "synapse:agent-personas:list",
+      "synapse:app:agent_personas:operation:list",
       undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       2,
-      "synapse:agent-personas:create",
+      "synapse:app:agent_personas:operation:create",
       input,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       3,
-      "synapse:agent-personas:update",
+      "synapse:app:agent_personas:operation:update",
       { id: "persona-1", ...input },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       4,
-      "synapse:agent-personas:builtin-model:update",
+      "synapse:app:agent_personas:builtin_model:update",
       {
         id: "builtin-zh-en-translator",
         providerModel: { providerId: "claude", modelTier: "sonnet" },
@@ -307,11 +309,11 @@ describe("preload bridge", () => {
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       5,
-      "synapse:agent-personas:delete",
+      "synapse:app:agent_personas:operation:delete",
       { id: "persona-1" },
     )
     expect(electronMock.ipcRenderer.on).toHaveBeenCalledWith(
-      "synapse:agent-personas:changed",
+      "synapse:app:agent_personas:operation:changed",
       expect.any(Function),
     )
   })
@@ -384,7 +386,7 @@ describe("preload bridge", () => {
     await bridge.account.listWebhooks()
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:webhooks:list",
+      "synapse:app:account:webhooks:list",
       undefined,
     )
   })
@@ -407,7 +409,7 @@ describe("preload bridge", () => {
     })
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:agent:replace-conversation-window-target",
+      "synapse:app:agent:operation:replace_conversation_window_target",
       {
         from: {
           projectId: "project-1",
@@ -466,7 +468,7 @@ describe("preload bridge", () => {
     })
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:installers:inspect-global-skill-installations",
+      "synapse:app:installers:operation:inspect_global_skill_installations",
       {
         kind: "skill",
         origin: "prepared",
@@ -477,15 +479,15 @@ describe("preload bridge", () => {
       },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:installers:prepare-local-skill-source",
+      "synapse:app:installers:operation:prepare_local_skill_source",
       { sourceDirectoryPath: "/tmp/skill" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:installers:prepare-inline-rule-source",
+      "synapse:app:installers:operation:prepare_inline_rule_source",
       { name: "team.rule", body: "# Rule" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:installers:install-source-to-editor",
+      "synapse:app:installers:operation:install_source_to_editor",
       {
         editorId: "codex",
         scope: "global",
@@ -500,7 +502,7 @@ describe("preload bridge", () => {
       },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:installers:install-source-to-editor-targets",
+      "synapse:app:installers:operation:install_source_to_editor_targets",
       {
         mode: "install",
         source: {
@@ -532,7 +534,7 @@ describe("preload bridge", () => {
     })
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:editor-scan:upload-skill-to-skill-repository",
+      "synapse:app:editor_scan:operation:upload_skill_to_skill_repository",
       {
         itemType: "skill",
         itemPath: "/tmp/skills/review",
@@ -553,12 +555,12 @@ describe("preload bridge", () => {
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       1,
-      "synapse:editor-scan:scan-all",
+      "synapse:app:editor_scan:operation:scan_all",
       request,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       2,
-      "synapse:editor-scan:cancel-scan",
+      "synapse:app:editor_scan:operation:cancel_scan",
       request,
     )
   })
@@ -582,7 +584,7 @@ describe("preload bridge", () => {
     await bridge.editorScan.retrySkillRepositoryIdentity(request)
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:editor-scan:retry-skill-repository-identity",
+      "synapse:app:editor_scan:operation:retry_skill_repository_identity",
       request,
     )
   })
@@ -599,7 +601,7 @@ describe("preload bridge", () => {
     await bridge.editorScan.finalizeQuickPublish(request)
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:editor-scan:finalize-quick-publish",
+      "synapse:app:editor_scan:operation:finalize_quick_publish",
       request,
     )
   })
@@ -607,46 +609,46 @@ describe("preload bridge", () => {
   it("maps account drive methods to account IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
-    await bridge.account.listDriveItems({ parentId: null })
-    await bridge.account.prepareDriveUpload({ parentId: null, name: "brief.txt", size: "11", mimeType: "text/plain" })
-    await bridge.account.completeDriveUpload({ sessionId: "session-1" })
-    await bridge.account.uploadDrivePreparedFile({
+    await bridge.drive.item.list({ parentId: null })
+    await bridge.drive.upload.prepare({ parentId: null, name: "brief.txt", size: "11", mimeType: "text/plain" })
+    await bridge.drive.upload.complete({ sessionId: "session-1" })
+    await bridge.drive.upload.put({
       body: new ArrayBuffer(11),
       headers: { "Content-Type": "text/plain" },
       method: "PUT",
       url: "https://upload.example.test/object",
     })
-    await bridge.account.uploadDriveLocalItems({
+    await bridge.drive.upload.localItems({
       parentId: null,
       items: [{ kind: "file", path: "/tmp/report.txt", name: "report.txt", mimeType: "text/plain" }],
     })
     const droppedFile = new File(["report"], "report.txt", { type: "text/plain" })
-    expect(bridge.account.filePathForDroppedFile(droppedFile)).toBe("/tmp/report.txt")
+    expect(bridge.drive.localFile.pathForDroppedFile(droppedFile)).toBe("/tmp/report.txt")
     expect(bridge.shell.filePathForDroppedFile(droppedFile)).toBe("/tmp/report.txt")
-    await bridge.account.createDriveFolder({ parentId: null, name: "交接材料" })
-    await bridge.account.deleteDriveItem({ itemId: "item-1" })
-    await bridge.account.listDriveFileVersions({ itemId: "item-1", limit: 20 })
-    await bridge.account.downloadDriveFileVersion({ itemId: "item-1", versionId: "version-1", outputPath: "/tmp/report-v1.txt" })
-    await bridge.account.restoreDriveFileVersion({ itemId: "item-1", versionId: "version-1" })
-    await bridge.account.deleteDriveFileVersion({ itemId: "item-1", versionId: "version-1" })
-    await bridge.account.updateDriveFileVersionPin({ itemId: "item-1", versionId: "version-1", isPinned: true })
-    await bridge.account.shareDriveItem({ itemId: "item-1", passwordEnabled: true, expiresIn: "7d", accessMode: "link_edit" })
-    await bridge.account.listDriveShares()
+    await bridge.drive.folder.create({ parentId: null, name: "交接材料" })
+    await bridge.drive.item.delete({ itemId: "item-1" })
+    await bridge.drive.fileVersion.list({ itemId: "item-1", limit: 20 })
+    await bridge.drive.fileVersionDownload.create({ itemId: "item-1", versionId: "version-1", outputPath: "/tmp/report-v1.txt" })
+    await bridge.drive.fileVersion.restore({ itemId: "item-1", versionId: "version-1" })
+    await bridge.drive.fileVersion.delete({ itemId: "item-1", versionId: "version-1" })
+    await bridge.drive.fileVersionPin.update({ itemId: "item-1", versionId: "version-1", isPinned: true })
+    await bridge.drive.share.create({ itemId: "item-1", passwordEnabled: true, expiresIn: "7d", accessMode: "link_edit" })
+    await bridge.drive.share.list()
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:items:list",
+      "synapse:app:drive:item:list",
       { parentId: null },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:uploads:prepare",
+      "synapse:app:drive:upload:prepare",
       { parentId: null, name: "brief.txt", size: "11", mimeType: "text/plain" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:uploads:complete",
+      "synapse:app:drive:upload:complete",
       { sessionId: "session-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:uploads:put",
+      "synapse:app:drive:upload:put",
       {
         body: expect.any(ArrayBuffer),
         headers: { "Content-Type": "text/plain" },
@@ -655,7 +657,7 @@ describe("preload bridge", () => {
       },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:uploads:local-items",
+      "synapse:app:drive:upload:local_items",
       {
         parentId: null,
         items: [{ kind: "file", path: "/tmp/report.txt", name: "report.txt", mimeType: "text/plain" }],
@@ -663,39 +665,39 @@ describe("preload bridge", () => {
     )
     expect(electronMock.webUtils.getPathForFile).toHaveBeenCalledWith(droppedFile)
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:folders:create",
+      "synapse:app:drive:folder:create",
       { parentId: null, name: "交接材料" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:items:delete",
+      "synapse:app:drive:item:delete",
       { itemId: "item-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:file-versions:list",
+      "synapse:app:drive:file_version:list",
       { itemId: "item-1", limit: 20 },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:file-versions:download",
+      "synapse:app:drive:file_version_download:create",
       { itemId: "item-1", versionId: "version-1", outputPath: "/tmp/report-v1.txt" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:file-versions:restore",
+      "synapse:app:drive:file_version:restore",
       { itemId: "item-1", versionId: "version-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:file-versions:delete",
+      "synapse:app:drive:file_version:delete",
       { itemId: "item-1", versionId: "version-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:file-versions:pin",
+      "synapse:app:drive:file_version_pin:update",
       { itemId: "item-1", versionId: "version-1", isPinned: true },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:items:share",
+      "synapse:app:drive:share:create",
       { itemId: "item-1", passwordEnabled: true, expiresIn: "7d", accessMode: "link_edit" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:shares:list",
+      "synapse:app:drive:share:list",
       undefined,
     )
   })
@@ -728,33 +730,33 @@ describe("preload bridge", () => {
     await bridge.driveSync.chooseLocalPath({ kind: "folder" })
     await bridge.driveSync.removeBinding({ id: "binding-1" })
 
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:snapshot:get", undefined)
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:snapshot:get", undefined)
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:drive-sync:bindings:preview",
+      "synapse:app:drive_sync:bindings:preview",
       expect.objectContaining({ driveItemId: "drive-item-1" }),
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:drive-sync:bindings:safe-create",
+      "synapse:app:drive_sync:bindings:safe_create",
       expect.objectContaining({ direction: "remote_to_local" }),
     )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:bindings:pause", { id: "binding-1" })
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:bindings:resume", { id: "binding-1" })
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:bindings:exclude-rules:update", { id: "binding-1", user: ["dist/**"] })
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:bindings:rescan", { id: "binding-1" })
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:remote:poll", { id: "binding-1" })
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:conflicts:resolve", { conflictId: "conflict-1", action: "keep_local" })
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:local-path:choose", { kind: "folder" })
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:bindings:remove", { id: "binding-1" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:bindings:pause", { id: "binding-1" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:bindings:resume", { id: "binding-1" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:bindings:exclude_rules:update", { id: "binding-1", user: ["dist/**"] })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:bindings:rescan", { id: "binding-1" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:remote:poll", { id: "binding-1" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:conflicts:resolve", { conflictId: "conflict-1", action: "keep_local" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:local_path:choose", { kind: "folder" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:bindings:remove", { id: "binding-1" })
   })
 
   it("subscribes content change listeners to the EventBus domain channel", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()
 
-    bridge.content.onChanged(listener)
+    bridge.resourceRepository.item.onChanged(listener)
 
     expect(electronMock.ipcRenderer.on).toHaveBeenCalledTimes(1)
-    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:events:content")
+    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:app:events:operation:content")
 
     const wrapped = electronMock.ipcRenderer.on.mock.calls[0]?.[1]
     wrapped?.({}, {
@@ -770,13 +772,13 @@ describe("preload bridge", () => {
   it("maps table description updates to the database IPC channel", async () => {
     const bridge = await loadPreloadBridge()
 
-    await bridge.database.databaseTableUpdate({
+    await bridge.database.table.update({
       table: "customer_orders",
       description: "客户订单",
     })
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:database:table:update",
+      "synapse:app:database:table:update",
       {
         table: "customer_orders",
         description: "客户订单",
@@ -802,7 +804,7 @@ describe("preload bridge", () => {
     })
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:knowledge-base:upload-raw-items",
+      "synapse:app:knowledge_base:operation:upload_raw_items",
       {
         projectId: "kb-1",
         targetDirectoryPath: "client-a",
@@ -810,14 +812,14 @@ describe("preload bridge", () => {
       },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:knowledge-base:select-and-upload-raw-directory",
+      "synapse:app:knowledge_base:operation:select_and_upload_raw_directory",
       {
         projectId: "kb-1",
         targetDirectoryPath: "client-a",
       },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:knowledge-base:export-raw-entries",
+      "synapse:app:knowledge_base:operation:export_raw_entries",
       {
         projectId: "kb-1",
         relativePaths: ["brief.md"],
@@ -839,27 +841,27 @@ describe("preload bridge", () => {
     bridge.knowledgeBase.onStorageMigrationChanged(listener)
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:knowledge-base:get-storage-status",
+      "synapse:app:knowledge_base:operation:get_storage_status",
       undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:knowledge-base:get-storage-migration-state",
+      "synapse:app:knowledge_base:operation:get_storage_migration_state",
       undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:knowledge-base:start-storage-migration",
+      "synapse:app:knowledge_base:operation:start_storage_migration",
       { target: { mode: "custom", rootPath: "/Volumes/Data/SynapseData" } },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:knowledge-base:cancel-storage-migration",
+      "synapse:app:knowledge_base:operation:cancel_storage_migration",
       undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:knowledge-base:recheck-storage",
+      "synapse:app:knowledge_base:operation:recheck_storage",
       undefined,
     )
     expect(electronMock.ipcRenderer.on).toHaveBeenCalledWith(
-      "synapse:events:knowledge-base",
+      "synapse:app:events:operation:knowledge_base",
       expect.any(Function),
     )
 
@@ -898,35 +900,35 @@ describe("preload bridge", () => {
     await bridge.usageAnalysis.cc.openConversationWindow({ sessionId: "session-1", title: "对话" })
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:usage-analysis:cc:records:list",
+      "synapse:app:usage_analysis:cc:records:list",
       { preset: "all", limit: 50 },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:usage-analysis:cc:record-details:list",
+      "synapse:app:usage_analysis:cc:record_details:list",
       { sessionId: "session-1", limit: 200 },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:usage-analysis:cc:conversations:list",
+      "synapse:app:usage_analysis:cc:conversations:list",
       { preset: "all", limit: 5 },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:usage-analysis:cc:conversation:get",
+      "synapse:app:usage_analysis:cc:conversation:get",
       { sessionId: "session-1", focus: { eventId: "event-1" } },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:usage-analysis:cc:conversation:chunk:get",
+      "synapse:app:usage_analysis:cc:conversation:chunk:get",
       { sessionId: "session-1", cursor: "128:1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:usage-analysis:cc:records:search-text",
+      "synapse:app:usage_analysis:cc:records:search_text",
       { preset: "all", query: "登录", rawText: true },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:usage-analysis:cc:conversation:search-text",
+      "synapse:app:usage_analysis:cc:conversation:search_text",
       { preset: "all", query: "登录", rawText: true },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:usage-analysis:cc:conversation-window:open",
+      "synapse:app:usage_analysis:cc:conversation_window:open",
       { sessionId: "session-1", title: "对话" },
     )
   })
@@ -934,45 +936,40 @@ describe("preload bridge", () => {
   it("maps model price methods to first-class IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
-    await bridge.modelPrice.listCoverage({ source: "all", range: "30d", limit: 100 })
-    await bridge.modelPrice.getRules()
-    await bridge.modelPrice.listPresets()
-    await bridge.modelPrice.importPreset("deepseek-official")
-    await bridge.modelPrice.importPresets(["deepseek-official", "aliyun-bailian"])
-    await bridge.modelPrice.saveRules([{ modelPattern: "local-model", inputPer1M: 1 }])
-    await bridge.modelPrice.clearRules()
-    await bridge.modelPrice.resetRules()
+    await bridge.modelPrice.usedModel.list({ source: "all", range: "30d", limit: 100 })
+    await bridge.modelPrice.rule.list()
+    await bridge.modelPrice.preset.list()
+    await bridge.modelPrice.preset.import("deepseek-official")
+    await bridge.modelPrice.preset.import(["deepseek-official", "aliyun-bailian"])
+    await bridge.modelPrice.rule.save([{ modelPattern: "local-model", inputPer1M: 1 }])
+    await bridge.modelPrice.rule.clear()
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:model-price:coverage:list",
+      "synapse:app:model_price:used_model:list",
       { source: "all", range: "30d", limit: 100 },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:model-price:rules:get",
+      "synapse:app:model_price:rule:list",
       undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:model-price:presets:list",
+      "synapse:app:model_price:preset:list",
       undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:model-price:presets:import",
+      "synapse:app:model_price:preset:import",
       "deepseek-official",
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:model-price:presets:import",
+      "synapse:app:model_price:preset:import",
       ["deepseek-official", "aliyun-bailian"],
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:model-price:rules:save",
+      "synapse:app:model_price:rule:save",
       [{ modelPattern: "local-model", inputPer1M: 1 }],
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:model-price:rules:clear",
-      undefined,
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:model-price:rules:reset",
+      "synapse:app:model_price:rule:clear",
       undefined,
     )
   })
@@ -980,10 +977,10 @@ describe("preload bridge", () => {
   it("maps workflow active runs to the workflow IPC channel", async () => {
     const bridge = await loadPreloadBridge()
 
-    await bridge.workflow.activeRuns()
+    await bridge.workflow.run.listActive()
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:workflow:active-runs",
+      "synapse:app:workflow:run:list_active",
       undefined,
     )
   })
@@ -991,25 +988,25 @@ describe("preload bridge", () => {
   it("maps workflow parameter preset methods to workflow IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
-    await bridge.workflowParamPresets.list("workflow-1")
-    await bridge.workflowParamPresets.resolveResourceEntryTypes("preset-1")
-    await bridge.workflowParamPresets.save({ workflowId: "workflow-1", name: "A", values: { topic: "secret" } })
-    await bridge.workflowParamPresets.delete("preset-1")
+    await bridge.workflow.paramPreset.list("workflow-1")
+    await bridge.workflow.paramPreset.resolveResourceEntryTypes("preset-1")
+    await bridge.workflow.paramPreset.save({ workflowId: "workflow-1", name: "A", values: { topic: "secret" } })
+    await bridge.workflow.paramPreset.delete("preset-1")
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:workflow:param-presets:list",
+      "synapse:app:workflow:param_preset:list",
       { workflowId: "workflow-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:workflow:param-presets:resolve-resource-entry-types",
+      "synapse:app:workflow:param_preset:resolve_resource_entry_types",
       { id: "preset-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:workflow:param-presets:save",
+      "synapse:app:workflow:param_preset:save",
       { workflowId: "workflow-1", name: "A", values: { topic: "secret" } },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:workflow:param-presets:delete",
+      "synapse:app:workflow:param_preset:delete",
       { id: "preset-1" },
     )
   })
@@ -1024,7 +1021,7 @@ describe("preload bridge", () => {
     })
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:agent:export-conversation-bundle",
+      "synapse:app:agent:operation:export_conversation_bundle",
       {
         projectId: "project-1",
         sessionKey: "local:renderer",
@@ -1037,7 +1034,7 @@ describe("preload bridge", () => {
     const bridge = await loadPreloadBridge()
     const failure = new Error("main failed")
     electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
-      if (channel === "synapse:config:get") {
+      if (channel === "synapse:app:config:operation:get") {
         return Promise.reject(failure)
       }
       return Promise.resolve(undefined)
@@ -1046,13 +1043,13 @@ describe("preload bridge", () => {
     await expect(bridge.config.get()).rejects.toThrow("main failed")
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:log:write",
+      "synapse:app:log:entry:write",
       expect.objectContaining({
         level: "error",
         category: "renderer.ipc",
         message: "IPC invoke failed.",
         details: expect.objectContaining({
-          channel: "synapse:config:get",
+          operationId: "app.config.operation.get",
           error: "main failed",
         }),
       }),
@@ -1063,7 +1060,7 @@ describe("preload bridge", () => {
     const bridge = await loadPreloadBridge()
     const failure = new Error("token=sk-secret Bearer abc.def at /Users/liyang/private/file.ts")
     electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
-      if (channel === "synapse:config:get") {
+      if (channel === "synapse:app:config:operation:get") {
         return Promise.reject(failure)
       }
       return Promise.resolve(undefined)
@@ -1072,13 +1069,13 @@ describe("preload bridge", () => {
     await expect(bridge.config.get()).rejects.toThrow("token=sk-secret")
 
     const logCall = electronMock.ipcRenderer.invoke.mock.calls.find(([channel]) =>
-      channel === "synapse:log:write")
+      channel === "synapse:app:log:entry:write")
     expect(logCall?.[1]).toEqual(expect.objectContaining({
       level: "error",
       category: "renderer.ipc",
       message: "IPC invoke failed.",
       details: expect.objectContaining({
-        channel: "synapse:config:get",
+        operationId: "app.config.operation.get",
         error: expect.any(String),
       }),
     }))
@@ -1094,9 +1091,9 @@ describe("preload bridge", () => {
     const failure = new Error("secret storage unavailable")
     electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
       if ([
-        "synapse:secrets:create",
-        "synapse:secrets:update",
-        "synapse:secrets:upsert",
+        "synapse:app:secrets:item:create",
+        "synapse:app:secrets:item:update",
+        "synapse:app:secrets:item:upsert",
       ].includes(channel)) {
         return Promise.reject(failure)
       }
@@ -1108,12 +1105,12 @@ describe("preload bridge", () => {
       description: "PRIVATE_SECRET_DESCRIPTION",
     }
 
-    await expect(bridge.secrets.create(input)).rejects.toThrow("secret storage unavailable")
-    await expect(bridge.secrets.update(input)).rejects.toThrow("secret storage unavailable")
-    await expect(bridge.secrets.upsert(input)).rejects.toThrow("secret storage unavailable")
+    await expect(bridge.secrets.item.create(input)).rejects.toThrow("secret storage unavailable")
+    await expect(bridge.secrets.item.update(input)).rejects.toThrow("secret storage unavailable")
+    await expect(bridge.secrets.item.upsert(input)).rejects.toThrow("secret storage unavailable")
 
     const logCalls = electronMock.ipcRenderer.invoke.mock.calls.filter(([channel]) =>
-      channel === "synapse:log:write")
+      channel === "synapse:app:log:entry:write")
     expect(logCalls).toHaveLength(3)
     for (const logCall of logCalls) {
       expect(logCall[1]).toEqual(expect.objectContaining({
@@ -1135,7 +1132,7 @@ describe("preload bridge", () => {
   it("does not log installer secret map values when install IPC fails", async () => {
     const bridge = await loadPreloadBridge()
     electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
-      if (channel.startsWith("synapse:installers:install-source-to-editor")) {
+      if (channel.startsWith("synapse:app:installers:operation:install_source_to_editor")) {
         return Promise.reject(new Error("install unavailable"))
       }
       return Promise.resolve(undefined)
@@ -1169,7 +1166,7 @@ describe("preload bridge", () => {
     })).rejects.toThrow("install unavailable")
 
     const logCalls = electronMock.ipcRenderer.invoke.mock.calls.filter(([channel]) =>
-      channel === "synapse:log:write")
+      channel === "synapse:app:log:entry:write")
     expect(logCalls).toHaveLength(2)
     for (const logCall of logCalls) {
       expect(logCall[1]).toEqual(expect.objectContaining({
@@ -1200,13 +1197,13 @@ describe("preload bridge", () => {
     const bridge = await loadPreloadBridge()
     const failure = new Error("upload unavailable")
     electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
-      if (channel === "synapse:account:drive:uploads:local-items") {
+      if (channel === "synapse:app:drive:upload:local_items") {
         return Promise.reject(failure)
       }
       return Promise.resolve(undefined)
     })
 
-    await expect(bridge.account.uploadDriveLocalItems({
+    await expect(bridge.drive.upload.localItems({
       parentId: "folder-1",
       items: [
         {
@@ -1235,13 +1232,13 @@ describe("preload bridge", () => {
     })).rejects.toThrow("upload unavailable")
 
     const logCall = electronMock.ipcRenderer.invoke.mock.calls.find(([channel]) =>
-      channel === "synapse:log:write")
+      channel === "synapse:app:log:entry:write")
     expect(logCall?.[1]).toEqual(expect.objectContaining({
       level: "error",
       category: "renderer.ipc",
       message: "IPC invoke failed.",
       details: expect.objectContaining({
-        channel: "synapse:account:drive:uploads:local-items",
+        operationId: "app.drive.upload.local_items",
         request: expect.objectContaining({
           itemCount: 2,
           fileCount: 3,
@@ -1259,7 +1256,7 @@ describe("preload bridge", () => {
     const bridge = await loadPreloadBridge()
     const failure = new Error("clone unavailable")
     electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
-      if (channel === "synapse:git:repositories:clone") {
+      if (channel === "synapse:app:git:repositories:clone") {
         return Promise.reject(failure)
       }
       return Promise.resolve(undefined)
@@ -1272,7 +1269,7 @@ describe("preload bridge", () => {
     })).rejects.toThrow("clone unavailable")
 
     const logCall = electronMock.ipcRenderer.invoke.mock.calls.find(([channel]) =>
-      channel === "synapse:log:write")
+      channel === "synapse:app:log:entry:write")
     const serializedLog = JSON.stringify(logCall?.[1])
     expect(serializedLog).toContain("git.example.com")
     expect(serializedLog).not.toContain("writer:raw-password")
@@ -1284,7 +1281,7 @@ describe("preload bridge", () => {
     const bridge = await loadPreloadBridge()
     const failure = new Error("send unavailable")
     electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
-      if (channel === "synapse:agent:send") {
+      if (channel === "synapse:app:agent:operation:send") {
         return Promise.reject(failure)
       }
       return Promise.resolve(undefined)
@@ -1297,9 +1294,9 @@ describe("preload bridge", () => {
     })).rejects.toThrow("send unavailable")
 
     const logCall = electronMock.ipcRenderer.invoke.mock.calls.find(([channel]) =>
-      channel === "synapse:log:write")
+      channel === "synapse:app:log:entry:write")
     const serializedLog = JSON.stringify(logCall?.[1])
-    expect(serializedLog).toContain("synapse:agent:send")
+    expect(serializedLog).toContain("app.agent.operation.send")
     expect(serializedLog).not.toContain("客户资料")
     expect(serializedLog).not.toContain("agent-content-secret")
   })
@@ -1308,13 +1305,13 @@ describe("preload bridge", () => {
     const bridge = await loadPreloadBridge()
     const failure = new Error("workflow unavailable")
     electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
-      if (channel === "synapse:workflow:run-definition") {
+      if (channel === "synapse:app:workflow:operation:run_definition") {
         return Promise.reject(failure)
       }
       return Promise.resolve(undefined)
     })
 
-    await expect(bridge.workflow.runDefinition({
+    await expect(bridge.workflow.operation.runDefinition({
       id: "workflow-1",
       name: "Workflow",
       version: "1",
@@ -1334,9 +1331,9 @@ describe("preload bridge", () => {
     })).rejects.toThrow("workflow unavailable")
 
     const logCall = electronMock.ipcRenderer.invoke.mock.calls.find(([channel]) =>
-      channel === "synapse:log:write")
+      channel === "synapse:app:log:entry:write")
     const serializedLog = JSON.stringify(logCall?.[1])
-    expect(serializedLog).toContain("synapse:workflow:run-definition")
+    expect(serializedLog).toContain("app.workflow.operation.run_definition")
     expect(serializedLog).not.toContain("内部合同")
     expect(serializedLog).not.toContain("workflow-prompt-secret")
     expect(serializedLog).not.toContain("客户输入")
@@ -1350,7 +1347,7 @@ describe("preload bridge", () => {
     bridge.updater.onStateChanged(listener)
 
     expect(electronMock.ipcRenderer.on).toHaveBeenCalledTimes(1)
-    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:update:state-changed")
+    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:app:update:operation:state_changed")
 
     const wrapped = electronMock.ipcRenderer.on.mock.calls[0]?.[1]
     wrapped?.({}, { status: "downloaded" })
@@ -1361,41 +1358,41 @@ describe("preload bridge", () => {
   it("maps Sound Notifier bridge methods to sound notifier IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
-    await bridge.soundNotifier.getSettings()
-    await bridge.soundNotifier.updateSettings({})
-    await bridge.soundNotifier.play({ presetId: "done", repeatCount: 3 })
-    await bridge.soundNotifier.preview({ eventType: "input-required", intervalMs: 1500 })
-    bridge.soundNotifier.onChanged(vi.fn())
-    bridge.soundNotifier.onPlayRequested(vi.fn())
+    await bridge.soundNotifier.settings.get()
+    await bridge.soundNotifier.settings.update({})
+    await bridge.soundNotifier.sound.play({ presetId: "done", repeatCount: 3 })
+    await bridge.soundNotifier.sound.preview({ eventType: "input-required", intervalMs: 1500 })
+    bridge.soundNotifier.operation.onChanged(vi.fn())
+    bridge.soundNotifier.operation.onPlayRequested(vi.fn())
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       1,
-      "synapse:sound-notifier:settings:get",
+      "synapse:app:sound_notifier:settings:get",
       undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       2,
-      "synapse:sound-notifier:settings:update",
+      "synapse:app:sound_notifier:settings:update",
       {},
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       3,
-      "synapse:sound-notifier:play",
+      "synapse:app:sound_notifier:sound:play",
       { presetId: "done", repeatCount: 3 },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       4,
-      "synapse:sound-notifier:preview",
+      "synapse:app:sound_notifier:sound:preview",
       { eventType: "input-required", intervalMs: 1500 },
     )
     expect(electronMock.ipcRenderer.on).toHaveBeenNthCalledWith(
       1,
-      "synapse:sound-notifier:changed",
+      "synapse:app:sound_notifier:operation:changed",
       expect.any(Function),
     )
     expect(electronMock.ipcRenderer.on).toHaveBeenNthCalledWith(
       2,
-      "synapse:sound-notifier:play-requested",
+      "synapse:app:sound_notifier:operation:play_requested",
       expect.any(Function),
     )
   })

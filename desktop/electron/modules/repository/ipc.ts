@@ -299,7 +299,7 @@ export const repositoryIpcModule: IpcModule = {
   methods: {
     getStates: {
       kind: "invoke",
-      channel: "synapse:repository:get-states",
+      operationId: "app.settings.repository.get_states",
       request: z.void(),
       response: z.array(repositoryStateSchema),
       handler: async (_ctx) => {
@@ -331,7 +331,7 @@ export const repositoryIpcModule: IpcModule = {
     },
     checkInitializationPreview: {
       kind: "invoke",
-      channel: "synapse:repository:check-initialization-preview",
+      operationId: "app.settings.repository.check_initialization_preview",
       request: z.object({ repositoryUuid: z.string() }),
       response: initializationPreviewSchema,
       handler: async (_ctx, request: { repositoryUuid: string }) => {
@@ -352,7 +352,7 @@ export const repositoryIpcModule: IpcModule = {
     },
     createLocalRepository: {
       kind: "invoke",
-      channel: "synapse:repository:create-local-repository",
+      operationId: "app.settings.repository.create_local_repository",
       request: createLocalRepositoryPayloadSchema,
       response: createLocalRepositoryResultSchema,
       handler: async (ctx, payload: SynapseCreateLocalRepositoryPayload) => {
@@ -370,7 +370,7 @@ export const repositoryIpcModule: IpcModule = {
     },
     getPendingPushes: {
       kind: "invoke",
-      channel: "synapse:repository:get-pending-pushes",
+      operationId: "app.settings.repository.get_pending_pushes",
       request: z.object({ repositoryUuid: z.string() }),
       response: pendingPushesSchema,
       handler: async (_ctx, request: { repositoryUuid: string }) => {
@@ -380,7 +380,7 @@ export const repositoryIpcModule: IpcModule = {
     },
     getSyncSnapshots: {
       kind: "invoke",
-      channel: "synapse:repository:get-sync-snapshots",
+      operationId: "app.settings.repository.get_sync_snapshots",
       request: z.void(),
       response: z.array(syncSnapshotSchema),
       handler: async (ctx) => {
@@ -391,7 +391,7 @@ export const repositoryIpcModule: IpcModule = {
     },
     initializeStructure: {
       kind: "invoke",
-      channel: "synapse:repository:initialize-structure",
+      operationId: "app.settings.repository.initialize_structure",
       request: z.object({
         repositoryUuid: z.string(),
         options: initializationOptionsSchema,
@@ -452,7 +452,7 @@ export const repositoryIpcModule: IpcModule = {
     },
     chooseDirectory: {
       kind: "invoke",
-      channel: "synapse:repository:choose-directory",
+      operationId: "app.settings.repository.choose_directory",
       request: z.void(),
       response: z.string().nullable(),
       handler: async (_ctx) => {
@@ -478,7 +478,7 @@ export const repositoryIpcModule: IpcModule = {
     },
     validateDirectory: {
       kind: "invoke",
-      channel: "synapse:repository:validate-directory",
+      operationId: "app.settings.repository.validate_directory",
       request: z.object({ targetPath: z.string() }),
       response: validationResultSchema,
       handler: async (_ctx, request: { targetPath: string }): Promise<SynapseRepositoryValidationResult> => {
@@ -488,7 +488,7 @@ export const repositoryIpcModule: IpcModule = {
     },
     sync: {
       kind: "invoke",
-      channel: "synapse:repository:sync",
+      operationId: "app.settings.repository.sync",
       request: z.object({ repositoryUuid: z.string() }),
       response: syncResultSchema,
       handler: async (ctx, request: { repositoryUuid: string }) => {
@@ -543,7 +543,7 @@ export const repositoryIpcModule: IpcModule = {
     },
     runMaintenance: {
       kind: "invoke",
-      channel: "synapse:repository:run-maintenance",
+      operationId: "app.settings.repository.run_maintenance",
       request: z.object({ repositoryUuid: z.string() }),
       response: maintenanceResultSchema,
       handler: async (ctx, request: { repositoryUuid: string }) => {
@@ -584,7 +584,7 @@ export const repositoryIpcModule: IpcModule = {
     },
     flushPendingPushes: {
       kind: "invoke",
-      channel: "synapse:repository:flush-pending-pushes",
+      operationId: "app.settings.repository.flush_pending_pushes",
       request: z.object({ repositoryUuid: z.string() }),
       response: flushResultSchema,
       handler: async (ctx, request: { repositoryUuid: string }) => {

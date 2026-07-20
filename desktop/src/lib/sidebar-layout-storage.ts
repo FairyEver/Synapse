@@ -1,6 +1,6 @@
 import { createRendererLogger } from "@/app-shell/logging"
 
-const SIDEBAR_WIDTH_STORAGE_PREFIX = "synapse:ui:sidebar-width:v1:"
+const SIDEBAR_WIDTH_STORAGE_PREFIX = "synapse:app:ui:sidebar_width:v1"
 const logger = createRendererLogger("ui.sidebar-layout")
 
 type SidebarSizeConstraints = {

@@ -15,8 +15,10 @@ const bridge = vi.hoisted(() => ({
     cloneRepository: vi.fn(),
     addLocalRepository: vi.fn(),
   },
-  repository: {
-    chooseDirectory: vi.fn(),
+  settings: {
+    repository: {
+      chooseDirectory: vi.fn(),
+    },
   },
 }))
 
@@ -81,7 +83,7 @@ describe("GitModule dialogs", () => {
   })
 
   it("shows add-local submit failures inside the open dialog", async () => {
-    bridge.repository.chooseDirectory.mockResolvedValue("/work/docs")
+    bridge.settings.repository.chooseDirectory.mockResolvedValue("/work/docs")
 
     await renderGitModule(roots)
 

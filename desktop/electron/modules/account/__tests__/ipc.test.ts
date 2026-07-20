@@ -122,11 +122,11 @@ function createAccountSecurityContext(permissionResult: PermissionResultForTest 
 describe("accountIpcModule", () => {
   it("declares account invoke channels", () => {
     expect(accountIpcModule.id).toBe("account")
-    expect(accountIpcModule.methods.getState.channel).toBe("synapse:account:get-state")
-    expect(accountIpcModule.methods.startLogin.channel).toBe("synapse:account:start-login")
-    expect(accountIpcModule.methods.refresh.channel).toBe("synapse:account:refresh")
-    expect(accountIpcModule.methods.logout.channel).toBe("synapse:account:logout")
-    expect(accountIpcModule.methods.listWebhooks.channel).toBe("synapse:account:webhooks:list")
+    expect(accountIpcModule.methods.getState.operationId).toBe("app.account.operation.get_state")
+    expect(accountIpcModule.methods.startLogin.operationId).toBe("app.account.operation.start_login")
+    expect(accountIpcModule.methods.refresh.operationId).toBe("app.account.operation.refresh")
+    expect(accountIpcModule.methods.logout.operationId).toBe("app.account.operation.logout")
+    expect(accountIpcModule.methods.listWebhooks.operationId).toBe("app.account.webhooks.list")
   })
 
   it("validates account webhook responses", () => {

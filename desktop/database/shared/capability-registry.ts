@@ -1,4 +1,4 @@
-import { buildPrimaryAndLegacyMcpToolActions } from "../../synapse-capabilities/shared/mcp-aliases"
+import { buildPrimaryMcpToolActions } from "../../synapse-capabilities/shared/mcp-tool-names"
 import type { CapabilityDefinition, CapabilityDomainDefinition } from "../../synapse-capabilities/shared/types"
 
 const DATABASE_CAPABILITIES = [
@@ -40,10 +40,7 @@ const DATABASE_DOMAIN: CapabilityDomainDefinition = {
 }
 
 function buildMcpToolActions(): Record<string, string> {
-  return buildPrimaryAndLegacyMcpToolActions(
-    DATABASE_CAPABILITIES,
-    { legacyPrefix: "database", primaryPrefix: "app_database" },
-  )
+  return buildPrimaryMcpToolActions(DATABASE_CAPABILITIES)
 }
 
 function getMutatingActions(): string[] {

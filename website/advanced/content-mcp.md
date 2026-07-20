@@ -6,7 +6,7 @@
 
 Content MCP 用于通过 MCP 发布和维护 Synapse 内容资源。当前支持 Rule、Skill 和 Prompt 的查询、新建、更新和删除。
 
-可用工具包括 `content_type_describe`，以及 `content_rule_*`、`content_skill_*`、`content_prompt_*` 三组资源工具。创建或更新前应先调用 `content_type_describe` 获取字段要求、分类、图标、背景色和限制。
+可用工具包括 `app_resource_repository_type_describe`，以及 `app_resource_repository_rule_*`、`app_resource_repository_skill_*`、`app_resource_repository_prompt_*` 三组资源工具。创建或更新前应先调用 `app_resource_repository_type_describe` 获取字段要求、分类、图标、背景色和限制。
 
 Content MCP 只写入内容仓库，不负责安装到编辑器。安装仍通过 Synapse 的编辑器安装能力完成。
 
@@ -25,7 +25,7 @@ Skill 附件有两种方式：
 
 ## 外观与图片
 
-使用内置图标时，设置 `iconType` 为 `icon`，并从 `content_type_describe` 返回的 `icon` 和 `iconBg` 值中选择。
+使用内置图标时，设置 `iconType` 为 `icon`，并从 `app_resource_repository_type_describe` 返回的 `icon` 和 `iconBg` 值中选择。
 
 使用图片时，设置 `iconType` 为 `image`，并提供 `iconImagePath` 或 `iconImageBase64` 中的一个。Synapse 会校验图片输入，将图片居中裁剪并缩放为 256 x 256 PNG，最终保存为 `icon.png`。
 

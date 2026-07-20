@@ -2,6 +2,7 @@ import { z } from "zod"
 
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
 import type { WindowManager } from "../../../electron/runtime/window"
+import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 import type { AgentPersonaService } from "./service"
 import {
   agentPersonaBuiltinModelUpdateInputSchema,
@@ -29,7 +30,7 @@ function wireAgentPersonaEvents(
 
   const windowManager = ctx.resolve<WindowManager>("core.window-manager")
   service.events.on("changed", (result) => {
-    windowManager.broadcast(agentPersonasIpcModule.events.changed.channel, {
+    windowManager.broadcast(ipcOperationIdToChannel(agentPersonasIpcModule.events.changed.operationId), {
       result,
       items: result.items,
     })
@@ -41,14 +42,14 @@ export const agentPersonasIpcModule: IpcModule = {
   id: "agentPersonas",
   methods: {
     list: {
-      channel: "synapse:agent-personas:list",
+      operationId: "app.agent_personas.operation.list",
       kind: "invoke",
       request: z.void(),
       response: agentPersonaListResultSchema,
       handler: (ctx) => resolveAgentPersonaService(ctx).list(),
     },
     create: {
-      channel: "synapse:agent-personas:create",
+      operationId: "app.agent_personas.operation.create",
       kind: "invoke",
       request: agentPersonaCreateInputSchema,
       response: agentPersonaSchema,
@@ -56,7 +57,7 @@ export const agentPersonasIpcModule: IpcModule = {
         resolveAgentPersonaService(ctx).create(request),
     },
     update: {
-      channel: "synapse:agent-personas:update",
+      operationId: "app.agent_personas.operation.update",
       kind: "invoke",
       request: agentPersonaUpdateInputSchema,
       response: agentPersonaSchema,
@@ -64,7 +65,7 @@ export const agentPersonasIpcModule: IpcModule = {
         resolveAgentPersonaService(ctx).update(request),
     },
     updateBuiltinModel: {
-      channel: "synapse:agent-personas:builtin-model:update",
+      operationId: "app.agent_personas.builtin_model.update",
       kind: "invoke",
       request: agentPersonaBuiltinModelUpdateInputSchema,
       response: agentPersonaSchema,
@@ -72,7 +73,7 @@ export const agentPersonasIpcModule: IpcModule = {
         resolveAgentPersonaService(ctx).updateBuiltinModel(request),
     },
     delete: {
-      channel: "synapse:agent-personas:delete",
+      operationId: "app.agent_personas.operation.delete",
       kind: "invoke",
       request: agentPersonaIdInputSchema,
       response: z.void(),
@@ -82,7 +83,7 @@ export const agentPersonasIpcModule: IpcModule = {
   },
   events: {
     changed: {
-      channel: "synapse:agent-personas:changed",
+      operationId: "app.agent_personas.operation.changed",
       kind: "event",
       payload: agentPersonaChangedEventSchema,
     },

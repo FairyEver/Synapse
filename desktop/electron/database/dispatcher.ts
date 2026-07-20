@@ -19,7 +19,7 @@ import { createMainLogger } from "../services/log-store"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import type { Column, DatabaseOperationSource, DatabaseQueryParams, DatabaseWhereClause } from "./types"
 
-const logger = createMainLogger("database.dispatcher")
+const logger = createMainLogger("app.database.dispatcher")
 
 type DispatchResult = {
   ok: true
@@ -109,9 +109,9 @@ function requireWhereClause(params: Record<string, unknown>, key: string): Datab
 // --- action handlers ---
 
 const ACTION_HANDLERS: Record<string, ActionHandler> = {
-  "database.table.list": () => ({ ok: true, data: databaseService.databaseTableList() }),
+  "app.database.table.list": () => ({ ok: true, data: databaseService.databaseTableList() }),
 
-  "database.table.create": (params) => {
+  "app.database.table.create": (params) => {
     databaseService.databaseTableCreate(
       requireString(params, "tableName"),
       requireArray(params, "columns") as Column[],
@@ -120,22 +120,22 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  "database.table.delete": (params) => {
+  "app.database.table.delete": (params) => {
     databaseService.databaseTableDelete(requireString(params, "tableName"))
     return { ok: true }
   },
 
-  "database.table.describe": (params) => ({
+  "app.database.table.describe": (params) => ({
     ok: true,
     data: databaseService.databaseTableDescribe(requireString(params, "tableName")),
   }),
 
-  "database.overview.get": () => ({
+  "app.database.overview.get": () => ({
     ok: true,
     data: databaseService.databaseOverviewGet(),
   }),
 
-  "database.table.update": (params) => {
+  "app.database.table.update": (params) => {
     databaseService.databaseTableUpdate(
       requireString(params, "tableName"),
       requireText(params, "description"),
@@ -143,7 +143,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  "database.column.create": (params) => {
+  "app.database.column.create": (params) => {
     databaseService.databaseColumnCreate(
       requireString(params, "tableName"),
       requireObject(params, "column") as Column & { default?: unknown },
@@ -151,7 +151,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  "database.column.update": (params) => {
+  "app.database.column.update": (params) => {
     databaseService.databaseColumnUpdate(
       requireString(params, "tableName"),
       requireString(params, "columnName"),
@@ -160,7 +160,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  "database.choice.update": (params) => {
+  "app.database.choice.update": (params) => {
     databaseService.databaseChoiceUpdate(
       requireString(params, "tableName"),
       requireString(params, "columnName"),
@@ -169,7 +169,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  "database.choice_usage.get": (params) => ({
+  "app.database.choice_usage.get": (params) => ({
     ok: true,
     data: databaseService.databaseChoiceUsageGet(
       requireString(params, "tableName"),
@@ -177,7 +177,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     ),
   }),
 
-  "database.row.create": (params) => {
+  "app.database.row.create": (params) => {
     const result = databaseService.databaseRowCreate(
       requireString(params, "tableName"),
       requireObject(params, "data"),
@@ -185,7 +185,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: result, affected: 1 }
   },
 
-  "database.rows.create": (params) => {
+  "app.database.rows.create": (params) => {
     const result = databaseService.databaseRowsCreate(
       requireString(params, "tableName"),
       requireArray(params, "rows") as Record<string, unknown>[],
@@ -193,7 +193,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: result, affected: result.ids.length }
   },
 
-  "database.row.list": (params) => {
+  "app.database.row.list": (params) => {
     const result = databaseService.databaseRowList({
       table: requireString(params, "tableName"),
       where: params.where as DatabaseWhereClause | undefined,
@@ -204,7 +204,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: result.rows, total: result.total }
   },
 
-  "database.row.update": (params) => {
+  "app.database.row.update": (params) => {
     const rowId = requireNumber(params, "rowId")
     const result = databaseService.databaseRowUpdate(
       requireString(params, "tableName"),
@@ -214,7 +214,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: { id: rowId }, affected: result.affected }
   },
 
-  "database.row.delete": (params) => {
+  "app.database.row.delete": (params) => {
     const rowId = requireNumber(params, "rowId")
     const result = databaseService.databaseRowDelete(
       requireString(params, "tableName"),
@@ -223,7 +223,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: { id: rowId }, affected: result.affected }
   },
 
-  "database.rows.update": (params) => {
+  "app.database.rows.update": (params) => {
     const result = databaseService.databaseRowsUpdate(
       requireString(params, "tableName"),
       requireWhereClause(params, "where"),
@@ -233,7 +233,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: { ids: result.ids, dryRun: result.dryRun }, affected: result.affected }
   },
 
-  "database.rows.delete": (params) => {
+  "app.database.rows.delete": (params) => {
     const result = databaseService.databaseRowsDelete(
       requireString(params, "tableName"),
       requireWhereClause(params, "where"),
@@ -242,18 +242,18 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: { ids: result.ids, dryRun: result.dryRun }, affected: result.affected }
   },
 
-  "database.row.count": (params) => {
+  "app.database.row.count": (params) => {
     const where = params.where as DatabaseWhereClause | undefined
     const result = databaseService.databaseRowCount(requireString(params, "tableName"), where)
     return { ok: true, data: result }
   },
 
-  "database.log.list": (params) => ({
+  "app.database.log.list": (params) => ({
     ok: true,
     data: databaseService.databaseLogList(optionalOperationLogListLimit(params)),
   }),
 
-  "database.table.rename": (params) => {
+  "app.database.table.rename": (params) => {
     databaseService.databaseTableRename(
       requireString(params, "fromTableName"),
       requireString(params, "toTableName"),
@@ -261,7 +261,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  "database.column.rename": (params) => {
+  "app.database.column.rename": (params) => {
     databaseService.databaseColumnRename(
       requireString(params, "tableName"),
       requireString(params, "fromColumnName"),
@@ -270,7 +270,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  "database.column.delete": (params) => {
+  "app.database.column.delete": (params) => {
     databaseService.databaseColumnDelete(
       requireString(params, "tableName"),
       requireString(params, "columnName"),
@@ -278,7 +278,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true }
   },
 
-  "database.sql.read": (params) => ({
+  "app.database.sql.read": (params) => ({
     ok: true,
     data: databaseService.databaseSqlRead(
       requireString(params, "sql"),
@@ -286,7 +286,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     ),
   }),
 
-  "database.sql.execute": (params) => {
+  "app.database.sql.execute": (params) => {
     const result = databaseService.databaseSqlExecute(
       requireString(params, "sql"),
       params.params as unknown[] | undefined,
@@ -295,32 +295,32 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: { changes: result.changes, lastInsertRowid: result.lastInsertRowid } }
   },
 
-  "database.folder.list": () => ({
+  "app.database.folder.list": () => ({
     ok: true,
     data: databaseService.folderList(),
   }),
 
-  "database.folder.create": (params) => {
+  "app.database.folder.create": (params) => {
     const result = databaseService.folderCreate(requireString(params, "name"))
     return { ok: true, data: result }
   },
 
-  "database.folder.rename": (params) => {
+  "app.database.folder.rename": (params) => {
     databaseService.folderRename(requireNumber(params, "folderId"), requireString(params, "name"))
     return { ok: true }
   },
 
-  "database.folder.delete": (params) => {
+  "app.database.folder.delete": (params) => {
     databaseService.folderDelete(requireNumber(params, "folderId"))
     return { ok: true }
   },
 
-  "database.folder.reorder": (params) => {
+  "app.database.folder.reorder": (params) => {
     databaseService.folderReorderFolders(requireArray(params, "folderIds") as number[])
     return { ok: true }
   },
 
-  "database.table.move": (params) => {
+  "app.database.table.move": (params) => {
     const folderId = params.folderId as number | null | undefined
     databaseService.folderMoveTable(requireString(params, "tableName"), folderId === undefined ? null : folderId)
     return { ok: true }
@@ -357,7 +357,7 @@ function notifyDatabaseChange(action: string, table?: string): void {
 }
 
 function extractTableName(action: string, params: Record<string, unknown>): string | undefined {
-  if (action === "database.table.rename") {
+  if (action === "app.database.table.rename") {
     return typeof params.toTableName === "string" ? params.toTableName : undefined
   }
   if (typeof params.tableName === "string") return params.tableName

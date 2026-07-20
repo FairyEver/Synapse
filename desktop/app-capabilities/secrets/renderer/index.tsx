@@ -160,7 +160,7 @@ export function SecretsModule() {
     try {
       setLoading(true)
       setLoadError("")
-      const result = await secretsBridge.list()
+      const result = await secretsBridge.item.list()
       replaceSecrets(result.secrets)
       clearSecretReveals()
     } catch (error) {
@@ -175,7 +175,7 @@ export function SecretsModule() {
 
   useEffect(() => {
     void reload()
-    const unsubscribe = secretsBridge.onChanged((event) => {
+    const unsubscribe = secretsBridge.item.onChanged((event) => {
       invalidateDeleteScan()
       setDeleting(null)
       replaceSecrets(event.secrets)
@@ -213,7 +213,7 @@ export function SecretsModule() {
 
   const scanSkillEnvBindings = useCallback(async (name: string): Promise<SecretSkillEnvScanResult | null> => {
     try {
-      const result = await secretsBridge.scanSkillEnvBindings({ name })
+      const result = await secretsBridge.operation.scanSkillEnvBindings({ name })
       if (result.failed && result.items.length === 0) {
         toast.error("扫描失败，请重试。")
         return null
@@ -251,12 +251,12 @@ export function SecretsModule() {
     try {
       setSaving(true)
       const saved = form.mode === "edit" && form.secret
-        ? await secretsBridge.update({
+        ? await secretsBridge.item.update({
             name: form.secret.name,
             ...(form.updateValue ? { value: form.value } : undefined),
             description: form.description,
           })
-        : await secretsBridge.create({
+        : await secretsBridge.item.create({
             name,
             value: form.value,
             description: form.description,
@@ -292,7 +292,7 @@ export function SecretsModule() {
     deleteRequestIdsRef.current.add(secret.id)
     setDeleteRequestIds(new Set(deleteRequestIdsRef.current))
     try {
-      await secretsBridge.delete({ name: secret.name })
+      await secretsBridge.item.delete({ name: secret.name })
       setSecrets((current) => {
         const next = current.filter((entry) => entry.id !== secret.id)
         secretsRef.current = next
@@ -320,7 +320,7 @@ export function SecretsModule() {
 
     let scanResult: SecretSkillEnvScanResult
     try {
-      scanResult = await secretsBridge.scanSkillEnvBindings({ name: secret.name })
+      scanResult = await secretsBridge.operation.scanSkillEnvBindings({ name: secret.name })
     } catch (error) {
       if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
       logger.error("Failed to scan Skill env bindings.", errorDiagnostic(error))
@@ -359,7 +359,7 @@ export function SecretsModule() {
     const requestGeneration = secretRevealGeneration.current
 
     try {
-      const valueView = await secretsBridge.get({ name: secret.name, includeValue: true })
+      const valueView = await secretsBridge.item.get({ name: secret.name, includeValue: true })
       if (!("value" in valueView)) {
         throw new Error("Secret value was not returned.")
       }

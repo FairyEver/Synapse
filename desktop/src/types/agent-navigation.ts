@@ -1,4 +1,4 @@
-export const OPEN_AGENT_SESSION_EVENT = "synapse:open-agent-session"
+export const OPEN_AGENT_SESSION_EVENT = "synapse:app:open_agent_session:operation"
 
 export type SynapseAgentConversationPlatform = "automation" | "workflow" | "scheduled"
 

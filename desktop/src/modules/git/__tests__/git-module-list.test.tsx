@@ -37,8 +37,10 @@ const bridge = vi.hoisted(() => ({
     pull: vi.fn(),
     push: vi.fn(),
   },
-  repository: {
-    chooseDirectory: vi.fn(),
+  settings: {
+    repository: {
+      chooseDirectory: vi.fn(),
+    },
   },
   shell: {
     openExternal: vi.fn(),
@@ -218,7 +220,7 @@ describe("GitModule repository list", () => {
       path: "/Users/writer/.ssh/id_ed25519.pub",
       content: "ssh-ed25519 AAAATEST writer@example.com",
     })
-    bridge.repository.chooseDirectory.mockResolvedValue(null)
+    bridge.settings.repository.chooseDirectory.mockResolvedValue(null)
     bridge.shell.openExternal.mockResolvedValue(undefined)
   })
 
@@ -878,7 +880,7 @@ describe("GitModule repository list", () => {
   })
 
   it("uses native folder selection for clone target path", async () => {
-    bridge.repository.chooseDirectory.mockResolvedValue("/work/docs")
+    bridge.settings.repository.chooseDirectory.mockResolvedValue("/work/docs")
     bridge.git.cloneRepository.mockResolvedValue({
       repository: { id: "repo-1", name: "docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
       remoteKind: "https",
@@ -890,7 +892,7 @@ describe("GitModule repository list", () => {
     await click(findButton("选择文件夹"))
     await click(findButton("开始克隆"))
 
-    expect(bridge.repository.chooseDirectory).toHaveBeenCalled()
+    expect(bridge.settings.repository.chooseDirectory).toHaveBeenCalled()
     expect(bridge.git.cloneRepository).toHaveBeenCalledWith({
       remoteUrl: "https://git.example.com/team/docs.git",
       targetPath: "/work/docs",
@@ -899,7 +901,7 @@ describe("GitModule repository list", () => {
   })
 
   it("uses native folder selection and folder name for local repositories", async () => {
-    bridge.repository.chooseDirectory.mockResolvedValue("/work/team-rules")
+    bridge.settings.repository.chooseDirectory.mockResolvedValue("/work/team-rules")
     bridge.git.addLocalRepository.mockResolvedValue({
       id: "repo-1",
       name: "team-rules",
@@ -915,7 +917,7 @@ describe("GitModule repository list", () => {
 
     await click(findButton("添加"))
 
-    expect(bridge.repository.chooseDirectory).toHaveBeenCalled()
+    expect(bridge.settings.repository.chooseDirectory).toHaveBeenCalled()
     expect(bridge.git.addLocalRepository).toHaveBeenCalledWith({
       localPath: "/work/team-rules",
       name: "team-rules",

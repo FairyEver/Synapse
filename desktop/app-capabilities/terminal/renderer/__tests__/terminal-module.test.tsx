@@ -209,6 +209,8 @@ const terminalBridge = vi.hoisted(() => ({
   }),
 }))
 
+const terminalDomainCache = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }))
+
 const droppedPathState = vi.hoisted(() => ({
   paths: new WeakMap<object, string | null>(),
 }))
@@ -253,7 +255,39 @@ const toastState = vi.hoisted(() => ({
 
 vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
-    if (domain === "terminal") return terminalBridge
+    if (domain === "terminal") return terminalDomainCache.value ??= {
+      group: {
+        chooseDefaultCwd: terminalBridge.chooseDefaultCwd,
+        list: terminalBridge.listGroups,
+        create: terminalBridge.createGroup,
+        rename: terminalBridge.renameGroup,
+        updateSettings: terminalBridge.updateGroupSettings,
+        delete: terminalBridge.deleteGroup,
+      },
+      groupCommand: {
+        create: terminalBridge.createGroupCommand,
+        update: terminalBridge.updateGroupCommand,
+        delete: terminalBridge.deleteGroupCommand,
+        launch: terminalBridge.launchGroupCommand,
+      },
+      session: {
+        list: terminalBridge.listSessions,
+        create: terminalBridge.createSession,
+        get: terminalBridge.getSession,
+        read: terminalBridge.readSession,
+        rename: terminalBridge.renameSession,
+        write: terminalBridge.writeSession,
+        resize: terminalBridge.resizeSession,
+        delete: terminalBridge.deleteSession,
+        stop: terminalBridge.stopSession,
+        runStartupCommand: terminalBridge.runStartupCommand,
+      },
+      operation: {
+        onData: terminalBridge.onData,
+        onSessionChanged: terminalBridge.onSessionChanged,
+        onSessionDeleted: terminalBridge.onSessionDeleted,
+      },
+    }
     if (domain === "shell") return shellBridge
     throw new Error(`Unexpected bridge domain: ${domain}`)
   },

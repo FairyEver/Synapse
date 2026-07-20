@@ -2,7 +2,7 @@
 
 You have access to Synapse Database MCP tools for table discovery, schema inspection, row CRUD, schema changes, table folders, operation logs, and SQL. Treat the MCP schema as static: discover current tables with `app_database_table_list` or `app_database_overview_get`, and inspect current columns, kinds, descriptions, and choices with `app_database_table_describe`.
 
-Use the `app_database_*` tool names for new work. The older `database_*` tool names remain available as compatibility aliases for existing workflows and fixed skills.
+Use the `app_database_*` tool names. The retired `database_*` names are not compatibility aliases.
 
 ## Scope Boundary
 

@@ -7,6 +7,8 @@ description: Use when operating Synapse through MCP tools, including Database, D
 
 Use this skill when the user wants to operate Synapse through MCP tools.
 
+Use only the canonical `app_*` MCP tool names documented by each domain. Retired names such as `database_*`, `drive_*`, `workflow_*`, and `content_*` are not supported aliases.
+
 ## Routing
 
 First classify the user's intent, then read the matching domain file before using tools:

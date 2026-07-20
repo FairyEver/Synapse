@@ -140,7 +140,7 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
   const save = async () => {
     setSaving(true)
     try {
-      const saved = await requireSynapseBridge().modelPrice.saveRules(rows.map(toRuleInput))
+      const saved = await requireSynapseBridge().modelPrice.rule.save(rows.map(toRuleInput))
       setRows(saved.map(toEditableRule))
       onSaved()
       showSuccess("已保存")
@@ -154,7 +154,7 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
   const clear = async () => {
     setClearing(true)
     try {
-      const clearedRows = await requireSynapseBridge().modelPrice.clearRules()
+      const clearedRows = await requireSynapseBridge().modelPrice.rule.clear()
       setRows(clearedRows.map(toEditableRule))
       onSaved()
       showSuccess("已清空")
@@ -172,7 +172,7 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
       const selectedIds = presetState.data
         ?.map((preset) => preset.id)
         .filter((presetId) => selectedPresetIds.includes(presetId)) ?? selectedPresetIds
-      const importedRows = await requireSynapseBridge().modelPrice.importPresets(selectedIds)
+      const importedRows = await requireSynapseBridge().modelPrice.preset.import(selectedIds)
       setRows(importedRows.map(toEditableRule))
       setImportDialogOpen(false)
       onSaved()

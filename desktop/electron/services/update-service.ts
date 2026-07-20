@@ -12,8 +12,8 @@ import type { WindowManager } from "../runtime/window"
 
 // Update event channels for broadcasting state changes
 const UPDATE_CHANNELS = {
-  stateChanged: "synapse:update:state-changed",
-  openUpdatePage: "synapse:update:open-update-page",
+  stateChanged: "synapse:app:update:operation:state_changed",
+  openUpdatePage: "synapse:app:update:operation:open_update_page",
 } as const
 import { createMainLogger } from "./log-store"
 

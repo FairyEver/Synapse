@@ -43,24 +43,24 @@ Routing and transport:
 规范能力 ID 使用：
 
 ```text
-<domain>.<resource>.<action>
+app.<namespace>.<resource>.<action>
 ```
 
 使用 `desktop/synapse-capabilities/shared/naming.ts` 中的 helper 派生公开名称：
 
 | Helper | Output |
 | --- | --- |
-| `capabilityIdToMcpTool("database.table.list")` | `database_table_list` |
-| `capabilityIdToServiceMethod("automation.runtime.inspect")` | `automationRuntimeInspect` |
+| `capabilityIdToMcpTool("app.database.table.list")` | `app_database_table_list` |
+| `capabilityIdToServiceMethod("app.automation.runtime.inspect")` | `appAutomationRuntimeInspect` |
 
 规则：
 
-- domain 和 resource 这两个 token 使用完整英文词。
+- namespace 和 resource 这两个 token 使用完整英文词。
 - Database 能力使用 `database` 领域。
 - Automation 能力使用 `automation` 领域。
 - Workflow 能力使用 `workflow` 领域。
-- Content 能力使用 `content` 领域。
-- 默认使用单数 resource；只有语义需要时使用复数，例如 `database.rows.update`。
+- Resource Repository 能力使用 `resource_repository` 领域。
+- 默认使用单数 resource；只有语义需要时使用复数，例如 `app.database.rows.update`。
 - 一个 token 内的多词使用 snake_case，例如 `choice_usage`。
 - action 使用 `CAPABILITY_ACTIONS` 中的受控词。
 - `execute` 只用于 SQL、命令、脚本或类似执行类能力。
@@ -104,9 +104,9 @@ Routing and transport:
 MCP 工具名称从规范能力 ID 派生：
 
 ```text
-database.row.create -> database_row_create
-automation.item.enable -> automation_item_enable
-workflow.definition.inspect -> workflow_definition_inspect
+app.database.row.create -> app_database_row_create
+app.automation.item.enable -> app_automation_item_enable
+app.workflow.definition.inspect -> app_workflow_definition_inspect
 ```
 
 MCP schema 应满足：
@@ -123,7 +123,7 @@ MCP schema 应满足：
 
 ```json
 {
-  "action": "database.row.create",
+  "action": "app.database.row.create",
   "tableName": "tasks",
   "data": {
     "title": "Ship"
@@ -133,7 +133,7 @@ MCP schema 应满足：
 
 ```json
 {
-  "action": "automation.item.enable",
+  "action": "app.automation.item.enable",
   "itemId": "automation:1"
 }
 ```
@@ -147,20 +147,20 @@ HTTP server 通过 `createSynapseActionRouter` 路由。新领域必须先注册
 规范能力 ID:
 
 ```text
-database.table.list
+app.database.table.list
 ```
 
 MCP 工具:
 
 ```text
-database_table_list
+app_database_table_list
 ```
 
 HTTP body:
 
 ```json
 {
-  "action": "database.table.list"
+  "action": "app.database.table.list"
 }
 ```
 
@@ -175,13 +175,13 @@ databaseTableList
 规范能力 ID:
 
 ```text
-database.row.create
+app.database.row.create
 ```
 
 MCP 工具:
 
 ```text
-database_row_create
+app_database_row_create
 ```
 
 MCP 参数:
@@ -199,7 +199,7 @@ HTTP body:
 
 ```json
 {
-  "action": "database.row.create",
+  "action": "app.database.row.create",
   "tableName": "tasks",
   "data": {
     "title": "Ship"
@@ -218,13 +218,13 @@ databaseRowCreate
 规范能力 ID:
 
 ```text
-automation.item.list
+app.automation.item.list
 ```
 
 MCP 工具:
 
 ```text
-automation_item_list
+app_automation_item_list
 ```
 
 MCP 参数:
@@ -240,7 +240,7 @@ HTTP body:
 
 ```json
 {
-  "action": "automation.item.list",
+  "action": "app.automation.item.list",
   "enabled": true,
   "limit": 20
 }
@@ -257,20 +257,20 @@ automationItemList
 规范能力 ID:
 
 ```text
-workflow.definition.inspect
+app.workflow.definition.inspect
 ```
 
 MCP 工具:
 
 ```text
-workflow_definition_inspect
+app_workflow_definition_inspect
 ```
 
 HTTP body:
 
 ```json
 {
-  "action": "workflow.definition.inspect",
+  "action": "app.workflow.definition.inspect",
   "workflowId": "workflow:1"
 }
 ```

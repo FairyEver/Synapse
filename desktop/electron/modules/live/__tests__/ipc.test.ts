@@ -25,8 +25,8 @@ import { liveIpcModule } from "../ipc"
 describe("liveIpcModule", () => {
   it("declares live invoke and event channels", () => {
     expect(liveIpcModule.id).toBe("live")
-    expect(liveIpcModule.methods.getState.channel).toBe("synapse:live:get-state")
-    expect(liveIpcModule.events.stateChanged.channel).toBe("synapse:events:live")
+    expect(liveIpcModule.methods.getState.operationId).toBe("app.live.operation.get_state")
+    expect(liveIpcModule.events.stateChanged.operationId).toBe("app.live.state.changed")
   })
 
   it("validates state changed domain events", () => {

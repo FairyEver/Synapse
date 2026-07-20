@@ -114,7 +114,7 @@ describe("agent conversation window service", () => {
       sessionKey: "local:renderer",
     })).toEqual({ focused: true })
     expect(window.focus).toHaveBeenCalled()
-    expect(AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL).toBe("synapse:agent:detached-conversations-changed")
+    expect(AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL).toBe("synapse:app:agent:operation:detached_conversations_changed")
   })
 
   it("updates a detached window title and broadcasts its new metadata", async () => {

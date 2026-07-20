@@ -1,8 +1,8 @@
 import type { CapabilityId } from "./naming"
 import {
-  buildPrimaryAndLegacyMcpToolActions,
-  withPrimaryAndLegacyMcpTools,
-} from "./mcp-aliases"
+  buildPrimaryMcpToolActions,
+  withPrimaryMcpTools,
+} from "./mcp-tool-names"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 const MODEL_PRICE_COVERAGE_MAX_LIMIT = 500
@@ -44,9 +44,8 @@ export const MODEL_PRICE_DOMAIN: CapabilityDomainDefinition = {
   capabilities: modelPriceCapabilities,
 }
 
-export const MODEL_PRICE_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAndLegacyMcpToolActions(
+export const MODEL_PRICE_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryMcpToolActions(
   modelPriceCapabilities,
-  { legacyPrefix: "model_price", primaryPrefix: "app_model_price" },
 )
 
 export function buildModelPriceTools(): McpToolDefinition[] {
@@ -58,7 +57,7 @@ export function buildModelPriceTools(): McpToolDefinition[] {
     reasoningPer1M: priceProperty("Reasoning"),
   }
 
-  return withPrimaryAndLegacyMcpTools([
+  return withPrimaryMcpTools([
     {
       name: "model_price_used_model_list",
       description: "List models used by CC and Codex with current enabled price-rule match status. matchedRuleId is a rule ID, not a model name. This reads indexed usage data and does not refresh usage logs.",
@@ -137,5 +136,5 @@ export function buildModelPriceTools(): McpToolDefinition[] {
       description: "Disable one model price rule by opaque ruleId without deleting it.",
       inputSchema: { type: "object", properties: { ruleId: ruleIdProperty }, required: ["ruleId"] },
     },
-  ], { legacyPrefix: "model_price", primaryPrefix: "app_model_price" })
+  ], { sourcePrefix: "model_price", primaryPrefix: "app_model_price" })
 }

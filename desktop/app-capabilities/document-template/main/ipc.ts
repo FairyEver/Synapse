@@ -15,7 +15,7 @@ export const documentTemplateIpcModule: IpcModule = {
   id: "documentTemplate",
   methods: {
     chooseTemplateFile: {
-      channel: "synapse:document-template:template:choose",
+      operationId: "app.document_template.template.choose",
       kind: "invoke",
       request: z.void().optional(),
       response: z.string().nullable(),
@@ -25,7 +25,7 @@ export const documentTemplateIpcModule: IpcModule = {
       }),
     },
     chooseJsonFile: {
-      channel: "synapse:document-template:json:choose",
+      operationId: "app.document_template.json.choose",
       kind: "invoke",
       request: z.void().optional(),
       response: z.string().nullable(),
@@ -35,7 +35,7 @@ export const documentTemplateIpcModule: IpcModule = {
       }),
     },
     chooseOutputFile: {
-      channel: "synapse:document-template:output:choose",
+      operationId: "app.document_template.output.choose",
       kind: "invoke",
       request: chooseOutputDocxRequestSchema,
       response: z.string().nullable(),
@@ -53,7 +53,7 @@ export const documentTemplateIpcModule: IpcModule = {
       },
     },
     generateDocx: {
-      channel: "synapse:document-template:docx:generate",
+      operationId: "app.document_template.docx.generate",
       kind: "invoke",
       request: generateDocxInputSchema,
       response: generateDocxResultSchema,

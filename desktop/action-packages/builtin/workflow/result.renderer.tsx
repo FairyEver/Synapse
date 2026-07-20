@@ -22,7 +22,7 @@ export function WorkflowActionResultView({ result }: { readonly result: ActionRu
           size="sm"
           onClick={(event) => {
             event.stopPropagation()
-            void window.synapse?.workflow.openRunner(workflowId, workflowRunId)
+            void window.synapse?.workflow.operation.openRunner(workflowId, workflowRunId)
           }}
         >
           打开运行记录

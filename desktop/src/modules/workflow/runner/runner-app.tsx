@@ -74,7 +74,7 @@ export function WorkflowRunnerApp() {
     setLoadError(null)
     void (async () => {
       try {
-        const status = await window.synapse?.workflow.runStatus(runId, workflowId)
+        const status = await window.synapse?.workflow.run.get(runId, workflowId)
         if (cancelled) return
         if (!status) {
           logger.warn("runner hydration failed: runStatus returned null, triggering fallback", { runId, workflowId })
@@ -122,7 +122,7 @@ export function WorkflowRunnerApp() {
     let cancelled = false
     void (async () => {
       try {
-        const def = await window.synapse?.workflow.get(workflowId)
+        const def = await window.synapse?.workflow.definition.get(workflowId)
         if (cancelled) return
         if (def) {
           setDefinition(def)
@@ -143,7 +143,7 @@ export function WorkflowRunnerApp() {
 
   useEffect(() => {
     if (!workflowId) return
-    const unsubEvent = window.synapse?.workflow.onEvent((event) => {
+    const unsubEvent = window.synapse?.workflow.operation.onEvent((event) => {
       if (event.type === "workflow:started" && event.workflowId === workflowId) {
         if (!runIdRef.current) {
           logger.info("workflow:started in runner — switching to new run", { newRunId: event.runId })
@@ -163,7 +163,7 @@ export function WorkflowRunnerApp() {
         }
       }
     })
-    const unsubSwitch = window.synapse?.workflow.onRunnerSwitchRun((payload) => {
+    const unsubSwitch = window.synapse?.workflow.operation.onRunnerSwitchRun((payload) => {
       if (payload?.runId && payload.runId !== runIdRef.current) {
         logger.info("runner-switch-run received", { newRunId: payload.runId })
         syncRunnerUrl(workflowId, payload.runId)
@@ -237,7 +237,7 @@ export function WorkflowRunnerApp() {
     if (!runId) return
     setCancelling(true)
     try {
-      await window.synapse?.workflow.cancel(runId)
+      await window.synapse?.workflow.run.disable(runId)
     } catch (err) {
       logger.warn("cancel IPC call failed", {
         runId,
@@ -254,7 +254,7 @@ export function WorkflowRunnerApp() {
     setRerunning(true)
     logger.info("rerun requested", { runId, paramKeys: Object.keys(runParams) })
     try {
-      const result = await window.synapse?.workflow.rerun(runId, runParams, undefined, workflowId)
+      const result = await window.synapse?.workflow.operation.rerun(runId, runParams, undefined, workflowId)
       if (!result) {
         logger.warn("rerun returned empty result — IPC bridge unavailable", { runId })
         setRunError("重新运行失败：IPC 通道不可用")
@@ -303,7 +303,7 @@ export function WorkflowRunnerApp() {
     setRerunning(true)
     logger.info("confirmed rerun with force", { runId, activeRunId: confirmRerunActiveRunId })
     try {
-      const result = await window.synapse?.workflow.rerun(runId, runParams, true, workflowId)
+      const result = await window.synapse?.workflow.operation.rerun(runId, runParams, true, workflowId)
       if (!result || "conflict" in result || "errors" in result) {
         setRunError("重新运行失败，请重试")
         return
@@ -330,7 +330,7 @@ export function WorkflowRunnerApp() {
   }, [runId, runParams, confirmRerunActiveRunId, workflowId])
 
   const handleOpenEditor = useCallback(() => {
-    void window.synapse?.workflow.openEditor(workflowId).catch((err) => {
+    void window.synapse?.workflow.operation.openEditor(workflowId).catch((err) => {
       logger.warn("Workflow editor open failed.", {
         boundary: "renderer.workflow.runner.openEditor",
         workflowId,

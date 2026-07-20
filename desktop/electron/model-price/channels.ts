@@ -1,9 +1,8 @@
 export const MODEL_PRICE_CHANNELS = {
-  coverageList: "synapse:model-price:coverage:list",
-  presetsList: "synapse:model-price:presets:list",
-  presetsImport: "synapse:model-price:presets:import",
-  rulesGet: "synapse:model-price:rules:get",
-  rulesSave: "synapse:model-price:rules:save",
-  rulesClear: "synapse:model-price:rules:clear",
-  rulesReset: "synapse:model-price:rules:reset",
+  coverageList: "synapse:app:model_price:used_model:list",
+  presetsList: "synapse:app:model_price:preset:list",
+  presetsImport: "synapse:app:model_price:preset:import",
+  rulesGet: "synapse:app:model_price:rule:list",
+  rulesSave: "synapse:app:model_price:rule:save",
+  rulesClear: "synapse:app:model_price:rule:clear",
 } as const

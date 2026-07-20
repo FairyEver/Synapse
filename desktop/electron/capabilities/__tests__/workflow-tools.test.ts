@@ -51,20 +51,20 @@ describe("workflow MCP tool definitions", () => {
   })
 
   it("teaches agents that workflow_call, codex, and claude_code are supported node types", () => {
-    const listDescription = toolByName("workflow_node_type_list").description
+    const listDescription = toolByName("app_workflow_node_type_list").description
     expect(listDescription).toContain("workflow_call")
     expect(listDescription).toContain('"app_workflow_call" is not a valid node type')
     expect(listDescription).toContain("script variables are injected as environment variables")
     expect(listDescription).toContain("codex")
     expect(listDescription).toContain("claude_code")
 
-    const describeProperties = toolByName("workflow_node_type_describe").inputSchema.properties
+    const describeProperties = toolByName("app_workflow_node_type_describe").inputSchema.properties
     const describeNodeType = objectProperty(describeProperties, "nodeType")
     expect(stringProperty(describeNodeType, "description")).toContain("workflow_call")
     expect(stringProperty(describeNodeType, "description")).toContain("codex")
     expect(stringProperty(describeNodeType, "description")).toContain("claude_code")
 
-    const createProperties = toolByName("workflow_node_create").inputSchema.properties
+    const createProperties = toolByName("app_workflow_node_create").inputSchema.properties
     const nodeSchema = objectProperty(createProperties, "node")
     const nodeProperties = objectProperty(nodeSchema, "properties")
     const typeSchema = objectProperty(nodeProperties, "type")
@@ -74,14 +74,14 @@ describe("workflow MCP tool definitions", () => {
   })
 
   it("teaches agents that app-provided Workflow node types are supported", () => {
-    const listDescription = toolByName("workflow_node_type_list").description
+    const listDescription = toolByName("app_workflow_node_type_list").description
     expect(listDescription).toContain("document_template_docx_generate")
 
-    const describeProperties = toolByName("workflow_node_type_describe").inputSchema.properties
+    const describeProperties = toolByName("app_workflow_node_type_describe").inputSchema.properties
     const describeNodeType = objectProperty(describeProperties, "nodeType")
     expect(stringProperty(describeNodeType, "description")).toContain("document_template_docx_generate")
 
-    const createProperties = toolByName("workflow_node_create").inputSchema.properties
+    const createProperties = toolByName("app_workflow_node_create").inputSchema.properties
     const nodeSchema = objectProperty(createProperties, "node")
     const nodeProperties = objectProperty(nodeSchema, "properties")
     const typeSchema = objectProperty(nodeProperties, "type")
@@ -89,7 +89,7 @@ describe("workflow MCP tool definitions", () => {
   })
 
   it("documents workflow_call, codex, and claude_code config fields in the full definition schema", () => {
-    const inspectProperties = toolByName("workflow_definition_inspect").inputSchema.properties
+    const inspectProperties = toolByName("app_workflow_definition_inspect").inputSchema.properties
     const definitionSchema = objectProperty(inspectProperties, "definition")
     const definitionProperties = objectProperty(definitionSchema, "properties")
     const nodesSchema = objectProperty(definitionProperties, "nodes")
@@ -129,7 +129,7 @@ describe("workflow MCP tool definitions", () => {
   })
 
   it("documents app-provided node config fields in the full definition schema", () => {
-    const inspectProperties = toolByName("workflow_definition_inspect").inputSchema.properties
+    const inspectProperties = toolByName("app_workflow_definition_inspect").inputSchema.properties
     const definitionSchema = objectProperty(inspectProperties, "definition")
     const definitionProperties = objectProperty(definitionSchema, "properties")
     const nodesSchema = objectProperty(definitionProperties, "nodes")
@@ -153,8 +153,8 @@ describe("workflow MCP tool definitions", () => {
     }
   })
 
-  it("documents atomic edge creation fields on workflow_node_create", () => {
-    const createProperties = toolByName("workflow_node_create").inputSchema.properties
+  it("documents atomic edge creation fields on app_workflow_node_create", () => {
+    const createProperties = toolByName("app_workflow_node_create").inputSchema.properties
     const nodeSchema = objectProperty(createProperties, "node")
     const nodeRequired = nodeSchema.required
 
@@ -171,7 +171,7 @@ describe("workflow MCP tool definitions", () => {
   })
 
   it("documents safe workflow node id constraints", () => {
-    const inspectProperties = toolByName("workflow_definition_inspect").inputSchema.properties
+    const inspectProperties = toolByName("app_workflow_definition_inspect").inputSchema.properties
     const definitionSchema = objectProperty(inspectProperties, "definition")
     const definitionProperties = objectProperty(definitionSchema, "properties")
     const nodesSchema = objectProperty(definitionProperties, "nodes")
@@ -182,7 +182,7 @@ describe("workflow MCP tool definitions", () => {
     expect(stringProperty(nodeIdSchema, "pattern")).toBe("^[A-Za-z0-9_-]+$")
     expect(stringProperty(nodeIdSchema, "description")).toContain("underscore")
 
-    const updateProperties = toolByName("workflow_node_update").inputSchema.properties
+    const updateProperties = toolByName("app_workflow_node_update").inputSchema.properties
     const updateNodeIdSchema = objectProperty(updateProperties, "nodeId")
     expect(stringProperty(updateNodeIdSchema, "pattern")).toBe("^[A-Za-z0-9_-]+$")
   })

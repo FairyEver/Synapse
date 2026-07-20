@@ -20,7 +20,7 @@ function useDatabaseFolders() {
     setLoading(true)
     setError(null)
     try {
-      const result = await bridge.database.databaseFolderList()
+      const result = await bridge.database.folder.list()
       if (requestId !== requestIdRef.current) return
       setFolders(result)
     } catch (e) {
@@ -45,7 +45,7 @@ function useDatabaseFolders() {
     const bridge = bridgeRef.current
     if (!bridge) return
 
-    const unsubscribe = bridge.database.onChanged((event: DatabaseChangeEvent) => {
+    const unsubscribe = bridge.database.operation.onChanged((event: DatabaseChangeEvent) => {
       // Refresh folders when folder-related actions occur
       if (event.action.startsWith("database.folder.") || event.action === "database.table.move") {
         void refresh()
@@ -57,7 +57,7 @@ function useDatabaseFolders() {
   const createFolder = useCallback(async (name: string) => {
     const bridge = bridgeRef.current
     if (!bridge) throw new Error("Bridge not available")
-    const result = await bridge.database.databaseFolderCreate({ name })
+    const result = await bridge.database.folder.create({ name })
     await refresh()
     return result
   }, [refresh])
@@ -65,35 +65,35 @@ function useDatabaseFolders() {
   const renameFolder = useCallback(async (id: number, name: string) => {
     const bridge = bridgeRef.current
     if (!bridge) throw new Error("Bridge not available")
-    await bridge.database.databaseFolderRename({ id, name })
+    await bridge.database.folder.rename({ id, name })
     await refresh()
   }, [refresh])
 
   const deleteFolder = useCallback(async (id: number) => {
     const bridge = bridgeRef.current
     if (!bridge) throw new Error("Bridge not available")
-    await bridge.database.databaseFolderDelete({ id })
+    await bridge.database.folder.delete({ id })
     await refresh()
   }, [refresh])
 
   const moveTable = useCallback(async (tableName: string, folderId: number | null) => {
     const bridge = bridgeRef.current
     if (!bridge) throw new Error("Bridge not available")
-    await bridge.database.databaseFolderMoveTable({ tableName, folderId })
+    await bridge.database.folder.moveTable({ tableName, folderId })
     await refresh()
   }, [refresh])
 
   const reorderTables = useCallback(async (folderId: number, tableNames: string[]) => {
     const bridge = bridgeRef.current
     if (!bridge) throw new Error("Bridge not available")
-    await bridge.database.databaseFolderReorder({ folderId, tableNames })
+    await bridge.database.folder.reorder({ folderId, tableNames })
     await refresh()
   }, [refresh])
 
   const reorderFolders = useCallback(async (folderIds: number[]) => {
     const bridge = bridgeRef.current
     if (!bridge) throw new Error("Bridge not available")
-    await bridge.database.databaseFolderReorderFolders({ folderIds })
+    await bridge.database.folder.reorderFolders({ folderIds })
     await refresh()
   }, [refresh])
 

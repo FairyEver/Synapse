@@ -23,7 +23,7 @@ export const liveIpcModule: IpcModule = {
   methods: {
     getState: {
       kind: "invoke",
-      channel: "synapse:live:get-state",
+      operationId: "app.live.operation.get_state",
       request: z.void(),
       response: liveStateSchema,
       handler: async () => liveConnectionService.getState(),
@@ -32,7 +32,7 @@ export const liveIpcModule: IpcModule = {
   events: {
     stateChanged: {
       kind: "event",
-      channel: "synapse:events:live",
+      operationId: "app.live.state.changed",
       payload: liveStateChangedDomainEventSchema,
     },
   },

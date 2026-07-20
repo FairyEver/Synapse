@@ -1,8 +1,8 @@
 import type { CapabilityId } from "./naming"
 import {
-  buildPrimaryAndLegacyMcpToolActions,
-  withPrimaryAndLegacyMcpTools,
-} from "./mcp-aliases"
+  buildPrimaryMcpToolActions,
+  withPrimaryMcpTools,
+} from "./mcp-tool-names"
 import type {
   CapabilityDefinition,
   CapabilityDomainDefinition,
@@ -39,9 +39,8 @@ export const CONTENT_DOMAIN: CapabilityDomainDefinition = {
   capabilities: contentCapabilities,
 }
 
-export const CONTENT_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAndLegacyMcpToolActions(
+export const CONTENT_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryMcpToolActions(
   contentCapabilities,
-  { legacyPrefix: "content", primaryPrefix: "app_resource_repository" },
 )
 
 const stringField = (description: string) => ({ type: "string", description })
@@ -198,7 +197,7 @@ function deleteTool(type: ContentResourceType): McpToolDefinition {
 }
 
 export function buildContentTools(): McpToolDefinition[] {
-  return withPrimaryAndLegacyMcpTools([
+  return withPrimaryMcpTools([
     {
       name: "content_type_describe",
       description: "Return content field requirements, categories, icon values, background values, and constraints for Rule, Skill, and Prompt publishing. Call this before create/update.",
@@ -220,5 +219,5 @@ export function buildContentTools(): McpToolDefinition[] {
       updateTool(type),
       deleteTool(type),
     ]),
-  ], { legacyPrefix: "content", primaryPrefix: "app_resource_repository" })
+  ], { sourcePrefix: "content", primaryPrefix: "app_resource_repository" })
 }

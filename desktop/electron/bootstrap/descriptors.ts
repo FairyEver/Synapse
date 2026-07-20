@@ -33,6 +33,7 @@ import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter } from "../capabilities/action-router"
 import { createAppCapabilityDispatcher } from "../../app-capabilities/dispatcher"
+import { ipcOperationIdToChannel } from "../../synapse-capabilities/shared/naming"
 import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabilities/document-template/main/dispatcher"
 import { createDocumentTemplateService } from "../../app-capabilities/document-template/main/service"
 import { createSoundNotifierCapabilityDispatcher } from "../../app-capabilities/sound-notifier/main/dispatcher"
@@ -441,10 +442,10 @@ export const coreSoundNotifierDescriptor: ServiceDescriptor<SoundNotifierService
     })
 
     service.events.on("changed", (payload) => {
-      windowManager.broadcast(soundNotifierIpcModule.events.changed.channel, payload)
+      windowManager.broadcast(ipcOperationIdToChannel(soundNotifierIpcModule.events.changed.operationId), payload)
     })
     service.events.on("playRequested", (payload, delivery) => {
-      const sent = windowManager.broadcast(soundNotifierIpcModule.events.playRequested.channel, payload)
+      const sent = windowManager.broadcast(ipcOperationIdToChannel(soundNotifierIpcModule.events.playRequested.operationId), payload)
       delivery.recipientCount = sent
       if (sent === 0) {
         logger.warn("Sound notifier playback request had no renderer window.", {

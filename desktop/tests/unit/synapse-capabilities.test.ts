@@ -70,7 +70,7 @@ describe("App capability domain", () => {
     ])
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_session_resize).toBe("app.terminal.session.resize")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_rename).toBe("app.terminal.group.rename")
-    expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_updateSettings).toBe("app.terminal.group.updateSettings")
+    expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_update_settings).toBe("app.terminal.group.update_settings")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_delete).toBe("app.terminal.group.delete")
     expect(APP_MCP_TOOL_ACTIONS.app_secrets_item_list).toBe("app.secrets.item.list")
     expect(APP_MCP_TOOL_ACTIONS.app_secrets_item_upsert).toBe("app.secrets.item.upsert")
@@ -96,27 +96,27 @@ describe("Model price capability domain", () => {
   })
 
   it("maps model price MCP tools to canonical actions", () => {
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_used_model_list).toBe("app.model_price.used_model.list")
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_preset_import).toBe("app.model_price.preset.import")
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_update).toBe("app.model_price.rule.update")
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_clear).toBe("app.model_price.rule.clear")
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_disable).toBe("app.model_price.rule.disable")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.app_model_price_used_model_list).toBe("app.model_price.used_model.list")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.app_model_price_preset_import).toBe("app.model_price.preset.import")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.app_model_price_rule_update).toBe("app.model_price.rule.update")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.app_model_price_rule_clear).toBe("app.model_price.rule.clear")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.app_model_price_rule_disable).toBe("app.model_price.rule.disable")
   })
 
   it("defines model price MCP schemas with ruleId-based mutations", () => {
     const tools = buildModelPriceTools()
-    expect(tools.find((tool) => tool.name === "model_price_rule_get")?.inputSchema.required).toEqual(["ruleId"])
-    expect(tools.find((tool) => tool.name === "model_price_rule_update")?.inputSchema.required).toEqual(["ruleId"])
-    expect(tools.find((tool) => tool.name === "model_price_rule_delete")?.inputSchema.required).toEqual(["ruleId"])
-    expect(tools.find((tool) => tool.name === "model_price_rule_update")?.inputSchema.properties).not.toHaveProperty("enabled")
+    expect(tools.find((tool) => tool.name === "app_model_price_rule_get")?.inputSchema.required).toEqual(["ruleId"])
+    expect(tools.find((tool) => tool.name === "app_model_price_rule_update")?.inputSchema.required).toEqual(["ruleId"])
+    expect(tools.find((tool) => tool.name === "app_model_price_rule_delete")?.inputSchema.required).toEqual(["ruleId"])
+    expect(tools.find((tool) => tool.name === "app_model_price_rule_update")?.inputSchema.properties).not.toHaveProperty("enabled")
   })
 
   it("combines model price tools with all MCP tools", () => {
     const toolNames = buildAllMcpTools().map((tool) => tool.name)
-    expect(toolNames).toContain("model_price_used_model_list")
-    expect(toolNames).toContain("model_price_rule_create")
-    expect(toolNames).toContain("model_price_rule_delete")
-    expect(MCP_TOOL_ACTIONS.model_price_rule_enable).toBe("app.model_price.rule.enable")
+    expect(toolNames).toContain("app_model_price_used_model_list")
+    expect(toolNames).toContain("app_model_price_rule_create")
+    expect(toolNames).toContain("app_model_price_rule_delete")
+    expect(MCP_TOOL_ACTIONS.app_model_price_rule_enable).toBe("app.model_price.rule.enable")
     expect(getActionDomainId("app.model_price.rule.list")).toBe("model_price")
   })
 })
@@ -132,15 +132,12 @@ describe("Repository capability domain", () => {
 
   it("maps repository MCP tools to canonical actions", () => {
     expect(REPOSITORY_MCP_TOOL_ACTIONS.app_settings_repository_item_list).toBe("app.settings.repository.item.list")
-    expect(REPOSITORY_MCP_TOOL_ACTIONS.repository_item_list).toBe("app.settings.repository.item.list")
     const tools = buildRepositoryTools()
-    expect(tools.map((tool) => tool.name)).toEqual([
-      "app_settings_repository_item_list",
-      "repository_item_list",
-    ])
-    const legacyTool = tools.find((tool) => tool.name === "repository_item_list")
-    expect(legacyTool?.description).toContain("uuid, name, local path, and active state")
-    expect(legacyTool?.description).not.toContain("variable count")
+    expect(tools.map((tool) => tool.name)).toEqual(["app_settings_repository_item_list"])
+    const tool = tools[0]
+    expect(tool?.description).toContain("uuid, name, local path, and active state")
+    expect(tool?.description).not.toContain("variable count")
+    expect(REPOSITORY_MCP_TOOL_ACTIONS).not.toHaveProperty("repository_item_list")
   })
 })
 
@@ -205,12 +202,12 @@ describe("Secrets app capability surface", () => {
 describe("Repository and Secrets combined MCP tools", () => {
   it("combines Repository and Secrets tools with all MCP tools", () => {
     const toolNames = buildAllMcpTools().map((tool) => tool.name)
-    expect(toolNames).toContain("repository_item_list")
+    expect(toolNames).toContain("app_settings_repository_item_list")
     expect(toolNames).toContain("app_secrets_item_list")
     expect(toolNames).toContain("app_secrets_item_upsert")
     expect(toolNames).not.toContain(["variable", "item", "list"].join("_"))
     expect(toolNames).not.toContain(["app", "settings", "variable", "item", "list"].join("_"))
-    expect(MCP_TOOL_ACTIONS.repository_item_list).toBe("app.settings.repository.item.list")
+    expect(MCP_TOOL_ACTIONS.app_settings_repository_item_list).toBe("app.settings.repository.item.list")
     expect(MCP_TOOL_ACTIONS.app_secrets_item_delete).toBe("app.secrets.item.delete")
     expect(getActionDomainId("app.settings.repository.item.list")).toBe("repository")
     expect(getActionDomainId("app.secrets.item.upsert")).toBe("app")
@@ -226,13 +223,13 @@ describe("Workflow MCP tool schemas", () => {
   }
 
   it("exposes workflow-level default project, provider, model tier, and timeout fields", () => {
-    const createProperties = tool("workflow_definition_create").inputSchema.properties
+    const createProperties = tool("app_workflow_definition_create").inputSchema.properties
     expect(createProperties).toHaveProperty("defaultProjectId")
     expect(createProperties).toHaveProperty("defaultProviderId")
     expect(createProperties).toHaveProperty("defaultModelTier")
     expect(createProperties).toHaveProperty("defaultNodeTimeoutMins")
 
-    const updateDefinition = tool("workflow_definition_update").inputSchema.properties.definition as {
+    const updateDefinition = tool("app_workflow_definition_update").inputSchema.properties.definition as {
       properties?: Record<string, unknown>
       required?: string[]
     }
@@ -247,11 +244,11 @@ describe("Workflow MCP tool schemas", () => {
   })
 
   it("documents executable workflow errors with node and timeout diagnostics", () => {
-    expect(tool("workflow_definition_inspect").description).toContain("field")
-    expect(tool("workflow_definition_inspect").description).toContain("nodeName")
-    expect(tool("workflow_run_get").description).toContain("durationMs")
-    expect(tool("workflow_run_get").description).toContain("timeoutMs")
-    expect(tool("workflow_run_get").description).toContain("retryable")
+    expect(tool("app_workflow_definition_inspect").description).toContain("field")
+    expect(tool("app_workflow_definition_inspect").description).toContain("nodeName")
+    expect(tool("app_workflow_run_get").description).toContain("durationMs")
+    expect(tool("app_workflow_run_get").description).toContain("timeoutMs")
+    expect(tool("app_workflow_run_get").description).toContain("retryable")
   })
 })
 
@@ -279,37 +276,37 @@ describe("Content capability domain", () => {
   })
 
   it("maps content MCP tool names to canonical actions", () => {
-    expect(CONTENT_MCP_TOOL_ACTIONS.content_type_describe).toBe("app.resource_repository.type.describe")
-    expect(CONTENT_MCP_TOOL_ACTIONS.content_rule_create).toBe("app.resource_repository.rule.create")
-    expect(CONTENT_MCP_TOOL_ACTIONS.content_skill_update).toBe("app.resource_repository.skill.update")
-    expect(CONTENT_MCP_TOOL_ACTIONS.content_prompt_delete).toBe("app.resource_repository.prompt.delete")
+    expect(CONTENT_MCP_TOOL_ACTIONS.app_resource_repository_type_describe).toBe("app.resource_repository.type.describe")
+    expect(CONTENT_MCP_TOOL_ACTIONS.app_resource_repository_rule_create).toBe("app.resource_repository.rule.create")
+    expect(CONTENT_MCP_TOOL_ACTIONS.app_resource_repository_skill_update).toBe("app.resource_repository.skill.update")
+    expect(CONTENT_MCP_TOOL_ACTIONS.app_resource_repository_prompt_delete).toBe("app.resource_repository.prompt.delete")
   })
 
   it("combines content tools with all MCP tools", () => {
     const toolNames = buildAllMcpTools().map((tool) => tool.name)
-    expect(toolNames).toContain("content_type_describe")
-    expect(toolNames).toContain("content_rule_create")
-    expect(toolNames).toContain("content_skill_create")
-    expect(toolNames).toContain("content_prompt_create")
-    expect(MCP_TOOL_ACTIONS.content_skill_delete).toBe("app.resource_repository.skill.delete")
+    expect(toolNames).toContain("app_resource_repository_type_describe")
+    expect(toolNames).toContain("app_resource_repository_rule_create")
+    expect(toolNames).toContain("app_resource_repository_skill_create")
+    expect(toolNames).toContain("app_resource_repository_prompt_create")
+    expect(MCP_TOOL_ACTIONS.app_resource_repository_skill_delete).toBe("app.resource_repository.skill.delete")
     expect(getActionDomainId("app.resource_repository.prompt.update")).toBe("content")
   })
 
   it("documents list/get/create/update/delete tool schemas for each content type", () => {
     const tools = buildContentTools()
     for (const type of ["rule", "skill", "prompt"] as const) {
-      expect(tools.find((tool) => tool.name === `content_${type}_list`)).toBeDefined()
-      expect(tools.find((tool) => tool.name === `content_${type}_get`)?.inputSchema.required).toEqual(["id"])
-      expect(tools.find((tool) => tool.name === `content_${type}_create`)).toBeDefined()
-      expect(tools.find((tool) => tool.name === `content_${type}_update`)?.inputSchema.required).toContain("baseHistoryDirname")
-      expect(tools.find((tool) => tool.name === `content_${type}_delete`)?.inputSchema.required).toEqual(["id", "baseHistoryDirname"])
+      expect(tools.find((tool) => tool.name === `app_resource_repository_${type}_list`)).toBeDefined()
+      expect(tools.find((tool) => tool.name === `app_resource_repository_${type}_get`)?.inputSchema.required).toEqual(["id"])
+      expect(tools.find((tool) => tool.name === `app_resource_repository_${type}_create`)).toBeDefined()
+      expect(tools.find((tool) => tool.name === `app_resource_repository_${type}_update`)?.inputSchema.required).toContain("baseHistoryDirname")
+      expect(tools.find((tool) => tool.name === `app_resource_repository_${type}_delete`)?.inputSchema.required).toEqual(["id", "baseHistoryDirname"])
     }
   })
 
   it("keeps Skill create and update schemas compatible with strict MCP clients", () => {
     const tools = buildContentTools()
-    const create = tools.find((tool) => tool.name === "content_skill_create")
-    const update = tools.find((tool) => tool.name === "content_skill_update")
+    const create = tools.find((tool) => tool.name === "app_resource_repository_skill_create")
+    const update = tools.find((tool) => tool.name === "app_resource_repository_skill_update")
 
     expect(create?.inputSchema.required).toBeUndefined()
     expect(create?.inputSchema).not.toHaveProperty("anyOf")

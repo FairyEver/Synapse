@@ -53,7 +53,7 @@ describe("editorIpcModule", () => {
   it("creates directories and shows them through PermissionGuard and AuditSink", async () => {
     const { harness, auditSink, permissionGuard } = createHarness()
 
-    await harness.invoke("synapse:editor:create-directory", {
+    await harness.invoke("synapse:app:editor:operation:create_directory", {
       dirPath: rulesPath,
     })
 
@@ -104,7 +104,7 @@ describe("editorIpcModule", () => {
     ])
     const { harness, auditSink, permissionGuard } = createHarness()
 
-    await harness.invoke("synapse:editor:create-directory", {
+    await harness.invoke("synapse:app:editor:operation:create_directory", {
       dirPath: rulesFilePath,
     })
 
@@ -137,7 +137,7 @@ describe("editorIpcModule", () => {
   it("rejects directory creation outside known global editor directories", async () => {
     const { harness, permissionGuard, auditSink } = createHarness()
 
-    await expect(harness.invoke("synapse:editor:create-directory", {
+    await expect(harness.invoke("synapse:app:editor:operation:create_directory", {
       dirPath: "/Users/test/Documents/unexpected",
     })).rejects.toThrow("只能创建已知编辑器目录。")
 
@@ -152,7 +152,7 @@ describe("editorIpcModule", () => {
       permission: { allowed: false, reason: "denied by test-policy", policyId: "test-policy" },
     })
 
-    await expect(harness.invoke("synapse:editor:create-directory", {
+    await expect(harness.invoke("synapse:app:editor:operation:create_directory", {
       dirPath: skillsPath,
     })).rejects.toThrow("denied by test-policy")
 

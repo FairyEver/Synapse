@@ -232,7 +232,7 @@ describe("UpdateService", () => {
     await updateService.checkForUpdates()
 
     expect(sent).toContainEqual({
-      channel: "synapse:update:state-changed",
+      operationId: "app.update.operation.state_changed",
       payload: expect.objectContaining({
         releaseVersion: "0.2.32",
         status: "available",
@@ -423,13 +423,13 @@ describe("UpdateService", () => {
 
     expect(windowManager.open).toHaveBeenCalledWith("main")
     expect(windowManager.broadcast).toHaveBeenCalledWith(
-      "synapse:update:open-update-page",
+      "synapse:app:update:operation:open_update_page",
       {},
     )
     expect(calls).toEqual([
-      "broadcast:synapse:update:state-changed",
+      "broadcast:synapse:app:update:operation:state_changed",
       "open:main",
-      "broadcast:synapse:update:open-update-page",
+      "broadcast:synapse:app:update:operation:open_update_page",
     ])
   })
 

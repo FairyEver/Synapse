@@ -37,7 +37,7 @@ export const identityIpcModule: IpcModule = {
   methods: {
     getLocalState: {
       kind: "invoke",
-      channel: "synapse:identity:get-local-state",
+      operationId: "app.identity.operation.get_local_state",
       request: z.void(),
       response: localIdentityStateSchema,
       handler: async (_ctx) => {
@@ -46,7 +46,7 @@ export const identityIpcModule: IpcModule = {
     },
     adoptExistingUserId: {
       kind: "invoke",
-      channel: "synapse:identity:adopt-existing-user-id",
+      operationId: "app.identity.operation.adopt_existing_user_id",
       request: adoptIdentityRequestSchema,
       response: localIdentityStateSchema,
       handler: async (_ctx, request: { repoId: string; userId: string }) => {
@@ -55,7 +55,7 @@ export const identityIpcModule: IpcModule = {
     },
     generateNewId: {
       kind: "invoke",
-      channel: "synapse:identity:generate-new-id",
+      operationId: "app.identity.operation.generate_new_id",
       request: z.void(),
       response: localIdentityStateSchema,
       handler: async (_ctx) => {

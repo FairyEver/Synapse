@@ -22,7 +22,7 @@ describe("repository capability dispatcher", () => {
       auditSink,
     })
 
-    await expect(dispatcher.dispatch("repository.item.list", {}, {
+    await expect(dispatcher.dispatch("app.settings.repository.item.list", {}, {
       source: "mcp-http",
       actor: mcpClientActorForSource("mcp-http"),
     })).resolves.toMatchObject({
@@ -35,7 +35,7 @@ describe("repository capability dispatcher", () => {
       resource: "repository:list",
       context: {
         source: "mcp-http",
-        repositoryAction: "repository.item.list",
+        repositoryAction: "app.settings.repository.item.list",
       },
     })
     expect(auditEvents).toContainEqual(expect.objectContaining({
@@ -58,7 +58,7 @@ describe("repository capability dispatcher", () => {
       auditSink,
     })
 
-    await expect(dispatcher.dispatch("repository.item.list", {}, { source: "api" }))
+    await expect(dispatcher.dispatch("app.settings.repository.item.list", {}, { source: "api" }))
       .rejects.toThrow("denied by policy")
     expect(auditEvents).toContainEqual(expect.objectContaining({
       action: "fs.read.outside-userdata",
@@ -83,7 +83,7 @@ describe("repository capability dispatcher", () => {
       auditSink,
     })
 
-    await expect(dispatcher.dispatch("repository.item.list", {}, { source: "api" }))
+    await expect(dispatcher.dispatch("app.settings.repository.item.list", {}, { source: "api" }))
       .rejects.toThrow("policy backend failed")
 
     expect(loadConfig).not.toHaveBeenCalled()
@@ -92,7 +92,7 @@ describe("repository capability dispatcher", () => {
       outcome: "failed",
       resource: "repository:list",
       metadata: expect.objectContaining({
-        repositoryAction: "repository.item.list",
+        repositoryAction: "app.settings.repository.item.list",
         reason: "permission-check-error",
         errorName: "Error",
       }),
@@ -123,7 +123,7 @@ describe("repository capability dispatcher", () => {
         }),
     })
 
-    await expect(dispatcher.dispatch("repository.item.list", {}, { source: "api" })).resolves.toEqual({
+    await expect(dispatcher.dispatch("app.settings.repository.item.list", {}, { source: "api" })).resolves.toEqual({
       ok: true,
       data: {
         activeRepositoryUuid: "repo-2",

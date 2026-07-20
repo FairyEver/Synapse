@@ -120,7 +120,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
       setLoadMoreError(null)
     }
     try {
-      const result = await requireSynapseBridge().account.listDrivePublicAssets({
+      const result = await requireSynapseBridge().drive.directLink.list({
         offset,
         limit: DRIVE_PUBLIC_ASSET_PAGE_SIZE,
       })
@@ -178,7 +178,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
     }
     setUploading(true)
     try {
-      const result = await requireSynapseBridge().account.uploadDrivePublicAssets({ files })
+      const result = await requireSynapseBridge().drive.directLink.upload({ files })
       setUploadResults(result.results)
       toast(publicAssetUploadToast(result.results))
       await loadAssets()
@@ -205,7 +205,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
     }
     setBusyAssetId(target.assetId)
     try {
-      await requireSynapseBridge().account.replaceDrivePublicAssetFile({
+      await requireSynapseBridge().drive.directLink.update({
         assetId: target.assetId,
         ...file,
       })
@@ -226,7 +226,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
     if (!name) return
     setBusyAssetId(renameState.asset.assetId)
     try {
-      await requireSynapseBridge().account.renameDrivePublicAsset({
+      await requireSynapseBridge().drive.directLink.rename({
         assetId: renameState.asset.assetId,
         name,
       })
@@ -267,7 +267,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
     if (target.action === "trash") {
       await runAssetMutation(
         target.asset,
-        () => requireSynapseBridge().account.trashDrivePublicAsset({ assetId: target.asset.assetId }),
+        () => requireSynapseBridge().drive.directLink.delete({ assetId: target.asset.assetId }),
         "已移到回收站",
         "移到回收站失败",
       )
@@ -275,7 +275,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
     }
     await runAssetMutation(
       target.asset,
-      () => requireSynapseBridge().account.deleteDriveTrashItem({ itemId: target.asset.itemId }),
+      () => requireSynapseBridge().drive.trash.delete({ itemId: target.asset.itemId }),
       "已删除",
       "删除失败",
       { refreshUsage: true },
@@ -285,7 +285,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
   const deletePublicAsset = useCallback(async (asset: DrivePublicAssetDto) => {
     await runAssetMutation(
       asset,
-      () => requireSynapseBridge().account.deleteDriveTrashItem({ itemId: asset.itemId }),
+      () => requireSynapseBridge().drive.trash.delete({ itemId: asset.itemId }),
       "已删除",
       "删除失败",
       { refreshUsage: true },
@@ -342,7 +342,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
                 onRestore={() => {
                   void runAssetMutation(
                     asset,
-                    () => requireSynapseBridge().account.restoreDrivePublicAsset({ assetId: asset.assetId }),
+                    () => requireSynapseBridge().drive.directLink.restore({ assetId: asset.assetId }),
                     "已恢复",
                     "恢复失败",
                   )
@@ -635,7 +635,7 @@ function DrivePublicAssetMenu({
 
 function publicAssetLocalFilesFromSelection(files: readonly File[]): DrivePublicAssetLocalFile[] {
   return files.map((file): DrivePublicAssetLocalFile | null => {
-    const path = requireSynapseBridge().account.filePathForDroppedFile(file)
+    const path = requireSynapseBridge().drive.localFile.pathForDroppedFile(file)
     if (!path) return null
     return {
       path,

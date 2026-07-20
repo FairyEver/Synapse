@@ -1,6 +1,7 @@
 import { z } from "zod"
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
 import type { WindowManager } from "../../../electron/runtime/window"
+import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 import type { AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import {
   SECRETS_ITEM_CREATE_CAPABILITY_ID,
@@ -46,7 +47,7 @@ function resolveSecretsService(ctx: SecretsIpcContext): SecretsService {
   if (!wiredServices.has(service)) {
     const windowManager = ctx.resolve<WindowManager>("core.window-manager")
     service.events.on("changed", (payload) => {
-      windowManager.broadcast(secretsIpcModule.events.changed.channel, payload)
+      windowManager.broadcast(ipcOperationIdToChannel(secretsIpcModule.events.changed.operationId), payload)
     })
     wiredServices.add(service)
   }
@@ -76,7 +77,7 @@ export const secretsIpcModule: IpcModule = {
   id: "secrets",
   methods: {
     list: {
-      channel: "synapse:secrets:list",
+      operationId: "app.secrets.item.list",
       kind: "invoke",
       request: z.void(),
       response: secretListResultSchema,
@@ -85,7 +86,7 @@ export const secretsIpcModule: IpcModule = {
       ),
     },
     get: {
-      channel: "synapse:secrets:get",
+      operationId: "app.secrets.item.get",
       kind: "invoke",
       request: secretGetInputSchema,
       response: z.union([secretValueViewSchema, secretSafeViewSchema]),
@@ -94,7 +95,7 @@ export const secretsIpcModule: IpcModule = {
       ).secret,
     },
     create: {
-      channel: "synapse:secrets:create",
+      operationId: "app.secrets.item.create",
       kind: "invoke",
       request: secretCreateInputSchema,
       response: secretSafeViewSchema,
@@ -103,7 +104,7 @@ export const secretsIpcModule: IpcModule = {
       ).secret),
     },
     update: {
-      channel: "synapse:secrets:update",
+      operationId: "app.secrets.item.update",
       kind: "invoke",
       request: secretUpdateInputSchema,
       response: secretSafeViewSchema,
@@ -112,7 +113,7 @@ export const secretsIpcModule: IpcModule = {
       ).secret),
     },
     upsert: {
-      channel: "synapse:secrets:upsert",
+      operationId: "app.secrets.item.upsert",
       kind: "invoke",
       request: secretUpsertInputSchema,
       response: secretUpsertResultSchema,
@@ -121,7 +122,7 @@ export const secretsIpcModule: IpcModule = {
       ),
     },
     delete: {
-      channel: "synapse:secrets:delete",
+      operationId: "app.secrets.item.delete",
       kind: "invoke",
       request: secretDeleteInputSchema,
       response: secretSafeViewSchema,
@@ -130,7 +131,7 @@ export const secretsIpcModule: IpcModule = {
       ).secret),
     },
     scanSkillEnvBindings: {
-      channel: "synapse:secrets:scan-skill-env-bindings",
+      operationId: "app.secrets.operation.scan_skill_env_bindings",
       kind: "invoke",
       request: secretSkillEnvScanInputSchema,
       response: secretSkillEnvScanResultSchema,
@@ -152,7 +153,7 @@ export const secretsIpcModule: IpcModule = {
       },
     },
     scanSkillEnvBindingsBatch: {
-      channel: "synapse:secrets:scan-skill-env-bindings-batch",
+      operationId: "app.secrets.operation.scan_skill_env_bindings_batch",
       kind: "invoke",
       request: secretSkillEnvBatchScanInputSchema,
       response: secretSkillEnvBatchScanResultSchema,
@@ -175,7 +176,7 @@ export const secretsIpcModule: IpcModule = {
       },
     },
     queueSkillEnvBindings: {
-      channel: "synapse:secrets:queue-skill-env-bindings",
+      operationId: "app.secrets.operation.queue_skill_env_bindings",
       kind: "invoke",
       request: secretSkillEnvQueueInputSchema,
       response: secretSkillEnvQueueResultSchema,
@@ -199,7 +200,7 @@ export const secretsIpcModule: IpcModule = {
   },
   events: {
     changed: {
-      channel: "synapse:secrets:changed",
+      operationId: "app.secrets.item.changed",
       kind: "event",
       payload: secretsChangedEventSchema,
     },

@@ -11,7 +11,7 @@ import {
 } from "../../../action-packages/builtin/http-request/request-builders.main"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 
-export const HTTP_TEST_CHANNEL = "synapse:http:test-request"
+export const HTTP_TEST_CHANNEL = "synapse:app:http:operation:test_request"
 
 export interface HttpTestResponse {
   readonly status: number

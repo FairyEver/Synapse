@@ -36,13 +36,15 @@ beforeEach(() => {
   runStatus = vi.fn(async () => null)
   ;(window as unknown as { synapse?: unknown }).synapse = {
     workflow: {
-      onEvent: vi.fn((listener: (event: WorkflowEvent) => void) => {
-        workflowListener = listener
-        return () => {
-          workflowListener = undefined
-        }
-      }),
-      runStatus,
+      run: { get: runStatus },
+      operation: {
+        onEvent: vi.fn((listener: (event: WorkflowEvent) => void) => {
+          workflowListener = listener
+          return () => {
+            workflowListener = undefined
+          }
+        }),
+      },
     },
   }
 })

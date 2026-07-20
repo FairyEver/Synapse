@@ -53,7 +53,7 @@ export function DocumentTemplateModule() {
   }
 
   const chooseTemplate = async () => {
-    const selected = await requireBridgeDomain("documentTemplate").chooseTemplateFile()
+    const selected = await requireBridgeDomain("documentTemplate").template.choose()
     if (selected) {
       clearStatus()
       setTemplatePath(selected)
@@ -61,7 +61,7 @@ export function DocumentTemplateModule() {
   }
 
   const chooseJson = async () => {
-    const selected = await requireBridgeDomain("documentTemplate").chooseJsonFile()
+    const selected = await requireBridgeDomain("documentTemplate").json.choose()
     if (selected) {
       clearStatus()
       setDataPath(selected)
@@ -69,7 +69,7 @@ export function DocumentTemplateModule() {
   }
 
   const chooseOutput = async () => {
-    const selected = await requireBridgeDomain("documentTemplate").chooseOutputFile({
+    const selected = await requireBridgeDomain("documentTemplate").output.choose({
       defaultPath: outputPath.trim() || "output.docx",
     })
     if (selected) {
@@ -96,7 +96,7 @@ export function DocumentTemplateModule() {
 
     try {
       setBusy(true)
-      const result = await requireBridgeDomain("documentTemplate").generateDocx({
+      const result = await requireBridgeDomain("documentTemplate").docx.generate({
         templatePath,
         outputPath,
         overwrite,

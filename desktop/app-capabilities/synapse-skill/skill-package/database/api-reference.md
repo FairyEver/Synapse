@@ -1,6 +1,6 @@
 # Synapse Database MCP — API Reference
 
-All tools are accessed through the `synapse-mcp` MCP server. Use `app_database_*` as the primary tool names; `database_*` remains a compatibility alias.
+All tools are accessed through the `synapse-mcp` MCP server. Use the canonical `app_database_*` names; retired `database_*` names are not supported.
 
 ## Discovery
 

@@ -17,7 +17,7 @@ type DriveItem = DriveItemDto
 
 describe("createDriveCapabilityDispatcher", () => {
   it("exposes access settings on share creation", () => {
-    const shareCreateTool = buildDriveTools().find((tool) => tool.name === "drive_share_create")
+    const shareCreateTool = buildDriveTools().find((tool) => tool.name === "app_drive_share_create")
     expect(shareCreateTool?.inputSchema.properties).toMatchObject({
       passwordEnabled: { type: "boolean" },
       expiresIn: { type: "string", enum: ["3d", "7d", "30d", "1y", "forever"] },
@@ -27,8 +27,8 @@ describe("createDriveCapabilityDispatcher", () => {
   })
 
   it("exposes custom password fields on site access tools", () => {
-    const siteCreateTool = buildDriveTools().find((tool) => tool.name === "drive_site_create")
-    const siteUpdateTool = buildDriveTools().find((tool) => tool.name === "drive_site_update_access")
+    const siteCreateTool = buildDriveTools().find((tool) => tool.name === "app_drive_site_create")
+    const siteUpdateTool = buildDriveTools().find((tool) => tool.name === "app_drive_site_update_access")
     expect(siteCreateTool?.inputSchema.properties).toMatchObject({
       password: { type: "string", description: expect.stringContaining("custom site password") },
     })
@@ -38,14 +38,14 @@ describe("createDriveCapabilityDispatcher", () => {
   })
 
   it("exposes item id on item deletion", () => {
-    const deleteTool = buildDriveTools().find((tool) => tool.name === "drive_item_delete")
+    const deleteTool = buildDriveTools().find((tool) => tool.name === "app_drive_item_delete")
     expect(deleteTool?.inputSchema.properties).toEqual({
       itemId: { type: "string", description: expect.any(String) },
     })
   })
 
   it("exposes pagination on item list", () => {
-    const listTool = buildDriveTools().find((tool) => tool.name === "drive_item_list")
+    const listTool = buildDriveTools().find((tool) => tool.name === "app_drive_item_list")
     expect(listTool?.inputSchema.properties).toMatchObject({
       parentId: expect.any(Object),
       offset: { type: "number" },
@@ -54,23 +54,23 @@ describe("createDriveCapabilityDispatcher", () => {
   })
 
   it("documents empty directory preservation for folder uploads", () => {
-    const uploadTool = buildDriveTools().find((tool) => tool.name === "drive_folder_upload")
+    const uploadTool = buildDriveTools().find((tool) => tool.name === "app_drive_folder_upload")
     expect(uploadTool?.description).toContain("empty subdirectories")
     expect(uploadTool?.description).toContain("uploadedFiles")
     expect(uploadTool?.description).toContain("createdDirectories")
   })
 
   it("documents pinned version handling before version deletion", () => {
-    const deleteTool = buildDriveTools().find((tool) => tool.name === "drive_file_version_delete")
+    const deleteTool = buildDriveTools().find((tool) => tool.name === "app_drive_file_version_delete")
     expect(deleteTool?.description).toContain("Current versions cannot be deleted")
     expect(deleteTool?.description).toContain("not pending cleanup")
     expect(deleteTool?.description).toContain("not pinned")
-    expect(deleteTool?.description).toContain("drive_file_version_pin_update")
+    expect(deleteTool?.description).toContain("app_drive_file_version_pin_update")
     expect(deleteTool?.description).toContain("deletePending")
   })
 
   it("requires an explicit parent id for item moves", () => {
-    const moveTool = buildDriveTools().find((tool) => tool.name === "drive_item_move")
+    const moveTool = buildDriveTools().find((tool) => tool.name === "app_drive_item_move")
     expect(moveTool?.inputSchema.required).toContain("parentId")
     expect(moveTool?.inputSchema.properties).toMatchObject({
       parentId: {
@@ -80,62 +80,60 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
-  it("exposes the full Drive MCP tool set without legacy gaps", () => {
-    const legacyToolNames = [
-      "drive_item_list",
-      "drive_item_get",
-      "drive_file_upload",
-      "drive_folder_upload",
-      "drive_folder_create",
-      "drive_item_rename",
-      "drive_item_move",
-      "drive_item_delete",
-      "drive_item_preview_get",
-      "drive_file_content_read",
-      "drive_file_download_create",
-      "drive_file_version_list",
-      "drive_file_version_download_create",
-      "drive_file_version_restore",
-      "drive_file_version_delete",
-      "drive_file_version_pin_update",
-      "drive_link_resolve",
-      "drive_link_list",
-      "drive_link_read_text",
-      "drive_link_materialize",
-      "drive_link_download_file",
-      "drive_folder_zip_create",
-      "drive_share_list",
-      "drive_share_create",
-      "drive_share_disable",
-      "drive_site_create",
-      "drive_site_list",
-      "drive_site_update_access",
-      "drive_site_disable",
-      "drive_site_enable",
-      "drive_site_delete",
-      "drive_site_republish",
-      "drive_usage_get",
-      "drive_stats_get",
-      "drive_item_tree_list",
-      "drive_folder_path_ensure",
-      "drive_reorganization_preview",
-      "drive_reorganization_apply",
-      "drive_direct_link_upload",
-      "drive_direct_link_list",
-      "drive_direct_link_get",
-      "drive_direct_link_update",
-      "drive_direct_link_rename",
-      "drive_direct_link_delete",
-      "drive_direct_link_restore",
-      "drive_trash_list",
-      "drive_trash_delete",
-      "drive_item_restore",
+  it("exposes the full canonical Drive MCP tool set", () => {
+    const primaryToolNames = [
+      "app_drive_item_list",
+      "app_drive_item_get",
+      "app_drive_file_upload",
+      "app_drive_folder_upload",
+      "app_drive_folder_create",
+      "app_drive_item_rename",
+      "app_drive_item_move",
+      "app_drive_item_delete",
+      "app_drive_item_preview_get",
+      "app_drive_file_content_read",
+      "app_drive_file_download_create",
+      "app_drive_file_version_list",
+      "app_drive_file_version_download_create",
+      "app_drive_file_version_restore",
+      "app_drive_file_version_delete",
+      "app_drive_file_version_pin_update",
+      "app_drive_link_resolve",
+      "app_drive_link_list",
+      "app_drive_link_read_text",
+      "app_drive_link_materialize",
+      "app_drive_link_download_file",
+      "app_drive_folder_zip_create",
+      "app_drive_share_list",
+      "app_drive_share_create",
+      "app_drive_share_disable",
+      "app_drive_site_create",
+      "app_drive_site_list",
+      "app_drive_site_update_access",
+      "app_drive_site_disable",
+      "app_drive_site_enable",
+      "app_drive_site_delete",
+      "app_drive_site_republish",
+      "app_drive_usage_get",
+      "app_drive_stats_get",
+      "app_drive_item_tree_list",
+      "app_drive_folder_path_ensure",
+      "app_drive_reorganization_preview",
+      "app_drive_reorganization_apply",
+      "app_drive_direct_link_upload",
+      "app_drive_direct_link_list",
+      "app_drive_direct_link_get",
+      "app_drive_direct_link_update",
+      "app_drive_direct_link_rename",
+      "app_drive_direct_link_delete",
+      "app_drive_direct_link_restore",
+      "app_drive_trash_list",
+      "app_drive_trash_delete",
+      "app_drive_item_restore",
     ]
 
-    expect(buildDriveTools().map((tool) => tool.name)).toEqual([
-      ...legacyToolNames.map((name) => name.replace(/^drive_/, "app_drive_")),
-      ...legacyToolNames,
-    ])
+    expect(buildDriveTools().map((tool) => tool.name)).toEqual(primaryToolNames)
+    expect(buildDriveTools().some((tool) => tool.name.startsWith("drive_"))).toBe(false)
   })
 
   it("lists Drive items under root by default", async () => {
@@ -145,7 +143,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.item.list", {}, { source: "mcp-stdio" })).resolves.toEqual({
+    await expect(dispatcher.dispatch("app.drive.item.list", {}, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
       data: page,
       total: 1,
@@ -175,11 +173,11 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.stats.get", {}, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.stats.get", {}, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: stats })
-    await expect(dispatcher.dispatch("drive.item_tree.list", { parentId: null, offset: 5, limit: 10 }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.item_tree.list", { parentId: null, offset: 5, limit: 10 }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: treePage, total: 1 })
-    await expect(dispatcher.dispatch("drive.folder_path.ensure", { segments: ["Work"] }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.folder_path.ensure", { segments: ["Work"] }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: { item: folder, created: [], reused: [folder] } })
 
     expect(accountService.listDriveItemTree).toHaveBeenCalledWith({ parentId: null, offset: 5, limit: 10 })
@@ -215,13 +213,13 @@ describe("createDriveCapabilityDispatcher", () => {
     const auditSink = createAuditSink()
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
 
-    await expect(dispatcher.dispatch("drive.reorganization.apply", {
+    await expect(dispatcher.dispatch("app.drive.reorganization.apply", {
       moves: [{ itemId: "file-1", targetParentId: "folder-work" }],
     }, { source: "mcp-stdio" })).rejects.toThrow("planId")
-    await expect(dispatcher.dispatch("drive.reorganization.preview", {
+    await expect(dispatcher.dispatch("app.drive.reorganization.preview", {
       moves: [{ itemId: "file-1", targetParentId: "folder-work" }],
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: preview })
-    await expect(dispatcher.dispatch("drive.reorganization.apply", {
+    await expect(dispatcher.dispatch("app.drive.reorganization.apply", {
       planId: "drive-reorg-plan-1",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: applied })
 
@@ -231,10 +229,10 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.applyDriveReorganization).toHaveBeenCalledWith({ planId: "drive-reorg-plan-1" })
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "network.connect",
-      resource: "synapse-drive:drive.reorganization.apply",
+      resource: "synapse-drive:app.drive.reorganization.apply",
       outcome: "allowed",
       metadata: expect.objectContaining({
-        driveAction: "drive.reorganization.apply",
+        driveAction: "app.drive.reorganization.apply",
         planId: "drive-reorg-plan-1",
         movedCount: 1,
         skippedCount: 0,
@@ -249,7 +247,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.reorganization.preview", {
+    await expect(dispatcher.dispatch("app.drive.reorganization.preview", {
       moves: [{ itemId: "file-1" }],
     }, { source: "mcp-stdio" })).rejects.toThrow("targetParentId is required")
 
@@ -269,7 +267,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const auditSink = createAuditSink()
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
 
-    await expect(dispatcher.dispatch("drive.link.resolve", { url: "https://synapse.test/share/shr_123", password: "secret" }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.link.resolve", { url: "https://synapse.test/share/shr_123", password: "secret" }, { source: "mcp-stdio" }))
       .resolves.toMatchObject({ ok: true, data: { linkType: "share" } })
 
     expect(accountService.resolveDriveLink).toHaveBeenCalledWith({ url: "https://synapse.test/share/shr_123", password: "secret" })
@@ -288,7 +286,7 @@ describe("createDriveCapabilityDispatcher", () => {
     }
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
 
-    await expect(dispatcher.dispatch("drive.link.materialize", {
+    await expect(dispatcher.dispatch("app.drive.link.materialize", {
       url: "https://synapse.test/share/shr_123?password=secret-token",
       password: "secret-password",
       scope: "text",
@@ -299,7 +297,7 @@ describe("createDriveCapabilityDispatcher", () => {
       action: "fs.write",
       resource: "synapse-drive:link-intake-cache",
       context: expect.objectContaining({
-        driveAction: "drive.link.materialize",
+        driveAction: "app.drive.link.materialize",
         scope: "text",
       }),
     }))
@@ -308,7 +306,7 @@ describe("createDriveCapabilityDispatcher", () => {
       outcome: "allowed",
       resource: "/tmp/intake",
       metadata: expect.objectContaining({
-        driveAction: "drive.link.materialize",
+        driveAction: "app.drive.link.materialize",
         manifestPath: "/tmp/intake/manifest.json",
         entryPath: "/tmp/intake/content/req.md",
         fileCount: 0,
@@ -333,7 +331,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
     const url = "https://synapse.test/share/shr_123?password=secret-token"
 
-    await expect(dispatcher.dispatch("drive.link.download_file", {
+    await expect(dispatcher.dispatch("app.drive.link.download_file", {
       url,
       password: "secret-password",
       path: "docs/report.md",
@@ -344,7 +342,7 @@ describe("createDriveCapabilityDispatcher", () => {
       action: "fs.write",
       resource: "synapse-drive:link-intake-cache",
       context: expect.objectContaining({
-        driveAction: "drive.link.download_file",
+        driveAction: "app.drive.link.download_file",
         path: "docs/report.md",
       }),
     }))
@@ -358,7 +356,7 @@ describe("createDriveCapabilityDispatcher", () => {
       outcome: "allowed",
       resource: "/tmp/intake/content/download",
       metadata: expect.objectContaining({
-        driveAction: "drive.link.download_file",
+        driveAction: "app.drive.link.download_file",
         localPath: "/tmp/intake/content/download",
         size: "12",
       }),
@@ -382,7 +380,7 @@ describe("createDriveCapabilityDispatcher", () => {
     }
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
 
-    await expect(dispatcher.dispatch("drive.link.download_file", {
+    await expect(dispatcher.dispatch("app.drive.link.download_file", {
       url: "https://synapse.test/share/shr_123",
     }, { source: "mcp-stdio" })).rejects.toThrow("denied by policy")
 
@@ -392,7 +390,7 @@ describe("createDriveCapabilityDispatcher", () => {
       outcome: "denied",
       resource: "synapse-drive:link-intake-cache",
       metadata: expect.objectContaining({
-        driveAction: "drive.link.download_file",
+        driveAction: "app.drive.link.download_file",
         reason: "denied by policy",
         policyId: "policy-1",
       }),
@@ -411,7 +409,7 @@ describe("createDriveCapabilityDispatcher", () => {
     }
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
 
-    await expect(dispatcher.dispatch("drive.item.list", {
+    await expect(dispatcher.dispatch("app.drive.item.list", {
       parentId: "folder-1",
       offset: 20,
       limit: 10,
@@ -429,13 +427,13 @@ describe("createDriveCapabilityDispatcher", () => {
       action: "network.connect",
       actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
       resource: "synapse-drive",
-      context: expect.objectContaining({ source: "mcp-stdio", driveAction: "drive.item.list", parentId: "folder-1" }),
+      context: expect.objectContaining({ source: "mcp-stdio", driveAction: "app.drive.item.list", parentId: "folder-1" }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "network.connect",
       outcome: "allowed",
-      resource: "synapse-drive:drive.item.list",
-      metadata: expect.objectContaining({ driveAction: "drive.item.list", parentId: "folder-1", total: 1 }),
+      resource: "synapse-drive:app.drive.item.list",
+      metadata: expect.objectContaining({ driveAction: "app.drive.item.list", parentId: "folder-1", total: 1 }),
     }))
   })
 
@@ -450,7 +448,7 @@ describe("createDriveCapabilityDispatcher", () => {
     }
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
 
-    await expect(dispatcher.dispatch("drive.usage.get", {}, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.usage.get", {}, { source: "mcp-stdio" }))
       .rejects.toThrow("drive read denied")
 
     expect(accountService.getDriveUsage).not.toHaveBeenCalled()
@@ -459,7 +457,7 @@ describe("createDriveCapabilityDispatcher", () => {
       outcome: "denied",
       resource: "synapse-drive",
       metadata: expect.objectContaining({
-        driveAction: "drive.usage.get",
+        driveAction: "app.drive.usage.get",
         reason: "drive read denied",
         policyId: "deny-drive-read",
       }),
@@ -479,7 +477,7 @@ describe("createDriveCapabilityDispatcher", () => {
     }
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
 
-    await expect(dispatcher.dispatch("drive.usage.get", {}, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.usage.get", {}, { source: "mcp-stdio" }))
       .rejects.toThrow("policy backend failed")
 
     expect(accountService.getDriveUsage).not.toHaveBeenCalled()
@@ -488,7 +486,7 @@ describe("createDriveCapabilityDispatcher", () => {
       outcome: "failed",
       resource: "synapse-drive",
       metadata: expect.objectContaining({
-        driveAction: "drive.usage.get",
+        driveAction: "app.drive.usage.get",
         reason: "permission-check-error",
         errorName: "Error",
       }),
@@ -506,14 +504,14 @@ describe("createDriveCapabilityDispatcher", () => {
     const auditSink = createAuditSink()
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
 
-    await expect(dispatcher.dispatch("drive.usage.get", {}, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.usage.get", {}, { source: "mcp-stdio" }))
       .rejects.toThrow("usage failed")
 
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "network.connect",
       outcome: "failed",
-      resource: "synapse-drive:drive.usage.get",
-      metadata: expect.objectContaining({ driveAction: "drive.usage.get", errorName: "Error" }),
+      resource: "synapse-drive:app.drive.usage.get",
+      metadata: expect.objectContaining({ driveAction: "app.drive.usage.get", errorName: "Error" }),
     }))
   })
 
@@ -524,9 +522,9 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.item.get", { itemId: "item-1" }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.item.get", { itemId: "item-1" }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: driveItem({ id: "item-1", name: "before.md" }) })
-    await expect(dispatcher.dispatch("drive.item.rename", {
+    await expect(dispatcher.dispatch("app.drive.item.rename", {
       itemId: "item-1",
       name: "after.md",
     }, { source: "mcp-stdio" })).resolves.toEqual({
@@ -544,10 +542,10 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.item.move", {
+    await expect(dispatcher.dispatch("app.drive.item.move", {
       itemId: "item-1",
     }, { source: "mcp-stdio" })).rejects.toThrow("parentId is required")
-    await expect(dispatcher.dispatch("drive.item.move", {
+    await expect(dispatcher.dispatch("app.drive.item.move", {
       itemId: "item-1",
       parentId: null,
     }, { source: "mcp-stdio" })).resolves.toEqual({
@@ -565,7 +563,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.share.list", { offset: 10, limit: 5 }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.share.list", { offset: 10, limit: 5 }, { source: "mcp-stdio" }))
       .resolves.toMatchObject({
         ok: true,
         data: {
@@ -595,7 +593,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const accountService = createAccountService({ createDriveSite, shareDriveItem })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.site.create", {
+    await expect(dispatcher.dispatch("app.drive.site.create", {
       sourceFolderItemId: "folder-1",
       name: "产品原型",
       accessMode: "password",
@@ -652,7 +650,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const auditSink = createAuditSink()
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
 
-    await expect(dispatcher.dispatch("drive.site.list", {
+    await expect(dispatcher.dispatch("app.drive.site.list", {
       offset: 2,
       limit: 5,
       search: "原型",
@@ -665,7 +663,7 @@ describe("createDriveCapabilityDispatcher", () => {
       },
       total: 1,
     })
-    await expect(dispatcher.dispatch("drive.site.update_access", {
+    await expect(dispatcher.dispatch("app.drive.site.update_access", {
       siteId: "site_public",
       accessMode: "password",
       password: "new-secret",
@@ -674,22 +672,22 @@ describe("createDriveCapabilityDispatcher", () => {
       ok: true,
       data: sanitizedSite,
     })
-    await expect(dispatcher.dispatch("drive.site.disable", {
+    await expect(dispatcher.dispatch("app.drive.site.disable", {
       siteId: "site_public",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
       data: { ...sanitizedSite, status: "disabled" },
     })
-    await expect(dispatcher.dispatch("drive.site.enable", {
+    await expect(dispatcher.dispatch("app.drive.site.enable", {
       siteId: "site_public",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
       data: sanitizedSite,
     })
-    await expect(dispatcher.dispatch("drive.site.delete", {
+    await expect(dispatcher.dispatch("app.drive.site.delete", {
       siteId: "site_public",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true } })
-    await expect(dispatcher.dispatch("drive.site.republish", {
+    await expect(dispatcher.dispatch("app.drive.site.republish", {
       siteId: "site_public",
       entryPath: "pages/home.html",
     }, { source: "mcp-stdio" })).resolves.toEqual({
@@ -726,7 +724,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fileSystem: regularFileSystemForTest(),
     })
 
-    await expect(dispatcher.dispatch("drive.direct_link.upload", {
+    await expect(dispatcher.dispatch("app.drive.direct_link.upload", {
       filePath: "/tmp/logo.png",
       name: "logo",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
@@ -734,7 +732,7 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.read.outside-userdata",
       resource: "/tmp/logo.png",
-      context: expect.objectContaining({ driveAction: "drive.direct_link.upload" }),
+      context: expect.objectContaining({ driveAction: "app.drive.direct_link.upload" }),
     }))
     expect(uploadDrivePublicAssets).toHaveBeenCalledWith({
       files: [{ path: "/tmp/logo.png", name: "logo", mimeType: "image/png" }],
@@ -755,7 +753,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fileSystem: regularFileSystemForTest(),
     })
 
-    await expect(dispatcher.dispatch("drive.direct_link.upload", {
+    await expect(dispatcher.dispatch("app.drive.direct_link.upload", {
       filePath: "/tmp/logo.png",
       name: "logo.txt",
     }, { source: "mcp-stdio" })).resolves.toEqual({
@@ -773,14 +771,14 @@ describe("createDriveCapabilityDispatcher", () => {
       fileSystem: regularFileSystemForTest(),
     })
 
-    await expect(dispatcher.dispatch("drive.direct_link.upload", {
+    await expect(dispatcher.dispatch("app.drive.direct_link.upload", {
       filePath: "/tmp/logo.pdf",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: false,
       error: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
     })
 
-    await expect(dispatcher.dispatch("drive.direct_link.update", {
+    await expect(dispatcher.dispatch("app.drive.direct_link.update", {
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
       filePath: "/tmp/logo.svg",
       mimeType: "image/svg+xml",
@@ -807,10 +805,10 @@ describe("createDriveCapabilityDispatcher", () => {
       fileSystem,
     })
 
-    await expect(dispatcher.dispatch("drive.direct_link.upload", {
+    await expect(dispatcher.dispatch("app.drive.direct_link.upload", {
       filePath: "/tmp/logo-link.png",
     }, { source: "mcp-stdio" })).rejects.toThrow("File upload does not support symbolic links.")
-    await expect(dispatcher.dispatch("drive.direct_link.update", {
+    await expect(dispatcher.dispatch("app.drive.direct_link.update", {
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
       filePath: "/tmp/logo-link.png",
     }, { source: "mcp-stdio" })).rejects.toThrow("File upload does not support symbolic links.")
@@ -829,9 +827,9 @@ describe("createDriveCapabilityDispatcher", () => {
       accountService: createAccountService({ listDrivePublicAssets, getDrivePublicAsset }),
     })
 
-    await expect(dispatcher.dispatch("drive.direct_link.list", { offset: 3, limit: 7, search: "logo" }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.direct_link.list", { offset: 3, limit: 7, search: "logo" }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: { items: [asset], total: 1, page: drivePage() }, total: 1 })
-    await expect(dispatcher.dispatch("drive.direct_link.get", {
+    await expect(dispatcher.dispatch("app.drive.direct_link.get", {
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
 
@@ -852,7 +850,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fileSystem: regularFileSystemForTest(),
     })
 
-    await expect(dispatcher.dispatch("drive.direct_link.update", {
+    await expect(dispatcher.dispatch("app.drive.direct_link.update", {
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
       filePath: "/tmp/new-logo.png",
       name: "new-logo",
@@ -861,7 +859,7 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.read.outside-userdata",
       resource: "/tmp/new-logo.png",
-      context: expect.objectContaining({ driveAction: "drive.direct_link.update" }),
+      context: expect.objectContaining({ driveAction: "app.drive.direct_link.update" }),
     }))
     expect(replaceDrivePublicAssetFile).toHaveBeenCalledWith({
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
@@ -881,7 +879,7 @@ describe("createDriveCapabilityDispatcher", () => {
       accountService: createAccountService({ renameDrivePublicAsset }),
     })
 
-    await expect(dispatcher.dispatch("drive.direct_link.rename", {
+    await expect(dispatcher.dispatch("app.drive.direct_link.rename", {
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
       name: "brand.png",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
@@ -897,10 +895,10 @@ describe("createDriveCapabilityDispatcher", () => {
       accountService: createAccountService({ trashDrivePublicAsset, restoreDrivePublicAsset }),
     })
 
-    await expect(dispatcher.dispatch("drive.direct_link.delete", {
+    await expect(dispatcher.dispatch("app.drive.direct_link.delete", {
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
-    await expect(dispatcher.dispatch("drive.direct_link.restore", {
+    await expect(dispatcher.dispatch("app.drive.direct_link.restore", {
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
 
@@ -934,13 +932,13 @@ describe("createDriveCapabilityDispatcher", () => {
       accountService: createAccountService({ listDriveTrash, deleteDriveTrashItem, restoreDriveTrashItem }),
     })
 
-    await expect(dispatcher.dispatch("drive.trash.list", { offset: 1, limit: 20, search: "old" }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.trash.list", { offset: 1, limit: 20, search: "old" }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: trashPage, total: 1 })
-    await expect(dispatcher.dispatch("drive.trash.delete", { itemId: "item-1" }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.trash.delete", { itemId: "item-1" }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: { ok: true } })
-    await expect(dispatcher.dispatch("drive.item.restore", { itemId: "item-1" }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.item.restore", { itemId: "item-1" }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: restored })
-    await expect(dispatcher.dispatch("drive.item.restore", {
+    await expect(dispatcher.dispatch("app.drive.item.restore", {
       itemId: "item-public",
       kind: "public_asset",
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
@@ -973,9 +971,9 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.item_preview.get", { itemId: "item-1" }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.item_preview.get", { itemId: "item-1" }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: snapshot })
-    await expect(dispatcher.dispatch("drive.file_content.read", { itemId: "item-1", maxBytes: 4096 }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.file_content.read", { itemId: "item-1", maxBytes: 4096 }, { source: "mcp-stdio" }))
       .resolves.toMatchObject({ ok: true, data: { text: "# Note", truncated: false } })
 
     expect(accountService.getDriveItemPreview).toHaveBeenCalledWith({ itemId: "item-1", surface: "standalone" })
@@ -994,11 +992,11 @@ describe("createDriveCapabilityDispatcher", () => {
     }
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
 
-    await expect(dispatcher.dispatch("drive.file_download.create", {
+    await expect(dispatcher.dispatch("app.drive.file_download.create", {
       itemId: "item-1",
       outputPath: "/tmp/report.md",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true, path: "/tmp/report.md" } })
-    await expect(dispatcher.dispatch("drive.folder_zip.create", {
+    await expect(dispatcher.dispatch("app.drive.folder_zip.create", {
       itemId: "folder-1",
       outputPath: "/tmp/project.zip",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true, path: "/tmp/project.zip" } })
@@ -1006,12 +1004,12 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write.outside-userdata",
       resource: "/tmp/report.md",
-      context: expect.objectContaining({ driveAction: "drive.file_download.create", itemId: "item-1" }),
+      context: expect.objectContaining({ driveAction: "app.drive.file_download.create", itemId: "item-1" }),
     }))
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write.outside-userdata",
       resource: "/tmp/project.zip",
-      context: expect.objectContaining({ driveAction: "drive.folder_zip.create", itemId: "folder-1" }),
+      context: expect.objectContaining({ driveAction: "app.drive.folder_zip.create", itemId: "folder-1" }),
     }))
     expect(accountService.downloadDriveFile).toHaveBeenCalledWith({ itemId: "item-1", outputPath: "/tmp/report.md" })
     expect(accountService.downloadDriveFolderZip).toHaveBeenCalledWith({ itemId: "folder-1", outputPath: "/tmp/project.zip" })
@@ -1030,20 +1028,20 @@ describe("createDriveCapabilityDispatcher", () => {
     }
     const dispatcher = createDriveCapabilityDispatcher({ accountService, permissionGuard })
 
-    await expect(dispatcher.dispatch("drive.file_download.create", {
+    await expect(dispatcher.dispatch("app.drive.file_download.create", {
       itemId: "item-1",
       outputPath: "/tmp/report.md ",
     }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
-    await expect(dispatcher.dispatch("drive.file_version_download.create", {
+    await expect(dispatcher.dispatch("app.drive.file_version_download.create", {
       itemId: "item-1",
       versionId: "version-1",
       outputPath: "/tmp/report-v1.md ",
     }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
-    await expect(dispatcher.dispatch("drive.link.download_file", {
+    await expect(dispatcher.dispatch("app.drive.link.download_file", {
       url: "https://synapse.local/share/link-1",
       outputPath: "/tmp/shared.md ",
     }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
-    await expect(dispatcher.dispatch("drive.folder_zip.create", {
+    await expect(dispatcher.dispatch("app.drive.folder_zip.create", {
       itemId: "folder-1",
       outputPath: "/tmp/project.zip ",
     }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
@@ -1090,7 +1088,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.file_version.list", {
+    await expect(dispatcher.dispatch("app.drive.file_version.list", {
       itemId: "item-1",
       offset: 10,
       limit: 5,
@@ -1103,15 +1101,15 @@ describe("createDriveCapabilityDispatcher", () => {
       },
       total: 1,
     })
-    await expect(dispatcher.dispatch("drive.file_version.restore", {
+    await expect(dispatcher.dispatch("app.drive.file_version.restore", {
       itemId: "item-1",
       versionId: "version-1",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: driveItem({ id: "item-1" }) })
-    await expect(dispatcher.dispatch("drive.file_version.delete", {
+    await expect(dispatcher.dispatch("app.drive.file_version.delete", {
       itemId: "item-1",
       versionId: "version-1",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true, deletePending: true } })
-    await expect(dispatcher.dispatch("drive.file_version_pin.update", {
+    await expect(dispatcher.dispatch("app.drive.file_version_pin.update", {
       itemId: "item-1",
       versionId: "version-1",
       isPinned: true,
@@ -1136,7 +1134,7 @@ describe("createDriveCapabilityDispatcher", () => {
     }
     const dispatcher = createDriveCapabilityDispatcher({ accountService, permissionGuard })
 
-    await expect(dispatcher.dispatch("drive.file_version_download.create", {
+    await expect(dispatcher.dispatch("app.drive.file_version_download.create", {
       itemId: "item-1",
       versionId: "version-1",
       outputPath: "/tmp/report-v1.md",
@@ -1145,7 +1143,7 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write.outside-userdata",
       resource: "/tmp/report-v1.md",
-      context: expect.objectContaining({ driveAction: "drive.file_version_download.create", itemId: "item-1" }),
+      context: expect.objectContaining({ driveAction: "app.drive.file_version_download.create", itemId: "item-1" }),
     }))
     expect(accountService.downloadDriveFileVersion).toHaveBeenCalledWith({
       itemId: "item-1",
@@ -1166,7 +1164,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
     const url = "https://synapse.test/share/shr_secret?password=secret&token=raw-token"
 
-    await expect(dispatcher.dispatch("drive.link.download_file", {
+    await expect(dispatcher.dispatch("app.drive.link.download_file", {
       url,
       outputPath: "/tmp/report.md",
     }, { source: "mcp-stdio" })).resolves.toEqual({
@@ -1179,7 +1177,7 @@ describe("createDriveCapabilityDispatcher", () => {
       action: "fs.write.outside-userdata",
       resource: "/tmp/report.md",
       context: expect.objectContaining({
-        driveAction: "drive.link.download_file",
+        driveAction: "app.drive.link.download_file",
         itemId: expect.stringContaining("password=***"),
       }),
     }))
@@ -1203,19 +1201,19 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({ accountService, permissionGuard })
     const cases = [
       {
-        action: "drive.file_download.create",
+        action: "app.drive.file_download.create",
         params: { itemId: "item-1", outputPath: "downloads/report.md" },
       },
       {
-        action: "drive.file_version_download.create",
+        action: "app.drive.file_version_download.create",
         params: { itemId: "item-1", versionId: "version-1", outputPath: "report-v1.md" },
       },
       {
-        action: "drive.link.download_file",
+        action: "app.drive.link.download_file",
         params: { url: "https://synapse.local/share/link-1", outputPath: "downloads/shared-report.md" },
       },
       {
-        action: "drive.folder_zip.create",
+        action: "app.drive.folder_zip.create",
         params: { itemId: "folder-1", outputPath: "project.zip" },
       },
     ] as const
@@ -1256,7 +1254,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: vi.fn(async () => ({ ok: true }) as Response),
     })
 
-    const result = await dispatcher.dispatch("drive.file.upload", {
+    const result = await dispatcher.dispatch("app.drive.file.upload", {
       filePath,
     }, { source: "mcp-stdio", actor: mcpClientActorForSource("mcp-stdio") })
 
@@ -1273,25 +1271,25 @@ describe("createDriveCapabilityDispatcher", () => {
       action: "network.connect",
       actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
       resource: "synapse-drive",
-      context: { source: "mcp-stdio", driveAction: "drive.file.upload" },
+      context: { source: "mcp-stdio", driveAction: "app.drive.file.upload" },
     }))
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.read.outside-userdata",
       actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
       resource: filePath,
-      context: { source: "mcp-stdio", driveAction: "drive.file.upload" },
+      context: { source: "mcp-stdio", driveAction: "app.drive.file.upload" },
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.read.outside-userdata",
       outcome: "allowed",
       resource: filePath,
-      metadata: expect.objectContaining({ driveAction: "drive.file.upload" }),
+      metadata: expect.objectContaining({ driveAction: "app.drive.file.upload" }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "network.connect",
       outcome: "allowed",
-      resource: "synapse-drive:drive.file.upload",
-      metadata: expect.objectContaining({ driveAction: "drive.file.upload", itemId: "item-1" }),
+      resource: "synapse-drive:app.drive.file.upload",
+      metadata: expect.objectContaining({ driveAction: "app.drive.file.upload", itemId: "item-1" }),
     }))
   })
 
@@ -1309,7 +1307,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: vi.fn(),
     })
 
-    await expect(dispatcher.dispatch("drive.file.upload", {
+    await expect(dispatcher.dispatch("app.drive.file.upload", {
       filePath: "/tmp/report-link.md",
     }, { source: "mcp-stdio" })).rejects.toThrow("File upload does not support symbolic links.")
 
@@ -1337,7 +1335,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: vi.fn(),
     })
 
-    await expect(dispatcher.dispatch("drive.file.upload", {
+    await expect(dispatcher.dispatch("app.drive.file.upload", {
       filePath: "README.md",
     }, { source: "mcp-stdio" })).rejects.toThrow("Local upload path must be absolute.")
 
@@ -1366,7 +1364,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: vi.fn(async () => ({ ok: true }) as Response),
     })
 
-    await expect(dispatcher.dispatch("drive.file.upload", {
+    await expect(dispatcher.dispatch("app.drive.file.upload", {
       filePath: "/tmp/report.md",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: item })
 
@@ -1398,7 +1396,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: vi.fn(),
     })
 
-    await expect(dispatcher.dispatch("drive.file.upload", {
+    await expect(dispatcher.dispatch("app.drive.file.upload", {
       filePath: "/tmp/report.md",
     }, { source: "mcp-stdio" })).rejects.toThrow("policy backend failed")
 
@@ -1408,7 +1406,7 @@ describe("createDriveCapabilityDispatcher", () => {
       outcome: "failed",
       resource: "/tmp/report.md",
       metadata: expect.objectContaining({
-        driveAction: "drive.file.upload",
+        driveAction: "app.drive.file.upload",
         reason: "permission-check-error",
         errorName: "Error",
       }),
@@ -1435,7 +1433,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: fetchImpl,
     })
 
-    await expect(dispatcher.dispatch("drive.file.upload", {
+    await expect(dispatcher.dispatch("app.drive.file.upload", {
       filePath: "/tmp/large.bin",
     }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
 
@@ -1511,7 +1509,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: fetchImpl,
     })
 
-    const result = await dispatcher.dispatch("drive.folder.upload", {
+    const result = await dispatcher.dispatch("app.drive.folder.upload", {
       folderPath: "/tmp/project",
     }, { source: "mcp-stdio" })
 
@@ -1536,14 +1534,14 @@ describe("createDriveCapabilityDispatcher", () => {
       action: "fs.read.outside-userdata",
       outcome: "allowed",
       resource: "/tmp/project",
-      metadata: expect.objectContaining({ driveAction: "drive.folder.upload" }),
+      metadata: expect.objectContaining({ driveAction: "app.drive.folder.upload" }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "network.connect",
       outcome: "failed",
-      resource: "synapse-drive:drive.folder.upload",
+      resource: "synapse-drive:app.drive.folder.upload",
       metadata: expect.objectContaining({
-        driveAction: "drive.folder.upload",
+        driveAction: "app.drive.folder.upload",
         completed: 1,
         failed: 1,
         rootItemId: "folder-root",
@@ -1598,7 +1596,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: vi.fn(async () => ({ ok: true }) as Response),
     })
 
-    const result = await dispatcher.dispatch("drive.folder.upload", {
+    const result = await dispatcher.dispatch("app.drive.folder.upload", {
       folderPath: "/tmp/project",
     }, { source: "mcp-stdio" })
 
@@ -1643,7 +1641,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: fetchImpl,
     })
 
-    await expect(dispatcher.dispatch("drive.folder.upload", {
+    await expect(dispatcher.dispatch("app.drive.folder.upload", {
       folderPath: "/tmp/project",
       parentId: "drive-root",
     }, { source: "mcp-stdio" })).resolves.toEqual({
@@ -1688,7 +1686,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: vi.fn(),
     })
 
-    await expect(dispatcher.dispatch("drive.folder.upload", {
+    await expect(dispatcher.dispatch("app.drive.folder.upload", {
       folderPath: "docs",
     }, { source: "mcp-stdio" })).rejects.toThrow("Local upload path must be absolute.")
 
@@ -1743,7 +1741,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: fetchImpl,
     })
 
-    const result = await dispatcher.dispatch("drive.folder.upload", {
+    const result = await dispatcher.dispatch("app.drive.folder.upload", {
       folderPath: "/tmp/project",
     }, { source: "mcp-stdio" })
 
@@ -1785,7 +1783,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: vi.fn(),
     })
 
-    await expect(dispatcher.dispatch("drive.folder.upload", {
+    await expect(dispatcher.dispatch("app.drive.folder.upload", {
       folderPath: "/tmp/project-link",
     }, { source: "mcp-stdio" })).rejects.toThrow("Folder upload does not support symbolic links.")
 
@@ -1822,7 +1820,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: vi.fn(),
     })
 
-    await expect(dispatcher.dispatch("drive.folder.upload", {
+    await expect(dispatcher.dispatch("app.drive.folder.upload", {
       folderPath: "/tmp/large-folder",
     }, { source: "mcp-stdio" })).rejects.toThrow(`一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_FILES} 个文件`)
 
@@ -1860,7 +1858,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: vi.fn(),
     })
 
-    await expect(dispatcher.dispatch("drive.folder.upload", {
+    await expect(dispatcher.dispatch("app.drive.folder.upload", {
       folderPath: "/tmp/many-directories",
     }, { source: "mcp-stdio" })).rejects.toThrow(`一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES} 个文件夹`)
 
@@ -1907,7 +1905,7 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: vi.fn(),
     })
 
-    await expect(dispatcher.dispatch("drive.folder.upload", {
+    await expect(dispatcher.dispatch("app.drive.folder.upload", {
       folderPath: "/tmp/deep-folder",
     }, { source: "mcp-stdio" })).rejects.toThrow(`文件夹层级最多 ${DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH} 层`)
 
@@ -1920,7 +1918,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.share.create", {
+    await expect(dispatcher.dispatch("app.drive.share.create", {
       itemId: "item-1",
     }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
 
@@ -1933,7 +1931,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.item.delete", {
+    await expect(dispatcher.dispatch("app.drive.item.delete", {
       itemId: "item-1",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true } })
 
@@ -1946,7 +1944,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.share.create", {
+    await expect(dispatcher.dispatch("app.drive.share.create", {
       itemId: "item-1",
       passwordEnabled: false,
       expiresIn: "forever",
@@ -1964,7 +1962,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.share.create", {
+    await expect(dispatcher.dispatch("app.drive.share.create", {
       itemId: "item-1",
       expiresIn: "30d",
     }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
@@ -1984,7 +1982,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.share.create", {
+    await expect(dispatcher.dispatch("app.drive.share.create", {
       itemId: "item-1",
       accessMode: "specified_users_edit",
       editorEmails: ["Writer@Example.com"],
@@ -2003,7 +2001,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
 
-    await expect(dispatcher.dispatch("drive.share.create", {
+    await expect(dispatcher.dispatch("app.drive.share.create", {
       itemId: "item-1",
       expiresIn: "30d",
     }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
@@ -2013,7 +2011,7 @@ describe("createDriveCapabilityDispatcher", () => {
       outcome: "allowed",
       resource: "synapse-drive:item-1",
       metadata: expect.objectContaining({
-        driveAction: "drive.share.create",
+        driveAction: "app.drive.share.create",
         itemId: "item-1",
         shareRecordId: "share-1",
         expiresIn: "30d",
@@ -2031,7 +2029,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
 
-    await expect(dispatcher.dispatch("drive.share.create", {
+    await expect(dispatcher.dispatch("app.drive.share.create", {
       itemId: "item-1",
     }, { source: "mcp-stdio" })).rejects.toThrow("share failed")
 
@@ -2040,7 +2038,7 @@ describe("createDriveCapabilityDispatcher", () => {
       outcome: "failed",
       resource: "synapse-drive:item-1",
       metadata: expect.objectContaining({
-        driveAction: "drive.share.create",
+        driveAction: "app.drive.share.create",
         itemId: "item-1",
         errorName: "Error",
       }),
@@ -2054,7 +2052,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
 
-    await expect(dispatcher.dispatch("drive.share.disable", {
+    await expect(dispatcher.dispatch("app.drive.share.disable", {
       shareId: "shr_public_secret",
     }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
 
@@ -2064,7 +2062,7 @@ describe("createDriveCapabilityDispatcher", () => {
       outcome: "allowed",
       resource: "synapse-drive:public-share:[redacted]",
       metadata: expect.objectContaining({
-        driveAction: "drive.share.disable",
+        driveAction: "app.drive.share.disable",
         shareId: "public-share:[redacted]",
       }),
     }))

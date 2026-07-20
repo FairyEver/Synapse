@@ -26,7 +26,11 @@ const toast = vi.hoisted(() => ({
 
 vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
-    if (domain === "soundNotifier") return soundNotifierBridge
+    if (domain === "soundNotifier") return {
+      settings: { get: soundNotifierBridge.getSettings },
+      sound: { preview: soundNotifierBridge.preview },
+      operation: { onChanged: soundNotifierBridge.onChanged },
+    }
     throw new Error(`Unexpected bridge domain: ${domain}`)
   },
 }))

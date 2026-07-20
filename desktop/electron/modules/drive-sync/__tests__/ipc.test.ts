@@ -12,19 +12,19 @@ import { driveSyncIpcModule } from "../ipc"
 
 describe("driveSyncIpcModule", () => {
   it("registers drive sync channels", () => {
-    expect(driveSyncIpcModule.methods.getSnapshot.channel).toBe("synapse:drive-sync:snapshot:get")
+    expect(driveSyncIpcModule.methods.getSnapshot.operationId).toBe("app.drive_sync.snapshot.get")
     expect(driveSyncIpcModule.methods).not.toHaveProperty("createBinding")
-    expect(driveSyncIpcModule.methods.previewBinding.channel).toBe("synapse:drive-sync:bindings:preview")
-    expect(driveSyncIpcModule.methods.createSafeBinding.channel).toBe("synapse:drive-sync:bindings:safe-create")
-    expect(driveSyncIpcModule.methods.removeBinding.channel).toBe("synapse:drive-sync:bindings:remove")
-    expect(driveSyncIpcModule.methods.pauseBinding.channel).toBe("synapse:drive-sync:bindings:pause")
-    expect(driveSyncIpcModule.methods.resumeBinding.channel).toBe("synapse:drive-sync:bindings:resume")
-    expect(driveSyncIpcModule.methods.updateExcludeRules.channel).toBe("synapse:drive-sync:bindings:exclude-rules:update")
-    expect(driveSyncIpcModule.methods.rescanBinding.channel).toBe("synapse:drive-sync:bindings:rescan")
-    expect(driveSyncIpcModule.methods.pollRemoteChanges.channel).toBe("synapse:drive-sync:remote:poll")
-    expect(driveSyncIpcModule.methods.resolveConflict.channel).toBe("synapse:drive-sync:conflicts:resolve")
-    expect(driveSyncIpcModule.methods.chooseLocalPath.channel).toBe("synapse:drive-sync:local-path:choose")
-    expect(driveSyncIpcModule.events.changed.channel).toBe("synapse:drive-sync:changed")
+    expect(driveSyncIpcModule.methods.previewBinding.operationId).toBe("app.drive_sync.bindings.preview")
+    expect(driveSyncIpcModule.methods.createSafeBinding.operationId).toBe("app.drive_sync.bindings.safe_create")
+    expect(driveSyncIpcModule.methods.removeBinding.operationId).toBe("app.drive_sync.bindings.remove")
+    expect(driveSyncIpcModule.methods.pauseBinding.operationId).toBe("app.drive_sync.bindings.pause")
+    expect(driveSyncIpcModule.methods.resumeBinding.operationId).toBe("app.drive_sync.bindings.resume")
+    expect(driveSyncIpcModule.methods.updateExcludeRules.operationId).toBe("app.drive_sync.bindings.exclude_rules.update")
+    expect(driveSyncIpcModule.methods.rescanBinding.operationId).toBe("app.drive_sync.bindings.rescan")
+    expect(driveSyncIpcModule.methods.pollRemoteChanges.operationId).toBe("app.drive_sync.remote.poll")
+    expect(driveSyncIpcModule.methods.resolveConflict.operationId).toBe("app.drive_sync.conflicts.resolve")
+    expect(driveSyncIpcModule.methods.chooseLocalPath.operationId).toBe("app.drive_sync.local_path.choose")
+    expect(driveSyncIpcModule.events.changed.operationId).toBe("app.drive_sync.operation.changed")
   })
 
   it("dispatches snapshot through the core service", async () => {

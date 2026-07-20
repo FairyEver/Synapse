@@ -3,6 +3,7 @@ import path from "node:path"
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { WindowManager } from "../../runtime/window"
+import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 import type { DriveSyncService } from "../../services/drive-sync-service"
 
 const driveItemKindSchema = z.enum(["file", "folder"])
@@ -149,7 +150,7 @@ function wireDriveSyncEvents(
 
   const windowManager = ctx.resolve<WindowManager>("core.window-manager")
   service.events.on("changed", (payload) => {
-    windowManager.broadcast(driveSyncIpcModule.events.changed.channel, payload)
+    windowManager.broadcast(ipcOperationIdToChannel(driveSyncIpcModule.events.changed.operationId), payload)
   })
   driveSyncEventWiredServices.add(service)
 }
@@ -158,14 +159,14 @@ export const driveSyncIpcModule: IpcModule = {
   id: "driveSync",
   methods: {
     getSnapshot: {
-      channel: "synapse:drive-sync:snapshot:get",
+      operationId: "app.drive_sync.snapshot.get",
       kind: "invoke",
       request: z.void(),
       response: driveSyncSnapshotSchema,
       handler: (ctx) => resolveDriveSyncService(ctx).getSnapshot(),
     },
     previewBinding: {
-      channel: "synapse:drive-sync:bindings:preview",
+      operationId: "app.drive_sync.bindings.preview",
       kind: "invoke",
       request: driveSyncPreviewBindingInputSchema,
       response: driveSyncBindingPreviewSchema,
@@ -173,7 +174,7 @@ export const driveSyncIpcModule: IpcModule = {
         resolveDriveSyncService(ctx).previewBinding(request),
     },
     createSafeBinding: {
-      channel: "synapse:drive-sync:bindings:safe-create",
+      operationId: "app.drive_sync.bindings.safe_create",
       kind: "invoke",
       request: driveSyncCreateSafeBindingInputSchema,
       response: driveSyncBindingSchema,
@@ -181,7 +182,7 @@ export const driveSyncIpcModule: IpcModule = {
         resolveDriveSyncService(ctx).createSafeBinding(request),
     },
     removeBinding: {
-      channel: "synapse:drive-sync:bindings:remove",
+      operationId: "app.drive_sync.bindings.remove",
       kind: "invoke",
       request: driveSyncBindingIdInputSchema,
       response: z.void(),
@@ -189,7 +190,7 @@ export const driveSyncIpcModule: IpcModule = {
         resolveDriveSyncService(ctx).removeBinding(request.id),
     },
     pauseBinding: {
-      channel: "synapse:drive-sync:bindings:pause",
+      operationId: "app.drive_sync.bindings.pause",
       kind: "invoke",
       request: driveSyncBindingIdInputSchema,
       response: driveSyncBindingSchema,
@@ -197,7 +198,7 @@ export const driveSyncIpcModule: IpcModule = {
         resolveDriveSyncService(ctx).pauseBinding(request.id),
     },
     resumeBinding: {
-      channel: "synapse:drive-sync:bindings:resume",
+      operationId: "app.drive_sync.bindings.resume",
       kind: "invoke",
       request: driveSyncBindingIdInputSchema,
       response: driveSyncBindingSchema,
@@ -205,7 +206,7 @@ export const driveSyncIpcModule: IpcModule = {
         resolveDriveSyncService(ctx).resumeBinding(request.id),
     },
     updateExcludeRules: {
-      channel: "synapse:drive-sync:bindings:exclude-rules:update",
+      operationId: "app.drive_sync.bindings.exclude_rules.update",
       kind: "invoke",
       request: driveSyncUpdateExcludeRulesInputSchema,
       response: driveSyncBindingSchema,
@@ -213,7 +214,7 @@ export const driveSyncIpcModule: IpcModule = {
         resolveDriveSyncService(ctx).updateExcludeRules(request),
     },
     rescanBinding: {
-      channel: "synapse:drive-sync:bindings:rescan",
+      operationId: "app.drive_sync.bindings.rescan",
       kind: "invoke",
       request: driveSyncBindingIdInputSchema,
       response: z.void(),
@@ -221,7 +222,7 @@ export const driveSyncIpcModule: IpcModule = {
         resolveDriveSyncService(ctx).rescanBinding(request.id),
     },
     pollRemoteChanges: {
-      channel: "synapse:drive-sync:remote:poll",
+      operationId: "app.drive_sync.remote.poll",
       kind: "invoke",
       request: driveSyncOptionalBindingIdInputSchema,
       response: z.void(),
@@ -229,7 +230,7 @@ export const driveSyncIpcModule: IpcModule = {
         resolveDriveSyncService(ctx).pollRemoteChanges(request?.id),
     },
     resolveConflict: {
-      channel: "synapse:drive-sync:conflicts:resolve",
+      operationId: "app.drive_sync.conflicts.resolve",
       kind: "invoke",
       request: driveSyncResolveConflictInputSchema,
       response: z.void(),
@@ -237,7 +238,7 @@ export const driveSyncIpcModule: IpcModule = {
         resolveDriveSyncService(ctx).resolveConflict(request),
     },
     chooseLocalPath: {
-      channel: "synapse:drive-sync:local-path:choose",
+      operationId: "app.drive_sync.local_path.choose",
       kind: "invoke",
       request: driveSyncChooseLocalPathInputSchema,
       response: z.string().nullable(),
@@ -263,7 +264,7 @@ export const driveSyncIpcModule: IpcModule = {
   },
   events: {
     changed: {
-      channel: "synapse:drive-sync:changed",
+      operationId: "app.drive_sync.operation.changed",
       kind: "event",
       payload: driveSyncSnapshotSchema,
     },

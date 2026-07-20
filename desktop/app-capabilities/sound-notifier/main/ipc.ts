@@ -19,14 +19,14 @@ export const soundNotifierIpcModule: IpcModule = {
   id: "soundNotifier",
   methods: {
     getSettings: {
-      channel: "synapse:sound-notifier:settings:get",
+      operationId: "app.sound_notifier.settings.get",
       kind: "invoke",
       request: z.void(),
       response: soundNotifierSettingsSchema,
       handler: (ctx) => resolveSoundNotifierService(ctx).getSettings(),
     },
     updateSettings: {
-      channel: "synapse:sound-notifier:settings:update",
+      operationId: "app.sound_notifier.settings.update",
       kind: "invoke",
       request: soundNotifierSettingsPatchSchema,
       response: soundNotifierSettingsSchema,
@@ -34,7 +34,7 @@ export const soundNotifierIpcModule: IpcModule = {
         resolveSoundNotifierService(ctx).updateSettings(request),
     },
     play: {
-      channel: "synapse:sound-notifier:play",
+      operationId: "app.sound_notifier.sound.play",
       kind: "invoke",
       request: soundNotifierPlayInputSchema,
       response: soundNotifierPlayResultSchema,
@@ -42,7 +42,7 @@ export const soundNotifierIpcModule: IpcModule = {
         resolveSoundNotifierService(ctx).play(request),
     },
     preview: {
-      channel: "synapse:sound-notifier:preview",
+      operationId: "app.sound_notifier.sound.preview",
       kind: "invoke",
       request: soundNotifierPlayInputSchema,
       response: soundNotifierPlayResultSchema,
@@ -52,12 +52,12 @@ export const soundNotifierIpcModule: IpcModule = {
   },
   events: {
     changed: {
-      channel: "synapse:sound-notifier:changed",
+      operationId: "app.sound_notifier.operation.changed",
       kind: "event",
       payload: soundNotifierChangedEventSchema,
     },
     playRequested: {
-      channel: "synapse:sound-notifier:play-requested",
+      operationId: "app.sound_notifier.operation.play_requested",
       kind: "event",
       payload: soundNotifierPlayRequestedEventSchema,
     },

@@ -204,7 +204,7 @@ export const opsIpcModule: IpcModule = {
   methods: {
     diagnostics: {
       kind: "invoke",
-      channel: "synapse:ops:diagnostics",
+      operationId: "app.ops.operation.diagnostics",
       request: diagnosticsRequestSchema,
       response: statusSchema,
       handler: async (ctx, request: DiagnosticsRequest) =>
@@ -212,7 +212,7 @@ export const opsIpcModule: IpcModule = {
     },
     openLogDirectory: {
       kind: "invoke",
-      channel: "synapse:ops:open-log-directory",
+      operationId: "app.ops.operation.open_log_directory",
       request: z.void(),
       response: z.object({ ok: z.literal(true) }),
       handler: async (ctx) => {
@@ -269,7 +269,7 @@ export const opsIpcModule: IpcModule = {
     },
     runDiagnostics: {
       kind: "invoke",
-      channel: "synapse:ops:diagnostics:run",
+      operationId: "app.ops.diagnostics.run",
       request: diagnosticsRequestSchema,
       response: diagnosticsReportSchema,
       handler: (ctx, request: DiagnosticsRequest) =>
@@ -277,7 +277,7 @@ export const opsIpcModule: IpcModule = {
     },
     exportDiagnosticsBundle: {
       kind: "invoke",
-      channel: "synapse:ops:diagnostics:export-bundle",
+      operationId: "app.ops.diagnostics.export_bundle",
       request: diagnosticsBundleExportRequestSchema,
       response: diagnosticsBundleExportResultSchema,
       handler: (ctx, request: DiagnosticsBundleExportRequest) =>
@@ -285,7 +285,7 @@ export const opsIpcModule: IpcModule = {
     },
     ping: {
       kind: "invoke",
-      channel: "synapse:ops:ping",
+      operationId: "app.ops.operation.ping",
       request: z.void(),
       response: opsPingResultSchema,
       handler: () => ({
@@ -295,7 +295,7 @@ export const opsIpcModule: IpcModule = {
     },
     runAsGet: {
       kind: "invoke",
-      channel: "synapse:ops:run-as:get",
+      operationId: "app.ops.run_as.get",
       request: projectRequestSchema,
       response: z.record(z.string(), z.unknown()),
       handler: (ctx, request: ProjectRequest) =>
@@ -303,7 +303,7 @@ export const opsIpcModule: IpcModule = {
     },
     runAsUpdate: {
       kind: "invoke",
-      channel: "synapse:ops:run-as:update",
+      operationId: "app.ops.run_as.update",
       request: runAsUpdateSchema,
       response: z.record(z.string(), z.unknown()),
       handler: (ctx, request: RunAsUpdateRequest) =>
@@ -311,7 +311,7 @@ export const opsIpcModule: IpcModule = {
     },
     runAsPreflight: {
       kind: "invoke",
-      channel: "synapse:ops:run-as:preflight",
+      operationId: "app.ops.run_as.preflight",
       request: projectRequestSchema,
       response: z.record(z.string(), z.unknown()),
       handler: async (ctx, request: ProjectRequest) => {
@@ -321,7 +321,7 @@ export const opsIpcModule: IpcModule = {
     },
     runAsAuditProbe: {
       kind: "invoke",
-      channel: "synapse:ops:run-as:audit-probe",
+      operationId: "app.ops.run_as.audit_probe",
       request: projectRequestSchema,
       response: z.record(z.string(), z.unknown()),
       handler: async (ctx, request: ProjectRequest) => {
@@ -331,14 +331,14 @@ export const opsIpcModule: IpcModule = {
     },
     webhookStatus: {
       kind: "invoke",
-      channel: "synapse:ops:webhook:status",
+      operationId: "app.ops.webhook.status",
       request: z.void(),
       response: z.record(z.string(), z.unknown()),
       handler: (ctx) => resolveWebhook(ctx.resolve).getStatus(),
     },
     webhookUpdate: {
       kind: "invoke",
-      channel: "synapse:ops:webhook:update",
+      operationId: "app.ops.webhook.update",
       request: webhookUpdateSchema,
       response: z.record(z.string(), z.unknown()),
       handler: (ctx, request: WebhookUpdateRequest) =>
@@ -346,7 +346,7 @@ export const opsIpcModule: IpcModule = {
     },
     webhookRuns: {
       kind: "invoke",
-      channel: "synapse:ops:webhook:runs",
+      operationId: "app.ops.webhook.runs",
       request: z.object({ projectId: z.string().optional() }),
       response: z.array(z.record(z.string(), z.unknown())),
       handler: (ctx, request: { projectId?: string }) =>
@@ -354,7 +354,7 @@ export const opsIpcModule: IpcModule = {
     },
     relayBindings: {
       kind: "invoke",
-      channel: "synapse:ops:relay:bindings",
+      operationId: "app.ops.relay.bindings",
       request: z.object({ projectId: z.string().optional() }),
       response: z.array(z.record(z.string(), z.unknown())),
       handler: (ctx, request: { projectId?: string }) =>
@@ -362,7 +362,7 @@ export const opsIpcModule: IpcModule = {
     },
     relayRuns: {
       kind: "invoke",
-      channel: "synapse:ops:relay:runs",
+      operationId: "app.ops.relay.runs",
       request: z.object({ projectId: z.string().optional() }),
       response: z.array(z.record(z.string(), z.unknown())),
       handler: (ctx, request: { projectId?: string }) =>
@@ -370,7 +370,7 @@ export const opsIpcModule: IpcModule = {
     },
     relayUnbind: {
       kind: "invoke",
-      channel: "synapse:ops:relay:unbind",
+      operationId: "app.ops.relay.unbind",
       request: relayBindingIdSchema,
       response: z.object({ ok: z.boolean() }),
       handler: async (ctx, request: RelayBindingIdRequest) => ({
@@ -379,7 +379,7 @@ export const opsIpcModule: IpcModule = {
     },
     compressGet: {
       kind: "invoke",
-      channel: "synapse:ops:compress:get",
+      operationId: "app.ops.compress.get",
       request: projectRequestSchema,
       response: z.record(z.string(), z.unknown()),
       handler: (ctx, request: ProjectRequest) => runCompressionIpc("get", request, async () => {
@@ -389,7 +389,7 @@ export const opsIpcModule: IpcModule = {
     },
     compressUpdate: {
       kind: "invoke",
-      channel: "synapse:ops:compress:update",
+      operationId: "app.ops.compress.update",
       request: compressUpdateSchema,
       response: z.record(z.string(), z.unknown()),
       handler: (ctx, request: CompressUpdateRequest) => runCompressionIpc("update", request, async () => {

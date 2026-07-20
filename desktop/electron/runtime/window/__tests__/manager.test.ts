@@ -115,19 +115,19 @@ describe("WindowManager (T3.12)", () => {
     manager.register({ id: "detail", role: "detail", create: () => b })
     manager.open("main")
     manager.open("detail")
-    const sent = manager.broadcast("synapse:test", { v: 1 })
+    const sent = manager.broadcast("synapse:app:test:operation", { v: 1 })
     expect(sent).toBe(2)
-    expect(a.sent[0]).toEqual({ channel: "synapse:test", payload: { v: 1 } })
-    expect(b.sent[0]).toEqual({ channel: "synapse:test", payload: { v: 1 } })
+    expect(a.sent[0]).toEqual({ operationId: "app.test.operation", payload: { v: 1 } })
+    expect(b.sent[0]).toEqual({ operationId: "app.test.operation", payload: { v: 1 } })
   })
 
   it("broadcast() reaches an externally attached main window", () => {
     const manager = createWindowManager()
     const main = makeFakeWindow(1)
     manager.attach({ id: "main", role: "main" }, main)
-    const sent = manager.broadcast("synapse:test", { v: 1 })
+    const sent = manager.broadcast("synapse:app:test:operation", { v: 1 })
     expect(sent).toBe(1)
-    expect(main.sent[0]).toEqual({ channel: "synapse:test", payload: { v: 1 } })
+    expect(main.sent[0]).toEqual({ operationId: "app.test.operation", payload: { v: 1 } })
   })
 
   it("detach() drops an attached handle without closing it", () => {
@@ -139,7 +139,7 @@ describe("WindowManager (T3.12)", () => {
 
     expect(detail.destroyed).toBe(false)
     expect(manager.list()).toEqual([])
-    expect(manager.broadcast("synapse:test", { v: 1 })).toBe(0)
+    expect(manager.broadcast("synapse:app:test:operation", { v: 1 })).toBe(0)
   })
 
   it("detach() releases attached dynamic descriptors from the broadcast table", () => {
@@ -178,7 +178,7 @@ describe("WindowManager (T3.12)", () => {
     manager.open("main")
     manager.open("detail")
     a.destroyed = true
-    const sent = manager.broadcast("synapse:test", { v: 1 })
+    const sent = manager.broadcast("synapse:app:test:operation", { v: 1 })
     expect(sent).toBe(1)
     expect(a.sent).toHaveLength(0)
   })
@@ -195,7 +195,7 @@ describe("WindowManager (T3.12)", () => {
     })
     manager.open("main")
     manager.open("detail")
-    const sent = manager.broadcast("synapse:test", { v: 1 }, (w) => w.role === "main")
+    const sent = manager.broadcast("synapse:app:test:operation", { v: 1 }, (w) => w.role === "main")
     expect(sent).toBe(1)
     expect(a.sent).toHaveLength(1)
     expect(b.sent).toHaveLength(0)

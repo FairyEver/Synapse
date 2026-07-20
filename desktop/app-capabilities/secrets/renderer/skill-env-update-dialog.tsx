@@ -113,7 +113,7 @@ export function SkillEnvUpdateDialog({
     const targetGroupId = groupId(name)
     setUpdating(true)
     try {
-      const scanResult = await secretsBridge.scanSkillEnvBindings({ name })
+      const scanResult = await secretsBridge.operation.scanSkillEnvBindings({ name })
       if (scanResult.failed) throw new Error("Skill env binding scan failed.")
       if (scanResult.truncated) {
         setQueueErrors((current) => ({ ...current, [targetGroupId]: "scan_truncated" }))
@@ -166,7 +166,7 @@ export function SkillEnvUpdateDialog({
       if (groupItemIds.length === 0) continue
 
       try {
-        const result = await secretsBridge.queueSkillEnvBindings({
+        const result = await secretsBridge.operation.queueSkillEnvBindings({
           name: group.name,
           scanSessionId: group.scanResult.scanSessionId,
           itemIds: groupItemIds,

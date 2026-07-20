@@ -55,7 +55,7 @@ function KnowledgeBaseStoragePanel() {
   }, [])
 
   const handleChangeLocation = useCallback(async () => {
-    const selectedPath = await requireBridgeDomain("repository").chooseDirectory()
+    const selectedPath = await requireBridgeDomain("settings").repository.chooseDirectory()
     if (!selectedPath) return
     setPendingTarget({ mode: "custom", rootPath: selectedPath })
   }, [])

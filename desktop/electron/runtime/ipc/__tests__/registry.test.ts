@@ -14,7 +14,7 @@ const demoModule = (overrides: Partial<IpcModule> = {}): IpcModule => ({
   methods: {
     greet: {
       kind: "invoke",
-      channel: "synapse:demo:greet",
+      operationId: "app.demo.operation.greet",
       request: z.object({ name: z.string().min(1) }),
       response: z.string(),
       handler: (_ctx, req: unknown) => `hello, ${(req as { name: string }).name}`,
@@ -23,7 +23,7 @@ const demoModule = (overrides: Partial<IpcModule> = {}): IpcModule => ({
   events: {
     pinged: {
       kind: "event",
-      channel: "synapse:demo:pinged",
+      operationId: "app.demo.operation.pinged",
       payload: z.object({ ts: z.string() }),
     },
   },
@@ -41,24 +41,24 @@ describe("IpcRegistryImpl (T3.2)", () => {
   it("registers a module and dispatches invoke calls through the in-memory transport", async () => {
     const harness = createInMemoryHarness()
     harness.registry.register(demoModule(), ctx)
-    const reply = await harness.invoke("synapse:demo:greet", { name: "world" })
+    const reply = await harness.invoke("synapse:app:demo:operation:greet", { name: "world" })
     expect(reply).toBe("hello, world")
   })
 
   it("validates the request payload and returns IpcValidationError on bad input", async () => {
     const harness = createInMemoryHarness()
     harness.registry.register(demoModule(), ctx)
-    await expect(harness.invoke("synapse:demo:greet", {})).rejects.toBeInstanceOf(
+    await expect(harness.invoke("synapse:app:demo:operation:greet", {})).rejects.toBeInstanceOf(
       IpcValidationError,
     )
-    await expect(harness.invoke("synapse:demo:greet", { name: "" })).rejects.toBeInstanceOf(
+    await expect(harness.invoke("synapse:app:demo:operation:greet", { name: "" })).rejects.toBeInstanceOf(
       IpcValidationError,
     )
   })
 
   it("throws IpcChannelNotFoundError for unregistered channels", async () => {
     const harness = createInMemoryHarness()
-    await expect(harness.invoke("synapse:ghost:method", {})).rejects.toBeInstanceOf(
+    await expect(harness.invoke("synapse:app:ghost:operation:method", {})).rejects.toBeInstanceOf(
       IpcChannelNotFoundError,
     )
   })
@@ -71,6 +71,20 @@ describe("IpcRegistryImpl (T3.2)", () => {
     )
   })
 
+  it("rejects operation ids outside the canonical app namespace", () => {
+    const harness = createInMemoryHarness()
+    expect(() => harness.registry.register(demoModule({
+      methods: {
+        legacy: {
+          kind: "invoke",
+          operationId: "demo.legacy.invoke" as never,
+          request: z.void(),
+          handler: () => undefined,
+        },
+      },
+    }), ctx)).toThrow(/Invalid IPC operation id/)
+  })
+
   it("rejects channel collisions across modules and rolls back partial installs", () => {
     const harness = createInMemoryHarness()
     harness.registry.register(demoModule(), ctx)
@@ -81,7 +95,7 @@ describe("IpcRegistryImpl (T3.2)", () => {
           methods: {
             shadow: {
               kind: "invoke",
-              channel: "synapse:demo:greet", // collision
+              operationId: "app.demo.operation.greet", // collision
               request: z.object({}),
               response: z.string(),
               handler: () => "shadowed",
@@ -102,8 +116,8 @@ describe("IpcRegistryImpl (T3.2)", () => {
     expect(summary).toHaveLength(1)
     expect(summary[0]?.moduleId).toBe("demo")
     expect([...(summary[0]?.channels ?? [])].sort()).toEqual([
-      "synapse:demo:greet",
-      "synapse:demo:pinged",
+      "synapse:app:demo:operation:greet",
+      "synapse:app:demo:operation:pinged",
     ])
   })
 
@@ -112,7 +126,7 @@ describe("IpcRegistryImpl (T3.2)", () => {
     const result = harness.registry.register(demoModule(), ctx)
     result.unregister()
     expect(harness.registry.list()).toEqual([])
-    await expect(harness.invoke("synapse:demo:greet", { name: "x" })).rejects.toBeInstanceOf(
+    await expect(harness.invoke("synapse:app:demo:operation:greet", { name: "x" })).rejects.toBeInstanceOf(
       IpcChannelNotFoundError,
     )
 
@@ -122,7 +136,7 @@ describe("IpcRegistryImpl (T3.2)", () => {
         methods: {
           greet: {
             kind: "invoke",
-            channel: "synapse:demo:greet",
+            operationId: "app.demo.operation.greet",
             request: z.object({ name: z.string() }),
             response: z.string(),
             handler: (_c, req: unknown) => `goodbye, ${(req as { name: string }).name}`,
@@ -131,7 +145,7 @@ describe("IpcRegistryImpl (T3.2)", () => {
       }),
       ctx,
     )
-    const reply = await harness.invoke("synapse:demo:greet", { name: "x" })
+    const reply = await harness.invoke("synapse:app:demo:operation:greet", { name: "x" })
     expect(reply).toBe("goodbye, x")
   })
 
@@ -143,7 +157,7 @@ describe("IpcRegistryImpl (T3.2)", () => {
         methods: {
           twoStrings: {
             kind: "invoke",
-            channel: "synapse:buggy:two-strings",
+            operationId: "app.buggy.operation.two_strings",
             request: z.object({}),
             response: z.string(),
             handler: () => 42 as unknown as string,
@@ -153,7 +167,7 @@ describe("IpcRegistryImpl (T3.2)", () => {
       },
       { ...ctx, moduleId: "buggy" },
     )
-    await expect(harness.invoke("synapse:buggy:two-strings", {})).rejects.toBeInstanceOf(
+    await expect(harness.invoke("synapse:app:buggy:operation:two_strings", {})).rejects.toBeInstanceOf(
       IpcValidationError,
     )
   })
@@ -166,7 +180,7 @@ describe("IpcRegistryImpl (T3.2)", () => {
         methods: {
           delay: {
             kind: "invoke",
-            channel: "synapse:async-demo:delay",
+            operationId: "app.async_demo.operation.delay",
             request: z.object({ ms: z.number().min(0).max(50) }),
             response: z.literal("done"),
             async handler(_c, req: unknown) {
@@ -180,7 +194,7 @@ describe("IpcRegistryImpl (T3.2)", () => {
       { ...ctx, moduleId: "async-demo" },
     )
     const t0 = Date.now()
-    const out = await harness.invoke("synapse:async-demo:delay", { ms: 10 })
+    const out = await harness.invoke("synapse:app:async_demo:operation:delay", { ms: 10 })
     expect(out).toBe("done")
     expect(Date.now() - t0).toBeGreaterThanOrEqual(8)
   })
@@ -203,14 +217,14 @@ describe("IpcRegistryImpl (T3.2)", () => {
           methods: {
             okay: {
               kind: "invoke",
-              channel: "synapse:second:okay",
+              operationId: "app.second.operation.okay",
               request: z.object({}),
               response: z.string(),
               handler: () => "ok",
             },
             collide: {
               kind: "invoke",
-              channel: "synapse:demo:greet", // collision after `okay` was installed
+              operationId: "app.demo.operation.greet", // collision after `okay` was installed
               request: z.object({}),
               response: z.string(),
               handler: () => "shadow",
@@ -236,7 +250,7 @@ describe("IpcRegistryImpl (T3.2)", () => {
     const disposedChannels: string[] = []
     const registry = new IpcRegistryImpl({
       install(channel, invoker) {
-        if (channel === "synapse:partial:fail") {
+        if (channel === "synapse:app:partial:operation:fail") {
           throw new Error("transport install failed")
         }
         handlers.set(channel, invoker)
@@ -254,14 +268,14 @@ describe("IpcRegistryImpl (T3.2)", () => {
           methods: {
             first: {
               kind: "invoke",
-              channel: "synapse:partial:first",
+              operationId: "app.partial.operation.first",
               request: z.object({}),
               response: z.string(),
               handler: () => "first",
             },
             fail: {
               kind: "invoke",
-              channel: "synapse:partial:fail",
+              operationId: "app.partial.operation.fail",
               request: z.object({}),
               response: z.string(),
               handler: () => "fail",
@@ -273,8 +287,8 @@ describe("IpcRegistryImpl (T3.2)", () => {
       ),
     ).toThrow("transport install failed")
 
-    expect(disposedChannels).toEqual(["synapse:partial:first"])
-    expect(handlers.has("synapse:partial:first")).toBe(false)
+    expect(disposedChannels).toEqual(["synapse:app:partial:operation:first"])
+    expect(handlers.has("synapse:app:partial:operation:first")).toBe(false)
     expect(registry.list()).toEqual([])
 
     expect(() =>
@@ -284,7 +298,7 @@ describe("IpcRegistryImpl (T3.2)", () => {
           methods: {
             first: {
               kind: "invoke",
-              channel: "synapse:partial:first",
+              operationId: "app.partial.operation.first",
               request: z.object({}),
               response: z.string(),
               handler: () => "retry",

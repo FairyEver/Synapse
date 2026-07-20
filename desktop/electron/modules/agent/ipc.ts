@@ -1,7 +1,6 @@
 import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
-import { AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL } from "../../services/agent-conversation-window-service"
 import {
   agentEventTypeSchema,
   agentEventSchema,
@@ -81,7 +80,7 @@ export const agentIpcModule: IpcModule = {
   events: {
     event: {
       kind: "event",
-      channel: "synapse:events:agent",
+      operationId: "app.agent.state.changed",
       payload: z.discriminatedUnion("type", [
         agentStreamDomainEventSchema,
         agentConversationUpdatedDomainEventSchema,
@@ -90,7 +89,7 @@ export const agentIpcModule: IpcModule = {
     },
     detachedConversationsChanged: {
       kind: "event",
-      channel: AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL,
+      operationId: "app.agent.operation.detached_conversations_changed",
       payload: z.array(agentDetachedConversationSchema),
     },
   },

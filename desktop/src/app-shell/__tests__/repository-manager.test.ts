@@ -123,8 +123,9 @@ function createBridge(): SynapseBridge {
       importBackup: vi.fn(async () => null),
       resetApp: vi.fn(async () => {}),
     },
-    content: {
-      list: vi.fn(async ({ contentType }: { contentType: SynapseContentType }) => {
+    resourceRepository: {
+      item: {
+        list: vi.fn(async ({ contentType }: { contentType: SynapseContentType }) => {
         if (contentType !== "skill") {
           return []
         }
@@ -133,28 +134,31 @@ function createBridge(): SynapseBridge {
           ? ["skill-1", "skill-2", "skill-3", "skill-4"]
           : ["skill-1", "skill-2", "skill-3"]
         return ids.map(createSkill)
-      }),
-      onChanged: vi.fn((listener: (event: { contentType: SynapseContentType }) => void) => {
-        contentChangedListeners.push(listener)
-        return () => {}
-      }),
+        }),
+        onChanged: vi.fn((listener: (event: { contentType: SynapseContentType }) => void) => {
+          contentChangedListeners.push(listener)
+          return () => {}
+        }),
+      },
     },
-    repository: {
-      getStates: vi.fn(async () => [repositoryState]),
+    settings: {
+      repository: {
+        getStates: vi.fn(async () => [repositoryState]),
       getPendingPushes: vi.fn(async () => ({ count: 0, items: [] })),
       getSyncSnapshots: vi.fn(async () => []),
       onProgress: vi.fn(() => () => {}),
       onUpdated: vi.fn(() => () => {}),
       onPendingPushesUpdated: vi.fn(() => () => {}),
       onSyncSnapshotUpdated: vi.fn(() => () => {}),
-      sync: vi.fn(async () => {
+        sync: vi.fn(async () => {
         synced = true
         return {
           operation: "sync",
           repository: repositoryState,
           completedAt: "2026-04-27T00:01:00.000Z",
         }
-      }),
+        }),
+      },
     },
     emitContentChanged(contentType: SynapseContentType) {
       synced = true
@@ -212,12 +216,12 @@ describe("RepositoryManager", () => {
       currentConfig = { ...currentConfig, ...patch }
       return currentConfig
     })
-    bridge.content.list = vi.fn(({ contentType }: { contentType: SynapseContentType }) => {
+    bridge.resourceRepository.item.list = vi.fn(({ contentType }: { contentType: SynapseContentType }) => {
       if (contentType !== "skill") return Promise.resolve([])
       return new Promise<SynapseContentMeta<"skill">[]>((resolve) => {
         skillListResolvers.push(resolve)
       })
-    }) as typeof bridge.content.list
+    }) as typeof bridge.resourceRepository.item.list
     installBridge(bridge)
     const manager = new RepositoryManager()
 
@@ -253,13 +257,13 @@ describe("RepositoryManager", () => {
     await manager.refreshContentList("skill")
     expect(manager.getContentList("skill")).toHaveLength(3)
 
-    bridge.repository.getPendingPushes = vi.fn(async () => {
+    bridge.settings.repository.getPendingPushes = vi.fn(async () => {
       throw new Error("pending push database unavailable")
     })
-    bridge.content.list = vi.fn(({ contentType }: { contentType: SynapseContentType }) => {
+    bridge.resourceRepository.item.list = vi.fn(({ contentType }: { contentType: SynapseContentType }) => {
       if (contentType !== "skill") return Promise.resolve([])
       return Promise.resolve([createSkill("repo-2-skill")])
-    }) as typeof bridge.content.list
+    }) as typeof bridge.resourceRepository.item.list
 
     await expect(manager.switchActiveRepository(addedRepository.uuid)).resolves.toBeUndefined()
 
@@ -304,7 +308,7 @@ describe("RepositoryManager", () => {
   it("stores sync snapshot updates and mirrors pending pushes", async () => {
     const snapshotListeners: Array<(event: SynapseRepositorySyncSnapshotUpdatedEvent) => void> = []
     const bridge = createBridge()
-    bridge.repository.onSyncSnapshotUpdated = vi.fn((listener) => {
+    bridge.settings.repository.onSyncSnapshotUpdated = vi.fn((listener) => {
       snapshotListeners.push(listener)
       return () => {}
     })
@@ -324,7 +328,7 @@ describe("RepositoryManager", () => {
 
   it("hydrates sync snapshots and mirrors pending pushes during initialize", async () => {
     const bridge = createBridge()
-    bridge.repository.getSyncSnapshots = vi.fn(async () => [pendingSnapshot])
+    bridge.settings.repository.getSyncSnapshots = vi.fn(async () => [pendingSnapshot])
     installBridge(bridge)
     const manager = new RepositoryManager()
 
@@ -336,7 +340,7 @@ describe("RepositoryManager", () => {
 
   it("keeps initialization alive when sync snapshot refresh fails", async () => {
     const bridge = createBridge()
-    bridge.repository.getSyncSnapshots = vi.fn(async () => {
+    bridge.settings.repository.getSyncSnapshots = vi.fn(async () => {
       throw new Error("snapshot refresh failed")
     })
     installBridge(bridge)
@@ -351,7 +355,7 @@ describe("RepositoryManager", () => {
   it("refreshes sync snapshots after replacing repositories", async () => {
     let snapshots: SynapseRepositorySyncSnapshot[] = []
     const bridge = createBridge()
-    bridge.repository.getSyncSnapshots = vi.fn(async () => snapshots)
+    bridge.settings.repository.getSyncSnapshots = vi.fn(async () => snapshots)
     installBridge(bridge)
     const manager = new RepositoryManager()
     await manager.initialize()

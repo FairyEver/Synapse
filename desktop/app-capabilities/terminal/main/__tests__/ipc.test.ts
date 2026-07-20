@@ -66,30 +66,30 @@ vi.mock("electron-updater", () => ({
 describe("terminalIpcModule", () => {
   it("declares stable method and event channels", () => {
     expect(terminalIpcModule.id).toBe("terminal")
-    expect(terminalIpcModule.methods.listGroups.channel).toBe("synapse:terminal:group:list")
-    expect(terminalIpcModule.methods.createGroup.channel).toBe("synapse:terminal:group:create")
-    expect(terminalIpcModule.methods.renameGroup.channel).toBe("synapse:terminal:group:rename")
-    expect(terminalIpcModule.methods.updateGroupSettings.channel).toBe("synapse:terminal:group:update-settings")
-    expect(terminalIpcModule.methods.chooseDefaultCwd.channel).toBe("synapse:terminal:group:choose-default-cwd")
-    expect(terminalIpcModule.methods.createGroupCommand.channel).toBe("synapse:terminal:group-command:create")
-    expect(terminalIpcModule.methods.updateGroupCommand.channel).toBe("synapse:terminal:group-command:update")
-    expect(terminalIpcModule.methods.deleteGroupCommand.channel).toBe("synapse:terminal:group-command:delete")
-    expect(terminalIpcModule.methods.launchGroupCommand.channel).toBe("synapse:terminal:group-command:launch")
-    expect(terminalIpcModule.methods.deleteGroup.channel).toBe("synapse:terminal:group:delete")
-    expect(terminalIpcModule.methods.listSessions.channel).toBe("synapse:terminal:session:list")
-    expect(terminalIpcModule.methods.createSession.channel).toBe("synapse:terminal:session:create")
-    expect(terminalIpcModule.methods.getSession.channel).toBe("synapse:terminal:session:get")
-    expect(terminalIpcModule.methods.readSession.channel).toBe("synapse:terminal:session:read")
-    expect(terminalIpcModule.methods.renameSession.channel).toBe("synapse:terminal:session:rename")
-    expect(terminalIpcModule.methods.writeSession.channel).toBe("synapse:terminal:session:write")
-    expect(terminalIpcModule.methods.resizeSession.channel).toBe("synapse:terminal:session:resize")
+    expect(terminalIpcModule.methods.listGroups.operationId).toBe("app.terminal.group.list")
+    expect(terminalIpcModule.methods.createGroup.operationId).toBe("app.terminal.group.create")
+    expect(terminalIpcModule.methods.renameGroup.operationId).toBe("app.terminal.group.rename")
+    expect(terminalIpcModule.methods.updateGroupSettings.operationId).toBe("app.terminal.group.update_settings")
+    expect(terminalIpcModule.methods.chooseDefaultCwd.operationId).toBe("app.terminal.group.choose_default_cwd")
+    expect(terminalIpcModule.methods.createGroupCommand.operationId).toBe("app.terminal.group_command.create")
+    expect(terminalIpcModule.methods.updateGroupCommand.operationId).toBe("app.terminal.group_command.update")
+    expect(terminalIpcModule.methods.deleteGroupCommand.operationId).toBe("app.terminal.group_command.delete")
+    expect(terminalIpcModule.methods.launchGroupCommand.operationId).toBe("app.terminal.group_command.launch")
+    expect(terminalIpcModule.methods.deleteGroup.operationId).toBe("app.terminal.group.delete")
+    expect(terminalIpcModule.methods.listSessions.operationId).toBe("app.terminal.session.list")
+    expect(terminalIpcModule.methods.createSession.operationId).toBe("app.terminal.session.create")
+    expect(terminalIpcModule.methods.getSession.operationId).toBe("app.terminal.session.get")
+    expect(terminalIpcModule.methods.readSession.operationId).toBe("app.terminal.session.read")
+    expect(terminalIpcModule.methods.renameSession.operationId).toBe("app.terminal.session.rename")
+    expect(terminalIpcModule.methods.writeSession.operationId).toBe("app.terminal.session.write")
+    expect(terminalIpcModule.methods.resizeSession.operationId).toBe("app.terminal.session.resize")
     expect("setAgentControl" in terminalIpcModule.methods).toBe(false)
-    expect(terminalIpcModule.methods.deleteSession.channel).toBe("synapse:terminal:session:delete")
-    expect(terminalIpcModule.methods.stopSession.channel).toBe("synapse:terminal:session:stop")
-    expect(terminalIpcModule.methods.runStartupCommand.channel).toBe("synapse:terminal:session:run-startup-command")
-    expect(terminalIpcModule.events.data.channel).toBe("synapse:terminal:data")
-    expect(terminalIpcModule.events.sessionChanged.channel).toBe("synapse:terminal:session-changed")
-    expect(terminalIpcModule.events.sessionDeleted.channel).toBe("synapse:terminal:session-deleted")
+    expect(terminalIpcModule.methods.deleteSession.operationId).toBe("app.terminal.session.delete")
+    expect(terminalIpcModule.methods.stopSession.operationId).toBe("app.terminal.session.stop")
+    expect(terminalIpcModule.methods.runStartupCommand.operationId).toBe("app.terminal.session.run_startup_command")
+    expect(terminalIpcModule.events.data.operationId).toBe("app.terminal.operation.data")
+    expect(terminalIpcModule.events.sessionChanged.operationId).toBe("app.terminal.operation.session_changed")
+    expect(terminalIpcModule.events.sessionDeleted.operationId).toBe("app.terminal.operation.session_deleted")
   })
 
   it("chooses a terminal group default cwd through the native directory dialog", async () => {
@@ -315,7 +315,7 @@ describe("terminalIpcModule", () => {
     ;(service.events as EventEmitter).emit("sessionChanged", createSession())
     ;(service.events as EventEmitter).emit("sessionDeleted", { sessionId: "session-1" })
 
-    expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:terminal:data", {
+    expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:app:terminal:operation:data", {
       sessionId: "session-1",
       chunk: {
         sessionId: "session-1",
@@ -325,8 +325,8 @@ describe("terminalIpcModule", () => {
         source: "pty",
       },
     })
-    expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:terminal:session-changed", createSession())
-    expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:terminal:session-deleted", {
+    expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:app:terminal:operation:session_changed", createSession())
+    expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:app:terminal:operation:session_deleted", {
       sessionId: "session-1",
     })
   })

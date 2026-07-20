@@ -47,9 +47,9 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 
 | 能力 ID | MCP 工具 | HTTP action | 服务方法 |
 | --- | --- | --- | --- |
-| `database.table.list` | `database_table_list` | `database.table.list` | `databaseTableList` |
-| `automation.runtime.inspect` | `automation_runtime_inspect` | `automation.runtime.inspect` | `automationRuntimeInspect` |
-| `content.skill.create` | `content_skill_create` | `content.skill.create` | `contentSkillCreate` |
+| `app.database.table.list` | `app_database_table_list` | `app.database.table.list` | `databaseTableList` |
+| `app.automation.runtime.inspect` | `app_automation_runtime_inspect` | `app.automation.runtime.inspect` | `automationRuntimeInspect` |
+| `app.resource_repository.skill.create` | `app_resource_repository_skill_create` | `app.resource_repository.skill.create` | `contentSkillCreate` |
 | `app.document_template.docx.generate` | `app_document_template_docx_generate` | `app.document_template.docx.generate` | `documentTemplateDocxGenerate` |
 
 公开 JSON 字段使用 camelCase。
@@ -58,14 +58,14 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 
 | 领域 | 职责 | 能力清单 |
 | --- | --- | --- |
-| `database` | 本地表、文件夹、字段、行、选项、日志和 SQL 操作 | `desktop/database/shared/capability-registry.ts` |
-| `model_price` | 模型价格规则、已用模型价格覆盖状态和规则启停 | `desktop/synapse-capabilities/shared/model-price-domain.ts` |
-| `repository` | 已配置 Synapse 仓库发现 | `desktop/synapse-capabilities/shared/repository-domain.ts` |
-| `automation` | 自动化配置、启停、手动运行、运行记录、Webhook 和 runtime inspect | `desktop/synapse-capabilities/shared/automation-domain.ts` |
+| `app.database` | 本地表、文件夹、字段、行、选项、日志和 SQL 操作 | `desktop/database/shared/capability-registry.ts` |
+| `app.model_price` | 模型价格规则、已用模型价格覆盖状态和规则启停 | `desktop/synapse-capabilities/shared/model-price-domain.ts` |
+| `app.settings.repository` | 已配置 Synapse 仓库发现 | `desktop/synapse-capabilities/shared/repository-domain.ts` |
+| `app.automation` | 自动化配置、启停、手动运行、运行记录、Webhook 和 runtime inspect | `desktop/synapse-capabilities/shared/automation-domain.ts` |
 | `variable` | 用户本机变量的查询、写入和删除 | `desktop/synapse-capabilities/shared/variable-domain.ts` |
-| `workflow` | DAG 工作流定义、节点/边原子操作、执行、布局 | `desktop/synapse-capabilities/shared/workflow-domain.ts` |
-| `content` | Rule、Skill、Prompt 的发布、查询、更新和删除 | `desktop/synapse-capabilities/shared/content-domain.ts` |
-| `drive` | 云盘文件、文件夹、分享链接和用量管理 | `desktop/synapse-capabilities/shared/drive-domain.ts` |
+| `app.workflow` | DAG 工作流定义、节点/边原子操作、执行、布局 | `desktop/synapse-capabilities/shared/workflow-domain.ts` |
+| `app.resource_repository` | Rule、Skill、Prompt 的发布、查询、更新和删除 | `desktop/synapse-capabilities/shared/content-domain.ts` |
+| `app.drive` | 云盘文件、文件夹、分享链接和用量管理 | `desktop/synapse-capabilities/shared/drive-domain.ts` |
 | `app` | 系统 App 提供的可复用能力，例如文档模板生成 | `desktop/synapse-capabilities/shared/app-domain.ts` |
 
 领域边界必须清晰。跨领域暴露通过 shared registry 和 action router 完成。
@@ -74,14 +74,14 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 
 ### MCP 工具
 
-MCP 是外部 Agent 和自动化的公开入口。工具名称由规范能力 ID 派生：把点号替换为下划线。
+MCP 是外部 Agent 和自动化的公开入口。工具名称由规范 `app.*` 能力 ID 派生：把点号替换为下划线。旧工具名不再作为别名。
 
 ```text
-database.table.list -> database_table_list
-automation.item.list -> automation_item_list
-model_price.rule.list -> model_price_rule_list
-content.skill.create -> content_skill_create
-drive.file.upload -> drive_file_upload
+app.database.table.list -> app_database_table_list
+app.automation.item.list -> app_automation_item_list
+app.model_price.rule.list -> app_model_price_rule_list
+app.resource_repository.skill.create -> app_resource_repository_skill_create
+app.drive.file.upload -> app_drive_file_upload
 app.document_template.docx.generate -> app_document_template_docx_generate
 ```
 
@@ -93,13 +93,13 @@ app.document_template.docx.generate -> app_document_template_docx_generate
 
 ```json
 {
-  "action": "database.table.list"
+  "action": "app.database.table.list"
 }
 ```
 
 ```json
 {
-  "action": "automation.run.list",
+  "action": "app.automation.run.list",
   "itemId": "automation:1",
   "limit": 5
 }
@@ -110,8 +110,8 @@ app.document_template.docx.generate -> app_document_template_docx_generate
 服务方法使用 lower camelCase。
 
 ```text
-database.choice_usage.get -> databaseChoiceUsageGet
-automation.trigger_type.list -> automationTriggerTypeList
+app.database.choice_usage.get -> databaseChoiceUsageGet
+app.automation.trigger_type.list -> automationTriggerTypeList
 ```
 
 ## 当前矩阵
@@ -122,13 +122,13 @@ automation.trigger_type.list -> automationTriggerTypeList
 
 ## Content MCP
 
-Content MCP 暴露 Rule、Skill 和 Prompt 的发布与维护能力。创建或更新前应先调用 `content_type_describe` 获取当前分类、图标、背景色和限制。
+Content MCP 暴露 Rule、Skill 和 Prompt 的发布与维护能力。创建或更新前应先调用 `app_resource_repository_type_describe` 获取当前分类、图标、背景色和限制。
 
 Content MCP 的更新和删除只允许修改当前仓库身份创建的资源。它不负责安装内容到编辑器。
 
 ## Drive MCP
 
-Drive MCP 暴露云盘文件、文件夹、预览、下载、分享和整理能力。上传未指定 `parentId` 时默认进入用户云盘根目录；上传工具使用服务端准备的直传会话，结果不返回 COS 凭证、Authorization header 或预签名上传 URL。分享工具返回 `/share/...` 链接，可浏览、渲染预览 HTML 或下载文件和文件夹。删除云盘文件或文件夹会禁用对应分享链接，恢复文件不会重新启用旧链接。整理云盘时，Agent 应先用 `drive_stats_get` 和 `drive_item_tree_list` 获取元数据，再用 `drive_folder_path_ensure` 准备目录，最后通过 `drive_reorganization_preview` 生成计划并用 `drive_reorganization_apply` 按 `planId` 应用。Drive MCP 不提供批量读取文件内容 API；内容判断只能少量、逐个调用现有文本读取工具。
+Drive MCP 暴露云盘文件、文件夹、预览、下载、分享和整理能力。上传未指定 `parentId` 时默认进入用户云盘根目录；上传工具使用服务端准备的直传会话，结果不返回 COS 凭证、Authorization header 或预签名上传 URL。分享工具返回 `/share/...` 链接，可浏览、渲染预览 HTML 或下载文件和文件夹。删除云盘文件或文件夹会禁用对应分享链接，恢复文件不会重新启用旧链接。整理云盘时，Agent 应先用 `app_drive_stats_get` 和 `app_drive_item_tree_list` 获取元数据，再用 `app_drive_folder_path_ensure` 准备目录，最后通过 `app_drive_reorganization_preview` 生成计划并用 `app_drive_reorganization_apply` 按 `planId` 应用。Drive MCP 不提供批量读取文件内容 API；内容判断只能少量、逐个调用现有文本读取工具。
 
 ## App MCP
 
@@ -140,11 +140,11 @@ Repository MCP 第一版只提供只读仓库发现。Variable MCP 管理用户�
 
 ## Automation MCP
 
-Automation MCP 暴露自动化条目、启停、手动运行、运行历史、Webhook 列表和 runtime inspect。创建或替换 trigger / executor 配置前，应先调用 `automation_trigger_type_list` 和 `automation_executor_type_list` 获取当前注册类型和 schema。
+Automation MCP 暴露自动化条目、启停、手动运行、运行历史、Webhook 列表和 runtime inspect。创建或替换 trigger / executor 配置前，应先调用 `app_automation_trigger_type_list` 和 `app_automation_executor_type_list` 获取当前注册类型和 schema。
 
 ## Model Price MCP
 
-Model Price MCP 暴露已用模型价格覆盖状态和模型价格规则维护能力。修改、启停或删除规则时，应先调用 `model_price_rule_list`，并使用规则的 `id` 作为 `ruleId`；该 ID 不是模型名或 `modelPattern`。
+Model Price MCP 暴露已用模型价格覆盖状态和模型价格规则维护能力。修改、启停或删除规则时，应先调用 `app_model_price_rule_list`，并使用规则的 `id` 作为 `ruleId`；该 ID 不是模型名或 `modelPattern`。
 
 ## 新增或修改能力
 

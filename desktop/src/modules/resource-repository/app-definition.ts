@@ -11,7 +11,6 @@ export const resourceRepositoryAppDefinition = {
   window: { openable: true },
   capabilities: {
     primaryMcpPrefix: "app_resource_repository",
-    legacyMcpPrefixes: ["content"],
   },
   removable: false,
   renameable: false,

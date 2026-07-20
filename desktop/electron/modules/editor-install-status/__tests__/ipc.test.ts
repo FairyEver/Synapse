@@ -18,7 +18,7 @@ it("preserves source fingerprints in install status requests", async () => {
     },
   })
 
-  await harness.invoke("synapse:editor-install-status:resolve-for-content", {
+  await harness.invoke("synapse:app:editor_install_status:operation:resolve_for_content", {
     contentType: "skill",
     contentId: "synapse-skill",
     contentName: "synapse-skill",

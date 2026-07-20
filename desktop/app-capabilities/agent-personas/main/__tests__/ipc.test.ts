@@ -4,13 +4,13 @@ import { agentPersonasIpcModule } from "../ipc"
 
 describe("agentPersonasIpcModule", () => {
   it("registers agent persona channels", () => {
-    expect(agentPersonasIpcModule.methods.list.channel).toBe("synapse:agent-personas:list")
-    expect(agentPersonasIpcModule.methods.create.channel).toBe("synapse:agent-personas:create")
-    expect(agentPersonasIpcModule.methods.update.channel).toBe("synapse:agent-personas:update")
-    expect(agentPersonasIpcModule.methods.updateBuiltinModel.channel)
-      .toBe("synapse:agent-personas:builtin-model:update")
-    expect(agentPersonasIpcModule.methods.delete.channel).toBe("synapse:agent-personas:delete")
-    expect(agentPersonasIpcModule.events.changed.channel).toBe("synapse:agent-personas:changed")
+    expect(agentPersonasIpcModule.methods.list.operationId).toBe("app.agent_personas.operation.list")
+    expect(agentPersonasIpcModule.methods.create.operationId).toBe("app.agent_personas.operation.create")
+    expect(agentPersonasIpcModule.methods.update.operationId).toBe("app.agent_personas.operation.update")
+    expect(agentPersonasIpcModule.methods.updateBuiltinModel.operationId)
+      .toBe("app.agent_personas.builtin_model.update")
+    expect(agentPersonasIpcModule.methods.delete.operationId).toBe("app.agent_personas.operation.delete")
+    expect(agentPersonasIpcModule.events.changed.operationId).toBe("app.agent_personas.operation.changed")
   })
 
   it("dispatches list through the core service", async () => {
@@ -131,7 +131,7 @@ describe("agentPersonasIpcModule", () => {
       syncedAt: "2026-07-01T00:00:00.000Z",
     }
     listeners[0]?.(result)
-    expect(broadcast).toHaveBeenCalledWith("synapse:agent-personas:changed", {
+    expect(broadcast).toHaveBeenCalledWith("synapse:app:agent_personas:operation:changed", {
       result,
       items: [persona()],
     })

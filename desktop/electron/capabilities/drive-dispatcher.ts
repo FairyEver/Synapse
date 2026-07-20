@@ -205,7 +205,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
   return {
     async dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult> {
       switch (action) {
-        case "drive.item.list":
+        case "app.drive.item.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
             const parentId = optionalNullableString(params.parentId)
             const page = await deps.accountService.listDriveItemsPage({
@@ -215,18 +215,18 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             })
             return { ok: true, data: page, total: page.items.length }
           })
-        case "drive.item.get":
+        case "app.drive.item.get":
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.getDriveItem(requireString(params, "itemId")),
           }))
-        case "drive.file.upload":
+        case "app.drive.file.upload":
           return dispatchDriveMutation(deps, action, params, context, () =>
             uploadFile(deps, fileSystem, fetchImpl, params, context))
-        case "drive.folder.upload":
+        case "app.drive.folder.upload":
           return dispatchDriveMutation(deps, action, params, context, () =>
             uploadFolder(deps, fileSystem, fetchImpl, params, context))
-        case "drive.folder.create":
+        case "app.drive.folder.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const item = await deps.accountService.createDriveFolder({
               parentId: optionalNullableString(params.parentId),
@@ -234,7 +234,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             })
             return { ok: true, data: item }
           })
-        case "drive.item.rename":
+        case "app.drive.item.rename":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.renameDriveItem(
@@ -242,7 +242,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               requireString(params, "name"),
             ),
           }))
-        case "drive.item.move":
+        case "app.drive.item.move":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const item = await deps.accountService.moveDriveItem(
               requireString(params, "itemId"),
@@ -250,12 +250,12 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             )
             return { ok: true, data: item }
           })
-        case "drive.item.delete":
+        case "app.drive.item.delete":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.deleteDriveItem(requireString(params, "itemId")),
           }))
-        case "drive.item_preview.get":
+        case "app.drive.item_preview.get":
           return dispatchDriveRead(deps, action, params, context, async () => {
             const childrenOffset = optionalNumber(params.childrenOffset)
             const childrenLimit = optionalNumber(params.childrenLimit)
@@ -269,7 +269,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               }),
             }
           })
-        case "drive.file_content.read":
+        case "app.drive.file_content.read":
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.readDriveFileContent({
@@ -277,7 +277,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               maxBytes: optionalNumber(params.maxBytes),
             }),
           }))
-        case "drive.file_download.create":
+        case "app.drive.file_download.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const itemId = requireString(params, "itemId")
             const outputPath = requireAbsoluteOutputPath(params)
@@ -287,13 +287,13 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               data: await deps.accountService.downloadDriveFile({ itemId, outputPath }),
             }
           })
-        case "drive.file_version.list":
+        case "app.drive.file_version.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
             const itemId = requireString(params, "itemId")
             const versions = await deps.accountService.listDriveFileVersions(itemId, parseDriveVersionListInput(params))
             return { ok: true, data: versions, total: versions.total }
           })
-        case "drive.file_version_download.create":
+        case "app.drive.file_version_download.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const itemId = requireString(params, "itemId")
             const versionId = requireString(params, "versionId")
@@ -304,7 +304,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               data: await deps.accountService.downloadDriveFileVersion({ itemId, versionId, outputPath }),
             }
           })
-        case "drive.file_version.restore":
+        case "app.drive.file_version.restore":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.restoreDriveFileVersion(
@@ -312,7 +312,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               requireString(params, "versionId"),
             ),
           }))
-        case "drive.file_version.delete":
+        case "app.drive.file_version.delete":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.deleteDriveFileVersion(
@@ -320,7 +320,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               requireString(params, "versionId"),
             ),
           }))
-        case "drive.file_version_pin.update":
+        case "app.drive.file_version_pin.update":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.updateDriveFileVersionPin(
@@ -329,22 +329,22 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               requireBoolean(params, "isPinned"),
             ),
           }))
-        case "drive.link.resolve":
+        case "app.drive.link.resolve":
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.resolveDriveLink(parseDriveLinkResolveInput(params)),
           }))
-        case "drive.link.list":
+        case "app.drive.link.list":
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.listDriveLink(parseDriveLinkListInput(params)),
           }))
-        case "drive.link.read_text":
+        case "app.drive.link.read_text":
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.readDriveLinkText(parseDriveLinkReadTextInput(params)),
           }))
-        case "drive.link.materialize":
+        case "app.drive.link.materialize":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const input = parseDriveLinkMaterializeInput(params)
             const cacheAudit = await authorizeDriveLinkMaterializeCacheWrite(deps, action, input, context)
@@ -367,7 +367,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               throw error
             }
           })
-        case "drive.link.download_file":
+        case "app.drive.link.download_file":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const input = parseDriveLinkDownloadFileInput(params)
             if (input.outputPath) {
@@ -402,7 +402,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               data: await deps.accountService.downloadDriveLinkFile(input),
             }
           })
-        case "drive.folder_zip.create":
+        case "app.drive.folder_zip.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const itemId = requireString(params, "itemId")
             const outputPath = requireAbsoluteOutputPath(params)
@@ -412,12 +412,12 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               data: await deps.accountService.downloadDriveFolderZip({ itemId, outputPath }),
             }
           })
-        case "drive.share.list":
+        case "app.drive.share.list":
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
             data: sanitizeDriveShareList(await deps.accountService.listDriveShares(parsePublicLinksPageInput(params))),
           }))
-        case "drive.share.create":
+        case "app.drive.share.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const settings = hasDriveAccessSettingsInput(params)
               ? parseDriveAccessSettings(params)
@@ -430,42 +430,42 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               ),
             }
           })
-        case "drive.share.disable":
+        case "app.drive.share.disable":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.disableDriveShare(requireString(params, "shareId")),
           }))
-        case "drive.site.create":
+        case "app.drive.site.create":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: sanitizeDriveSite(await deps.accountService.createDriveSite(parseDriveSiteCreateInput(params))),
           }))
-        case "drive.site.list":
+        case "app.drive.site.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
             const sites = sanitizeDriveSiteList(await deps.accountService.listDriveSites(parseDriveSiteListInput(params)))
             return { ok: true, data: sites, total: sites.total }
           })
-        case "drive.site.update_access":
+        case "app.drive.site.update_access":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: sanitizeDriveSite(await deps.accountService.updateDriveSiteAccess(parseDriveSiteAccessUpdateInput(params))),
           }))
-        case "drive.site.disable":
+        case "app.drive.site.disable":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: sanitizeDriveSite(await deps.accountService.disableDriveSite(requireString(params, "siteId"))),
           }))
-        case "drive.site.enable":
+        case "app.drive.site.enable":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: sanitizeDriveSite(await deps.accountService.enableDriveSite(requireString(params, "siteId"))),
           }))
-        case "drive.site.delete":
+        case "app.drive.site.delete":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.deleteDriveSite(requireString(params, "siteId")),
           }))
-        case "drive.site.republish":
+        case "app.drive.site.republish":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: sanitizeDriveSite(await deps.accountService.republishDriveSite({
@@ -473,53 +473,53 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               entryPath: optionalNullableString(params.entryPath),
             })),
           }))
-        case "drive.usage.get":
+        case "app.drive.usage.get":
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.getDriveUsage(),
           }))
-        case "drive.stats.get":
+        case "app.drive.stats.get":
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.getDriveStats(),
           }))
-        case "drive.item_tree.list":
+        case "app.drive.item_tree.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
             const tree = await deps.accountService.listDriveItemTree(parseDriveTreeListInput(params))
             return { ok: true, data: tree, total: tree.total }
           })
-        case "drive.folder_path.ensure":
+        case "app.drive.folder_path.ensure":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.ensureDriveFolderPath(parseFolderPathEnsureInput(params)),
           }))
-        case "drive.reorganization.preview":
+        case "app.drive.reorganization.preview":
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.previewDriveReorganization(parseReorganizationPreviewInput(params)),
           }))
-        case "drive.reorganization.apply":
+        case "app.drive.reorganization.apply":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.applyDriveReorganization({ planId: requireString(params, "planId") }),
           }))
-        case "drive.direct_link.upload":
+        case "app.drive.direct_link.upload":
           return dispatchDriveMutation(deps, action, params, context, () =>
             uploadPublicAsset(deps, fileSystem, params, context, action))
-        case "drive.direct_link.list":
+        case "app.drive.direct_link.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
             const assets = await deps.accountService.listDrivePublicAssets(parsePublicLinksPageInput(params))
             return { ok: true, data: assets, total: assets.total }
           })
-        case "drive.direct_link.get":
+        case "app.drive.direct_link.get":
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.getDrivePublicAsset(requireString(params, "assetId")),
           }))
-        case "drive.direct_link.update":
+        case "app.drive.direct_link.update":
           return dispatchDriveMutation(deps, action, params, context, () =>
             replacePublicAsset(deps, fileSystem, params, context, action))
-        case "drive.direct_link.rename":
+        case "app.drive.direct_link.rename":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.renameDrivePublicAsset(
@@ -527,27 +527,27 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               requireString(params, "name"),
             ),
           }))
-        case "drive.direct_link.delete":
+        case "app.drive.direct_link.delete":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.trashDrivePublicAsset(requireString(params, "assetId")),
           }))
-        case "drive.direct_link.restore":
+        case "app.drive.direct_link.restore":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.restoreDrivePublicAsset(requireString(params, "assetId")),
           }))
-        case "drive.trash.list":
+        case "app.drive.trash.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
             const trash = await deps.accountService.listDriveTrash(parsePublicLinksPageInput(params))
             return { ok: true, data: trash, total: trash.total }
           })
-        case "drive.trash.delete":
+        case "app.drive.trash.delete":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.deleteDriveTrashItem(requireString(params, "itemId")),
           }))
-        case "drive.item.restore":
+        case "app.drive.item.restore":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.restoreDriveTrashItem(parseDriveTrashRestoreInput(params)),
@@ -567,7 +567,7 @@ async function uploadFile(
   context: DispatchContext,
 ): Promise<DispatchResult> {
   const filePath = requireLocalPath(params, "filePath")
-  await authorizeFileRead(deps, filePath, context, "drive.file.upload")
+  await authorizeFileRead(deps, filePath, context, "app.drive.file.upload")
   const fileStat = await requireLocalUploadFile(fileSystem, filePath)
 
   const prepared = await deps.accountService.prepareDriveUpload({
@@ -595,7 +595,7 @@ async function uploadFolder(
   context: DispatchContext,
 ): Promise<DispatchResult> {
   const folderPath = requireLocalPath(params, "folderPath")
-  await authorizeFileRead(deps, folderPath, context, "drive.folder.upload")
+  await authorizeFileRead(deps, folderPath, context, "app.drive.folder.upload")
   const folderStat = await fileSystem.lstat(folderPath)
   if (folderStat.isSymbolicLink()) throw new Error("Folder upload does not support symbolic links.")
   if (!folderStat.isDirectory()) throw new Error("folderPath must point to a directory.")

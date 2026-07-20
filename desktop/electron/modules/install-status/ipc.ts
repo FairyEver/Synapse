@@ -24,7 +24,7 @@ export const installStatusIpcModule: IpcModule = {
   methods: {
     getAll: {
       kind: "invoke",
-      channel: "synapse:install-status:get-all",
+      operationId: "app.install_status.operation.get_all",
       request: z.any(),
       response: z.any(),
       handler: async () => {
@@ -33,7 +33,7 @@ export const installStatusIpcModule: IpcModule = {
     },
     uninstall: {
       kind: "invoke",
-      channel: "synapse:install-status:uninstall",
+      operationId: "app.install_status.operation.uninstall",
       request: uninstallSchema,
       response: uninstallResultSchema,
       handler: async (ctx, payload: { contentId: string; editorId: string }) => {

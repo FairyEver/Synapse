@@ -109,7 +109,7 @@ describe("installersIpcModule", () => {
   it("prepares inline Rule sources through the service", async () => {
     const harness = createHarness()
 
-    const result = await harness.invoke("synapse:installers:prepare-inline-rule-source", {
+    const result = await harness.invoke("synapse:app:installers:operation:prepare_inline_rule_source", {
       name: "team.rule",
       body: "# Rule",
     })
@@ -124,7 +124,7 @@ describe("installersIpcModule", () => {
   it("prepares local Skill sources through the service", async () => {
     const harness = createHarness()
 
-    const result = await harness.invoke("synapse:installers:prepare-local-skill-source", {
+    const result = await harness.invoke("synapse:app:installers:operation:prepare_local_skill_source", {
       sourceDirectoryPath: "/tmp/skill",
     })
 
@@ -148,7 +148,7 @@ describe("installersIpcModule", () => {
       name: "team-skill",
     }
 
-    const result = await harness.invoke("synapse:installers:inspect-skill-env-source", source)
+    const result = await harness.invoke("synapse:app:installers:operation:inspect_skill_env_source", source)
 
     expect(result).toEqual({
       declarations: [{ name: "GITEE_TOKEN", defaultValue: "" }],
@@ -168,7 +168,7 @@ describe("installersIpcModule", () => {
       sourceFingerprint: "sha256:test",
     }
 
-    await harness.invoke("synapse:installers:inspect-global-skill-installations", source)
+    await harness.invoke("synapse:app:installers:operation:inspect_global_skill_installations", source)
 
     expect(mocks.inspectGlobalSkillInstallations).toHaveBeenCalledWith(source)
   })
@@ -176,10 +176,10 @@ describe("installersIpcModule", () => {
   it("rejects empty and extra fields", async () => {
     const harness = createHarness()
 
-    await expect(harness.invoke("synapse:installers:prepare-local-skill-source", {
+    await expect(harness.invoke("synapse:app:installers:operation:prepare_local_skill_source", {
       sourceDirectoryPath: "",
     })).rejects.toThrow()
-    await expect(harness.invoke("synapse:installers:prepare-inline-rule-source", {
+    await expect(harness.invoke("synapse:app:installers:operation:prepare_inline_rule_source", {
       name: "team.rule",
       body: "# Rule",
       rawPath: "/tmp/secret",
@@ -200,7 +200,7 @@ describe("installersIpcModule", () => {
       body: "# Rule",
     }
 
-    await harness.invoke("synapse:installers:install-source-to-editor", {
+    await harness.invoke("synapse:app:installers:operation:install_source_to_editor", {
       editorId: "codex",
       scope: "global",
       source,
@@ -223,7 +223,7 @@ describe("installersIpcModule", () => {
   it("routes batch source installs to the editor install service", async () => {
     const harness = createHarness()
 
-    const result = await harness.invoke("synapse:installers:install-source-to-editor-targets", {
+    const result = await harness.invoke("synapse:app:installers:operation:install_source_to_editor_targets", {
       mode: "install",
       source: {
         kind: "skill",
@@ -266,7 +266,7 @@ describe("installersIpcModule", () => {
     })
     const harness = createHarness()
 
-    await harness.invoke("synapse:installers:install-source-to-editor-targets", {
+    await harness.invoke("synapse:app:installers:operation:install_source_to_editor_targets", {
       mode: "install",
       source: {
         kind: "skill",
@@ -284,7 +284,7 @@ describe("installersIpcModule", () => {
   it("resolves saved secret references in main through permission and audit", async () => {
     const harness = createHarness()
 
-    await harness.invoke("synapse:installers:install-source-to-editor", {
+    await harness.invoke("synapse:app:installers:operation:install_source_to_editor", {
       editorId: "codex",
       scope: "global",
       source: {
@@ -328,7 +328,7 @@ describe("installersIpcModule", () => {
   it("resolves saved secret references before batch installs", async () => {
     const harness = createHarness()
 
-    await harness.invoke("synapse:installers:install-source-to-editor-targets", {
+    await harness.invoke("synapse:app:installers:operation:install_source_to_editor_targets", {
       mode: "install",
       source: {
         kind: "skill",
@@ -369,7 +369,7 @@ describe("installersIpcModule", () => {
     mocks.permissionCheck.mockResolvedValueOnce({ allowed: false, reason: "denied" })
     const harness = createHarness()
 
-    await expect(harness.invoke("synapse:installers:install-source-to-editor", {
+    await expect(harness.invoke("synapse:app:installers:operation:install_source_to_editor", {
       editorId: "codex",
       scope: "global",
       source: {

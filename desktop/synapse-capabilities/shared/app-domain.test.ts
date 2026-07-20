@@ -67,7 +67,7 @@ describe("App capability domain", () => {
   })
 
   it("maps terminal group settings MCP tool to its capability", () => {
-    expect(TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID).toBe("app.terminal.group.updateSettings")
+    expect(TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID).toBe("app.terminal.group.update_settings")
     expect(APP_MCP_TOOL_ACTIONS[TERMINAL_MCP_TOOL_NAMES.groupUpdateSettings]).toBe(
       TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
     )

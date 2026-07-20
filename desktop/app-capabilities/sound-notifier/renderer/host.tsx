@@ -10,7 +10,7 @@ export function SoundNotifierHost() {
     const bridge = getSynapseBridge()
     if (!bridge?.soundNotifier) return undefined
 
-    return bridge.soundNotifier.onPlayRequested((event) => {
+    return bridge.soundNotifier.operation.onPlayRequested((event) => {
       try {
         playSoundNotifierPreset(event)
       } catch (error) {

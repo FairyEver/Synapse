@@ -40,7 +40,7 @@ export const updateIpcModule: IpcModule = {
   methods: {
     getState: {
       kind: "invoke",
-      channel: "synapse:update:get-state",
+      operationId: "app.update.operation.get_state",
       request: z.void(),
       response: updateStateResponseSchema,
       handler: async (_ctx) => {
@@ -49,7 +49,7 @@ export const updateIpcModule: IpcModule = {
     },
     checkForUpdates: {
       kind: "invoke",
-      channel: "synapse:update:check-for-updates",
+      operationId: "app.update.operation.check_for_updates",
       request: z.void(),
       response: updateStateResponseSchema,
       handler: async (_ctx) => {
@@ -58,7 +58,7 @@ export const updateIpcModule: IpcModule = {
     },
     checkForUpdatesOnPageEnter: {
       kind: "invoke",
-      channel: "synapse:update:check-for-updates-on-page-enter",
+      operationId: "app.update.operation.check_for_updates_on_page_enter",
       request: z.void(),
       response: updateStateResponseSchema,
       handler: async (_ctx) => {
@@ -67,7 +67,7 @@ export const updateIpcModule: IpcModule = {
     },
     downloadUpdate: {
       kind: "invoke",
-      channel: "synapse:update:download-update",
+      operationId: "app.update.operation.download_update",
       request: z.void(),
       response: updateStateResponseSchema,
       handler: async (_ctx) => {
@@ -76,7 +76,7 @@ export const updateIpcModule: IpcModule = {
     },
     cancelDownload: {
       kind: "invoke",
-      channel: "synapse:update:cancel-download",
+      operationId: "app.update.operation.cancel_download",
       request: z.void(),
       response: z.void(),
       handler: async (_ctx) => {
@@ -85,7 +85,7 @@ export const updateIpcModule: IpcModule = {
     },
     installUpdate: {
       kind: "invoke",
-      channel: "synapse:update:install-update",
+      operationId: "app.update.operation.install_update",
       request: z.void(),
       response: z.void(),
       handler: async (_ctx) => {

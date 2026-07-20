@@ -70,21 +70,21 @@ export const skillRepositoryInstallIpcModule: IpcModule = {
   methods: {
     resolve: {
       kind: "invoke",
-      channel: "synapse:skill-repository-install:resolve",
+      operationId: "app.skill_repository_install.operation.resolve",
       request: sessionRequestSchema,
       response: resolveResultSchema,
       handler: (_ctx, { sessionId }) => skillRepositoryInstallService.resolveInstallSession(sessionId),
     },
     prepare: {
       kind: "invoke",
-      channel: "synapse:skill-repository-install:prepare",
+      operationId: "app.skill_repository_install.operation.prepare",
       request: sessionRequestSchema,
       response: prepareResultSchema,
       handler: (_ctx, { sessionId }) => skillRepositoryInstallService.prepare(sessionId),
     },
     recordComplete: {
       kind: "invoke",
-      channel: "synapse:skill-repository-install:record-complete",
+      operationId: "app.skill_repository_install.operation.record_complete",
       request: sessionRequestSchema,
       response: completionResultSchema,
       handler: (_ctx, { sessionId }) => skillRepositoryInstallService.recordComplete(sessionId),

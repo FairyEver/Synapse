@@ -100,7 +100,7 @@ export const logIpcModule: IpcModule = {
   methods: {
     write: {
       kind: "invoke",
-      channel: "synapse:log:write",
+      operationId: "app.log.entry.write",
       request: rendererLogPayloadSchema,
       response: z.void(),
       handler: async (_ctx, request: SynapseRendererLogPayload) => {
@@ -115,7 +115,7 @@ export const logIpcModule: IpcModule = {
     },
     export: {
       kind: "invoke",
-      channel: "synapse:log:export",
+      operationId: "app.log.bundle.export",
       request: z.void(),
       response: exportResultSchema,
       handler: async (ctx) => {
@@ -194,7 +194,7 @@ export const logIpcModule: IpcModule = {
     },
     clear: {
       kind: "invoke",
-      channel: "synapse:log:clear",
+      operationId: "app.log.entry.clear",
       request: z.void(),
       response: z.object({ fileCount: z.number() }),
       handler: async (ctx) => {
@@ -207,7 +207,7 @@ export const logIpcModule: IpcModule = {
     },
     readAll: {
       kind: "invoke",
-      channel: "synapse:log:read-all",
+      operationId: "app.log.operation.read_all",
       request: z.void(),
       response: z.string(),
       handler: async (ctx) => {
@@ -220,7 +220,7 @@ export const logIpcModule: IpcModule = {
     },
     listFiles: {
       kind: "invoke",
-      channel: "synapse:log:list-files",
+      operationId: "app.log.operation.list_files",
       request: z.void(),
       response: z.array(logFileInfoSchema),
       handler: async (_ctx) => {
@@ -229,7 +229,7 @@ export const logIpcModule: IpcModule = {
     },
     readFiles: {
       kind: "invoke",
-      channel: "synapse:log:read-files",
+      operationId: "app.log.operation.read_files",
       request: z.array(z.string()),
       response: z.string(),
       handler: async (ctx, fileNames: string[]) => {

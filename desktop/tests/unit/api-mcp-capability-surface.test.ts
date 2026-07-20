@@ -11,6 +11,15 @@ import {
 import { capabilityIdToMcpTool, type CapabilityId } from "../../synapse-capabilities/shared/naming"
 
 const repoRoot = new URL("../../", import.meta.url)
+const RETIRED_MCP_PREFIXES = [
+  ["app_database_", "database_"],
+  ["app_model_price_", "model_price_"],
+  ["app_settings_repository_", "repository_"],
+  ["app_automation_", "automation_"],
+  ["app_workflow_", "workflow_"],
+  ["app_resource_repository_", "content_"],
+  ["app_drive_", "drive_"],
+] as const
 
 function allCapabilityIds(): CapabilityId[] {
   return CAPABILITY_DOMAINS.flatMap((domain) => domain.capabilities.map((capability) => capability.id)).sort()
@@ -21,6 +30,17 @@ function conventionalPrimaryCapabilityIds(): CapabilityId[] {
     .filter((domain) => domain.id !== "skill_repository")
     .flatMap((domain) => domain.capabilities.map((capability) => capability.id))
     .sort()
+}
+
+function retiredMcpToolNamePairs(): Array<readonly [retiredName: string, currentName: string]> {
+  return buildAllMcpTools().flatMap(({ name }) => {
+    const prefixes = RETIRED_MCP_PREFIXES.find(([primaryPrefix]) => name.startsWith(primaryPrefix))
+    return prefixes ? [[name.replace(prefixes[0], prefixes[1]), name] as const] : []
+  })
+}
+
+function retiredMcpToolNames(): string[] {
+  return retiredMcpToolNamePairs().map(([retiredName]) => retiredName)
 }
 
 function readRepoFile(path: string): string {
@@ -44,7 +64,7 @@ function readMarkdownFiles(root: URL, prefix = ""): Array<{ path: string; conten
 }
 
 describe("API and MCP capability surface", () => {
-  it("keeps every registered capability exposed as a primary MCP tool with mapped aliases", () => {
+  it("keeps every registered capability exposed with only canonical MCP tool names", () => {
     const actionIds = allCapabilityIds()
     const toolNames = buildAllMcpTools().map((tool) => tool.name).sort()
     const mappedToolNames = Object.keys(MCP_TOOL_ACTIONS).sort()
@@ -52,16 +72,20 @@ describe("API and MCP capability surface", () => {
     const expectedToolNames = conventionalPrimaryCapabilityIds()
       .map((action) => capabilityIdToMcpTool(action))
       .sort()
+    const retiredToolNames = new Set(retiredMcpToolNames())
 
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
+    expect(toolNames).toHaveLength(174)
+    expect(toolNames.every((toolName) => toolName.startsWith("app_"))).toBe(true)
+    expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
 
   it("documents model price rule IDs as opaque rule IDs", () => {
     const tools = buildAllMcpTools()
-    const updateTool = tools.find((tool) => tool.name === "model_price_rule_update")
-    const listTool = tools.find((tool) => tool.name === "model_price_rule_list")
+    const updateTool = tools.find((tool) => tool.name === "app_model_price_rule_update")
+    const listTool = tools.find((tool) => tool.name === "app_model_price_rule_list")
     const ruleIdProperty = updateTool?.inputSchema.properties.ruleId as { description?: string } | undefined
 
     const listDescription = listTool?.description.toLowerCase() ?? ""
@@ -71,6 +95,15 @@ describe("API and MCP capability surface", () => {
     expect(ruleIdDescription).toContain("opaque model price rule id")
     expect(ruleIdDescription).toContain("not a model name")
     expect(ruleIdDescription).toContain("not modelpattern")
+  })
+
+  it("keeps the clean MCP name comparison synchronized with the registry", () => {
+    const guide = readRepoFile("../docs/reference/mcp-tool-name-migration.md")
+    const documentedPairs = [...guide.matchAll(/^\| `([^`]+)` \| `([^`]+)` \|$/gm)]
+      .map((match) => [match[1], match[2]] as const)
+
+    expect(documentedPairs).toEqual(retiredMcpToolNamePairs())
+    expect(documentedPairs).toHaveLength(139)
   })
 
   it("routes every registered API action to its owning domain dispatcher", async () => {
@@ -102,7 +135,7 @@ describe("API and MCP capability surface", () => {
       const domain = getActionDomainId(action)
       expect(domain).not.toBeNull()
       expect(dispatchers[domain as keyof typeof dispatchers])
-        .toHaveBeenLastCalledWith(expectedDispatcherAction(action, domain), {}, { source: "api" })
+        .toHaveBeenLastCalledWith(action, {}, { source: "api" })
     }
   })
 
@@ -118,20 +151,15 @@ describe("API and MCP capability surface", () => {
     expect(`${docsMatrix}\n${websiteMatrix}\n${websiteCapabilities}`).not.toMatch(/\bCLI command\b|CLI 命令|synapse database|synapse scheduler|synapse content/u)
   })
 
-  it("uses primary app MCP tool names in the built-in Synapse skill docs", () => {
+  it("uses only canonical app MCP tool names in the built-in Synapse skill docs", () => {
     const docs = readMarkdownFiles(
       new URL("app-capabilities/synapse-skill/skill-package/", repoRoot),
     )
     const docsText = docs.map((file) => file.content).join("\n")
-    const legacyToolNames = Object.keys(MCP_TOOL_ACTIONS)
-      .filter((toolName) => !toolName.startsWith("app_"))
-      .sort()
-    const documentedLegacyToolNames = legacyToolNames.filter((toolName) => {
-      const escaped = toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-      return new RegExp(`\`${escaped}\``).test(docsText)
-    })
+    const documentedRetiredToolNames = retiredMcpToolNames()
+      .filter((toolName) => docsText.includes(`\`${toolName}\``))
 
-    expect(documentedLegacyToolNames).toEqual([])
+    expect(documentedRetiredToolNames).toEqual([])
   })
 
   it("marks historical superpowers docs before mentioning retired Synapse CLI entrypoints", () => {
@@ -149,26 +177,3 @@ describe("API and MCP capability surface", () => {
     expect(offenders).toEqual([])
   })
 })
-
-function expectedDispatcherAction(action: string, domain: string | null): string {
-  if (!action.startsWith("app.")) return action
-
-  switch (domain) {
-    case "automation":
-      return action.replace("app.automation.", "automation.")
-    case "content":
-      return action.replace("app.resource_repository.", "content.")
-    case "database":
-      return action.replace("app.database.", "database.")
-    case "drive":
-      return action.replace("app.drive.", "drive.")
-    case "model_price":
-      return action.replace("app.model_price.", "model_price.")
-    case "repository":
-      return action.replace("app.settings.repository.", "repository.")
-    case "workflow":
-      return action.replace("app.workflow.", "workflow.")
-    default:
-      return action
-  }
-}

@@ -1,8 +1,8 @@
 import type { CapabilityId } from "./naming"
 import {
-  buildPrimaryAndLegacyMcpToolActions,
-  withPrimaryAndLegacyMcpTools,
-} from "./mcp-aliases"
+  buildPrimaryMcpToolActions,
+  withPrimaryMcpTools,
+} from "./mcp-tool-names"
 import type {
   CapabilityDefinition,
   CapabilityDomainDefinition,
@@ -97,9 +97,8 @@ export const AUTOMATION_DOMAIN: CapabilityDomainDefinition = {
   capabilities: automationCapabilities,
 }
 
-export const AUTOMATION_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAndLegacyMcpToolActions(
+export const AUTOMATION_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryMcpToolActions(
   automationCapabilities,
-  { legacyPrefix: "automation", primaryPrefix: "app_automation" },
 )
 
 const automationIdProperty = {
@@ -139,7 +138,7 @@ const automationPolicySchema = {
 }
 
 export function buildAutomationTools(): McpToolDefinition[] {
-  return withPrimaryAndLegacyMcpTools([
+  return withPrimaryMcpTools([
     {
       name: "automation_item_list",
       description: "List Synapse Automation item summaries. Results intentionally omit raw trigger.config and executor.config.",
@@ -267,5 +266,5 @@ export function buildAutomationTools(): McpToolDefinition[] {
       description: "List registered Automation executor types from Action Runtime, including public config fields and platform-aware defaults.",
       inputSchema: { type: "object", properties: {} },
     },
-  ], { legacyPrefix: "automation", primaryPrefix: "app_automation" })
+  ], { sourcePrefix: "automation", primaryPrefix: "app_automation" })
 }

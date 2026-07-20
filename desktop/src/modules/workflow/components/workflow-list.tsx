@@ -58,9 +58,9 @@ const MIGRATION_DIAGNOSTIC_DISPLAY: Record<WorkflowMigrationDiagnosticStatus, {
 }
 
 function openRunner(workflowApi: WorkflowBridge, workflowId: string, runId: string): void {
-  void workflowApi.openRunner(workflowId, runId).catch((err) => {
+  void workflowApi.operation.openRunner(workflowId, runId).catch((err) => {
     logger.warn("Workflow runner open failed.", {
-      boundary: "renderer.workflow.list.openRunner",
+      boundary: "renderer.workflow.definition.list.openRunner",
       workflowId,
       runId,
       ...errorDiagnostic(err),
@@ -93,7 +93,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
 
   useEffect(() => {
     try {
-      const unsub = requireBridgeDomain("workflow").onEvent((event) => {
+      const unsub = requireBridgeDomain("workflow").operation.onEvent((event) => {
         if (event.type === "workflow:started") {
           runIdToWfId.current[event.runId] = event.workflowId
           setRunStates((s) => ({ ...s, [event.workflowId]: { status: "running", runId: event.runId } }))
@@ -111,7 +111,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       return () => { unsub() }
     } catch (err) {
       logger.warn("Workflow event subscription failed.", {
-        boundary: "renderer.workflow.list.events",
+        boundary: "renderer.workflow.definition.list.events",
         ...errorDiagnostic(err),
       })
       return undefined
@@ -122,7 +122,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     let cancelled = false
     void (async () => {
       try {
-        const activeRuns = await requireBridgeDomain("workflow").activeRuns()
+        const activeRuns = await requireBridgeDomain("workflow").run.listActive()
         if (cancelled) return
         setRunStates((state) => {
           const next = { ...state }
@@ -134,7 +134,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
         })
       } catch (err) {
         logger.warn("Workflow active runs load failed.", {
-          boundary: "renderer.workflow.list.active-runs",
+          boundary: "renderer.workflow.definition.list.active-runs",
           ...errorDiagnostic(err),
         })
       }
@@ -147,7 +147,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     setRunningId(id)
     try {
       const workflowApi = requireBridgeDomain("workflow")
-      const def = await workflowApi.get(id)
+      const def = await workflowApi.definition.get(id)
       if (!def) {
         toast.error("工作流不存在，请刷新列表")
         void refresh()
@@ -155,7 +155,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       }
       if (def.params.length === 0) {
         trackWorkflowRunSubmit(def, {}, false)
-        const result = await workflowApi.runDefinition(def, {})
+        const result = await workflowApi.operation.runDefinition(def, {})
         if ("errors" in result) {
           const errors = result.errors as { message?: string }[]
           toast.error(errors[0]?.message ?? "工作流校验失败")
@@ -178,11 +178,11 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
 
   const handleDelete = async (id: string, cleanupImportedChildren = true) => {
     try {
-      await requireBridgeDomain("workflow").delete(id, { cleanupImportedChildren })
+      await requireBridgeDomain("workflow").definition.delete(id, { cleanupImportedChildren })
     } catch (err) {
       const diagnostic = errorDiagnostic(err)
       logger.warn("Workflow delete failed.", {
-        boundary: "renderer.workflow.list.delete",
+        boundary: "renderer.workflow.definition.list.delete",
         workflowId: id,
         ...diagnostic,
       })
@@ -197,13 +197,13 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     try {
       const workflowBridge = requireBridgeDomain("workflow")
       const result = migrationDiagnosticId
-        ? await workflowBridge.exportPackage(id, name, migrationDiagnosticId)
-        : await workflowBridge.exportPackage(id, name)
+        ? await workflowBridge.operation.exportPackage(id, name, migrationDiagnosticId)
+        : await workflowBridge.operation.exportPackage(id, name)
       if (!result) return
       toast.success(result.kind === "future-raw" ? "工作流原文已导出" : "工作流已导出")
     } catch (err) {
       logger.warn("Workflow export failed.", {
-        boundary: "renderer.workflow.list.export",
+        boundary: "renderer.workflow.definition.list.export",
         workflowId: id,
         migrationDiagnosticId,
         ...errorDiagnostic(err),
@@ -214,11 +214,11 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
 
   const handleExport = async (id: string) => {
     try {
-      setExportPreflight(await requireBridgeDomain("workflow").inspectExportPackage(id))
+      setExportPreflight(await requireBridgeDomain("workflow").operation.inspectExportPackage(id))
     } catch (err) {
       const diagnostic = errorDiagnostic(err)
       logger.warn("Workflow export preflight failed.", {
-        boundary: "renderer.workflow.list.export-preflight",
+        boundary: "renderer.workflow.definition.list.export-preflight",
         workflowId: id,
         ...diagnostic,
       })
@@ -230,7 +230,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     if (!exportPreflight || exporting) return
     setExporting(true)
     try {
-      const result = await requireBridgeDomain("workflow").exportPackage(
+      const result = await requireBridgeDomain("workflow").operation.exportPackage(
         exportPreflight.workflowId,
         exportPreflight.workflowName,
         undefined,
@@ -243,7 +243,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     } catch (err) {
       const diagnostic = errorDiagnostic(err)
       logger.warn("Workflow export failed.", {
-        boundary: "renderer.workflow.list.export",
+        boundary: "renderer.workflow.definition.list.export",
         workflowId: exportPreflight.workflowId,
         ...diagnostic,
       })
@@ -262,9 +262,9 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       setProtectedWorkflow(meta)
       return
     }
-    void requireBridgeDomain("workflow").openEditor(meta.id).catch((err) => {
+    void requireBridgeDomain("workflow").operation.openEditor(meta.id).catch((err) => {
       logger.warn("Workflow editor open failed.", {
-        boundary: "renderer.workflow.list.openEditor",
+        boundary: "renderer.workflow.definition.list.openEditor",
         workflowId: meta.id,
         ...errorDiagnostic(err),
       })
@@ -279,7 +279,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     try {
       const workflowApi = requireBridgeDomain("workflow")
       trackWorkflowRunSubmit(def, params, false)
-      const result = await workflowApi.runDefinition(def, params)
+      const result = await workflowApi.operation.runDefinition(def, params)
       if ("errors" in result) {
         const errors = result.errors as { message?: string }[]
         toast.error(errors[0]?.message ?? "工作流校验失败")
@@ -309,7 +309,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     try {
       const workflowApi = requireBridgeDomain("workflow")
       trackWorkflowRunSubmit(def, params, true)
-      const forceResult = await workflowApi.runDefinition(def, params, true)
+      const forceResult = await workflowApi.operation.runDefinition(def, params, true)
       if ("errors" in forceResult) {
         const errors = forceResult.errors as Array<{ message?: string }>
         toast.error(errors[0]?.message ?? "运行失败：校验未通过")
@@ -397,7 +397,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
                   if (meta.loadError) void handleRawExport(meta.id, meta.name)
                   else void handleExport(meta.id)
                 }}
-                onInspectDelete={() => requireBridgeDomain("workflow").inspectDeletePackage(meta.id)}
+                onInspectDelete={() => requireBridgeDomain("workflow").operation.inspectDeletePackage(meta.id)}
                 onDelete={(cleanupImportedChildren) => void handleDelete(meta.id, cleanupImportedChildren)} />
             ))}
             {migrationDiagnostics.map((diagnostic) => (
@@ -546,7 +546,7 @@ function trackWorkflowRunSubmit(
     name: "workflow-list-run-submit",
     action: "submit",
     metadata: {
-      boundary: "renderer.workflow.list.run-submit",
+      boundary: "renderer.workflow.definition.list.run-submit",
       workflowId: def.id,
       source: "workflow-list",
       force,
@@ -563,7 +563,7 @@ function showRunFailure(
   error: unknown,
 ): void {
   logger.warn("Workflow list run failed.", {
-    boundary: "renderer.workflow.list.run",
+    boundary: "renderer.workflow.definition.list.run",
     workflowId: def.id,
     force,
     paramCount: Object.keys(params).length,

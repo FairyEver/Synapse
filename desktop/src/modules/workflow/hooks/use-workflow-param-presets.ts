@@ -20,7 +20,7 @@ interface PendingPresetList {
 }
 
 function requirePresetBridge() {
-  const bridge = window.synapse?.workflowParamPresets
+  const bridge = window.synapse?.workflow.paramPreset
   if (!bridge) throw new Error("Workflow 参数预设服务不可用")
   return bridge
 }
@@ -41,7 +41,7 @@ export function useWorkflowParamPresets({ enabled, workflowId }: UseWorkflowPara
       setLoading(false)
       return
     }
-    const bridge = window.synapse?.workflowParamPresets
+    const bridge = window.synapse?.workflow.paramPreset
     if (!bridge) {
       setPresets([])
       setLoading(false)

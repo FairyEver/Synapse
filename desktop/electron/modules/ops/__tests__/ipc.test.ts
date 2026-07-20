@@ -52,7 +52,7 @@ describe("opsIpcModule diagnostics", () => {
     }
     const harness = createHarness(diagnostics)
 
-    const result = await harness.invoke("synapse:ops:diagnostics:run", {
+    const result = await harness.invoke("synapse:app:ops:diagnostics:run", {
       projectId: "project-1",
     })
 
@@ -72,7 +72,7 @@ describe("opsIpcModule diagnostics", () => {
     }
     const harness = createHarness(diagnostics)
 
-    const result = await harness.invoke("synapse:ops:diagnostics:export-bundle", {
+    const result = await harness.invoke("synapse:app:ops:diagnostics:export_bundle", {
       report,
     })
 
@@ -90,7 +90,7 @@ describe("opsIpcModule diagnostics", () => {
       exportBundle: vi.fn(),
     })
 
-    const result = await harness.invoke("synapse:ops:ping", undefined)
+    const result = await harness.invoke("synapse:app:ops:operation:ping", undefined)
 
     expect(result).toEqual({
       ok: true,
@@ -117,7 +117,7 @@ describe("opsIpcModule diagnostics", () => {
       exportBundle: vi.fn(),
     }, { permissionGuard, auditSink })
 
-    await expect(harness.invoke("synapse:ops:open-log-directory", undefined))
+    await expect(harness.invoke("synapse:app:ops:operation:open_log_directory", undefined))
       .rejects
       .toThrow("打开日志目录失败：open failed")
 
@@ -167,7 +167,7 @@ describe("opsIpcModule diagnostics", () => {
       exportBundle: vi.fn(),
     }, { projectContainers })
 
-    const result = await harness.invoke("synapse:ops:compress:get", {
+    const result = await harness.invoke("synapse:app:ops:compress:get", {
       projectId: "repo-1",
     })
 
@@ -214,7 +214,7 @@ describe("opsIpcModule diagnostics", () => {
       exportBundle: vi.fn(),
     }, { projectContainers })
 
-    await expect(harness.invoke("synapse:ops:compress:get", {
+    await expect(harness.invoke("synapse:app:ops:compress:get", {
       projectId: "repo-1",
     })).rejects.toThrow("SDK failed for secret compression prompt")
 

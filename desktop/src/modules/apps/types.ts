@@ -66,7 +66,6 @@ export type SynapseSystemAppWindowMetadata = {
 
 export type SynapseSystemAppCapabilityMetadata = {
   readonly primaryMcpPrefix: `app_${string}`
-  readonly legacyMcpPrefixes?: readonly string[]
 }
 
 export type SynapseSystemAppDefinition = {

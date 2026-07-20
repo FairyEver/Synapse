@@ -284,7 +284,7 @@ export function SharedInstallerFlow({
           const content = await readInstallerSourceContent(flow.source)
           const placeholders = detectPlaceholders(content, { includeCodeBlocks: true })
           if (placeholders.length > 0) {
-            const list = await secretsBridge.list()
+            const list = await secretsBridge.item.list()
             setUserSecrets(list.secrets)
             setLegacyInitialValues(Object.fromEntries(placeholders.map((name) => [
               name,
@@ -305,7 +305,7 @@ export function SharedInstallerFlow({
           setDetectedPlaceholders(inspection.legacyPlaceholders)
 
           if (names.length > 0) {
-            const list = await secretsBridge.list()
+            const list = await secretsBridge.item.list()
             const envInitialValues = Object.fromEntries(inspection.declarations.map(({ name, defaultValue }) => [
               name,
               findValueByName(pendingSkillEnvValuesRef.current, name)
@@ -445,7 +445,7 @@ export function SharedInstallerFlow({
     setIsSavingVariables(true)
     try {
       for (const secret of secretsToSave) {
-        await secretsBridge.upsert(secret)
+        await secretsBridge.item.upsert(secret)
         savedCount += 1
       }
     } catch (saveError) {

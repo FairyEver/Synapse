@@ -47,27 +47,27 @@ describe("account state helpers", () => {
     expect(isAccountUnavailable(state)).toBe(true)
   })
 
-  it("exposes Drive site methods on the account bridge type", () => {
+  it("exposes Drive site methods on the Drive bridge type", () => {
     type DriveSiteBridgeMethods = Pick<
-      SynapseBridge["account"],
-      | "preflightDriveSite"
-      | "createDriveSite"
-      | "listDriveSites"
-      | "updateDriveSiteAccess"
-      | "disableDriveSite"
-      | "enableDriveSite"
-      | "deleteDriveSite"
-      | "republishDriveSite"
+      SynapseBridge["drive"]["site"],
+      | "preflight"
+      | "create"
+      | "list"
+      | "updateAccess"
+      | "disable"
+      | "enable"
+      | "delete"
+      | "republish"
     >
     const methodNames: Array<keyof DriveSiteBridgeMethods> = [
-      "preflightDriveSite",
-      "createDriveSite",
-      "listDriveSites",
-      "updateDriveSiteAccess",
-      "disableDriveSite",
-      "enableDriveSite",
-      "deleteDriveSite",
-      "republishDriveSite",
+      "preflight",
+      "create",
+      "list",
+      "updateAccess",
+      "disable",
+      "enable",
+      "delete",
+      "republish",
     ]
     expect(methodNames).toHaveLength(8)
   })

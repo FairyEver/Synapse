@@ -153,7 +153,7 @@ function resolveCreateSessionMode(
 export const sessionMethods: Record<string, IpcMethodDescriptor> = {
   status: {
     kind: "invoke",
-    channel: "synapse:agent:status",
+    operationId: "app.agent.operation.status",
     request: projectRequestSchema,
     response: statusSchema,
     handler: async (ctx, request: ProjectRequest) => {
@@ -166,7 +166,7 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
   },
   listSessions: {
     kind: "invoke",
-    channel: "synapse:agent:list-sessions",
+    operationId: "app.agent.operation.list_sessions",
     request: sessionsRequestSchema,
     response: z.array(sessionSummarySchema),
     handler: async (ctx, request: SessionsRequest) => {
@@ -177,7 +177,7 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
   },
   listAllSessions: {
     kind: "invoke",
-    channel: "synapse:agent:list-all-sessions",
+    operationId: "app.agent.operation.list_all_sessions",
     request: archivedSessionsRequestSchema,
     response: z.array(sessionSummarySchema),
     handler: async (ctx, request: z.infer<typeof archivedSessionsRequestSchema>) => {
@@ -204,7 +204,7 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
   },
   openConversation: {
     kind: "invoke",
-    channel: "synapse:agent:open-conversation",
+    operationId: "app.agent.operation.open_conversation",
     request: openConversationRequestSchema,
     response: openConversationResultSchema,
     handler: async (ctx, request: OpenConversationRequest): Promise<SynapseOpenAgentConversationResult> => {
@@ -245,7 +245,7 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
   },
   openConversationWindow: {
     kind: "invoke",
-    channel: "synapse:agent:open-conversation-window",
+    operationId: "app.agent.operation.open_conversation_window",
     request: openConversationWindowRequestSchema,
     response: openConversationWindowResultSchema,
     handler: async (ctx, request: OpenConversationWindowRequest) => {
@@ -255,7 +255,7 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
   },
   focusConversationWindow: {
     kind: "invoke",
-    channel: "synapse:agent:focus-conversation-window",
+    operationId: "app.agent.operation.focus_conversation_window",
     request: agentConversationTargetSchema,
     response: focusConversationWindowResultSchema,
     handler: async (ctx, request: AgentConversationTargetRequest) => {
@@ -265,7 +265,7 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
   },
   replaceConversationWindowTarget: {
     kind: "invoke",
-    channel: "synapse:agent:replace-conversation-window-target",
+    operationId: "app.agent.operation.replace_conversation_window_target",
     request: replaceConversationWindowTargetRequestSchema,
     response: replaceConversationWindowTargetResultSchema,
     handler: async (ctx, request: ReplaceConversationWindowTargetRequest) => {
@@ -275,7 +275,7 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
   },
   listDetachedConversationWindows: {
     kind: "invoke",
-    channel: "synapse:agent:list-detached-conversation-windows",
+    operationId: "app.agent.operation.list_detached_conversation_windows",
     request: z.object({}),
     response: z.array(detachedConversationSchema),
     handler: async (ctx) => {
@@ -285,7 +285,7 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
   },
   createSession: {
     kind: "invoke",
-    channel: "synapse:agent:create-session",
+    operationId: "app.agent.operation.create_session",
     request: createSessionRequestSchema,
     response: sessionSummarySchema,
     handler: async (ctx, request: CreateSessionRequest) => {
@@ -327,7 +327,7 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
   },
   switchSession: {
     kind: "invoke",
-    channel: "synapse:agent:switch-session",
+    operationId: "app.agent.operation.switch_session",
     request: switchSessionRequestSchema,
     response: sessionSummarySchema,
     handler: async (ctx, request: SwitchSessionRequest) => {
@@ -359,7 +359,7 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
   },
   deleteSession: {
     kind: "invoke",
-    channel: "synapse:agent:delete-session",
+    operationId: "app.agent.operation.delete_session",
     request: deleteSessionRequestSchema,
     response: deleteSessionResultSchema,
     handler: async (ctx, request: DeleteSessionRequest) => {
@@ -408,7 +408,7 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
   },
   renameSession: {
     kind: "invoke",
-    channel: "synapse:agent:rename-session",
+    operationId: "app.agent.operation.rename_session",
     request: renameSessionRequestSchema,
     response: renameSessionResultSchema,
     handler: async (ctx, request: RenameSessionRequest) => {

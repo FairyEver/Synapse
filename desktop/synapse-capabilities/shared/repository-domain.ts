@@ -1,8 +1,8 @@
 import type { CapabilityId } from "./naming"
 import {
-  buildPrimaryAndLegacyMcpToolActions,
-  withPrimaryAndLegacyMcpTools,
-} from "./mcp-aliases"
+  buildPrimaryMcpToolActions,
+  withPrimaryMcpTools,
+} from "./mcp-tool-names"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 const repositoryCapabilities: readonly CapabilityDefinition[] = [
@@ -19,13 +19,12 @@ export const REPOSITORY_DOMAIN: CapabilityDomainDefinition = {
   capabilities: repositoryCapabilities,
 }
 
-export const REPOSITORY_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAndLegacyMcpToolActions(
+export const REPOSITORY_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryMcpToolActions(
   repositoryCapabilities,
-  { legacyPrefix: "repository", primaryPrefix: "app_settings_repository" },
 )
 
 export function buildRepositoryTools(): McpToolDefinition[] {
-  return withPrimaryAndLegacyMcpTools([
+  return withPrimaryMcpTools([
     {
       name: "repository_item_list",
       description:
@@ -35,5 +34,5 @@ export function buildRepositoryTools(): McpToolDefinition[] {
         properties: {},
       },
     },
-  ], { legacyPrefix: "repository", primaryPrefix: "app_settings_repository" })
+  ], { sourcePrefix: "repository", primaryPrefix: "app_settings_repository" })
 }

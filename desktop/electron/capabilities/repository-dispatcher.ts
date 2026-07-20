@@ -33,7 +33,7 @@ export function createRepositoryCapabilityDispatcher(deps: RepositoryCapabilityD
       context: DispatchContext,
     ): Promise<DispatchResult> {
       switch (action) {
-        case "repository.item.list": {
+        case "app.settings.repository.item.list": {
           const security = repositoryAccessSecurity(deps, action, context)
           await authorizeRepositoryAccess(deps, security)
           try {

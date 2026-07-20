@@ -126,7 +126,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { harness, permissionGuard } = createHarness({ service: { createManaged } })
 
-    const result = await harness.invoke("synapse:knowledge-base:create-managed", {
+    const result = await harness.invoke("synapse:app:knowledge_base:operation:create_managed", {
       projectId: "kb-1",
       name: "Knowledge",
     }) as { projectPath: string; runtimePath?: string }
@@ -160,7 +160,7 @@ describe("knowledgeBaseIpcModule", () => {
     const createManaged = vi.fn().mockRejectedValue(new Error("failed with token=secret-token at /Users/liyang/private"))
     const { auditSink, harness } = createHarness({ service: { createManaged } })
 
-    await expect(harness.invoke("synapse:knowledge-base:create-managed", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:create_managed", {
       projectId: "kb-1",
       name: "Knowledge",
     })).rejects.toThrow("failed with token=secret-token at /Users/liyang/private")
@@ -194,7 +194,7 @@ describe("knowledgeBaseIpcModule", () => {
     const createManaged = vi.fn()
     const { harness } = createHarness({ migrationActive: true, service: { createManaged } })
 
-    await expect(harness.invoke("synapse:knowledge-base:create-managed", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:create_managed", {
       projectId: "kb-1",
       name: "Knowledge",
     })).rejects.toThrow("知识库存储迁移正在进行")
@@ -210,7 +210,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { auditSink, harness, permissionGuard } = createHarness({ service: { deleteManaged } })
 
-    const result = await harness.invoke("synapse:knowledge-base:delete-managed", {
+    const result = await harness.invoke("synapse:app:knowledge_base:operation:delete_managed", {
       projectId: "kb-1",
       runtimeId: "kb-1",
     })
@@ -243,7 +243,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { auditSink, harness, permissionGuard } = createHarness({ service: { deleteManaged } })
 
-    await harness.invoke("synapse:knowledge-base:delete-managed", {
+    await harness.invoke("synapse:app:knowledge_base:operation:delete_managed", {
       projectId: "project-1",
       runtimeId: "kb-victim",
     })
@@ -268,7 +268,7 @@ describe("knowledgeBaseIpcModule", () => {
     const deleteManaged = vi.fn()
     const { harness } = createHarness({ migrationActive: true, service: { deleteManaged } })
 
-    await expect(harness.invoke("synapse:knowledge-base:delete-managed", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:delete_managed", {
       projectId: "kb-1",
       runtimeId: "kb-1",
     })).rejects.toThrow("知识库存储迁移正在进行")
@@ -291,7 +291,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { harness, permissionGuard } = createHarness({ service: { addUrlSource } })
 
-    const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
+    const result = await harness.invoke("synapse:app:knowledge_base:operation:add_url_source", {
       projectId: "kb-1",
       targetDirectoryPath: "client-a",
       url: "https://example.com/article?token=secret-token",
@@ -342,7 +342,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { auditSink, harness, permissionGuard } = createHarness({ service: { addUrlSource } })
 
-    await harness.invoke("synapse:knowledge-base:add-url-source", {
+    await harness.invoke("synapse:app:knowledge_base:operation:add_url_source", {
       projectId: "kb-1",
       targetDirectoryPath: "client-a",
       url: "https://example.com/redirect-source?token=initial-secret",
@@ -385,7 +385,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { harness } = createHarness({ service: { addUrlSource } })
 
-    const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
+    const result = await harness.invoke("synapse:app:knowledge_base:operation:add_url_source", {
       projectId: "kb-1",
       url: "https://example.com/missing",
     }) as { skipped: Array<{ reason: string }> }
@@ -407,7 +407,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { harness, permissionGuard } = createHarness({ service: { addUrlSource } })
 
-    const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
+    const result = await harness.invoke("synapse:app:knowledge_base:operation:add_url_source", {
       projectId: "kb-1",
       url: "file:///tmp/source.html",
     }) as { skipped: Array<{ reason: string }> }
@@ -436,7 +436,7 @@ describe("knowledgeBaseIpcModule", () => {
       ],
     })
 
-    await expect(harness.invoke("synapse:knowledge-base:add-url-source", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:add_url_source", {
       projectId: "kb-1",
       url: "https://example.com/article",
     })).rejects.toThrow("Write denied")
@@ -500,7 +500,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { harness, permissionGuard } = createHarness({ service })
 
-    const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
+    const result = await harness.invoke("synapse:app:knowledge_base:operation:add_url_source", {
       projectId: "kb-1",
       url: "https://example.com/article",
     }) as { uploaded: Array<{ relativePath: string }> }
@@ -523,7 +523,7 @@ describe("knowledgeBaseIpcModule", () => {
   it("opens the source manager window through guarded read permission", async () => {
     const { harness, migrationService, permissionGuard } = createHarness({ service: {} })
 
-    await harness.invoke("synapse:knowledge-base:open-source-manager", {
+    await harness.invoke("synapse:app:knowledge_base:operation:open_source_manager", {
       projectId: "project-1",
       projectName: "知识库001",
     })
@@ -551,7 +551,7 @@ describe("knowledgeBaseIpcModule", () => {
       unavailableReason: "missing volume",
     })
 
-    await expect(harness.invoke("synapse:knowledge-base:open-source-manager", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:open_source_manager", {
       projectId: "project-1",
       projectName: "知识库001",
     })).rejects.toThrow("知识库存储位置不可用。请在设置中重新检测。")
@@ -563,7 +563,7 @@ describe("knowledgeBaseIpcModule", () => {
     const { auditSink, harness, migrationService, permissionGuard } = createHarness({ service: {} })
     migrationService.startMigration.mockResolvedValue({ status: "completed" })
 
-    await harness.invoke("synapse:knowledge-base:start-storage-migration", {
+    await harness.invoke("synapse:app:knowledge_base:operation:start_storage_migration", {
       target: { mode: "custom", rootPath: "/Volumes/Data/SynapseData" },
     })
 
@@ -594,7 +594,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     migrationService.startMigration.mockResolvedValue({ status: "completed" })
 
-    await harness.invoke("synapse:knowledge-base:start-storage-migration", {
+    await harness.invoke("synapse:app:knowledge_base:operation:start_storage_migration", {
       target: { mode: "default" },
     })
 
@@ -646,7 +646,7 @@ describe("knowledgeBaseIpcModule", () => {
       available: true,
     })
 
-    await expect(harness.invoke("synapse:knowledge-base:get-storage-status", undefined))
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:get_storage_status", undefined))
       .resolves.toMatchObject({
         mode: "default",
         available: true,
@@ -666,7 +666,7 @@ describe("knowledgeBaseIpcModule", () => {
       message: "正在复制知识库",
     })
 
-    await expect(harness.invoke("synapse:knowledge-base:get-storage-migration-state", undefined))
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:get_storage_migration_state", undefined))
       .resolves.toMatchObject({
         active: true,
         phase: "copying",
@@ -688,7 +688,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { harness, permissionGuard } = createHarness({ service: { listRawDirectory } })
 
-    const result = await harness.invoke("synapse:knowledge-base:list-raw-directory", {
+    const result = await harness.invoke("synapse:app:knowledge_base:operation:list_raw_directory", {
       projectId: "kb-1",
       directoryPath: "client-a",
     }) as { entries: unknown[] }
@@ -710,7 +710,7 @@ describe("knowledgeBaseIpcModule", () => {
     const listRawDirectory = vi.fn().mockResolvedValue({ projectId: "kb-1", directoryPath: "", entries: [] })
     const { harness } = createHarness({ migrationActive: true, service: { listRawDirectory } })
 
-    await expect(harness.invoke("synapse:knowledge-base:list-raw-directory", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:list_raw_directory", {
       projectId: "kb-1",
       directoryPath: "",
     })).rejects.toThrow("知识库存储迁移正在进行")
@@ -732,7 +732,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { harness, permissionGuard } = createHarness({ service: { uploadRawFiles } })
 
-    await harness.invoke("synapse:knowledge-base:upload-raw-files", {
+    await harness.invoke("synapse:app:knowledge_base:operation:upload_raw_files", {
       projectId: "kb-1",
       targetDirectoryPath: "client-a",
       filePaths: ["/tmp/brief.md"],
@@ -765,7 +765,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { harness } = createHarness({ service: { uploadRawFiles } })
 
-    await expect(harness.invoke("synapse:knowledge-base:upload-raw-files", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:upload_raw_files", {
       projectId: "kb-1",
       targetDirectoryPath: "",
       filePaths: ["/tmp/CON.txt"],
@@ -784,7 +784,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { harness, permissionGuard } = createHarness({ service: { uploadRawFiles } })
 
-    await harness.invoke("synapse:knowledge-base:select-and-upload-raw-files", {
+    await harness.invoke("synapse:app:knowledge_base:operation:select_and_upload_raw_files", {
       projectId: "kb-1",
       targetDirectoryPath: "client-a",
     })
@@ -826,7 +826,7 @@ describe("knowledgeBaseIpcModule", () => {
       unavailableReason: "missing volume",
     })
 
-    await expect(harness.invoke("synapse:knowledge-base:select-and-upload-raw-files", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:select_and_upload_raw_files", {
       projectId: "kb-1",
       targetDirectoryPath: "client-a",
     })).rejects.toThrow("知识库存储位置不可用。请在设置中重新检测。")
@@ -844,7 +844,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { harness, migrationService, permissionGuard } = createHarness({ migrationActive: true, service: { uploadRawFiles } })
 
-    await expect(harness.invoke("synapse:knowledge-base:select-and-upload-raw-files", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:select_and_upload_raw_files", {
       projectId: "kb-1",
       targetDirectoryPath: "client-a",
     })).rejects.toThrow("知识库存储迁移正在进行，请稍后再试。")
@@ -866,7 +866,7 @@ describe("knowledgeBaseIpcModule", () => {
       service: { uploadRawFiles },
     })
 
-    await expect(harness.invoke("synapse:knowledge-base:upload-raw-files", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:upload_raw_files", {
       projectId: "kb-1",
       targetDirectoryPath: "client-a",
       filePaths: ["/tmp/brief.md"],
@@ -895,7 +895,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
     const { harness, permissionGuard } = createHarness({ migrationActive: true, service: { uploadRawFiles } })
 
-    await expect(harness.invoke("synapse:knowledge-base:upload-raw-files", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:upload_raw_files", {
       projectId: "kb-1",
       targetDirectoryPath: "client-a",
       filePaths: ["/tmp/brief.md"],
@@ -909,7 +909,7 @@ describe("knowledgeBaseIpcModule", () => {
     const uploadRawItems = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
     const { harness, permissionGuard } = createHarness({ service: { uploadRawItems } })
 
-    await harness.invoke("synapse:knowledge-base:upload-raw-items", {
+    await harness.invoke("synapse:app:knowledge_base:operation:upload_raw_items", {
       projectId: "kb-1",
       targetDirectoryPath: "client-a",
       itemPaths: ["/tmp/folder"],
@@ -939,7 +939,7 @@ describe("knowledgeBaseIpcModule", () => {
     const uploadRawItems = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
     const { harness } = createHarness({ service: { uploadRawItems } })
 
-    await harness.invoke("synapse:knowledge-base:select-and-upload-raw-directory", {
+    await harness.invoke("synapse:app:knowledge_base:operation:select_and_upload_raw_directory", {
       projectId: "kb-1",
       targetDirectoryPath: "client-a",
     })
@@ -965,7 +965,7 @@ describe("knowledgeBaseIpcModule", () => {
       unavailableReason: "missing volume",
     })
 
-    await expect(harness.invoke("synapse:knowledge-base:select-and-upload-raw-directory", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:select_and_upload_raw_directory", {
       projectId: "kb-1",
       targetDirectoryPath: "client-a",
     })).rejects.toThrow("知识库存储位置不可用。请在设置中重新检测。")
@@ -979,7 +979,7 @@ describe("knowledgeBaseIpcModule", () => {
     const uploadRawItems = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
     const { harness, migrationService, permissionGuard } = createHarness({ migrationActive: true, service: { uploadRawItems } })
 
-    await expect(harness.invoke("synapse:knowledge-base:select-and-upload-raw-directory", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:select_and_upload_raw_directory", {
       projectId: "kb-1",
       targetDirectoryPath: "client-a",
     })).rejects.toThrow("知识库存储迁移正在进行，请稍后再试。")
@@ -995,7 +995,7 @@ describe("knowledgeBaseIpcModule", () => {
     const exportRawEntries = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
     const { harness, permissionGuard } = createHarness({ service: { exportRawEntries } })
 
-    await harness.invoke("synapse:knowledge-base:export-raw-entries", {
+    await harness.invoke("synapse:app:knowledge_base:operation:export_raw_entries", {
       projectId: "kb-1",
       relativePaths: ["brief.md", "folder"],
     })
@@ -1027,7 +1027,7 @@ describe("knowledgeBaseIpcModule", () => {
     const exportRawEntries = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
     const { harness } = createHarness({ service: { exportRawEntries } })
 
-    await harness.invoke("synapse:knowledge-base:export-raw-entries", {
+    await harness.invoke("synapse:app:knowledge_base:operation:export_raw_entries", {
       projectId: "kb-1",
       relativePaths: ["brief.md"],
     })
@@ -1051,7 +1051,7 @@ describe("knowledgeBaseIpcModule", () => {
       unavailableReason: "missing volume",
     })
 
-    await expect(harness.invoke("synapse:knowledge-base:export-raw-entries", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:export_raw_entries", {
       projectId: "kb-1",
       relativePaths: ["brief.md"],
     })).rejects.toThrow("知识库存储位置不可用。请在设置中重新检测。")
@@ -1067,7 +1067,7 @@ describe("knowledgeBaseIpcModule", () => {
     const exportRawEntries = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
     const { harness } = createHarness({ service: { exportRawEntries } })
 
-    await expect(harness.invoke("synapse:knowledge-base:export-raw-entries", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:export_raw_entries", {
       projectId: "kb-1",
       relativePaths: ["brief.md"],
     })).rejects.toThrow("知识库存储迁移正在进行")
@@ -1080,7 +1080,7 @@ describe("knowledgeBaseIpcModule", () => {
     const exportRawEntries = vi.fn()
     const { harness } = createHarness({ service: { exportRawEntries } })
 
-    const result = await harness.invoke("synapse:knowledge-base:export-raw-entries", {
+    const result = await harness.invoke("synapse:app:knowledge_base:operation:export_raw_entries", {
       projectId: "kb-1",
       relativePaths: ["brief.md"],
     })
@@ -1093,7 +1093,7 @@ describe("knowledgeBaseIpcModule", () => {
     const exportRawEntries = vi.fn()
     const { harness } = createHarness({ service: { exportRawEntries } })
 
-    await expect(harness.invoke("synapse:knowledge-base:export-raw-entries", {
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:export_raw_entries", {
       projectId: "kb-1",
       relativePaths: Array.from(
         { length: KNOWLEDGE_BASE_RAW_EXPORT_MAX_ENTRIES + 1 },
@@ -1114,22 +1114,22 @@ describe("knowledgeBaseIpcModule", () => {
       service: { createRawFolder, renameRawEntry, moveRawEntries, trashRawEntries },
     })
 
-    await harness.invoke("synapse:knowledge-base:create-raw-folder", {
+    await harness.invoke("synapse:app:knowledge_base:operation:create_raw_folder", {
       projectId: "kb-1",
       parentDirectoryPath: "",
       name: "client-a",
     })
-    await harness.invoke("synapse:knowledge-base:rename-raw-entry", {
+    await harness.invoke("synapse:app:knowledge_base:operation:rename_raw_entry", {
       projectId: "kb-1",
       relativePath: "brief.md",
       newName: "brief-renamed.md",
     })
-    await harness.invoke("synapse:knowledge-base:move-raw-entries", {
+    await harness.invoke("synapse:app:knowledge_base:operation:move_raw_entries", {
       projectId: "kb-1",
       relativePaths: ["brief-renamed.md"],
       targetDirectoryPath: "client-a",
     })
-    await harness.invoke("synapse:knowledge-base:trash-raw-entries", {
+    await harness.invoke("synapse:app:knowledge_base:operation:trash_raw_entries", {
       projectId: "kb-1",
       relativePaths: ["client-a/brief-renamed.md"],
     })

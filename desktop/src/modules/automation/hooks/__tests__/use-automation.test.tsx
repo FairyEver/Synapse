@@ -19,8 +19,10 @@ const rendererLogger = vi.hoisted(() => ({
 
 const bridge = vi.hoisted(() => ({
   automation: {
-    listItems: vi.fn(),
-    onChanged: vi.fn(),
+    item: {
+      list: vi.fn(),
+      onChanged: vi.fn(),
+    },
   },
 }))
 
@@ -43,8 +45,8 @@ afterEach(() => {
   roots = []
   document.body.innerHTML = ""
   vi.clearAllMocks()
-  bridge.automation.listItems.mockReset()
-  bridge.automation.onChanged.mockReset()
+  bridge.automation.item.list.mockReset()
+  bridge.automation.item.onChanged.mockReset()
 })
 
 describe("useAutomationItems", () => {
@@ -58,10 +60,10 @@ describe("useAutomationItems", () => {
     })
     let listener: (() => void) | null = null
     const snapshots: Array<ReturnType<typeof useAutomationItems>> = []
-    bridge.automation.listItems
+    bridge.automation.item.list
       .mockResolvedValueOnce([initialItem])
       .mockResolvedValueOnce([updatedItem])
-    bridge.automation.onChanged.mockImplementation((nextListener) => {
+    bridge.automation.item.onChanged.mockImplementation((nextListener) => {
       listener = nextListener
       return vi.fn()
     })
@@ -82,14 +84,14 @@ describe("useAutomationItems", () => {
       await Promise.resolve()
     })
 
-    expect(bridge.automation.listItems).toHaveBeenCalledTimes(2)
+    expect(bridge.automation.item.list).toHaveBeenCalledTimes(2)
     expect(snapshots.at(-1)?.items).toEqual([updatedItem])
   })
 
   it("logs list refresh failures without exposing backend messages", async () => {
     const rawError = "secret automation database failure"
     const snapshots: Array<ReturnType<typeof useAutomationItems>> = []
-    bridge.automation.listItems.mockRejectedValue(new Error(rawError))
+    bridge.automation.item.list.mockRejectedValue(new Error(rawError))
 
     const container = document.createElement("div")
     document.body.appendChild(container)

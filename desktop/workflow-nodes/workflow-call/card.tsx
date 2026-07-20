@@ -33,7 +33,7 @@ export function WorkflowCallNodeCard({ config, name, selected, status, progressL
     const workflowApi = window.synapse?.workflow
     if (!workflowApi) return
     let cancelled = false
-    void workflowApi.get(workflowId)
+    void workflowApi.definition.get(workflowId)
       .then((workflow) => {
         if (cancelled) return
         setWorkflowName(workflow?.name?.trim() || null)

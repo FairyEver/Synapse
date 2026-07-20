@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
 import type { WindowManager } from "../../../electron/runtime/window"
+import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 import type { TerminalService } from "./service"
 import {
   terminalCreateGroupCommandInputSchema,
@@ -54,13 +55,13 @@ function wireTerminalEvents(
 
   const windowManager = ctx.resolve<WindowManager>("core.window-manager")
   service.events.on("data", (payload) => {
-    windowManager.broadcast(terminalIpcModule.events.data.channel, payload)
+    windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.data.operationId), payload)
   })
   service.events.on("sessionChanged", (payload) => {
-    windowManager.broadcast(terminalIpcModule.events.sessionChanged.channel, payload)
+    windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.sessionChanged.operationId), payload)
   })
   service.events.on("sessionDeleted", (payload) => {
-    windowManager.broadcast(terminalIpcModule.events.sessionDeleted.channel, payload)
+    windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.sessionDeleted.operationId), payload)
   })
   terminalEventWiredServices.add(service)
 }
@@ -69,14 +70,14 @@ export const terminalIpcModule: IpcModule = {
   id: "terminal",
   methods: {
     listGroups: {
-      channel: "synapse:terminal:group:list",
+      operationId: "app.terminal.group.list",
       kind: "invoke",
       request: z.void(),
       response: z.array(terminalGroupSchema),
       handler: (ctx) => resolveTerminalService(ctx).listGroups(),
     },
     createGroup: {
-      channel: "synapse:terminal:group:create",
+      operationId: "app.terminal.group.create",
       kind: "invoke",
       request: terminalCreateGroupInputSchema,
       response: terminalGroupSchema,
@@ -84,7 +85,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).createGroup(request),
     },
     renameGroup: {
-      channel: "synapse:terminal:group:rename",
+      operationId: "app.terminal.group.rename",
       kind: "invoke",
       request: terminalRenameGroupInputSchema,
       response: terminalGroupSchema,
@@ -92,7 +93,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).renameGroup(request),
     },
     updateGroupSettings: {
-      channel: "synapse:terminal:group:update-settings",
+      operationId: "app.terminal.group.update_settings",
       kind: "invoke",
       request: terminalUpdateGroupSettingsInputSchema,
       response: terminalGroupSchema,
@@ -100,7 +101,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).updateGroupSettings(request),
     },
     createGroupCommand: {
-      channel: "synapse:terminal:group-command:create",
+      operationId: "app.terminal.group_command.create",
       kind: "invoke",
       request: terminalCreateGroupCommandInputSchema,
       response: terminalGroupCommandSchema,
@@ -108,7 +109,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).createGroupCommand(request),
     },
     updateGroupCommand: {
-      channel: "synapse:terminal:group-command:update",
+      operationId: "app.terminal.group_command.update",
       kind: "invoke",
       request: terminalUpdateGroupCommandInputSchema,
       response: terminalGroupCommandSchema,
@@ -116,7 +117,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).updateGroupCommand(request),
     },
     deleteGroupCommand: {
-      channel: "synapse:terminal:group-command:delete",
+      operationId: "app.terminal.group_command.delete",
       kind: "invoke",
       request: terminalDeleteGroupCommandInputSchema,
       response: z.void(),
@@ -124,7 +125,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).deleteGroupCommand(request),
     },
     launchGroupCommand: {
-      channel: "synapse:terminal:group-command:launch",
+      operationId: "app.terminal.group_command.launch",
       kind: "invoke",
       request: terminalLaunchGroupCommandInputSchema,
       response: terminalSessionSchema,
@@ -132,7 +133,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).launchGroupCommand(request),
     },
     chooseDefaultCwd: {
-      channel: "synapse:terminal:group:choose-default-cwd",
+      operationId: "app.terminal.group.choose_default_cwd",
       kind: "invoke",
       request: z.void().optional(),
       response: z.string().nullable(),
@@ -149,7 +150,7 @@ export const terminalIpcModule: IpcModule = {
       },
     },
     deleteGroup: {
-      channel: "synapse:terminal:group:delete",
+      operationId: "app.terminal.group.delete",
       kind: "invoke",
       request: terminalDeleteGroupInputSchema,
       response: z.void(),
@@ -157,14 +158,14 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).deleteGroup(request),
     },
     listSessions: {
-      channel: "synapse:terminal:session:list",
+      operationId: "app.terminal.session.list",
       kind: "invoke",
       request: z.void(),
       response: z.array(terminalSessionSchema),
       handler: (ctx) => resolveTerminalService(ctx).listSessions(),
     },
     createSession: {
-      channel: "synapse:terminal:session:create",
+      operationId: "app.terminal.session.create",
       kind: "invoke",
       request: terminalCreateSessionInputSchema,
       response: terminalSessionSchema,
@@ -172,7 +173,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).createSession(request),
     },
     getSession: {
-      channel: "synapse:terminal:session:get",
+      operationId: "app.terminal.session.get",
       kind: "invoke",
       request: terminalSessionIdInputSchema,
       response: terminalSessionSchema,
@@ -180,7 +181,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).getSession(request),
     },
     readSession: {
-      channel: "synapse:terminal:session:read",
+      operationId: "app.terminal.session.read",
       kind: "invoke",
       request: terminalReadSessionInputSchema,
       response: terminalReadSessionResultSchema,
@@ -188,7 +189,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).readSession(request),
     },
     renameSession: {
-      channel: "synapse:terminal:session:rename",
+      operationId: "app.terminal.session.rename",
       kind: "invoke",
       request: terminalRenameSessionInputSchema,
       response: terminalSessionSchema,
@@ -196,7 +197,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).renameSession(request),
     },
     writeSession: {
-      channel: "synapse:terminal:session:write",
+      operationId: "app.terminal.session.write",
       kind: "invoke",
       request: terminalWriteSessionInputSchema,
       response: z.void(),
@@ -204,7 +205,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).writeSession(request),
     },
     resizeSession: {
-      channel: "synapse:terminal:session:resize",
+      operationId: "app.terminal.session.resize",
       kind: "invoke",
       request: terminalResizeSessionInputSchema,
       response: z.void(),
@@ -212,7 +213,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).resizeSession(request),
     },
     deleteSession: {
-      channel: "synapse:terminal:session:delete",
+      operationId: "app.terminal.session.delete",
       kind: "invoke",
       request: terminalDeleteSessionInputSchema,
       response: z.void(),
@@ -220,7 +221,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).deleteSession(request),
     },
     stopSession: {
-      channel: "synapse:terminal:session:stop",
+      operationId: "app.terminal.session.stop",
       kind: "invoke",
       request: terminalStopSessionInputSchema,
       response: z.void(),
@@ -228,7 +229,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).stopSession(request),
     },
     runStartupCommand: {
-      channel: "synapse:terminal:session:run-startup-command",
+      operationId: "app.terminal.session.run_startup_command",
       kind: "invoke",
       request: terminalRunStartupCommandInputSchema,
       response: z.void(),
@@ -238,17 +239,17 @@ export const terminalIpcModule: IpcModule = {
   },
   events: {
     data: {
-      channel: "synapse:terminal:data",
+      operationId: "app.terminal.operation.data",
       kind: "event",
       payload: terminalDataEventPayloadSchema,
     },
     sessionChanged: {
-      channel: "synapse:terminal:session-changed",
+      operationId: "app.terminal.operation.session_changed",
       kind: "event",
       payload: terminalSessionSchema,
     },
     sessionDeleted: {
-      channel: "synapse:terminal:session-deleted",
+      operationId: "app.terminal.operation.session_deleted",
       kind: "event",
       payload: terminalSessionDeletedEventPayloadSchema,
     },

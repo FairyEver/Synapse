@@ -51,7 +51,7 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
     setError(null)
     void (async () => {
       try {
-        const data = await window.synapse?.workflow.runHistory(workflowId)
+        const data = await window.synapse?.workflow.run.list(workflowId)
         if (gen !== loadGenRef.current) return
         if (!data) {
           // IPC bridge unavailable — treat as error, not empty
@@ -81,7 +81,7 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
 
   useEffect(() => {
     if (!open || !workflowId) return
-    const unsubscribe = window.synapse?.workflow.onEvent?.((event) => {
+    const unsubscribe = window.synapse?.workflow.operation.onEvent?.((event) => {
       if (isWorkflowTerminalEvent(event, workflowId)) load()
     })
     return () => { unsubscribe?.() }
@@ -111,7 +111,7 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
       },
     })
     try {
-      await window.synapse?.workflow.openRunner(workflowId, runId)
+      await window.synapse?.workflow.operation.openRunner(workflowId, runId)
       onClose()
     } catch (err) {
       logger.warn("Workflow runner open failed from run history.", {

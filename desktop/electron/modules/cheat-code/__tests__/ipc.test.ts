@@ -30,7 +30,7 @@ describe("cheatCodeIpcModule", () => {
   it("returns canonical states", async () => {
     const harness = createHarness()
 
-    await expect(harness.invoke("synapse:cheat-code:states:get", {
+    await expect(harness.invoke("synapse:app:cheat_code:states:get", {
       names: ["settings:test"],
     })).resolves.toEqual({ "settings:test": false })
 
@@ -44,11 +44,11 @@ describe("cheatCodeIpcModule", () => {
   it("sets and toggles state", async () => {
     const harness = createHarness()
 
-    await expect(harness.invoke("synapse:cheat-code:state:set", {
+    await expect(harness.invoke("synapse:app:cheat_code:state:set", {
       active: true,
       name: "settings:test",
     })).resolves.toEqual({ active: true, name: "settings:test" })
-    await expect(harness.invoke("synapse:cheat-code:state:toggle", {
+    await expect(harness.invoke("synapse:app:cheat_code:state:toggle", {
       name: "settings:test",
     })).resolves.toEqual({ active: true, name: "settings:test" })
 

@@ -41,6 +41,7 @@ import {
   buildDriveTools,
 } from "./drive-domain"
 import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
+import { assertCanonicalCapabilityId } from "./naming"
 
 export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
   APP_DOMAIN,
@@ -53,6 +54,12 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
   CONTENT_DOMAIN,
   DRIVE_DOMAIN,
 ]
+
+for (const domain of CAPABILITY_DOMAINS) {
+  for (const capability of domain.capabilities) {
+    assertCanonicalCapabilityId(capability.id)
+  }
+}
 
 export const MCP_TOOL_ACTIONS: Record<string, string> = {
   ...APP_MCP_TOOL_ACTIONS,

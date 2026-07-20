@@ -19,13 +19,13 @@ describe("Agent personas public IPC contract", () => {
   it("manages user personas through cloud-backed public channels", async () => {
     const harness = createBlackBoxHarness()
 
-    await expect(harness.invoke("synapse:agent-personas:list", undefined))
+    await expect(harness.invoke("synapse:app:agent_personas:operation:list", undefined))
       .resolves.toMatchObject({
         status: "online",
         items: [{ id: builtinId, source: "builtin", readonly: true }],
       })
 
-    const created = await harness.invoke("synapse:agent-personas:create", {
+    const created = await harness.invoke("synapse:app:agent_personas:operation:create", {
       name: "  产品顾问  ",
       description: "  整理产品判断。  ",
       systemPrompt: "  你是产品顾问。  ",
@@ -41,7 +41,7 @@ describe("Agent personas public IPC contract", () => {
       readonly: false,
     })
 
-    await expect(harness.invoke("synapse:agent-personas:list", undefined))
+    await expect(harness.invoke("synapse:app:agent_personas:operation:list", undefined))
       .resolves.toMatchObject({
         status: "online",
         items: [
@@ -50,7 +50,7 @@ describe("Agent personas public IPC contract", () => {
         ],
       })
 
-    await expect(harness.invoke("synapse:agent-personas:update", {
+    await expect(harness.invoke("synapse:app:agent_personas:operation:update", {
       id: created.id,
       name: "产品教练",
       description: "整理产品策略。",
@@ -62,9 +62,9 @@ describe("Agent personas public IPC contract", () => {
       providerModel: null,
     })
 
-    await expect(harness.invoke("synapse:agent-personas:delete", { id: created.id }))
+    await expect(harness.invoke("synapse:app:agent_personas:operation:delete", { id: created.id }))
       .resolves.toBeUndefined()
-    await expect(harness.invoke("synapse:agent-personas:list", undefined))
+    await expect(harness.invoke("synapse:app:agent_personas:operation:list", undefined))
       .resolves.toMatchObject({
         status: "online",
         items: [{ id: builtinId, source: "builtin", readonly: true }],
@@ -74,12 +74,12 @@ describe("Agent personas public IPC contract", () => {
   it("rejects invalid public payloads at the IPC boundary", async () => {
     const harness = createBlackBoxHarness()
 
-    await expect(harness.invoke("synapse:agent-personas:create", {
+    await expect(harness.invoke("synapse:app:agent_personas:operation:create", {
       name: "产品顾问",
       description: "整理产品判断。",
     })).rejects.toBeInstanceOf(IpcValidationError)
 
-    await expect(harness.invoke("synapse:agent-personas:create", {
+    await expect(harness.invoke("synapse:app:agent_personas:operation:create", {
       name: "产品顾问",
       description: "整理产品判断。",
       systemPrompt: "你是产品顾问。",
@@ -90,7 +90,7 @@ describe("Agent personas public IPC contract", () => {
   it("relies on remote authorization for built-in mutations", async () => {
     const harness = createBlackBoxHarness()
 
-    await expect(harness.invoke("synapse:agent-personas:update", {
+    await expect(harness.invoke("synapse:app:agent_personas:operation:update", {
       id: builtinId,
       name: "中英翻译",
       description: "修改描述。",
@@ -98,7 +98,7 @@ describe("Agent personas public IPC contract", () => {
       providerModel: null,
     })).rejects.toThrow("内置智能体不可编辑")
 
-    await expect(harness.invoke("synapse:agent-personas:delete", {
+    await expect(harness.invoke("synapse:app:agent_personas:operation:delete", {
       id: builtinId,
     })).rejects.toThrow("内置智能体不可删除")
   })
@@ -106,7 +106,7 @@ describe("Agent personas public IPC contract", () => {
   it("allows built-in model updates through the dedicated public channel", async () => {
     const harness = createBlackBoxHarness()
 
-    await expect(harness.invoke("synapse:agent-personas:builtin-model:update", {
+    await expect(harness.invoke("synapse:app:agent_personas:builtin_model:update", {
       id: builtinId,
       providerModel: { providerId: "claude", modelTier: "sonnet" },
     })).resolves.toMatchObject({
@@ -115,7 +115,7 @@ describe("Agent personas public IPC contract", () => {
       providerModel: { providerId: "claude", modelTier: "sonnet" },
     })
 
-    await expect(harness.invoke("synapse:agent-personas:list", undefined))
+    await expect(harness.invoke("synapse:app:agent_personas:operation:list", undefined))
       .resolves.toMatchObject({
         items: [{
           id: builtinId,
@@ -128,7 +128,7 @@ describe("Agent personas public IPC contract", () => {
   it("broadcasts changed events after public mutations", async () => {
     const harness = createBlackBoxHarness()
 
-    await harness.invoke("synapse:agent-personas:create", {
+    await harness.invoke("synapse:app:agent_personas:operation:create", {
       name: "产品顾问",
       description: "整理产品判断。",
       systemPrompt: "你是产品顾问。",
@@ -136,7 +136,7 @@ describe("Agent personas public IPC contract", () => {
     })
 
     expect(harness.broadcast).toHaveBeenCalledWith(
-      "synapse:agent-personas:changed",
+      "synapse:app:agent_personas:operation:changed",
       {
         result: expect.objectContaining({
           status: "online",

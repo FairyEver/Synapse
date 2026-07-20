@@ -2,6 +2,7 @@ import { z } from "zod"
 
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
 import type { WindowManager } from "../../../electron/runtime/window"
+import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 import type { QuickInputService } from "./service"
 import {
   quickInputChangedEventSchema,
@@ -27,7 +28,7 @@ function wireQuickInputEvents(
 
   const windowManager = ctx.resolve<WindowManager>("core.window-manager")
   service.events.on("changed", (payload) => {
-    windowManager.broadcast(quickInputIpcModule.events.changed.channel, payload)
+    windowManager.broadcast(ipcOperationIdToChannel(quickInputIpcModule.events.changed.operationId), payload)
   })
   quickInputEventWiredServices.add(service)
 }
@@ -36,14 +37,14 @@ export const quickInputIpcModule: IpcModule = {
   id: "quick-input",
   methods: {
     list: {
-      channel: "synapse:quick-input:list",
+      operationId: "app.quick_input.item.list",
       kind: "invoke",
       request: z.void(),
       response: z.array(quickInputItemSchema),
       handler: (ctx) => resolveQuickInputService(ctx).list(),
     },
     create: {
-      channel: "synapse:quick-input:create",
+      operationId: "app.quick_input.item.create",
       kind: "invoke",
       request: quickInputCreateInputSchema,
       response: quickInputItemSchema,
@@ -51,7 +52,7 @@ export const quickInputIpcModule: IpcModule = {
         resolveQuickInputService(ctx).create(request),
     },
     update: {
-      channel: "synapse:quick-input:update",
+      operationId: "app.quick_input.item.update",
       kind: "invoke",
       request: quickInputUpdateInputSchema,
       response: quickInputItemSchema,
@@ -59,7 +60,7 @@ export const quickInputIpcModule: IpcModule = {
         resolveQuickInputService(ctx).update(request),
     },
     delete: {
-      channel: "synapse:quick-input:delete",
+      operationId: "app.quick_input.item.delete",
       kind: "invoke",
       request: quickInputIdInputSchema,
       response: z.void(),
@@ -69,7 +70,7 @@ export const quickInputIpcModule: IpcModule = {
   },
   events: {
     changed: {
-      channel: "synapse:quick-input:changed",
+      operationId: "app.quick_input.item.changed",
       kind: "event",
       payload: quickInputChangedEventSchema,
     },

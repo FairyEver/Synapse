@@ -33,7 +33,7 @@ describe("editorCopyIpcModule", () => {
     const harness = createHarness()
     const sourcePath = "/Users/ada/private-project/.cursor/rules/review-rule.mdc"
 
-    await expect(harness.invoke("synapse:editor-copy:copy", {
+    await expect(harness.invoke("synapse:app:editor_copy:operation:copy", {
       source: {
         editorId: "cursor",
         itemName: "review-rule",

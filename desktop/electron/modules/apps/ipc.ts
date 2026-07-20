@@ -66,7 +66,7 @@ export const appsIpcModule: IpcModule = {
   id: "apps",
   methods: {
     openSystemApp: {
-      channel: "synapse:apps:open-system-app",
+      operationId: "app.apps.system_app.open",
       kind: "invoke",
       request: openSystemAppRequestSchema,
       response: z.void(),

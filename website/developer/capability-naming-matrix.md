@@ -2,108 +2,114 @@
 
 <!-- Sources: docs/reference/capability-naming-matrix.md; desktop/synapse-capabilities/shared/registry.ts; desktop/synapse-capabilities/shared/naming.ts -->
 
-本页列出当前公开的 Synapse MCP 能力。规范能力 ID 使用 `<domain>.<resource>.<action>`，本地 HTTP API 使用相同 ID 作为顶层 `action`。
+本页列出当前公开的 Synapse MCP 能力。规范能力 ID 使用 `app.<namespace>.<resource>.<action>`，本地 HTTP API 使用相同 ID 作为顶层 `action`。MCP 只公开当前的 `app_*` 名称；下列旧前缀不再作为别名，继续调用会返回 `Unknown tool`。
+
+| 旧 MCP 前缀 | 新 MCP 前缀 | 已移除工具数 |
+| --- | --- | ---: |
+| `database_*` | `app_database_*` | 30 |
+| `model_price_*` | `app_model_price_*` | 11 |
+| `repository_*` | `app_settings_repository_*` | 1 |
+| `automation_*` | `app_automation_*` | 14 |
+| `workflow_*` | `app_workflow_*` | 19 |
+| `content_*` | `app_resource_repository_*` | 16 |
+| `drive_*` | `app_drive_*` | 48 |
+
+前缀之后的部分不变。例如：`database_table_list` 改为 `app_database_table_list`。
 
 | 能力 ID | MCP 工具 | HTTP action | 服务方法 |
 | --- | --- | --- | --- |
-| `database.table.list` | `database_table_list` | `database.table.list` | `databaseTableList` |
-| `database.table.describe` | `database_table_describe` | `database.table.describe` | `databaseTableDescribe` |
-| `database.table.create` | `database_table_create` | `database.table.create` | `databaseTableCreate` |
-| `database.table.delete` | `database_table_delete` | `database.table.delete` | `databaseTableDelete` |
-| `database.table.rename` | `database_table_rename` | `database.table.rename` | `databaseTableRename` |
-| `database.table.update` | `database_table_update` | `database.table.update` | `databaseTableUpdate` |
-| `database.overview.get` | `database_overview_get` | `database.overview.get` | `databaseOverviewGet` |
-| `database.column.create` | `database_column_create` | `database.column.create` | `databaseColumnCreate` |
-| `database.column.delete` | `database_column_delete` | `database.column.delete` | `databaseColumnDelete` |
-| `database.column.rename` | `database_column_rename` | `database.column.rename` | `databaseColumnRename` |
-| `database.column.update` | `database_column_update` | `database.column.update` | `databaseColumnUpdate` |
-| `database.choice.update` | `database_choice_update` | `database.choice.update` | `databaseChoiceUpdate` |
-| `database.choice_usage.get` | `database_choice_usage_get` | `database.choice_usage.get` | `databaseChoiceUsageGet` |
-| `database.row.create` | `database_row_create` | `database.row.create` | `databaseRowCreate` |
-| `database.rows.create` | `database_rows_create` | `database.rows.create` | `databaseRowsCreate` |
-| `database.row.list` | `database_row_list` | `database.row.list` | `databaseRowList` |
-| `database.row.count` | `database_row_count` | `database.row.count` | `databaseRowCount` |
-| `database.row.update` | `database_row_update` | `database.row.update` | `databaseRowUpdate` |
-| `database.row.delete` | `database_row_delete` | `database.row.delete` | `databaseRowDelete` |
-| `database.rows.update` | `database_rows_update` | `database.rows.update` | `databaseRowsUpdate` |
-| `database.rows.delete` | `database_rows_delete` | `database.rows.delete` | `databaseRowsDelete` |
-| `database.log.list` | `database_log_list` | `database.log.list` | `databaseLogList` |
-| `database.sql.read` | `database_sql_read` | `database.sql.read` | `databaseSqlRead` |
-| `database.sql.execute` | `database_sql_execute` | `database.sql.execute` | `databaseSqlExecute` |
-| `database.folder.list` | `database_folder_list` | `database.folder.list` | `databaseFolderList` |
-| `database.folder.create` | `database_folder_create` | `database.folder.create` | `databaseFolderCreate` |
-| `database.folder.rename` | `database_folder_rename` | `database.folder.rename` | `databaseFolderRename` |
-| `database.folder.delete` | `database_folder_delete` | `database.folder.delete` | `databaseFolderDelete` |
-| `database.folder.reorder` | `database_folder_reorder` | `database.folder.reorder` | `databaseFolderReorder` |
-| `database.table.move` | `database_table_move` | `database.table.move` | `databaseTableMove` |
-| `repository.item.list` | `repository_item_list` | `repository.item.list` | `repositoryItemList` |
+| `app.database.table.list` | `app_database_table_list` | `app.database.table.list` | `databaseTableList` |
+| `app.database.table.describe` | `app_database_table_describe` | `app.database.table.describe` | `databaseTableDescribe` |
+| `app.database.table.create` | `app_database_table_create` | `app.database.table.create` | `databaseTableCreate` |
+| `app.database.table.delete` | `app_database_table_delete` | `app.database.table.delete` | `databaseTableDelete` |
+| `app.database.table.rename` | `app_database_table_rename` | `app.database.table.rename` | `databaseTableRename` |
+| `app.database.table.update` | `app_database_table_update` | `app.database.table.update` | `databaseTableUpdate` |
+| `app.database.overview.get` | `app_database_overview_get` | `app.database.overview.get` | `databaseOverviewGet` |
+| `app.database.column.create` | `app_database_column_create` | `app.database.column.create` | `databaseColumnCreate` |
+| `app.database.column.delete` | `app_database_column_delete` | `app.database.column.delete` | `databaseColumnDelete` |
+| `app.database.column.rename` | `app_database_column_rename` | `app.database.column.rename` | `databaseColumnRename` |
+| `app.database.column.update` | `app_database_column_update` | `app.database.column.update` | `databaseColumnUpdate` |
+| `app.database.choice.update` | `app_database_choice_update` | `app.database.choice.update` | `databaseChoiceUpdate` |
+| `app.database.choice_usage.get` | `app_database_choice_usage_get` | `app.database.choice_usage.get` | `databaseChoiceUsageGet` |
+| `app.database.row.create` | `app_database_row_create` | `app.database.row.create` | `databaseRowCreate` |
+| `app.database.rows.create` | `app_database_rows_create` | `app.database.rows.create` | `databaseRowsCreate` |
+| `app.database.row.list` | `app_database_row_list` | `app.database.row.list` | `databaseRowList` |
+| `app.database.row.count` | `app_database_row_count` | `app.database.row.count` | `databaseRowCount` |
+| `app.database.row.update` | `app_database_row_update` | `app.database.row.update` | `databaseRowUpdate` |
+| `app.database.row.delete` | `app_database_row_delete` | `app.database.row.delete` | `databaseRowDelete` |
+| `app.database.rows.update` | `app_database_rows_update` | `app.database.rows.update` | `databaseRowsUpdate` |
+| `app.database.rows.delete` | `app_database_rows_delete` | `app.database.rows.delete` | `databaseRowsDelete` |
+| `app.database.log.list` | `app_database_log_list` | `app.database.log.list` | `databaseLogList` |
+| `app.database.sql.read` | `app_database_sql_read` | `app.database.sql.read` | `databaseSqlRead` |
+| `app.database.sql.execute` | `app_database_sql_execute` | `app.database.sql.execute` | `databaseSqlExecute` |
+| `app.database.folder.list` | `app_database_folder_list` | `app.database.folder.list` | `databaseFolderList` |
+| `app.database.folder.create` | `app_database_folder_create` | `app.database.folder.create` | `databaseFolderCreate` |
+| `app.database.folder.rename` | `app_database_folder_rename` | `app.database.folder.rename` | `databaseFolderRename` |
+| `app.database.folder.delete` | `app_database_folder_delete` | `app.database.folder.delete` | `databaseFolderDelete` |
+| `app.database.folder.reorder` | `app_database_folder_reorder` | `app.database.folder.reorder` | `databaseFolderReorder` |
+| `app.database.table.move` | `app_database_table_move` | `app.database.table.move` | `databaseTableMove` |
+| `app.settings.repository.item.list` | `app_settings_repository_item_list` | `app.settings.repository.item.list` | `repositoryItemList` |
 | `app.document_template.docx.generate` | `app_document_template_docx_generate` | `app.document_template.docx.generate` | `documentTemplateDocxGenerate` |
-| `variable.item.list` | `variable_item_list` | `variable.item.list` | `variableItemList` |
-| `variable.item.get` | `variable_item_get` | `variable.item.get` | `variableItemGet` |
-| `variable.item.create` | `variable_item_create` | `variable.item.create` | `variableItemCreate` |
-| `variable.item.update` | `variable_item_update` | `variable.item.update` | `variableItemUpdate` |
-| `variable.item.upsert` | `variable_item_upsert` | `variable.item.upsert` | `variableItemUpsert` |
-| `variable.item.delete` | `variable_item_delete` | `variable.item.delete` | `variableItemDelete` |
-| `workflow.node_type.list` | `workflow_node_type_list` | `workflow.node_type.list` | `workflowNodeTypeList` |
-| `workflow.node_type.describe` | `workflow_node_type_describe` | `workflow.node_type.describe` | `workflowNodeTypeDescribe` |
-| `workflow.definition.list` | `workflow_definition_list` | `workflow.definition.list` | `workflowDefinitionList` |
-| `workflow.definition.get` | `workflow_definition_get` | `workflow.definition.get` | `workflowDefinitionGet` |
-| `workflow.definition.inspect` | `workflow_definition_inspect` | `workflow.definition.inspect` | `workflowDefinitionInspect` |
-| `workflow.run.get` | `workflow_run_get` | `workflow.run.get` | `workflowRunGet` |
-| `workflow.run.list` | `workflow_run_list` | `workflow.run.list` | `workflowRunList` |
-| `workflow.definition.create` | `workflow_definition_create` | `workflow.definition.create` | `workflowDefinitionCreate` |
-| `workflow.definition.update` | `workflow_definition_update` | `workflow.definition.update` | `workflowDefinitionUpdate` |
-| `workflow.definition.delete` | `workflow_definition_delete` | `workflow.definition.delete` | `workflowDefinitionDelete` |
-| `workflow.run.execute` | `workflow_run_execute` | `workflow.run.execute` | `workflowRunExecute` |
-| `workflow.run.disable` | `workflow_run_disable` | `workflow.run.disable` | `workflowRunDisable` |
-| `workflow.node.create` | `workflow_node_create` | `workflow.node.create` | `workflowNodeCreate` |
-| `workflow.node.update` | `workflow_node_update` | `workflow.node.update` | `workflowNodeUpdate` |
-| `workflow.node.delete` | `workflow_node_delete` | `workflow.node.delete` | `workflowNodeDelete` |
-| `workflow.edge.create` | `workflow_edge_create` | `workflow.edge.create` | `workflowEdgeCreate` |
-| `workflow.edge.delete` | `workflow_edge_delete` | `workflow.edge.delete` | `workflowEdgeDelete` |
-| `workflow.param.update` | `workflow_param_update` | `workflow.param.update` | `workflowParamUpdate` |
-| `workflow.layout.update` | `workflow_layout_update` | `workflow.layout.update` | `workflowLayoutUpdate` |
-| `content.type.describe` | `content_type_describe` | `content.type.describe` | `contentTypeDescribe` |
-| `content.rule.list` | `content_rule_list` | `content.rule.list` | `contentRuleList` |
-| `content.rule.get` | `content_rule_get` | `content.rule.get` | `contentRuleGet` |
-| `content.rule.create` | `content_rule_create` | `content.rule.create` | `contentRuleCreate` |
-| `content.rule.update` | `content_rule_update` | `content.rule.update` | `contentRuleUpdate` |
-| `content.rule.delete` | `content_rule_delete` | `content.rule.delete` | `contentRuleDelete` |
-| `content.skill.list` | `content_skill_list` | `content.skill.list` | `contentSkillList` |
-| `content.skill.get` | `content_skill_get` | `content.skill.get` | `contentSkillGet` |
-| `content.skill.create` | `content_skill_create` | `content.skill.create` | `contentSkillCreate` |
-| `content.skill.update` | `content_skill_update` | `content.skill.update` | `contentSkillUpdate` |
-| `content.skill.delete` | `content_skill_delete` | `content.skill.delete` | `contentSkillDelete` |
-| `content.prompt.list` | `content_prompt_list` | `content.prompt.list` | `contentPromptList` |
-| `content.prompt.get` | `content_prompt_get` | `content.prompt.get` | `contentPromptGet` |
-| `content.prompt.create` | `content_prompt_create` | `content.prompt.create` | `contentPromptCreate` |
-| `content.prompt.update` | `content_prompt_update` | `content.prompt.update` | `contentPromptUpdate` |
-| `content.prompt.delete` | `content_prompt_delete` | `content.prompt.delete` | `contentPromptDelete` |
-| `drive.item.list` | `drive_item_list` | `drive.item.list` | `driveItemList` |
-| `drive.item.get` | `drive_item_get` | `drive.item.get` | `driveItemGet` |
-| `drive.file.upload` | `drive_file_upload` | `drive.file.upload` | `driveFileUpload` |
-| `drive.folder.upload` | `drive_folder_upload` | `drive.folder.upload` | `driveFolderUpload` |
-| `drive.folder.create` | `drive_folder_create` | `drive.folder.create` | `driveFolderCreate` |
-| `drive.item.rename` | `drive_item_rename` | `drive.item.rename` | `driveItemRename` |
-| `drive.item.move` | `drive_item_move` | `drive.item.move` | `driveItemMove` |
-| `drive.item.delete` | `drive_item_delete` | `drive.item.delete` | `driveItemDelete` |
-| `drive.item_preview.get` | `drive_item_preview_get` | `drive.item_preview.get` | `driveItemPreviewGet` |
-| `drive.file_content.read` | `drive_file_content_read` | `drive.file_content.read` | `driveFileContentRead` |
-| `drive.file_download.create` | `drive_file_download_create` | `drive.file_download.create` | `driveFileDownloadCreate` |
-| `drive.link.resolve` | `drive_link_resolve` | `drive.link.resolve` | `driveLinkResolve` |
-| `drive.link.list` | `drive_link_list` | `drive.link.list` | `driveLinkList` |
-| `drive.link.read_text` | `drive_link_read_text` | `drive.link.read_text` | `driveLinkReadText` |
-| `drive.link.materialize` | `drive_link_materialize` | `drive.link.materialize` | `driveLinkMaterialize` |
-| `drive.link.download_file` | `drive_link_download_file` | `drive.link.download_file` | `driveLinkDownloadFile` |
-| `drive.folder_zip.create` | `drive_folder_zip_create` | `drive.folder_zip.create` | `driveFolderZipCreate` |
-| `drive.share.list` | `drive_share_list` | `drive.share.list` | `driveShareList` |
-| `drive.share.create` | `drive_share_create` | `drive.share.create` | `driveShareCreate` |
-| `drive.share.disable` | `drive_share_disable` | `drive.share.disable` | `driveShareDisable` |
-| `drive.usage.get` | `drive_usage_get` | `drive.usage.get` | `driveUsageGet` |
-| `drive.stats.get` | `drive_stats_get` | `drive.stats.get` | `driveStatsGet` |
-| `drive.item_tree.list` | `drive_item_tree_list` | `drive.item_tree.list` | `driveItemTreeList` |
-| `drive.folder_path.ensure` | `drive_folder_path_ensure` | `drive.folder_path.ensure` | `driveFolderPathEnsure` |
-| `drive.reorganization.preview` | `drive_reorganization_preview` | `drive.reorganization.preview` | `driveReorganizationPreview` |
-| `drive.reorganization.apply` | `drive_reorganization_apply` | `drive.reorganization.apply` | `driveReorganizationApply` |
+| `app.workflow.node_type.list` | `app_workflow_node_type_list` | `app.workflow.node_type.list` | `workflowNodeTypeList` |
+| `app.workflow.node_type.describe` | `app_workflow_node_type_describe` | `app.workflow.node_type.describe` | `workflowNodeTypeDescribe` |
+| `app.workflow.definition.list` | `app_workflow_definition_list` | `app.workflow.definition.list` | `workflowDefinitionList` |
+| `app.workflow.definition.get` | `app_workflow_definition_get` | `app.workflow.definition.get` | `workflowDefinitionGet` |
+| `app.workflow.definition.inspect` | `app_workflow_definition_inspect` | `app.workflow.definition.inspect` | `workflowDefinitionInspect` |
+| `app.workflow.run.get` | `app_workflow_run_get` | `app.workflow.run.get` | `workflowRunGet` |
+| `app.workflow.run.list` | `app_workflow_run_list` | `app.workflow.run.list` | `workflowRunList` |
+| `app.workflow.definition.create` | `app_workflow_definition_create` | `app.workflow.definition.create` | `workflowDefinitionCreate` |
+| `app.workflow.definition.update` | `app_workflow_definition_update` | `app.workflow.definition.update` | `workflowDefinitionUpdate` |
+| `app.workflow.definition.delete` | `app_workflow_definition_delete` | `app.workflow.definition.delete` | `workflowDefinitionDelete` |
+| `app.workflow.run.execute` | `app_workflow_run_execute` | `app.workflow.run.execute` | `workflowRunExecute` |
+| `app.workflow.run.disable` | `app_workflow_run_disable` | `app.workflow.run.disable` | `workflowRunDisable` |
+| `app.workflow.node.create` | `app_workflow_node_create` | `app.workflow.node.create` | `workflowNodeCreate` |
+| `app.workflow.node.update` | `app_workflow_node_update` | `app.workflow.node.update` | `workflowNodeUpdate` |
+| `app.workflow.node.delete` | `app_workflow_node_delete` | `app.workflow.node.delete` | `workflowNodeDelete` |
+| `app.workflow.edge.create` | `app_workflow_edge_create` | `app.workflow.edge.create` | `workflowEdgeCreate` |
+| `app.workflow.edge.delete` | `app_workflow_edge_delete` | `app.workflow.edge.delete` | `workflowEdgeDelete` |
+| `app.workflow.param.update` | `app_workflow_param_update` | `app.workflow.param.update` | `workflowParamUpdate` |
+| `app.workflow.layout.update` | `app_workflow_layout_update` | `app.workflow.layout.update` | `workflowLayoutUpdate` |
+| `app.resource_repository.type.describe` | `app_resource_repository_type_describe` | `app.resource_repository.type.describe` | `contentTypeDescribe` |
+| `app.resource_repository.rule.list` | `app_resource_repository_rule_list` | `app.resource_repository.rule.list` | `contentRuleList` |
+| `app.resource_repository.rule.get` | `app_resource_repository_rule_get` | `app.resource_repository.rule.get` | `contentRuleGet` |
+| `app.resource_repository.rule.create` | `app_resource_repository_rule_create` | `app.resource_repository.rule.create` | `contentRuleCreate` |
+| `app.resource_repository.rule.update` | `app_resource_repository_rule_update` | `app.resource_repository.rule.update` | `contentRuleUpdate` |
+| `app.resource_repository.rule.delete` | `app_resource_repository_rule_delete` | `app.resource_repository.rule.delete` | `contentRuleDelete` |
+| `app.resource_repository.skill.list` | `app_resource_repository_skill_list` | `app.resource_repository.skill.list` | `contentSkillList` |
+| `app.resource_repository.skill.get` | `app_resource_repository_skill_get` | `app.resource_repository.skill.get` | `contentSkillGet` |
+| `app.resource_repository.skill.create` | `app_resource_repository_skill_create` | `app.resource_repository.skill.create` | `contentSkillCreate` |
+| `app.resource_repository.skill.update` | `app_resource_repository_skill_update` | `app.resource_repository.skill.update` | `contentSkillUpdate` |
+| `app.resource_repository.skill.delete` | `app_resource_repository_skill_delete` | `app.resource_repository.skill.delete` | `contentSkillDelete` |
+| `app.resource_repository.prompt.list` | `app_resource_repository_prompt_list` | `app.resource_repository.prompt.list` | `contentPromptList` |
+| `app.resource_repository.prompt.get` | `app_resource_repository_prompt_get` | `app.resource_repository.prompt.get` | `contentPromptGet` |
+| `app.resource_repository.prompt.create` | `app_resource_repository_prompt_create` | `app.resource_repository.prompt.create` | `contentPromptCreate` |
+| `app.resource_repository.prompt.update` | `app_resource_repository_prompt_update` | `app.resource_repository.prompt.update` | `contentPromptUpdate` |
+| `app.resource_repository.prompt.delete` | `app_resource_repository_prompt_delete` | `app.resource_repository.prompt.delete` | `contentPromptDelete` |
+| `app.drive.item.list` | `app_drive_item_list` | `app.drive.item.list` | `driveItemList` |
+| `app.drive.item.get` | `app_drive_item_get` | `app.drive.item.get` | `driveItemGet` |
+| `app.drive.file.upload` | `app_drive_file_upload` | `app.drive.file.upload` | `driveFileUpload` |
+| `app.drive.folder.upload` | `app_drive_folder_upload` | `app.drive.folder.upload` | `driveFolderUpload` |
+| `app.drive.folder.create` | `app_drive_folder_create` | `app.drive.folder.create` | `driveFolderCreate` |
+| `app.drive.item.rename` | `app_drive_item_rename` | `app.drive.item.rename` | `driveItemRename` |
+| `app.drive.item.move` | `app_drive_item_move` | `app.drive.item.move` | `driveItemMove` |
+| `app.drive.item.delete` | `app_drive_item_delete` | `app.drive.item.delete` | `driveItemDelete` |
+| `app.drive.item_preview.get` | `app_drive_item_preview_get` | `app.drive.item_preview.get` | `driveItemPreviewGet` |
+| `app.drive.file_content.read` | `app_drive_file_content_read` | `app.drive.file_content.read` | `driveFileContentRead` |
+| `app.drive.file_download.create` | `app_drive_file_download_create` | `app.drive.file_download.create` | `driveFileDownloadCreate` |
+| `app.drive.link.resolve` | `app_drive_link_resolve` | `app.drive.link.resolve` | `driveLinkResolve` |
+| `app.drive.link.list` | `app_drive_link_list` | `app.drive.link.list` | `driveLinkList` |
+| `app.drive.link.read_text` | `app_drive_link_read_text` | `app.drive.link.read_text` | `driveLinkReadText` |
+| `app.drive.link.materialize` | `app_drive_link_materialize` | `app.drive.link.materialize` | `driveLinkMaterialize` |
+| `app.drive.link.download_file` | `app_drive_link_download_file` | `app.drive.link.download_file` | `driveLinkDownloadFile` |
+| `app.drive.folder_zip.create` | `app_drive_folder_zip_create` | `app.drive.folder_zip.create` | `driveFolderZipCreate` |
+| `app.drive.share.list` | `app_drive_share_list` | `app.drive.share.list` | `driveShareList` |
+| `app.drive.share.create` | `app_drive_share_create` | `app.drive.share.create` | `driveShareCreate` |
+| `app.drive.share.disable` | `app_drive_share_disable` | `app.drive.share.disable` | `driveShareDisable` |
+| `app.drive.usage.get` | `app_drive_usage_get` | `app.drive.usage.get` | `driveUsageGet` |
+| `app.drive.stats.get` | `app_drive_stats_get` | `app.drive.stats.get` | `driveStatsGet` |
+| `app.drive.item_tree.list` | `app_drive_item_tree_list` | `app.drive.item_tree.list` | `driveItemTreeList` |
+| `app.drive.folder_path.ensure` | `app_drive_folder_path_ensure` | `app.drive.folder_path.ensure` | `driveFolderPathEnsure` |
+| `app.drive.reorganization.preview` | `app_drive_reorganization_preview` | `app.drive.reorganization.preview` | `driveReorganizationPreview` |
+| `app.drive.reorganization.apply` | `app_drive_reorganization_apply` | `app.drive.reorganization.apply` | `driveReorganizationApply` |
 
 只支持本矩阵中的规范公开名称。

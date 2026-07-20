@@ -100,13 +100,15 @@ beforeEach(() => {
     configurable: true,
     value: {
       workflow: {
-        create: workflowCreate,
-        exportPackage: workflowExportPackage,
-        importPackage: workflowImportPackage,
-        importSharePackage: workflowImportSharePackage,
-        inspectImportPackage: workflowInspectImportPackage,
-        openEditor: workflowOpenEditor,
-        undoShareImport: workflowUndoShareImport,
+        definition: { create: workflowCreate },
+        operation: {
+          exportPackage: workflowExportPackage,
+          importPackage: workflowImportPackage,
+          importSharePackage: workflowImportSharePackage,
+          inspectImportPackage: workflowInspectImportPackage,
+          openEditor: workflowOpenEditor,
+          undoShareImport: workflowUndoShareImport,
+        },
       },
     } as unknown as Window["synapse"],
   })
@@ -145,7 +147,7 @@ describe("WorkflowModule", () => {
 
     expect(toastError).toHaveBeenCalledWith("创建工作流失败，请重试")
     expect(loggerWarn).toHaveBeenCalledWith("Workflow create failed.", {
-      boundary: "renderer.workflow.create",
+      boundary: "renderer.workflow.definition.create",
       errorName: "Error",
       errorLength: rawError.length,
       errorMessage: "create failed token=[redacted] [path] prompt text",

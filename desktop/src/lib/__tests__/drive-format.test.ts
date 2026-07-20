@@ -12,7 +12,7 @@ describe("drive-format", () => {
   })
 
   it("removes IPC and Error prefixes from Drive error messages", () => {
-    expect(readableDriveErrorMessage("Error invoking remote method 'synapse:drive:list': Error: 文件不存在"))
+    expect(readableDriveErrorMessage("Error invoking remote method 'synapse:app:drive:operation:list': Error: 文件不存在"))
       .toBe("文件不存在")
     expect(driveErrorMessage(new Error("Error: 保存失败"), "操作失败")).toBe("保存失败")
     expect(driveErrorMessage(new Error("  "), "操作失败")).toBe("操作失败")

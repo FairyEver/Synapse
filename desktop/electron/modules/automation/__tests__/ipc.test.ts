@@ -29,9 +29,9 @@ describe("automationIpcModule", () => {
   })
 
   it("declares automation editor window methods", () => {
-    expect(automationIpcModule.methods.openCreateEditorWindow.channel).toBe("synapse:automation:editor:open-create")
+    expect(automationIpcModule.methods.openCreateEditorWindow.operationId).toBe("app.automation.editor.open_create")
     expect(automationIpcModule.methods.openCreateEditorWindow.request?.safeParse(undefined).success).toBe(true)
-    expect(automationIpcModule.methods.openEditorWindow.channel).toBe("synapse:automation:editor:open-edit")
+    expect(automationIpcModule.methods.openEditorWindow.operationId).toBe("app.automation.editor.open_edit")
     expect(automationIpcModule.methods.openEditorWindow.request?.parse({ automationId: "automation:1" })).toEqual({
       automationId: "automation:1",
     })
@@ -41,24 +41,24 @@ describe("automationIpcModule", () => {
     const harness = createInMemoryHarness()
     harness.registry.register(automationIpcModule, { moduleId: "automation", resolve: (() => undefined) as IpcHandlerContext["resolve"] })
 
-    await expect(harness.invoke("synapse:automation:editor:open-create", undefined)).resolves.toBeUndefined()
-    await expect(harness.invoke("synapse:automation:editor:open-edit", { automationId: "automation:1" })).resolves.toBeUndefined()
+    await expect(harness.invoke("synapse:app:automation:editor:open_create", undefined)).resolves.toBeUndefined()
+    await expect(harness.invoke("synapse:app:automation:editor:open_edit", { automationId: "automation:1" })).resolves.toBeUndefined()
 
     expect(automationWindowServiceMock.openCreate).toHaveBeenCalledTimes(1)
     expect(automationWindowServiceMock.openEdit).toHaveBeenCalledWith("automation:1")
     expect(logStoreMock.logger.info).toHaveBeenCalledWith("Automation IPC request.", expect.objectContaining({
       boundary: "automation.ipc.open-create-editor-window",
-      channel: "synapse:automation:editor:open-create",
+      operationId: "app.automation.editor.open_create",
     }))
     expect(logStoreMock.logger.info).toHaveBeenCalledWith("Automation IPC request.", expect.objectContaining({
       automationId: "automation:1",
       boundary: "automation.ipc.open-editor-window",
-      channel: "synapse:automation:editor:open-edit",
+      operationId: "app.automation.editor.open_edit",
     }))
   })
 
   it("declares an automation changed event", () => {
-    expect(automationIpcModule.events.changed.channel).toBe("synapse:events:automation")
+    expect(automationIpcModule.events.changed.operationId).toBe("app.automation.item.changed")
     expect(automationIpcModule.events.changed.payload.parse({
       domain: "automation",
       type: "automation.itemChanged",
@@ -99,21 +99,21 @@ describe("automationIpcModule", () => {
     }
     harness.registry.register(automationIpcModule, { moduleId: "automation", resolve })
 
-    expect(await harness.invoke("synapse:automation:items:list", undefined)).toEqual([])
-    await harness.invoke("synapse:automation:items:create", defaultAutomationInput())
-    await harness.invoke("synapse:automation:items:update", {
+    expect(await harness.invoke("synapse:app:automation:item:list", undefined)).toEqual([])
+    await harness.invoke("synapse:app:automation:item:create", defaultAutomationInput())
+    await harness.invoke("synapse:app:automation:item:update", {
       id: "automation:1",
       patch: { enabled: false },
     })
-    await harness.invoke("synapse:automation:items:set-enabled", {
+    await harness.invoke("synapse:app:automation:item:set_enabled", {
       automationId: "automation:1",
       enabled: false,
     })
-    await harness.invoke("synapse:automation:items:run", { automationId: "automation:1" })
-    await expect(harness.invoke("synapse:automation:runs:stop", { runId: "automation-run:1" }))
+    await harness.invoke("synapse:app:automation:run:execute", { automationId: "automation:1" })
+    await expect(harness.invoke("synapse:app:automation:run:disable", { runId: "automation-run:1" }))
       .resolves
       .toEqual({ stopped: false, alreadyFinished: true })
-    const runs = await harness.invoke("synapse:automation:runs:list", {
+    const runs = await harness.invoke("synapse:app:automation:run:list", {
       automationId: "automation:1",
       limit: 20,
     })
@@ -149,7 +149,7 @@ describe("automationIpcModule", () => {
     }
     harness.registry.register(automationIpcModule, { moduleId: "automation", resolve })
 
-    await harness.invoke("synapse:automation:items:create", {
+    await harness.invoke("synapse:app:automation:item:create", {
       ...defaultAutomationInput(),
       trigger: {
         type: "builtin.fake-event",
@@ -185,7 +185,7 @@ describe("automationIpcModule", () => {
     }
     harness.registry.register(automationIpcModule, { moduleId: "automation", resolve })
 
-    const items = await harness.invoke("synapse:automation:items:list", undefined) as Array<{
+    const items = await harness.invoke("synapse:app:automation:item:list", undefined) as Array<{
       activeRun?: { readonly status: "running"; readonly id?: string }
       validation?: { readonly status: string }
     }>

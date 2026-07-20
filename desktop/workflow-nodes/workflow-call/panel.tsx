@@ -29,7 +29,7 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const result = await window.synapse?.workflow.list()
+      const result = await window.synapse?.workflow.definition.list()
       if (!cancelled) setWorkflows((result?.items ?? []).filter((item) => item.id !== currentWorkflowId))
     })()
     return () => { cancelled = true }
@@ -46,7 +46,7 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
       setChildParams([])
       setSelectedWorkflowError(null)
       try {
-        const child = await window.synapse?.workflow.get(config.workflowId)
+        const child = await window.synapse?.workflow.definition.get(config.workflowId)
         if (cancelled) return
         if (!child) {
           setSelectedWorkflowError("子工作流不存在")

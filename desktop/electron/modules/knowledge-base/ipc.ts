@@ -525,7 +525,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
   methods: {
     createManaged: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:create-managed",
+      operationId: "app.knowledge_base.operation.create_managed",
       request: createManagedPayloadSchema,
       response: createManagedResultSchema,
       handler: (ctx, request: { projectId: string; name: string }) => runGuardedKnowledgeBaseOperation({
@@ -541,7 +541,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     deleteManaged: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:delete-managed",
+      operationId: "app.knowledge_base.operation.delete_managed",
       request: deleteManagedPayloadSchema,
       response: deleteManagedResultSchema,
       handler: (ctx, request: { projectId: string; runtimeId?: string }) => runGuardedKnowledgeBaseOperation({
@@ -557,7 +557,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     listRawDirectory: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:list-raw-directory",
+      operationId: "app.knowledge_base.operation.list_raw_directory",
       request: listRawDirectoryPayloadSchema,
       response: listRawDirectoryResultSchema,
       handler: (ctx, request: { projectId: string; directoryPath: string }) => runGuardedKnowledgeBaseOperation({
@@ -573,7 +573,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     uploadRawFiles: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:upload-raw-files",
+      operationId: "app.knowledge_base.operation.upload_raw_files",
       request: uploadRawFilesPayloadSchema,
       response: rawMutationResultSchema,
       handler: (ctx, request: { projectId: string; targetDirectoryPath: string; filePaths: string[] }) => runGuardedKnowledgeBaseFileUpload({
@@ -587,7 +587,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     uploadRawItems: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:upload-raw-items",
+      operationId: "app.knowledge_base.operation.upload_raw_items",
       request: uploadRawItemsPayloadSchema,
       response: rawMutationResultSchema,
       handler: (ctx, request: { projectId: string; targetDirectoryPath: string; itemPaths: string[] }) => runGuardedKnowledgeBaseFileUpload({
@@ -601,7 +601,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     createRawFolder: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:create-raw-folder",
+      operationId: "app.knowledge_base.operation.create_raw_folder",
       request: createRawFolderPayloadSchema,
       response: rawMutationResultSchema,
       handler: (ctx, request: { projectId: string; parentDirectoryPath: string; name: string }) => runGuardedKnowledgeBaseOperation({
@@ -618,7 +618,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     renameRawEntry: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:rename-raw-entry",
+      operationId: "app.knowledge_base.operation.rename_raw_entry",
       request: renameRawEntryPayloadSchema,
       response: rawMutationResultSchema,
       handler: (ctx, request: { projectId: string; relativePath: string; newName: string }) => runGuardedKnowledgeBaseOperation({
@@ -635,7 +635,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     moveRawEntries: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:move-raw-entries",
+      operationId: "app.knowledge_base.operation.move_raw_entries",
       request: moveRawEntriesPayloadSchema,
       response: rawMutationResultSchema,
       handler: (ctx, request: { projectId: string; relativePaths: string[]; targetDirectoryPath: string }) => runGuardedKnowledgeBaseOperation({
@@ -652,7 +652,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     trashRawEntries: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:trash-raw-entries",
+      operationId: "app.knowledge_base.operation.trash_raw_entries",
       request: trashRawEntriesPayloadSchema,
       response: rawMutationResultSchema,
       handler: (ctx, request: { projectId: string; relativePaths: string[] }) => runGuardedKnowledgeBaseOperation({
@@ -668,7 +668,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     addUrlSource: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:add-url-source",
+      operationId: "app.knowledge_base.operation.add_url_source",
       request: addUrlSourcePayloadSchema,
       response: uploadSourcesResultSchema,
       handler: async (ctx, request: { projectId: string; targetDirectoryPath?: string; url: string }) => {
@@ -689,7 +689,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     selectAndUploadRawFiles: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:select-and-upload-raw-files",
+      operationId: "app.knowledge_base.operation.select_and_upload_raw_files",
       request: z.object({
         projectId: z.string().min(1),
         targetDirectoryPath: z.string(),
@@ -720,7 +720,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     selectAndUploadRawDirectory: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:select-and-upload-raw-directory",
+      operationId: "app.knowledge_base.operation.select_and_upload_raw_directory",
       request: selectAndUploadRawDirectoryPayloadSchema,
       response: rawMutationResultSchema,
       handler: async (ctx, request: { projectId: string; targetDirectoryPath: string }) => {
@@ -749,7 +749,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     exportRawEntries: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:export-raw-entries",
+      operationId: "app.knowledge_base.operation.export_raw_entries",
       request: exportRawEntriesPayloadSchema,
       response: rawMutationResultSchema,
       handler: (ctx, request: { projectId: string; relativePaths: string[] }) => trackRawMutation(async () => {
@@ -782,7 +782,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     openSourceManager: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:open-source-manager",
+      operationId: "app.knowledge_base.operation.open_source_manager",
       request: openSourceManagerPayloadSchema,
       response: z.void(),
       handler: (ctx, request: { projectId: string; projectName: string }) => runGuardedKnowledgeBaseOperation({
@@ -798,35 +798,35 @@ export const knowledgeBaseIpcModule: IpcModule = {
     },
     getStorageStatus: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:get-storage-status",
+      operationId: "app.knowledge_base.operation.get_storage_status",
       request: z.void(),
       response: storageStatusSchema,
       handler: (ctx) => migrationService(ctx).getStorageStatus(),
     },
     getStorageMigrationState: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:get-storage-migration-state",
+      operationId: "app.knowledge_base.operation.get_storage_migration_state",
       request: z.void(),
       response: storageMigrationProgressSchema,
       handler: (ctx) => storageMigrationProgressPayload(migrationService(ctx).getState()),
     },
     startStorageMigration: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:start-storage-migration",
+      operationId: "app.knowledge_base.operation.start_storage_migration",
       request: storageMigrationPayloadSchema,
       response: storageMigrationResultSchema,
       handler: runGuardedStorageMigration,
     },
     cancelStorageMigration: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:cancel-storage-migration",
+      operationId: "app.knowledge_base.operation.cancel_storage_migration",
       request: z.void(),
       response: z.void(),
       handler: (ctx) => migrationService(ctx).cancelMigration(),
     },
     recheckStorage: {
       kind: "invoke",
-      channel: "synapse:knowledge-base:recheck-storage",
+      operationId: "app.knowledge_base.operation.recheck_storage",
       request: z.void(),
       response: storageStatusSchema,
       handler: (ctx) => migrationService(ctx).getStorageStatus(),
@@ -835,7 +835,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
   events: {
     storageMigrationChanged: {
       kind: "event",
-      channel: "synapse:knowledge-base:storage-migration-changed",
+      operationId: "app.knowledge_base.operation.storage_migration_changed",
       payload: storageMigrationProgressSchema,
     },
   },

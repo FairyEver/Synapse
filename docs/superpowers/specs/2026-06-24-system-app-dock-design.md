@@ -80,8 +80,7 @@ SynapseSystemAppDefinition
 ├─ window
 │  └─ openable
 └─ capabilities
-   ├─ primaryMcpPrefix
-   └─ legacyMcpPrefixes
+   └─ primaryMcpPrefix
 ```
 
 Implementation can add the fields incrementally, but the registry is the long-term source of truth for Dock, Launcher, and system app window behavior.
@@ -186,52 +185,48 @@ app.model_price.*                 app_model_price_*
 app.document_template.*           app_document_template_*
 ```
 
-Legacy MCP aliases should remain callable where public tools already exist.
+The following public MCP prefixes are retired and are not callable aliases:
 
 ```text
-Legacy Prefix     Primary Prefix
+Retired Prefix    Current Prefix
 -----------------------------------------------
 database_*        app_database_*
-drive_*           app_drive_*
+model_price_*     app_model_price_*
+repository_*      app_settings_repository_*
 automation_*      app_automation_*
 workflow_*        app_workflow_*
 content_*         app_resource_repository_*
-variable_*        app_settings_variable_*
-repository_*      app_settings_repository_*
-model_price_*     app_model_price_*
+drive_*           app_drive_*
 ```
 
-The built-in `synapse-skill` template should move to the primary `app_*` tool names. The external `sy-worklog` skill can continue using `database_*` through aliases.
+The suffix after each prefix remains unchanged. For example, `database_table_list` becomes `app_database_table_list`. The built-in `synapse-skill` template and all maintained callers must use the current `app_*` names.
 
-## Compatibility Rules
+## Current Naming Rules
 
-- `database_*` aliases must be long-lived because `sy-worklog` is used by the department and hardcodes these tool names.
-- Alias tools dispatch to the same canonical `app.*` capability id as their primary tool.
-- Existing external scripts and prompts using old names should keep working during the migration.
-- New documentation, built-in skills, and Agent guidance should use primary `app_*` names.
-- `tools/list` should initially include primary names and legacy aliases. Legacy descriptions should clearly state which primary tool they alias.
+- Only current `app_*` MCP names are registered and callable.
+- Retired names are absent from `tools/list`, action maps, app registry metadata, and MCP dispatch.
+- Calling a retired name returns `Unknown tool`; there is no compatibility fallback.
+- Documentation, built-in skills, and Agent guidance must use current `app_*` names.
 
 ## Implementation Shape
 
 The implementation should be staged:
 
-1. Extend the system app registry with `namespace`, Dock metadata, and compatibility aliases.
+1. Extend the system app registry with `namespace`, Dock metadata, and the current MCP prefix.
 2. Add app definitions/manifests for Agent, Workflow, Drive, Automation, Launcher, and Settings.
 3. Replace `APP_NAVIGATION_TABS` with Dock data derived from the app registry.
 4. Rename the renderer navigation state from `activeTab` to `activeAppId`.
 5. Move AppsModule into `launcher` while preserving current launcher behavior.
 6. Convert MCP canonical ids and primary tool names to `app.*` / `app_*`.
-7. Add legacy alias resolution for existing public MCP tool names.
-8. Update the built-in `synapse-skill` template to document primary `app_*` tools.
+7. Remove retired public MCP names from registration and dispatch.
+8. Update the built-in `synapse-skill` template to document current `app_*` tools.
 
-Business modules do not need to be physically moved in the first implementation. The first goal is to unify the shell, registry, naming, and compatibility contract.
+Business modules do not need to be physically moved in the first implementation. The first goal is to unify the shell, registry, and naming contract.
 
 ## Non-Goals
 
 - Do not redesign the internal UI of Agent, Drive, Automation, Workflow, or Settings.
-- Do not remove legacy MCP aliases.
 - Do not introduce a standalone Scheduler app in this phase.
-- Do not rename `sy-worklog` or require department users to update it.
 - Do not add third-party app installation or app marketplace behavior in this phase.
 
 ## Testing
@@ -244,7 +239,6 @@ Focused tests should cover:
 - Main window switches active apps through app ids.
 - Existing settings/account/update navigation requests still open Settings.
 - Existing content-open requests open Resource Repository through Launcher/system app routing.
-- MCP `tools/list` exposes primary `app_*` tools and legacy aliases.
-- MCP `tools/call` dispatches legacy aliases and primary names to the same canonical action.
+- MCP `tools/list` exposes only current `app_*` tools.
+- MCP `tools/call` rejects retired names with `Unknown tool`.
 - Built-in `synapse-skill` docs reference primary `app_*` names.
-- `database_*` aliases continue to support `sy-worklog` database calls.

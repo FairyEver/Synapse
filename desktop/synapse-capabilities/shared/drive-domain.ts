@@ -1,8 +1,8 @@
 import type { CapabilityId } from "./naming"
 import {
-  buildPrimaryAndLegacyMcpToolActions,
-  withPrimaryAndLegacyMcpTools,
-} from "./mcp-aliases"
+  buildPrimaryMcpToolActions,
+  withPrimaryMcpTools,
+} from "./mcp-tool-names"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 const driveCapabilities: readonly CapabilityDefinition[] = [
@@ -61,9 +61,8 @@ export const DRIVE_DOMAIN: CapabilityDomainDefinition = {
   capabilities: driveCapabilities,
 }
 
-export const DRIVE_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAndLegacyMcpToolActions(
+export const DRIVE_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryMcpToolActions(
   driveCapabilities,
-  { legacyPrefix: "drive", primaryPrefix: "app_drive" },
 )
 
 const stringField = (description: string) => ({ type: "string", description })
@@ -107,7 +106,7 @@ const accessSettingsProperties = {
 const sitePasswordField = stringField("Optional custom site password. Used only when accessMode is password. MCP responses never return site passwords; pass a custom value when the user needs a known password.")
 
 export function buildDriveTools(): McpToolDefinition[] {
-  return withPrimaryAndLegacyMcpTools([
+  return withPrimaryMcpTools([
     {
       name: "drive_item_list",
       description: "List Synapse Drive files and folders with pagination. parentId defaults to root.",
@@ -691,5 +690,5 @@ export function buildDriveTools(): McpToolDefinition[] {
         required: ["itemId"],
       },
     },
-  ], { legacyPrefix: "drive", primaryPrefix: "app_drive" })
+  ], { sourcePrefix: "drive", primaryPrefix: "app_drive" })
 }

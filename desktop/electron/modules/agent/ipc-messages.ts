@@ -330,7 +330,7 @@ type ExportConversationBundleRequest = z.infer<typeof exportConversationBundleRe
 export const messageMethods: Record<string, IpcMethodDescriptor> = {
   getTimeline: {
     kind: "invoke",
-    channel: "synapse:agent:get-timeline",
+    operationId: "app.agent.operation.get_timeline",
     request: timelineRequestSchema,
     response: timelineResultSchema,
     handler: async (ctx, request: z.infer<typeof timelineRequestSchema>) => {
@@ -375,7 +375,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
   },
   exportConversationBundle: {
     kind: "invoke",
-    channel: "synapse:agent:export-conversation-bundle",
+    operationId: "app.agent.operation.export_conversation_bundle",
     request: exportConversationBundleRequestSchema,
     response: exportConversationBundleResultSchema,
     handler: async (ctx, request: ExportConversationBundleRequest) => {
@@ -427,7 +427,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
   },
   send: {
     kind: "invoke",
-    channel: "synapse:agent:send",
+    operationId: "app.agent.operation.send",
     request: sendRequestSchema,
     response: sendResultSchema,
     handler: async (ctx, request: SendRequest) => {
@@ -574,7 +574,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
   },
   listPendingPermissions: {
     kind: "invoke",
-    channel: "synapse:agent:list-pending-permissions",
+    operationId: "app.agent.operation.list_pending_permissions",
     request: projectRequestSchema,
     response: z.array(pendingPermissionSchema),
     handler: async (ctx, request: ProjectRequest) => {
@@ -584,7 +584,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
   },
   respondPermission: {
     kind: "invoke",
-    channel: "synapse:agent:respond-permission",
+    operationId: "app.agent.operation.respond_permission",
     request: respondPermissionRequestSchema,
     response: respondPermissionResultSchema,
     handler: async (ctx, request: RespondPermissionRequest) => {
@@ -601,7 +601,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
   },
   setPermissionMode: {
     kind: "invoke",
-    channel: "synapse:agent:set-permission-mode",
+    operationId: "app.agent.operation.set_permission_mode",
     request: setPermissionModeRequestSchema,
     response: sessionSummarySchema,
     handler: async (ctx, request: SetPermissionModeRequest) => {
@@ -616,7 +616,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
   },
   cancelTurn: {
     kind: "invoke",
-    channel: "synapse:agent:cancel-turn",
+    operationId: "app.agent.operation.cancel_turn",
     request: cancelTurnRequestSchema,
     response: cancelTurnResultSchema,
     handler: async (ctx, request: z.infer<typeof cancelTurnRequestSchema>) => {
@@ -626,7 +626,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
   },
   forceKillTurn: {
     kind: "invoke",
-    channel: "synapse:agent:force-kill-turn",
+    operationId: "app.agent.operation.force_kill_turn",
     request: cancelTurnRequestSchema,
     response: cancelTurnResultSchema,
     handler: async (ctx, request: z.infer<typeof cancelTurnRequestSchema>) => {

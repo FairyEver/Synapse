@@ -3,11 +3,11 @@ import { quickInputIpcModule } from "../ipc"
 
 describe("quickInputIpcModule", () => {
   it("registers quick input channels", () => {
-    expect(quickInputIpcModule.methods.list.channel).toBe("synapse:quick-input:list")
-    expect(quickInputIpcModule.methods.create.channel).toBe("synapse:quick-input:create")
-    expect(quickInputIpcModule.methods.update.channel).toBe("synapse:quick-input:update")
-    expect(quickInputIpcModule.methods.delete.channel).toBe("synapse:quick-input:delete")
-    expect(quickInputIpcModule.events.changed.channel).toBe("synapse:quick-input:changed")
+    expect(quickInputIpcModule.methods.list.operationId).toBe("app.quick_input.item.list")
+    expect(quickInputIpcModule.methods.create.operationId).toBe("app.quick_input.item.create")
+    expect(quickInputIpcModule.methods.update.operationId).toBe("app.quick_input.item.update")
+    expect(quickInputIpcModule.methods.delete.operationId).toBe("app.quick_input.item.delete")
+    expect(quickInputIpcModule.events.changed.operationId).toBe("app.quick_input.item.changed")
   })
 
   it("dispatches list through the core service", async () => {

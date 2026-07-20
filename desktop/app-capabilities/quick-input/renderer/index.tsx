@@ -72,7 +72,7 @@ export function QuickInputModule() {
     try {
       setLoading(true)
       setLoadError("")
-      setItems(await quickInputBridge.list())
+      setItems(await quickInputBridge.item.list())
     } catch (error) {
       const message = errorMessage(error, "加载失败")
       logger.error("Failed to load quick input items.", error)
@@ -85,7 +85,7 @@ export function QuickInputModule() {
 
   useEffect(() => {
     void reload()
-    return quickInputBridge.onChanged((event) => {
+    return quickInputBridge.item.onChanged((event) => {
       setItems(event.items)
     })
   }, [quickInputBridge, reload])
@@ -124,8 +124,8 @@ export function QuickInputModule() {
     try {
       setSaving(true)
       const saved = form.mode === "edit" && form.item
-        ? await quickInputBridge.update({ id: form.item.id, content })
-        : await quickInputBridge.create({ content })
+        ? await quickInputBridge.item.update({ id: form.item.id, content })
+        : await quickInputBridge.item.create({ content })
 
       setItems((current) => mergeItem(current, saved))
       toast.success("已保存")
@@ -142,7 +142,7 @@ export function QuickInputModule() {
 
   const deleteItem = async (item: SynapseQuickInputItem) => {
     try {
-      await quickInputBridge.delete({ id: item.id })
+      await quickInputBridge.item.delete({ id: item.id })
       setItems((current) => current.filter((entry) => entry.id !== item.id))
     } catch (error) {
       logger.error("Failed to delete quick input item.", error)

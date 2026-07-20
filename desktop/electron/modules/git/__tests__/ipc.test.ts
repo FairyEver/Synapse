@@ -16,19 +16,19 @@ function createContext(resolveMap: Record<string, unknown>): IpcHandlerContext {
 describe("gitIpcModule", () => {
   it("declares structured channels", () => {
     expect(gitIpcModule.id).toBe("git")
-    expect(gitIpcModule.methods.listRepositories.channel).toBe("synapse:git:repositories:list")
-    expect(gitIpcModule.methods.listRepositorySummaries.channel).toBe("synapse:git:repositories:list-summaries")
-    expect(gitIpcModule.methods.getSnapshot.channel).toBe("synapse:git:status:get-snapshot")
-    expect(gitIpcModule.methods.commit.channel).toBe("synapse:git:commit:create")
+    expect(gitIpcModule.methods.listRepositories.operationId).toBe("app.git.repositories.list")
+    expect(gitIpcModule.methods.listRepositorySummaries.operationId).toBe("app.git.repositories.list_summaries")
+    expect(gitIpcModule.methods.getSnapshot.operationId).toBe("app.git.status.get_snapshot")
+    expect(gitIpcModule.methods.commit.operationId).toBe("app.git.commit.create")
   })
 
   it("declares access channels", () => {
-    expect(gitIpcModule.methods.checkAccess.channel).toBe("synapse:git:access:check")
-    expect(gitIpcModule.methods.configureCredentialHelper.channel).toBe("synapse:git:access:configure-credential-helper")
-    expect(gitIpcModule.methods.saveHttpsCredential.channel).toBe("synapse:git:access:save-https-credential")
-    expect(gitIpcModule.methods.clearHttpsCredential.channel).toBe("synapse:git:access:clear-https-credential")
-    expect(gitIpcModule.methods.generateSshKey.channel).toBe("synapse:git:access:generate-ssh-key")
-    expect(gitIpcModule.methods.testSshConnection.channel).toBe("synapse:git:access:test-ssh-connection")
+    expect(gitIpcModule.methods.checkAccess.operationId).toBe("app.git.access.check")
+    expect(gitIpcModule.methods.configureCredentialHelper.operationId).toBe("app.git.access.configure_credential_helper")
+    expect(gitIpcModule.methods.saveHttpsCredential.operationId).toBe("app.git.access.save_https_credential")
+    expect(gitIpcModule.methods.clearHttpsCredential.operationId).toBe("app.git.access.clear_https_credential")
+    expect(gitIpcModule.methods.generateSshKey.operationId).toBe("app.git.access.generate_ssh_key")
+    expect(gitIpcModule.methods.testSshConnection.operationId).toBe("app.git.access.test_ssh_connection")
   })
 
   it("rejects arbitrary git command payloads", () => {

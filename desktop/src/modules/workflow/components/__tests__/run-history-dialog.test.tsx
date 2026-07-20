@@ -49,9 +49,8 @@ describe("RunHistoryDialog", () => {
   it("shows the earliest node error in run history summaries", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
-    window.synapse = {
-      workflow: {
-        runHistory: vi.fn().mockResolvedValue([
+    installWorkflowBridge({
+      runHistory: vi.fn().mockResolvedValue([
           createRunItem({
             nodeResults: {
               late: {
@@ -70,9 +69,8 @@ describe("RunHistoryDialog", () => {
               },
             },
           }),
-        ]),
-      },
-    } as unknown as Window["synapse"]
+      ]),
+    })
 
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -92,16 +90,14 @@ describe("RunHistoryDialog", () => {
   })
 
   it("shows workflow-level errors when no node error is available", async () => {
-    window.synapse = {
-      workflow: {
-        runHistory: vi.fn().mockResolvedValue([
+    installWorkflowBridge({
+      runHistory: vi.fn().mockResolvedValue([
           createRunItem({
             error: "工作流准备失败",
             nodeResults: {},
           }),
-        ]),
-      },
-    } as unknown as Window["synapse"]
+      ]),
+    })
 
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -119,9 +115,8 @@ describe("RunHistoryDialog", () => {
   })
 
   it("marks history records whose workflow structure is unreadable", async () => {
-    window.synapse = {
-      workflow: {
-        runHistory: vi.fn().mockResolvedValue([
+    installWorkflowBridge({
+      runHistory: vi.fn().mockResolvedValue([
           createRunItem({
             definitionMigration: {
               kind: "unsupported_future",
@@ -129,9 +124,8 @@ describe("RunHistoryDialog", () => {
               targetVersion: "1.0.0",
             },
           }),
-        ]),
-      },
-    } as unknown as Window["synapse"]
+      ]),
+    })
 
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -147,9 +141,8 @@ describe("RunHistoryDialog", () => {
   })
 
   it("keeps the history list within a wider dialog layout", async () => {
-    window.synapse = {
-      workflow: {
-        runHistory: vi.fn().mockResolvedValue([
+    installWorkflowBridge({
+      runHistory: vi.fn().mockResolvedValue([
           createRunItem({
             endedAt: Date.parse("2026-05-15T00:13:31.900Z"),
             nodeResults: Object.fromEntries(
@@ -164,9 +157,8 @@ describe("RunHistoryDialog", () => {
               ]),
             ),
           }),
-        ]),
-      },
-    } as unknown as Window["synapse"]
+      ]),
+    })
 
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -188,9 +180,8 @@ describe("RunHistoryDialog", () => {
 
   it("tracks opening a workflow run without recording node output", async () => {
     const openRunner = vi.fn()
-    window.synapse = {
-      workflow: {
-        runHistory: vi.fn().mockResolvedValue([
+    installWorkflowBridge({
+      runHistory: vi.fn().mockResolvedValue([
           createRunItem({
             nodeResults: {
               nodeSecret: {
@@ -201,10 +192,9 @@ describe("RunHistoryDialog", () => {
               },
             },
           }),
-        ]),
-        openRunner,
-      },
-    } as unknown as Window["synapse"]
+      ]),
+      openRunner,
+    })
 
     const onClose = vi.fn()
     const container = document.createElement("div")
@@ -243,11 +233,9 @@ describe("RunHistoryDialog", () => {
 
   it("shows a generic load failure and logs sanitized diagnostics", async () => {
     const rawError = "history failed with token=sk-secret and prompt body at /Users/example/repo"
-    window.synapse = {
-      workflow: {
-        runHistory: vi.fn().mockRejectedValue(new Error(rawError)),
-      },
-    } as unknown as Window["synapse"]
+    installWorkflowBridge({
+      runHistory: vi.fn().mockRejectedValue(new Error(rawError)),
+    })
 
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -275,9 +263,8 @@ describe("RunHistoryDialog", () => {
 
   it("shows running records and opens the active runner", async () => {
     const openRunner = vi.fn()
-    window.synapse = {
-      workflow: {
-        runHistory: vi.fn().mockResolvedValue([
+    installWorkflowBridge({
+      runHistory: vi.fn().mockResolvedValue([
           createRunItem({
             runId: "active-run",
             status: "running",
@@ -290,10 +277,9 @@ describe("RunHistoryDialog", () => {
               },
             },
           }),
-        ]),
-        openRunner,
-      },
-    } as unknown as Window["synapse"]
+      ]),
+      openRunner,
+    })
 
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -327,16 +313,13 @@ describe("RunHistoryDialog", () => {
       .mockResolvedValueOnce([
         createRunItem({ runId: "active-run", status: "completed", endedAt: Date.parse("2026-05-15T00:00:02.000Z") }),
       ])
-    window.synapse = {
-      workflow: {
-        runHistory,
-        openRunner: vi.fn(),
-        onEvent: vi.fn((listener) => {
-          eventListener = listener
-          return vi.fn()
-        }),
-      },
-    } as unknown as Window["synapse"]
+    installWorkflowBridge({
+      runHistory,
+      onEvent: vi.fn((listener) => {
+        eventListener = listener
+        return vi.fn()
+      }),
+    })
 
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -366,6 +349,23 @@ describe("RunHistoryDialog", () => {
     expect(document.body.textContent).toContain("已完成")
   })
 })
+
+function installWorkflowBridge({
+  onEvent = vi.fn(() => vi.fn()),
+  openRunner = vi.fn(),
+  runHistory,
+}: {
+  readonly onEvent?: (listener: (event: WorkflowEvent) => void) => () => void
+  readonly openRunner?: (workflowId: string, runId: string) => unknown
+  readonly runHistory: (workflowId: string) => Promise<WorkflowRunListItem[]>
+}): void {
+  window.synapse = {
+    workflow: {
+      run: { list: runHistory },
+      operation: { onEvent, openRunner },
+    },
+  } as unknown as Window["synapse"]
+}
 
 function createRunItem(patch: Partial<WorkflowRunListItem> = {}): WorkflowRunListItem {
   return {

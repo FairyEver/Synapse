@@ -17,7 +17,7 @@ import {
 } from "./detached-view-window-service"
 import { createMainLogger } from "./log-store"
 
-const SYSTEM_APP_CONTENT_OPEN_REQUEST_CHANNEL = "synapse:apps:content-open-request"
+const SYSTEM_APP_CONTENT_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:content_open_request"
 
 type SystemAppWindowLogger = {
   readonly info: (message: string, metadata?: Record<string, unknown>) => void

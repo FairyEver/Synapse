@@ -587,22 +587,26 @@ function installWorkflowBridge(overrides: {
 }): void {
   ;(window as unknown as { synapse: { workflow: Record<string, unknown> } }).synapse = {
     workflow: {
-      runStatus: overrides.runStatus ?? vi.fn(async () => ({
-        definition: {
-          id: "workflow-1",
-          name: "Workflow",
-          nodes: [],
-          edges: [],
-          params: [],
-        },
-        params: {},
-      })),
-      get: overrides.get ?? vi.fn(),
-      onEvent: overrides.onEvent ?? vi.fn(() => vi.fn()),
-      onRunnerSwitchRun: overrides.onRunnerSwitchRun ?? vi.fn(() => vi.fn()),
-      cancel: overrides.cancel ?? vi.fn(),
-      rerun: overrides.rerun ?? vi.fn(),
-      openEditor: overrides.openEditor ?? vi.fn(),
+      definition: { get: overrides.get ?? vi.fn() },
+      run: {
+        get: overrides.runStatus ?? vi.fn(async () => ({
+          definition: {
+            id: "workflow-1",
+            name: "Workflow",
+            nodes: [],
+            edges: [],
+            params: [],
+          },
+          params: {},
+        })),
+        disable: overrides.cancel ?? vi.fn(),
+      },
+      operation: {
+        onEvent: overrides.onEvent ?? vi.fn(() => vi.fn()),
+        onRunnerSwitchRun: overrides.onRunnerSwitchRun ?? vi.fn(() => vi.fn()),
+        rerun: overrides.rerun ?? vi.fn(),
+        openEditor: overrides.openEditor ?? vi.fn(),
+      },
     },
   }
 }

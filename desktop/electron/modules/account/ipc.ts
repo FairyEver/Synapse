@@ -1002,70 +1002,70 @@ export const accountIpcModule: IpcModule = {
   methods: {
     getState: {
       kind: "invoke",
-      channel: "synapse:account:get-state",
+      operationId: "app.account.operation.get_state",
       request: z.void(),
       response: accountStateSchema,
       handler: async () => accountService.getState(),
     },
     startLogin: {
       kind: "invoke",
-      channel: "synapse:account:start-login",
+      operationId: "app.account.operation.start_login",
       request: z.void(),
       response: accountStateSchema,
       handler: async () => (await accountService.startLogin()).state,
     },
     refresh: {
       kind: "invoke",
-      channel: "synapse:account:refresh",
+      operationId: "app.account.operation.refresh",
       request: z.void(),
       response: accountStateSchema,
       handler: async () => accountService.refreshFromStorage({ reason: "manual" }),
     },
     logout: {
       kind: "invoke",
-      channel: "synapse:account:logout",
+      operationId: "app.account.operation.logout",
       request: z.void(),
       response: accountStateSchema,
       handler: async () => accountService.logout(),
     },
     listWebhooks: {
       kind: "invoke",
-      channel: "synapse:account:webhooks:list",
+      operationId: "app.account.webhooks.list",
       request: z.void(),
       response: z.array(dashboardWebhookSchema),
       handler: async () => accountService.listWebhooks(),
     },
     listDriveItems: {
       kind: "invoke",
-      channel: "synapse:account:drive:items:list",
+      operationId: "app.drive.item.list",
       request: driveItemListInputSchema,
       response: drivePublicLinksPageSchema(driveItemSchema),
       handler: async (_ctx, input) => accountService.listDriveItemsPage(driveItemListInputSchema.parse(input) ?? {}),
     },
     prepareDriveUpload: {
       kind: "invoke",
-      channel: "synapse:account:drive:uploads:prepare",
+      operationId: "app.drive.upload.prepare",
       request: drivePrepareUploadSchema,
       response: driveUploadPrepareResultSchema,
       handler: async (_ctx, input) => accountService.prepareDriveUpload(drivePrepareUploadSchema.parse(input)),
     },
     prepareDriveFolderUpload: {
       kind: "invoke",
-      channel: "synapse:account:drive:uploads:folder:prepare",
+      operationId: "app.drive.upload.folder.prepare",
       request: drivePrepareFolderUploadSchema,
       response: driveFolderUploadPrepareResultSchema,
       handler: async (_ctx, input) => accountService.prepareDriveFolderUpload(drivePrepareFolderUploadSchema.parse(input)),
     },
     completeDriveUpload: {
       kind: "invoke",
-      channel: "synapse:account:drive:uploads:complete",
+      operationId: "app.drive.upload.complete",
       request: driveSessionSchema,
       response: driveItemSchema,
       handler: async (_ctx, input) => accountService.completeDriveUpload(driveSessionSchema.parse(input).sessionId),
     },
     uploadDrivePreparedFile: {
       kind: "invoke",
-      channel: "synapse:account:drive:uploads:put",
+      operationId: "app.drive.upload.put",
       request: drivePreparedFileUploadSchema,
       response: okSchema,
       handler: async (ctx, input) => {
@@ -1079,7 +1079,7 @@ export const accountIpcModule: IpcModule = {
     },
     uploadDriveLocalItems: {
       kind: "invoke",
-      channel: "synapse:account:drive:uploads:local-items",
+      operationId: "app.drive.upload.local_items",
       request: driveLocalUploadRequestSchema,
       response: driveLocalUploadResultSchema,
       handler: async (ctx, input) => {
@@ -1114,28 +1114,28 @@ export const accountIpcModule: IpcModule = {
     },
     cancelDriveUpload: {
       kind: "invoke",
-      channel: "synapse:account:drive:uploads:cancel",
+      operationId: "app.drive.upload.cancel",
       request: driveSessionSchema,
       response: okSchema,
       handler: async (_ctx, input) => accountService.cancelDriveUpload(driveSessionSchema.parse(input).sessionId),
     },
     createDriveFolder: {
       kind: "invoke",
-      channel: "synapse:account:drive:folders:create",
+      operationId: "app.drive.folder.create",
       request: driveFolderCreateSchema,
       response: driveItemSchema,
       handler: async (_ctx, input) => accountService.createDriveFolder(driveFolderCreateSchema.parse(input)),
     },
     getDriveItemPreviewUrl: {
       kind: "invoke",
-      channel: "synapse:account:drive:items:preview-url",
+      operationId: "app.drive.item.preview_url",
       request: driveItemIdSchema,
       response: drivePreviewUrlSchema,
       handler: async (_ctx, input) => accountService.getDriveItemPreviewUrl(driveItemIdSchema.parse(input).itemId),
     },
     renameDriveItem: {
       kind: "invoke",
-      channel: "synapse:account:drive:items:rename",
+      operationId: "app.drive.item.rename",
       request: driveRenameSchema,
       response: driveItemSchema,
       handler: async (_ctx, input) => {
@@ -1145,7 +1145,7 @@ export const accountIpcModule: IpcModule = {
     },
     moveDriveItem: {
       kind: "invoke",
-      channel: "synapse:account:drive:items:move",
+      operationId: "app.drive.item.move",
       request: driveMoveSchema,
       response: driveItemSchema,
       handler: async (_ctx, input) => {
@@ -1155,7 +1155,7 @@ export const accountIpcModule: IpcModule = {
     },
     deleteDriveItem: {
       kind: "invoke",
-      channel: "synapse:account:drive:items:delete",
+      operationId: "app.drive.item.delete",
       request: driveDeleteItemSchema,
       response: okSchema,
       handler: async (_ctx, input) => {
@@ -1165,7 +1165,7 @@ export const accountIpcModule: IpcModule = {
     },
     listDriveFileVersions: {
       kind: "invoke",
-      channel: "synapse:account:drive:file-versions:list",
+      operationId: "app.drive.file_version.list",
       request: driveFileVersionListSchema,
       response: driveFileVersionListPageSchema,
       handler: async (_ctx, input) => {
@@ -1178,7 +1178,7 @@ export const accountIpcModule: IpcModule = {
     },
     downloadDriveFileVersion: {
       kind: "invoke",
-      channel: "synapse:account:drive:file-versions:download",
+      operationId: "app.drive.file_version_download.create",
       request: driveFileVersionDownloadSchema,
       response: okSchema.extend({ path: z.string() }),
       handler: async (ctx, input) => {
@@ -1192,7 +1192,7 @@ export const accountIpcModule: IpcModule = {
     },
     restoreDriveFileVersion: {
       kind: "invoke",
-      channel: "synapse:account:drive:file-versions:restore",
+      operationId: "app.drive.file_version.restore",
       request: driveFileVersionIdSchema,
       response: driveItemSchema,
       handler: async (_ctx, input) => {
@@ -1202,7 +1202,7 @@ export const accountIpcModule: IpcModule = {
     },
     deleteDriveFileVersion: {
       kind: "invoke",
-      channel: "synapse:account:drive:file-versions:delete",
+      operationId: "app.drive.file_version.delete",
       request: driveFileVersionIdSchema,
       response: driveFileVersionDeleteResultSchema,
       handler: async (_ctx, input) => {
@@ -1212,7 +1212,7 @@ export const accountIpcModule: IpcModule = {
     },
     updateDriveFileVersionPin: {
       kind: "invoke",
-      channel: "synapse:account:drive:file-versions:pin",
+      operationId: "app.drive.file_version_pin.update",
       request: driveFileVersionPinSchema,
       response: driveFileVersionSchema,
       handler: async (_ctx, input) => {
@@ -1222,28 +1222,28 @@ export const accountIpcModule: IpcModule = {
     },
     resolveDriveLink: {
       kind: "invoke",
-      channel: "synapse:account:drive:links:resolve",
+      operationId: "app.drive.link.resolve",
       request: driveLinkResolveSchema,
       response: driveLinkResolveResponseSchema,
       handler: async (_ctx, input) => accountService.resolveDriveLink(driveLinkResolveSchema.parse(input)),
     },
     listDriveLink: {
       kind: "invoke",
-      channel: "synapse:account:drive:links:list",
+      operationId: "app.drive.link.list",
       request: driveLinkListSchema,
       response: driveLinkListResponseSchema,
       handler: async (_ctx, input) => accountService.listDriveLink(driveLinkListSchema.parse(input)),
     },
     readDriveLinkText: {
       kind: "invoke",
-      channel: "synapse:account:drive:links:read-text",
+      operationId: "app.drive.link.read_text",
       request: driveLinkReadTextSchema,
       response: driveLinkReadTextResponseSchema,
       handler: async (_ctx, input) => accountService.readDriveLinkText(driveLinkReadTextSchema.parse(input)),
     },
     materializeDriveLink: {
       kind: "invoke",
-      channel: "synapse:account:drive:links:materialize",
+      operationId: "app.drive.link.materialize",
       request: driveLinkMaterializeSchema,
       response: driveLinkMaterializeResponseSchema,
       handler: async (ctx, input) => {
@@ -1257,7 +1257,7 @@ export const accountIpcModule: IpcModule = {
     },
     downloadDriveLinkFile: {
       kind: "invoke",
-      channel: "synapse:account:drive:links:download-file",
+      operationId: "app.drive.link.download_file",
       request: driveLinkDownloadFileSchema,
       response: driveLinkDownloadFileResponseSchema,
       handler: async (ctx, input) => {
@@ -1283,7 +1283,7 @@ export const accountIpcModule: IpcModule = {
     },
     shareDriveItem: {
       kind: "invoke",
-      channel: "synapse:account:drive:items:share",
+      operationId: "app.drive.share.create",
       request: driveAccessItemSchema,
       response: driveShareSchema,
       handler: async (_ctx, input) => {
@@ -1298,49 +1298,49 @@ export const accountIpcModule: IpcModule = {
     },
     disableDriveShare: {
       kind: "invoke",
-      channel: "synapse:account:drive:shares:disable",
+      operationId: "app.drive.share.disable",
       request: driveShareIdSchema,
       response: okSchema,
       handler: async (_ctx, input) => accountService.disableDriveShare(driveShareIdSchema.parse(input).shareId),
     },
     getDriveUsage: {
       kind: "invoke",
-      channel: "synapse:account:drive:usage:get",
+      operationId: "app.drive.usage.get",
       request: z.void(),
       response: driveUsageSchema,
       handler: async () => accountService.getDriveUsage(),
     },
     listDriveShares: {
       kind: "invoke",
-      channel: "synapse:account:drive:shares:list",
+      operationId: "app.drive.share.list",
       request: drivePublicLinksPageInputSchema,
       response: drivePublicLinksPageSchema(driveShareListItemSchema),
       handler: async (_ctx, input) => accountService.listDriveShares(drivePublicLinksPageInputSchema.parse(input)),
     },
     getDriveShare: {
       kind: "invoke",
-      channel: "synapse:account:drive:shares:get",
+      operationId: "app.drive.share.get",
       request: driveShareIdSchema,
       response: driveShareListItemSchema,
       handler: async (_ctx, input) => accountService.getDriveShare(driveShareIdSchema.parse(input).shareId),
     },
     listDrivePublicAssets: {
       kind: "invoke",
-      channel: "synapse:account:drive:public-assets:list",
+      operationId: "app.drive.direct_link.list",
       request: drivePageInputSchema,
       response: drivePublicLinksPageSchema(drivePublicAssetSchema).extend({ total: z.number().int().nonnegative() }),
       handler: async (_ctx, input) => accountService.listDrivePublicAssets(drivePageInputSchema.parse(input)),
     },
     getDrivePublicAsset: {
       kind: "invoke",
-      channel: "synapse:account:drive:public-assets:get",
+      operationId: "app.drive.direct_link.get",
       request: drivePublicAssetIdSchema,
       response: drivePublicAssetSchema,
       handler: async (_ctx, input) => accountService.getDrivePublicAsset(drivePublicAssetIdSchema.parse(input).assetId),
     },
     uploadDrivePublicAssets: {
       kind: "invoke",
-      channel: "synapse:account:drive:public-assets:upload",
+      operationId: "app.drive.direct_link.upload",
       request: drivePublicAssetUploadSchema,
       response: z.object({
         results: z.array(z.discriminatedUnion("status", [
@@ -1360,28 +1360,28 @@ export const accountIpcModule: IpcModule = {
     },
     uploadDrivePublicAssetBinary: {
       kind: "invoke",
-      channel: "synapse:account:drive:public-assets:upload-binary",
+      operationId: "app.drive.direct_link.upload_binary",
       request: drivePublicAssetBinaryUploadSchema,
       response: drivePublicAssetSchema,
       handler: async (_ctx, input) => accountService.uploadDrivePublicAssetBinary(drivePublicAssetBinaryUploadSchema.parse(input)),
     },
     scanDriveDocumentImageSources: {
       kind: "invoke",
-      channel: "synapse:account:drive:document-images:scan",
+      operationId: "app.drive.document_images.scan",
       request: driveDocumentImageSourceContextSchema,
       response: driveDocumentImageSourcesSchema,
       handler: async (_ctx, input) => accountService.scanDriveDocumentImageSources(driveDocumentImageSourceContextSchema.parse(input)),
     },
     importDriveDocumentImages: {
       kind: "invoke",
-      channel: "synapse:account:drive:document-images:import",
+      operationId: "app.drive.document_images.import",
       request: driveDocumentImageImportSchema,
       response: driveDocumentImageImportResultSchema,
       handler: async (_ctx, input) => accountService.importDriveDocumentImages(driveDocumentImageImportSchema.parse(input)),
     },
     replaceDrivePublicAssetFile: {
       kind: "invoke",
-      channel: "synapse:account:drive:public-assets:replace-file",
+      operationId: "app.drive.direct_link.update",
       request: drivePublicAssetReplaceSchema,
       response: drivePublicAssetSchema,
       handler: async (ctx, input) => {
@@ -1397,7 +1397,7 @@ export const accountIpcModule: IpcModule = {
     },
     renameDrivePublicAsset: {
       kind: "invoke",
-      channel: "synapse:account:drive:public-assets:rename",
+      operationId: "app.drive.direct_link.rename",
       request: drivePublicAssetRenameSchema,
       response: drivePublicAssetSchema,
       handler: async (_ctx, input) => {
@@ -1407,91 +1407,91 @@ export const accountIpcModule: IpcModule = {
     },
     trashDrivePublicAsset: {
       kind: "invoke",
-      channel: "synapse:account:drive:public-assets:trash",
+      operationId: "app.drive.direct_link.delete",
       request: drivePublicAssetIdSchema,
       response: drivePublicAssetSchema,
       handler: async (_ctx, input) => accountService.trashDrivePublicAsset(drivePublicAssetIdSchema.parse(input).assetId),
     },
     restoreDrivePublicAsset: {
       kind: "invoke",
-      channel: "synapse:account:drive:public-assets:restore",
+      operationId: "app.drive.direct_link.restore",
       request: drivePublicAssetIdSchema,
       response: drivePublicAssetSchema,
       handler: async (_ctx, input) => accountService.restoreDrivePublicAsset(drivePublicAssetIdSchema.parse(input).assetId),
     },
     preflightDriveSite: {
       kind: "invoke",
-      channel: "synapse:account:drive:sites:preflight",
+      operationId: "app.drive.site.preflight",
       request: driveSitePreflightSchema,
       response: driveSitePreflightResultSchema,
       handler: async (_ctx, input) => accountService.preflightDriveSite(driveSitePreflightSchema.parse(input)),
     },
     createDriveSite: {
       kind: "invoke",
-      channel: "synapse:account:drive:sites:create",
+      operationId: "app.drive.site.create",
       request: driveSiteCreateSchema,
       response: driveSiteSchema,
       handler: async (_ctx, input) => accountService.createDriveSite(driveSiteCreateSchema.parse(input)),
     },
     listDriveSites: {
       kind: "invoke",
-      channel: "synapse:account:drive:sites:list",
+      operationId: "app.drive.site.list",
       request: driveSiteListSchema,
       response: driveSiteListPageSchema,
       handler: async (_ctx, input) => accountService.listDriveSites(driveSiteListSchema.parse(input)),
     },
     updateDriveSiteAccess: {
       kind: "invoke",
-      channel: "synapse:account:drive:sites:access:update",
+      operationId: "app.drive.site.update_access",
       request: driveSiteAccessUpdateSchema,
       response: driveSiteSchema,
       handler: async (_ctx, input) => accountService.updateDriveSiteAccess(driveSiteAccessUpdateSchema.parse(input)),
     },
     disableDriveSite: {
       kind: "invoke",
-      channel: "synapse:account:drive:sites:disable",
+      operationId: "app.drive.site.disable",
       request: driveSiteIdSchema,
       response: driveSiteSchema,
       handler: async (_ctx, input) => accountService.disableDriveSite(driveSiteIdSchema.parse(input).siteId),
     },
     enableDriveSite: {
       kind: "invoke",
-      channel: "synapse:account:drive:sites:enable",
+      operationId: "app.drive.site.enable",
       request: driveSiteIdSchema,
       response: driveSiteSchema,
       handler: async (_ctx, input) => accountService.enableDriveSite(driveSiteIdSchema.parse(input).siteId),
     },
     deleteDriveSite: {
       kind: "invoke",
-      channel: "synapse:account:drive:sites:delete",
+      operationId: "app.drive.site.delete",
       request: driveSiteIdSchema,
       response: okSchema,
       handler: async (_ctx, input) => accountService.deleteDriveSite(driveSiteIdSchema.parse(input).siteId),
     },
     republishDriveSite: {
       kind: "invoke",
-      channel: "synapse:account:drive:sites:republish",
+      operationId: "app.drive.site.republish",
       request: driveSiteRepublishSchema,
       response: driveSiteSchema,
       handler: async (_ctx, input) => accountService.republishDriveSite(driveSiteRepublishSchema.parse(input)),
     },
     listDriveTrash: {
       kind: "invoke",
-      channel: "synapse:account:drive:trash:list",
+      operationId: "app.drive.trash.list",
       request: drivePageInputSchema,
       response: drivePublicLinksPageSchema(driveTrashItemSchema).extend({ total: z.number().int().nonnegative() }),
       handler: async (_ctx, input) => accountService.listDriveTrash(drivePageInputSchema.parse(input)),
     },
     restoreDriveTrashItem: {
       kind: "invoke",
-      channel: "synapse:account:drive:trash:restore",
+      operationId: "app.drive.trash.restore",
       request: driveTrashItemSchemaInput,
       response: z.union([driveItemSchema, drivePublicAssetSchema]),
       handler: async (_ctx, input) => accountService.restoreDriveTrashItem(driveTrashItemSchemaInput.parse(input)),
     },
     deleteDriveTrashItem: {
       kind: "invoke",
-      channel: "synapse:account:drive:trash:delete",
+      operationId: "app.drive.trash.delete",
       request: z.object({ itemId: z.string() }),
       response: okSchema,
       handler: async (_ctx, input) => accountService.deleteDriveTrashItem(z.object({ itemId: z.string() }).parse(input).itemId),
@@ -1500,12 +1500,12 @@ export const accountIpcModule: IpcModule = {
   events: {
     stateChanged: {
       kind: "event",
-      channel: "synapse:events:account",
+      operationId: "app.account.state.changed",
       payload: accountStateChangedDomainEventSchema,
     },
     driveLocalUploadProgress: {
       kind: "event",
-      channel: "synapse:events:account",
+      operationId: "app.account.state.changed",
       payload: z.object({
         domain: z.literal("account"),
         type: z.literal("account.driveLocalUploadProgress"),

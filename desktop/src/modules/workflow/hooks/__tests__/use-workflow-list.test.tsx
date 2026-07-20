@@ -46,8 +46,8 @@ describe("useWorkflowList", () => {
       items: [{ id: "workflow-1", name: "Workflow", version: "v1", nodeCount: 1, createdAt: 1, updatedAt: 2 }],
       migrationDiagnostics: [{ id: "legacy:workflow-2", workflowId: "workflow-2", status: "failed" as const, targetSchemaVersion: "2.0.0", updatedAt: 3 }],
     }))
-    ;(window as unknown as { synapse: { workflow: { list: typeof list } } }).synapse = {
-      workflow: { list },
+    ;(window as unknown as { synapse: { workflow: { definition: { list: typeof list }; editor: { onDefinitionUpdated: () => () => void } } } }).synapse = {
+      workflow: { definition: { list }, editor: { onDefinitionUpdated: () => () => undefined } },
     }
     let hook: ReturnType<typeof useWorkflowList> | undefined
     const container = document.createElement("div")
@@ -70,8 +70,8 @@ describe("useWorkflowList", () => {
     const list = vi.fn(async () => {
       throw new Error(rawError)
     })
-    ;(window as unknown as { synapse: { workflow: { list: typeof list } } }).synapse = {
-      workflow: { list },
+    ;(window as unknown as { synapse: { workflow: { definition: { list: typeof list }; editor: { onDefinitionUpdated: () => () => void } } } }).synapse = {
+      workflow: { definition: { list }, editor: { onDefinitionUpdated: () => () => undefined } },
     }
     let hook: ReturnType<typeof useWorkflowList> | undefined
     const container = document.createElement("div")
@@ -87,7 +87,7 @@ describe("useWorkflowList", () => {
 
     expect(hook?.error).toBe("加载失败，请重试")
     expect(rendererLogger.warn).toHaveBeenCalledWith("Workflow list refresh failed.", {
-      boundary: "renderer.workflow.list",
+      boundary: "renderer.workflow.definition.list",
       errorName: "Error",
       errorLength: rawError.length,
       errorMessage: "list failed with token=[redacted] and prompt body",

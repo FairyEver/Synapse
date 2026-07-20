@@ -69,22 +69,22 @@ type AutomationDispatchSecurity = {
 }
 
 const READING_AUTOMATION_ACTIONS = new Set([
-  "automation.trigger_type.list",
-  "automation.executor_type.list",
-  "automation.item.list",
-  "automation.item.get",
-  "automation.run.list",
-  "automation.runtime.inspect",
-  "automation.webhook.list",
+  "app.automation.trigger_type.list",
+  "app.automation.executor_type.list",
+  "app.automation.item.list",
+  "app.automation.item.get",
+  "app.automation.run.list",
+  "app.automation.runtime.inspect",
+  "app.automation.webhook.list",
 ])
 const MUTATING_AUTOMATION_ACTIONS = new Set([
-  "automation.item.create",
-  "automation.item.update",
-  "automation.item.delete",
-  "automation.item.enable",
-  "automation.item.disable",
-  "automation.run.execute",
-  "automation.run.disable",
+  "app.automation.item.create",
+  "app.automation.item.update",
+  "app.automation.item.delete",
+  "app.automation.item.enable",
+  "app.automation.item.disable",
+  "app.automation.run.execute",
+  "app.automation.run.disable",
 ])
 const SAFE_AUDIT_IDENTIFIER_PATTERN = /^[A-Za-z0-9:_-]{1,128}$/
 
@@ -97,7 +97,7 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
       try {
         let result: DispatchResult
         switch (action) {
-          case "automation.trigger_type.list": {
+          case "app.automation.trigger_type.list": {
             const descriptors = deps.triggers.list().map((definition) => ({
               type: definition.manifest.id,
               title: definition.manifest.title,
@@ -112,7 +112,7 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
             break
           }
 
-          case "automation.executor_type.list": {
+          case "app.automation.executor_type.list": {
             const platform = deps.platform ?? process.platform
             const descriptors = deps.actions.list().map((definition) => ({
               type: definition.manifest.id,
@@ -129,7 +129,7 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
             break
           }
 
-          case "automation.item.list": {
+          case "app.automation.item.list": {
             const input = parseListParams(params)
             const items = await deps.service.automationList(input)
             const summaries = items.map((item) => toPublicAutomationItemSummary(item, deps.triggers, deps.actions, automationSummaryLogger(deps)))
@@ -137,48 +137,48 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
             break
           }
 
-          case "automation.item.get": {
+          case "app.automation.item.get": {
             const { automationId } = parseAutomationIdParams(params)
             const item = await deps.service.automationGet(automationId)
             result = { ok: true, data: item ? toPublicAutomationItemSummary(item, deps.triggers, deps.actions, automationSummaryLogger(deps)) : null }
             break
           }
 
-          case "automation.item.create": {
+          case "app.automation.item.create": {
             const input = parseCreateParams(params, deps.triggers, deps.actions, deps.platform ?? process.platform)
             const item = await deps.service.automationCreate(input)
             result = { ok: true, data: toPublicAutomationItemSummary(item, deps.triggers, deps.actions) }
             break
           }
 
-          case "automation.item.update": {
+          case "app.automation.item.update": {
             const input = parseUpdateParams(params, deps.triggers, deps.actions, deps.platform ?? process.platform)
             const item = await deps.service.automationUpdate(input.automationId, input.patch)
             result = { ok: true, data: toPublicAutomationItemSummary(item, deps.triggers, deps.actions) }
             break
           }
 
-          case "automation.item.delete": {
+          case "app.automation.item.delete": {
             const { automationId } = parseAutomationIdParams(params)
             result = { ok: true, data: await deps.service.automationDelete(automationId) }
             break
           }
 
-          case "automation.item.enable": {
+          case "app.automation.item.enable": {
             const { automationId } = parseAutomationIdParams(params)
             const item = await deps.service.automationEnable(automationId)
             result = { ok: true, data: toPublicAutomationItemSummary(item, deps.triggers, deps.actions) }
             break
           }
 
-          case "automation.item.disable": {
+          case "app.automation.item.disable": {
             const { automationId } = parseAutomationIdParams(params)
             const item = await deps.service.automationDisable(automationId)
             result = { ok: true, data: toPublicAutomationItemSummary(item, deps.triggers, deps.actions) }
             break
           }
 
-          case "automation.run.execute": {
+          case "app.automation.run.execute": {
             const { automationId } = parseAutomationIdParams(params)
             const run = await deps.service.runAutomationNow(automationId)
             if (!run) throw new Error(`Automation "${automationId}" was not found or did not start`)
@@ -186,7 +186,7 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
             break
           }
 
-          case "automation.run.disable": {
+          case "app.automation.run.disable": {
             const { runId } = parseRunIdParams(params)
             const stopResult = await deps.service.stopRun(runId)
             if (!stopResult.stopped && !stopResult.alreadyFinished && !stopResult.stopRequested) {
@@ -196,7 +196,7 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
             break
           }
 
-          case "automation.run.list": {
+          case "app.automation.run.list": {
             const input = parseRunListParams(params)
             const item = await deps.service.automationGet(input.automationId)
             if (!item) throw new Error(`Automation "${input.automationId}" was not found`)
@@ -205,13 +205,13 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
             break
           }
 
-          case "automation.runtime.inspect": {
+          case "app.automation.runtime.inspect": {
             const input = parseRuntimeInspectParams(params)
             result = { ok: true, data: await buildRuntimeInspect(deps, input.automationId) }
             break
           }
 
-          case "automation.webhook.list": {
+          case "app.automation.webhook.list": {
             const webhooks = await deps.accountService.listWebhooks()
             result = { ok: true, data: webhooks.map(toPublicAutomationWebhookSummary), total: webhooks.length }
             break
@@ -464,7 +464,7 @@ function parseUpdateParams(
   )
   assignIfDefined(patch, "policy", parseOptionalPolicy(patchRecord.policy))
   if (Object.keys(patch).length === 0) {
-    throw new Error("automation.item.update requires at least one field to update")
+    throw new Error("app.automation.item.update requires at least one field to update")
   }
   return { automationId, patch }
 }

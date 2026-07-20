@@ -9,10 +9,10 @@ const dataPath = path.resolve("data.json")
 describe("documentTemplateIpcModule", () => {
   it("declares document template channels", () => {
     expect(documentTemplateIpcModule.id).toBe("documentTemplate")
-    expect(documentTemplateIpcModule.methods.chooseTemplateFile.channel).toBe("synapse:document-template:template:choose")
-    expect(documentTemplateIpcModule.methods.chooseJsonFile.channel).toBe("synapse:document-template:json:choose")
-    expect(documentTemplateIpcModule.methods.chooseOutputFile.channel).toBe("synapse:document-template:output:choose")
-    expect(documentTemplateIpcModule.methods.generateDocx.channel).toBe("synapse:document-template:docx:generate")
+    expect(documentTemplateIpcModule.methods.chooseTemplateFile.operationId).toBe("app.document_template.template.choose")
+    expect(documentTemplateIpcModule.methods.chooseJsonFile.operationId).toBe("app.document_template.json.choose")
+    expect(documentTemplateIpcModule.methods.chooseOutputFile.operationId).toBe("app.document_template.output.choose")
+    expect(documentTemplateIpcModule.methods.generateDocx.operationId).toBe("app.document_template.docx.generate")
   })
 
   it("validates dataPath and inline data alternatives", () => {

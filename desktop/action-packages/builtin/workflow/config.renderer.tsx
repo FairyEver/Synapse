@@ -38,7 +38,7 @@ export function WorkflowConfigForm({
         cancelled = true
       }
     }
-    workflowBridge.list().then((result) => {
+    workflowBridge.definition.list().then((result) => {
       if (!cancelled) setWorkflows(result.items)
     }).catch(() => {
       if (!cancelled) setWorkflows([])
@@ -57,7 +57,7 @@ export function WorkflowConfigForm({
         cancelled = true
       }
     }
-    workflowBridge.get(value.workflowId).then((next) => {
+    workflowBridge.definition.get(value.workflowId).then((next) => {
       if (!cancelled) setDefinition(next)
     }).catch(() => {
       if (!cancelled) setDefinition(null)

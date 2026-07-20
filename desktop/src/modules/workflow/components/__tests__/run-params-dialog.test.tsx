@@ -86,16 +86,16 @@ afterEach(() => {
 function installBridge() {
   ;(window as unknown as { synapse: unknown }).synapse = {
     workflow: {
-      chooseParamFile: mocks.chooseParamFile,
-      chooseParamDirectory: mocks.chooseParamDirectory,
-      chooseParamFiles: mocks.chooseParamFiles,
-      chooseParamDirectories: mocks.chooseParamDirectories,
-    },
-    workflowParamPresets: {
-      list: mocks.presetList,
-      resolveResourceEntryTypes: mocks.presetResolveResourceEntryTypes,
-      save: mocks.presetSave,
-      delete: mocks.presetDelete,
+      paramFile: { choose: mocks.chooseParamFile },
+      paramDirectory: { choose: mocks.chooseParamDirectory },
+      paramFiles: { choose: mocks.chooseParamFiles },
+      paramDirectories: { choose: mocks.chooseParamDirectories },
+      paramPreset: {
+        list: mocks.presetList,
+        resolveResourceEntryTypes: mocks.presetResolveResourceEntryTypes,
+        save: mocks.presetSave,
+        delete: mocks.presetDelete,
+      },
     },
   }
 }

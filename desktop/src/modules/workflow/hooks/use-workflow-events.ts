@@ -42,7 +42,7 @@ export function useWorkflowEvents(
     // Hydrate current state to cover events emitted before subscription.
     // This closes the race window between engine.run() start and subscription setup.
     void (async () => {
-      const status = await window.synapse?.workflow.runStatus(runId, workflowId)
+      const status = await window.synapse?.workflow.run.get(runId, workflowId)
       if (cancelled || !status) return
       const skippedByLive = [] as string[]
       for (const [nodeId, nr] of Object.entries(status.nodeResults)) {
@@ -83,7 +83,7 @@ export function useWorkflowEvents(
       cbRef.current.onFailed?.(`运行状态恢复失败：${sanitizeError(msg)}`)
     })
 
-    const unsub = window.synapse?.workflow.onEvent((event: WorkflowEvent) => {
+    const unsub = window.synapse?.workflow.operation.onEvent((event: WorkflowEvent) => {
       if (event.runId !== runId) return
       if (event.type === "node:started") {
         cbRef.current.onNodeStarted?.(event.nodeId, event.result ?? { startedAt: event.startedAt ?? Date.now() })

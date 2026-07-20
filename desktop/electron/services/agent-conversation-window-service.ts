@@ -23,7 +23,7 @@ import {
 } from "./detached-view-window-service"
 import { createMainLogger } from "./log-store"
 
-export const AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL = "synapse:agent:detached-conversations-changed"
+export const AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL = "synapse:app:agent:operation:detached_conversations_changed"
 export const AGENT_CONVERSATION_WINDOW_SERVICE_ID = "agent.conversation-window-service"
 
 type Logger = {

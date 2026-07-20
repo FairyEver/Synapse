@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -46,6 +49,25 @@ describe("shell environment helpers", () => {
     })
 
     expect(result).toBe("/opt/homebrew/bin/node")
+  })
+
+  it("skips directories that collide with an executable name", () => {
+    const rootPath = mkdtempSync(path.join(os.tmpdir(), "synapse-shell-environment-"))
+    const firstBinPath = path.join(rootPath, "first-bin")
+    const secondBinPath = path.join(rootPath, "second-bin")
+    const gitPath = path.join(secondBinPath, "git")
+
+    mkdirSync(path.join(firstBinPath, "git"), { recursive: true })
+    mkdirSync(secondBinPath, { recursive: true })
+    writeFileSync(gitPath, "")
+
+    try {
+      expect(resolveExecutableInPath("git", `${firstBinPath}:${secondBinPath}`, {
+        platform: "linux",
+      })).toBe(gitPath)
+    } finally {
+      rmSync(rootPath, { force: true, recursive: true })
+    }
   })
 
   it("resolves Windows executables using PATHEXT order", () => {

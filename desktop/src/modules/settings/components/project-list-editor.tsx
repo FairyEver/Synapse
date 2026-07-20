@@ -87,7 +87,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const [isCreatingKnowledgeBase, setIsCreatingKnowledgeBase] = useState(false)
   const [openingKnowledgeBaseProjectId, setOpeningKnowledgeBaseProjectId] = useState<string | null>(null)
   const isKnowledgeBaseCreateInFlightRef = useRef(false)
-  const hasDirectoryPicker = Boolean(window.synapse?.repository)
+  const hasDirectoryPicker = Boolean(window.synapse?.settings.repository)
 
   const resetForm = () => {
     setDraftName("")
@@ -155,7 +155,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   }
 
   const handleChooseProjectPath = async () => {
-    const bridge = window.synapse?.repository
+    const bridge = window.synapse?.settings.repository
 
     if (!bridge) {
       return
@@ -300,7 +300,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   }
 
   const handleChooseEditPath = async () => {
-    const bridge = window.synapse?.repository
+    const bridge = window.synapse?.settings.repository
 
     if (!bridge) {
       return

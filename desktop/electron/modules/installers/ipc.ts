@@ -187,14 +187,14 @@ export const installersIpcModule: IpcModule = {
   methods: {
     inspectGlobalSkillInstallations: {
       kind: "invoke",
-      channel: "synapse:installers:inspect-global-skill-installations",
+      operationId: "app.installers.operation.inspect_global_skill_installations",
       request: skillInstallerSourceSchema,
       handler: (_ctx, source: SynapseSkillInstallerSource) =>
         editorInstallService.inspectGlobalSkillInstallations(source),
     },
     inspectSkillEnvSource: {
       kind: "invoke",
-      channel: "synapse:installers:inspect-skill-env-source",
+      operationId: "app.installers.operation.inspect_skill_env_source",
       request: skillInstallerSourceSchema,
       response: z.object({
         declarations: z.array(z.object({
@@ -208,7 +208,7 @@ export const installersIpcModule: IpcModule = {
     },
     prepareLocalSkillSource: {
       kind: "invoke",
-      channel: "synapse:installers:prepare-local-skill-source",
+      operationId: "app.installers.operation.prepare_local_skill_source",
       request: prepareLocalSkillSourceSchema,
       response: skillInstallerSourceSchema,
       handler: (ctx, payload: SynapsePrepareLocalSkillSourcePayload) =>
@@ -220,7 +220,7 @@ export const installersIpcModule: IpcModule = {
     },
     prepareInlineRuleSource: {
       kind: "invoke",
-      channel: "synapse:installers:prepare-inline-rule-source",
+      operationId: "app.installers.operation.prepare_inline_rule_source",
       request: prepareInlineRuleSourceSchema,
       response: ruleInstallerSourceSchema,
       handler: (_ctx, payload: SynapsePrepareInlineRuleSourcePayload) =>
@@ -228,7 +228,7 @@ export const installersIpcModule: IpcModule = {
     },
     installSourceToEditor: {
       kind: "invoke",
-      channel: "synapse:installers:install-source-to-editor",
+      operationId: "app.installers.operation.install_source_to_editor",
       request: installSourceToEditorSchema,
       handler: async (ctx, payload: SynapseInstallSourceToEditorPayload) => {
         const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
@@ -264,7 +264,7 @@ export const installersIpcModule: IpcModule = {
     },
     installSourceToEditorTargets: {
       kind: "invoke",
-      channel: "synapse:installers:install-source-to-editor-targets",
+      operationId: "app.installers.operation.install_source_to_editor_targets",
       request: installSourceToEditorTargetsSchema,
       handler: async (ctx, payload: SynapseInstallSourceToEditorTargetsPayload) => {
         const auditSink = ctx.resolve<AuditSink>("core.audit-sink")

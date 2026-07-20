@@ -17,7 +17,7 @@ export const editorCopyIpcModule: IpcModule = {
   methods: {
     resolveTarget: {
       kind: "invoke",
-      channel: "synapse:editor-copy:resolve-target",
+      operationId: "app.editor_copy.operation.resolve_target",
       request: anySchema,
       response: anySchema,
       handler: async (_ctx, payload: SynapseResolveEditorCopyTargetPayload) => {
@@ -26,7 +26,7 @@ export const editorCopyIpcModule: IpcModule = {
     },
     copy: {
       kind: "invoke",
-      channel: "synapse:editor-copy:copy",
+      operationId: "app.editor_copy.operation.copy",
       request: anySchema,
       response: anySchema,
       handler: async (ctx, payload: SynapseCopyToEditorPayload) => {

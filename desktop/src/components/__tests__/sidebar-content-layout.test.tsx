@@ -129,7 +129,7 @@ describe("SidebarContentLayout", () => {
   })
 
   it("restores a persisted sidebar width", async () => {
-    window.localStorage.setItem("synapse:ui:sidebar-width:v1:agent", "312")
+    window.localStorage.setItem("synapse:app:ui:sidebar_width:v1:agent", "312")
 
     const container = await renderLayout({
       sidebarResizable: true,
@@ -147,15 +147,15 @@ describe("SidebarContentLayout", () => {
     })
 
     resizableMocks.onSidebarResize?.({ inPixels: 318.4 })
-    expect(window.localStorage.getItem("synapse:ui:sidebar-width:v1:agent")).toBeNull()
+    expect(window.localStorage.getItem("synapse:app:ui:sidebar_width:v1:agent")).toBeNull()
 
     resizableMocks.onLayoutChanged?.()
-    expect(window.localStorage.getItem("synapse:ui:sidebar-width:v1:agent")).toBe("318")
+    expect(window.localStorage.getItem("synapse:app:ui:sidebar_width:v1:agent")).toBe("318")
   })
 
   it("keeps persistence records isolated by page", async () => {
-    window.localStorage.setItem("synapse:ui:sidebar-width:v1:agent", "300")
-    window.localStorage.setItem("synapse:ui:sidebar-width:v1:terminal", "340")
+    window.localStorage.setItem("synapse:app:ui:sidebar_width:v1:agent", "300")
+    window.localStorage.setItem("synapse:app:ui:sidebar_width:v1:terminal", "340")
 
     const agent = await renderLayout({
       sidebarResizable: true,
@@ -173,7 +173,7 @@ describe("SidebarContentLayout", () => {
   })
 
   it("clamps stored widths to the current sidebar constraints", async () => {
-    window.localStorage.setItem("synapse:ui:sidebar-width:v1:editor-scan", "999")
+    window.localStorage.setItem("synapse:app:ui:sidebar_width:v1:editor_scan", "999")
 
     const container = await renderLayout({
       sidebarResizable: true,
@@ -188,7 +188,7 @@ describe("SidebarContentLayout", () => {
   })
 
   it("falls back safely when persisted data is invalid or storage is unavailable", async () => {
-    window.localStorage.setItem("synapse:ui:sidebar-width:v1:agent", "invalid")
+    window.localStorage.setItem("synapse:app:ui:sidebar_width:v1:agent", "invalid")
     const invalid = await renderLayout({
       sidebarResizable: true,
       sidebarPersistenceId: "agent",

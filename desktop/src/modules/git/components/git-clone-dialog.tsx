@@ -148,7 +148,7 @@ export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit
     setError(null)
     setFailure(null)
     try {
-      const selectedPath = await getSynapseBridge()?.repository?.chooseDirectory()
+      const selectedPath = await getSynapseBridge()?.settings.repository?.chooseDirectory()
 
       if (selectedPath) {
         setTargetPath(selectedPath)
@@ -261,7 +261,7 @@ export function GitAddLocalDialog({ open, busy, onOpenChange, onSubmit }: GitAdd
   const chooseLocalPath = async () => {
     setError(null)
     try {
-      const selectedPath = await getSynapseBridge()?.repository?.chooseDirectory()
+      const selectedPath = await getSynapseBridge()?.settings.repository?.chooseDirectory()
 
       if (selectedPath) {
         setLocalPath(selectedPath)

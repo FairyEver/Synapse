@@ -42,7 +42,7 @@ describe("createSynapseActionRouter", () => {
       ok: true,
       data: ["tables"],
     })
-    expect(databaseDispatch).toHaveBeenCalledWith("database.table.list", {}, { source: "api" })
+    expect(databaseDispatch).toHaveBeenCalledWith("app.database.table.list", {}, { source: "api" })
     expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
@@ -60,7 +60,7 @@ describe("createSynapseActionRouter", () => {
       ok: true,
       data: [],
     })
-    expect(modelPriceDispatch).toHaveBeenCalledWith("model_price.rule.list", {}, { source: "api" })
+    expect(modelPriceDispatch).toHaveBeenCalledWith("app.model_price.rule.list", {}, { source: "api" })
     expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
@@ -79,7 +79,7 @@ describe("createSynapseActionRouter", () => {
       ok: true,
       data: [],
     })
-    expect(repositoryDispatch).toHaveBeenCalledWith("repository.item.list", {}, { source: "api" })
+    expect(repositoryDispatch).toHaveBeenCalledWith("app.settings.repository.item.list", {}, { source: "api" })
     expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
@@ -110,7 +110,7 @@ describe("createSynapseActionRouter", () => {
       ok: true,
       data: [],
     })
-    expect(automationDispatch).toHaveBeenCalledWith("automation.item.list", {}, { source: "api" })
+    expect(automationDispatch).toHaveBeenCalledWith("app.automation.item.list", {}, { source: "api" })
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
@@ -145,7 +145,7 @@ describe("createSynapseActionRouter", () => {
       ok: true,
       data: [],
     })
-    expect(workflowDispatch).toHaveBeenCalledWith("workflow.definition.list", {}, { source: "api" })
+    expect(workflowDispatch).toHaveBeenCalledWith("app.workflow.definition.list", {}, { source: "api" })
     expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
@@ -163,7 +163,7 @@ describe("createSynapseActionRouter", () => {
       ok: true,
       data: [],
     })
-    expect(contentDispatch).toHaveBeenCalledWith("content.skill.list", {}, { source: "api" })
+    expect(contentDispatch).toHaveBeenCalledWith("app.resource_repository.skill.list", {}, { source: "api" })
     expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
@@ -181,7 +181,7 @@ describe("createSynapseActionRouter", () => {
       ok: true,
       data: [],
     })
-    expect(driveDispatch).toHaveBeenCalledWith("drive.item.list", {}, { source: "api" })
+    expect(driveDispatch).toHaveBeenCalledWith("app.drive.item.list", {}, { source: "api" })
     expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
@@ -191,40 +191,26 @@ describe("createSynapseActionRouter", () => {
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
 
-  it("routes legacy API action ids to their existing dispatchers", async () => {
-    const automationDispatch = vi.fn(async () => ({ ok: true as const }))
-    const databaseDispatch = vi.fn(async () => ({ ok: true as const }))
-    const driveDispatch = vi.fn(async () => ({ ok: true as const }))
-    const contentDispatch = vi.fn(async () => ({ ok: true as const }))
-    const modelPriceDispatch = vi.fn(async () => ({ ok: true as const }))
-    const repositoryDispatch = vi.fn(async () => ({ ok: true as const }))
-    const workflowDispatch = vi.fn(async () => ({ ok: true as const }))
-    const deps = createRouterDeps({
-      automationDispatch,
-      contentDispatch,
-      databaseDispatch,
-      driveDispatch,
-      modelPriceDispatch,
-      repositoryDispatch,
-      workflowDispatch,
-    })
+  it("rejects all retired API action prefixes", async () => {
+    const deps = createRouterDeps()
     const router = createSynapseActionRouter(deps)
+    const retiredActions = [
+      "automation.item.list",
+      "database.table.list",
+      "drive.item.list",
+      "content.skill.list",
+      "model_price.rule.list",
+      "repository.item.list",
+      "workflow.definition.list",
+    ]
 
-    await expect(router.dispatch("automation.item.list", {}, { source: "api" })).resolves.toEqual({ ok: true })
-    await expect(router.dispatch("database.table.list", {}, { source: "api" })).resolves.toEqual({ ok: true })
-    await expect(router.dispatch("drive.item.list", {}, { source: "api" })).resolves.toEqual({ ok: true })
-    await expect(router.dispatch("content.skill.list", {}, { source: "api" })).resolves.toEqual({ ok: true })
-    await expect(router.dispatch("model_price.rule.list", {}, { source: "api" })).resolves.toEqual({ ok: true })
-    await expect(router.dispatch("repository.item.list", {}, { source: "api" })).resolves.toEqual({ ok: true })
-    await expect(router.dispatch("workflow.definition.list", {}, { source: "api" })).resolves.toEqual({ ok: true })
+    for (const action of retiredActions) {
+      await expect(router.dispatch(action, {}, { source: "api" })).rejects.toThrow(/Unknown action/)
+    }
 
-    expect(automationDispatch).toHaveBeenCalledWith("automation.item.list", {}, { source: "api" })
-    expect(databaseDispatch).toHaveBeenCalledWith("database.table.list", {}, { source: "api" })
-    expect(driveDispatch).toHaveBeenCalledWith("drive.item.list", {}, { source: "api" })
-    expect(contentDispatch).toHaveBeenCalledWith("content.skill.list", {}, { source: "api" })
-    expect(modelPriceDispatch).toHaveBeenCalledWith("model_price.rule.list", {}, { source: "api" })
-    expect(repositoryDispatch).toHaveBeenCalledWith("repository.item.list", {}, { source: "api" })
-    expect(workflowDispatch).toHaveBeenCalledWith("workflow.definition.list", {}, { source: "api" })
+    for (const dispatch of Object.values(deps)) {
+      expect(dispatch).not.toHaveBeenCalled()
+    }
   })
 
   it("rejects retired Variable actions", async () => {

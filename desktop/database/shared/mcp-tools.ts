@@ -10,7 +10,7 @@
 // allowed values client-side, even after DDL operations.
 
 import { buildMcpToolActions } from "./capability-registry"
-import { withPrimaryAndLegacyMcpTools } from "../../synapse-capabilities/shared/mcp-aliases"
+import { withPrimaryMcpTools } from "../../synapse-capabilities/shared/mcp-tool-names"
 import {
   DATABASE_OPERATION_LOG_LIST_DEFAULT_LIMIT,
   DATABASE_OPERATION_LOG_LIST_MAX_LIMIT,
@@ -87,7 +87,7 @@ const whereClauseSchema = {
 }
 
 function buildTools(): McpTool[] {
-  return withPrimaryAndLegacyMcpTools([
+  return withPrimaryMcpTools([
     {
       name: "database_table_list",
       description: "List all user tables in the database. Use description to choose the relevant table when the user describes a purpose rather than an exact table name. Returns an array of { name, description, rowCount, createdAt, updatedAt }.",
@@ -595,7 +595,7 @@ function buildTools(): McpTool[] {
         required: ["tableName"],
       },
     },
-  ], { legacyPrefix: "database", primaryPrefix: "app_database" })
+  ], { sourcePrefix: "database", primaryPrefix: "app_database" })
 }
 
 // Maps MCP tool names (snake_case) to canonical action ids used by the

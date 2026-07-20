@@ -4,12 +4,12 @@ import { soundNotifierIpcModule } from "../ipc"
 describe("soundNotifierIpcModule", () => {
   it("defines stable channels", () => {
     expect(soundNotifierIpcModule.id).toBe("soundNotifier")
-    expect(soundNotifierIpcModule.methods.getSettings.channel).toBe("synapse:sound-notifier:settings:get")
-    expect(soundNotifierIpcModule.methods.updateSettings.channel).toBe("synapse:sound-notifier:settings:update")
-    expect(soundNotifierIpcModule.methods.play.channel).toBe("synapse:sound-notifier:play")
-    expect(soundNotifierIpcModule.methods.preview.channel).toBe("synapse:sound-notifier:preview")
-    expect(soundNotifierIpcModule.events.changed.channel).toBe("synapse:sound-notifier:changed")
-    expect(soundNotifierIpcModule.events.playRequested.channel).toBe("synapse:sound-notifier:play-requested")
+    expect(soundNotifierIpcModule.methods.getSettings.operationId).toBe("app.sound_notifier.settings.get")
+    expect(soundNotifierIpcModule.methods.updateSettings.operationId).toBe("app.sound_notifier.settings.update")
+    expect(soundNotifierIpcModule.methods.play.operationId).toBe("app.sound_notifier.sound.play")
+    expect(soundNotifierIpcModule.methods.preview.operationId).toBe("app.sound_notifier.sound.preview")
+    expect(soundNotifierIpcModule.events.changed.operationId).toBe("app.sound_notifier.operation.changed")
+    expect(soundNotifierIpcModule.events.playRequested.operationId).toBe("app.sound_notifier.operation.play_requested")
   })
 
   it("resolves the service for settings reads", async () => {

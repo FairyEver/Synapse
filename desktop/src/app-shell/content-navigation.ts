@@ -2,7 +2,7 @@ import type { CreateSkillPayload, SkillCreateFilePayloadDraft } from "@/modules/
 import type { ContentCreateNotice } from "@/modules/content/types/create-notice"
 import type { SynapseCreateRulePayload } from "@/types/content"
 
-const OPEN_CONTENT_REQUEST_EVENT = "synapse:open-content-request"
+const OPEN_CONTENT_REQUEST_EVENT = "synapse:app:open_content_request:operation"
 
 export type EditOverwriteRulePrefill = {
   contentType: "rule"

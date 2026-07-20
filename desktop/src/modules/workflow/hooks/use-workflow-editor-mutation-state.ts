@@ -5,7 +5,7 @@ const logger = createRendererLogger("workflow.editor-mutation-state")
 
 export function useWorkflowEditorMutationState(workflowId: string, dirty: boolean, saving: boolean): void {
   useEffect(() => {
-    const updateState = window.synapse?.workflow.setEditorMutationState
+    const updateState = window.synapse?.workflow.operation.setEditorMutationState
     if (!updateState || !workflowId) return
     void updateState(workflowId, dirty, saving).catch((error) => {
       logger.warn("Workflow editor mutation state sync failed.", {
@@ -17,7 +17,7 @@ export function useWorkflowEditorMutationState(workflowId: string, dirty: boolea
   }, [workflowId, dirty, saving])
 
   useEffect(() => {
-    const updateState = window.synapse?.workflow.setEditorMutationState
+    const updateState = window.synapse?.workflow.operation.setEditorMutationState
     if (!updateState || !workflowId) return
     return () => {
       void updateState(workflowId, false, false).catch((error) => {

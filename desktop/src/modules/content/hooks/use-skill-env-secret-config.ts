@@ -160,7 +160,7 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
 
     void Promise.all([
       inspectSkillEnvSource(installerSource(item)),
-      secretsBridge.list(),
+      secretsBridge.item.list(),
     ]).then(([inspection, secretList]) => {
       if (generation !== loadGeneration.current) return
       setFields(inspection.declarations.map(({ name, defaultValue }) => (
@@ -227,7 +227,7 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
   const scanNames = useCallback(async (names: readonly string[]): Promise<ScanNamesResult> => {
     const requestedNames = uniqueNames(names)
     try {
-      const result = await secretsBridge.scanSkillEnvBindingsBatch({ names: requestedNames })
+      const result = await secretsBridge.operation.scanSkillEnvBindingsBatch({ names: requestedNames })
       const scannedNames = new Set(result.groups.map(({ name }) => name))
       const failedNames = new Set(result.groups
         .filter(({ scanResult }) => scanResult.failed === true)
@@ -308,7 +308,7 @@ function useSkillEnvSecretConfig(item: SynapseContentMeta<"skill">) {
       setFields([...nextFields])
 
       try {
-        const result = await secretsBridge.upsert({
+        const result = await secretsBridge.item.upsert({
           name: candidate.existingSecretName ?? candidate.name,
           value: candidate.value,
         })

@@ -201,11 +201,13 @@ function installBridge({
   save: (input: unknown) => Promise<WorkflowParamPreset>
 }): void {
   ;(window as unknown as { synapse: unknown }).synapse = {
-    workflowParamPresets: {
-      delete: deletePreset,
-      list,
-      resolveResourceEntryTypes: vi.fn(async () => ({})),
-      save,
+    workflow: {
+      paramPreset: {
+        delete: deletePreset,
+        list,
+        resolveResourceEntryTypes: vi.fn(async () => ({})),
+        save,
+      },
     },
   }
 }

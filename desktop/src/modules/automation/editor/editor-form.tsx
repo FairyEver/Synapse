@@ -118,7 +118,7 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
       setDirty(false)
       setShowCloseDialog(false)
       let cancelled = false
-      void automationBridge.listItems()
+      void automationBridge.item.list()
         .then((items) => {
           if (cancelled || dirtyRef.current) return
           setLoadState({ status: "ready", draft: createDefaultAutomationDraft(
@@ -140,7 +140,7 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
 
     let cancelled = false
     setLoadState({ status: "loading" })
-    void automationBridge.getItem(mode.automationId)
+    void automationBridge.item.get(mode.automationId)
       .then((item) => {
         if (cancelled) return
         if (!item) {
@@ -223,13 +223,13 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
     setError(null)
     try {
       if (mode.mode === "edit" && item) {
-        const updated = await automationBridge.updateItem({
+        const updated = await automationBridge.item.update({
           id: item.id,
           patch: buildAutomationUpdateInputFromDraft(draft, enableAfterSave ? true : undefined),
         })
         setLoadState({ status: "ready", item: updated, draft: createAutomationDraftFromItem(updated) })
       } else {
-        const created = await automationBridge.createItem(buildAutomationCreateInputFromDraft(draft, enabled))
+        const created = await automationBridge.item.create(buildAutomationCreateInputFromDraft(draft, enabled))
         setLoadState({ status: "ready", item: created, draft: createAutomationDraftFromItem(created) })
       }
       setDirty(false)

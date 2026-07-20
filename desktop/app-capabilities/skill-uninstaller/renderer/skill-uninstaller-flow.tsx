@@ -82,7 +82,7 @@ export function SkillUninstallerFlow({
   const activeUninstallIdRef = useRef<string | null>(null)
   const uninstallCancelRequestedRef = useRef(false)
   const skillUninstallerBridge = useMemo(getSkillUninstallerBridge, [])
-  const repositoryBridge = useMemo(() => requireBridgeDomain("repository"), [])
+  const repositoryBridge = useMemo(() => requireBridgeDomain("settings").repository, [])
 
   const normalizedQuery = useMemo<SkillUninstallQuery>(() => ({
     name: query.name.trim(),

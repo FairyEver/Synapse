@@ -133,7 +133,7 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
   }, [loadInitialConfig])
 
   useEffect(() => {
-    const unsubscribe = getSynapseBridge()?.repository?.onUpdated?.((event) => {
+    const unsubscribe = getSynapseBridge()?.settings.repository?.onUpdated?.((event) => {
       if (event.operation !== "variables") {
         return
       }

@@ -258,7 +258,7 @@ function AutomationModule() {
     if (openingEditor) return
     setOpeningEditor(true)
     try {
-      await requireBridgeDomain("automation").openCreateEditorWindow()
+      await requireBridgeDomain("automation").editor.openCreate()
     } catch (openError) {
       logger.warn("Automation create editor open failed.", {
         boundary: "renderer.automation.open-create-editor",
@@ -272,7 +272,7 @@ function AutomationModule() {
 
   async function handleEditorOpen(item: AutomationItem) {
     try {
-      await requireBridgeDomain("automation").openEditorWindow(item.id)
+      await requireBridgeDomain("automation").editor.openEdit(item.id)
     } catch (openError) {
       logger.warn("Automation editor open failed.", {
         boundary: "renderer.automation.open-editor",

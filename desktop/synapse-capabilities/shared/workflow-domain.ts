@@ -1,9 +1,9 @@
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 import type { CapabilityId } from "./naming"
 import {
-  buildPrimaryAndLegacyMcpToolActions,
-  withPrimaryAndLegacyMcpTools,
-} from "./mcp-aliases"
+  buildPrimaryMcpToolActions,
+  withPrimaryMcpTools,
+} from "./mcp-tool-names"
 
 // ---------------------------------------------------------------------------
 // Capability definitions
@@ -42,9 +42,8 @@ export const WORKFLOW_DOMAIN: CapabilityDomainDefinition = {
   capabilities: workflowCapabilities,
 }
 
-export const WORKFLOW_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAndLegacyMcpToolActions(
+export const WORKFLOW_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryMcpToolActions(
   workflowCapabilities,
-  { legacyPrefix: "workflow", primaryPrefix: "app_workflow" },
 )
 
 // ---------------------------------------------------------------------------
@@ -261,7 +260,7 @@ const workflowDefinitionSchema = {
 }
 
 export function buildWorkflowTools(): McpToolDefinition[] {
-  return withPrimaryAndLegacyMcpTools([
+  return withPrimaryMcpTools([
     // Discovery
     {
       name: "workflow_node_type_list",
@@ -504,5 +503,5 @@ export function buildWorkflowTools(): McpToolDefinition[] {
         required: ["workflowId"],
       },
     },
-  ], { legacyPrefix: "workflow", primaryPrefix: "app_workflow" })
+  ], { sourcePrefix: "workflow", primaryPrefix: "app_workflow" })
 }

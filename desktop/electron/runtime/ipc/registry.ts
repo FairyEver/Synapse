@@ -22,6 +22,7 @@ import type {
 } from "./types"
 import { tryValidateResponse, validateRequest } from "./validation"
 import { makeIdempotentDisposer } from "../lib"
+import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 
 /**
  * Transport callback: the IpcRegistry calls this once per registered method
@@ -65,7 +66,7 @@ export class IpcRegistryImpl implements IpcRegistry {
 
     try {
       for (const [methodName, descriptor] of Object.entries(module.methods)) {
-        const channel = descriptor.channel
+        const channel = ipcOperationIdToChannel(descriptor.operationId)
         if (this.channelOwner.has(channel)) {
           // Roll back partial install before rethrowing. The error's details
           // record how many handlers were rolled back so consumers can
@@ -100,7 +101,7 @@ export class IpcRegistryImpl implements IpcRegistry {
     // Events are not "installed" on a transport — they're emitted via EventBus
     // (Phase 0.4). We only record their channels for diagnostics.
     for (const [, descriptor] of Object.entries(module.events)) {
-      entry.channels.push(descriptor.channel)
+      entry.channels.push(ipcOperationIdToChannel(descriptor.operationId))
     }
 
     this.modules.set(module.id, entry)

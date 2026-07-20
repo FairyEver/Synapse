@@ -35,50 +35,50 @@ describe("Automation capability domain", () => {
   })
 
   it("maps Automation MCP tool names to canonical actions", () => {
-    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_item_list).toBe("app.automation.item.list")
-    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_item_create).toBe("app.automation.item.create")
-    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_run_execute).toBe("app.automation.run.execute")
-    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_webhook_list).toBe("app.automation.webhook.list")
-    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_trigger_type_list).toBe("app.automation.trigger_type.list")
-    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_executor_type_list).toBe("app.automation.executor_type.list")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.app_automation_item_list).toBe("app.automation.item.list")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.app_automation_item_create).toBe("app.automation.item.create")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.app_automation_run_execute).toBe("app.automation.run.execute")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.app_automation_webhook_list).toBe("app.automation.webhook.list")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.app_automation_trigger_type_list).toBe("app.automation.trigger_type.list")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.app_automation_executor_type_list).toBe("app.automation.executor_type.list")
   })
 
   it("registers Automation tools with the global MCP registry", () => {
     expect(CAPABILITY_DOMAINS.map((domain) => domain.id)).toContain("automation")
-    expect(MCP_TOOL_ACTIONS.automation_item_delete).toBe("app.automation.item.delete")
-    expect(MCP_TOOL_ACTIONS.automation_run_disable).toBe("app.automation.run.disable")
-    expect(MCP_TOOL_ACTIONS.automation_webhook_list).toBe("app.automation.webhook.list")
+    expect(MCP_TOOL_ACTIONS.app_automation_item_delete).toBe("app.automation.item.delete")
+    expect(MCP_TOOL_ACTIONS.app_automation_run_disable).toBe("app.automation.run.disable")
+    expect(MCP_TOOL_ACTIONS.app_automation_webhook_list).toBe("app.automation.webhook.list")
     expect(getActionDomainId("app.automation.item.list")).toBe("automation")
-    expect(getMcpToolDomainId("automation_runtime_inspect")).toBe("automation")
+    expect(getMcpToolDomainId("app_automation_runtime_inspect")).toBe("automation")
 
     const tools = buildAllMcpTools()
     expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
-      "automation_item_list",
-      "automation_item_create",
-      "automation_item_update",
-      "automation_item_delete",
-      "automation_run_execute",
-      "automation_runtime_inspect",
-      "automation_webhook_list",
-      "automation_trigger_type_list",
-      "automation_executor_type_list",
+      "app_automation_item_list",
+      "app_automation_item_create",
+      "app_automation_item_update",
+      "app_automation_item_delete",
+      "app_automation_run_execute",
+      "app_automation_runtime_inspect",
+      "app_automation_webhook_list",
+      "app_automation_trigger_type_list",
+      "app_automation_executor_type_list",
     ]))
   })
 
   it("declares required input schema fields for mutating tools", () => {
     const tools = buildAutomationTools()
-    expect(tools.find((tool) => tool.name === "automation_item_get")?.inputSchema.required).toEqual(["automationId"])
-    expect(tools.find((tool) => tool.name === "automation_item_create")?.inputSchema.required).toEqual([
+    expect(tools.find((tool) => tool.name === "app_automation_item_get")?.inputSchema.required).toEqual(["automationId"])
+    expect(tools.find((tool) => tool.name === "app_automation_item_create")?.inputSchema.required).toEqual([
       "name",
       "scope",
       "trigger",
       "executor",
     ])
-    expect(tools.find((tool) => tool.name === "automation_item_update")?.inputSchema.required).toEqual([
+    expect(tools.find((tool) => tool.name === "app_automation_item_update")?.inputSchema.required).toEqual([
       "automationId",
       "patch",
     ])
-    expect(tools.find((tool) => tool.name === "automation_run_disable")?.inputSchema.required).toEqual(["runId"])
-    expect(tools.find((tool) => tool.name === "automation_run_disable")?.description).toContain("stopRequested")
+    expect(tools.find((tool) => tool.name === "app_automation_run_disable")?.inputSchema.required).toEqual(["runId"])
+    expect(tools.find((tool) => tool.name === "app_automation_run_disable")?.description).toContain("stopRequested")
   })
 })

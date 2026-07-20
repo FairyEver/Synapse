@@ -90,6 +90,25 @@ import { WorkflowEditorApp } from "../editor-app"
 
 let roots: Root[] = []
 
+function createWorkflowApi(api: {
+  get: ReturnType<typeof vi.fn>
+  openRunner: ReturnType<typeof vi.fn>
+  runDefinition: ReturnType<typeof vi.fn>
+  save: ReturnType<typeof vi.fn>
+  onEditorRefocus: ReturnType<typeof vi.fn>
+  onDefinitionUpdated: ReturnType<typeof vi.fn>
+}) {
+  return {
+    definition: { get: api.get, update: api.save },
+    operation: {
+      openRunner: api.openRunner,
+      runDefinition: api.runDefinition,
+      onEditorRefocus: api.onEditorRefocus,
+    },
+    editor: { onDefinitionUpdated: api.onDefinitionUpdated },
+  }
+}
+
 afterEach(() => {
   for (const root of roots) {
     act(() => {
@@ -105,14 +124,14 @@ afterEach(() => {
 describe("WorkflowEditorApp", () => {
   it("logs definition load failures without exposing raw backend error text", async () => {
     const rawError = "workflow get failed token=sk-secret at /Users/example/repo prompt text"
-    const workflowApi = {
+    const workflowApi = createWorkflowApi({
       get: vi.fn().mockRejectedValue(new Error(rawError)),
       openRunner: vi.fn(),
       runDefinition: vi.fn(),
       save: vi.fn(),
       onEditorRefocus: vi.fn(() => vi.fn()),
       onDefinitionUpdated: vi.fn(() => vi.fn()),
-    }
+    })
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: { workflow: workflowApi },
@@ -129,7 +148,7 @@ describe("WorkflowEditorApp", () => {
       await Promise.resolve()
     })
 
-    expect(workflowApi.get).toHaveBeenCalledWith("workflow-1")
+    expect(workflowApi.definition.get).toHaveBeenCalledWith("workflow-1")
     expect(document.body.textContent).toContain("加载失败")
     expect(document.body.textContent).not.toContain("sk-secret")
     expect(document.body.textContent).not.toContain("/Users/example")
@@ -147,14 +166,14 @@ describe("WorkflowEditorApp", () => {
 
   it("logs and displays workflow run IPC failures without raw backend error text", async () => {
     const rawError = "workflow run failed token=sk-secret at /Users/example/repo prompt text"
-    const workflowApi = {
+    const workflowApi = createWorkflowApi({
       get: vi.fn().mockResolvedValue(definition()),
       openRunner: vi.fn(),
       runDefinition: vi.fn().mockRejectedValue(new Error(rawError)),
       save: vi.fn().mockResolvedValue({ versionHash: "v2" }),
       onEditorRefocus: vi.fn(() => vi.fn()),
       onDefinitionUpdated: vi.fn(() => vi.fn()),
-    }
+    })
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: { workflow: workflowApi },
@@ -176,7 +195,7 @@ describe("WorkflowEditorApp", () => {
       await Promise.resolve()
     })
 
-    expect(workflowApi.runDefinition).toHaveBeenCalled()
+    expect(workflowApi.operation.runDefinition).toHaveBeenCalled()
     expect(document.body.textContent).toContain("运行失败")
     expect(document.body.textContent).not.toContain("sk-secret")
     expect(document.body.textContent).not.toContain("/Users/example")
@@ -194,7 +213,7 @@ describe("WorkflowEditorApp", () => {
 
   it("logs force-run IPC failures without exposing raw backend error text", async () => {
     const rawError = "force run failed token=sk-secret at /Users/example/repo prompt text"
-    const workflowApi = {
+    const workflowApi = createWorkflowApi({
       get: vi.fn().mockResolvedValue(definition()),
       openRunner: vi.fn(),
       runDefinition: vi.fn()
@@ -203,7 +222,7 @@ describe("WorkflowEditorApp", () => {
       save: vi.fn().mockResolvedValue({ versionHash: "v2" }),
       onEditorRefocus: vi.fn(() => vi.fn()),
       onDefinitionUpdated: vi.fn(() => vi.fn()),
-    }
+    })
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: { workflow: workflowApi },
@@ -231,7 +250,7 @@ describe("WorkflowEditorApp", () => {
       await Promise.resolve()
     })
 
-    expect(workflowApi.runDefinition).toHaveBeenCalledTimes(2)
+    expect(workflowApi.operation.runDefinition).toHaveBeenCalledTimes(2)
     expect(toastError).toHaveBeenCalledWith("运行失败：无法连接到主进程")
     expect(rendererLogger.error).toHaveBeenCalledWith("force run failed", {
       workflowId: "workflow-1",
@@ -246,7 +265,7 @@ describe("WorkflowEditorApp", () => {
 
   it("clears stale editor state when an open workflow is deleted externally", async () => {
     let definitionUpdated: ((payload: { workflowId: string; source?: string }) => void) | undefined
-    const workflowApi = {
+    const workflowApi = createWorkflowApi({
       get: vi.fn()
         .mockResolvedValueOnce(definition())
         .mockResolvedValueOnce(null),
@@ -258,7 +277,7 @@ describe("WorkflowEditorApp", () => {
         definitionUpdated = listener
         return vi.fn()
       }),
-    }
+    })
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: { workflow: workflowApi },
@@ -282,7 +301,7 @@ describe("WorkflowEditorApp", () => {
       await Promise.resolve()
     })
 
-    expect(workflowApi.get).toHaveBeenCalledTimes(2)
+    expect(workflowApi.definition.get).toHaveBeenCalledTimes(2)
     expect(document.body.textContent).toContain("工作流不存在或已被删除")
     expect(document.body.textContent).not.toContain("Change workflow")
     expect(toastInfo).toHaveBeenCalledWith("工作流已被删除", { duration: 2000 })
@@ -290,7 +309,7 @@ describe("WorkflowEditorApp", () => {
 
   it("shows node repair hints without raw validation JSON", async () => {
     const rawMessage = JSON.stringify([{ code: "invalid_type", path: ["projectId"], message: "Required" }])
-    const workflowApi = {
+    const workflowApi = createWorkflowApi({
       get: vi.fn().mockResolvedValue(definitionWithPrompt()),
       openRunner: vi.fn(),
       runDefinition: vi.fn().mockResolvedValue({
@@ -299,7 +318,7 @@ describe("WorkflowEditorApp", () => {
       save: vi.fn().mockResolvedValue({ versionHash: "v2" }),
       onEditorRefocus: vi.fn(() => vi.fn()),
       onDefinitionUpdated: vi.fn(() => vi.fn()),
-    }
+    })
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: { workflow: workflowApi },
@@ -329,7 +348,7 @@ describe("WorkflowEditorApp", () => {
 
   it("shows save validation details when run is cancelled before execution", async () => {
     const validationMessage = "节点「提示词节点」缺少 providerId"
-    const workflowApi = {
+    const workflowApi = createWorkflowApi({
       get: vi.fn().mockResolvedValue(definitionWithPrompt()),
       openRunner: vi.fn(),
       runDefinition: vi.fn(),
@@ -338,7 +357,7 @@ describe("WorkflowEditorApp", () => {
       }),
       onEditorRefocus: vi.fn(() => vi.fn()),
       onDefinitionUpdated: vi.fn(() => vi.fn()),
-    }
+    })
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: { workflow: workflowApi },
@@ -364,13 +383,13 @@ describe("WorkflowEditorApp", () => {
       await Promise.resolve()
     })
 
-    expect(workflowApi.save).toHaveBeenCalled()
-    expect(workflowApi.runDefinition).not.toHaveBeenCalled()
+    expect(workflowApi.definition.update).toHaveBeenCalled()
+    expect(workflowApi.operation.runDefinition).not.toHaveBeenCalled()
     expect(toastError).toHaveBeenCalledWith(validationMessage)
   })
 
   it("collapses the floating validation card", async () => {
-    const workflowApi = {
+    const workflowApi = createWorkflowApi({
       get: vi.fn().mockResolvedValue(definitionWithPrompt()),
       openRunner: vi.fn(),
       runDefinition: vi.fn().mockResolvedValue({
@@ -379,7 +398,7 @@ describe("WorkflowEditorApp", () => {
       save: vi.fn().mockResolvedValue({ versionHash: "v2" }),
       onEditorRefocus: vi.fn(() => vi.fn()),
       onDefinitionUpdated: vi.fn(() => vi.fn()),
-    }
+    })
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: { workflow: workflowApi },

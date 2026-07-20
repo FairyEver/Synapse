@@ -10,7 +10,6 @@ export const modelPriceAppDefinition = {
   window: { openable: true },
   capabilities: {
     primaryMcpPrefix: "app_model_price",
-    legacyMcpPrefixes: ["model_price"],
   },
   removable: false,
   renameable: false,

@@ -1124,7 +1124,7 @@ export const workflowIpcModule: IpcModule = {
   id: "workflow",
   methods: {
     inspectDeletePackage: {
-      channel: "synapse:workflow:inspect-delete-package", kind: "invoke",
+      operationId: "app.workflow.operation.inspect_delete_package", kind: "invoke",
       request: z.object({ workflowId: workflowIdSchema }),
       response: workflowShareDeletePlanSchema,
       handler: async (ctx, { workflowId }: { workflowId: string }) => (
@@ -1132,7 +1132,7 @@ export const workflowIpcModule: IpcModule = {
       ),
     },
     inspectExportPackage: {
-      channel: "synapse:workflow:inspect-export-package", kind: "invoke",
+      operationId: "app.workflow.operation.inspect_export_package", kind: "invoke",
       request: z.object({ workflowId: workflowIdSchema }),
       response: workflowShareExportPreflightSchema,
       handler: async (ctx, { workflowId }: { workflowId: string }) => (
@@ -1140,7 +1140,7 @@ export const workflowIpcModule: IpcModule = {
       ),
     },
     exportPackage: {
-      channel: "synapse:workflow:export-package", kind: "invoke",
+      operationId: "app.workflow.operation.export_package", kind: "invoke",
       request: z.object({
         workflowId: workflowIdSchema,
         workflowName: z.string().optional(),
@@ -1190,7 +1190,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     inspectImportPackage: {
-      channel: "synapse:workflow:inspect-import-package", kind: "invoke",
+      operationId: "app.workflow.operation.inspect_import_package", kind: "invoke",
       request: z.void().optional(),
       response: z.union([workflowImportPreviewSchema, workflowShareImportPreviewSchema]).nullable(),
       handler: async (ctx) => {
@@ -1249,7 +1249,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     importPackage: {
-      channel: "synapse:workflow:import-package", kind: "invoke",
+      operationId: "app.workflow.operation.import_package", kind: "invoke",
       request: z.object({
         packagePath: z.string(),
         packageDigest: z.string().optional(),
@@ -1362,7 +1362,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     undoShareImport: {
-      channel: "synapse:workflow:undo-share-import", kind: "invoke",
+      operationId: "app.workflow.operation.undo_share_import", kind: "invoke",
       request: z.object({ lineageId: z.string().min(1).max(200) }),
       response: z.object({ workflowIds: z.array(workflowIdSchema) }),
       handler: async (ctx, { lineageId }: { lineageId: string }) => {
@@ -1381,23 +1381,23 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     chooseParamFile: {
-      channel: "synapse:workflow:param-file:choose", kind: "invoke", request: z.void().optional(), response: z.string().nullable(),
+      operationId: "app.workflow.param_file.choose", kind: "invoke", request: z.void().optional(), response: z.string().nullable(),
       handler: async () => chooseWorkflowParamPath({ title: "选择文件", properties: ["openFile"] }),
     },
     chooseParamDirectory: {
-      channel: "synapse:workflow:param-directory:choose", kind: "invoke", request: z.void().optional(), response: z.string().nullable(),
+      operationId: "app.workflow.param_directory.choose", kind: "invoke", request: z.void().optional(), response: z.string().nullable(),
       handler: async () => chooseWorkflowParamPath({ title: "选择文件夹", properties: ["openDirectory"] }),
     },
     chooseParamFiles: {
-      channel: "synapse:workflow:param-files:choose", kind: "invoke", request: z.void().optional(), response: z.array(z.string()),
+      operationId: "app.workflow.param_files.choose", kind: "invoke", request: z.void().optional(), response: z.array(z.string()),
       handler: async () => chooseWorkflowParamPaths({ title: "选择文件", properties: ["openFile", "multiSelections"] }),
     },
     chooseParamDirectories: {
-      channel: "synapse:workflow:param-directories:choose", kind: "invoke", request: z.void().optional(), response: z.array(z.string()),
+      operationId: "app.workflow.param_directories.choose", kind: "invoke", request: z.void().optional(), response: z.array(z.string()),
       handler: async () => chooseWorkflowParamPaths({ title: "选择文件夹", properties: ["openDirectory", "multiSelections"] }),
     },
     paramPresetsList: {
-      channel: "synapse:workflow:param-presets:list", kind: "invoke",
+      operationId: "app.workflow.param_preset.list", kind: "invoke",
       request: z.object({ workflowId: workflowIdSchema }),
       response: z.array(workflowParamPresetSchema),
       handler: async (ctx, { workflowId }: { workflowId: string }) => {
@@ -1406,7 +1406,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     paramPresetsResolveResourceEntryTypes: {
-      channel: "synapse:workflow:param-presets:resolve-resource-entry-types", kind: "invoke",
+      operationId: "app.workflow.param_preset.resolve_resource_entry_types", kind: "invoke",
       request: z.object({ id: z.string() }),
       response: z.record(z.string(), z.enum(["file", "directory", "mixed", "unavailable"])),
       handler: async (ctx, { id }: { id: string }) => {
@@ -1415,7 +1415,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     paramPresetsSave: {
-      channel: "synapse:workflow:param-presets:save", kind: "invoke",
+      operationId: "app.workflow.param_preset.save", kind: "invoke",
       request: saveWorkflowParamPresetSchema,
       response: workflowParamPresetSchema,
       handler: async (ctx, input: z.infer<typeof saveWorkflowParamPresetSchema>) => {
@@ -1435,7 +1435,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     paramPresetsDelete: {
-      channel: "synapse:workflow:param-presets:delete", kind: "invoke",
+      operationId: "app.workflow.param_preset.delete", kind: "invoke",
       request: z.object({ id: z.string() }),
       response: z.void(),
       handler: async (ctx, { id }: { id: string }) => {
@@ -1444,7 +1444,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     list: {
-      channel: "synapse:workflow:list", kind: "invoke", request: z.void().optional(),
+      operationId: "app.workflow.definition.list", kind: "invoke", request: z.void().optional(),
       response: z.object({
         items: z.array(z.object({ id: z.string(), name: z.string(), description: z.string().optional(), version: z.string(), loadError: z.string().optional(), rawExportAvailable: z.boolean().optional(), nodeCount: z.number(), createdAt: z.number(), updatedAt: z.number() })),
         migrationDiagnostics: z.array(z.object({ id: z.string(), workflowId: z.string(), status: z.enum(["failed", "unsupported_future", "legacy_conflict"]), targetSchemaVersion: z.string(), errorCode: z.string().optional(), errorMessage: z.string().optional(), rawExportAvailable: z.boolean().optional(), updatedAt: z.number() })),
@@ -1460,7 +1460,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     get: {
-      channel: "synapse:workflow:get", kind: "invoke", request: z.object({ id: workflowIdSchema }),
+      operationId: "app.workflow.definition.get", kind: "invoke", request: z.object({ id: workflowIdSchema }),
       response: workflowDefinitionSchema.nullable(),
       handler: async (ctx, { id }: { id: string }) => {
         logger.info("workflow:get", { id })
@@ -1470,7 +1470,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     create: {
-      channel: "synapse:workflow:create", kind: "invoke", request: z.void().optional(),
+      operationId: "app.workflow.definition.create", kind: "invoke", request: z.void().optional(),
       response: z.union([
         z.object({ id: z.string(), versionHash: z.string() }),
         z.object({ errors: z.array(validationErrorSchema) }),
@@ -1488,7 +1488,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     save: {
-      channel: "synapse:workflow:save", kind: "invoke", request: workflowDefinitionSchema,
+      operationId: "app.workflow.definition.update", kind: "invoke", request: workflowDefinitionSchema,
       response: z.union([z.object({ versionHash: z.string() }), z.object({ errors: z.array(validationErrorSchema) })]),
       handler: async (ctx, def) => {
         const d = def as { id: string; name: string; nodes: unknown[] }
@@ -1511,7 +1511,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     delete: {
-      channel: "synapse:workflow:delete", kind: "invoke", request: z.object({
+      operationId: "app.workflow.definition.delete", kind: "invoke", request: z.object({
         id: workflowIdSchema,
         cleanupImportedChildren: z.boolean().optional(),
       }), response: z.void(),
@@ -1587,7 +1587,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     validate: {
-      channel: "synapse:workflow:validate", kind: "invoke", request: workflowDefinitionSchema, response: validationResultSchema,
+      operationId: "app.workflow.definition.inspect", kind: "invoke", request: workflowDefinitionSchema, response: validationResultSchema,
       handler: async (ctx, def) => {
         const d = def as { id: string; nodes: unknown[] }
         logger.info("workflow:validate requested", { id: d.id, nodeCount: d.nodes.length })
@@ -1599,7 +1599,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     run: {
-      channel: "synapse:workflow:run", kind: "invoke",
+      operationId: "app.workflow.run.execute", kind: "invoke",
       request: z.object({ id: workflowIdSchema, params: z.record(z.string(), z.unknown()) }),
       response: z.union([
         z.object({ runId: z.string() }),
@@ -1659,7 +1659,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     runDefinition: {
-      channel: "synapse:workflow:run-definition", kind: "invoke",
+      operationId: "app.workflow.operation.run_definition", kind: "invoke",
       request: z.object({ definition: workflowDefinitionSchema, params: z.record(z.string(), z.unknown()), force: z.boolean().optional() }),
       response: z.union([
         z.object({ runId: z.string() }),
@@ -1736,7 +1736,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     rerun: {
-      channel: "synapse:workflow:rerun", kind: "invoke",
+      operationId: "app.workflow.operation.rerun", kind: "invoke",
       request: z.object({ previousRunId: workflowRunIdSchema, workflowId: workflowIdSchema.optional(), params: z.record(z.string(), z.unknown()), force: z.boolean().optional() }),
       response: z.union([
         z.object({ runId: z.string() }),
@@ -1872,7 +1872,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     openRunner: {
-      channel: "synapse:workflow:open-runner", kind: "invoke",
+      operationId: "app.workflow.operation.open_runner", kind: "invoke",
       request: z.object({ workflowId: workflowIdSchema, runId: workflowRunIdSchema }),
       response: z.void(),
       handler: async (ctx, { workflowId, runId }: { workflowId: string; runId: string }) => {
@@ -1882,7 +1882,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     cancel: {
-      channel: "synapse:workflow:cancel", kind: "invoke", request: z.object({ runId: workflowRunIdSchema }), response: z.void(),
+      operationId: "app.workflow.run.disable", kind: "invoke", request: z.object({ runId: workflowRunIdSchema }), response: z.void(),
       handler: (ctx, { runId }: { runId: string }) => {
         logger.info("workflow:cancel requested", { runId })
         const controller = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts").get(runId)
@@ -1895,14 +1895,14 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     activeRuns: {
-      channel: "synapse:workflow:active-runs", kind: "invoke", request: z.void(), response: z.array(workflowRunListItemSchema),
+      operationId: "app.workflow.run.list_active", kind: "invoke", request: z.void(), response: z.array(workflowRunListItemSchema),
       handler: (ctx) => {
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
         return listActiveRunItems(runStatuses)
       },
     },
     runHistory: {
-      channel: "synapse:workflow:run-history", kind: "invoke", request: z.object({ workflowId: workflowIdSchema }), response: z.array(workflowRunListItemSchema),
+      operationId: "app.workflow.run.list", kind: "invoke", request: z.object({ workflowId: workflowIdSchema }), response: z.array(workflowRunListItemSchema),
       handler: async (ctx, { workflowId }: { workflowId: string }) => {
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
         const snapshots = await ctx.resolve<RunSnapshotService>("core.workflow.snapshots").list(workflowId, 20)
@@ -1920,7 +1920,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     runStatus: {
-      channel: "synapse:workflow:run-status", kind: "invoke", request: z.object({ runId: workflowRunIdSchema, workflowId: workflowIdSchema.optional() }), response: workflowRunStatusSchema.nullable(),
+      operationId: "app.workflow.run.get", kind: "invoke", request: z.object({ runId: workflowRunIdSchema, workflowId: workflowIdSchema.optional() }), response: workflowRunStatusSchema.nullable(),
       handler: async (ctx, { runId, workflowId }: { runId: string; workflowId?: string }) => {
         const live = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses").get(runId)
         if (live) {
@@ -1978,7 +1978,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     openEditor: {
-      channel: "synapse:workflow:open-editor", kind: "invoke", request: z.object({ id: workflowIdSchema, runId: workflowRunIdSchema.optional() }), response: z.void(),
+      operationId: "app.workflow.operation.open_editor", kind: "invoke", request: z.object({ id: workflowIdSchema, runId: workflowRunIdSchema.optional() }), response: z.void(),
       handler: async (ctx, { id, runId }: { id: string; runId?: string }) => {
         logger.info("workflow:openEditor", { workflowId: id, runId })
         const baseUrl = rendererBaseUrl()
@@ -1986,7 +1986,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     editorState: {
-      channel: "synapse:workflow:editor-state", kind: "invoke", request: z.void().optional(),
+      operationId: "app.workflow.operation.editor_state", kind: "invoke", request: z.void().optional(),
       response: z.object({
         openEditors: z.array(z.string()),
         states: z.array(z.object({ workflowId: workflowIdSchema, dirty: z.boolean(), saving: z.boolean() })),
@@ -1997,7 +1997,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     setEditorMutationState: {
-      channel: "synapse:workflow:set-editor-mutation-state", kind: "invoke",
+      operationId: "app.workflow.operation.set_editor_mutation_state", kind: "invoke",
       request: z.object({ workflowId: workflowIdSchema, dirty: z.boolean(), saving: z.boolean() }),
       response: z.void(),
       handler: (ctx, state: { workflowId: string; dirty: boolean; saving: boolean }) => {
@@ -2005,14 +2005,14 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     checkCanSync: {
-      channel: "synapse:workflow:check-can-sync", kind: "invoke", request: z.void().optional(),
+      operationId: "app.workflow.operation.check_can_sync", kind: "invoke", request: z.void().optional(),
       response: z.object({ canSync: z.boolean(), blockers: z.array(z.string()) }),
       handler: (ctx) => ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").checkCanSync(),
     },
   },
   events: {
     event: {
-      kind: "event", channel: "synapse:workflow:event",
+      kind: "event", operationId: "app.workflow.operation.event",
       payload: z.object({ domain: z.literal("workflow"), type: z.string(), payload: z.unknown(), timestamp: z.string() }),
     },
   },

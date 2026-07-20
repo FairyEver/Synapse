@@ -61,7 +61,7 @@ const DATABASE_APP_TABS: readonly { readonly id: DatabaseAppViewId; readonly lab
 ]
 
 function getStoredDisplayMode(): DisplayMode {
-  const stored = localStorage.getItem("synapse:database:displayMode")
+  const stored = localStorage.getItem("synapse:app:database:operation:displayMode")
   if (stored === "title" || stored === "desc" || stored === "title+desc") return stored
   return "title+desc"
 }
@@ -129,7 +129,7 @@ function DatabaseTablesView() {
 
   const handleDisplayModeChange = useCallback((mode: DisplayMode) => {
     setDisplayMode(mode)
-    localStorage.setItem("synapse:database:displayMode", mode)
+    localStorage.setItem("synapse:app:database:operation:displayMode", mode)
   }, [])
 
   const handleFolderOperationError = useCallback((action: DatabaseFolderOperationAction, error: unknown) => {
@@ -424,7 +424,7 @@ function DatabaseTablesView() {
       void refreshQuery()
       void refreshSchema()
     }
-    const unsubscribe = bridge.database.onChanged(() => {
+    const unsubscribe = bridge.database.operation.onChanged(() => {
       if (timer !== null) return
       timer = setTimeout(runRefresh, 150)
     })

@@ -13,7 +13,7 @@ export function useWorkflowList() {
   const refresh = useCallback(async () => {
     setError(null)
     try {
-      const data = await window.synapse?.workflow.list()
+      const data = await window.synapse?.workflow.definition.list()
       if (!data) {
         // IPC bridge unavailable — treat as error, not empty
         setError("无法连接到主进程，请稍后重试")
@@ -23,7 +23,7 @@ export function useWorkflowList() {
       setMigrationDiagnostics(data.migrationDiagnostics)
     } catch (err) {
       logger.warn("Workflow list refresh failed.", {
-        boundary: "renderer.workflow.list",
+        boundary: "renderer.workflow.definition.list",
         ...errorDiagnostic(err),
       })
       setError("加载失败，请重试")
@@ -33,7 +33,7 @@ export function useWorkflowList() {
   }, [])
   useEffect(() => { void refresh() }, [refresh])
   useEffect(() => {
-    const unsub = window.synapse?.workflow.onDefinitionUpdated?.(() => {
+    const unsub = window.synapse?.workflow.editor.onDefinitionUpdated?.(() => {
       void refresh()
     })
     return () => { unsub?.() }

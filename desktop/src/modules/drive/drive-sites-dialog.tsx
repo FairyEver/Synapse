@@ -91,7 +91,7 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
     const generation = input.generation ?? loadGenerationRef.current
     setState((current) => ({ ...current, loading: !append, loadingMore: append, error: null }))
     try {
-      const result = await requireSynapseBridge().account.listDriveSites({
+      const result = await requireSynapseBridge().drive.site.list({
         offset: input.offset ?? 0,
         limit: DRIVE_SITE_PAGE_SIZE,
       })
@@ -127,10 +127,10 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
     setBusySiteId(site.siteId)
     try {
       if (action === "enable") {
-        await requireSynapseBridge().account.enableDriveSite({ siteId: site.siteId })
+        await requireSynapseBridge().drive.site.enable({ siteId: site.siteId })
         toast("站点已启用")
       } else {
-        await requireSynapseBridge().account.republishDriveSite({ siteId: site.siteId, entryPath: site.entryPath })
+        await requireSynapseBridge().drive.site.republish({ siteId: site.siteId, entryPath: site.entryPath })
         toast("站点已重新发布")
       }
       await reloadSites()
@@ -144,7 +144,7 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
   const deleteSite = useCallback(async (site: DriveSiteDto) => {
     setBusySiteId(site.siteId)
     try {
-      await requireSynapseBridge().account.deleteDriveSite({ siteId: site.siteId })
+      await requireSynapseBridge().drive.site.delete({ siteId: site.siteId })
       toast("站点已删除")
       setConfirmState(null)
       await reloadSites()
@@ -164,7 +164,7 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
     setBusySiteId(confirmState.site.siteId)
     try {
       if (confirmState.action === "disable") {
-        await requireSynapseBridge().account.disableDriveSite({ siteId: confirmState.site.siteId })
+        await requireSynapseBridge().drive.site.disable({ siteId: confirmState.site.siteId })
         toast("站点已停用")
       }
       setConfirmState(null)
@@ -449,7 +449,7 @@ function DriveSiteAccessDialog({
     if (!form) return
     setBusySiteId(form.site.siteId)
     try {
-      await requireSynapseBridge().account.updateDriveSiteAccess({
+      await requireSynapseBridge().drive.site.updateAccess({
         siteId: form.site.siteId,
         accessMode: form.passwordEnabled ? "password" : "public",
         expiresIn: form.expiresIn,

@@ -39,7 +39,7 @@ export class WorkflowWindowManager {
     const existing = this.editorWindows.get(workflowId)
     if (existing && !existing.isDestroyed()) {
       logger.info("workflow editor window reused", { workflowId, runId })
-      this.sendToWindow(existing, "synapse:workflow:editor-refocus", { runId }, { workflowId, runId })
+      this.sendToWindow(existing, "synapse:app:workflow:operation:editor_refocus", { runId }, { workflowId, runId })
       focusWorkflowWindow(existing)
       this.closeRunnerWindow(workflowId, "workflow runner window closed after editor opened")
       return existing
@@ -96,7 +96,7 @@ export class WorkflowWindowManager {
     const existing = this.runnerWindows.get(workflowId)
     if (existing && !existing.isDestroyed()) {
       logger.info("workflow runner window reused — switching run", { workflowId, newRunId: runId })
-      this.sendToWindow(existing, "synapse:workflow:runner-switch-run", { runId }, { workflowId, runId })
+      this.sendToWindow(existing, "synapse:app:workflow:operation:runner_switch_run", { runId }, { workflowId, runId })
       focusWorkflowWindow(existing)
       this.closeEditorWindow(workflowId, "workflow editor window closed after runner opened")
       return existing

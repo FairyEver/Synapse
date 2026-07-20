@@ -41,7 +41,7 @@ describe("logIpcModule", () => {
   it("requires permission and records audit before clearing logs", async () => {
     const { auditSink, harness, permissionGuard } = createHarness()
 
-    await expect(harness.invoke("synapse:log:clear", undefined)).resolves.toEqual({ fileCount: 2 })
+    await expect(harness.invoke("synapse:app:log:entry:clear", undefined)).resolves.toEqual({ fileCount: 2 })
 
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "fs.write",
@@ -63,7 +63,7 @@ describe("logIpcModule", () => {
       permission: { allowed: false, reason: "denied by test-policy", policyId: "test-policy" },
     })
 
-    await expect(harness.invoke("synapse:log:clear", undefined)).rejects.toThrow("denied by test-policy")
+    await expect(harness.invoke("synapse:app:log:entry:clear", undefined)).rejects.toThrow("denied by test-policy")
 
     expect(mocks.logStore.clearAllLogs).not.toHaveBeenCalled()
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
@@ -85,7 +85,7 @@ describe("logIpcModule", () => {
   it("requires permission and records audit before reading all logs", async () => {
     const { auditSink, harness, permissionGuard } = createHarness()
 
-    await expect(harness.invoke("synapse:log:read-all", undefined)).resolves.toBe("all logs")
+    await expect(harness.invoke("synapse:app:log:operation:read_all", undefined)).resolves.toBe("all logs")
 
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "fs.read.outside-userdata",
@@ -107,7 +107,7 @@ describe("logIpcModule", () => {
       permission: { allowed: false, reason: "denied by test-policy", policyId: "test-policy" },
     })
 
-    await expect(harness.invoke("synapse:log:read-files", ["main.log"])).rejects.toThrow("denied by test-policy")
+    await expect(harness.invoke("synapse:app:log:operation:read_files", ["main.log"])).rejects.toThrow("denied by test-policy")
 
     expect(mocks.logStore.readLogsByNames).not.toHaveBeenCalled()
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({

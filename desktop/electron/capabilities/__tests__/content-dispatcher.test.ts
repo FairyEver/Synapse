@@ -171,7 +171,7 @@ describe("content capability dispatcher", () => {
     const deps = createDeps()
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    const result = await dispatcher.dispatch("content.type.describe", { contentType: "skill" }, { source: "api" })
+    const result = await dispatcher.dispatch("app.resource_repository.type.describe", { contentType: "skill" }, { source: "api" })
 
     expect(result.ok).toBe(true)
     expect(result.data).toEqual(expect.objectContaining({
@@ -185,10 +185,10 @@ describe("content capability dispatcher", () => {
     const deps = createDeps()
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    const result = await dispatcher.dispatch("content.rule.list", { includeDeleted: true }, { source: "api" })
+    const result = await dispatcher.dispatch("app.resource_repository.rule.list", { includeDeleted: true }, { source: "api" })
 
     expect(result.ok).toBe(true)
-    if (!result.ok) throw new Error("content.rule.list should succeed")
+    if (!result.ok) throw new Error("app.resource_repository.rule.list should succeed")
     expect(result.total).toBe(2)
     expect(deps.contentReader.listContent).toHaveBeenCalledWith("rule")
     expect(deps.contentReader.listDeletedContent).toHaveBeenCalledWith("rule")
@@ -203,8 +203,8 @@ describe("content capability dispatcher", () => {
     const dispatcher = createContentCapabilityDispatcher(deps)
     const contextActor = mcpClientActorForSource("mcp-stdio")
 
-    await dispatcher.dispatch("content.rule.list", { includeDeleted: true }, { source: "mcp-stdio", actor: contextActor })
-    await dispatcher.dispatch("content.rule.get", { id: "rule-1" }, { source: "mcp-stdio", actor: contextActor })
+    await dispatcher.dispatch("app.resource_repository.rule.list", { includeDeleted: true }, { source: "mcp-stdio", actor: contextActor })
+    await dispatcher.dispatch("app.resource_repository.rule.get", { id: "rule-1" }, { source: "mcp-stdio", actor: contextActor })
 
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "content.read",
@@ -212,7 +212,7 @@ describe("content capability dispatcher", () => {
       resource: "content:rule:list",
       context: {
         source: "mcp-stdio",
-        contentAction: "content.rule.list",
+        contentAction: "app.resource_repository.rule.list",
         contentType: "rule",
         operation: "list",
         includeDeleted: true,
@@ -224,7 +224,7 @@ describe("content capability dispatcher", () => {
       resource: "content:rule:rule-1",
       context: {
         source: "mcp-stdio",
-        contentAction: "content.rule.get",
+        contentAction: "app.resource_repository.rule.get",
         contentType: "rule",
         operation: "get",
         contentId: "rule-1",
@@ -236,7 +236,7 @@ describe("content capability dispatcher", () => {
       resource: "content:rule:list",
       outcome: "allowed",
       metadata: expect.objectContaining({
-        contentAction: "content.rule.list",
+        contentAction: "app.resource_repository.rule.list",
         resultCount: 2,
       }),
     }))
@@ -246,7 +246,7 @@ describe("content capability dispatcher", () => {
       resource: "content:rule:rule-1",
       outcome: "allowed",
       metadata: expect.objectContaining({
-        contentAction: "content.rule.get",
+        contentAction: "app.resource_repository.rule.get",
         contentId: "rule-1",
       }),
     }))
@@ -265,7 +265,7 @@ describe("content capability dispatcher", () => {
     }
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    await expect(dispatcher.dispatch("content.rule.get", { id: "rule-1" }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.resource_repository.rule.get", { id: "rule-1" }, { source: "mcp-stdio" }))
       .rejects.toThrow("content read denied")
 
     expect(deps.contentReader.getDetail).not.toHaveBeenCalled()
@@ -276,7 +276,7 @@ describe("content capability dispatcher", () => {
       outcome: "denied",
       metadata: expect.objectContaining({
         source: "mcp-stdio",
-        contentAction: "content.rule.get",
+        contentAction: "app.resource_repository.rule.get",
         contentType: "rule",
         operation: "get",
         contentId: "rule-1",
@@ -290,7 +290,7 @@ describe("content capability dispatcher", () => {
     const deps = createDeps()
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    await dispatcher.dispatch("content.skill.create", {
+    await dispatcher.dispatch("app.resource_repository.skill.create", {
       description: "Skill description.",
       iconType: "image",
       iconImageBase64: Buffer.from("image").toString("base64"),
@@ -317,7 +317,7 @@ describe("content capability dispatcher", () => {
     const deps = createDeps()
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    await dispatcher.dispatch("content.rule.create", {
+    await dispatcher.dispatch("app.resource_repository.rule.create", {
       name: "team-rule",
       title: "Team Rule",
       description: "Description",
@@ -329,14 +329,14 @@ describe("content capability dispatcher", () => {
     }, { source: "mcp-stdio" })
 
     expect(logStoreMock.logger.info).toHaveBeenCalledWith("content capability dispatch", expect.objectContaining({
-      action: "content.rule.create",
+      action: "app.resource_repository.rule.create",
       contentType: "rule",
       hasContent: true,
       operation: "create",
       source: "mcp-stdio",
     }))
     expect(logStoreMock.logger.info).toHaveBeenCalledWith("content capability dispatch succeeded", expect.objectContaining({
-      action: "content.rule.create",
+      action: "app.resource_repository.rule.create",
       contentType: "rule",
       operation: "create",
       resultContentId: "created",
@@ -350,7 +350,7 @@ describe("content capability dispatcher", () => {
     deps.contentWriter.createContent.mockRejectedValueOnce(new Error("write failed"))
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    await expect(dispatcher.dispatch("content.rule.create", {
+    await expect(dispatcher.dispatch("app.resource_repository.rule.create", {
       name: "team-rule",
       title: "Team Rule",
       description: "Description",
@@ -362,7 +362,7 @@ describe("content capability dispatcher", () => {
     }, { source: "mcp-stdio" })).rejects.toThrow("write failed")
 
     expect(logStoreMock.logger.warn).toHaveBeenCalledWith("content capability dispatch failed", expect.objectContaining({
-      action: "content.rule.create",
+      action: "app.resource_repository.rule.create",
       contentType: "rule",
       errorMessage: "write failed",
       errorName: "Error",
@@ -389,7 +389,7 @@ describe("content capability dispatcher", () => {
     })
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    await dispatcher.dispatch("content.skill.update", {
+    await dispatcher.dispatch("app.resource_repository.skill.update", {
       id: "skill-1",
       baseHistoryDirname: "20260521000000Z__user__abc123",
       sourceDirectoryPath: "/tmp/demo-skill",
@@ -426,7 +426,7 @@ describe("content capability dispatcher", () => {
     const dispatcher = createContentCapabilityDispatcher(deps)
     const contextActor = mcpClientActorForSource("mcp-stdio")
 
-    const result = await dispatcher.dispatch("content.rule.create", {
+    const result = await dispatcher.dispatch("app.resource_repository.rule.create", {
       name: "team-rule",
       title: "Team Rule",
       description: "Description",
@@ -444,7 +444,7 @@ describe("content capability dispatcher", () => {
       resource: "content:rule:create",
       context: {
         source: "mcp-stdio",
-        contentAction: "content.rule.create",
+        contentAction: "app.resource_repository.rule.create",
         contentType: "rule",
         operation: "create",
       },
@@ -456,7 +456,7 @@ describe("content capability dispatcher", () => {
       outcome: "allowed",
       metadata: expect.objectContaining({
         source: "mcp-stdio",
-        contentAction: "content.rule.create",
+        contentAction: "app.resource_repository.rule.create",
         contentType: "rule",
         operation: "create",
       }),
@@ -480,7 +480,7 @@ describe("content capability dispatcher", () => {
     }
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    await expect(dispatcher.dispatch("content.rule.delete", {
+    await expect(dispatcher.dispatch("app.resource_repository.rule.delete", {
       id: "rule-1",
       baseHistoryDirname: "20260521000000Z__user__abc123",
     }, { source: "mcp-stdio" })).rejects.toThrow("content denied")
@@ -494,7 +494,7 @@ describe("content capability dispatcher", () => {
       outcome: "denied",
       metadata: expect.objectContaining({
         source: "mcp-stdio",
-        contentAction: "content.rule.delete",
+        contentAction: "app.resource_repository.rule.delete",
         contentType: "rule",
         operation: "delete",
         contentId: "rule-1",
@@ -523,7 +523,7 @@ describe("content capability dispatcher", () => {
     }
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    await expect(dispatcher.dispatch("content.rule.delete", {
+    await expect(dispatcher.dispatch("app.resource_repository.rule.delete", {
       id: "rule-1",
       baseHistoryDirname: "20260521000000Z__user__abc123",
     }, { source: "mcp-stdio" })).rejects.toThrow("policy backend failed")
@@ -536,7 +536,7 @@ describe("content capability dispatcher", () => {
       resource: "content:rule:rule-1",
       outcome: "failed",
       metadata: expect.objectContaining({
-        contentAction: "content.rule.delete",
+        contentAction: "app.resource_repository.rule.delete",
         reason: "permission-check-error",
         errorName: "Error",
       }),
@@ -577,7 +577,7 @@ describe("content capability dispatcher", () => {
           content: "# Content",
         }
 
-    await dispatcher.dispatch(`content.${contentType}.${operation}`, params, { source: "mcp-stdio" })
+    await dispatcher.dispatch(`app.resource_repository.${contentType}.${operation}`, params, { source: "mcp-stdio" })
 
     expect(deps.eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
       domain: "content",
@@ -593,7 +593,7 @@ describe("content capability dispatcher", () => {
     const deps = createDeps()
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    await dispatcher.dispatch("content.rule.update", {
+    await dispatcher.dispatch("app.resource_repository.rule.update", {
       id: "rule-1",
       baseHistoryDirname: "20260521000000Z__user__abc123",
       name: "team-rule",
@@ -605,7 +605,7 @@ describe("content capability dispatcher", () => {
       iconBg: "graphite",
       content: "# Rule",
     }, { source: "mcp-stdio" })
-    await dispatcher.dispatch("content.rule.delete", {
+    await dispatcher.dispatch("app.resource_repository.rule.delete", {
       id: "rule-1",
       baseHistoryDirname: "20260521000000Z__user__abc123",
     }, { source: "mcp-stdio" })
@@ -629,7 +629,7 @@ describe("content capability dispatcher", () => {
     })
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    await expect(dispatcher.dispatch("content.skill.update", {
+    await expect(dispatcher.dispatch("app.resource_repository.skill.update", {
       id: "skill-1",
       baseHistoryDirname: "20260521000000Z__user__abc123",
       name: "team-skill",
@@ -659,7 +659,7 @@ describe("content capability dispatcher", () => {
     } as never)
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    await expect(dispatcher.dispatch("content.skill.update", {
+    await expect(dispatcher.dispatch("app.resource_repository.skill.update", {
       id: "skill-1",
       baseHistoryDirname: "stale-history",
       name: "team-skill",
@@ -679,7 +679,7 @@ describe("content capability dispatcher", () => {
     })
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    await expect(dispatcher.dispatch(`content.${contentType}.update`, {
+    await expect(dispatcher.dispatch(`app.resource_repository.${contentType}.update`, {
       id: `${contentType}-1`,
       baseHistoryDirname: "20260521000000Z__user__abc123",
       name: "team-rule",
@@ -701,7 +701,7 @@ describe("content capability dispatcher", () => {
     })
     const dispatcher = createContentCapabilityDispatcher(deps)
 
-    await expect(dispatcher.dispatch("content.skill.delete", {
+    await expect(dispatcher.dispatch("app.resource_repository.skill.delete", {
       id: "skill-1",
       baseHistoryDirname: "20260521000000Z__user__abc123",
     }, { source: "mcp-stdio" })).rejects.toThrow(ContentCapabilityError)
@@ -738,7 +738,7 @@ describe("content capability dispatcher", () => {
     }
     deps.contentWriter[serviceName].mockResolvedValueOnce(conflict as never)
 
-    await expect(dispatcher.dispatch(`content.rule.${operation}`, params, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch(`app.resource_repository.rule.${operation}`, params, { source: "mcp-stdio" }))
       .rejects.toMatchObject({
         code: "CONTENT_CONFLICT",
         details: {

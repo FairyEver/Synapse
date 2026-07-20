@@ -29,7 +29,18 @@ vi.mock("@/app-shell/notifications", () => ({
 
 vi.mock("@/lib/electron-bridge", () => ({
   requireSynapseBridge: () => ({
-    modelPrice: modelPriceBridge,
+    modelPrice: {
+      preset: {
+        list: modelPriceBridge.listPresets,
+        import: (presetIds: unknown) => Array.isArray(presetIds)
+          ? modelPriceBridge.importPresets(presetIds)
+          : modelPriceBridge.importPreset(presetIds),
+      },
+      rule: {
+        save: modelPriceBridge.saveRules,
+        clear: modelPriceBridge.clearRules,
+      },
+    },
   }),
 }))
 

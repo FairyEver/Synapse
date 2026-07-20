@@ -11,8 +11,10 @@ import type { SynapseKnowledgeBaseStorageStatus } from "@/types/knowledge-base"
 
 const roots: Root[] = []
 const bridge = {
-  repository: {
-    chooseDirectory: vi.fn(),
+  settings: {
+    repository: {
+      chooseDirectory: vi.fn(),
+    },
   },
   knowledgeBase: {
     getStorageStatus: vi.fn(),

@@ -10,7 +10,6 @@ export const databaseAppDefinition = {
   window: { openable: true },
   capabilities: {
     primaryMcpPrefix: "app_database",
-    legacyMcpPrefixes: ["database"],
   },
   removable: false,
   renameable: false,

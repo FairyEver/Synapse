@@ -11,6 +11,7 @@
  */
 
 import { execFile as execFileCb } from "node:child_process"
+import { readFile } from "node:fs/promises"
 import { promisify } from "node:util"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -22,18 +23,15 @@ const desktopRoot = path.resolve(__dirname, "../..")
 const GENERATED_FILE = "electron/generated/ipc-channels.generated.ts"
 
 async function run() {
+  const generatedPath = path.resolve(desktopRoot, GENERATED_FILE)
+  const before = await readFile(generatedPath, "utf8")
   await execFile(process.execPath, ["scripts/build/generate-ipc.mjs"], { cwd: desktopRoot })
-  try {
-    await execFile("git", ["diff", "--quiet", "--", GENERATED_FILE], { cwd: desktopRoot })
-  } catch (err) {
-    const detail = (err && err.stdout) || (err && err.message) || ""
+  const after = await readFile(generatedPath, "utf8")
+  if (before !== after) {
     console.error(
       `IPC codegen output (${GENERATED_FILE}) differs from the committed file.`,
     )
     console.error(`Run \`pnpm --filter @synapse/desktop run generate:ipc\` and commit the result.`)
-    if (detail) {
-      console.error(detail)
-    }
     process.exit(1)
   }
   console.log(`IPC codegen output is in sync with ${GENERATED_FILE}`)

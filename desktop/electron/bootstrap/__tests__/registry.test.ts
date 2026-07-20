@@ -381,7 +381,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     await service.play({ eventType: "success" })
 
     expect(broadcast).toHaveBeenCalledWith(
-      "synapse:sound-notifier:play-requested",
+      "synapse:app:sound_notifier:operation:play_requested",
       {
         eventType: "success",
         presetId: "done",

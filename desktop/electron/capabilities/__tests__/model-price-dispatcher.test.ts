@@ -57,14 +57,11 @@ describe("model price capability dispatcher", () => {
       "app_model_price_preset_list",
       "app_model_price_preset_import",
       "app_model_price_rule_clear",
-      "model_price_preset_list",
-      "model_price_preset_import",
-      "model_price_rule_clear",
     ]))
     expect(MODEL_PRICE_MCP_TOOL_ACTIONS.app_model_price_preset_list).toBe("app.model_price.preset.list")
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_preset_list).toBe("app.model_price.preset.list")
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_preset_import).toBe("app.model_price.preset.import")
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_clear).toBe("app.model_price.rule.clear")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.app_model_price_preset_import).toBe("app.model_price.preset.import")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.app_model_price_rule_clear).toBe("app.model_price.rule.clear")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS).not.toHaveProperty("model_price_preset_list")
   })
 
   it("checks permission and audits model price read actions", async () => {
@@ -76,7 +73,7 @@ describe("model price capability dispatcher", () => {
       permissionGuard,
       auditSink,
     })
-    const created = await dispatcher.dispatch("model_price.rule.create", {
+    const created = await dispatcher.dispatch("app.model_price.rule.create", {
       modelPattern: "local-model",
       inputPer1M: 1,
     }, { source: "api" })
@@ -84,10 +81,10 @@ describe("model price capability dispatcher", () => {
     auditEvents.length = 0
     const ruleId = (created.data as { id: string }).id
 
-    await dispatcher.dispatch("model_price.used_model.list", {}, { source: "mcp-http", actor: mcpClientActorForSource("mcp-http") })
-    await dispatcher.dispatch("model_price.preset.list", {}, { source: "mcp-http" })
-    await dispatcher.dispatch("model_price.rule.list", {}, { source: "mcp-http" })
-    await dispatcher.dispatch("model_price.rule.get", { ruleId }, { source: "mcp-http" })
+    await dispatcher.dispatch("app.model_price.used_model.list", {}, { source: "mcp-http", actor: mcpClientActorForSource("mcp-http") })
+    await dispatcher.dispatch("app.model_price.preset.list", {}, { source: "mcp-http" })
+    await dispatcher.dispatch("app.model_price.rule.list", {}, { source: "mcp-http" })
+    await dispatcher.dispatch("app.model_price.rule.get", { ruleId }, { source: "mcp-http" })
 
     expect(permissionGuard.check).toHaveBeenCalledTimes(4)
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
@@ -96,7 +93,7 @@ describe("model price capability dispatcher", () => {
       resource: "model-price:used-models",
       context: expect.objectContaining({
         source: "mcp-http",
-        modelPriceAction: "model_price.used_model.list",
+        modelPriceAction: "app.model_price.used_model.list",
       }),
     }))
     expect(auditEvents.filter((event) => event.outcome === "allowed")).toHaveLength(4)
@@ -133,32 +130,32 @@ describe("model price capability dispatcher", () => {
       auditSink,
     })
 
-    const created = await dispatcher.dispatch("model_price.rule.create", {
+    const created = await dispatcher.dispatch("app.model_price.rule.create", {
       modelPattern: "secure-model",
       inputPer1M: 1,
     }, { source: "mcp-http", actor: mcpClientActorForSource("mcp-http") })
     const ruleId = (created.data as { id: string }).id
 
-    await dispatcher.dispatch("model_price.rule.update", { ruleId, outputPer1M: 2 }, { source: "mcp-http" })
-    await dispatcher.dispatch("model_price.rule.disable", { ruleId }, { source: "mcp-http" })
-    await dispatcher.dispatch("model_price.rule.enable", { ruleId }, { source: "mcp-http" })
-    await dispatcher.dispatch("model_price.rule.delete", { ruleId }, { source: "mcp-http" })
+    await dispatcher.dispatch("app.model_price.rule.update", { ruleId, outputPer1M: 2 }, { source: "mcp-http" })
+    await dispatcher.dispatch("app.model_price.rule.disable", { ruleId }, { source: "mcp-http" })
+    await dispatcher.dispatch("app.model_price.rule.enable", { ruleId }, { source: "mcp-http" })
+    await dispatcher.dispatch("app.model_price.rule.delete", { ruleId }, { source: "mcp-http" })
 
     expect(permissionGuard.check).toHaveBeenCalledTimes(5)
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "database.mutate",
       actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
-      resource: "model-price-rule:model_price.rule.create",
+      resource: "model-price-rule:app.model_price.rule.create",
       context: expect.objectContaining({
         source: "mcp-http",
-        modelPriceAction: "model_price.rule.create",
+        modelPriceAction: "app.model_price.rule.create",
       }),
     }))
     expect(auditEvents.filter((event) => event.outcome === "allowed")).toHaveLength(5)
     expect(auditEvents).toContainEqual(expect.objectContaining({
       action: "database.mutate",
       outcome: "allowed",
-      resource: "model-price-rule:model_price.rule.create",
+      resource: "model-price-rule:app.model_price.rule.create",
     }))
     db.close()
   })
@@ -172,28 +169,28 @@ describe("model price capability dispatcher", () => {
       auditSink,
     })
 
-    const presets = await dispatcher.dispatch("model_price.preset.list", {}, { source: "api" })
+    const presets = await dispatcher.dispatch("app.model_price.preset.list", {}, { source: "api" })
     expect(presets.data).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "deepseek-official", ruleCount: expect.any(Number) }),
     ]))
 
-    const imported = await dispatcher.dispatch("model_price.preset.import", {
+    const imported = await dispatcher.dispatch("app.model_price.preset.import", {
       presetId: "deepseek-official",
     }, { source: "mcp-http", actor: mcpClientActorForSource("mcp-http") })
     expect(imported.data).toEqual(expect.arrayContaining([
       expect.objectContaining({ modelPattern: "deepseek-v4-pro", source: "builtin" }),
     ]))
 
-    const cleared = await dispatcher.dispatch("model_price.rule.clear", {}, { source: "mcp-http" })
+    const cleared = await dispatcher.dispatch("app.model_price.rule.clear", {}, { source: "mcp-http" })
     expect(cleared).toEqual({ ok: true, data: [] })
-    await expect(dispatcher.dispatch("model_price.rule.list", {}, { source: "api" }))
+    await expect(dispatcher.dispatch("app.model_price.rule.list", {}, { source: "api" }))
       .resolves.toEqual({ ok: true, data: [] })
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "database.mutate",
       resource: "model-price-preset:deepseek-official",
       context: expect.objectContaining({
-        modelPriceAction: "model_price.preset.import",
+        modelPriceAction: "app.model_price.preset.import",
         presetId: "deepseek-official",
       }),
     }))
@@ -201,7 +198,7 @@ describe("model price capability dispatcher", () => {
       action: "database.mutate",
       resource: "model-price-rules",
       context: expect.objectContaining({
-        modelPriceAction: "model_price.rule.clear",
+        modelPriceAction: "app.model_price.rule.clear",
       }),
     }))
     expect(auditEvents).toContainEqual(expect.objectContaining({
@@ -231,20 +228,20 @@ describe("model price capability dispatcher", () => {
       auditSink,
     })
 
-    await expect(dispatcher.dispatch("model_price.rule.create", {
+    await expect(dispatcher.dispatch("app.model_price.rule.create", {
       modelPattern: "blocked-model",
     }, { source: "api" })).rejects.toThrow("denied by policy")
 
     expect(auditEvents).toContainEqual(expect.objectContaining({
       action: "database.mutate",
       outcome: "denied",
-      resource: "model-price-rule:model_price.rule.create",
+      resource: "model-price-rule:app.model_price.rule.create",
       metadata: expect.objectContaining({
         reason: "denied by policy",
         policyId: "test-policy",
       }),
     }))
-    const rules = await dispatcher.dispatch("model_price.rule.list", {}, { source: "api" })
+    const rules = await dispatcher.dispatch("app.model_price.rule.list", {}, { source: "api" })
     expect((rules.data as Array<{ modelPattern: string }>).some((rule) => rule.modelPattern === "blocked-model"))
       .toBe(false)
     db.close()
@@ -264,7 +261,7 @@ describe("model price capability dispatcher", () => {
       auditSink,
     })
 
-    await expect(dispatcher.dispatch("model_price.rule.update", {
+    await expect(dispatcher.dispatch("app.model_price.rule.update", {
       ruleId: "missing-token=secret-value",
       outputPer1M: 2,
     }, { source: "mcp-http" })).rejects.toThrow("denied by policy")
@@ -298,7 +295,7 @@ describe("model price capability dispatcher", () => {
       auditSink,
     })
 
-    await expect(dispatcher.dispatch("model_price.rule.create", {
+    await expect(dispatcher.dispatch("app.model_price.rule.create", {
       modelPattern: "secure-model",
       inputPer1M: 1,
     }, { source: "api" })).rejects.toThrow("policy backend failed")
@@ -306,9 +303,9 @@ describe("model price capability dispatcher", () => {
     expect(auditEvents).toContainEqual(expect.objectContaining({
       action: "database.mutate",
       outcome: "failed",
-      resource: "model-price-rule:model_price.rule.create",
+      resource: "model-price-rule:app.model_price.rule.create",
       metadata: expect.objectContaining({
-        modelPriceAction: "model_price.rule.create",
+        modelPriceAction: "app.model_price.rule.create",
         reason: "permission-check-error",
         errorName: "Error",
       }),
@@ -327,7 +324,7 @@ describe("model price capability dispatcher", () => {
       auditSink,
     })
 
-    await expect(dispatcher.dispatch("model_price.rule.update", {
+    await expect(dispatcher.dispatch("app.model_price.rule.update", {
       ruleId: "missing-token=secret-value",
       outputPer1M: 2,
     }, { source: "mcp-http" })).rejects.toThrow(/Model price rule not found/)
@@ -348,29 +345,29 @@ describe("model price capability dispatcher", () => {
     const logger = createLoggerHarness()
     const dispatcher = createModelPriceCapabilityDispatcher({ db, logger })
 
-    await dispatcher.dispatch("model_price.rule.create", {
+    await dispatcher.dispatch("app.model_price.rule.create", {
       modelPattern: "logged-model",
       inputPer1M: 1,
     }, { source: "mcp-http" })
 
     expect(logger.info).toHaveBeenCalledWith("model price mcp dispatch", expect.objectContaining({
-      action: "model_price.rule.create",
+      action: "app.model_price.rule.create",
       source: "mcp-http",
       hasModelPattern: true,
     }))
     expect(logger.info).toHaveBeenCalledWith("model price mcp dispatch succeeded", expect.objectContaining({
-      action: "model_price.rule.create",
+      action: "app.model_price.rule.create",
       source: "mcp-http",
       hasModelPattern: true,
     }))
 
-    await expect(dispatcher.dispatch("model_price.rule.update", {
+    await expect(dispatcher.dispatch("app.model_price.rule.update", {
       ruleId: "missing-token=secret-value",
       outputPer1M: 2,
     }, { source: "mcp-http" })).rejects.toThrow(/Model price rule not found/)
 
     expect(logger.warn).toHaveBeenCalledWith("model price mcp dispatch failed", expect.objectContaining({
-      action: "model_price.rule.update",
+      action: "app.model_price.rule.update",
       source: "mcp-http",
       ruleId: "missing-token=[redacted]",
       errorName: "Error",
@@ -383,7 +380,7 @@ describe("model price capability dispatcher", () => {
     const db = createTestDb()
     const dispatcher = createModelPriceCapabilityDispatcher({ db })
 
-    const created = await dispatcher.dispatch("model_price.rule.create", {
+    const created = await dispatcher.dispatch("app.model_price.rule.create", {
       modelPattern: "local-model",
       inputPer1M: 14.4,
     }, { source: "api" })
@@ -397,7 +394,7 @@ describe("model price capability dispatcher", () => {
     })
     const ruleId = (created.data as { id: string }).id
 
-    const updated = await dispatcher.dispatch("model_price.rule.update", {
+    const updated = await dispatcher.dispatch("app.model_price.rule.update", {
       ruleId,
       outputPer1M: 57.6,
     }, { source: "mcp-http" })
@@ -407,14 +404,14 @@ describe("model price capability dispatcher", () => {
       outputPer1M: 57.6,
     })
 
-    await expect(dispatcher.dispatch("model_price.rule.disable", { ruleId }, { source: "api" }))
+    await expect(dispatcher.dispatch("app.model_price.rule.disable", { ruleId }, { source: "api" }))
       .resolves.toMatchObject({ data: { id: ruleId, enabled: false } })
-    await expect(dispatcher.dispatch("model_price.rule.enable", { ruleId }, { source: "api" }))
+    await expect(dispatcher.dispatch("app.model_price.rule.enable", { ruleId }, { source: "api" }))
       .resolves.toMatchObject({ data: { id: ruleId, enabled: true } })
-    await expect(dispatcher.dispatch("model_price.rule.delete", { ruleId }, { source: "api" }))
+    await expect(dispatcher.dispatch("app.model_price.rule.delete", { ruleId }, { source: "api" }))
       .resolves.toEqual({ ok: true, data: { deleted: true, ruleId } })
 
-    const rules = await dispatcher.dispatch("model_price.rule.list", {}, { source: "api" })
+    const rules = await dispatcher.dispatch("app.model_price.rule.list", {}, { source: "api" })
     expect((rules.data as Array<{ id: string }>).some((rule) => rule.id === ruleId)).toBe(false)
     db.close()
   })
@@ -423,11 +420,11 @@ describe("model price capability dispatcher", () => {
     const db = createTestDb()
     const dispatcher = createModelPriceCapabilityDispatcher({ db })
 
-    await expect(dispatcher.dispatch("model_price.rule.create", { modelPattern: "" }, { source: "api" }))
+    await expect(dispatcher.dispatch("app.model_price.rule.create", { modelPattern: "" }, { source: "api" }))
       .rejects.toThrow(/modelPattern/)
-    await expect(dispatcher.dispatch("model_price.rule.create", { modelPattern: "x", inputPer1M: -1 }, { source: "api" }))
+    await expect(dispatcher.dispatch("app.model_price.rule.create", { modelPattern: "x", inputPer1M: -1 }, { source: "api" }))
       .rejects.toThrow(/inputPer1M/)
-    await expect(dispatcher.dispatch("model_price.rule.update", { ruleId: "missing", outputPer1M: 1 }, { source: "api" }))
+    await expect(dispatcher.dispatch("app.model_price.rule.update", { ruleId: "missing", outputPer1M: 1 }, { source: "api" }))
       .rejects.toThrow(/Model price rule not found/)
     db.close()
   })
@@ -438,13 +435,13 @@ describe("model price capability dispatcher", () => {
     insertUsageEvent(db, "cx", { id: "cx-1", model: "local-model", inputTokens: 50 })
     insertUsageEvent(db, "cx", { id: "cx-2", model: "other-model", inputTokens: 25 })
     const dispatcher = createModelPriceCapabilityDispatcher({ db })
-    const created = await dispatcher.dispatch("model_price.rule.create", {
+    const created = await dispatcher.dispatch("app.model_price.rule.create", {
       modelPattern: "local-model",
       inputPer1M: 1,
     }, { source: "api" })
     const ruleId = (created.data as { id: string }).id
 
-    const all = await dispatcher.dispatch("model_price.used_model.list", {}, { source: "api" })
+    const all = await dispatcher.dispatch("app.model_price.used_model.list", {}, { source: "api" })
     expect(all.data).toEqual([
       expect.objectContaining({
         model: "local-model",
@@ -463,13 +460,13 @@ describe("model price capability dispatcher", () => {
       }),
     ])
 
-    const ccOnly = await dispatcher.dispatch("model_price.used_model.list", { source: "cc" }, { source: "api" })
+    const ccOnly = await dispatcher.dispatch("app.model_price.used_model.list", { source: "cc" }, { source: "api" })
     expect(ccOnly.data).toEqual([
       expect.objectContaining({ model: "local-model", sources: ["cc"], tokens: 100 }),
     ])
 
-    await dispatcher.dispatch("model_price.rule.disable", { ruleId }, { source: "api" })
-    const afterDisable = await dispatcher.dispatch("model_price.used_model.list", { source: "cc" }, { source: "api" })
+    await dispatcher.dispatch("app.model_price.rule.disable", { ruleId }, { source: "api" })
+    const afterDisable = await dispatcher.dispatch("app.model_price.used_model.list", { source: "cc" }, { source: "api" })
     expect(afterDisable.data).toEqual([
       expect.objectContaining({ model: "local-model", priceKnown: false }),
     ])
@@ -487,7 +484,7 @@ describe("model price capability dispatcher", () => {
     }
     const dispatcher = createModelPriceCapabilityDispatcher({ db })
 
-    const result = await dispatcher.dispatch("model_price.used_model.list", {
+    const result = await dispatcher.dispatch("app.model_price.used_model.list", {
       source: "cc",
       range: "all",
       limit: 10_000,
@@ -512,11 +509,11 @@ describe("model price capability dispatcher", () => {
     })
     const dispatcher = createModelPriceCapabilityDispatcher({ db })
 
-    const created = await dispatcher.dispatch("model_price.rule.create", {
+    const created = await dispatcher.dispatch("app.model_price.rule.create", {
       modelPattern: "priced-model",
       inputPer1M: 99,
     }, { source: "api" })
-    await dispatcher.dispatch("model_price.rule.update", {
+    await dispatcher.dispatch("app.model_price.rule.update", {
       ruleId: (created.data as { id: string }).id,
       inputPer1M: 111,
     }, { source: "api" })

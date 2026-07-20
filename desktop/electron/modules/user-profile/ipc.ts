@@ -45,7 +45,7 @@ export const userProfileIpcModule: IpcModule = {
   methods: {
     getRepoState: {
       kind: "invoke",
-      channel: "synapse:user-profile:get-repo-state",
+      operationId: "app.user_profile.operation.get_repo_state",
       request: z.object({ repoId: z.string() }),
       response: repoProfileStateSchema,
       handler: async (_ctx, request: { repoId: string }) => {
@@ -60,7 +60,7 @@ export const userProfileIpcModule: IpcModule = {
     },
     listRepoProfiles: {
       kind: "invoke",
-      channel: "synapse:user-profile:list-repo-profiles",
+      operationId: "app.user_profile.operation.list_repo_profiles",
       request: z.object({ repoId: z.string() }),
       response: listRepoProfilesResponseSchema,
       handler: async (_ctx, request: { repoId: string }) => {
@@ -69,7 +69,7 @@ export const userProfileIpcModule: IpcModule = {
     },
     updateDisplayName: {
       kind: "invoke",
-      channel: "synapse:user-profile:update-display-name",
+      operationId: "app.user_profile.operation.update_display_name",
       request: updateDisplayNameRequestSchema,
       response: userProfileSchema,
       handler: async (ctx, request: { repoId: string; displayName: string }) => {

@@ -8,7 +8,7 @@ const synapseSkillIpcModule: IpcModule = {
   id: "synapseSkill",
   methods: {
     prepareInstallSource: {
-      channel: "synapse:synapse-skill:install-source:prepare",
+      operationId: "app.synapse_skill.install_source.prepare",
       kind: "invoke",
       request: z.void().optional(),
       response: synapseSkillInstallerSourceSchema,
@@ -17,7 +17,7 @@ const synapseSkillIpcModule: IpcModule = {
       ).prepareInstallSource(),
     },
     releaseInstallSource: {
-      channel: "synapse:synapse-skill:install-source:release",
+      operationId: "app.synapse_skill.install_source.release",
       kind: "invoke",
       request: z.object({ preparedSourceId: z.string().min(1) }),
       response: z.void(),

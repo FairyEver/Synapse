@@ -947,10 +947,10 @@ export type SynapseBridge = {
     ) => () => void
   }
   documentTemplate: {
-    chooseTemplateFile: () => Promise<string | null>
-    chooseJsonFile: () => Promise<string | null>
-    chooseOutputFile: (input?: { defaultPath?: string }) => Promise<string | null>
-    generateDocx: (input: GenerateDocxInput) => Promise<GenerateDocxResult>
+    template: { choose: () => Promise<string | null> }
+    json: { choose: () => Promise<string | null> }
+    output: { choose: (input?: { defaultPath?: string }) => Promise<string | null> }
+    docx: { generate: (input: GenerateDocxInput) => Promise<GenerateDocxResult> }
   }
   skillUninstaller: {
     scan: (request: SkillUninstallScanRequest) => Promise<SkillUninstallScanResult>
@@ -960,23 +960,29 @@ export type SynapseBridge = {
     uninstall: (request: SkillUninstallRequest) => Promise<SkillUninstallBatchResult>
   }
   quickInput: {
-    list: () => Promise<SynapseQuickInputItem[]>
-    create: (input: { content: string }) => Promise<SynapseQuickInputItem>
-    update: (input: { id: string; content: string }) => Promise<SynapseQuickInputItem>
-    delete: (input: { id: string }) => Promise<void>
-    onChanged: (listener: (event: SynapseQuickInputChangedEvent) => void) => () => void
+    item: {
+      list: () => Promise<SynapseQuickInputItem[]>
+      create: (input: { content: string }) => Promise<SynapseQuickInputItem>
+      update: (input: { id: string; content: string }) => Promise<SynapseQuickInputItem>
+      delete: (input: { id: string }) => Promise<void>
+      onChanged: (listener: (event: SynapseQuickInputChangedEvent) => void) => () => void
+    }
   }
   secrets: {
-    list: () => Promise<SecretListResult>
-    get: (input: SecretGetInput) => Promise<SecretSafeView | SecretValueView>
-    create: (input: SecretCreateInput) => Promise<SecretSafeView>
-    update: (input: SecretUpdateInput) => Promise<SecretSafeView>
-    upsert: (input: SecretUpsertInput) => Promise<SecretUpsertResult>
-    delete: (input: SecretDeleteInput) => Promise<SecretSafeView>
-    scanSkillEnvBindings: (input: SecretSkillEnvScanInput) => Promise<SecretSkillEnvScanResult>
-    scanSkillEnvBindingsBatch: (input: SecretSkillEnvBatchScanInput) => Promise<SecretSkillEnvBatchScanResult>
-    queueSkillEnvBindings: (input: SecretSkillEnvQueueInput) => Promise<SecretSkillEnvQueueResult>
-    onChanged: (listener: (event: SecretsChangedEvent) => void) => () => void
+    item: {
+      list: () => Promise<SecretListResult>
+      get: (input: SecretGetInput) => Promise<SecretSafeView | SecretValueView>
+      create: (input: SecretCreateInput) => Promise<SecretSafeView>
+      update: (input: SecretUpdateInput) => Promise<SecretSafeView>
+      upsert: (input: SecretUpsertInput) => Promise<SecretUpsertResult>
+      delete: (input: SecretDeleteInput) => Promise<SecretSafeView>
+      onChanged: (listener: (event: SecretsChangedEvent) => void) => () => void
+    }
+    operation: {
+      scanSkillEnvBindings: (input: SecretSkillEnvScanInput) => Promise<SecretSkillEnvScanResult>
+      scanSkillEnvBindingsBatch: (input: SecretSkillEnvBatchScanInput) => Promise<SecretSkillEnvBatchScanResult>
+      queueSkillEnvBindings: (input: SecretSkillEnvQueueInput) => Promise<SecretSkillEnvQueueResult>
+    }
   }
   agentPersonas: {
     list: () => Promise<SynapseAgentPersonaListResult>
@@ -1011,37 +1017,51 @@ export type SynapseBridge = {
     onChanged: (listener: (snapshot: DriveSyncSnapshotDto) => void) => () => void
   }
   soundNotifier: {
-    getSettings: () => Promise<SynapseSoundNotifierSettings>
-    updateSettings: (input: SynapseSoundNotifierSettingsPatch) => Promise<SynapseSoundNotifierSettings>
-    play: (input?: SynapseSoundNotifierPlayInput) => Promise<SynapseSoundNotifierPlayResult>
-    preview: (input?: SynapseSoundNotifierPlayInput) => Promise<SynapseSoundNotifierPlayResult>
-    onChanged: (listener: (event: SynapseSoundNotifierChangedEvent) => void) => () => void
-    onPlayRequested: (listener: (event: SynapseSoundNotifierPlayRequestedEvent) => void) => () => void
+    settings: {
+      get: () => Promise<SynapseSoundNotifierSettings>
+      update: (input: SynapseSoundNotifierSettingsPatch) => Promise<SynapseSoundNotifierSettings>
+    }
+    sound: {
+      play: (input?: SynapseSoundNotifierPlayInput) => Promise<SynapseSoundNotifierPlayResult>
+      preview: (input?: SynapseSoundNotifierPlayInput) => Promise<SynapseSoundNotifierPlayResult>
+    }
+    operation: {
+      onChanged: (listener: (event: SynapseSoundNotifierChangedEvent) => void) => () => void
+      onPlayRequested: (listener: (event: SynapseSoundNotifierPlayRequestedEvent) => void) => () => void
+    }
   }
   terminal: {
-    chooseDefaultCwd: () => Promise<string | null>
-    listGroups: () => Promise<SynapseTerminalGroup[]>
-    createGroup: (input: SynapseTerminalCreateGroupInput) => Promise<SynapseTerminalGroup>
-    renameGroup: (input: SynapseTerminalRenameGroupInput) => Promise<SynapseTerminalGroup>
-    updateGroupSettings: (input: SynapseTerminalUpdateGroupSettingsInput) => Promise<SynapseTerminalGroup>
-    createGroupCommand: (input: SynapseTerminalCreateGroupCommandInput) => Promise<SynapseTerminalGroupCommand>
-    updateGroupCommand: (input: SynapseTerminalUpdateGroupCommandInput) => Promise<SynapseTerminalGroupCommand>
-    deleteGroupCommand: (input: SynapseTerminalDeleteGroupCommandInput) => Promise<void>
-    launchGroupCommand: (input: SynapseTerminalLaunchGroupCommandInput) => Promise<SynapseTerminalSession>
-    deleteGroup: (input: SynapseTerminalDeleteGroupInput) => Promise<void>
-    listSessions: () => Promise<SynapseTerminalSession[]>
-    createSession: (input: SynapseTerminalCreateSessionInput) => Promise<SynapseTerminalSession>
-    getSession: (input: { sessionId: string }) => Promise<SynapseTerminalSession>
-    readSession: (input: SynapseTerminalReadSessionInput) => Promise<SynapseTerminalReadSessionResult>
-    renameSession: (input: SynapseTerminalRenameSessionInput) => Promise<SynapseTerminalSession>
-    writeSession: (input: SynapseTerminalWriteSessionInput) => Promise<void>
-    resizeSession: (input: SynapseTerminalResizeSessionInput) => Promise<void>
-    deleteSession: (input: SynapseTerminalDeleteSessionInput) => Promise<void>
-    stopSession: (input: SynapseTerminalStopSessionInput) => Promise<void>
-    runStartupCommand: (input: SynapseTerminalRunStartupCommandInput) => Promise<void>
-    onData: (listener: (event: SynapseTerminalDataEvent) => void) => () => void
-    onSessionChanged: (listener: (session: SynapseTerminalSession) => void) => () => void
-    onSessionDeleted: (listener: (event: SynapseTerminalSessionDeletedEvent) => void) => () => void
+    group: {
+      chooseDefaultCwd: () => Promise<string | null>
+      list: () => Promise<SynapseTerminalGroup[]>
+      create: (input: SynapseTerminalCreateGroupInput) => Promise<SynapseTerminalGroup>
+      rename: (input: SynapseTerminalRenameGroupInput) => Promise<SynapseTerminalGroup>
+      updateSettings: (input: SynapseTerminalUpdateGroupSettingsInput) => Promise<SynapseTerminalGroup>
+      delete: (input: SynapseTerminalDeleteGroupInput) => Promise<void>
+    }
+    groupCommand: {
+      create: (input: SynapseTerminalCreateGroupCommandInput) => Promise<SynapseTerminalGroupCommand>
+      update: (input: SynapseTerminalUpdateGroupCommandInput) => Promise<SynapseTerminalGroupCommand>
+      delete: (input: SynapseTerminalDeleteGroupCommandInput) => Promise<void>
+      launch: (input: SynapseTerminalLaunchGroupCommandInput) => Promise<SynapseTerminalSession>
+    }
+    session: {
+      list: () => Promise<SynapseTerminalSession[]>
+      create: (input: SynapseTerminalCreateSessionInput) => Promise<SynapseTerminalSession>
+      get: (input: { sessionId: string }) => Promise<SynapseTerminalSession>
+      read: (input: SynapseTerminalReadSessionInput) => Promise<SynapseTerminalReadSessionResult>
+      rename: (input: SynapseTerminalRenameSessionInput) => Promise<SynapseTerminalSession>
+      write: (input: SynapseTerminalWriteSessionInput) => Promise<void>
+      resize: (input: SynapseTerminalResizeSessionInput) => Promise<void>
+      delete: (input: SynapseTerminalDeleteSessionInput) => Promise<void>
+      stop: (input: SynapseTerminalStopSessionInput) => Promise<void>
+      runStartupCommand: (input: SynapseTerminalRunStartupCommandInput) => Promise<void>
+    }
+    operation: {
+      onData: (listener: (event: SynapseTerminalDataEvent) => void) => () => void
+      onSessionChanged: (listener: (session: SynapseTerminalSession) => void) => () => void
+      onSessionDeleted: (listener: (event: SynapseTerminalSessionDeletedEvent) => void) => () => void
+    }
   }
   git: {
     checkEnvironment: () => Promise<SynapseGitEnvironmentState>
@@ -1094,114 +1114,109 @@ export type SynapseBridge = {
     refresh: () => Promise<SynapseAccountState>
     logout: () => Promise<SynapseAccountState>
     listWebhooks: () => Promise<DashboardWebhookDto[]>
-    listDriveItems: (input?: DriveItemListInput) => Promise<DriveItemListPageDto>
-    prepareDriveUpload: (input: { parentId?: string | null; name: string; size: string; mimeType?: string | null; expectedItemId?: string | null }) => Promise<DriveUploadPrepareResult>
-    prepareDriveFolderUpload: (input: { parentId?: string | null; folderName: string; files: Array<{ relativePath: string; size: string; mimeType?: string | null }> }) => Promise<DriveFolderUploadPrepareResult>
-    completeDriveUpload: (input: { sessionId: string }) => Promise<DriveItemDto>
-    uploadDrivePreparedFile: (input: { method: "PUT"; url: string; headers: Record<string, string>; body: ArrayBuffer }) => Promise<{ ok: true }>
-    uploadDriveLocalItems: (input: DriveLocalUploadRequest) => Promise<DriveLocalUploadResult>
-    filePathForDroppedFile: (file: File) => string | null
-    cancelDriveUpload: (input: { sessionId: string }) => Promise<{ ok: true }>
-    createDriveFolder: (input: { parentId?: string | null; name: string }) => Promise<DriveItemDto>
-    getDriveItemPreviewUrl: (input: { itemId: string }) => Promise<{ url: string }>
-    renameDriveItem: (input: { itemId: string; name: string }) => Promise<DriveItemDto>
-    moveDriveItem: (input: { itemId: string; parentId: string | null }) => Promise<DriveItemDto>
-    deleteDriveItem: (input: { itemId: string }) => Promise<{ ok: true }>
-    listDriveFileVersions: (input: { itemId: string } & DriveFileVersionListInput) => Promise<DriveFileVersionListPageDto>
-    downloadDriveFileVersion: (input: { itemId: string; versionId: string; outputPath: string }) => Promise<{ ok: true; path: string }>
-    restoreDriveFileVersion: (input: { itemId: string; versionId: string }) => Promise<DriveItemDto>
-    deleteDriveFileVersion: (input: { itemId: string; versionId: string }) => Promise<DriveFileVersionDeleteResult>
-    updateDriveFileVersionPin: (input: { itemId: string; versionId: string; isPinned: boolean }) => Promise<DriveFileVersionDto>
-    resolveDriveLink: (input: DriveLinkResolveInput) => Promise<DriveLinkResolveDto>
-    listDriveLink: (input: DriveLinkListInput) => Promise<DriveLinkListDto>
-    readDriveLinkText: (input: DriveLinkReadTextInput) => Promise<DriveLinkReadTextDto>
-    materializeDriveLink: (input: DriveLinkMaterializeInput) => Promise<DriveLinkMaterializeDto>
-    downloadDriveLinkFile: (input: DriveLinkDownloadFileInput) => Promise<DriveLinkDownloadFileDto>
-    shareDriveItem: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DriveShareDto>
-    disableDriveShare: (input: { shareId: string }) => Promise<{ ok: true }>
-    getDriveUsage: () => Promise<DriveUsageDto>
-    getDriveShare: (input: { shareId: string }) => Promise<DriveShareListItemDto>
-    listDriveShares: (input?: DrivePublicLinksPageInput) => Promise<DriveShareListPageDto>
-    listDrivePublicAssets: (input?: DrivePublicLinksPageInput) => Promise<DrivePublicAssetListPageDto>
-    getDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
-    uploadDrivePublicAssets: (input: DrivePublicAssetUploadRequest) => Promise<DrivePublicAssetUploadResult>
-    uploadDrivePublicAssetBinary: (input: DrivePublicAssetBinaryUploadRequest) => Promise<DrivePublicAssetDto>
-    scanDriveDocumentImageSources: (input: DriveDocumentImageSourceContext) => Promise<DriveDocumentImageSourcesDto>
-    importDriveDocumentImages: (input: DriveDocumentImageImportBridgeRequest) => Promise<DriveDocumentImageImportResult>
-    replaceDrivePublicAssetFile: (input: { assetId: string } & DrivePublicAssetLocalFile) => Promise<DrivePublicAssetDto>
-    renameDrivePublicAsset: (input: { assetId: string; name: string }) => Promise<DrivePublicAssetDto>
-    trashDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
-    restoreDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
-    preflightDriveSite: (input: { sourceFolderItemId: string }) => Promise<DriveSitePreflightDto>
-    createDriveSite: (input: DriveSiteCreateInput) => Promise<DriveSiteDto>
-    listDriveSites: (input?: DriveSiteListInput) => Promise<DriveSiteListPageDto>
-    updateDriveSiteAccess: (input: { siteId: string } & DriveSiteAccessUpdateInput) => Promise<DriveSiteDto>
-    disableDriveSite: (input: { siteId: string }) => Promise<DriveSiteDto>
-    enableDriveSite: (input: { siteId: string }) => Promise<DriveSiteDto>
-    deleteDriveSite: (input: { siteId: string }) => Promise<{ ok: true }>
-    republishDriveSite: (input: { siteId: string; entryPath?: string | null }) => Promise<DriveSiteDto>
-    listDriveTrash: (input?: DrivePublicLinksPageInput) => Promise<DriveTrashListPageDto>
-    restoreDriveTrashItem: (input: { itemId: string; kind?: DriveTrashItemDto["kind"]; assetId?: string }) => Promise<DriveItemDto | DrivePublicAssetDto>
-    deleteDriveTrashItem: (input: { itemId: string }) => Promise<{ ok: true }>
     onStateChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void
-    onDriveLocalUploadProgress: (listener: (event: DriveLocalUploadProgressEvent) => void) => () => void
+  }
+  drive: {
+    item: {
+      list: (input?: DriveItemListInput) => Promise<DriveItemListPageDto>
+      previewUrl: (input: { itemId: string }) => Promise<{ url: string }>
+      rename: (input: { itemId: string; name: string }) => Promise<DriveItemDto>
+      move: (input: { itemId: string; parentId: string | null }) => Promise<DriveItemDto>
+      delete: (input: { itemId: string }) => Promise<{ ok: true }>
+    }
+    upload: {
+      prepare: (input: { parentId?: string | null; name: string; size: string; mimeType?: string | null; expectedItemId?: string | null }) => Promise<DriveUploadPrepareResult>
+      folder: { prepare: (input: { parentId?: string | null; folderName: string; files: Array<{ relativePath: string; size: string; mimeType?: string | null }> }) => Promise<DriveFolderUploadPrepareResult> }
+      complete: (input: { sessionId: string }) => Promise<DriveItemDto>
+      put: (input: { method: "PUT"; url: string; headers: Record<string, string>; body: ArrayBuffer }) => Promise<{ ok: true }>
+      localItems: (input: DriveLocalUploadRequest) => Promise<DriveLocalUploadResult>
+      cancel: (input: { sessionId: string }) => Promise<{ ok: true }>
+      onLocalProgress: (listener: (event: DriveLocalUploadProgressEvent) => void) => () => void
+    }
+    localFile: { pathForDroppedFile: (file: File) => string | null }
+    folder: { create: (input: { parentId?: string | null; name: string }) => Promise<DriveItemDto> }
+    fileVersion: {
+      list: (input: { itemId: string } & DriveFileVersionListInput) => Promise<DriveFileVersionListPageDto>
+      restore: (input: { itemId: string; versionId: string }) => Promise<DriveItemDto>
+      delete: (input: { itemId: string; versionId: string }) => Promise<DriveFileVersionDeleteResult>
+    }
+    fileVersionDownload: { create: (input: { itemId: string; versionId: string; outputPath: string }) => Promise<{ ok: true; path: string }> }
+    fileVersionPin: { update: (input: { itemId: string; versionId: string; isPinned: boolean }) => Promise<DriveFileVersionDto> }
+    link: {
+      resolve: (input: DriveLinkResolveInput) => Promise<DriveLinkResolveDto>
+      list: (input: DriveLinkListInput) => Promise<DriveLinkListDto>
+      readText: (input: DriveLinkReadTextInput) => Promise<DriveLinkReadTextDto>
+      materialize: (input: DriveLinkMaterializeInput) => Promise<DriveLinkMaterializeDto>
+      downloadFile: (input: DriveLinkDownloadFileInput) => Promise<DriveLinkDownloadFileDto>
+    }
+    share: {
+      create: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DriveShareDto>
+      disable: (input: { shareId: string }) => Promise<{ ok: true }>
+      get: (input: { shareId: string }) => Promise<DriveShareListItemDto>
+      list: (input?: DrivePublicLinksPageInput) => Promise<DriveShareListPageDto>
+    }
+    usage: { get: () => Promise<DriveUsageDto> }
+    directLink: {
+      list: (input?: DrivePublicLinksPageInput) => Promise<DrivePublicAssetListPageDto>
+      get: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
+      upload: (input: DrivePublicAssetUploadRequest) => Promise<DrivePublicAssetUploadResult>
+      uploadBinary: (input: DrivePublicAssetBinaryUploadRequest) => Promise<DrivePublicAssetDto>
+      update: (input: { assetId: string } & DrivePublicAssetLocalFile) => Promise<DrivePublicAssetDto>
+      rename: (input: { assetId: string; name: string }) => Promise<DrivePublicAssetDto>
+      delete: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
+      restore: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
+    }
+    documentImages: {
+      scan: (input: DriveDocumentImageSourceContext) => Promise<DriveDocumentImageSourcesDto>
+      import: (input: DriveDocumentImageImportBridgeRequest) => Promise<DriveDocumentImageImportResult>
+    }
+    site: {
+      preflight: (input: { sourceFolderItemId: string }) => Promise<DriveSitePreflightDto>
+      create: (input: DriveSiteCreateInput) => Promise<DriveSiteDto>
+      list: (input?: DriveSiteListInput) => Promise<DriveSiteListPageDto>
+      updateAccess: (input: { siteId: string } & DriveSiteAccessUpdateInput) => Promise<DriveSiteDto>
+      disable: (input: { siteId: string }) => Promise<DriveSiteDto>
+      enable: (input: { siteId: string }) => Promise<DriveSiteDto>
+      delete: (input: { siteId: string }) => Promise<{ ok: true }>
+      republish: (input: { siteId: string; entryPath?: string | null }) => Promise<DriveSiteDto>
+    }
+    trash: {
+      list: (input?: DrivePublicLinksPageInput) => Promise<DriveTrashListPageDto>
+      restore: (input: { itemId: string; kind?: DriveTrashItemDto["kind"]; assetId?: string }) => Promise<DriveItemDto | DrivePublicAssetDto>
+      delete: (input: { itemId: string }) => Promise<{ ok: true }>
+    }
   }
   live: {
     getState: () => Promise<SynapseLiveState>
     onStateChanged: (listener: (event: SynapseLiveStateChangedEvent) => void) => () => void
   }
-  content: {
-    list: <T extends SynapseContentType>(
-      args: { contentType: T },
-    ) => Promise<SynapseContentMeta<T>[]>
-    getContent: (
-      args: { contentType: SynapseContentType; id: string },
-    ) => Promise<SynapseTextContentFile>
-    getDetail: (
-      args: { contentType: SynapseContentType; id: string },
-    ) => Promise<SynapseContentDetail>
-    getAttachmentFile: (
-      args: {
-        contentType: SynapseContentType
-        historyDirname: string
-        id: string
-        originalName: string
-      },
-    ) => Promise<SynapseContentFile | null>
-    create: (request: SynapseCreateContentRequest) => Promise<SynapseContentMutationResult>
-    update: (request: SynapseUpdateContentRequest) => Promise<SynapseContentMutationResult>
-    deleteContent: (payload: SynapseDeleteContentPayload) => Promise<SynapseContentMutationResult>
-    onChanged: (listener: (payload: SynapseContentChangedEvent) => void) => () => void
-    listDeleted: <T extends SynapseContentType>(
-      args: { contentType: T },
-    ) => Promise<SynapseContentMeta<T>[]>
-    restore: (payload: SynapseRestoreContentPayload) => Promise<SynapseContentMutationResult>
-    purge: (payload: SynapsePurgeContentPayload) => Promise<SynapseContentMutationResult>
-    download: (
-      args: { contentType: SynapseContentType; id: string },
-    ) => Promise<SynapseContentDownloadResult>
-    openDetailWindow: (payload: SynapseOpenContentWindowPayload) => Promise<void>
-    openCreateWindow: (payload: SynapseOpenContentCreateWindowPayload) => Promise<void>
-    openEditWindow: (payload: SynapseOpenContentEditWindowPayload) => Promise<void>
-    readEditorInitPayload: (payload: { requestId: string }) => Promise<
-      SynapseOpenContentCreateWindowPayload | SynapseOpenContentEditWindowPayload | null
-    >
-    getEditorAdapters: () => Promise<SynapseEditorAdapterSummary[]>
-    installToEditor: (
-      payload: SynapseInstallToEditorPayload,
-    ) => Promise<SynapseContentInstallResult>
-    readEditorInstallFormValues: (
-      payload: SynapseReadEditorInstallFormValuesPayload,
-    ) => Promise<SynapseReadEditorInstallFormValuesResult>
-    getIconPromptTemplate: (
-      args: { contentType: SynapseContentType; id: string },
-    ) => Promise<string | null>
-    readIconImage: (
-      args: { contentType: SynapseContentType; id: string },
-    ) => Promise<string | null>
-    resolveEditorInstallTarget: (
-      payload: SynapseResolveEditorTargetPayload,
-    ) => Promise<SynapseEditorResolvedTarget>
+  resourceRepository: {
+    item: {
+      list: <T extends SynapseContentType>(args: { contentType: T }) => Promise<SynapseContentMeta<T>[]>
+      create: (request: SynapseCreateContentRequest) => Promise<SynapseContentMutationResult>
+      update: (request: SynapseUpdateContentRequest) => Promise<SynapseContentMutationResult>
+      restore: (payload: SynapseRestoreContentPayload) => Promise<SynapseContentMutationResult>
+      purge: (payload: SynapsePurgeContentPayload) => Promise<SynapseContentMutationResult>
+      download: (args: { contentType: SynapseContentType; id: string }) => Promise<SynapseContentDownloadResult>
+      onChanged: (listener: (payload: SynapseContentChangedEvent) => void) => () => void
+    }
+    operation: {
+      getContent: (args: { contentType: SynapseContentType; id: string }) => Promise<SynapseTextContentFile>
+      getDetail: (args: { contentType: SynapseContentType; id: string }) => Promise<SynapseContentDetail>
+      getAttachmentFile: (args: { contentType: SynapseContentType; historyDirname: string; id: string; originalName: string }) => Promise<SynapseContentFile | null>
+      deleteContent: (payload: SynapseDeleteContentPayload) => Promise<SynapseContentMutationResult>
+      listDeleted: <T extends SynapseContentType>(args: { contentType: T }) => Promise<SynapseContentMeta<T>[]>
+      openDetailWindow: (payload: SynapseOpenContentWindowPayload) => Promise<void>
+      openCreateWindow: (payload: SynapseOpenContentCreateWindowPayload) => Promise<void>
+      openEditWindow: (payload: SynapseOpenContentEditWindowPayload) => Promise<void>
+      readEditorInitPayload: (payload: { requestId: string }) => Promise<SynapseOpenContentCreateWindowPayload | SynapseOpenContentEditWindowPayload | null>
+      getEditorAdapters: () => Promise<SynapseEditorAdapterSummary[]>
+      installToEditor: (payload: SynapseInstallToEditorPayload) => Promise<SynapseContentInstallResult>
+      readEditorInstallFormValues: (payload: SynapseReadEditorInstallFormValuesPayload) => Promise<SynapseReadEditorInstallFormValuesResult>
+      getIconPromptTemplate: (args: { contentType: SynapseContentType; id: string }) => Promise<string | null>
+      readIconImage: (args: { contentType: SynapseContentType; id: string }) => Promise<string | null>
+      resolveEditorInstallTarget: (payload: SynapseResolveEditorTargetPayload) => Promise<SynapseEditorResolvedTarget>
+    }
   }
   skillRepositoryInstall: {
     resolve: (sessionId: string) => Promise<SynapseSkillRepositoryInstallResolveResult>
@@ -1354,31 +1369,33 @@ export type SynapseBridge = {
     showItemInFolder: (filePath: string) => Promise<void>
     filePathForDroppedFile: (file: File) => string | null
   }
-  repository: {
-    checkInitializationPreview: (
-      repositoryUuid: string,
-    ) => Promise<SynapseRepositoryInitializationPreview>
-    createLocalRepository: (
-      payload: SynapseCreateLocalRepositoryPayload,
-    ) => Promise<SynapseCreateLocalRepositoryResult>
-    chooseDirectory: () => Promise<string | null>
-    flushPendingPushes: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
-    getPendingPushes: (repositoryUuid: string) => Promise<SynapsePendingPushState>
-    getSyncSnapshots: () => Promise<SynapseRepositorySyncSnapshot[]>
-    getStates: () => Promise<SynapseRepositoryLocalState[]>
-    initializeStructure: (
-      repositoryUuid: string,
-      options?: SynapseRepositoryInitializationOptions,
-    ) => Promise<SynapseRepositoryInitializationResult>
-    onPendingPushesUpdated: (listener: (payload: SynapsePendingPushUpdatedEvent) => void) => () => void
-    onSyncSnapshotUpdated: (
-      listener: (payload: SynapseRepositorySyncSnapshotUpdatedEvent) => void,
-    ) => () => void
-    runMaintenance: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
-    sync: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
-    onProgress: (listener: (payload: SynapseRepositoryProgressEvent) => void) => () => void
-    onUpdated: (listener: (payload: SynapseRepositoryUpdatedEvent) => void) => () => void
-    validateDirectory: (targetPath: string) => Promise<SynapseRepositoryValidationResult>
+  settings: {
+    repository: {
+      checkInitializationPreview: (
+        repositoryUuid: string,
+      ) => Promise<SynapseRepositoryInitializationPreview>
+      createLocalRepository: (
+        payload: SynapseCreateLocalRepositoryPayload,
+      ) => Promise<SynapseCreateLocalRepositoryResult>
+      chooseDirectory: () => Promise<string | null>
+      flushPendingPushes: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
+      getPendingPushes: (repositoryUuid: string) => Promise<SynapsePendingPushState>
+      getSyncSnapshots: () => Promise<SynapseRepositorySyncSnapshot[]>
+      getStates: () => Promise<SynapseRepositoryLocalState[]>
+      initializeStructure: (
+        repositoryUuid: string,
+        options?: SynapseRepositoryInitializationOptions,
+      ) => Promise<SynapseRepositoryInitializationResult>
+      onPendingPushesUpdated: (listener: (payload: SynapsePendingPushUpdatedEvent) => void) => () => void
+      onSyncSnapshotUpdated: (
+        listener: (payload: SynapseRepositorySyncSnapshotUpdatedEvent) => void,
+      ) => () => void
+      runMaintenance: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
+      sync: (repositoryUuid: string) => Promise<SynapseRepositoryOperationResult>
+      onProgress: (listener: (payload: SynapseRepositoryProgressEvent) => void) => () => void
+      onUpdated: (listener: (payload: SynapseRepositoryUpdatedEvent) => void) => () => void
+      validateDirectory: (targetPath: string) => Promise<SynapseRepositoryValidationResult>
+    }
   }
   updater: {
     cancelDownload: () => Promise<void>
@@ -1397,64 +1414,79 @@ export type SynapseBridge = {
     onStateChanged: (listener: (payload: SynapseCheatCodeStateChangedEvent) => void) => () => void
   }
   database: {
-    databaseTableList: () => Promise<DatabaseTableInfo[]>
-    databaseTableCreate: (params: { name: string; description?: string; columns: Column[] }) => Promise<void>
-    databaseTableDelete: (name: string) => Promise<void>
-    databaseTableDescribe: (name: string) => Promise<DatabaseTableSchema>
-    databaseOverviewGet: () => Promise<DatabaseOverview>
-    databaseTableUpdate: (params: { table: string; description: string }) => Promise<void>
-    databaseColumnCreate: (params: { table: string; column: Column & { default?: unknown } }) => Promise<void>
-    databaseColumnUpdate: (params: { table: string; column: string; description: string }) => Promise<void>
-    databaseChoiceUpdate: (params: { table: string; column: string; choices: string[] }) => Promise<void>
-    databaseChoiceUsageGet: (params: { table: string; column: string }) => Promise<Record<string, number>>
-    databaseRowCreate: (params: { table: string; data: Record<string, unknown> }) => Promise<{ id: number }>
-    databaseRowsCreate: (params: { table: string; rows: Record<string, unknown>[] }) => Promise<{ ids: number[] }>
-    databaseRowList: (params: DatabaseQueryParams) => Promise<DatabaseQueryResult>
-    databaseRowUpdate: (params: { table: string; id: number; data: Record<string, unknown> }) => Promise<{ affected: number }>
-    databaseRowDelete: (params: { table: string; id: number }) => Promise<{ affected: number }>
-    databaseRowsUpdate: (params: { table: string; where: DatabaseWhereClause; data: Record<string, unknown> }) => Promise<{ affected: number; ids: number[] }>
-    databaseRowsDelete: (params: { table: string; where: DatabaseWhereClause }) => Promise<{ affected: number; ids: number[] }>
-    databaseRowCount: (params: { table: string; where?: DatabaseWhereClause }) => Promise<{ count: number }>
-    databaseTableRename: (params: { from: string; to: string }) => Promise<void>
-    databaseColumnRename: (params: { table: string; from: string; to: string }) => Promise<void>
-    databaseColumnDelete: (params: { table: string; column: string }) => Promise<void>
-    databaseSqlExecute: (params: { sql: string; params?: unknown[] }) => Promise<{ rows?: Record<string, unknown>[]; changes?: number; lastInsertRowid?: number }>
-    databaseStatusGet: () => Promise<DatabaseStatus>
-    databaseExport: () => Promise<{ success: boolean; path?: string }>
-    databaseImport: () => Promise<{ success: boolean }>
-    databaseTableExport: (table: string) => Promise<{ success: boolean; path?: string }>
-    databaseTableImportInspect: () => Promise<
-      { success: false }
-      | ({ success: true } & DatabaseTableImportInspection)
-    >
-    databaseTableImport: (input: { sourcePath: string; sourceDigest: string }) => Promise<{ success: boolean; tableName?: string }>
-    databaseMcpHttpStatusGet: () => Promise<DatabaseMcpHttpStatus>
-    databaseMcpStatusGet: () => Promise<DatabaseMcpStatus>
-    databaseMcpServersGet: () => Promise<DatabaseMcpServerInfo[]>
-    databaseMcpSettingsOpen: (target: DatabaseMcpTarget) => Promise<{ success: boolean; error?: string }>
-    databaseMcpRegister: (target: DatabaseMcpTarget) => Promise<{ success: boolean; error?: string }>
-    onChanged: (listener: (event: DatabaseChangeEvent) => void) => () => void
-    databaseFolderList: () => Promise<DatabaseFolder[]>
-    databaseFolderCreate: (params: { name: string }) => Promise<{ id: number }>
-    databaseFolderRename: (params: { id: number; name: string }) => Promise<void>
-    databaseFolderDelete: (params: { id: number }) => Promise<void>
-    databaseFolderMoveTable: (params: { tableName: string; folderId: number | null }) => Promise<void>
-    databaseFolderReorder: (params: { folderId: number; tableNames: string[] }) => Promise<void>
-    databaseFolderReorderFolders: (params: { folderIds: number[] }) => Promise<void>
+    table: {
+      list: () => Promise<DatabaseTableInfo[]>
+      create: (params: { name: string; description?: string; columns: Column[] }) => Promise<void>
+      delete: (name: string) => Promise<void>
+      describe: (name: string) => Promise<DatabaseTableSchema>
+      update: (params: { table: string; description: string }) => Promise<void>
+      rename: (params: { from: string; to: string }) => Promise<void>
+      export: (table: string) => Promise<{ success: boolean; path?: string }>
+      import: (input: { sourcePath: string; sourceDigest: string }) => Promise<{ success: boolean; tableName?: string }>
+    }
+    tableImport: { inspect: () => Promise<{ success: false } | ({ success: true } & DatabaseTableImportInspection)> }
+    overview: { get: () => Promise<DatabaseOverview> }
+    column: {
+      create: (params: { table: string; column: Column & { default?: unknown } }) => Promise<void>
+      update: (params: { table: string; column: string; description: string }) => Promise<void>
+      rename: (params: { table: string; from: string; to: string }) => Promise<void>
+      delete: (params: { table: string; column: string }) => Promise<void>
+    }
+    choice: { update: (params: { table: string; column: string; choices: string[] }) => Promise<void> }
+    choiceUsage: { get: (params: { table: string; column: string }) => Promise<Record<string, number>> }
+    row: {
+      create: (params: { table: string; data: Record<string, unknown> }) => Promise<{ id: number }>
+      list: (params: DatabaseQueryParams) => Promise<DatabaseQueryResult>
+      update: (params: { table: string; id: number; data: Record<string, unknown> }) => Promise<{ affected: number }>
+      delete: (params: { table: string; id: number }) => Promise<{ affected: number }>
+      count: (params: { table: string; where?: DatabaseWhereClause }) => Promise<{ count: number }>
+    }
+    rows: {
+      create: (params: { table: string; rows: Record<string, unknown>[] }) => Promise<{ ids: number[] }>
+      update: (params: { table: string; where: DatabaseWhereClause; data: Record<string, unknown> }) => Promise<{ affected: number; ids: number[] }>
+      delete: (params: { table: string; where: DatabaseWhereClause }) => Promise<{ affected: number; ids: number[] }>
+    }
+    sql: { execute: (params: { sql: string; params?: unknown[] }) => Promise<{ rows?: Record<string, unknown>[]; changes?: number; lastInsertRowid?: number }> }
+    status: { get: () => Promise<DatabaseStatus> }
+    operation: {
+      export: () => Promise<{ success: boolean; path?: string }>
+      import: () => Promise<{ success: boolean }>
+      onChanged: (listener: (event: DatabaseChangeEvent) => void) => () => void
+    }
+    mcpHttpStatus: { get: () => Promise<DatabaseMcpHttpStatus> }
+    mcpStatus: { get: () => Promise<DatabaseMcpStatus> }
+    mcpServers: { get: () => Promise<DatabaseMcpServerInfo[]> }
+    mcpSettings: { open: (target: DatabaseMcpTarget) => Promise<{ success: boolean; error?: string }> }
+    mcp: { register: (target: DatabaseMcpTarget) => Promise<{ success: boolean; error?: string }> }
+    folder: {
+      list: () => Promise<DatabaseFolder[]>
+      create: (params: { name: string }) => Promise<{ id: number }>
+      rename: (params: { id: number; name: string }) => Promise<void>
+      delete: (params: { id: number }) => Promise<void>
+      moveTable: (params: { tableName: string; folderId: number | null }) => Promise<void>
+      reorder: (params: { folderId: number; tableNames: string[] }) => Promise<void>
+      reorderFolders: (params: { folderIds: number[] }) => Promise<void>
+    }
   }
   automation: {
-    openCreateEditorWindow: () => Promise<void>
-    openEditorWindow: (id: string) => Promise<void>
-    listItems: () => Promise<AutomationItem[]>
-    getItem: (id: string) => Promise<AutomationItem | null>
-    createItem: (input: AutomationCreateInput) => Promise<AutomationItem>
-    updateItem: (payload: { id: string; patch: AutomationUpdateInput }) => Promise<AutomationItem>
-    deleteItem: (id: string) => Promise<{ deleted: boolean }>
-    setItemEnabled: (payload: { id: string; enabled: boolean }) => Promise<AutomationItem>
-    runItem: (id: string) => Promise<AutomationRun | null>
-    stopRun: (runId: string) => Promise<AutomationStopRunResult>
-    listRuns: (automationId: string, options?: { limit?: number }) => Promise<AutomationRun[]>
-    onChanged: (listener: (event: AutomationChangedEvent) => void) => () => void
+    editor: {
+      openCreate: () => Promise<void>
+      openEdit: (id: string) => Promise<void>
+    }
+    item: {
+      list: () => Promise<AutomationItem[]>
+      get: (id: string) => Promise<AutomationItem | null>
+      create: (input: AutomationCreateInput) => Promise<AutomationItem>
+      update: (payload: { id: string; patch: AutomationUpdateInput }) => Promise<AutomationItem>
+      delete: (id: string) => Promise<{ deleted: boolean }>
+      setEnabled: (payload: { id: string; enabled: boolean }) => Promise<AutomationItem>
+      onChanged: (listener: (event: AutomationChangedEvent) => void) => () => void
+    }
+    run: {
+      execute: (id: string) => Promise<AutomationRun | null>
+      disable: (runId: string) => Promise<AutomationStopRunResult>
+      list: (automationId: string, options?: { limit?: number }) => Promise<AutomationRun[]>
+    }
   }
   agent: {
     status: (projectId: string) => Promise<SynapseAgentStatus>
@@ -1663,79 +1695,71 @@ export type SynapseBridge = {
     }) => Promise<SynapseOpsRecord>
   }
   workflow: {
-    list: () => Promise<WorkflowListResult>
-    get: (id: string) => Promise<WorkflowDefinition | null>
-    create: () => Promise<{ id: string; versionHash: string } | { errors: ValidationError[] }>
-    save: (def: WorkflowDefinition) => Promise<{ versionHash: string } | { errors: ValidationError[] }>
-    delete: (id: string, options?: { cleanupImportedChildren?: boolean }) => Promise<void>
-    validate: (def: WorkflowDefinition) => Promise<ValidationResult>
-    run: (id: string, params: Record<string, unknown>) => Promise<{ runId: string } | { errors: ValidationError[] }>
-    runDefinition: (def: WorkflowDefinition, params: Record<string, unknown>, force?: boolean) => Promise<{ runId: string } | { errors: ValidationError[] } | { conflict: true; activeRunId: string }>
-    rerun: (previousRunId: string, params: Record<string, unknown>, force?: boolean, workflowId?: string) => Promise<{ runId: string } | { errors: ValidationError[] } | { conflict: true; activeRunId: string }>
-    openRunner: (workflowId: string, runId: string) => Promise<void>
-    cancel: (runId: string) => Promise<void>
-    activeRuns: () => Promise<WorkflowRunListItem[]>
-    runHistory: (workflowId: string) => Promise<WorkflowRunListItem[]>
-    runStatus: (runId: string, workflowId?: string) => Promise<WorkflowRunStatus | null>
-    openEditor: (id: string, runId?: string) => Promise<void>
-    editorState: () => Promise<{ openEditors: string[]; states: Array<{ workflowId: string; dirty: boolean; saving: boolean }> }>
-    setEditorMutationState: (workflowId: string, dirty: boolean, saving: boolean) => Promise<void>
-    checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
-    inspectDeletePackage: (workflowId: string) => Promise<WorkflowShareDeletePlan>
-    inspectExportPackage: (workflowId: string) => Promise<WorkflowShareExportPreflight>
-    exportPackage: (
-      workflowId: string,
-      workflowName?: string,
-      migrationDiagnosticId?: string,
-      shareNote?: string,
-      expectedDigestSeed?: string,
-    ) => Promise<{
-      path: string
-      kind: "package" | "future-raw"
-    } | null>
-    inspectImportPackage: () => Promise<WorkflowImportPreview | WorkflowShareImportPreview | null>
-    importPackage: (packagePath: string, mappings: WorkflowModelMapping[], options?: WorkflowImportOptions, packageDigest?: string) => Promise<{ workflowId: string; versionHash: string } | { errors: ValidationError[] }>
-    importSharePackage: (packagePath: string, selections: WorkflowShareImportSelections, packageDigest: string) => Promise<{
-      workflowId: string
-      workflowIds?: string[]
-      versionHash: string
-      mutated?: boolean
-      undoCreated?: boolean
-    } | { errors: ValidationError[] }>
-    undoShareImport: (lineageId: string) => Promise<{ workflowIds: string[] }>
-    chooseParamFile: () => Promise<string | null>
-    chooseParamDirectory: () => Promise<string | null>
-    chooseParamFiles: () => Promise<string[]>
-    chooseParamDirectories: () => Promise<string[]>
-    onEvent: (listener: (event: WorkflowEvent) => void) => () => void
-    onDefinitionUpdated: (listener: (payload: { workflowId: string; source?: string; versionHash?: string }) => void) => () => void
-    onRunnerSwitchRun: (listener: (payload: { runId: string }) => void) => () => void
-    onEditorRefocus: (listener: (payload: { runId?: string }) => void) => () => void
-  }
-  workflowParamPresets: {
-    list: (workflowId: string) => Promise<WorkflowParamPreset[]>
-    resolveResourceEntryTypes: (id: string) => Promise<Record<string, WorkflowParamPresetResourceEntryType>>
-    save: (input: SaveWorkflowParamPresetInput) => Promise<WorkflowParamPreset>
-    delete: (id: string) => Promise<void>
+    definition: {
+      list: () => Promise<WorkflowListResult>
+      get: (id: string) => Promise<WorkflowDefinition | null>
+      create: () => Promise<{ id: string; versionHash: string } | { errors: ValidationError[] }>
+      update: (def: WorkflowDefinition) => Promise<{ versionHash: string } | { errors: ValidationError[] }>
+      delete: (id: string, options?: { cleanupImportedChildren?: boolean }) => Promise<void>
+      inspect: (def: WorkflowDefinition) => Promise<ValidationResult>
+    }
+    run: {
+      execute: (id: string, params: Record<string, unknown>) => Promise<{ runId: string } | { errors: ValidationError[] }>
+      disable: (runId: string) => Promise<void>
+      listActive: () => Promise<WorkflowRunListItem[]>
+      list: (workflowId: string) => Promise<WorkflowRunListItem[]>
+      get: (runId: string, workflowId?: string) => Promise<WorkflowRunStatus | null>
+    }
+    operation: {
+      runDefinition: (def: WorkflowDefinition, params: Record<string, unknown>, force?: boolean) => Promise<{ runId: string } | { errors: ValidationError[] } | { conflict: true; activeRunId: string }>
+      rerun: (previousRunId: string, params: Record<string, unknown>, force?: boolean, workflowId?: string) => Promise<{ runId: string } | { errors: ValidationError[] } | { conflict: true; activeRunId: string }>
+      openRunner: (workflowId: string, runId: string) => Promise<void>
+      openEditor: (id: string, runId?: string) => Promise<void>
+      editorState: () => Promise<{ openEditors: string[]; states: Array<{ workflowId: string; dirty: boolean; saving: boolean }> }>
+      setEditorMutationState: (workflowId: string, dirty: boolean, saving: boolean) => Promise<void>
+      checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
+      inspectDeletePackage: (workflowId: string) => Promise<WorkflowShareDeletePlan>
+      inspectExportPackage: (workflowId: string) => Promise<WorkflowShareExportPreflight>
+      exportPackage: (workflowId: string, workflowName?: string, migrationDiagnosticId?: string, shareNote?: string, expectedDigestSeed?: string) => Promise<{ path: string; kind: "package" | "future-raw" } | null>
+      inspectImportPackage: () => Promise<WorkflowImportPreview | WorkflowShareImportPreview | null>
+      importPackage: (packagePath: string, mappings: WorkflowModelMapping[], options?: WorkflowImportOptions, packageDigest?: string) => Promise<{ workflowId: string; versionHash: string } | { errors: ValidationError[] }>
+      importSharePackage: (packagePath: string, selections: WorkflowShareImportSelections, packageDigest: string) => Promise<{ workflowId: string; workflowIds?: string[]; versionHash: string; mutated?: boolean; undoCreated?: boolean } | { errors: ValidationError[] }>
+      undoShareImport: (lineageId: string) => Promise<{ workflowIds: string[] }>
+      onEvent: (listener: (event: WorkflowEvent) => void) => () => void
+      onRunnerSwitchRun: (listener: (payload: { runId: string }) => void) => () => void
+      onEditorRefocus: (listener: (payload: { runId?: string }) => void) => () => void
+    }
+    paramFile: { choose: () => Promise<string | null> }
+    paramDirectory: { choose: () => Promise<string | null> }
+    paramFiles: { choose: () => Promise<string[]> }
+    paramDirectories: { choose: () => Promise<string[]> }
+    paramPreset: {
+      list: (workflowId: string) => Promise<WorkflowParamPreset[]>
+      resolveResourceEntryTypes: (id: string) => Promise<Record<string, WorkflowParamPresetResourceEntryType>>
+      save: (input: SaveWorkflowParamPresetInput) => Promise<WorkflowParamPreset>
+      delete: (id: string) => Promise<void>
+    }
+    editor: {
+      onDefinitionUpdated: (listener: (payload: { workflowId: string; source?: string; versionHash?: string }) => void) => () => void
+    }
   }
   usageAnalysis: {
     cc: ClaudeCodeUsageAnalysisBridgeDomain
     codex: UsageAnalysisBridgeDomain
-    getPricingRules: () => Promise<UsageAnalysisModelPriceRule[]>
-    savePricingRules: (rules: UsageAnalysisModelPriceRuleInput[]) => Promise<UsageAnalysisModelPriceRule[]>
-    /** @deprecated Compatibility alias with clear semantics. New code should use modelPrice.clearRules(). */
-    resetPricingRules: () => Promise<UsageAnalysisModelPriceRule[]>
   }
   modelPrice: {
-    listCoverage: (input?: ModelPriceCoverageInput) => Promise<ModelPriceCoverageRow[]>
-    listPresets: () => Promise<ModelPricePresetSummary[]>
-    importPreset: (presetId: ModelPricePresetId) => Promise<ModelPriceRule[]>
-    importPresets: (presetIds: ModelPricePresetId[]) => Promise<ModelPriceRule[]>
-    getRules: () => Promise<ModelPriceRule[]>
-    saveRules: (rules: ModelPriceRuleInput[]) => Promise<ModelPriceRule[]>
-    clearRules: () => Promise<ModelPriceRule[]>
-    /** @deprecated Compatibility alias for clearRules. New code should call clearRules(). */
-    resetRules: () => Promise<ModelPriceRule[]>
+    usedModel: {
+      list: (input?: ModelPriceCoverageInput) => Promise<ModelPriceCoverageRow[]>
+    }
+    preset: {
+      list: () => Promise<ModelPricePresetSummary[]>
+      import: (presetIds: ModelPricePresetId | ModelPricePresetId[]) => Promise<ModelPriceRule[]>
+    }
+    rule: {
+      list: () => Promise<ModelPriceRule[]>
+      save: (rules: ModelPriceRuleInput[]) => Promise<ModelPriceRule[]>
+      clear: () => Promise<ModelPriceRule[]>
+    }
   }
   http: {
     testRequest: (config: Record<string, unknown>) => Promise<{

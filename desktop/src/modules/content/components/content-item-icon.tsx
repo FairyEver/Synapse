@@ -74,7 +74,7 @@ function ContentItemIcon({
 
     let canceled = false
 
-    window.synapse?.content
+    window.synapse?.resourceRepository.operation
       .readIconImage({ contentType, id: contentId })
       .then((dataUrl) => {
         if (!canceled && dataUrl) {

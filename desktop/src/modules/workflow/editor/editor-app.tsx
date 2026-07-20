@@ -78,7 +78,7 @@ export function WorkflowEditorApp() {
     setLoadError(null)
     void (async () => {
       try {
-        const def = await workflowApi.get(workflowId)
+        const def = await workflowApi.definition.get(workflowId)
         if (cancelled) return
         // Re-check dirty state: the user may have started editing while
         // the IPC call was in flight. Overwriting would lose their work.
@@ -112,7 +112,7 @@ export function WorkflowEditorApp() {
   }, [loadDefinition])
 
   useEffect(() => {
-    const unsub = window.synapse?.workflow.onEditorRefocus(() => {
+    const unsub = window.synapse?.workflow.operation.onEditorRefocus(() => {
       if (isDirtyRef.current) {
         logger.info("editor-refocus received but has unsaved changes, skipping reload", { workflowId })
         return
@@ -124,7 +124,7 @@ export function WorkflowEditorApp() {
   }, [workflowId, loadDefinition])
 
   useEffect(() => {
-    const unsub = window.synapse?.workflow.onDefinitionUpdated((payload) => {
+    const unsub = window.synapse?.workflow.editor.onDefinitionUpdated((payload) => {
       if (payload.workflowId !== workflowId) return
       if (payload.source !== "mcp" && payload.source !== "workflow-delete" && payload.source !== "share-import") return
       const workflowDeleted = payload.source === "workflow-delete"
@@ -264,9 +264,9 @@ export function WorkflowEditorApp() {
     savingRef.current = true
     setSaving(true)
     try {
-      let result: Awaited<ReturnType<NonNullable<typeof window.synapse>["workflow"]["save"]>> | undefined
+      let result: Awaited<ReturnType<NonNullable<typeof window.synapse>["workflow"]["definition"]["update"]>> | undefined
       try {
-        result = await window.synapse?.workflow.save(def)
+        result = await window.synapse?.workflow.definition.update(def)
       } catch (err) {
         logger.error("save IPC call threw", {
           workflowId: def.id,
@@ -336,7 +336,7 @@ export function WorkflowEditorApp() {
       }
       const saved = definitionRef.current
       if (!saved) return null
-      const result = await window.synapse?.workflow.runDefinition(saved, params)
+      const result = await window.synapse?.workflow.operation.runDefinition(saved, params)
       if (!result) {
         setRunErrors([{ type: "invalid_config", message: "运行失败：IPC 通道不可用" }])
         return null
@@ -349,7 +349,7 @@ export function WorkflowEditorApp() {
         setConflictState({ saved, params })
         return null
       }
-      window.synapse?.workflow.openRunner(saved.id, result.runId).catch((err) => {
+      window.synapse?.workflow.operation.openRunner(saved.id, result.runId).catch((err) => {
         logger.warn("Workflow runner open failed after run.", {
           boundary: "renderer.workflow.editor.run",
           workflowId: saved.id,
@@ -378,7 +378,7 @@ export function WorkflowEditorApp() {
     setConflictState(null)
     setRunning(true)
     try {
-      const forceResult = await window.synapse?.workflow.runDefinition(saved, params, true)
+      const forceResult = await window.synapse?.workflow.operation.runDefinition(saved, params, true)
       if (!forceResult) {
         toast.error("运行失败：无法连接到主进程")
         return
@@ -392,7 +392,7 @@ export function WorkflowEditorApp() {
         toast.error("仍有运行中的实例，请先取消")
         return
       }
-      window.synapse?.workflow.openRunner(saved.id, forceResult.runId).catch((err) => {
+      window.synapse?.workflow.operation.openRunner(saved.id, forceResult.runId).catch((err) => {
         logger.warn("Workflow runner open failed after force run.", {
           boundary: "renderer.workflow.editor.force-run",
           workflowId: saved.id,

@@ -24,7 +24,7 @@ describe("shellIpcModule", () => {
     const { harness, auditSink, permissionGuard } = createHarness()
     electronMock.shell.openExternal.mockResolvedValue(undefined)
 
-    await harness.invoke("synapse:shell:open-external", {
+    await harness.invoke("synapse:app:shell:external:open", {
       url: "https://example.com/path",
     })
 
@@ -50,7 +50,7 @@ describe("shellIpcModule", () => {
     const rawUrl = "https://user:pass@example.com/path?token=secret-value&query=ok&code=oauth-code"
     const redactedUrl = "https://example.com/path?token=%5Bredacted%5D&query=ok&code=%5Bredacted%5D"
 
-    await harness.invoke("synapse:shell:open-external", { url: rawUrl })
+    await harness.invoke("synapse:app:shell:external:open", { url: rawUrl })
 
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "shell.exec",
@@ -70,7 +70,7 @@ describe("shellIpcModule", () => {
   it("rejects non-web external links", async () => {
     const { harness, permissionGuard, auditSink } = createHarness()
 
-    await expect(harness.invoke("synapse:shell:open-external", {
+    await expect(harness.invoke("synapse:app:shell:external:open", {
       url: "file:///Users/test/secret.txt",
     })).rejects.toThrow()
 
@@ -84,7 +84,7 @@ describe("shellIpcModule", () => {
       permission: { allowed: false, reason: "denied by test-policy", policyId: "test-policy" },
     })
 
-    await expect(harness.invoke("synapse:shell:open-external", {
+    await expect(harness.invoke("synapse:app:shell:external:open", {
       url: "https://example.com/path",
     })).rejects.toThrow("denied by test-policy")
 
@@ -105,7 +105,7 @@ describe("shellIpcModule", () => {
   it("shows items in Finder through PermissionGuard and AuditSink", async () => {
     const { harness, auditSink, permissionGuard } = createHarness()
 
-    await harness.invoke("synapse:shell:show-item-in-folder", {
+    await harness.invoke("synapse:app:shell:item:show_in_folder", {
       fullPath: "/Users/test/project/file.md",
     })
 

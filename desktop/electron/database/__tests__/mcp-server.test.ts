@@ -123,7 +123,7 @@ describe("MCP HTTP server", () => {
       id: 3,
       method: "tools/call",
       params: {
-        name: "automation_item_create",
+        name: "app_automation_item_create",
         arguments: { name: "unsafe" },
       },
     }, undefined, "https://example.com")
@@ -175,13 +175,9 @@ describe("MCP HTTP server", () => {
       "app_automation_webhook_list",
       "app_automation_trigger_type_list",
       "app_automation_executor_type_list",
-      "automation_item_list",
-      "automation_item_create",
-      "automation_run_execute",
-      "automation_webhook_list",
-      "automation_trigger_type_list",
-      "automation_executor_type_list",
     ]))
+    expect(payload.result.tools.map((tool: { name: string }) => tool.name))
+      .not.toContain("automation_item_list")
   })
 
   it("calls Automation tools through the action router", async () => {
@@ -194,7 +190,7 @@ describe("MCP HTTP server", () => {
       id: 3,
       method: "tools/call",
       params: {
-        name: "automation_item_list",
+        name: "app_automation_item_list",
         arguments: { enabled: true },
       },
     })

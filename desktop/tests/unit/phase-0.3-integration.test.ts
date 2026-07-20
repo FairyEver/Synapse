@@ -21,7 +21,7 @@ import { createNetworkServiceRegistry } from "../../electron/runtime/network"
 
 const demoEchoMethod: IpcMethodDescriptor<{ text: string }, { text: string }> = {
   kind: "invoke",
-  channel: "synapse:demo:echo",
+  operationId: "app.demo.operation.echo",
   request: z.object({ text: z.string() }),
   response: z.object({ text: z.string() }),
   handler: (_ctx, request) => ({ text: request.text }),
@@ -61,7 +61,7 @@ describe("Phase 0.3 integration (T3.16)", () => {
         throw new Error("unused")
       },
     })
-    const reply = await harness.invoke("synapse:demo:echo", { text: "ok" })
+    const reply = await harness.invoke("synapse:app:demo:operation:echo", { text: "ok" })
     expect(reply).toEqual({ text: "ok" })
   })
 

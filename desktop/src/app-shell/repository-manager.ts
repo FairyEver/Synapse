@@ -352,7 +352,7 @@ class RepositoryManager {
     uuid: string,
     options?: SynapseRepositoryInitializationOptions,
   ): Promise<SynapseRepositoryInitializationResult> {
-    const bridge = requireBridgeDomain("repository")
+    const bridge = requireBridgeDomain("settings").repository
 
     this.setOperationState(uuid, {
       operation: "initialize",
@@ -396,7 +396,7 @@ class RepositoryManager {
     uuid: string,
     operation: SynapseRepositoryOperationKind,
   ): Promise<SynapseRepositoryOperationResult> {
-    const bridge = requireBridgeDomain("repository")
+    const bridge = requireBridgeDomain("settings").repository
 
     this.setOperationState(uuid, {
       operation,
@@ -466,11 +466,11 @@ class RepositoryManager {
     contentType: T,
     payload: SynapseCreateContentPayload<T>,
   ): Promise<SynapseContentMutationResult> {
-    const bridge = requireBridgeDomain("content")
+    const bridge = requireBridgeDomain("resourceRepository")
     const t0 = Date.now()
     logger.info("createContent: calling bridge.create.", { contentType })
 
-    const result = await bridge.create({ contentType, payload } as SynapseCreateContentRequest<T>)
+    const result = await bridge.item.create({ contentType, payload } as SynapseCreateContentRequest<T>)
     logger.info("createContent: bridge.create returned.", { contentType, durationMs: Date.now() - t0, status: result.status })
 
     if (result.status === "saved") {
@@ -495,9 +495,9 @@ class RepositoryManager {
     contentType: T,
     payload: SynapseUpdateContentPayload<T>,
   ): Promise<SynapseContentMutationResult> {
-    const bridge = requireBridgeDomain("content")
+    const bridge = requireBridgeDomain("resourceRepository")
 
-    const result = await bridge.update({ contentType, payload } as SynapseUpdateContentRequest<T>)
+    const result = await bridge.item.update({ contentType, payload } as SynapseUpdateContentRequest<T>)
 
     if (result.status === "saved") {
       await this.refreshContentList(contentType)
@@ -513,9 +513,9 @@ class RepositoryManager {
   }
 
   async deleteContent(payload: SynapseDeleteContentPayload): Promise<SynapseContentMutationResult> {
-    const bridge = requireBridgeDomain("content")
+    const bridge = requireBridgeDomain("resourceRepository")
 
-    const result = await bridge.deleteContent(payload)
+    const result = await bridge.operation.deleteContent(payload)
 
     if (result.status === "saved") {
       await this.refreshContentList(payload.type)
@@ -558,7 +558,7 @@ class RepositoryManager {
   }
 
   async refreshContentList<T extends SynapseContentType>(contentType: T): Promise<void> {
-    const bridge = getSynapseBridge()?.content
+    const bridge = getSynapseBridge()?.resourceRepository
     if (!bridge) {
       this.contentErrors.set(contentType, new Error("Content bridge not available"))
       this.notifyContentSubscribers(contentType)
@@ -572,7 +572,7 @@ class RepositoryManager {
     this.notifyContentSubscribers(contentType)
 
     try {
-      const items = await bridge.list({ contentType })
+      const items = await bridge.item.list({ contentType })
       if (!this.isCurrentContentRefresh(contentType, refreshVersion, activeRepositoryUuid)) {
         return
       }
@@ -604,26 +604,26 @@ class RepositoryManager {
 
   // ===== 桥接检查 =====
   hasRepositoryBridge(): boolean {
-    return Boolean(getSynapseBridge()?.repository)
+    return Boolean(getSynapseBridge()?.settings.repository)
   }
 
   hasContentBridge(): boolean {
-    return Boolean(getSynapseBridge()?.content)
+    return Boolean(getSynapseBridge()?.resourceRepository)
   }
 
   // ===== 工具方法 =====
   async checkInitializationPreview(uuid: string): Promise<SynapseRepositoryInitializationPreview> {
-    const bridge = requireBridgeDomain("repository")
+    const bridge = requireBridgeDomain("settings").repository
     return bridge.checkInitializationPreview(uuid)
   }
 
   async validateDirectory(targetPath: string): Promise<SynapseRepositoryValidationResult> {
-    const bridge = requireBridgeDomain("repository")
+    const bridge = requireBridgeDomain("settings").repository
     return bridge.validateDirectory(targetPath)
   }
 
   async chooseDirectory(): Promise<string | null> {
-    const bridge = getSynapseBridge()?.repository
+    const bridge = getSynapseBridge()?.settings.repository
     if (!bridge) {
       return null
     }
@@ -633,12 +633,12 @@ class RepositoryManager {
   async createLocalRepository(
     options: SynapseCreateLocalRepositoryPayload,
   ): Promise<SynapseCreateLocalRepositoryResult> {
-    const bridge = requireBridgeDomain("repository")
+    const bridge = requireBridgeDomain("settings").repository
     return bridge.createLocalRepository(options)
   }
 
   async getPendingPushesFromBridge(uuid: string): Promise<SynapsePendingPushState> {
-    const bridge = getSynapseBridge()?.repository
+    const bridge = getSynapseBridge()?.settings.repository
     if (!bridge) {
       return { count: 0, items: [] }
     }
@@ -699,7 +699,7 @@ class RepositoryManager {
 
   // ===== 内部方法 =====
   async refreshRepositoryStates(): Promise<void> {
-    const bridge = getSynapseBridge()?.repository
+    const bridge = getSynapseBridge()?.settings.repository
     if (!bridge) {
       return
     }
@@ -739,7 +739,7 @@ class RepositoryManager {
   }
 
   private async refreshSyncSnapshots(): Promise<void> {
-    const bridge = getSynapseBridge()?.repository
+    const bridge = getSynapseBridge()?.settings.repository
     if (!bridge?.getSyncSnapshots) {
       return
     }
@@ -758,10 +758,10 @@ class RepositoryManager {
 
   private setupBridgeListeners(): void {
     const synapseBridge = getSynapseBridge()
-    const bridge = synapseBridge?.repository
-    const contentBridge = synapseBridge?.content
+    const bridge = synapseBridge?.settings.repository
+    const contentBridge = synapseBridge?.resourceRepository
 
-    this.unsubscribeContentChanged = contentBridge?.onChanged?.(
+    this.unsubscribeContentChanged = contentBridge?.item.onChanged?.(
       (event: SynapseContentChangedEvent) => {
         void this.refreshContentList(event.contentType)
       },

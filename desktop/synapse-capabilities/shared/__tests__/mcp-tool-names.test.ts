@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest"
 
-import { withPrimaryAndLegacyMcpTools } from "../mcp-aliases"
+import { withPrimaryMcpTools } from "../mcp-tool-names"
 import type { McpToolDefinition } from "../types"
 
-describe("withPrimaryAndLegacyMcpTools", () => {
-  it("rewrites MCP tool references without rewriting domain identifiers", () => {
+describe("withPrimaryMcpTools", () => {
+  it("returns only primary names and rewrites tool references without rewriting domain identifiers", () => {
     const tools: McpToolDefinition[] = [{
       name: "workflow_node_type_describe",
-      description: "Call workflow_node_type_describe for workflow_call, not app_workflow_call.",
+      description: "Call workflow_node_type_describe for workflow_call, not workflow_call.",
       inputSchema: {
         type: "object",
         properties: {
@@ -19,15 +19,19 @@ describe("withPrimaryAndLegacyMcpTools", () => {
       },
     }]
 
-    const [primaryTool] = withPrimaryAndLegacyMcpTools(tools, {
-      legacyPrefix: "workflow",
+    const [primaryTool] = withPrimaryMcpTools(tools, {
+      sourcePrefix: "workflow",
       primaryPrefix: "app_workflow",
     })
 
     expect(primaryTool.name).toBe("app_workflow_node_type_describe")
     expect(primaryTool.description).toBe(
-      "Call app_workflow_node_type_describe for workflow_call, not app_workflow_call.",
+      "Call app_workflow_node_type_describe for workflow_call, not workflow_call.",
     )
     expect(primaryTool.inputSchema.properties.nodeType.description).toBe("workflow_call")
+    expect(withPrimaryMcpTools(tools, {
+      sourcePrefix: "workflow",
+      primaryPrefix: "app_workflow",
+    })).toHaveLength(1)
   })
 })

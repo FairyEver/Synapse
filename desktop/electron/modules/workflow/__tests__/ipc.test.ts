@@ -112,7 +112,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    await expect(harness.invoke("synapse:workflow:list", undefined)).resolves.toEqual({
+    await expect(harness.invoke("synapse:app:workflow:definition:list", undefined)).resolves.toEqual({
       items: [expect.objectContaining({ id: "workflow-1" })],
       migrationDiagnostics: [expect.objectContaining({
         id: "legacy:workflow-2",
@@ -182,8 +182,8 @@ describe("workflowIpcModule", () => {
       },
     })
 
-    await expect(harness.invoke("synapse:workflow:param-file:choose", undefined)).resolves.toBe("/tmp/input.txt")
-    await expect(harness.invoke("synapse:workflow:param-directory:choose", undefined)).resolves.toBe("/tmp/work")
+    await expect(harness.invoke("synapse:app:workflow:param_file:choose", undefined)).resolves.toBe("/tmp/input.txt")
+    await expect(harness.invoke("synapse:app:workflow:param_directory:choose", undefined)).resolves.toBe("/tmp/work")
 
     expect(electronMock.dialog.showOpenDialog).toHaveBeenNthCalledWith(1, {
       title: "选择文件",
@@ -205,7 +205,7 @@ describe("workflowIpcModule", () => {
       },
     })
 
-    await expect(harness.invoke("synapse:workflow:param-file:choose", undefined)).resolves.toBeNull()
+    await expect(harness.invoke("synapse:app:workflow:param_file:choose", undefined)).resolves.toBeNull()
   })
 
   it("opens multi-select native pickers for workflow resource params", async () => {
@@ -218,9 +218,9 @@ describe("workflowIpcModule", () => {
       resolve: <T,>(): T => { throw new Error("No services expected") },
     })
 
-    await expect(harness.invoke("synapse:workflow:param-files:choose", undefined))
+    await expect(harness.invoke("synapse:app:workflow:param_files:choose", undefined))
       .resolves.toEqual(["/tmp/a.txt", "/tmp/b.txt"])
-    await expect(harness.invoke("synapse:workflow:param-directories:choose", undefined))
+    await expect(harness.invoke("synapse:app:workflow:param_directories:choose", undefined))
       .resolves.toEqual(["/tmp/a", "/tmp/b"])
     expect(electronMock.dialog.showOpenDialog).toHaveBeenNthCalledWith(1, {
       title: "选择文件",
@@ -253,7 +253,7 @@ describe("workflowIpcModule", () => {
       }],
     }
 
-    await expect(harness.invoke("synapse:workflow:save", definition)).resolves.toEqual({ versionHash: "v-option" })
+    await expect(harness.invoke("synapse:app:workflow:definition:update", definition)).resolves.toEqual({ versionHash: "v-option" })
     expect(workflow.save).toHaveBeenCalledWith(definition)
   })
 
@@ -300,7 +300,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const result = await harness.invoke("synapse:workflow:run", {
+    const result = await harness.invoke("synapse:app:workflow:run:execute", {
       id: "workflow-1",
       params: {
         apiToken: "sk-param-secret",
@@ -411,7 +411,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const result = await harness.invoke("synapse:workflow:run", {
+    const result = await harness.invoke("synapse:app:workflow:run:execute", {
       id: "workflow-1",
       params: {
         apiKey: "sk-param-secret",
@@ -421,7 +421,7 @@ describe("workflowIpcModule", () => {
     await Promise.resolve()
 
     const runId = (result as { runId: string }).runId
-    const liveStatus = await harness.invoke("synapse:workflow:run-status", { runId })
+    const liveStatus = await harness.invoke("synapse:app:workflow:run:get", { runId })
     const serializedEvents = JSON.stringify(eventBus.emit.mock.calls)
     const serializedStatus = JSON.stringify(liveStatus)
     const serializedMemory = JSON.stringify(runStatuses.get(runId))
@@ -488,7 +488,7 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     // workflow:run → "renderer"
-    await harness.invoke("synapse:workflow:run", { id: "workflow-1", params: {} })
+    await harness.invoke("synapse:app:workflow:run:execute", { id: "workflow-1", params: {} })
     expect(engine.run).toHaveBeenCalledWith(
       expect.anything(), expect.anything(), expect.anything(),
       expect.anything(), expect.anything(), undefined,
@@ -496,7 +496,7 @@ describe("workflowIpcModule", () => {
     )
 
     // workflow:runDefinition → "editor-run-definition"
-    await harness.invoke("synapse:workflow:run-definition", {
+    await harness.invoke("synapse:app:workflow:operation:run_definition", {
       definition: workflowDefinition(),
       params: {},
     })
@@ -528,7 +528,7 @@ describe("workflowIpcModule", () => {
       throw new Error(`Unknown service: ${serviceId}`)
     }
     harness2.registry.register(workflowIpcModule, { moduleId: "workflow", resolve: resolve2 })
-    await harness2.invoke("synapse:workflow:rerun", { previousRunId: "previous-run", params: {} })
+    await harness2.invoke("synapse:app:workflow:operation:rerun", { previousRunId: "previous-run", params: {} })
     expect(engine.run).toHaveBeenCalledWith(
       expect.anything(), expect.anything(), expect.anything(),
       expect.anything(), expect.anything(), undefined,
@@ -563,7 +563,7 @@ describe("workflowIpcModule", () => {
     }) as IpcHandlerContext["resolve"]
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    await expect(harness.invoke("synapse:workflow:run-definition", {
+    await expect(harness.invoke("synapse:app:workflow:operation:run_definition", {
       definition: {
         ...workflowDefinition(),
         meta: { schemaVersion },
@@ -611,8 +611,8 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     try {
-      const firstRun = await harness.invoke("synapse:workflow:run", { id: "workflow-1", params: {} })
-      const forceRun = harness.invoke("synapse:workflow:run-definition", {
+      const firstRun = await harness.invoke("synapse:app:workflow:run:execute", { id: "workflow-1", params: {} })
+      const forceRun = harness.invoke("synapse:app:workflow:operation:run_definition", {
         definition: workflowDefinition(),
         params: {},
         force: true,
@@ -658,9 +658,9 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     try {
-      const firstRun = await harness.invoke("synapse:workflow:run", { id: "workflow-1", params: {} })
+      const firstRun = await harness.invoke("synapse:app:workflow:run:execute", { id: "workflow-1", params: {} })
       const previousRunId = (firstRun as { runId: string }).runId
-      const forceRerun = harness.invoke("synapse:workflow:rerun", {
+      const forceRerun = harness.invoke("synapse:app:workflow:operation:rerun", {
         previousRunId,
         params: {},
         force: true,
@@ -717,7 +717,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const conflict = await harness.invoke("synapse:workflow:rerun", {
+    const conflict = await harness.invoke("synapse:app:workflow:operation:rerun", {
       previousRunId: "previous-run",
       params: {},
     })
@@ -728,7 +728,7 @@ describe("workflowIpcModule", () => {
     })
 
     runStatuses.delete("active-run")
-    const started = await harness.invoke("synapse:workflow:rerun", {
+    const started = await harness.invoke("synapse:app:workflow:operation:rerun", {
       previousRunId: "previous-run",
       params: {},
     })
@@ -781,7 +781,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const result = await harness.invoke("synapse:workflow:rerun", { previousRunId: "previous-run", params: {} })
+    const result = await harness.invoke("synapse:app:workflow:operation:rerun", { previousRunId: "previous-run", params: {} })
 
     expect(result).toEqual({ runId: expect.any(String) })
     expect(workflow.get).toHaveBeenCalledWith("workflow-1")
@@ -832,7 +832,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const result = await harness.invoke("synapse:workflow:rerun", { previousRunId: "previous-run", params: {} })
+    const result = await harness.invoke("synapse:app:workflow:operation:rerun", { previousRunId: "previous-run", params: {} })
 
     expect(result).toEqual({
       errors: [{
@@ -872,7 +872,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const result = await harness.invoke("synapse:workflow:rerun", {
+    const result = await harness.invoke("synapse:app:workflow:operation:rerun", {
       previousRunId: "previous-run",
       workflowId: "workflow-1",
       params: {},
@@ -918,7 +918,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const result = await harness.invoke("synapse:workflow:rerun", { previousRunId: "previous-run", params: {} })
+    const result = await harness.invoke("synapse:app:workflow:operation:rerun", { previousRunId: "previous-run", params: {} })
 
     expect(result).toEqual({
       errors: [{
@@ -961,7 +961,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const result = await harness.invoke("synapse:workflow:rerun", { previousRunId: "previous-run", params: {} })
+    const result = await harness.invoke("synapse:app:workflow:operation:rerun", { previousRunId: "previous-run", params: {} })
 
     expect(result).toEqual({ runId: expect.any(String) })
     expect(workflow.get).toHaveBeenCalledWith("workflow-1")
@@ -1010,8 +1010,8 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     try {
-      await harness.invoke("synapse:workflow:run", { id: "workflow-1", params: {} })
-      const deleteRequest = harness.invoke("synapse:workflow:delete", { id: "workflow-1" })
+      await harness.invoke("synapse:app:workflow:run:execute", { id: "workflow-1", params: {} })
+      const deleteRequest = harness.invoke("synapse:app:workflow:definition:delete", { id: "workflow-1" })
       const deleteExpectation = expect(deleteRequest).rejects.toThrow("旧运行仍在后台执行，请等待取消完成后再删除工作流")
 
       await vi.advanceTimersByTimeAsync(5_000)
@@ -1063,7 +1063,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    await harness.invoke("synapse:workflow:run-definition", {
+    await harness.invoke("synapse:app:workflow:operation:run_definition", {
       definition: workflowDefinition(),
       params: {},
     })
@@ -1109,7 +1109,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    await harness.invoke("synapse:workflow:create", undefined)
+    await harness.invoke("synapse:app:workflow:definition:create", undefined)
 
     expect(workflow.create).toHaveBeenCalledWith("agent-project-1", undefined)
   })
@@ -1143,7 +1143,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    await harness.invoke("synapse:workflow:create", undefined)
+    await harness.invoke("synapse:app:workflow:definition:create", undefined)
 
     expect(workflow.create).toHaveBeenCalledWith(undefined, { providerId: "provider-1", modelTier: "sonnet" })
   })
@@ -1170,7 +1170,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const result = await harness.invoke("synapse:workflow:create", undefined)
+    const result = await harness.invoke("synapse:app:workflow:definition:create", undefined)
 
     expect(result).toEqual({
       errors: [{
@@ -1202,7 +1202,7 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
     const definition = workflowDefinition()
 
-    const result = await harness.invoke("synapse:workflow:validate", definition)
+    const result = await harness.invoke("synapse:app:workflow:definition:inspect", definition)
 
     expect(result).toEqual(validationResult)
     expect(validateWorkflowWithResourceDefaults).toHaveBeenCalledWith(
@@ -1222,7 +1222,7 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     // Case 1: cancel a run that has no active AbortController
-    await harness.invoke("synapse:workflow:cancel", { runId: "no-such-run" })
+    await harness.invoke("synapse:app:workflow:run:disable", { runId: "no-such-run" })
     expect(logStoreMock.logger.warn).toHaveBeenCalledWith(
       "workflow:cancel — no active run to cancel",
       { runId: "no-such-run" },
@@ -1235,7 +1235,7 @@ describe("workflowIpcModule", () => {
     // Case 2: cancel a run that has an active AbortController
     const ac = new AbortController()
     abortMap.set("active-run", ac)
-    await harness.invoke("synapse:workflow:cancel", { runId: "active-run" })
+    await harness.invoke("synapse:app:workflow:run:disable", { runId: "active-run" })
     expect(logStoreMock.logger.info).toHaveBeenCalledWith(
       "workflow:cancel signal sent",
       { runId: "active-run" },
@@ -1252,7 +1252,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    await expect(harness.invoke("synapse:workflow:cancel", { runId: "../escaped-run" }))
+    await expect(harness.invoke("synapse:app:workflow:run:disable", { runId: "../escaped-run" }))
       .rejects
       .toThrow()
     expect(abortMap.size).toBe(0)
@@ -1274,8 +1274,8 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     try {
-      await harness.invoke("synapse:workflow:open-editor", { id: "workflow-1" })
-      await harness.invoke("synapse:workflow:open-runner", { workflowId: "workflow-1", runId: "run-1" })
+      await harness.invoke("synapse:app:workflow:operation:open_editor", { id: "workflow-1" })
+      await harness.invoke("synapse:app:workflow:operation:open_runner", { workflowId: "workflow-1", runId: "run-1" })
 
       expect(windowManager.open).toHaveBeenCalledWith("workflow-1", expectedBaseUrl, undefined)
       expect(windowManager.openRunner).toHaveBeenCalledWith("workflow-1", "run-1", expectedBaseUrl)
@@ -1296,7 +1296,7 @@ describe("workflowIpcModule", () => {
     const harness = createWorkflowImportHarness(packageService, permissionGuard, auditSink)
 
     try {
-      const result = await harness.invoke("synapse:workflow:import-package", { packagePath, mappings: [] })
+      const result = await harness.invoke("synapse:app:workflow:operation:import_package", { packagePath, mappings: [] })
 
       expect(result).toEqual({ workflowId: "workflow-imported", versionHash: "v-imported" })
       expect(logStoreMock.logger.info).toHaveBeenCalledWith("workflow:importPackage requested", {
@@ -1349,7 +1349,7 @@ describe("workflowIpcModule", () => {
     const harness = createWorkflowImportHarness(packageService, permissionGuard, auditSink)
 
     try {
-      await expect(harness.invoke("synapse:workflow:import-package", { packagePath, mappings: [] }))
+      await expect(harness.invoke("synapse:app:workflow:operation:import_package", { packagePath, mappings: [] }))
         .rejects.toThrow("workflow denied")
 
       expect(packageService.importPackage).not.toHaveBeenCalled()
@@ -1384,7 +1384,7 @@ describe("workflowIpcModule", () => {
     const harness = createWorkflowImportHarness(packageService, permissionGuard, auditSink)
 
     try {
-      await expect(harness.invoke("synapse:workflow:import-package", { packagePath, mappings: [] }))
+      await expect(harness.invoke("synapse:app:workflow:operation:import_package", { packagePath, mappings: [] }))
         .rejects.toThrow("token=secret")
 
       expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
@@ -1444,12 +1444,12 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     try {
-      const preview = await harness.invoke("synapse:workflow:inspect-import-package", undefined)
+      const preview = await harness.invoke("synapse:app:workflow:operation:inspect_import_package", undefined)
       expect(preview).toEqual(expect.objectContaining({ packageDigest: inspectedDigest }))
 
       await writeFile(packagePath, `${JSON.stringify(replacementPackage)}\n`, "utf8")
 
-      await expect(harness.invoke("synapse:workflow:import-package", {
+      await expect(harness.invoke("synapse:app:workflow:operation:import_package", {
         packagePath,
         packageDigest: inspectedDigest,
         mappings: [],
@@ -1483,7 +1483,7 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     try {
-      await expect(harness.invoke("synapse:workflow:inspect-import-package", undefined))
+      await expect(harness.invoke("synapse:app:workflow:operation:inspect_import_package", undefined))
         .rejects
         .toThrow("工作流包格式无效。")
 
@@ -1538,7 +1538,7 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     try {
-      await expect(harness.invoke("synapse:workflow:inspect-import-package", undefined))
+      await expect(harness.invoke("synapse:app:workflow:operation:inspect_import_package", undefined))
         .rejects
         .toThrow("Invalid workflow package workflow")
 
@@ -1568,7 +1568,7 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     try {
-      await expect(harness.invoke("synapse:workflow:import-package", { packagePath, mappings: [] }))
+      await expect(harness.invoke("synapse:app:workflow:operation:import_package", { packagePath, mappings: [] }))
         .rejects
         .toThrow("工作流包格式无效。")
 
@@ -1614,7 +1614,7 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     try {
-      await expect(harness.invoke("synapse:workflow:inspect-import-package", undefined))
+      await expect(harness.invoke("synapse:app:workflow:operation:inspect_import_package", undefined))
         .rejects
         .toThrow("工作流包文件过大。")
 
@@ -1650,7 +1650,7 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     try {
-      await expect(harness.invoke("synapse:workflow:import-package", { packagePath, mappings: [] }))
+      await expect(harness.invoke("synapse:app:workflow:operation:import_package", { packagePath, mappings: [] }))
         .rejects
         .toThrow("工作流包文件过大。")
 
@@ -1679,7 +1679,7 @@ describe("workflowIpcModule", () => {
     const harness = createWorkflowImportHarness(packageService, permissionGuard, auditSink)
 
     try {
-      await expect(harness.invoke("synapse:workflow:import-package", { packagePath, mappings: [] }))
+      await expect(harness.invoke("synapse:app:workflow:operation:import_package", { packagePath, mappings: [] }))
         .rejects
         .toThrow("工作流包不能是符号链接。")
 
@@ -1706,7 +1706,7 @@ describe("workflowIpcModule", () => {
     const harness = createWorkflowImportHarness(packageService, permissionGuard, auditSink)
 
     try {
-      await expect(harness.invoke("synapse:workflow:inspect-import-package", undefined))
+      await expect(harness.invoke("synapse:app:workflow:operation:inspect_import_package", undefined))
         .rejects
         .toThrow("工作流包不能是符号链接。")
 
@@ -1741,7 +1741,7 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     try {
-      const result = await harness.invoke("synapse:workflow:export-package", {
+      const result = await harness.invoke("synapse:app:workflow:operation:export_package", {
         workflowId: "workflow-1",
         workflowName: "Workflow",
       })
@@ -1791,7 +1791,7 @@ describe("workflowIpcModule", () => {
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
     try {
-      const result = await harness.invoke("synapse:workflow:export-package", {
+      const result = await harness.invoke("synapse:app:workflow:operation:export_package", {
         workflowId: futureDocument.id,
         workflowName: futureDocument.name,
         migrationDiagnosticId: `legacy:${futureDocument.id}`,
@@ -1883,7 +1883,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const result = await harness.invoke("synapse:workflow:export-package", {
+    const result = await harness.invoke("synapse:app:workflow:operation:export_package", {
       workflowId: "workflow-1",
       workflowName: "CON",
     })
@@ -1918,7 +1918,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const result = await harness.invoke("synapse:workflow:run", { id: "workflow-1", params: {} })
+    const result = await harness.invoke("synapse:app:workflow:run:execute", { id: "workflow-1", params: {} })
 
     expect(result).toEqual({ errors: [{ type: "invalid_config", message: "已有运行中的实例，请先取消或等待完成" }] })
     expect(engine.run).not.toHaveBeenCalled()
@@ -1973,7 +1973,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const status = await harness.invoke("synapse:workflow:run-status", { runId: "run-usage" })
+    const status = await harness.invoke("synapse:app:workflow:run:get", { runId: "run-usage" })
 
     expect(status).toEqual(expect.objectContaining({
       nodeResults: {
@@ -2007,7 +2007,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    await expect(harness.invoke("synapse:workflow:run-status", {
+    await expect(harness.invoke("synapse:app:workflow:run:get", {
       runId: "active-run",
       workflowId: "workflow-public",
     })).resolves.toBeNull()
@@ -2043,7 +2043,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const status = await harness.invoke("synapse:workflow:run-status", {
+    const status = await harness.invoke("synapse:app:workflow:run:get", {
       runId: "run-future",
       workflowId: "workflow-1",
     })
@@ -2083,7 +2083,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const result = await harness.invoke("synapse:workflow:run", { id: "workflow-1", params: {} })
+    const result = await harness.invoke("synapse:app:workflow:run:execute", { id: "workflow-1", params: {} })
     const runId = (result as { runId: string }).runId
 
     expect(runStatuses.get(runId)?.nodeResults["node-1"]?.progressLabel).toBe("Working")
@@ -2137,7 +2137,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const history = await harness.invoke("synapse:workflow:run-history", { workflowId: "workflow-1" })
+    const history = await harness.invoke("synapse:app:workflow:run:list", { workflowId: "workflow-1" })
 
     expect(history).toEqual([
       expect.objectContaining({
@@ -2190,7 +2190,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const history = await harness.invoke("synapse:workflow:run-history", { workflowId: "workflow-1" })
+    const history = await harness.invoke("synapse:app:workflow:run:list", { workflowId: "workflow-1" })
 
     expect(history).toEqual([
       expect.objectContaining({
@@ -2216,7 +2216,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    await expect(harness.invoke("synapse:workflow:run-history", { workflowId: "../escaped-workflow" }))
+    await expect(harness.invoke("synapse:app:workflow:run:list", { workflowId: "../escaped-workflow" }))
       .rejects
       .toThrow()
     expect(snapshots.list).not.toHaveBeenCalled()
@@ -2233,7 +2233,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    await expect(harness.invoke("synapse:workflow:run-status", { runId: "../escaped-run" }))
+    await expect(harness.invoke("synapse:app:workflow:run:get", { runId: "../escaped-run" }))
       .rejects
       .toThrow()
     expect(snapshots.findByRunId).not.toHaveBeenCalled()
@@ -2265,7 +2265,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    const activeRuns = await harness.invoke("synapse:workflow:active-runs", undefined)
+    const activeRuns = await harness.invoke("synapse:app:workflow:run:list_active", undefined)
 
     expect(activeRuns).toEqual([
       expect.objectContaining({
@@ -2299,7 +2299,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    await harness.invoke("synapse:workflow:delete", { id: "workflow-1" })
+    await harness.invoke("synapse:app:workflow:definition:delete", { id: "workflow-1" })
 
     expect(workflow.delete).toHaveBeenCalledWith("workflow-1")
     expect(snapshots.deleteWorkflow).toHaveBeenCalledWith("workflow-1")
@@ -2332,16 +2332,16 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    await expect(harness.invoke("synapse:workflow:param-presets:list", { workflowId: "workflow-1" }))
+    await expect(harness.invoke("synapse:app:workflow:param_preset:list", { workflowId: "workflow-1" }))
       .resolves.toEqual([expect.objectContaining({ id: "preset-1", values: { topic: "secret text" } })])
-    await expect(harness.invoke("synapse:workflow:param-presets:resolve-resource-entry-types", { id: "preset-1" }))
+    await expect(harness.invoke("synapse:app:workflow:param_preset:resolve_resource_entry_types", { id: "preset-1" }))
       .resolves.toEqual({ inputs: "file" })
-    await expect(harness.invoke("synapse:workflow:param-presets:save", {
+    await expect(harness.invoke("synapse:app:workflow:param_preset:save", {
       workflowId: "workflow-1",
       name: "新预设",
       values: { topic: "secret text" },
     })).resolves.toEqual(expect.objectContaining({ id: "preset-2" }))
-    await expect(harness.invoke("synapse:workflow:param-presets:delete", { id: "preset-2" }))
+    await expect(harness.invoke("synapse:app:workflow:param_preset:delete", { id: "preset-2" }))
       .resolves.toBeUndefined()
 
     expect(presets.list).toHaveBeenCalledWith("workflow-1")
@@ -2369,7 +2369,7 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    await expect(harness.invoke("synapse:workflow:param-presets:save", {
+    await expect(harness.invoke("synapse:app:workflow:param_preset:save", {
       workflowId: "workflow-1",
       name: "无效目录",
       values: { workspace: missingDirectory },

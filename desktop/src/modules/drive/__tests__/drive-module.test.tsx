@@ -118,31 +118,39 @@ vi.mock("@/app-shell/account", () => ({
 
 vi.mock("@/lib/electron-bridge", () => ({
   requireSynapseBridge: () => ({
-    account: {
-      completeDriveUpload: mocks.completeDriveUpload,
-      createDriveFolder: mocks.createDriveFolder,
-      deleteDriveItem: mocks.deleteDriveItem,
-      disableDriveShare: mocks.disableDriveShare,
-      filePathForDroppedFile: mocks.filePathForDroppedFile,
-      getDriveItemPreviewUrl: mocks.getDriveItemPreviewUrl,
-      getDriveShare: mocks.getDriveShare,
-      getDriveUsage: mocks.getDriveUsage,
-      listDrivePublicAssets: mocks.listDrivePublicAssets,
-      listDriveItems: mocks.listDriveItems,
-      listDriveSites: mocks.listDriveSites,
-      listDriveTrash: mocks.listDriveTrash,
-      listDriveShares: mocks.listDriveShares,
-      moveDriveItem: mocks.moveDriveItem,
-      prepareDriveFolderUpload: mocks.prepareDriveFolderUpload,
-      prepareDriveUpload: mocks.prepareDriveUpload,
-      preflightDriveSite: mocks.preflightDriveSite,
-      renameDriveItem: mocks.renameDriveItem,
-      createDriveSite: mocks.createDriveSite,
-      updateDriveSiteAccess: mocks.updateDriveSiteAccess,
-      shareDriveItem: mocks.shareDriveItem,
-      uploadDriveLocalItems: mocks.uploadDriveLocalItems,
-      onDriveLocalUploadProgress: mocks.onDriveLocalUploadProgress,
-      uploadDrivePreparedFile: mocks.uploadDrivePreparedFile,
+    drive: {
+      item: {
+        list: mocks.listDriveItems,
+        previewUrl: mocks.getDriveItemPreviewUrl,
+        rename: mocks.renameDriveItem,
+        move: mocks.moveDriveItem,
+        delete: mocks.deleteDriveItem,
+      },
+      upload: {
+        prepare: mocks.prepareDriveUpload,
+        folder: { prepare: mocks.prepareDriveFolderUpload },
+        complete: mocks.completeDriveUpload,
+        put: mocks.uploadDrivePreparedFile,
+        localItems: mocks.uploadDriveLocalItems,
+        onLocalProgress: mocks.onDriveLocalUploadProgress,
+      },
+      localFile: { pathForDroppedFile: mocks.filePathForDroppedFile },
+      folder: { create: mocks.createDriveFolder },
+      share: {
+        create: mocks.shareDriveItem,
+        disable: mocks.disableDriveShare,
+        get: mocks.getDriveShare,
+        list: mocks.listDriveShares,
+      },
+      usage: { get: mocks.getDriveUsage },
+      directLink: { list: mocks.listDrivePublicAssets },
+      site: {
+        preflight: mocks.preflightDriveSite,
+        create: mocks.createDriveSite,
+        list: mocks.listDriveSites,
+        updateAccess: mocks.updateDriveSiteAccess,
+      },
+      trash: { list: mocks.listDriveTrash },
     },
     driveSync: {
       chooseLocalPath: mocks.chooseDriveSyncLocalPath,
@@ -1634,7 +1642,7 @@ describe("DriveModule", () => {
     expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(1)
     expect(document.body.textContent).toContain("需要登录账号")
     expect(document.body.textContent).toContain("登录后才能查看云盘。")
-    expect(document.body.textContent).not.toContain("synapse:account:drive:items:list")
+    expect(document.body.textContent).not.toContain("synapse:app:drive:item:list")
     expect(queryButton("上传文件")).toBeNull()
     expect(queryButton("上传文件夹")).toBeNull()
     expect(getButton("新建").disabled).toBe(true)
@@ -1694,13 +1702,13 @@ describe("DriveModule", () => {
   })
 
   it("does not expose the ipc channel when a wrapped account error is returned", async () => {
-    mocks.listDriveItems.mockRejectedValue(new Error("Error invoking remote method 'synapse:account:drive:items:list': Error: 账号未登录。"))
+    mocks.listDriveItems.mockRejectedValue(new Error("Error invoking remote method 'synapse:app:drive:item:list': Error: 账号未登录。"))
 
     await render(<DriveModule />)
     await flushAct()
 
     expect(document.body.textContent).toContain("需要登录账号")
-    expect(document.body.textContent).not.toContain("synapse:account:drive:items:list")
+    expect(document.body.textContent).not.toContain("synapse:app:drive:item:list")
     expect(document.body.textContent).not.toContain("Error invoking remote method")
   })
 

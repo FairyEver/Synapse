@@ -13,6 +13,7 @@
  */
 
 import type { ZodSchema } from "zod"
+import type { IpcOperationId } from "../../../synapse-capabilities/shared/naming"
 
 export type IpcMethodKind = "invoke" | "send"
 
@@ -39,7 +40,7 @@ export interface IpcHandlerContext {
 
 export interface IpcMethodDescriptor<Req = unknown, Res = unknown> {
   readonly kind: IpcMethodKind
-  readonly channel: string
+  readonly operationId: IpcOperationId
   readonly request: ZodSchema<Req>
   readonly response?: ZodSchema<Res>
   /** Server-side handler. The runtime validates request before dispatch. */
@@ -48,7 +49,7 @@ export interface IpcMethodDescriptor<Req = unknown, Res = unknown> {
 
 export interface IpcEventDescriptor<Payload = unknown> {
   readonly kind: "event"
-  readonly channel: string
+  readonly operationId: IpcOperationId
   readonly payload: ZodSchema<Payload>
 }
 

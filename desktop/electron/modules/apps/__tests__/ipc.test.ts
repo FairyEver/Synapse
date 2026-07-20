@@ -27,7 +27,7 @@ describe("appsIpcModule", () => {
 
   it("declares open system app channel", () => {
     expect(appsIpcModule.id).toBe("apps")
-    expect(appsIpcModule.methods.openSystemApp.channel).toBe("synapse:apps:open-system-app")
+    expect(appsIpcModule.methods.openSystemApp.operationId).toBe("app.apps.system_app.open")
   })
 
   it("validates app ids and opens a valid app", async () => {

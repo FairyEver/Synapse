@@ -62,7 +62,7 @@ describe("createSystemAppWindowService", () => {
     expect(createWindow).toHaveBeenCalledTimes(1)
     expect(window.focus).toHaveBeenCalledTimes(1)
     expect(windowManager.broadcast).toHaveBeenCalledWith(
-      "synapse:apps:content-open-request",
+      "synapse:app:apps:operation:content_open_request",
       contentOpenRequest,
       expect.any(Function),
     )

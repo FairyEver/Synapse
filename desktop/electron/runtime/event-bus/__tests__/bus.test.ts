@@ -162,8 +162,8 @@ describe("EventBusImpl core (T4.1)", () => {
   })
 
   it("channelForDomain composes the documented channel name", () => {
-    expect(channelForDomain("repository")).toBe("synapse:events:repository")
-    expect(channelForDomain("agent")).toBe("synapse:events:agent")
+    expect(channelForDomain("repository")).toBe("synapse:app:events:operation:repository")
+    expect(channelForDomain("agent")).toBe("synapse:app:events:operation:agent")
   })
 })
 
@@ -185,9 +185,9 @@ describe("WindowBroadcaster (T4.2)", () => {
     void broadcaster
     const direct = new WindowBroadcaster(fakeManager as never)
     const event = eventOf("repository", "updated", { v: 1 })
-    expect(direct.broadcast(event, "synapse:events:repository")).toBe(2)
+    expect(direct.broadcast(event, "synapse:app:events:operation:repository")).toBe(2)
     expect(managerLog).toHaveLength(1)
-    expect(managerLog[0]?.channel).toBe("synapse:events:repository")
+    expect(managerLog[0]?.channel).toBe("synapse:app:events:operation:repository")
     expect((managerLog[0]?.payload as DomainEvent).domain).toBe("repository")
     bus.flushAllForTests()
   })

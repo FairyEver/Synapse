@@ -83,7 +83,7 @@ describe("configIpcModule", () => {
     vi.mocked(configStore.load).mockResolvedValue(configFixture({ defaultPermissionMode: "plan", defaultProviderModel: null }))
     const harness = createHarness()
 
-    const result = await harness.invoke("synapse:config:get", undefined)
+    const result = await harness.invoke("synapse:app:config:operation:get", undefined)
 
     expect(result).toEqual(configFixture({ defaultPermissionMode: "plan", defaultProviderModel: null }))
   })
@@ -92,7 +92,7 @@ describe("configIpcModule", () => {
     vi.mocked(configStore.update).mockResolvedValue(configFixture({ defaultPermissionMode: "default", defaultProviderModel: null }))
     const harness = createHarness()
 
-    const result = await harness.invoke("synapse:config:update", {
+    const result = await harness.invoke("synapse:app:config:operation:update", {
       agent: { defaultPermissionMode: "default" },
     })
 
@@ -105,7 +105,7 @@ describe("configIpcModule", () => {
     vi.mocked(configStore.update).mockResolvedValue(nextConfig)
     const harness = createHarness()
 
-    await harness.invoke("synapse:config:update", {
+    await harness.invoke("synapse:app:config:operation:update", {
       repositories: nextConfig.repositories,
     })
 
@@ -119,7 +119,7 @@ describe("configIpcModule", () => {
     )
     const harness = createHarness()
 
-    const result = await harness.invoke("synapse:config:update", {
+    const result = await harness.invoke("synapse:app:config:operation:update", {
       agent: { defaultProviderModel: providerModel },
     }) as SynapseConfig
 
@@ -130,7 +130,7 @@ describe("configIpcModule", () => {
     vi.mocked(configStore.update).mockResolvedValue(configFixture({ defaultPermissionMode: "default", defaultProviderModel: null }))
     const harness = createHarness()
 
-    await harness.invoke("synapse:config:update", {
+    await harness.invoke("synapse:app:config:operation:update", {
       global: {
         quickInputs: [{ id: "quick-1", content: "token=secret-value\n内部资料", directSend: true }],
       },
@@ -169,7 +169,7 @@ describe("configIpcModule", () => {
     }
     const harness = createHarness({ auditSink, permissionGuard })
 
-    await harness.invoke("synapse:config:update", {
+    await harness.invoke("synapse:app:config:operation:update", {
       global: { variables: nextConfig.global.variables },
     })
 
@@ -205,7 +205,7 @@ describe("configIpcModule", () => {
     const eventBus = { emit: vi.fn() }
     const harness = createHarness({ eventBus })
 
-    await harness.invoke("synapse:config:update", {
+    await harness.invoke("synapse:app:config:operation:update", {
       global: { variables: nextConfig.global.variables },
     })
 
@@ -225,7 +225,7 @@ describe("configIpcModule", () => {
     const eventBus = { emit: vi.fn() }
     const harness = createHarness({ eventBus })
 
-    await harness.invoke("synapse:config:update", {
+    await harness.invoke("synapse:app:config:operation:update", {
       agent: { defaultPermissionMode: "plan" },
     })
 
@@ -248,7 +248,7 @@ describe("configIpcModule", () => {
     }
     const harness = createHarness({ auditSink, permissionGuard })
 
-    await expect(harness.invoke("synapse:config:update", {
+    await expect(harness.invoke("synapse:app:config:operation:update", {
       global: { variables: [{ name: "TOKEN", value: "new-secret" }] },
     })).rejects.toThrow("disk full")
 
@@ -269,7 +269,7 @@ describe("configIpcModule", () => {
     )
     const harness = createHarness()
 
-    const result = await harness.invoke("synapse:config:update", {
+    const result = await harness.invoke("synapse:app:config:operation:update", {
       agent: {
         conversationRolloverPrompt: {
           costThresholdCny: 18,
@@ -287,7 +287,7 @@ describe("configIpcModule", () => {
     vi.mocked(configBackupService.writeExport).mockResolvedValue(undefined)
     const harness = createHarness()
 
-    const result = await harness.invoke("synapse:config:export-backup", undefined)
+    const result = await harness.invoke("synapse:app:config:operation:export_backup", undefined)
 
     expect(result).toEqual({ filePath: "/tmp/synapse-backup.json" })
   })
@@ -299,7 +299,7 @@ describe("configIpcModule", () => {
     vi.mocked(configBackupService.commitImport).mockResolvedValue({ filePath: "/tmp/synapse-backup.json" })
     const harness = createHarness()
 
-    const result = await harness.invoke("synapse:config:import-backup", undefined)
+    const result = await harness.invoke("synapse:app:config:operation:import_backup", undefined)
 
     expect(result).toEqual({ filePath: "/tmp/synapse-backup.json" })
   })
@@ -327,7 +327,7 @@ describe("configIpcModule", () => {
     }
     const harness = createHarness({ auditSink, permissionGuard })
 
-    await harness.invoke("synapse:config:import-backup", undefined)
+    await harness.invoke("synapse:app:config:operation:import_backup", undefined)
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "secret.write",
@@ -379,7 +379,7 @@ describe("configIpcModule", () => {
     }
     const harness = createHarness({ auditSink, permissionGuard })
 
-    await expect(harness.invoke("synapse:config:import-backup", undefined)).rejects.toThrow("secret denied")
+    await expect(harness.invoke("synapse:app:config:operation:import_backup", undefined)).rejects.toThrow("secret denied")
 
     expect(configBackupService.commitImport).not.toHaveBeenCalled()
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
@@ -409,12 +409,12 @@ describe("configIpcModule", () => {
     }))
     const harness = createHarness()
 
-    const firstImport = harness.invoke("synapse:config:import-backup", undefined)
+    const firstImport = harness.invoke("synapse:app:config:operation:import_backup", undefined)
     await vi.waitFor(() => {
       expect(configBackupService.commitImport).toHaveBeenCalledTimes(1)
     })
 
-    await expect(harness.invoke("synapse:config:import-backup", undefined))
+    await expect(harness.invoke("synapse:app:config:operation:import_backup", undefined))
       .rejects.toThrow("已有配置导入正在进行")
     expect(configBackupService.selectImportSource).toHaveBeenCalledTimes(1)
 
@@ -433,7 +433,7 @@ describe("configIpcModule", () => {
     }
     const harness = createHarness({ auditSink })
 
-    await expect(harness.invoke("synapse:config:import-backup", undefined)).rejects.toThrow("备份文件超过")
+    await expect(harness.invoke("synapse:app:config:operation:import_backup", undefined)).rejects.toThrow("备份文件超过")
 
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.read.outside-userdata",
@@ -465,7 +465,7 @@ describe("configIpcModule", () => {
 
     let result: unknown
     try {
-      result = await harness.invoke("synapse:config:reset-app", undefined)
+      result = await harness.invoke("synapse:app:config:operation:reset_app", undefined)
     } finally {
       stderrWrite.mockRestore()
     }
@@ -498,7 +498,7 @@ describe("configIpcModule", () => {
     const harness = createHarness({ auditSink })
 
     try {
-      await harness.invoke("synapse:config:reset-app", undefined)
+      await harness.invoke("synapse:app:config:operation:reset_app", undefined)
 
       expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
         action: "fs.write",

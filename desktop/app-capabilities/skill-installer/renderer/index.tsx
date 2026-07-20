@@ -82,7 +82,7 @@ function SkillSourceInput({
 
   const chooseDirectory = async () => {
     setError("")
-    const selected = await requireBridgeDomain("repository").chooseDirectory()
+    const selected = await requireBridgeDomain("settings").repository.chooseDirectory()
     if (!selected) return
     setSourceDirectoryPath(selected)
     await prepare(selected)

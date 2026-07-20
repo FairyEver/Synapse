@@ -39,16 +39,16 @@ function createHarness(allow = true) {
 describe("secretsIpcModule", () => {
   it("registers secrets channels", () => {
     expect(secretsIpcModule.id).toBe("secrets")
-    expect(secretsIpcModule.methods.list.channel).toBe("synapse:secrets:list")
-    expect(secretsIpcModule.methods.get.channel).toBe("synapse:secrets:get")
-    expect(secretsIpcModule.methods.create.channel).toBe("synapse:secrets:create")
-    expect(secretsIpcModule.methods.update.channel).toBe("synapse:secrets:update")
-    expect(secretsIpcModule.methods.upsert.channel).toBe("synapse:secrets:upsert")
-    expect(secretsIpcModule.methods.delete.channel).toBe("synapse:secrets:delete")
-    expect(secretsIpcModule.methods.scanSkillEnvBindings.channel).toBe("synapse:secrets:scan-skill-env-bindings")
-    expect(secretsIpcModule.methods.scanSkillEnvBindingsBatch.channel).toBe("synapse:secrets:scan-skill-env-bindings-batch")
-    expect(secretsIpcModule.methods.queueSkillEnvBindings.channel).toBe("synapse:secrets:queue-skill-env-bindings")
-    expect(secretsIpcModule.events.changed.channel).toBe("synapse:secrets:changed")
+    expect(secretsIpcModule.methods.list.operationId).toBe("app.secrets.item.list")
+    expect(secretsIpcModule.methods.get.operationId).toBe("app.secrets.item.get")
+    expect(secretsIpcModule.methods.create.operationId).toBe("app.secrets.item.create")
+    expect(secretsIpcModule.methods.update.operationId).toBe("app.secrets.item.update")
+    expect(secretsIpcModule.methods.upsert.operationId).toBe("app.secrets.item.upsert")
+    expect(secretsIpcModule.methods.delete.operationId).toBe("app.secrets.item.delete")
+    expect(secretsIpcModule.methods.scanSkillEnvBindings.operationId).toBe("app.secrets.operation.scan_skill_env_bindings")
+    expect(secretsIpcModule.methods.scanSkillEnvBindingsBatch.operationId).toBe("app.secrets.operation.scan_skill_env_bindings_batch")
+    expect(secretsIpcModule.methods.queueSkillEnvBindings.operationId).toBe("app.secrets.operation.queue_skill_env_bindings")
+    expect(secretsIpcModule.events.changed.operationId).toBe("app.secrets.item.changed")
   })
 
   it("rejects secret values from Skill env scan and apply requests", () => {

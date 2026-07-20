@@ -18,7 +18,7 @@ import type { SynapseEditorInstallStatusEntry } from "../../../src/types/editor-
 import type { SynapseSkillInstallerSource } from "../../../src/types/installers"
 
 const logger = createRendererLogger("synapse-skill.update-dialog")
-const DISMISSED_SESSION_KEY = "synapse:synapse-skill-update-dismissed"
+const DISMISSED_SESSION_KEY = "synapse:app:synapse_skill_update_dismissed:operation"
 
 type UpdateFailure = {
   readonly editorId: SynapseEditorInstallStatusEntry["editorId"]

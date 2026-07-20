@@ -41,7 +41,7 @@ export function SoundNotifierModule() {
     try {
       setLoading(true)
       setLoadError("")
-      const loaded = await soundNotifierBridge.getSettings()
+      const loaded = await soundNotifierBridge.settings.get()
       setSettings(loaded)
     } catch (error) {
       const message = errorMessage(error, "加载失败")
@@ -55,14 +55,14 @@ export function SoundNotifierModule() {
 
   useEffect(() => {
     void reload()
-    return soundNotifierBridge.onChanged((event) => {
+    return soundNotifierBridge.operation.onChanged((event) => {
       setSettings(event.settings)
     })
   }, [reload, soundNotifierBridge])
 
   const preview = useCallback(async (eventType: SoundNotifierEventType) => {
     try {
-      await soundNotifierBridge.preview({
+      await soundNotifierBridge.sound.preview({
         eventType,
         repeatCount,
         intervalMs,
