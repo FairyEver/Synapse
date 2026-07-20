@@ -21,7 +21,7 @@ describe("synapseSkillIpcModule", () => {
     const resolve = vi.fn(() => service)
     expect(synapseSkillIpcModule.id).toBe("synapseSkill")
     expect(synapseSkillIpcModule.methods.prepareInstallSource.operationId).toBe(
-      "synapse:app:synapse_skill:install_source:prepare",
+      "app.synapse_skill.install_source.prepare",
     )
 
     const result = await synapseSkillIpcModule.methods.prepareInstallSource.handler({ resolve } as never, undefined)
@@ -36,7 +36,7 @@ describe("synapseSkillIpcModule", () => {
       { preparedSourceId: "synapse-skill:test" },
     )
     expect(synapseSkillIpcModule.methods.releaseInstallSource.operationId).toBe(
-      "synapse:app:synapse_skill:install_source:release",
+      "app.synapse_skill.install_source.release",
     )
     expect(service.releaseInstallSource).toHaveBeenCalledWith("synapse-skill:test")
   })

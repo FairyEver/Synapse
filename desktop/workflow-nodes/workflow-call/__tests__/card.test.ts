@@ -43,8 +43,8 @@ describe("WorkflowCallNodeCard", () => {
       nodes: [],
       edges: [],
     })
-    ;(window as unknown as { synapse: { workflow: { get: typeof workflowGet } } }).synapse = {
-      workflow: { get: workflowGet },
+    ;(window as unknown as { synapse: { workflow: { definition: { get: typeof workflowGet } } } }).synapse = {
+      workflow: { definition: { get: workflowGet } },
     }
 
     const container = document.createElement("div")
@@ -67,8 +67,8 @@ describe("WorkflowCallNodeCard", () => {
 
   it("shows a missing child workflow state when the selected workflow no longer exists", async () => {
     const workflowGet = vi.fn().mockResolvedValue(null)
-    ;(window as unknown as { synapse: { workflow: { get: typeof workflowGet } } }).synapse = {
-      workflow: { get: workflowGet },
+    ;(window as unknown as { synapse: { workflow: { definition: { get: typeof workflowGet } } } }).synapse = {
+      workflow: { definition: { get: workflowGet } },
     }
 
     const container = document.createElement("div")

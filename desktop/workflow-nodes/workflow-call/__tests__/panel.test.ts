@@ -15,8 +15,10 @@ const workflowGet = vi.fn()
 Object.defineProperty(window, "synapse", {
   value: {
     workflow: {
-      list: workflowList,
-      get: workflowGet,
+      definition: {
+        list: workflowList,
+        get: workflowGet,
+      },
     },
   },
   configurable: true,

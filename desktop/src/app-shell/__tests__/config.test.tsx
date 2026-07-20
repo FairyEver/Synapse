@@ -23,12 +23,14 @@ vi.mock("@/app-shell/logging", () => ({
 
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
-    repository: {
-      onUpdated: (listener: (event: unknown) => void) => {
-        mocks.repositoryUpdatedListener = listener
-        return () => {
-          mocks.repositoryUpdatedListener = null
-        }
+    settings: {
+      repository: {
+        onUpdated: (listener: (event: unknown) => void) => {
+          mocks.repositoryUpdatedListener = listener
+          return () => {
+            mocks.repositoryUpdatedListener = null
+          }
+        },
       },
     },
   }),
@@ -37,12 +39,14 @@ vi.mock("@/lib/electron-bridge", () => ({
       get: mocks.configGet,
       update: mocks.configUpdate,
     },
-    repository: {
-      onUpdated: (listener: (event: unknown) => void) => {
-        mocks.repositoryUpdatedListener = listener
-        return () => {
-          mocks.repositoryUpdatedListener = null
-        }
+    settings: {
+      repository: {
+        onUpdated: (listener: (event: unknown) => void) => {
+          mocks.repositoryUpdatedListener = listener
+          return () => {
+            mocks.repositoryUpdatedListener = null
+          }
+        },
       },
     },
   }),

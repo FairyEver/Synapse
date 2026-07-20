@@ -34,13 +34,13 @@ describe("Database operation log", () => {
   it("records mutating dispatcher actions with source and affected count", async () => {
     const { dispatchDatabaseAction } = await import("../../electron/database/dispatcher")
 
-    await dispatchDatabaseAction("database.row.create", { tableName: "tasks", data: { title: "Ship" } }, { source: "mcp-stdio" })
+    await dispatchDatabaseAction("app.database.row.create", { tableName: "tasks", data: { title: "Ship" } }, { source: "mcp-stdio" })
 
-    const result = await dispatchDatabaseAction("database.log.list", { limit: 5 })
+    const result = await dispatchDatabaseAction("app.database.log.list", { limit: 5 })
     expect(result.data).toEqual([
       expect.objectContaining({
         source: "mcp-stdio",
-        action: "database.row.create",
+        action: "app.database.row.create",
         table: "tasks",
         affected: 1,
         dryRun: false,
@@ -54,7 +54,7 @@ describe("Database operation log", () => {
     const auditSink = auditSinkMock()
 
     await dispatchDatabaseAction(
-      "database.row.create",
+      "app.database.row.create",
       { tableName: "tasks", data: { title: "Ship" } },
       { source: "mcp-http", actor: mcpClientActorForSource("mcp-http") },
       { permissionGuard, auditSink },
@@ -66,7 +66,7 @@ describe("Database operation log", () => {
       resource: "database:tasks",
       context: {
         source: "mcp-http",
-        databaseAction: "database.row.create",
+        databaseAction: "app.database.row.create",
         table: "tasks",
         dryRun: false,
       },
@@ -78,7 +78,7 @@ describe("Database operation log", () => {
       outcome: "allowed",
       metadata: expect.objectContaining({
         source: "mcp-http",
-        databaseAction: "database.row.create",
+        databaseAction: "app.database.row.create",
         table: "tasks",
         dryRun: false,
       }),
@@ -95,13 +95,13 @@ describe("Database operation log", () => {
     const auditSink = auditSinkMock()
 
     await expect(dispatchDatabaseAction(
-      "database.row.create",
+      "app.database.row.create",
       { tableName: "tasks", data: { title: "Blocked" } },
       { source: "mcp-stdio", actor: mcpClientActorForSource("mcp-stdio") },
       { permissionGuard, auditSink },
     )).rejects.toThrow("denied by policy")
 
-    const rows = await dispatchDatabaseAction("database.row.list", { tableName: "tasks" })
+    const rows = await dispatchDatabaseAction("app.database.row.list", { tableName: "tasks" })
     expect(rows.total).toBe(0)
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "database.mutate",
@@ -120,7 +120,7 @@ describe("Database operation log", () => {
     const auditSink = auditSinkMock()
 
     await expect(dispatchDatabaseAction(
-      "database.row.create",
+      "app.database.row.create",
       { tableName: "missing_table", data: { title: "secret row detail" } },
       { source: "api" },
       { permissionGuard: permissionGuardMock({ allowed: true }), auditSink },
@@ -143,7 +143,7 @@ describe("Database operation log", () => {
     const auditSink = auditSinkMock()
 
     await dispatchDatabaseAction(
-      "database.row.list",
+      "app.database.row.list",
       { tableName: "tasks" },
       { source: "mcp-stdio" },
       { permissionGuard, auditSink },
@@ -155,7 +155,7 @@ describe("Database operation log", () => {
       resource: "database:tasks",
       context: {
         source: "mcp-stdio",
-        databaseAction: "database.row.list",
+        databaseAction: "app.database.row.list",
         table: "tasks",
       },
     })
@@ -166,7 +166,7 @@ describe("Database operation log", () => {
       outcome: "allowed",
       metadata: expect.objectContaining({
         source: "mcp-stdio",
-        databaseAction: "database.row.list",
+        databaseAction: "app.database.row.list",
         table: "tasks",
       }),
     }))

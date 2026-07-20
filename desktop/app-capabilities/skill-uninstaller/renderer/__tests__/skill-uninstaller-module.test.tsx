@@ -25,7 +25,7 @@ vi.mock("@/lib/electron-bridge", () => ({
         uninstall: vi.fn(),
       }
     }
-    if (domain === "repository") return { chooseDirectory: mocks.chooseDirectory }
+    if (domain === "settings") return { repository: { chooseDirectory: mocks.chooseDirectory } }
     throw new Error(`Unexpected bridge domain: ${domain}`)
   },
 }))

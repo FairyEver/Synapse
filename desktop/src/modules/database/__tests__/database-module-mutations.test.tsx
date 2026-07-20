@@ -52,7 +52,7 @@ vi.mock("@/app-shell/notifications", () => ({
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
     database: {
-      onChanged: vi.fn(() => () => {}),
+      operation: { onChanged: vi.fn(() => () => {}) },
     },
   }),
 }))

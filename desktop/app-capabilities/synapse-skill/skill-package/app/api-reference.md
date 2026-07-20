@@ -56,7 +56,7 @@ Output:
 
 - Terminal group.
 
-`app_terminal_group_updateSettings`
+`app_terminal_group_update_settings`
 
 Update a terminal group's name and default working directory.
 
@@ -70,7 +70,7 @@ Output:
 
 - Terminal group.
 
-`app_terminal_groupCommand_create`
+`app_terminal_group_command_create`
 
 Create a named command under a terminal group.
 
@@ -84,7 +84,7 @@ Output:
 
 - Terminal group command.
 
-`app_terminal_groupCommand_update`
+`app_terminal_group_command_update`
 
 Update a named command under a terminal group.
 
@@ -99,7 +99,7 @@ Output:
 
 - Terminal group command.
 
-`app_terminal_groupCommand_delete`
+`app_terminal_group_command_delete`
 
 Delete a named command from a terminal group.
 
@@ -112,7 +112,7 @@ Output:
 
 - `{ "ok": true }`
 
-`app_terminal_groupCommand_launch`
+`app_terminal_group_command_launch`
 
 Create a new terminal session from a named command and run it in the group default directory.
 

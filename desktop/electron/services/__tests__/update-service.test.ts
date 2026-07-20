@@ -232,7 +232,7 @@ describe("UpdateService", () => {
     await updateService.checkForUpdates()
 
     expect(sent).toContainEqual({
-      operationId: "app.update.operation.state_changed",
+      channel: "synapse:app:update:operation:state_changed",
       payload: expect.objectContaining({
         releaseVersion: "0.2.32",
         status: "available",

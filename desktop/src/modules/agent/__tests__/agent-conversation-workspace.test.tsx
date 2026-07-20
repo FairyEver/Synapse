@@ -321,14 +321,18 @@ describe("AgentConversationWorkspace", () => {
     ;(window as unknown as {
       synapse?: {
         quickInput: {
-          list: typeof list
-          onChanged: () => () => void
+          item: {
+            list: typeof list
+            onChanged: () => () => void
+          }
         }
       }
     }).synapse = {
       quickInput: {
-        list,
-        onChanged: () => () => undefined,
+        item: {
+          list,
+          onChanged: () => () => undefined,
+        },
       },
     }
 

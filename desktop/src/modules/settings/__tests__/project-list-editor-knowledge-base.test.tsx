@@ -77,8 +77,10 @@ afterEach(() => {
 
 function createSynapseBridgeMocks() {
   return {
-    repository: {
-      chooseDirectory: vi.fn<() => Promise<string | null>>().mockResolvedValue("/Users/example/new-kb"),
+    settings: {
+      repository: {
+        chooseDirectory: vi.fn<() => Promise<string | null>>().mockResolvedValue("/Users/example/new-kb"),
+      },
     },
     knowledgeBase: {
       createManaged: vi.fn<(payload: SynapseKnowledgeBaseCreateManagedPayload) => Promise<SynapseKnowledgeBaseCreateManagedResult>>().mockResolvedValue({

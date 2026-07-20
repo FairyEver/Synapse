@@ -62,7 +62,7 @@ describe("createElectronTransportInstall", () => {
     expect(logger.error).toHaveBeenCalledWith(
       "IPC invoke failed.",
       expect.objectContaining({
-        operationId: "app.test.operation.fail",
+        channel: "synapse:app:test:operation:fail",
         durationMs: expect.any(Number),
         error: expect.objectContaining({
           name: "Error",
@@ -137,7 +137,7 @@ describe("createElectronTransportInstall", () => {
     expect(logger.error).toHaveBeenCalledWith(
       "IPC invoke failed.",
       expect.objectContaining({
-        operationId: "app.drive.upload.local_items",
+        channel: "synapse:app:drive:upload:local_items",
         request: expect.objectContaining({
           parentId: "folder-1",
           items: expect.any(Array),

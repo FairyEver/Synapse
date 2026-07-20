@@ -14,7 +14,7 @@ function clampSidebarSize(size: number, minSize: number, maxSize: number): numbe
 }
 
 function getSidebarWidthStorageKey(persistenceId: string): string {
-  return `${SIDEBAR_WIDTH_STORAGE_PREFIX}${persistenceId}`
+  return `${SIDEBAR_WIDTH_STORAGE_PREFIX}:${persistenceId.replaceAll("-", "_")}`
 }
 
 function readSidebarWidth(

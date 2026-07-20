@@ -117,8 +117,8 @@ describe("WindowManager (T3.12)", () => {
     manager.open("detail")
     const sent = manager.broadcast("synapse:app:test:operation", { v: 1 })
     expect(sent).toBe(2)
-    expect(a.sent[0]).toEqual({ operationId: "app.test.operation", payload: { v: 1 } })
-    expect(b.sent[0]).toEqual({ operationId: "app.test.operation", payload: { v: 1 } })
+    expect(a.sent[0]).toEqual({ channel: "synapse:app:test:operation", payload: { v: 1 } })
+    expect(b.sent[0]).toEqual({ channel: "synapse:app:test:operation", payload: { v: 1 } })
   })
 
   it("broadcast() reaches an externally attached main window", () => {
@@ -127,7 +127,7 @@ describe("WindowManager (T3.12)", () => {
     manager.attach({ id: "main", role: "main" }, main)
     const sent = manager.broadcast("synapse:app:test:operation", { v: 1 })
     expect(sent).toBe(1)
-    expect(main.sent[0]).toEqual({ operationId: "app.test.operation", payload: { v: 1 } })
+    expect(main.sent[0]).toEqual({ channel: "synapse:app:test:operation", payload: { v: 1 } })
   })
 
   it("detach() drops an attached handle without closing it", () => {

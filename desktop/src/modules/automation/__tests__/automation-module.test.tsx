@@ -43,8 +43,10 @@ vi.mock("@/lib/electron-bridge", async () => {
   return {
     ...actual,
     requireBridgeDomain: () => ({
-      openCreateEditorWindow: mocks.openCreateEditorWindow,
-      openEditorWindow: mocks.openEditorWindow,
+      editor: {
+        openCreate: mocks.openCreateEditorWindow,
+        openEdit: mocks.openEditorWindow,
+      },
     }),
   }
 })

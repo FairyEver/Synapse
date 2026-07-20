@@ -6,15 +6,17 @@ import { createRoot, type Root } from "react-dom/client"
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
 
 const documentTemplateBridge = vi.hoisted(() => ({
-  chooseTemplateFile: vi.fn(async () => "/tmp/template.docx"),
-  chooseJsonFile: vi.fn(async () => "/tmp/data.json"),
-  chooseOutputFile: vi.fn(async () => "/tmp/output.docx"),
-  generateDocx: vi.fn(async () => ({
-    outputPath: "/tmp/output.docx",
-    fileName: "output.docx",
-    size: 123,
-    generatedAt: "2026-06-23T00:00:00.000Z",
-  })),
+  template: { choose: vi.fn(async () => "/tmp/template.docx") },
+  json: { choose: vi.fn(async () => "/tmp/data.json") },
+  output: { choose: vi.fn(async () => "/tmp/output.docx") },
+  docx: {
+    generate: vi.fn(async () => ({
+      outputPath: "/tmp/output.docx",
+      fileName: "output.docx",
+      size: 123,
+      generatedAt: "2026-06-23T00:00:00.000Z",
+    })),
+  },
 }))
 
 const shellBridge = vi.hoisted(() => ({
@@ -52,10 +54,10 @@ import { DocumentTemplateModule } from "../index"
 let roots: Root[] = []
 
 beforeEach(() => {
-  documentTemplateBridge.chooseTemplateFile.mockClear()
-  documentTemplateBridge.chooseJsonFile.mockClear()
-  documentTemplateBridge.chooseOutputFile.mockClear()
-  documentTemplateBridge.generateDocx.mockClear()
+  documentTemplateBridge.template.choose.mockClear()
+  documentTemplateBridge.json.choose.mockClear()
+  documentTemplateBridge.output.choose.mockClear()
+  documentTemplateBridge.docx.generate.mockClear()
   shellBridge.showItemInFolder.mockClear()
   toast.error.mockClear()
   toast.success.mockClear()
@@ -80,7 +82,7 @@ describe("DocumentTemplateModule", () => {
     await clickButton("选择", 2)
     await clickButton("生成文档")
 
-    expect(documentTemplateBridge.generateDocx).toHaveBeenCalledWith({
+    expect(documentTemplateBridge.docx.generate).toHaveBeenCalledWith({
       templatePath: "/tmp/template.docx",
       dataPath: "/tmp/data.json",
       outputPath: "/tmp/output.docx",
@@ -111,7 +113,7 @@ describe("DocumentTemplateModule", () => {
     await changeTextarea('{"name":"Ada"}')
     await clickButton("生成文档")
 
-    expect(documentTemplateBridge.generateDocx).toHaveBeenCalledWith({
+    expect(documentTemplateBridge.docx.generate).toHaveBeenCalledWith({
       templatePath: "/tmp/template.docx",
       data: { name: "Ada" },
       outputPath: "/tmp/output.docx",
@@ -128,7 +130,7 @@ describe("DocumentTemplateModule", () => {
     await changeTextarea("[]")
     await clickButton("生成文档")
 
-    expect(documentTemplateBridge.generateDocx).not.toHaveBeenCalled()
+    expect(documentTemplateBridge.docx.generate).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalledWith("JSON 数据必须是对象")
     expect(document.body.textContent).toContain("JSON 数据必须是对象")
   })

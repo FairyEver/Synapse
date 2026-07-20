@@ -29,15 +29,17 @@ vi.mock("sonner", () => ({
 
 vi.mock("@/lib/electron-bridge", () => ({
   requireSynapseBridge: () => ({
-    account: {
-      deleteDriveTrashItem: mocks.deleteDriveTrashItem,
-      filePathForDroppedFile: mocks.filePathForDroppedFile,
-      listDrivePublicAssets: mocks.listDrivePublicAssets,
-      renameDrivePublicAsset: mocks.renameDrivePublicAsset,
-      replaceDrivePublicAssetFile: mocks.replaceDrivePublicAssetFile,
-      restoreDrivePublicAsset: mocks.restoreDrivePublicAsset,
-      trashDrivePublicAsset: mocks.trashDrivePublicAsset,
-      uploadDrivePublicAssets: mocks.uploadDrivePublicAssets,
+    drive: {
+      directLink: {
+        list: mocks.listDrivePublicAssets,
+        upload: mocks.uploadDrivePublicAssets,
+        update: mocks.replaceDrivePublicAssetFile,
+        rename: mocks.renameDrivePublicAsset,
+        delete: mocks.trashDrivePublicAsset,
+        restore: mocks.restoreDrivePublicAsset,
+      },
+      trash: { delete: mocks.deleteDriveTrashItem },
+      localFile: { pathForDroppedFile: mocks.filePathForDroppedFile },
     },
   }),
 }))

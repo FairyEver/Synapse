@@ -17,8 +17,6 @@ describe("Database capability parity", () => {
   it("keeps dispatcher actions registered in the shared capability registry", () => {
     const registryActions = DATABASE_CAPABILITIES.map((capability) => capability.id).sort()
     const dispatcherActions = extractDispatcherActions()
-      .map((action) => action.replace("database.", "app.database."))
-      .sort()
     expect(registryActions).toEqual(dispatcherActions)
   })
 

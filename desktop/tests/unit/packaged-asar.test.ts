@@ -42,6 +42,7 @@ function hash(value: Buffer): string {
 interface CreateAsarBufferOptions {
   readonly includeClaudeRuntimeGuard?: boolean
   readonly includeDeploymentConfig?: boolean
+  readonly includePreloadBundle?: boolean
   readonly includeSharedPackage?: boolean
   readonly includeUsageAnalysisWorkers?: boolean
   readonly includeUnpackedSourceMaps?: boolean
@@ -101,12 +102,14 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const {
     includeClaudeRuntimeGuard = true,
     includeDeploymentConfig = true,
+    includePreloadBundle = true,
     includeSharedPackage = true,
     includeUsageAnalysisWorkers = false,
     includeUnpackedSourceMaps = true,
   } = options
   const packageJson = Buffer.from(JSON.stringify({ main: "dist-electron/electron/main.js" }), "utf8")
   const mainJs = Buffer.from("require('./bootstrap/descriptors.js')\n", "utf8")
+  const preloadJs = Buffer.from("const { contextBridge } = require('electron')\n", "utf8")
   const diagnosticsService = Buffer.from("const id = 'app.claude-runtime'; const message = '内置 Claude Code runtime';\n", "utf8")
   const claudeRuntimeBinary = Buffer.from("export function inspectPackagedClaudeRuntime() {} // 内置 Claude Code runtime\n", "utf8")
   const claudeSdkSession = Buffer.from("inspectPackagedClaudeRuntime(); queryOptions.pathToClaudeCodeExecutable = executablePath;\n", "utf8")
@@ -117,6 +120,10 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   offset += packageJson.length
   const mainNode = createPackedFileNode(offset, mainJs)
   offset += mainJs.length
+  const preloadNode = createPackedFileNode(offset, preloadJs)
+  if (includePreloadBundle) {
+    offset += preloadJs.length
+  }
   const diagnosticsNode = createPackedFileNode(offset, diagnosticsService)
   if (includeClaudeRuntimeGuard) {
     offset += diagnosticsService.length
@@ -145,6 +152,7 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
           electron: {
             files: {
               "main.js": mainNode,
+              ...(includePreloadBundle ? { "preload.js": preloadNode } : {}),
               generated: {
                 files: {
                   ...(includeDeploymentConfig
@@ -221,6 +229,7 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     header,
     packageJson,
     mainJs,
+    ...(includePreloadBundle ? [preloadJs] : []),
     ...(includeClaudeRuntimeGuard ? [diagnosticsService] : []),
     ...(includeClaudeRuntimeGuard ? [claudeRuntimeBinary] : []),
     ...(includeClaudeRuntimeGuard ? [claudeSdkSession] : []),
@@ -326,6 +335,26 @@ describe("packaged asar verification", () => {
         root,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("packaged Claude runtime guard"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects packages missing the sandboxed preload bundle", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includePreloadBundle: false }))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("sandboxed preload bundle is missing"),
       })
     } finally {
       await rm(root, { recursive: true, force: true })

@@ -16,8 +16,8 @@ describe("WorkflowActionResultView", () => {
 
   it("opens workflow runner for workflow outputs", async () => {
     const openRunner = vi.fn(async () => undefined)
-    ;(window as unknown as { synapse: { workflow: { openRunner: typeof openRunner } } }).synapse = {
-      workflow: { openRunner },
+    ;(window as unknown as { synapse: { workflow: { operation: { openRunner: typeof openRunner } } } }).synapse = {
+      workflow: { operation: { openRunner } },
     }
     const host = document.createElement("div")
     document.body.appendChild(host)

@@ -43,7 +43,7 @@ vi.mock("@/app-shell/notifications", () => ({
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
     database: {
-      onChanged: vi.fn(() => () => undefined),
+      operation: { onChanged: vi.fn(() => () => undefined) },
     },
   }),
 }))

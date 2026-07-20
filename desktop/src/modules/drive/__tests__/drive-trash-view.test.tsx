@@ -23,10 +23,12 @@ vi.mock("sonner", () => ({
 
 vi.mock("@/lib/electron-bridge", () => ({
   requireSynapseBridge: () => ({
-    account: {
-      deleteDriveTrashItem: mocks.deleteDriveTrashItem,
-      listDriveTrash: mocks.listDriveTrash,
-      restoreDriveTrashItem: mocks.restoreDriveTrashItem,
+    drive: {
+      trash: {
+        delete: mocks.deleteDriveTrashItem,
+        list: mocks.listDriveTrash,
+        restore: mocks.restoreDriveTrashItem,
+      },
     },
   }),
 }))

@@ -19,25 +19,27 @@ const quickInputFixtures = vi.hoisted(() => ({
 }))
 
 const quickInputBridge = vi.hoisted(() => ({
-  list: vi.fn(async () => quickInputFixtures.items),
-  create: vi.fn(async (input: { content: string }) => ({
-    id: "quick-2",
-    schemaVersion: 1,
-    content: input.content,
-    sortOrder: 20,
-    createdAt: "2026-06-25T00:00:00.000Z",
-    updatedAt: "2026-06-25T00:00:00.000Z",
-  })),
-  update: vi.fn(async (input: { id: string; content: string }) => ({
-    id: input.id,
-    schemaVersion: 1,
-    content: input.content,
-    sortOrder: 10,
-    createdAt: "2026-06-25T00:00:00.000Z",
-    updatedAt: "2026-06-25T00:00:00.000Z",
-  })),
-  delete: vi.fn(async () => undefined),
-  onChanged: vi.fn(() => vi.fn()),
+  item: {
+    list: vi.fn(async () => quickInputFixtures.items),
+    create: vi.fn(async (input: { content: string }) => ({
+      id: "quick-2",
+      schemaVersion: 1,
+      content: input.content,
+      sortOrder: 20,
+      createdAt: "2026-06-25T00:00:00.000Z",
+      updatedAt: "2026-06-25T00:00:00.000Z",
+    })),
+    update: vi.fn(async (input: { id: string; content: string }) => ({
+      id: input.id,
+      schemaVersion: 1,
+      content: input.content,
+      sortOrder: 10,
+      createdAt: "2026-06-25T00:00:00.000Z",
+      updatedAt: "2026-06-25T00:00:00.000Z",
+    })),
+    delete: vi.fn(async () => undefined),
+    onChanged: vi.fn(() => vi.fn()),
+  },
 }))
 
 const toast = vi.hoisted(() => ({
@@ -70,12 +72,12 @@ import { QuickInputModule } from "../index"
 let roots: Root[] = []
 
 beforeEach(() => {
-  quickInputBridge.list.mockClear()
-  quickInputBridge.list.mockImplementation(async () => quickInputFixtures.items)
-  quickInputBridge.create.mockClear()
-  quickInputBridge.update.mockClear()
-  quickInputBridge.delete.mockClear()
-  quickInputBridge.onChanged.mockClear()
+  quickInputBridge.item.list.mockClear()
+  quickInputBridge.item.list.mockImplementation(async () => quickInputFixtures.items)
+  quickInputBridge.item.create.mockClear()
+  quickInputBridge.item.update.mockClear()
+  quickInputBridge.item.delete.mockClear()
+  quickInputBridge.item.onChanged.mockClear()
   toast.error.mockClear()
   toast.success.mockClear()
 })
@@ -94,14 +96,14 @@ describe("QuickInputModule", () => {
   it("loads quick input items", async () => {
     await renderModule()
 
-    expect(quickInputBridge.list).toHaveBeenCalled()
+    expect(quickInputBridge.item.list).toHaveBeenCalled()
     expect(document.body.textContent).toContain("内容")
     expect(document.body.textContent).toContain("操作")
     expect(document.body.textContent).toContain("今天的工作计划有什么")
   })
 
   it("shows an empty state when no quick input items exist", async () => {
-    quickInputBridge.list.mockResolvedValueOnce([])
+    quickInputBridge.item.list.mockResolvedValueOnce([])
 
     await renderModule()
 
@@ -111,7 +113,7 @@ describe("QuickInputModule", () => {
   })
 
   it("shows a retry action when loading quick input items fails", async () => {
-    quickInputBridge.list
+    quickInputBridge.item.list
       .mockRejectedValueOnce(new Error("读取失败"))
       .mockResolvedValueOnce(quickInputFixtures.items)
 
@@ -120,7 +122,7 @@ describe("QuickInputModule", () => {
     expect(document.body.textContent).toContain("加载失败")
     await clickButton("重试")
 
-    expect(quickInputBridge.list).toHaveBeenCalledTimes(2)
+    expect(quickInputBridge.item.list).toHaveBeenCalledTimes(2)
     expect(document.body.textContent).toContain("今天的工作计划有什么")
   })
 
@@ -131,7 +133,7 @@ describe("QuickInputModule", () => {
     await changeTextarea("预览今天的工作总结")
     await clickButton("保存快捷输入")
 
-    expect(quickInputBridge.create).toHaveBeenCalledWith({ content: "预览今天的工作总结" })
+    expect(quickInputBridge.item.create).toHaveBeenCalledWith({ content: "预览今天的工作总结" })
     expect(toast.success).toHaveBeenCalledWith("已保存")
   })
 
@@ -143,11 +145,11 @@ describe("QuickInputModule", () => {
     await clickButton("保存快捷输入")
     await clickButton("删除快捷输入：更新后的快捷输入")
 
-    expect(quickInputBridge.update).toHaveBeenCalledWith({
+    expect(quickInputBridge.item.update).toHaveBeenCalledWith({
       id: "quick-1",
       content: "更新后的快捷输入",
     })
-    expect(quickInputBridge.delete).toHaveBeenCalledWith({ id: "quick-1" })
+    expect(quickInputBridge.item.delete).toHaveBeenCalledWith({ id: "quick-1" })
   })
 })
 

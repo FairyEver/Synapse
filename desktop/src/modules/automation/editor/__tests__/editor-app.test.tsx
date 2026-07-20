@@ -17,10 +17,12 @@ const listProviders = vi.fn()
 
 vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: () => ({
-    getItem,
-    listItems,
-    createItem,
-    updateItem,
+    item: {
+      get: getItem,
+      list: listItems,
+      create: createItem,
+      update: updateItem,
+    },
   }),
   requireSynapseBridge: () => ({
     agent: {
