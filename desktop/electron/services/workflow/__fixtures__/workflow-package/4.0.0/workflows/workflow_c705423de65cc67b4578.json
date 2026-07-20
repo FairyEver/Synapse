@@ -1,0 +1,28 @@
+{
+  "id": "fixture-root",
+  "name": "V4 Fixture",
+  "version": "v-fixture-root",
+  "meta": {
+    "schemaVersion": "2.0.0"
+  },
+  "createdAt": 1,
+  "updatedAt": 2,
+  "params": [],
+  "nodes": [
+    {
+      "id": "end",
+      "name": "结束",
+      "type": "end",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "config": {
+        "outputType": "text",
+        "template": "",
+        "variables": []
+      }
+    }
+  ],
+  "edges": []
+}

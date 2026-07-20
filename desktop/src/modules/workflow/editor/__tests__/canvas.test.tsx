@@ -225,6 +225,10 @@ describe("WorkflowCanvas", () => {
       cardSummary: () => ({ title: "Claude Code", subtitle: "" }),
       configFields: [],
       configSchema: {} as never,
+      share: {
+        selfContained: false,
+        capability: { id: "workflow.node.claude_code", minVersion: "1.0.0" },
+      },
     })
     vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-000000000001")
     const container = document.createElement("div")

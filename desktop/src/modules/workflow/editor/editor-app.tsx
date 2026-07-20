@@ -24,6 +24,7 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import { buildWorkflowValidationDisplayItems, type WorkflowValidationDisplayItem } from "./validation-display"
 import { WorkflowErrorCard } from "./workflow-error-card"
 import { syncSwitchBranchReferences } from "./switch-branch-sync"
+import { useWorkflowEditorMutationState } from "../hooks/use-workflow-editor-mutation-state"
 
 const logger = createRendererLogger("workflow.editor")
 
@@ -54,6 +55,8 @@ export function WorkflowEditorApp() {
   definitionRef.current = definition
   const isDirtyRef = useRef(false)
   const savingRef = useRef(false)
+
+  useWorkflowEditorMutationState(workflowId, dirty, saving)
   const validationItems = useMemo(
     () => definition ? buildWorkflowValidationDisplayItems(definition, runErrors) : [],
     [definition, runErrors],
@@ -123,7 +126,7 @@ export function WorkflowEditorApp() {
   useEffect(() => {
     const unsub = window.synapse?.workflow.onDefinitionUpdated((payload) => {
       if (payload.workflowId !== workflowId) return
-      if (payload.source !== "mcp" && payload.source !== "workflow-delete") return
+      if (payload.source !== "mcp" && payload.source !== "workflow-delete" && payload.source !== "share-import") return
       const workflowDeleted = payload.source === "workflow-delete"
       if (!workflowDeleted && isDirtyRef.current) {
         logger.warn("external definition update received but editor has unsaved changes, skipping reload", { workflowId })

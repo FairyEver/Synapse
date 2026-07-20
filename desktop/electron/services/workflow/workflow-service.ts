@@ -30,6 +30,18 @@ const logger = createMainLogger("service.workflow")
 
 export interface WorkflowSaveResult { versionHash: string }
 export interface WorkflowSaveError { errors: ValidationError[] }
+export interface WorkflowAtomicBatchSnapshot {
+  readonly previous: WorkflowDefinition[]
+  readonly next: WorkflowDefinition[]
+  readonly removedIds: string[]
+  readonly newlyCreatedIds: string[]
+}
+
+export interface WorkflowAtomicBatchHooks {
+  readonly beforeCommit?: (snapshot: WorkflowAtomicBatchSnapshot) => Promise<void>
+  readonly afterCommit?: (snapshot: WorkflowAtomicBatchSnapshot) => Promise<void>
+  readonly rollback?: (snapshot: WorkflowAtomicBatchSnapshot, error: unknown) => Promise<void>
+}
 export type WorkflowExportDocumentResult =
   | { readonly kind: "current"; readonly document: WorkflowDefinition }
   | { readonly kind: "future"; readonly document: WorkflowFutureDocument; readonly sourceVersion: string }
@@ -66,6 +78,7 @@ export class WorkflowService {
   private readonly migrationOptions: WorkflowServiceMigrationOptions
   private readonly migrationStorage: WorkflowMigrationStorage
   private initialization: Promise<void> | null = null
+  private mutationQueue: Promise<void> = Promise.resolve()
 
   constructor(
     dataRepository: DataRepository,
@@ -124,6 +137,15 @@ export class WorkflowService {
       })
       throw err
     }
+  }
+
+  async listCurrentDefinitions(): Promise<WorkflowDefinition[]> {
+    await this.initialize()
+    const entries = await this.workflowsNamespace.list()
+    return entries.flatMap((entry) => {
+      const result = migrateWorkflowDocument(entry)
+      return result.kind === "current" ? [result.document] : []
+    })
   }
 
   async listMigrationDiagnostics(): Promise<WorkflowMigrationDiagnostic[]> {
@@ -314,8 +336,33 @@ export class WorkflowService {
     delete versioned.loadError
     delete versioned.schemaVersion
     try {
-      await this.workflowsNamespace.upsert(versioned)
-      await this.clearCurrentMigrationState(current.id)
+      const conflict = await this.withMutationLock(async (): Promise<WorkflowSaveError | null> => {
+        const latest = await this.workflowsNamespace.get(current.id)
+        if (current.version && latest?.version !== current.version) {
+          return {
+            errors: [{
+              type: "invalid_config",
+              message: "工作流在保存前发生变化，请重新加载后再保存。",
+              retryable: true,
+            }],
+          }
+        }
+        if (latest) {
+          const latestResult = migrateWorkflowDocument(latest)
+          if (latestResult.kind !== "current") {
+            return {
+              errors: [{
+                type: "invalid_config",
+                message: `${workflowReadError(latestResult).message} 受保护的原始数据不能被覆盖。`,
+              }],
+            }
+          }
+        }
+        await this.workflowsNamespace.upsert(versioned)
+        await this.clearCurrentMigrationState(current.id)
+        return null
+      })
+      if (conflict) return conflict
     } catch (err) {
       logger.error("workflow save failed", {
         boundary: "workflow-service.save",
@@ -327,6 +374,132 @@ export class WorkflowService {
     }
     logger.info("workflow saved", { id: current.id, name: current.name, nodeCount: current.nodes.length, versionHash })
     return { versionHash }
+  }
+
+  async commitAtomicBatch(
+    definitions: readonly WorkflowDefinition[],
+    removeIds: readonly string[],
+    expectedRevisions: ReadonlyMap<string, string | null>,
+    hooks: WorkflowAtomicBatchHooks = {},
+  ): Promise<{ versions: ReadonlyMap<string, string>; snapshot: WorkflowAtomicBatchSnapshot } | WorkflowSaveError> {
+    await this.initialize()
+    return this.withMutationLock(async () => {
+      if (!this.workflowsJsonNamespace) {
+        return { errors: [{ type: "invalid_config", message: "工作流批量更新需要 JSON 存储后端。" }] }
+      }
+      const storedEntries = await this.workflowsNamespace.list()
+      const storedById = new Map(storedEntries.map((entry) => [entry.id, entry]))
+      for (const [id, expectedRevision] of expectedRevisions) {
+        const actualRevision = storedById.get(id)?.version ?? null
+        if (actualRevision !== expectedRevision) {
+          return { errors: [{ type: "invalid_config", message: "工作流在确认后发生变化，请重新检查再导入。", retryable: true }] }
+        }
+      }
+
+      const migratedDefinitions: WorkflowDefinition[] = []
+      for (const definition of definitions) {
+        const result = migrateWorkflowDocument(definition)
+        if (result.kind !== "current") {
+          return { errors: [{ type: "invalid_config", message: workflowReadError(result).message }] }
+        }
+        migratedDefinitions.push(result.document)
+      }
+      if (new Set(migratedDefinitions.map((definition) => definition.id)).size !== migratedDefinitions.length) {
+        return { errors: [{ type: "invalid_config", message: "批量更新包含重复的工作流 ID。" }] }
+      }
+
+      let validationOptions: WorkflowValidationOptions | undefined
+      try {
+        validationOptions = await this.validationOptionsProvider?.()
+      } catch (error) {
+        logger.warn("workflow batch project validation context failed", errorLogMeta(error))
+        return { errors: [{ type: "invalid_config", message: "保存失败：项目配置读取失败，请重试" }] }
+      }
+      const prospective = new Map<string, WorkflowDefinition>()
+      for (const entry of storedEntries) {
+        const result = migrateWorkflowDocument(entry)
+        if (result.kind === "current") prospective.set(entry.id, result.document)
+      }
+      removeIds.forEach((id) => prospective.delete(id))
+      migratedDefinitions.forEach((definition) => prospective.set(definition.id, definition))
+      const prospectiveIds = Array.from(prospective.keys())
+      const paramsById = new Map(Array.from(prospective.values()).map((definition) => [definition.id, definition.params]))
+      for (const definition of migratedDefinitions) {
+        const validation = await validateWorkflowWithResourceDefaults(definition, {
+          ...validationOptions,
+          availableWorkflowIds: prospectiveIds.filter((id) => id !== definition.id),
+          workflowParamsById: paramsById,
+        })
+        if (!validation.valid) return { errors: validation.errors }
+      }
+
+      const now = this.migrationOptions.now?.() ?? Date.now()
+      const next = migratedDefinitions.map((definition): WorkflowEntryV1 => {
+        const existing = storedById.get(definition.id)
+        const versionHash = this.versionHash(definition)
+        const entry = {
+          ...definition,
+          meta: { ...definition.meta, schemaVersion: WORKFLOW_SCHEMA_VERSION },
+          version: versionHash,
+          createdAt: existing?.createdAt || definition.createdAt || now,
+          updatedAt: now,
+        } as WorkflowEntryV1
+        delete entry.loadError
+        delete entry.schemaVersion
+        return entry
+      })
+      const affectedIds = new Set([...next.map((definition) => definition.id), ...removeIds])
+      const previous = storedEntries.flatMap((entry) => {
+        if (!affectedIds.has(entry.id)) return []
+        const result = migrateWorkflowDocument(entry)
+        return result.kind === "current" ? [result.document] : []
+      })
+      const snapshot: WorkflowAtomicBatchSnapshot = {
+        previous,
+        next: next.map((entry) => structuredClone(entry) as WorkflowDefinition),
+        removedIds: [...removeIds],
+        newlyCreatedIds: next.filter((entry) => !storedById.has(entry.id)).map((entry) => entry.id),
+      }
+      await hooks.beforeCommit?.(snapshot)
+      try {
+        await this.workflowsJsonNamespace.replaceMany(next, removeIds)
+        await hooks.afterCommit?.(snapshot)
+      } catch (error) {
+        const previousIds = new Set(previous.map((definition) => definition.id))
+        const rollbackRemoveIds = Array.from(affectedIds).filter((id) => !previousIds.has(id))
+        await this.workflowsJsonNamespace.replaceMany(previous as WorkflowEntryV1[], rollbackRemoveIds)
+        await hooks.rollback?.(snapshot, error)
+        throw error
+      }
+      for (const id of affectedIds) await this.clearCurrentMigrationState(id)
+      return {
+        versions: new Map(next.map((definition) => [definition.id, definition.version])),
+        snapshot,
+      }
+    })
+  }
+
+  async restoreAtomicSnapshot(
+    upserts: readonly WorkflowDefinition[],
+    removeIds: readonly string[],
+  ): Promise<void> {
+    await this.initialize()
+    await this.withMutationLock(async () => {
+      if (!this.workflowsJsonNamespace) throw new Error("工作流恢复需要 JSON 存储后端。")
+      const entries = upserts.map((document): WorkflowEntryV1 => {
+        const result = migrateWorkflowDocument(document)
+        if (result.kind !== "current") throw workflowReadError(result)
+        if (!result.document.version) throw new Error(`工作流恢复快照缺少修订：${result.document.id}`)
+        return result.document as WorkflowEntryV1
+      })
+      await this.workflowsJsonNamespace.replaceMany(entries, removeIds)
+    })
+  }
+
+  private withMutationLock<T>(operation: () => Promise<T>): Promise<T> {
+    const run = this.mutationQueue.then(operation, operation)
+    this.mutationQueue = run.then(() => undefined, () => undefined)
+    return run
   }
 
   async create(defaultProjectId?: string, defaultProviderModel?: WorkflowDefaultProviderModel): Promise<{ id: string; versionHash: string } | WorkflowSaveError> {
@@ -354,11 +527,13 @@ export class WorkflowService {
 
   async delete(id: string): Promise<void> {
     await this.initialize()
-    await this.assertDeleteAllowed(id)
     logger.info("workflow deleting", { id })
     try {
-      await this.workflowsNamespace.remove(id)
-      await this.clearCurrentMigrationState(id)
+      await this.withMutationLock(async () => {
+        await this.assertDeleteAllowed(id)
+        await this.workflowsNamespace.remove(id)
+        await this.clearCurrentMigrationState(id)
+      })
       await this.paramPresetService?.deleteForWorkflow(id)
       logger.info("workflow deleted", { id })
     } catch (err) {
@@ -371,13 +546,27 @@ export class WorkflowService {
     }
   }
 
-  private async assertDeleteAllowed(id: string): Promise<void> {
+  async assertDeleteAllowed(id: string): Promise<void> {
     await this.initialize()
     const entry = await this.workflowsNamespace.get(id)
     if (!entry) return
 
     const result = migrateWorkflowDocument(entry)
-    if (result.kind === "current") return
+    if (result.kind === "current") {
+      const entries = await this.workflowsNamespace.list()
+      const references = entries.flatMap((candidate) => {
+        if (candidate.id === id) return []
+        const candidateResult = migrateWorkflowDocument(candidate)
+        if (candidateResult.kind !== "current") return []
+        return workflowCallTargetIds(candidateResult.document).includes(id)
+          ? [candidateResult.document.name]
+          : []
+      })
+      if (references.length > 0) {
+        throw new Error(`该工作流仍被以下工作流调用：${references.join("、")}。请先解除引用。`)
+      }
+      return
+    }
 
     logger.warn("workflow delete blocked for protected document", {
       boundary: "workflow-service.delete",

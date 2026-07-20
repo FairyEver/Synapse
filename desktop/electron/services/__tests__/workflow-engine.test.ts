@@ -107,6 +107,10 @@ describe("WorkflowEngine", () => {
       cardSummary: () => ({ title: "Stack Probe", subtitle: "" }),
       configFields: [],
       configSchema: { parse: (value: unknown) => value, safeParse: (value: unknown) => ({ success: true, data: value }) } as never,
+      share: {
+        selfContained: true,
+        capability: { id: "workflow.node.stack_probe", minVersion: "1.0.0" },
+      },
     }, {
       async execute(input) {
         seenStacks.push(input.context.workflowCallStack)

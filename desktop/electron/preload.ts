@@ -298,10 +298,14 @@ const IPC_CHANNELS = {
     "runStatus": "synapse:workflow:run-status",
     "openEditor": "synapse:workflow:open-editor",
     "editorState": "synapse:workflow:editor-state",
+    "setEditorMutationState": "synapse:workflow:set-editor-mutation-state",
     "checkCanSync": "synapse:workflow:check-can-sync",
+    "inspectDeletePackage": "synapse:workflow:inspect-delete-package",
     "exportPackage": "synapse:workflow:export-package",
+    "inspectExportPackage": "synapse:workflow:inspect-export-package",
     "inspectImportPackage": "synapse:workflow:inspect-import-package",
     "importPackage": "synapse:workflow:import-package",
+    "undoShareImport": "synapse:workflow:undo-share-import",
     "chooseParamFile": "synapse:workflow:param-file:choose",
     "chooseParamDirectory": "synapse:workflow:param-directory:choose",
     "chooseParamFiles": "synapse:workflow:param-files:choose",
@@ -1582,7 +1586,7 @@ const synapseBridge: SynapseBridge = {
     get: (id: string) => invoke(IPC_CHANNELS.workflow.get)({ id }),
     create: () => invoke(IPC_CHANNELS.workflow.create)(),
     save: (def) => invoke(IPC_CHANNELS.workflow.save)(def),
-    delete: (id: string) => invoke(IPC_CHANNELS.workflow.delete)({ id }),
+    delete: (id: string, options?: { cleanupImportedChildren?: boolean }) => invoke(IPC_CHANNELS.workflow.delete)({ id, ...options }),
     validate: (def) => invoke(IPC_CHANNELS.workflow.validate)(def),
     run: (id: string, params: Record<string, unknown>) => invoke(IPC_CHANNELS.workflow.run)({ id, params }),
     runDefinition: (def: unknown, params: Record<string, unknown>, force?: boolean) =>
@@ -1597,16 +1601,33 @@ const synapseBridge: SynapseBridge = {
     runStatus: (runId: string, workflowId?: string) => invoke(IPC_CHANNELS.workflow.runStatus)({ runId, workflowId }),
     openEditor: (id: string, runId?: string) => invoke(IPC_CHANNELS.workflow.openEditor)({ id, runId }),
     editorState: invoke(IPC_CHANNELS.workflow.editorState),
+    setEditorMutationState: (workflowId: string, dirty: boolean, saving: boolean) =>
+      invoke(IPC_CHANNELS.workflow.setEditorMutationState)({ workflowId, dirty, saving }),
     checkCanSync: invoke(IPC_CHANNELS.workflow.checkCanSync),
-    exportPackage: (workflowId: string, workflowName?: string, migrationDiagnosticId?: string) =>
+    inspectDeletePackage: (workflowId: string) =>
+      invoke(IPC_CHANNELS.workflow.inspectDeletePackage)({ workflowId }),
+    inspectExportPackage: (workflowId: string) =>
+      invoke(IPC_CHANNELS.workflow.inspectExportPackage)({ workflowId }),
+    exportPackage: (
+      workflowId: string,
+      workflowName?: string,
+      migrationDiagnosticId?: string,
+      shareNote?: string,
+      expectedDigestSeed?: string,
+    ) =>
       invoke(IPC_CHANNELS.workflow.exportPackage)({
         workflowId,
         workflowName,
         ...(migrationDiagnosticId ? { migrationDiagnosticId } : {}),
+        ...(shareNote !== undefined ? { shareNote } : {}),
+        ...(expectedDigestSeed !== undefined ? { expectedDigestSeed } : {}),
       }),
     inspectImportPackage: () => invoke(IPC_CHANNELS.workflow.inspectImportPackage)(),
     importPackage: (packagePath: string, mappings, options, packageDigest?: string) =>
       invoke(IPC_CHANNELS.workflow.importPackage)({ packagePath, packageDigest, mappings, options }),
+    importSharePackage: (packagePath: string, selections, packageDigest: string) =>
+      invoke(IPC_CHANNELS.workflow.importPackage)({ packagePath, packageDigest, selections }),
+    undoShareImport: (lineageId: string) => invoke(IPC_CHANNELS.workflow.undoShareImport)({ lineageId }),
     chooseParamFile: () => invoke(IPC_CHANNELS.workflow.chooseParamFile)(),
     chooseParamDirectory: () => invoke(IPC_CHANNELS.workflow.chooseParamDirectory)(),
     chooseParamFiles: () => invoke(IPC_CHANNELS.workflow.chooseParamFiles)(),

@@ -194,6 +194,8 @@ import { collectOpsStatus } from "../modules/ops/status"
 import { WorkflowService } from "../services/workflow/workflow-service"
 import { WorkflowParamPresetService } from "../services/workflow/workflow-param-preset-service"
 import { WorkflowPackageService } from "../services/workflow/workflow-package-service"
+import { WorkflowShareStateService } from "../services/workflow/workflow-share-state-service"
+import { createWorkflowShareIntegration } from "../services/workflow/workflow-share-integration"
 import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import { configuredWorkflowProjectIdsFromConfig, validateWorkflow } from "../services/workflow/workflow-validator"
@@ -1926,15 +1928,62 @@ export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> =
 export const coreWorkflowPackageDescriptor: ServiceDescriptor<WorkflowPackageService> = {
   id: "core.workflow.package",
   criticality: "degraded",
-  dependsOn: ["core.workflow", PROVIDER_SERVICE_ID, "core.permission-guard", "core.audit-sink"],
+  dependsOn: [
+    "core.workflow",
+    PROVIDER_SERVICE_ID,
+    "core.permission-guard",
+    "core.audit-sink",
+    "core.automation",
+    "core.workflow.run-statuses",
+    "core.workflow.window-manager",
+    "core.workflow.snapshots",
+    "core.event-bus",
+    "git.command-runner",
+  ],
   create(ctx) {
+    const workflowService = ctx.registry.get<WorkflowService>("core.workflow")
+    const automationService = ctx.registry.get<AutomationService>("core.automation")
+    const workflowWindowManager = ctx.registry.get<WorkflowWindowManager>("core.workflow.window-manager")
+    const runStatuses = ctx.registry.get<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
+    const eventBus = ctx.registry.get<EventBus>("core.event-bus")
+    const snapshots = ctx.registry.get<RunSnapshotService>("core.workflow.snapshots")
+    const paramPresets = ctx.registry.get<WorkflowParamPresetService>("core.workflow.param-presets")
+    const gitCommandRunner = ctx.registry.get<GitClientCommandRunner>("git.command-runner")
+    const integration = createWorkflowShareIntegration({
+      workflowService,
+      automationService,
+      workflowWindowManager,
+      runStatuses,
+      snapshots,
+      paramPresets,
+      eventBus,
+      gitCommandRunner,
+      loadConfig: () => configStore.load(),
+      drive: accountService,
+    })
+    const shareStateService = new WorkflowShareStateService(
+      ctx.registry.get<DataRepository>("core.data-repository"),
+      workflowService,
+      Date.now,
+      {
+        getEnabled: async (id) => (await automationService.automationGet(id))?.enabled ?? null,
+        setEnabled: async (id, enabled) => {
+          if (enabled) await automationService.automationEnable(id)
+          else await automationService.automationDisable(id)
+        },
+      },
+    )
     return new WorkflowPackageService({
-      workflowService: ctx.registry.get<WorkflowService>("core.workflow"),
+      workflowService,
+      shareStateService,
       providerService: ctx.registry.get<ProviderService>(PROVIDER_SERVICE_ID),
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      appVersion: SYNAPSE_APP_VERSION,
+      ...integration,
     })
   },
+  start(service) { return service.initialize() },
 }
 
 export const coreWorkflowSnapshotsDescriptor: ServiceDescriptor<RunSnapshotService> = {

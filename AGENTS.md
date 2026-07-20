@@ -156,6 +156,20 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - 无版本旧数据按 `0.0.0` 处理。迁移失败或未来版本必须按单工作流隔离：列表可以显示诊断，但不得把原文改造成空工作流，也不得允许编辑、保存、运行、子工作流调用或 Automation 执行。只有可识别身份和版本的未来文档允许通过专用导出路径原样导出；不得为导出解释、迁移或裁剪正文。迁移诊断只写 `workflow.migration-state`，不得写回用户工作流正文。
 - 应用升级启动时只扫描已配置内容仓库的 `<localPath>/workflows/`，从每个旧工作流目录选择最新可解析版本自动找回；扫描必须限制仓库数、工作流目录总数、单工作流历史版本数、单版本文件大小和总时长，达到边界时保留已完成结果、记录结构化诊断且不为未扫描来源写完成标记。单个仓库、工作流目录或版本文件不可读时只记录结构化诊断并继续处理其它来源。不得扫描整盘、覆盖同 ID 当前数据或删除旧来源。成功或冲突标记必须按工作流身份永久幂等，不能随旧文件摘要或目标 schema 版本变化而失效，防止用户删除已找回工作流后旧数据再次复活。
 
+### Workflow 分享包与节点分享契约
+
+- Workflow 分享 V4 的权威产品与格式规格是 `docs/superpowers/specs/2026-05-19-workflow-import-export-design.md`。现有 V1/V2/V3 JSON 只作为历史兼容来源，经只读 adapter 进入统一 V4 导入计划；不得删除其 reader、adapter、fixture 或历史测试，也不得恢复“单工作流、单弹窗、永不覆盖”等旧边界。
+- 后续修改 Workflow 时必须分别判断三条独立版本线，禁止只因为“已经 bump 过一个版本”就跳过其它判断：
+  - 工作流正文持久化字段、字段语义、参数、节点类型或节点 `configSchema` 变化，按上一节规则升级 `WORKFLOW_SCHEMA_VERSION` 并补迁移、fixture 和 contract。
+  - `.synapse-workflow` 容器、manifest 必需结构、安全语义或已有字段含义变化，升级分享包 `formatVersion`；不兼容变化用 major，可忽略显示元数据或由 `requiredCapabilities` 保护的可选扩展用 minor，不改变协议语义的规范化与校验修正用 patch。
+  - 节点运行能力、分享依赖语义或最低可执行实现变化，升级对应 capability 版本或最低版本声明；不要用工作流 schema 版本或分享包格式版本代替 capability 版本。
+- 工作流每次保存生成的 `version` 是内容修订哈希，由保存流程自动生成，不是人工维护的版本号；DataRepository namespace 数字 schema 也只描述存储 envelope。Agent 在评审任何工作流改动时必须明确说明上述各版本是否需要变化及理由。
+- 同一分享包 major 的更高 minor / patch 只有在所有 `requiredCapabilities` 均受支持时才可导入；未知必需 capability 必须阻止，不得通过裁剪节点、字段、附件、签名要求或其它正文来降级导入。未知可选显示元数据可以忽略。已发布包 adapter 和迁移不得原地改写，修正必须新增版本或新适配步骤并保留历史 fixture。
+- 每个已注册 Workflow 节点，包括 App Capability 工作流节点，都必须在 `NodeManifest` 中声明纯函数或声明式节点分享契约；即使完全自包含也必须显式声明。契约至少覆盖 capability 与最低版本、模型、项目、子工作流、资源、敏感字段、高风险权限、显式/继承配置、导入重写和可移植性诊断。新增节点或修改这些语义时必须更新全节点分享契约测试，禁止在中央分享服务继续追加节点类型硬编码分支。
+- 节点分享契约不得读写文件、网络、数据库或 UI。递归遍历、稳定引用、权限审计、安全 ZIP、映射、导入计划、原子事务、崩溃恢复、谱系、撤销和持久化统一归中央工作流分享服务；分享包不得携带节点实现、插件代码、可执行文件、安装脚本或任意下载 URL。
+- 工作流分享来源、模型/项目/文件映射、事务恢复和撤销状态必须保存在工作流正文之外；包内每个工作流仍分别通过 `workflow-document-migration.ts`。`VersionedDataMigrator` 不负责 ZIP、transport adapter、capability 检查、ID 重写、IO 或跨存储事务。
+- 修改 Workflow 分享功能后，除 schema / migration / package fixture 外，必须同步检查 Workflow MCP capability/schema、`desktop/app-capabilities/synapse-skill/skill-package/workflow/` 指南、导入导出 UI、`CONTEXT.md` 和相关 ADR；用户可感知实现完成时按本文件规则更新 `RELEASE_NOTES_PENDING.md`。
+
 ### App Capability Package 架构
 
 - 当新增系统应用同时提供 App UI、MCP 能力、Workflow 节点或其它外部调用入口时，必须按能力包组织代码，目录放在 `desktop/app-capabilities/<app-id>/`。

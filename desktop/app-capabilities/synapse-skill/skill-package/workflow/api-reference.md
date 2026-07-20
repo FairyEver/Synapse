@@ -2,6 +2,8 @@
 
 All tools are accessed via the `synapse-mcp` MCP server.
 
+Workflow share export/import is intentionally not exposed as an MCP tool in this version. Use the Synapse Workflow UI for `.synapse-workflow` V4 packages. Whole-definition MCP create/update calls do not provide package lineage, recursive child inclusion, dependency mapping, transaction recovery, or share undo.
+
 Workflow definition responses include `meta.schemaVersion` (SemVer). Preserve it on whole-definition updates. Do not confuse it with the `version` save revision. Synapse migrates supported legacy documents before returning them and blocks future or failed documents from fetch, update, and execution. List metadata can expose `loadError`; `rawExportAvailable` refers only to the Synapse UI's protected raw export path, which writes the untouched workflow JSON document rather than an importable Synapse workflow package and rejects symbolic-link destinations.
 
 ---
@@ -267,7 +269,7 @@ Replace a full workflow definition. Validates before saving.
 
 ### app_workflow_definition_delete
 
-Delete a current workflow definition. Cancels active runs and removes snapshots.
+Delete a current workflow definition. Cancels active runs and removes snapshots. The delete is rejected while another saved `workflow_call` still references the target.
 
 **Params:** `workflowId` (string, required)
 **Returns:** `{ ok: true }`

@@ -198,6 +198,36 @@ export class JsonNamespace<T extends Record<string, unknown>>
     })
   }
 
+  /** Atomically applies collection upserts and removals in one JSON replacement. */
+  async replaceMany(
+    items: readonly (T & { id: string })[],
+    removeIds: readonly string[],
+  ): Promise<void> {
+    if (items.length === 0 && removeIds.length === 0) return
+    return this.enqueueWrite(async () => {
+      const env = await this.loadEnvelope()
+      const nextItems = { ...env.items }
+      const removals = removeIds.flatMap((id) => {
+        const previous = nextItems[id]
+        if (!previous) return []
+        delete nextItems[id]
+        return [{ id, previous }]
+      })
+      const upserts = items.map((item) => {
+        const previous = nextItems[item.id]
+        nextItems[item.id] = item
+        return { item, previous }
+      })
+      const next = { ...env, items: nextItems }
+      await this.persist(next)
+      this.cache = next
+      for (const { id, previous } of removals) this.emit({ kind: "remove", id, previous })
+      for (const { item, previous } of upserts) {
+        this.emit({ kind: "upsert", id: item.id, value: item, previous })
+      }
+    })
+  }
+
   async upsertIfFileUnchanged(
     item: T & { id: string },
     expectedSource: Uint8Array | null,

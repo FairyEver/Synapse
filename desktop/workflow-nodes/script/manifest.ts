@@ -1,5 +1,6 @@
 import { Terminal } from "lucide-react"
 import type { NodeManifest } from "../types"
+import { builtinWorkflowNodeCapability } from "../share-contract"
 import type { ScriptNodeConfig } from "./schema"
 import { scriptNodeConfigSchema } from "./schema"
 
@@ -20,4 +21,20 @@ export const scriptNodeManifest: NodeManifest<ScriptNodeConfig> = {
     { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
   ],
   configSchema: scriptNodeConfigSchema,
+  share: {
+    selfContained: false,
+    capability: builtinWorkflowNodeCapability("script"),
+    projects: [{ path: ["projectId"], inheritFromWorkflow: true }],
+    sensitive: [{ path: ["env", "*"] }],
+    risks: [{ path: ["script"], id: "shell.execute", when: "present" }],
+    runtimes: [{
+      path: ["shell"],
+      capabilityByValue: {
+        posix: { id: "runtime.shell.posix", minVersion: "1.0.0" },
+        cmd: { id: "runtime.shell.cmd", minVersion: "1.0.0" },
+        powershell: { id: "runtime.shell.powershell", minVersion: "1.0.0" },
+      },
+    }],
+    portabilityWarnings: ["script-platform-syntax"],
+  },
 }

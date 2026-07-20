@@ -1955,6 +1955,12 @@ describe("bootstrap descriptors (T1.5)", () => {
       "provider",
       "core.permission-guard",
       "core.audit-sink",
+      "core.automation",
+      "core.workflow.run-statuses",
+      "core.workflow.window-manager",
+      "core.workflow.snapshots",
+      "core.event-bus",
+      "git.command-runner",
     ])
   })
 

@@ -20,10 +20,18 @@ import type { EventBus } from "../../runtime/event-bus"
 import { configuredWorkflowProjectIdsFromConfig, validateWorkflow, validateWorkflowWithResourceDefaults, workflowCallTargetIds, type WorkflowValidationOptions } from "../../services/workflow/workflow-validator"
 import { normalizeWorkflowRunParams } from "../../services/workflow/workflow-param-normalizer"
 import { migrateWorkflowDocument } from "../../services/workflow/workflow-document-migration"
-import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../config"
+import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS, WORKFLOW_SHARE_PACKAGE_MAX_COMPRESSED_BYTES } from "../../../config"
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
 import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
-import type { SynapseWorkflowPackage, WorkflowImportOptions, WorkflowModelMapping } from "../../../src/types/workflow-package"
+import type {
+  SynapseWorkflowImportPackage,
+  SynapseWorkflowPackage,
+  WorkflowImportOptions,
+  WorkflowModelMapping,
+  WorkflowShareDeletePlan,
+  WorkflowShareImportSelections,
+  WorkflowSharePackageV4,
+} from "../../../src/types/workflow-package"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
@@ -32,6 +40,7 @@ import { isSafeWorkflowId, isSafeWorkflowNodeId, isSafeWorkflowRunId } from "../
 import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowEventForRenderer, sanitizeWorkflowOutputForHistory, sanitizeWorkflowRunSnapshot, sanitizeWorkflowRunStatus } from "../../services/workflow/run-snapshot-sanitize"
 import { checkCapabilityPermission } from "../../capabilities/permission-audit"
 import { rendererBaseUrl } from "../shared/renderer-base-url"
+import { readWorkflowShareArchive, workflowShareManifestV4Schema } from "../../services/workflow/workflow-share-package-v4"
 
 const logger = createMainLogger("workflow.ipc")
 const DELETE_ABORT_WAIT_MS = 5_000
@@ -356,16 +365,29 @@ function recordWorkflowImportMutation(
 }
 
 function parseWorkflowPackageOrFail(options: {
-  readonly raw: unknown
+  readonly bytes: Buffer
   readonly auditSink: AuditSink
   readonly action: PermissionAction
   readonly resource: string
   readonly source: "workflow.inspectImportPackage" | "workflow.importPackage"
   readonly fileBase: string
   readonly mappingCount?: number
-}): SynapseWorkflowPackage {
+}): SynapseWorkflowImportPackage {
+  if (!isZipArchive(options.bytes) && options.bytes.length > WORKFLOW_PACKAGE_MAX_BYTES) {
+    const error = new Error("工作流包文件过大。")
+    recordFilePermissionFailure({
+      auditSink: options.auditSink,
+      action: options.action,
+      resource: options.resource,
+      source: options.source,
+      error,
+    })
+    throw error
+  }
   try {
-    return workflowPackageSchema.parse(options.raw) as SynapseWorkflowPackage
+    if (isZipArchive(options.bytes)) return readWorkflowShareArchive(options.bytes)
+    const raw = JSON.parse(options.bytes.toString("utf8"))
+    return workflowPackageSchema.parse(raw) as SynapseWorkflowPackage
   } catch (error) {
     recordFilePermissionFailure({
       auditSink: options.auditSink,
@@ -384,7 +406,7 @@ function parseWorkflowPackageOrFail(options: {
   }
 }
 
-async function readWorkflowPackageFile(packagePath: string): Promise<{ raw: unknown; digest: string }> {
+async function readWorkflowPackageFile(packagePath: string): Promise<{ bytes: Buffer; digest: string }> {
   const expected = await lstat(packagePath, { bigint: true })
   if (expected.isSymbolicLink()) {
     throw new Error("工作流包不能是符号链接。")
@@ -392,14 +414,14 @@ async function readWorkflowPackageFile(packagePath: string): Promise<{ raw: unkn
   if (!expected.isFile()) {
     throw new Error("工作流包必须是普通文件。")
   }
-  if (expected.size > BigInt(WORKFLOW_PACKAGE_MAX_BYTES)) {
+  if (expected.size > BigInt(WORKFLOW_SHARE_PACKAGE_MAX_COMPRESSED_BYTES)) {
     throw new Error("工作流包文件过大。")
   }
 
   const noFollowFlag = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0
   const nonBlockingFlag = typeof constants.O_NONBLOCK === "number" ? constants.O_NONBLOCK : 0
   const handle = await open(packagePath, constants.O_RDONLY | noFollowFlag | nonBlockingFlag)
-  let text: string
+  let bytes: Buffer
   try {
     const opened = await handle.stat({ bigint: true })
     if (!opened.isFile() || !hasSameFileSnapshot(expected, opened)) {
@@ -413,7 +435,7 @@ async function readWorkflowPackageFile(packagePath: string): Promise<{ raw: unkn
       if (bytesRead === 0) break
       offset += bytesRead
     }
-    text = buffer.subarray(0, offset).toString("utf8")
+    bytes = buffer.subarray(0, offset)
 
     const [afterRead, pathAfterRead] = await Promise.all([
       handle.stat({ bigint: true }),
@@ -431,13 +453,27 @@ async function readWorkflowPackageFile(packagePath: string): Promise<{ raw: unkn
     await handle.close()
   }
 
-  if (Buffer.byteLength(text, "utf8") > WORKFLOW_PACKAGE_MAX_BYTES) {
-    throw new Error("工作流包文件过大。")
-  }
   return {
-    raw: JSON.parse(text),
-    digest: `sha256:${createHash("sha256").update(text).digest("hex")}`,
+    bytes,
+    digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
   }
+}
+
+function isZipArchive(bytes: Uint8Array): boolean {
+  return bytes.length >= 4
+    && bytes[0] === 0x50
+    && bytes[1] === 0x4b
+    && (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07)
+}
+
+function isWorkflowSharePackageV4(value: SynapseWorkflowImportPackage): value is WorkflowSharePackageV4 {
+  return "manifest" in value && "workflows" in value
+}
+
+function workflowPackageModelReferenceCount(value: SynapseWorkflowImportPackage): number {
+  return isWorkflowSharePackageV4(value)
+    ? value.manifest.references.models.length
+    : value.modelReferences.length
 }
 
 function saveRunSnapshot(
@@ -568,9 +604,39 @@ const workflowModelMappingSchema = z.object({
   targetModelTier: modelTierSchema,
 })
 
+const workflowShareImportSelectionsSchema = z.object({
+  models: z.array(z.object({
+    sourceRefId: z.string(),
+    action: z.enum(["map", "local-default"]),
+    targetProviderId: z.string().optional(),
+    targetModelTier: modelTierSchema.optional(),
+    targetModelName: z.string().optional(),
+  })),
+  projects: z.array(z.object({ sourceRefId: z.string(), targetProjectId: z.string() })),
+  resources: z.array(z.object({
+    sourceRefId: z.string(),
+    target: z.union([
+      z.object({ kind: z.literal("local_path"), path: z.string() }),
+      z.object({ kind: z.literal("drive"), id: z.string(), versionId: z.string().optional() }),
+    ]),
+  })),
+  environments: z.array(z.object({
+    sourceRefId: z.string(),
+    action: z.enum(["reuse", "replace", "local-default"]),
+    targetValue: z.string().optional(),
+  })),
+})
+
 const workflowImportOptionsSchema = z.object({
   targetProjectId: z.string().optional(),
 }).optional()
+
+const workflowImportProviderOptionSchema = z.object({
+  providerId: z.string(),
+  providerName: z.string(),
+  active: z.boolean().optional(),
+  models: z.record(modelTierSchema, z.string().optional()),
+})
 
 const workflowImportPreviewSchema = z.object({
   packagePath: z.string(),
@@ -583,13 +649,102 @@ const workflowImportPreviewSchema = z.object({
     requiresProjectMapping: z.boolean(),
   }),
   modelReferences: z.array(workflowModelReferenceSchema),
-  providerOptions: z.array(z.object({
-    providerId: z.string(),
-    providerName: z.string(),
-    active: z.boolean().optional(),
-    models: z.record(modelTierSchema, z.string().optional()),
-  })),
+  providerOptions: z.array(workflowImportProviderOptionSchema),
   suggestedMappings: z.array(workflowModelMappingSchema),
+})
+
+const workflowShareImportPreviewSchema = z.object({
+  packagePath: z.string(),
+  packageDigest: z.string(),
+  formatVersion: z.string(),
+  artifactId: z.string(),
+  lineageId: z.string(),
+  shareNote: z.string().optional(),
+  sourceVerified: z.boolean(),
+  mode: z.enum(["create", "duplicate", "update"]),
+  content: z.object({
+    entrypoints: z.array(z.string()),
+    workflows: z.array(z.object({
+      ref: z.string(),
+      name: z.string(),
+      nodeCount: z.number(),
+      sourceRevision: z.string(),
+      action: z.enum(["create", "update", "keep", "detach", "delete"]),
+      targetWorkflowId: z.string().optional(),
+    })),
+  }),
+  compatibility: z.object({
+    supported: z.boolean(),
+    issues: z.array(z.string()),
+    requiredCapabilities: workflowShareManifestV4Schema.shape.requiredCapabilities,
+    sensitiveLocations: workflowShareManifestV4Schema.shape.risks.shape.sensitiveLocations,
+    highRiskLocations: workflowShareManifestV4Schema.shape.risks.shape.highRiskLocations,
+    portabilityWarnings: workflowShareManifestV4Schema.shape.risks.shape.portabilityWarnings,
+    excludedAutomationCount: z.number(),
+    automationUpdates: z.array(z.object({ id: z.string(), name: z.string(), action: z.literal("disable"), reason: z.string() })),
+  }),
+  mappings: z.object({
+    models: workflowShareManifestV4Schema.shape.references.shape.models,
+    projects: workflowShareManifestV4Schema.shape.references.shape.projects,
+    resources: workflowShareManifestV4Schema.shape.references.shape.resources,
+    environments: workflowShareManifestV4Schema.shape.references.shape.environments,
+  }),
+  providerOptions: z.array(workflowImportProviderOptionSchema),
+  projectOptions: z.array(z.object({ id: z.string(), name: z.string(), type: z.string().optional() })),
+  suggestions: workflowShareImportSelectionsSchema,
+  summary: z.object({
+    createCount: z.number(),
+    updateCount: z.number(),
+    deleteCount: z.number(),
+    detachCount: z.number(),
+    preserveRunHistory: z.boolean(),
+    undoAvailable: z.boolean(),
+    transactionalBackup: z.boolean(),
+    incompatiblePresetCount: z.number(),
+  }),
+})
+
+const workflowShareExportPreflightSchema = z.object({
+  workflowId: workflowIdSchema,
+  workflowName: z.string(),
+  shareNote: z.string(),
+  entrypoints: z.array(z.string()),
+  workflows: z.array(z.object({
+    ref: z.string(),
+    id: workflowIdSchema,
+    name: z.string(),
+    revision: z.string(),
+    nodeCount: z.number(),
+  })),
+  references: z.object({
+    models: workflowShareManifestV4Schema.shape.references.shape.models,
+    projects: workflowShareManifestV4Schema.shape.references.shape.projects,
+    resources: workflowShareManifestV4Schema.shape.references.shape.resources,
+    environments: workflowShareManifestV4Schema.shape.references.shape.environments,
+    runtimes: workflowShareManifestV4Schema.shape.references.shape.runtimes,
+  }),
+  requiredCapabilities: workflowShareManifestV4Schema.shape.requiredCapabilities,
+  risks: z.object({
+    sensitiveLocations: workflowShareManifestV4Schema.shape.risks.shape.sensitiveLocations,
+    highRiskLocations: workflowShareManifestV4Schema.shape.risks.shape.highRiskLocations,
+    portabilityWarnings: workflowShareManifestV4Schema.shape.risks.shape.portabilityWarnings,
+    excludedAutomationCount: z.number(),
+  }),
+  blockers: z.array(z.string()),
+  packageDigestSeed: z.string(),
+})
+
+const workflowShareDeletePlanSchema: z.ZodType<WorkflowShareDeletePlan> = z.object({
+  workflowId: workflowIdSchema,
+  imported: z.boolean(),
+  isEntrypoint: z.boolean(),
+  lineageId: z.string().optional(),
+  cleanupCandidates: z.array(z.object({ workflowId: workflowIdSchema, name: z.string() })),
+  retainedChildren: z.array(z.object({
+    workflowId: workflowIdSchema,
+    name: z.string(),
+    reason: z.enum(["reference", "history"]),
+  })),
 })
 
 const workflowUsageCostBreakdownCnySchema = z.object({
@@ -975,12 +1130,30 @@ async function abortActiveRunsForWorkflow(options: {
 export const workflowIpcModule: IpcModule = {
   id: "workflow",
   methods: {
+    inspectDeletePackage: {
+      channel: "synapse:workflow:inspect-delete-package", kind: "invoke",
+      request: z.object({ workflowId: workflowIdSchema }),
+      response: workflowShareDeletePlanSchema,
+      handler: async (ctx, { workflowId }: { workflowId: string }) => (
+        ctx.resolve<WorkflowPackageService>("core.workflow.package").buildDeletePlan(workflowId)
+      ),
+    },
+    inspectExportPackage: {
+      channel: "synapse:workflow:inspect-export-package", kind: "invoke",
+      request: z.object({ workflowId: workflowIdSchema }),
+      response: workflowShareExportPreflightSchema,
+      handler: async (ctx, { workflowId }: { workflowId: string }) => (
+        ctx.resolve<WorkflowPackageService>("core.workflow.package").buildExportPreflight(workflowId)
+      ),
+    },
     exportPackage: {
       channel: "synapse:workflow:export-package", kind: "invoke",
       request: z.object({
         workflowId: workflowIdSchema,
         workflowName: z.string().optional(),
         migrationDiagnosticId: z.string().min(1).optional(),
+        shareNote: z.string().max(20_000).optional(),
+        expectedDigestSeed: z.string().length(64).optional(),
       }),
       response: z.object({
         path: z.string(),
@@ -988,19 +1161,32 @@ export const workflowIpcModule: IpcModule = {
       }).nullable(),
       handler: async (ctx, {
         workflowId,
-        workflowName,
-        migrationDiagnosticId,
-      }: { workflowId: string; workflowName?: string; migrationDiagnosticId?: string }) => {
+      workflowName,
+      migrationDiagnosticId,
+      shareNote,
+      expectedDigestSeed,
+      }: {
+        workflowId: string
+        workflowName?: string
+        migrationDiagnosticId?: string
+        shareNote?: string
+        expectedDigestSeed?: string
+      }) => {
         return ctx.resolve<WorkflowPackageService>("core.workflow.package").exportToFile({
           workflowId,
           workflowName,
           migrationDiagnosticId,
+          shareNote,
+          expectedDigestSeed,
           chooseDestination: async ({ title, defaultPath }) => {
             const parentWindow = focusedWindow()
             const dialogOptions: Electron.SaveDialogOptions = {
               title,
               defaultPath,
-              filters: [{ name: "Synapse Workflow", extensions: ["json"] }],
+              filters: [{
+                name: "Synapse Workflow",
+                extensions: defaultPath.endsWith(".json") ? ["json"] : ["synapse-workflow"],
+              }],
             }
             const result = parentWindow
               ? await dialog.showSaveDialog(parentWindow, dialogOptions)
@@ -1013,18 +1199,18 @@ export const workflowIpcModule: IpcModule = {
     inspectImportPackage: {
       channel: "synapse:workflow:inspect-import-package", kind: "invoke",
       request: z.void().optional(),
-      response: workflowImportPreviewSchema.nullable(),
+      response: z.union([workflowImportPreviewSchema, workflowShareImportPreviewSchema]).nullable(),
       handler: async (ctx) => {
         const parentWindow = focusedWindow()
         const result = parentWindow
           ? await dialog.showOpenDialog(parentWindow, {
             title: "导入工作流",
-            filters: [{ name: "Synapse Workflow", extensions: ["json"] }],
+            filters: [{ name: "Synapse Workflow", extensions: ["synapse-workflow", "json"] }],
             properties: ["openFile"],
           })
           : await dialog.showOpenDialog({
             title: "导入工作流",
-            filters: [{ name: "Synapse Workflow", extensions: ["json"] }],
+            filters: [{ name: "Synapse Workflow", extensions: ["synapse-workflow", "json"] }],
             properties: ["openFile"],
           })
         if (result.canceled || result.filePaths.length === 0) return null
@@ -1032,7 +1218,7 @@ export const workflowIpcModule: IpcModule = {
         const action: PermissionAction = "fs.read.outside-userdata"
         const source = "workflow.inspectImportPackage"
         const auditSink = await checkFilePermission({ ctx, action, resource: packagePath, source })
-        let packageFile: { raw: unknown; digest: string }
+        let packageFile: { bytes: Buffer; digest: string }
         try {
           packageFile = await readWorkflowPackageFile(packagePath)
         } catch (error) {
@@ -1045,7 +1231,7 @@ export const workflowIpcModule: IpcModule = {
           throw error
         }
         const packageData = parseWorkflowPackageOrFail({
-          raw: packageFile.raw,
+          bytes: packageFile.bytes,
           auditSink,
           action,
           resource: packagePath,
@@ -1054,12 +1240,16 @@ export const workflowIpcModule: IpcModule = {
         })
         logger.info("workflow:inspectImportPackage requested", {
           fileBase: path.basename(packagePath),
-          modelReferenceCount: packageData.modelReferences.length,
+          modelReferenceCount: workflowPackageModelReferenceCount(packageData),
         })
-        const preview = await ctx.resolve<WorkflowPackageService>("core.workflow.package").buildImportPreview(packagePath, packageData, packageFile.digest)
+        const packageService = ctx.resolve<WorkflowPackageService>("core.workflow.package")
+        const unifiedPackage = isWorkflowSharePackageV4(packageData)
+          ? packageData
+          : await packageService.adaptLegacyPackageToV4(packageData, packageFile.digest)
+        const preview = await packageService.buildImportPreview(packagePath, unifiedPackage, packageFile.digest)
         logger.info("workflow:inspectImportPackage succeeded", {
           fileBase: path.basename(packagePath),
-          workflowId: preview.workflow.id,
+          workflowId: preview.content.workflows[0]?.ref,
           providerOptionCount: preview.providerOptions.length,
         })
         return preview
@@ -1070,18 +1260,31 @@ export const workflowIpcModule: IpcModule = {
       request: z.object({
         packagePath: z.string(),
         packageDigest: z.string().optional(),
-        mappings: z.array(workflowModelMappingSchema),
+        mappings: z.array(workflowModelMappingSchema).optional(),
+        selections: workflowShareImportSelectionsSchema.optional(),
         options: workflowImportOptionsSchema,
       }),
       response: z.union([
-        z.object({ workflowId: workflowIdSchema, versionHash: z.string() }),
+        z.object({
+          workflowId: workflowIdSchema,
+          workflowIds: z.array(workflowIdSchema).optional(),
+          versionHash: z.string(),
+          mutated: z.boolean().optional(),
+          undoCreated: z.boolean().optional(),
+        }),
         z.object({ errors: z.array(validationErrorSchema) }),
       ]),
-      handler: async (ctx, { packagePath, packageDigest, mappings, options }: { packagePath: string; packageDigest?: string; mappings: WorkflowModelMapping[]; options?: WorkflowImportOptions }) => {
+      handler: async (ctx, { packagePath, packageDigest, mappings = [], selections, options }: {
+        packagePath: string
+        packageDigest?: string
+        mappings?: WorkflowModelMapping[]
+        selections?: WorkflowShareImportSelections
+        options?: WorkflowImportOptions
+      }) => {
         const action: PermissionAction = "fs.read.outside-userdata"
         const source = "workflow.importPackage"
         const auditSink = await checkFilePermission({ ctx, action, resource: packagePath, source })
-        let packageFile: { raw: unknown; digest: string }
+        let packageFile: { bytes: Buffer; digest: string }
         try {
           packageFile = await readWorkflowPackageFile(packagePath)
         } catch (error) {
@@ -1102,7 +1305,7 @@ export const workflowIpcModule: IpcModule = {
           throw new Error("工作流包已变化，请重新选择文件。")
         }
         const packageData = parseWorkflowPackageOrFail({
-          raw: packageFile.raw,
+          bytes: packageFile.bytes,
           auditSink,
           action,
           resource: packagePath,
@@ -1110,13 +1313,26 @@ export const workflowIpcModule: IpcModule = {
           fileBase: path.basename(packagePath),
           mappingCount: mappings.length,
         })
+        if ((isWorkflowSharePackageV4(packageData) || selections !== undefined) && packageDigest === undefined) {
+          throw new Error("导入预检已失效，请重新选择文件。")
+        }
         logger.info("workflow:importPackage requested", {
           fileBase: path.basename(packagePath),
           mappingCount: mappings.length,
         })
         const mutationAudit = await authorizeWorkflowImportMutation(ctx)
         try {
-          const result = await ctx.resolve<WorkflowPackageService>("core.workflow.package").importPackage(packageData, mappings, options ?? {})
+          const packageService = ctx.resolve<WorkflowPackageService>("core.workflow.package")
+          const useUnifiedImport = isWorkflowSharePackageV4(packageData) || selections !== undefined
+          const result = useUnifiedImport
+            ? await packageService.importV4Package(
+              isWorkflowSharePackageV4(packageData)
+                ? packageData
+                : await packageService.adaptLegacyPackageToV4(packageData, packageFile.digest),
+              selections ?? { models: [], projects: [], resources: [], environments: [] },
+              packageDigest!,
+            )
+            : await packageService.importPackage(packageData as SynapseWorkflowPackage, mappings, options ?? {})
           if ("errors" in result) {
             recordWorkflowImportMutation(mutationAudit, "failed", {
               reason: "validation-error",
@@ -1147,6 +1363,25 @@ export const workflowIpcModule: IpcModule = {
             mappingCount: mappings.length,
             errorName: error instanceof Error ? error.name : typeof error,
             errorLength: (error instanceof Error ? error.message : String(error)).length,
+          })
+          throw error
+        }
+      },
+    },
+    undoShareImport: {
+      channel: "synapse:workflow:undo-share-import", kind: "invoke",
+      request: z.object({ lineageId: z.string().min(1).max(200) }),
+      response: z.object({ workflowIds: z.array(workflowIdSchema) }),
+      handler: async (ctx, { lineageId }: { lineageId: string }) => {
+        const mutationAudit = await authorizeWorkflowImportMutation(ctx)
+        try {
+          const result = await ctx.resolve<WorkflowPackageService>("core.workflow.package").undoV4Import(lineageId)
+          recordWorkflowImportMutation(mutationAudit, "allowed", { operation: "undo", workflowCount: result.workflowIds.length })
+          return result
+        } catch (error) {
+          recordWorkflowImportMutation(mutationAudit, "failed", {
+            operation: "undo",
+            errorName: error instanceof Error ? error.name : typeof error,
           })
           throw error
         }
@@ -1283,9 +1518,16 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     delete: {
-      channel: "synapse:workflow:delete", kind: "invoke", request: z.object({ id: workflowIdSchema }), response: z.void(),
-      handler: async (ctx, { id }: { id: string }) => {
+      channel: "synapse:workflow:delete", kind: "invoke", request: z.object({
+        id: workflowIdSchema,
+        cleanupImportedChildren: z.boolean().optional(),
+      }), response: z.void(),
+      handler: async (ctx, { id, cleanupImportedChildren }: { id: string; cleanupImportedChildren?: boolean }) => {
         logger.info("workflow:delete requested", { id })
+        const workflowService = ctx.resolve<WorkflowService>("core.workflow")
+        const packageService = ctx.resolve<WorkflowPackageService>("core.workflow.package")
+        const imported = await packageService.assertDeleteAllowed(id)
+        if (!imported) await workflowService.assertDeleteAllowed(id)
         // Mark the workflow as deleted before any cleanup to prevent
         // late-finishing engine runs from re-creating snapshot files
         // (saveRunSnapshot checks this tombstone and skips writes).
@@ -1325,22 +1567,26 @@ export const workflowIpcModule: IpcModule = {
           const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
           const windowManager = ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager")
           const eventBus = ctx.resolve<EventBus>("core.event-bus")
-          await ctx.resolve<WorkflowService>("core.workflow").delete(id)
-          try {
-            await snapshots.deleteWorkflow(id)
-          } catch {
-            logger.error("workflow:delete — snapshot cleanup failed", { id })
-            // Snapshot cleanup failure is non-fatal: the workflow definition has
-            // already been deleted, so proceeding with window close and event
-            // emission ensures the UI stays in a consistent state.
+          const packageResult = await packageService.deleteImportedWorkflow(id, cleanupImportedChildren ?? true)
+          const deletedIds = packageResult.handled ? packageResult.workflowIds : [id]
+          if (!packageResult.handled) await workflowService.delete(id)
+          for (const deletedId of deletedIds) {
+            try {
+              await snapshots.deleteWorkflow(deletedId)
+            } catch {
+              logger.error("workflow:delete — snapshot cleanup failed", { id: deletedId })
+              // Snapshot cleanup failure is non-fatal: the workflow definition has
+              // already been deleted, so proceeding with window close and event
+              // emission ensures the UI stays in a consistent state.
+            }
+            windowManager.forceCloseAll(deletedId)
+            eventBus.emit({
+              domain: "workflow",
+              type: "workflow:definition-updated",
+              payload: { workflowId: deletedId, source: "workflow-delete" },
+              timestamp: new Date().toISOString(),
+            })
           }
-          windowManager.forceCloseAll(id)
-          eventBus.emit({
-            domain: "workflow",
-            type: "workflow:definition-updated",
-            payload: { workflowId: id, source: "workflow-delete" },
-            timestamp: new Date().toISOString(),
-          })
           logger.info("workflow:delete done", { id })
         } finally {
           deletedWorkflows.delete(id)
@@ -1748,8 +1994,22 @@ export const workflowIpcModule: IpcModule = {
     },
     editorState: {
       channel: "synapse:workflow:editor-state", kind: "invoke", request: z.void().optional(),
-      response: z.object({ openEditors: z.array(z.string()) }),
-      handler: (ctx) => ({ openEditors: ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").getOpenEditorIds() }),
+      response: z.object({
+        openEditors: z.array(z.string()),
+        states: z.array(z.object({ workflowId: workflowIdSchema, dirty: z.boolean(), saving: z.boolean() })),
+      }),
+      handler: (ctx) => {
+        const manager = ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager")
+        return { openEditors: manager.getOpenEditorIds(), states: manager.getEditorMutationStates() }
+      },
+    },
+    setEditorMutationState: {
+      channel: "synapse:workflow:set-editor-mutation-state", kind: "invoke",
+      request: z.object({ workflowId: workflowIdSchema, dirty: z.boolean(), saving: z.boolean() }),
+      response: z.void(),
+      handler: (ctx, state: { workflowId: string; dirty: boolean; saving: boolean }) => {
+        ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").updateEditorMutationState(state)
+      },
     },
     checkCanSync: {
       channel: "synapse:workflow:check-can-sync", kind: "invoke", request: z.void().optional(),

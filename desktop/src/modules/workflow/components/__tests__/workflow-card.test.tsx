@@ -144,6 +144,31 @@ describe("WorkflowCard", () => {
     expect(onOpen).not.toHaveBeenCalled()
   })
 
+  it("offers imported child cleanup by default and allows opting out", async () => {
+    const onDelete = vi.fn()
+    const container = await renderWorkflowCard({
+      onDelete,
+      onInspectDelete: vi.fn(async () => ({
+        workflowId: "workflow-1",
+        imported: true,
+        isEntrypoint: true,
+        lineageId: "lineage-1",
+        cleanupCandidates: [{ workflowId: "child-1", name: "子工作流" }],
+        retainedChildren: [{ workflowId: "child-2", name: "有历史", reason: "history" as const }],
+      })),
+    })
+
+    await openDeleteDialog(container)
+    expect(document.body.textContent).toContain("同时清理 1 个")
+    expect(document.body.textContent).toContain("1 个有引用或运行历史的子工作流会保留")
+    const cleanupCheckbox = document.body.querySelector<HTMLButtonElement>('[role="checkbox"]')
+    expect(cleanupCheckbox?.getAttribute("data-state")).toBe("checked")
+    await act(async () => cleanupCheckbox?.click())
+    await act(async () => findButtonByText("删除")?.click())
+
+    expect(onDelete).toHaveBeenCalledWith(false)
+  })
+
   it("cancels deletion without opening the workflow", async () => {
     const onOpen = vi.fn()
     const onDelete = vi.fn()

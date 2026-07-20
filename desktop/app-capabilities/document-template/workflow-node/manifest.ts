@@ -1,6 +1,6 @@
 import { FileText } from "lucide-react"
 import type { NodeManifest } from "../../../workflow-nodes/types"
-import { DOCUMENT_TEMPLATE_WORKFLOW_NODE_TYPE } from "../shared/capability"
+import { DOCUMENT_TEMPLATE_CAPABILITY_ID, DOCUMENT_TEMPLATE_WORKFLOW_NODE_TYPE } from "../shared/capability"
 import { documentTemplateNodeConfigSchema, type DocumentTemplateNodeConfig } from "./schema"
 
 export const documentTemplateNodeManifest: NodeManifest<DocumentTemplateNodeConfig> = {
@@ -32,4 +32,17 @@ export const documentTemplateNodeManifest: NodeManifest<DocumentTemplateNodeConf
     { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
   ],
   configSchema: documentTemplateNodeConfigSchema,
+  share: {
+    selfContained: false,
+    capability: {
+      id: DOCUMENT_TEMPLATE_CAPABILITY_ID,
+      minVersion: "1.0.0",
+      installSourceId: "synapse.builtin",
+    },
+    resources: [
+      { path: ["templatePath"], entryType: "file", cardinality: "one", access: "read" },
+      { path: ["outputPath"], entryType: "file", cardinality: "one", access: "write" },
+      { path: ["dataPath"], entryType: "file", cardinality: "one", access: "read", optional: true },
+    ],
+  },
 }

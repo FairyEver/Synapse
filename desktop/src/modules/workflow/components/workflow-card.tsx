@@ -6,7 +6,9 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { TableCell, TableRow } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
 import type { WorkflowMeta, WorkflowRunStatus } from "@/types/workflow"
+import type { WorkflowShareDeletePlan } from "@/types/workflow-package"
 import { Download, GitBranch, Play, Trash2, History, Loader2 } from "lucide-react"
 import { RUN_STATE_BADGE } from "../lib/status-display"
 import { CopyIdButton } from "./copy-id-button"
@@ -17,13 +19,31 @@ export type WorkflowCardRunState = {
   runId?: string
 }
 
-interface WorkflowCardProps { meta: WorkflowMeta; running?: boolean; runState?: WorkflowCardRunState; onOpen: () => void; onRun: () => void; onOpenActiveRun: (runId: string) => void; onHistory: () => void; onExport: () => void; onDelete: () => void }
+interface WorkflowCardProps { meta: WorkflowMeta; running?: boolean; runState?: WorkflowCardRunState; onOpen: () => void; onRun: () => void; onOpenActiveRun: (runId: string) => void; onHistory: () => void; onExport: () => void; onInspectDelete?: () => Promise<WorkflowShareDeletePlan>; onDelete: (cleanupImportedChildren?: boolean) => void }
 
-export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenActiveRun, onHistory, onExport, onDelete }: WorkflowCardProps) {
+export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenActiveRun, onHistory, onExport, onInspectDelete, onDelete }: WorkflowCardProps) {
   const badge = runState ? RUN_STATE_BADGE[runState.status] : null
   const hasLoadError = Boolean(meta.loadError)
   const suppressClickRef = useRef(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deletePlan, setDeletePlan] = useState<WorkflowShareDeletePlan | null>(null)
+  const [cleanupImportedChildren, setCleanupImportedChildren] = useState(true)
+  const [deletePlanLoading, setDeletePlanLoading] = useState(false)
+  const [deletePlanError, setDeletePlanError] = useState(false)
+
+  const openDeleteDialog = () => {
+    suppressClickRef.current = true
+    setDeletePlan(null)
+    setCleanupImportedChildren(true)
+    setDeletePlanError(false)
+    setDeleteDialogOpen(true)
+    if (!onInspectDelete) return
+    setDeletePlanLoading(true)
+    void onInspectDelete()
+      .then(setDeletePlan)
+      .catch(() => setDeletePlanError(true))
+      .finally(() => setDeletePlanLoading(false))
+  }
 
   return (
     <TableRow
@@ -114,11 +134,10 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
               onClick={(e) => {
                 e.stopPropagation()
                 if (shouldBypassDeleteConfirm(e)) {
-                  onDelete()
+                  onDelete(true)
                   return
                 }
-                suppressClickRef.current = true
-                setDeleteDialogOpen(true)
+                openDeleteDialog()
               }}
             >
               <Trash2 />
@@ -128,9 +147,30 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
                 <AlertDialogTitle>删除工作流</AlertDialogTitle>
                 <AlertDialogDescription>确定删除「{meta.name}」？此操作不可恢复。</AlertDialogDescription>
               </AlertDialogHeader>
+              {deletePlanLoading ? <p className="text-sm text-muted-foreground">正在检查关联工作流…</p> : null}
+              {deletePlanError ? <p className="text-sm text-destructive">无法检查关联工作流，请关闭后重试。</p> : null}
+              {deletePlan?.cleanupCandidates.length ? (
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox
+                    checked={cleanupImportedChildren}
+                    onCheckedChange={(checked) => setCleanupImportedChildren(checked === true)}
+                  />
+                  <span>同时清理 {deletePlan.cleanupCandidates.length} 个无外部引用且无运行历史的子工作流</span>
+                </label>
+              ) : null}
+              {deletePlan?.retainedChildren.length ? (
+                <p className="text-sm text-muted-foreground">
+                  {deletePlan.retainedChildren.length} 个有引用或运行历史的子工作流会保留。
+                </p>
+              ) : null}
               <AlertDialogFooter>
                 <AlertDialogCancel>取消</AlertDialogCancel>
-                <AlertDialogAction onClick={onDelete}>删除</AlertDialogAction>
+                <AlertDialogAction
+                  disabled={deletePlanLoading || deletePlanError}
+                  onClick={() => onDelete(cleanupImportedChildren)}
+                >
+                  删除
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

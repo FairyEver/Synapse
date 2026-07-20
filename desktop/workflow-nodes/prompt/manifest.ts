@@ -1,5 +1,6 @@
 import { MessageSquare } from "lucide-react"
 import type { NodeManifest } from "../types"
+import { builtinWorkflowNodeCapability } from "../share-contract"
 import type { PromptNodeConfig } from "./schema"
 import { promptNodeConfigSchema } from "./schema"
 
@@ -16,4 +17,10 @@ export const promptNodeManifest: NodeManifest<PromptNodeConfig> = {
     { name: "prompt", kind: "text", label: "Prompt 模板" },
   ],
   configSchema: promptNodeConfigSchema,
+  share: {
+    selfContained: false,
+    capability: builtinWorkflowNodeCapability("prompt"),
+    models: [{ providerPath: ["providerId"], tierPath: ["modelTier"], inheritProvider: true, inheritTier: true, environment: "synapse" }],
+    projects: [{ path: ["projectId"], inheritFromWorkflow: true }],
+  },
 }

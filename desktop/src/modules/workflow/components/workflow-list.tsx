@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { AlertCircle, FileJson, Info, Loader2, Plus, RefreshCw } from "lucide-react"
 import { WorkflowCard, type WorkflowCardRunState } from "./workflow-card"
+import { WorkflowExportDialog } from "./workflow-export-dialog"
 import { RunParamsDialog } from "./run-params-dialog"
 import { RunHistoryDialog } from "./run-history-dialog"
 import { useWorkflowList } from "../hooks/use-workflow-list"
@@ -23,6 +24,7 @@ import {
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition, WorkflowMeta, WorkflowMigrationDiagnostic, WorkflowMigrationDiagnosticStatus } from "@/types/workflow"
+import type { WorkflowShareExportPreflight } from "@/types/workflow-package"
 import { CopyIdButton } from "./copy-id-button"
 import { errorDiagnostic } from "../lib/error-utils"
 import {
@@ -74,6 +76,8 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
   const [protectedWorkflow, setProtectedWorkflow] = useState<WorkflowMeta | null>(null)
   const [migrationDiagnostic, setMigrationDiagnostic] = useState<WorkflowMigrationDiagnostic | null>(null)
   const [runningId, setRunningId] = useState<string | null>(null)
+  const [exportPreflight, setExportPreflight] = useState<WorkflowShareExportPreflight | null>(null)
+  const [exporting, setExporting] = useState(false)
   // Track a conflict so we can offer "cancel old & start new" instead of just an error toast.
   const [conflictState, setConflictState] = useState<{
     def: WorkflowDefinition
@@ -172,9 +176,9 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, cleanupImportedChildren = true) => {
     try {
-      await requireBridgeDomain("workflow").delete(id)
+      await requireBridgeDomain("workflow").delete(id, { cleanupImportedChildren })
     } catch (err) {
       logger.warn("Workflow delete failed.", {
         boundary: "renderer.workflow.list.delete",
@@ -188,7 +192,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     void refresh()
   }
 
-  const handleExport = async (id: string, name: string, migrationDiagnosticId?: string) => {
+  const handleRawExport = async (id: string, name: string, migrationDiagnosticId?: string) => {
     try {
       const workflowBridge = requireBridgeDomain("workflow")
       const result = migrationDiagnosticId
@@ -204,6 +208,47 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
         ...errorDiagnostic(err),
       })
       toast.error("导出失败，请重试")
+    }
+  }
+
+  const handleExport = async (id: string) => {
+    try {
+      setExportPreflight(await requireBridgeDomain("workflow").inspectExportPackage(id))
+    } catch (err) {
+      const diagnostic = errorDiagnostic(err)
+      logger.warn("Workflow export preflight failed.", {
+        boundary: "renderer.workflow.list.export-preflight",
+        workflowId: id,
+        ...diagnostic,
+      })
+      toast.error(diagnostic.errorMessage ?? "导出预检失败，请重试")
+    }
+  }
+
+  const handleExportConfirm = async (shareNote: string) => {
+    if (!exportPreflight || exporting) return
+    setExporting(true)
+    try {
+      const result = await requireBridgeDomain("workflow").exportPackage(
+        exportPreflight.workflowId,
+        exportPreflight.workflowName,
+        undefined,
+        shareNote,
+        exportPreflight.packageDigestSeed,
+      )
+      if (!result) return
+      setExportPreflight(null)
+      toast.success("工作流已导出")
+    } catch (err) {
+      const diagnostic = errorDiagnostic(err)
+      logger.warn("Workflow export failed.", {
+        boundary: "renderer.workflow.list.export",
+        workflowId: exportPreflight.workflowId,
+        ...diagnostic,
+      })
+      toast.error(diagnostic.errorMessage ?? "导出失败，请重试")
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -347,8 +392,12 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
                 onRun={() => void handleRun(meta.id)}
                 onOpenActiveRun={(runId) => handleOpenActiveRun(meta.id, runId)}
                 onHistory={() => setHistoryWorkflowId(meta.id)}
-                onExport={() => void handleExport(meta.id, meta.name)}
-                onDelete={() => void handleDelete(meta.id)} />
+                onExport={() => {
+                  if (meta.loadError) void handleRawExport(meta.id, meta.name)
+                  else void handleExport(meta.id)
+                }}
+                onInspectDelete={() => requireBridgeDomain("workflow").inspectDeletePackage(meta.id)}
+                onDelete={(cleanupImportedChildren) => void handleDelete(meta.id, cleanupImportedChildren)} />
             ))}
             {migrationDiagnostics.map((diagnostic) => (
               <TableRow
@@ -404,7 +453,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
                 onClick={() => {
                   const target = protectedWorkflow
                   setProtectedWorkflow(null)
-                  if (target) void handleExport(target.id, target.name)
+                  if (target) void handleRawExport(target.id, target.name)
                 }}
               >
                 导出原文
@@ -440,7 +489,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
                 onClick={() => {
                   const target = migrationDiagnostic
                   setMigrationDiagnostic(null)
-                  void handleExport(target.workflowId, "旧仓库工作流", target.id)
+                  void handleRawExport(target.workflowId, "旧仓库工作流", target.id)
                 }}
               >
                 导出原文
@@ -449,6 +498,13 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <WorkflowExportDialog
+        open={exportPreflight !== null}
+        preflight={exportPreflight}
+        exporting={exporting}
+        onOpenChange={(open) => { if (!open) setExportPreflight(null) }}
+        onExport={(shareNote) => void handleExportConfirm(shareNote)}
+      />
       <RunParamsDialog
         open={!!runTarget}
         workflowId={runTarget?.id ?? ""}

@@ -9,6 +9,8 @@ export type InstallPackageLimits = {
   readonly maxFileBytes: number
   readonly maxManifestBytes: number
   readonly maxUncompressedBytes: number
+  readonly maxCompressionRatio?: number
+  readonly maxParseTimeMs?: number
 }
 
 export type ZipEntry = {
@@ -23,6 +25,7 @@ export function parseContentLength(value: string | null): number | undefined {
 }
 
 export function readZipEntries(archive: Buffer, limits: InstallPackageLimits): Map<string, ZipEntry> {
+  const startedAt = performance.now()
   const endOffset = findEndOfCentralDirectory(archive)
   const diskNumber = archive.readUInt16LE(endOffset + 4)
   const centralDisk = archive.readUInt16LE(endOffset + 6)
@@ -46,6 +49,9 @@ export function readZipEntries(archive: Buffer, limits: InstallPackageLimits): M
   let totalUncompressed = 0
 
   for (let index = 0; index < entryCount; index += 1) {
+    if (limits.maxParseTimeMs !== undefined && performance.now() - startedAt > limits.maxParseTimeMs) {
+      throw new Error("ZIP package parsing exceeded time limit")
+    }
     if (cursor + 46 > centralOffset + centralSize || archive.readUInt32LE(cursor) !== 0x02014b50) {
       throw new Error("invalid ZIP central directory entry")
     }
@@ -73,6 +79,12 @@ export function readZipEntries(archive: Buffer, limits: InstallPackageLimits): M
     if (compressedSize > limits.maxCompressedBytes || uncompressedSize > limits.maxFileBytes) {
       throw new Error("ZIP entry exceeds size limit")
     }
+    if (
+      limits.maxCompressionRatio !== undefined
+      && uncompressedSize / Math.max(compressedSize, 1) > limits.maxCompressionRatio
+    ) {
+      throw new Error("ZIP entry compression ratio exceeds limit")
+    }
     totalCompressed += compressedSize
     totalUncompressed += uncompressedSize
     if (totalCompressed > limits.maxCompressedBytes) throw new Error("ZIP compressed data exceeds size limit")
@@ -88,6 +100,9 @@ export function readZipEntries(archive: Buffer, limits: InstallPackageLimits): M
       uncompressedSize,
       limits.maxFileBytes,
     )
+    if (limits.maxParseTimeMs !== undefined && performance.now() - startedAt > limits.maxParseTimeMs) {
+      throw new Error("ZIP package parsing exceeded time limit")
+    }
     if (crc32(bytes) !== crc) throw new Error("ZIP entry CRC does not match")
     entries.set(name, { name, bytes })
     cursor = entryEnd

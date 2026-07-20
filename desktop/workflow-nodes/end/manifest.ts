@@ -1,5 +1,6 @@
 import { LogOut } from "lucide-react"
 import type { NodeManifest } from "../types"
+import { builtinWorkflowNodeCapability } from "../share-contract"
 import type { EndNodeConfig } from "./schema"
 import { endNodeConfigSchema } from "./schema"
 
@@ -17,4 +18,8 @@ export const endNodeManifest: NodeManifest<EndNodeConfig> = {
     { name: "template", kind: "text", label: "返回文本" },
   ],
   configSchema: endNodeConfigSchema,
+  share: {
+    selfContained: true,
+    capability: builtinWorkflowNodeCapability("end"),
+  },
 }

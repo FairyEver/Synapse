@@ -1,0 +1,52 @@
+{
+  "format": "synapse-workflow-package",
+  "formatVersion": "4.0.0",
+  "artifactId": "artifact-fixture-v4",
+  "lineageId": "lineage-fixture-v4",
+  "exportedAt": "2026-07-19T00:00:00.000Z",
+  "createdWith": {
+    "appVersion": "0.2.349",
+    "platform": "darwin"
+  },
+  "shareNote": "Fixture",
+  "entrypoints": [
+    "workflow_c705423de65cc67b4578"
+  ],
+  "workflows": [
+    {
+      "ref": "workflow_c705423de65cc67b4578",
+      "sourceWorkflowId": "fixture-root",
+      "sourceRevision": "v-fixture-root",
+      "schemaVersion": "2.0.0",
+      "path": "workflows/workflow_c705423de65cc67b4578.json"
+    }
+  ],
+  "references": {
+    "models": [],
+    "projects": [],
+    "resources": [],
+    "environments": [],
+    "runtimes": []
+  },
+  "requiredCapabilities": [
+    {
+      "id": "workflow.node.end",
+      "minVersion": "1.0.0",
+      "installSourceId": "synapse.builtin"
+    }
+  ],
+  "risks": {
+    "sensitiveLocations": [],
+    "highRiskLocations": [],
+    "portabilityWarnings": [],
+    "excludedAutomationCount": 0
+  },
+  "files": [
+    {
+      "path": "workflows/workflow_c705423de65cc67b4578.json",
+      "size": 453,
+      "sha256": "08357de4feaac2fe6c819ec60556b41dd5136681087c74dc28f77a81cf0c3506",
+      "mediaType": "application/vnd.synapse.workflow+json"
+    }
+  ]
+}

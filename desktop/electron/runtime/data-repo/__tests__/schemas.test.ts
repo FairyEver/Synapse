@@ -88,6 +88,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "webhook.runs",
         "workflow.migration-state",
         "workflow.param-presets",
+        "workflow.share-state",
         "workflows",
       ].sort(),
     )

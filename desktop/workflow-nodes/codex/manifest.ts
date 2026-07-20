@@ -1,5 +1,6 @@
 import { Bot } from "lucide-react"
 import type { NodeManifest } from "../types"
+import { builtinWorkflowNodeCapability } from "../share-contract"
 import { codexNodeConfigSchema, defaultCodexNodeConfig, type CodexNodeConfig } from "./schema"
 
 export const codexNodeManifest: NodeManifest<CodexNodeConfig> = {
@@ -34,4 +35,21 @@ export const codexNodeManifest: NodeManifest<CodexNodeConfig> = {
     { name: "captureDebugArtifacts", kind: "select", label: "保存调试文件", optional: true },
   ],
   configSchema: codexNodeConfigSchema,
+  share: {
+    selfContained: false,
+    capability: builtinWorkflowNodeCapability("codex"),
+    models: [{ modelPath: ["model"], environment: "codex" }],
+    projects: [{ path: ["projectId"], inheritFromWorkflow: true }],
+    resources: [
+      { path: ["workingDirectory"], entryType: "directory", cardinality: "one", access: "read-write", optional: true },
+      { path: ["additionalWritableDirs"], entryType: "directory", cardinality: "many", access: "write", optional: true },
+      { path: ["images"], entryType: "file", cardinality: "many", access: "read", optional: true },
+    ],
+    environments: [{ path: ["profile"], kind: "codex.profile", optional: true }],
+    sensitive: [{ path: ["configOverrides", "*", "value"] }],
+    risks: [
+      { path: ["bypassApprovalsAndSandbox"], id: "codex.bypass-approvals-and-sandbox", when: "truthy" },
+      { path: ["bypassHookTrust"], id: "codex.bypass-hook-trust", when: "truthy" },
+    ],
+  },
 }

@@ -1,5 +1,6 @@
 import { Bot } from "lucide-react"
 import type { NodeManifest } from "../types"
+import { builtinWorkflowNodeCapability } from "../share-contract"
 import { claudeCodeNodeConfigSchema, defaultClaudeCodeNodeConfig, type ClaudeCodeNodeConfig } from "./schema"
 
 export const claudeCodeNodeManifest: NodeManifest<ClaudeCodeNodeConfig> = {
@@ -36,4 +37,17 @@ export const claudeCodeNodeManifest: NodeManifest<ClaudeCodeNodeConfig> = {
     { name: "captureDebugArtifacts", kind: "select", label: "保存调试文件" },
   ],
   configSchema: claudeCodeNodeConfigSchema,
+  share: {
+    selfContained: false,
+    capability: builtinWorkflowNodeCapability("claude_code"),
+    models: [{ modelPath: ["model"], environment: "claude-code" }],
+    projects: [{ path: ["projectId"], inheritFromWorkflow: true }],
+    resources: [
+      { path: ["workingDirectory"], entryType: "directory", cardinality: "one", access: "read-write", optional: true },
+      { path: ["settingsPath"], entryType: "file", cardinality: "one", access: "read", optional: true },
+      { path: ["mcpConfigPath"], entryType: "file", cardinality: "one", access: "read", optional: true },
+      { path: ["additionalDirectories"], entryType: "directory", cardinality: "many", access: "read-write", optional: true },
+    ],
+    risks: [{ path: ["permissionMode"], id: "claude-code.bypass-permissions", when: "present", equals: "bypassPermissions" }],
+  },
 }

@@ -78,6 +78,45 @@ function makeDef(): WorkflowDefinition {
 }
 
 describe("WorkflowService", () => {
+  it("blocks deleting a workflow that is still called by another workflow", async () => {
+    const { svc } = createRepo()
+    await svc.initialize()
+    await svc.save({ ...makeDef(), id: "child" })
+    await svc.save({
+      ...makeDef(),
+      id: "parent",
+      nodes: [
+        { id: "call", name: "调用子流程", type: "workflow_call", position: { x: 0, y: 0 }, config: { workflowId: "child", variables: [], paramTemplates: {} } },
+        { id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "", variables: [] } },
+      ],
+      edges: [{ id: "edge", from: "call", to: "end" }],
+    })
+
+    await expect(svc.delete("child")).rejects.toThrow("仍被以下工作流调用")
+    await expect(svc.get("child")).resolves.not.toBeNull()
+  })
+
+  it("restores the complete old workflow set when an atomic batch post-commit hook fails", async () => {
+    const { svc } = createRepo()
+    await svc.initialize()
+    const original = { ...makeDef(), id: "atomic-workflow", name: "旧版" }
+    const saved = await svc.save(original)
+    if ("errors" in saved) throw new Error("Fixture save failed")
+    const current = await svc.get(original.id)
+    if (!current) throw new Error("Fixture workflow missing")
+    const rollback = vi.fn(async () => {})
+
+    await expect(svc.commitAtomicBatch(
+      [{ ...current, name: "新版" }],
+      [],
+      new Map([[current.id, current.version]]),
+      { afterCommit: async () => { throw new Error("state commit failed") }, rollback },
+    )).rejects.toThrow("state commit failed")
+
+    expect((await svc.get(current.id))?.name).toBe("旧版")
+    expect(rollback).toHaveBeenCalledTimes(1)
+  })
+
   it("does not list unrelated workflow definitions when saving a regular workflow", async () => {
     const { repo, svc } = createRepo()
     await svc.initialize()
@@ -141,6 +180,25 @@ describe("WorkflowService", () => {
     await svc.save(def)
     await svc.save({ ...def, name: "Updated" })
     expect((await svc.get(def.id))?.name).toBe("Updated")
+  })
+  it("rejects a stale saved revision instead of overwriting a newer change", async () => {
+    const { svc } = createRepo()
+    const def = makeDef()
+    await svc.save(def)
+    const loaded = await svc.get(def.id)
+    if (!loaded) throw new Error("Fixture workflow missing")
+    await svc.save({ ...loaded, name: "Newer" })
+
+    const staleResult = await svc.save({ ...loaded, name: "Stale" })
+
+    expect(staleResult).toEqual({
+      errors: [{
+        type: "invalid_config",
+        message: "工作流在保存前发生变化，请重新加载后再保存。",
+        retryable: true,
+      }],
+    })
+    expect((await svc.get(def.id))?.name).toBe("Newer")
   })
   it("delete removes workflow", async () => {
     const { svc } = createRepo()

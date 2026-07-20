@@ -21,6 +21,14 @@ export {
   type WorkflowMigrationStateStatus,
 } from "./workflow-migration-state"
 export {
+  workflowShareStateSchema,
+  type WorkflowShareExportEntryV1,
+  type WorkflowShareOriginEntryV1,
+  type WorkflowShareStateEntryV1,
+  type WorkflowShareTransactionEntryV1,
+  type WorkflowShareUndoEntryV1,
+} from "./workflow-share-state"
+export {
   coreIdentitySchema,
   type CoreIdentityV2,
 } from "./core-identity"
@@ -150,6 +158,7 @@ export {
 
 import { coreConfigSchema } from "./core-config"
 import { workflowMigrationStateSchema } from "./workflow-migration-state"
+import { workflowShareStateSchema } from "./workflow-share-state"
 import { cheatCodeStatesSchema } from "./cheat-code-states"
 import { coreIdentitySchema } from "./core-identity"
 import { driveSyncBaselineSchema, driveSyncBindingsSchema, driveSyncConflictsSchema, driveSyncOperationsSchema, driveSyncStateSchema } from "./drive-sync"
@@ -227,6 +236,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   opsDiagnosticsSchema,
   workflowParamPresetsSchema,
   workflowMigrationStateSchema,
+  workflowShareStateSchema,
   workflowsSchema,
   conversationsSchema,
   auditSchema,

@@ -12,6 +12,14 @@ If a user asks for another Synapse MCP domain while this domain file is active, 
 
 Workflow definitions returned by Synapse contain `meta.schemaVersion`, a SemVer document-schema version managed by Synapse. Preserve the complete `meta` object when sending a fetched definition back through a whole-definition update. Do not invent, downgrade, or remove this value. It is separate from `version`, which is the save revision hash. Legacy definitions are migrated by Synapse before MCP access; a future or failed document cannot be fetched, updated, run, or deleted through MCP. `app_workflow_definition_inspect` applies the same migration gate and returns `valid: false` for future or failed schemas; do not interpret or edit a definition after that result. `app_workflow_definition_list` may report `loadError`; do not call `app_workflow_definition_delete` for such an entry. `rawExportAvailable` only means a future document can be preserved through the Synapse UI's protected raw export path. That path writes the untouched workflow JSON document, not an importable Synapse workflow package, and rejects symbolic-link destinations.
 
+## Workflow Sharing Boundary
+
+Workflow sharing is currently a Synapse UI flow, not an MCP definition operation. The UI exports one `.synapse-workflow` ZIP container with the entry workflow and all recursively referenced child workflows. It preserves workflow config literals, reports sensitive/high-risk field locations without showing their values, and does not include local file bytes, run history, parameter presets, Automation instances, or node implementation code.
+
+Import uses up to six fixed steps to check content, risks/capabilities, model mappings, project mappings, external files/environments, and the final change plan. Model references used by several nodes are mapped once as a group. A same-lineage revision updates the existing local workflow IDs, preserves run history and parameter presets, disables only incompatible linked Automation items, and creates one undo point. Re-importing the same artifact is idempotent. Missing required capabilities or unresolved resources block import.
+
+Do not simulate share import by calling `app_workflow_definition_create` or `app_workflow_definition_update` with copied JSON. That bypasses recursive child inclusion, stable dependency mappings, capability checks, lineage updates, crash recovery, and undo. Use the UI sharing flow when the user wants a reproducible workflow package. The V1/V2/V3 JSON readers remain for historical imports, but new exports use package format V4; package `formatVersion`, workflow `meta.schemaVersion`, save `version`, and node capability versions are independent.
+
 ## Node Types
 
 - **prompt** — Sends a prompt to an AI model, returns the response as output. Requires a provider.

@@ -287,6 +287,10 @@ import type {
   WorkflowImportOptions,
   WorkflowImportPreview,
   WorkflowModelMapping,
+  WorkflowShareImportPreview,
+  WorkflowShareImportSelections,
+  WorkflowShareExportPreflight,
+  WorkflowShareDeletePlan,
 } from "./workflow-package"
 import type {
   CcConversationChunk,
@@ -1666,7 +1670,7 @@ export type SynapseBridge = {
     get: (id: string) => Promise<WorkflowDefinition | null>
     create: () => Promise<{ id: string; versionHash: string } | { errors: ValidationError[] }>
     save: (def: WorkflowDefinition) => Promise<{ versionHash: string } | { errors: ValidationError[] }>
-    delete: (id: string) => Promise<void>
+    delete: (id: string, options?: { cleanupImportedChildren?: boolean }) => Promise<void>
     validate: (def: WorkflowDefinition) => Promise<ValidationResult>
     run: (id: string, params: Record<string, unknown>) => Promise<{ runId: string } | { errors: ValidationError[] }>
     runDefinition: (def: WorkflowDefinition, params: Record<string, unknown>, force?: boolean) => Promise<{ runId: string } | { errors: ValidationError[] } | { conflict: true; activeRunId: string }>
@@ -1677,14 +1681,31 @@ export type SynapseBridge = {
     runHistory: (workflowId: string) => Promise<WorkflowRunListItem[]>
     runStatus: (runId: string, workflowId?: string) => Promise<WorkflowRunStatus | null>
     openEditor: (id: string, runId?: string) => Promise<void>
-    editorState: () => Promise<{ openEditors: string[] }>
+    editorState: () => Promise<{ openEditors: string[]; states: Array<{ workflowId: string; dirty: boolean; saving: boolean }> }>
+    setEditorMutationState: (workflowId: string, dirty: boolean, saving: boolean) => Promise<void>
     checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
-    exportPackage: (workflowId: string, workflowName?: string, migrationDiagnosticId?: string) => Promise<{
+    inspectDeletePackage: (workflowId: string) => Promise<WorkflowShareDeletePlan>
+    inspectExportPackage: (workflowId: string) => Promise<WorkflowShareExportPreflight>
+    exportPackage: (
+      workflowId: string,
+      workflowName?: string,
+      migrationDiagnosticId?: string,
+      shareNote?: string,
+      expectedDigestSeed?: string,
+    ) => Promise<{
       path: string
       kind: "package" | "future-raw"
     } | null>
-    inspectImportPackage: () => Promise<WorkflowImportPreview | null>
+    inspectImportPackage: () => Promise<WorkflowImportPreview | WorkflowShareImportPreview | null>
     importPackage: (packagePath: string, mappings: WorkflowModelMapping[], options?: WorkflowImportOptions, packageDigest?: string) => Promise<{ workflowId: string; versionHash: string } | { errors: ValidationError[] }>
+    importSharePackage: (packagePath: string, selections: WorkflowShareImportSelections, packageDigest: string) => Promise<{
+      workflowId: string
+      workflowIds?: string[]
+      versionHash: string
+      mutated?: boolean
+      undoCreated?: boolean
+    } | { errors: ValidationError[] }>
+    undoShareImport: (lineageId: string) => Promise<{ workflowIds: string[] }>
     chooseParamFile: () => Promise<string | null>
     chooseParamDirectory: () => Promise<string | null>
     chooseParamFiles: () => Promise<string[]>

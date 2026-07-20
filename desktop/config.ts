@@ -25,6 +25,33 @@ export const WORKFLOW_LEGACY_RECOVERY_MAX_VERSION_BYTES = 1024 * 1024
 // 旧资源仓库工作流找回总扫描时长（毫秒）：避免首次工作流列表长期等待历史文件扫描。
 export const WORKFLOW_LEGACY_RECOVERY_TIMEOUT_MS = 3_000
 
+// 工作流分享包允许的最大压缩文件字节数：限制外部 ZIP 在解析前占用的内存。
+export const WORKFLOW_SHARE_PACKAGE_MAX_COMPRESSED_BYTES = 16 * 1024 * 1024
+
+// 工作流分享包允许的最大 ZIP 条目数：覆盖 manifest、工作流文档和未来受控扩展。
+export const WORKFLOW_SHARE_PACKAGE_MAX_ENTRIES = 256
+
+// 工作流分享包单个条目的最大解压字节数：限制异常工作流文档或扩展文件。
+export const WORKFLOW_SHARE_PACKAGE_MAX_FILE_BYTES = 2 * 1024 * 1024
+
+// 工作流分享包 manifest 的最大字节数：限制依赖清单和风险位置数量。
+export const WORKFLOW_SHARE_PACKAGE_MAX_MANIFEST_BYTES = 1024 * 1024
+
+// 工作流分享包全部条目解压后的最大总字节数：防止压缩炸弹占用过多内存。
+export const WORKFLOW_SHARE_PACKAGE_MAX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024
+
+// 工作流分享包单个条目允许的最大解压比：在实际解压前拒绝高度压缩的可疑条目。
+export const WORKFLOW_SHARE_PACKAGE_MAX_COMPRESSION_RATIO = 200
+
+// 工作流分享包 ZIP 解析最大同步耗时（毫秒）：限制大量或异常条目长期占用主进程。
+export const WORKFLOW_SHARE_PACKAGE_MAX_PARSE_TIME_MS = 2_000
+
+// 单个工作流分享包允许包含的最大工作流数量：限制递归依赖集规模。
+export const WORKFLOW_SHARE_PACKAGE_MAX_WORKFLOWS = 100
+
+// 单个工作流分享包允许记录的最大依赖出现位置数量：限制恶意 manifest 的解析和渲染成本。
+export const WORKFLOW_SHARE_PACKAGE_MAX_OCCURRENCES = 10_000
+
 // 日志复制到剪贴板的最大总字节数：限制设置页复制日志和主进程读取日志的单次文本体积，完整日志应通过导出 zip 获取。
 export const LOG_CLIPBOARD_MAX_BYTES = 2 * 1024 * 1024
 

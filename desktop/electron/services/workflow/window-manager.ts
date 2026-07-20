@@ -21,10 +21,17 @@ interface WorkflowDetailWindowNavigationContext {
   readonly expectedUrl: string
 }
 
+export interface WorkflowEditorMutationState {
+  readonly workflowId: string
+  readonly dirty: boolean
+  readonly saving: boolean
+}
+
 export class WorkflowWindowManager {
   private readonly editorWindows = new Map<string, BrowserWindow>()
   private readonly runnerWindows = new Map<string, BrowserWindow>()
   private readonly healthServices = new Map<string, RendererHealthService>()
+  private readonly editorMutationStates = new Map<string, WorkflowEditorMutationState>()
 
   constructor(private readonly mainWindowManager?: WindowManager) {}
 
@@ -67,8 +74,10 @@ export class WorkflowWindowManager {
       logger.info("workflow editor window closed", { workflowId })
       this.detachManagedWindow(windowId)
       this.editorWindows.delete(workflowId)
+      this.editorMutationStates.delete(workflowId)
     })
     this.editorWindows.set(workflowId, win)
+    this.editorMutationStates.set(workflowId, { workflowId, dirty: false, saving: false })
     try {
       await win.loadURL(url)
     } catch (err) {
@@ -150,6 +159,17 @@ export class WorkflowWindowManager {
     return [...this.editorWindows.entries()].filter(([, w]) => !w.isDestroyed()).map(([id]) => id)
   }
 
+  updateEditorMutationState(state: WorkflowEditorMutationState): void {
+    const editor = this.editorWindows.get(state.workflowId)
+    if (!editor || editor.isDestroyed()) return
+    this.editorMutationStates.set(state.workflowId, state)
+  }
+
+  getEditorMutationStates(): WorkflowEditorMutationState[] {
+    const openIds = new Set(this.getOpenEditorIds())
+    return Array.from(this.editorMutationStates.values()).filter((state) => openIds.has(state.workflowId))
+  }
+
   checkCanSync(): { canSync: boolean; blockers: string[] } {
     const open = this.getOpenEditorIds()
     return open.length > 0
@@ -175,6 +195,7 @@ export class WorkflowWindowManager {
       this.detachManagedWindow(windowId)
     }
     this.editorWindows.delete(workflowId)
+    this.editorMutationStates.delete(workflowId)
   }
 
   private closeRunnerWindow(workflowId: string, message: string): void {

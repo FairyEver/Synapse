@@ -133,6 +133,7 @@ describe("workflowIpcModule", () => {
         getExportDocument: vi.fn(async () => exportDocument),
         getLegacyMigrationExportDocument: vi.fn(async () => exportDocument),
         save: vi.fn(),
+        commitAtomicBatch: vi.fn(),
       },
       providerService: { listProviders: vi.fn(async () => []) },
       permissionGuard,
@@ -987,6 +988,7 @@ describe("workflowIpcModule", () => {
     const workflow = {
       get: vi.fn(async () => workflowDefinition()),
       delete: vi.fn(async () => undefined),
+      assertDeleteAllowed: vi.fn(async () => undefined),
     }
     const engine = {
       run: vi.fn(() => new Promise<void>((resolve) => {
@@ -996,6 +998,7 @@ describe("workflowIpcModule", () => {
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return { assertDeleteAllowed: vi.fn(async () => false) } as T
       if (serviceId === "core.workflow.engine") return engine as T
       if (serviceId === "core.workflow.snapshots") return snapshots as T
       if (serviceId === "core.workflow.window-manager") return windowManager as T
@@ -1423,25 +1426,14 @@ describe("workflowIpcModule", () => {
     const inspectedDigest = `sha256:${createHash("sha256").update(inspectedRaw).digest("hex")}`
     await writeFile(packagePath, inspectedRaw, "utf8")
     electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [packagePath] })
-    const packageService = {
-      buildImportPreview: vi.fn(async (selectedPath: string, pkg: typeof inspectedPackage, packageDigest: string) => ({
-        packagePath: selectedPath,
-        packageDigest,
-        workflow: {
-          id: pkg.workflow.id,
-          name: pkg.workflow.name,
-          nodeCount: pkg.workflow.nodes.length,
-          modelReferenceCount: pkg.modelReferences.length,
-          requiresProjectMapping: false,
-        },
-        modelReferences: pkg.modelReferences,
-        providerOptions: [],
-        suggestedMappings: [],
-      })),
-      importPackage: vi.fn(async () => ({ workflowId: "workflow-imported", versionHash: "v-imported" })),
-    }
     const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
     const auditSink = { record: vi.fn() }
+    const packageService = createExportPackageService(
+      { kind: "current", document: workflowDefinition() },
+      permissionGuard as never,
+      auditSink as never,
+    )
+    const importPackage = vi.spyOn(packageService, "importPackage")
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow.package") return packageService as T
@@ -1463,7 +1455,7 @@ describe("workflowIpcModule", () => {
         mappings: [],
       })).rejects.toThrow("工作流包已变化，请重新选择文件。")
 
-      expect(packageService.importPackage).not.toHaveBeenCalled()
+      expect(importPackage).not.toHaveBeenCalled()
       expect(logStoreMock.logger.warn).toHaveBeenCalledWith("workflow:importPackage digest mismatch", {
         fileBase: "shared.synapse-workflow.json",
         mappingCount: 0,
@@ -1529,10 +1521,13 @@ describe("workflowIpcModule", () => {
     }
     await writeFile(packagePath, `${JSON.stringify(packageData)}\n`, "utf8")
     electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [packagePath] })
-    const packageError = new Error("Invalid workflow package workflow")
-    const packageService = { buildImportPreview: vi.fn(async () => { throw packageError }) }
     const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
     const auditSink = { record: vi.fn() }
+    const packageService = createExportPackageService(
+      { kind: "current", document: workflowDefinition() },
+      permissionGuard as never,
+      auditSink as never,
+    )
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow.package") return packageService as T
@@ -1547,11 +1542,6 @@ describe("workflowIpcModule", () => {
         .rejects
         .toThrow("Invalid workflow package workflow")
 
-      expect(packageService.buildImportPreview).toHaveBeenCalledWith(
-        packagePath,
-        expect.objectContaining({ workflow: null }),
-        expect.stringMatching(/^sha256:/),
-      )
       expect(logStoreMock.logger.info).toHaveBeenCalledWith("workflow:inspectImportPackage requested", {
         fileBase: "invalid-workflow.synapse-workflow.json",
         modelReferenceCount: 0,
@@ -1900,7 +1890,7 @@ describe("workflowIpcModule", () => {
 
     expect(result).toBeNull()
     expect(electronMock.dialog.showSaveDialog).toHaveBeenCalledWith(expect.objectContaining({
-      defaultPath: "_CON.synapse-workflow.json",
+      defaultPath: "_CON.synapse-workflow",
     }))
   })
 
@@ -2289,12 +2279,17 @@ describe("workflowIpcModule", () => {
 
   it("emits a workflow-delete source after deleting a definition", async () => {
     const eventBus = { emit: vi.fn() }
-    const workflow = { delete: vi.fn(async () => undefined) }
+    const workflow = { delete: vi.fn(async () => undefined), assertDeleteAllowed: vi.fn(async () => undefined) }
+    const workflowPackage = {
+      assertDeleteAllowed: vi.fn(async () => false),
+      deleteImportedWorkflow: vi.fn(async () => ({ handled: false, workflowIds: [] })),
+    }
     const snapshots = { deleteWorkflow: vi.fn(async () => undefined) }
     const windowManager = { forceCloseAll: vi.fn() }
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return workflowPackage as T
       if (serviceId === "core.workflow.snapshots") return snapshots as T
       if (serviceId === "core.workflow.window-manager") return windowManager as T
       if (serviceId === "core.event-bus") return eventBus as T

@@ -17,6 +17,7 @@ const {
   workflowListState,
   workflowActiveRuns,
   workflowExportPackage,
+  workflowInspectExportPackage,
   workflowOpenEditor,
   workflowRunDefinition,
   workflowOpenRunner,
@@ -30,6 +31,7 @@ const {
   workflowListState: { items: [] as WorkflowMeta[], migrationDiagnostics: [] as WorkflowMigrationDiagnostic[] },
   workflowActiveRuns: vi.fn(),
   workflowExportPackage: vi.fn(),
+  workflowInspectExportPackage: vi.fn(),
   workflowOpenEditor: vi.fn(),
   workflowRunDefinition: vi.fn(),
   workflowOpenRunner: vi.fn(),
@@ -158,6 +160,18 @@ beforeEach(() => {
   workflowActiveRuns.mockResolvedValue([])
   workflowRunDefinition.mockResolvedValue({ runId: "run-1" })
   workflowOpenRunner.mockResolvedValue(undefined)
+  workflowInspectExportPackage.mockResolvedValue({
+    workflowId: "workflow-param",
+    workflowName: "Parameterized",
+    shareNote: "",
+    entrypoints: ["root"],
+    workflows: [{ ref: "root", id: "workflow-param", name: "Parameterized", revision: "v1", nodeCount: 1 }],
+    references: { models: [], projects: [], resources: [], environments: [], runtimes: [] },
+    requiredCapabilities: [],
+    risks: { sensitiveLocations: [], highRiskLocations: [], portabilityWarnings: [], excludedAutomationCount: 0 },
+    blockers: [],
+    packageDigestSeed: "digest",
+  })
   Object.defineProperty(window, "synapse", {
     configurable: true,
     value: {
@@ -165,6 +179,7 @@ beforeEach(() => {
         get: workflowGet,
         activeRuns: workflowActiveRuns,
         exportPackage: workflowExportPackage,
+        inspectExportPackage: workflowInspectExportPackage,
         openEditor: workflowOpenEditor,
         runDefinition: workflowRunDefinition,
         openRunner: workflowOpenRunner,
@@ -313,12 +328,26 @@ describe("WorkflowList", () => {
       container.querySelector<HTMLButtonElement>('[data-track="workflow-card-export"]')?.click()
       await Promise.resolve()
     })
+    await act(async () => {
+      Array.from(document.body.querySelectorAll("button")).find((button) => button.textContent === "导出文件")?.click()
+      await Promise.resolve()
+    })
 
-    expect(workflowExportPackage).toHaveBeenCalledWith("workflow-param", "Parameterized")
+    expect(workflowExportPackage).toHaveBeenCalledWith("workflow-param", "Parameterized", undefined, "", "digest")
     expect(toastSuccess).toHaveBeenCalledWith("工作流已导出")
   })
 
   it("reports protected raw exports explicitly", async () => {
+    workflowListState.items = [{
+      id: "workflow-future",
+      name: "Future workflow",
+      version: "v1",
+      nodeCount: 0,
+      createdAt: 0,
+      updatedAt: 0,
+      loadError: "版本过高",
+      rawExportAvailable: true,
+    }]
     workflowExportPackage.mockResolvedValue({
       path: "/tmp/future.synapse-workflow-future.json",
       kind: "future-raw",

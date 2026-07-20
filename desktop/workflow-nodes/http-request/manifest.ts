@@ -1,5 +1,6 @@
 import { Globe } from "lucide-react"
 import type { NodeManifest } from "../types"
+import { builtinWorkflowNodeCapability } from "../share-contract"
 import type { HttpRequestNodeConfig } from "./schema"
 import { httpRequestNodeConfigSchema } from "./schema"
 
@@ -26,4 +27,15 @@ export const httpRequestNodeManifest: NodeManifest<HttpRequestNodeConfig> = {
     { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
   ],
   configSchema: httpRequestNodeConfigSchema,
+  share: {
+    selfContained: false,
+    capability: builtinWorkflowNodeCapability("http_request"),
+    sensitive: [
+      { path: ["headers", "*"] },
+      { path: ["query", "*"] },
+      { path: ["auth", "bearerToken"] },
+      { path: ["auth", "basicPassword"] },
+    ],
+    risks: [{ path: ["url"], id: "network.request", when: "present" }],
+  },
 }

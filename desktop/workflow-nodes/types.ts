@@ -12,6 +12,77 @@ export interface ConfigFieldDescriptor {
   optional?: boolean
 }
 
+export type NodeShareConfigPath = readonly (string | number | "*")[]
+
+export interface NodeShareCapabilityRequirement {
+  readonly id: string
+  readonly minVersion: string
+  readonly installSourceId?: string
+}
+
+export interface NodeShareModelDeclaration {
+  readonly providerPath?: NodeShareConfigPath
+  readonly tierPath?: NodeShareConfigPath
+  readonly modelPath?: NodeShareConfigPath
+  readonly inheritProvider?: boolean
+  readonly inheritTier?: boolean
+  readonly environment?: "synapse" | "codex" | "claude-code"
+}
+
+export interface NodeShareProjectDeclaration {
+  readonly path: NodeShareConfigPath
+  readonly inheritFromWorkflow?: boolean
+}
+
+export interface NodeShareWorkflowDeclaration {
+  readonly path: NodeShareConfigPath
+}
+
+export interface NodeShareResourceDeclaration {
+  readonly path: NodeShareConfigPath
+  readonly entryType: "file" | "directory"
+  readonly cardinality: "one" | "many"
+  readonly access: "read" | "write" | "read-write"
+  readonly optional?: boolean
+}
+
+export interface NodeShareEnvironmentDeclaration {
+  readonly path: NodeShareConfigPath
+  readonly kind: string
+  readonly optional?: boolean
+}
+
+export interface NodeShareSensitiveDeclaration {
+  readonly path: NodeShareConfigPath
+}
+
+export interface NodeShareRiskDeclaration {
+  readonly path: NodeShareConfigPath
+  readonly id: string
+  readonly when: "present" | "truthy"
+  readonly equals?: unknown
+}
+
+export interface NodeShareRuntimeDeclaration {
+  readonly path?: NodeShareConfigPath
+  readonly capabilityByValue?: Readonly<Record<string, NodeShareCapabilityRequirement>>
+  readonly capability?: NodeShareCapabilityRequirement
+}
+
+export interface NodeShareContract {
+  readonly selfContained: boolean
+  readonly capability: NodeShareCapabilityRequirement
+  readonly models?: readonly NodeShareModelDeclaration[]
+  readonly projects?: readonly NodeShareProjectDeclaration[]
+  readonly workflows?: readonly NodeShareWorkflowDeclaration[]
+  readonly resources?: readonly NodeShareResourceDeclaration[]
+  readonly environments?: readonly NodeShareEnvironmentDeclaration[]
+  readonly sensitive?: readonly NodeShareSensitiveDeclaration[]
+  readonly risks?: readonly NodeShareRiskDeclaration[]
+  readonly runtimes?: readonly NodeShareRuntimeDeclaration[]
+  readonly portabilityWarnings?: readonly string[]
+}
+
 export interface NodeManifest<TConfig = unknown> {
   type: string
   title: string
@@ -23,6 +94,7 @@ export interface NodeManifest<TConfig = unknown> {
   cardSummary: (config: TConfig) => { title: string; subtitle: string }
   configFields: readonly ConfigFieldDescriptor[]
   configSchema: ZodType<TConfig>
+  share: NodeShareContract
 }
 
 export interface WorkflowRuntimeContext {

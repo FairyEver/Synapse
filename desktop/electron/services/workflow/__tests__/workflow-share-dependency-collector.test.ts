@@ -1,0 +1,113 @@
+import { describe, expect, it } from "vitest"
+import type { WorkflowDefinition } from "../../../../src/types/workflow"
+import "../../../../workflow-nodes/register.renderer"
+import { collectWorkflowShareDependencies, workflowShareGitRemoteFingerprint } from "../workflow-share-dependency-collector"
+import { stableWorkflowReference } from "../workflow-share-graph"
+
+function workflow(): WorkflowDefinition {
+  return {
+    id: "root",
+    name: "Root",
+    version: "v-root",
+    meta: { schemaVersion: "2.0.0" },
+    createdAt: 1,
+    updatedAt: 2,
+    defaultProviderId: "provider-a",
+    defaultModelTier: "default",
+    defaultProjectId: "project-a",
+    params: [{
+      name: "source",
+      type: "file",
+      default: { kind: "local_path", entryType: "file", path: "/tmp/source.json" },
+    }],
+    nodes: [
+      { id: "prompt", name: "Prompt", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "provider-a", modelTier: "sonnet", projectId: "project-b", prompt: "p", variables: [] } },
+      { id: "switch", name: "Switch", type: "switch", position: { x: 100, y: 0 }, config: { prompt: "s", variables: [], branches: [{ id: "yes", label: "Yes" }] } },
+      { id: "script", name: "Script", type: "script", position: { x: 200, y: 0 }, config: { script: "echo ok", shell: "posix", env: { TOKEN: "secret" }, variables: [] } },
+      { id: "http", name: "HTTP", type: "http_request", position: { x: 300, y: 0 }, config: { method: "GET", url: "https://example.com", headers: { Authorization: "secret" }, bodyType: "none", variables: [] } },
+      { id: "call", name: "Call", type: "workflow_call", position: { x: 400, y: 0 }, config: { workflowId: "child", variables: [], paramTemplates: {}, paramBindings: {} } },
+      { id: "end", name: "End", type: "end", position: { x: 500, y: 0 }, config: { outputType: "text", template: "", variables: [] } },
+    ],
+    edges: [],
+  }
+}
+
+describe("collectWorkflowShareDependencies", () => {
+  it("groups the same resolved model across tiers and collects declared dependencies", () => {
+    const definition = workflow()
+    const workflowRef = stableWorkflowReference(definition.id)
+    const result = collectWorkflowShareDependencies({
+      workflows: [definition],
+      workflowRefs: new Map([[definition.id, workflowRef]]),
+      providers: [{
+        id: "provider-a",
+        name: "Provider A",
+        model: "same-model",
+        sonnetModel: "same-model",
+      }],
+      projects: [
+        { id: "project-a", name: "Project A" },
+        { id: "project-b", name: "Project B" },
+      ],
+    })
+
+    expect(result.references.models).toHaveLength(1)
+    expect(result.references.models[0].sourceModelName).toBe("same-model")
+    expect(result.references.models[0].occurrences).toHaveLength(3)
+    expect(result.references.projects.map((ref) => ref.sourceProjectName).sort()).toEqual(["Project A", "Project B"])
+    expect(JSON.stringify(result.references)).not.toContain("project-a")
+    expect(JSON.stringify(result.references)).not.toContain("provider-a")
+    expect(result.references.resources).toEqual([
+      expect.objectContaining({ kind: "local_path", entryType: "file", displayName: "source.json" }),
+    ])
+    expect(result.references.resources[0].sourceIdentity).toMatch(/^local-resource_[a-f0-9]{20}$/)
+    expect(JSON.stringify(result.references.resources)).not.toContain("/tmp/source.json")
+    expect(result.references.runtimes).toEqual([
+      expect.objectContaining({ id: "runtime.shell.posix", minVersion: "1.0.0" }),
+    ])
+    expect(result.requiredCapabilities.map((capability) => capability.id)).toEqual(expect.arrayContaining([
+      "workflow.node.end",
+      "workflow.node.http_request",
+      "workflow.node.prompt",
+      "workflow.node.script",
+      "workflow.node.switch",
+      "workflow.node.workflow_call",
+      "runtime.shell.posix",
+    ]))
+    expect(result.childWorkflowIds).toEqual(["child"])
+    expect(result.risks.sensitiveLocations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ nodeId: "script", fieldPath: ["env", "TOKEN"] }),
+      expect.objectContaining({ nodeId: "http", fieldPath: ["headers", "Authorization"] }),
+    ]))
+    expect(JSON.stringify(result.risks)).not.toContain("secret")
+    expect(result.blockers).toEqual([])
+  })
+
+  it("blocks inline parameter files without copying their bytes into diagnostics", () => {
+    const definition = workflow()
+    definition.params[0].default = {
+      kind: "inline_file",
+      entryType: "file",
+      name: "secret.txt",
+      base64: "c2VjcmV0",
+    }
+    const workflowRef = stableWorkflowReference(definition.id)
+    const result = collectWorkflowShareDependencies({
+      workflows: [definition],
+      workflowRefs: new Map([[definition.id, workflowRef]]),
+      providers: [],
+    })
+
+    expect(result.blockers).toEqual(["Root / 参数 source：内联文件不能导出"])
+    expect(JSON.stringify(result)).not.toContain("c2VjcmV0")
+  })
+
+  it("matches equivalent Git remotes without exposing credentials or URLs", () => {
+    const https = workflowShareGitRemoteFingerprint("https://token:secret@github.com/Team/Repo.git?token=secret")
+    const ssh = workflowShareGitRemoteFingerprint("git@github.com:Team/Repo.git")
+
+    expect(https).toBe(ssh)
+    expect(https).toMatch(/^[a-f0-9]{64}$/)
+    expect(https).not.toContain("secret")
+  })
+})

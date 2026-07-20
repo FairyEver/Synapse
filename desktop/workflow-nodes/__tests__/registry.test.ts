@@ -11,6 +11,10 @@ const stub: NodeManifest<{ t: string }> = {
   cardSummary: (c) => ({ title: c.t, subtitle: "" }),
   configFields: [],
   configSchema: z.object({ t: z.string() }),
+  share: {
+    selfContained: true,
+    capability: { id: "workflow.node.stub", minVersion: "1.0.0" },
+  },
 }
 const exec: NodeExecutor<{ t: string }> = { execute: async () => ({ status: "success", output: "ok", durationMs: 0 }) }
 
@@ -33,6 +37,7 @@ describe("NodeTypeRegistry", () => {
     expect(r.getManifest("stub")).toBe(stub)
     expect(r.getExecutor("stub")).toBe(exec)
     expect(r.listTypes()).toEqual(["stub"])
+    expect(r.listManifests()).toEqual([stub])
   })
   it("throws for unknown type", () => {
     expect(() => new NodeTypeRegistry().getManifest("nope")).toThrow("Unknown node type: nope")
@@ -147,6 +152,44 @@ describe("NodeTypeRegistry", () => {
 
     expect(nodeTypeRegistry.getManifest("document_template_docx_generate").title).toBe("模板生成文档")
     expect(nodeTypeRegistry.getExecutor("document_template_docx_generate")).toBe(documentTemplateNodeExecutor)
+  })
+
+  it("requires a share contract for every registered main-process node", async () => {
+    vi.doMock("electron", () => ({
+      app: {
+        getPath: () => "/tmp",
+        getAppPath: () => "/tmp",
+      },
+    }))
+    vi.doMock("../../electron/services/log-store", () => ({
+      createMainLogger: () => ({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      }),
+    }))
+
+    await import("../register.main")
+    const { nodeTypeRegistry } = await import("../registry")
+    const manifests = nodeTypeRegistry.listManifests()
+
+    expect(manifests.map((manifest) => manifest.type).sort()).toEqual([
+      "claude_code",
+      "codex",
+      "document_template_docx_generate",
+      "end",
+      "http_request",
+      "prompt",
+      "script",
+      "switch",
+      "workflow_call",
+    ])
+    for (const manifest of manifests) {
+      expect(manifest.share.capability.id).toBeTruthy()
+      expect(manifest.share.capability.minVersion).toMatch(/^\d+\.\d+\.\d+$/)
+      expect(manifest.share.selfContained).toEqual(expect.any(Boolean))
+    }
   })
 
 })

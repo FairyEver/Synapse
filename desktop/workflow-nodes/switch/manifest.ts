@@ -1,5 +1,6 @@
 import { GitBranch } from "lucide-react"
 import type { NodeManifest } from "../types"
+import { builtinWorkflowNodeCapability } from "../share-contract"
 import type { SwitchNodeConfig } from "./schema"
 import { switchNodeConfigSchema } from "./schema"
 
@@ -19,4 +20,10 @@ export const switchNodeManifest: NodeManifest<SwitchNodeConfig> = {
     { name: "defaultBranch", kind: "select", label: "默认分支", optional: true },
   ],
   configSchema: switchNodeConfigSchema,
+  share: {
+    selfContained: false,
+    capability: builtinWorkflowNodeCapability("switch"),
+    models: [{ providerPath: ["providerId"], tierPath: ["modelTier"], inheritProvider: true, inheritTier: true, environment: "synapse" }],
+    projects: [{ path: ["projectId"], inheritFromWorkflow: true }],
+  },
 }

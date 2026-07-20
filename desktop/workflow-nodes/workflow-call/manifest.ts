@@ -1,5 +1,6 @@
 import { Workflow } from "lucide-react"
 import type { NodeManifest } from "../types"
+import { builtinWorkflowNodeCapability } from "../share-contract"
 import type { WorkflowCallNodeConfig } from "./schema"
 import { workflowCallNodeConfigSchema } from "./schema"
 
@@ -21,6 +22,11 @@ export const workflowCallNodeManifest: NodeManifest<WorkflowCallNodeConfig> = {
     { name: "paramBindings", kind: "record", label: "参数绑定" },
   ],
   configSchema: workflowCallNodeConfigSchema,
+  share: {
+    selfContained: false,
+    capability: builtinWorkflowNodeCapability("workflow_call"),
+    workflows: [{ path: ["workflowId"] }],
+  },
 }
 
 function workflowCallParamCount(config: WorkflowCallNodeConfig): number {

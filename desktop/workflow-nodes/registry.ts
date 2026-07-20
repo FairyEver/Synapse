@@ -22,6 +22,7 @@ export class NodeTypeRegistry {
     return e
   }
   listTypes(): string[] { return [...this.manifests.keys()] }
+  listManifests(): NodeManifest[] { return [...this.manifests.values()] }
 }
 
 export const nodeTypeRegistry = new NodeTypeRegistry()

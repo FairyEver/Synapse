@@ -11,6 +11,7 @@ import "../../../workflow-nodes/register.main"
 import { defaultClaudeCodeNodeConfig } from "../../../workflow-nodes/claude-code/schema"
 import { defaultCodexNodeConfig } from "../../../workflow-nodes/codex/schema"
 import { WorkflowPackageService } from "../workflow/workflow-package-service"
+import { readWorkflowShareArchive } from "../workflow/workflow-share-package-v4"
 import type { WorkflowExportDocumentResult } from "../workflow/workflow-service"
 
 const logger = vi.hoisted(() => ({
@@ -29,6 +30,7 @@ function workflowDefinition(): WorkflowDefinition {
     id: "workflow-source",
     name: "Shared Workflow",
     version: "v_old",
+    meta: { schemaVersion: "2.0.0" },
     createdAt: 1,
     updatedAt: 2,
     defaultProviderId: "provider-deepseek",
@@ -74,6 +76,7 @@ function codexOnlyPackage(): SynapseWorkflowPackageV1 {
       id: "codex-source",
       name: "Code X Workflow",
       version: "v_old",
+      meta: { schemaVersion: "2.0.0" },
       createdAt: 1,
       updatedAt: 2,
       defaultProjectId: "exporter-project",
@@ -168,6 +171,7 @@ function createService() {
       saved.push(def)
       return { versionHash: "v_imported" }
     }),
+    commitAtomicBatch: vi.fn(),
   }
   const providerService = {
     listProviders: vi.fn(async (): Promise<CCProvider[]> => [
@@ -253,6 +257,46 @@ describe("WorkflowPackageService", () => {
         occurrences: [expect.objectContaining({ kind: "node", nodeId: "n2", inherited: false })],
       }),
     ]))
+  })
+
+  it("builds a recursive V4 ZIP artifact for new exports", async () => {
+    const { service } = createService()
+    const artifact = await service.buildV4ExportArtifact("workflow-source")
+    const parsed = readWorkflowShareArchive(artifact.archive)
+
+    expect(parsed.manifest.format).toBe("synapse-workflow-package")
+    expect(parsed.manifest.formatVersion).toBe("4.0.0")
+    expect(parsed.manifest.entrypoints).toHaveLength(1)
+    expect(parsed.manifest.workflows).toEqual([
+      expect.objectContaining({ sourceWorkflowId: "workflow-source", sourceRevision: "v_old", schemaVersion: "2.0.0" }),
+    ])
+    expect(parsed.manifest.requiredCapabilities.map((capability) => capability.id)).toEqual(expect.arrayContaining([
+      "workflow.node.end",
+      "workflow.node.prompt",
+    ]))
+    const exportedWorkflow = Object.values(parsed.workflows)[0]
+    expect(exportedWorkflow.id).toBe("workflow-source")
+    expect(JSON.stringify(parsed.manifest.references)).not.toContain("provider-deepseek")
+    expect(JSON.stringify(parsed.manifest.references)).not.toContain("exporter-project")
+    expect(JSON.stringify(exportedWorkflow)).not.toContain("provider-deepseek")
+    expect(JSON.stringify(exportedWorkflow)).not.toContain("provider-claude")
+    expect(JSON.stringify(exportedWorkflow)).not.toContain("exporter-project")
+    expect(JSON.stringify(exportedWorkflow)).not.toContain("exporter-node-project")
+  })
+
+  it("rejects export when the confirmed preflight no longer matches", async () => {
+    const { service, workflowService } = createService()
+    const preflight = await service.buildExportPreflight("workflow-source")
+    workflowService.getExportDocument.mockResolvedValue({
+      kind: "current",
+      document: { ...workflowDefinition(), version: "changed-after-preflight" },
+    })
+
+    await expect(service.buildV4ExportArtifact(
+      "workflow-source",
+      preflight.shareNote,
+      preflight.packageDigestSeed,
+    )).rejects.toThrow("重新预检")
   })
 
   it("exports a future-schema workflow without interpreting or rewriting its raw document", async () => {
@@ -528,5 +572,89 @@ describe("WorkflowPackageService", () => {
     }))
 
     await expect(service.importPackage(pkg, mappings)).rejects.toThrow(/Unknown target provider/)
+  })
+
+  it("adapts legacy packages into the V4 plan and rejects legacy packages with missing child bodies", async () => {
+    const { service } = createService()
+    const legacy: SynapseWorkflowPackageV1 = {
+      format: "synapse-workflow-package-v1",
+      exportedAt: nowIso,
+      workflow: workflowDefinition(),
+      modelReferences: [{
+        id: "legacy-model",
+        sourceProviderName: "DeepSeek",
+        sourceModelTier: "sonnet",
+        sourceModelName: "deepseek-chat",
+        occurrences: [{ kind: "workflowDefault" }],
+      }],
+    }
+
+    const adapted = await service.adaptLegacyPackageToV4(legacy, "sha256:legacy")
+
+    expect(adapted.manifest.formatVersion).toBe("4.0.0")
+    expect(adapted.manifest.extensions).toEqual({ legacyFormat: "synapse-workflow-package-v1" })
+    expect(adapted.manifest.references.models).toContainEqual(expect.objectContaining({
+      sourceProviderName: "DeepSeek",
+      sourceModelName: "deepseek-chat",
+    }))
+
+    const withChild: SynapseWorkflowPackageV1 = {
+      ...legacy,
+      workflow: {
+        ...legacy.workflow,
+        nodes: [
+          ...legacy.workflow.nodes,
+          {
+            id: "call-child",
+            name: "调用子工作流",
+            type: "workflow_call",
+            position: { x: 600, y: 0 },
+            config: { workflowId: "child-workflow", variables: [], paramTemplates: {}, paramBindings: {} },
+          },
+        ],
+      },
+    }
+    await expect(service.adaptLegacyPackageToV4(withChild, "sha256:child")).rejects.toThrow("未包含子工作流")
+  })
+
+  it("plans cleanup only for imported children without references or history", async () => {
+    const service = new WorkflowPackageService({
+      workflowService: {
+        getExportDocument: vi.fn(),
+        getLegacyMigrationExportDocument: vi.fn(),
+        save: vi.fn(),
+        commitAtomicBatch: vi.fn(),
+      },
+      shareStateService: {
+        initialize: vi.fn(),
+        findOriginByWorkflowId: vi.fn(async () => ({
+          id: "origin:lineage-1",
+          schemaVersion: 1,
+          recordType: "origin",
+          lineageId: "lineage-1",
+          artifactId: "artifact-1",
+          packageDigest: "sha256:test",
+          sourceRevisions: { root: "v1", safe: "v1", retained: "v1" },
+          workflowIds: { root: "workflow-root", safe: "workflow-safe", retained: "workflow-retained" },
+          entrypointRefs: ["root"],
+          selections: { models: [], projects: [], resources: [], environments: [] },
+          importedAt: 1,
+        })),
+      } as never,
+      providerService: { listProviders: vi.fn(async () => []) },
+      permissionGuard: { check: vi.fn(async () => ({ allowed: true as const })) },
+      auditSink: { record: vi.fn() },
+      inspectDeleteCandidates: vi.fn(async () => new Map([
+        ["workflow-safe", { name: "可清理", hasReference: false, hasHistory: false }],
+        ["workflow-retained", { name: "保留", hasReference: false, hasHistory: true }],
+      ])),
+    })
+
+    await expect(service.buildDeletePlan("workflow-root")).resolves.toEqual(expect.objectContaining({
+      imported: true,
+      isEntrypoint: true,
+      cleanupCandidates: [{ workflowId: "workflow-safe", name: "可清理" }],
+      retainedChildren: [{ workflowId: "workflow-retained", name: "保留", reason: "history" }],
+    }))
   })
 })
