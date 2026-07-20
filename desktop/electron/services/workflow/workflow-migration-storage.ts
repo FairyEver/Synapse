@@ -14,7 +14,7 @@ import {
   readBinaryFile,
   writeBinaryFileAtomic,
 } from "../../runtime/data-repo"
-import { hasSameFileSnapshot, isPathInside } from "../fs-utils"
+import { hasSameFileSnapshot, isPathInside, readFileHandleUpTo } from "../fs-utils"
 import {
   WORKFLOW_LEGACY_BASELINE_VERSION,
   WORKFLOW_SCHEMA_VERSION,
@@ -366,13 +366,7 @@ async function readVerifiedLegacyVersionFile(
       throw new Error("Legacy workflow version changed before it was read.")
     }
 
-    const buffer = Buffer.allocUnsafe(maximumBytes + 1)
-    let offset = 0
-    while (offset < buffer.byteLength) {
-      const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, offset)
-      if (bytesRead === 0) break
-      offset += bytesRead
-    }
+    const buffer = await readFileHandleUpTo(handle, maximumBytes + 1)
 
     const [afterRead, pathAfterRead, realPathAfterRead] = await Promise.all([
       handle.stat({ bigint: true }),
@@ -388,7 +382,7 @@ async function readVerifiedLegacyVersionFile(
     ) {
       throw new Error("Legacy workflow version changed while it was read.")
     }
-    return buffer.subarray(0, offset)
+    return buffer
   } finally {
     await handle.close()
   }

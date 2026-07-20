@@ -68,6 +68,74 @@ describe("SynapseSkillService", () => {
       .rejects.toThrow("安装源不可用")
   })
 
+  it("expires idle prepared sources when the renderer does not release them", async () => {
+    const packageRoot = await createPackageRoot()
+    let now = 100
+    const service = createSynapseSkillService({
+      now: () => now,
+      packageRoot,
+      preparedSourceTtlMs: 500,
+    })
+    const source = await service.prepareInstallSource()
+
+    now = 600
+
+    expect(service.hasPreparedSource(source.preparedSourceId, source.sourceIdentity)).toBe(false)
+  })
+
+  it("does not expire a prepared source while it is installing", async () => {
+    const packageRoot = await createPackageRoot()
+    let now = 100
+    const service = createSynapseSkillService({
+      now: () => now,
+      packageRoot,
+      preparedSourceTtlMs: 500,
+    })
+    const source = await service.prepareInstallSource()
+    await service.beginPreparedInstall(source.preparedSourceId, source.sourceIdentity)
+
+    now = 600
+
+    expect(service.hasPreparedSource(source.preparedSourceId, source.sourceIdentity)).toBe(true)
+  })
+
+  it("keeps a prepared source protected until every concurrent install ends", async () => {
+    const packageRoot = await createPackageRoot()
+    let now = 100
+    const service = createSynapseSkillService({
+      now: () => now,
+      packageRoot,
+      preparedSourceTtlMs: 500,
+    })
+    const source = await service.prepareInstallSource()
+    await service.beginPreparedInstall(source.preparedSourceId, source.sourceIdentity)
+    await service.beginPreparedInstall(source.preparedSourceId, source.sourceIdentity)
+    await service.endPreparedInstall(source.preparedSourceId, source.sourceIdentity)
+
+    now = 600
+
+    expect(service.hasPreparedSource(source.preparedSourceId, source.sourceIdentity)).toBe(true)
+  })
+
+  it("evicts the least recently used idle source when the cache reaches its limit", async () => {
+    const packageRoot = await createPackageRoot()
+    const ids = ["first", "second", "third"]
+    const service = createSynapseSkillService({
+      createId: () => ids.shift()!,
+      maxPreparedSources: 2,
+      packageRoot,
+    })
+    const first = await service.prepareInstallSource()
+    const second = await service.prepareInstallSource()
+    expect(service.hasPreparedSource(first.preparedSourceId, first.sourceIdentity)).toBe(true)
+
+    const third = await service.prepareInstallSource()
+
+    expect(service.hasPreparedSource(first.preparedSourceId, first.sourceIdentity)).toBe(true)
+    expect(service.hasPreparedSource(second.preparedSourceId, second.sourceIdentity)).toBe(false)
+    expect(service.hasPreparedSource(third.preparedSourceId, third.sourceIdentity)).toBe(true)
+  })
+
   it("defers release across adjacent installs in a batch", async () => {
     vi.useFakeTimers()
     try {

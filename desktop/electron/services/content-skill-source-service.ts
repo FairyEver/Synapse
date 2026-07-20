@@ -22,6 +22,7 @@ import {
 } from "./content-skill-attachment-constraints"
 import { sanitizeError } from "./error-sanitize"
 import { createMainLogger } from "./log-store"
+import { readFileHandleUpTo } from "./fs-utils"
 import { assertSkillRuntimeEnvByteLength } from "./skill-env/file-policy"
 
 const logger = createMainLogger("service.content-skill-source")
@@ -407,20 +408,14 @@ async function readVerifiedRegularFile(
       throwInvalid(field, changedMessage)
     }
 
-    const buffer = Buffer.allocUnsafe(expected.size + 1)
-    let offset = 0
-    while (offset < buffer.byteLength) {
-      const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, offset)
-      if (bytesRead === 0) break
-      offset += bytesRead
-    }
+    const buffer = await readFileHandleUpTo(handle, expected.size + 1)
 
     const [afterRead, pathAfterRead] = await Promise.all([
       handle.stat(),
       lstat(filePath),
     ])
     if (
-      offset !== expected.size
+      buffer.byteLength !== expected.size
       || pathAfterRead.isSymbolicLink()
       || !pathAfterRead.isFile()
       || !sameFileSnapshot(expected, afterRead)
@@ -428,7 +423,7 @@ async function readVerifiedRegularFile(
     ) {
       throwInvalid(field, changedMessage)
     }
-    return Uint8Array.from(buffer.subarray(0, offset))
+    return Uint8Array.from(buffer)
   } finally {
     await handle.close()
   }

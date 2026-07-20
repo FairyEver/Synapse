@@ -145,6 +145,21 @@ export const CONTENT_SKILL_IDENTITY_MAX_BYTES = 64 * 1024
 // Skill 环境变量声明最大数量：统一限制 .env.example 配置字段和密钥关联批量扫描的单次规模。
 export const SKILL_ENV_MAX_VARIABLES = 100
 
+// Synapse Skill 主进程 prepared source 的最大缓存条目数：限制 renderer 异常退出或释放 IPC 丢失后的累计占用。
+export const SYNAPSE_SKILL_PREPARED_SOURCE_MAX_ENTRIES = 4
+
+// Synapse Skill 主进程 prepared source 的闲置有效期（毫秒）：超过该时长且未安装中的来源会在下次访问时清理。
+export const SYNAPSE_SKILL_PREPARED_SOURCE_TTL_MS = 10 * 60 * 1000
+
+// Installer 本地 Skill 安装源缓存最大总字节数：限制待安装内容在主进程中的累计内存占用。
+export const INSTALLER_SOURCE_LOCAL_SKILL_CACHE_MAX_BYTES = 100 * 1024 * 1024
+
+// Installer 本地 Skill 安装源缓存最大条目数：限制未主动释放的本地目录来源数量。
+export const INSTALLER_SOURCE_LOCAL_SKILL_CACHE_MAX_ENTRIES = 4
+
+// Installer 临时安装源闲置有效期（毫秒）：控制本地 Skill 和内联 Rule 来源的自动过期时间。
+export const INSTALLER_SOURCE_TTL_MS = 10 * 60 * 1000
+
 // Skill 环境变量关联扫描单个受信任根最多访问的一级条目数：避免异常大的编辑器 Skill 根长期占用主进程。
 export const SKILL_ENV_BINDING_SCAN_MAX_ROOT_ENTRIES = 1_000
 

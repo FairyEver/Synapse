@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from "node:crypto"
 import { mkdir, realpath, writeFile } from "node:fs/promises"
 import path from "node:path"
+import {
+  INSTALLER_SOURCE_LOCAL_SKILL_CACHE_MAX_BYTES,
+  INSTALLER_SOURCE_LOCAL_SKILL_CACHE_MAX_ENTRIES,
+  INSTALLER_SOURCE_TTL_MS,
+} from "../../config"
 import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
 import { slugifySkillName } from "../../src/definitions/editor/shared-skill-frontmatter"
 import { normalizeContentNameInput, validateContentNameInput } from "../../src/lib/content-name-input"
@@ -44,10 +49,6 @@ type InstallerSourceServiceOptions = {
   readonly sourceTtlMs?: number
 }
 
-const DEFAULT_LOCAL_SKILL_CACHE_MAX_BYTES = 100 * 1024 * 1024
-const DEFAULT_LOCAL_SKILL_CACHE_MAX_ENTRIES = 4
-const DEFAULT_INSTALLER_SOURCE_TTL_MS = 10 * 60 * 1000
-
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex")
 }
@@ -73,7 +74,7 @@ class InstallerSourceService {
   }
 
   private pruneSources(timestamp = this.now()): void {
-    const ttlMs = this.options.sourceTtlMs ?? DEFAULT_INSTALLER_SOURCE_TTL_MS
+    const ttlMs = this.options.sourceTtlMs ?? INSTALLER_SOURCE_TTL_MS
     for (const [id, stored] of this.localSkills) {
       if (timestamp - stored.lastAccessedAt >= ttlMs) this.localSkills.delete(id)
     }
@@ -83,8 +84,8 @@ class InstallerSourceService {
   }
 
   private enforceLocalSkillBudget(): void {
-    const maxEntries = this.options.maxLocalSkillEntries ?? DEFAULT_LOCAL_SKILL_CACHE_MAX_ENTRIES
-    const maxBytes = this.options.maxLocalSkillBytes ?? DEFAULT_LOCAL_SKILL_CACHE_MAX_BYTES
+    const maxEntries = this.options.maxLocalSkillEntries ?? INSTALLER_SOURCE_LOCAL_SKILL_CACHE_MAX_ENTRIES
+    const maxBytes = this.options.maxLocalSkillBytes ?? INSTALLER_SOURCE_LOCAL_SKILL_CACHE_MAX_BYTES
     let totalBytes = Array.from(this.localSkills.values())
       .reduce((total, stored) => total + stored.byteLength, 0)
     while (this.localSkills.size > maxEntries || totalBytes > maxBytes) {

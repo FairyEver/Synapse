@@ -35,7 +35,7 @@ import type {
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
-import { hasSameFileSnapshot } from "../../services/fs-utils"
+import { hasSameFileSnapshot, readFileHandleUpTo } from "../../services/fs-utils"
 import { isSafeWorkflowId, isSafeWorkflowNodeId, isSafeWorkflowRunId } from "../../services/workflow/workflow-id"
 import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowEventForRenderer, sanitizeWorkflowOutputForHistory, sanitizeWorkflowRunSnapshot, sanitizeWorkflowRunStatus } from "../../services/workflow/run-snapshot-sanitize"
 import { checkCapabilityPermission } from "../../capabilities/permission-audit"
@@ -428,14 +428,7 @@ async function readWorkflowPackageFile(packagePath: string): Promise<{ bytes: Bu
       throw new Error("工作流包在读取前发生变化，请重新选择文件。")
     }
 
-    const buffer = Buffer.alloc(Number(opened.size))
-    let offset = 0
-    while (offset < buffer.length) {
-      const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset)
-      if (bytesRead === 0) break
-      offset += bytesRead
-    }
-    bytes = buffer.subarray(0, offset)
+    bytes = await readFileHandleUpTo(handle, Number(opened.size))
 
     const [afterRead, pathAfterRead] = await Promise.all([
       handle.stat({ bigint: true }),

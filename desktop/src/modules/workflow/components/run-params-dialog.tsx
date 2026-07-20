@@ -38,6 +38,7 @@ import type {
   WorkflowResourceRef,
 } from "@/types/workflow"
 import { MultiResourcePathField } from "./multi-resource-path-field"
+import { useWorkflowParamPresets } from "../hooks/use-workflow-param-presets"
 import { useWorkflowResourcePicker } from "../hooks/use-workflow-resource-picker"
 import type { WorkflowLastRunValues } from "../lib/run-param-last-values"
 
@@ -54,13 +55,22 @@ interface RunParamsDialogProps {
 
 export function RunParamsDialog({ open, workflowId, params, lastValues, onConfirm, onCancel }: RunParamsDialogProps) {
   const { chooseResource } = useWorkflowResourcePicker()
+  const {
+    deletePreset,
+    loadError: presetLoadError,
+    loading: presetsLoading,
+    presets,
+    resolveResourceEntryTypes,
+    savePreset,
+  } = useWorkflowParamPresets({
+    enabled: open && Boolean(workflowId) && params.length > 0,
+    workflowId,
+  })
   const [values, setValues] = useState<Record<string, WorkflowParamPresetValue>>(() => buildInitialValues(params, lastValues?.values))
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [incompatibleValueErrors, setIncompatibleValueErrors] = useState<Record<string, string>>(() => buildLastRunCompatibilityErrors(params, lastValues))
-  const [presets, setPresets] = useState<WorkflowParamPreset[]>([])
   const [selectedPresetId, setSelectedPresetId] = useState<string>(NO_PRESET_VALUE)
-  const [presetsLoading, setPresetsLoading] = useState(false)
   const [presetResolving, setPresetResolving] = useState(false)
   const presetResolutionSequence = useRef(0)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
@@ -100,33 +110,14 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     presetResolutionSequence.current += 1
     setValues(buildInitialValues(params, lastValues?.values))
 
-    const presetBridge = window.synapse?.workflowParamPresets
-    if (!presetBridge || !workflowId || params.length === 0) {
-      setPresets([])
-      setPresetsLoading(false)
-      return
-    }
-
-    let cancelled = false
-    setPresetsLoading(true)
-    presetBridge.list(workflowId)
-      .then((items) => {
-        if (!cancelled) setPresets(items)
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setPresets([])
-          toast.error("读取预设失败")
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setPresetsLoading(false)
-      })
     return () => {
-      cancelled = true
       presetResolutionSequence.current += 1
     }
   }, [open, params, lastValues, workflowId])
+
+  useEffect(() => {
+    if (presetLoadError) toast.error(presetLoadError)
+  }, [presetLoadError])
 
   function validate(): boolean {
     const next: Record<string, string> = { ...incompatibleValueErrors }
@@ -259,20 +250,10 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     setErrors(cardinalityErrors)
     if (!hasPresetResourceValue(params, preset.values)) return
 
-    const presetBridge = window.synapse?.workflowParamPresets
-    if (!presetBridge) {
-      const nextErrors = buildPresetResourceCheckErrors(params, preset.values, cardinalityErrors)
-      setIncompatibleValueErrors(nextErrors)
-      setErrors(nextErrors)
-      return
-    }
     setPresetResolving(true)
     try {
-      const resourceEntryTypes = await presetBridge.resolveResourceEntryTypes(preset.id)
+      const resourceEntryTypes = await resolveResourceEntryTypes(preset.id)
       if (presetResolutionSequence.current !== resolutionSequence) return
-      setPresets((current) => current.map((item) => item.id === preset.id
-        ? { ...item, resourceEntryTypes }
-        : item))
       const nextErrors = buildResourceCompatibilityErrors(params, preset.values, resourceEntryTypes)
       setIncompatibleValueErrors(nextErrors)
       setErrors(nextErrors)
@@ -310,21 +291,14 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
       return
     }
 
-    const presetBridge = window.synapse?.workflowParamPresets
-    if (!presetBridge) {
-      toast.error("保存预设失败")
-      return
-    }
-
     setSavingPreset(true)
     try {
-      const saved = await presetBridge.save({
+      const saved = await savePreset({
         workflowId,
         name,
         values,
         ...(overwritePresetId ? { overwritePresetId } : {}),
       })
-      setPresets((current) => upsertPreset(current, saved))
       setSelectedPresetId(saved.id)
       setSaveDialogOpen(false)
       setOverwriteConfirm(null)
@@ -349,12 +323,9 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
 
   async function handleDeletePreset(): Promise<void> {
     if (!selectedPreset || presetResolving) return
-    const presetBridge = window.synapse?.workflowParamPresets
-    if (!presetBridge) return
     setDeletingPreset(true)
     try {
-      await presetBridge.delete(selectedPreset.id)
-      setPresets((current) => current.filter((preset) => preset.id !== selectedPreset.id))
+      await deletePreset(selectedPreset.id)
       setSelectedPresetId(NO_PRESET_VALUE)
       setDeleteConfirmOpen(false)
       toast("预设已删除")
@@ -780,12 +751,6 @@ function nextPresetName(existing: readonly WorkflowParamPreset[]): string {
   let index = 2
   while (names.has(`${base} ${index}`)) index += 1
   return `${base} ${index}`
-}
-
-function upsertPreset(presets: WorkflowParamPreset[], nextPreset: WorkflowParamPreset): WorkflowParamPreset[] {
-  const next = presets.filter((preset) => preset.id !== nextPreset.id)
-  next.push(nextPreset)
-  return next.sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
 function isWorkflowResourceRef(value: unknown): value is WorkflowResourceRef {

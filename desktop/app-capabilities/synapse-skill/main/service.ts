@@ -2,6 +2,10 @@ import { createHash, randomUUID } from "node:crypto"
 import { copyFile, mkdir, readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 import { app } from "electron"
+import {
+  SYNAPSE_SKILL_PREPARED_SOURCE_MAX_ENTRIES,
+  SYNAPSE_SKILL_PREPARED_SOURCE_TTL_MS,
+} from "../../../config"
 import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
 import type { SynapseContentDetail } from "../../../src/types/content"
 import {
@@ -18,10 +22,14 @@ import type { SynapseSkillInstallerSource } from "../shared/schema"
 
 type SynapseSkillServiceDeps = {
   readonly createId?: () => string
+  readonly maxPreparedSources?: number
+  readonly now?: () => number
   readonly packageRoot?: string
+  readonly preparedSourceTtlMs?: number
 }
 
 type PreparedSynapseSkill = {
+  lastAccessedAt: number
   readonly packageRoot: string
   readonly source: SynapseSkillInstallerSource
 }
@@ -87,18 +95,26 @@ function stripSkillFrontmatter(content: string): string {
 
 class SynapseSkillService {
   private readonly createId: () => string
+  private readonly maxPreparedSources: number
+  private readonly now: () => number
   private readonly packageRoot: string
+  private readonly preparedSourceTtlMs: number
   private readonly preparedById = new Map<string, PreparedSynapseSkill>()
-  private readonly installingSourceIds = new Set<string>()
+  private readonly installingSourceCounts = new Map<string, number>()
   private readonly releaseAfterInstallSourceIds = new Set<string>()
   private readonly releaseTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   constructor(deps: SynapseSkillServiceDeps = {}) {
     this.createId = deps.createId ?? randomUUID
+    this.maxPreparedSources = deps.maxPreparedSources ?? SYNAPSE_SKILL_PREPARED_SOURCE_MAX_ENTRIES
+    this.now = deps.now ?? Date.now
     this.packageRoot = deps.packageRoot ?? defaultPackageRoot()
+    this.preparedSourceTtlMs = deps.preparedSourceTtlMs ?? SYNAPSE_SKILL_PREPARED_SOURCE_TTL_MS
   }
 
   async prepareInstallSource(): Promise<SynapseSkillInstallerSource> {
+    const timestamp = this.now()
+    this.prunePreparedSources(timestamp)
     const draft = await this.readDraft()
     const preparedSourceId = `${SYNAPSE_SKILL_PREPARED_SOURCE_PREFIX}${this.createId()}`
     const sourceFingerprint = await computePackageFingerprint(this.packageRoot)
@@ -114,12 +130,18 @@ class SynapseSkillService {
       sourceFingerprint,
     }
 
-    this.preparedById.set(preparedSourceId, { packageRoot: this.packageRoot, source })
+    this.preparedById.set(preparedSourceId, {
+      lastAccessedAt: this.now(),
+      packageRoot: this.packageRoot,
+      source,
+    })
+    this.enforcePreparedSourceCapacity(preparedSourceId)
     return source
   }
 
   hasPreparedSource(sourceId: string, contentId: string): boolean {
-    return contentId === SYNAPSE_SKILL_SOURCE_IDENTITY && this.preparedById.has(sourceId)
+    if (contentId !== SYNAPSE_SKILL_SOURCE_IDENTITY) return false
+    return this.getPrepared(sourceId) !== undefined
   }
 
   async readPreparedSkill(
@@ -195,19 +217,24 @@ class SynapseSkillService {
       clearTimeout(releaseTimer)
       this.releaseTimers.delete(sourceId)
     }
-    this.installingSourceIds.add(sourceId)
+    this.installingSourceCounts.set(sourceId, (this.installingSourceCounts.get(sourceId) ?? 0) + 1)
     return Promise.resolve()
   }
 
   endPreparedInstall(sourceId: string, contentId: string): Promise<void> {
     this.requirePrepared(sourceId, contentId)
-    this.installingSourceIds.delete(sourceId)
-    if (this.releaseAfterInstallSourceIds.has(sourceId)) {
+    const remainingInstalls = Math.max((this.installingSourceCounts.get(sourceId) ?? 1) - 1, 0)
+    if (remainingInstalls > 0) {
+      this.installingSourceCounts.set(sourceId, remainingInstalls)
+    } else {
+      this.installingSourceCounts.delete(sourceId)
+    }
+    if (remainingInstalls === 0 && this.releaseAfterInstallSourceIds.has(sourceId)) {
       const existingTimer = this.releaseTimers.get(sourceId)
       if (existingTimer) clearTimeout(existingTimer)
       const releaseTimer = setTimeout(() => {
         this.releaseTimers.delete(sourceId)
-        if (!this.installingSourceIds.has(sourceId)) {
+        if (!this.installingSourceCounts.has(sourceId)) {
           this.deletePreparedSource(sourceId)
         }
       }, 0)
@@ -223,7 +250,7 @@ class SynapseSkillService {
 
   releaseInstallSource(sourceId: string): Promise<void> {
     if (!this.preparedById.has(sourceId)) return Promise.resolve()
-    if (this.installingSourceIds.has(sourceId)) {
+    if (this.installingSourceCounts.has(sourceId)) {
       this.releaseAfterInstallSourceIds.add(sourceId)
       return Promise.resolve()
     }
@@ -236,11 +263,45 @@ class SynapseSkillService {
   }
 
   private requirePrepared(sourceId: string, contentId: string): PreparedSynapseSkill {
-    const prepared = this.preparedById.get(sourceId)
+    const prepared = this.getPrepared(sourceId)
     if (!prepared || contentId !== SYNAPSE_SKILL_SOURCE_IDENTITY) {
       throw new Error("Synapse Skill 安装源不可用。")
     }
     return prepared
+  }
+
+  private getPrepared(sourceId: string): PreparedSynapseSkill | undefined {
+    const timestamp = this.now()
+    this.prunePreparedSources(timestamp)
+    const prepared = this.preparedById.get(sourceId)
+    if (!prepared) return undefined
+    prepared.lastAccessedAt = timestamp
+    this.preparedById.delete(sourceId)
+    this.preparedById.set(sourceId, prepared)
+    return prepared
+  }
+
+  private prunePreparedSources(timestamp: number): void {
+    for (const [sourceId, prepared] of this.preparedById) {
+      if (
+        !this.installingSourceCounts.has(sourceId)
+        && timestamp - prepared.lastAccessedAt >= this.preparedSourceTtlMs
+      ) {
+        this.deletePreparedSource(sourceId)
+      }
+    }
+  }
+
+  private enforcePreparedSourceCapacity(protectedSourceId: string): void {
+    while (this.preparedById.size > this.maxPreparedSources) {
+      const candidate = Array.from(this.preparedById.keys())
+        .find((sourceId) => sourceId !== protectedSourceId && !this.installingSourceCounts.has(sourceId))
+      if (!candidate) {
+        this.deletePreparedSource(protectedSourceId)
+        throw new Error("Synapse Skill 安装源缓存正忙，请稍后重试。")
+      }
+      this.deletePreparedSource(candidate)
+    }
   }
 
   private deletePreparedSource(sourceId: string): void {
@@ -248,7 +309,7 @@ class SynapseSkillService {
     if (releaseTimer) clearTimeout(releaseTimer)
     this.releaseTimers.delete(sourceId)
     this.preparedById.delete(sourceId)
-    this.installingSourceIds.delete(sourceId)
+    this.installingSourceCounts.delete(sourceId)
     this.releaseAfterInstallSourceIds.delete(sourceId)
   }
 }

@@ -5,7 +5,7 @@ import path from "node:path"
 
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { CONTENT_SKILL_IDENTITY_MAX_BYTES } from "../../config"
-import { hasSameFileSnapshot, isFileNotFoundError, isPathInside } from "./fs-utils"
+import { hasSameFileSnapshot, isFileNotFoundError, isPathInside, readFileHandleUpTo } from "./fs-utils"
 import { SYNAPSE_SKILL_ID_FILE } from "./content-skill-source-service"
 
 type ContentSkillIdentity = {
@@ -125,15 +125,9 @@ async function readVerifiedContentIdentityFile(
 }
 
 async function readBoundedContentIdentityFile(handle: Awaited<ReturnType<typeof open>>): Promise<string> {
-  const buffer = Buffer.allocUnsafe(CONTENT_SKILL_IDENTITY_MAX_BYTES + 1)
-  let offset = 0
-  while (offset < buffer.byteLength) {
-    const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, offset)
-    if (bytesRead === 0) break
-    offset += bytesRead
-  }
-  if (offset > CONTENT_SKILL_IDENTITY_MAX_BYTES) throw new ContentSkillIdentityTooLargeError()
-  return buffer.subarray(0, offset).toString("utf8")
+  const buffer = await readFileHandleUpTo(handle, CONTENT_SKILL_IDENTITY_MAX_BYTES + 1)
+  if (buffer.byteLength > CONTENT_SKILL_IDENTITY_MAX_BYTES) throw new ContentSkillIdentityTooLargeError()
+  return buffer.toString("utf8")
 }
 
 async function checkContentIdentityReadPermission(
