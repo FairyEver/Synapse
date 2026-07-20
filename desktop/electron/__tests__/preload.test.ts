@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises"
 import path from "node:path"
+import { build } from "esbuild"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { SynapseBridge } from "../../src/types/bridge"
 
@@ -55,18 +56,21 @@ describe("preload bridge", () => {
     vi.clearAllMocks()
   })
 
-  it("keeps preload free of local runtime imports for Electron sandbox loading", async () => {
-    const source = await readFile(path.resolve(__dirname, "..", "preload.ts"), "utf8")
-    const imports = source.match(/import[\s\S]*?from\s+["'][^"']+["']/g) ?? []
-    const localRuntimeImports = imports.filter((statement) => {
-      const moduleMatch = statement.match(/from\s+["']([^"']+)["']/)
-      const modulePath = moduleMatch?.[1] ?? ""
-      return !/^import\s+type\b/.test(statement.trim()) && modulePath.startsWith(".")
+  it("bundles preload into a single script for Electron sandbox loading", async () => {
+    const result = await build({
+      entryPoints: [path.resolve(__dirname, "..", "preload.ts")],
+      bundle: true,
+      platform: "node",
+      target: "es2022",
+      format: "cjs",
+      external: ["electron"],
+      write: false,
+      logLevel: "silent",
     })
+    const output = result.outputFiles[0]?.text ?? ""
 
-    expect(localRuntimeImports).toEqual([
-      'import { IPC_CHANNELS } from "./generated/ipc-channels.generated"',
-    ])
+    expect(output).toContain('require("electron")')
+    expect(output).not.toMatch(/require\(["']\.{1,2}\//)
   })
 
   it("subscribes repository listeners to the EventBus domain channel", async () => {

@@ -141,6 +141,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - 修改工作流、Scheduler、Automation、Content、Rule、Skill、Prompt 等用户可操作能力时，如果该能力有对应 MCP 工具、系统 Skill 包或 Agent 使用指南，必须在功能改动完成后同步更新对应 MCP 能力描述/schema、Skill 包和指南文档；不要只改产品功能本体。
 - Synapse MCP 的 Agent 使用指南归属于系统 Skill 包 `desktop/app-capabilities/synapse-skill/skill-package/`，不属于资源仓库内置资源。修改 Database、Drive、Workflow、Automation、Content、Model Price、Variable、Repository 等 MCP 域能力时，必须同步更新该包下对应 `<domain>/index.md` 和必要的 `<domain>/api-reference.md`；不要再新增或维护旧式 `desktop/resources/templates/skills/synapse-*-mcp/` 或资源仓库内置 Skill 模板。
 - 修改 Electron 打包边界时必须把 `app.asar` 当成启动关键路径处理。凡是改动 `desktop/package.json` 的 `files`、`asarUnpack`、`extraResources`，或新增/移动 Electron worker、原生模块、可执行文件、运行时资源，都必须同步确认 sourcemap、unpacked 文件和 packed 文件不会错位；不要只把 `.js` 加入 `asarUnpack` 而忽略同目录产物如 `.js.map`。Claude SDK native binary（例如 `node_modules/@anthropic-ai/claude-agent-sdk-*/claude` 或 `claude.exe`）属于启动关键 runtime 文件；只写 `asarUnpack` 不够，必须校验证明目标平台的实际二进制已落在 `app.asar.unpacked` 中。发版前必须用 `pnpm --filter @synapse/desktop run check:packaged-asar` 或等价校验证明 `package.json`、主进程入口、packed hash 和 unpacked 文件存在性正常。
+- `sandbox: true` 的 Electron preload 必须通过 `build:preload` 打成不含相对 `require()` 的单文件；不得把 TypeScript 编译生成的多文件 CommonJS preload 直接交给沙箱窗口。所有窗口统一复用该构建产物，正式包校验必须检查这一约束。
 
 ### 通用数据版本迁移器
 

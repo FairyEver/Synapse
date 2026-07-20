@@ -31,6 +31,7 @@ const MAX_READ_BYTES = 100 * 1024
 export function resolveLocalReference(
   input: string,
   workspacePath: string,
+  options: { readonly allowOutsideWorkspace?: boolean } = {},
 ): LocalReference | null {
   const normalized = normalizeReferenceInput(input)
   if (!normalized || isWebUrl(normalized)) return null
@@ -49,7 +50,7 @@ export function resolveLocalReference(
   const absolutePath = path.isAbsolute(candidate)
     ? path.normalize(candidate)
     : path.resolve(workspacePath, candidate)
-  if (!isInsideWorkspace(absolutePath, workspacePath)) return null
+  if (!options.allowOutsideWorkspace && !isInsideWorkspace(absolutePath, workspacePath)) return null
   return {
     raw: input,
     path: absolutePath,

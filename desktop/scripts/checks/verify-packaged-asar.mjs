@@ -104,6 +104,24 @@ function verifyPackedTextIncludes(buffer, dataOffset, header, relativePath, expe
   }
 }
 
+function verifySandboxedPreloadBundle(buffer, dataOffset, header, failures) {
+  const relativePath = "dist-electron/electron/preload.js"
+  const node = findNode(header, relativePath)
+  if (!node || node.unpacked || node.offset === undefined || node.size === undefined) {
+    failures.push(`sandboxed preload bundle is missing from packed app.asar: ${relativePath}`)
+    return
+  }
+
+  try {
+    const source = readPackedFile(buffer, dataOffset, node).toString("utf8")
+    if (/require\(["']\.{1,2}\//.test(source)) {
+      failures.push(`sandboxed preload bundle contains a relative require: ${relativePath}`)
+    }
+  } catch (error) {
+    failures.push(`${relativePath}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 function verifyUnpackedNode(header, unpackedPath, relativePath, failures, message) {
   const node = findNode(header, relativePath)
   if (!node) {
@@ -405,6 +423,7 @@ function verifyResources(resourcesPath, label) {
     failures,
     "packaged Claude runtime diagnostics are missing from app.asar",
   )
+  verifySandboxedPreloadBundle(buffer, dataOffset, header, failures)
   verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures)
   verifyClaudeRuntime(unpackedPath, failures)
   verifyExtraResources(resourcesPath, failures)

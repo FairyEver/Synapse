@@ -11,7 +11,7 @@ import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { DataRepository } from "../../runtime/data-repo"
 import { quoteWindowsCommandArg } from "../../runtime/process/controlled-runner"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
-import { resolveLocalReference, isResolvedInsideWorkspace } from "../../services/agent-runtime/references"
+import { resolveLocalReference } from "../../services/agent-runtime/references"
 import type {
   CCProvider,
   CcSwitchImportSource,
@@ -786,11 +786,10 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     handler: async (ctx, request: OpenReferenceRequest) => {
       try {
         const { project } = await resolveProjectAgent(ctx.resolve, request.projectId)
-        const reference = resolveLocalReference(request.reference, project.localPath)
+        const reference = resolveLocalReference(request.reference, project.localPath, {
+          allowOutsideWorkspace: true,
+        })
         if (!reference) throw new Error("Reference is outside the workspace or invalid.")
-        if (!await isResolvedInsideWorkspace(reference, project.localPath)) {
-          throw new Error("Reference is outside the workspace or invalid.")
-        }
         const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
         const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
         const actor = { kind: "user" as const, id: "renderer" }

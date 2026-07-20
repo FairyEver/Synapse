@@ -27,6 +27,14 @@ describe("agent local references", () => {
     expect(resolveLocalReference("../outside.ts", workspace)).toBeNull()
   })
 
+  it("resolves outside paths when opening a local reference explicitly allows them", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-ref-workspace-"))
+    const outside = path.join(path.dirname(workspace), "Easy Worklog", "待发送", "工作总结.md")
+
+    expect(resolveLocalReference(outside, workspace, { allowOutsideWorkspace: true }))
+      .toEqual(expect.objectContaining({ path: outside }))
+  })
+
   it("resolves sentence-punctuated local references from agent messages", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-ref-punctuated-"))
     await fs.mkdir(path.join(workspace, "src"))

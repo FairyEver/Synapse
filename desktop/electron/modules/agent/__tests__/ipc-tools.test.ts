@@ -111,6 +111,18 @@ describe("agent tool IPC methods", () => {
     }))
   })
 
+  it("opens an absolute Agent file reference outside the project", async () => {
+    const auditSink = fakeAuditSink()
+    const outsidePath = path.resolve("/outside/Easy Worklog/待发送/工作总结.md")
+
+    await expect(toolMethods.openReference.handler(createContext({ auditSink }), {
+      projectId: "project-1",
+      reference: outsidePath,
+    })).resolves.toEqual({ ok: true, path: outsidePath })
+
+    expect(electronMock.shell.openPath).toHaveBeenCalledWith(outsidePath)
+  })
+
   it("escapes Windows editor shim line jump targets before cmd parses them", async () => {
     const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32")
     const auditSink = fakeAuditSink()
