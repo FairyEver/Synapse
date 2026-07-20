@@ -173,7 +173,7 @@ describe("AgentPersonasModule black-box behavior", () => {
     expect(document.body.querySelector("#agent-persona-description")).toBeNull()
     expect(document.body.querySelector("#agent-persona-system-prompt")).toBeNull()
     expect(document.body.querySelector("#agent-persona-tool-policy-readonly")).toBeNull()
-    expect(buttonWithText("跟随对话")).toBeTruthy()
+    expect(buttonWithText("未绑定")).toBeTruthy()
   })
 })
 

@@ -294,7 +294,7 @@ describe("AgentPersonasModule", () => {
     await setFieldValue("#agent-persona-name", "翻译助手")
     await setFieldValue("#agent-persona-description", "处理中英文本。")
     await setFieldValue("#agent-persona-system-prompt", "你是翻译助手。")
-    await clickButton("跟随对话")
+    await clickButton("未绑定")
     await clickButton("选择 Sonnet 模型")
     await setSelectValue("#agent-persona-tool-policy-mode", "allowlist")
     await clickButton("选择工具")
@@ -391,7 +391,7 @@ describe("AgentPersonasModule", () => {
     expect(document.body.querySelector("#agent-persona-system-prompt")).toBeNull()
     expect(document.body.querySelector("#agent-persona-tool-policy-readonly")).toBeNull()
 
-    await clickButton("跟随对话")
+    await clickButton("未绑定")
     await clickButton("选择 Sonnet 模型")
     await clickButton("保存模型")
 
@@ -413,8 +413,8 @@ describe("AgentPersonasModule", () => {
       await renderModule()
       await clickButtonByLabel("配置模型：中英翻译")
 
-      await clickButtonByLabel("恢复为跟随对话")
-      expect(buttonWithText("跟随对话")).toBeTruthy()
+      await clickButtonByLabel("取消模型绑定")
+      expect(buttonWithText("未绑定")).toBeTruthy()
       await clickButton("保存模型")
 
       expect(bridge.updateBuiltinModel).toHaveBeenCalledWith({
