@@ -62,7 +62,7 @@ esac
 
 docker compose --env-file .env config >/dev/null
 
-for key in USER_ACCESS_JWT_SECRET USER_ACCESS_TOKEN_MINUTES USER_REFRESH_TOKEN_DAYS APP_PUBLIC_URL DATABASE_POOL_SIZE; do
+for key in USER_ACCESS_JWT_SECRET DESKTOP_UPDATE_INTENT_SECRET USER_ACCESS_TOKEN_MINUTES USER_REFRESH_TOKEN_DAYS APP_PUBLIC_URL DATABASE_POOL_SIZE; do
   value=$(read_env_value "$key")
   if [ -z "$value" ]; then
     echo "$key missing"

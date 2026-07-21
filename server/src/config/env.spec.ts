@@ -7,6 +7,8 @@ import {
   loadEnv,
 } from "./env"
 
+const productionUpdateIntentSecret = "update-intent-secret-update-intent-secret-update-intent-secret-64"
+
 describe("loadEnv", () => {
   it("parses required production settings", () => {
     const env = loadEnv({
@@ -16,6 +18,7 @@ describe("loadEnv", () => {
       ADMIN_PASSWORD: "change-me-now!",
       ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+      DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
       APP_PUBLIC_URL: "https://synapse.test",
       SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
       SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
@@ -29,6 +32,7 @@ describe("loadEnv", () => {
     expect(env.databasePoolSize).toBe(10)
     expect(env.adminEmail).toBe("admin@d2.com")
     expect(env.appPublicUrl).toBe("https://synapse.test")
+    expect(env.desktopUpdateIntentSecret).toBe(productionUpdateIntentSecret)
     expect(env.driveLocalRoot).toBe("/app/data/drive")
     expect(isSkillRepositoryCosConfigured(env)).toBe(true)
     expect(env.trustProxy).toBe(false)
@@ -60,6 +64,69 @@ describe("loadEnv", () => {
     ).toThrow("APP_PUBLIC_URL")
   })
 
+  it("rejects a missing desktop update intent secret in production", () => {
+    expect(() =>
+      loadEnv({
+        NODE_ENV: "production",
+        DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
+        ADMIN_EMAIL: "admin@d2.com",
+        ADMIN_PASSWORD: "change-me-now!",
+        ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+        USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+        APP_PUBLIC_URL: "https://synapse.test",
+        SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
+        SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
+        SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
+        SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
+        SKILL_REPOSITORY_COS_REGION: "ap-beijing",
+      }),
+    ).toThrow("DESKTOP_UPDATE_INTENT_SECRET")
+  })
+
+  it("rejects a desktop update intent secret reused from either JWT domain in production", () => {
+    const productionEnv = {
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
+      ADMIN_EMAIL: "admin@d2.com",
+      ADMIN_PASSWORD: "change-me-now!",
+      ADMIN_JWT_SECRET: "admin-secret-with-enough-length-32chars",
+      USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+      APP_PUBLIC_URL: "https://synapse.test",
+      SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
+      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
+      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
+      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
+      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
+    }
+
+    expect(() => loadEnv({
+      ...productionEnv,
+      DESKTOP_UPDATE_INTENT_SECRET: productionEnv.ADMIN_JWT_SECRET,
+    })).toThrow("DESKTOP_UPDATE_INTENT_SECRET")
+    expect(() => loadEnv({
+      ...productionEnv,
+      DESKTOP_UPDATE_INTENT_SECRET: productionEnv.USER_ACCESS_JWT_SECRET,
+    })).toThrow("DESKTOP_UPDATE_INTENT_SECRET")
+  })
+
+  it("rejects a weak desktop update intent secret in production", () => {
+    expect(() => loadEnv({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
+      ADMIN_EMAIL: "admin@d2.com",
+      ADMIN_PASSWORD: "change-me-now!",
+      ADMIN_JWT_SECRET: "admin-secret-with-enough-length-32chars",
+      USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+      DESKTOP_UPDATE_INTENT_SECRET: "short-update-secret",
+      APP_PUBLIC_URL: "https://synapse.test",
+      SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
+      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
+      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
+      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
+      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
+    })).toThrow("DESKTOP_UPDATE_INTENT_SECRET")
+  })
+
   it("rejects public app URL values that point at the API path", () => {
     expect(() =>
       loadEnv({
@@ -69,6 +136,7 @@ describe("loadEnv", () => {
         ADMIN_PASSWORD: "change-me-now!",
         ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+        DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
         APP_PUBLIC_URL: "https://synapse.test/api/",
         SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
         SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
@@ -88,6 +156,7 @@ describe("loadEnv", () => {
         ADMIN_PASSWORD: "change-me-now!",
         ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+        DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
         APP_PUBLIC_URL: "https://synapse.test",
         SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
         SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
@@ -105,6 +174,7 @@ describe("loadEnv", () => {
       ADMIN_PASSWORD: "change-me-now!",
       ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+      DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
       APP_PUBLIC_URL: "https://synapse.test",
       DRIVE_COS_SECRET_ID: "drive-secret-id",
       DRIVE_COS_SECRET_KEY: "drive-secret-key",
@@ -129,6 +199,7 @@ describe("loadEnv", () => {
         ADMIN_PASSWORD: "change-me-now!",
         ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+        DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
         APP_PUBLIC_URL: "https://synapse.test",
         SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
       }),
@@ -143,6 +214,7 @@ describe("loadEnv", () => {
       ADMIN_PASSWORD: "change-me-now!",
       ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+      DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
       APP_PUBLIC_URL: "https://synapse.test",
       SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
       SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",

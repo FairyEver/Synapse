@@ -122,6 +122,21 @@ describe("server deployment configuration", () => {
     expect(envExample).not.toContain("POSTGRES_PASSWORD=synapse")
   })
 
+  it("provisions the dedicated desktop update intent secret without an example secret value", () => {
+    const compose = readRepoFile("server/compose.yml")
+    const envExample = readRepoFile("server/.env.example")
+    const setupScript = readRepoFile("setup.sh")
+    const deployScript = readRepoFile("deploy.sh")
+    const readme = readRepoFile("server/README.md")
+
+    expect(compose).toContain("DESKTOP_UPDATE_INTENT_SECRET: ${DESKTOP_UPDATE_INTENT_SECRET:?DESKTOP_UPDATE_INTENT_SECRET is required}")
+    expect(envExample).toContain("DESKTOP_UPDATE_INTENT_SECRET=\n")
+    expect(setupScript).toContain("DESKTOP_UPDATE_INTENT_SECRET=$(openssl rand -hex 32)")
+    expect(setupScript).toContain("DESKTOP_UPDATE_INTENT_SECRET=$DESKTOP_UPDATE_INTENT_SECRET")
+    expect(deployScript).toContain("DESKTOP_UPDATE_INTENT_SECRET")
+    expect(readme).toContain("DESKTOP_UPDATE_INTENT_SECRET")
+  })
+
   it("includes the shared workspace package in the server Docker image", () => {
     const dockerfile = readRepoFile("server/Dockerfile")
 

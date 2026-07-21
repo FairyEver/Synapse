@@ -89,9 +89,9 @@ git clone https://YOUR_TOKEN@github.com/你的用户名/Synapse.git synapse
 
 ---
 
-### 第四步：生成 JWT Secret
+### 第四步：生成签名密钥
 
-在服务器上执行以下命令，把输出结果记下来，后面要用。
+在服务器上分别执行三次以下命令，把输出结果记下来，后面分别用于管理员 JWT、用户 JWT 和桌面更新凭证。三个值不得相同。
 
 ```bash
 cd /www/wwwroot/synapse/server
@@ -134,6 +134,8 @@ ADMIN_PASSWORD=设一个至少12位的密码
 # JWT 密钥（分别执行一次第四步，为管理员和用户令牌生成不同的 hex 字符）
 ADMIN_JWT_SECRET=粘贴第四步生成的那串hex字符
 USER_ACCESS_JWT_SECRET=再次生成并粘贴另一串hex字符
+# 桌面更新凭证密钥（再次生成独立的随机 hex 字符，不得复用上面两个 JWT 密钥）
+DESKTOP_UPDATE_INTENT_SECRET=第三次生成并粘贴的hex字符
 USER_ACCESS_TOKEN_MINUTES=15
 USER_REFRESH_TOKEN_DAYS=30
 
@@ -162,6 +164,7 @@ BACKUP_COS_REGION=备份桶地域，如 ap-beijing
 - `ADMIN_PASSWORD` 少于 12 位
 - `ADMIN_JWT_SECRET` 少于 32 位（必须用 `openssl rand -hex 32` 生成的 64 字符）
 - `USER_ACCESS_JWT_SECRET` 少于 32 位，或和 `ADMIN_JWT_SECRET` 相同
+- `DESKTOP_UPDATE_INTENT_SECRET` 少于 43 位，或与任一 JWT 密钥相同
 - `ADMIN_EMAIL` 不是合法邮箱格式
 - `APP_PUBLIC_URL` 不是用户可访问的站点根地址，或误填成了 `/api` 地址
 - `PORT` 不应和对外 Nginx 端口混用，默认保持 `3001`
@@ -267,6 +270,12 @@ curl http://127.0.0.1:3000/healthz
 - 管理后台：`https://api.yourdomain.com/console`
 
 用 `.env` 中的 `ADMIN_EMAIL` 和 `ADMIN_PASSWORD` 登录。登录后可创建普通账号注册邀请。
+
+## 桌面更新凭证
+
+- `POST /api/desktop/update-intent` 无需登录；生产环境只接受与 `APP_PUBLIC_URL` 完全相同的 `Origin`，返回 120 秒有效的完整 `synapse://update?token=...` 更新深链和过期时间。
+- `POST /api/desktop/update-intent/verify` 无需登录；请求体为 `{ "token": "..." }`，验证成功只返回 `{ "authorized": true }`。
+- 两个接口均严格限流并返回 `Cache-Control: no-store`。更新凭证不落库、有效期内允许重放；请求日志和错误日志不得记录 token、完整更新深链或验证请求体。
 
 ---
 
