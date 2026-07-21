@@ -25,6 +25,7 @@ vi.mock("../../services/log-store", () => ({
 
 import {
   attachActivateHandler,
+  attachOpenUrlHandler,
   attachProcessLevelLogging,
   attachSecondInstanceFocus,
   attachSecondInstanceProtocolHandler,
@@ -156,10 +157,24 @@ describe("app event bootstrap", () => {
       "/Electron",
       "synapse://auth/desktop/callback?code=auth-code",
       "synapse://skill-install?session=session-1",
+      "synapse://update?token=credential",
     ])
 
     expect(handleUrl).toHaveBeenNthCalledWith(1, "synapse://auth/desktop/callback?code=auth-code")
     expect(handleUrl).toHaveBeenNthCalledWith(2, "synapse://skill-install?session=session-1")
+    expect(handleUrl).toHaveBeenNthCalledWith(3, "synapse://update?token=credential")
+  })
+
+  it("routes macOS open-url update launches through the shared protocol callback", () => {
+    const handleUrl = vi.fn()
+    const preventDefault = vi.fn()
+
+    attachOpenUrlHandler(handleUrl)
+    const handler = electronMock.app.on.mock.calls.find(([event]) => event === "open-url")?.[1]
+    handler?.({ preventDefault }, "synapse://update")
+
+    expect(preventDefault).toHaveBeenCalledTimes(1)
+    expect(handleUrl).toHaveBeenCalledWith("synapse://update")
   })
 
   it("routes protocol URLs with case-insensitive schemes from a second-instance launch", () => {

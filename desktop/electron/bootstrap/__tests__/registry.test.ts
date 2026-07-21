@@ -268,7 +268,12 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.audit-sink",
       "core.database",
     ])
-    expect(byId.get("core.update")?.dependsOn).toEqual(["core.config", "core.window-manager"])
+    expect(byId.get("core.update")?.dependsOn).toEqual([
+      "core.config",
+      "core.window-manager",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
     expect(byId.get("repo.watch")?.dependsOn).toEqual(["core.config", "core.event-bus"])
     expect(byId.get("repo.maintenance")?.dependsOn).toEqual(["repo.watch", "repo.pending-pushes"])
     expect(byId.get("repo.pending-pushes")?.dependsOn).toEqual(["core.database"])

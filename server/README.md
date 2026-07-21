@@ -89,9 +89,9 @@ git clone https://YOUR_TOKEN@github.com/你的用户名/Synapse.git synapse
 
 ---
 
-### 第四步：生成 JWT Secret
+### 第四步：生成签名密钥
 
-在服务器上执行以下命令，把输出结果记下来，后面要用。
+在服务器上分别执行三次以下命令，把输出结果记下来，后面分别用于管理员 JWT、用户 JWT 和桌面更新凭证。三个值不得相同。
 
 ```bash
 cd /www/wwwroot/synapse/server
@@ -134,6 +134,8 @@ ADMIN_PASSWORD=设一个至少12位的密码
 # JWT 密钥（分别执行一次第四步，为管理员和用户令牌生成不同的 hex 字符）
 ADMIN_JWT_SECRET=粘贴第四步生成的那串hex字符
 USER_ACCESS_JWT_SECRET=再次生成并粘贴另一串hex字符
+# 桌面更新凭证密钥（再次生成独立的随机 hex 字符，不得复用上面两个 JWT 密钥）
+DESKTOP_UPDATE_INTENT_SECRET=第三次生成并粘贴的hex字符
 USER_ACCESS_TOKEN_MINUTES=15
 USER_REFRESH_TOKEN_DAYS=30
 
@@ -162,6 +164,7 @@ BACKUP_COS_REGION=备份桶地域，如 ap-beijing
 - `ADMIN_PASSWORD` 少于 12 位
 - `ADMIN_JWT_SECRET` 少于 32 位（必须用 `openssl rand -hex 32` 生成的 64 字符）
 - `USER_ACCESS_JWT_SECRET` 少于 32 位，或和 `ADMIN_JWT_SECRET` 相同
+- `DESKTOP_UPDATE_INTENT_SECRET` 少于 43 位，或与任一 JWT 密钥相同
 - `ADMIN_EMAIL` 不是合法邮箱格式
 - `APP_PUBLIC_URL` 不是用户可访问的站点根地址，或误填成了 `/api` 地址
 - `PORT` 不应和对外 Nginx 端口混用，默认保持 `3001`
@@ -268,6 +271,22 @@ curl http://127.0.0.1:3000/healthz
 
 用 `.env` 中的 `ADMIN_EMAIL` 和 `ADMIN_PASSWORD` 登录。登录后可创建普通账号注册邀请。
 
+## 桌面更新凭证
+
+- `POST /api/desktop/update-intent` 无需登录；生产环境只接受与 `APP_PUBLIC_URL` 完全相同的 `Origin`，返回 120 秒有效的完整 `synapse://update?token=...` 更新深链和过期时间。
+- `POST /api/desktop/update-intent/verify` 无需登录；请求体为 `{ "token": "..." }`，验证成功只返回 `{ "authorized": true }`。
+- 两个接口均严格限流并返回 `Cache-Control: no-store`。更新凭证不落库、有效期内允许重放；请求日志和错误日志不得记录 token、完整更新深链或验证请求体。
+- 该凭证防止第三方网页仅靠裸深链启动自动更新，不把公开签发接口当作本机恶意进程的安全边界。
+
+首次上线必须按顺序执行：
+
+1. 为生产环境配置独立的 `DESKTOP_UPDATE_INTENT_SECRET`，并确认 `APP_PUBLIC_URL=https://synapse.d2.pub`。
+2. 先部署服务端凭证接口和独立 `/desktop/update` 页面。
+3. 通过 `deploy.sh` 的部署后健康检查确认容器内页面、签发/验证链路及 `https://synapse.d2.pub/desktop/update` 公网入口可用。
+4. 用候选正式包从公开页面完成一次点击到安装的真实主路径，并复核旧客户端回退及主要失败场景；通过后再发布支持新更新深链的桌面客户端。
+
+在上述生产部署完成前，稳定公网地址仍指向旧页面或跳转 `/console/` 属于预期现状，不作为本地测试或部署前发版准备失败；真正切换后的 `deploy.sh` 公网门禁仍必须通过。
+
 ---
 
 ## 日常运维
@@ -304,7 +323,7 @@ bash deploy.sh
 
 部署会生成这些切换备份：远端 `.env` 备份保存到 `/www/wwwroot/synapse/backups/env/`，Postgres 角色和权限 globals 备份保存到 `/www/wwwroot/synapse/backups/globals/`，在线数据库备份用于临时数据库预演，停旧服务后的最终数据库备份会先恢复到 `synapse_final_verify_*` 临时库验证成功后才启动新服务。临时数据库预演会把在线备份恢复到 `synapse_preflight_*` 临时库，并在新镜像里执行 `prisma migrate deploy`；预演失败时不会停旧服务。未配置 Drive COS 且存在 `server/data/drive` 时，部署还会在切换窗口打包本地 Drive 数据到 `/www/wwwroot/synapse/backups/drive/`。
 
-真正切换前脚本会先通过 Docker 网络验证 `.env` 中的数据库密码能连接 `postgres:5432`，失败时会在停服前中止。切换时脚本只停止 `server` 容器，不会执行 `docker compose down` 或删除 Postgres volume。新服务启动后会轮询检查 `/healthz`、`/console/` 静态入口、`/dashboard` 到 `/console/` 的重定向，以及 `/webhooks/not-found/test` 公共 Webhook 路由不会被导向管理后台。失败时自动回滚到上一版服务镜像，但不会自动覆盖恢复数据库，避免误删部署窗口里的新写入；脚本会打印失败检查项、HTTP 状态、响应摘要、容器状态、最近 server 日志、最终备份路径和人工恢复命令。
+真正切换前脚本会先通过 Docker 网络验证 `.env` 中的数据库密码能连接 `postgres:5432`，失败时会在停服前中止。切换时脚本只停止 `server` 容器，不会执行 `docker compose down` 或删除 Postgres volume。新服务启动后会轮询检查 `/healthz`、`/console/`、独立 `/desktop/update` 页面、更新凭证签发/验证链路、`/dashboard` 到 `/console/` 的重定向，以及公共 Webhook 和 Drive 分享路由不会被导向管理后台；内部检查通过后，再确认稳定公网地址没有重定向并返回独立更新页。凭证只在容器内健康检查进程内短暂使用，不作为 shell 参数或日志输出。失败时自动回滚到上一版服务镜像，但不会自动覆盖恢复数据库，避免误删部署窗口里的新写入；脚本会打印失败检查项、HTTP 状态、响应摘要、容器状态、最近 server 日志、最终备份路径和人工恢复命令。
 
 如果是在服务器上手动更新，也必须先备份，再构建启动：
 

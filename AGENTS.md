@@ -140,6 +140,8 @@ Single-context: use the root `CONTEXT.md` and `docs/adr/`. See `docs/agents/doma
 - `AGENTS.md` 是仓库级长期约束，不只是说明文档。凡是修改以下关键部分，都必须主动检查并按需同步本文件：对象存储域和 bucket 用途、环境变量和配置项、数据落库位置和备份/恢复策略、权限/审计/安全边界、MCP capability/schema/tool 命名、系统 App 能力包结构、Electron 打包边界、用户可操作模块的长期产品边界。更新时只记录稳定规则、归属和禁止事项，不写一次性实现流水账。
 - `desktop/config.ts` 用于集中放置桌面端全局配置常量；该文件内每个常量定义都必须添加中文注释，说明用途和影响范围，后续 AI 编码新增常量时必须自动补齐注释。
 - 配置文件（例如 `.env`、`.env.example`、`*.env.*`）必须按职责分组，并为每组和每个配置项添加中文注释，说明用途、影响范围或单位；示例文件不得携带密码、token、secret、私钥、真实数据库连接串等关键信息。
+- 服务端桌面更新凭证必须使用独立的 `DESKTOP_UPDATE_INTENT_SECRET`，生产环境至少 43 字符且不得与管理员或用户 JWT 密钥相同。签发只接受与 `APP_PUBLIC_URL` 精确相同的 Origin；凭证固定表达更新到当前最新版、120 秒过期、不落库且有效期内允许重放。签发与验证接口必须独立严格限流并返回 `Cache-Control: no-store`，日志不得记录原始 token、完整更新深链或验证请求体。
+- 桌面 GitHub Release 正文必须固定使用 `https://synapse.d2.pub/desktop/update`，不得写入 `synapse://`、目标版本或 query。本地 macOS 发布和 CI 发布必须共用同一 Release body 生成逻辑。生产服务部署完成后，`deploy.sh` 必须确认稳定 URL 最终返回 2xx 独立更新页；本地测试和部署前的 Release workflow 只静态校验 Release body，不要求尚未部署的生产页面已经可用。macOS/Windows 正式包必须通过协议注册、冷启动和热启动 smoke。首次上线必须先配置独立密钥并部署服务端/页面，通过部署后验收后再发布支持新深链的客户端。
 - 服务端腾讯 COS 按业务域隔离，不要因为“都是文件”混用 bucket 或复用错误模块。当前域划分如下：
   - `DRIVE_COS_*` / Drive Storage：只用于用户云盘文件、云盘文件版本、Drive 公开素材和 Drive Sites 发布资源；这些对象受 Drive 元数据、权限、生命周期、容量统计或 Drive 专属公开资源规则约束。不得把用户头像、智能体头像、系统图标、模板封面等平台媒体塞进 Drive，也不得让这类平台媒体占用用户网盘额度。
   - `SKILL_REPOSITORY_COS_*` / Skill Repository Storage：只用于云端 Skill 仓库文件、安装包和分发产物。Skill Repository 服务端存储必须使用这组 COS 配置，不提供本地 root 或 fallback 存储。不得复用它存头像、普通用户文件、临时上传、备份包、Rule/Prompt 云端分享数据或任意平台媒体。

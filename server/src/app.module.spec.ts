@@ -7,6 +7,7 @@ import { AppModule } from "./app.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 import { LiveModule } from "./live/live.module"
 import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
+import { UpdateIntentModule } from "./update-intent/update-intent.module"
 
 describe("AppModule", () => {
   it("registers audit logging at the application level", () => {
@@ -18,6 +19,7 @@ describe("AppModule", () => {
     ]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([LiveModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([SkillRepositoryModule]))
+    expect(importsOf(AppModule)).toEqual(expect.arrayContaining([UpdateIntentModule]))
   })
 
   it("compiles the application dependency graph", async () => {
@@ -35,6 +37,7 @@ async function withServerEnv(callback: () => Promise<void>): Promise<void> {
     ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
     ADMIN_JWT_SECRET: process.env.ADMIN_JWT_SECRET,
     USER_ACCESS_JWT_SECRET: process.env.USER_ACCESS_JWT_SECRET,
+    DESKTOP_UPDATE_INTENT_SECRET: process.env.DESKTOP_UPDATE_INTENT_SECRET,
     PORT: process.env.PORT,
   }
   process.env.DATABASE_URL = "postgresql://synapse:synapse@localhost:5433/synapse"
@@ -42,6 +45,7 @@ async function withServerEnv(callback: () => Promise<void>): Promise<void> {
   process.env.ADMIN_PASSWORD = "password-password"
   process.env.ADMIN_JWT_SECRET = "admin-secret-admin-secret-admin-secret"
   process.env.USER_ACCESS_JWT_SECRET = "user-secret-user-secret-user-secret"
+  process.env.DESKTOP_UPDATE_INTENT_SECRET = "update-intent-secret-update-intent-secret-update-intent-secret-64"
   process.env.PORT = "3001"
   try {
     await callback()

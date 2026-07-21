@@ -1,19 +1,27 @@
 import { app, Notification } from "electron"
 import { CancellationToken } from "electron-updater"
 import * as electronUpdater from "electron-updater"
+import { z } from "zod"
 import type {
   AppUpdater,
   ProgressInfo,
   UpdateDownloadedEvent,
   UpdateInfo,
 } from "electron-updater"
-import type { SynapseAppUpdateState } from "../../src/types/update"
+import type {
+  SynapseAppUpdateOpenRequest,
+  SynapseAppUpdateState,
+} from "../../src/types/update"
 import type { WindowManager } from "../runtime/window"
+import type { AuditSink, PermissionGuard } from "../runtime/security"
+import { DESKTOP_UPDATE_INTENT_VERIFY_TIMEOUT_MS } from "../../config"
+import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
 
 // Update event channels for broadcasting state changes
 const UPDATE_CHANNELS = {
   stateChanged: "synapse:app:update:operation:state_changed",
   openUpdatePage: "synapse:app:update:operation:open_update_page",
+  openRequest: "synapse:app:update:operation:open_request",
 } as const
 import { createMainLogger } from "./log-store"
 
@@ -25,6 +33,42 @@ const AUTO_CHECK_INITIAL_DELAY_MS = 60_000
 const PAGE_ENTRY_CHECK_COOLDOWN_MS = 30_000
 const UPDATE_ERROR_MESSAGE = "检查更新失败，请稍后再试。"
 const UPDATE_DOWNLOAD_ERROR_MESSAGE = "下载更新失败，请重试。"
+const updateIntentVerificationResponseSchema = z.object({
+  authorized: z.literal(true),
+}).strict()
+const UPDATE_INTENT_VERIFICATION_ACTOR = {
+  kind: "system",
+  id: "desktop-update-intent",
+} as const
+const UPDATE_INTENT_VERIFICATION_SOURCE = "desktop.update-intent.verify"
+
+type UpdateIntentVerificationSecurity = {
+  readonly auditSink: AuditSink
+  readonly permissionGuard: PermissionGuard
+}
+
+function recordUpdateIntentVerificationAudit(
+  auditSink: AuditSink,
+  resource: string,
+  outcome: "allowed" | "denied" | "failed",
+  metadata: Record<string, unknown> = {},
+): void {
+  auditSink.record({
+    action: "network.connect",
+    actor: UPDATE_INTENT_VERIFICATION_ACTOR,
+    resource,
+    outcome,
+    metadata: {
+      source: UPDATE_INTENT_VERIFICATION_SOURCE,
+      ...metadata,
+    },
+  })
+}
+
+function isUpdateIntentVerificationTimeout(error: unknown): boolean {
+  return error instanceof Error
+    && (error.name === "AbortError" || error.name === "TimeoutError")
+}
 
 function isSupportedPlatform(): boolean {
   return process.platform === "darwin" || process.platform === "win32"
@@ -84,6 +128,9 @@ class UpdateService {
   private autoCheckTimer: ReturnType<typeof setInterval> | null = null
   private windowManager: WindowManager | null = null
   private beforeInstallQuitHandler: (() => boolean | void) | null = null
+  private updateIntentVerificationSecurity: UpdateIntentVerificationSecurity | null = null
+  private pendingOpenRequest: SynapseAppUpdateOpenRequest | null = null
+  private nextOpenRequestId = 0
 
   setWindowManager(windowManager: WindowManager): void {
     this.windowManager = windowManager
@@ -91,6 +138,114 @@ class UpdateService {
 
   setBeforeInstallQuitHandler(handler: (() => boolean | void) | null): void {
     this.beforeInstallQuitHandler = handler
+  }
+
+  setUpdateIntentVerificationSecurity(security: UpdateIntentVerificationSecurity): void {
+    this.updateIntentVerificationSecurity = security
+  }
+
+  publishUpdateOpenRequest(automatic: boolean): SynapseAppUpdateOpenRequest {
+    const request = {
+      id: this.nextOpenRequestId + 1,
+      automatic,
+    }
+    this.nextOpenRequestId = request.id
+    this.pendingOpenRequest = request
+    this.windowManager?.broadcast(UPDATE_CHANNELS.openRequest, request)
+    return { ...request }
+  }
+
+  getPendingOpenRequest(): SynapseAppUpdateOpenRequest | null {
+    return this.pendingOpenRequest ? { ...this.pendingOpenRequest } : null
+  }
+
+  acknowledgeOpenRequest(id: number): void {
+    if (this.pendingOpenRequest?.id === id) {
+      this.pendingOpenRequest = null
+    }
+  }
+
+  async verifyUpdateIntent(token: string): Promise<boolean> {
+    const verificationUrl = `${SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.apiBaseUrl}/desktop/update-intent/verify`
+    const security = this.updateIntentVerificationSecurity
+    if (!security) {
+      logger.warn("Update intent verification failed closed.", {
+        outcome: "security-unavailable",
+      })
+      return false
+    }
+
+    const permission = await security.permissionGuard.check({
+      action: "network.connect",
+      actor: UPDATE_INTENT_VERIFICATION_ACTOR,
+      context: { source: UPDATE_INTENT_VERIFICATION_SOURCE },
+      resource: verificationUrl,
+    })
+    if (!permission.allowed) {
+      recordUpdateIntentVerificationAudit(
+        security.auditSink,
+        verificationUrl,
+        "denied",
+        {
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      )
+      logger.warn("Update intent verification failed closed.", {
+        outcome: "permission-denied",
+      })
+      return false
+    }
+
+    let response: Response
+    try {
+      response = await fetch(
+        verificationUrl,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ token }),
+          signal: AbortSignal.timeout(DESKTOP_UPDATE_INTENT_VERIFY_TIMEOUT_MS),
+        },
+      )
+    } catch (error) {
+      recordUpdateIntentVerificationAudit(security.auditSink, verificationUrl, "failed")
+      logger.warn("Update intent verification failed closed.", {
+        outcome: isUpdateIntentVerificationTimeout(error)
+          ? "timeout"
+          : "service-unavailable",
+      })
+      return false
+    }
+    recordUpdateIntentVerificationAudit(
+      security.auditSink,
+      verificationUrl,
+      "allowed",
+      { status: response.status },
+    )
+    if (!response.ok) {
+      logger.warn("Update intent verification failed closed.", {
+        outcome: "rejected",
+        status: response.status,
+      })
+      return false
+    }
+    try {
+      const parsed = updateIntentVerificationResponseSchema.safeParse(await response.json())
+      if (!parsed.success) {
+        logger.warn("Update intent verification failed closed.", {
+          outcome: "invalid-response",
+        })
+        return false
+      }
+      logger.info("Update intent verification succeeded.")
+      return true
+    } catch {
+      logger.warn("Update intent verification failed closed.", {
+        outcome: "invalid-response",
+      })
+      return false
+    }
   }
 
   private clearDownloadTracking(cancellationToken?: CancellationToken, flowId?: number): void {

@@ -170,6 +170,8 @@ vi.mock("@/lib/electron-bridge", () => ({
       },
     },
     updater: {
+      getPendingOpenRequest: vi.fn(async () => null),
+      onOpenRequest: () => () => undefined,
       onOpenUpdatePage: () => () => undefined,
     },
   }),

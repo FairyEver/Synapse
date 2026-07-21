@@ -19,6 +19,7 @@ import type {
   SynapseAccountState,
   SynapseAccountStateChangedEvent,
 } from "./account"
+import type { SynapseAppUpdateOpenRequest, SynapseAppUpdateState } from "./update"
 import type {
   GenerateDocxInput,
   GenerateDocxResult,
@@ -441,7 +442,6 @@ import type {
   SynapseGitSshTestResult,
   SynapseGitTestSshConnectionInput,
 } from "./git"
-import type { SynapseAppUpdateState } from "./update"
 import type {
   AutomationChangedEvent,
   AutomationCreateInput,
@@ -1398,12 +1398,15 @@ export type SynapseBridge = {
     }
   }
   updater: {
+    acknowledgeOpenRequest: (id: number) => Promise<void>
     cancelDownload: () => Promise<void>
     checkForUpdates: () => Promise<SynapseAppUpdateState>
     checkForUpdatesOnPageEnter: () => Promise<SynapseAppUpdateState>
     downloadUpdate: () => Promise<SynapseAppUpdateState>
+    getPendingOpenRequest: () => Promise<SynapseAppUpdateOpenRequest | null>
     getState: () => Promise<SynapseAppUpdateState>
     installUpdate: () => Promise<void>
+    onOpenRequest: (listener: (payload: SynapseAppUpdateOpenRequest) => void) => () => void
     onStateChanged: (listener: (payload: SynapseAppUpdateState) => void) => () => void
     onOpenUpdatePage: (listener: () => void) => () => void
   }

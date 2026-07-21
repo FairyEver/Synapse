@@ -21,3 +21,8 @@ export type SynapseAppUpdateState = {
   lastCheckedAt: string | null
   canCheck: boolean
 }
+
+export type SynapseAppUpdateOpenRequest = {
+  readonly id: number
+  readonly automatic: boolean
+}

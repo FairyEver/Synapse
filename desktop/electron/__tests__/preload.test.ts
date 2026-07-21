@@ -1398,6 +1398,34 @@ describe("preload bridge", () => {
     expect(listener).toHaveBeenCalledWith({ status: "downloaded" })
   })
 
+  it("maps reliable update-open delivery through the updater bridge", async () => {
+    const bridge = await loadPreloadBridge()
+    const listener = vi.fn()
+
+    await bridge.updater.getPendingOpenRequest()
+    await bridge.updater.acknowledgeOpenRequest(7)
+    bridge.updater.onOpenRequest(listener)
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      1,
+      "synapse:app:update:operation:get_pending_open_request",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      2,
+      "synapse:app:update:operation:acknowledge_open_request",
+      { id: 7 },
+    )
+    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe(
+      "synapse:app:update:operation:open_request",
+    )
+
+    const wrapped = electronMock.ipcRenderer.on.mock.calls[0]?.[1]
+    wrapped?.({}, { id: 7, automatic: true })
+
+    expect(listener).toHaveBeenCalledWith({ id: 7, automatic: true })
+  })
+
   it("maps Sound Notifier bridge methods to sound notifier IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 

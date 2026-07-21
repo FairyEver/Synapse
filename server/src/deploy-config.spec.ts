@@ -122,6 +122,21 @@ describe("server deployment configuration", () => {
     expect(envExample).not.toContain("POSTGRES_PASSWORD=synapse")
   })
 
+  it("provisions the dedicated desktop update intent secret without an example secret value", () => {
+    const compose = readRepoFile("server/compose.yml")
+    const envExample = readRepoFile("server/.env.example")
+    const setupScript = readRepoFile("setup.sh")
+    const deployScript = readRepoFile("deploy.sh")
+    const readme = readRepoFile("server/README.md")
+
+    expect(compose).toContain("DESKTOP_UPDATE_INTENT_SECRET: ${DESKTOP_UPDATE_INTENT_SECRET:?DESKTOP_UPDATE_INTENT_SECRET is required}")
+    expect(envExample).toContain("DESKTOP_UPDATE_INTENT_SECRET=\n")
+    expect(setupScript).toContain("DESKTOP_UPDATE_INTENT_SECRET=$(openssl rand -hex 32)")
+    expect(setupScript).toContain("DESKTOP_UPDATE_INTENT_SECRET=$DESKTOP_UPDATE_INTENT_SECRET")
+    expect(deployScript).toContain("DESKTOP_UPDATE_INTENT_SECRET")
+    expect(readme).toContain("DESKTOP_UPDATE_INTENT_SECRET")
+  })
+
   it("includes the shared workspace package in the server Docker image", () => {
     const dockerfile = readRepoFile("server/Dockerfile")
 
@@ -279,11 +294,59 @@ describe("server deployment configuration", () => {
     expect(restartScript).toContain("drive share route")
   })
 
+  it("checks the independent update page and update credential service during deployment", () => {
+    const deployScript = readRepoFile("deploy.sh")
+
+    expect(deployScript).toContain('check_body_contains "desktop update page" "http://127.0.0.1:3000/desktop/update" \'<title>更新 Synapse</title>\'')
+    expect(deployScript).toContain("check_update_intent_service")
+    expect(deployScript).toContain("/api/desktop/update-intent")
+    expect(deployScript).toContain("/api/desktop/update-intent/verify")
+    expect(deployScript).toContain("result.authorized !== true")
+    expect(deployScript).not.toContain("console.log(token)")
+    expect(deployScript.indexOf('check_body_contains "desktop update page"'))
+      .toBeLessThan(deployScript.lastIndexOf("check_update_intent_service"))
+  })
+
+  it("accepts the public update handoff only after the deployed service passes internal checks", () => {
+    const deployScript = readRepoFile("deploy.sh")
+    const internalCredentialCheck = deployScript.lastIndexOf("check_update_intent_service")
+    const publicHandoffCheck = deployScript.lastIndexOf("check_public_desktop_update_page")
+
+    expect(deployScript).toContain('https://synapse.d2.pub/desktop/update')
+    expect(deployScript).toContain('%{url_effective}')
+    expect(deployScript).toContain('<title>更新 Synapse</title>')
+    expect(deployScript).toContain('if effective_url=$(curl')
+    expect(deployScript).toMatch(/run_deployed_health_check\(\) \{\s+run_remote_health_check && check_public_desktop_update_page\s+\}/)
+    expect(deployScript).toContain("rollback_remote_service 2>&1 | sed 's/^/  /' && run_remote_health_check")
+    expect(deployScript).not.toContain("rollback_remote_service 2>&1 | sed 's/^/  /' && run_deployed_health_check")
+    expect(publicHandoffCheck).toBeGreaterThan(internalCredentialCheck)
+  })
+
+  it("requires the checked deployment path after first-time infrastructure bootstrap", () => {
+    const deployScript = readRepoFile("deploy.sh")
+
+    expect(deployScript).toContain("启动完成后重新运行 bash deploy.sh")
+    expect(deployScript).toContain("通过部署后健康检查再发布桌面客户端")
+  })
+
   it("routes public webhooks through nginx instead of dashboard redirects", () => {
     const nginx = readRepoFile("server/nginx.conf")
 
     expect(nginx).toContain("location /webhooks/")
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
+  })
+
+  it("serves the independent desktop update page with focused security headers", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+
+    expect(nginx).toContain("location = /desktop/update")
+    expect(nginx).toContain('if ($args != "") { return 404; }')
+    expect(nginx).toContain("try_files /desktop-update.html =404;")
+    expect(nginx).toContain("Content-Security-Policy")
+    expect(nginx).toContain("frame-ancestors 'none'")
+    expect(nginx).toContain("X-Frame-Options \"DENY\"")
+    expect(nginx).toContain("Referrer-Policy \"no-referrer\"")
+    expect(nginx).toContain("Cache-Control \"no-cache, must-revalidate\"")
   })
 
   it("serves drive browser pages from the console bundle and proxies direct file responses", () => {

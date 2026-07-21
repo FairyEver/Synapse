@@ -212,6 +212,9 @@ export const IPC_CHANNELS = {
     "downloadUpdate": "synapse:app:update:operation:download_update",
     "cancelDownload": "synapse:app:update:operation:cancel_download",
     "installUpdate": "synapse:app:update:operation:install_update",
+    "getPendingOpenRequest": "synapse:app:update:operation:get_pending_open_request",
+    "acknowledgeOpenRequest": "synapse:app:update:operation:acknowledge_open_request",
+    "openRequest": "synapse:app:update:operation:open_request",
   },
   "cheat-code": {
     "getStates": "synapse:app:cheat_code:states:get",

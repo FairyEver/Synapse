@@ -68,6 +68,7 @@ const envSchema = z
     ADMIN_PASSWORD: z.string().min(12),
     ADMIN_JWT_SECRET: z.string().min(32),
     USER_ACCESS_JWT_SECRET: z.string().min(32),
+    DESKTOP_UPDATE_INTENT_SECRET: optionalEnvString,
     USER_ACCESS_TOKEN_MINUTES: z.coerce.number().int().positive().default(15),
     USER_REFRESH_TOKEN_DAYS: z.coerce.number().int().positive().default(30),
     NODE_ENV: z.string().optional(),
@@ -116,6 +117,23 @@ const envSchema = z
     path: ["APP_PUBLIC_URL"],
     message: "APP_PUBLIC_URL is required in production",
   })
+  .refine((env) => env.NODE_ENV !== "production" || !!env.DESKTOP_UPDATE_INTENT_SECRET, {
+    path: ["DESKTOP_UPDATE_INTENT_SECRET"],
+    message: "DESKTOP_UPDATE_INTENT_SECRET is required in production",
+  })
+  .refine((env) => {
+    if (env.NODE_ENV !== "production" || !env.DESKTOP_UPDATE_INTENT_SECRET) return true
+    return env.DESKTOP_UPDATE_INTENT_SECRET !== env.ADMIN_JWT_SECRET
+      && env.DESKTOP_UPDATE_INTENT_SECRET !== env.USER_ACCESS_JWT_SECRET
+  }, {
+    path: ["DESKTOP_UPDATE_INTENT_SECRET"],
+    message: "DESKTOP_UPDATE_INTENT_SECRET must be different from JWT secrets",
+  })
+  .refine((env) => env.NODE_ENV !== "production"
+    || (env.DESKTOP_UPDATE_INTENT_SECRET?.length ?? 0) >= 43, {
+    path: ["DESKTOP_UPDATE_INTENT_SECRET"],
+    message: "DESKTOP_UPDATE_INTENT_SECRET must contain at least 43 characters in production",
+  })
   .refine((env) => {
     if (env.NODE_ENV !== "production") return true
     const hasDriveCos = !!(env.DRIVE_COS_SECRET_ID && env.DRIVE_COS_SECRET_KEY && env.DRIVE_COS_BUCKET && env.DRIVE_COS_REGION)
@@ -143,6 +161,7 @@ export interface ServerEnv {
   readonly adminPassword: string
   readonly adminJwtSecret: string
   readonly userAccessJwtSecret: string
+  readonly desktopUpdateIntentSecret?: string
   readonly userAccessTokenMinutes: number
   readonly userRefreshTokenDays: number
   readonly appPublicUrl?: string
@@ -181,6 +200,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     adminPassword: result.data.ADMIN_PASSWORD,
     adminJwtSecret: result.data.ADMIN_JWT_SECRET,
     userAccessJwtSecret: result.data.USER_ACCESS_JWT_SECRET,
+    desktopUpdateIntentSecret: result.data.DESKTOP_UPDATE_INTENT_SECRET,
     userAccessTokenMinutes: result.data.USER_ACCESS_TOKEN_MINUTES,
     userRefreshTokenDays: result.data.USER_REFRESH_TOKEN_DAYS,
     appPublicUrl: result.data.APP_PUBLIC_URL,

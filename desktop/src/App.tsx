@@ -22,7 +22,9 @@ import {
   subscribeOpenSettingsTab,
 } from "@/app-shell/navigation"
 import { useWatchNextAgentSession } from "@/app-shell/use-watch-next-agent-session"
+import { useUpdateOpenRequest } from "@/hooks/use-update-open-request"
 import { isWorkflowEntryVisible } from "@/app-shell/workflow-entry-visibility"
+import type { SynapseAppUpdateOpenRequest } from "@/types/update"
 import {
   useActiveRepository,
   useHasRepositories,
@@ -226,6 +228,17 @@ function MainApp() {
       setPendingAppContentOpenRequest(request)
     })
   }, [setActiveAppId])
+
+  const handleUpdateOpenRequest = useCallback((request: SynapseAppUpdateOpenRequest) => {
+    setActiveAppId("settings", "notification")
+    requestOpenSettingsAbout()
+    logger.info("Update open request navigated to About Synapse.", {
+      automatic: request.automatic,
+      requestId: request.id,
+    })
+  }, [setActiveAppId])
+
+  useUpdateOpenRequest(handleUpdateOpenRequest)
 
   useEffect(() => {
     const bridge = getSynapseBridge()

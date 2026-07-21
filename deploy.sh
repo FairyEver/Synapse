@@ -62,7 +62,7 @@ esac
 
 docker compose --env-file .env config >/dev/null
 
-for key in USER_ACCESS_JWT_SECRET USER_ACCESS_TOKEN_MINUTES USER_REFRESH_TOKEN_DAYS APP_PUBLIC_URL DATABASE_POOL_SIZE; do
+for key in USER_ACCESS_JWT_SECRET DESKTOP_UPDATE_INTENT_SECRET USER_ACCESS_TOKEN_MINUTES USER_REFRESH_TOKEN_DAYS APP_PUBLIC_URL DATABASE_POOL_SIZE; do
   value=$(read_env_value "$key")
   if [ -z "$value" ]; then
     echo "$key missing"
@@ -539,14 +539,74 @@ check_not_redirect_to_dashboard() {
   rm -f "$header_file" "$body_file" "$error_file"
 }
 
+check_update_intent_service() {
+  local error_file
+
+  error_file=$(mktemp)
+  if docker compose --env-file .env exec -T server node --input-type=module - \
+    >/dev/null 2>"$error_file" <<'UPDATE_INTENT_NODE'
+const serviceUrl = "http://127.0.0.1:3001/api/desktop/update-intent"
+const verifyServiceUrl = "http://127.0.0.1:3001/api/desktop/update-intent/verify"
+const origin = process.env.APP_PUBLIC_URL
+
+if (!origin) {
+  throw new Error("APP_PUBLIC_URL is not configured")
+}
+
+const issueResponse = await fetch(serviceUrl, {
+  method: "POST",
+  headers: { Origin: origin },
+})
+if (!issueResponse.ok) {
+  throw new Error(`update intent issuance returned HTTP ${issueResponse.status}`)
+}
+
+const issued = await issueResponse.json()
+const deepLink = new URL(issued.deepLinkUrl)
+const token = deepLink.searchParams.get("token")
+if (deepLink.protocol !== "synapse:" || deepLink.hostname !== "update" || !token) {
+  throw new Error("update intent issuance returned an invalid deep link")
+}
+
+const verifyResponse = await fetch(verifyServiceUrl, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ token }),
+})
+if (!verifyResponse.ok) {
+  throw new Error(`update intent verification returned HTTP ${verifyResponse.status}`)
+}
+
+const result = await verifyResponse.json()
+if (result.authorized !== true) {
+  throw new Error("update intent verification was not authorized")
+}
+UPDATE_INTENT_NODE
+  then
+    echo "desktop update credential service ok"
+  else
+    echo "desktop update credential service FAILED"
+    if [ -s "$error_file" ]; then
+      sed -n '1,4p' "$error_file"
+    fi
+    record_failure
+  fi
+
+  rm -f "$error_file"
+}
+
 run_checks_once() {
   failed=0
   check_body_contains "healthz" "http://127.0.0.1:3000/healthz" '"status":"ok"'
   check_body_contains "console" "http://127.0.0.1:3000/console/" '<div id="root">'
+  check_body_contains "desktop update page" "http://127.0.0.1:3000/desktop/update" '<title>更新 Synapse</title>'
   # Expected redirect header: Location: /console/
   check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/console/"
   check_not_redirect_to_dashboard "webhook route" "http://127.0.0.1:3000/webhooks/not-found/test"
   check_not_redirect_to_dashboard "drive share route" "http://127.0.0.1:3000/share/shr_not_found"
+  if [ "$failed" -eq 0 ]; then
+    check_update_intent_service
+  fi
   return "$failed"
 }
 
@@ -575,6 +635,49 @@ done
 REMOTE_SCRIPT
 }
 
+check_public_desktop_update_page() {
+  local body_file
+  local error_file
+  local effective_url
+  local curl_status
+
+  body_file=$(mktemp)
+  error_file=$(mktemp)
+  if effective_url=$(curl \
+    --fail \
+    --silent \
+    --show-error \
+    --location \
+    --output "$body_file" \
+    --write-out '%{url_effective}' \
+    --connect-timeout 20 \
+    --max-time 60 \
+    "https://synapse.d2.pub/desktop/update" 2>"$error_file"); then
+    curl_status=0
+  else
+    curl_status=$?
+  fi
+
+  if [ "$curl_status" -eq 0 ] \
+    && [ "$effective_url" = "https://synapse.d2.pub/desktop/update" ] \
+    && grep -Fq '<title>更新 Synapse</title>' "$body_file"; then
+    echo "public desktop update page ok"
+    rm -f "$body_file" "$error_file"
+    return 0
+  fi
+
+  printf "public desktop update page FAILED (effective URL: %s)\n" "${effective_url:-unavailable}"
+  if [ -s "$error_file" ]; then
+    sed -n '1,4p' "$error_file"
+  fi
+  rm -f "$body_file" "$error_file"
+  return 1
+}
+
+run_deployed_health_check() {
+  run_remote_health_check && check_public_desktop_update_page
+}
+
 echo ""
 
 # [1/18] 确保远程目录存在
@@ -594,6 +697,7 @@ if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
   echo ""
   echo "首次部署已同步本机 server/.env.server，请 SSH 登录服务器启动服务："
   echo "  cd $REMOTE_DIR/server && docker compose --env-file .env up -d --build"
+  echo "启动完成后重新运行 bash deploy.sh，通过部署后健康检查再发布桌面客户端。"
   exit 0
 fi
 
@@ -663,7 +767,7 @@ step 17 "启动新服务" \
 
 # [18/18] 健康检查
 printf "\n[%d/%d] 健康检查\n" 18 "$TOTAL_STEPS"
-if run_remote_health_check 2>&1 | sed 's/^/  /'; then
+if run_deployed_health_check 2>&1 | sed 's/^/  /'; then
   printf "[%d/%d] done\n" 18 "$TOTAL_STEPS"
 else
   printf "[%d/%d] 健康检查 .......... FAILED\n" 18 "$TOTAL_STEPS"

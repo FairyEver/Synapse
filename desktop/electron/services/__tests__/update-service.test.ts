@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { DESKTOP_UPDATE_INTENT_VERIFY_TIMEOUT_MS } from "../../../config"
 
 const updaterMock = vi.hoisted(() => {
   class MockCancellationToken {
@@ -67,6 +68,13 @@ const updaterMock = vi.hoisted(() => {
   }
 })
 
+const loggerMock = vi.hoisted(() => ({
+  debug: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+}))
+
 vi.mock("electron-updater", () => ({
   autoUpdater: updaterMock.autoUpdater,
   CancellationToken: updaterMock.MockCancellationToken,
@@ -100,12 +108,13 @@ vi.mock("electron", () => ({
 }))
 
 vi.mock("../log-store", () => ({
-  createMainLogger: () => ({
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  }),
+  createMainLogger: () => loggerMock,
+}))
+
+vi.mock("../../generated/deployment-config.generated", () => ({
+  SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG: {
+    apiBaseUrl: "https://desktop.example.test/api",
+  },
 }))
 
 vi.mock("../../ipc/validated-ipc", () => ({
@@ -117,6 +126,22 @@ const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform")
 
 async function importUpdateService() {
   return await import("../update-service")
+}
+
+async function importUpdateServiceWithAllowedNetwork() {
+  const { updateService } = await importUpdateService()
+  updateService.setUpdateIntentVerificationSecurity({
+    permissionGuard: {
+      check: vi.fn(async () => ({ allowed: true as const, policyId: "test-policy" })),
+      registerPolicy: vi.fn(),
+    },
+    auditSink: {
+      clearForTests: vi.fn(),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    },
+  })
+  return updateService
 }
 
 describe("UpdateService", () => {
@@ -137,9 +162,122 @@ describe("UpdateService", () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllGlobals()
     if (platformDescriptor) {
       Object.defineProperty(process, "platform", platformDescriptor)
     }
+  })
+
+  it("verifies update intents against the configured desktop API", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ authorized: true }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }))
+    vi.stubGlobal("fetch", fetchMock)
+    const updateService = await importUpdateServiceWithAllowedNetwork()
+
+    await expect(updateService.verifyUpdateIntent("credential-canary")).resolves.toBe(true)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://desktop.example.test/api/desktop/update-intent/verify",
+      expect.objectContaining({
+        body: JSON.stringify({ token: "credential-canary" }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    )
+  })
+
+  it.each([
+    ["non-success response", new Response("unauthorized", { status: 401 })],
+    ["invalid authorization", new Response(JSON.stringify({ authorized: false }), { status: 200 })],
+    ["unexpected response fields", new Response(JSON.stringify({ authorized: true, token: "leak" }), { status: 200 })],
+    ["invalid JSON", new Response("not-json", { status: 200 })],
+  ])("fails closed for a %s", async (_caseName, response) => {
+    vi.stubGlobal("fetch", vi.fn(async () => response))
+    const updateService = await importUpdateServiceWithAllowedNetwork()
+
+    await expect(updateService.verifyUpdateIntent("credential-canary")).resolves.toBe(false)
+  })
+
+  it("fails closed on the real short verification timeout without logging the credential", async () => {
+    const credential = "credential-timeout-canary"
+    let requestSignal: AbortSignal | null = null
+    const fetchMock = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+      requestSignal = init?.signal ?? null
+      return new Promise<Response>((_resolve, reject) => {
+        requestSignal?.addEventListener("abort", () => {
+          reject(new DOMException(`timed out ${credential}`, "TimeoutError"))
+        }, { once: true })
+      })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    const updateService = await importUpdateServiceWithAllowedNetwork()
+
+    const verification = updateService.verifyUpdateIntent(credential)
+    expect(DESKTOP_UPDATE_INTENT_VERIFY_TIMEOUT_MS).toBe(3_000)
+    await vi.waitFor(() => {
+      expect(requestSignal).not.toBeNull()
+    })
+    const capturedSignal = requestSignal as AbortSignal | null
+    capturedSignal?.dispatchEvent(new Event("abort"))
+
+    await expect(verification).resolves.toBe(false)
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "Update intent verification failed closed.",
+      { outcome: "timeout" },
+    )
+    expect(JSON.stringify({
+      error: loggerMock.error.mock.calls,
+      info: loggerMock.info.mock.calls,
+      warn: loggerMock.warn.mock.calls,
+    })).not.toContain(credential)
+  })
+
+  it("fails closed before connecting when verification security is unavailable", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ authorized: true })))
+    vi.stubGlobal("fetch", fetchMock)
+    const { updateService } = await importUpdateService()
+
+    await expect(updateService.verifyUpdateIntent("credential-canary")).resolves.toBe(false)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "Update intent verification failed closed.",
+      { outcome: "security-unavailable" },
+    )
+  })
+
+  it("fails closed before connecting when update intent verification permission is denied", async () => {
+    const fetchMock = vi.fn()
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: false as const, reason: "denied", policyId: "test-policy" })),
+      registerPolicy: vi.fn(),
+    }
+    const auditSink = {
+      clearForTests: vi.fn(),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    }
+    vi.stubGlobal("fetch", fetchMock)
+    const { updateService } = await importUpdateService()
+
+    updateService.setUpdateIntentVerificationSecurity({ auditSink, permissionGuard })
+    await expect(updateService.verifyUpdateIntent("credential-denied-canary")).resolves.toBe(false)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "network.connect",
+      actor: { kind: "system", id: "desktop-update-intent" },
+      context: { source: "desktop.update-intent.verify" },
+      resource: "https://desktop.example.test/api/desktop/update-intent/verify",
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "denied",
+      resource: "https://desktop.example.test/api/desktop/update-intent/verify",
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("credential-denied-canary")
   })
 
   it("waits for explicit confirmation before downloading an available update", async () => {
@@ -238,6 +376,29 @@ describe("UpdateService", () => {
         status: "available",
       }),
     })
+  })
+
+  it("broadcasts update open requests while retaining the latest request for pull delivery", async () => {
+    const { updateService } = await importUpdateService()
+    const windowManager = {
+      attach: vi.fn(),
+      broadcast: vi.fn(() => 1),
+      close: vi.fn(),
+      detach: vi.fn(),
+      getAllWindows: vi.fn(() => []),
+      list: vi.fn(() => []),
+      open: vi.fn(),
+      register: vi.fn(),
+    }
+    updateService.setWindowManager(windowManager)
+
+    const request = updateService.publishUpdateOpenRequest(true)
+
+    expect(windowManager.broadcast).toHaveBeenCalledWith(
+      "synapse:app:update:operation:open_request",
+      request,
+    )
+    expect(updateService.getPendingOpenRequest()).toEqual(request)
   })
 
   it("does not start a manual update check while an automatic check is pending", async () => {

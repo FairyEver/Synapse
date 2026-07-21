@@ -100,6 +100,9 @@ describe("prepare-cdn-release-artifacts", () => {
     expect(releaseBody).toContain("Synapse v0.2.214")
     expect(releaseBody).toContain("https://desktop.release.synapse.d2.pub/v0.2.214/Synapse-0.2.214-mac-arm64.dmg")
     expect(releaseBody).toContain("https://desktop.release.synapse.d2.pub/v0.2.214/Synapse-0.2.214-win-x64.exe")
+    expect(releaseBody).toContain("一键更新：https://synapse.d2.pub/desktop/update")
+    expect(releaseBody).not.toContain("synapse://")
+    expect(releaseBody).not.toMatch(/https:\/\/synapse\.d2\.pub\/desktop\/update[?#]/)
   })
 
   it("prepares mac-only artifacts without writing Windows metadata", async () => {
@@ -145,6 +148,11 @@ describe("prepare-cdn-release-artifacts", () => {
     expect(manifest.metadataUrls).toEqual([
       "https://desktop.release.synapse.d2.pub/latest-mac.yml",
     ])
+
+    const releaseBody = await readFile(path.join(outDir, "release-body.md"), "utf8")
+    expect(releaseBody).toContain("一键更新：https://synapse.d2.pub/desktop/update")
+    expect(releaseBody).not.toContain("synapse://")
+    expect(releaseBody).not.toMatch(/https:\/\/synapse\.d2\.pub\/desktop\/update[?#]/)
   })
 
   it("ignores stale artifacts from older versions", async () => {

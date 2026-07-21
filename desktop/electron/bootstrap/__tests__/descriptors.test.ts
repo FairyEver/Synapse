@@ -1964,11 +1964,16 @@ describe("bootstrap descriptors (T1.5)", () => {
     ])
   })
 
-  it("coreUpdateDescriptor is degraded and depends on core.config + core.window-manager", async () => {
+  it("coreUpdateDescriptor depends on update runtime and verification security services", async () => {
     const { coreUpdateDescriptor } = await importBootstrap()
     expect(coreUpdateDescriptor.id).toBe("core.update")
     expect(coreUpdateDescriptor.criticality).toBe("degraded")
-    expect(coreUpdateDescriptor.dependsOn).toEqual(["core.config", "core.window-manager"])
+    expect(coreUpdateDescriptor.dependsOn).toEqual([
+      "core.config",
+      "core.window-manager",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
   })
 
   it("coreDriveSyncDescriptor restores local watching during startup", async () => {

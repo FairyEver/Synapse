@@ -4,6 +4,8 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { parse, stringify } from "yaml"
 
+const DESKTOP_UPDATE_HANDOFF_URL = "https://synapse.d2.pub/desktop/update"
+
 const PLATFORM_CONFIGS = {
   all: {
     assetFilter: isReleaseAsset,
@@ -136,6 +138,7 @@ function releaseBody(version, cdnBaseUrl, artifactFiles, metadataTargets) {
     lines.push("Windows x64:", `${cdnBaseUrl}${versionPrefix}/${exe}`, "")
   }
 
+  lines.push(`一键更新：${DESKTOP_UPDATE_HANDOFF_URL}`, "")
   lines.push("更新元数据：", ...metadataTargets.map((fileName) => `${cdnBaseUrl}${fileName}`), "")
   return `${lines.join("\n")}\n`
 }

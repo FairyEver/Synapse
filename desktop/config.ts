@@ -1,6 +1,12 @@
 // 基础时间单位：用于派生全局配置里的 1 小时时长，避免重复写魔法数字。
 const ONE_HOUR_MS = 60 * 60 * 1000
 
+// 桌面更新深链允许验证的凭证最大字符数：与服务端验证请求上限保持一致，超限请求只进入手动更新页。
+export const DESKTOP_UPDATE_INTENT_TOKEN_MAX_LENGTH = 4_096
+
+// 桌面更新凭证在线验证超时（毫秒）：网络异常时快速降级到手动更新，不阻塞更新页导航。
+export const DESKTOP_UPDATE_INTENT_VERIFY_TIMEOUT_MS = 3_000
+
 // Agent 会话在最近活动结束后超过该时长时，提示用户新建对话以避免继续沿用长上下文。
 export const CONVERSATION_IDLE_ROLLOVER_PROMPT_MS = ONE_HOUR_MS
 

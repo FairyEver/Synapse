@@ -15,26 +15,13 @@ import {
   type CheatCodeContext,
 } from "@/modules/settings/cheat-codes"
 import { useCheatCodeTitleSequence } from "@/modules/settings/hooks/use-cheat-code-title-sequence"
+import { useAppUpdateController } from "@/modules/settings/hooks/use-app-update-controller"
 import type { CheatCodeStateStore } from "@/lib/cheat-codes/manager"
 import type { CheatCodeTriggerResult } from "@/types/cheat-code"
 import type { SynapseAppUpdateState } from "@/types/update"
 import synapseLogo from "@/assets/icon.png"
 
 const logger = createRendererLogger("settings.about")
-
-const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
-  currentVersion: "0.0.0",
-  releaseVersion: null,
-  status: "idle",
-  message: "正在读取更新信息...",
-  error: null,
-  downloadPercent: null,
-  bytesPerSecond: null,
-  transferredBytes: null,
-  totalBytes: null,
-  lastCheckedAt: null,
-  canCheck: false,
-}
 
 function formatBytes(value: number | null): string | null {
   return value === null || !Number.isFinite(value) || value < 0 ? null : formatByteSize(value)
@@ -103,68 +90,25 @@ type AboutPanelProps = {
 }
 
 function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
-  const [updateState, setUpdateState] = useState<SynapseAppUpdateState>(INITIAL_UPDATE_STATE)
-  const [actionError, setActionError] = useState<string | null>(null)
   const [installCountdown, setInstallCountdown] = useState<number | null>(null)
   const [isRestarting, setIsRestarting] = useState(false)
-  const autoInstallArmedRef = useRef(false)
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const installTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activeTitleColorOffset, setActiveTitleColorOffset] = useState(0)
   const [hoveredTitleIndex, setHoveredTitleIndex] = useState<number | null>(null)
-
-  useEffect(() => {
-    const bridge = window.synapse?.updater
-
-    if (!bridge) {
-      setUpdateState({
-        ...INITIAL_UPDATE_STATE,
-        status: "unsupported",
-        message: "当前环境不支持自动更新。",
-      })
-      return
-    }
-
-    let cancelled = false
-
-    const unsubscribe = bridge.onStateChanged((state) => {
-      setActionError(null)
-      setUpdateState(state)
-    })
-
-    const loadAndCheckForUpdates = async () => {
-      try {
-        const state = await bridge.getState()
-        if (cancelled) return
-        setUpdateState(state)
-
-        const checkedState = await bridge.checkForUpdatesOnPageEnter()
-        if (!cancelled) {
-          setUpdateState(checkedState)
-        }
-      } catch (error) {
-        logger.error("Failed to initialize app update state.", error)
-
-        if (!cancelled) {
-          const message = error instanceof Error ? error.message : "读取更新信息失败。"
-
-          setUpdateState({
-            ...INITIAL_UPDATE_STATE,
-            status: "error",
-            message,
-            error: message,
-          })
-        }
-      }
-    }
-
-    void loadAndCheckForUpdates()
-
-    return () => {
-      cancelled = true
-      unsubscribe()
-    }
-  }, [])
+  const {
+    actionError,
+    automaticInstallArmed,
+    cancelDownload,
+    checkForUpdates,
+    clearActionError,
+    downloadUpdate,
+    installArmVersion,
+    installUpdate,
+    setActionError,
+    setAutomaticInstallArmed,
+    updateState,
+  } = useAppUpdateController()
 
   const isChecking = updateState.status === "checking"
   const isAvailable = updateState.status === "available"
@@ -195,17 +139,11 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   const currentVersionLabel = `v${updateState.currentVersion}`
 
   const installDownloadedUpdate = useCallback(async () => {
-    const bridge = window.synapse?.updater
-
-    if (!bridge) {
-      return
-    }
-
-    setActionError(null)
+    clearActionError()
     setIsRestarting(true)
 
     try {
-      await bridge.installUpdate()
+      await installUpdate()
     } catch (error) {
       const message = error instanceof Error ? error.message : "安装更新失败。"
 
@@ -213,7 +151,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       setActionError(message)
       setIsRestarting(false)
     }
-  }, [])
+  }, [clearActionError, installUpdate, setActionError])
 
   const clearInstallTimers = useCallback(() => {
     if (countdownIntervalRef.current) {
@@ -227,7 +165,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   }, [])
 
   useEffect(() => {
-    if (!isDownloaded || !autoInstallArmedRef.current) {
+    if (!isDownloaded || !automaticInstallArmed) {
       return
     }
 
@@ -236,7 +174,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       setInstallCountdown((current) => current === null ? null : Math.max(1, current - 1))
     }, 1_000)
     installTimeoutRef.current = setTimeout(() => {
-      autoInstallArmedRef.current = false
+      setAutomaticInstallArmed(false)
       clearInstallTimers()
       setInstallCountdown(null)
       void installDownloadedUpdate()
@@ -245,7 +183,14 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     return () => {
       clearInstallTimers()
     }
-  }, [clearInstallTimers, installDownloadedUpdate, isDownloaded])
+  }, [
+    automaticInstallArmed,
+    clearInstallTimers,
+    installArmVersion,
+    installDownloadedUpdate,
+    isDownloaded,
+    setAutomaticInstallArmed,
+  ])
 
   const cheatCodeContext = useMemo<CheatCodeContext>(
     () => ({
@@ -307,18 +252,12 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   }, [isCheatCodeEntryArmed])
 
   const handleAction = async () => {
-    const bridge = window.synapse?.updater
-
-    if (!bridge) {
-      return
-    }
-
-    setActionError(null)
+    clearActionError()
     logger.info("App update action triggered.", { currentStatus: updateState.status })
 
     try {
       if (isDownloaded) {
-        autoInstallArmedRef.current = false
+        setAutomaticInstallArmed(false)
         clearInstallTimers()
         setInstallCountdown(null)
         await installDownloadedUpdate()
@@ -326,36 +265,28 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       }
 
       if (isAvailable) {
-        autoInstallArmedRef.current = true
-        const nextState = await bridge.downloadUpdate()
-        setUpdateState(nextState)
+        setAutomaticInstallArmed(true)
+        await downloadUpdate()
         return
       }
 
-      const nextState = await bridge.checkForUpdates()
-      setUpdateState(nextState)
+      await checkForUpdates()
     } catch (error) {
       const message = error instanceof Error ? error.message : "软件更新操作失败。"
 
       logger.error("App update action failed in settings.", error)
-      autoInstallArmedRef.current = false
+      setAutomaticInstallArmed(false)
       setActionError(message)
       setIsRestarting(false)
     }
   }
 
   const handleCancelDownload = async () => {
-    const bridge = window.synapse?.updater
-
-    if (!bridge) {
-      return
-    }
-
     logger.info("App update download cancelled.")
-    autoInstallArmedRef.current = false
+    setAutomaticInstallArmed(false)
 
     try {
-      await bridge.cancelDownload()
+      await cancelDownload()
     } catch (error) {
       logger.error("Failed to cancel download.", error)
       setActionError(error instanceof Error ? error.message : "取消下载失败。")
@@ -364,7 +295,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
 
   const handlePostponeInstall = () => {
     logger.info("Automatic update install postponed.")
-    autoInstallArmedRef.current = false
+    setAutomaticInstallArmed(false)
     clearInstallTimers()
     setInstallCountdown(null)
   }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import config, {
   isDriveBrowserSpaPath,
+  resolveDesktopUpdateDevHtmlPath,
   resolveDashboardDevSpaFallback,
   resolveLegacyDashboardDevRedirect,
 } from "./vite.config"
@@ -17,6 +18,18 @@ describe("dashboard Vite dev proxy", () => {
     expect(apiProxy).toEqual(expect.objectContaining({
       target: "http://localhost:3001",
       ws: true,
+    }))
+  })
+
+  it("serves the independent desktop update entry at the stable path in dev and build", () => {
+    expect(resolveDesktopUpdateDevHtmlPath("/desktop/update")).toBe("/desktop-update.html")
+    expect(resolveDesktopUpdateDevHtmlPath("/desktop/update", "?version=1.2.3")).toBe("reject")
+    expect(resolveDesktopUpdateDevHtmlPath("/desktop/update", "?mode=install")).toBe("reject")
+    expect(resolveDesktopUpdateDevHtmlPath("/desktop/update/")).toBeNull()
+    expect(resolveDesktopUpdateDevHtmlPath("/console/desktop/update")).toBeNull()
+    expect(config.build?.rollupOptions?.input).toEqual(expect.objectContaining({
+      dashboard: expect.stringContaining("index.html"),
+      desktopUpdate: expect.stringContaining("desktop-update.html"),
     }))
   })
 
