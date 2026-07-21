@@ -1,5 +1,6 @@
 import { parseSkillRepositoryInstallProtocolUrl } from "../../src/lib/skill-repository-install-window"
 import type { SynapseSkillRepositoryInstallWindowRequest } from "../../src/types/skill-repository-install"
+import { DESKTOP_UPDATE_INTENT_TOKEN_MAX_LENGTH } from "../../config"
 
 type ProtocolRouterLogger = {
   warn: (message: string, meta?: unknown) => void
@@ -10,6 +11,12 @@ type ProtocolUrlRouterDeps = {
   handleAuthCallback: (url: string) => Promise<unknown>
   logger: ProtocolRouterLogger
   openSkillRepositoryInstallWindow: (request: SynapseSkillRepositoryInstallWindowRequest) => Promise<void>
+  publishUpdateOpenRequest: (automatic: boolean) => void
+  verifyUpdateIntent: (token: string) => Promise<boolean>
+}
+
+type UpdateProtocolRequest = {
+  readonly token: string | null
 }
 
 function isSynapseProtocolUrl(rawUrl: string): boolean {
@@ -48,6 +55,38 @@ function isSkillRepositoryInstallUrlCandidate(rawUrl: string): boolean {
   }
 }
 
+function parseUpdateProtocolRequest(rawUrl: string): UpdateProtocolRequest | null {
+  try {
+    const parsed = new URL(rawUrl)
+    if (parsed.protocol !== "synapse:" || parsed.hostname !== "update") {
+      return null
+    }
+    if (
+      (parsed.pathname !== "" && parsed.pathname !== "/")
+      || parsed.hash !== ""
+      || parsed.username !== ""
+      || parsed.password !== ""
+      || parsed.port !== ""
+    ) return { token: null }
+    if (parsed.search === "") {
+      return { token: null }
+    }
+    const tokenValues = parsed.searchParams.getAll("token")
+    const parameterNames = [...parsed.searchParams.keys()]
+    if (
+      parameterNames.length !== 1
+      || tokenValues.length !== 1
+      || !tokenValues[0]
+      || tokenValues[0].length > DESKTOP_UPDATE_INTENT_TOKEN_MAX_LENGTH
+    ) {
+      return { token: null }
+    }
+    return { token: tokenValues[0] }
+  } catch {
+    return null
+  }
+}
+
 function shouldFocusMainForSecondInstance(argv: string[]): boolean {
   return !argv.some(isSynapseProtocolUrl)
 }
@@ -58,6 +97,21 @@ function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: strin
   let activeDrain: Promise<number> | null = null
 
   async function routeUrl(url: string): Promise<number> {
+    const updateRequest = parseUpdateProtocolRequest(url)
+    if (updateRequest) {
+      deps.focusMainWindow()
+      let automatic = false
+      if (updateRequest.token) {
+        try {
+          automatic = await deps.verifyUpdateIntent(updateRequest.token)
+        } catch {
+          deps.logger.warn("Update intent verification failed closed.")
+        }
+      }
+      deps.publishUpdateOpenRequest(automatic)
+      return 0
+    }
+
     if (isAccountAuthCallbackUrl(url)) {
       try {
         await deps.handleAuthCallback(url)

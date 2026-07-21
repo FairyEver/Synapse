@@ -27,7 +27,7 @@ import type {
   SynapseRepositorySyncSnapshotUpdatedEvent,
   SynapseRepositoryUpdatedEvent,
 } from "../src/types/repository"
-import type { SynapseAppUpdateState } from "../src/types/update"
+import type { SynapseAppUpdateOpenRequest, SynapseAppUpdateState } from "../src/types/update"
 import type { AutomationChangedEvent } from "../src/types/automation"
 import type { WorkflowEvent } from "../src/types/workflow"
 import type { SynapseCheatCodeStateChangedEvent } from "../src/types/cheat-code"
@@ -892,12 +892,19 @@ const synapseBridge: SynapseBridge = {
     },
   },
   updater: {
+    acknowledgeOpenRequest: (id) =>
+      invoke(IPC_CHANNELS.update.acknowledgeOpenRequest)({ id }),
     cancelDownload: invoke(IPC_CHANNELS.update.cancelDownload),
     checkForUpdates: invoke(IPC_CHANNELS.update.checkForUpdates),
     checkForUpdatesOnPageEnter: invoke(IPC_CHANNELS.update.checkForUpdatesOnPageEnter),
     downloadUpdate: invoke(IPC_CHANNELS.update.downloadUpdate),
+    getPendingOpenRequest: invoke(IPC_CHANNELS.update.getPendingOpenRequest),
     getState: invoke(IPC_CHANNELS.update.getState),
     installUpdate: invoke(IPC_CHANNELS.update.installUpdate),
+    onOpenRequest: createRawPayloadSubscription<SynapseAppUpdateOpenRequest>(
+      subscribe,
+      IPC_CHANNELS.update.openRequest,
+    ),
     onStateChanged: createRawPayloadSubscription<SynapseAppUpdateState>(
       subscribe,
       EVENT_CHANNELS.update.stateChanged,

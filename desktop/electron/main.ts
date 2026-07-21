@@ -27,6 +27,7 @@ import type { WindowManager } from "./runtime/window"
 import { accountService } from "./services/account-service"
 import { createMainLogger } from "./services/log-store"
 import { skillRepositoryInstallWindowService } from "./services/skill-repository-install-window-service"
+import { updateService } from "./services/update-service"
 
 const logger = createMainLogger("main")
 const mainWindowState = createMainWindowState()
@@ -47,6 +48,8 @@ const protocolRouter = createProtocolUrlRouter({
   handleAuthCallback: (url) => accountService.handleAuthCallback(url),
   logger,
   openSkillRepositoryInstallWindow: (request) => skillRepositoryInstallWindowService.open(request),
+  publishUpdateOpenRequest: (automatic) => updateService.publishUpdateOpenRequest(automatic),
+  verifyUpdateIntent: (token) => updateService.verifyUpdateIntent(token),
 }, process.argv.filter(isSynapseProtocolUrl))
 
 attachProcessLevelLogging({

@@ -35,6 +35,11 @@ const updateStateResponseSchema = z.object({
   canCheck: z.boolean(),
 })
 
+const updateOpenRequestSchema = z.object({
+  id: z.number().int().positive(),
+  automatic: z.boolean(),
+}).strict()
+
 export const updateIpcModule: IpcModule = {
   id: "update",
   methods: {
@@ -92,6 +97,30 @@ export const updateIpcModule: IpcModule = {
         await updateService.installUpdate()
       },
     },
+    getPendingOpenRequest: {
+      kind: "invoke",
+      operationId: "app.update.operation.get_pending_open_request",
+      request: z.void(),
+      response: updateOpenRequestSchema.nullable(),
+      handler: async (_ctx) => {
+        return updateService.getPendingOpenRequest()
+      },
+    },
+    acknowledgeOpenRequest: {
+      kind: "invoke",
+      operationId: "app.update.operation.acknowledge_open_request",
+      request: z.object({ id: z.number().int().positive() }).strict(),
+      response: z.void(),
+      handler: async (_ctx, request: { id: number }) => {
+        updateService.acknowledgeOpenRequest(request.id)
+      },
+    },
   },
-  events: {},
+  events: {
+    openRequest: {
+      kind: "event",
+      operationId: "app.update.operation.open_request",
+      payload: updateOpenRequestSchema,
+    },
+  },
 }

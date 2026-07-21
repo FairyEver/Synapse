@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
   activeRepository: null as { uuid: string; name: string; localPath: string } | null,
   getStates: vi.fn(),
+  getPendingOpenRequest: vi.fn(),
   hasRepositories: false,
   logger: {
     error: vi.fn(),
@@ -15,6 +16,9 @@ const mocks = vi.hoisted(() => ({
     warn: vi.fn(),
   },
   repositoryState: undefined as { status: "checking" | "missing" | "ready" } | undefined,
+  requestOpenSettingsAbout: vi.fn(),
+  updateOpenRequestListener: null as null | ((request: { id: number; automatic: boolean }) => void),
+  updateOpenRequestSetupOrder: [] as string[],
 }))
 
 vi.mock("@/app-shell/account-ui-visibility", () => ({
@@ -82,7 +86,7 @@ vi.mock("@/app-shell/use-repository-manager", () => ({
 vi.mock("@/app-shell/navigation", () => ({
   publishActiveAppTab: vi.fn(),
   requestOpenSettingsAccount: vi.fn(),
-  requestOpenSettingsAbout: vi.fn(),
+  requestOpenSettingsAbout: mocks.requestOpenSettingsAbout,
   requestOpenSettingsDock: vi.fn(),
   requestOpenSettingsStorage: vi.fn(),
   subscribeOpenAgentSession: () => () => undefined,
@@ -126,6 +130,17 @@ vi.mock("@/lib/electron-bridge", () => ({
       onStateChanged: () => () => undefined,
     },
     updater: {
+      getPendingOpenRequest: () => {
+        mocks.updateOpenRequestSetupOrder.push("pull")
+        return mocks.getPendingOpenRequest()
+      },
+      onOpenRequest: (listener: (request: { id: number; automatic: boolean }) => void) => {
+        mocks.updateOpenRequestSetupOrder.push("subscribe")
+        mocks.updateOpenRequestListener = listener
+        return () => {
+          mocks.updateOpenRequestListener = null
+        }
+      },
       onOpenUpdatePage: () => () => undefined,
     },
   }),
@@ -157,8 +172,11 @@ let roots: Root[] = []
 beforeEach(() => {
   mocks.activeRepository = null
   mocks.getStates.mockResolvedValue({})
+  mocks.getPendingOpenRequest.mockResolvedValue(null)
   mocks.hasRepositories = false
   mocks.repositoryState = undefined
+  mocks.updateOpenRequestListener = null
+  mocks.updateOpenRequestSetupOrder = []
   vi.clearAllMocks()
 })
 
@@ -194,6 +212,33 @@ describe("App without repositories", () => {
     expect(document.querySelector("[data-testid='empty-repository-state']")).toBeNull()
     expect(document.body.textContent).toContain("Dock")
     expect(document.body.textContent).toContain("应用模块")
+  })
+
+  it("subscribes before pulling a pending update open request and navigates to About Synapse", async () => {
+    mocks.getPendingOpenRequest.mockResolvedValue({ id: 1, automatic: true })
+
+    await renderApp()
+
+    expect(mocks.updateOpenRequestSetupOrder.slice(0, 2)).toEqual(["subscribe", "pull"])
+    expect(mocks.requestOpenSettingsAbout).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).toContain("settings")
+  })
+
+  it("ignores an older pull result after a newer update open event", async () => {
+    let resolvePending: ((request: { id: number; automatic: boolean }) => void) | undefined
+    mocks.getPendingOpenRequest.mockReturnValue(new Promise((resolve) => {
+      resolvePending = resolve
+    }))
+
+    await renderApp()
+    await act(async () => {
+      mocks.updateOpenRequestListener?.({ id: 2, automatic: true })
+      resolvePending?.({ id: 1, automatic: false })
+      await Promise.resolve()
+    })
+
+    expect(mocks.requestOpenSettingsAbout).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).toContain("settings")
   })
 })
 

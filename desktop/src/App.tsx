@@ -50,6 +50,7 @@ import type { SynapseSystemAppId } from "@/modules/apps/types"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
 import { SoundNotifierHost } from "../app-capabilities/sound-notifier/renderer/host"
 import { SynapseSkillUpdateDialogHost } from "../app-capabilities/synapse-skill/renderer/update-dialog"
+import type { SynapseAppUpdateOpenRequest } from "@/types/update"
 
 type ActiveAppId = SynapseSystemAppId
 type ActiveAppChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
@@ -87,6 +88,7 @@ function MainApp() {
   )
 
   const activeAppIdRef = useRef(activeAppId)
+  const lastHandledUpdateOpenRequestIdRef = useRef(0)
   activeAppIdRef.current = activeAppId
 
   useEffect(() => {
@@ -226,6 +228,29 @@ function MainApp() {
       setPendingAppContentOpenRequest(request)
     })
   }, [setActiveAppId])
+
+  const handleUpdateOpenRequest = useCallback((request: SynapseAppUpdateOpenRequest) => {
+    if (request.id <= lastHandledUpdateOpenRequestIdRef.current) return
+    lastHandledUpdateOpenRequestIdRef.current = request.id
+    setActiveAppId("settings", "notification")
+    requestOpenSettingsAbout()
+  }, [setActiveAppId])
+
+  useEffect(() => {
+    const bridge = getSynapseBridge()
+    if (!bridge) return
+
+    const unsubscribe = bridge.updater.onOpenRequest(handleUpdateOpenRequest)
+    void bridge.updater.getPendingOpenRequest()
+      .then((request) => {
+        if (request) handleUpdateOpenRequest(request)
+      })
+      .catch((error) => {
+        logger.error("Failed to read pending update open request.", error)
+      })
+
+    return unsubscribe
+  }, [handleUpdateOpenRequest])
 
   useEffect(() => {
     const bridge = getSynapseBridge()

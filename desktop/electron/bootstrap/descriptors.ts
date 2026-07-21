@@ -1067,10 +1067,19 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
 export const coreUpdateDescriptor: ServiceDescriptor<typeof updateService> = {
   id: "core.update",
   criticality: "degraded",
-  dependsOn: ["core.config", "core.window-manager"],
+  dependsOn: [
+    "core.config",
+    "core.window-manager",
+    "core.permission-guard",
+    "core.audit-sink",
+  ],
   create(ctx) {
     const windowManager = ctx.registry.get<WindowManager>("core.window-manager")
     updateService.setWindowManager(windowManager)
+    updateService.setUpdateIntentVerificationSecurity({
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+    })
     updateService.initialize()
     updateService.startAutoCheck()
     return updateService

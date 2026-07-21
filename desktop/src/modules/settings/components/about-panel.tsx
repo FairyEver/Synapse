@@ -132,6 +132,17 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       setUpdateState(state)
     })
 
+    const acknowledgeManualOpenRequest = async () => {
+      try {
+        const request = await bridge.getPendingOpenRequest()
+        if (!cancelled && request && !request.automatic) {
+          await bridge.acknowledgeOpenRequest(request.id)
+        }
+      } catch (error) {
+        logger.error("Failed to acknowledge manual update open request.", error)
+      }
+    }
+
     const loadAndCheckForUpdates = async () => {
       try {
         const state = await bridge.getState()
@@ -158,6 +169,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       }
     }
 
+    void acknowledgeManualOpenRequest()
     void loadAndCheckForUpdates()
 
     return () => {

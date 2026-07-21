@@ -72,6 +72,24 @@ describe("AboutPanel cheat codes", () => {
     expect(getUpdaterBridge().checkForUpdatesOnPageEnter).toHaveBeenCalledTimes(1)
   })
 
+  it("acknowledges a manual update-open request after the panel takes over navigation", async () => {
+    const updater = getUpdaterBridge()
+    vi.mocked(updater.getPendingOpenRequest).mockResolvedValue({ id: 7, automatic: false })
+
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(7)
+  })
+
+  it("retains an automatic update-open request for the automatic update controller", async () => {
+    const updater = getUpdaterBridge()
+    vi.mocked(updater.getPendingOpenRequest).mockResolvedValue({ id: 8, automatic: true })
+
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    expect(updater.acknowledgeOpenRequest).not.toHaveBeenCalled()
+  })
+
   it("downloads only after the user confirms the available update", async () => {
     const updater = getUpdaterBridge()
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
@@ -550,6 +568,7 @@ function installUpdaterBridge(): void {
     message: "当前已是最新版本。",
   })
   const updater = {
+    acknowledgeOpenRequest: vi.fn(),
     cancelDownload: vi.fn(),
     checkForUpdates: vi.fn(),
     checkForUpdatesOnPageEnter: vi.fn().mockResolvedValue(initialState),
@@ -561,8 +580,11 @@ function installUpdaterBridge(): void {
       status: "downloading",
       transferredBytes: 0,
     })),
+    getPendingOpenRequest: vi.fn().mockResolvedValue(null),
     getState: vi.fn().mockResolvedValue(initialState),
     installUpdate: vi.fn(),
+    onOpenRequest: vi.fn(() => () => undefined),
+    onOpenUpdatePage: vi.fn(() => () => undefined),
     onStateChanged: vi.fn((listener: (state: SynapseAppUpdateState) => void) => {
       updaterStateListeners.push(listener)
       return () => {
