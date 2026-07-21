@@ -1,6 +1,6 @@
 # 桌面端一键更新承接链路设计
 
-- 状态：已确认，待实现
+- 状态：已实现
 - 日期：2026-07-21
 - 稳定入口：`https://synapse.d2.pub/desktop/update`
 - 相关决策：`docs/adr/0028-use-an-https-handoff-for-shared-update-links.md`、`docs/adr/0029-require-a-short-lived-credential-for-automatic-update-deep-links.md`
@@ -456,15 +456,16 @@ renderer 内现有 `requestOpenSettingsAbout` 可以继续处理设置组件尚�
 - 不附加版本 query；
 - macOS 本地发布生成的 release body artifact 同样包含该链接。
 
-### 11.2 发布前可用性检查
+### 11.2 部署后可用性检查
 
-`.github/workflows/release.yml` 在创建 Release 前检查：
+`deploy.sh` 在新服务完成切换、容器内健康检查通过后检查：
 
 - `https://synapse.d2.pub/desktop/update` 可访问并最终返回 2xx；
 - 返回的是独立更新页，而不是 `/console` 登录页或重定向；
-- 准备发布的 Release body 包含稳定链接。
 
-页面不可用时阻止发布，避免公开一个失效入口。
+该公网检查属于生产部署后的验收门禁。服务端/页面尚未部署时，生产地址仍指向旧页面或跳转 `/console/` 是预期现状，不作为本地测试或部署前发版准备失败；首次上线必须先通过部署后门禁，再发布客户端。
+
+`.github/workflows/release.yml` 在创建 Release 前只静态确认准备发布的 Release body 包含稳定链接且不含自定义协议或版本参数，不主动探测生产页面。
 
 ### 11.3 首次上线顺序
 
@@ -586,7 +587,7 @@ renderer 内现有 `requestOpenSettingsAbout` 可以继续处理设置组件尚�
 ### 14.6 发布与兼容
 
 - Release body 固定包含稳定 HTTPS 链接，不包含自定义协议和版本参数。
-- 发布前 URL 健康检查能区分独立更新页和 `/console` 页面。
+- 部署后 URL 健康检查能区分独立更新页和 `/console` 页面；部署前 Release workflow 只静态校验正文。
 - 已安装旧客户端时，网页始终展示可执行的手动设置回退。
 - macOS 与 Windows 正式打包产物各做一次协议注册、冷启动和热启动 smoke test。
 
@@ -610,5 +611,5 @@ renderer 内现有 `requestOpenSettingsAbout` 可以继续处理设置组件尚�
 5. 自动流程正确处理检查中、可更新、下载中、已下载、已是最新和错误状态，重复触发保持幂等。
 6. “稍后安装”、离页清理和 Knowledge Base 迁移退出门继续有效。
 7. 网页不提供下载，不谎报唤醒成功，并始终给出手动设置回退。
-8. 每次 GitHub Release 都包含稳定 HTTPS 链接，且发布前验证页面可用。
+8. 每次 GitHub Release 都包含稳定 HTTPS 链接；生产服务部署后必须验证页面可用，首次上线通过该门禁后才发布客户端。
 9. token 和独立 secret 不出现在 URL 日志、renderer、数据库、发布产物或仓库真实配置中。

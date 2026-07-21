@@ -107,6 +107,119 @@ jobs:
       - name: Verify packaged app
         run: pnpm --filter @synapse/desktop run check:packaged-asar
 
+      - name: Smoke macOS packaged update protocol
+        if: matrix.label == 'macOS'
+        env:
+          UPDATE_DEEP_LINK: synapse://update
+        run: |
+          set -euo pipefail
+
+          APP_BUNDLE="$GITHUB_WORKSPACE/desktop/release/mac-arm64/Synapse.app"
+          APP_BINARY="$APP_BUNDLE/Contents/MacOS/Synapse"
+          INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
+          LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+          test -x "$APP_BINARY"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes' "$INFO_PLIST" | grep -Fq 'CFBundleURLSchemes'
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes' "$INFO_PLIST" | grep -Fq 'synapse'
+          "$LSREGISTER" -f "$APP_BUNDLE"
+
+          stop_synapse() {
+            pkill -f "$APP_BINARY" >/dev/null 2>&1 || true
+          }
+
+          wait_for_synapse() {
+            local attempt
+            local pid
+            for attempt in {1..30}; do
+              pid=$(pgrep -f "$APP_BINARY" | head -n 1 || true)
+              if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+                printf '%s\n' "$pid"
+                return 0
+              fi
+              sleep 1
+            done
+            return 1
+          }
+
+          trap stop_synapse EXIT
+          stop_synapse
+          open "$UPDATE_DEEP_LINK"
+          COLD_PID=$(wait_for_synapse)
+          kill -0 "$COLD_PID"
+          echo "cold update protocol launch ok"
+
+          stop_synapse
+          open -g "$APP_BUNDLE"
+          HOT_PID=$(wait_for_synapse)
+          open "$UPDATE_DEEP_LINK"
+          sleep 5
+          kill -0 "$HOT_PID"
+          echo "hot update protocol launch ok"
+
+      - name: Smoke Windows packaged update protocol
+        if: matrix.label == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $appPath = Join-Path $env:GITHUB_WORKSPACE 'desktop/release/win-unpacked/Synapse.exe'
+          $updateDeepLink = 'synapse://update'
+          $protocolPath = 'Registry::HKEY_CURRENT_USER\Software\Classes\synapse\shell\open\command'
+
+          if (-not (Test-Path -LiteralPath $appPath)) {
+            throw "Packaged executable not found: $appPath"
+          }
+
+          function Stop-SynapseProcesses {
+            Get-Process -Name Synapse -ErrorAction SilentlyContinue | Stop-Process -Force
+          }
+
+          function Wait-SynapseProcess {
+            for ($attempt = 0; $attempt -lt 30; $attempt += 1) {
+              $process = Get-Process -Name Synapse -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($null -ne $process) {
+                return $process
+              }
+              Start-Sleep -Seconds 1
+            }
+            throw 'Synapse did not start within 30 seconds.'
+          }
+
+          try {
+            Stop-SynapseProcesses
+            $registrationProcess = Start-Process -FilePath $appPath -PassThru
+            Start-Sleep -Seconds 3
+            if ($registrationProcess.HasExited) {
+              throw 'Packaged Synapse exited before protocol registration.'
+            }
+            $protocolCommand = (Get-Item -LiteralPath $protocolPath).GetValue('')
+            if (-not $protocolCommand.Contains($appPath)) {
+              throw 'The synapse protocol is not registered to the packaged executable.'
+            }
+
+            Stop-SynapseProcesses
+            Start-Process $updateDeepLink
+            $coldProcess = Wait-SynapseProcess
+            if ($coldProcess.HasExited) {
+              throw 'The cold update protocol launch exited unexpectedly.'
+            }
+            Write-Output 'cold update protocol launch ok'
+
+            Stop-SynapseProcesses
+            $hotProcess = Start-Process -FilePath $appPath -PassThru
+            Start-Sleep -Seconds 3
+            Start-Process $updateDeepLink
+            Start-Sleep -Seconds 5
+            $hotProcess.Refresh()
+            if ($hotProcess.HasExited) {
+              throw 'The hot update protocol launch terminated the primary app.'
+            }
+            Write-Output 'hot update protocol launch ok'
+          }
+          finally {
+            Stop-SynapseProcesses
+          }
+
       - name: Collect release artifacts
         run: |
           mkdir -p release-artifacts
@@ -139,6 +252,7 @@ jobs:
       TENCENT_CLOUD_COS_REGION: ap-beijing
       TENCENT_CLOUD_COS_ENDPOINT: cos.accelerate.myqcloud.com
       TENCENT_CLOUD_CDN_DOMAIN: desktop.release.synapse.d2.pub
+      DESKTOP_UPDATE_HANDOFF_URL: https://synapse.d2.pub/desktop/update
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -268,6 +382,20 @@ jobs:
           while IFS= read -r url; do
             verify_cdn_head "$url"
           done < <(node -e "const manifest=require('./cdn-release/manifest.json'); for (const url of manifest.assetUrls) console.log(url)")
+
+      - name: Verify release body
+        run: |
+          set -euo pipefail
+
+          test "$(grep -Fxc "一键更新：${DESKTOP_UPDATE_HANDOFF_URL}" cdn-release/release-body.md)" -eq 1
+          if grep -Fq 'synapse://' cdn-release/release-body.md; then
+            echo "Release body must not contain a custom-protocol update link."
+            exit 1
+          fi
+          if grep -Eq 'https://synapse\.d2\.pub/desktop/update[?#]' cdn-release/release-body.md; then
+            echo "Release body must not contain a versioned or parameterized update handoff link."
+            exit 1
+          fi
 
       - name: Publish release notes
         env:

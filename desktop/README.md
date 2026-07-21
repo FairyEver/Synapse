@@ -45,14 +45,14 @@ pnpm desktop:release:mac                               # 递增版本号、提�
 
 1. 装依赖（`pnpm install --frozen-lockfile`，需要根目录 `pnpm-lock.yaml` 已提交）。
 2. 依次执行 `pnpm --filter @synapse/desktop run build:renderer`、`pnpm --filter @synapse/desktop run build:electron`、`pnpm --filter @synapse/desktop run build:database`。
-3. 执行 `pnpm --filter @synapse/desktop run package:mac` / `pnpm --filter @synapse/desktop run package:win`。
+3. 执行 `pnpm --filter @synapse/desktop run package:mac` / `pnpm --filter @synapse/desktop run package:win`，并在对应 runner 上验证 `synapse` 协议注册、冷启动和热启动。
 4. 把 `desktop/release/` 下的产物整理为腾讯云 CDN 发布目录：安装包和 blockmap 归档到 `https://desktop.release.synapse.d2.pub/v<version>/`，`latest.yml` / `latest-windows.yml` / `latest-mac.yml` 上传到 CDN 根目录供应用内更新检查。
-5. 刷新 CDN 上的 `latest.yml` / `latest-windows.yml` / `latest-mac.yml`，验证 CDN 可访问后，在 `FairyEver/SynapseAppRelease` 创建只包含下载链接和发版说明的 GitHub Release。
+5. 刷新并验证 CDN，并静态确认 Release body 只包含 `https://synapse.d2.pub/desktop/update` 这个稳定 HTTPS 更新入口；该 workflow 不探测尚未部署的生产页面。生产页面的公网可用性由服务端部署完成后的 `deploy.sh` 门禁验收，首次上线必须先通过该验收，再在 `FairyEver/SynapseAppRelease` 发布客户端。
 6. 清理腾讯云 COS 根目录下旧的 `v<version>/` 目录：默认保留语义版本号最新的 3 个版本，并额外保留仍被 `latest.yml`、`latest-windows.yml` 或 `latest-mac.yml` 引用的版本，避免某个平台更新链接失效。
 
 GitHub Action 发版会在构建安装包时设置 `SYNAPSE_DESKTOP_PUBLIC_APP_URL=https://synapse.d2.pub`，并强制要求该变量存在，避免正式包写入 CI 测试兜底地址。
 
-本机 macOS 快速发版使用 `pnpm desktop:release:mac`。该命令复用现有版本递增和 macOS 打包流程，只上传 macOS 安装包、blockmap 和 `latest-mac.yml`，不会改动 `latest.yml` 或 `latest-windows.yml`。发布成功后同样会清理旧的 `v<version>/` 目录，但仍会保留三个 `latest*.yml` 当前引用的版本；如需临时跳过清理，可给 `desktop/scripts/release/publish-mac-release.mjs` 传 `--skip-cos-prune`。全量 GitHub Action 发版仍会覆盖三个 updater metadata 文件，让 macOS 和 Windows 重新对齐到同一个版本。
+本机 macOS 快速发版使用 `pnpm desktop:release:mac`。该命令复用现有版本递增和 macOS 打包流程，只上传 macOS 安装包、blockmap 和 `latest-mac.yml`，不会改动 `latest.yml` 或 `latest-windows.yml`。它生成的 `release-body.md` 与 CI 共用同一份文案生成逻辑，固定包含 `https://synapse.d2.pub/desktop/update`，不包含 `synapse://`、目标版本或 query。发布成功后同样会清理旧的 `v<version>/` 目录，但仍会保留三个 `latest*.yml` 当前引用的版本；如需临时跳过清理，可给 `desktop/scripts/release/publish-mac-release.mjs` 传 `--skip-cos-prune`。全量 GitHub Action 发版仍会覆盖三个 updater metadata 文件，让 macOS 和 Windows 重新对齐到同一个版本。
 
 本机发布会自动读取仓库根目录 `.env.release.local`、`.env.local`、`.env`。推荐在 `.env.release.local` 中填写 `SYNAPSE_DESKTOP_PUBLIC_APP_URL`、`TENCENT_CLOUD_SECRET_ID`、`TENCENT_CLOUD_SECRET_KEY`；该文件已被 `.gitignore` 忽略，不会提交。也可以用 `--env-file <path>` 指定其它文件。若 shell 环境已存在同名变量，脚本不会用 env 文件覆盖它。如果没有安装 `tccli`，可先运行 `python -m pip install --user tccli`；COSCLI 会优先使用 `COSCLI_PATH` 或 PATH 中的 `coscli`，缺失时脚本会下载当前平台的 COSCLI 到临时目录。
 

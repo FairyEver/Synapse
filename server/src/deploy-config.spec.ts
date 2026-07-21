@@ -294,6 +294,34 @@ describe("server deployment configuration", () => {
     expect(restartScript).toContain("drive share route")
   })
 
+  it("checks the independent update page and update credential service during deployment", () => {
+    const deployScript = readRepoFile("deploy.sh")
+
+    expect(deployScript).toContain('check_body_contains "desktop update page" "http://127.0.0.1:3000/desktop/update" \'<title>更新 Synapse</title>\'')
+    expect(deployScript).toContain("check_update_intent_service")
+    expect(deployScript).toContain("/api/desktop/update-intent")
+    expect(deployScript).toContain("/api/desktop/update-intent/verify")
+    expect(deployScript).toContain("result.authorized !== true")
+    expect(deployScript).not.toContain("console.log(token)")
+    expect(deployScript.indexOf('check_body_contains "desktop update page"'))
+      .toBeLessThan(deployScript.lastIndexOf("check_update_intent_service"))
+  })
+
+  it("accepts the public update handoff only after the deployed service passes internal checks", () => {
+    const deployScript = readRepoFile("deploy.sh")
+    const internalCredentialCheck = deployScript.lastIndexOf("check_update_intent_service")
+    const publicHandoffCheck = deployScript.lastIndexOf("check_public_desktop_update_page")
+
+    expect(deployScript).toContain('https://synapse.d2.pub/desktop/update')
+    expect(deployScript).toContain('%{url_effective}')
+    expect(deployScript).toContain('<title>更新 Synapse</title>')
+    expect(deployScript).toContain('if effective_url=$(curl')
+    expect(deployScript).toMatch(/run_deployed_health_check\(\) \{\s+run_remote_health_check && check_public_desktop_update_page\s+\}/)
+    expect(deployScript).toContain("rollback_remote_service 2>&1 | sed 's/^/  /' && run_remote_health_check")
+    expect(deployScript).not.toContain("rollback_remote_service 2>&1 | sed 's/^/  /' && run_deployed_health_check")
+    expect(publicHandoffCheck).toBeGreaterThan(internalCredentialCheck)
+  })
+
   it("routes public webhooks through nginx instead of dashboard redirects", () => {
     const nginx = readRepoFile("server/nginx.conf")
 
