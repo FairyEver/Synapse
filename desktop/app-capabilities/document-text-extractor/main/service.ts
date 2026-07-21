@@ -1,8 +1,6 @@
 import { constants } from "node:fs"
-import { existsSync } from "node:fs"
 import { lstat, open } from "node:fs/promises"
 import path from "node:path"
-import { Worker, type WorkerOptions } from "node:worker_threads"
 import type { DispatchContext } from "../../../synapse-capabilities/shared/types"
 import {
   DOCUMENT_TEXT_EXTRACTION_MAX_FILE_BYTES,
@@ -28,10 +26,11 @@ import {
   type DocumentTextExtractionInput,
   type DocumentTextExtractionResult,
 } from "../shared/schema"
-import type {
-  DocumentTextExtractionWorkerInput,
-  DocumentTextExtractionWorkerMessage,
-} from "./worker-protocol"
+import type { DocumentTextExtractionWorkerMessage } from "./worker-protocol"
+import {
+  launchDocumentTextExtractionWorker,
+  type DocumentTextExtractionWorkerFactory,
+} from "./worker-launch"
 import {
   DocumentTextExtractionScheduler,
   type DocumentTextExtractionTask,
@@ -55,10 +54,8 @@ type DocumentTextExtractionWorkerRuntime = {
   ): Promise<WorkerExtractionResult>
 }
 
-export type DocumentTextExtractionWorkerFactory = (
-  filename: string,
-  options: WorkerOptions,
-) => Worker
+export type { DocumentTextExtractionWorkerFactory } from "./worker-launch"
+export { resolveDocumentTextExtractionWorkerPath } from "./worker-launch"
 
 export type DocumentTextExtractorService = {
   createTask(
@@ -91,7 +88,7 @@ export function createDocumentTextExtractorService(deps: {
     DOCUMENT_TEXT_EXTRACTION_MAX_CONCURRENCY,
     deps.logger,
   )
-  const workerFactory = deps.workerFactory ?? DEFAULT_WORKER_FACTORY
+  const workerFactory = deps.workerFactory
   const workerRuntime: DocumentTextExtractionWorkerRuntime = {
     run: (bytes, format, signal, onStarted) => extractDocumentInWorker(
       bytes,
@@ -202,7 +199,7 @@ async function authorizeDocumentRead(
       ? metadata
       : { ...metadata, reason: permission.reason, policyId: permission.policyId },
   })
-  if (!permission.allowed) throw new Error(permission.reason)
+  if (!permission.allowed) throw new DocumentTextExtractionError("PERMISSION_DENIED")
 }
 
 async function readVerifiedFile(
@@ -292,27 +289,20 @@ function extractDocumentInWorker(
   format: DocumentFormat,
   signal: AbortSignal,
   onStarted: () => void,
-  workerFactory: DocumentTextExtractionWorkerFactory,
+  workerFactory: DocumentTextExtractionWorkerFactory | undefined,
 ): Promise<WorkerExtractionResult> {
   if (signal.aborted) {
     return Promise.reject(new DocumentTextExtractionError("EXTRACTION_CANCELLED"))
   }
-  const transferable = bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength,
-  ) as ArrayBuffer
   return new Promise((resolve, reject) => {
-    const worker = workerFactory(resolveDocumentTextExtractionWorkerPath(__dirname), {
-      workerData: {
-        bytes: transferable,
-        format,
-        maxPages: DOCUMENT_TEXT_EXTRACTION_MAX_PDF_PAGES,
-        maxTextBytes: DOCUMENT_TEXT_EXTRACTION_MAX_TEXT_BYTES,
-      } satisfies DocumentTextExtractionWorkerInput,
-      transferList: [transferable],
-      resourceLimits: {
-        maxOldGenerationSizeMb: DOCUMENT_TEXT_EXTRACTION_WORKER_MAX_OLD_GENERATION_MB,
-      },
+    const worker = launchDocumentTextExtractionWorker({
+      baseDir: __dirname,
+      bytes,
+      format,
+      maxPages: DOCUMENT_TEXT_EXTRACTION_MAX_PDF_PAGES,
+      maxTextBytes: DOCUMENT_TEXT_EXTRACTION_MAX_TEXT_BYTES,
+      maxOldGenerationSizeMb: DOCUMENT_TEXT_EXTRACTION_WORKER_MAX_OLD_GENERATION_MB,
+      workerFactory,
     })
     onStarted()
     let settled = false
@@ -369,10 +359,6 @@ function getDocumentFormat(filePath: string): DocumentFormat | undefined {
   }
 }
 
-const DEFAULT_WORKER_FACTORY: DocumentTextExtractionWorkerFactory = (filename, options) => (
-  new Worker(filename, options)
-)
-
 async function runWorkerWithTimeout(
   workerRuntime: DocumentTextExtractionWorkerRuntime,
   bytes: Buffer,
@@ -407,14 +393,6 @@ async function runWorkerWithTimeout(
     if (timeout) clearTimeout(timeout)
     signal.removeEventListener("abort", abortWorker)
   }
-}
-
-export function resolveDocumentTextExtractionWorkerPath(baseDir: string): string {
-  const workerBaseDir = baseDir.replace(/([\\/])app\.asar(?=[\\/])/, "$1app.asar.unpacked")
-  const compiledPath = path.join(workerBaseDir, "worker.js")
-  return workerBaseDir !== baseDir || existsSync(compiledPath)
-    ? compiledPath
-    : path.join(baseDir, "worker.ts")
 }
 
 function isWorkerMemoryError(error: unknown): boolean {
