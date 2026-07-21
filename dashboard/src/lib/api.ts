@@ -57,6 +57,9 @@ import type {
   WebhookDeliveryHistoryDto,
 } from '@synapse/shared'
 import { DRIVE_SHARE_UNLOCK_REQUIRED_ERROR_CODE } from '@synapse/shared'
+import { ApiError, readErrorMessage, requestJson } from './api-client'
+
+export { ApiError } from './api-client'
 
 export type AdminSession = {
   email: string
@@ -359,8 +362,6 @@ export type AdminDriveStorageStatus = {
   bytes: string
 }
 
-type RequestOptions = RequestInit
-
 const consoleApiBasePath = '/api/console'
 const legacyDashboardApiBasePath = '/api/dashboard'
 const adminApiBasePath = '/api/admin'
@@ -370,70 +371,15 @@ const driveBrowserApiBasePath = '/api/drive/browser'
 const desktopAuthorizePath = '/api/auth/desktop/authorize'
 const authExpiredListeners = new Set<() => void>()
 
-export class ApiError extends Error {
-  readonly code?: string
-  readonly status: number
-
-  constructor(message: string, status: number, code?: string) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-    this.code = code
-  }
-}
-
-async function readErrorDetails(response: Response): Promise<{ readonly code?: string; readonly message: string }> {
-  const fallback = response.statusText || '请求失败'
-
+async function request<T>(path: string, options: RequestInit = {}) {
   try {
-    const payload = (await response.json()) as { code?: unknown; message?: unknown }
-    const code = typeof payload.code === 'string' ? payload.code : undefined
-
-    if (typeof payload.message === 'string') {
-      return { code, message: payload.message }
-    }
-
-    if (Array.isArray(payload.message)) {
-      return {
-        code,
-        message: payload.message.filter((item) => typeof item === 'string').join('，') || fallback,
-      }
-    }
-  } catch {
-    return { message: fallback }
-  }
-
-  return { message: fallback }
-}
-
-async function readErrorMessage(response: Response) {
-  return (await readErrorDetails(response)).message
-}
-
-async function request<T>(path: string, options: RequestOptions = {}) {
-  const headers =
-    options.body === undefined
-      ? options.headers
-      : {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        }
-
-  const response = await fetch(path, {
-    ...options,
-    credentials: 'include',
-    headers,
-  })
-
-  if (!response.ok) {
-    const error = await readErrorDetails(response)
-    if (shouldNotifyAuthExpired(path, response.status, error.code)) {
+    return await requestJson<T>(path, options)
+  } catch (error) {
+    if (error instanceof ApiError && shouldNotifyAuthExpired(path, error.status, error.code)) {
       notifyAuthExpired()
     }
-    throw new ApiError(error.message, response.status, error.code)
+    throw error
   }
-
-  return (await response.json()) as T
 }
 
 export function subscribeAuthExpired(listener: () => void) {

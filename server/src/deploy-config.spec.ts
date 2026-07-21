@@ -305,6 +305,7 @@ describe("server deployment configuration", () => {
     const nginx = readRepoFile("server/nginx.conf")
 
     expect(nginx).toContain("location = /desktop/update")
+    expect(nginx).toContain('if ($args != "") { return 404; }')
     expect(nginx).toContain("try_files /desktop-update.html =404;")
     expect(nginx).toContain("Content-Security-Policy")
     expect(nginx).toContain("frame-ancestors 'none'")

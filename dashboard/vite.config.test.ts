@@ -23,6 +23,8 @@ describe("dashboard Vite dev proxy", () => {
 
   it("serves the independent desktop update entry at the stable path in dev and build", () => {
     expect(resolveDesktopUpdateDevHtmlPath("/desktop/update")).toBe("/desktop-update.html")
+    expect(resolveDesktopUpdateDevHtmlPath("/desktop/update", "?version=1.2.3")).toBeNull()
+    expect(resolveDesktopUpdateDevHtmlPath("/desktop/update", "?mode=install")).toBeNull()
     expect(resolveDesktopUpdateDevHtmlPath("/desktop/update/")).toBeNull()
     expect(resolveDesktopUpdateDevHtmlPath("/console/desktop/update")).toBeNull()
     expect(config.build?.rollupOptions?.input).toEqual(expect.objectContaining({

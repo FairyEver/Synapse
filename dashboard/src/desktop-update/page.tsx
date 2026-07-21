@@ -1,36 +1,25 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
+import { type UpdateHandoffState, useUpdateHandoff } from './use-update-handoff'
 
-type PageState = 'idle' | 'requesting' | 'opened' | 'error'
-
-interface UpdateIntentResponse {
-  readonly deepLink: string
+const actionLabelByState: Record<UpdateHandoffState, string> = {
+  idle: '打开 Synapse 并更新',
+  requesting: '正在申请更新凭证',
+  opened: '再次打开 Synapse',
+  error: '重试',
 }
 
 export function UpdateHandoffPage() {
-  const [state, setState] = useState<PageState>('idle')
-  const requestPendingRef = useRef(false)
+  const { requestUpdate, state } = useUpdateHandoff()
+  const actionButtonRef = useRef<HTMLButtonElement>(null)
+  const previousStateRef = useRef(state)
 
-  const requestUpdate = async () => {
-    if (requestPendingRef.current) return
-    requestPendingRef.current = true
-    setState('requesting')
-
-    try {
-      const response = await fetch('/api/desktop/update-intent', { method: 'POST' })
-      if (!response.ok) throw new Error('Update intent request failed')
-
-      const result = await response.json() as UpdateIntentResponse
-      if (typeof result.deepLink !== 'string') throw new Error('Invalid update intent response')
-
-      window.open(result.deepLink, '_self')
-      setState('opened')
-    } catch {
-      setState('error')
-    } finally {
-      requestPendingRef.current = false
+  useEffect(() => {
+    if (previousStateRef.current === 'requesting' && state !== 'requesting') {
+      actionButtonRef.current?.focus()
     }
-  }
+    previousStateRef.current = state
+  }, [state])
 
   return (
     <main className='flex min-h-svh items-center justify-center px-6 py-12'>
@@ -43,18 +32,15 @@ export function UpdateHandoffPage() {
         </div>
 
         <Button
+          ref={actionButtonRef}
           type='button'
           size='lg'
           disabled={state === 'requesting'}
+          aria-busy={state === 'requesting'}
+          aria-live='polite'
           onClick={() => { void requestUpdate() }}
         >
-          {state === 'requesting'
-            ? '正在申请更新凭证'
-            : state === 'opened'
-              ? '再次打开 Synapse'
-              : state === 'error'
-                ? '重试'
-                : '打开 Synapse 并更新'}
+          {actionLabelByState[state]}
         </Button>
 
         {state === 'error' && (
