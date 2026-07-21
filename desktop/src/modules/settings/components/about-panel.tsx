@@ -107,18 +107,57 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   const [updateState, setUpdateState] = useState<SynapseAppUpdateState>(INITIAL_UPDATE_STATE)
   const [actionError, setActionError] = useState<string | null>(null)
   const [installCountdown, setInstallCountdown] = useState<number | null>(null)
+  const [installArmVersion, setInstallArmVersion] = useState(0)
   const [isRestarting, setIsRestarting] = useState(false)
+  const updateStateRef = useRef(INITIAL_UPDATE_STATE)
   const autoInstallArmedRef = useRef(false)
+  const automaticActionRef = useRef<"check" | "download" | null>(null)
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const installTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activeTitleColorOffset, setActiveTitleColorOffset] = useState(0)
   const [hoveredTitleIndex, setHoveredTitleIndex] = useState<number | null>(null)
 
-  useUpdateOpenRequest(useCallback(async (request, { acknowledge }) => {
-    if (!request.automatic) {
-      await acknowledge()
+  const advanceAutomaticUpdate = useCallback(async (state: SynapseAppUpdateState) => {
+    const bridge = window.synapse?.updater
+    if (!bridge || !autoInstallArmedRef.current) return
+
+    if (state.status === "error" || state.status === "not-available") {
+      autoInstallArmedRef.current = false
+      automaticActionRef.current = null
+      return
     }
-  }, []))
+
+    if (state.status === "checking") {
+      automaticActionRef.current = "check"
+      return
+    }
+    if (state.status === "downloading") {
+      automaticActionRef.current = "download"
+      return
+    }
+    if (state.status === "downloaded") {
+      automaticActionRef.current = null
+      return
+    }
+    if (state.status === "idle" && automaticActionRef.current === "check") return
+    if (state.status === "available" && automaticActionRef.current === "download") return
+    if (state.status !== "idle" && state.status !== "available") return
+
+    automaticActionRef.current = state.status === "available" ? "download" : "check"
+    try {
+      const nextState = state.status === "available"
+        ? await bridge.downloadUpdate()
+        : await bridge.checkForUpdates()
+      updateStateRef.current = nextState
+      setUpdateState(nextState)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "软件更新操作失败。"
+      logger.error("Automatic app update action failed in settings.", error)
+      autoInstallArmedRef.current = false
+      automaticActionRef.current = null
+      setActionError(message)
+    }
+  }, [])
 
   useEffect(() => {
     const bridge = window.synapse?.updater
@@ -136,17 +175,21 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
 
     const unsubscribe = bridge.onStateChanged((state) => {
       setActionError(null)
+      updateStateRef.current = state
       setUpdateState(state)
+      void advanceAutomaticUpdate(state)
     })
 
     const loadAndCheckForUpdates = async () => {
       try {
         const state = await bridge.getState()
         if (cancelled) return
+        updateStateRef.current = state
         setUpdateState(state)
 
         const checkedState = await bridge.checkForUpdatesOnPageEnter()
         if (!cancelled) {
+          updateStateRef.current = checkedState
           setUpdateState(checkedState)
         }
       } catch (error) {
@@ -171,7 +214,24 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       cancelled = true
       unsubscribe()
     }
-  }, [])
+  }, [advanceAutomaticUpdate])
+
+  useUpdateOpenRequest(useCallback(async (request, { acknowledge }) => {
+    if (!request.automatic) {
+      await acknowledge()
+      return
+    }
+
+    const bridge = window.synapse?.updater
+    if (!bridge) return
+
+    if (!autoInstallArmedRef.current) {
+      autoInstallArmedRef.current = true
+      setInstallArmVersion((current) => current + 1)
+    }
+    await advanceAutomaticUpdate(updateStateRef.current)
+    await acknowledge()
+  }, [advanceAutomaticUpdate]))
 
   const isChecking = updateState.status === "checking"
   const isAvailable = updateState.status === "available"
@@ -252,7 +312,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     return () => {
       clearInstallTimers()
     }
-  }, [clearInstallTimers, installDownloadedUpdate, isDownloaded])
+  }, [clearInstallTimers, installArmVersion, installDownloadedUpdate, isDownloaded])
 
   const cheatCodeContext = useMemo<CheatCodeContext>(
     () => ({

@@ -81,15 +81,24 @@ describe("AboutPanel cheat codes", () => {
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
     expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(7)
+    expect(updater.checkForUpdates).not.toHaveBeenCalled()
+    expect(updater.downloadUpdate).not.toHaveBeenCalled()
   })
 
-  it("retains an automatic update-open request for the automatic update controller", async () => {
+  it("bypasses the page-entry cooldown path with an explicit check for an automatic idle request", async () => {
     const updater = getUpdaterBridge()
     vi.mocked(updater.getPendingOpenRequest).mockResolvedValue({ id: 8, automatic: true })
+    vi.mocked(updater.checkForUpdates).mockResolvedValue(updateState({
+      canCheck: false,
+      message: "正在检查更新...",
+      status: "checking",
+    }))
 
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
-    expect(updater.acknowledgeOpenRequest).not.toHaveBeenCalled()
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1)
+    expect(updater.checkForUpdatesOnPageEnter).toHaveBeenCalledTimes(1)
+    expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(8)
   })
 
   it("acknowledges a hot manual request while the panel is already mounted", async () => {
@@ -102,6 +111,254 @@ describe("AboutPanel cheat codes", () => {
     })
 
     expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(9)
+  })
+
+  it("starts the existing download when an automatic request finds an available update", async () => {
+    const updater = getUpdaterBridge()
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({
+        message: "发现新版本 v0.2.190。",
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+    })
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 10, automatic: true })
+      await Promise.resolve()
+    })
+
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1)
+    expect(updater.checkForUpdates).not.toHaveBeenCalled()
+    expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(10)
+  })
+
+  it("waits for an existing check and downloads when it becomes available", async () => {
+    const updater = getUpdaterBridge()
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({
+        message: "正在检查更新...",
+        status: "checking",
+      }))
+    })
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 11, automatic: true })
+      await Promise.resolve()
+    })
+
+    expect(updater.checkForUpdates).not.toHaveBeenCalled()
+    expect(updater.downloadUpdate).not.toHaveBeenCalled()
+
+    await act(async () => {
+      emitUpdaterState(updateState({
+        message: "发现新版本 v0.2.190。",
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+      await Promise.resolve()
+    })
+
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it("starts the shared install countdown when an automatic request finds a downloaded update", async () => {
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({
+        downloadPercent: 100,
+        message: "新版本 v0.2.190 已下载。",
+        releaseVersion: "0.2.190",
+        status: "downloaded",
+      }))
+    })
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 12, automatic: true })
+      await Promise.resolve()
+    })
+
+    expect(getButtonWithText("3 秒后安装").disabled).toBe(true)
+    expect(getButtonWithText("稍后安装")).toBeTruthy()
+  })
+
+  it("waits for an existing download and starts the countdown when it completes", async () => {
+    const updater = getUpdaterBridge()
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({
+        downloadPercent: 40,
+        releaseVersion: "0.2.190",
+        status: "downloading",
+      }))
+    })
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 19, automatic: true })
+      await Promise.resolve()
+    })
+
+    expect(updater.checkForUpdates).not.toHaveBeenCalled()
+    expect(updater.downloadUpdate).not.toHaveBeenCalled()
+
+    act(() => {
+      emitUpdaterState(updateState({
+        downloadPercent: 100,
+        releaseVersion: "0.2.190",
+        status: "downloaded",
+      }))
+    })
+
+    expect(getButtonWithText("3 秒后安装").disabled).toBe(true)
+  })
+
+  it("does not restart the shared countdown for a repeated automatic request", async () => {
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({
+        downloadPercent: 100,
+        releaseVersion: "0.2.190",
+        status: "downloaded",
+      }))
+    })
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 20, automatic: true })
+      await Promise.resolve()
+    })
+    expect(getButtonWithText("3 秒后安装").disabled).toBe(true)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000)
+    })
+
+    expect(getButtonWithText("2 秒后安装").disabled).toBe(true)
+
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 21, automatic: true })
+      await Promise.resolve()
+    })
+
+    expect(getButtonWithText("2 秒后安装").disabled).toBe(true)
+  })
+
+  it("uses the loaded updater state before taking over a cold automatic request", async () => {
+    const updater = getUpdaterBridge()
+    const downloadedState = updateState({
+      downloadPercent: 100,
+      releaseVersion: "0.2.190",
+      status: "downloaded",
+    })
+    vi.mocked(updater.getState).mockResolvedValue(downloadedState)
+    vi.mocked(updater.checkForUpdatesOnPageEnter).mockResolvedValue(downloadedState)
+    vi.mocked(updater.checkForUpdates).mockResolvedValue(downloadedState)
+    vi.mocked(updater.getPendingOpenRequest).mockResolvedValue({ id: 17, automatic: true })
+
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    expect(updater.checkForUpdates).not.toHaveBeenCalled()
+    expect(getButtonWithText("3 秒后安装").disabled).toBe(true)
+  })
+
+  it("stops automatic progression after an updater error", async () => {
+    const updater = getUpdaterBridge()
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({ message: "正在检查更新...", status: "checking" }))
+    })
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 13, automatic: true })
+      await Promise.resolve()
+      emitUpdaterState(updateState({
+        canCheck: true,
+        error: "检查更新失败，请稍后再试。",
+        message: "检查更新失败，请稍后再试。",
+        status: "error",
+      }))
+      emitUpdaterState(updateState({
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+      await Promise.resolve()
+    })
+
+    expect(updater.downloadUpdate).not.toHaveBeenCalled()
+    expect(getButtonWithText("下载并安装")).toBeTruthy()
+  })
+
+  it("shows an automatic action failure once without retrying it", async () => {
+    const updater = getUpdaterBridge()
+    vi.mocked(updater.getPendingOpenRequest).mockResolvedValue({ id: 18, automatic: true })
+    vi.mocked(updater.checkForUpdates).mockRejectedValue(new Error("自动检查失败"))
+
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    expect(document.body.textContent).toContain("自动检查失败")
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1)
+    expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(18)
+  })
+
+  it("finishes automatic progression when the current version is already latest", async () => {
+    const updater = getUpdaterBridge()
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({ message: "正在检查更新...", status: "checking" }))
+    })
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 14, automatic: true })
+      await Promise.resolve()
+      emitUpdaterState(updateState({
+        canCheck: true,
+        message: "当前已经是最新版本。",
+        status: "not-available",
+      }))
+      emitUpdaterState(updateState({
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+      await Promise.resolve()
+    })
+
+    expect(updater.downloadUpdate).not.toHaveBeenCalled()
+  })
+
+  it("coalesces repeated automatic requests while the same download action is pending", async () => {
+    const updater = getUpdaterBridge()
+    let resolveDownload: ((state: SynapseAppUpdateState) => void) | undefined
+    vi.mocked(updater.downloadUpdate).mockImplementation(() => new Promise((resolve) => {
+      resolveDownload = resolve
+    }))
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+    })
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 15, automatic: true })
+      emitUpdateOpenRequest({ id: 16, automatic: true })
+      await Promise.resolve()
+    })
+
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1)
+    expect(updater.onOpenRequest).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveDownload?.(updateState({
+        releaseVersion: "0.2.190",
+        status: "downloading",
+      }))
+      await Promise.resolve()
+    })
+
+    expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(15)
+    expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(16)
   })
 
   it("downloads only after the user confirms the available update", async () => {
@@ -160,7 +417,7 @@ describe("AboutPanel cheat codes", () => {
     expect(updater.installUpdate).toHaveBeenCalledTimes(1)
   })
 
-  it("keeps the downloaded update ready when automatic installation is postponed", async () => {
+  it("keeps the update ready after postponing and lets a new automatic request re-arm it", async () => {
     const updater = getUpdaterBridge()
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
@@ -190,6 +447,13 @@ describe("AboutPanel cheat codes", () => {
 
     expect(updater.installUpdate).not.toHaveBeenCalled()
     expect(getButtonWithText("立即安装")).toBeTruthy()
+
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 22, automatic: true })
+      await Promise.resolve()
+    })
+
+    expect(getButtonWithText("3 秒后安装").disabled).toBe(true)
   })
 
   it("does not auto-install when the panel is left before download completes", async () => {
