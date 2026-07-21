@@ -355,6 +355,38 @@ describe("AboutPanel", () => {
     expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(16)
   })
 
+  it("keeps a pending download deduplicated when an older check resolves", async () => {
+    const updater = getUpdaterBridge()
+    let resolveCheck: ((state: SynapseAppUpdateState) => void) | undefined
+    vi.mocked(updater.getPendingOpenRequest).mockResolvedValue({ id: 30, automatic: true })
+    vi.mocked(updater.checkForUpdates).mockImplementation(() => new Promise((resolve) => {
+      resolveCheck = resolve
+    }))
+    vi.mocked(updater.downloadUpdate).mockImplementation(() => new Promise(() => undefined))
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      emitUpdaterState(updateState({
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+      await Promise.resolve()
+    })
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveCheck?.(updateState({
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+      await Promise.resolve()
+    })
+
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1)
+  })
+
   it("does not duplicate a pending manual check for a hot automatic request", async () => {
     const updater = getUpdaterBridge()
     vi.mocked(updater.checkForUpdates).mockImplementation(() => new Promise(() => undefined))
@@ -536,6 +568,32 @@ describe("AboutPanel", () => {
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(6_000)
+    })
+
+    expect(updater.installUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not re-arm while an automatic installation is pending", async () => {
+    const updater = getUpdaterBridge()
+    vi.mocked(updater.installUpdate).mockImplementation(() => new Promise(() => undefined))
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+    await emitStateAndAutomaticRequest(updateState({
+      downloadPercent: 100,
+      releaseVersion: "0.2.190",
+      status: "downloaded",
+    }), 31)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000)
+    })
+    expect(updater.installUpdate).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 32, automatic: true })
+      await Promise.resolve()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000)
     })
 
     expect(updater.installUpdate).toHaveBeenCalledTimes(1)

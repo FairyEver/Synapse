@@ -6,6 +6,8 @@ import type { SynapseAppUpdateState } from "@/types/update"
 
 const logger = createRendererLogger("settings.app-update")
 
+type UpdateAction = "check" | "download" | "install"
+
 const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
   currentVersion: "0.0.0",
   releaseVersion: null,
@@ -28,17 +30,16 @@ function useAppUpdateController() {
   const updateStateRef = useRef(INITIAL_UPDATE_STATE)
   const mountedRef = useRef(true)
   const automaticInstallArmedRef = useRef(false)
-  const automaticActionRef = useRef<"check" | "download" | null>(null)
+  const inFlightActionsRef = useRef(new Set<UpdateAction>())
 
   const setAutomaticInstallArmed = useCallback((armed: boolean) => {
+    if (armed && inFlightActionsRef.current.has("install")) return
     if (automaticInstallArmedRef.current === armed) return
 
     automaticInstallArmedRef.current = armed
     setAutomaticInstallArmedState(armed)
     if (armed) {
       setInstallArmVersion((current) => current + 1)
-    } else {
-      automaticActionRef.current = null
     }
   }, [])
 
@@ -48,23 +49,23 @@ function useAppUpdateController() {
   }, [])
 
   const runUpdateAction = useCallback(async (action: "check" | "download") => {
-    if (automaticActionRef.current === action) return undefined
+    if (inFlightActionsRef.current.has(action)) return undefined
 
     const bridge = getSynapseBridge()?.updater
     if (!bridge) return undefined
 
-    automaticActionRef.current = action
+    inFlightActionsRef.current.add(action)
     try {
       const state = action === "download"
         ? await bridge.downloadUpdate()
         : await bridge.checkForUpdates()
       if (!mountedRef.current) return undefined
 
-      automaticActionRef.current = null
+      inFlightActionsRef.current.delete(action)
       applyUpdateState(state)
       return state
     } catch (error) {
-      automaticActionRef.current = null
+      inFlightActionsRef.current.delete(action)
       if (!mountedRef.current) return undefined
       throw error
     }
@@ -80,19 +81,16 @@ function useAppUpdateController() {
         return
       }
       if (state.status === "checking") {
-        automaticActionRef.current = "check"
         return
       }
       if (state.status === "downloading") {
-        automaticActionRef.current = "download"
         return
       }
       if (state.status === "downloaded") {
-        automaticActionRef.current = null
         return
       }
-      if (state.status === "idle" && automaticActionRef.current === "check") return
-      if (state.status === "available" && automaticActionRef.current === "download") return
+      if (state.status === "idle" && inFlightActionsRef.current.has("check")) return
+      if (state.status === "available" && inFlightActionsRef.current.has("download")) return
       if (state.status !== "idle" && state.status !== "available") return
 
       try {
@@ -160,7 +158,7 @@ function useAppUpdateController() {
       cancelled = true
       mountedRef.current = false
       automaticInstallArmedRef.current = false
-      automaticActionRef.current = null
+      inFlightActionsRef.current.clear()
       unsubscribe()
     }
   }, [advanceAutomaticUpdate, applyUpdateState])
@@ -193,7 +191,17 @@ function useAppUpdateController() {
   }, [])
 
   const installUpdate = useCallback(async () => {
-    await getSynapseBridge()?.updater?.installUpdate()
+    if (inFlightActionsRef.current.has("install")) return
+
+    const bridge = getSynapseBridge()?.updater
+    if (!bridge) return
+
+    inFlightActionsRef.current.add("install")
+    try {
+      await bridge.installUpdate()
+    } finally {
+      inFlightActionsRef.current.delete("install")
+    }
   }, [])
 
   const clearActionError = useCallback(() => {
