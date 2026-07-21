@@ -5,10 +5,12 @@
  * This is the ONLY allowed place outside tests to use ipcMain.handle.
  */
 
-import { ipcMain } from "electron"
+import { ipcMain, type IpcMainInvokeEvent, type WebContents } from "electron"
 import type { SynapseGitUserFacingFailure } from "../../../src/types/git"
 import { assertTrustedIpcSender } from "../../ipc/validated-ipc"
 import { sanitizeGitDiagnosticText } from "../../services/git-client/git-sanitize"
+import type { IpcInvocationContext } from "./types"
+import type { IpcTransportInstall } from "./registry"
 
 type IpcTransportLogger = {
   info?: (message: string, meta?: unknown) => void
@@ -200,14 +202,16 @@ function redactDiagnosticText(value: string): string {
  * Electron transport: installs handlers via ipcMain.handle.
  * Each installed handler returns a disposer that removes the listener.
  */
-export function createElectronTransportInstall(options: ElectronTransportInstallOptions = {}) {
-  return (channel: string, invoker: (request: unknown) => Promise<unknown>) => {
+export function createElectronTransportInstall(
+  options: ElectronTransportInstallOptions = {},
+): IpcTransportInstall {
+  return (channel, invoker) => {
     // eslint-disable-next-line no-restricted-properties -- This adapter is the single Electron transport boundary for IpcRegistry.
     ipcMain.handle(channel, async (event, request) => {
       assertTrustedIpcSender(event)
       const startedAt = performance.now()
       try {
-        return await invoker(request)
+        return await invoker(request, createInvocationContext(event))
       } catch (error) {
         options.logger?.error("IPC invoke failed.", {
           channel,
@@ -221,5 +225,20 @@ export function createElectronTransportInstall(options: ElectronTransportInstall
     return () => {
       ipcMain.removeHandler(channel)
     }
+  }
+}
+
+function createInvocationContext(event: IpcMainInvokeEvent): IpcInvocationContext {
+  return event.sender ? { sender: createInvocationSender(event.sender) } : {}
+}
+
+function createInvocationSender(sender: WebContents): NonNullable<IpcInvocationContext["sender"]> {
+  return {
+    id: sender.id,
+    isDestroyed: () => sender.isDestroyed(),
+    onDestroyed: (listener) => {
+      sender.once("destroyed", listener)
+      return () => sender.removeListener("destroyed", listener)
+    },
   }
 }

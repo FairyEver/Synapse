@@ -4,6 +4,7 @@ import { automationAppManifest } from "@/modules/automation/app-manifest"
 import { databaseAppManifest } from "@/modules/database/app-manifest"
 import { driveAppManifest } from "@/modules/drive/app-manifest"
 import { documentTemplateAppManifest } from "../../../app-capabilities/document-template/renderer/app-manifest"
+import { documentTextExtractorAppManifest } from "../../../app-capabilities/document-text-extractor/renderer/app-manifest"
 import { skillInstallerAppManifest } from "../../../app-capabilities/skill-installer/renderer/app-manifest"
 import { skillUninstallerAppManifest } from "../../../app-capabilities/skill-uninstaller/renderer/app-manifest"
 import { synapseSkillAppManifest } from "../../../app-capabilities/synapse-skill/renderer/app-manifest"
@@ -35,6 +36,7 @@ const systemApps = [
   gitAppManifest,
   databaseAppManifest,
   documentTemplateAppManifest,
+  documentTextExtractorAppManifest,
   skillInstallerAppManifest,
   skillUninstallerAppManifest,
   synapseSkillAppManifest,

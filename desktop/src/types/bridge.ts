@@ -25,6 +25,14 @@ import type {
   GenerateDocxResult,
 } from "../../app-capabilities/document-template/shared/schema"
 import type {
+  DocumentTextExtractionRequest,
+  DocumentTextExtractionResponse,
+  DocumentTextExtractionStatusEvent,
+  DocumentTextOutputChooseRequest,
+  DocumentTextSaveInput,
+  DocumentTextSaveResponse,
+} from "../../app-capabilities/document-text-extractor/shared/schema"
+import type {
   SkillUninstallBatchResult,
   SkillUninstallCancelRequest,
   SkillUninstallExecutionCancelRequest,
@@ -951,6 +959,22 @@ export type SynapseBridge = {
     json: { choose: () => Promise<string | null> }
     output: { choose: (input?: { defaultPath?: string }) => Promise<string | null> }
     docx: { generate: (input: GenerateDocxInput) => Promise<GenerateDocxResult> }
+  }
+  documentTextExtractor: {
+    document: {
+      choose: () => Promise<string | null>
+      extract: (input: DocumentTextExtractionRequest) => Promise<DocumentTextExtractionResponse>
+      cancel: (input: { operationId: string }) => Promise<{ cancelled: boolean }>
+    }
+    output: {
+      choose: (input: DocumentTextOutputChooseRequest) => Promise<string | null>
+    }
+    text: {
+      save: (input: DocumentTextSaveInput) => Promise<DocumentTextSaveResponse>
+    }
+    operation: {
+      onStatus: (listener: (event: DocumentTextExtractionStatusEvent) => void) => () => void
+    }
   }
   skillUninstaller: {
     scan: (request: SkillUninstallScanRequest) => Promise<SkillUninstallScanResult>

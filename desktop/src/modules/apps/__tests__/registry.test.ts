@@ -24,6 +24,7 @@ describe("system app registry", () => {
       "git",
       "database",
       "document-template",
+      "document-text-extractor",
       "skill-installer",
       "skill-uninstaller",
       "synapse-skill",
@@ -95,6 +96,17 @@ describe("system app registry", () => {
       dock: { pinnedByDefault: false, order: 285 },
       capabilities: {
         primaryMcpPrefix: "app_skill_uninstaller",
+      },
+    })
+    expect(getSystemAppManifest("document-text-extractor")).toMatchObject({
+      id: "document-text-extractor",
+      namespace: "document_text_extractor",
+      name: "文档文本提取",
+      windowTitle: "文档文本提取",
+      dock: { pinnedByDefault: false, order: 245 },
+      window: { openable: true },
+      capabilities: {
+        primaryMcpPrefix: "app_document_text_extractor",
       },
     })
   })

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { IpcInvocationContext } from "../types"
 
 const electronMock = vi.hoisted(() => ({
   handlers: new Map<string, (_event: unknown, request: unknown) => Promise<unknown>>(),
@@ -92,6 +93,43 @@ describe("createElectronTransportInstall", () => {
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("customer names")
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("sk-live")
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("/Users/liyang")
+  })
+
+  it("passes the invoking webContents lifecycle to module handlers", async () => {
+    const { createElectronTransportInstall } = await import("../electron-adapter")
+    const install = createElectronTransportInstall()
+    const destroyedListeners = new Set<() => void>()
+    const sender = {
+      id: 73,
+      isDestroyed: vi.fn(() => false),
+      once: vi.fn((event: string, listener: () => void) => {
+        if (event === "destroyed") destroyedListeners.add(listener)
+      }),
+      removeListener: vi.fn((_event: string, listener: () => void) => {
+        destroyedListeners.delete(listener)
+      }),
+    }
+    const invoker = vi.fn(async (
+      _request: unknown,
+      _invocation?: IpcInvocationContext,
+    ) => ({ ok: true }))
+    install("synapse:app:test:lifecycle:read", invoker)
+
+    const handler = electronMock.handlers.get("synapse:app:test:lifecycle:read")
+    await handler?.({
+      sender,
+      senderFrame: { url: "http://localhost:5173/" },
+    }, { value: true })
+
+    const invocation = invoker.mock.calls[0]?.[1]
+    expect(invocation?.sender?.id).toBe(73)
+    expect(invocation?.sender?.isDestroyed()).toBe(false)
+    const listener = vi.fn()
+    const detach = invocation?.sender?.onDestroyed(listener)
+    for (const notify of destroyedListeners) notify()
+    expect(listener).toHaveBeenCalledTimes(1)
+    detach?.()
+    expect(sender.removeListener).toHaveBeenCalledWith("destroyed", listener)
   })
 
   it("redacts local path-like fields from failed IPC invoke request logs", async () => {

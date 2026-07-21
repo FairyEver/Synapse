@@ -88,6 +88,21 @@ describe("createSystemAppWindowService", () => {
     }))
   })
 
+  it("uses the document text extractor title in its independent window", async () => {
+    const window = createWindowMock()
+    const createWindow = vi.fn(() => window as never)
+    const service = createSystemAppWindowService({ createWindow, baseUrl: () => "app://index.html" })
+
+    await service.open("document-text-extractor")
+
+    expect(createWindow).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Synapse AI Studio 文档文本提取",
+    }))
+    expect(window.loadURL).toHaveBeenCalledWith(
+      "app://index.html?window=system-app&appId=document-text-extractor",
+    )
+  })
+
   it("removes closed windows so the app can reopen", async () => {
     const first = createWindowMock()
     const second = createWindowMock()

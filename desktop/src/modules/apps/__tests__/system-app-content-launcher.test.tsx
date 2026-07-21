@@ -96,6 +96,10 @@ vi.mock("../../../../app-capabilities/document-template/renderer", () => ({
   DocumentTemplateModule: () => <div>文档模板内容</div>,
 }))
 
+vi.mock("../../../../app-capabilities/document-text-extractor/renderer", () => ({
+  DocumentTextExtractorModule: () => <div>文档文本提取内容</div>,
+}))
+
 vi.mock("../../../../app-capabilities/skill-installer/renderer", () => ({
   SkillInstallerModule: () => <div>Skill 安装器内容</div>,
 }))
@@ -207,6 +211,20 @@ describe("SystemAppContent launcher", () => {
     })
 
     expect(document.body.textContent).toContain("Skill 卸载器内容")
+  })
+
+  it("renders document-text-extractor through the system app host", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<SystemAppContent appId="document-text-extractor" />)
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("文档文本提取内容")
   })
 })
 

@@ -4,6 +4,7 @@ import { automationAppDefinition } from "../automation/app-definition"
 import { databaseAppDefinition } from "../database/app-definition"
 import { driveAppDefinition } from "../drive/app-definition"
 import { documentTemplateAppDefinition } from "../../../app-capabilities/document-template/renderer/app-definition"
+import { documentTextExtractorAppDefinition } from "../../../app-capabilities/document-text-extractor/renderer/app-definition"
 import { skillInstallerAppDefinition } from "../../../app-capabilities/skill-installer/renderer/app-definition"
 import { skillUninstallerAppDefinition } from "../../../app-capabilities/skill-uninstaller/renderer/app-definition"
 import { synapseSkillAppDefinition } from "../../../app-capabilities/synapse-skill/renderer/app-definition"
@@ -35,6 +36,7 @@ const systemAppDefinitions = [
   gitAppDefinition,
   databaseAppDefinition,
   documentTemplateAppDefinition,
+  documentTextExtractorAppDefinition,
   skillInstallerAppDefinition,
   skillUninstallerAppDefinition,
   synapseSkillAppDefinition,
