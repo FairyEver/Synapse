@@ -123,6 +123,8 @@ describe("ProviderModelSelectDialog", () => {
     expect(document.body.textContent).toContain("claude-sonnet-4-20250514")
     expect(document.body.textContent).toContain("claude-haiku-3-5")
     expect(document.body.textContent).toContain("claude-opus-4")
+    expect(document.querySelector('[data-slot="dialog-content"]')?.className)
+      .toContain("sm:max-w-xl")
     expect([...document.querySelectorAll("[data-tier]")]
       .map((el) => el.getAttribute("data-tier"))).toEqual(["default", "opus", "sonnet", "haiku"])
   })

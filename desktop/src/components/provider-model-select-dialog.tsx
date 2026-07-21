@@ -191,7 +191,7 @@ function ProviderModelSelectDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="sm:max-w-lg"
+        className="sm:max-w-xl"
         aria-describedby={undefined}
         onOpenAutoFocus={handleOpenAutoFocus}
       >
