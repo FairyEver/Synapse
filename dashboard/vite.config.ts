@@ -26,7 +26,8 @@ export function resolveDashboardDevSpaFallback(pathname: string) {
 }
 
 export function resolveDesktopUpdateDevHtmlPath(pathname: string, search = '') {
-  return pathname === '/desktop/update' && search === '' ? '/desktop-update.html' : null
+  if (pathname !== '/desktop/update') return null
+  return search === '' ? '/desktop-update.html' : 'reject'
 }
 
 function driveBrowserHistoryFallback(): Plugin {
@@ -41,8 +42,13 @@ function driveBrowserHistoryFallback(): Plugin {
 
         const parsedUrl = new URL(request.url ?? '/', 'http://localhost')
         const desktopUpdateHtmlPath = resolveDesktopUpdateDevHtmlPath(parsedUrl.pathname, parsedUrl.search)
+        if (desktopUpdateHtmlPath === 'reject') {
+          response.statusCode = 404
+          response.end()
+          return
+        }
         if (desktopUpdateHtmlPath) {
-          request.url = `${desktopUpdateHtmlPath}${parsedUrl.search}`
+          request.url = desktopUpdateHtmlPath
           next()
           return
         }
