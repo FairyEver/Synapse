@@ -162,6 +162,15 @@ const usageAnalysisWorkerEntries = [
   "dist-electron/electron/services/usage-analysis/conversation-worker.js",
   "dist-electron/electron/services/usage-analysis/refresh-worker.js",
 ]
+const documentTextExtractionServiceEntry =
+  "dist-electron/app-capabilities/document-text-extractor/main/service.js"
+const documentTextExtractionWorkerEntry =
+  "dist-electron/app-capabilities/document-text-extractor/main/worker.js"
+const documentTextExtractionRuntimeEntries = [
+  "node_modules/unpdf/package.json",
+  "node_modules/unpdf/dist/index.cjs",
+  "node_modules/unpdf/dist/pdfjs.mjs",
+]
 const requiredExtraResourceFiles = [
   {
     relativePath: "synapse-skill/SKILL.md",
@@ -211,14 +220,20 @@ function resolveRelativeRequire(header, importerPath, request) {
   return filePath
 }
 
-function readUnpackedText(header, unpackedPath, relativePath, failures) {
+function readUnpackedText(
+  header,
+  unpackedPath,
+  relativePath,
+  failures,
+  label = "usage analysis worker dependency",
+) {
   const node = findNode(header, relativePath)
   if (!node) {
-    failures.push(`usage analysis worker dependency is missing from app.asar header: ${relativePath}`)
+    failures.push(`${label} is missing from app.asar header: ${relativePath}`)
     return null
   }
   if (!node.unpacked) {
-    failures.push(`usage analysis worker dependency must be unpacked: ${relativePath}`)
+    failures.push(`${label} must be unpacked: ${relativePath}`)
     return null
   }
 
@@ -268,6 +283,65 @@ function verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures) {
       }
       queue.push(dependencyPath)
     }
+  }
+}
+
+function verifyDocumentTextExtractionWorker(header, unpackedPath, failures) {
+  verifyUnpackedNode(
+    header,
+    unpackedPath,
+    documentTextExtractionServiceEntry,
+    failures,
+    "document text extraction service is missing from app.asar",
+  )
+  verifyUnpackedSourceMap(
+    header,
+    unpackedPath,
+    documentTextExtractionServiceEntry,
+    failures,
+  )
+  verifyUnpackedNode(
+    header,
+    unpackedPath,
+    documentTextExtractionWorkerEntry,
+    failures,
+    "document text extraction worker is missing from app.asar",
+  )
+  verifyUnpackedSourceMap(
+    header,
+    unpackedPath,
+    documentTextExtractionWorkerEntry,
+    failures,
+  )
+  for (const relativePath of documentTextExtractionRuntimeEntries) {
+    verifyUnpackedNode(
+      header,
+      unpackedPath,
+      relativePath,
+      failures,
+      "document text extraction runtime dependency is missing from app.asar",
+    )
+  }
+
+  const serviceSource = readUnpackedText(
+    header,
+    unpackedPath,
+    documentTextExtractionServiceEntry,
+    failures,
+    "document text extraction service",
+  )
+  if (serviceSource && !serviceSource.includes("worker.js")) {
+    failures.push("document text extraction service does not reference its packaged worker path")
+  }
+  const workerSource = readUnpackedText(
+    header,
+    unpackedPath,
+    documentTextExtractionWorkerEntry,
+    failures,
+    "document text extraction worker",
+  )
+  if (workerSource && !workerSource.includes("unpdf")) {
+    failures.push("document text extraction worker does not reference unpdf")
   }
 }
 
@@ -424,6 +498,7 @@ function verifyResources(resourcesPath, label) {
     "packaged Claude runtime diagnostics are missing from app.asar",
   )
   verifySandboxedPreloadBundle(buffer, dataOffset, header, failures)
+  verifyDocumentTextExtractionWorker(header, unpackedPath, failures)
   verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures)
   verifyClaudeRuntime(unpackedPath, failures)
   verifyExtraResources(resourcesPath, failures)

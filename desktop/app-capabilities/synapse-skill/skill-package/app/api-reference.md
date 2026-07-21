@@ -1,5 +1,30 @@
 # Synapse App MCP API Reference
 
+## `app_document_text_extractor_document_extract`
+
+Extract the existing text layer from one local PDF. This tool does not perform OCR or layout reconstruction.
+
+Input:
+
+- `filePath` required: absolute local `.pdf` path. The extension is case-insensitive. Symbolic links and non-regular files are rejected.
+
+Output:
+
+- `text`: complete normalized plain text. Pages are joined in order with two newlines. A PDF without a text layer returns an empty string.
+- `format`: `pdf`.
+- `fileName`: source file name without its full path.
+- `size`: source file size in bytes.
+- `pages`: PDF page count.
+
+Limits:
+
+- Source file: 50 MiB.
+- Normalized UTF-8 text: 5 MiB.
+- PDF pages: 2,000.
+- Extraction time: 60 seconds.
+
+Stable errors include `UNSUPPORTED_FORMAT`, `INVALID_DOCUMENT`, `PASSWORD_PROTECTED`, `FILE_TOO_LARGE`, `TEXT_TOO_LARGE`, `PDF_PAGE_LIMIT_EXCEEDED`, `READ_FAILED`, `EXTRACTION_TIMEOUT`, `EXTRACTION_MEMORY_LIMIT`, `EXTRACTION_CANCELLED`, and `EXTRACTION_FAILED`. Limits fail explicitly and never return truncated text.
+
 ## `app_document_template_docx_generate`
 
 Generate a local `.docx` file from a local `.docx` template and JSON object data.

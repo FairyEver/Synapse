@@ -16,6 +16,7 @@ const CAPABILITY_ACTIONS = [
   "write",
   "resize",
   "execute",
+  "extract",
   "reorder",
   "move",
   "import_local",

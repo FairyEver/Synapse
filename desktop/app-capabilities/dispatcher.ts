@@ -1,4 +1,5 @@
 import type { DispatchContext, DispatchResult } from "../synapse-capabilities/shared/types"
+import { DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID } from "./document-text-extractor/shared/capability"
 import { DOCUMENT_TEMPLATE_CAPABILITY_ID } from "./document-template/shared/capability"
 import { SECRETS_CAPABILITY_IDS } from "./secrets/shared/capability"
 import { SOUND_NOTIFIER_PLAY_CAPABILITY_ID } from "./sound-notifier/shared/capability"
@@ -12,12 +13,16 @@ const secretsCapabilityIds = new Set<string>(SECRETS_CAPABILITY_IDS)
 export type AppCapabilityDispatcher = AppCapabilitySubDispatcher
 
 export function createAppCapabilityDispatcher(deps: {
+  readonly documentTextExtractor: AppCapabilitySubDispatcher
   readonly documentTemplate: AppCapabilitySubDispatcher
   readonly secrets?: AppCapabilitySubDispatcher
   readonly soundNotifier: AppCapabilitySubDispatcher
 }): AppCapabilityDispatcher {
   return {
     async dispatch(action, params, context) {
+      if (action === DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID) {
+        return deps.documentTextExtractor.dispatch(action, params, context)
+      }
       if (action === DOCUMENT_TEMPLATE_CAPABILITY_ID) {
         return deps.documentTemplate.dispatch(action, params, context)
       }

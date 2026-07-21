@@ -2,6 +2,19 @@
 
 Use App MCP tools for capabilities provided by Synapse system apps.
 
+## Document Text Extraction
+
+Use `app_document_text_extractor_document_extract` when the user asks to extract the existing text layer from a local PDF.
+
+Rules:
+
+- Pass one absolute local PDF path as `filePath`; the extension is case-insensitive.
+- Treat `text: ""` as a successful result when the PDF has no text layer.
+- Do not use this tool for OCR, scanned-image recognition, semantic rewriting, or layout reconstruction.
+- Preserve the returned full text unless the user asks for a summary or transformation.
+- Do not repeat the full source path or extracted text unnecessarily in the final answer.
+- Surface stable error codes when extraction fails; do not claim partial success because limits never truncate silently.
+
 ## Document Template
 
 Use `app_document_template_docx_generate` when the user asks to generate a Word `.docx` document from a `.docx` template and JSON data.

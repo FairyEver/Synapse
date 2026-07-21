@@ -36,6 +36,8 @@ import { createAppCapabilityDispatcher } from "../../app-capabilities/dispatcher
 import { ipcOperationIdToChannel } from "../../synapse-capabilities/shared/naming"
 import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabilities/document-template/main/dispatcher"
 import { createDocumentTemplateService } from "../../app-capabilities/document-template/main/service"
+import { createDocumentTextExtractorCapabilityDispatcher } from "../../app-capabilities/document-text-extractor/main/dispatcher"
+import { createDocumentTextExtractorService } from "../../app-capabilities/document-text-extractor/main/service"
 import { createSoundNotifierCapabilityDispatcher } from "../../app-capabilities/sound-notifier/main/dispatcher"
 import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
 import { createSoundNotifierService, type SoundNotifierService } from "../../app-capabilities/sound-notifier/main/service"
@@ -1007,6 +1009,13 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       permissionGuard,
       auditSink,
     })
+    const documentTextExtractorDispatcher = createDocumentTextExtractorCapabilityDispatcher({
+      service: createDocumentTextExtractorService({
+        logger: createMainLogger("capability.document-text-extractor"),
+        permissionGuard,
+        auditSink,
+      }),
+    })
     const terminalDispatcher = createTerminalCapabilityDispatcher({
       service: terminalService,
       permissionGuard,
@@ -1022,6 +1031,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
     })
     const appDispatcher = createAppCapabilityDispatcher({
+      documentTextExtractor: documentTextExtractorDispatcher,
       documentTemplate: documentTemplateDispatcher,
       secrets: secretsDispatcher,
       soundNotifier: soundNotifierDispatcher,
