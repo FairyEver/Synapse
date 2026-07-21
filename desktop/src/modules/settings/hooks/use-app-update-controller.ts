@@ -26,6 +26,7 @@ function useAppUpdateController() {
   const [automaticInstallArmed, setAutomaticInstallArmedState] = useState(false)
   const [installArmVersion, setInstallArmVersion] = useState(0)
   const updateStateRef = useRef(INITIAL_UPDATE_STATE)
+  const mountedRef = useRef(true)
   const automaticInstallArmedRef = useRef(false)
   const automaticActionRef = useRef<"check" | "download" | null>(null)
 
@@ -46,9 +47,31 @@ function useAppUpdateController() {
     setUpdateState(state)
   }, [])
 
-  const advanceAutomaticUpdate = useCallback(async (initialState: SynapseAppUpdateState) => {
+  const runUpdateAction = useCallback(async (action: "check" | "download") => {
+    if (automaticActionRef.current === action) return undefined
+
     const bridge = getSynapseBridge()?.updater
-    if (!bridge || !automaticInstallArmedRef.current) return
+    if (!bridge) return undefined
+
+    automaticActionRef.current = action
+    try {
+      const state = action === "download"
+        ? await bridge.downloadUpdate()
+        : await bridge.checkForUpdates()
+      if (!mountedRef.current) return undefined
+
+      automaticActionRef.current = null
+      applyUpdateState(state)
+      return state
+    } catch (error) {
+      automaticActionRef.current = null
+      if (!mountedRef.current) return undefined
+      throw error
+    }
+  }, [applyUpdateState])
+
+  const advanceAutomaticUpdate = useCallback(async (initialState: SynapseAppUpdateState) => {
+    if (!automaticInstallArmedRef.current) return
 
     let state = initialState
     while (automaticInstallArmedRef.current) {
@@ -72,12 +95,10 @@ function useAppUpdateController() {
       if (state.status === "available" && automaticActionRef.current === "download") return
       if (state.status !== "idle" && state.status !== "available") return
 
-      automaticActionRef.current = state.status === "available" ? "download" : "check"
       try {
-        state = state.status === "available"
-          ? await bridge.downloadUpdate()
-          : await bridge.checkForUpdates()
-        applyUpdateState(state)
+        const nextState = await runUpdateAction(state.status === "available" ? "download" : "check")
+        if (!nextState || !automaticInstallArmedRef.current) return
+        state = nextState
       } catch (error) {
         const message = error instanceof Error ? error.message : "软件更新操作失败。"
         logger.error("Automatic app update action failed in settings.", error)
@@ -86,9 +107,10 @@ function useAppUpdateController() {
         return
       }
     }
-  }, [applyUpdateState, setAutomaticInstallArmed])
+  }, [runUpdateAction, setAutomaticInstallArmed])
 
   useEffect(() => {
+    mountedRef.current = true
     const bridge = getSynapseBridge()?.updater
 
     if (!bridge) {
@@ -136,6 +158,9 @@ function useAppUpdateController() {
 
     return () => {
       cancelled = true
+      mountedRef.current = false
+      automaticInstallArmedRef.current = false
+      automaticActionRef.current = null
       unsubscribe()
     }
   }, [advanceAutomaticUpdate, applyUpdateState])
@@ -154,14 +179,14 @@ function useAppUpdateController() {
   }, [advanceAutomaticUpdate, setAutomaticInstallArmed]))
 
   const checkForUpdates = useCallback(async () => {
-    const nextState = await getSynapseBridge()?.updater?.checkForUpdates()
-    if (nextState) applyUpdateState(nextState)
-  }, [applyUpdateState])
+    const nextState = await runUpdateAction("check")
+    if (nextState) await advanceAutomaticUpdate(nextState)
+  }, [advanceAutomaticUpdate, runUpdateAction])
 
   const downloadUpdate = useCallback(async () => {
-    const nextState = await getSynapseBridge()?.updater?.downloadUpdate()
-    if (nextState) applyUpdateState(nextState)
-  }, [applyUpdateState])
+    const nextState = await runUpdateAction("download")
+    if (nextState) await advanceAutomaticUpdate(nextState)
+  }, [advanceAutomaticUpdate, runUpdateAction])
 
   const cancelDownload = useCallback(async () => {
     await getSynapseBridge()?.updater?.cancelDownload()

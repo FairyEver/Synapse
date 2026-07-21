@@ -355,6 +355,44 @@ describe("AboutPanel", () => {
     expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(16)
   })
 
+  it("does not duplicate a pending manual check for a hot automatic request", async () => {
+    const updater = getUpdaterBridge()
+    vi.mocked(updater.checkForUpdates).mockImplementation(() => new Promise(() => undefined))
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      getUpdateActionButton().click()
+    })
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 28, automatic: true })
+      await Promise.resolve()
+    })
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not duplicate a pending manual download for a hot automatic request", async () => {
+    const updater = getUpdaterBridge()
+    vi.mocked(updater.downloadUpdate).mockImplementation(() => new Promise(() => undefined))
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+    })
+    act(() => {
+      getButtonWithText("下载并安装").click()
+    })
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 29, automatic: true })
+      await Promise.resolve()
+    })
+
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1)
+  })
+
   it("downloads only after the user confirms the available update", async () => {
     const updater = getUpdaterBridge()
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
@@ -534,6 +572,32 @@ describe("AboutPanel", () => {
     })
 
     expect(updater.installUpdate).not.toHaveBeenCalled()
+  })
+
+  it("does not continue an in-flight automatic check after leaving the panel", async () => {
+    const updater = getUpdaterBridge()
+    let resolveCheck: ((state: SynapseAppUpdateState) => void) | undefined
+    vi.mocked(updater.getPendingOpenRequest).mockResolvedValue({ id: 27, automatic: true })
+    vi.mocked(updater.checkForUpdates).mockImplementation(() => new Promise((resolve) => {
+      resolveCheck = resolve
+    }))
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1)
+
+    const root = roots.pop()
+    act(() => {
+      root?.unmount()
+    })
+    await act(async () => {
+      resolveCheck?.(updateState({
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+      await Promise.resolve()
+    })
+
+    expect(updater.downloadUpdate).not.toHaveBeenCalled()
   })
 
   it("marks version and update details as selectable text", async () => {
