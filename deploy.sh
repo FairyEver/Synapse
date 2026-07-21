@@ -697,6 +697,7 @@ if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
   echo ""
   echo "首次部署已同步本机 server/.env.server，请 SSH 登录服务器启动服务："
   echo "  cd $REMOTE_DIR/server && docker compose --env-file .env up -d --build"
+  echo "启动完成后重新运行 bash deploy.sh，通过部署后健康检查再发布桌面客户端。"
   exit 0
 fi
 

@@ -322,6 +322,13 @@ describe("server deployment configuration", () => {
     expect(publicHandoffCheck).toBeGreaterThan(internalCredentialCheck)
   })
 
+  it("requires the checked deployment path after first-time infrastructure bootstrap", () => {
+    const deployScript = readRepoFile("deploy.sh")
+
+    expect(deployScript).toContain("启动完成后重新运行 bash deploy.sh")
+    expect(deployScript).toContain("通过部署后健康检查再发布桌面客户端")
+  })
+
   it("routes public webhooks through nginx instead of dashboard redirects", () => {
     const nginx = readRepoFile("server/nginx.conf")
 

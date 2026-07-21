@@ -221,6 +221,10 @@ describe("App without repositories", () => {
 
     expect(mocks.updateOpenRequestSetupOrder.slice(0, 2)).toEqual(["subscribe", "pull"])
     expect(mocks.requestOpenSettingsAbout).toHaveBeenCalledTimes(1)
+    expect(mocks.logger.info).toHaveBeenCalledWith(
+      "Update open request navigated to About Synapse.",
+      { automatic: true, requestId: 1 },
+    )
     expect(document.body.textContent).toContain("settings")
   })
 

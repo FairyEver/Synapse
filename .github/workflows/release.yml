@@ -118,6 +118,8 @@ jobs:
           APP_BINARY="$APP_BUNDLE/Contents/MacOS/Synapse"
           INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
           LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+          LOG_DIR="$HOME/Library/Application Support/Synapse/logs"
+          NAVIGATION_LOG="Update open request navigated to About Synapse."
 
           test -x "$APP_BINARY"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes' "$INFO_PLIST" | grep -Fq 'CFBundleURLSchemes'
@@ -142,18 +144,46 @@ jobs:
             return 1
           }
 
+          navigation_log_count() {
+            if [ ! -d "$LOG_DIR" ]; then
+              printf '0\n'
+              return
+            fi
+            find "$LOG_DIR" -type f -name 'synapse-*.log' \
+              -exec grep -Fh "$NAVIGATION_LOG" {} + 2>/dev/null \
+              | wc -l \
+              | tr -d ' '
+          }
+
+          wait_for_navigation_log() {
+            local previous_count=$1
+            local attempt
+            local current_count
+            for attempt in {1..30}; do
+              current_count=$(navigation_log_count)
+              if [ "$current_count" -gt "$previous_count" ]; then
+                return 0
+              fi
+              sleep 1
+            done
+            return 1
+          }
+
           trap stop_synapse EXIT
           stop_synapse
+          COLD_LOG_COUNT=$(navigation_log_count)
           open "$UPDATE_DEEP_LINK"
           COLD_PID=$(wait_for_synapse)
           kill -0 "$COLD_PID"
+          wait_for_navigation_log "$COLD_LOG_COUNT"
           echo "cold update protocol launch ok"
 
           stop_synapse
           open -g "$APP_BUNDLE"
           HOT_PID=$(wait_for_synapse)
+          HOT_LOG_COUNT=$(navigation_log_count)
           open "$UPDATE_DEEP_LINK"
-          sleep 5
+          wait_for_navigation_log "$HOT_LOG_COUNT"
           kill -0 "$HOT_PID"
           echo "hot update protocol launch ok"
 
@@ -165,6 +195,8 @@ jobs:
           $appPath = Join-Path $env:GITHUB_WORKSPACE 'desktop/release/win-unpacked/Synapse.exe'
           $updateDeepLink = 'synapse://update'
           $protocolPath = 'Registry::HKEY_CURRENT_USER\Software\Classes\synapse\shell\open\command'
+          $logDir = Join-Path $env:APPDATA 'Synapse\logs'
+          $navigationLog = 'Update open request navigated to About Synapse.'
 
           if (-not (Test-Path -LiteralPath $appPath)) {
             throw "Packaged executable not found: $appPath"
@@ -185,6 +217,25 @@ jobs:
             throw 'Synapse did not start within 30 seconds.'
           }
 
+          function Get-NavigationLogCount {
+            if (-not (Test-Path -LiteralPath $logDir)) {
+              return 0
+            }
+            $matches = Get-ChildItem -LiteralPath $logDir -Filter 'synapse-*.log' -File -ErrorAction SilentlyContinue |
+              Select-String -SimpleMatch $navigationLog
+            return @($matches).Count
+          }
+
+          function Wait-NavigationLog([int]$previousCount) {
+            for ($attempt = 0; $attempt -lt 30; $attempt += 1) {
+              if ((Get-NavigationLogCount) -gt $previousCount) {
+                return
+              }
+              Start-Sleep -Seconds 1
+            }
+            throw 'The update protocol was not observed by the packaged renderer.'
+          }
+
           try {
             Stop-SynapseProcesses
             $registrationProcess = Start-Process -FilePath $appPath -PassThru
@@ -198,18 +249,21 @@ jobs:
             }
 
             Stop-SynapseProcesses
+            $coldLogCount = Get-NavigationLogCount
             Start-Process $updateDeepLink
             $coldProcess = Wait-SynapseProcess
             if ($coldProcess.HasExited) {
               throw 'The cold update protocol launch exited unexpectedly.'
             }
+            Wait-NavigationLog $coldLogCount
             Write-Output 'cold update protocol launch ok'
 
             Stop-SynapseProcesses
             $hotProcess = Start-Process -FilePath $appPath -PassThru
             Start-Sleep -Seconds 3
+            $hotLogCount = Get-NavigationLogCount
             Start-Process $updateDeepLink
-            Start-Sleep -Seconds 5
+            Wait-NavigationLog $hotLogCount
             $hotProcess.Refresh()
             if ($hotProcess.HasExited) {
               throw 'The hot update protocol launch terminated the primary app.'
@@ -252,6 +306,7 @@ jobs:
       TENCENT_CLOUD_COS_REGION: ap-beijing
       TENCENT_CLOUD_COS_ENDPOINT: cos.accelerate.myqcloud.com
       TENCENT_CLOUD_CDN_DOMAIN: desktop.release.synapse.d2.pub
+      # Release 正文的稳定更新入口；只做静态契约校验，不在部署前探测生产页面。
       DESKTOP_UPDATE_HANDOFF_URL: https://synapse.d2.pub/desktop/update
     steps:
       - name: Checkout repository

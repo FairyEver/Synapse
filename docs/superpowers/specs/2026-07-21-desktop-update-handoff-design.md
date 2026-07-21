@@ -1,6 +1,6 @@
 # 桌面端一键更新承接链路设计
 
-- 状态：已实现
+- 状态：已实现；生产可用性与真实更新主路径待部署后验收
 - 日期：2026-07-21
 - 稳定入口：`https://synapse.d2.pub/desktop/update`
 - 相关决策：`docs/adr/0028-use-an-https-handoff-for-shared-update-links.md`、`docs/adr/0029-require-a-short-lived-credential-for-automatic-update-deep-links.md`
@@ -467,7 +467,11 @@ renderer 内现有 `requestOpenSettingsAbout` 可以继续处理设置组件尚�
 
 `.github/workflows/release.yml` 在创建 Release 前只静态确认准备发布的 Release body 包含稳定链接且不含自定义协议或版本参数，不主动探测生产页面。
 
-### 11.3 首次上线顺序
+### 11.3 正式包协议验收
+
+macOS 与 Windows runner 必须在上传安装包前验证正式打包产物的协议注册，并分别覆盖冷启动和热启动。smoke 不只检查进程存活，还必须通过现有结构化 renderer 日志确认请求已被消费并导航到“关于 Synapse”；裸深链只验证手动导航，不启用自动更新。
+
+### 11.4 首次上线顺序
 
 首次发布必须按顺序：
 
@@ -479,6 +483,8 @@ renderer 内现有 `requestOpenSettingsAbout` 可以继续处理设置组件尚�
 这样第一条 Release 链接即使被旧客户端打开，也仍有明确的手动设置回退。之后的客户端版本继续复用相同 HTTPS 与深链契约。
 
 `server/deploy.sh` 的部署健康检查应增加 `/desktop/update`，并以不泄露 token 的方式验证签发/验证链路配置完整。
+
+部署后验收还必须使用已安装的候选正式包从公开页面实际点击一次，确认凭证签发、客户端验证、页面导航、检查、下载、倒计时和安装主路径；同时复核浏览器拦截、旧客户端手动设置回退及设计列出的主要失败/幂等场景。该真实生产链路在服务端/页面尚未部署时不可执行，属于部署后验收项，不作为本地测试或部署前 Release workflow 的失败条件。
 
 ## 12. 安全与隐私
 
@@ -589,7 +595,8 @@ renderer 内现有 `requestOpenSettingsAbout` 可以继续处理设置组件尚�
 - Release body 固定包含稳定 HTTPS 链接，不包含自定义协议和版本参数。
 - 部署后 URL 健康检查能区分独立更新页和 `/console` 页面；部署前 Release workflow 只静态校验正文。
 - 已安装旧客户端时，网页始终展示可执行的手动设置回退。
-- macOS 与 Windows 正式打包产物各做一次协议注册、冷启动和热启动 smoke test。
+- macOS 与 Windows 正式打包产物各做一次协议注册、冷启动和热启动 smoke test，并从结构化日志确认已导航到“关于 Synapse”。
+- 公开页面到实际安装的生产主路径及依赖真实生产状态的兼容/失败场景在部署后执行验收。
 
 ## 15. 版本与其它能力影响
 

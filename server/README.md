@@ -283,7 +283,7 @@ curl http://127.0.0.1:3000/healthz
 1. 为生产环境配置独立的 `DESKTOP_UPDATE_INTENT_SECRET`，并确认 `APP_PUBLIC_URL=https://synapse.d2.pub`。
 2. 先部署服务端凭证接口和独立 `/desktop/update` 页面。
 3. 通过 `deploy.sh` 的部署后健康检查确认容器内页面、签发/验证链路及 `https://synapse.d2.pub/desktop/update` 公网入口可用。
-4. 最后发布支持新更新深链的桌面客户端。
+4. 用候选正式包从公开页面完成一次点击到安装的真实主路径，并复核旧客户端回退及主要失败场景；通过后再发布支持新更新深链的桌面客户端。
 
 在上述生产部署完成前，稳定公网地址仍指向旧页面或跳转 `/console/` 属于预期现状，不作为本地测试或部署前发版准备失败；真正切换后的 `deploy.sh` 公网门禁仍必须通过。
 
