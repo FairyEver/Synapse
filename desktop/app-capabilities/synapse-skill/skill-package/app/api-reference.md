@@ -2,19 +2,19 @@
 
 ## `app_document_text_extractor_document_extract`
 
-Extract the existing text layer from one local PDF. This tool does not perform OCR or layout reconstruction.
+Extract normalized plain text from one local PDF or DOCX. PDF extraction reads the existing text layer. DOCX extraction reads the main document's paragraphs, list text, table cells, and recognizable text boxes. The tool does not perform OCR or layout reconstruction, and does not promise DOCX header, footer, comment, footnote, endnote, or image text.
 
 Input:
 
-- `filePath` required: absolute local `.pdf` path. The extension is case-insensitive. Symbolic links and non-regular files are rejected.
+- `filePath` required: absolute local `.pdf` or `.docx` path. The extension is case-insensitive and must match the document content. Symbolic links and non-regular files are rejected.
 
 Output:
 
-- `text`: complete normalized plain text. Pages are joined in order with two newlines. A PDF without a text layer returns an empty string.
-- `format`: `pdf`.
+- `text`: complete normalized plain text. PDF pages are joined in order with two newlines. A supported document without extractable text returns an empty string.
+- `format`: `pdf` or `docx`.
 - `fileName`: source file name without its full path.
 - `size`: source file size in bytes.
-- `pages`: PDF page count.
+- `pages`: PDF page count. Omitted for DOCX.
 
 Limits:
 
@@ -22,6 +22,8 @@ Limits:
 - Normalized UTF-8 text: 5 MiB.
 - PDF pages: 2,000.
 - Extraction time: 60 seconds.
+- Worker V8 heap: 512 MiB.
+- Global concurrency: 2 tasks; additional requests wait in FIFO order.
 
 Stable errors include `UNSUPPORTED_FORMAT`, `INVALID_DOCUMENT`, `PASSWORD_PROTECTED`, `FILE_TOO_LARGE`, `TEXT_TOO_LARGE`, `PDF_PAGE_LIMIT_EXCEEDED`, `READ_FAILED`, `EXTRACTION_TIMEOUT`, `EXTRACTION_MEMORY_LIMIT`, `EXTRACTION_CANCELLED`, and `EXTRACTION_FAILED`. Limits fail explicitly and never return truncated text.
 

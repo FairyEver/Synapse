@@ -16,7 +16,7 @@ export type DocumentTextExtractionErrorCode =
   typeof DOCUMENT_TEXT_EXTRACTION_ERROR_CODES[number]
 
 const ERROR_MESSAGES: Record<DocumentTextExtractionErrorCode, string> = {
-  UNSUPPORTED_FORMAT: "当前仅支持 PDF 文档。",
+  UNSUPPORTED_FORMAT: "当前仅支持 PDF 或 DOCX 文档。",
   INVALID_DOCUMENT: "文档格式无效或文件已损坏。",
   PASSWORD_PROTECTED: "文档受密码保护，无法提取文本。",
   FILE_TOO_LARGE: "文档超过 50 MiB 限制。",

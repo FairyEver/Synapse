@@ -9,6 +9,7 @@ import {
   DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME,
 } from "../capability"
 import { documentTextExtractorCapabilityManifest } from "../manifest"
+import { documentTextExtractionResultSchema } from "../schema"
 
 describe("document text extractor capability", () => {
   it("publishes one read-only format-neutral MCP tool", () => {
@@ -20,20 +21,35 @@ describe("document text extractor capability", () => {
     })
     expect(APP_DOMAIN.capabilities).toContainEqual(expect.objectContaining({
       id: DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID,
+      description: expect.stringMatching(/PDF.*DOCX/i),
       mutates: false,
     }))
     expect(APP_MCP_TOOL_ACTIONS[DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME])
       .toBe(DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID)
     expect(buildAppTools()).toContainEqual(expect.objectContaining({
       name: DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME,
+      description: expect.stringMatching(/PDF.*DOCX/i),
       inputSchema: {
         type: "object",
         properties: {
-          filePath: expect.objectContaining({ type: "string" }),
+          filePath: expect.objectContaining({
+            type: "string",
+            description: expect.stringMatching(/\.pdf.*\.docx/i),
+          }),
         },
         required: ["filePath"],
         additionalProperties: false,
       },
     }))
+  })
+
+  it("keeps PDF pages optional metadata out of DOCX results", () => {
+    expect(documentTextExtractionResultSchema.safeParse({
+      text: "text",
+      format: "docx",
+      fileName: "document.docx",
+      size: 42,
+      pages: 1,
+    }).success).toBe(false)
   })
 })

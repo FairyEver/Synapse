@@ -4,12 +4,14 @@ Use App MCP tools for capabilities provided by Synapse system apps.
 
 ## Document Text Extraction
 
-Use `app_document_text_extractor_document_extract` when the user asks to extract the existing text layer from a local PDF.
+Use `app_document_text_extractor_document_extract` when the user asks to extract text from a local PDF or DOCX document.
 
 Rules:
 
-- Pass one absolute local PDF path as `filePath`; the extension is case-insensitive.
-- Treat `text: ""` as a successful result when the PDF has no text layer.
+- Pass one absolute local `.pdf` or `.docx` path as `filePath`; the extension is case-insensitive and must match the document content.
+- For PDF, the tool reads the existing text layer. For DOCX, it reads the main document's paragraphs, list text, table cells, and recognizable text boxes.
+- Treat `text: ""` as a successful result when a supported document has no extractable text.
+- Do not promise DOCX header, footer, comment, footnote, endnote, or image text.
 - Do not use this tool for OCR, scanned-image recognition, semantic rewriting, or layout reconstruction.
 - Preserve the returned full text unless the user asks for a summary or transformation.
 - Do not repeat the full source path or extracted text unnecessarily in the final answer.

@@ -124,6 +124,21 @@ function createUnpdfFiles() {
   }
 }
 
+function createDocumentTextExtractionPackageFiles(entryDirectory: string, entryFile: string) {
+  return {
+    "package.json": createUnpackedFileNode(),
+    [entryDirectory]: {
+      files: {
+        [entryFile]: createUnpackedFileNode(),
+      },
+    },
+  }
+}
+
+function createPackageManifestFiles() {
+  return { "package.json": createUnpackedFileNode() }
+}
+
 function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const {
     includeClaudeRuntimeGuard = true,
@@ -256,7 +271,23 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
             },
           },
           ...(includeDocumentTextExtraction
-            ? { unpdf: { files: createUnpdfFiles() } }
+            ? {
+                unpdf: { files: createUnpdfFiles() },
+                mammoth: {
+                  files: createDocumentTextExtractionPackageFiles("lib", "index.js"),
+                },
+                pizzip: {
+                  files: createDocumentTextExtractionPackageFiles("js", "index.js"),
+                },
+                "@xmldom": {
+                  files: {
+                    xmldom: { files: createPackageManifestFiles() },
+                  },
+                },
+                jszip: { files: createPackageManifestFiles() },
+                pako: { files: createPackageManifestFiles() },
+                xmlbuilder: { files: createPackageManifestFiles() },
+              }
             : {}),
         },
       },
@@ -295,11 +326,14 @@ describe("packaged asar verification", () => {
     return filePath
   }
 
-  async function writeExtraResourceFixtures(resourcesPath: string) {
+  async function writeRequiredExtraResourceFixtures(resourcesPath: string) {
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "SKILL.md"], "# Synapse Skill\n")
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "database", "index.md"], "# Database\n")
     await writeUnpackedFixture(resourcesPath, ["knowledge-base", "synapse-knowledge-base-template", "CLAUDE.md"], "# Knowledge Base\n")
     await writeUnpackedFixture(resourcesPath, ["database", "mcp", "index.js"], "module.exports = {}\n")
+  }
+
+  async function writeDocumentTextExtractionRuntimeFixtures(resourcesPath: string) {
     await writeUnpackedFixture(
       resourcesPath,
       ["app.asar.unpacked", "dist-electron", "app-capabilities", "document-text-extractor", "main", "service.js"],
@@ -308,7 +342,7 @@ describe("packaged asar verification", () => {
     await writeUnpackedFixture(
       resourcesPath,
       ["app.asar.unpacked", "dist-electron", "app-capabilities", "document-text-extractor", "main", "worker.js"],
-      "require('unpdf')\n",
+      "require('unpdf'); require('mammoth'); require('pizzip')\n",
     )
     await writeUnpackedFixture(
       resourcesPath,
@@ -328,6 +362,28 @@ describe("packaged asar verification", () => {
       "export {}\n",
       { sourceMap: false },
     )
+    for (const segments of [
+      ["mammoth", "package.json"],
+      ["mammoth", "lib", "index.js"],
+      ["pizzip", "package.json"],
+      ["pizzip", "js", "index.js"],
+      ["@xmldom", "xmldom", "package.json"],
+      ["jszip", "package.json"],
+      ["pako", "package.json"],
+      ["xmlbuilder", "package.json"],
+    ]) {
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "node_modules", ...segments],
+        "{}\n",
+        { sourceMap: false },
+      )
+    }
+  }
+
+  async function writeExtraResourceFixtures(resourcesPath: string) {
+    await writeRequiredExtraResourceFixtures(resourcesPath)
+    await writeDocumentTextExtractionRuntimeFixtures(resourcesPath)
   }
 
   it("verifies a Windows-style resources directory with unpacked files", async () => {
@@ -359,6 +415,7 @@ describe("packaged asar verification", () => {
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeDocumentTextExtractionRuntimeFixtures(resourcesPath)
 
       await expect(execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
@@ -401,6 +458,7 @@ describe("packaged asar verification", () => {
       await mkdir(resourcesPath, { recursive: true })
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeExtraResourceFixtures(resourcesPath)
 
       await expect(execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),

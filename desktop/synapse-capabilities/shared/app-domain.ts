@@ -58,7 +58,7 @@ const appCapabilities: readonly CapabilityDefinition[] = [
   {
     id: DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID,
     title: "Extract document text",
-    description: "Extract normalized text and metadata from a local PDF document.",
+    description: "Extract normalized text and metadata from a local PDF or DOCX document.",
     mutates: false,
   },
   {
@@ -260,11 +260,11 @@ export function buildAppTools(): McpToolDefinition[] {
   return [
     {
       name: DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME,
-      description: "Extract complete normalized plain text and metadata from one local PDF. The file must be an absolute path to a regular, non-symbolic-link PDF with a valid PDF header. An empty text result is successful. Limits: 50 MiB source file, 5 MiB UTF-8 text, and 2,000 pages.",
+      description: "Extract complete normalized plain text and metadata from one local PDF or DOCX. The file must be an absolute path to a regular, non-symbolic-link document whose extension matches its content. PDF extraction reads the existing text layer; DOCX extraction reads main-document paragraphs, list text, table cells, and recognizable text boxes. It does not perform OCR or layout reconstruction. An empty text result is successful. Limits: 50 MiB source file, 5 MiB UTF-8 text, 2,000 PDF pages, 60 seconds, and two concurrent tasks.",
       inputSchema: {
         type: "object",
         properties: {
-          filePath: stringField("Absolute local .pdf file path."),
+          filePath: stringField("Absolute local .pdf or .docx file path."),
         },
         required: ["filePath"],
         additionalProperties: false,

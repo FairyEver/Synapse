@@ -37,11 +37,19 @@ import {
   type DocumentTextExtractionTask,
 } from "./scheduler"
 
-type WorkerExtractionResult = { readonly text: string; readonly pages: number }
+type DocumentFormat = DocumentTextExtractionResult["format"]
+
+type WorkerExtractionResult = {
+  readonly text: string
+  readonly pages?: number
+  readonly warningCount?: number
+  readonly warningCategories?: readonly string[]
+}
 
 type DocumentTextExtractionWorkerRuntime = {
   run(
     bytes: Buffer,
+    format: DocumentFormat,
     signal: AbortSignal,
     onStarted: () => void,
   ): Promise<WorkerExtractionResult>
@@ -85,8 +93,9 @@ export function createDocumentTextExtractorService(deps: {
   )
   const workerFactory = deps.workerFactory ?? DEFAULT_WORKER_FACTORY
   const workerRuntime: DocumentTextExtractionWorkerRuntime = {
-    run: (bytes, signal, onStarted) => extractPdfInWorker(
+    run: (bytes, format, signal, onStarted) => extractDocumentInWorker(
       bytes,
+      format,
       signal,
       onStarted,
       workerFactory,
@@ -98,7 +107,8 @@ export function createDocumentTextExtractorService(deps: {
     context: DispatchContext = {},
   ): DocumentTextExtractionTask<DocumentTextExtractionResult> {
     const parsed = documentTextExtractionInputSchema.parse(input)
-    if (path.extname(parsed.filePath).toLowerCase() !== ".pdf") {
+    const format = getDocumentFormat(parsed.filePath)
+    if (!format) {
       throw new DocumentTextExtractionError("UNSUPPORTED_FORMAT")
     }
     return scheduler.schedule(async (signal, markRunning) => {
@@ -107,27 +117,36 @@ export function createDocumentTextExtractorService(deps: {
 
       try {
         const file = await readVerifiedFile(parsed.filePath)
-        if (!hasPdfHeader(file.bytes)) {
+        if (format === "pdf" && !hasPdfHeader(file.bytes)) {
           throw new DocumentTextExtractionError("INVALID_DOCUMENT")
         }
         const extracted = await runWorkerWithTimeout(
           workerRuntime,
           file.bytes,
+          format,
           signal,
           markRunning,
         )
-        const result: DocumentTextExtractionResult = {
+        const metadata = {
           text: extracted.text,
-          format: "pdf",
           fileName: path.basename(parsed.filePath),
           size: file.size,
-          pages: extracted.pages,
+        }
+        const result: DocumentTextExtractionResult = format === "pdf"
+          ? { ...metadata, format, ...(extracted.pages === undefined ? {} : { pages: extracted.pages }) }
+          : { ...metadata, format }
+        if (extracted.warningCount) {
+          deps.logger?.warn("Document text extraction completed with warnings.", {
+            format,
+            warningCount: extracted.warningCount,
+            warningCategories: extracted.warningCategories ?? [],
+          })
         }
         deps.logger?.info("Document text extraction completed.", {
           format: result.format,
           sourceBytes: result.size,
           textBytes: Buffer.byteLength(result.text, "utf8"),
-          pages: result.pages,
+          ...("pages" in result && result.pages !== undefined ? { pages: result.pages } : {}),
           durationMs: Date.now() - startedAt,
         })
         return result
@@ -268,8 +287,9 @@ function hasPdfHeader(bytes: Uint8Array): boolean {
   return /^%PDF-(?:1\.[0-7]|2\.0)$/.test(header)
 }
 
-function extractPdfInWorker(
+function extractDocumentInWorker(
   bytes: Buffer,
+  format: DocumentFormat,
   signal: AbortSignal,
   onStarted: () => void,
   workerFactory: DocumentTextExtractionWorkerFactory,
@@ -285,6 +305,7 @@ function extractPdfInWorker(
     const worker = workerFactory(resolveDocumentTextExtractionWorkerPath(__dirname), {
       workerData: {
         bytes: transferable,
+        format,
         maxPages: DOCUMENT_TEXT_EXTRACTION_MAX_PDF_PAGES,
         maxTextBytes: DOCUMENT_TEXT_EXTRACTION_MAX_TEXT_BYTES,
       } satisfies DocumentTextExtractionWorkerInput,
@@ -337,6 +358,17 @@ function extractPdfInWorker(
   })
 }
 
+function getDocumentFormat(filePath: string): DocumentFormat | undefined {
+  switch (path.extname(filePath).toLowerCase()) {
+    case ".pdf":
+      return "pdf"
+    case ".docx":
+      return "docx"
+    default:
+      return undefined
+  }
+}
+
 const DEFAULT_WORKER_FACTORY: DocumentTextExtractionWorkerFactory = (filename, options) => (
   new Worker(filename, options)
 )
@@ -344,6 +376,7 @@ const DEFAULT_WORKER_FACTORY: DocumentTextExtractionWorkerFactory = (filename, o
 async function runWorkerWithTimeout(
   workerRuntime: DocumentTextExtractionWorkerRuntime,
   bytes: Buffer,
+  format: DocumentFormat,
   signal: AbortSignal,
   onStarted: () => void,
 ): Promise<WorkerExtractionResult> {
@@ -355,7 +388,7 @@ async function runWorkerWithTimeout(
   let timeout: ReturnType<typeof setTimeout> | undefined
 
   try {
-    return await workerRuntime.run(bytes, workerController.signal, () => {
+    return await workerRuntime.run(bytes, format, workerController.signal, () => {
       onStarted()
       timeout = setTimeout(() => {
         timedOut = true
