@@ -68,6 +68,20 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - 定时任务、scheduler、cron/interval、启用/停用、运行历史或 runtime 状态请求使用当前 Automation 工具；legacy `scheduler_*` MCP 工具已退役，不要再引导 Agent 调用。
 - 如果 `sss` 没有明确领域，先根据上下文推断；仍不明确时，只问一句简短澄清。
 
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues for `FairyEver/Synapse` using the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the canonical labels `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: use the root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
+
 ## 未来开发计划
 
 本节用于记录 Synapse 后续可能建设的产品板块、后台能力、长期规划和暂未启动的开发方向。这里的内容不是当前任务的实现要求，也不自动授权新增功能；它的作用是让 Agent 在做当前设计、数据结构、接口、模块边界和扩展点时，能理解产品未来可能演进的方向，并在不增加当前复杂度的前提下避免明显封死后续路线。
