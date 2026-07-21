@@ -7,6 +7,7 @@ import type { WorkflowRunSnapshot } from "../../../src/types/workflow"
 import "../../../workflow-nodes/register.main"
 import { defaultCodexNodeConfig } from "../../../workflow-nodes/codex/schema"
 import { RunSnapshotService } from "../workflow/run-snapshot-service"
+import { WORKFLOW_SCHEMA_VERSION } from "../workflow/workflow-document-migration"
 
 const logger = vi.hoisted(() => ({
   error: vi.fn(),
@@ -267,7 +268,7 @@ describe("RunSnapshotService", () => {
 
     const listed = await new RunSnapshotService(root).list("wf")
 
-    expect(listed[0]?.definition?.meta?.schemaVersion).toBe("2.0.0")
+    expect(listed[0]?.definition?.meta?.schemaVersion).toBe(WORKFLOW_SCHEMA_VERSION)
     expect(await readFile(target, "utf8")).toBe(raw)
   })
 

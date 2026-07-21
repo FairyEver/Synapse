@@ -24,6 +24,7 @@ import {
   type WorkflowMigrationStateEntryV1,
 } from "../../runtime/data-repo"
 import { WorkflowService, type WorkflowServiceMigrationOptions } from "../workflow/workflow-service"
+import { WORKFLOW_SCHEMA_VERSION } from "../workflow/workflow-document-migration"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
 import { defaultCodexNodeConfig } from "../../../workflow-nodes/codex/schema"
 import "../../../workflow-nodes/register.main"
@@ -707,8 +708,8 @@ describe("WorkflowService", () => {
     const backups = readdirSync(path.join(dir, "workflow-migration-backups"))
     expect(backups).toHaveLength(1)
     expect(readFileSync(path.join(dir, "workflow-migration-backups", backups[0]!), "utf8")).toBe(original)
-    expect((await svc.get(def.id))?.meta?.schemaVersion).toBe("2.0.0")
-    expect((await svc.get(second.id))?.meta?.schemaVersion).toBe("2.0.0")
+    expect((await svc.get(def.id))?.meta?.schemaVersion).toBe(WORKFLOW_SCHEMA_VERSION)
+    expect((await svc.get(second.id))?.meta?.schemaVersion).toBe(WORKFLOW_SCHEMA_VERSION)
   })
   it("recovers the newest valid workflow from configured legacy repository storage only once", async () => {
     const dir = tmpDir()
@@ -728,7 +729,7 @@ describe("WorkflowService", () => {
     await expect(first.get(def.id)).resolves.toMatchObject({
       id: def.id,
       name: def.name,
-      meta: { schemaVersion: "2.0.0" },
+      meta: { schemaVersion: WORKFLOW_SCHEMA_VERSION },
     })
     expect(readFileSync(path.join(legacyDir, "v_100_valid.json"), "utf8")).toBe(JSON.stringify(def))
 
