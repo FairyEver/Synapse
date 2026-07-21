@@ -22,6 +22,9 @@ export const DOCUMENT_TEXT_EXTRACTION_TIMEOUT_MS = 60_000
 // 文档文本提取 Worker 的 V8 老生代堆上限（MiB）：隔离恶意或异常文档的内存影响。
 export const DOCUMENT_TEXT_EXTRACTION_WORKER_MAX_OLD_GENERATION_MB = 512
 
+// 文档文本提取全局并发数：限制所有 App、MCP 与 Workflow 请求共享的 Worker 数量。
+export const DOCUMENT_TEXT_EXTRACTION_MAX_CONCURRENCY = 2
+
 // Agent 会话在最近活动结束后超过该时长时，提示用户新建对话以避免继续沿用长上下文。
 export const CONVERSATION_IDLE_ROLLOVER_PROMPT_MS = ONE_HOUR_MS
 

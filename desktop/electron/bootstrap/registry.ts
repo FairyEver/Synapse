@@ -29,6 +29,7 @@ import {
   coreConfigDescriptor,
   coreDataRepositoryDescriptor,
   coreDatabaseDescriptor,
+  coreDocumentTextExtractorDescriptor,
   coreDiagnosticsDescriptor,
   coreDriveSyncDescriptor,
   coreEventBusDescriptor,
@@ -116,6 +117,7 @@ export function buildServiceRegistry(
   registry.register(coreSecretsDescriptor)
   registry.register(coreAgentPersonasDescriptor)
   registry.register(coreSoundNotifierDescriptor)
+  registry.register(coreDocumentTextExtractorDescriptor)
   registry.register(coreDriveSyncDescriptor)
   registry.register(coreRelayDescriptor)
   registry.register(coreAutomationIngressDescriptor)

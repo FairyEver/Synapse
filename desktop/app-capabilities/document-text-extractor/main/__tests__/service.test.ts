@@ -10,8 +10,12 @@ import {
 } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { Worker } from "node:worker_threads"
 import { describe, expect, it, vi } from "vitest"
-import { createDocumentTextExtractorService } from "../service"
+import {
+  createDocumentTextExtractorService,
+  type DocumentTextExtractionWorkerFactory,
+} from "../service"
 import { createPdfFixture } from "./pdf-fixture"
 
 const fixturePath = path.resolve(
@@ -34,7 +38,368 @@ function createTestService(logger?: { info: ReturnType<typeof vi.fn>; warn: Retu
   }
 }
 
+const CONTROLLED_WORKER_SOURCE = `
+  const { parentPort } = require("node:worker_threads")
+  parentPort.on("message", (command) => {
+    if (command === "complete") {
+      parentPort.postMessage({ type: "success", result: { text: "completed", pages: 1 } })
+      return
+    }
+    if (command === "fail") {
+      parentPort.postMessage({ type: "error", code: "EXTRACTION_FAILED" })
+      return
+    }
+    if (command === "crash") throw new Error("raw worker detail")
+  })
+`
+
+const MEMORY_WORKER_SOURCE = `
+  const retained = []
+  while (true) retained.push(new Array(500_000).fill(Math.random()))
+`
+
+function createWorkerBoundary(mode: "controlled" | "memory" = "controlled") {
+  const activeWorkers: Worker[] = []
+  const releaseWaiters = new Set<() => void>()
+  const factory: DocumentTextExtractionWorkerFactory = (_filename, options) => {
+    const worker = new Worker(
+      mode === "memory" ? MEMORY_WORKER_SOURCE : CONTROLLED_WORKER_SOURCE,
+      {
+        ...options,
+        eval: true,
+        ...(mode === "memory"
+          ? { resourceLimits: { maxOldGenerationSizeMb: 8, maxYoungGenerationSizeMb: 2 } }
+          : {}),
+      },
+    )
+    activeWorkers.push(worker)
+    worker.once("exit", () => {
+      const index = activeWorkers.indexOf(worker)
+      if (index >= 0) activeWorkers.splice(index, 1)
+      if (activeWorkers.length === 0) {
+        for (const resolve of releaseWaiters) resolve()
+        releaseWaiters.clear()
+      }
+    })
+    return worker
+  }
+
+  const sendNext = (command: "complete" | "fail" | "crash") => {
+    const worker = activeWorkers[0]
+    if (!worker) throw new Error("Expected an active Worker")
+    worker.postMessage(command)
+  }
+
+  return {
+    factory,
+    completeNext: () => sendNext("complete"),
+    failNext: () => sendNext("fail"),
+    crashNext: () => sendNext("crash"),
+    completeAll: () => {
+      for (const worker of [...activeWorkers]) worker.postMessage("complete")
+    },
+    waitForAllReleased: () => activeWorkers.length === 0
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => releaseWaiters.add(resolve)),
+  }
+}
+
+function createSchedulingTestService(workerFactory: DocumentTextExtractionWorkerFactory) {
+  return createDocumentTextExtractorService({
+    permissionGuard: { check: vi.fn(async () => ({ allowed: true as const })) } as never,
+    auditSink: { record: vi.fn() } as never,
+    workerFactory,
+  })
+}
+
+async function waitForTaskStatus(
+  task: { getState(): { readonly status: string } },
+  status: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if (task.getState().status === status) return
+    await new Promise<void>((resolve) => setImmediate(resolve))
+  }
+  expect(task.getState().status).toBe(status)
+}
+
 describe("DocumentTextExtractorService", () => {
+  it("keeps a task waiting while bytes are prepared and starts it after Worker creation", async () => {
+    let statusAtWorkerCreation: string | undefined
+    const workerFactory: DocumentTextExtractionWorkerFactory = (_filename, options) => {
+      statusAtWorkerCreation = task.getState().status
+      return new Worker(`
+        const { parentPort } = require("node:worker_threads")
+        parentPort.postMessage({ type: "success", result: { text: "created", pages: 1 } })
+      `, { ...options, eval: true })
+    }
+    const service = createDocumentTextExtractorService({
+      permissionGuard: { check: vi.fn(async () => ({ allowed: true as const })) } as never,
+      auditSink: { record: vi.fn() } as never,
+      workerFactory,
+    })
+
+    const task = service.createTask({ filePath: fixturePath })
+
+    await expect(task.result).resolves.toMatchObject({ text: "created" })
+    expect(statusAtWorkerCreation).toBe("waiting")
+    expect(task.getState().status).toBe("completed")
+  })
+
+  it("runs at most two tasks and keeps the third task waiting", async () => {
+    const boundary = createWorkerBoundary()
+    const scheduledService = createSchedulingTestService(boundary.factory)
+    const first = scheduledService.createTask({ filePath: fixturePath })
+    const second = scheduledService.createTask({ filePath: fixturePath })
+    const third = scheduledService.createTask({ filePath: fixturePath })
+    const firstStates: unknown[] = []
+    first.subscribe((state) => firstStates.push(state))
+
+    await vi.waitFor(() => {
+      expect(first.getState().status).toBe("running")
+      expect(second.getState().status).toBe("running")
+      expect(third.getState().status).toBe("waiting")
+    })
+    boundary.completeAll()
+    await expect(Promise.all([first.result, second.result])).resolves.toHaveLength(2)
+    expect(firstStates).toEqual([
+      expect.objectContaining({ status: "waiting" }),
+      expect.objectContaining({ status: "running" }),
+      expect.objectContaining({ status: "completed" }),
+    ])
+    expect(JSON.stringify(firstStates)).not.toMatch(/percent|progress/i)
+    await vi.waitFor(() => {
+      expect(third.getState().status).toBe("running")
+    })
+
+    boundary.completeNext()
+    await expect(third.result).resolves.toMatchObject({ text: "completed" })
+    await boundary.waitForAllReleased()
+  })
+
+  it("starts waiting tasks in FIFO order as slots become available", async () => {
+    const boundary = createWorkerBoundary()
+    const service = createSchedulingTestService(boundary.factory)
+    const tasks = Array.from({ length: 4 }, () => service.createTask({ filePath: fixturePath }))
+
+    await vi.waitFor(() => {
+      expect(tasks.map((task) => task.getState().status)).toEqual([
+        "running",
+        "running",
+        "waiting",
+        "waiting",
+      ])
+    })
+
+    boundary.completeNext()
+    await vi.waitFor(() => {
+      expect(tasks[2]!.getState().status).toBe("running")
+      expect(tasks[3]!.getState().status).toBe("waiting")
+    })
+
+    boundary.completeNext()
+    await vi.waitFor(() => expect(tasks[3]!.getState().status).toBe("running"))
+    boundary.completeAll()
+    await expect(Promise.all(tasks.map((task) => task.result))).resolves.toHaveLength(4)
+    await boundary.waitForAllReleased()
+  })
+
+  it("cancels a waiting task without delaying the next task", async () => {
+    const boundary = createWorkerBoundary()
+    const service = createSchedulingTestService(boundary.factory)
+    const first = service.createTask({ filePath: fixturePath })
+    const second = service.createTask({ filePath: fixturePath })
+    const cancelled = service.createTask({ filePath: fixturePath })
+    const fourth = service.createTask({ filePath: fixturePath })
+
+    await vi.waitFor(() => {
+      expect(first.getState().status).toBe("running")
+      expect(second.getState().status).toBe("running")
+      expect(cancelled.getState().status).toBe("waiting")
+    })
+    expect(cancelled.cancel()).toBe(true)
+    await expect(cancelled.result).rejects.toMatchObject({ code: "EXTRACTION_CANCELLED" })
+    expect(cancelled.getState()).toMatchObject({
+      status: "cancelled",
+      error: { code: "EXTRACTION_CANCELLED" },
+    })
+
+    boundary.completeNext()
+    await vi.waitFor(() => expect(fourth.getState().status).toBe("running"))
+    boundary.completeAll()
+    await expect(Promise.all([first.result, second.result, fourth.result])).resolves.toHaveLength(3)
+    await boundary.waitForAllReleased()
+  })
+
+  it("cancels a running task and releases its slot for the next task", async () => {
+    const boundary = createWorkerBoundary()
+    const service = createSchedulingTestService(boundary.factory)
+    const first = service.createTask({ filePath: fixturePath })
+    const second = service.createTask({ filePath: fixturePath })
+    const third = service.createTask({ filePath: fixturePath })
+
+    await vi.waitFor(() => {
+      expect(first.getState().status).toBe("running")
+      expect(second.getState().status).toBe("running")
+      expect(third.getState().status).toBe("waiting")
+    })
+    expect(first.cancel()).toBe(true)
+    await expect(first.result).rejects.toMatchObject({ code: "EXTRACTION_CANCELLED" })
+    await vi.waitFor(() => expect(third.getState().status).toBe("running"))
+    boundary.completeAll()
+    await expect(Promise.all([second.result, third.result])).resolves.toHaveLength(2)
+    await boundary.waitForAllReleased()
+  })
+
+  it("keeps cancellation terminal until its Worker is released", async () => {
+    const boundary = createWorkerBoundary()
+    const service = createSchedulingTestService(boundary.factory)
+    const task = service.createTask({ filePath: fixturePath })
+    await vi.waitFor(() => expect(task.getState().status).toBe("running"))
+
+    expect(task.cancel()).toBe(true)
+    await expect(task.result).rejects.toMatchObject({ code: "EXTRACTION_CANCELLED" })
+    await boundary.waitForAllReleased()
+    expect(task.getState().status).toBe("cancelled")
+  })
+
+  it("releases running workers and queued tasks when the shared service stops", async () => {
+    const boundary = createWorkerBoundary()
+    const service = createSchedulingTestService(boundary.factory)
+    const tasks = Array.from({ length: 3 }, () => service.createTask({ filePath: fixturePath }))
+    const outcomes = tasks.map((task) => task.result.catch((error: unknown) => error))
+
+    await vi.waitFor(() => {
+      expect(tasks.map((task) => task.getState().status)).toEqual([
+        "running",
+        "running",
+        "waiting",
+      ])
+    })
+    await service.stop()
+    await boundary.waitForAllReleased()
+
+    await expect(Promise.all(outcomes)).resolves.toEqual([
+      expect.objectContaining({ code: "EXTRACTION_CANCELLED" }),
+      expect.objectContaining({ code: "EXTRACTION_CANCELLED" }),
+      expect.objectContaining({ code: "EXTRACTION_CANCELLED" }),
+    ])
+    expect(tasks.map((task) => task.getState().status)).toEqual([
+      "cancelled",
+      "cancelled",
+      "cancelled",
+    ])
+  })
+
+  it("continues the FIFO queue after a worker failure", async () => {
+    const boundary = createWorkerBoundary()
+    const service = createSchedulingTestService(boundary.factory)
+    const tasks = Array.from({ length: 3 }, () => service.createTask({ filePath: fixturePath }))
+    const outcomes = tasks.map((task) => task.result.then(
+      () => "completed" as const,
+      (error: unknown) => error,
+    ))
+
+    await vi.waitFor(() => {
+      expect(tasks[0]!.getState().status).toBe("running")
+      expect(tasks[1]!.getState().status).toBe("running")
+      expect(tasks[2]!.getState().status).toBe("waiting")
+    })
+    boundary.failNext()
+    await vi.waitFor(() => expect(tasks[2]!.getState().status).toBe("running"))
+    const failedTask = tasks.find((task) => task.getState().status === "failed")
+    expect(failedTask?.getState()).toMatchObject({
+      status: "failed",
+      error: { code: "EXTRACTION_FAILED" },
+    })
+    expect(tasks.filter((task) => task.getState().status === "running")).toHaveLength(2)
+    boundary.completeAll()
+    const results = await Promise.all(outcomes)
+    expect(results.filter((result) => result === "completed")).toHaveLength(2)
+    expect(results.find((result) => result !== "completed"))
+      .toMatchObject({ code: "EXTRACTION_FAILED" })
+    await boundary.waitForAllReleased()
+  })
+
+  it("maps a worker heap exhaustion to a stable serializable failure", async () => {
+    const boundary = createWorkerBoundary("memory")
+    const service = createSchedulingTestService(boundary.factory)
+    const task = service.createTask({ filePath: fixturePath })
+
+    await expect(task.result).rejects.toMatchObject({
+      code: "EXTRACTION_MEMORY_LIMIT",
+      message: "文档文本提取超过内存限制。",
+    })
+    expect(task.getState()).toMatchObject({
+      status: "failed",
+      error: {
+        code: "EXTRACTION_MEMORY_LIMIT",
+        message: "文档文本提取超过内存限制。",
+      },
+    })
+    expect(JSON.stringify(task.getState())).not.toContain(fixturePath)
+    await boundary.waitForAllReleased()
+  }, 30_000)
+
+  it("maps an abnormal worker exit without exposing the worker error", async () => {
+    const boundary = createWorkerBoundary()
+    const service = createSchedulingTestService(boundary.factory)
+    const task = service.createTask({ filePath: fixturePath })
+    await vi.waitFor(() => expect(task.getState().status).toBe("running"))
+    boundary.crashNext()
+
+    await expect(task.result).rejects.toMatchObject({
+      code: "EXTRACTION_FAILED",
+      message: "文档文本提取失败。",
+    })
+    expect(task.getState()).toMatchObject({
+      status: "failed",
+      error: {
+        code: "EXTRACTION_FAILED",
+        message: "文档文本提取失败。",
+      },
+    })
+    expect(JSON.stringify(task.getState())).not.toContain("raw worker detail")
+    await boundary.waitForAllReleased()
+  })
+
+  it("starts the timeout when a waiting task begins running", async () => {
+    const boundary = createWorkerBoundary()
+    const service = createSchedulingTestService(boundary.factory)
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+    try {
+      const first = service.createTask({ filePath: fixturePath })
+      const second = service.createTask({ filePath: fixturePath })
+      const third = service.createTask({ filePath: fixturePath })
+      await Promise.all([
+        waitForTaskStatus(first, "running"),
+        waitForTaskStatus(second, "running"),
+      ])
+      expect(third.getState().status).toBe("waiting")
+
+      await vi.advanceTimersByTimeAsync(59_999)
+      expect(third.getState().status).toBe("waiting")
+      boundary.completeAll()
+      await expect(Promise.all([first.result, second.result])).resolves.toHaveLength(2)
+      await waitForTaskStatus(third, "running")
+
+      await vi.advanceTimersByTimeAsync(59_999)
+      expect(third.getState().status).toBe("running")
+      const timeoutResult = expect(third.result).rejects.toMatchObject({
+        code: "EXTRACTION_TIMEOUT",
+      })
+      await vi.advanceTimersByTimeAsync(1)
+      await timeoutResult
+      await boundary.waitForAllReleased()
+      expect(third.getState()).toMatchObject({
+        status: "failed",
+        error: { code: "EXTRACTION_TIMEOUT" },
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("extracts a multi-page PDF through the real worker", async () => {
     const logger = { info: vi.fn(), warn: vi.fn() }
     const { service, permissionGuard, auditSink } = createTestService(logger)
@@ -67,6 +432,9 @@ describe("DocumentTextExtractorService", () => {
     )
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain(fixturePath)
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain(result.text)
+    expect(logger.info.mock.calls
+      .map(([, metadata]) => metadata?.status)
+      .filter(Boolean)).toEqual(["waiting", "running", "completed"])
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "fs.read.outside-userdata",
       actor: context.actor,
