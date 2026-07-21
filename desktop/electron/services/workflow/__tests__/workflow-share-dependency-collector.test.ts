@@ -102,6 +102,70 @@ describe("collectWorkflowShareDependencies", () => {
     expect(JSON.stringify(result)).not.toContain("c2VjcmV0")
   })
 
+  it("ignores resource paths derived from runtime variables", () => {
+    const definition = workflow()
+    definition.params[0].default = null
+    definition.nodes = [1, 2, 3].map((index) => ({
+      id: `docx-${index}`,
+      name: `DOCX ${index}`,
+      type: "document_template_docx_generate",
+      position: { x: index * 100, y: 0 },
+      config: {
+        templatePath: "{{runDir}}/_data/模板.docx",
+        outputPath: `{{runDir}}/方案${index}.docx`,
+        dataSource: "dataPath",
+        dataPath: "{{jsonPath}}",
+        overwrite: false,
+        variables: [
+          { name: "runDir", source: { type: "node_output", node: "prepare" } },
+          { name: "jsonPath", source: { type: "node_output", node: `write-${index}` } },
+        ],
+      },
+    }))
+    const workflowRef = stableWorkflowReference(definition.id)
+    const result = collectWorkflowShareDependencies({
+      workflows: [definition],
+      workflowRefs: new Map([[definition.id, workflowRef]]),
+      providers: [],
+    })
+
+    expect(result.references.resources).toEqual([])
+  })
+
+  it("keeps literal and static-variable resource paths as external dependencies", () => {
+    const definition = workflow()
+    definition.params[0].default = null
+    definition.nodes = [{
+      id: "docx",
+      name: "DOCX",
+      type: "document_template_docx_generate",
+      position: { x: 0, y: 0 },
+      config: {
+        templatePath: "/tmp/template.docx",
+        outputPath: "/tmp/{{name}}.docx",
+        dataSource: "dataPath",
+        dataPath: "{{jsonPath}}",
+        overwrite: false,
+        variables: [
+          { name: "name", source: { type: "static", value: "output" } },
+          { name: "jsonPath", source: { type: "static", value: "/tmp/data.json" } },
+        ],
+      },
+    }]
+    const workflowRef = stableWorkflowReference(definition.id)
+    const result = collectWorkflowShareDependencies({
+      workflows: [definition],
+      workflowRefs: new Map([[definition.id, workflowRef]]),
+      providers: [],
+    })
+
+    expect(result.references.resources.map((resource) => resource.displayName).sort()).toEqual([
+      "template.docx",
+      "{{jsonPath}}",
+      "{{name}}.docx",
+    ])
+  })
+
   it("matches equivalent Git remotes without exposing credentials or URLs", () => {
     const https = workflowShareGitRemoteFingerprint("https://token:secret@github.com/Team/Repo.git?token=secret")
     const ssh = workflowShareGitRemoteFingerprint("git@github.com:Team/Repo.git")

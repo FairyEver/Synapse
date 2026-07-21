@@ -62,6 +62,18 @@ function render(value = preflight()) {
 }
 
 describe("WorkflowExportDialog", () => {
+  it("keeps the dialog actions fixed while the body scrolls", () => {
+    render()
+    const content = document.body.querySelector('[data-slot="dialog-content"]')
+    const body = document.body.querySelector('[data-slot="dialog-frame-body"]')
+    const footer = document.body.querySelector('[data-slot="dialog-frame-footer"]')
+
+    expect(content?.className).toContain("overflow-hidden")
+    expect(body?.className).toContain("overflow-y-auto")
+    expect(body?.className).toContain("overscroll-contain")
+    expect(footer).not.toBeNull()
+  })
+
   it("shows excluded local resources and sensitive locations without exposing their values", () => {
     render()
     expect(document.body.textContent).toContain("template.docx")

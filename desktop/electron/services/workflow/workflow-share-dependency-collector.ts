@@ -171,6 +171,7 @@ export function collectWorkflowShareDependencies(
             : [located.value]
           values.forEach((value, index) => {
             if (typeof value !== "string" || !value.trim()) return
+            if (isResourcePathDerivedFromRuntimeVariable(node.config, value)) return
             const resourcePath = declaration.cardinality === "many" ? [...located.path, index] : located.path
             addResourceReference(resourceRefs, {
               kind: "local_path",
@@ -441,6 +442,14 @@ function modelNameForTier(provider: WorkflowShareProviderSummary, tier: Workflow
 
 function localResourceDisplayName(value: string): string {
   return value.replace(/\\/g, "/").split("/").filter(Boolean).at(-1) ?? "resource"
+}
+
+function isResourcePathDerivedFromRuntimeVariable(config: unknown, value: string): boolean {
+  const variableName = /^\s*\{\{\s*\$?([\p{L}\p{N}_.-]+)\s*\}\}/u.exec(value)?.[1]
+  if (!variableName || !isRecord(config) || !Array.isArray(config.variables)) return false
+  const binding = config.variables.find((candidate) => isRecord(candidate) && candidate.name === variableName)
+  if (!isRecord(binding) || !isRecord(binding.source)) return false
+  return binding.source.type === "param" || binding.source.type === "node_output"
 }
 
 function opaqueLocalResourceIdentity(value: string): string {
