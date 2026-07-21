@@ -65,6 +65,10 @@ vi.mock("../../../../app-capabilities/document-template/renderer", () => ({
   DocumentTemplateModule: () => <div>文档模板窗口</div>,
 }))
 
+vi.mock("../../../../app-capabilities/document-text-extractor/renderer", () => ({
+  DocumentTextExtractorModule: () => <div>文档文本提取窗口</div>,
+}))
+
 vi.mock("../../../../app-capabilities/terminal/renderer", () => ({
   TerminalModule: () => <div>终端窗口</div>,
 }))
@@ -133,6 +137,12 @@ describe("SystemAppWindowApp", () => {
     window.history.replaceState({}, "", "/?window=system-app&appId=terminal")
     await renderSystemAppWindow(roots)
     expect(document.body.textContent).toContain("终端窗口")
+  })
+
+  it("renders the document text extractor system app", async () => {
+    window.history.replaceState({}, "", "/?window=system-app&appId=document-text-extractor")
+    await renderSystemAppWindow(roots)
+    expect(document.body.textContent).toContain("文档文本提取窗口")
   })
 
   it("renders the secrets system app", async () => {

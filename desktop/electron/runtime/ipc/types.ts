@@ -25,7 +25,17 @@ export interface IpcHandlerLogger {
   }
 }
 
-export interface IpcHandlerContext {
+export interface IpcInvocationSender {
+  readonly id: number
+  isDestroyed(): boolean
+  onDestroyed(listener: () => void): () => void
+}
+
+export interface IpcInvocationContext {
+  readonly sender?: IpcInvocationSender
+}
+
+export interface IpcHandlerContext extends IpcInvocationContext {
   /** Module id from IpcModule.id. Useful for logging and metrics. */
   readonly moduleId: string
   /** Optional logger used by transport/runtime adapters. */

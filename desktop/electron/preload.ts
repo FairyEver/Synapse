@@ -397,6 +397,25 @@ const synapseBridge: SynapseBridge = {
     output: { choose: (input) => invoke(IPC_CHANNELS.documentTemplate.chooseOutputFile)(input) },
     docx: { generate: (input) => invoke(IPC_CHANNELS.documentTemplate.generateDocx)(input) },
   },
+  documentTextExtractor: {
+    document: {
+      choose: () => invoke(IPC_CHANNELS.documentTextExtractor.chooseDocument)(),
+      extract: (input) => invoke(IPC_CHANNELS.documentTextExtractor.extractDocument)(input),
+      cancel: (input) => invoke(IPC_CHANNELS.documentTextExtractor.cancelExtraction)(input),
+    },
+    output: {
+      choose: (input) => invoke(IPC_CHANNELS.documentTextExtractor.chooseOutput)(input),
+    },
+    text: {
+      save: (input) => invoke(IPC_CHANNELS.documentTextExtractor.saveText)(input),
+    },
+    operation: {
+      onStatus: createRawPayloadSubscription(
+        subscribe,
+        IPC_CHANNELS.documentTextExtractor.status,
+      ),
+    },
+  },
   skillUninstaller: {
     scan: invoke(IPC_CHANNELS["skill-uninstaller"].scan),
     scanNames: invoke(IPC_CHANNELS["skill-uninstaller"].scanNames),

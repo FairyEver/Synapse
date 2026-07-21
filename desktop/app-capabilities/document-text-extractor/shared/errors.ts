@@ -44,3 +44,36 @@ export function isDocumentTextExtractionError(
 ): error is DocumentTextExtractionError {
   return error instanceof DocumentTextExtractionError
 }
+
+export const DOCUMENT_TEXT_SAVE_ERROR_CODES = [
+  "INVALID_OUTPUT",
+  "UNSAFE_OUTPUT_TARGET",
+  "OUTPUT_CHANGED",
+  "PERMISSION_DENIED",
+  "WRITE_FAILED",
+] as const
+
+export type DocumentTextSaveErrorCode =
+  typeof DOCUMENT_TEXT_SAVE_ERROR_CODES[number]
+
+const SAVE_ERROR_MESSAGES: Record<DocumentTextSaveErrorCode, string> = {
+  INVALID_OUTPUT: "输出文件必须是 .txt 文件。",
+  UNSAFE_OUTPUT_TARGET: "无法安全写入所选文件。",
+  OUTPUT_CHANGED: "输出文件在写入前发生变化。",
+  PERMISSION_DENIED: "没有写入所选文件的权限。",
+  WRITE_FAILED: "保存文本失败。",
+}
+
+export class DocumentTextSaveError extends Error {
+  readonly code: DocumentTextSaveErrorCode
+
+  constructor(code: DocumentTextSaveErrorCode, options?: ErrorOptions) {
+    super(SAVE_ERROR_MESSAGES[code], options)
+    this.name = "DocumentTextSaveError"
+    this.code = code
+  }
+}
+
+export function isDocumentTextSaveError(error: unknown): error is DocumentTextSaveError {
+  return error instanceof DocumentTextSaveError
+}
