@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process"
 import { createHash } from "node:crypto"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
@@ -39,7 +39,77 @@ function hash(value: Buffer): string {
   return createHash("sha256").update(value).digest("hex")
 }
 
+const SYNTHETIC_UNPDF_PACKAGE_JSON = '{"license":"MIT"}\n'
+const SYNTHETIC_UNPDF_LICENSE = [
+  "MIT License",
+  "Permission is hereby granted, free of charge, to any person obtaining a copy",
+  'THE SOFTWARE IS PROVIDED "AS IS"',
+  "",
+].join("\n")
+const SYNTHETIC_MAMMOTH_PACKAGE_JSON = '{"license":"BSD-2-Clause"}\n'
+const SYNTHETIC_MAMMOTH_LICENSE = [
+  "Redistribution and use in source and binary forms, with or without modification, are permitted",
+  "1. Redistributions of source code must retain the above copyright notice",
+  "2. Redistributions in binary form must reproduce the above copyright notice",
+  'THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"',
+  "",
+].join("\n")
+const DOCUMENT_EXTRACTION_MAIN_PATH =
+  "dist-electron/app-capabilities/document-text-extractor/main"
+const SYNTHETIC_DOCUMENT_EXTRACTION_FILES: Readonly<Record<string, string>> = {
+  [`${DOCUMENT_EXTRACTION_MAIN_PATH}/service.js`]:
+    "const { launchDocumentTextExtractionWorker } = require('./worker-launch')\n",
+  [`${DOCUMENT_EXTRACTION_MAIN_PATH}/service.js.map`]: "{}",
+  [`${DOCUMENT_EXTRACTION_MAIN_PATH}/worker-launch.js`]: [
+    "const path = require('node:path')",
+    "const { Worker } = require('node:worker_threads')",
+    "function launchDocumentTextExtractionWorker(input) {",
+    "  const bytes = input.bytes.buffer.slice(input.bytes.byteOffset, input.bytes.byteOffset + input.bytes.byteLength)",
+    "  return (input.workerFactory || ((filename, options) => new Worker(filename, options)))(path.join(input.baseDir, 'worker.js'), {",
+    "    workerData: { bytes, format: input.format, maxPages: input.maxPages, maxTextBytes: input.maxTextBytes },",
+    "    transferList: [bytes],",
+    "    resourceLimits: { maxOldGenerationSizeMb: input.maxOldGenerationSizeMb },",
+    "  })",
+    "}",
+    "module.exports = { launchDocumentTextExtractionWorker }",
+    "",
+  ].join("\n"),
+  [`${DOCUMENT_EXTRACTION_MAIN_PATH}/worker-launch.js.map`]: "{}",
+  [`${DOCUMENT_EXTRACTION_MAIN_PATH}/worker.js`]: [
+    "const { parentPort, workerData } = require('node:worker_threads')",
+    "// unpdf mammoth pizzip",
+    "const result = workerData.format === 'pdf'",
+    "  ? { text: 'packaged pdf smoke', pages: 1 }",
+    "  : { text: 'packaged docx smoke' }",
+    "parentPort.postMessage({ type: 'success', result })",
+    "",
+  ].join("\n"),
+  [`${DOCUMENT_EXTRACTION_MAIN_PATH}/worker.js.map`]: "{}",
+  "node_modules/unpdf/package.json": SYNTHETIC_UNPDF_PACKAGE_JSON,
+  "node_modules/unpdf/LICENSE": SYNTHETIC_UNPDF_LICENSE,
+  "node_modules/unpdf/dist/index.cjs": "module.exports = {}\n",
+  "node_modules/unpdf/dist/pdfjs.mjs": "export {}\n",
+  "node_modules/mammoth/package.json": SYNTHETIC_MAMMOTH_PACKAGE_JSON,
+  "node_modules/mammoth/LICENSE": SYNTHETIC_MAMMOTH_LICENSE,
+  "node_modules/mammoth/lib/index.js": "{}\n",
+  "node_modules/pizzip/package.json": "{}\n",
+  "node_modules/pizzip/js/index.js": "{}\n",
+  "node_modules/@xmldom/xmldom/package.json": "{}\n",
+  "node_modules/jszip/package.json": "{}\n",
+  "node_modules/pako/package.json": "{}\n",
+  "node_modules/xmlbuilder/package.json": "{}\n",
+}
+
+type DocumentExtractionContentOverrides = Readonly<Record<string, string>>
+
+function documentExtractionFiles(
+  overrides: DocumentExtractionContentOverrides = {},
+): Readonly<Record<string, string>> {
+  return { ...SYNTHETIC_DOCUMENT_EXTRACTION_FILES, ...overrides }
+}
+
 interface CreateAsarBufferOptions {
+  readonly documentTextExtractionContentOverrides?: DocumentExtractionContentOverrides
   readonly includeClaudeRuntimeGuard?: boolean
   readonly includeDeploymentConfig?: boolean
   readonly includeDocumentTextExtraction?: boolean
@@ -47,6 +117,7 @@ interface CreateAsarBufferOptions {
   readonly includeSharedPackage?: boolean
   readonly includeUsageAnalysisWorkers?: boolean
   readonly includeUnpackedSourceMaps?: boolean
+  readonly omitDocumentTextExtractionIntegrity?: string
 }
 
 function createPackedFileNode(offset: number, content: Buffer, unpacked = false) {
@@ -58,11 +129,13 @@ function createPackedFileNode(offset: number, content: Buffer, unpacked = false)
   }
 }
 
-function createUnpackedFileNode() {
+function createUnpackedFileNode(content?: string) {
+  const bytes = content === undefined ? undefined : Buffer.from(content)
   return {
-    size: 1,
+    size: bytes?.length ?? 1,
     offset: "0",
     unpacked: true,
+    ...(bytes ? { integrity: { hash: hash(bytes) } } : {}),
   }
 }
 
@@ -99,48 +172,77 @@ function createModelPriceFiles(includeSourceMaps: boolean) {
   }
 }
 
-function createDocumentTextExtractionFiles() {
+function createDocumentTextExtractionFiles(
+  files: Readonly<Record<string, string>>,
+  omitIntegrity?: string,
+) {
+  const node = (fileName: string) => {
+    const relativePath = `${DOCUMENT_EXTRACTION_MAIN_PATH}/${fileName}`
+    return createUnpackedFileNode(relativePath === omitIntegrity ? undefined : files[relativePath])
+  }
   return {
     main: {
       files: {
-        "service.js": createUnpackedFileNode(),
-        "service.js.map": createUnpackedFileNode(),
-        "worker.js": createUnpackedFileNode(),
-        "worker.js.map": createUnpackedFileNode(),
+        "service.js": node("service.js"),
+        "service.js.map": node("service.js.map"),
+        "worker-launch.js": node("worker-launch.js"),
+        "worker-launch.js.map": node("worker-launch.js.map"),
+        "worker.js": node("worker.js"),
+        "worker.js.map": node("worker.js.map"),
       },
     },
   }
 }
 
-function createUnpdfFiles() {
+function createUnpdfFiles(files: Readonly<Record<string, string>>, omitIntegrity?: string) {
+  const node = (relativePath: string) => createUnpackedFileNode(
+    relativePath === omitIntegrity ? undefined : files[relativePath],
+  )
   return {
-    "package.json": createUnpackedFileNode(),
+    "package.json": node("node_modules/unpdf/package.json"),
+    LICENSE: node("node_modules/unpdf/LICENSE"),
     dist: {
       files: {
-        "index.cjs": createUnpackedFileNode(),
-        "pdfjs.mjs": createUnpackedFileNode(),
+        "index.cjs": node("node_modules/unpdf/dist/index.cjs"),
+        "pdfjs.mjs": node("node_modules/unpdf/dist/pdfjs.mjs"),
       },
     },
   }
 }
 
-function createDocumentTextExtractionPackageFiles(entryDirectory: string, entryFile: string) {
+function createDocumentTextExtractionPackageFiles(
+  packageName: string,
+  entryDirectory: string,
+  entryFile: string,
+  files: Readonly<Record<string, string>>,
+  omitIntegrity?: string,
+) {
+  const packagePath = `node_modules/${packageName}/package.json`
+  const entryPath = `node_modules/${packageName}/${entryDirectory}/${entryFile}`
   return {
-    "package.json": createUnpackedFileNode(),
+    "package.json": createUnpackedFileNode(packagePath === omitIntegrity ? undefined : files[packagePath]),
     [entryDirectory]: {
       files: {
-        [entryFile]: createUnpackedFileNode(),
+        [entryFile]: createUnpackedFileNode(entryPath === omitIntegrity ? undefined : files[entryPath]),
       },
     },
   }
 }
 
-function createPackageManifestFiles() {
-  return { "package.json": createUnpackedFileNode() }
+function createPackageManifestFiles(
+  packageName: string,
+  files: Readonly<Record<string, string>>,
+  omitIntegrity?: string,
+) {
+  const packagePath = `node_modules/${packageName}/package.json`
+  return {
+    "package.json": createUnpackedFileNode(packagePath === omitIntegrity ? undefined : files[packagePath]),
+  }
 }
 
 function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const {
+    documentTextExtractionContentOverrides = {},
     includeClaudeRuntimeGuard = true,
     includeDeploymentConfig = true,
     includeDocumentTextExtraction = true,
@@ -148,7 +250,9 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     includeSharedPackage = true,
     includeUsageAnalysisWorkers = false,
     includeUnpackedSourceMaps = true,
+    omitDocumentTextExtractionIntegrity,
   } = options
+  const documentFiles = documentExtractionFiles(documentTextExtractionContentOverrides)
   const packageJson = Buffer.from(JSON.stringify({ main: "dist-electron/electron/main.js" }), "utf8")
   const mainJs = Buffer.from("require('./bootstrap/descriptors.js')\n", "utf8")
   const preloadJs = Buffer.from("const { contextBridge } = require('electron')\n", "utf8")
@@ -183,9 +287,6 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     offset += deploymentConfig.length
   }
   const sharedIndexNode = createPackedFileNode(offset, sharedIndex)
-  if (includeSharedPackage) {
-    offset += sharedIndex.length
-  }
   const header = Buffer.from(JSON.stringify({
     files: {
       "package.json": packageNode,
@@ -236,7 +337,10 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                 "app-capabilities": {
                   files: {
                     "document-text-extractor": {
-                      files: createDocumentTextExtractionFiles(),
+                      files: createDocumentTextExtractionFiles(
+                        documentFiles,
+                        omitDocumentTextExtractionIntegrity,
+                      ),
                     },
                   },
                 },
@@ -272,21 +376,54 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
           },
           ...(includeDocumentTextExtraction
             ? {
-                unpdf: { files: createUnpdfFiles() },
+                unpdf: {
+                  files: createUnpdfFiles(documentFiles, omitDocumentTextExtractionIntegrity),
+                },
                 mammoth: {
-                  files: createDocumentTextExtractionPackageFiles("lib", "index.js"),
+                  files: {
+                    ...createDocumentTextExtractionPackageFiles(
+                      "mammoth",
+                      "lib",
+                      "index.js",
+                      documentFiles,
+                      omitDocumentTextExtractionIntegrity,
+                    ),
+                    LICENSE: createUnpackedFileNode(
+                      omitDocumentTextExtractionIntegrity === "node_modules/mammoth/LICENSE"
+                        ? undefined
+                        : documentFiles["node_modules/mammoth/LICENSE"],
+                    ),
+                  },
                 },
                 pizzip: {
-                  files: createDocumentTextExtractionPackageFiles("js", "index.js"),
+                  files: createDocumentTextExtractionPackageFiles(
+                    "pizzip",
+                    "js",
+                    "index.js",
+                    documentFiles,
+                    omitDocumentTextExtractionIntegrity,
+                  ),
                 },
                 "@xmldom": {
                   files: {
-                    xmldom: { files: createPackageManifestFiles() },
+                    xmldom: {
+                      files: createPackageManifestFiles(
+                        "@xmldom/xmldom",
+                        documentFiles,
+                        omitDocumentTextExtractionIntegrity,
+                      ),
+                    },
                   },
                 },
-                jszip: { files: createPackageManifestFiles() },
-                pako: { files: createPackageManifestFiles() },
-                xmlbuilder: { files: createPackageManifestFiles() },
+                jszip: {
+                  files: createPackageManifestFiles("jszip", documentFiles, omitDocumentTextExtractionIntegrity),
+                },
+                pako: {
+                  files: createPackageManifestFiles("pako", documentFiles, omitDocumentTextExtractionIntegrity),
+                },
+                xmlbuilder: {
+                  files: createPackageManifestFiles("xmlbuilder", documentFiles, omitDocumentTextExtractionIntegrity),
+                },
               }
             : {}),
         },
@@ -333,57 +470,26 @@ describe("packaged asar verification", () => {
     await writeUnpackedFixture(resourcesPath, ["database", "mcp", "index.js"], "module.exports = {}\n")
   }
 
-  async function writeDocumentTextExtractionRuntimeFixtures(resourcesPath: string) {
-    await writeUnpackedFixture(
-      resourcesPath,
-      ["app.asar.unpacked", "dist-electron", "app-capabilities", "document-text-extractor", "main", "service.js"],
-      "const workerPath = 'worker.js'\n",
-    )
-    await writeUnpackedFixture(
-      resourcesPath,
-      ["app.asar.unpacked", "dist-electron", "app-capabilities", "document-text-extractor", "main", "worker.js"],
-      "require('unpdf'); require('mammoth'); require('pizzip')\n",
-    )
-    await writeUnpackedFixture(
-      resourcesPath,
-      ["app.asar.unpacked", "node_modules", "unpdf", "package.json"],
-      "{}\n",
-      { sourceMap: false },
-    )
-    await writeUnpackedFixture(
-      resourcesPath,
-      ["app.asar.unpacked", "node_modules", "unpdf", "dist", "index.cjs"],
-      "module.exports = {}\n",
-      { sourceMap: false },
-    )
-    await writeUnpackedFixture(
-      resourcesPath,
-      ["app.asar.unpacked", "node_modules", "unpdf", "dist", "pdfjs.mjs"],
-      "export {}\n",
-      { sourceMap: false },
-    )
-    for (const segments of [
-      ["mammoth", "package.json"],
-      ["mammoth", "lib", "index.js"],
-      ["pizzip", "package.json"],
-      ["pizzip", "js", "index.js"],
-      ["@xmldom", "xmldom", "package.json"],
-      ["jszip", "package.json"],
-      ["pako", "package.json"],
-      ["xmlbuilder", "package.json"],
-    ]) {
+  async function writeDocumentTextExtractionRuntimeFixtures(
+    resourcesPath: string,
+    overrides: DocumentExtractionContentOverrides = {},
+  ) {
+    for (const [relativePath, content] of Object.entries(documentExtractionFiles(overrides))) {
       await writeUnpackedFixture(
         resourcesPath,
-        ["app.asar.unpacked", "node_modules", ...segments],
-        "{}\n",
+        ["app.asar.unpacked", ...relativePath.split("/")],
+        content,
         { sourceMap: false },
       )
     }
   }
 
-  async function writeExtraResourceFixtures(resourcesPath: string) {
+  async function writeExtraResourceFixtures(
+    resourcesPath: string,
+    overrides: DocumentExtractionContentOverrides = {},
+  ) {
     await writeRequiredExtraResourceFixtures(resourcesPath)
-    await writeDocumentTextExtractionRuntimeFixtures(resourcesPath)
+    await writeDocumentTextExtractionRuntimeFixtures(resourcesPath, overrides)
   }
 
   it("verifies a Windows-style resources directory with unpacked files", async () => {
@@ -401,7 +507,30 @@ describe("packaged asar verification", () => {
         root,
       ])
 
+      expect(result.stdout).toContain("Verified packaged document text extraction worker smoke")
       expect(result.stdout).toContain("Verified resources")
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("verifies a macOS app bundle resources directory with unpacked files", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const appPath = path.join(root, "Synapse.app")
+      const resourcesPath = path.join(appPath, "Contents", "Resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+
+      const result = await execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        appPath,
+      ])
+
+      expect(result.stdout).toContain("Verified Synapse.app")
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -451,6 +580,278 @@ describe("packaged asar verification", () => {
     }
   })
 
+  it("rejects packages whose document text extraction worker cannot complete the packaged smoke", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    const overrides = {
+      [`${DOCUMENT_EXTRACTION_MAIN_PATH}/worker.js`]:
+        "// unpdf mammoth pizzip\nthrow new Error('packaged worker smoke failure')\n",
+    }
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({
+        documentTextExtractionContentOverrides: overrides,
+      }))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath, overrides)
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("document text extraction worker smoke failed"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects packages whose document extraction service bypasses the packaged worker launch contract", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    const overrides = {
+      [`${DOCUMENT_EXTRACTION_MAIN_PATH}/service.js`]: "const workerPath = 'worker.js'\n",
+    }
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({
+        documentTextExtractionContentOverrides: overrides,
+      }))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath, overrides)
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("document text extraction service bypasses the worker launch contract"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects document extraction runtime entries missing ASAR integrity metadata", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({
+        omitDocumentTextExtractionIntegrity: `${DOCUMENT_EXTRACTION_MAIN_PATH}/service.js`,
+      }))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("unpacked file integrity metadata is missing"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects a same-length stale document extraction source map", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+      await writeFile(path.join(
+        resourcesPath,
+        "app.asar.unpacked",
+        "dist-electron",
+        "app-capabilities",
+        "document-text-extractor",
+        "main",
+        "worker-launch.js.map",
+      ), "[]")
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("unpacked file integrity mismatch: dist-electron/app-capabilities/document-text-extractor/main/worker-launch.js.map"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects an empty document extraction source map", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+      await writeFile(path.join(
+        resourcesPath,
+        "app.asar.unpacked",
+        "dist-electron",
+        "app-capabilities",
+        "document-text-extractor",
+        "main",
+        "worker.js.map",
+      ), "")
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("unpacked file size mismatch: dist-electron/app-capabilities/document-text-extractor/main/worker.js.map"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects packages missing a document parser license from the release archive", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+      await unlink(path.join(
+        resourcesPath,
+        "app.asar.unpacked",
+        "node_modules",
+        "mammoth",
+        "LICENSE",
+      ))
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("missing unpacked file: node_modules/mammoth/LICENSE"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects stale unpacked document parser license bytes", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+      const licensePath = path.join(resourcesPath, "app.asar.unpacked", "node_modules", "unpdf", "LICENSE")
+      const license = await readFile(licensePath)
+      await writeFile(licensePath, Buffer.alloc(license.length, "x"))
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("unpacked file integrity mismatch: node_modules/unpdf/LICENSE"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects an empty document parser license", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+      await writeFile(path.join(
+        resourcesPath,
+        "app.asar.unpacked",
+        "node_modules",
+        "mammoth",
+        "LICENSE",
+      ), "")
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("document parser license is empty: mammoth"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects the wrong document parser license identity", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+      await writeFile(path.join(
+        resourcesPath,
+        "app.asar.unpacked",
+        "node_modules",
+        "unpdf",
+        "package.json",
+      ), '{"license":"ISC"}\n')
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("document parser license identity mismatch: unpdf must be MIT"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects wrong document parser license content", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+      await writeFile(path.join(
+        resourcesPath,
+        "app.asar.unpacked",
+        "node_modules",
+        "unpdf",
+        "LICENSE",
+      ), "Copyright only; no license grant.\n")
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("document parser license content mismatch: unpdf (MIT)"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("rejects packages missing the Claude SDK native binary", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
     try {
@@ -479,6 +880,7 @@ describe("packaged asar verification", () => {
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeClaudeRuntimeGuard: false }))
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
 
       await expect(execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
@@ -499,6 +901,7 @@ describe("packaged asar verification", () => {
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includePreloadBundle: false }))
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
 
       await expect(execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
@@ -519,6 +922,7 @@ describe("packaged asar verification", () => {
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeSharedPackage: false }))
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
 
       await expect(execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),

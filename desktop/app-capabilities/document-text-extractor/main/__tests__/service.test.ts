@@ -307,6 +307,41 @@ describe("DocumentTextExtractorService", () => {
     expect(task.getState().status).toBe("completed")
   })
 
+  it("launches the worker with bytes-only input, transfer ownership, and bounded memory", async () => {
+    let capturedFilename: string | undefined
+    let capturedOptions: Parameters<DocumentTextExtractionWorkerFactory>[1] | undefined
+    const workerFactory: DocumentTextExtractionWorkerFactory = (filename, options) => {
+      capturedFilename = filename
+      capturedOptions = options
+      return new Worker(`
+        const { parentPort } = require("node:worker_threads")
+        parentPort.postMessage({ type: "success", result: { text: "bounded", pages: 1 } })
+      `, { ...options, eval: true })
+    }
+    const service = createDocumentTextExtractorService({
+      permissionGuard: { check: vi.fn(async () => ({ allowed: true as const })) } as never,
+      auditSink: { record: vi.fn() } as never,
+      workerFactory,
+    })
+
+    await expect(service.extract({ filePath: fixturePath })).resolves.toMatchObject({ text: "bounded" })
+    expect(path.basename(capturedFilename ?? "")).toMatch(/^worker\.(?:js|ts)$/)
+    expect(Object.keys(capturedOptions?.workerData ?? {}).sort()).toEqual([
+      "bytes",
+      "format",
+      "maxPages",
+      "maxTextBytes",
+    ])
+    expect(capturedOptions?.workerData).toMatchObject({
+      format: "pdf",
+      maxPages: 2_000,
+      maxTextBytes: 5 * 1024 * 1024,
+    })
+    expect(capturedOptions?.workerData).not.toHaveProperty("filePath")
+    expect(capturedOptions?.transferList).toEqual([capturedOptions?.workerData.bytes])
+    expect(capturedOptions?.resourceLimits).toMatchObject({ maxOldGenerationSizeMb: 512 })
+  })
+
   it("runs at most two tasks and keeps the third task waiting", async () => {
     const boundary = createWorkerBoundary()
     const scheduledService = createSchedulingTestService(boundary.factory)
@@ -643,7 +678,7 @@ describe("DocumentTextExtractorService", () => {
 
     const actor = { kind: "system" as const, id: "workflow-engine" }
     await expect(service.extract({ filePath: fixturePath }, { source: "workflow", actor }))
-      .rejects.toThrow("denied")
+      .rejects.toMatchObject({ code: "PERMISSION_DENIED" })
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       actor,
       context: expect.objectContaining({ source: "workflow" }),

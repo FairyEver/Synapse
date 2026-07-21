@@ -16,6 +16,7 @@ Rules:
 - Preserve the returned full text unless the user asks for a summary or transformation.
 - Do not repeat the full source path or extracted text unnecessarily in the final answer.
 - Surface stable error codes when extraction fails; do not claim partial success because limits never truncate silently.
+- Treat `PERMISSION_DENIED` as a denied local-file read and ask the user to choose or authorize an accessible document; do not retry around the permission boundary.
 
 ## Document Template
 
