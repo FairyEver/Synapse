@@ -12,7 +12,7 @@ import {
   WORKFLOW_ENTRY_TITLE_SEQUENCE,
 } from "@/modules/settings/cheat-codes"
 import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
-import type { SynapseAppUpdateState } from "@/types/update"
+import type { SynapseAppUpdateOpenRequest, SynapseAppUpdateState } from "@/types/update"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -41,11 +41,13 @@ import { AboutPanel } from "@/modules/settings/components/about-panel"
 
 let roots: Root[] = []
 let updaterStateListeners: Array<(state: SynapseAppUpdateState) => void> = []
+let updateOpenRequestListeners: Array<(request: SynapseAppUpdateOpenRequest) => void> = []
 
 beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
   updaterStateListeners = []
+  updateOpenRequestListeners = []
   installUpdaterBridge()
   Object.defineProperty(window.navigator, "clipboard", {
     configurable: true,
@@ -88,6 +90,18 @@ describe("AboutPanel cheat codes", () => {
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
     expect(updater.acknowledgeOpenRequest).not.toHaveBeenCalled()
+  })
+
+  it("acknowledges a hot manual request while the panel is already mounted", async () => {
+    const updater = getUpdaterBridge()
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    await act(async () => {
+      emitUpdateOpenRequest({ id: 9, automatic: false })
+      await Promise.resolve()
+    })
+
+    expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(9)
   })
 
   it("downloads only after the user confirms the available update", async () => {
@@ -583,7 +597,12 @@ function installUpdaterBridge(): void {
     getPendingOpenRequest: vi.fn().mockResolvedValue(null),
     getState: vi.fn().mockResolvedValue(initialState),
     installUpdate: vi.fn(),
-    onOpenRequest: vi.fn(() => () => undefined),
+    onOpenRequest: vi.fn((listener: (request: SynapseAppUpdateOpenRequest) => void) => {
+      updateOpenRequestListeners.push(listener)
+      return () => {
+        updateOpenRequestListeners = updateOpenRequestListeners.filter((item) => item !== listener)
+      }
+    }),
     onOpenUpdatePage: vi.fn(() => () => undefined),
     onStateChanged: vi.fn((listener: (state: SynapseAppUpdateState) => void) => {
       updaterStateListeners.push(listener)
@@ -640,6 +659,12 @@ function updateState(overrides: Partial<SynapseAppUpdateState>): SynapseAppUpdat
 function emitUpdaterState(state: SynapseAppUpdateState): void {
   for (const listener of updaterStateListeners) {
     listener(state)
+  }
+}
+
+function emitUpdateOpenRequest(request: SynapseAppUpdateOpenRequest): void {
+  for (const listener of updateOpenRequestListeners) {
+    listener(request)
   }
 }
 

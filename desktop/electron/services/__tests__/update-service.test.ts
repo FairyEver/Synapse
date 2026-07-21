@@ -128,6 +128,22 @@ async function importUpdateService() {
   return await import("../update-service")
 }
 
+async function importUpdateServiceWithAllowedNetwork() {
+  const { updateService } = await importUpdateService()
+  updateService.setUpdateIntentVerificationSecurity({
+    permissionGuard: {
+      check: vi.fn(async () => ({ allowed: true as const, policyId: "test-policy" })),
+      registerPolicy: vi.fn(),
+    },
+    auditSink: {
+      clearForTests: vi.fn(),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    },
+  })
+  return updateService
+}
+
 describe("UpdateService", () => {
   beforeEach(() => {
     vi.resetModules()
@@ -158,7 +174,7 @@ describe("UpdateService", () => {
       headers: { "content-type": "application/json" },
     }))
     vi.stubGlobal("fetch", fetchMock)
-    const { updateService } = await importUpdateService()
+    const updateService = await importUpdateServiceWithAllowedNetwork()
 
     await expect(updateService.verifyUpdateIntent("credential-canary")).resolves.toBe(true)
 
@@ -179,29 +195,31 @@ describe("UpdateService", () => {
     ["invalid JSON", new Response("not-json", { status: 200 })],
   ])("fails closed for a %s", async (_caseName, response) => {
     vi.stubGlobal("fetch", vi.fn(async () => response))
-    const { updateService } = await importUpdateService()
+    const updateService = await importUpdateServiceWithAllowedNetwork()
 
     await expect(updateService.verifyUpdateIntent("credential-canary")).resolves.toBe(false)
   })
 
-  it("fails closed on the short verification timeout without logging the credential", async () => {
+  it("fails closed on the real short verification timeout without logging the credential", async () => {
     const credential = "credential-timeout-canary"
     let requestSignal: AbortSignal | null = null
     const fetchMock = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
       requestSignal = init?.signal ?? null
       return new Promise<Response>((_resolve, reject) => {
         requestSignal?.addEventListener("abort", () => {
-          reject(new DOMException(`aborted ${credential}`, "AbortError"))
+          reject(new DOMException(`timed out ${credential}`, "TimeoutError"))
         }, { once: true })
       })
     })
     vi.stubGlobal("fetch", fetchMock)
-    const { updateService } = await importUpdateService()
+    const updateService = await importUpdateServiceWithAllowedNetwork()
 
     const verification = updateService.verifyUpdateIntent(credential)
     expect(DESKTOP_UPDATE_INTENT_VERIFY_TIMEOUT_MS).toBe(3_000)
+    await vi.waitFor(() => {
+      expect(requestSignal).not.toBeNull()
+    })
     const capturedSignal = requestSignal as AbortSignal | null
-    expect(capturedSignal).not.toBeNull()
     capturedSignal?.dispatchEvent(new Event("abort"))
 
     await expect(verification).resolves.toBe(false)
@@ -214,6 +232,20 @@ describe("UpdateService", () => {
       info: loggerMock.info.mock.calls,
       warn: loggerMock.warn.mock.calls,
     })).not.toContain(credential)
+  })
+
+  it("fails closed before connecting when verification security is unavailable", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ authorized: true })))
+    vi.stubGlobal("fetch", fetchMock)
+    const { updateService } = await importUpdateService()
+
+    await expect(updateService.verifyUpdateIntent("credential-canary")).resolves.toBe(false)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "Update intent verification failed closed.",
+      { outcome: "security-unavailable" },
+    )
   })
 
   it("fails closed before connecting when update intent verification permission is denied", async () => {

@@ -15,6 +15,7 @@ import {
   type CheatCodeContext,
 } from "@/modules/settings/cheat-codes"
 import { useCheatCodeTitleSequence } from "@/modules/settings/hooks/use-cheat-code-title-sequence"
+import { useUpdateOpenRequest } from "@/hooks/use-update-open-request"
 import type { CheatCodeStateStore } from "@/lib/cheat-codes/manager"
 import type { CheatCodeTriggerResult } from "@/types/cheat-code"
 import type { SynapseAppUpdateState } from "@/types/update"
@@ -113,6 +114,12 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   const [activeTitleColorOffset, setActiveTitleColorOffset] = useState(0)
   const [hoveredTitleIndex, setHoveredTitleIndex] = useState<number | null>(null)
 
+  useUpdateOpenRequest(useCallback(async (request, { acknowledge }) => {
+    if (!request.automatic) {
+      await acknowledge()
+    }
+  }, []))
+
   useEffect(() => {
     const bridge = window.synapse?.updater
 
@@ -131,17 +138,6 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       setActionError(null)
       setUpdateState(state)
     })
-
-    const acknowledgeManualOpenRequest = async () => {
-      try {
-        const request = await bridge.getPendingOpenRequest()
-        if (!cancelled && request && !request.automatic) {
-          await bridge.acknowledgeOpenRequest(request.id)
-        }
-      } catch (error) {
-        logger.error("Failed to acknowledge manual update open request.", error)
-      }
-    }
 
     const loadAndCheckForUpdates = async () => {
       try {
@@ -169,7 +165,6 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       }
     }
 
-    void acknowledgeManualOpenRequest()
     void loadAndCheckForUpdates()
 
     return () => {

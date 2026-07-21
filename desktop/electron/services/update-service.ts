@@ -36,10 +36,38 @@ const UPDATE_DOWNLOAD_ERROR_MESSAGE = "下载更新失败，请重试。"
 const updateIntentVerificationResponseSchema = z.object({
   authorized: z.literal(true),
 }).strict()
+const UPDATE_INTENT_VERIFICATION_ACTOR = {
+  kind: "system",
+  id: "desktop-update-intent",
+} as const
+const UPDATE_INTENT_VERIFICATION_SOURCE = "desktop.update-intent.verify"
 
 type UpdateIntentVerificationSecurity = {
   readonly auditSink: AuditSink
   readonly permissionGuard: PermissionGuard
+}
+
+function recordUpdateIntentVerificationAudit(
+  auditSink: AuditSink,
+  resource: string,
+  outcome: "allowed" | "denied" | "failed",
+  metadata: Record<string, unknown> = {},
+): void {
+  auditSink.record({
+    action: "network.connect",
+    actor: UPDATE_INTENT_VERIFICATION_ACTOR,
+    resource,
+    outcome,
+    metadata: {
+      source: UPDATE_INTENT_VERIFICATION_SOURCE,
+      ...metadata,
+    },
+  })
+}
+
+function isUpdateIntentVerificationTimeout(error: unknown): boolean {
+  return error instanceof Error
+    && (error.name === "AbortError" || error.name === "TimeoutError")
 }
 
 function isSupportedPlatform(): boolean {
@@ -140,31 +168,35 @@ class UpdateService {
   async verifyUpdateIntent(token: string): Promise<boolean> {
     const verificationUrl = `${SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.apiBaseUrl}/desktop/update-intent/verify`
     const security = this.updateIntentVerificationSecurity
-    if (security) {
-      const permission = await security.permissionGuard.check({
-        action: "network.connect",
-        actor: { kind: "system", id: "desktop-update-intent" },
-        context: { source: "desktop.update-intent.verify" },
-        resource: verificationUrl,
+    if (!security) {
+      logger.warn("Update intent verification failed closed.", {
+        outcome: "security-unavailable",
       })
-      if (!permission.allowed) {
-        security.auditSink.record({
-          action: "network.connect",
-          actor: { kind: "system", id: "desktop-update-intent" },
-          resource: verificationUrl,
-          outcome: "denied",
-          metadata: {
-            source: "desktop.update-intent.verify",
-            reason: permission.reason,
-            policyId: permission.policyId,
-          },
-        })
-        logger.warn("Update intent verification failed closed.", {
-          outcome: "permission-denied",
-        })
-        return false
-      }
+      return false
     }
+
+    const permission = await security.permissionGuard.check({
+      action: "network.connect",
+      actor: UPDATE_INTENT_VERIFICATION_ACTOR,
+      context: { source: UPDATE_INTENT_VERIFICATION_SOURCE },
+      resource: verificationUrl,
+    })
+    if (!permission.allowed) {
+      recordUpdateIntentVerificationAudit(
+        security.auditSink,
+        verificationUrl,
+        "denied",
+        {
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      )
+      logger.warn("Update intent verification failed closed.", {
+        outcome: "permission-denied",
+      })
+      return false
+    }
+
     let response: Response
     try {
       response = await fetch(
@@ -177,30 +209,20 @@ class UpdateService {
         },
       )
     } catch (error) {
-      security?.auditSink.record({
-        action: "network.connect",
-        actor: { kind: "system", id: "desktop-update-intent" },
-        resource: verificationUrl,
-        outcome: "failed",
-        metadata: { source: "desktop.update-intent.verify" },
-      })
+      recordUpdateIntentVerificationAudit(security.auditSink, verificationUrl, "failed")
       logger.warn("Update intent verification failed closed.", {
-        outcome: error instanceof Error && error.name === "AbortError"
+        outcome: isUpdateIntentVerificationTimeout(error)
           ? "timeout"
           : "service-unavailable",
       })
       return false
     }
-    security?.auditSink.record({
-      action: "network.connect",
-      actor: { kind: "system", id: "desktop-update-intent" },
-      resource: verificationUrl,
-      outcome: "allowed",
-      metadata: {
-        source: "desktop.update-intent.verify",
-        status: response.status,
-      },
-    })
+    recordUpdateIntentVerificationAudit(
+      security.auditSink,
+      verificationUrl,
+      "allowed",
+      { status: response.status },
+    )
     if (!response.ok) {
       logger.warn("Update intent verification failed closed.", {
         outcome: "rejected",
