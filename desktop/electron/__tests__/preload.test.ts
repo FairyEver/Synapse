@@ -3,6 +3,7 @@ import path from "node:path"
 import { build } from "esbuild"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { SynapseBridge } from "../../src/types/bridge"
+import { channelForDomain } from "../runtime/event-bus"
 
 const electronMock = vi.hoisted(() => {
   const state: { exposedBridge: SynapseBridge | null } = { exposedBridge: null }
@@ -140,6 +141,44 @@ describe("preload bridge", () => {
     })
 
     expect(listener).toHaveBeenCalledWith({ automationId: "automation-1", reason: "run-finished" })
+  })
+
+  it("subscribes Agent listeners to the EventBus domain channel", async () => {
+    const bridge = await loadPreloadBridge()
+    const listener = vi.fn()
+    const event = {
+      domain: "agent" as const,
+      type: "phase.update" as const,
+      payload: {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        conversationId: "conversation-1",
+        runId: "run-1",
+        phase: "completed" as const,
+        status: "done" as const,
+      },
+      timestamp: "2026-07-21T00:00:00.000Z",
+    }
+
+    bridge.agent.onEvent(listener)
+
+    expect(electronMock.ipcRenderer.on).toHaveBeenCalledTimes(1)
+    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe(channelForDomain("agent"))
+
+    const wrapped = electronMock.ipcRenderer.on.mock.calls[0]?.[1]
+    wrapped?.({}, event)
+
+    expect(listener).toHaveBeenCalledWith(event)
+  })
+
+  it("subscribes Workflow listeners to the EventBus domain channel", async () => {
+    const bridge = await loadPreloadBridge()
+    const listener = vi.fn()
+
+    bridge.workflow.operation.onEvent(listener)
+
+    expect(electronMock.ipcRenderer.on).toHaveBeenCalledTimes(1)
+    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe(channelForDomain("workflow"))
   })
 
   it("maps automation bridge methods to automation IPC channels", async () => {

@@ -59,14 +59,7 @@ const EVENT_CHANNELS = {
     openUpdatePage: "synapse:app:update:operation:open_update_page",
   },
   agent: {
-    event: "synapse:app:agent:state:changed",
     detachedConversationsChanged: "synapse:app:agent:operation:detached_conversations_changed",
-  },
-  workflow: {
-    event: "synapse:app:events:operation:workflow",
-  },
-  installStatus: {
-    changed: "synapse:app:events:operation:install_status",
   },
   diagnostics: {
     ping: "synapse:app:diagnostics:operation:ping",
@@ -1073,7 +1066,7 @@ const synapseBridge: SynapseBridge = {
     ),
     onEvent: createRawPayloadSubscription<SynapseAgentDomainEvent>(
       subscribe,
-      EVENT_CHANNELS.agent.event,
+      channelForDomain("agent"),
     ),
     onDetachedConversationWindowsChanged: createRawPayloadSubscription<AgentDetachedConversation[]>(
       subscribe,
@@ -1146,7 +1139,7 @@ const synapseBridge: SynapseBridge = {
         invoke(IPC_CHANNELS.workflow.importPackage)({ packagePath, packageDigest, selections }),
       undoShareImport: (lineageId: string) => invoke(IPC_CHANNELS.workflow.undoShareImport)({ lineageId }),
       onEvent: (listener) =>
-        subscribe(EVENT_CHANNELS.workflow.event)((domainEvent) => {
+        subscribe(channelForDomain("workflow"))((domainEvent) => {
           listener((domainEvent as DomainEvent).payload as WorkflowEvent)
         }),
       onRunnerSwitchRun: createRawPayloadSubscription<{ runId: string }>(
