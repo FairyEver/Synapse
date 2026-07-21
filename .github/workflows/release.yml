@@ -119,6 +119,7 @@ jobs:
           INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
           LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
           LOG_DIR="$HOME/Library/Application Support/Synapse/logs"
+          APP_MOUNTED_LOG="App mounted."
           NAVIGATION_LOG="Update open request navigated to About Synapse."
 
           test -x "$APP_BINARY"
@@ -155,29 +156,39 @@ jobs:
             return 1
           }
 
-          navigation_log_count() {
+          log_count() {
+            local message=$1
             if [ ! -d "$LOG_DIR" ]; then
               printf '0\n'
               return
             fi
             { find "$LOG_DIR" -type f -name 'synapse-*.log' \
-              -exec grep -Fh "$NAVIGATION_LOG" {} + 2>/dev/null || true; } \
+              -exec grep -Fh "$message" {} + 2>/dev/null || true; } \
               | wc -l \
               | tr -d ' '
           }
 
-          wait_for_navigation_log() {
-            local previous_count=$1
+          wait_for_log() {
+            local message=$1
+            local previous_count=$2
             local attempt
             local current_count
             for attempt in {1..30}; do
-              current_count=$(navigation_log_count)
+              current_count=$(log_count "$message")
               if [ "$current_count" -gt "$previous_count" ]; then
                 return 0
               fi
               sleep 1
             done
             return 1
+          }
+
+          navigation_log_count() {
+            log_count "$NAVIGATION_LOG"
+          }
+
+          wait_for_navigation_log() {
+            wait_for_log "$NAVIGATION_LOG" "$1"
           }
 
           trap stop_synapse EXIT
@@ -192,8 +203,10 @@ jobs:
 
           stop_synapse
           wait_for_synapse_exit
+          HOT_MOUNTED_LOG_COUNT=$(log_count "$APP_MOUNTED_LOG")
           open -g "$APP_BUNDLE"
           HOT_PID=$(wait_for_synapse)
+          wait_for_log "$APP_MOUNTED_LOG" "$HOT_MOUNTED_LOG_COUNT"
           HOT_LOG_COUNT=$(navigation_log_count)
           open "$UPDATE_DEEP_LINK"
           wait_for_navigation_log "$HOT_LOG_COUNT"
