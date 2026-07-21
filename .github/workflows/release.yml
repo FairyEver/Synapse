@@ -130,6 +130,17 @@ jobs:
             pkill -f "$APP_BINARY" >/dev/null 2>&1 || true
           }
 
+          wait_for_synapse_exit() {
+            local attempt
+            for attempt in {1..30}; do
+              if ! pgrep -f "$APP_BINARY" >/dev/null; then
+                return 0
+              fi
+              sleep 1
+            done
+            return 1
+          }
+
           wait_for_synapse() {
             local attempt
             local pid
@@ -171,6 +182,7 @@ jobs:
 
           trap stop_synapse EXIT
           stop_synapse
+          wait_for_synapse_exit
           COLD_LOG_COUNT=$(navigation_log_count)
           open "$UPDATE_DEEP_LINK"
           COLD_PID=$(wait_for_synapse)
@@ -179,6 +191,7 @@ jobs:
           echo "cold update protocol launch ok"
 
           stop_synapse
+          wait_for_synapse_exit
           open -g "$APP_BUNDLE"
           HOT_PID=$(wait_for_synapse)
           HOT_LOG_COUNT=$(navigation_log_count)

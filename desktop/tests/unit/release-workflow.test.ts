@@ -99,6 +99,7 @@ describe("desktop release workflow", () => {
     expect(workflowText).toContain("cold update protocol launch")
     expect(workflowText).toContain("hot update protocol launch")
     expect(workflowText).toContain("Update open request navigated to About Synapse.")
+    expect(workflowText).toContain("wait_for_synapse_exit")
     expect(workflowText).toContain("wait_for_navigation_log")
     expect(workflowText).toContain("Wait-NavigationLog")
     expect(workflowText).toContain('2>/dev/null || true')
