@@ -2,10 +2,11 @@ import { constants } from "node:fs"
 import { existsSync } from "node:fs"
 import { lstat, open } from "node:fs/promises"
 import path from "node:path"
-import { Worker } from "node:worker_threads"
+import { Worker, type WorkerOptions } from "node:worker_threads"
 import type { DispatchContext } from "../../../synapse-capabilities/shared/types"
 import {
   DOCUMENT_TEXT_EXTRACTION_MAX_FILE_BYTES,
+  DOCUMENT_TEXT_EXTRACTION_MAX_CONCURRENCY,
   DOCUMENT_TEXT_EXTRACTION_MAX_PDF_PAGES,
   DOCUMENT_TEXT_EXTRACTION_MAX_TEXT_BYTES,
   DOCUMENT_TEXT_EXTRACTION_TIMEOUT_MS,
@@ -31,12 +32,36 @@ import type {
   DocumentTextExtractionWorkerInput,
   DocumentTextExtractionWorkerMessage,
 } from "./worker-protocol"
+import {
+  DocumentTextExtractionScheduler,
+  type DocumentTextExtractionTask,
+} from "./scheduler"
+
+type WorkerExtractionResult = { readonly text: string; readonly pages: number }
+
+type DocumentTextExtractionWorkerRuntime = {
+  run(
+    bytes: Buffer,
+    signal: AbortSignal,
+    onStarted: () => void,
+  ): Promise<WorkerExtractionResult>
+}
+
+export type DocumentTextExtractionWorkerFactory = (
+  filename: string,
+  options: WorkerOptions,
+) => Worker
 
 export type DocumentTextExtractorService = {
+  createTask(
+    input: DocumentTextExtractionInput,
+    context?: DispatchContext,
+  ): DocumentTextExtractionTask<DocumentTextExtractionResult>
   extract(
     input: DocumentTextExtractionInput,
     context?: DispatchContext,
   ): Promise<DocumentTextExtractionResult>
+  stop(): Promise<void>
 }
 
 type ServiceLogger = Pick<StructuredLogger, "info" | "warn">
@@ -52,14 +77,32 @@ export function createDocumentTextExtractorService(deps: {
   readonly auditSink: AuditSink
   readonly logger?: ServiceLogger
   readonly actor?: ActorIdentity
+  readonly workerFactory?: DocumentTextExtractionWorkerFactory
 }): DocumentTextExtractorService {
-  return {
-    async extract(input, context = {}) {
+  const scheduler = new DocumentTextExtractionScheduler(
+    DOCUMENT_TEXT_EXTRACTION_MAX_CONCURRENCY,
+    deps.logger,
+  )
+  const workerFactory = deps.workerFactory ?? DEFAULT_WORKER_FACTORY
+  const workerRuntime: DocumentTextExtractionWorkerRuntime = {
+    run: (bytes, signal, onStarted) => extractPdfInWorker(
+      bytes,
+      signal,
+      onStarted,
+      workerFactory,
+    ),
+  }
+
+  function createTask(
+    input: DocumentTextExtractionInput,
+    context: DispatchContext = {},
+  ): DocumentTextExtractionTask<DocumentTextExtractionResult> {
+    const parsed = documentTextExtractionInputSchema.parse(input)
+    if (path.extname(parsed.filePath).toLowerCase() !== ".pdf") {
+      throw new DocumentTextExtractionError("UNSUPPORTED_FORMAT")
+    }
+    return scheduler.schedule(async (signal, markRunning) => {
       const startedAt = Date.now()
-      const parsed = documentTextExtractionInputSchema.parse(input)
-      if (path.extname(parsed.filePath).toLowerCase() !== ".pdf") {
-        throw new DocumentTextExtractionError("UNSUPPORTED_FORMAT")
-      }
       await authorizeDocumentRead(deps, context, parsed.filePath)
 
       try {
@@ -67,7 +110,12 @@ export function createDocumentTextExtractorService(deps: {
         if (!hasPdfHeader(file.bytes)) {
           throw new DocumentTextExtractionError("INVALID_DOCUMENT")
         }
-        const extracted = await extractPdfInWorker(file.bytes)
+        const extracted = await runWorkerWithTimeout(
+          workerRuntime,
+          file.bytes,
+          signal,
+          markRunning,
+        )
         const result: DocumentTextExtractionResult = {
           text: extracted.text,
           format: "pdf",
@@ -91,6 +139,16 @@ export function createDocumentTextExtractorService(deps: {
         })
         throw normalized
       }
+    })
+  }
+
+  return {
+    createTask,
+    async extract(input, context = {}) {
+      return createTask(input, context).result
+    },
+    async stop() {
+      await scheduler.cancelAll()
     },
   }
 }
@@ -212,13 +270,19 @@ function hasPdfHeader(bytes: Uint8Array): boolean {
 
 function extractPdfInWorker(
   bytes: Buffer,
-): Promise<{ readonly text: string; readonly pages: number }> {
+  signal: AbortSignal,
+  onStarted: () => void,
+  workerFactory: DocumentTextExtractionWorkerFactory,
+): Promise<WorkerExtractionResult> {
+  if (signal.aborted) {
+    return Promise.reject(new DocumentTextExtractionError("EXTRACTION_CANCELLED"))
+  }
   const transferable = bytes.buffer.slice(
     bytes.byteOffset,
     bytes.byteOffset + bytes.byteLength,
   ) as ArrayBuffer
   return new Promise((resolve, reject) => {
-    const worker = new Worker(resolveDocumentTextExtractionWorkerPath(__dirname), {
+    const worker = workerFactory(resolveDocumentTextExtractionWorkerPath(__dirname), {
       workerData: {
         bytes: transferable,
         maxPages: DOCUMENT_TEXT_EXTRACTION_MAX_PDF_PAGES,
@@ -229,21 +293,24 @@ function extractPdfInWorker(
         maxOldGenerationSizeMb: DOCUMENT_TEXT_EXTRACTION_WORKER_MAX_OLD_GENERATION_MB,
       },
     })
+    onStarted()
     let settled = false
-    const timeout = setTimeout(() => {
-      if (settled) return
-      settled = true
-      void worker.terminate()
-      reject(new DocumentTextExtractionError("EXTRACTION_TIMEOUT"))
-    }, DOCUMENT_TEXT_EXTRACTION_TIMEOUT_MS)
+    const onAbort = () => finish(
+      () => reject(new DocumentTextExtractionError("EXTRACTION_CANCELLED")),
+    )
 
     const finish = (callback: () => void) => {
       if (settled) return
       settled = true
-      clearTimeout(timeout)
-      void worker.terminate()
-      callback()
+      signal.removeEventListener("abort", onAbort)
+      void worker.terminate().then(callback, callback)
     }
+
+    if (signal.aborted) {
+      onAbort()
+      return
+    }
+    signal.addEventListener("abort", onAbort, { once: true })
 
     worker.once("message", (message: DocumentTextExtractionWorkerMessage) => {
       finish(() => {
@@ -270,6 +337,45 @@ function extractPdfInWorker(
   })
 }
 
+const DEFAULT_WORKER_FACTORY: DocumentTextExtractionWorkerFactory = (filename, options) => (
+  new Worker(filename, options)
+)
+
+async function runWorkerWithTimeout(
+  workerRuntime: DocumentTextExtractionWorkerRuntime,
+  bytes: Buffer,
+  signal: AbortSignal,
+  onStarted: () => void,
+): Promise<WorkerExtractionResult> {
+  const workerController = new AbortController()
+  let timedOut = false
+  const abortWorker = () => workerController.abort()
+  if (signal.aborted) abortWorker()
+  else signal.addEventListener("abort", abortWorker, { once: true })
+  let timeout: ReturnType<typeof setTimeout> | undefined
+
+  try {
+    return await workerRuntime.run(bytes, workerController.signal, () => {
+      onStarted()
+      timeout = setTimeout(() => {
+        timedOut = true
+        workerController.abort()
+      }, DOCUMENT_TEXT_EXTRACTION_TIMEOUT_MS)
+    })
+  } catch (error) {
+    if (timedOut) {
+      throw new DocumentTextExtractionError("EXTRACTION_TIMEOUT", { cause: error })
+    }
+    if (signal.aborted) {
+      throw new DocumentTextExtractionError("EXTRACTION_CANCELLED", { cause: error })
+    }
+    throw error
+  } finally {
+    if (timeout) clearTimeout(timeout)
+    signal.removeEventListener("abort", abortWorker)
+  }
+}
+
 export function resolveDocumentTextExtractionWorkerPath(baseDir: string): string {
   const workerBaseDir = baseDir.replace(/([\\/])app\.asar(?=[\\/])/, "$1app.asar.unpacked")
   const compiledPath = path.join(workerBaseDir, "worker.js")
@@ -285,9 +391,11 @@ function isWorkerMemoryError(error: unknown): boolean {
 }
 
 function normalizeServiceError(error: unknown): DocumentTextExtractionError {
-  return error instanceof DocumentTextExtractionError
-    ? error
-    : new DocumentTextExtractionError("EXTRACTION_FAILED", { cause: error })
+  if (error instanceof DocumentTextExtractionError) return error
+  return new DocumentTextExtractionError(
+    isWorkerMemoryError(error) ? "EXTRACTION_MEMORY_LIMIT" : "EXTRACTION_FAILED",
+    { cause: error },
+  )
 }
 
 export function serializeDocumentTextExtractionError(error: unknown): {

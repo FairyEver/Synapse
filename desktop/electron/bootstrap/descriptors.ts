@@ -37,7 +37,10 @@ import { ipcOperationIdToChannel } from "../../synapse-capabilities/shared/namin
 import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabilities/document-template/main/dispatcher"
 import { createDocumentTemplateService } from "../../app-capabilities/document-template/main/service"
 import { createDocumentTextExtractorCapabilityDispatcher } from "../../app-capabilities/document-text-extractor/main/dispatcher"
-import { createDocumentTextExtractorService } from "../../app-capabilities/document-text-extractor/main/service"
+import {
+  createDocumentTextExtractorService,
+  type DocumentTextExtractorService,
+} from "../../app-capabilities/document-text-extractor/main/service"
 import { createSoundNotifierCapabilityDispatcher } from "../../app-capabilities/sound-notifier/main/dispatcher"
 import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
 import { createSoundNotifierService, type SoundNotifierService } from "../../app-capabilities/sound-notifier/main/service"
@@ -460,6 +463,22 @@ export const coreSoundNotifierDescriptor: ServiceDescriptor<SoundNotifierService
   },
 }
 
+export const coreDocumentTextExtractorDescriptor: ServiceDescriptor<DocumentTextExtractorService> = {
+  id: "core.document-text-extractor",
+  criticality: "degraded",
+  dependsOn: ["core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    return createDocumentTextExtractorService({
+      logger: ctx.logger.child("document-text-extractor"),
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+    })
+  },
+  async stop(instance) {
+    await instance.stop()
+  },
+}
+
 export const coreDriveSyncDescriptor: ServiceDescriptor<DriveSyncService> = {
   id: "core.drive-sync",
   criticality: "degraded",
@@ -874,6 +893,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     "core.audit-sink",
     "core.terminal",
     "core.sound-notifier",
+    "core.document-text-extractor",
     PROVIDER_SERVICE_ID,
   ],
   async create(ctx) {
@@ -890,6 +910,9 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
     const terminalService = ctx.registry.get<TerminalService>("core.terminal")
+    const documentTextExtractorService = ctx.registry.get<DocumentTextExtractorService>(
+      "core.document-text-extractor",
+    )
     const capabilityLogger = createMainLogger("bootstrap.workflow-capability")
     const runCompletions = new Map<string, Promise<unknown>>()
     const deletedWorkflowIds = new Set<string>()
@@ -1010,11 +1033,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       auditSink,
     })
     const documentTextExtractorDispatcher = createDocumentTextExtractorCapabilityDispatcher({
-      service: createDocumentTextExtractorService({
-        logger: createMainLogger("capability.document-text-extractor"),
-        permissionGuard,
-        auditSink,
-      }),
+      service: documentTextExtractorService,
     })
     const terminalDispatcher = createTerminalCapabilityDispatcher({
       service: terminalService,

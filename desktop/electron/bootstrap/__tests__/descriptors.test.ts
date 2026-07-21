@@ -123,6 +123,17 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreSynapseSkillDescriptor.create(makeFakeContext())).toBeDefined()
   })
 
+  it("coreDocumentTextExtractorDescriptor owns the shared extraction service", async () => {
+    const { coreDocumentTextExtractorDescriptor } = await importBootstrap()
+    expect(coreDocumentTextExtractorDescriptor.id).toBe("core.document-text-extractor")
+    expect(coreDocumentTextExtractorDescriptor.criticality).toBe("degraded")
+    expect(coreDocumentTextExtractorDescriptor.dependsOn).toEqual([
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+    expect(coreDocumentTextExtractorDescriptor.stop).toBeTypeOf("function")
+  })
+
   it("coreDatabaseDescriptor is degraded, depends on config, event bus, automation, and action runtime, has stop", async () => {
     const { coreDatabaseDescriptor } = await importBootstrap()
     expect(coreDatabaseDescriptor.id).toBe("core.database")
@@ -141,6 +152,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.audit-sink",
       "core.terminal",
       "core.sound-notifier",
+      "core.document-text-extractor",
       "provider",
     ])
     expect(coreDatabaseDescriptor.stop).toBeTypeOf("function")
