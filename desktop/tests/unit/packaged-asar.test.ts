@@ -42,6 +42,7 @@ function hash(value: Buffer): string {
 interface CreateAsarBufferOptions {
   readonly includeClaudeRuntimeGuard?: boolean
   readonly includeDeploymentConfig?: boolean
+  readonly includeDocumentTextExtraction?: boolean
   readonly includePreloadBundle?: boolean
   readonly includeSharedPackage?: boolean
   readonly includeUsageAnalysisWorkers?: boolean
@@ -98,10 +99,36 @@ function createModelPriceFiles(includeSourceMaps: boolean) {
   }
 }
 
+function createDocumentTextExtractionFiles() {
+  return {
+    main: {
+      files: {
+        "service.js": createUnpackedFileNode(),
+        "service.js.map": createUnpackedFileNode(),
+        "worker.js": createUnpackedFileNode(),
+        "worker.js.map": createUnpackedFileNode(),
+      },
+    },
+  }
+}
+
+function createUnpdfFiles() {
+  return {
+    "package.json": createUnpackedFileNode(),
+    dist: {
+      files: {
+        "index.cjs": createUnpackedFileNode(),
+        "pdfjs.mjs": createUnpackedFileNode(),
+      },
+    },
+  }
+}
+
 function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const {
     includeClaudeRuntimeGuard = true,
     includeDeploymentConfig = true,
+    includeDocumentTextExtraction = true,
     includePreloadBundle = true,
     includeSharedPackage = true,
     includeUsageAnalysisWorkers = false,
@@ -189,6 +216,17 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
               },
             },
           },
+          ...(includeDocumentTextExtraction
+            ? {
+                "app-capabilities": {
+                  files: {
+                    "document-text-extractor": {
+                      files: createDocumentTextExtractionFiles(),
+                    },
+                  },
+                },
+              }
+            : {}),
           src: {
             files: {
               lib: {
@@ -217,6 +255,9 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
               },
             },
           },
+          ...(includeDocumentTextExtraction
+            ? { unpdf: { files: createUnpdfFiles() } }
+            : {}),
         },
       },
     },
@@ -259,6 +300,34 @@ describe("packaged asar verification", () => {
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "database", "index.md"], "# Database\n")
     await writeUnpackedFixture(resourcesPath, ["knowledge-base", "synapse-knowledge-base-template", "CLAUDE.md"], "# Knowledge Base\n")
     await writeUnpackedFixture(resourcesPath, ["database", "mcp", "index.js"], "module.exports = {}\n")
+    await writeUnpackedFixture(
+      resourcesPath,
+      ["app.asar.unpacked", "dist-electron", "app-capabilities", "document-text-extractor", "main", "service.js"],
+      "const workerPath = 'worker.js'\n",
+    )
+    await writeUnpackedFixture(
+      resourcesPath,
+      ["app.asar.unpacked", "dist-electron", "app-capabilities", "document-text-extractor", "main", "worker.js"],
+      "require('unpdf')\n",
+    )
+    await writeUnpackedFixture(
+      resourcesPath,
+      ["app.asar.unpacked", "node_modules", "unpdf", "package.json"],
+      "{}\n",
+      { sourceMap: false },
+    )
+    await writeUnpackedFixture(
+      resourcesPath,
+      ["app.asar.unpacked", "node_modules", "unpdf", "dist", "index.cjs"],
+      "module.exports = {}\n",
+      { sourceMap: false },
+    )
+    await writeUnpackedFixture(
+      resourcesPath,
+      ["app.asar.unpacked", "node_modules", "unpdf", "dist", "pdfjs.mjs"],
+      "export {}\n",
+      { sourceMap: false },
+    )
   }
 
   it("verifies a Windows-style resources directory with unpacked files", async () => {
@@ -296,6 +365,29 @@ describe("packaged asar verification", () => {
         root,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("missing extra resource"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects packages missing the document text extraction runtime", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({
+        includeDocumentTextExtraction: false,
+      }))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("document text extraction service is missing"),
       })
     } finally {
       await rm(root, { recursive: true, force: true })

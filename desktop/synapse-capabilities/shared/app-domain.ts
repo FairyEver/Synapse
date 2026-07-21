@@ -3,6 +3,10 @@ import {
   DOCUMENT_TEMPLATE_MCP_TOOL_NAME,
 } from "../../app-capabilities/document-template/shared/capability"
 import {
+  DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID,
+  DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME,
+} from "../../app-capabilities/document-text-extractor/shared/capability"
+import {
   TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID,
   TERMINAL_GROUP_COMMAND_DELETE_CAPABILITY_ID,
   TERMINAL_GROUP_COMMAND_LAUNCH_CAPABILITY_ID,
@@ -51,6 +55,12 @@ import {
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 const appCapabilities: readonly CapabilityDefinition[] = [
+  {
+    id: DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID,
+    title: "Extract document text",
+    description: "Extract normalized text and metadata from a local PDF document.",
+    mutates: false,
+  },
   {
     id: DOCUMENT_TEMPLATE_CAPABILITY_ID,
     title: "Generate Word document from template",
@@ -186,6 +196,7 @@ export const APP_DOMAIN: CapabilityDomainDefinition = {
 }
 
 export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
+  [DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME]: DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID,
   [DOCUMENT_TEMPLATE_MCP_TOOL_NAME]: DOCUMENT_TEMPLATE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupCreate]: TERMINAL_GROUP_CREATE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupList]: TERMINAL_GROUP_LIST_CAPABILITY_ID,
@@ -247,6 +258,18 @@ const strictEmptyInputSchema = {
 }
 export function buildAppTools(): McpToolDefinition[] {
   return [
+    {
+      name: DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME,
+      description: "Extract complete normalized plain text and metadata from one local PDF. The file must be an absolute path to a regular, non-symbolic-link PDF with a valid PDF header. An empty text result is successful. Limits: 50 MiB source file, 5 MiB UTF-8 text, and 2,000 pages.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          filePath: stringField("Absolute local .pdf file path."),
+        },
+        required: ["filePath"],
+        additionalProperties: false,
+      },
+    },
     {
       name: DOCUMENT_TEMPLATE_MCP_TOOL_NAME,
       description: "Generate a local .docx file from a .docx template and JSON data. Provide exactly one of dataPath or data. Existing outputPath is rejected unless overwrite is true; symbolic-link outputs are always rejected.",
