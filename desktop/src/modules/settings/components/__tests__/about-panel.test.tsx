@@ -67,7 +67,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe("AboutPanel cheat codes", () => {
+describe("AboutPanel", () => {
   it("checks for updates when the panel opens", async () => {
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
@@ -117,17 +117,11 @@ describe("AboutPanel cheat codes", () => {
     const updater = getUpdaterBridge()
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
-    act(() => {
-      emitUpdaterState(updateState({
-        message: "发现新版本 v0.2.190。",
-        releaseVersion: "0.2.190",
-        status: "available",
-      }))
-    })
-    await act(async () => {
-      emitUpdateOpenRequest({ id: 10, automatic: true })
-      await Promise.resolve()
-    })
+    await emitStateAndAutomaticRequest(updateState({
+      message: "发现新版本 v0.2.190。",
+      releaseVersion: "0.2.190",
+      status: "available",
+    }), 10)
 
     expect(updater.downloadUpdate).toHaveBeenCalledTimes(1)
     expect(updater.checkForUpdates).not.toHaveBeenCalled()
@@ -138,16 +132,10 @@ describe("AboutPanel cheat codes", () => {
     const updater = getUpdaterBridge()
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
-    act(() => {
-      emitUpdaterState(updateState({
-        message: "正在检查更新...",
-        status: "checking",
-      }))
-    })
-    await act(async () => {
-      emitUpdateOpenRequest({ id: 11, automatic: true })
-      await Promise.resolve()
-    })
+    await emitStateAndAutomaticRequest(updateState({
+      message: "正在检查更新...",
+      status: "checking",
+    }), 11)
 
     expect(updater.checkForUpdates).not.toHaveBeenCalled()
     expect(updater.downloadUpdate).not.toHaveBeenCalled()
@@ -167,18 +155,12 @@ describe("AboutPanel cheat codes", () => {
   it("starts the shared install countdown when an automatic request finds a downloaded update", async () => {
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
-    act(() => {
-      emitUpdaterState(updateState({
-        downloadPercent: 100,
-        message: "新版本 v0.2.190 已下载。",
-        releaseVersion: "0.2.190",
-        status: "downloaded",
-      }))
-    })
-    await act(async () => {
-      emitUpdateOpenRequest({ id: 12, automatic: true })
-      await Promise.resolve()
-    })
+    await emitStateAndAutomaticRequest(updateState({
+      downloadPercent: 100,
+      message: "新版本 v0.2.190 已下载。",
+      releaseVersion: "0.2.190",
+      status: "downloaded",
+    }), 12)
 
     expect(getButtonWithText("3 秒后安装").disabled).toBe(true)
     expect(getButtonWithText("稍后安装")).toBeTruthy()
@@ -188,17 +170,11 @@ describe("AboutPanel cheat codes", () => {
     const updater = getUpdaterBridge()
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
-    act(() => {
-      emitUpdaterState(updateState({
-        downloadPercent: 40,
-        releaseVersion: "0.2.190",
-        status: "downloading",
-      }))
-    })
-    await act(async () => {
-      emitUpdateOpenRequest({ id: 19, automatic: true })
-      await Promise.resolve()
-    })
+    await emitStateAndAutomaticRequest(updateState({
+      downloadPercent: 40,
+      releaseVersion: "0.2.190",
+      status: "downloading",
+    }), 19)
 
     expect(updater.checkForUpdates).not.toHaveBeenCalled()
     expect(updater.downloadUpdate).not.toHaveBeenCalled()
@@ -217,17 +193,11 @@ describe("AboutPanel cheat codes", () => {
   it("does not restart the shared countdown for a repeated automatic request", async () => {
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
-    act(() => {
-      emitUpdaterState(updateState({
-        downloadPercent: 100,
-        releaseVersion: "0.2.190",
-        status: "downloaded",
-      }))
-    })
-    await act(async () => {
-      emitUpdateOpenRequest({ id: 20, automatic: true })
-      await Promise.resolve()
-    })
+    await emitStateAndAutomaticRequest(updateState({
+      downloadPercent: 100,
+      releaseVersion: "0.2.190",
+      status: "downloaded",
+    }), 20)
     expect(getButtonWithText("3 秒后安装").disabled).toBe(true)
 
     await act(async () => {
@@ -260,6 +230,31 @@ describe("AboutPanel cheat codes", () => {
 
     expect(updater.checkForUpdates).not.toHaveBeenCalled()
     expect(getButtonWithText("3 秒后安装").disabled).toBe(true)
+  })
+
+  it("continues from the state returned by an explicit automatic check", async () => {
+    const updater = getUpdaterBridge()
+    let resolveInitialState: ((state: SynapseAppUpdateState) => void) | undefined
+    vi.mocked(updater.getState).mockImplementation(() => new Promise((resolve) => {
+      resolveInitialState = resolve
+    }))
+    vi.mocked(updater.getPendingOpenRequest).mockResolvedValue({ id: 23, automatic: true })
+    vi.mocked(updater.checkForUpdates).mockResolvedValue(updateState({
+      message: "发现新版本 v0.2.190。",
+      releaseVersion: "0.2.190",
+      status: "available",
+    }))
+
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1)
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1)
+    expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(23)
+
+    await act(async () => {
+      resolveInitialState?.(updateState({ canCheck: true }))
+      await Promise.resolve()
+    })
   })
 
   it("stops automatic progression after an updater error", async () => {
@@ -347,7 +342,6 @@ describe("AboutPanel cheat codes", () => {
     })
 
     expect(updater.downloadUpdate).toHaveBeenCalledTimes(1)
-    expect(updater.onOpenRequest).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       resolveDownload?.(updateState({
@@ -454,6 +448,59 @@ describe("AboutPanel cheat codes", () => {
     })
 
     expect(getButtonWithText("3 秒后安装").disabled).toBe(true)
+  })
+
+  it("re-arms a downloaded update from a new request after leaving and re-entering", async () => {
+    const updater = getUpdaterBridge()
+    const downloadedState = updateState({
+      downloadPercent: 100,
+      message: "新版本 v0.2.190 已下载。",
+      releaseVersion: "0.2.190",
+      status: "downloaded",
+    })
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+    await emitStateAndAutomaticRequest(downloadedState, 24)
+
+    const firstRoot = roots.pop()
+    act(() => {
+      firstRoot?.unmount()
+    })
+
+    vi.mocked(updater.getState).mockResolvedValue(downloadedState)
+    vi.mocked(updater.checkForUpdatesOnPageEnter).mockResolvedValue(downloadedState)
+    vi.mocked(updater.getPendingOpenRequest).mockResolvedValue({ id: 25, automatic: true })
+
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    expect(getButtonWithText("3 秒后安装").disabled).toBe(true)
+    expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(25)
+  })
+
+  it("shows an exit-gate rejection after countdown without retrying installation", async () => {
+    const updater = getUpdaterBridge()
+    vi.mocked(updater.installUpdate).mockRejectedValue(
+      new Error("知识库迁移尚未安全完成，请稍后再安装更新。"),
+    )
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+    await emitStateAndAutomaticRequest(updateState({
+      downloadPercent: 100,
+      releaseVersion: "0.2.190",
+      status: "downloaded",
+    }), 26)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000)
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("知识库迁移尚未安全完成，请稍后再安装更新。")
+    expect(updater.installUpdate).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000)
+    })
+
+    expect(updater.installUpdate).toHaveBeenCalledTimes(1)
   })
 
   it("does not auto-install when the panel is left before download completes", async () => {
@@ -717,6 +764,8 @@ async function renderAboutPanel(props: {
       />,
     )
     await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
   })
 }
 
@@ -930,6 +979,19 @@ function emitUpdateOpenRequest(request: SynapseAppUpdateOpenRequest): void {
   for (const listener of updateOpenRequestListeners) {
     listener(request)
   }
+}
+
+async function emitStateAndAutomaticRequest(
+  state: SynapseAppUpdateState,
+  requestId: number,
+): Promise<void> {
+  act(() => {
+    emitUpdaterState(state)
+  })
+  await act(async () => {
+    emitUpdateOpenRequest({ automatic: true, id: requestId })
+    await Promise.resolve()
+  })
 }
 
 function getUpdaterBridge(): NonNullable<Window["synapse"]>["updater"] {
