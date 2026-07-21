@@ -16,6 +16,8 @@ import {
   createDocumentTextExtractorService,
   type DocumentTextExtractionWorkerFactory,
 } from "../service"
+import { createDocxFixture, textParagraph } from "./docx-fixture"
+import { createEncryptedDocxFixture } from "./encrypted-docx-fixture"
 import { createPdfFixture } from "./pdf-fixture"
 
 const fixturePath = path.resolve(
@@ -124,6 +126,165 @@ async function waitForTaskStatus(
 }
 
 describe("DocumentTextExtractorService", () => {
+  it("extracts DOCX paragraphs, list text, table cells, and a text box through the real worker", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-document-text-"))
+    const filePath = path.join(root, "content.DOCX")
+    try {
+      await writeFile(filePath, createDocxFixture([
+        textParagraph("Opening paragraph"),
+        `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>First list item</w:t></w:r></w:p>`,
+        `<w:tbl><w:tr><w:tc>${textParagraph("Left cell")}</w:tc><w:tc>${textParagraph("Right cell")}</w:tc></w:tr></w:tbl>`,
+        `<w:p><w:r><w:pict><v:rect><v:textbox><w:txbxContent>${textParagraph("Text box content")}</w:txbxContent></v:textbox></v:rect></w:pict></w:r></w:p>`,
+      ].join("")))
+
+      const result = await createTestService().service.extract({ filePath })
+
+      expect(result).toEqual({
+        text: "Opening paragraph\n\nFirst list item\n\nLeft cell\n\nRight cell\n\nText box content",
+        format: "docx",
+        fileName: "content.DOCX",
+        size: (await stat(filePath)).size,
+      })
+      expect(result).not.toHaveProperty("pages")
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("reports a real password-protected DOCX without attempting decryption", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-document-text-"))
+    const filePath = path.join(root, "protected.docx")
+    try {
+      await writeFile(filePath, createEncryptedDocxFixture())
+
+      await expect(createTestService().service.extract({ filePath }))
+        .rejects.toMatchObject({ code: "PASSWORD_PROTECTED" })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("does not treat CFB-looking garbage with encryption stream names as password-protected", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-document-text-"))
+    const filePath = path.join(root, "fake-protected.docx")
+    const fakeCompoundFile = Buffer.concat([
+      Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]),
+      Buffer.alloc(504),
+      Buffer.from("EncryptionInfo\0", "utf16le"),
+      Buffer.from("EncryptedPackage\0", "utf16le"),
+    ])
+    try {
+      await writeFile(filePath, fakeCompoundFile)
+
+      await expect(createTestService().service.extract({ filePath }))
+        .rejects.toMatchObject({ code: "INVALID_DOCUMENT" })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("returns an empty successful result for an empty DOCX body", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-document-text-"))
+    const filePath = path.join(root, "empty.docx")
+    try {
+      await writeFile(filePath, createDocxFixture(""))
+
+      await expect(createTestService().service.extract({ filePath }))
+        .resolves.toEqual({
+          text: "",
+          format: "docx",
+          fileName: "empty.docx",
+          size: (await stat(filePath)).size,
+        })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("applies the shared deterministic normalization to DOCX text", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-document-text-"))
+    const filePath = path.join(root, "normalize.docx")
+    try {
+      await writeFile(filePath, createDocxFixture([
+        textParagraph("  first  "),
+        textParagraph("second\t  "),
+        textParagraph(""),
+        textParagraph(""),
+        textParagraph("third"),
+      ].join("")))
+
+      await expect(createTestService().service.extract({ filePath }))
+        .resolves.toMatchObject({ text: "first\n\nsecond\n\nthird", format: "docx" })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects corrupt, disguised, and incomplete DOCX containers as invalid documents", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-document-text-"))
+    const corruptPath = path.join(root, "corrupt.docx")
+    const disguisedPath = path.join(root, "disguised.docx")
+    const missingMainPath = path.join(root, "missing-main.docx")
+    try {
+      await writeFile(corruptPath, "PK\u0003\u0004corrupt")
+      await writeFile(disguisedPath, createPdfFixture(["PDF in DOCX clothing"]))
+      await writeFile(missingMainPath, createDocxFixture("", { includeMainDocument: false }))
+      const service = createTestService().service
+
+      for (const filePath of [corruptPath, disguisedPath, missingMainPath]) {
+        await expect(service.extract({ filePath }))
+          .rejects.toMatchObject({ code: "INVALID_DOCUMENT" })
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps Mammoth warnings out of the result and logs only redacted diagnostics", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-document-text-"))
+    const filePath = path.join(root, "warning.docx")
+    const logger = { info: vi.fn(), warn: vi.fn() }
+    try {
+      await writeFile(filePath, createDocxFixture([
+        textParagraph("Visible text"),
+        `<w:unsupportedSecretElement><w:r><w:t>hidden warning detail</w:t></w:r></w:unsupportedSecretElement>`,
+      ].join("")))
+
+      const result = await createTestService(logger).service.extract({ filePath })
+
+      expect(result).toMatchObject({ text: "Visible text", format: "docx" })
+      expect(result).not.toHaveProperty("warnings")
+      expect(logger.warn).toHaveBeenCalledWith(
+        "Document text extraction completed with warnings.",
+        {
+          format: "docx",
+          warningCount: 1,
+          warningCategories: ["unrecognized-element"],
+        },
+      )
+      expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(filePath)
+      expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("unsupportedSecretElement")
+      expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("hidden warning detail")
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects DOCX text larger than 5 MiB without returning a partial result", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-document-text-"))
+    const filePath = path.join(root, "large-text.docx")
+    try {
+      await writeFile(filePath, createDocxFixture(textParagraph("a".repeat(
+        5 * 1024 * 1024 + 1,
+      ))))
+
+      await expect(createTestService().service.extract({ filePath }))
+        .rejects.toMatchObject({ code: "TEXT_TOO_LARGE" })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  }, 30_000)
+
   it("keeps a task waiting while bytes are prepared and starts it after Worker creation", async () => {
     let statusAtWorkerCreation: string | undefined
     const workerFactory: DocumentTextExtractionWorkerFactory = (_filename, options) => {

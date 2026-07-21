@@ -54,4 +54,23 @@ describe("createDocumentTextExtractorCapabilityDispatcher", () => {
     expect(JSON.stringify(result)).not.toContain(filePath)
   })
 
+  it("returns the shared DOCX result without PDF-only pages", async () => {
+    const docxPath = path.resolve("private/report.docx")
+    const result = {
+      text: "document text",
+      format: "docx" as const,
+      fileName: "report.docx",
+      size: 456,
+    }
+    const dispatcher = createDocumentTextExtractorCapabilityDispatcher({
+      service: { extract: vi.fn(async () => result) },
+    })
+
+    await expect(dispatcher.dispatch(
+      "app.document_text_extractor.document.extract",
+      { filePath: docxPath },
+      { source: "mcp-http" },
+    )).resolves.toEqual({ ok: true, data: result, affected: 1 })
+  })
+
 })

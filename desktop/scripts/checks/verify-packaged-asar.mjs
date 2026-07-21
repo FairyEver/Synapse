@@ -170,6 +170,14 @@ const documentTextExtractionRuntimeEntries = [
   "node_modules/unpdf/package.json",
   "node_modules/unpdf/dist/index.cjs",
   "node_modules/unpdf/dist/pdfjs.mjs",
+  "node_modules/mammoth/package.json",
+  "node_modules/mammoth/lib/index.js",
+  "node_modules/pizzip/package.json",
+  "node_modules/pizzip/js/index.js",
+  "node_modules/@xmldom/xmldom/package.json",
+  "node_modules/jszip/package.json",
+  "node_modules/pako/package.json",
+  "node_modules/xmlbuilder/package.json",
 ]
 const requiredExtraResourceFiles = [
   {
@@ -340,8 +348,10 @@ function verifyDocumentTextExtractionWorker(header, unpackedPath, failures) {
     failures,
     "document text extraction worker",
   )
-  if (workerSource && !workerSource.includes("unpdf")) {
-    failures.push("document text extraction worker does not reference unpdf")
+  for (const parser of ["unpdf", "mammoth", "pizzip"]) {
+    if (workerSource && !workerSource.includes(parser)) {
+      failures.push(`document text extraction worker does not reference ${parser}`)
+    }
   }
 }
 
