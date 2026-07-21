@@ -319,7 +319,9 @@ export class WorkflowEngine {
               output: execResult.output,
               outputs: mergeAgentConversationOutput(execResult.outputs, execResult.agentConversation),
               agentConversation: execResult.agentConversation,
-              error: "运行被取消",
+              error: execResult.status === "cancelled" && execResult.error
+                ? execResult.error
+                : "运行被取消",
               durationMs: execResult.durationMs,
             }
           }

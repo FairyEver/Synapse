@@ -1850,6 +1850,39 @@ describe("createWorkflowDispatcher", () => {
     ]))
   })
 
+  it("discovers and describes the document text extraction node", async () => {
+    const deps = makeDeps({ nodeTypeRegistry })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const listResult = await dispatcher.dispatch(
+      "app.workflow.node_type.list",
+      {},
+      { source: "api" },
+    )
+    expect(listResult.ok).toBe(true)
+    expect(listResult.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "document_text_extract", title: "文档文本提取" }),
+    ]))
+
+    const describeResult = await dispatcher.dispatch(
+      "app.workflow.node_type.describe",
+      { nodeType: "document_text_extract" },
+      { source: "api" },
+    )
+    expect(describeResult.ok).toBe(true)
+    expect(describeResult.data).toMatchObject({
+      type: "document_text_extract",
+      configSchema: {
+        required: expect.arrayContaining(["filePath", "variables"]),
+        properties: {
+          filePath: expect.objectContaining({ type: "string" }),
+          variables: expect.objectContaining({ type: "array" }),
+        },
+      },
+    })
+    expect(describeResult.data).not.toHaveProperty("availableProviders")
+  })
+
   it("app.workflow.node_type.describe returns claude code config schema without providers", async () => {
     const listProviders = vi.fn(async () => [{ id: "p1", name: "P1", model: "m", haikuModel: "h", sonnetModel: "s", opusModel: "o" }])
     const deps = makeDeps({ nodeTypeRegistry, listProviders })

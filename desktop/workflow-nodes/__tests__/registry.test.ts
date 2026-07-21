@@ -100,6 +100,16 @@ describe("NodeTypeRegistry", () => {
     expect(manifest.type).toBe("document_template_docx_generate")
   })
 
+  it("registers document text extraction manifest in renderer registry", async () => {
+    await import("../register.renderer")
+    const { nodeTypeRegistry } = await import("../registry")
+
+    const manifest = nodeTypeRegistry.getManifest("document_text_extract")
+
+    expect(manifest.title).toBe("文档文本提取")
+    expect(manifest.type).toBe("document_text_extract")
+  })
+
   it("registers claude code manifest and executor in main registry", async () => {
     vi.doMock("electron", () => ({
       app: {
@@ -154,6 +164,33 @@ describe("NodeTypeRegistry", () => {
     expect(nodeTypeRegistry.getExecutor("document_template_docx_generate")).toBe(documentTemplateNodeExecutor)
   })
 
+  it("registers document text extraction manifest and executor in main registry", async () => {
+    vi.doMock("electron", () => ({
+      app: {
+        getPath: () => "/tmp",
+        getAppPath: () => "/tmp",
+      },
+    }))
+
+    vi.doMock("../../electron/services/log-store", () => ({
+      createMainLogger: () => ({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      }),
+    }))
+
+    await import("../register.main")
+    const [{ nodeTypeRegistry }, { documentTextExtractNodeExecutor }] = await Promise.all([
+      import("../registry"),
+      import("../../app-capabilities/document-text-extractor/workflow-node/executor.main"),
+    ])
+
+    expect(nodeTypeRegistry.getManifest("document_text_extract").title).toBe("文档文本提取")
+    expect(nodeTypeRegistry.getExecutor("document_text_extract")).toBe(documentTextExtractNodeExecutor)
+  })
+
   it("requires a share contract for every registered main-process node", async () => {
     vi.doMock("electron", () => ({
       app: {
@@ -178,6 +215,7 @@ describe("NodeTypeRegistry", () => {
       "claude_code",
       "codex",
       "document_template_docx_generate",
+      "document_text_extract",
       "end",
       "http_request",
       "prompt",

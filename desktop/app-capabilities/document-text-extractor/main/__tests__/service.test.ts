@@ -627,7 +627,7 @@ describe("DocumentTextExtractorService", () => {
     }
   })
 
-  it("denies reads in the core service and records only a redacted resource", async () => {
+  it("preserves workflow provenance when denying reads in the core service", async () => {
     const permissionGuard = {
       check: vi.fn(async () => ({
         allowed: false as const,
@@ -641,12 +641,18 @@ describe("DocumentTextExtractorService", () => {
       auditSink: auditSink as never,
     })
 
-    await expect(service.extract({ filePath: fixturePath }, { source: "mcp-http" }))
+    const actor = { kind: "system" as const, id: "workflow-engine" }
+    await expect(service.extract({ filePath: fixturePath }, { source: "workflow", actor }))
       .rejects.toThrow("denied")
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      actor,
+      context: expect.objectContaining({ source: "workflow" }),
+    }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      actor,
       outcome: "denied",
       resource: "install-guide.pdf",
-      metadata: expect.objectContaining({ policyId: "policy:test" }),
+      metadata: expect.objectContaining({ source: "workflow", policyId: "policy:test" }),
     }))
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain(fixturePath)
   })

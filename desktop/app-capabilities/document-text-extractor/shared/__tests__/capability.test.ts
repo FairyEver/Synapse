@@ -7,6 +7,7 @@ import {
 import {
   DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID,
   DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME,
+  DOCUMENT_TEXT_EXTRACT_WORKFLOW_NODE_TYPE,
 } from "../capability"
 import { documentTextExtractorCapabilityManifest } from "../manifest"
 import { documentTextExtractionResultSchema } from "../schema"
@@ -17,7 +18,7 @@ describe("document text extractor capability", () => {
       id: "document-text-extractor",
       capabilities: [DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID],
       mcpTools: [DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME],
-      workflowNodes: [],
+      workflowNodes: [DOCUMENT_TEXT_EXTRACT_WORKFLOW_NODE_TYPE],
     })
     expect(APP_DOMAIN.capabilities).toContainEqual(expect.objectContaining({
       id: DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID,
