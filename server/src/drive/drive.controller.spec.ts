@@ -1995,6 +1995,46 @@ describe("DrivePublicController public asset streaming", () => {
 
     expect(response.headers.get("Cache-Control")).toBe("no-cache, must-revalidate")
     expect(response.headers.get("ETag")).toBe("\"etag-1\"")
+    expect(response.headers.get("Content-Disposition")).toContain("inline")
+    expect(response.headers.get("Content-Security-Policy")).toBeUndefined()
+  })
+
+  it("forces public documents to download with restrictive response headers", async () => {
+    const publicAssets = {
+      resolvePublicAsset: vi.fn(async () => ({
+        status: "ok",
+        assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+        publicAssetId: "public-asset-1",
+        userId: "user-1",
+        storageKey: "drive/item-1",
+        name: "需求说明.pdf",
+        mimeType: "application/pdf",
+        size: 9n,
+        etag: "\"etag-2\"",
+      })),
+      recordAccessSafely: vi.fn(async () => undefined),
+    }
+    const storage = {
+      getObjectStream: vi.fn(async () => ({
+        stream: Readable.from("%PDF-1.7"),
+        size: 9n,
+        contentType: "application/pdf",
+      })),
+    }
+    const controller = new DrivePublicController({} as DriveService, storage as never, publicAssets as never)
+    const response = createPublicAssetResponse()
+
+    await controller.sendPublicAsset(
+      "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      { headers: {}, ip: "127.0.0.1", method: "GET" } as never,
+      response as never,
+    )
+
+    expect(response.headers.get("Content-Disposition")).toContain("attachment")
+    expect(response.headers.get("Content-Disposition")).toContain("%E9%9C%80%E6%B1%82%E8%AF%B4%E6%98%8E.pdf")
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff")
+    expect(response.headers.get("Content-Security-Policy")).toBe("default-src 'none'; sandbox")
+    expect(response.headers.get("Referrer-Policy")).toBe("no-referrer")
   })
 
   it("keeps public asset 304 responses revalidation-only", async () => {

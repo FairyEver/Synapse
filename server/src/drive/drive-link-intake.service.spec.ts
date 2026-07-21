@@ -575,8 +575,49 @@ describe("DriveLinkIntakeService", () => {
     })
   })
 
-  it("rejects public asset text reads", async () => {
-    const { service } = createService()
+  it("reads public text assets with the requested byte limit", async () => {
+    const { service, publicAssets, storage } = createService()
+    publicAssets.resolvePublicAsset.mockResolvedValue({
+      status: "ok",
+      publicAssetId: "public-asset-row-1",
+      userId: "owner-1",
+      name: "notes.md",
+      mimeType: "text/markdown",
+      size: 12n,
+      storageKey: "drive/public/notes",
+      etag: "etag-notes",
+    })
+    storage.getObjectStream.mockResolvedValue({
+      stream: Readable.from("# 说明文档"),
+      size: 14n,
+      contentType: "text/markdown",
+    })
+
+    await expect(service.resolve({ url: `${publicAppUrl}/files/asset_123` })).resolves.toMatchObject({
+      access: { canReadText: true },
+      root: { previewKind: "markdown" },
+    })
+    await expect(service.readText({ url: `${publicAppUrl}/files/asset_123`, maxBytes: 5 })).resolves.toMatchObject({
+      path: "notes.md",
+      mimeType: "text/markdown",
+      previewKind: "markdown",
+      truncated: true,
+      source: { linkType: "public_asset" },
+    })
+  })
+
+  it("rejects non-text public asset reads", async () => {
+    const { service, publicAssets } = createService()
+    publicAssets.resolvePublicAsset.mockResolvedValue({
+      status: "ok",
+      publicAssetId: "public-asset-row-1",
+      userId: "owner-1",
+      name: "report.pdf",
+      mimeType: "application/pdf",
+      size: 12n,
+      storageKey: "drive/public/report",
+      etag: "etag-report",
+    })
 
     await expect(service.readText({ url: `${publicAppUrl}/files/asset_123` })).rejects.toThrow("该链接不是可读取的文本内容")
   })

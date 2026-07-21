@@ -9,6 +9,7 @@ import {
   DRIVE_LINK_INTAKE_SCOPES,
   DRIVE_LINK_SUPPORTED_PATH_PREFIXES,
   DRIVE_PUBLIC_ASSET_PATH_PREFIX,
+  DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION,
   DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
   DRIVE_MAX_FILE_BYTES,
   DRIVE_CONSOLE_BROWSER_PATH_PREFIX,
@@ -36,7 +37,9 @@ import {
   buildShareDriveBrowserUrl,
   buildShareDriveDownloadUrl,
   buildShareDriveRenderUrl,
+  drivePublicAssetContentKind,
   inferDrivePublicAssetMimeType,
+  isDrivePublicAssetTextMimeType,
   isDriveMarkdownItem,
   isDrivePublicAssetId,
   parseDrivePublicAssetUrl,
@@ -146,18 +149,31 @@ describe("drive URL helpers", () => {
     expect(isDrivePublicAssetId("shr_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")).toBe(false)
   })
 
-  it("infers public asset image MIME types from filenames", () => {
+  it("infers public asset MIME types from filenames", () => {
     expect(inferDrivePublicAssetMimeType("logo.PNG")).toBe("image/png")
     expect(inferDrivePublicAssetMimeType("photo.jpeg")).toBe("image/jpeg")
+    expect(inferDrivePublicAssetMimeType("report.PDF")).toBe("application/pdf")
+    expect(inferDrivePublicAssetMimeType("plan.docx")).toBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    expect(inferDrivePublicAssetMimeType("notes.md")).toBe("text/markdown")
     expect(inferDrivePublicAssetMimeType("icon.svg")).toBeNull()
   })
 
-  it("describes supported public asset image formats", () => {
+  it("classifies public asset content kinds", () => {
+    expect(drivePublicAssetContentKind(DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION.png)).toBe("image")
+    expect(drivePublicAssetContentKind(DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION.pdf)).toBe("document")
+    expect(drivePublicAssetContentKind("text/html")).toBeNull()
+    expect(isDrivePublicAssetTextMimeType("text/csv")).toBe(true)
+    expect(isDrivePublicAssetTextMimeType("application/pdf")).toBe(false)
+  })
+
+  it("describes supported public asset formats", () => {
     expect(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE).toContain("PNG")
     expect(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE).toContain("JPG")
     expect(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE).toContain("WebP")
+    expect(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE).toContain("PDF")
+    expect(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE).toContain("DOCX")
     expect(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE).toContain("SVG")
-    expect(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE).toContain("暂不支持")
+    expect(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE).toContain("不支持")
   })
 
   it("encodes share ids", () => {

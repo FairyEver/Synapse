@@ -5,6 +5,7 @@ import {
   DRIVE_PUBLIC_PATH_PREFIX,
   DRIVE_SITE_PATH_PREFIX,
   decodeUtf8Prefix,
+  isDrivePublicAssetTextMimeType,
   truncateUtf8StringToBytes,
   type DriveBrowserItemDto,
   type DriveBrowserPreviewKind,
@@ -168,9 +169,7 @@ export class DriveLinkIntakeService {
 
   async readText(input: DriveLinkReadTextInput): Promise<DriveLinkReadTextDto> {
     const parsed = parseDriveLinkUrl(input.url, this.deps.publicAppUrl)
-    if (parsed.linkType === "public_asset") {
-      throw new BadRequestException("该链接不是可读取的文本内容。")
-    }
+    if (parsed.linkType === "public_asset") return this.readPublicAssetText(parsed, input)
     if (parsed.linkType === "site") return this.readSiteText(parsed, input)
     return this.readShareText(parsed, input)
   }
@@ -287,7 +286,7 @@ export class DriveLinkIntakeService {
     return {
       ok: true,
       linkType: "public_asset",
-      access: { status: "ok", canRead: true, canList: false, canReadText: false, canDownload: true },
+      access: { status: "ok", canRead: true, canList: false, canReadText: isDrivePublicAssetTextMimeType(access.mimeType), canDownload: true },
       root: { name: access.name, type: "asset", previewKind: previewKindFromMime(access.mimeType, access.name) },
       ref: { kind: "public_asset", shareId: null, itemId: null, siteId: null, path: null, assetId: parsed.assetId },
     }
@@ -314,6 +313,27 @@ export class DriveLinkIntakeService {
       text: text.text,
       truncated: preview.truncated || text.truncated,
       source: { linkType: parsed.itemId ? "share_item" : "share" },
+    }
+  }
+
+  private async readPublicAssetText(
+    parsed: Extract<ParsedDriveLink, { readonly linkType: "public_asset" }>,
+    input: DriveLinkReadTextInput,
+  ): Promise<DriveLinkReadTextDto> {
+    const access = await this.deps.publicAssets.resolvePublicAsset(parsed.assetId, {})
+    if (access.status !== "ok") throw new NotFoundException("公开素材不存在。")
+    if (!isDrivePublicAssetTextMimeType(access.mimeType)) {
+      throw new BadRequestException("该链接不是可读取的文本内容。")
+    }
+    const object = await this.deps.storage.getObjectStream({ key: access.storageKey })
+    const raw = await streamToString(object.stream, input.maxBytes ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES)
+    return {
+      path: access.name,
+      mimeType: access.mimeType,
+      previewKind: previewKindFromMime(access.mimeType, access.name),
+      text: raw.text,
+      truncated: raw.truncated,
+      source: { linkType: "public_asset" },
     }
   }
 

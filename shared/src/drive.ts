@@ -23,7 +23,21 @@ export const DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION = {
   avif: "image/avif",
   ico: "image/x-icon",
 } as const
-export const DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE = "仅支持 PNG、JPG、JPEG、GIF、WebP、AVIF、ICO 图片；暂不支持 SVG。"
+export const DRIVE_PUBLIC_ASSET_DOCUMENT_MIME_BY_EXTENSION = {
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  txt: "text/plain",
+  md: "text/markdown",
+  csv: "text/csv",
+} as const
+export const DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION = {
+  ...DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION,
+  ...DRIVE_PUBLIC_ASSET_DOCUMENT_MIME_BY_EXTENSION,
+} as const
+export const DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE = "仅支持 PNG、JPG、JPEG、GIF、WebP、AVIF、ICO 图片；不支持 SVG。"
+export const DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE = "仅支持 PNG、JPG、JPEG、GIF、WebP、AVIF、ICO、PDF、DOCX、XLSX、PPTX、TXT、MD、CSV 文件；不支持 SVG。"
 
 export type DriveItemType = "file" | "folder"
 export type DriveShareItemType = "file" | "folder"
@@ -40,6 +54,7 @@ export type DriveBrowserAnnotationUnavailableReason = "login_required" | "permis
 export type DriveFileVersionSource = "upload" | "online_edit" | "restore"
 export type DriveItemLifecycleStatus = "active" | "trashed" | "hidden" | "legacy_missing"
 export type DriveTrashItemKind = "normal" | "public_asset"
+export type DrivePublicAssetContentKind = "image" | "document"
 export type DriveSiteStatus = "active" | "disabled" | "expired" | "deleted" | "failed"
 export type DriveSiteAccessMode = "public" | "password"
 export const DRIVE_CHANGE_TYPES = [
@@ -1026,7 +1041,20 @@ export function isDrivePublicAssetId(value: string): boolean {
 export function inferDrivePublicAssetMimeType(name: string): string | null {
   const extension = name.split(".").pop()?.toLowerCase()
   if (!extension) return null
-  return DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION[extension as keyof typeof DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION] ?? null
+  return DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION[extension as keyof typeof DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION] ?? null
+}
+
+export function drivePublicAssetContentKind(mimeType: string | null | undefined): DrivePublicAssetContentKind | null {
+  const normalized = mimeType?.trim().toLowerCase()
+  if (!normalized) return null
+  if ((Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION) as readonly string[]).includes(normalized)) return "image"
+  if ((Object.values(DRIVE_PUBLIC_ASSET_DOCUMENT_MIME_BY_EXTENSION) as readonly string[]).includes(normalized)) return "document"
+  return null
+}
+
+export function isDrivePublicAssetTextMimeType(mimeType: string | null | undefined): boolean {
+  const normalized = mimeType?.trim().toLowerCase()
+  return normalized === "text/plain" || normalized === "text/markdown" || normalized === "text/csv"
 }
 
 export function buildOwnerDriveBrowserUrl(itemId: string): string {

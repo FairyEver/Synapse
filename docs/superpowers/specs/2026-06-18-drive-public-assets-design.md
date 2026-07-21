@@ -3,6 +3,8 @@
 Date: 2026-06-18
 Scope: `server/`, `dashboard/`, `desktop/`, `shared/`, `desktop/synapse-capabilities/`, `desktop/resources/templates/skills/synapse-drive-mcp/`, `docs/`
 
+> Format, delivery, and replacement-category rules in this V1 design are superseded by `2026-07-21-drive-public-documents-design.md`. Lifecycle, identity, quota, audit, and storage rules remain authoritative.
+
 ## Goal
 
 Add a Drive-backed public asset library to Synapse Drive and convert Drive deletion into a recoverable soft-delete lifecycle.

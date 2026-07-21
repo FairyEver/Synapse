@@ -2,7 +2,9 @@ import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Opt
 import { Prisma } from "@prisma/client"
 import {
   DRIVE_MAX_FILE_SIZE_LABEL,
+  DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE,
   DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
+  drivePublicAssetContentKind,
   isDrivePublicAssetId,
   maskDriveBrowserUrl,
   type DrivePublicAssetDto,
@@ -25,7 +27,7 @@ import {
   driveUploadUrlTtlSeconds,
 } from "./drive.constants"
 import { DriveLifecycleService } from "./drive-lifecycle.service"
-import { detectPublicAssetImageType, validatePublicAssetNameAndMime } from "./drive-public-asset-policy"
+import { matchesPublicAssetContentSignature, validatePublicAssetNameAndMime } from "./drive-public-asset-policy"
 import type { DriveStoragePort } from "./drive-storage"
 import { createDrivePublicAssetId, driveOverwriteStorageKeyForSession, driveStorageKeyForItem, isValidDriveItemName } from "./drive-token"
 import { reserveDriveUsageBytes } from "./drive-usage"
@@ -131,7 +133,7 @@ export type DrivePublicAssetAccessInput = {
 
 const PUBLIC_ASSET_LIST_DEFAULT_LIMIT = 50
 const PUBLIC_ASSET_LIST_MAX_LIMIT = 200
-const PUBLIC_ASSET_SIGNATURE_READ_BYTES = 32
+const PUBLIC_ASSET_SIGNATURE_READ_BYTES = 4096
 
 @Injectable()
 export class DrivePublicAssetService {
@@ -378,6 +380,9 @@ export class DrivePublicAssetService {
     readonly mimeType: string
     readonly body: Buffer
   }): Promise<DrivePublicAssetDto> {
+    if (drivePublicAssetContentKind(input.mimeType) !== "image") {
+      throw new BadRequestException(DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE)
+    }
     let session: PublicAssetUploadSession | null = null
     try {
       const prepared = await this.prepareUpload(userId, {
@@ -401,6 +406,9 @@ export class DrivePublicAssetService {
 
   async copyPublicAssetToUser(userId: string, sourceAssetId: string, publicAppUrl: string): Promise<DrivePublicAssetDto> {
     const source = await this.requireActivePublicAsset(sourceAssetId)
+    if (drivePublicAssetContentKind(source.mimeType) !== "image") {
+      throw new BadRequestException(DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE)
+    }
     let session: PublicAssetUploadSession | null = null
     try {
       const prepared = await this.prepareUpload(userId, {
@@ -442,6 +450,9 @@ export class DrivePublicAssetService {
       throw new NotFoundException("公共资源不存在。")
     }
     const normalized = normalizePublicAssetUploadInput(input)
+    if (drivePublicAssetContentKind(asset.mimeType) !== drivePublicAssetContentKind(normalized.mimeType)) {
+      throw new BadRequestException("图片和文档不能互相替换。")
+    }
     const reservedBytes = normalized.size
     const sessionId = randomUUID()
     const storageKey = driveOverwriteStorageKeyForSession(asset.itemId, sessionId)
@@ -847,8 +858,7 @@ export class DrivePublicAssetService {
       throw new BadRequestException("上传文件校验失败。")
     }
     const bytes = await readObjectPrefix(this.storage, session.storageKey)
-    const detectedMime = detectPublicAssetImageType(bytes)
-    if (!detectedMime || detectedMime !== session.expectedMime) {
+    if (!session.expectedMime || !matchesPublicAssetContentSignature(bytes, session.expectedMime)) {
       await this.failSession(session.userId, session, DRIVE_UPLOAD_STATUS.failed, { preserveItem: session.purpose === DRIVE_UPLOAD_PURPOSE.publicAssetReplace })
       throw new BadRequestException("上传文件校验失败。")
     }

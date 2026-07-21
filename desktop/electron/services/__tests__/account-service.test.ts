@@ -44,7 +44,7 @@ import {
   type SafeStorage,
 } from "../../runtime/data-repo/backends/encrypted-json"
 import type { SynapseAccountProfile } from "../../../src/types/account"
-import { DRIVE_MAX_FILE_BYTES, DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE, type DashboardWebhookDto, type DriveDocumentImageImportResult, type DriveDocumentImageSourcesDto, type DriveItemDto, type DrivePublicAssetDto, type DriveSiteDto, type DriveUploadPrepareResult } from "@synapse/shared"
+import { DRIVE_MAX_FILE_BYTES, DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE, DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE, type DashboardWebhookDto, type DriveDocumentImageImportResult, type DriveDocumentImageSourcesDto, type DriveItemDto, type DrivePublicAssetDto, type DriveSiteDto, type DriveUploadPrepareResult } from "@synapse/shared"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../generated/deployment-config.generated"
 import { AccountService } from "../account-service"
 
@@ -1219,8 +1219,8 @@ describe("AccountService", () => {
 
   it("infers public asset MIME types before upload and replace prepare requests", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-public-asset-local-"))
-    const uploadPath = path.join(dir, "logo.png")
-    const replacePath = path.join(dir, "banner.webp")
+    const uploadPath = path.join(dir, "report.pdf")
+    const replacePath = path.join(dir, "notes.md")
     await writeFile(uploadPath, "hello")
     await writeFile(replacePath, "banner")
     const asset = drivePublicAsset()
@@ -1237,12 +1237,12 @@ describe("AccountService", () => {
     }, "putPreparedUploadFromPath").mockResolvedValue(undefined)
 
     await expect(service.uploadDrivePublicAssets({
-      files: [{ path: uploadPath, name: "logo.png", mimeType: null }],
-    })).resolves.toEqual({ results: [{ status: "fulfilled", fileName: "logo.png", asset }] })
+      files: [{ path: uploadPath, name: "report.pdf", mimeType: null }],
+    })).resolves.toEqual({ results: [{ status: "fulfilled", fileName: "report.pdf", asset }] })
     await expect(service.replaceDrivePublicAssetFile({
       assetId: asset.assetId,
       path: replacePath,
-      name: "banner.webp",
+      name: "notes.md",
       mimeType: null,
     })).resolves.toEqual(asset)
 
@@ -1250,14 +1250,14 @@ describe("AccountService", () => {
       1,
       "POST",
       expectedApiUrl("/drive/public-assets/uploads/prepare"),
-      { name: "logo.png", size: "5", mimeType: "image/png" },
+      { name: "report.pdf", size: "5", mimeType: "application/pdf" },
       "上传准备失败。",
     )
     expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
       3,
       "POST",
       expectedApiUrl(`/drive/public-assets/${encodeURIComponent(asset.assetId)}/replace/prepare`),
-      { name: "banner.webp", size: "6", mimeType: "image/webp" },
+      { name: "notes.md", size: "6", mimeType: "text/markdown" },
       "替换准备失败。",
     )
   })
@@ -1345,28 +1345,28 @@ describe("AccountService", () => {
       name: "note.txt",
       mimeType: "text/plain",
       data: bytes,
-    })).rejects.toThrow(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
+    })).rejects.toThrow(DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE)
 
     expect(requestAuthenticatedJson).not.toHaveBeenCalled()
   })
 
   it("rejects unsupported local public asset uploads and replacements before prepare", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-public-asset-unsupported-"))
-    const uploadPath = path.join(dir, "note.pdf")
-    const replacePath = path.join(dir, "vector.svg")
-    await writeFile(uploadPath, "pdf")
-    await writeFile(replacePath, "<svg />")
+    const uploadPath = path.join(dir, "vector.svg")
+    const replacePath = path.join(dir, "page.html")
+    await writeFile(uploadPath, "<svg />")
+    await writeFile(replacePath, "<html></html>")
     const { service } = await createTestAccountService()
     const requestAuthenticatedJson = vi.spyOn(service as unknown as {
       requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
     }, "requestAuthenticatedJson")
 
     await expect(service.uploadDrivePublicAssets({
-      files: [{ path: uploadPath, name: "note.pdf", mimeType: null }],
+      files: [{ path: uploadPath, name: "vector.svg", mimeType: null }],
     })).resolves.toEqual({
       results: [{
         status: "rejected",
-        fileName: "note.pdf",
+        fileName: "vector.svg",
         message: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
       }],
     })
@@ -1374,8 +1374,8 @@ describe("AccountService", () => {
     await expect(service.replaceDrivePublicAssetFile({
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
       path: replacePath,
-      name: "vector.svg",
-      mimeType: "image/svg+xml",
+      name: "page.html",
+      mimeType: "text/html",
     })).rejects.toThrow(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
 
     expect(requestAuthenticatedJson).not.toHaveBeenCalled()

@@ -176,7 +176,7 @@ Input:
 - `itemId` optional.
 - `maxBytes` optional.
 
-Use for Markdown, HTML source, JSON, and text. Binary files should use `app_drive_link_download_file`.
+Use for Markdown, HTML source, JSON, and text, including public TXT, MD, and CSV assets. PDF, Office, and other binary files should use `app_drive_link_download_file`.
 
 For `/share` children, prefer `itemId` from `app_drive_link_list`; `path` is primarily for `/sites` assets and share fallback lookup.
 Protected `/share` and `/sites` links require `password`; without it, this tool reports that the link needs a password rather than treating the link as missing.
@@ -441,7 +441,7 @@ Input:
 
 ## Public Asset Tools
 
-Use these tools for Drive-backed `公开素材`, `图床`, `外链`, `直链`, `public asset`, or `direct link` requests. Public assets are image-only in v1, support PNG/JPG/JPEG/GIF/WebP/AVIF/ICO, do not support SVG, are flat, allow duplicate names, and use stable `/files/<assetId>` URLs.
+Use these tools for Drive-backed `公开素材`, `图床`, `外链`, `直链`, `public asset`, or `direct link` requests. Public assets support PNG/JPG/JPEG/GIF/WebP/AVIF/ICO images and PDF/DOCX/XLSX/PPTX/TXT/MD/CSV documents, do not support SVG, are flat, allow duplicate names, and use stable `/files/<assetId>` URLs. Images open inline; documents download as attachments.
 
 Natural language mapping:
 
@@ -451,13 +451,13 @@ Natural language mapping:
 
 ### `app_drive_direct_link_upload`
 
-Upload a supported image and create a new public asset id and URL.
+Upload a supported image or document and create a new public asset id and URL.
 
 Input:
 
-- `filePath` required: absolute local image file path. Supported formats are PNG/JPG/JPEG/GIF/WebP/AVIF/ICO; SVG is not supported.
+- `filePath` required: absolute local file path. Supported formats are PNG/JPG/JPEG/GIF/WebP/AVIF/ICO/PDF/DOCX/XLSX/PPTX/TXT/MD/CSV; SVG is not supported.
 - `name` optional: display name; defaults to local basename.
-- `mimeType` optional: supported image MIME type; inferred from the local `filePath` extension when omitted.
+- `mimeType` optional: supported MIME type; inferred from the local `filePath` extension when omitted.
 
 ### `app_drive_direct_link_list`
 
@@ -479,14 +479,14 @@ Input:
 
 ### `app_drive_direct_link_update`
 
-Replace a public asset image while preserving the same `/files/<assetId>` URL. Supported formats are PNG/JPG/JPEG/GIF/WebP/AVIF/ICO; SVG is not supported.
+Replace a public asset while preserving the same `/files/<assetId>` URL. Images can replace images, and documents can replace documents; the two categories cannot replace each other. Supported formats are PNG/JPG/JPEG/GIF/WebP/AVIF/ICO/PDF/DOCX/XLSX/PPTX/TXT/MD/CSV; SVG is not supported.
 
 Input:
 
 - `assetId` required.
-- `filePath` required: absolute local replacement image file path.
+- `filePath` required: absolute local replacement file path.
 - `name` optional.
-- `mimeType` optional: supported image MIME type inferred from the local `filePath` extension when omitted.
+- `mimeType` optional: supported MIME type inferred from the local `filePath` extension when omitted.
 
 ### `app_drive_direct_link_rename`
 

@@ -1,6 +1,6 @@
 import type { DragEvent, ReactNode } from 'react'
 import type { DriveBrowserItemDto, DriveBrowserSnapshotDto } from '@synapse/shared'
-import { Image, MoreHorizontal, Trash2 } from 'lucide-react'
+import { Archive, MoreHorizontal, Trash2 } from 'lucide-react'
 import { RelativeTime } from '@/components/relative-time'
 import { Button } from '@/components/ui/button'
 import {
@@ -81,7 +81,7 @@ export function DriveFileTable({
         <TableBody>
           {rootSystemRows ? (
             <>
-              <SystemRow icon={<Image className='size-4 text-muted-foreground' />} name='公开素材' onOpen={() => onOpenSystemView('public-assets')} />
+              <SystemRow icon={<Archive className='size-4 text-muted-foreground' />} name='公开素材' onOpen={() => onOpenSystemView('public-assets')} />
               <SystemRow icon={<Trash2 className='size-4 text-muted-foreground' />} name='回收站' onOpen={() => onOpenSystemView('trash')} />
             </>
           ) : null}

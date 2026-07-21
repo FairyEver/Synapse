@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import type { DrivePublicAssetDto, DrivePublicAssetListPageDto } from '@synapse/shared'
+import {
+  DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION,
+  DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
+  inferDrivePublicAssetMimeType,
+  type DrivePublicAssetDto,
+  type DrivePublicAssetListPageDto,
+} from '@synapse/shared'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -9,6 +15,8 @@ import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDriveBrowserBytes } from '@/features/drive-browser/shared/drive-format'
 import { driveApi } from '@/lib/api'
+
+const DRIVE_PUBLIC_ASSET_ACCEPT = Object.keys(DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION).map((extension) => `.${extension}`).join(',')
 
 export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () => Promise<void> }) {
   const [items, setItems] = useState<DrivePublicAssetDto[]>([])
@@ -55,9 +63,11 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
   }
 
   const uploadPublicAsset = async (file: File, target: DrivePublicAssetDto | null) => {
+    const mimeType = inferDrivePublicAssetMimeType(file.name)
+    if (!mimeType) throw new Error(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
     const prepared = target
-      ? await driveApi.preparePublicAssetReplace(target.assetId, { name: file.name, size: String(file.size), mimeType: file.type || null })
-      : await driveApi.preparePublicAssetUpload({ name: file.name, size: String(file.size), mimeType: file.type || null })
+      ? await driveApi.preparePublicAssetReplace(target.assetId, { name: file.name, size: String(file.size), mimeType })
+      : await driveApi.preparePublicAssetUpload({ name: file.name, size: String(file.size), mimeType })
     let completed = false
     try {
       const response = await fetch(prepared.upload.url, { method: prepared.upload.method, headers: prepared.upload.headers, body: file })
@@ -131,7 +141,7 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
           ref={uploadInputRef}
           aria-label='上传公开素材'
           type='file'
-          accept='image/png,image/jpeg,image/gif,image/webp,image/avif,image/x-icon'
+          accept={DRIVE_PUBLIC_ASSET_ACCEPT}
           className='hidden'
           onChange={(event) => {
             const [file] = Array.from(event.currentTarget.files ?? [])
@@ -143,7 +153,7 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
           ref={replaceInputRef}
           aria-label='替换公开素材'
           type='file'
-          accept='image/png,image/jpeg,image/gif,image/webp,image/avif,image/x-icon'
+          accept={DRIVE_PUBLIC_ASSET_ACCEPT}
           className='hidden'
           onChange={(event) => {
             const [file] = Array.from(event.currentTarget.files ?? [])

@@ -3,6 +3,8 @@
 Date: 2026-06-29
 Scope: `dashboard/`, `server/`, `shared/`, `docs/`
 
+> Public asset format restrictions in this alignment design are superseded by `2026-07-21-drive-public-documents-design.md`.
+
 ## Goal
 
 Bring the web console Drive experience in line with the desktop client's cloud-side Drive capabilities. A user should be able to manage Synapse Drive from the web console with the same cloud model they see in the desktop client: files and folders, public links, sites, public assets, trash, previews, inline editing, comments, and version history.
@@ -280,7 +282,7 @@ Capabilities:
 - move an asset to trash
 - refresh and paginate
 
-Use the existing shared public asset image MIME restrictions. The web version may upload files directly from `File` objects through the server's existing public asset upload prepare/complete flow.
+Use the shared public asset MIME restrictions from `2026-07-21-drive-public-documents-design.md`. The web version may upload files directly from `File` objects through the server's existing public asset upload prepare/complete flow.
 
 ## Trash
 

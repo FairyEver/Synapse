@@ -219,6 +219,7 @@ Single-context: use the root `CONTEXT.md` and `docs/adr/`. See `docs/agents/doma
 
 ### 模块硬边界摘要
 
+- Drive `公开素材`使用稳定、匿名、不过期的 `/files/<assetId>` URL。允许 JPG/JPEG/PNG/WebP/GIF/AVIF/ICO 图片和 PDF/DOCX/XLSX/PPTX/TXT/MD/CSV 文档；SVG、网页主动内容、压缩包、可执行文件、旧版 Office 和宏格式不允许。图片以内联方式返回，文档必须作为附件下载；替换只能在图片类别内或文档类别内进行。需要密码、有效期或敏感访问控制的文档必须使用普通 Drive 分享，不得把公开素材扩展成受控分享的旁路。
 - Drive 公开 HTML 时，独立 HTML 在用户未明确要求发布整个文件夹的情况下默认使用 `/share/...`；多文件静态站点，或用户明确要求把整个文件夹作为网站发布时，使用 `/sites/...`。文件夹即使只有一个 `index.html` 也可以发布为 Site；用户仅指定上传目标文件夹，或泛称“网页 / 网站 / 站点”，不等于要求发布该文件夹。
 - Knowledge Base 是 Synapse 托管项目类型；新建知识库时用户只提供名称，真实目录由 Synapse 创建在 Synapse-managed storage 中，项目路径对用户显示为虚拟 `synapse-kb://<id>`。Synapse-managed storage 默认位于 Electron `userData`，也允许用户配置一个全局知识库存储根；实际运行目录始终由 Synapse 创建为 `<storage-root>/knowledge-bases/<runtimeId>/`，不得暴露为逐库自选项目路径。
 - Knowledge Base 托管运行目录可以包含来自内置 Synapse Knowledge Base 模板的 Claude Code plugin、skill、command、hook、脚本、提示词和 `CLAUDE.md`，因为它不是用户选择的可见项目目录。

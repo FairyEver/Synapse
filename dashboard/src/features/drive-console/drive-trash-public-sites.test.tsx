@@ -157,11 +157,13 @@ describe('DrivePublicAssetsView', () => {
 
     const uploadInput = document.querySelector('input[aria-label="上传公开素材"]')
     if (!(uploadInput instanceof HTMLInputElement)) throw new Error('missing upload input')
-    const file = new File(['new'], 'first.png', { type: 'image/png' })
+    expect(uploadInput.accept).toContain('.pdf')
+    expect(uploadInput.accept).toContain('.docx')
+    const file = new File(['%PDF-1.7'], 'report.pdf', { type: 'application/octet-stream' })
     Object.defineProperty(uploadInput, 'files', { value: [file], configurable: true })
     await act(async () => uploadInput.dispatchEvent(new Event('change', { bubbles: true })))
 
-    expect(driveApi.preparePublicAssetUpload).toHaveBeenCalledWith({ name: 'first.png', size: String(file.size), mimeType: 'image/png' })
+    expect(driveApi.preparePublicAssetUpload).toHaveBeenCalledWith({ name: 'report.pdf', size: String(file.size), mimeType: 'application/pdf' })
     expect(driveApi.completePublicAssetUpload).toHaveBeenCalledWith('upload-1')
   })
 

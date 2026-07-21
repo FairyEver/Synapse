@@ -719,7 +719,7 @@ async function uploadPublicAsset(
   const name = optionalString(params.name) ?? path.basename(filePath)
   await authorizeFileRead(deps, filePath, context, action)
   await requireLocalUploadFile(fileSystem, filePath)
-  const mimeType = await resolvePublicAssetImageMimeType(path.basename(filePath), optionalString(params.mimeType))
+  const mimeType = await resolvePublicAssetAllowedMimeType(path.basename(filePath), optionalString(params.mimeType))
   if (!mimeType.ok) return { ok: false, error: mimeType.error }
   const result = await deps.accountService.uploadDrivePublicAssets({
     files: [{
@@ -750,7 +750,7 @@ async function replacePublicAsset(
   const name = optionalString(params.name) ?? path.basename(filePath)
   await authorizeFileRead(deps, filePath, context, action)
   await requireLocalUploadFile(fileSystem, filePath)
-  const mimeType = await resolvePublicAssetImageMimeType(path.basename(filePath), optionalString(params.mimeType))
+  const mimeType = await resolvePublicAssetAllowedMimeType(path.basename(filePath), optionalString(params.mimeType))
   if (!mimeType.ok) return { ok: false, error: mimeType.error }
   return {
     ok: true,
@@ -776,13 +776,13 @@ async function resolvePublicAssetMimeType(name: string, mimeType?: string): Prom
   return inferDrivePublicAssetMimeType(name)
 }
 
-async function resolvePublicAssetImageMimeType(name: string, mimeType?: string): Promise<
+async function resolvePublicAssetAllowedMimeType(name: string, mimeType?: string): Promise<
   | { readonly ok: true; readonly value: string }
   | { readonly ok: false; readonly error: string }
 > {
   const shared = await import("@synapse/shared")
   const resolved = await resolvePublicAssetMimeType(name, mimeType)
-  const supportedMimeTypes = new Set<string>(Object.values(shared.DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))
+  const supportedMimeTypes = new Set<string>(Object.values(shared.DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION))
   if (!resolved || !supportedMimeTypes.has(resolved)) {
     return { ok: false, error: shared.DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE }
   }

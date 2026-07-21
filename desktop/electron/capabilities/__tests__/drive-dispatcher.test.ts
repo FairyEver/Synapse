@@ -739,6 +739,25 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
+  it("uploads supported public documents through the account helper", async () => {
+    const asset = drivePublicAsset({ assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", name: "report.pdf", mimeType: "application/pdf" })
+    const uploadDrivePublicAssets = vi.fn(async () => ({
+      results: [{ status: "fulfilled" as const, fileName: "report.pdf", asset }],
+    }))
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService({ uploadDrivePublicAssets }),
+      fileSystem: regularFileSystemForTest(),
+    })
+
+    await expect(dispatcher.dispatch("app.drive.direct_link.upload", {
+      filePath: "/tmp/report.pdf",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
+
+    expect(uploadDrivePublicAssets).toHaveBeenCalledWith({
+      files: [{ path: "/tmp/report.pdf", name: "report.pdf", mimeType: "application/pdf" }],
+    })
+  })
+
   it("returns a failed dispatch result when public asset upload is rejected", async () => {
     const uploadDrivePublicAssets = vi.fn(async () => ({
       results: [{ status: "rejected" as const, fileName: "logo.txt", message: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE }],
@@ -763,7 +782,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
-  it("rejects unsupported public asset image formats before calling account helpers", async () => {
+  it("rejects unsupported public asset formats before calling account helpers", async () => {
     const uploadDrivePublicAssets = vi.fn()
     const replaceDrivePublicAssetFile = vi.fn()
     const dispatcher = createDriveCapabilityDispatcher({
@@ -772,7 +791,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
 
     await expect(dispatcher.dispatch("app.drive.direct_link.upload", {
-      filePath: "/tmp/logo.pdf",
+      filePath: "/tmp/logo.svg",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: false,
       error: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,

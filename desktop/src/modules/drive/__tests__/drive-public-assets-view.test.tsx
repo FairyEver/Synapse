@@ -4,7 +4,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION, type DrivePublicAssetDto, type DrivePublicAssetListPageDto } from "@synapse/shared"
+import { DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION, type DrivePublicAssetDto, type DrivePublicAssetListPageDto } from "@synapse/shared"
 
 import { DrivePublicAssetsView } from "../drive-public-assets-view"
 
@@ -327,11 +327,11 @@ describe("DrivePublicAssetsView", () => {
     expect(uploadResultTexts()).toEqual([])
   })
 
-  it("uses the shared public asset image MIME list for file pickers", async () => {
+  it("uses the shared public asset format list for file pickers", async () => {
     await render(<DrivePublicAssetsView />)
     await flushAct()
 
-    const expectedAccept = Array.from(new Set(Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))).join(",")
+    const expectedAccept = Object.keys(DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION).map((extension) => `.${extension}`).join(",")
     const inputs = [...document.querySelectorAll<HTMLInputElement>('input[type="file"]')]
 
     expect(inputs).toHaveLength(2)

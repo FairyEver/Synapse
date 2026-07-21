@@ -5,6 +5,8 @@ import {
 } from "./mcp-tool-names"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
+const PUBLIC_ASSET_SUPPORTED_FORMATS = "PNG, JPG, JPEG, GIF, WebP, AVIF, ICO, PDF, DOCX, XLSX, PPTX, TXT, MD, CSV"
+
 const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.item.list" as CapabilityId, title: "List drive items", description: "List Synapse Drive files and folders under a parent folder.", mutates: false },
   { id: "app.drive.item.get" as CapabilityId, title: "Get drive item", description: "Get metadata for one Synapse Drive file or folder.", mutates: false },
@@ -44,10 +46,10 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.folder_path.ensure" as CapabilityId, title: "Ensure folder path", description: "Create or reuse a nested Synapse Drive folder path.", mutates: true },
   { id: "app.drive.reorganization.preview" as CapabilityId, title: "Preview reorganization", description: "Validate a Synapse Drive reorganization plan without moving items.", mutates: false },
   { id: "app.drive.reorganization.apply" as CapabilityId, title: "Apply reorganization", description: "Apply a previously previewed Synapse Drive reorganization plan.", mutates: true },
-  { id: "app.drive.direct_link.upload" as CapabilityId, title: "Upload public asset", description: "Upload a supported image to Drive 公开素材, also known as 图床, 外链, 直链, public asset, or direct link. Supported formats: PNG, JPG, JPEG, GIF, WebP, AVIF, ICO; SVG is not supported.", mutates: true },
+  { id: "app.drive.direct_link.upload" as CapabilityId, title: "Upload public asset", description: `Upload a supported image or document to Drive 公开素材, also known as 外链, 直链, public asset, or direct link. Supported formats: ${PUBLIC_ASSET_SUPPORTED_FORMATS}; SVG is not supported.`, mutates: true },
   { id: "app.drive.direct_link.list" as CapabilityId, title: "List public assets", description: "List current user's Drive 公开素材 public assets. Access logs are not returned.", mutates: false },
   { id: "app.drive.direct_link.get" as CapabilityId, title: "Get public asset", description: "Get one public asset by assetId without access-log detail.", mutates: false },
-  { id: "app.drive.direct_link.update" as CapabilityId, title: "Replace public asset", description: "Replace a public asset file while preserving its /files/<assetId> URL.", mutates: true },
+  { id: "app.drive.direct_link.update" as CapabilityId, title: "Replace public asset", description: "Replace a public asset file with the same content category while preserving its /files/<assetId> URL. Images can replace images; documents can replace documents.", mutates: true },
   { id: "app.drive.direct_link.rename" as CapabilityId, title: "Rename public asset", description: "Rename a public asset while preserving its /files/<assetId> URL.", mutates: true },
   { id: "app.drive.direct_link.delete" as CapabilityId, title: "Delete public asset", description: "Move a public asset to Drive trash. Its public URL returns 404 until restored.", mutates: true, risk: "high" },
   { id: "app.drive.direct_link.restore" as CapabilityId, title: "Restore public asset", description: "Restore a trashed public asset and make the same public URL available again.", mutates: true },
@@ -576,13 +578,13 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_direct_link_upload",
-      description: "Upload a supported image to Drive 公开素材 / 图床 and create a new 外链 / 直链 / public asset / direct link URL at /files/<assetId>. Supported formats: PNG, JPG, JPEG, GIF, WebP, AVIF, ICO; SVG is not supported. Duplicate names are allowed.",
+      description: `Upload a supported image or document to Drive 公开素材 and create a new 外链 / 直链 / public asset / direct link URL at /files/<assetId>. Supported formats: ${PUBLIC_ASSET_SUPPORTED_FORMATS}; SVG is not supported. Duplicate names are allowed. Public documents download as attachments.`,
       inputSchema: {
         type: "object",
         properties: {
-          filePath: stringField("Absolute local image file path to upload. Supported formats: PNG, JPG, JPEG, GIF, WebP, AVIF, ICO; SVG is not supported."),
+          filePath: stringField(`Absolute local file path to upload. Supported formats: ${PUBLIC_ASSET_SUPPORTED_FORMATS}; SVG is not supported.`),
           name: stringField("Optional public asset display name. Defaults to the local file basename."),
-          mimeType: stringField("Optional supported image MIME type; inferred from the local file path extension when omitted."),
+          mimeType: stringField("Optional supported MIME type; inferred from the local file path extension when omitted."),
         },
         required: ["filePath"],
       },
@@ -608,14 +610,14 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_direct_link_update",
-      description: "Replace a public asset image while preserving its /files/<assetId> URL. Supported formats: PNG, JPG, JPEG, GIF, WebP, AVIF, ICO; SVG is not supported.",
+      description: `Replace a public asset with a supported file in the same content category while preserving its /files/<assetId> URL. Images can replace images; documents can replace documents. Supported formats: ${PUBLIC_ASSET_SUPPORTED_FORMATS}; SVG is not supported.`,
       inputSchema: {
         type: "object",
         properties: {
           assetId: stringField("Public asset id to replace."),
-          filePath: stringField("Absolute local replacement image file path. Supported formats: PNG, JPG, JPEG, GIF, WebP, AVIF, ICO; SVG is not supported."),
+          filePath: stringField(`Absolute local replacement file path. Supported formats: ${PUBLIC_ASSET_SUPPORTED_FORMATS}; SVG is not supported.`),
           name: stringField("Optional replacement display name. Defaults to the local file basename."),
-          mimeType: stringField("Optional supported image MIME type; inferred from the local file path extension when omitted."),
+          mimeType: stringField("Optional supported MIME type; inferred from the local file path extension when omitted."),
         },
         required: ["assetId", "filePath"],
       },

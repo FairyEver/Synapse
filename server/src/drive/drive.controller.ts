@@ -20,6 +20,7 @@ import {
   DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
   DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES,
   DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES,
+  drivePublicAssetContentKind,
   type DriveAccessSettingsUpdateInput,
   type DriveBrowserPasswordRequiredDto,
   type DriveBrowserSnapshotDto,
@@ -1050,9 +1051,17 @@ export class DrivePublicController {
 
     response.setHeader("Cache-Control", PUBLIC_ASSET_CACHE_CONTROL)
     response.setHeader("Content-Type", resolved.mimeType)
-    response.setHeader("Content-Disposition", inlineContentDisposition(resolved.name))
+    const contentKind = drivePublicAssetContentKind(resolved.mimeType)
+    response.setHeader(
+      "Content-Disposition",
+      contentKind === "image" ? inlineContentDisposition(resolved.name) : attachmentContentDisposition(resolved.name),
+    )
     response.setHeader("Content-Length", resolved.size.toString())
     response.setHeader("X-Content-Type-Options", "nosniff")
+    if (contentKind !== "image") {
+      response.setHeader("Content-Security-Policy", "default-src 'none'; sandbox")
+      response.setHeader("Referrer-Policy", "no-referrer")
+    }
     if (resolved.etag) response.setHeader("ETag", resolved.etag)
     if (method === "HEAD") {
       response.status(200).end()
@@ -1093,6 +1102,8 @@ export class DrivePublicController {
       response.removeHeader("Content-Disposition")
       response.removeHeader("Content-Length")
       response.removeHeader("ETag")
+      response.removeHeader("Content-Security-Policy")
+      response.removeHeader("Referrer-Policy")
       response.setHeader("Cache-Control", "no-store")
       response.status(404).send("Not Found")
       void publicAssets.recordAccessSafely({ ...accessBase, statusCode: 404, bytes: 0n })

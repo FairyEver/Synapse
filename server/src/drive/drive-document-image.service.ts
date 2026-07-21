@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger } from "@nestjs/common"
 import {
   DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
+  DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE,
   parseDrivePublicAssetUrl,
   type DriveFileContentUpdateResult,
   type DriveFileTextUpdateInput,
@@ -444,7 +445,10 @@ function isHttpImageSource(src: string): boolean {
 
 function importFailureReason(error: unknown): DriveDocumentImageImportResult["failed"][number]["reason"] {
   const message = error instanceof Error ? error.message : ""
-  if (message.includes("格式不支持") || message.includes("仅支持图片") || message.includes("文件类型与扩展名不匹配")) return "unsupported"
+  if (message.includes("格式不支持")
+    || message.includes("仅支持图片")
+    || message.includes(DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE)
+    || message.includes("文件类型与扩展名不匹配")) return "unsupported"
   if (message.includes("图片过大") || message.includes("文件超过")) return "too_large"
   if (message.includes("云盘空间不足")) return "quota"
   if (message.includes("文档已更新") || message.includes("文件已有新内容")) return "changed"

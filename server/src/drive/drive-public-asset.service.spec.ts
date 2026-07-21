@@ -1,6 +1,6 @@
 import { BadRequestException } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
-import { DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE } from "@synapse/shared"
+import { DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE, DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE } from "@synapse/shared"
 import { Readable } from "node:stream"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
@@ -97,17 +97,46 @@ describe("DrivePublicAssetService", () => {
     expect(completed.mimeType).toBe("image/png")
   })
 
-  it("rejects public asset upload prepare when MIME is not an image", async () => {
-    await expect(service.prepareUpload("user-1", {
-      name: "logo",
-      size: "8",
+  it("creates supported public document assets", async () => {
+    const prepared = await service.prepareUpload("user-1", {
+      name: "notes.txt",
+      size: "5",
       mimeType: "text/plain",
       publicAppUrl: "https://synapse.example",
-    })).rejects.toBeInstanceOf(BadRequestException)
-    await expect(service.prepareUpload("user-1", {
-      name: "logo",
-      size: "8",
+    })
+    await storage.putObject({
+      key: await storageKeyForSession(prisma, prepared.sessionId),
+      body: Buffer.from("hello"),
+      contentType: "text/plain",
+    })
+
+    await expect(service.completeUpload("user-1", prepared.sessionId, { publicAppUrl: "https://synapse.example" }))
+      .resolves.toMatchObject({ name: "notes.txt", mimeType: "text/plain" })
+  })
+
+  it("keeps Markdown image import helpers image-only", async () => {
+    await expect(service.importImageBuffer("user-1", "https://synapse.example", {
+      name: "notes.txt",
       mimeType: "text/plain",
+      body: Buffer.from("hello"),
+    })).rejects.toThrow(DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE)
+
+    const document = await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "notes.txt",
+      size: 5n,
+      mimeType: "text/plain",
+    })
+    await expect(service.copyPublicAssetToUser("user-2", document.assetId, "https://synapse.example"))
+      .rejects.toThrow(DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE)
+  })
+
+  it("rejects unsupported public asset MIME types", async () => {
+    await expect(service.prepareUpload("user-1", {
+      name: "page.html",
+      size: "8",
+      mimeType: "text/html",
       publicAppUrl: "https://synapse.example",
     })).rejects.toThrow(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
     expect(await prisma.driveUploadSession.findMany()).toEqual([])
@@ -233,6 +262,45 @@ describe("DrivePublicAssetService", () => {
       mimeType: "image/jpeg",
     })).rejects.toThrow("文件类型与扩展名不匹配。")
     expect(await prisma.driveUploadSession.findMany()).toEqual([])
+  })
+
+  it("rejects replacement across image and document categories", async () => {
+    const asset = await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "logo.png",
+      size: 8n,
+    })
+
+    await expect(service.prepareReplace("user-1", asset.assetId, {
+      name: "report.pdf",
+      size: "8",
+      mimeType: "application/pdf",
+    })).rejects.toThrow("图片和文档不能互相替换。")
+    expect(await prisma.driveUploadSession.findMany()).toEqual([])
+  })
+
+  it("allows replacement between supported document formats", async () => {
+    const asset = await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "notes.txt",
+      size: 5n,
+      mimeType: "text/plain",
+    })
+    const prepared = await service.prepareReplace("user-1", asset.assetId, {
+      name: "report.pdf",
+      size: "8",
+      mimeType: "application/pdf",
+    })
+    await storage.putObject({
+      key: await storageKeyForSession(prisma, prepared.sessionId),
+      body: Buffer.from("%PDF-1.7"),
+      contentType: "application/pdf",
+    })
+
+    await expect(service.completeReplace("user-1", asset.assetId, prepared.sessionId, { publicAppUrl: "https://synapse.example" }))
+      .resolves.toMatchObject({ assetId: asset.assetId, name: "report.pdf", mimeType: "application/pdf" })
   })
 
   it("returns the current asset when public asset replace completion is retried", async () => {
@@ -385,6 +453,21 @@ describe("DrivePublicAssetService", () => {
 
     expect((await prisma.publicAsset.findFirst({ where: { assetId: asset.assetId } })).name).toBe("logo.png")
     expect((await prisma.driveItem.findUniqueOrThrow({ where: { id: asset.itemId } })).name).toBe("logo.png")
+  })
+
+  it("renames documents only with an extension matching the current MIME", async () => {
+    const asset = await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "notes.txt",
+      size: 5n,
+      mimeType: "text/plain",
+    })
+
+    await expect(service.renameAsset("user-1", asset.assetId, "archive.md"))
+      .rejects.toThrow("文件类型与扩展名不匹配。")
+    await expect(service.renameAsset("user-1", asset.assetId, "archive.txt"))
+      .resolves.toMatchObject({ assetId: asset.assetId, name: "archive.txt", mimeType: "text/plain" })
   })
 
   it("restores with caller publicAppUrl while keeping assetId and URL identity", async () => {
@@ -865,9 +948,11 @@ async function seedPublicAsset(input: {
   readonly assetId: string
   readonly name: string
   readonly size: bigint
+  readonly mimeType?: string
   readonly lifecycleStatus?: string
 }) {
   const userId = input.userId ?? "user-1"
+  const mimeType = input.mimeType ?? "image/png"
   const item = await input.prisma.driveItem.create({
     data: {
       userId,
@@ -875,7 +960,7 @@ async function seedPublicAsset(input: {
       type: "file",
       name: input.name,
       size: input.size,
-      mimeType: "image/png",
+      mimeType,
       storageKey: `drive/public-assets/${input.assetId}`,
       storageStatus: "active",
       uploadStatus: "completed",
@@ -890,7 +975,7 @@ async function seedPublicAsset(input: {
       name: input.name,
       originalName: input.name,
       size: input.size,
-      mimeType: "image/png",
+      mimeType,
       storageKey: item.storageKey,
       etag: "seed-etag",
       lifecycleStatus: input.lifecycleStatus ?? "active",

@@ -1,7 +1,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type Dispatch, type FormEvent, type MouseEvent, type SetStateAction } from "react"
 import { LoaderCircle, MoreHorizontal, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
-import { DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION, type DrivePublicAssetDto, type DrivePublicAssetListPageDto } from "@synapse/shared"
+import { DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION, inferDrivePublicAssetMimeType, type DrivePublicAssetDto, type DrivePublicAssetListPageDto } from "@synapse/shared"
 
 import { FormDialog } from "@/components/form-dialog"
 import { ModuleContentPanel } from "@/components/module-page"
@@ -55,7 +55,7 @@ import { DRIVE_PUBLIC_ASSET_TABLE_COLUMNS, DriveTableColumns } from "./drive-tab
 
 const DRIVE_PUBLIC_ASSET_PAGE_SIZE = 50
 const DRIVE_PUBLIC_ASSET_SKELETON_ROWS = Array.from({ length: 6 }, (_, index) => index)
-const DRIVE_PUBLIC_ASSET_IMAGE_ACCEPT = Array.from(new Set(Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))).join(",")
+const DRIVE_PUBLIC_ASSET_ACCEPT = Object.keys(DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION).map((extension) => `.${extension}`).join(",")
 
 type DrivePublicAssetRenameState = {
   readonly asset: DrivePublicAssetDto
@@ -369,14 +369,14 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
         ref={uploadInputRef}
         type="file"
         multiple
-        accept={DRIVE_PUBLIC_ASSET_IMAGE_ACCEPT}
+        accept={DRIVE_PUBLIC_ASSET_ACCEPT}
         className="hidden"
         onChange={handleUploadSelected}
       />
       <input
         ref={replaceInputRef}
         type="file"
-        accept={DRIVE_PUBLIC_ASSET_IMAGE_ACCEPT}
+        accept={DRIVE_PUBLIC_ASSET_ACCEPT}
         className="hidden"
         data-testid="drive-public-asset-replace-input"
         onChange={handleReplaceSelected}
@@ -640,7 +640,7 @@ function publicAssetLocalFilesFromSelection(files: readonly File[]): DrivePublic
     return {
       path,
       name: file.name,
-      mimeType: file.type || null,
+      mimeType: (inferDrivePublicAssetMimeType(file.name) ?? file.type) || null,
     }
   }).filter((file): file is DrivePublicAssetLocalFile => file !== null)
 }
