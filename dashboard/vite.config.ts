@@ -25,6 +25,10 @@ export function resolveDashboardDevSpaFallback(pathname: string) {
   return null
 }
 
+export function resolveDesktopUpdateDevHtmlPath(pathname: string) {
+  return pathname === '/desktop/update' ? '/desktop-update.html' : null
+}
+
 function driveBrowserHistoryFallback(): Plugin {
   return {
     name: 'synapse-drive-browser-history-fallback',
@@ -36,6 +40,13 @@ function driveBrowserHistoryFallback(): Plugin {
         }
 
         const parsedUrl = new URL(request.url ?? '/', 'http://localhost')
+        const desktopUpdateHtmlPath = resolveDesktopUpdateDevHtmlPath(parsedUrl.pathname)
+        if (desktopUpdateHtmlPath) {
+          request.url = `${desktopUpdateHtmlPath}${parsedUrl.search}`
+          next()
+          return
+        }
+
         const redirectPath = resolveLegacyDashboardDevRedirect(parsedUrl.pathname)
         if (redirectPath) {
           response.statusCode = 302
@@ -98,6 +109,14 @@ export default defineConfig({
       '^/share/[^/]+/items/[^/]+/(download|render)$': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+      },
+    },
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        dashboard: path.resolve(__dirname, 'index.html'),
+        desktopUpdate: path.resolve(__dirname, 'desktop-update.html'),
       },
     },
   },

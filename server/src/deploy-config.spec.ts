@@ -301,6 +301,18 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
   })
 
+  it("serves the independent desktop update page with focused security headers", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+
+    expect(nginx).toContain("location = /desktop/update")
+    expect(nginx).toContain("try_files /desktop-update.html =404;")
+    expect(nginx).toContain("Content-Security-Policy")
+    expect(nginx).toContain("frame-ancestors 'none'")
+    expect(nginx).toContain("X-Frame-Options \"DENY\"")
+    expect(nginx).toContain("Referrer-Policy \"no-referrer\"")
+    expect(nginx).toContain("Cache-Control \"no-cache, must-revalidate\"")
+  })
+
   it("serves drive browser pages from the console bundle and proxies direct file responses", () => {
     const nginx = readRepoFile("server/nginx.conf")
 
