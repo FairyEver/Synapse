@@ -1,4 +1,4 @@
-import { Body, Controller, Header, Headers, HttpCode, Post } from "@nestjs/common"
+import { Body, Controller, Headers, HttpCode, Post } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import { z } from "zod"
 import {
@@ -31,7 +31,6 @@ export class UpdateIntentController {
 
   @Post()
   @HttpCode(200)
-  @Header("Cache-Control", "no-store")
   @Throttle(issueThrottle)
   issue(@Headers("origin") origin?: string) {
     return this.updateIntents.issue(origin)
@@ -39,7 +38,6 @@ export class UpdateIntentController {
 
   @Post("/verify")
   @HttpCode(200)
-  @Header("Cache-Control", "no-store")
   @Throttle(verifyThrottle)
   verify(@Body() body: unknown) {
     const parsed = verifySchema.safeParse(body)

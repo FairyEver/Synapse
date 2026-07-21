@@ -51,7 +51,8 @@ export class UpdateIntentService {
         audience: "synapse-desktop",
       })
       const parsed = updateIntentClaimsSchema.parse(payload)
-      if (parsed.exp - parsed.iat !== UPDATE_INTENT_LIFETIME_SECONDS) {
+      const now = Math.floor(Date.now() / 1_000)
+      if (parsed.iat > now || parsed.exp - parsed.iat !== UPDATE_INTENT_LIFETIME_SECONDS) {
         throw new Error("Invalid update credential lifetime")
       }
       return { authorized: true }

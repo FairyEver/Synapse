@@ -153,6 +153,7 @@ describe("update intent HTTP API", () => {
     ["wrong audience", createCredential({ aud: "other-client" })],
     ["wrong scope", createCredential({ scope: "update:specific" })],
     ["wrong lifetime", createCredential({ exp: nowSeconds() + 121 })],
+    ["future-issued", createCredential({ iat: nowSeconds() + 3_600, exp: nowSeconds() + 3_720 })],
   ])("rejects a %s credential", async (_caseName, token) => {
     const response = await request(app.getHttpServer())
       .post("/api/desktop/update-intent/verify")
