@@ -562,7 +562,7 @@ if (!issueResponse.ok) {
 }
 
 const issued = await issueResponse.json()
-const deepLink = new URL(issued.deepLinkUrl)
+const deepLink = new URL(issued.deepLink)
 const token = deepLink.searchParams.get("token")
 if (deepLink.protocol !== "synapse:" || deepLink.hostname !== "update" || !token) {
   throw new Error("update intent issuance returned an invalid deep link")

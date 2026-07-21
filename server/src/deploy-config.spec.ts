@@ -301,6 +301,8 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("check_update_intent_service")
     expect(deployScript).toContain("/api/desktop/update-intent")
     expect(deployScript).toContain("/api/desktop/update-intent/verify")
+    expect(deployScript).toContain("new URL(issued.deepLink)")
+    expect(deployScript).not.toContain("new URL(issued.deepLinkUrl)")
     expect(deployScript).toContain("result.authorized !== true")
     expect(deployScript).not.toContain("console.log(token)")
     expect(deployScript.indexOf('check_body_contains "desktop update page"'))
