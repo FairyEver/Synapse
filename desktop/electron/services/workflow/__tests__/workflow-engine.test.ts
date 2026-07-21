@@ -1,5 +1,10 @@
+import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
+import type { DocumentTextExtractorService } from "../../../../app-capabilities/document-text-extractor/main/service"
+import { DocumentTextExtractionError } from "../../../../app-capabilities/document-text-extractor/shared/errors"
+import { documentTextExtractNodeExecutor } from "../../../../app-capabilities/document-text-extractor/workflow-node/executor.main"
+import { documentTextExtractNodeManifest } from "../../../../app-capabilities/document-text-extractor/workflow-node/manifest"
 import type { WorkflowDefinition } from "../../../../src/types/workflow"
 import type { NodeExecutor } from "../../../../workflow-nodes/types"
 import { defaultCodexNodeConfig, type CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
@@ -134,6 +139,80 @@ describe("WorkflowEngine", () => {
       outputs: { codexDebug },
       durationMs: 9,
     })
+  })
+
+  it("preserves the document extraction cancellation code after engine cancellation", async () => {
+    const abortController = new AbortController()
+    let rejectTask!: (error: unknown) => void
+    const result = new Promise<never>((_resolve, reject) => {
+      rejectTask = reject
+    })
+    const cancel = vi.fn(() => {
+      rejectTask(new DocumentTextExtractionError("EXTRACTION_CANCELLED"))
+      return true
+    })
+    const service = {
+      createTask: vi.fn(() => {
+        queueMicrotask(() => abortController.abort())
+        return {
+          result,
+          getState: () => ({ id: "task-1", status: "running" as const }),
+          subscribe: () => () => undefined,
+          cancel,
+        }
+      }),
+    } as unknown as DocumentTextExtractorService
+    nodeTypeRegistry.register(documentTextExtractNodeManifest, documentTextExtractNodeExecutor)
+    nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
+    const engine = new WorkflowEngine(
+      { sendToAgent: vi.fn() },
+      undefined,
+      { resolveService: vi.fn(() => service) } as never,
+    )
+    const definition: WorkflowDefinition = {
+      id: "workflow-document-text-extract",
+      name: "Document extraction workflow",
+      version: "v1",
+      createdAt: 1,
+      updatedAt: 1,
+      params: [],
+      nodes: [
+        {
+          id: "extract-1",
+          name: "文档文本提取",
+          type: "document_text_extract",
+          position: { x: 0, y: 0 },
+          config: { filePath: path.resolve("tmp", "report.pdf"), variables: [] },
+        },
+        {
+          id: "end",
+          name: "End",
+          type: "end",
+          position: { x: 200, y: 0 },
+          config: {
+            outputType: "text",
+            template: "{{result}}",
+            variables: [{ name: "result", source: { type: "node_output", node: "extract-1" } }],
+          },
+        },
+      ],
+      edges: [{ id: "edge-1", from: "extract-1", to: "end" }],
+    }
+
+    const runResult = await engine.run(
+      definition,
+      {},
+      "run-1",
+      vi.fn(),
+      abortController.signal,
+    )
+
+    expect(runResult.nodeResults["extract-1"]).toMatchObject({
+      status: "cancelled",
+      error: "EXTRACTION_CANCELLED: 文档文本提取已取消。",
+    })
+    expect(runResult.status).toBe("cancelled")
+    expect(cancel).toHaveBeenCalledOnce()
   })
 
   it("passes claude code final output to downstream node bindings", async () => {

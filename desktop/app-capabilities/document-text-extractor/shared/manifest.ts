@@ -1,6 +1,7 @@
 import {
   DOCUMENT_TEXT_EXTRACTOR_APP_ID,
   DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID,
+  DOCUMENT_TEXT_EXTRACT_WORKFLOW_NODE_TYPE,
   DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME,
 } from "./capability"
 
@@ -11,5 +12,5 @@ export const documentTextExtractorCapabilityManifest = {
   },
   capabilities: [DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID],
   mcpTools: [DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME],
-  workflowNodes: [],
+  workflowNodes: [DOCUMENT_TEXT_EXTRACT_WORKFLOW_NODE_TYPE],
 } as const

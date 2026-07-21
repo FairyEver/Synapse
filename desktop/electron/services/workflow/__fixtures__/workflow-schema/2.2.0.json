@@ -1,0 +1,28 @@
+{
+  "meta": { "schemaVersion": "2.2.0" },
+  "id": "current-workflow",
+  "name": "当前工作流",
+  "version": "v_1720000000000_00000000_current",
+  "createdAt": 1720000000000,
+  "updatedAt": 1720000000000,
+  "params": [],
+  "nodes": [
+    {
+      "id": "text",
+      "name": "文本",
+      "type": "text",
+      "position": { "x": 0, "y": 0 },
+      "config": { "template": "固定文本", "variables": [] }
+    },
+    {
+      "id": "end",
+      "name": "结束",
+      "type": "end",
+      "position": { "x": 400, "y": 0 },
+      "config": { "outputType": "text", "template": "", "variables": [] }
+    }
+  ],
+  "edges": [
+    { "id": "text-to-end", "from": "text", "to": "end" }
+  ]
+}

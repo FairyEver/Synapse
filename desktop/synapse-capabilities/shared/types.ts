@@ -1,6 +1,6 @@
 import type { CapabilityId } from "./naming"
 
-export type SynapseActionSource = "api" | "mcp-stdio" | "mcp-http"
+export type SynapseActionSource = "api" | "mcp-stdio" | "mcp-http" | "workflow"
 
 export type DispatchActorIdentity =
   | { readonly kind: "user"; readonly id?: string; readonly display?: string }
