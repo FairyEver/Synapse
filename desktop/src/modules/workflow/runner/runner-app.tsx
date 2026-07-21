@@ -498,7 +498,7 @@ export function WorkflowRunnerApp() {
         </div>
       )}
       <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
-        <ResizablePanel>
+        <ResizablePanel className="min-w-0 overflow-hidden">
           {viewMode === "dag" ? (
             <DagView
               definition={definition}
@@ -527,6 +527,7 @@ export function WorkflowRunnerApp() {
           <>
             <ResizableHandle withHandle />
             <ResizablePanel
+              className="min-w-0 overflow-hidden"
               defaultSize={460}
               minSize={320}
               maxSize={900}

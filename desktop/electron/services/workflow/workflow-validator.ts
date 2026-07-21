@@ -140,7 +140,7 @@ function collectTemplateTexts(node: WorkflowDefinition["nodes"][number]): string
       pushString(cfg.mcpConfigPath)
       pushStringArray(cfg.additionalDirectories)
     }
-  } else if (node.type === "end") {
+  } else if (node.type === "text" || node.type === "end") {
     pushString(cfg.template)
   } else if (node.type === "http_request") {
     pushString(cfg.url)

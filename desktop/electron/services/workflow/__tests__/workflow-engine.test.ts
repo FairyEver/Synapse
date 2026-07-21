@@ -9,6 +9,8 @@ import { claudeCodeNodeManifest } from "../../../../workflow-nodes/claude-code/m
 import { endNodeExecutor } from "../../../../workflow-nodes/end/executor.main"
 import { endNodeManifest } from "../../../../workflow-nodes/end/manifest"
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
+import { textNodeExecutor } from "../../../../workflow-nodes/text/executor.main"
+import { textNodeManifest } from "../../../../workflow-nodes/text/manifest"
 import { workflowCallNodeExecutor } from "../../../../workflow-nodes/workflow-call/executor.main"
 import { workflowCallNodeManifest } from "../../../../workflow-nodes/workflow-call/manifest"
 import { WorkflowEngine } from "../workflow-engine"
@@ -24,6 +26,53 @@ vi.mock("../../log-store", () => ({
 }))
 
 describe("WorkflowEngine", () => {
+  it("records text-node variables and output without labeling the template as a prompt", async () => {
+    nodeTypeRegistry.register(textNodeManifest, textNodeExecutor)
+    nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
+    const engine = new WorkflowEngine({ sendToAgent: vi.fn() })
+    const definition: WorkflowDefinition = {
+      id: "workflow-text",
+      name: "Text workflow",
+      version: "v1",
+      createdAt: 1,
+      updatedAt: 1,
+      params: [],
+      nodes: [
+        {
+          id: "text-1",
+          name: "文本",
+          type: "text",
+          position: { x: 0, y: 0 },
+          config: {
+            template: "{{value}}",
+            variables: [{ name: "value", source: { type: "static", value: "fixed" } }],
+          },
+        },
+        {
+          id: "end",
+          name: "End",
+          type: "end",
+          position: { x: 200, y: 0 },
+          config: {
+            outputType: "text",
+            template: "{{result}}",
+            variables: [{ name: "result", source: { type: "node_output", node: "text-1" } }],
+          },
+        },
+      ],
+      edges: [{ id: "edge-1", from: "text-1", to: "end" }],
+    }
+
+    const result = await engine.run(definition, {}, "run-1", vi.fn())
+
+    expect(result.nodeResults["text-1"]).toMatchObject({
+      status: "success",
+      input: { variables: { value: "fixed" } },
+      output: "fixed",
+    })
+    expect(result.nodeResults["text-1"]?.input).not.toHaveProperty("prompt")
+  })
+
   it("applies workflow default timeout to codex nodes with blank timeout", async () => {
     const receivedConfigs: CodexNodeConfig[] = []
     const codexExecutor: NodeExecutor<CodexNodeConfig> = {

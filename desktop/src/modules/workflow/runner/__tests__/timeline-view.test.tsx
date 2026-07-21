@@ -119,6 +119,67 @@ describe("TimelineView", () => {
       root.unmount()
     })
   })
+
+  it("tracks an empty string as a present output", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <TimelineView
+          definition={definition()}
+          nodeResults={{ "node-1": { ...nodeResult(), output: "" } }}
+          selectedNodeId={null}
+          onNodeSelect={vi.fn()}
+        />,
+      )
+    })
+
+    const nodeRow = Array.from(container.querySelectorAll("div"))
+      .find((candidate) => candidate.textContent?.includes("Prompt node") && candidate.className.includes("cursor-pointer"))
+    await act(async () => {
+      nodeRow?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(track).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ hasOutput: true }),
+    }))
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
+
+  it("shows completed node durations with readable minute and second units", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <TimelineView
+          definition={definition()}
+          nodeResults={{
+            "node-1": {
+              ...nodeResult(),
+              status: "success",
+              durationMs: 72_000,
+              error: undefined,
+            },
+          }}
+          selectedNodeId={null}
+          onNodeSelect={vi.fn()}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain("耗时 1分钟12秒")
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
 })
 
 function definition(): WorkflowDefinition {

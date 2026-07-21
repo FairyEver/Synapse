@@ -2,6 +2,7 @@ import type { ComponentType } from "react"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowParam } from "@/types/workflow"
 import type { WorkflowValidationDisplayItem } from "@/modules/workflow/editor/validation-display"
+import { TextNodePanel } from "./text/panel"
 import { PromptNodePanel } from "./prompt/panel"
 import { SwitchNodePanel } from "./switch/panel"
 import { EndNodePanel } from "./end/panel"
@@ -32,6 +33,7 @@ type PanelComponent = ComponentType<NodePanelProps>
 // Cast is required because each panel uses a narrower config type; the cast is
 // safe because node.config is always passed as Record<string, unknown> at the call site.
 const panelRegistry = new Map<string, PanelComponent>([
+  ["text", TextNodePanel as unknown as PanelComponent],
   ["prompt", PromptNodePanel as unknown as PanelComponent],
   ["switch", SwitchNodePanel as unknown as PanelComponent],
   ["end", EndNodePanel as unknown as PanelComponent],

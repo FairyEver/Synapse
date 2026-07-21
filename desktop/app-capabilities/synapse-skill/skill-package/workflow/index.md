@@ -22,6 +22,7 @@ Do not simulate share import by calling `app_workflow_definition_create` or `app
 
 ## Node Types
 
+- **text** — Builds one deterministic text output from a template and explicit variable bindings. Empty templates return an empty string. No provider or project needed.
 - **prompt** — Sends a prompt to an AI model, returns the response as output. Requires a provider.
 - **switch** — Evaluates input via AI, returns a branch label. Only the matching branch's downstream nodes execute. Requires a provider.
 - **http_request** — Sends an HTTP request (GET/POST/PUT/PATCH/DELETE) and returns the response. Supports headers, query params, JSON/text body, auth (bearer/basic), and timeout. No provider needed.
@@ -34,7 +35,7 @@ Do not simulate share import by calling `app_workflow_definition_create` or `app
 
 ## Provider / Model Configuration
 
-Only **prompt** and **switch** nodes require a provider (AI service), model tier, and execution project. **script**, **codex**, and **claude_code** nodes require an execution project but do not use `providerId` or `modelTier`. **http_request**, **workflow_call**, and **document_template_docx_generate** execute without provider configuration on that node. Inside a workflow called by **workflow_call**, child prompt/switch nodes still need effective project/provider/model settings, and child script/codex/claude_code nodes still need an effective project. Configure project/provider/model with these exact field names:
+Only **prompt** and **switch** nodes require a provider (AI service), model tier, and execution project. **script**, **codex**, and **claude_code** nodes require an execution project but do not use `providerId` or `modelTier`. **text**, **http_request**, **workflow_call**, and **document_template_docx_generate** execute without provider or project configuration on that node. Inside a workflow called by **workflow_call**, child prompt/switch nodes still need effective project/provider/model settings, and child script/codex/claude_code nodes still need an effective project. Configure project/provider/model with these exact field names:
 
 - **Workflow defaults** — Set `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optionally `defaultNodeTimeoutMins` on the workflow definition. Prompt/switch nodes inherit project/provider/model/timeout defaults unless they override; script nodes use `defaultProjectId` as their execution project; codex/claude_code nodes inherit project and timeout defaults unless they override. When no timeout is configured for prompt/switch/codex/claude_code, the default is 60 minutes.
 - **Node overrides** — Set `projectId`, `providerId`, `modelTier`, and optionally `timeoutMins` directly on prompt/switch config. For codex config, set Codex CLI fields such as `projectId`, `workingDirectory`, `timeoutMins`, `enableSearch`, `additionalWritableDirs`, `images`, `configOverrides`, and debug or safety flags. For claude_code config, set Claude Code CLI fields such as `projectId`, `workingDirectory`, `timeoutMins`, `permissionMode`, `model`, `settingSources`, `settingsPath`, `mcpConfigPath`, `allowedTools`, `disallowedTools`, `additionalDirectories`, and debug flags. Do not set `providerId` or `modelTier` on codex or claude_code nodes.
@@ -124,7 +125,7 @@ Nodes declare a `variables` array. Each binding has:
 
 ## Template Fields
 
-Use `{{variableName}}` to interpolate bound variables into prompt text, codex/claude_code prompt text, end output templates, HTTP request text fields, and workflow_call child parameter templates. Script node variables are injected as environment variables instead of template text; do not write `{{variableName}}` inside `script`. Use `$variableName` in POSIX, `%variableName%` in cmd, or `$env:variableName` in PowerShell. A single file/directory variable is its path string; a multi-resource variable is an ordered JSON array of paths. All referenced template variables must be declared in the node's `variables` array.
+Use `{{variableName}}` to interpolate bound variables into text-node output templates, prompt text, codex/claude_code prompt text, end output templates, HTTP request text fields, and workflow_call child parameter templates. A text node preserves whitespace exactly, accepts an empty template as `""`, and does not receive upstream output unless that output is explicitly bound and referenced. Script node variables are injected as environment variables instead of template text; do not write `{{variableName}}` inside `script`. Use `$variableName` in POSIX, `%variableName%` in cmd, or `$env:variableName` in PowerShell. A single file/directory variable is its path string; a multi-resource variable is an ordered JSON array of paths. All referenced template variables must be declared in the node's `variables` array.
 
 Script node `node_output` is the exact stdout string. If a downstream node needs a path, ID, JSON scalar, or other single value, write scripts with `printf` or strip inside the producing script so the output does not include an accidental trailing newline.
 

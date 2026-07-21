@@ -20,14 +20,17 @@ interface PromptEditorProps {
   variables: VariableBinding[]
   placeholder?: string
   rows?: number
+  enableSkillShortcuts?: boolean
 }
 
-function useClaudeCodeGlobalSkillNames(): { skillNames: string[]; refresh: () => void } {
+function useClaudeCodeGlobalSkillNames(enabled: boolean): { skillNames: string[]; refresh: () => void } {
   const [skillNames, setSkillNames] = useState<string[]>([])
   const activeScanRequestRef = useRef<string | null>(null)
   const requestIdRef = useRef(0)
 
   const refresh = useCallback(() => {
+    if (!enabled) return
+
     const requestId = requestIdRef.current + 1
     requestIdRef.current = requestId
 
@@ -63,9 +66,11 @@ function useClaudeCodeGlobalSkillNames(): { skillNames: string[]; refresh: () =>
         }
       }
     })()
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
+    if (!enabled) return
+
     refresh()
 
     return () => {
@@ -80,20 +85,29 @@ function useClaudeCodeGlobalSkillNames(): { skillNames: string[]; refresh: () =>
         })
       })
     }
-  }, [refresh])
+  }, [enabled, refresh])
 
   return { skillNames, refresh }
 }
 
-export function PromptEditor({ value, onChange, onBlur, variables, placeholder, rows = 8 }: PromptEditorProps) {
+export function PromptEditor({
+  value,
+  onChange,
+  onBlur,
+  variables,
+  placeholder,
+  rows = 8,
+  enableSkillShortcuts = true,
+}: PromptEditorProps) {
   const editorRef = useRef<ReactCodeMirrorRef>(null)
-  const { skillNames, refresh: refreshSkillNames } = useClaudeCodeGlobalSkillNames()
+  const { skillNames, refresh: refreshSkillNames } = useClaudeCodeGlobalSkillNames(enableSkillShortcuts)
   const options = useMemo(() => buildPromptShortcutOptions({ variables, skillNames }), [variables, skillNames])
   const minHeight = `${Math.max(rows, 3) * 20}px`
 
   const completionSource = useCallback((context: CompletionContext): CompletionResult | null => {
     const match = matchPromptShortcutTrigger(context.state.doc.toString(), context.pos)
     if (!match) return null
+    if (match.kind === "skill" && !enableSkillShortcuts) return null
 
     const sourceOptions = match.kind === "variable" ? options.variables : options.skills
     if (sourceOptions.length === 0) return null
@@ -109,7 +123,7 @@ export function PromptEditor({ value, onChange, onBlur, variables, placeholder, 
       })),
       validFor: match.kind === "variable" ? /^@[^\s@/]*$/ : /^\/[^\s@/]*$/,
     }
-  }, [options])
+  }, [enableSkillShortcuts, options])
 
   const extensions = useMemo(() => [
     autocompletion({ override: [completionSource] }),
@@ -125,10 +139,12 @@ export function PromptEditor({ value, onChange, onBlur, variables, placeholder, 
       const cursor = update.state.selection.main
       if (!cursor.empty) return
       if (shouldStartPromptShortcutCompletion(update.state.doc.toString(), cursor.from)) {
+        const match = matchPromptShortcutTrigger(update.state.doc.toString(), cursor.from)
+        if (match?.kind === "skill" && !enableSkillShortcuts) return
         startCompletion(update.view)
       }
     }),
-  ], [completionSource, refreshSkillNames])
+  ], [completionSource, enableSkillShortcuts, refreshSkillNames])
 
   const insertTrigger = (trigger: "@" | "/") => {
     const view = editorRef.current?.view
@@ -178,16 +194,18 @@ export function PromptEditor({ value, onChange, onBlur, variables, placeholder, 
         >
           @ 变量
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-6 px-1.5 text-[10px]"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => insertTrigger("/")}
-        >
-          / Skill
-        </Button>
+        {enableSkillShortcuts ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-1.5 text-[10px]"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => insertTrigger("/")}
+          >
+            / Skill
+          </Button>
+        ) : null}
         <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">{value.length}字</span>
       </div>
     </div>

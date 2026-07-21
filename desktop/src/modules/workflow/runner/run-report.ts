@@ -225,7 +225,7 @@ function formatScalar(value: unknown): string {
 
 function formatTextValue(value: unknown): string {
   if (value === null || value === undefined) return "未记录"
-  if (value === "") return "（空）"
+  if (value === "") return "空字符串"
   return sanitizeWorkflowResultText(String(value))
 }
 

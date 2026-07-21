@@ -41,6 +41,40 @@ afterEach(() => {
 })
 
 describe("runnerNodeTypes", () => {
+  it("renders the text node card instead of falling back to an empty default node", async () => {
+    const TextNode = runnerNodeTypes.text
+    expect(TextNode).toBeTypeOf("function")
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <RunnerNodeResultsContext.Provider value={{}}>
+          <TextNode
+            id="node_text"
+            data={{ name: "公共：作业 JSON 写作规范", template: "写作规范", variables: [] }}
+            selected={false}
+            type="text"
+            zIndex={0}
+            isConnectable={false}
+            positionAbsoluteX={0}
+            positionAbsoluteY={0}
+            dragging={false}
+            draggable={false}
+            selectable
+            deletable={false}
+          />
+        </RunnerNodeResultsContext.Provider>,
+      )
+    })
+
+    expect(container.textContent).toContain("公共：作业 JSON 写作规范")
+    expect(container.textContent).toContain("写作规范")
+  })
+
   it("registers the document template node type", () => {
     expect(runnerNodeTypes.document_template_docx_generate).toBeTypeOf("function")
   })

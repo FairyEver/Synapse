@@ -12,7 +12,7 @@ Workflow definition responses include `meta.schemaVersion` (SemVer). Preserve it
 
 ### app_workflow_node_type_list
 
-List available node types with summaries. Current built-in node types include `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `codex`, `claude_code`, and `end`.
+List available node types with summaries. Current built-in node types include `text`, `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `codex`, `claude_code`, and `end`.
 
 **Params:** none
 **Returns:** `[{ type, title, subtitle, color }]`
@@ -30,6 +30,13 @@ Get full manifest and config JSON Schema for a node type.
 ## Node Type Config Reference
 
 These are the key config fields for each node type. Always call `app_workflow_node_type_describe` for the full JSON Schema.
+
+### text
+
+- `template` (string) — exact output template with optional `{{variable}}` placeholders; empty and whitespace-only strings are valid
+- `variables` (array) — explicit variable bindings
+
+The node does not call a model or script and does not require provider, project, or timeout fields. Incoming edges control execution only; they do not append upstream output. The node returns exactly one string output and cannot replace the required End node.
 
 ### prompt
 

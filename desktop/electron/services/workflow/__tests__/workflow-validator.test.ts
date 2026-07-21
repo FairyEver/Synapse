@@ -18,6 +18,23 @@ vi.mock("../../log-store", () => ({
 }))
 
 describe("validateWorkflow", () => {
+  it("accepts a text node with an empty template and no provider or project", () => {
+    const result = validateWorkflow(definitionWithTextNode())
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
+  it("rejects unbound template variables in text nodes", () => {
+    const result = validateWorkflow(definitionWithTextNode("{{missing}}"))
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      nodeId: "text-1",
+      message: expect.stringContaining("模板变量「missing」未绑定"),
+    }))
+  })
+
   it("rejects disconnected nodes as validation errors", () => {
     const result = validateWorkflow(definitionWithDisconnectedNode())
 
@@ -832,6 +849,28 @@ function definitionWithScriptNode(overrides: Partial<WorkflowDefinition> = {}): 
     ],
     edges: [{ id: "edge-1", from: "script-1", to: "end" }],
     ...overrides,
+  }
+}
+
+function definitionWithTextNode(template = ""): WorkflowDefinition {
+  return {
+    id: "workflow-text",
+    name: "Workflow",
+    version: "v1",
+    createdAt: 0,
+    updatedAt: 0,
+    params: [],
+    nodes: [
+      {
+        id: "text-1",
+        name: "文本",
+        type: "text",
+        position: { x: 0, y: 0 },
+        config: { template, variables: [] },
+      },
+      endNode(),
+    ],
+    edges: [{ id: "edge-1", from: "text-1", to: "end" }],
   }
 }
 

@@ -197,6 +197,46 @@ describe("NodeResultPanel", () => {
     })
   })
 
+  it("summarizes binary HTTP responses without rendering raw bytes", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const rawBody = "PK\u0003\u0004binary-docx-content-with-a-long-unbroken-sequence"
+
+    await act(async () => {
+      root.render(
+        <NodeResultPanel
+          result={{
+            ...nodeResult(),
+            error: undefined,
+            output: rawBody,
+            outputs: {
+              status: 200,
+              headers: {
+                "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "content-length": "17790",
+              },
+              body: rawBody,
+            },
+          }}
+          nodeName="HTTP node"
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    const renderedText = container.textContent ?? ""
+    const fieldLabels = Array.from(container.querySelectorAll("span")).map((node) => node.textContent)
+    expect(renderedText).toContain("二进制响应未显示")
+    expect(renderedText).toContain("17.4 KB")
+    expect(renderedText).not.toContain(rawBody)
+    expect(fieldLabels).not.toContain("body")
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
+
   it("renders content sections as markdown by default and can switch to plain text", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -265,6 +305,35 @@ describe("NodeResultPanel", () => {
     })
   })
 
+  it("distinguishes an empty-string output from a missing output", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <NodeResultPanel
+          result={{
+            ...nodeResult(),
+            input: { variables: {} },
+            output: "",
+            error: undefined,
+          }}
+          nodeName="Text node"
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain("输出")
+    expect(container.textContent).toContain("空字符串")
+    expect(container.textContent).not.toContain("无可展示的输出")
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
+
   it("constrains rendered markdown output so long content can wrap inside the panel", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -297,6 +366,7 @@ describe("NodeResultPanel", () => {
     expect(outputFrame?.className).toContain("min-w-0")
     expect(outputFrame?.className).toContain("max-w-full")
     expect(outputFrame?.className).toContain("overflow-hidden")
+    expect(outputFrame?.className).toContain("break-all")
     expect(markdownViewer?.className).toContain("max-w-full")
     expect(MARKDOWN_BODY_CLASSNAME).toContain("[&_code]:break-all")
     expect(MARKDOWN_BODY_CLASSNAME).toContain("[&_pre]:overflow-hidden")

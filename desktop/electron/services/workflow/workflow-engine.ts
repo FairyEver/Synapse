@@ -256,11 +256,12 @@ export class WorkflowEngine {
           const template = (cfg as Record<string, unknown>)["template"]
           const interpolatable = typeof prompt === "string" ? prompt : (typeof template === "string" ? template : undefined)
           const resolvedPrompt = interpolatable !== undefined ? interpolatePrompt(interpolatable, resolved) : undefined
+          const recordedPrompt = typeof prompt === "string" ? resolvedPrompt : undefined
 
           // Update NodeRunResult input for this node
           const nr = nodeResults[nodeId]
           if (nr) {
-            nr.input = { variables: resolved, ...(resolvedPrompt !== undefined ? { prompt: resolvedPrompt } : {}) }
+            nr.input = { variables: resolved, ...(recordedPrompt !== undefined ? { prompt: recordedPrompt } : {}) }
           }
           emit({ type: "node:started", runId, nodeId, startedAt: nr?.startedAt, result: nr ? { ...nr } : undefined })
 

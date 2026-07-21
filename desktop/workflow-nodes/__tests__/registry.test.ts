@@ -183,6 +183,7 @@ describe("NodeTypeRegistry", () => {
       "prompt",
       "script",
       "switch",
+      "text",
       "workflow_call",
     ])
     for (const manifest of manifests) {

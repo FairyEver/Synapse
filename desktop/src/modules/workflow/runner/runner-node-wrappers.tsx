@@ -8,6 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { TextNodeCard } from "../../../../workflow-nodes/text/card"
 import { PromptNodeCard } from "../../../../workflow-nodes/prompt/card"
 import { SwitchNodeCard } from "../../../../workflow-nodes/switch/card"
 import { EndNodeCard } from "../../../../workflow-nodes/end/card"
@@ -18,6 +19,7 @@ import { CodexNodeCard } from "../../../../workflow-nodes/codex/card"
 import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
 import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-template/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
+import type { TextNodeConfig } from "../../../../workflow-nodes/text/schema"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
 import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
 import type { EndNodeConfig } from "../../../../workflow-nodes/end/schema"
@@ -35,6 +37,24 @@ export const RunnerNodeResultsContext = createContext<Record<string, NodeRunResu
 export const RunnerOpenAgentConversationContext = createContext<
   ((target: SynapseAgentConversationTarget) => void) | undefined
 >(undefined)
+
+function RunnerTextNodeWrapper({ id, data, selected }: NodeProps) {
+  const nodeResults = useContext(RunnerNodeResultsContext)
+  const result = nodeResults[id]
+  const name = (data as { name?: string }).name
+  return (
+    <div className="relative">
+      <Handle type="target" position={Position.Left} />
+      <TextNodeCard
+        config={data as TextNodeConfig}
+        name={name}
+        selected={selected}
+        status={result?.status}
+      />
+      <Handle type="source" position={Position.Right} />
+    </div>
+  )
+}
 
 function AgentConversationNodeAction({ result }: { result?: NodeRunResult }) {
   const onOpenAgentConversation = useContext(RunnerOpenAgentConversationContext)
@@ -260,6 +280,7 @@ function RunnerDocumentTemplateNodeWrapper({ id, data, selected }: NodeProps) {
 }
 
 export const runnerNodeTypes = {
+  text: RunnerTextNodeWrapper,
   prompt: RunnerPromptNodeWrapper,
   switch: RunnerSwitchNodeWrapper,
   end: RunnerEndNodeWrapper,

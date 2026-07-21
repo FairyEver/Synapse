@@ -60,8 +60,16 @@ describe("workflow document migration", () => {
     expect(source).toEqual(original)
   })
 
-  it("validates the current historical fixture without rewriting its source", async () => {
+  it("migrates the previous minor fixture without rewriting its source", async () => {
     const source = await fixture("2.0.0")
+    const original = structuredClone(source)
+    const result = migrateWorkflowDocument(source)
+    expect(result).toMatchObject({ kind: "current", migrated: true })
+    expect(source).toEqual(original)
+  })
+
+  it("validates the current fixture without rewriting its source", async () => {
+    const source = await fixture("2.1.0")
     const original = structuredClone(source)
     const result = migrateWorkflowDocument(source)
     expect(result).toMatchObject({ kind: "current", migrated: false })
@@ -94,7 +102,7 @@ describe("workflow document migration", () => {
     expect(source).toEqual(original)
   })
 
-  it.each(["0.0.0", "1.0.0", "2.0.0"])(
+  it.each(["0.0.0", "1.0.0", "2.0.0", "2.1.0"])(
     "isolates %s documents whose node config violates the registered schema",
     async (version) => {
       const source = await fixture(version) as Record<string, unknown>
@@ -154,7 +162,7 @@ describe("workflow document migration", () => {
       (source.params as Array<Record<string, unknown>>)[0]!.allowMultiple = "yes"
     }],
   ])("rejects a current document with invalid %s structure", async (_field, mutate) => {
-    const source = await fixture("2.0.0") as Record<string, unknown>
+    const source = await fixture("2.1.0") as Record<string, unknown>
     source.params = [{ name: "topic", type: "text", default: null }]
     mutate(source)
     expect(migrateWorkflowDocument(source)).toMatchObject({ kind: "failed" })

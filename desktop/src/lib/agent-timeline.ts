@@ -414,17 +414,7 @@ function appendToolProgress(
   if (stringValue(event.event?.type) === "content_block_stop") {
     const progressIndex = matchingToolProgressIndex(current, progress)
     if (progressIndex === -1) return [...current]
-    const existing = current[progressIndex]
-    if (existing?.kind !== "toolProgress") return [...current]
-    return [
-      ...current.slice(0, progressIndex),
-      {
-        ...existing,
-        timestamp,
-        status: "stopped" as const,
-      },
-      ...current.slice(progressIndex + 1),
-    ]
+    return [...current.slice(0, progressIndex), ...current.slice(progressIndex + 1)]
   }
   const progressIndex = matchingToolProgressIndex(current, progress)
   if (progressIndex === -1) return [...current, progress]
@@ -433,6 +423,7 @@ function appendToolProgress(
   const next: SynapseAgentToolProgressTimelineItem = {
     ...existing,
     timestamp,
+    ...(!existing.toolUseId && progress.toolUseId ? { toolUseId: progress.toolUseId } : {}),
     toolName: existing.toolName === "工具" ? progress.toolName : existing.toolName,
     inputCharCount: existing.inputCharCount + progress.inputCharCount,
     status: "preparing",
@@ -468,10 +459,16 @@ function matchingToolProgressIndex(
   items: readonly SynapseAgentTimelineItem[],
   target: { readonly toolUseId?: string; readonly blockIndex?: number },
 ): number {
+  if (target.toolUseId) {
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index]
+      if (item?.kind === "toolProgress" && item.toolUseId === target.toolUseId) return index
+    }
+  }
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
-    if (item?.kind !== "toolProgress") continue
-    if (target.toolUseId && item.toolUseId === target.toolUseId) return index
+    if (item?.kind !== "toolProgress" || item.status !== "preparing") continue
+    if (target.toolUseId && item.toolUseId) continue
     if (typeof target.blockIndex === "number" && item.blockIndex === target.blockIndex) return index
   }
   return -1

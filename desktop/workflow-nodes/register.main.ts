@@ -1,4 +1,5 @@
 import { nodeTypeRegistry } from "./registry"
+import { textNodeManifest, textNodeExecutor } from "./text"
 import { promptNodeManifest, promptNodeExecutor } from "./prompt"
 import { switchNodeManifest, switchNodeExecutor } from "./switch"
 import { endNodeManifest, endNodeExecutor } from "./end"
@@ -10,6 +11,7 @@ import { claudeCodeNodeManifest, claudeCodeNodeExecutor } from "./claude-code"
 import { documentTemplateNodeManifest } from "../app-capabilities/document-template/workflow-node/manifest"
 import { documentTemplateNodeExecutor } from "../app-capabilities/document-template/workflow-node/executor.main"
 
+nodeTypeRegistry.register(textNodeManifest, textNodeExecutor)
 nodeTypeRegistry.register(promptNodeManifest, promptNodeExecutor)
 nodeTypeRegistry.register(switchNodeManifest, switchNodeExecutor)
 nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)

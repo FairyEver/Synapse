@@ -922,13 +922,10 @@ describe("AgentTimeline", () => {
       },
     }, "2026-06-27T00:00:00.000Z", "claude")
     const stopped = appendAgentTimelineEvent(progress, {
-      type: "stream",
-      blockIndex: 1,
-      toolUseId: "toolu-read",
-      event: {
-        type: "content_block_stop",
-        index: 1,
-      },
+      type: "error",
+      message: "Agent 在工具调用后中断，发送“继续”可接着执行。",
+      recoverable: true,
+      errorKind: "tool_use_interrupted",
     }, "2026-06-27T00:00:05.000Z", "claude")
 
     const nodes = groupTimelineDisplayEntries(timelineDisplayEntries(stopped), {

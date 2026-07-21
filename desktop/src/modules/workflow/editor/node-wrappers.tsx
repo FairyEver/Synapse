@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react"
 import { NodeContextMenu } from "./node-context-menu"
+import { TextNodeCard } from "../../../../workflow-nodes/text/card"
 import { PromptNodeCard } from "../../../../workflow-nodes/prompt/card"
 import { SwitchNodeCard } from "../../../../workflow-nodes/switch/card"
 import { EndNodeCard } from "../../../../workflow-nodes/end/card"
@@ -10,6 +11,7 @@ import { CodexNodeCard } from "../../../../workflow-nodes/codex/card"
 import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
 import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-template/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
+import type { TextNodeConfig } from "../../../../workflow-nodes/text/schema"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
 import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
 import type { EndNodeConfig } from "../../../../workflow-nodes/end/schema"
@@ -19,6 +21,19 @@ import type { WorkflowCallNodeConfig } from "../../../../workflow-nodes/workflow
 import type { CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
 import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
 import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/document-template/workflow-node/schema"
+
+export function TextNodeWrapper({ id, data, selected }: NodeProps) {
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="text">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <TextNodeCard config={data as TextNodeConfig} name={name} selected={selected} nodeId={id} />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
+  )
+}
 
 export function PromptNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
@@ -146,6 +161,7 @@ export function DocumentTemplateNodeWrapper({ id, data, selected }: NodeProps) {
 }
 
 export const nodeTypes = {
+  text: TextNodeWrapper,
   prompt: PromptNodeWrapper,
   switch: SwitchNodeWrapper,
   end: EndNodeWrapper,

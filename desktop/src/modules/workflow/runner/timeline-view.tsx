@@ -7,6 +7,7 @@ import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
 import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
 import { agentConversationTargetFromOutputs } from "@/lib/agent-conversation-target"
 import { NODE_STATUS_LABEL, NODE_STATUS_VARIANT } from "../lib/status-display"
+import { formatDurationMs } from "../lib/duration"
 import { useRunningTimer } from "./node-progress-bar"
 import { MessageSquare } from "lucide-react"
 
@@ -50,7 +51,7 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
         nodeType: typeOf(result.nodeId),
         status: result.status,
         hasError: Boolean(result.error),
-        hasOutput: (result.output != null && result.output !== "")
+        hasOutput: result.output != null
           || (result.outputs != null && Object.keys(result.outputs).length > 0),
       },
     })
@@ -95,19 +96,19 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
                 )}
                 {r.status === "success" && r.durationMs != null && (
                   <span className="text-xs text-muted-foreground">
-                    耗时 {r.durationMs < 1000 ? `${r.durationMs}ms` : `${(r.durationMs / 1000).toFixed(1)}s`}
+                    耗时 {formatDurationMs(r.durationMs)}
                   </span>
                 )}
                 {r.status === "failed" && (r.durationMs != null || r.error) && (
                   <span className="text-xs truncate max-w-48" title={r.error ?? undefined}>
-                    {r.durationMs != null && <span className="text-muted-foreground">{r.durationMs < 1000 ? `${r.durationMs}ms` : `${(r.durationMs / 1000).toFixed(1)}s`}</span>}
+                    {r.durationMs != null && <span className="text-muted-foreground">{formatDurationMs(r.durationMs)}</span>}
                     {r.durationMs != null && r.error && <span className="text-muted-foreground mx-1">·</span>}
                     {r.error && <span className="text-destructive">{r.error}</span>}
                   </span>
                 )}
                 {r.status === "cancelled" && (
                   <span className="text-xs truncate max-w-48 text-muted-foreground">
-                    {r.durationMs != null && <span>{r.durationMs < 1000 ? `${r.durationMs}ms` : `${(r.durationMs / 1000).toFixed(1)}s`}</span>}
+                    {r.durationMs != null && <span>{formatDurationMs(r.durationMs)}</span>}
                     {r.durationMs != null && r.error && <span className="mx-1">·</span>}
                     {r.error && <span>{r.error}</span>}
                   </span>

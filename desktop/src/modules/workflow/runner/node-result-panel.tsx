@@ -45,7 +45,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
         boundary: "renderer.workflow.runner.node-result",
         nodeId: result.nodeId,
         status: result.status,
-        hasOutput: Boolean(result.output),
+        hasOutput: result.output != null,
         hasError: Boolean(result.error),
         hasPrompt: Boolean(result.input.prompt),
         variableCount: Object.keys(result.input.variables).length,
@@ -56,10 +56,13 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
     })
     onClose()
   }
-  const structuredOutputs = resolveStructuredOutputs(result)
+  const binaryResponseSummary = describeBinaryHttpResponse(result.outputs)
+  const structuredOutputs = resolveStructuredOutputs(result, Boolean(binaryResponseSummary))
   const displayInputVariables = sanitizeWorkflowResultValue(result.input.variables) as Record<string, unknown>
   const displayPrompt = result.input.prompt ? sanitizeWorkflowResultText(result.input.prompt) : undefined
-  const displayOutput = result.output != null ? sanitizeWorkflowResultText(result.output) : undefined
+  const displayOutput = binaryResponseSummary
+    ? sanitizeWorkflowResultText(binaryResponseSummary)
+    : result.output != null ? sanitizeWorkflowResultText(result.output) : undefined
   const displayError = result.error ? sanitizeWorkflowResultText(result.error) : undefined
   const displayStructuredOutputs = structuredOutputs
     ? sanitizeWorkflowResultValue(structuredOutputs) as Record<string, unknown>
@@ -144,12 +147,12 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
               )}
             </ContentSection>
           )}
-          {displayOutput != null && displayOutput !== "" && (
+          {displayOutput != null && (
             <ContentSection title="输出" trackingName="workflow-runner-output-render-mode">
               {(mode) => (
                 <FieldList>
                   <FieldBlock label="结果">
-                    <TextContent content={displayOutput} mode={mode} />
+                    <TextContent content={displayOutput === "" ? "空字符串" : displayOutput} mode={mode} />
                   </FieldBlock>
                 </FieldList>
               )}
@@ -220,7 +223,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
             </div>
           )}
           {!result.input.prompt && !result.error && !activeBranchLabel
-            && (result.output == null || result.output === "")
+            && result.output == null
             && (!result.outputs || Object.keys(result.outputs).length === 0) && (
             <p className="text-muted-foreground">
               {result.status === "skipped" ? "节点因工作流分支逻辑被跳过，未执行" : result.status === "pending" ? "节点等待执行" : result.status === "running" ? "节点正在执行…" : result.status === "cancelled" ? "节点执行被取消" : "（无可展示的输出）"}
@@ -336,7 +339,7 @@ function TextContent({ className, content, empty = false, mode }: TextContentPro
 
   if (mode === "markdown") {
     return (
-      <div className={cn("min-w-0 max-w-full overflow-hidden rounded-md bg-muted p-3", className)}>
+      <div className={cn("min-w-0 max-w-full overflow-hidden break-all rounded-md bg-muted p-3", className)}>
         <MarkdownViewer content={content} mode="rendered" showTabs={false} surface="plain" />
       </div>
     )
@@ -402,13 +405,56 @@ function formatCliArgs(value: unknown): string | undefined {
   return formatOutputValue(value)
 }
 
-function resolveStructuredOutputs(result: NodeRunResult): Record<string, unknown> | undefined {
+function resolveStructuredOutputs(result: NodeRunResult, omitBody = false): Record<string, unknown> | undefined {
   if (!result.outputs || Object.keys(result.outputs).length === 0) return undefined
   const entries = Object.entries(result.outputs).filter(([key, value]) => (
     key !== "agentConversation"
     && !(key === "markdown" && typeof value === "string" && value === result.output)
+    && !(key === "body" && (omitBody || (typeof value === "string" && value === result.output)))
   ))
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function describeBinaryHttpResponse(outputs: Record<string, unknown> | undefined): string | undefined {
+  if (!outputs || !isRecord(outputs.headers)) return undefined
+  const contentType = recordStringValue(outputs.headers, "content-type")?.split(";", 1)[0]?.trim().toLowerCase()
+  if (!contentType || isTextContentType(contentType)) return undefined
+
+  const contentLength = recordStringValue(outputs.headers, "content-length")
+  const parsedLength = contentLength && /^\d+$/.test(contentLength) ? Number(contentLength) : undefined
+  const size = parsedLength === undefined ? "" : `，${formatByteSize(parsedLength)}`
+  return `二进制响应未显示：${contentType}${size}`
+}
+
+function recordStringValue(record: Record<string, unknown>, key: string): string | undefined {
+  const target = key.toLowerCase()
+  const entry = Object.entries(record).find(([recordKey, value]) => (
+    recordKey.toLowerCase() === target && typeof value === "string"
+  ))
+  return entry?.[1] as string | undefined
+}
+
+function isTextContentType(contentType: string): boolean {
+  if (contentType.startsWith("text/") || contentType.endsWith("+json") || contentType.endsWith("+xml")) {
+    return true
+  }
+  return [
+    "application/graphql",
+    "application/javascript",
+    "application/json",
+    "application/sql",
+    "application/toml",
+    "application/x-www-form-urlencoded",
+    "application/x-yaml",
+    "application/xml",
+    "application/yaml",
+  ].includes(contentType)
+}
+
+function formatByteSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function omitRecordKeys(record: Record<string, unknown>, keysToOmit: readonly string[]): Record<string, unknown> | undefined {

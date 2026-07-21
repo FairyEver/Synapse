@@ -7,6 +7,7 @@
 // renderer's safe entry point: it imports each `*/manifest.ts` directly and
 // never reaches into `index.ts` or `executor.main.ts`.
 import { nodeTypeRegistry } from "./registry"
+import { textNodeManifest } from "./text/manifest"
 import { promptNodeManifest } from "./prompt/manifest"
 import { switchNodeManifest } from "./switch/manifest"
 import { endNodeManifest } from "./end/manifest"
@@ -17,6 +18,7 @@ import { codexNodeManifest } from "./codex/manifest"
 import { claudeCodeNodeManifest } from "./claude-code/manifest"
 import { documentTemplateNodeManifest } from "../app-capabilities/document-template/workflow-node/manifest"
 
+nodeTypeRegistry.registerManifest(textNodeManifest)
 nodeTypeRegistry.registerManifest(promptNodeManifest)
 nodeTypeRegistry.registerManifest(switchNodeManifest)
 nodeTypeRegistry.registerManifest(endNodeManifest)

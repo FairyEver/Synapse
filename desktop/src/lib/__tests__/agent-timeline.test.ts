@@ -586,7 +586,7 @@ describe("agent timeline conversion", () => {
     ])
   })
 
-  it("keeps stopped tool progress when SDK closes the tool content block", () => {
+  it("removes provisional tool progress when SDK closes the tool content block", () => {
     const progress = appendAgentTimelineEvent([], {
       type: "stream",
       blockIndex: 1,
@@ -608,13 +608,55 @@ describe("agent timeline conversion", () => {
       },
     }, "2026-05-14T00:00:08.000Z", "claude")
 
-    expect(stopped).toEqual([
+    expect(stopped).toEqual([])
+  })
+
+  it("does not reuse error-stopped tool progress when a later tool reuses the block index", () => {
+    const firstProgress = appendAgentTimelineEvent([], {
+      type: "stream",
+      blockIndex: 0,
+      toolUseId: "toolu-first",
+      toolName: "Bash",
+      event: {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "tool_use", id: "toolu-first", name: "Bash" },
+      },
+    }, "2026-05-14T00:00:05.000Z", "claude")
+    const stopped = appendAgentTimelineEvent(firstProgress, {
+      type: "error",
+      message: "Agent 在工具调用后中断，发送“继续”可接着执行。",
+      recoverable: true,
+      errorKind: "tool_use_interrupted",
+    }, "2026-05-14T00:00:06.000Z", "claude")
+    const secondProgress = appendAgentTimelineEvent(stopped, {
+      type: "stream",
+      blockIndex: 0,
+      toolUseId: "toolu-second",
+      toolName: "Write",
+      event: {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "tool_use", id: "toolu-second", name: "Write" },
+      },
+    }, "2026-05-14T00:00:07.000Z", "claude")
+
+    expect(secondProgress).toEqual([
       expect.objectContaining({
         kind: "toolProgress",
-        toolUseId: "toolu-write",
+        toolUseId: "toolu-first",
+        toolName: "Bash",
         status: "stopped",
-        startedAt: "2026-05-14T00:00:05.000Z",
-        timestamp: "2026-05-14T00:00:08.000Z",
+      }),
+      expect.objectContaining({
+        kind: "error",
+        errorKind: "tool_use_interrupted",
+      }),
+      expect.objectContaining({
+        kind: "toolProgress",
+        toolUseId: "toolu-second",
+        toolName: "Write",
+        status: "preparing",
       }),
     ])
   })

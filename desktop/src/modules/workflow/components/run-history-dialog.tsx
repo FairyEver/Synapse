@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFrame, DialogFrameBody,
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
 import { errorDiagnostic } from "../lib/error-utils"
+import { formatDurationMs } from "../lib/duration"
 import type { WorkflowEvent, WorkflowRunListItem } from "@/types/workflow"
 
 const logger = createRendererLogger("workflow.run-history")
@@ -92,13 +93,6 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
     return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`
   }
 
-  const formatDuration = (startedAt: number, endedAt?: number) => {
-    if (!endedAt) return null
-    const ms = endedAt - startedAt
-    if (ms < 1000) return `${ms}ms`
-    return `${(ms / 1000).toFixed(1)}s`
-  }
-
   const handleOpenRunner = async (runId: string) => {
     track({
       component: "workflow",
@@ -158,7 +152,7 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
                 <div className="flex flex-col gap-2 pr-3">
                   {snapshots.map((s) => {
                     const firstError = getFirstError(s)
-                    const duration = formatDuration(s.startedAt, s.endedAt)
+                    const duration = s.endedAt == null ? null : formatDurationMs(s.endedAt - s.startedAt)
                     return (
                       <div
                         key={s.runId}

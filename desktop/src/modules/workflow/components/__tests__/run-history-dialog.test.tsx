@@ -178,6 +178,34 @@ describe("RunHistoryDialog", () => {
     expect(document.body.querySelector('[role="button"]')?.className).toContain("min-w-0")
   })
 
+  it("shows workflow durations with readable minute and second units", async () => {
+    installWorkflowBridge({
+      runHistory: vi.fn().mockResolvedValue([
+        createRunItem({
+          runId: "under-one-minute",
+          endedAt: Date.parse("2026-05-15T00:00:45.000Z"),
+        }),
+        createRunItem({
+          runId: "over-one-minute",
+          endedAt: Date.parse("2026-05-15T00:01:12.000Z"),
+        }),
+      ]),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<RunHistoryDialog open workflowId="workflow-1" onClose={vi.fn()} />)
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("45秒")
+    expect(document.body.textContent).toContain("1分钟12秒")
+  })
+
   it("tracks opening a workflow run without recording node output", async () => {
     const openRunner = vi.fn()
     installWorkflowBridge({

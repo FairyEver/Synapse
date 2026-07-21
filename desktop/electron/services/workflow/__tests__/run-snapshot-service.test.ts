@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest"
 
 import type { WorkflowRunSnapshot } from "../../../../src/types/workflow"
 import { RunSnapshotService } from "../run-snapshot-service"
+import { WORKFLOW_SCHEMA_VERSION } from "../workflow-document-migration"
 
 describe("RunSnapshotService", () => {
   it("prunes debug artifact directories with stale run snapshots", async () => {
@@ -58,7 +59,7 @@ describe("RunSnapshotService", () => {
       expect(loaded?.definitionMigration).toEqual({
         kind: "unsupported_future",
         sourceVersion: "3.0.0",
-        targetVersion: "2.0.0",
+        targetVersion: WORKFLOW_SCHEMA_VERSION,
       })
       await expect(readFile(file, "utf-8")).resolves.toBe(JSON.stringify(raw))
     } finally {

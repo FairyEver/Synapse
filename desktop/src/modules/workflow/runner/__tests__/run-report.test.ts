@@ -3,6 +3,18 @@ import type { NodeRunResult, WorkflowDefinition, WorkflowNode } from "@/types/wo
 import { formatNodeRunReport, formatWorkflowRunReport } from "../run-report"
 
 describe("workflow run reports", () => {
+  it("labels an empty-string node output explicitly", () => {
+    const report = formatNodeRunReport({
+      definition: workflowDefinition(),
+      node: workflowDefinition().nodes[0],
+      result: nodeResult("node-1", { output: "" }),
+      orderIndex: 1,
+    })
+
+    expect(report).toContain("## 输出")
+    expect(report).toContain("空字符串")
+  })
+
   it("formats a full workflow report with overview, ordering, and every node", () => {
     const report = formatWorkflowRunReport({
       definition: workflowDefinition(),

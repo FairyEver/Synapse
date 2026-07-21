@@ -15,6 +15,10 @@ vi.mock("../../../../workflow-nodes/provider-lookup-context", () => ({
 }))
 
 describe("nodeTypes", () => {
+  it("registers the text node type", () => {
+    expect(nodeTypes.text).toBeTypeOf("function")
+  })
+
   it("registers the document template node type", () => {
     expect(nodeTypes.document_template_docx_generate).toBeTypeOf("function")
   })
