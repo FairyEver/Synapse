@@ -13,6 +13,7 @@ import {
 import {
   directoriesForPathAttachments,
   hasUnconfiguredAttachmentDirectories,
+  mergeAdditionalDirectories,
   normalizeAgentAttachments,
 } from "./attachments"
 import {
@@ -105,7 +106,14 @@ export interface SessionManagerDeps {
 }
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000
-const AGENT_ATTACHMENT_DIRECTORIES_UNAVAILABLE_MESSAGE = "当前会话无法访问新附件路径。请开启新会话后重试。"
+const AGENT_ATTACHMENT_DIRECTORIES_UNAVAILABLE_MESSAGE = "当前会话未能授权新的附件目录，请重试。"
+
+export class AgentAttachmentDirectoryAuthorizationError extends Error {
+  constructor(cause?: unknown) {
+    super(AGENT_ATTACHMENT_DIRECTORIES_UNAVAILABLE_MESSAGE, { cause })
+    this.name = "AgentAttachmentDirectoryAuthorizationError"
+  }
+}
 
 export class SessionManager {
   private readonly deps: SessionManagerDeps
@@ -255,7 +263,24 @@ export class SessionManager {
         attachments,
         configuredDirectories: input.state.additionalDirectories ?? [],
       })) {
-        throw new Error(AGENT_ATTACHMENT_DIRECTORIES_UNAVAILABLE_MESSAGE)
+        if (!reusableLiveSession.grantAdditionalDirectories) {
+          throw new AgentAttachmentDirectoryAuthorizationError()
+        }
+        try {
+          await reusableLiveSession.grantAdditionalDirectories(additionalDirectories)
+        } catch (error) {
+          this.deps.logger?.warn("Granting attachment directories failed.", {
+            boundary: "agent-runtime.live-session.additional-directories",
+            projectId: this.deps.projectId,
+            conversationId: input.conversation.id,
+            ...errorDiagnostic(error),
+          })
+          throw new AgentAttachmentDirectoryAuthorizationError(error)
+        }
+        input.state.additionalDirectories = mergeAdditionalDirectories(
+          input.state.additionalDirectories ?? [],
+          additionalDirectories,
+        )
       }
       return { liveSession: reusableLiveSession, created: false }
     }

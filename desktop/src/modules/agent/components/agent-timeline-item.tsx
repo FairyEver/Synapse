@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import type {
   SynapseAgentDisplayProfile,
   SynapseAgentPendingPermission,
+  SynapseAgentPermissionScope,
   SynapseAgentTimelineItem,
   SynapseAgentToolProgressTimelineItem,
   SynapseAgentToolResultTimelineItem,
@@ -40,6 +41,7 @@ function AgentTimelineItem({
     behavior: "allow" | "deny",
     updatedInput?: Record<string, unknown>,
     message?: string,
+    scope?: SynapseAgentPermissionScope,
   ) => void | Promise<void>
 }) {
   switch (item.kind) {

@@ -164,6 +164,17 @@ export function hasUnconfiguredAttachmentDirectories(input: {
         directory.flavor === configured.flavor && isInsideOrEqual(directory, configured)))
 }
 
+export function mergeAdditionalDirectories(
+  ...directoryGroups: readonly (readonly string[])[]
+): readonly string[] {
+  const directories: ParsedAbsolutePath[] = []
+  for (const value of directoryGroups.flat()) {
+    const directory = parseAbsolutePath(value)
+    if (directory) addDirectory(directories, directory)
+  }
+  return directories.map((directory) => directory.value)
+}
+
 function isImageAttachment(attachment: AgentAttachment): attachment is AgentImageAttachment {
   return attachment.kind === "image"
 }

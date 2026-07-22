@@ -812,7 +812,7 @@ describe("SessionManager", () => {
     }))
   })
 
-  it("blocks existing live sessions when new external attachment directories were not configured", async () => {
+  it("grants new external attachment directories to an existing live session", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const createSession = vi.fn(() => new FakeLiveSession())
     const manager = new SessionManager({
@@ -835,6 +835,71 @@ describe("SessionManager", () => {
       message: baseMessage("default"),
     })
 
+    const reused = await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: {
+        ...baseMessage("default"),
+        attachments: [{
+          kind: "path",
+          path: "/Users/liyang/Desktop/report.pdf",
+          entryType: "file",
+        }],
+      },
+    })
+
+    expect(reused.created).toBe(false)
+    expect(reused.liveSession.grantAdditionalDirectories).toHaveBeenCalledWith([
+      "/Users/liyang/Desktop",
+    ])
+    expect(state.additionalDirectories).toEqual(["/Users/liyang/Desktop"])
+    expect(createSession).toHaveBeenCalledOnce()
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: {
+        ...baseMessage("default"),
+        attachments: [
+          {
+            kind: "path",
+            path: "/Users/liyang/Desktop/reports/nested.pdf",
+            entryType: "file",
+          },
+          {
+            kind: "path",
+            path: "/tmp/project/inside.md",
+            entryType: "file",
+          },
+        ],
+      },
+    })
+    expect(reused.liveSession.grantAdditionalDirectories).toHaveBeenCalledOnce()
+  })
+
+  it("does not update attachment directory state when dynamic authorization fails", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const liveSession = new FakeLiveSession()
+    liveSession.grantAdditionalDirectories.mockRejectedValueOnce(new Error("SDK update failed"))
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession: vi.fn(() => liveSession),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
     await expect(manager.getOrCreateSession({
       state,
       conversation: baseConversation(),
@@ -846,8 +911,8 @@ describe("SessionManager", () => {
           entryType: "file",
         }],
       },
-    })).rejects.toThrow("当前会话无法访问新附件路径")
-    expect(createSession).toHaveBeenCalledOnce()
+    })).rejects.toThrow("当前会话未能授权新的附件目录，请重试")
+    expect(state.additionalDirectories).toEqual([])
   })
 
   it("records the final model after provider env reply target env and model tier resolution", async () => {
@@ -1525,6 +1590,7 @@ class FakeLiveSession implements AgentLiveSession {
     this.closed = true
   })
   readonly cancelCurrentTurn?: () => Promise<boolean>
+  readonly grantAdditionalDirectories = vi.fn(async (_directories: readonly string[]) => {})
   mainThreadAgentName: string | undefined
   protected closed = false
   private closeError: Error | undefined

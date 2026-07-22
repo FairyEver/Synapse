@@ -5,6 +5,7 @@ import type {
   Options,
   PermissionMode,
   PermissionResult,
+  PermissionUpdate,
   Query,
   SDKMessage,
   SessionStore,
@@ -39,6 +40,7 @@ import { agentRuntimeErrorMessage } from "./error-message"
 import { bridgeSdkMessage, type AgentEventEnvelope } from "./sdk-event-bridge"
 import {
   buildClaudeUserMessageContent,
+  mergeAdditionalDirectories,
   normalizeAgentAttachments,
 } from "./attachments"
 import type {
@@ -62,6 +64,7 @@ export interface QueryLike {
   close(): void | Promise<void>
   streamInput?(stream: AsyncIterable<SDKUserMessage>): Promise<void>
   setPermissionMode?(mode: PermissionMode): Promise<void>
+  grantAdditionalDirectories?(directories: readonly string[]): Promise<void>
 }
 
 export type QueryFactory = (input: {
@@ -109,9 +112,12 @@ export interface ClaudeSDKRuntimeSettings {
 
 interface PendingPermission {
   readonly input: Record<string, unknown>
+  readonly sessionDirectoryUpdates: readonly SessionDirectoryPermissionUpdate[]
   readonly resolve: (decision: PermissionResult) => void
   readonly cleanup: () => void
 }
+
+type SessionDirectoryPermissionUpdate = Extract<PermissionUpdate, { type: "addDirectories" }>
 
 interface ForwardedAbortController {
   readonly controller: AbortController
@@ -164,6 +170,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly personaToolPolicy: ClaudeSDKPersonaToolPolicy | undefined
   private readonly toolPolicy: ClaudeSDKToolPolicy | undefined
   private readonly query: QueryLike
+  private additionalDirectories: readonly string[]
   private readonly abortController: AbortController | undefined
   private readonly abortCleanup: (() => void) | undefined
   private readonly pumpPromise: Promise<void>
@@ -194,6 +201,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.now = options.now ?? (() => new Date())
     this.mainThreadAgentName = options.agent
     this.agentDefinitionsHash = options.agentDefinitionsHash
+    this.additionalDirectories = mergeAdditionalDirectories(options.additionalDirectories ?? [])
     const forwardedAbort = createForwardedAbortController(options.abortSignal)
     this.abortController = forwardedAbort?.controller
     this.abortCleanup = forwardedAbort?.cleanup
@@ -254,9 +262,21 @@ export class ClaudeSDKSession implements AgentLiveSession {
       throw new Error(AGENT_PERMISSION_NOT_PENDING_MESSAGE)
     }
 
+    if (decision.behavior === "allow"
+      && decision.scope === "session"
+      && pending.sessionDirectoryUpdates.length === 0) {
+      throw new Error("当前权限请求不支持会话级目录授权。")
+    }
+
     this.permissions.delete(requestId)
     pending.cleanup()
-    pending.resolve(toPermissionResult(decision, pending.input))
+    if (decision.behavior === "allow" && decision.scope === "session") {
+      this.additionalDirectories = mergeAdditionalDirectories(
+        this.additionalDirectories,
+        pending.sessionDirectoryUpdates.flatMap((update) => update.directories),
+      )
+    }
+    pending.resolve(toPermissionResult(decision, pending.input, pending.sessionDirectoryUpdates))
   }
 
   nextEvent(): Promise<AgentEvent | null> {
@@ -291,6 +311,16 @@ export class ClaudeSDKSession implements AgentLiveSession {
       throw new Error("当前会话不支持切换权限模式")
     }
     await this.query.setPermissionMode(permissionMode)
+  }
+
+  async grantAdditionalDirectories(directories: readonly string[]): Promise<void> {
+    const nextDirectories = mergeAdditionalDirectories(this.additionalDirectories, directories)
+    if (sameDirectories(this.additionalDirectories, nextDirectories)) return
+    if (!this.query.grantAdditionalDirectories) {
+      throw new Error("当前会话不支持动态授权附件目录。")
+    }
+    await this.query.grantAdditionalDirectories(nextDirectories)
+    this.additionalDirectories = nextDirectories
   }
 
   async close(): Promise<void> {
@@ -362,8 +392,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
     if (options.systemPrompt) queryOptions.systemPrompt = options.systemPrompt
     if (options.tools !== undefined) queryOptions.tools = options.tools
     if (options.disallowedTools?.length) queryOptions.disallowedTools = [...options.disallowedTools]
-    if (options.additionalDirectories?.length) {
-      queryOptions.additionalDirectories = [...options.additionalDirectories]
+    if (this.additionalDirectories.length > 0) {
+      queryOptions.additionalDirectories = [...this.additionalDirectories]
     }
     if (options.onConversationTitle && !options.sdkSessionId) {
       queryOptions.sessionStore = conversationTitleSessionStore(options.onConversationTitle)
@@ -473,6 +503,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
     const requestId = this.nextPermissionRequestId()
     const timestamp = this.now().toISOString()
+    const sessionDirectoryUpdates = sessionDirectoryPermissionUpdates(context.suggestions)
     const event: AgentEvent = {
       type: "permissionRequest",
       requestId,
@@ -484,11 +515,15 @@ export class ClaudeSDKSession implements AgentLiveSession {
       projectId: this.projectId,
       sdkSessionId: this.sdkSessionId,
       timestamp,
+      ...(context.blockedPath ? { blockedPath: context.blockedPath } : {}),
+      ...(sessionDirectoryUpdates.length > 0
+        ? { sessionDirectoryGrantAvailable: true }
+        : {}),
     }
 
     this.eventQueue.push(event)
 
-    return this.awaitPermissionResponse(requestId, input, context)
+    return this.awaitPermissionResponse(requestId, input, context, sessionDirectoryUpdates)
   }
 
   private async requestUserQuestion(
@@ -518,13 +553,14 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
     this.eventQueue.push(event)
 
-    return this.awaitPermissionResponse(requestId, input, context)
+    return this.awaitPermissionResponse(requestId, input, context, [])
   }
 
   private awaitPermissionResponse(
     requestId: string,
     input: Record<string, unknown>,
     context: CanUseToolContext,
+    sessionDirectoryUpdates: readonly SessionDirectoryPermissionUpdate[],
   ): Promise<PermissionResult> {
     return new Promise<PermissionResult>((resolve) => {
       const abort = (): void => {
@@ -534,6 +570,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       context.signal.addEventListener("abort", abort, { once: true })
       this.permissions.set(requestId, {
         input,
+        sessionDirectoryUpdates,
         resolve,
         cleanup: () => context.signal.removeEventListener("abort", abort),
       })
@@ -796,6 +833,13 @@ class LazyQuery implements QueryLike {
     await (await this.query).setPermissionMode(mode)
   }
 
+  async grantAdditionalDirectories(directories: readonly string[]): Promise<void> {
+    this.throwIfFailed()
+    await (await this.query).applyFlagSettings({
+      permissions: { additionalDirectories: [...directories] },
+    })
+  }
+
   private throwIfFailed(): void {
     if (this.failed) throw this.failure
   }
@@ -832,11 +876,15 @@ function createForwardedAbortController(signal: AbortSignal | undefined): Forwar
 function toPermissionResult(
   decision: AgentPermissionDecision,
   originalInput: Record<string, unknown>,
+  sessionDirectoryUpdates: readonly SessionDirectoryPermissionUpdate[],
 ): PermissionResult {
   if (decision.behavior === "allow") {
     return {
       behavior: "allow",
       updatedInput: decision.updatedInput ?? originalInput,
+      ...(decision.scope === "session"
+        ? { updatedPermissions: [...sessionDirectoryUpdates] }
+        : {}),
     }
   }
 
@@ -845,6 +893,27 @@ function toPermissionResult(
     message: decision.message
       ?? "The user denied this tool use. Stop and wait for the user's instructions.",
   }
+}
+
+function sessionDirectoryPermissionUpdates(
+  suggestions: CanUseToolContext["suggestions"],
+): readonly SessionDirectoryPermissionUpdate[] {
+  const directories = (suggestions ?? [])
+    .filter((suggestion): suggestion is SessionDirectoryPermissionUpdate =>
+      suggestion.type === "addDirectories")
+    .flatMap((suggestion) => suggestion.directories)
+  const normalizedDirectories = mergeAdditionalDirectories(directories)
+  return normalizedDirectories.length > 0
+    ? [{
+        type: "addDirectories",
+        directories: [...normalizedDirectories],
+        destination: "session",
+      }]
+    : []
+}
+
+function sameDirectories(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
 function permissionCancelledResult(): PermissionResult {

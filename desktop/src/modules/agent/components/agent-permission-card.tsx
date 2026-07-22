@@ -5,14 +5,23 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
-import type { SynapseAgentPermissionRequestTimelineItem } from "@/types/agent"
+import type {
+  SynapseAgentPermissionRequestTimelineItem,
+  SynapseAgentPermissionScope,
+} from "@/types/agent"
 import { formatAgentInputText, sanitizeAgentRawInput } from "../utils"
 
 type AgentPermissionCardProps = {
   readonly item: SynapseAgentPermissionRequestTimelineItem
   readonly pending: boolean
   readonly isLatestPending: boolean
-  readonly onRespond: (requestId: string, behavior: "allow" | "deny") => void | Promise<void>
+  readonly onRespond: (
+    requestId: string,
+    behavior: "allow" | "deny",
+    updatedInput?: Record<string, unknown>,
+    message?: string,
+    scope?: SynapseAgentPermissionScope,
+  ) => void | Promise<void>
 }
 
 function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: AgentPermissionCardProps) {
@@ -29,7 +38,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
   const body = item.toolInput ? formatAgentInputText(item.toolInput) : formatRawInput(item.toolInputRaw)
   const showActions = pending
 
-  async function handleRespond(behavior: "allow" | "deny") {
+  async function handleRespond(behavior: "allow" | "deny", scope?: SynapseAgentPermissionScope) {
     if (submitting) return
     setSubmitting(true)
     track({
@@ -43,6 +52,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
         requestId: item.requestId,
         toolName: item.toolName,
         behavior,
+        ...(scope ? { scope } : {}),
         inputLength: body.length,
         hasRawInput: Boolean(item.toolInputRaw),
         ...(item.sdkSessionId ? { sdkSessionId: item.sdkSessionId } : {}),
@@ -51,7 +61,11 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
       },
     })
     try {
-      await onRespond(item.requestId, behavior)
+      if (scope) {
+        await onRespond(item.requestId, behavior, undefined, undefined, scope)
+      } else {
+        await onRespond(item.requestId, behavior)
+      }
     } catch {
       setSubmitting(false)
     }
@@ -103,11 +117,24 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
           <Button
             size="sm"
             disabled={submitting}
-            onClick={() => handleRespond("allow")}
+            variant={item.sessionDirectoryGrantAvailable ? "outline" : "default"}
+            onClick={() => handleRespond(
+              "allow",
+              item.sessionDirectoryGrantAvailable ? "once" : undefined,
+            )}
           >
             <ShieldCheck data-icon="inline-start" />
-            允许
+            {item.sessionDirectoryGrantAvailable ? "允许一次" : "允许"}
           </Button>
+          {item.sessionDirectoryGrantAvailable ? (
+            <Button
+              size="sm"
+              disabled={submitting}
+              onClick={() => handleRespond("allow", "session")}
+            >
+              本会话允许
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -47,6 +47,7 @@ export const SYNAPSE_AGENT_PERMISSION_MODES = [
 ] as const
 
 export type SynapseAgentPermissionMode = typeof SYNAPSE_AGENT_PERMISSION_MODES[number]
+export type SynapseAgentPermissionScope = "once" | "session"
 
 export type SynapseAgentEvent = SynapseAgentEventBase & (
   | {
@@ -82,6 +83,8 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
       toolInput?: string
       toolInputRaw?: Record<string, unknown>
       questions?: SynapseAgentUserQuestion[]
+      blockedPath?: string
+      sessionDirectoryGrantAvailable?: boolean
     }
   | {
       type: "result"
@@ -346,6 +349,8 @@ export interface SynapseAgentPermissionRequestTimelineItem extends SynapseAgentT
   readonly toolInput?: string
   readonly toolInputRaw?: Record<string, unknown>
   readonly questions?: readonly SynapseAgentUserQuestion[]
+  readonly blockedPath?: string
+  readonly sessionDirectoryGrantAvailable?: boolean
   readonly resolution?: SynapseAgentUserQuestionResolution
   readonly resolutionAttempt?: SynapseAgentUserQuestionResolution
 }
@@ -546,6 +551,8 @@ export interface SynapseAgentPendingPermission {
   readonly toolInput?: string
   readonly toolInputRaw?: Record<string, unknown>
   readonly questions?: readonly SynapseAgentUserQuestion[]
+  readonly blockedPath?: string
+  readonly sessionDirectoryGrantAvailable?: boolean
   readonly createdAt: string
 }
 

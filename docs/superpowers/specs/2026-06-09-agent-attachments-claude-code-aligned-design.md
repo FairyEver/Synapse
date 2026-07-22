@@ -185,13 +185,9 @@ Claude can only read files and folders it has access to. For path attachments:
 - de-duplicate directories and collapse children under an already added parent;
 - keep paths absolute in the prompt text so Claude can call `Read`, `Glob`, or `Grep` directly.
 
-`additionalDirectories` is session-level. If a user adds new external paths to an already-running SDK session, implementation must choose one of these safe patterns:
+`additionalDirectories` is session-level. New SDK sessions receive the complete initial directory set. The installed Claude Agent SDK exposes `Query.applyFlagSettings()`, so an existing live session is updated before the turn is sent. Because SDK flag settings are shallow-merged, every update must include the complete normalized and de-duplicated directory set. Only update the runtime state after the SDK call succeeds.
 
-- create the session with all current turn path directories before the first send when the session is new;
-- for existing live sessions, use an SDK-supported runtime settings update if available and verified;
-- otherwise restart or recreate the SDK session only after preserving conversation continuity, and document the trade-off.
-
-The implementation plan must verify whether the current installed SDK exposes a live method for adding directories. Do not guess.
+Dragging or pasting a path is explicit user authorization for that attachment directory. Plain message text is not parsed for paths and does not grant access. If the SDK later requests permission for an external path, preserve its `addDirectories` suggestion server-side and expose only the blocked path plus whether session authorization is available. “允许一次” keeps the existing one-time decision; “本会话允许” returns only filtered `addDirectories` updates with `destination: "session"`. Never infer a directory from text or the blocked path, accept a directory from Renderer, or write the grant to Claude settings files.
 
 ## Electron Validation
 

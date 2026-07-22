@@ -119,6 +119,39 @@ describe("AgentPermissionCard", () => {
     expect(JSON.stringify(trackMock.mock.calls)).not.toContain("pnpm test")
   })
 
+  it("shows session directory authorization only when the SDK supports it", () => {
+    const onRespond = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    act(() => {
+      root.render(
+        <AgentPermissionCard
+          item={{ ...permissionItem, sessionDirectoryGrantAvailable: true }}
+          pending
+          isLatestPending
+          onRespond={onRespond}
+        />,
+      )
+    })
+
+    expect(buttonByText(container, "允许一次")).toBeTruthy()
+    expect(buttonByText(container, "本会话允许")).toBeTruthy()
+
+    act(() => {
+      buttonByText(container, "本会话允许").click()
+    })
+    expect(onRespond).toHaveBeenCalledWith(
+      "request-1",
+      "allow",
+      undefined,
+      undefined,
+      "session",
+    )
+  })
+
   it("redacts raw SDK tool input fallback before rendering", () => {
     const onRespond = vi.fn()
     const container = document.createElement("div")

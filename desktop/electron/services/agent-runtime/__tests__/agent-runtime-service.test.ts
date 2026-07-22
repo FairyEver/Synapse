@@ -26,6 +26,39 @@ import type {
 } from "../types"
 
 describe("AgentRuntimeService", () => {
+  it("does not send a turn when live attachment directory authorization fails", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new AttachmentGrantFailureSession()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    await expect(service.send(baseMessage("start"))).resolves.toMatchObject({ resultText: "done" })
+    const result = await service.send({
+      ...baseMessage("read attachment"),
+      attachments: [{
+        kind: "path",
+        path: "/Users/liyang/Downloads/report.pdf",
+        entryType: "file",
+      }],
+    })
+
+    expect(session.sent).toEqual(["start"])
+    expect(result).toMatchObject({
+      error: "当前会话未能授权新的附件目录，请重试。",
+      events: [{
+        type: "error",
+        message: "当前会话未能授权新的附件目录，请重试。",
+        recoverable: true,
+      }],
+    })
+  })
+
   it("creates a fixed-persona conversation with the persona-bound model", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const getProvider = vi.fn(async () => ({
@@ -1122,6 +1155,45 @@ describe("AgentRuntimeService", () => {
     }])
     expect(JSON.stringify(session.responses)).not.toContain("[truncated]")
     await expect(turn).resolves.toMatchObject({ resultText: "write allowed" })
+  })
+
+  it("forwards session scope and lists only the safe directory permission capability", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new PermissionSession("conversation-a-permission-1", "read allowed", {
+      toolName: "Read",
+      toolInput: "/Users/liyang/Downloads/report.pdf",
+      blockedPath: "/Users/liyang/Downloads/report.pdf",
+      sessionDirectoryGrantAvailable: true,
+    })
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("read external path"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    expect(service.listPendingPermissions()[0]).toMatchObject({
+      blockedPath: "/Users/liyang/Downloads/report.pdf",
+      sessionDirectoryGrantAvailable: true,
+    })
+    await service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      scope: "session",
+      actor: { kind: "user" },
+    })
+
+    expect(session.responses).toEqual([{
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      scope: "session",
+    }])
+    await expect(turn).resolves.toMatchObject({ resultText: "read allowed" })
   })
 
   it("rejects updated input on regular tool permission responses", async () => {
@@ -3010,6 +3082,41 @@ class ScriptedSession implements AgentLiveSession {
   }
 }
 
+class AttachmentGrantFailureSession implements AgentLiveSession {
+  readonly agentType = "claude-sdk"
+  readonly sent: string[] = []
+  private readonly events: AgentEvent[] = []
+  private closed = false
+
+  async send(message: AgentMessage): Promise<boolean> {
+    this.sent.push(message.content)
+    this.events.push({ type: "result", content: "done", done: true })
+    return true
+  }
+
+  async respondPermission(): Promise<void> {}
+
+  async nextEvent(): Promise<AgentEvent | null> {
+    return this.events.shift() ?? null
+  }
+
+  currentSessionId(): string | undefined {
+    return "sdk-1"
+  }
+
+  alive(): boolean {
+    return !this.closed
+  }
+
+  async grantAdditionalDirectories(): Promise<void> {
+    throw new Error("SDK update failed")
+  }
+
+  async close(): Promise<void> {
+    this.closed = true
+  }
+}
+
 class StaticSkillRegistry extends SkillRegistry {
   constructor(private readonly skill: AgentSkill) {
     super({})
@@ -3091,6 +3198,7 @@ class PermissionSession implements AgentLiveSession {
   readonly responses: Array<{
     readonly requestId: string
     readonly behavior: string
+    readonly scope?: string
     readonly updatedInput?: Record<string, unknown>
   }> = []
   closed = false
@@ -3105,6 +3213,8 @@ class PermissionSession implements AgentLiveSession {
       readonly toolName: string
       readonly toolInput?: string
       readonly toolInputRaw?: Record<string, unknown>
+      readonly blockedPath?: string
+      readonly sessionDirectoryGrantAvailable?: boolean
     } = {
       toolName: "Bash",
       toolInput: "pwd",
@@ -3124,6 +3234,7 @@ class PermissionSession implements AgentLiveSession {
     this.responses.push({
       requestId,
       behavior: decision.behavior,
+      ...(decision.scope ? { scope: decision.scope } : {}),
       ...(decision.updatedInput ? { updatedInput: decision.updatedInput } : {}),
     })
     this.push({

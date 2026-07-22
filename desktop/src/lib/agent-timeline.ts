@@ -83,6 +83,8 @@ export function agentEventToTimelineItem(
         toolInput: event.toolInput,
         toolInputRaw: event.toolInputRaw,
         questions: event.questions,
+        blockedPath: event.blockedPath,
+        sessionDirectoryGrantAvailable: event.sessionDirectoryGrantAvailable,
       }
     case "result":
       return {
@@ -200,6 +202,8 @@ export function historyRecordToTimelineItem(
         toolInput: entry.content.includes("\n") ? entry.content.slice(entry.content.indexOf("\n") + 1) : undefined,
         toolInputRaw: recordMetadata(metadata, "toolInputRaw"),
         questions: questionsMetadata(metadata, "questions"),
+        blockedPath: stringMetadata(metadata, "blockedPath"),
+        sessionDirectoryGrantAvailable: booleanMetadata(metadata, "sessionDirectoryGrantAvailable"),
         resolution: userQuestionResolutionMetadata(metadata, "userQuestionResolution"),
         resolutionAttempt: userQuestionResolutionMetadata(metadata, "userQuestionResolutionAttempt"),
       }

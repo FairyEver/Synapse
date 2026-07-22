@@ -13,6 +13,7 @@ import type {
   SynapseAgentDisplayProfile,
   SynapseAgentPendingPermission,
   SynapseAgentPermissionMode,
+  SynapseAgentPermissionScope,
   SynapseAgentProviderState,
   SynapseAgentPublishedCommand,
   SynapseAgentSessionSummary,
@@ -101,6 +102,7 @@ export type AgentConversationWorkspaceController = {
     behavior: "allow" | "deny",
     updatedInput?: Record<string, unknown>,
     message?: string,
+    scope?: SynapseAgentPermissionScope,
   ) => Promise<void>
   readonly cancelTurn: (target?: AgentConversationTarget) => Promise<void>
   readonly forceKillTurn: (target?: AgentConversationTarget) => Promise<void>
@@ -674,8 +676,8 @@ function AgentConversationWorkspace({
         sending={chat.sending}
         pendingPermissions={currentPendingPermissions}
         onOpenReference={openReference}
-        onRespondPermission={(requestId, behavior, updatedInput, message) =>
-          chat.respondPermission({ projectId: target.projectId, requestId }, behavior, updatedInput, message)}
+        onRespondPermission={(requestId, behavior, updatedInput, message, scope) =>
+          chat.respondPermission({ projectId: target.projectId, requestId }, behavior, updatedInput, message, scope)}
         viewportRef={stick.viewportRef}
       />
 

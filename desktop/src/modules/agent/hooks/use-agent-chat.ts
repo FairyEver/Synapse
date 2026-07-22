@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef } from "react"
 import type {
   SynapseAgentPendingPermission,
   SynapseAgentPermissionMode,
+  SynapseAgentPermissionScope,
   SynapseAgentPublishedCommand,
   SynapseAgentProviderState,
   SynapseAgentSessionSummary,
@@ -63,6 +64,7 @@ type UseAgentChatState = {
     behavior: "allow" | "deny",
     updatedInput?: Record<string, unknown>,
     message?: string,
+    scope?: SynapseAgentPermissionScope,
   ) => Promise<void>
   cancelTurn: (target?: AgentConversationTarget) => Promise<void>
   forceKillTurn: (target?: AgentConversationTarget) => Promise<void>

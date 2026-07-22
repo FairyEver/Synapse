@@ -3,6 +3,31 @@ import { describe, expect, it } from "vitest"
 import { agentIpcModule } from "../ipc"
 
 describe("agent IPC event schema", () => {
+  it("preserves session directory permission capability on live events", () => {
+    const parsed = agentIpcModule.events.event.payload.parse({
+      domain: "agent",
+      type: "permissionRequest",
+      payload: {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        platform: "renderer",
+        event: {
+          type: "permissionRequest",
+          requestId: "permission-1",
+          toolName: "Read",
+          blockedPath: "/Users/liyang/Downloads/report.pdf",
+          sessionDirectoryGrantAvailable: true,
+        },
+      },
+      timestamp: "2026-07-22T00:00:00.000Z",
+    }) as { payload: { event: Record<string, unknown> } }
+
+    expect(parsed.payload.event).toMatchObject({
+      blockedPath: "/Users/liyang/Downloads/report.pdf",
+      sessionDirectoryGrantAvailable: true,
+    })
+  })
+
   it("preserves SDK event envelope correlation fields", () => {
     const parsed = agentIpcModule.events.event.payload.parse({
       domain: "agent",

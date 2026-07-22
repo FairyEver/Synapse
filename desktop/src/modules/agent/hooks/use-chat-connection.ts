@@ -6,6 +6,7 @@ import { localUserTimelineItem } from "@/lib/agent-timeline"
 import type {
   SynapseAgentPendingPermission,
   SynapseAgentPermissionMode,
+  SynapseAgentPermissionScope,
   SynapseAgentSessionSummary,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
@@ -78,6 +79,7 @@ type ChatConnectionResult = {
     behavior: "allow" | "deny",
     updatedInput?: Record<string, unknown>,
     message?: string,
+    scope?: SynapseAgentPermissionScope,
   ) => Promise<void>
   readonly cancelTurn: (target?: AgentConversationTarget) => Promise<void>
   readonly forceKillTurn: (target?: AgentConversationTarget) => Promise<void>
@@ -796,6 +798,7 @@ function useChatConnection(
     behavior: "allow" | "deny",
     updatedInput?: Record<string, unknown>,
     message?: string,
+    scope?: SynapseAgentPermissionScope,
   ) => {
     const { projectId, requestId } = target
     const permissionKey = pendingPermissionKey(target)
@@ -804,7 +807,7 @@ function useChatConnection(
     const bridge = requireSynapseBridge()
     dispatch({ type: "SET_ERROR", error: null })
     try {
-      await bridge.agent.respondPermission({ projectId, requestId, behavior, updatedInput, message })
+      await bridge.agent.respondPermission({ projectId, requestId, behavior, scope, updatedInput, message })
       try {
         await refreshPendingPermissions()
       } catch (refreshError) {

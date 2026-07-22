@@ -13,6 +13,45 @@ import { messageMethods } from "../ipc-messages"
 import { sessionMethods } from "../ipc-sessions"
 
 describe("agent IPC schemas", () => {
+  it("accepts session-scoped directory permission responses", () => {
+    expect(messageMethods.respondPermission.request.parse({
+      projectId: "project-1",
+      requestId: "permission-1",
+      behavior: "allow",
+      scope: "session",
+    })).toEqual({
+      projectId: "project-1",
+      requestId: "permission-1",
+      behavior: "allow",
+      scope: "session",
+    })
+  })
+
+  it("preserves directory permission capability without exposing SDK suggestions", () => {
+    const parsed = messageMethods.listPendingPermissions.response?.parse([{
+      requestId: "permission-1",
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      conversationId: "conversation-1",
+      toolName: "Read",
+      blockedPath: "/Users/liyang/Downloads/report.pdf",
+      sessionDirectoryGrantAvailable: true,
+      createdAt: "2026-07-22T00:00:00.000Z",
+      suggestions: [{ type: "addDirectories", directories: ["/Users/liyang/Downloads"] }],
+    }])
+
+    expect(parsed).toEqual([{
+      requestId: "permission-1",
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      conversationId: "conversation-1",
+      toolName: "Read",
+      blockedPath: "/Users/liyang/Downloads/report.pdf",
+      sessionDirectoryGrantAvailable: true,
+      createdAt: "2026-07-22T00:00:00.000Z",
+    }])
+  })
+
   it("preserves SDK init MCP server summaries", () => {
     const parsed = agentEventSchema.parse({
       type: "sessionInit",

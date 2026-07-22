@@ -242,6 +242,8 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     toolInput: z.string().optional(),
     toolInputRaw: jsonRecordSchema.optional(),
     questions: z.array(agentUserQuestionSchema).optional(),
+    blockedPath: z.string().optional(),
+    sessionDirectoryGrantAvailable: z.boolean().optional(),
     resolution: agentUserQuestionResolutionSchema.optional(),
     resolutionAttempt: agentUserQuestionResolutionSchema.optional(),
   }),
@@ -564,6 +566,8 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     toolInput: z.string().optional(),
     toolInputRaw: jsonRecordSchema.optional(),
     questions: z.array(agentUserQuestionSchema).optional(),
+    blockedPath: z.string().optional(),
+    sessionDirectoryGrantAvailable: z.boolean().optional(),
   }),
   z.object({
     ...agentEventBaseSchema,

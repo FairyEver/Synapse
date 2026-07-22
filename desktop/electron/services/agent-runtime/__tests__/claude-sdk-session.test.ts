@@ -1,5 +1,6 @@
 import type {
   PermissionResult,
+  PermissionUpdate,
   SDKMessage,
   SessionStore,
   SDKUserMessage,
@@ -166,6 +167,23 @@ describe("ClaudeSDKSession", () => {
     expect(getOptions()).toMatchObject({
       additionalDirectories: ["/Users/liyang/Desktop"],
     })
+  })
+
+  it("updates the SDK with the complete normalized directory set", async () => {
+    const grantAdditionalDirectories = vi.fn(async (_directories: readonly string[]) => {})
+    const { factory } = createQueryFactory({ grantAdditionalDirectories })
+    const session = createSession(factory, {
+      additionalDirectories: ["/Users/liyang/Desktop"],
+    })
+
+    await session.grantAdditionalDirectories(["/Users/liyang/Downloads"])
+    await session.grantAdditionalDirectories(["/Users/liyang/Desktop/reports"])
+    await session.grantAdditionalDirectories(["/Users/liyang"])
+
+    expect(grantAdditionalDirectories.mock.calls).toEqual([
+      [["/Users/liyang/Desktop", "/Users/liyang/Downloads"]],
+      [["/Users/liyang"]],
+    ])
   })
 
   it("loads local Claude Code rules, memory, skills, and project MCP configuration", () => {
@@ -840,6 +858,84 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("returns only SDK-suggested directory updates for session permission scope", async () => {
+    const grantAdditionalDirectories = vi.fn(async (_directories: readonly string[]) => {})
+    const { factory, getOptions } = createQueryFactory({ grantAdditionalDirectories })
+    const session = createSession(factory)
+    const input = { command: "cat /Users/liyang/Downloads/report.md" }
+    const permission = canUseTool(getOptions())("Bash", input, {
+      signal: new AbortController().signal,
+      blockedPath: "/Users/liyang/Downloads/report.md",
+      suggestions: [
+        {
+          type: "addRules",
+          rules: [{ toolName: "Bash", ruleContent: "cat *" }],
+          behavior: "allow",
+          destination: "localSettings",
+        },
+        {
+          type: "addDirectories",
+          directories: [
+            "/Users/liyang/Downloads",
+            "/Users/liyang/Downloads/reports",
+          ],
+          destination: "localSettings",
+        },
+      ],
+    })
+    const event = await session.nextEvent()
+
+    expect(event).toMatchObject({
+      type: "permissionRequest",
+      blockedPath: "/Users/liyang/Downloads/report.md",
+      sessionDirectoryGrantAvailable: true,
+    })
+    expect(JSON.stringify(event)).not.toContain("addDirectories")
+    if (event?.type !== "permissionRequest") throw new Error("expected permission request")
+
+    await session.respondPermission(event.requestId, {
+      behavior: "allow",
+      scope: "session",
+    })
+
+    await expect(permission).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: input,
+      updatedPermissions: [{
+        type: "addDirectories",
+        directories: ["/Users/liyang/Downloads"],
+        destination: "session",
+      }],
+    })
+
+    await session.grantAdditionalDirectories(["/Users/liyang/Desktop"])
+    expect(grantAdditionalDirectories).toHaveBeenCalledWith([
+      "/Users/liyang/Downloads",
+      "/Users/liyang/Desktop",
+    ])
+  })
+
+  it("rejects session permission scope without an SDK directory suggestion", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory)
+    const permission = canUseTool(getOptions())("Bash", { command: "pwd" }, {
+      signal: new AbortController().signal,
+      blockedPath: "/Users/liyang/Downloads/report.md",
+    })
+    const event = await session.nextEvent()
+    if (event?.type !== "permissionRequest") throw new Error("expected permission request")
+
+    await expect(session.respondPermission(event.requestId, {
+      behavior: "allow",
+      scope: "session",
+    })).rejects.toThrow("当前权限请求不支持会话级目录授权")
+    await session.respondPermission(event.requestId, { behavior: "allow", scope: "once" })
+    await expect(permission).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: { command: "pwd" },
+    })
+  })
+
   it("canUseTool returns the original ExitPlanMode input when allowed", async () => {
     const { factory, getOptions } = createQueryFactory()
     const session = createSession(factory)
@@ -1427,12 +1523,20 @@ function createSession(
 function canUseTool(options: Record<string, unknown>): (
   toolName: string,
   input: Record<string, unknown>,
-  context: { signal: AbortSignal },
+  context: {
+    signal: AbortSignal
+    suggestions?: PermissionUpdate[]
+    blockedPath?: string
+  },
 ) => Promise<PermissionResult> {
   return options.canUseTool as (
     toolName: string,
     input: Record<string, unknown>,
-    context: { signal: AbortSignal },
+    context: {
+      signal: AbortSignal
+      suggestions?: PermissionUpdate[]
+      blockedPath?: string
+    },
   ) => Promise<PermissionResult>
 }
 

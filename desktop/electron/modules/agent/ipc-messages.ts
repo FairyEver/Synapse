@@ -253,6 +253,7 @@ const sendRequestSchema = projectRequestSchema.extend({
 const respondPermissionRequestSchema = projectRequestSchema.extend({
   requestId: z.string().min(1),
   behavior: z.enum(["allow", "deny"]),
+  scope: z.enum(["once", "session"]).optional(),
   updatedInput: z.record(z.string(), z.unknown()).optional(),
   message: z.string().optional(),
 })
@@ -304,6 +305,8 @@ const pendingPermissionSchema = z.object({
   toolInput: z.string().optional(),
   toolInputRaw: z.record(z.string(), z.unknown()).optional(),
   questions: z.array(agentUserQuestionSchema).optional(),
+  blockedPath: z.string().optional(),
+  sessionDirectoryGrantAvailable: z.boolean().optional(),
   createdAt: z.string(),
 })
 
@@ -592,6 +595,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       await agent.respondPermission({
         requestId: request.requestId,
         behavior: request.behavior,
+        scope: request.scope,
         updatedInput: request.updatedInput,
         message: request.message,
         actor: { kind: "user" },

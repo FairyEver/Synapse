@@ -135,6 +135,25 @@ describe("agent timeline conversion", () => {
     }))
   })
 
+  it("restores session directory permission capability from history", () => {
+    expect(historyRecordToTimelineItem("session-1", {
+      role: "system",
+      content: "Read\n/Users/liyang/Downloads/report.pdf",
+      timestamp: "2026-07-22T00:00:00.000Z",
+      metadata: {
+        agentEventType: "permissionRequest",
+        requestId: "request-1",
+        toolName: "Read",
+        blockedPath: "/Users/liyang/Downloads/report.pdf",
+        sessionDirectoryGrantAvailable: true,
+      },
+    }, 2, "claude")).toEqual(expect.objectContaining({
+      kind: "permissionRequest",
+      blockedPath: "/Users/liyang/Downloads/report.pdf",
+      sessionDirectoryGrantAvailable: true,
+    }))
+  })
+
   it("restores an unconfirmed user question resolution attempt", () => {
     expect(historyRecordToTimelineItem("session-1", {
       role: "system",

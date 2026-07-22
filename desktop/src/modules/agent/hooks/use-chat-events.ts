@@ -287,6 +287,8 @@ function useChatEvents(
               toolInput: event.toolInput,
               toolInputRaw: event.toolInputRaw,
               questions: event.questions,
+              blockedPath: event.blockedPath,
+              sessionDirectoryGrantAvailable: event.sessionDirectoryGrantAvailable,
               createdAt: domainEvent.timestamp,
             }
             const key = pendingPermissionKey(pendingPermission)

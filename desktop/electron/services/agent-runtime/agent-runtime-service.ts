@@ -721,6 +721,8 @@ export class AgentRuntimeService {
       toolInput: sanitizePermissionText(pending.toolInput),
       toolInputRaw: sanitizePermissionRawInput(pending.toolInputRaw),
       questions: pending.questions,
+      blockedPath: pending.blockedPath,
+      sessionDirectoryGrantAvailable: pending.sessionDirectoryGrantAvailable,
       createdAt: pending.createdAt,
     }))
   }
@@ -937,6 +939,7 @@ export class AgentRuntimeService {
       try {
         await pending.liveSession.respondPermission(request.requestId, {
           behavior: request.behavior,
+          scope: request.scope,
           updatedInput: request.updatedInput,
           message: request.message,
         })

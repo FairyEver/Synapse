@@ -179,6 +179,8 @@ export interface AgentPermissionRequestEvent extends AgentEventBase {
   readonly toolInput?: string
   readonly toolInputRaw?: Record<string, unknown>
   readonly questions?: readonly AgentUserQuestion[]
+  readonly blockedPath?: string
+  readonly sessionDirectoryGrantAvailable?: boolean
 }
 
 export interface AgentResultMetadata {
@@ -297,9 +299,11 @@ export type AgentEvent =
   | AgentSdkEvent
 
 export type AgentPermissionBehavior = "allow" | "deny"
+export type AgentPermissionScope = "once" | "session"
 
 export interface AgentPermissionDecision {
   readonly behavior: AgentPermissionBehavior
+  readonly scope?: AgentPermissionScope
   readonly updatedInput?: Record<string, unknown>
   readonly message?: string
 }
@@ -321,6 +325,8 @@ export interface AgentPendingPermission {
   readonly toolInput?: string
   readonly toolInputRaw?: Record<string, unknown>
   readonly questions?: readonly AgentUserQuestion[]
+  readonly blockedPath?: string
+  readonly sessionDirectoryGrantAvailable?: boolean
   readonly createdAt: string
 }
 
@@ -341,6 +347,7 @@ export interface AgentLiveSession {
   close(): Promise<void>
   cancelCurrentTurn?(): Promise<boolean>
   setPermissionMode?(mode: string): Promise<void>
+  grantAdditionalDirectories?(directories: readonly string[]): Promise<void>
 }
 
 export interface AgentUsageCostBreakdownCny {

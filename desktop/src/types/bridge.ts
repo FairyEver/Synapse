@@ -272,6 +272,7 @@ import type {
   SynapseAgentStatus,
   SynapseAgentTimelineResult,
   SynapseAgentPermissionMode,
+  SynapseAgentPermissionScope,
 } from "./agent"
 import type {
   AgentConversationTarget,
@@ -1573,6 +1574,7 @@ export type SynapseBridge = {
         projectId: string
         requestId: string
         behavior: "allow" | "deny"
+        scope?: SynapseAgentPermissionScope
         updatedInput?: Record<string, unknown>
         message?: string
       },

@@ -45,7 +45,10 @@ import {
 import type { AgentCommandRouter, AgentCommandRouterResult } from "./command-router"
 import type { AgentGovernanceService } from "./governance"
 import type { AgentSessionRepository } from "./session-repository"
-import type { SessionManager } from "./session-manager"
+import {
+  AgentAttachmentDirectoryAuthorizationError,
+  type SessionManager,
+} from "./session-manager"
 import type { AgentProjectAfterTurnInput, AgentProjectAfterTurnOutput } from "./project-contributions"
 import { attachmentHistoryMetadata, withReadablePathAttachmentContent } from "./attachments"
 import type {
@@ -425,7 +428,12 @@ export class ConversationRouter {
               conversationId: turn.conversationId,
               ...queuedTurnFailureMetadata(error),
             })
-            const result = this.finishWithError(turn.message, turn.conversationId, messageText)
+            const result = this.finishWithError(
+              turn.message,
+              turn.conversationId,
+              messageText,
+              error instanceof AgentAttachmentDirectoryAuthorizationError,
+            )
             await this.persistFailureEvent(turn.conversationId, result.events[0])
             turn.resolve(result)
           }
@@ -1317,6 +1325,8 @@ export class ConversationRouter {
         toolInput: event.toolInput,
         toolInputRaw: event.toolInputRaw,
         questions: event.questions,
+        blockedPath: event.blockedPath,
+        sessionDirectoryGrantAvailable: event.sessionDirectoryGrantAvailable,
         createdAt: this.isoNow(),
         liveSession,
         resolve: settle,
@@ -1834,9 +1844,14 @@ export class ConversationRouter {
     message: AgentMessage,
     conversationId: string,
     error: string,
+    recoverable = false,
   ): AgentRuntimeTurnResult {
     const safeError = sanitizeErrorText(error)
-    const event: AgentEvent = { type: "error", message: safeError }
+    const event: AgentEvent = {
+      type: "error",
+      message: safeError,
+      ...(recoverable ? { recoverable: true } : {}),
+    }
     this.emitEvent(message, conversationId, event)
     return {
       conversationId,
@@ -2115,6 +2130,8 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
           toolName: event.toolName,
           toolInputSummary: truncateString(event.toolInput, MAX_SUMMARY_LENGTH),
           questions: event.questions,
+          blockedPath: event.blockedPath,
+          sessionDirectoryGrantAvailable: event.sessionDirectoryGrantAvailable,
         }),
       }
     case "error":

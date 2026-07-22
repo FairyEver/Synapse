@@ -2,6 +2,7 @@ import { useState, type Ref } from "react"
 import type {
   SynapseAgentDisplayProfile,
   SynapseAgentPendingPermission,
+  SynapseAgentPermissionScope,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
 import { useActivePhaseTicker } from "../hooks/use-active-phase-ticker"
@@ -36,6 +37,7 @@ function AgentTimeline({
     behavior: "allow" | "deny",
     updatedInput?: Record<string, unknown>,
     message?: string,
+    scope?: SynapseAgentPermissionScope,
   ) => void | Promise<void>
   readonly viewportRef: Ref<HTMLDivElement>
 }) {
