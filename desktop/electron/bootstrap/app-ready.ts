@@ -22,6 +22,7 @@ import { buildServiceRegistry } from "./registry"
 import { createSynapseSkillPreparedSourceProvider } from "../../app-capabilities/synapse-skill/main/prepared-source-provider"
 import type { SynapseSkillService } from "../../app-capabilities/synapse-skill/main/service"
 import { SYNAPSE_SKILL_SERVICE_ID } from "../../app-capabilities/synapse-skill/shared/capability"
+import type { CoreDatabaseService } from "./descriptors"
 
 const logger = createMainLogger("bootstrap.app-ready")
 
@@ -32,6 +33,7 @@ type InitializeReadyAppDeps = {
   setAllowAppQuit: (value: boolean) => void
   setProcessLevelCleanup?: (cleanup: (() => Promise<void>) | undefined) => void
   setWindowManager: (windowManager: WindowManager) => void
+  setProtocolActionRouter?: (router: CoreDatabaseService["actionRouter"] | undefined) => void
   shouldCreateMainWindowBeforeProtocolHandling?: () => boolean
   startProtocolHandling: (
     prepareBeforeNonAuthRoutes: (handledAuthCallbacks: number) => Promise<void>,
@@ -85,6 +87,12 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
       detail: result.degraded.map((failure) => `${failure.id}: ${failure.error?.message ?? "未知错误"}`).join("\n"),
       buttons: ["知道了"],
     })
+  }
+
+  try {
+    deps.setProtocolActionRouter?.(registry.get<CoreDatabaseService>("core.database").actionRouter)
+  } catch {
+    deps.setProtocolActionRouter?.(undefined)
   }
 
   try {

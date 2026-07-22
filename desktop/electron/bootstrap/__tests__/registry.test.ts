@@ -88,6 +88,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.drive-sync",
         "core.event-bus",
         "core.execution-isolation",
+        "core.file-opener",
         "core.http-test",
         "core.logging",
         "core.model-price",
@@ -263,6 +264,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.terminal",
       "core.sound-notifier",
       "core.text-extractor",
+      "core.file-opener",
       "provider",
     ])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([

@@ -84,7 +84,7 @@ describe("runnerNodeTypes", () => {
   })
 
   it("registers the default-app open-file node type", () => {
-    expect(runnerNodeTypes.open_file).toBeTypeOf("function")
+    expect(runnerNodeTypes.file_opener_file_open).toBeTypeOf("function")
   })
 
   it("opens the agent conversation directly from a DAG node card", async () => {

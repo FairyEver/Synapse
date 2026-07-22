@@ -35,6 +35,7 @@ import { driveSyncIpcModule } from "../modules/drive-sync/ipc"
 import { liveIpcModule } from "../modules/live/ipc"
 import { documentTemplateIpcModule } from "../../app-capabilities/document-template/main/ipc"
 import { textExtractorIpcModule } from "../../app-capabilities/text-extractor/main/ipc"
+import { fileOpenerIpcModule } from "../../app-capabilities/file-opener/main/ipc"
 import { terminalIpcModule } from "../../app-capabilities/terminal/main/ipc"
 import { quickInputIpcModule } from "../../app-capabilities/quick-input/main/ipc"
 import { agentPersonasIpcModule } from "../../app-capabilities/agent-personas/main/ipc"
@@ -79,6 +80,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(liveIpcModule, ctx)
   registry.register(documentTemplateIpcModule, ctx)
   registry.register(textExtractorIpcModule, ctx)
+  registry.register(fileOpenerIpcModule, ctx)
   registry.register(terminalIpcModule, ctx)
   registry.register(quickInputIpcModule, ctx)
   registry.register(secretsIpcModule, ctx)
@@ -122,6 +124,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   liveIpcModule,
   documentTemplateIpcModule,
   textExtractorIpcModule,
+  fileOpenerIpcModule,
   terminalIpcModule,
   quickInputIpcModule,
   secretsIpcModule,

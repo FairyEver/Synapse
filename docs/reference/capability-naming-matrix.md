@@ -59,6 +59,7 @@ For HTTP action, IPC channel, and preload bridge changes, see [API、IPC 与 Bri
 | `app.model_price.rule.disable` | `app_model_price_rule_disable` | `app.model_price.rule.disable` | `modelPriceRuleDisable` |
 | `app.settings.repository.item.list` | `app_settings_repository_item_list` | `app.settings.repository.item.list` | `repositoryItemList` |
 | `app.document_template.docx.generate` | `app_document_template_docx_generate` | `app.document_template.docx.generate` | `documentTemplateDocxGenerate` |
+| `app.file_opener.file.open` | `app_file_opener_file_open` | `app.file_opener.file.open` | `fileOpenerFileOpen` |
 | `app.automation.item.list` | `app_automation_item_list` | `app.automation.item.list` | `automationItemList` |
 | `app.automation.item.get` | `app_automation_item_get` | `app.automation.item.get` | `automationItemGet` |
 | `app.automation.item.create` | `app_automation_item_create` | `app.automation.item.create` | `automationItemCreate` |

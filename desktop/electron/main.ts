@@ -24,6 +24,7 @@ import {
 } from "./bootstrap"
 import { formatStartupFailureDialogMessage } from "./bootstrap/startup-error"
 import type { WindowManager } from "./runtime/window"
+import type { SynapseActionRouter } from "./capabilities/action-router"
 import { accountService } from "./services/account-service"
 import { createMainLogger } from "./services/log-store"
 import { skillRepositoryInstallWindowService } from "./services/skill-repository-install-window-service"
@@ -34,6 +35,7 @@ const mainWindowState = createMainWindowState()
 let allowAppQuit = false
 let processLevelCleanup: (() => Promise<void>) | undefined
 let windowManager: WindowManager | undefined
+let protocolActionRouter: SynapseActionRouter | undefined
 
 function focusOrCreateMainWindow(): void {
   showOrCreateMainWindow({
@@ -50,6 +52,14 @@ const protocolRouter = createProtocolUrlRouter({
   openSkillRepositoryInstallWindow: (request) => skillRepositoryInstallWindowService.open(request),
   publishUpdateOpenRequest: (automatic) => updateService.publishUpdateOpenRequest(automatic),
   verifyUpdateIntent: (token) => updateService.verifyUpdateIntent(token),
+  dispatchAppAction: async (capabilityId, params) => {
+    if (!protocolActionRouter) throw new Error("应用能力暂不可用")
+    return protocolActionRouter.dispatch(capabilityId, params, {
+      source: "app.deep_link",
+      actor: { kind: "user", id: "app-deep-link" },
+    })
+  },
+  showAppDeepLinkError: (message) => dialog.showErrorBox("无法处理应用链接", message),
 }, process.argv.filter(isSynapseProtocolUrl))
 
 attachProcessLevelLogging({
@@ -86,6 +96,9 @@ if (!gotSingleInstanceLock) {
       },
       setWindowManager: (manager) => {
         windowManager = manager
+      },
+      setProtocolActionRouter: (router) => {
+        protocolActionRouter = router
       },
       shouldCreateMainWindowBeforeProtocolHandling: protocolRouter.shouldCreateMainWindowBeforeStart,
       startProtocolHandling: protocolRouter.start,

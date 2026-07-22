@@ -10,6 +10,7 @@
 - [Git](/advanced/git)
 - [Database](/advanced/database)
 - [Document Template](/advanced/document-template)
+- [File Opener](/advanced/file-opener)
 - [Editor Scan](/advanced/editor-scan)
 - [Token Usage](/advanced/token-usage)
 - [Model Price](/advanced/model-price)

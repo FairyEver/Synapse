@@ -40,9 +40,9 @@ describe("validateWorkflow", () => {
     definition.nodes[0] = {
       id: "open-file-1",
       name: "默认应用打开",
-      type: "open_file",
+      type: "file_opener_file_open",
       position: { x: 0, y: 0 },
-      config: { filePath: "{{missing}}", variables: [] },
+      config: { path: "{{missing}}", variables: [] },
     }
     definition.edges[0] = { id: "edge-1", from: "open-file-1", to: "end" }
 

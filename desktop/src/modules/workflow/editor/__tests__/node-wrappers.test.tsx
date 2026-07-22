@@ -28,6 +28,6 @@ describe("nodeTypes", () => {
   })
 
   it("registers the default-app open-file node type", () => {
-    expect(nodeTypes.open_file).toBeTypeOf("function")
+    expect(nodeTypes.file_opener_file_open).toBeTypeOf("function")
   })
 })

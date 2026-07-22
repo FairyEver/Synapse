@@ -51,6 +51,7 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 | `app.automation.runtime.inspect` | `app_automation_runtime_inspect` | `app.automation.runtime.inspect` | `automationRuntimeInspect` |
 | `app.resource_repository.skill.create` | `app_resource_repository_skill_create` | `app.resource_repository.skill.create` | `contentSkillCreate` |
 | `app.document_template.docx.generate` | `app_document_template_docx_generate` | `app.document_template.docx.generate` | `documentTemplateDocxGenerate` |
+| `app.file_opener.file.open` | `app_file_opener_file_open` | `app.file_opener.file.open` | `fileOpenerFileOpen` |
 
 公开 JSON 字段使用 camelCase。
 
@@ -83,6 +84,7 @@ app.model_price.rule.list -> app_model_price_rule_list
 app.resource_repository.skill.create -> app_resource_repository_skill_create
 app.drive.file.upload -> app_drive_file_upload
 app.document_template.docx.generate -> app_document_template_docx_generate
+app.file_opener.file.open -> app_file_opener_file_open
 ```
 
 工具参数使用与 HTTP action 参数一致的公开 JSON 字段名。
@@ -132,7 +134,7 @@ Drive MCP 暴露云盘文件、文件夹、预览、下载、分享和整理能�
 
 ## App MCP
 
-App MCP 暴露系统 App 提供的可复用能力。`app_document_template_docx_generate` 用本地 `.docx` 模板和 JSON 对象生成 Word 文档；调用时必须提供 `templatePath`、`outputPath`，并且在 `dataPath` 和内联 `data` 中二选一。默认不覆盖已有输出文件，除非显式传入 `overwrite: true`。
+App MCP 暴露系统 App 提供的可复用能力。`app_document_template_docx_generate` 用本地 `.docx` 模板和 JSON 对象生成 Word 文档；调用时必须提供 `templatePath`、`outputPath`，并且在 `dataPath` 和内联 `data` 中二选一。默认不覆盖已有输出文件，除非显式传入 `overwrite: true`。`app_file_opener_file_open` 接收一个已有本机普通文件的绝对路径 `path`，并提交给系统默认应用；成功仅表示操作系统接受了请求。
 
 ## Repository And Variable MCP
 

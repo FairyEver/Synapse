@@ -32,6 +32,7 @@ import type {
   TextSaveInput,
   TextSaveResponse,
 } from "../../app-capabilities/text-extractor/shared/schema"
+import type { FileOpenInput, FileOpenResult } from "../../app-capabilities/file-opener/shared/schema"
 import type {
   SkillUninstallBatchResult,
   SkillUninstallCancelRequest,
@@ -975,6 +976,11 @@ export type SynapseBridge = {
     }
     operation: {
       onStatus: (listener: (event: TextExtractionStatusEvent) => void) => () => void
+    }
+  }
+  fileOpener: {
+    file: {
+      open: (input: FileOpenInput) => Promise<FileOpenResult>
     }
   }
   skillUninstaller: {

@@ -79,6 +79,7 @@ describe("App capability domain", () => {
     expect(buildAppTools().map((tool) => tool.name)).toEqual([
       TEXT_EXTRACTOR_MCP_TOOL_NAME,
       "app_document_template_docx_generate",
+      "app_file_opener_file_open",
       ...Object.values(TERMINAL_MCP_TOOL_NAMES),
       SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
       ...Object.values(SECRETS_MCP_TOOL_NAMES),

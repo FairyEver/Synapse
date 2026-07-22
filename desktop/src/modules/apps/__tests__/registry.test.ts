@@ -25,6 +25,7 @@ describe("system app registry", () => {
       "database",
       "document-template",
       "text-extractor",
+      "file-opener",
       "skill-installer",
       "skill-uninstaller",
       "synapse-skill",
@@ -57,6 +58,11 @@ describe("system app registry", () => {
       capabilities: {
         primaryMcpPrefix: "app_resource_repository",
       },
+    })
+    expect(getSystemAppManifest("file-opener")).toMatchObject({
+      namespace: "file_opener",
+      dock: { pinnedByDefault: false, order: 242 },
+      capabilities: { primaryMcpPrefix: "app_file_opener" },
     })
     expect(getSystemAppManifest("agent-personas")).toMatchObject({
       id: "agent-personas",

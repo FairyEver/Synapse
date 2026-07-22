@@ -233,6 +233,47 @@ describe("createProtocolUrlRouter", () => {
     expect(focusMainWindow).not.toHaveBeenCalled()
   })
 
+  it("dispatches app deep links without focusing the main window or asking for confirmation", async () => {
+    const dispatchAppAction = vi.fn(async () => ({ ok: true as const, data: { path: "/tmp/report.docx" } }))
+    const focusMainWindow = vi.fn()
+    const showAppDeepLinkError = vi.fn()
+    const router = createProtocolUrlRouter({
+      ...createUnusedUpdateRouterDeps(),
+      focusMainWindow,
+      handleAuthCallback: vi.fn(async () => undefined),
+      logger: createLogger(),
+      openSkillRepositoryInstallWindow: vi.fn(async () => undefined),
+      dispatchAppAction,
+      showAppDeepLinkError,
+    }, ["synapse://app/file-opener/open?path=%2Ftmp%2Freport.docx"])
+
+    expect(router.shouldCreateMainWindowBeforeStart()).toBe(false)
+    await router.start()
+
+    expect(dispatchAppAction).toHaveBeenCalledWith("app.file_opener.file.open", { path: "/tmp/report.docx" })
+    expect(focusMainWindow).not.toHaveBeenCalled()
+    expect(showAppDeepLinkError).not.toHaveBeenCalled()
+  })
+
+  it("reports one sanitized native error for an invalid app deep link without focusing", async () => {
+    const focusMainWindow = vi.fn()
+    const showAppDeepLinkError = vi.fn()
+    const router = createProtocolUrlRouter({
+      ...createUnusedUpdateRouterDeps(),
+      focusMainWindow,
+      handleAuthCallback: vi.fn(async () => undefined),
+      logger: createLogger(),
+      openSkillRepositoryInstallWindow: vi.fn(async () => undefined),
+      dispatchAppAction: vi.fn(),
+      showAppDeepLinkError,
+    }, ["synapse://app/file-opener/open?path=relative.txt"])
+
+    await router.start()
+
+    expect(showAppDeepLinkError).toHaveBeenCalledTimes(1)
+    expect(focusMainWindow).not.toHaveBeenCalled()
+  })
+
   it("focuses and publishes update URLs received after startup", async () => {
     const focusMainWindow = vi.fn()
     const publishUpdateOpenRequest = vi.fn()

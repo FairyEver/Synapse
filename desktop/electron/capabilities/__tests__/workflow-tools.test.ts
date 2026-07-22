@@ -77,7 +77,7 @@ describe("workflow MCP tool definitions", () => {
     const listDescription = toolByName("app_workflow_node_type_list").description
     expect(listDescription).toContain("document_template_docx_generate")
     expect(listDescription).toContain("text_extract")
-    expect(listDescription).toContain("open_file")
+    expect(listDescription).toContain("file_opener_file_open")
     expect(listDescription).toContain("PDF")
     expect(listDescription).toContain("DOCX")
 
@@ -85,7 +85,7 @@ describe("workflow MCP tool definitions", () => {
     const describeNodeType = objectProperty(describeProperties, "nodeType")
     expect(stringProperty(describeNodeType, "description")).toContain("document_template_docx_generate")
     expect(stringProperty(describeNodeType, "description")).toContain("text_extract")
-    expect(stringProperty(describeNodeType, "description")).toContain("open_file")
+    expect(stringProperty(describeNodeType, "description")).toContain("file_opener_file_open")
 
     const createProperties = toolByName("app_workflow_node_create").inputSchema.properties
     const nodeSchema = objectProperty(createProperties, "node")
@@ -93,7 +93,7 @@ describe("workflow MCP tool definitions", () => {
     const typeSchema = objectProperty(nodeProperties, "type")
     expect(stringProperty(typeSchema, "description")).toContain("document_template_docx_generate")
     expect(stringProperty(typeSchema, "description")).toContain("text_extract")
-    expect(stringProperty(typeSchema, "description")).toContain("open_file")
+    expect(stringProperty(typeSchema, "description")).toContain("file_opener_file_open")
   })
 
   it("documents workflow_call, codex, and claude_code config fields in the full definition schema", () => {
@@ -149,7 +149,7 @@ describe("workflow MCP tool definitions", () => {
 
     expect(configDescription).toContain("document_template_docx_generate")
     expect(configDescription).toContain("text_extract")
-    expect(configDescription).toContain("open_file")
+    expect(configDescription).toContain("file_opener_file_open")
     for (const property of [
       "templatePath",
       "outputPath",
@@ -163,8 +163,8 @@ describe("workflow MCP tool definitions", () => {
     }
     expect(stringProperty(objectProperty(configProperties, "filePath"), "description"))
       .toContain("text_extract")
-    expect(stringProperty(objectProperty(configProperties, "filePath"), "description"))
-      .toContain("open_file")
+    expect(stringProperty(objectProperty(configProperties, "path"), "description"))
+      .toContain("file_opener_file_open")
   })
 
   it("documents atomic edge creation fields on app_workflow_node_create", () => {

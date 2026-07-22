@@ -53,6 +53,10 @@ import {
   SOUND_NOTIFIER_PRESET_IDS,
 } from "../../app-capabilities/sound-notifier/shared/defaults"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
+import {
+  FILE_OPENER_CAPABILITY_ID,
+  FILE_OPENER_MCP_TOOL_NAME,
+} from "../../app-capabilities/file-opener/shared/capability"
 
 const appCapabilities: readonly CapabilityDefinition[] = [
   {
@@ -66,6 +70,13 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     title: "Generate Word document from template",
     description: "Generate a local .docx file from a local .docx template and JSON object data.",
     mutates: true,
+  },
+  {
+    id: FILE_OPENER_CAPABILITY_ID,
+    title: "Open local file with default application",
+    description: "Submit one existing local regular file to the operating system's default application.",
+    mutates: false,
+    risk: "high",
   },
   {
     id: TERMINAL_GROUP_CREATE_CAPABILITY_ID,
@@ -198,6 +209,7 @@ export const APP_DOMAIN: CapabilityDomainDefinition = {
 export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [TEXT_EXTRACTOR_MCP_TOOL_NAME]: TEXT_EXTRACTOR_CAPABILITY_ID,
   [DOCUMENT_TEMPLATE_MCP_TOOL_NAME]: DOCUMENT_TEMPLATE_CAPABILITY_ID,
+  [FILE_OPENER_MCP_TOOL_NAME]: FILE_OPENER_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupCreate]: TERMINAL_GROUP_CREATE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupList]: TERMINAL_GROUP_LIST_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupRename]: TERMINAL_GROUP_RENAME_CAPABILITY_ID,
@@ -289,6 +301,18 @@ export function buildAppTools(): McpToolDefinition[] {
           },
         },
         required: ["templatePath", "outputPath"],
+      },
+    },
+    {
+      name: FILE_OPENER_MCP_TOOL_NAME,
+      description: "Submit one existing absolute local regular file to the operating system's default application. URLs, directories, symbolic links, multiple files, and selecting a specific application are not supported. Success means the operating system accepted the request.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: stringField("Absolute local file path."),
+        },
+        required: ["path"],
+        additionalProperties: false,
       },
     },
     {

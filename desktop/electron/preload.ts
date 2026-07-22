@@ -416,6 +416,11 @@ const synapseBridge: SynapseBridge = {
       ),
     },
   },
+  fileOpener: {
+    file: {
+      open: (input) => invoke(IPC_CHANNELS.fileOpener.openFile)(input),
+    },
+  },
   skillUninstaller: {
     scan: invoke(IPC_CHANNELS["skill-uninstaller"].scan),
     scanNames: invoke(IPC_CHANNELS["skill-uninstaller"].scanNames),

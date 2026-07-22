@@ -17,9 +17,9 @@
     {
       "id": "open-file",
       "name": "默认应用打开",
-      "type": "open_file",
+      "type": "file_opener_file_open",
       "position": { "x": 300, "y": 0 },
-      "config": { "filePath": "{{report_path}}", "variables": [{ "name": "report_path", "source": { "type": "node_output", "node": "text" } }] }
+      "config": { "path": "{{report_path}}", "variables": [{ "name": "report_path", "source": { "type": "node_output", "node": "text" } }] }
     },
     {
       "id": "end",

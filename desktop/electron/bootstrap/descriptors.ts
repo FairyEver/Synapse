@@ -31,11 +31,14 @@ import { readFile, statfs } from "node:fs/promises"
 
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
-import { createSynapseActionRouter } from "../capabilities/action-router"
+import { createSynapseActionRouter, type SynapseActionRouter } from "../capabilities/action-router"
 import { createAppCapabilityDispatcher } from "../../app-capabilities/dispatcher"
 import { ipcOperationIdToChannel } from "../../synapse-capabilities/shared/naming"
 import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabilities/document-template/main/dispatcher"
 import { createDocumentTemplateService } from "../../app-capabilities/document-template/main/service"
+import { createFileOpenerCapabilityDispatcher } from "../../app-capabilities/file-opener/main/dispatcher"
+import { FileOpenerService } from "../../app-capabilities/file-opener/main/service"
+import { FILE_OPENER_SERVICE_ID } from "../../app-capabilities/file-opener/shared/capability"
 import { createTextExtractorCapabilityDispatcher } from "../../app-capabilities/text-extractor/main/dispatcher"
 import {
   createTextExtractorService,
@@ -479,6 +482,20 @@ export const coreTextExtractorDescriptor: ServiceDescriptor<TextExtractorService
   },
 }
 
+export const coreFileOpenerDescriptor: ServiceDescriptor<FileOpenerService> = {
+  id: FILE_OPENER_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    return new FileOpenerService({
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      openPath: (filePath) => shell.openPath(filePath),
+      logger: ctx.logger.child("file-opener"),
+    })
+  },
+}
+
 export const coreDriveSyncDescriptor: ServiceDescriptor<DriveSyncService> = {
   id: "core.drive-sync",
   criticality: "degraded",
@@ -876,7 +893,9 @@ function resolveWorkflowOutput(
  * Status: degraded — SPEC §4 mapping. If the database fails the app still
  * runs without CLI/MCP.
  */
-export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = {
+export type CoreDatabaseService = { readonly initialized: true; readonly actionRouter: SynapseActionRouter }
+
+export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
   id: "core.database",
   criticality: "degraded",
   dependsOn: [
@@ -894,6 +913,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     "core.terminal",
     "core.sound-notifier",
     "core.text-extractor",
+    FILE_OPENER_SERVICE_ID,
     PROVIDER_SERVICE_ID,
   ],
   async create(ctx) {
@@ -913,6 +933,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const textExtractorService = ctx.registry.get<TextExtractorService>(
       "core.text-extractor",
     )
+    const fileOpenerService = ctx.registry.get<FileOpenerService>(FILE_OPENER_SERVICE_ID)
     const capabilityLogger = createMainLogger("bootstrap.workflow-capability")
     const runCompletions = new Map<string, Promise<unknown>>()
     const deletedWorkflowIds = new Set<string>()
@@ -1035,6 +1056,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const textExtractorDispatcher = createTextExtractorCapabilityDispatcher({
       service: textExtractorService,
     })
+    const fileOpenerDispatcher = createFileOpenerCapabilityDispatcher({ service: fileOpenerService })
     const terminalDispatcher = createTerminalCapabilityDispatcher({
       service: terminalService,
       permissionGuard,
@@ -1054,6 +1076,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       documentTemplate: documentTemplateDispatcher,
       secrets: secretsDispatcher,
       soundNotifier: soundNotifierDispatcher,
+      fileOpener: fileOpenerDispatcher,
     })
 
     const actionRouter = createSynapseActionRouter({
@@ -1072,13 +1095,16 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       databaseDispatch: (action, params, context) => dispatchDatabaseAction(
         action,
         params,
-        context,
+        {
+          ...context,
+          source: context.source === "app.deep_link" ? "api" : context.source,
+        },
         { permissionGuard, auditSink },
       ),
       workflowDispatch: (action, params, context) => workflowDispatcher.dispatch(action, params, context),
     })
     await initDatabase(eventBus, actionRouter, { permissionGuard, auditSink })
-    return { initialized: true }
+    return { initialized: true, actionRouter }
   },
   async stop() {
     await shutdownDatabase()
@@ -2174,7 +2200,6 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
       sendHttpRequest: createHttpSendHandler({ permissionGuard, auditSink }),
       permissionGuard,
       auditSink,
-      openPath: (filePath) => shell.openPath(filePath),
       resolveProjectWorkspacePath: async (projectId) => {
         const { config, repo, proj } = await loadWorkflowProject(projectId)
         return resolveWorkflowProjectWorkspacePath(config, repo, proj)

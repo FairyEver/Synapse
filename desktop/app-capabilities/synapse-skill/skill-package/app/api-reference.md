@@ -1,5 +1,19 @@
 # Synapse App MCP API Reference
 
+## `app_file_opener_file_open`
+
+Submit one local file to the operating system's default application.
+
+Input:
+
+- `path` required: one existing absolute local regular-file path. URLs, directories, symbolic links, multiple files, and application selection are rejected.
+
+Output:
+
+- `path`: the submitted absolute path.
+
+Success means `shell.openPath()` returned an empty string, so the operating system accepted the request. Stable errors are `invalid_path`, `file_not_found_or_inaccessible`, `symbolic_link_not_supported`, `not_regular_file`, `permission_denied`, `system_rejected`, and `open_failed`.
+
 ## `app_text_extractor_document_extract`
 
 Extract normalized plain text from one local PDF or DOCX. PDF extraction reads the existing text layer. DOCX extraction reads the main document's paragraphs, list text, table cells, and recognizable text boxes. The tool does not perform OCR or layout reconstruction, and does not promise DOCX header, footer, comment, footnote, endnote, or image text.

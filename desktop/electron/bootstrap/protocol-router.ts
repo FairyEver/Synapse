@@ -1,6 +1,8 @@
 import { parseSkillRepositoryInstallProtocolUrl } from "../../src/lib/skill-repository-install-window"
 import type { SynapseSkillRepositoryInstallWindowRequest } from "../../src/types/skill-repository-install"
 import { DESKTOP_UPDATE_INTENT_TOKEN_MAX_LENGTH } from "../../config"
+import type { DispatchResult } from "../../synapse-capabilities/shared/types"
+import { isAppDeepLinkCandidate, parseDeclaredAppDeepLink } from "./app-deep-link"
 
 type ProtocolRouterLogger = {
   warn: (message: string, meta?: unknown) => void
@@ -13,6 +15,11 @@ type ProtocolUrlRouterDeps = {
   openSkillRepositoryInstallWindow: (request: SynapseSkillRepositoryInstallWindowRequest) => Promise<void>
   publishUpdateOpenRequest: (automatic: boolean) => void
   verifyUpdateIntent: (token: string) => Promise<boolean>
+  dispatchAppAction?: (
+    capabilityId: string,
+    params: Record<string, unknown>,
+  ) => Promise<DispatchResult>
+  showAppDeepLinkError?: (message: string) => void
 }
 
 type UpdateProtocolRequest = {
@@ -97,6 +104,25 @@ function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: strin
   let activeDrain: Promise<number> | null = null
 
   async function routeUrl(url: string): Promise<number> {
+    if (isAppDeepLinkCandidate(url)) {
+      try {
+        const request = parseDeclaredAppDeepLink(url)
+        if (!deps.dispatchAppAction) throw new Error("应用能力暂不可用")
+        const result = await deps.dispatchAppAction(request.capabilityId, request.params)
+        if (!result.ok) throw new Error(result.error || "应用操作失败")
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "应用链接处理失败"
+        deps.logger.warn("App deep link request failed.", {
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorCode: typeof error === "object" && error !== null && "code" in error
+            ? String((error as { code?: unknown }).code)
+            : undefined,
+        })
+        deps.showAppDeepLinkError?.(message)
+      }
+      return 0
+    }
+
     const updateRequest = parseUpdateProtocolRequest(url)
     if (updateRequest) {
       deps.focusMainWindow()
@@ -180,7 +206,7 @@ function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: strin
   function shouldCreateMainWindowBeforeStart(): boolean {
     if (pendingUrls.length === 0) return true
     return pendingUrls.some((url) => (
-      !parseSkillRepositoryInstallProtocolUrl(url)
+      !parseSkillRepositoryInstallProtocolUrl(url) && !isAppDeepLinkCandidate(url)
     ))
   }
 

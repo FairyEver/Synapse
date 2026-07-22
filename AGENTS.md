@@ -196,6 +196,7 @@ Single-context: use the root `CONTEXT.md` and `docs/adr/`. See `docs/agents/doma
 - App 类 MCP capability 命名采用 `app.<app_namespace>.<subdomain>.<action>`，MCP tool 名采用 capability id 的下划线形式，例如 `app.document_template.docx.generate` 对应 `app_document_template_docx_generate`。
 - 生成类能力使用 `generate` action。新增这类 action 或 domain 时，必须同步更新 capability 命名校验、MCP tool 映射、action router、内置 `synapse-skill` 模板和相关测试。
 - 能力包如果涉及本地文件读写、网络、shell、Agent、Drive 或其它敏感能力，入口适配器和核心 service 必须保留统一权限检查、审计、错误脱敏和日志边界，不得只在某一个入口处理。
+- 通用 App 深链格式固定为 `synapse://app/<app-id>/<action>?<params>`。协议路由只负责严格解析和分发；每个 App 必须在主进程可导入的 manifest 中通过 `deepLinks` 显式声明 `action → capabilityId → 参数 Schema`，不得因注册 App、capability 或 MCP tool 而自动暴露，也不得在通用协议路由器硬编码具体 App。App 深链不做 Synapse 二次确认、签名、Origin、来源或调用者可信性校验；安全边界只保留 manifest 显式声明、Action/参数 Schema 与能力自身的权限、运行条件、审计和错误脱敏。无效 App 深链不得打开或聚焦主窗口，不得回退打开 App 界面或猜测相近 Action；日志不得记录原始深链 URL。
 - 系统应用自有业务数据默认使用 DataRepository namespace，命名格式为 `app.<app-id>.<entity>`，例如 `app.quick-input.items`。`app-id` 使用系统应用 id 的短横线形式，`entity` 使用英文复数名词或明确单例名，例如 `items`、`groups`、`runs`、`settings`。
 - 系统应用自有数据不得直接手写 SQLite 业务表名；SQLite backend 的实际表名由 DataRepository namespace 自动映射，例如 `app.quick-input.items` 对应 `ns_app_quick_input_items`。只有确有理由绕过 DataRepository 时，必须先在设计文档中说明并获得当前对话确认。
 - 系统应用数据 backend 选择默认规则：小型单例配置用 `json`，列表型用户数据优先用 `sqlite`，密钥或 token 用 `encrypted-json`，追加型审计或运行日志用 `jsonl`。记录必须带 `schemaVersion`，schema 放在 `desktop/electron/runtime/data-repo/schemas/` 并注册进 `allSchemas`。
@@ -222,6 +223,7 @@ Single-context: use the root `CONTEXT.md` and `docs/adr/`. See `docs/agents/doma
 ### 模块硬边界摘要
 
 - 文本提取系统应用使用 `text-extractor` app id 和 `text_extractor` namespace；统一 capability 为 `app.text_extractor.document.extract`，MCP Tool 为 `app_text_extractor_document_extract`，Workflow 节点类型为 `text_extract`。PDF、DOCX、App、MCP 和 Workflow 入口必须复用同一格式中立能力、核心服务、限制与错误契约，不得拆成格式专属公共工具。文件权限检查、审计、安全打开及身份校验在主进程完成，解析 Worker 只接收已验证字节且不得重新打开用户路径；正文、内容片段和未脱敏完整路径不得进入结构化日志或审计。
+- 默认应用打开系统应用使用 `file-opener` app id 和 `file_opener` namespace；统一 capability 为 `app.file_opener.file.open`，MCP Tool 为 `app_file_opener_file_open`，Workflow 节点类型为 `file_opener_file_open`，深链 Action 为 `open`。App UI、MCP、Workflow 和深链入口必须复用 `FileOpenerService.open()`，统一参数名为 `path`；只接受一个已有绝对本地普通文件路径，拒绝 URL、目录和符号链接。成功只表示操作系统接受请求，不承诺外部应用启动、聚焦或完成加载。
 - Drive `公开素材`使用稳定、匿名、不过期的 `/files/<assetId>` URL。允许 JPG/JPEG/PNG/WebP/GIF/AVIF/ICO 图片和 PDF/DOCX/XLSX/PPTX/TXT/MD/CSV 文档；SVG、网页主动内容、压缩包、可执行文件、旧版 Office 和宏格式不允许。图片以内联方式返回，文档必须作为附件下载；替换只能在图片类别内或文档类别内进行。需要密码、有效期或敏感访问控制的文档必须使用普通 Drive 分享，不得把公开素材扩展成受控分享的旁路。
 - Drive 公开 HTML 时，独立 HTML 在用户未明确要求发布整个文件夹的情况下默认使用 `/share/...`；多文件静态站点，或用户明确要求把整个文件夹作为网站发布时，使用 `/sites/...`。文件夹即使只有一个 `index.html` 也可以发布为 Site；用户仅指定上传目标文件夹，或泛称“网页 / 网站 / 站点”，不等于要求发布该文件夹。
 - Knowledge Base 是 Synapse 托管项目类型；新建知识库时用户只提供名称，真实目录由 Synapse 创建在 Synapse-managed storage 中，项目路径对用户显示为虚拟 `synapse-kb://<id>`。Synapse-managed storage 默认位于 Electron `userData`，也允许用户配置一个全局知识库存储根；实际运行目录始终由 Synapse 创建为 `<storage-root>/knowledge-bases/<runtimeId>/`，不得暴露为逐库自选项目路径。

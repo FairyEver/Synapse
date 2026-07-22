@@ -1894,21 +1894,21 @@ describe("createWorkflowDispatcher", () => {
     )
     expect(listResult.ok).toBe(true)
     expect(listResult.data).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: "open_file", title: "默认应用打开" }),
+      expect.objectContaining({ type: "file_opener_file_open", title: "默认应用打开" }),
     ]))
 
     const describeResult = await dispatcher.dispatch(
       "app.workflow.node_type.describe",
-      { nodeType: "open_file" },
+      { nodeType: "file_opener_file_open" },
       { source: "api" },
     )
     expect(describeResult.ok).toBe(true)
     expect(describeResult.data).toMatchObject({
-      type: "open_file",
+      type: "file_opener_file_open",
       configSchema: {
-        required: expect.arrayContaining(["filePath", "variables"]),
+        required: expect.arrayContaining(["path", "variables"]),
         properties: {
-          filePath: expect.objectContaining({ type: "string" }),
+          path: expect.objectContaining({ type: "string" }),
           variables: expect.objectContaining({ type: "array" }),
         },
       },

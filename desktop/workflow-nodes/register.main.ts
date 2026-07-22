@@ -8,7 +8,7 @@ import { scriptNodeManifest, scriptNodeExecutor } from "./script"
 import { workflowCallNodeManifest, workflowCallNodeExecutor } from "./workflow-call"
 import { codexNodeManifest, codexNodeExecutor } from "./codex"
 import { claudeCodeNodeManifest, claudeCodeNodeExecutor } from "./claude-code"
-import { openFileNodeManifest, openFileNodeExecutor } from "./open-file"
+import { fileOpenerNodeManifest, fileOpenerNodeExecutor } from "../app-capabilities/file-opener/workflow-node"
 import { documentTemplateNodeManifest } from "../app-capabilities/document-template/workflow-node/manifest"
 import { documentTemplateNodeExecutor } from "../app-capabilities/document-template/workflow-node/executor.main"
 import { textExtractNodeManifest } from "../app-capabilities/text-extractor/workflow-node/manifest"
@@ -23,6 +23,6 @@ nodeTypeRegistry.register(scriptNodeManifest, scriptNodeExecutor)
 nodeTypeRegistry.register(workflowCallNodeManifest, workflowCallNodeExecutor)
 nodeTypeRegistry.register(codexNodeManifest, codexNodeExecutor)
 nodeTypeRegistry.register(claudeCodeNodeManifest, claudeCodeNodeExecutor)
-nodeTypeRegistry.register(openFileNodeManifest, openFileNodeExecutor)
+nodeTypeRegistry.register(fileOpenerNodeManifest, fileOpenerNodeExecutor)
 nodeTypeRegistry.register(documentTemplateNodeManifest, documentTemplateNodeExecutor)
 nodeTypeRegistry.register(textExtractNodeManifest, textExtractNodeExecutor)

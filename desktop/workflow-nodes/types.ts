@@ -154,7 +154,6 @@ export interface NodeRuntimeDeps {
   sendHttpRequest: (request: import("../electron/runtime/network").OutboundHttpRequest) => Promise<import("../electron/runtime/network").OutboundHttpResponse>
   permissionGuard?: PermissionGuard
   auditSink?: AuditSink
-  openPath?: (filePath: string) => Promise<string>
   resolveProjectWorkspacePath?: (projectId: string) => Promise<string | null>
   resolveService?: <T>(serviceId: string) => T
   workflowCall?: WorkflowCallRuntimeDeps

@@ -1,3 +1,7 @@
+---
+status: superseded by ADR-0034
+---
+
 # Open local files through a native workflow node
 
 Synapse will provide a built-in `open_file` workflow node instead of relying on platform-specific shell scripts. The node accepts one interpolated path that must be an existing absolute non-symbolic-link regular file, then asks the operating system to open it with its associated default application through Electron `shell.openPath()`; relative paths, directories, URLs, application selection, file-type restrictions, and multiple files are outside the first version. An accepted operating-system request is success rather than proof that the external application started, focused, or loaded the file, and the submitted absolute path is returned as both the primary output and structured `path` output.

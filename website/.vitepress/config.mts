@@ -64,6 +64,7 @@ export default defineConfig({
         { text: 'Content MCP', link: '/advanced/content-mcp' },
         { text: 'Database', link: '/advanced/database' },
         { text: 'Document Template', link: '/advanced/document-template' },
+        { text: 'File Opener', link: '/advanced/file-opener' },
         { text: 'Git', link: '/advanced/git' },
         { text: 'Model Price', link: '/advanced/model-price' },
         { text: 'Token Usage', link: '/advanced/token-usage' },

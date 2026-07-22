@@ -2,6 +2,18 @@
 
 Use App MCP tools for capabilities provided by Synapse system apps.
 
+## File Opener
+
+Use `app_file_opener_file_open` when the user asks to open one local file with the operating system's default application.
+
+Rules:
+
+- Pass exactly one existing absolute local regular-file path as `path`.
+- Do not pass URLs, `file://` values, directories, symbolic links, multiple files, or an application choice.
+- Success means the operating system accepted the request; it does not guarantee that the external application launched, focused, or loaded the file.
+- Surface the stable error code on failure. Do not report a failed request as successful.
+- The matching deep link is `synapse://app/file-opener/open?path=<percent-encoded-absolute-path>`.
+
 ## Text Extraction
 
 Use `app_text_extractor_document_extract` when the user asks to extract text from a local PDF or DOCX document.

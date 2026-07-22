@@ -114,10 +114,10 @@ describe("NodeTypeRegistry", () => {
     await import("../register.renderer")
     const { nodeTypeRegistry } = await import("../registry")
 
-    const manifest = nodeTypeRegistry.getManifest("open_file")
+    const manifest = nodeTypeRegistry.getManifest("file_opener_file_open")
 
     expect(manifest.title).toBe("默认应用打开")
-    expect(manifest.type).toBe("open_file")
+    expect(manifest.type).toBe("file_opener_file_open")
   })
 
   it("registers claude code manifest and executor in main registry", async () => {
@@ -219,13 +219,13 @@ describe("NodeTypeRegistry", () => {
     }))
 
     await import("../register.main")
-    const [{ nodeTypeRegistry }, { openFileNodeExecutor }] = await Promise.all([
+    const [{ nodeTypeRegistry }, { fileOpenerNodeExecutor }] = await Promise.all([
       import("../registry"),
-      import("../open-file/executor.main"),
+      import("../../app-capabilities/file-opener/workflow-node/executor.main"),
     ])
 
-    expect(nodeTypeRegistry.getManifest("open_file").title).toBe("默认应用打开")
-    expect(nodeTypeRegistry.getExecutor("open_file")).toBe(openFileNodeExecutor)
+    expect(nodeTypeRegistry.getManifest("file_opener_file_open").title).toBe("默认应用打开")
+    expect(nodeTypeRegistry.getExecutor("file_opener_file_open")).toBe(fileOpenerNodeExecutor)
   })
 
   it("requires a share contract for every registered main-process node", async () => {
@@ -253,8 +253,8 @@ describe("NodeTypeRegistry", () => {
       "codex",
       "document_template_docx_generate",
       "end",
+      "file_opener_file_open",
       "http_request",
-      "open_file",
       "prompt",
       "script",
       "switch",

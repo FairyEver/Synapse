@@ -50,6 +50,7 @@
 | `app.database.table.move` | `app_database_table_move` | `app.database.table.move` | `databaseTableMove` |
 | `app.settings.repository.item.list` | `app_settings_repository_item_list` | `app.settings.repository.item.list` | `repositoryItemList` |
 | `app.document_template.docx.generate` | `app_document_template_docx_generate` | `app.document_template.docx.generate` | `documentTemplateDocxGenerate` |
+| `app.file_opener.file.open` | `app_file_opener_file_open` | `app.file_opener.file.open` | `fileOpenerFileOpen` |
 | `app.workflow.node_type.list` | `app_workflow_node_type_list` | `app.workflow.node_type.list` | `workflowNodeTypeList` |
 | `app.workflow.node_type.describe` | `app_workflow_node_type_describe` | `app.workflow.node_type.describe` | `workflowNodeTypeDescribe` |
 | `app.workflow.definition.list` | `app_workflow_definition_list` | `app.workflow.definition.list` | `workflowDefinitionList` |
