@@ -6,6 +6,7 @@ import { driveAppManifest } from "@/modules/drive/app-manifest"
 import { documentTemplateAppManifest } from "../../../app-capabilities/document-template/renderer/app-manifest"
 import { textExtractorAppManifest } from "../../../app-capabilities/text-extractor/renderer/app-manifest"
 import { fileOpenerAppManifest } from "../../../app-capabilities/file-opener/renderer/app-manifest"
+import { textFileWriterAppManifest } from "../../../app-capabilities/text-file-writer/renderer/app-manifest"
 import { skillInstallerAppManifest } from "../../../app-capabilities/skill-installer/renderer/app-manifest"
 import { skillUninstallerAppManifest } from "../../../app-capabilities/skill-uninstaller/renderer/app-manifest"
 import { synapseSkillAppManifest } from "../../../app-capabilities/synapse-skill/renderer/app-manifest"
@@ -39,6 +40,7 @@ const systemApps = [
   documentTemplateAppManifest,
   textExtractorAppManifest,
   fileOpenerAppManifest,
+  textFileWriterAppManifest,
   skillInstallerAppManifest,
   skillUninstallerAppManifest,
   synapseSkillAppManifest,

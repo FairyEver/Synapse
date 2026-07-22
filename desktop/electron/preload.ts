@@ -421,6 +421,14 @@ const synapseBridge: SynapseBridge = {
       open: (input) => invoke(IPC_CHANNELS.fileOpener.openFile)(input),
     },
   },
+  textFileWriter: {
+    output: {
+      choose: (input) => invoke(IPC_CHANNELS.textFileWriter.chooseOutput)(input),
+    },
+    file: {
+      write: (input) => invoke(IPC_CHANNELS.textFileWriter.writeFile)(input),
+    },
+  },
   skillUninstaller: {
     scan: invoke(IPC_CHANNELS["skill-uninstaller"].scan),
     scanNames: invoke(IPC_CHANNELS["skill-uninstaller"].scanNames),

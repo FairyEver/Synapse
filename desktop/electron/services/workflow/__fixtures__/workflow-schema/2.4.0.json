@@ -1,0 +1,42 @@
+{
+  "meta": { "schemaVersion": "2.4.0" },
+  "id": "text-file-writer-workflow",
+  "name": "文本写入文件",
+  "version": "v_1720000000000_00000000_textwriter",
+  "createdAt": 1720000000000,
+  "updatedAt": 1720000000000,
+  "params": [],
+  "nodes": [
+    {
+      "id": "text",
+      "name": "文本",
+      "type": "text",
+      "position": { "x": 0, "y": 0 },
+      "config": { "template": "hello", "variables": [] }
+    },
+    {
+      "id": "write-file",
+      "name": "文本写入文件",
+      "type": "text_file_writer_file_write",
+      "position": { "x": 300, "y": 0 },
+      "config": {
+        "path": "/tmp/report.md",
+        "text": "{{body}}",
+        "encoding": "utf8",
+        "overwrite": false,
+        "variables": [{ "name": "body", "source": { "type": "node_output", "node": "text" } }]
+      }
+    },
+    {
+      "id": "end",
+      "name": "结束",
+      "type": "end",
+      "position": { "x": 600, "y": 0 },
+      "config": { "outputType": "text", "template": "", "variables": [] }
+    }
+  ],
+  "edges": [
+    { "id": "text-to-write", "from": "text", "to": "write-file" },
+    { "id": "write-to-end", "from": "write-file", "to": "end" }
+  ]
+}

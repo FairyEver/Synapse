@@ -1,7 +1,7 @@
 import path from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { IpcHandlerContext } from "../../../../electron/runtime/ipc/types"
-import { TextExtractionError } from "../../shared/errors"
+import { TextExtractionError, TextSaveError } from "../../shared/errors"
 import { createTextExtractorIpcModule } from "../ipc"
 
 const electron = vi.hoisted(() => ({
@@ -140,16 +140,11 @@ describe("textExtractorIpcModule", () => {
     expect(JSON.stringify(response)).not.toContain(unsupportedPath)
   })
 
-  it("checks write permission, records a path-safe audit, and saves full UTF-8 text", async () => {
-    const permissionGuard = { check: vi.fn(async () => ({ allowed: true as const })) }
-    const auditSink = { record: vi.fn() }
+  it("passes the full text and source identity to the shared writer adapter", async () => {
     const save = vi.fn(async () => ({ outputPath, fileName: "report.txt", size: 6 }))
     const module = createTextExtractorIpcModule({ saveService: { save } })
 
-    await expect(module.methods.saveText.handler(createContext({
-      "core.permission-guard": permissionGuard,
-      "core.audit-sink": auditSink,
-    }), { outputPath, text: "正文" })).resolves.toEqual({
+    await expect(module.methods.saveText.handler(createContext(), { outputPath, text: "正文" })).resolves.toEqual({
       ok: true,
       result: {
         outputPath,
@@ -158,43 +153,24 @@ describe("textExtractorIpcModule", () => {
       },
     })
 
-    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
-      action: "fs.write.outside-userdata",
-      resource: outputPath,
-    }))
-    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "report.txt",
-      outcome: "allowed",
-    }))
-    expect(save).toHaveBeenCalledWith({ outputPath, text: "正文" })
+    expect(save).toHaveBeenCalledWith({ outputPath, text: "正文" }, {
+      actor: { kind: "user", id: "text-extractor-app" },
+      source: "text-extractor",
+    })
   })
 
-  it("records denied write permission and does not save text", async () => {
-    const permissionGuard = {
-      check: vi.fn(async () => ({ allowed: false as const, reason: "denied", policyId: "test" })),
-    }
-    const auditSink = { record: vi.fn() }
-    const save = vi.fn()
+  it("serializes permission denial returned by the shared writer adapter", async () => {
+    const save = vi.fn(async () => { throw new TextSaveError("PERMISSION_DENIED") })
     const module = createTextExtractorIpcModule({ saveService: { save } })
 
-    await expect(module.methods.saveText.handler(createContext({
-      "core.permission-guard": permissionGuard,
-      "core.audit-sink": auditSink,
-    }), { outputPath, text: "正文" })).resolves.toEqual({
+    await expect(module.methods.saveText.handler(createContext(), { outputPath, text: "正文" })).resolves.toEqual({
       ok: false,
       error: {
         code: "PERMISSION_DENIED",
         message: "没有写入所选文件的权限。",
       },
     })
-
-    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "report.txt",
-      outcome: "denied",
-      metadata: expect.objectContaining({ policyId: "test" }),
-    }))
-    expect(auditSink.record.mock.calls[0]?.[0]?.metadata).not.toHaveProperty("reason")
-    expect(save).not.toHaveBeenCalled()
+    expect(save).toHaveBeenCalledTimes(1)
   })
 
   it("serializes native save failures without exposing the output path", async () => {

@@ -12,6 +12,10 @@ import {
 } from "../../app-capabilities/sound-notifier/shared/capability"
 import { SECRETS_MCP_TOOL_NAMES } from "../../app-capabilities/secrets/shared/capability"
 import { DOCUMENT_TEMPLATE_MCP_TOOL_NAME } from "../../app-capabilities/document-template/shared/capability"
+import {
+  TEXT_FILE_WRITER_CAPABILITY_ID,
+  TEXT_FILE_WRITER_MCP_TOOL_NAME,
+} from "../../app-capabilities/text-file-writer/shared/capability"
 import { APP_DOMAIN, APP_MCP_TOOL_ACTIONS, buildAppTools } from "./app-domain"
 import { assertCanonicalCapabilityId, capabilityIdToMcpTool } from "./naming"
 import { MCP_TOOL_ACTIONS, buildAllMcpTools, getActionDomainId } from "./registry"
@@ -53,6 +57,29 @@ describe("App capability domain", () => {
     expect(tool?.description).toContain("exactly one of dataPath or data")
     expect(tool?.inputSchema).not.toHaveProperty("oneOf")
     expect(tool?.inputSchema).not.toHaveProperty("anyOf")
+  })
+
+  it("registers the strict text file writer schema without a text length limit", () => {
+    const tool = buildAppTools().find((item) => item.name === TEXT_FILE_WRITER_MCP_TOOL_NAME)
+
+    expect(APP_DOMAIN.capabilities).toContainEqual(expect.objectContaining({
+      id: TEXT_FILE_WRITER_CAPABILITY_ID,
+      mutates: true,
+      risk: "high",
+    }))
+    expect(APP_MCP_TOOL_ACTIONS[TEXT_FILE_WRITER_MCP_TOOL_NAME]).toBe(TEXT_FILE_WRITER_CAPABILITY_ID)
+    expect(tool?.inputSchema).toMatchObject({
+      required: ["text", "path"],
+      additionalProperties: false,
+      properties: {
+        text: expect.objectContaining({ type: "string" }),
+        path: expect.objectContaining({ type: "string" }),
+        encoding: expect.objectContaining({ enum: ["utf8", "utf16le"], default: "utf8" }),
+        overwrite: expect.objectContaining({ type: "boolean", default: false }),
+      },
+    })
+    expect((tool?.inputSchema.properties.text as Record<string, unknown> | undefined)).not.toHaveProperty("maxLength")
+    expect(tool?.description).toContain(".txt, .md, or .csv")
   })
 
   it("maps public terminal rename and delete tools to their capabilities", () => {

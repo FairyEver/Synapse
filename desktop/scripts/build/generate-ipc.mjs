@@ -66,6 +66,7 @@ const MODULE_SOURCES = [
   { id: "apps", importPath: "electron/modules/apps/ipc.ts" },
   { id: "documentTemplate", importPath: "app-capabilities/document-template/main/ipc.ts" },
   { id: "textExtractor", importPath: "app-capabilities/text-extractor/main/ipc.ts" },
+  { id: "textFileWriter", importPath: "app-capabilities/text-file-writer/main/ipc.ts" },
   { id: "fileOpener", importPath: "app-capabilities/file-opener/main/ipc.ts" },
   { id: "quick-input", outputId: "quickInput", importPath: "app-capabilities/quick-input/main/ipc.ts" },
   { id: "secrets", importPath: "app-capabilities/secrets/main/ipc.ts" },

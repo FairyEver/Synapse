@@ -19,6 +19,7 @@ import { claudeCodeNodeManifest } from "./claude-code/manifest"
 import { fileOpenerNodeManifest } from "../app-capabilities/file-opener/workflow-node/manifest"
 import { documentTemplateNodeManifest } from "../app-capabilities/document-template/workflow-node/manifest"
 import { textExtractNodeManifest } from "../app-capabilities/text-extractor/workflow-node/manifest"
+import { textFileWriterNodeManifest } from "../app-capabilities/text-file-writer/workflow-node/manifest"
 
 nodeTypeRegistry.registerManifest(textNodeManifest)
 nodeTypeRegistry.registerManifest(promptNodeManifest)
@@ -32,3 +33,4 @@ nodeTypeRegistry.registerManifest(claudeCodeNodeManifest)
 nodeTypeRegistry.registerManifest(fileOpenerNodeManifest)
 nodeTypeRegistry.registerManifest(documentTemplateNodeManifest)
 nodeTypeRegistry.registerManifest(textExtractNodeManifest)
+nodeTypeRegistry.registerManifest(textFileWriterNodeManifest)

@@ -1,9 +1,7 @@
-import path from "node:path"
 import { BrowserWindow, dialog } from "electron"
 import { z } from "zod"
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
 import type { WindowManager } from "../../../electron/runtime/window"
-import type { AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 import {
   textExtractionCancelResultSchema,
@@ -18,7 +16,8 @@ import {
   type TextOutputChooseRequest,
   type TextSaveInput,
 } from "../shared/schema"
-import { TextSaveError } from "../shared/errors"
+import type { TextFileWriterService } from "../../text-file-writer/main/service"
+import { TEXT_FILE_WRITER_SERVICE_ID } from "../../text-file-writer/shared/capability"
 import type { TextExtractionTask } from "./scheduler"
 import type { TextExtractorService } from "./service"
 import { serializeTextExtractionError } from "./service"
@@ -130,10 +129,13 @@ export function createTextExtractorIpcModule(deps: {
         response: textSaveResponseSchema,
         handler: async (ctx, request: TextSaveInput) => {
           try {
-            await authorizeTextWrite(ctx, request.outputPath)
-            const result = await (deps.saveService ?? createTextSaveService({
-              logger: ctx.logger?.child("text-extractor.save"),
-            })).save(request)
+            const saveService = deps.saveService ?? createTextSaveService(
+              ctx.resolve<TextFileWriterService>(TEXT_FILE_WRITER_SERVICE_ID),
+            )
+            const result = await saveService.save(request, {
+              actor: { kind: "user", id: "text-extractor-app" },
+              source: "text-extractor",
+            })
             return { ok: true as const, result }
           } catch (error) {
             return { ok: false as const, error: serializeTextSaveError(error) }
@@ -185,30 +187,4 @@ function focusedWindow(): Electron.BrowserWindow | undefined {
   return BrowserWindow.getFocusedWindow()
     ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
     ?? undefined
-}
-
-async function authorizeTextWrite(
-  ctx: Parameters<IpcModule["methods"][string]["handler"]>[0],
-  outputPath: string,
-): Promise<void> {
-  const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
-  const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
-  const actor = { kind: "user" } as const
-  const metadata = { source: "textExtractor.saveText" }
-  const permission = await permissionGuard.check({
-    action: "fs.write.outside-userdata",
-    actor,
-    resource: outputPath,
-    context: metadata,
-  })
-  auditSink.record({
-    action: "fs.write.outside-userdata",
-    actor,
-    resource: path.basename(outputPath),
-    outcome: permission.allowed ? "allowed" : "denied",
-    metadata: permission.allowed
-      ? metadata
-      : { ...metadata, policyId: permission.policyId },
-  })
-  if (!permission.allowed) throw new TextSaveError("PERMISSION_DENIED")
 }

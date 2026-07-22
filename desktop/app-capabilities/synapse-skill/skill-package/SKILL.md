@@ -22,7 +22,7 @@ First classify the user's intent, then read the matching domain file before usin
 - Model price rules and used-model pricing -> `model-price/index.md`
 - Local secrets and placeholder secret values -> `secrets/index.md`
 - Settings repositories -> `repository/index.md`
-- App-provided capabilities such as text extraction, document generation, Synapse-managed Terminal sessions, and Sound Notifier playback -> `app/index.md`
+- App-provided capabilities such as text file writing, text extraction, document generation, Synapse-managed Terminal sessions, and Sound Notifier playback -> `app/index.md`
 
 If the task spans multiple domains, handle each part in order and read each relevant domain file.
 

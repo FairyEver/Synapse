@@ -2,6 +2,19 @@
 
 Use App MCP tools for capabilities provided by Synapse system apps.
 
+## Text File Writer
+
+Use `app_text_file_writer_file_write` when the user asks to save a complete text value as a local `.txt`, `.md`, or `.csv` file.
+
+Rules:
+
+- Pass the complete string once as `text` and one current-OS absolute path as `path`; do not split or reconstruct the content through shell commands.
+- The final path extension selects the format. Do not send a separate format field, add an extension, or rewrite `.txt`, `.md`, or `.csv` content.
+- Use only `utf8` or `utf16le`; omit `encoding` for UTF-8. Synapse does not add a BOM, trim text, normalize newlines, or append a final newline. Empty text is valid.
+- Omit `overwrite` unless the caller explicitly authorizes replacement. A changed target returns retryable `TARGET_CHANGED`; do not silently retry over the newer file.
+- Missing parent directories are created automatically. Do not pass `~`, environment variables, shell expressions, or `file://` URLs.
+- Do not repeat the original text, complete path, or native failure details in logs or the final answer unless the user specifically needs the resulting path.
+
 ## File Opener
 
 Use `app_file_opener_file_open` when the user asks to open one local file with the operating system's default application.

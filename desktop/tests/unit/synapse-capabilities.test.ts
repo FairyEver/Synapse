@@ -80,6 +80,7 @@ describe("App capability domain", () => {
       TEXT_EXTRACTOR_MCP_TOOL_NAME,
       "app_document_template_docx_generate",
       "app_file_opener_file_open",
+      "app_text_file_writer_file_write",
       ...Object.values(TERMINAL_MCP_TOOL_NAMES),
       SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
       ...Object.values(SECRETS_MCP_TOOL_NAMES),

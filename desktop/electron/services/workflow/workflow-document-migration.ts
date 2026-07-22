@@ -11,7 +11,7 @@ import { LOCAL_CLAUDE_CODE_PROVIDER_ID } from "../provider/types"
 import { assertSafeWorkflowId } from "./workflow-id"
 import { validateWorkflowParamConfiguration } from "./workflow-param-validator"
 
-export const WORKFLOW_SCHEMA_VERSION = "2.3.0"
+export const WORKFLOW_SCHEMA_VERSION = "2.4.0"
 export const WORKFLOW_LEGACY_BASELINE_VERSION = "0.0.0"
 
 type VersionedWorkflowDefinition = WorkflowDefinition & VersionedData & Record<string, unknown>
@@ -41,6 +41,7 @@ const workflowMigrations: DataMigrationRegistry<VersionedWorkflowDefinition> = {
   "2.1.0": migrateWorkflowV2ToV2_1,
   "2.2.0": migrateWorkflowV2_1ToV2_2,
   "2.3.0": migrateWorkflowV2_2ToV2_3,
+  "2.4.0": migrateWorkflowV2_3ToV2_4,
 }
 
 export function migrateWorkflowDocument(source: unknown): WorkflowDocumentMigrationResult {
@@ -160,6 +161,10 @@ function migrateWorkflowV2_1ToV2_2(source: VersionedWorkflowDefinition): Version
 }
 
 function migrateWorkflowV2_2ToV2_3(source: VersionedWorkflowDefinition): VersionedWorkflowDefinition {
+  return source
+}
+
+function migrateWorkflowV2_3ToV2_4(source: VersionedWorkflowDefinition): VersionedWorkflowDefinition {
   return source
 }
 

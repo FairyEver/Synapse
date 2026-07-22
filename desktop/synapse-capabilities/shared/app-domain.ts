@@ -57,6 +57,16 @@ import {
   FILE_OPENER_CAPABILITY_ID,
   FILE_OPENER_MCP_TOOL_NAME,
 } from "../../app-capabilities/file-opener/shared/capability"
+import {
+  TEXT_FILE_WRITER_CAPABILITY_ID,
+  TEXT_FILE_WRITER_MCP_TOOL_NAME,
+} from "../../app-capabilities/text-file-writer/shared/capability"
+import {
+  DEFAULT_TEXT_FILE_ENCODING,
+  DEFAULT_TEXT_FILE_OVERWRITE,
+  TEXT_FILE_ENCODINGS,
+  TEXT_FILE_FORMATS,
+} from "../../app-capabilities/text-file-writer/shared/schema"
 
 const appCapabilities: readonly CapabilityDefinition[] = [
   {
@@ -76,6 +86,13 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     title: "Open local file with default application",
     description: "Submit one existing local regular file to the operating system's default application.",
     mutates: false,
+    risk: "high",
+  },
+  {
+    id: TEXT_FILE_WRITER_CAPABILITY_ID,
+    title: "Write text to local file",
+    description: "Write one complete text value to an absolute local .txt, .md, or .csv path.",
+    mutates: true,
     risk: "high",
   },
   {
@@ -210,6 +227,7 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [TEXT_EXTRACTOR_MCP_TOOL_NAME]: TEXT_EXTRACTOR_CAPABILITY_ID,
   [DOCUMENT_TEMPLATE_MCP_TOOL_NAME]: DOCUMENT_TEMPLATE_CAPABILITY_ID,
   [FILE_OPENER_MCP_TOOL_NAME]: FILE_OPENER_CAPABILITY_ID,
+  [TEXT_FILE_WRITER_MCP_TOOL_NAME]: TEXT_FILE_WRITER_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupCreate]: TERMINAL_GROUP_CREATE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupList]: TERMINAL_GROUP_LIST_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupRename]: TERMINAL_GROUP_RENAME_CAPABILITY_ID,
@@ -312,6 +330,30 @@ export function buildAppTools(): McpToolDefinition[] {
           path: stringField("Absolute local file path."),
         },
         required: ["path"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: TEXT_FILE_WRITER_MCP_TOOL_NAME,
+      description: "Write one complete text value to an absolute local .txt, .md, or .csv file. Missing parent directories are created automatically. Text is preserved exactly apart from the selected encoding: utf8 by default or utf16le; no BOM, trimming, newline normalization, final newline, CSV processing, or Markdown processing is added. Existing files are rejected unless overwrite is true. Synapse sets no product-level text length limit, although IPC, memory, filesystem, and disk limits still apply.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          text: stringField("Complete text to write. Empty text is valid and no product-level maximum length is imposed."),
+          path: stringField(`Absolute local output path ending in ${TEXT_FILE_FORMATS.map((format) => `.${format}`).join(", ")}.`),
+          encoding: {
+            type: "string",
+            enum: TEXT_FILE_ENCODINGS,
+            default: DEFAULT_TEXT_FILE_ENCODING,
+            description: "Character encoding. Defaults to utf8. A BOM is never added automatically.",
+          },
+          overwrite: {
+            type: "boolean",
+            default: DEFAULT_TEXT_FILE_OVERWRITE,
+            description: "When true, replace an unchanged existing regular file. Defaults to false.",
+          },
+        },
+        required: ["text", "path"],
         additionalProperties: false,
       },
     },

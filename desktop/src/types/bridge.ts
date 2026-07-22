@@ -34,6 +34,11 @@ import type {
 } from "../../app-capabilities/text-extractor/shared/schema"
 import type { FileOpenInput, FileOpenResult } from "../../app-capabilities/file-opener/shared/schema"
 import type {
+  TextFileOutputChooseRequest,
+  TextFileWriteInput,
+  TextFileWriteResponse,
+} from "../../app-capabilities/text-file-writer/shared/schema"
+import type {
   SkillUninstallBatchResult,
   SkillUninstallCancelRequest,
   SkillUninstallExecutionCancelRequest,
@@ -981,6 +986,14 @@ export type SynapseBridge = {
   fileOpener: {
     file: {
       open: (input: FileOpenInput) => Promise<FileOpenResult>
+    }
+  }
+  textFileWriter: {
+    output: {
+      choose: (input?: TextFileOutputChooseRequest) => Promise<string | null>
+    }
+    file: {
+      write: (input: TextFileWriteInput) => Promise<TextFileWriteResponse>
     }
   }
   skillUninstaller: {

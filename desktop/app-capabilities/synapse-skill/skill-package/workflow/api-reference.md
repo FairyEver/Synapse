@@ -12,7 +12,7 @@ Workflow definition responses include `meta.schemaVersion` (SemVer). Preserve it
 
 ### app_workflow_node_type_list
 
-List available node types with summaries. Current built-in node types include `text`, `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `text_extract`, `file_opener_file_open`, `codex`, `claude_code`, and `end`.
+List available node types with summaries. Current built-in node types include `text`, `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `text_extract`, `file_opener_file_open`, `text_file_writer_file_write`, `codex`, `claude_code`, and `end`.
 
 **Params:** none
 **Returns:** `[{ type, title, subtitle, color }]`
@@ -126,6 +126,18 @@ Submits one existing local regular file to the operating system's default applic
 - `variables` (array) — variable bindings available to `path`
 
 The node rejects relative paths, URLs including `file://`, directories, symbolic links, and missing files. It does not select a specific application or accept multiple files. Execution requires `fs.read.outside-userdata` and `shell.exec`. Success means the native open request was accepted, not that the application finished launching or loading the file. The primary output and `outputs.path` are the exact submitted path. Automation and reruns perform the real action and may open the file repeatedly; cancellation after native submission cannot undo it.
+
+### text_file_writer_file_write
+
+Writes one complete text value to a local text file. No provider or project needed. Config fields:
+
+- `path` (string) — current-OS absolute `.txt`, `.md`, or `.csv` target path; supports `{{variable}}` interpolation
+- `text` (string) — complete text, including an empty string; supports `{{variable}}` interpolation
+- `encoding` (enum: `utf8`/`utf16le`) — output encoding
+- `overwrite` (boolean) — explicit replacement permission; `false` rejects an existing target
+- `variables` (array) — explicit bindings available to `path` and `text`
+
+There is no separate `format` field and no text `maxLength`. The extension is matched case-insensitively and returned as lower-case `format`. The node preserves the text exactly apart from encoding, creates missing parent directories, and returns the canonical actual path as primary output plus `{ path, fileName, format, encoding, size, overwritten }` in `outputs`. It requires `fs.write.outside-userdata`. Stable failure outputs contain `code`, `message`, and `retryable`; only `TARGET_CHANGED` is retryable.
 
 ### codex
 

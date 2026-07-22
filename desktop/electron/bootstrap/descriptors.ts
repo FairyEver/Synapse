@@ -39,6 +39,9 @@ import { createDocumentTemplateService } from "../../app-capabilities/document-t
 import { createFileOpenerCapabilityDispatcher } from "../../app-capabilities/file-opener/main/dispatcher"
 import { FileOpenerService } from "../../app-capabilities/file-opener/main/service"
 import { FILE_OPENER_SERVICE_ID } from "../../app-capabilities/file-opener/shared/capability"
+import { createTextFileWriterCapabilityDispatcher } from "../../app-capabilities/text-file-writer/main/dispatcher"
+import { TextFileWriterService } from "../../app-capabilities/text-file-writer/main/service"
+import { TEXT_FILE_WRITER_SERVICE_ID } from "../../app-capabilities/text-file-writer/shared/capability"
 import { createTextExtractorCapabilityDispatcher } from "../../app-capabilities/text-extractor/main/dispatcher"
 import {
   createTextExtractorService,
@@ -496,6 +499,19 @@ export const coreFileOpenerDescriptor: ServiceDescriptor<FileOpenerService> = {
   },
 }
 
+export const coreTextFileWriterDescriptor: ServiceDescriptor<TextFileWriterService> = {
+  id: TEXT_FILE_WRITER_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    return new TextFileWriterService({
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      logger: ctx.logger.child("text-file-writer"),
+    })
+  },
+}
+
 export const coreDriveSyncDescriptor: ServiceDescriptor<DriveSyncService> = {
   id: "core.drive-sync",
   criticality: "degraded",
@@ -914,6 +930,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     "core.sound-notifier",
     "core.text-extractor",
     FILE_OPENER_SERVICE_ID,
+    TEXT_FILE_WRITER_SERVICE_ID,
     PROVIDER_SERVICE_ID,
   ],
   async create(ctx) {
@@ -934,6 +951,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       "core.text-extractor",
     )
     const fileOpenerService = ctx.registry.get<FileOpenerService>(FILE_OPENER_SERVICE_ID)
+    const textFileWriterService = ctx.registry.get<TextFileWriterService>(TEXT_FILE_WRITER_SERVICE_ID)
     const capabilityLogger = createMainLogger("bootstrap.workflow-capability")
     const runCompletions = new Map<string, Promise<unknown>>()
     const deletedWorkflowIds = new Set<string>()
@@ -1057,6 +1075,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       service: textExtractorService,
     })
     const fileOpenerDispatcher = createFileOpenerCapabilityDispatcher({ service: fileOpenerService })
+    const textFileWriterDispatcher = createTextFileWriterCapabilityDispatcher({ service: textFileWriterService })
     const terminalDispatcher = createTerminalCapabilityDispatcher({
       service: terminalService,
       permissionGuard,
@@ -1077,6 +1096,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       secrets: secretsDispatcher,
       soundNotifier: soundNotifierDispatcher,
       fileOpener: fileOpenerDispatcher,
+      textFileWriter: textFileWriterDispatcher,
     })
 
     const actionRouter = createSynapseActionRouter({

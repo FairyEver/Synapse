@@ -228,6 +228,33 @@ describe("NodeTypeRegistry", () => {
     expect(nodeTypeRegistry.getExecutor("file_opener_file_open")).toBe(fileOpenerNodeExecutor)
   })
 
+  it("registers text file writer manifest and executor in main registry", async () => {
+    vi.doMock("electron", () => ({
+      app: {
+        getPath: () => "/tmp",
+        getAppPath: () => "/tmp",
+      },
+    }))
+
+    vi.doMock("../../electron/services/log-store", () => ({
+      createMainLogger: () => ({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      }),
+    }))
+
+    await import("../register.main")
+    const [{ nodeTypeRegistry }, { textFileWriterNodeExecutor }] = await Promise.all([
+      import("../registry"),
+      import("../../app-capabilities/text-file-writer/workflow-node/executor.main"),
+    ])
+
+    expect(nodeTypeRegistry.getManifest("text_file_writer_file_write").title).toBe("文本写入文件")
+    expect(nodeTypeRegistry.getExecutor("text_file_writer_file_write")).toBe(textFileWriterNodeExecutor)
+  })
+
   it("requires a share contract for every registered main-process node", async () => {
     vi.doMock("electron", () => ({
       app: {
@@ -260,6 +287,7 @@ describe("NodeTypeRegistry", () => {
       "switch",
       "text",
       "text_extract",
+      "text_file_writer_file_write",
       "workflow_call",
     ])
     for (const manifest of manifests) {

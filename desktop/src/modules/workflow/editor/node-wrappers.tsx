@@ -12,6 +12,7 @@ import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
 import { FileOpenerNodeCard } from "../../../../app-capabilities/file-opener/workflow-node/card"
 import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-template/workflow-node/card"
 import { TextExtractNodeCard } from "../../../../app-capabilities/text-extractor/workflow-node/card"
+import { TextFileWriterNodeCard } from "../../../../app-capabilities/text-file-writer/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { TextNodeConfig } from "../../../../workflow-nodes/text/schema"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
@@ -25,6 +26,7 @@ import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-cod
 import type { FileOpenerNodeConfig } from "../../../../app-capabilities/file-opener/workflow-node/schema"
 import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/document-template/workflow-node/schema"
 import type { TextExtractNodeConfig } from "../../../../app-capabilities/text-extractor/workflow-node/schema"
+import type { TextFileWriterNodeConfig } from "../../../../app-capabilities/text-file-writer/workflow-node/schema"
 
 export function TextNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
@@ -195,6 +197,19 @@ export function TextExtractNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
+export function TextFileWriterNodeWrapper({ id, data, selected }: NodeProps) {
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="text_file_writer_file_write">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <TextFileWriterNodeCard config={data as TextFileWriterNodeConfig} name={name} selected={selected} nodeId={id} />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
 export const nodeTypes = {
   text: TextNodeWrapper,
   prompt: PromptNodeWrapper,
@@ -208,4 +223,5 @@ export const nodeTypes = {
   file_opener_file_open: FileOpenerNodeWrapper,
   document_template_docx_generate: DocumentTemplateNodeWrapper,
   text_extract: TextExtractNodeWrapper,
+  text_file_writer_file_write: TextFileWriterNodeWrapper,
 }

@@ -154,6 +154,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.sound-notifier",
       "core.text-extractor",
       "core.file-opener",
+      "core.text-file-writer",
       "provider",
     ])
     expect(coreDatabaseDescriptor.stop).toBeTypeOf("function")

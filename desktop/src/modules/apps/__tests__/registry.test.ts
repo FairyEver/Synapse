@@ -26,6 +26,7 @@ describe("system app registry", () => {
       "document-template",
       "text-extractor",
       "file-opener",
+      "text-file-writer",
       "skill-installer",
       "skill-uninstaller",
       "synapse-skill",
@@ -63,6 +64,14 @@ describe("system app registry", () => {
       namespace: "file_opener",
       dock: { pinnedByDefault: false, order: 242 },
       capabilities: { primaryMcpPrefix: "app_file_opener" },
+    })
+    expect(getSystemAppManifest("text-file-writer")).toMatchObject({
+      id: "text-file-writer",
+      namespace: "text_file_writer",
+      name: "文本写入文件",
+      windowTitle: "文本写入文件",
+      dock: { pinnedByDefault: false, order: 241 },
+      capabilities: { primaryMcpPrefix: "app_text_file_writer" },
     })
     expect(getSystemAppManifest("agent-personas")).toMatchObject({
       id: "agent-personas",

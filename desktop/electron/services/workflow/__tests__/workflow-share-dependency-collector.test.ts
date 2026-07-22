@@ -290,6 +290,67 @@ describe("collectWorkflowShareDependencies", () => {
     expect(result.references.resources).toEqual([])
   })
 
+  it("declares text file writing as one local write dependency", () => {
+    const definition = workflow()
+    definition.params = []
+    definition.defaultProviderId = undefined
+    definition.defaultProjectId = undefined
+    definition.nodes = [{
+      id: "write",
+      name: "文本写入文件",
+      type: "text_file_writer_file_write",
+      position: { x: 0, y: 0 },
+      config: { path: "/tmp/report.md", text: "hello", encoding: "utf8", overwrite: false, variables: [] },
+    }]
+    const workflowRef = stableWorkflowReference(definition.id)
+    const result = collectWorkflowShareDependencies({
+      workflows: [definition],
+      workflowRefs: new Map([[definition.id, workflowRef]]),
+      providers: [],
+    })
+
+    expect(result.requiredCapabilities).toContainEqual({
+      id: "app.text_file_writer.file.write",
+      minVersion: "1.0.0",
+      installSourceId: "synapse.builtin",
+    })
+    expect(result.references.resources).toEqual([
+      expect.objectContaining({
+        kind: "local_path",
+        entryType: "file",
+        cardinality: "one",
+        access: "write",
+        displayName: "report.md",
+      }),
+    ])
+  })
+
+  it("does not export a text-writer path supplied by a runtime binding", () => {
+    const definition = workflow()
+    definition.params[0].default = null
+    definition.nodes = [{
+      id: "write",
+      name: "文本写入文件",
+      type: "text_file_writer_file_write",
+      position: { x: 0, y: 0 },
+      config: {
+        path: "{{source}}",
+        text: "hello",
+        encoding: "utf8",
+        overwrite: false,
+        variables: [{ name: "source", source: { type: "param", param: "source" } }],
+      },
+    }]
+    const workflowRef = stableWorkflowReference(definition.id)
+    const result = collectWorkflowShareDependencies({
+      workflows: [definition],
+      workflowRefs: new Map([[definition.id, workflowRef]]),
+      providers: [],
+    })
+
+    expect(result.references.resources).toEqual([])
+  })
+
   it("matches equivalent Git remotes without exposing credentials or URLs", () => {
     const https = workflowShareGitRemoteFingerprint("https://token:secret@github.com/Team/Repo.git?token=secret")
     const ssh = workflowShareGitRemoteFingerprint("git@github.com:Team/Repo.git")

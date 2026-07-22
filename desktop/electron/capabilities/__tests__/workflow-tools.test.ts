@@ -78,6 +78,7 @@ describe("workflow MCP tool definitions", () => {
     expect(listDescription).toContain("document_template_docx_generate")
     expect(listDescription).toContain("text_extract")
     expect(listDescription).toContain("file_opener_file_open")
+    expect(listDescription).toContain("text_file_writer_file_write")
     expect(listDescription).toContain("PDF")
     expect(listDescription).toContain("DOCX")
 
@@ -86,6 +87,7 @@ describe("workflow MCP tool definitions", () => {
     expect(stringProperty(describeNodeType, "description")).toContain("document_template_docx_generate")
     expect(stringProperty(describeNodeType, "description")).toContain("text_extract")
     expect(stringProperty(describeNodeType, "description")).toContain("file_opener_file_open")
+    expect(stringProperty(describeNodeType, "description")).toContain("text_file_writer_file_write")
 
     const createProperties = toolByName("app_workflow_node_create").inputSchema.properties
     const nodeSchema = objectProperty(createProperties, "node")
@@ -94,6 +96,7 @@ describe("workflow MCP tool definitions", () => {
     expect(stringProperty(typeSchema, "description")).toContain("document_template_docx_generate")
     expect(stringProperty(typeSchema, "description")).toContain("text_extract")
     expect(stringProperty(typeSchema, "description")).toContain("file_opener_file_open")
+    expect(stringProperty(typeSchema, "description")).toContain("text_file_writer_file_write")
   })
 
   it("documents workflow_call, codex, and claude_code config fields in the full definition schema", () => {
@@ -165,6 +168,13 @@ describe("workflow MCP tool definitions", () => {
       .toContain("text_extract")
     expect(stringProperty(objectProperty(configProperties, "path"), "description"))
       .toContain("file_opener_file_open")
+    expect(stringProperty(objectProperty(configProperties, "path"), "description"))
+      .toContain("text_file_writer_file_write")
+    expect(stringProperty(objectProperty(configProperties, "text"), "description"))
+      .toContain("no schema maxLength")
+    expect(objectProperty(configProperties, "encoding")).toMatchObject({
+      enum: ["utf8", "utf16le"],
+    })
   })
 
   it("documents atomic edge creation fields on app_workflow_node_create", () => {

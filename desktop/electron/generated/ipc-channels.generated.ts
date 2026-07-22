@@ -300,6 +300,10 @@ export const IPC_CHANNELS = {
     "saveText": "synapse:app:text_extractor:text:save",
     "status": "synapse:app:text_extractor:operation:status",
   },
+  "textFileWriter": {
+    "chooseOutput": "synapse:app:text_file_writer:output:choose",
+    "writeFile": "synapse:app:text_file_writer:file:write",
+  },
   "fileOpener": {
     "openFile": "synapse:app:file_opener:file:open",
   },

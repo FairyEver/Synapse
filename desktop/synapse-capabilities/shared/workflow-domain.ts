@@ -52,6 +52,8 @@ export const WORKFLOW_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryMcp
 
 const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Workflow params support text, number, file, directory, and option types; option labels and values are the same string, and custom run values are not saved back to the definition. file/directory values are resource references such as { kind: "local_path", entryType: "file", path: "/abs/file.txt" }; set allowMultiple=true to accept an ordered, non-empty array of up to 100 unique references. Available node types include text, prompt, switch, http_request, script, workflow_call, document_template_docx_generate, text_extract, file_opener_file_open, codex, claude_code, and end. A text node returns one deterministic string from its template and explicit variables; incoming edges control execution but do not append upstream output. The nested-workflow node type is exactly "workflow_call"; "app_workflow_call" is not a valid node type. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Switch branches are mutually exclusive: connect each branch only to its own downstream nodes, then merge after those branch-specific nodes if needed. Nodes define a "variables" list that binds upstream node outputs or workflow params. Use {{variableName}} only in supported template fields; script variables are injected as environment variables instead of template text. A workflow_call node invokes another saved workflow and maps text/number/option child params through paramTemplates. Every child param without a default requires a non-empty template or binding before save, and every value binding from a parent param must reference a param declared by the parent workflow with the same declared type as the child param. Single file/directory child params retain legacy string-template and static/node_output value-binding compatibility. Multi-select file/directory child params must use a paramBindings value binding from a parent param with the same resource kind and allowMultiple=true; templates and string value sources are rejected before save. The node returns the child workflow's End output. A document_template_docx_generate node generates a DOCX from a template and either a JSON file or inline JSON data. A text_extract node reads one local PDF or DOCX file and returns its complete text; its filePath supports {{variable}} interpolation. A file_opener_file_open node submits one existing absolute regular local file to the operating system's default application; it rejects URLs, directories, and symbolic links, and its path supports {{variable}} interpolation. A script node runs shell code in the effective project workspace, so workflow defaultProjectId is required because script config has no node-level projectId field. A codex node runs local codex exec, needs an effective project, may set a per-task workingDirectory, and returns Codex's final reply text. A claude_code node runs the user's local Claude Code CLI via claude -p, needs an effective project, may set workingDirectory and Claude Code settings/MCP paths, and returns Claude Code's final reply text. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
 
+const TEXT_FILE_WRITER_WORKFLOW_GUIDANCE = "The text_file_writer_file_write node writes one complete text string to an absolute local .txt, .md, or .csv path. It uses path, text, encoding, overwrite, and variables; path and text support explicit {{variable}} interpolation, there is no separate format field or text length limit, and incoming edges never supply implicit text."
+
 const modelTierSchema = {
   type: "string",
   enum: ["default", "haiku", "sonnet", "opus"],
@@ -202,9 +204,11 @@ const workflowDefinitionSchema = {
               dataSource: { type: "string", enum: ["dataPath", "inline"], description: "document_template_docx_generate only: use a JSON file path or inline JSON data." },
               dataPath: { type: "string", description: "document_template_docx_generate only: JSON data file path when dataSource is dataPath. Supports {{variable}} interpolation." },
               dataJson: { type: "string", description: "document_template_docx_generate only: inline JSON text when dataSource is inline. Supports {{variable}} interpolation." },
-              overwrite: { type: "boolean", default: false, description: "document_template_docx_generate only: whether an existing output file may be replaced." },
+              overwrite: { type: "boolean", default: false, description: "document_template_docx_generate/text_file_writer_file_write: whether an existing output file may be replaced." },
               filePath: { type: "string", description: "text_extract only: absolute local PDF or DOCX path. Supports {{variable}} interpolation." },
-              path: { type: "string", description: "file_opener_file_open only: absolute path to an existing non-symbolic-link regular local file. URLs and directories are rejected. Supports {{variable}} interpolation." },
+              path: { type: "string", description: "file_opener_file_open/text_file_writer_file_write: absolute local path. The writer requires a .txt, .md, or .csv suffix. Supports {{variable}} interpolation." },
+              text: { type: "string", description: "text_file_writer_file_write only: complete text to write, with no schema maxLength. Supports {{variable}} interpolation." },
+              encoding: { type: "string", enum: ["utf8", "utf16le"], description: "text_file_writer_file_write only: exact output encoding." },
               approvalPolicy: { type: "string", enum: ["never", "on-request", "untrusted"], description: "codex only: Codex approval policy, e.g. never, on-request, or untrusted." },
               sandbox: { type: "string", enum: ["read-only", "workspace-write", "danger-full-access"], description: "codex only: Codex sandbox mode, e.g. read-only, workspace-write, or danger-full-access." },
               workingDirectory: { type: "string", description: "codex/claude_code only: optional per-task working directory. Supports {{variable}} interpolation and must already exist. For codex it becomes process cwd and Codex --cd; for claude_code it becomes process cwd." },
@@ -267,7 +271,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     // Discovery
     {
       name: "workflow_node_type_list",
-      description: SYSTEM_MODEL_DESCRIPTION,
+      description: `${SYSTEM_MODEL_DESCRIPTION} ${TEXT_FILE_WRITER_WORKFLOW_GUIDANCE}`,
       inputSchema: { type: "object", properties: {}, required: [] },
     },
     {
@@ -275,7 +279,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
       description: "Return the full manifest for a node type including config JSON Schema, port definitions, and field descriptors. Treat `configSchema.required` as authoritative, including required booleans and arrays. For prompt and switch nodes, also returns `availableProviders` — a list of configured providers with their model names per tier. Codex and Claude Code nodes do not use providerId/modelTier; inspect their schemas for local CLI options.",
       inputSchema: {
         type: "object",
-        properties: { nodeType: { type: "string", description: "Node type identifier (e.g. \"text\", \"prompt\", \"switch\", \"http_request\", \"script\", \"workflow_call\", \"document_template_docx_generate\", \"text_extract\", \"file_opener_file_open\", \"codex\", \"claude_code\", \"end\")." } },
+        properties: { nodeType: { type: "string", description: "Node type identifier (e.g. \"text\", \"prompt\", \"switch\", \"http_request\", \"script\", \"workflow_call\", \"document_template_docx_generate\", \"text_extract\", \"file_opener_file_open\", \"text_file_writer_file_write\", \"codex\", \"claude_code\", \"end\")." } },
         required: ["nodeType"],
       },
     },
@@ -398,7 +402,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
             description: "Node specification.",
             properties: {
               name: { type: "string", description: "Display name for the node." },
-              type: { type: "string", description: "Node type (e.g. \"text\", \"prompt\", \"switch\", \"http_request\", \"script\", \"workflow_call\", \"document_template_docx_generate\", \"text_extract\", \"file_opener_file_open\", \"codex\", \"claude_code\", \"end\")." },
+              type: { type: "string", description: "Node type (e.g. \"text\", \"prompt\", \"switch\", \"http_request\", \"script\", \"workflow_call\", \"document_template_docx_generate\", \"text_extract\", \"file_opener_file_open\", \"text_file_writer_file_write\", \"codex\", \"claude_code\", \"end\")." },
               position: { type: "object", description: "Optional { x, y } position. Auto-calculated if omitted.", properties: { x: { type: "number" }, y: { type: "number" } } },
               config: { type: "object", description: "Required node configuration. Use workflow_node_type_describe to see required fields and minimal valid config for the selected type." },
             },

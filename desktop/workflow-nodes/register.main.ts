@@ -13,6 +13,7 @@ import { documentTemplateNodeManifest } from "../app-capabilities/document-templ
 import { documentTemplateNodeExecutor } from "../app-capabilities/document-template/workflow-node/executor.main"
 import { textExtractNodeManifest } from "../app-capabilities/text-extractor/workflow-node/manifest"
 import { textExtractNodeExecutor } from "../app-capabilities/text-extractor/workflow-node/executor.main"
+import { textFileWriterNodeManifest, textFileWriterNodeExecutor } from "../app-capabilities/text-file-writer/workflow-node"
 
 nodeTypeRegistry.register(textNodeManifest, textNodeExecutor)
 nodeTypeRegistry.register(promptNodeManifest, promptNodeExecutor)
@@ -26,3 +27,4 @@ nodeTypeRegistry.register(claudeCodeNodeManifest, claudeCodeNodeExecutor)
 nodeTypeRegistry.register(fileOpenerNodeManifest, fileOpenerNodeExecutor)
 nodeTypeRegistry.register(documentTemplateNodeManifest, documentTemplateNodeExecutor)
 nodeTypeRegistry.register(textExtractNodeManifest, textExtractNodeExecutor)
+nodeTypeRegistry.register(textFileWriterNodeManifest, textFileWriterNodeExecutor)

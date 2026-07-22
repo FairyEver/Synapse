@@ -23,6 +23,7 @@ import { AgentPersonasModule } from "../../../../app-capabilities/agent-personas
 import { DocumentTemplateModule } from "../../../../app-capabilities/document-template/renderer"
 import { TextExtractorModule } from "../../../../app-capabilities/text-extractor/renderer"
 import { FileOpenerModule } from "../../../../app-capabilities/file-opener/renderer"
+import { TextFileWriterModule } from "../../../../app-capabilities/text-file-writer/renderer"
 import { SkillInstallerModule } from "../../../../app-capabilities/skill-installer/renderer"
 import { SkillUninstallerModule } from "../../../../app-capabilities/skill-uninstaller/renderer"
 import { SynapseSkillModule } from "../../../../app-capabilities/synapse-skill/renderer"
@@ -101,6 +102,7 @@ function SystemAppContent({
   if (appId === "document-template") return <DocumentTemplateModule />
   if (appId === "text-extractor") return <TextExtractorModule />
   if (appId === "file-opener") return <FileOpenerModule />
+  if (appId === "text-file-writer") return <TextFileWriterModule />
   if (appId === "skill-installer") return <SkillInstallerModule />
   if (appId === "skill-uninstaller") return <SkillUninstallerModule />
   if (appId === "synapse-skill") return <SynapseSkillModule />

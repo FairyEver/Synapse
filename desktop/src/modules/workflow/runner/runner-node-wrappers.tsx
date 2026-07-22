@@ -20,6 +20,7 @@ import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
 import { FileOpenerNodeCard } from "../../../../app-capabilities/file-opener/workflow-node/card"
 import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-template/workflow-node/card"
 import { TextExtractNodeCard } from "../../../../app-capabilities/text-extractor/workflow-node/card"
+import { TextFileWriterNodeCard } from "../../../../app-capabilities/text-file-writer/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { TextNodeConfig } from "../../../../workflow-nodes/text/schema"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
@@ -33,6 +34,7 @@ import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-cod
 import type { FileOpenerNodeConfig } from "../../../../app-capabilities/file-opener/workflow-node/schema"
 import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/document-template/workflow-node/schema"
 import type { TextExtractNodeConfig } from "../../../../app-capabilities/text-extractor/workflow-node/schema"
+import type { TextFileWriterNodeConfig } from "../../../../app-capabilities/text-file-writer/workflow-node/schema"
 import type { NodeRunResult } from "@/types/workflow"
 import type { SynapseAgentConversationReference } from "@/types/agent-navigation"
 import { agentConversationTargetFromOutputs } from "@/lib/agent-conversation-target"
@@ -323,6 +325,26 @@ function RunnerFileOpenerNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
+function RunnerTextFileWriterNodeWrapper({ id, data, selected }: NodeProps) {
+  const nodeResults = useContext(RunnerNodeResultsContext)
+  const result = nodeResults[id]
+  const name = (data as { name?: string }).name
+  return (
+    <div className="relative">
+      <Handle type="target" position={Position.Left} />
+      <TextFileWriterNodeCard
+        config={data as TextFileWriterNodeConfig}
+        name={name}
+        selected={selected}
+        status={result?.status}
+        progressLabel={result?.progressLabel}
+        startedAt={result?.startedAt}
+      />
+      <Handle type="source" position={Position.Right} />
+    </div>
+  )
+}
+
 export const runnerNodeTypes = {
   text: RunnerTextNodeWrapper,
   prompt: RunnerPromptNodeWrapper,
@@ -336,4 +358,5 @@ export const runnerNodeTypes = {
   document_template_docx_generate: RunnerDocumentTemplateNodeWrapper,
   text_extract: RunnerTextExtractNodeWrapper,
   file_opener_file_open: RunnerFileOpenerNodeWrapper,
+  text_file_writer_file_write: RunnerTextFileWriterNodeWrapper,
 }
