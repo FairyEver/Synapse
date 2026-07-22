@@ -2081,6 +2081,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
       workflowNodeId,
       workflowNodeName,
       onConversationCreated,
+      onResponseStarted,
     }) => {
       try {
         if (!projectId) {
@@ -2127,6 +2128,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
             agentConversation = target
             onConversationCreated?.(target)
           },
+          onResponseStarted,
         })
         const providerFailure = result.status === "success" && result.summary
           ? agentProviderFailureFromResponse(result.summary)

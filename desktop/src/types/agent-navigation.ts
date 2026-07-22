@@ -12,11 +12,15 @@ export type SynapseAgentConversationSourceFilter =
   | "bridge"
   | "all"
 
-export interface SynapseAgentConversationTarget {
+export interface SynapseAgentConversationReference {
   readonly projectId: string
   readonly conversationId: string
-  readonly sessionKey: string
+  readonly sessionKey?: string
   readonly platform: SynapseAgentConversationPlatform
+}
+
+export interface SynapseAgentConversationTarget extends SynapseAgentConversationReference {
+  readonly sessionKey: string
 }
 
 export type SynapseOpenAgentConversationResult =

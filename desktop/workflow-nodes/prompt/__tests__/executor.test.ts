@@ -125,10 +125,15 @@ describe("promptNodeExecutor", () => {
       platform: "workflow" as const,
     }
     const onAgentConversation = vi.fn()
+    const onProgress = vi.fn()
     const sendToAgent = vi.fn(async (
-      input: { onConversationCreated?: (conversationTarget: typeof target) => void },
+      input: {
+        onConversationCreated?: (conversationTarget: typeof target) => void
+        onResponseStarted?: () => void
+      },
     ) => {
       input.onConversationCreated?.(target)
+      input.onResponseStarted?.()
       return {
         status: "success" as const,
         response: "answer",
@@ -143,6 +148,7 @@ describe("promptNodeExecutor", () => {
       context: ctx,
       agentDeps: { sendToAgent },
       onAgentConversation,
+      onProgress,
     })
 
     expect(r).toMatchObject({
@@ -151,6 +157,7 @@ describe("promptNodeExecutor", () => {
       agentConversation: target,
     })
     expect(onAgentConversation).toHaveBeenCalledWith(target)
+    expect(onProgress).toHaveBeenCalledWith("processing_response", "处理中…")
   })
 
   it("returns sanitized Agent error for UI display — redacts secrets and paths", async () => {

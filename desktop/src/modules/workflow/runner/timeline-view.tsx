@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
-import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
+import type { SynapseAgentConversationReference } from "@/types/agent-navigation"
 import { agentConversationTargetFromOutputs } from "@/lib/agent-conversation-target"
 import { NODE_STATUS_LABEL, NODE_STATUS_VARIANT } from "../lib/status-display"
 import { formatDurationMs } from "../lib/duration"
@@ -16,7 +16,7 @@ interface TimelineViewProps {
   nodeResults: Record<string, NodeRunResult>
   selectedNodeId?: string | null
   onNodeSelect: (nodeId: string | null) => void
-  onOpenAgentConversation?: (target: SynapseAgentConversationTarget) => void
+  onOpenAgentConversation?: (target: SynapseAgentConversationReference) => void
 }
 
 export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSelect, onOpenAgentConversation }: TimelineViewProps) {

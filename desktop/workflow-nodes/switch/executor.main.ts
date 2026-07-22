@@ -120,6 +120,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
         agentConversation = target
         input.onAgentConversation?.(target)
       },
+      onResponseStarted: () => input.onProgress?.("processing_response", "处理中…"),
     })
     const durationMs = Date.now() - start
 

@@ -6,7 +6,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { NodeRunResult } from "@/types/workflow"
-import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
+import type { SynapseAgentConversationReference } from "@/types/agent-navigation"
 import {
   RunnerOpenAgentConversationContext,
   RunnerNodeResultsContext,
@@ -84,10 +84,9 @@ describe("runnerNodeTypes", () => {
   })
 
   it("opens the agent conversation directly from a DAG node card", async () => {
-    const target: SynapseAgentConversationTarget = {
+    const target: SynapseAgentConversationReference = {
       projectId: "project-1",
       conversationId: "conversation-1",
-      sessionKey: "workflow:project-1:conversation-1",
       platform: "workflow",
     }
     const onOpenAgentConversation = vi.fn()
@@ -136,7 +135,7 @@ describe("runnerNodeTypes", () => {
   })
 })
 
-function nodeResult(nodeId: string, target: SynapseAgentConversationTarget): NodeRunResult {
+function nodeResult(nodeId: string, target: SynapseAgentConversationReference): NodeRunResult {
   return {
     nodeId,
     status: "success",

@@ -1,5 +1,5 @@
 import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResult, WorkflowNodeUsageCostSnapshot } from "../../../src/types/workflow"
-import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
+import type { SynapseAgentConversationReference } from "../../../src/types/agent-navigation"
 import type { AgentSendDeps, NodeExecutionResult, NodeRuntimeDeps, WorkflowCallStackEntry } from "../../../workflow-nodes/types"
 import type { ActorIdentity } from "../../runtime/security"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
@@ -51,7 +51,7 @@ function normalizeOptionalString(value: unknown): string | undefined {
 
 function mergeAgentConversationOutput(
   outputs: Record<string, unknown> | undefined,
-  agentConversation: SynapseAgentConversationTarget | undefined,
+  agentConversation: SynapseAgentConversationReference | undefined,
 ): NodeRunResult["outputs"] {
   if (!agentConversation) return outputs as NodeRunResult["outputs"]
   return {
