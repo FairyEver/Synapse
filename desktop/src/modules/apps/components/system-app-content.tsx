@@ -21,7 +21,7 @@ import { getSynapseBridge } from "@/lib/electron-bridge"
 import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
 import { AgentPersonasModule } from "../../../../app-capabilities/agent-personas/renderer"
 import { DocumentTemplateModule } from "../../../../app-capabilities/document-template/renderer"
-import { DocumentTextExtractorModule } from "../../../../app-capabilities/document-text-extractor/renderer"
+import { TextExtractorModule } from "../../../../app-capabilities/text-extractor/renderer"
 import { SkillInstallerModule } from "../../../../app-capabilities/skill-installer/renderer"
 import { SkillUninstallerModule } from "../../../../app-capabilities/skill-uninstaller/renderer"
 import { SynapseSkillModule } from "../../../../app-capabilities/synapse-skill/renderer"
@@ -98,7 +98,7 @@ function SystemAppContent({
   }
   if (appId === "database") return <DatabaseModule />
   if (appId === "document-template") return <DocumentTemplateModule />
-  if (appId === "document-text-extractor") return <DocumentTextExtractorModule />
+  if (appId === "text-extractor") return <TextExtractorModule />
   if (appId === "skill-installer") return <SkillInstallerModule />
   if (appId === "skill-uninstaller") return <SkillUninstallerModule />
   if (appId === "synapse-skill") return <SynapseSkillModule />

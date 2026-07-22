@@ -84,7 +84,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.data-repository",
         "core.database",
         "core.diagnostics",
-        "core.document-text-extractor",
+        "core.text-extractor",
         "core.drive-sync",
         "core.event-bus",
         "core.execution-isolation",
@@ -153,7 +153,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.terminal")?.dependsOn).toEqual([])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
     expect(byId.get("core.sound-notifier")?.dependsOn).toEqual(["core.data-repository", "core.window-manager"])
-    expect(byId.get("core.document-text-extractor")?.dependsOn).toEqual([
+    expect(byId.get("core.text-extractor")?.dependsOn).toEqual([
       "core.permission-guard",
       "core.audit-sink",
     ])
@@ -262,7 +262,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.audit-sink",
       "core.terminal",
       "core.sound-notifier",
-      "core.document-text-extractor",
+      "core.text-extractor",
       "provider",
     ])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([
@@ -303,7 +303,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.config")).toBeLessThan(idx("core.database"))
     expect(idx("core.action-runtime")).toBeLessThan(idx("core.database"))
     expect(idx("core.automation")).toBeLessThan(idx("core.database"))
-    expect(idx("core.document-text-extractor")).toBeLessThan(idx("core.database"))
+    expect(idx("core.text-extractor")).toBeLessThan(idx("core.database"))
     expect(idx("core.config")).toBeLessThan(idx("core.diagnostics"))
     expect(idx("core.config")).toBeLessThan(idx("repo.watch"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.project-containers"))

@@ -2,9 +2,9 @@
 
 Use App MCP tools for capabilities provided by Synapse system apps.
 
-## Document Text Extraction
+## Text Extraction
 
-Use `app_document_text_extractor_document_extract` when the user asks to extract text from a local PDF or DOCX document.
+Use `app_text_extractor_document_extract` when the user asks to extract text from a local PDF or DOCX document.
 
 Rules:
 

@@ -221,7 +221,7 @@ Single-context: use the root `CONTEXT.md` and `docs/adr/`. See `docs/agents/doma
 
 ### 模块硬边界摘要
 
-- 文档文本提取对外保持单一格式中立能力，PDF、DOCX、App、MCP 和 Workflow 入口必须复用同一能力身份、核心服务、限制与错误契约，不得拆成格式专属公共工具。文件权限检查、审计、安全打开及身份校验在主进程完成，解析 Worker 只接收已验证字节且不得重新打开用户路径；正文、内容片段和未脱敏完整路径不得进入结构化日志或审计。
+- 文本提取系统应用使用 `text-extractor` app id 和 `text_extractor` namespace；统一 capability 为 `app.text_extractor.document.extract`，MCP Tool 为 `app_text_extractor_document_extract`，Workflow 节点类型为 `text_extract`。PDF、DOCX、App、MCP 和 Workflow 入口必须复用同一格式中立能力、核心服务、限制与错误契约，不得拆成格式专属公共工具。文件权限检查、审计、安全打开及身份校验在主进程完成，解析 Worker 只接收已验证字节且不得重新打开用户路径；正文、内容片段和未脱敏完整路径不得进入结构化日志或审计。
 - Drive `公开素材`使用稳定、匿名、不过期的 `/files/<assetId>` URL。允许 JPG/JPEG/PNG/WebP/GIF/AVIF/ICO 图片和 PDF/DOCX/XLSX/PPTX/TXT/MD/CSV 文档；SVG、网页主动内容、压缩包、可执行文件、旧版 Office 和宏格式不允许。图片以内联方式返回，文档必须作为附件下载；替换只能在图片类别内或文档类别内进行。需要密码、有效期或敏感访问控制的文档必须使用普通 Drive 分享，不得把公开素材扩展成受控分享的旁路。
 - Drive 公开 HTML 时，独立 HTML 在用户未明确要求发布整个文件夹的情况下默认使用 `/share/...`；多文件静态站点，或用户明确要求把整个文件夹作为网站发布时，使用 `/sites/...`。文件夹即使只有一个 `index.html` 也可以发布为 Site；用户仅指定上传目标文件夹，或泛称“网页 / 网站 / 站点”，不等于要求发布该文件夹。
 - Knowledge Base 是 Synapse 托管项目类型；新建知识库时用户只提供名称，真实目录由 Synapse 创建在 Synapse-managed storage 中，项目路径对用户显示为虚拟 `synapse-kb://<id>`。Synapse-managed storage 默认位于 Electron `userData`，也允许用户配置一个全局知识库存储根；实际运行目录始终由 Synapse 创建为 `<storage-root>/knowledge-bases/<runtimeId>/`，不得暴露为逐库自选项目路径。

@@ -10,8 +10,8 @@ import { codexNodeManifest, codexNodeExecutor } from "./codex"
 import { claudeCodeNodeManifest, claudeCodeNodeExecutor } from "./claude-code"
 import { documentTemplateNodeManifest } from "../app-capabilities/document-template/workflow-node/manifest"
 import { documentTemplateNodeExecutor } from "../app-capabilities/document-template/workflow-node/executor.main"
-import { documentTextExtractNodeManifest } from "../app-capabilities/document-text-extractor/workflow-node/manifest"
-import { documentTextExtractNodeExecutor } from "../app-capabilities/document-text-extractor/workflow-node/executor.main"
+import { textExtractNodeManifest } from "../app-capabilities/text-extractor/workflow-node/manifest"
+import { textExtractNodeExecutor } from "../app-capabilities/text-extractor/workflow-node/executor.main"
 
 nodeTypeRegistry.register(textNodeManifest, textNodeExecutor)
 nodeTypeRegistry.register(promptNodeManifest, promptNodeExecutor)
@@ -23,4 +23,4 @@ nodeTypeRegistry.register(workflowCallNodeManifest, workflowCallNodeExecutor)
 nodeTypeRegistry.register(codexNodeManifest, codexNodeExecutor)
 nodeTypeRegistry.register(claudeCodeNodeManifest, claudeCodeNodeExecutor)
 nodeTypeRegistry.register(documentTemplateNodeManifest, documentTemplateNodeExecutor)
-nodeTypeRegistry.register(documentTextExtractNodeManifest, documentTextExtractNodeExecutor)
+nodeTypeRegistry.register(textExtractNodeManifest, textExtractNodeExecutor)

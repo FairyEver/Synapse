@@ -292,13 +292,13 @@ export const IPC_CHANNELS = {
     "chooseOutputFile": "synapse:app:document_template:output:choose",
     "generateDocx": "synapse:app:document_template:docx:generate",
   },
-  "documentTextExtractor": {
-    "chooseDocument": "synapse:app:document_text_extractor:document:choose",
-    "extractDocument": "synapse:app:document_text_extractor:document:extract",
-    "cancelExtraction": "synapse:app:document_text_extractor:operation:cancel",
-    "chooseOutput": "synapse:app:document_text_extractor:output:choose",
-    "saveText": "synapse:app:document_text_extractor:text:save",
-    "status": "synapse:app:document_text_extractor:operation:status",
+  "textExtractor": {
+    "chooseDocument": "synapse:app:text_extractor:document:choose",
+    "extractDocument": "synapse:app:text_extractor:document:extract",
+    "cancelExtraction": "synapse:app:text_extractor:operation:cancel",
+    "chooseOutput": "synapse:app:text_extractor:output:choose",
+    "saveText": "synapse:app:text_extractor:text:save",
+    "status": "synapse:app:text_extractor:operation:status",
   },
   "quickInput": {
     "list": "synapse:app:quick_input:item:list",

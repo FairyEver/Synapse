@@ -76,21 +76,21 @@ describe("workflow MCP tool definitions", () => {
   it("teaches agents that app-provided Workflow node types are supported", () => {
     const listDescription = toolByName("app_workflow_node_type_list").description
     expect(listDescription).toContain("document_template_docx_generate")
-    expect(listDescription).toContain("document_text_extract")
+    expect(listDescription).toContain("text_extract")
     expect(listDescription).toContain("PDF")
     expect(listDescription).toContain("DOCX")
 
     const describeProperties = toolByName("app_workflow_node_type_describe").inputSchema.properties
     const describeNodeType = objectProperty(describeProperties, "nodeType")
     expect(stringProperty(describeNodeType, "description")).toContain("document_template_docx_generate")
-    expect(stringProperty(describeNodeType, "description")).toContain("document_text_extract")
+    expect(stringProperty(describeNodeType, "description")).toContain("text_extract")
 
     const createProperties = toolByName("app_workflow_node_create").inputSchema.properties
     const nodeSchema = objectProperty(createProperties, "node")
     const nodeProperties = objectProperty(nodeSchema, "properties")
     const typeSchema = objectProperty(nodeProperties, "type")
     expect(stringProperty(typeSchema, "description")).toContain("document_template_docx_generate")
-    expect(stringProperty(typeSchema, "description")).toContain("document_text_extract")
+    expect(stringProperty(typeSchema, "description")).toContain("text_extract")
   })
 
   it("documents workflow_call, codex, and claude_code config fields in the full definition schema", () => {
@@ -145,7 +145,7 @@ describe("workflow MCP tool definitions", () => {
     const configProperties = objectProperty(configSchema, "properties")
 
     expect(configDescription).toContain("document_template_docx_generate")
-    expect(configDescription).toContain("document_text_extract")
+    expect(configDescription).toContain("text_extract")
     for (const property of [
       "templatePath",
       "outputPath",
@@ -158,7 +158,7 @@ describe("workflow MCP tool definitions", () => {
       expect(configProperties).toHaveProperty(property)
     }
     expect(stringProperty(objectProperty(configProperties, "filePath"), "description"))
-      .toContain("document_text_extract")
+      .toContain("text_extract")
   })
 
   it("documents atomic edge creation fields on app_workflow_node_create", () => {

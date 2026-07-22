@@ -29,9 +29,9 @@ import {
 import { SECRET_NAME_REGEX } from "../../app-capabilities/secrets/shared/schema"
 import { SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME } from "../../app-capabilities/sound-notifier/shared/capability"
 import {
-  DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID,
-  DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME,
-} from "../../app-capabilities/document-text-extractor/shared/capability"
+  TEXT_EXTRACTOR_CAPABILITY_ID,
+  TEXT_EXTRACTOR_MCP_TOOL_NAME,
+} from "../../app-capabilities/text-extractor/shared/capability"
 import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
@@ -61,7 +61,7 @@ describe("App capability naming", () => {
   })
 
   it("accepts extract as a canonical app capability action", () => {
-    expect(isCanonicalCapabilityId(DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID)).toBe(true)
+    expect(isCanonicalCapabilityId(TEXT_EXTRACTOR_CAPABILITY_ID)).toBe(true)
   })
 })
 
@@ -69,15 +69,15 @@ describe("App capability domain", () => {
   it("registers document template docx generation", () => {
     expect(APP_DOMAIN.id).toBe("app")
     expect(APP_DOMAIN.capabilities).toContainEqual(expect.objectContaining({
-      id: DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID,
+      id: TEXT_EXTRACTOR_CAPABILITY_ID,
       mutates: false,
     }))
     expect(APP_DOMAIN.capabilities.map((capability) => capability.id)).toContain("app.document_template.docx.generate")
-    expect(APP_MCP_TOOL_ACTIONS[DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME])
-      .toBe(DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID)
+    expect(APP_MCP_TOOL_ACTIONS[TEXT_EXTRACTOR_MCP_TOOL_NAME])
+      .toBe(TEXT_EXTRACTOR_CAPABILITY_ID)
     expect(APP_MCP_TOOL_ACTIONS.app_document_template_docx_generate).toBe("app.document_template.docx.generate")
     expect(buildAppTools().map((tool) => tool.name)).toEqual([
-      DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME,
+      TEXT_EXTRACTOR_MCP_TOOL_NAME,
       "app_document_template_docx_generate",
       ...Object.values(TERMINAL_MCP_TOOL_NAMES),
       SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,

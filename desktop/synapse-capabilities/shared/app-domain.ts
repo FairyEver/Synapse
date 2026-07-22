@@ -3,9 +3,9 @@ import {
   DOCUMENT_TEMPLATE_MCP_TOOL_NAME,
 } from "../../app-capabilities/document-template/shared/capability"
 import {
-  DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID,
-  DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME,
-} from "../../app-capabilities/document-text-extractor/shared/capability"
+  TEXT_EXTRACTOR_CAPABILITY_ID,
+  TEXT_EXTRACTOR_MCP_TOOL_NAME,
+} from "../../app-capabilities/text-extractor/shared/capability"
 import {
   TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID,
   TERMINAL_GROUP_COMMAND_DELETE_CAPABILITY_ID,
@@ -56,7 +56,7 @@ import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinitio
 
 const appCapabilities: readonly CapabilityDefinition[] = [
   {
-    id: DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID,
+    id: TEXT_EXTRACTOR_CAPABILITY_ID,
     title: "Extract document text",
     description: "Extract normalized text and metadata from a local PDF or DOCX document.",
     mutates: false,
@@ -196,7 +196,7 @@ export const APP_DOMAIN: CapabilityDomainDefinition = {
 }
 
 export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
-  [DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME]: DOCUMENT_TEXT_EXTRACTOR_CAPABILITY_ID,
+  [TEXT_EXTRACTOR_MCP_TOOL_NAME]: TEXT_EXTRACTOR_CAPABILITY_ID,
   [DOCUMENT_TEMPLATE_MCP_TOOL_NAME]: DOCUMENT_TEMPLATE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupCreate]: TERMINAL_GROUP_CREATE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupList]: TERMINAL_GROUP_LIST_CAPABILITY_ID,
@@ -259,7 +259,7 @@ const strictEmptyInputSchema = {
 export function buildAppTools(): McpToolDefinition[] {
   return [
     {
-      name: DOCUMENT_TEXT_EXTRACTOR_MCP_TOOL_NAME,
+      name: TEXT_EXTRACTOR_MCP_TOOL_NAME,
       description: "Extract complete normalized plain text and metadata from one local PDF or DOCX. The file must be an absolute path to a regular, non-symbolic-link document whose extension matches its content. PDF extraction reads the existing text layer; DOCX extraction reads main-document paragraphs, list text, table cells, and recognizable text boxes. It does not perform OCR or layout reconstruction. An empty text result is successful. Limits: 50 MiB source file, 5 MiB UTF-8 text, 2,000 PDF pages, 60 seconds, and two concurrent tasks.",
       inputSchema: {
         type: "object",

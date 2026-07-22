@@ -18,7 +18,7 @@ import { WorkflowCallNodeCard } from "../../../../workflow-nodes/workflow-call/c
 import { CodexNodeCard } from "../../../../workflow-nodes/codex/card"
 import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
 import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-template/workflow-node/card"
-import { DocumentTextExtractNodeCard } from "../../../../app-capabilities/document-text-extractor/workflow-node/card"
+import { TextExtractNodeCard } from "../../../../app-capabilities/text-extractor/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { TextNodeConfig } from "../../../../workflow-nodes/text/schema"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
@@ -30,7 +30,7 @@ import type { WorkflowCallNodeConfig } from "../../../../workflow-nodes/workflow
 import type { CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
 import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
 import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/document-template/workflow-node/schema"
-import type { DocumentTextExtractNodeConfig } from "../../../../app-capabilities/document-text-extractor/workflow-node/schema"
+import type { TextExtractNodeConfig } from "../../../../app-capabilities/text-extractor/workflow-node/schema"
 import type { NodeRunResult } from "@/types/workflow"
 import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
 import { agentConversationTargetFromOutputs } from "@/lib/agent-conversation-target"
@@ -281,15 +281,15 @@ function RunnerDocumentTemplateNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
-function RunnerDocumentTextExtractNodeWrapper({ id, data, selected }: NodeProps) {
+function RunnerTextExtractNodeWrapper({ id, data, selected }: NodeProps) {
   const nodeResults = useContext(RunnerNodeResultsContext)
   const result = nodeResults[id]
   const name = (data as { name?: string }).name
   return (
     <div className="relative">
       <Handle type="target" position={Position.Left} />
-      <DocumentTextExtractNodeCard
-        config={data as DocumentTextExtractNodeConfig}
+      <TextExtractNodeCard
+        config={data as TextExtractNodeConfig}
         name={name}
         selected={selected}
         status={result?.status}
@@ -312,5 +312,5 @@ export const runnerNodeTypes = {
   codex: RunnerCodexNodeWrapper,
   claude_code: RunnerClaudeCodeNodeWrapper,
   document_template_docx_generate: RunnerDocumentTemplateNodeWrapper,
-  document_text_extract: RunnerDocumentTextExtractNodeWrapper,
+  text_extract: RunnerTextExtractNodeWrapper,
 }

@@ -25,13 +25,13 @@ import type {
   GenerateDocxResult,
 } from "../../app-capabilities/document-template/shared/schema"
 import type {
-  DocumentTextExtractionRequest,
-  DocumentTextExtractionResponse,
-  DocumentTextExtractionStatusEvent,
-  DocumentTextOutputChooseRequest,
-  DocumentTextSaveInput,
-  DocumentTextSaveResponse,
-} from "../../app-capabilities/document-text-extractor/shared/schema"
+  TextExtractionRequest,
+  TextExtractionResponse,
+  TextExtractionStatusEvent,
+  TextOutputChooseRequest,
+  TextSaveInput,
+  TextSaveResponse,
+} from "../../app-capabilities/text-extractor/shared/schema"
 import type {
   SkillUninstallBatchResult,
   SkillUninstallCancelRequest,
@@ -960,20 +960,20 @@ export type SynapseBridge = {
     output: { choose: (input?: { defaultPath?: string }) => Promise<string | null> }
     docx: { generate: (input: GenerateDocxInput) => Promise<GenerateDocxResult> }
   }
-  documentTextExtractor: {
+  textExtractor: {
     document: {
       choose: () => Promise<string | null>
-      extract: (input: DocumentTextExtractionRequest) => Promise<DocumentTextExtractionResponse>
+      extract: (input: TextExtractionRequest) => Promise<TextExtractionResponse>
       cancel: (input: { operationId: string }) => Promise<{ cancelled: boolean }>
     }
     output: {
-      choose: (input: DocumentTextOutputChooseRequest) => Promise<string | null>
+      choose: (input: TextOutputChooseRequest) => Promise<string | null>
     }
     text: {
-      save: (input: DocumentTextSaveInput) => Promise<DocumentTextSaveResponse>
+      save: (input: TextSaveInput) => Promise<TextSaveResponse>
     }
     operation: {
-      onStatus: (listener: (event: DocumentTextExtractionStatusEvent) => void) => () => void
+      onStatus: (listener: (event: TextExtractionStatusEvent) => void) => () => void
     }
   }
   skillUninstaller: {

@@ -209,13 +209,13 @@ const usageAnalysisWorkerEntries = [
   "dist-electron/electron/services/usage-analysis/conversation-worker.js",
   "dist-electron/electron/services/usage-analysis/refresh-worker.js",
 ]
-const documentTextExtractionServiceEntry =
-  "dist-electron/app-capabilities/document-text-extractor/main/service.js"
-const documentTextExtractionWorkerLaunchEntry =
-  "dist-electron/app-capabilities/document-text-extractor/main/worker-launch.js"
-const documentTextExtractionWorkerEntry =
-  "dist-electron/app-capabilities/document-text-extractor/main/worker.js"
-const documentTextExtractionRuntimeEntries = [
+const textExtractionServiceEntry =
+  "dist-electron/app-capabilities/text-extractor/main/service.js"
+const textExtractionWorkerLaunchEntry =
+  "dist-electron/app-capabilities/text-extractor/main/worker-launch.js"
+const textExtractionWorkerEntry =
+  "dist-electron/app-capabilities/text-extractor/main/worker.js"
+const textExtractionRuntimeEntries = [
   "node_modules/unpdf/package.json",
   "node_modules/unpdf/LICENSE",
   "node_modules/unpdf/dist/index.cjs",
@@ -251,7 +251,7 @@ const documentParserLicenses = [
     ],
   },
 ]
-const documentTextExtractionSmokeFixtures = [
+const textExtractionSmokeFixtures = [
   {
     format: "pdf",
     bytes: Buffer.from("JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA1IDAgUiA+PiA+PiAvQ29udGVudHMgNCAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA0OSA+PgpzdHJlYW0KQlQgL0YxIDEyIFRmIDcyIDcyMCBUZCAocGFja2FnZWQgcGRmIHNtb2tlKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDM0MCAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQxMAolJUVPRgo=", "base64"),
@@ -378,82 +378,82 @@ function verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures) {
   }
 }
 
-function verifyDocumentTextExtractionWorker(header, unpackedPath, failures) {
+function verifyTextExtractionWorker(header, unpackedPath, failures) {
   verifyUnpackedNode(
     header,
     unpackedPath,
-    documentTextExtractionServiceEntry,
+    textExtractionServiceEntry,
     failures,
-    "document text extraction service is missing from app.asar",
+    "text extraction service is missing from app.asar",
   )
   verifyUnpackedSourceMap(
     header,
     unpackedPath,
-    documentTextExtractionServiceEntry,
+    textExtractionServiceEntry,
     failures,
     true,
   )
   verifyUnpackedNode(
     header,
     unpackedPath,
-    documentTextExtractionWorkerLaunchEntry,
+    textExtractionWorkerLaunchEntry,
     failures,
-    "document text extraction worker launch contract is missing from app.asar",
+    "text extraction worker launch contract is missing from app.asar",
   )
   verifyUnpackedSourceMap(
     header,
     unpackedPath,
-    documentTextExtractionWorkerLaunchEntry,
+    textExtractionWorkerLaunchEntry,
     failures,
     true,
   )
   verifyUnpackedNode(
     header,
     unpackedPath,
-    documentTextExtractionWorkerEntry,
+    textExtractionWorkerEntry,
     failures,
-    "document text extraction worker is missing from app.asar",
+    "text extraction worker is missing from app.asar",
   )
   verifyUnpackedSourceMap(
     header,
     unpackedPath,
-    documentTextExtractionWorkerEntry,
+    textExtractionWorkerEntry,
     failures,
     true,
   )
-  for (const relativePath of documentTextExtractionRuntimeEntries) {
+  for (const relativePath of textExtractionRuntimeEntries) {
     verifyUnpackedNode(
       header,
       unpackedPath,
       relativePath,
       failures,
-      "document text extraction runtime dependency is missing from app.asar",
+      "text extraction runtime dependency is missing from app.asar",
     )
   }
 
   const serviceSource = readUnpackedText(
     header,
     unpackedPath,
-    documentTextExtractionServiceEntry,
+    textExtractionServiceEntry,
     failures,
-    "document text extraction service",
+    "text extraction service",
   )
   if (
     serviceSource
-    && (!serviceSource.includes("worker-launch") || !serviceSource.includes("launchDocumentTextExtractionWorker"))
+    && (!serviceSource.includes("worker-launch") || !serviceSource.includes("launchTextExtractionWorker"))
   ) {
-    failures.push("document text extraction service bypasses the worker launch contract")
+    failures.push("text extraction service bypasses the worker launch contract")
   }
   const workerSource = readUnpackedText(
     header,
     unpackedPath,
-    documentTextExtractionWorkerEntry,
+    textExtractionWorkerEntry,
     failures,
-    "document text extraction worker",
+    "text extraction worker",
   )
   for (const parser of ["unpdf", "mammoth", "pizzip"]) {
     if (workerSource && !workerSource.includes(parser)) {
-      failures.push(`document text extraction worker does not reference ${parser}`)
+      failures.push(`text extraction worker does not reference ${parser}`)
     }
   }
   for (const license of documentParserLicenses) {
@@ -484,26 +484,26 @@ function verifyDocumentParserLicense(unpackedPath, license, failures) {
   }
 }
 
-async function runDocumentTextExtractionWorkerSmoke(unpackedPath, failures) {
-  const workerPath = path.join(unpackedPath, documentTextExtractionWorkerEntry)
-  const workerLaunchPath = path.join(unpackedPath, documentTextExtractionWorkerLaunchEntry)
+async function runTextExtractionWorkerSmoke(unpackedPath, failures) {
+  const workerPath = path.join(unpackedPath, textExtractionWorkerEntry)
+  const workerLaunchPath = path.join(unpackedPath, textExtractionWorkerLaunchEntry)
   const failureCount = failures.length
-  let launchDocumentTextExtractionWorker
+  let launchTextExtractionWorker
   try {
-    ({ launchDocumentTextExtractionWorker } = require(workerLaunchPath))
+    ({ launchTextExtractionWorker } = require(workerLaunchPath))
   } catch {
-    failures.push("document text extraction worker launch contract cannot be loaded")
+    failures.push("text extraction worker launch contract cannot be loaded")
     return
   }
-  if (typeof launchDocumentTextExtractionWorker !== "function") {
-    failures.push("document text extraction worker launch contract is invalid")
+  if (typeof launchTextExtractionWorker !== "function") {
+    failures.push("text extraction worker launch contract is invalid")
     return
   }
-  for (const fixture of documentTextExtractionSmokeFixtures) {
+  for (const fixture of textExtractionSmokeFixtures) {
     let message
     let launch
     try {
-      const worker = launchDocumentTextExtractionWorker({
+      const worker = launchTextExtractionWorker({
         baseDir: path.dirname(workerLaunchPath),
         bytes: fixture.bytes,
         format: fixture.format,
@@ -515,10 +515,10 @@ async function runDocumentTextExtractionWorkerSmoke(unpackedPath, failures) {
           return new Worker(filename, options)
         },
       })
-      assertDocumentTextExtractionWorkerLaunch(launch, workerPath)
-      message = await waitForDocumentTextExtractionWorker(worker)
+      assertTextExtractionWorkerLaunch(launch, workerPath)
+      message = await waitForTextExtractionWorker(worker)
     } catch {
-      failures.push(`document text extraction worker smoke failed (${fixture.format}): worker launch or execution error`)
+      failures.push(`text extraction worker smoke failed (${fixture.format}): worker launch or execution error`)
       continue
     }
     if (
@@ -526,15 +526,15 @@ async function runDocumentTextExtractionWorkerSmoke(unpackedPath, failures) {
       || message.result?.text !== fixture.expected.text
       || ("pages" in fixture.expected && message.result?.pages !== fixture.expected.pages)
     ) {
-      failures.push(`document text extraction worker smoke failed (${fixture.format}): unexpected result`)
+      failures.push(`text extraction worker smoke failed (${fixture.format}): unexpected result`)
     }
   }
   if (failures.length === failureCount) {
-    console.log("Verified packaged document text extraction worker smoke: PDF text/pages, DOCX text")
+    console.log("Verified packaged text extraction worker smoke: PDF text/pages, DOCX text")
   }
 }
 
-function assertDocumentTextExtractionWorkerLaunch(launch, expectedWorkerPath) {
+function assertTextExtractionWorkerLaunch(launch, expectedWorkerPath) {
   if (!launch || launch.filename !== expectedWorkerPath) {
     throw new Error("unexpected worker path")
   }
@@ -561,7 +561,7 @@ function assertDocumentTextExtractionWorkerLaunch(launch, expectedWorkerPath) {
   }
 }
 
-function waitForDocumentTextExtractionWorker(worker) {
+function waitForTextExtractionWorker(worker) {
   return new Promise((resolve, reject) => {
     let settled = false
     const timeout = setTimeout(() => {
@@ -744,9 +744,9 @@ async function verifyResources(resourcesPath, label) {
     "packaged Claude runtime diagnostics are missing from app.asar",
   )
   verifySandboxedPreloadBundle(buffer, dataOffset, header, failures)
-  verifyDocumentTextExtractionWorker(header, unpackedPath, failures)
+  verifyTextExtractionWorker(header, unpackedPath, failures)
   if (failures.length === 0) {
-    await runDocumentTextExtractionWorkerSmoke(unpackedPath, failures)
+    await runTextExtractionWorkerSmoke(unpackedPath, failures)
   }
   verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures)
   verifyClaudeRuntime(unpackedPath, failures)

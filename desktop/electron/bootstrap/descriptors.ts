@@ -36,11 +36,11 @@ import { createAppCapabilityDispatcher } from "../../app-capabilities/dispatcher
 import { ipcOperationIdToChannel } from "../../synapse-capabilities/shared/naming"
 import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabilities/document-template/main/dispatcher"
 import { createDocumentTemplateService } from "../../app-capabilities/document-template/main/service"
-import { createDocumentTextExtractorCapabilityDispatcher } from "../../app-capabilities/document-text-extractor/main/dispatcher"
+import { createTextExtractorCapabilityDispatcher } from "../../app-capabilities/text-extractor/main/dispatcher"
 import {
-  createDocumentTextExtractorService,
-  type DocumentTextExtractorService,
-} from "../../app-capabilities/document-text-extractor/main/service"
+  createTextExtractorService,
+  type TextExtractorService,
+} from "../../app-capabilities/text-extractor/main/service"
 import { createSoundNotifierCapabilityDispatcher } from "../../app-capabilities/sound-notifier/main/dispatcher"
 import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
 import { createSoundNotifierService, type SoundNotifierService } from "../../app-capabilities/sound-notifier/main/service"
@@ -463,13 +463,13 @@ export const coreSoundNotifierDescriptor: ServiceDescriptor<SoundNotifierService
   },
 }
 
-export const coreDocumentTextExtractorDescriptor: ServiceDescriptor<DocumentTextExtractorService> = {
-  id: "core.document-text-extractor",
+export const coreTextExtractorDescriptor: ServiceDescriptor<TextExtractorService> = {
+  id: "core.text-extractor",
   criticality: "degraded",
   dependsOn: ["core.permission-guard", "core.audit-sink"],
   create(ctx) {
-    return createDocumentTextExtractorService({
-      logger: ctx.logger.child("document-text-extractor"),
+    return createTextExtractorService({
+      logger: ctx.logger.child("text-extractor"),
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
     })
@@ -893,7 +893,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     "core.audit-sink",
     "core.terminal",
     "core.sound-notifier",
-    "core.document-text-extractor",
+    "core.text-extractor",
     PROVIDER_SERVICE_ID,
   ],
   async create(ctx) {
@@ -910,8 +910,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
     const terminalService = ctx.registry.get<TerminalService>("core.terminal")
-    const documentTextExtractorService = ctx.registry.get<DocumentTextExtractorService>(
-      "core.document-text-extractor",
+    const textExtractorService = ctx.registry.get<TextExtractorService>(
+      "core.text-extractor",
     )
     const capabilityLogger = createMainLogger("bootstrap.workflow-capability")
     const runCompletions = new Map<string, Promise<unknown>>()
@@ -1032,8 +1032,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       permissionGuard,
       auditSink,
     })
-    const documentTextExtractorDispatcher = createDocumentTextExtractorCapabilityDispatcher({
-      service: documentTextExtractorService,
+    const textExtractorDispatcher = createTextExtractorCapabilityDispatcher({
+      service: textExtractorService,
     })
     const terminalDispatcher = createTerminalCapabilityDispatcher({
       service: terminalService,
@@ -1050,7 +1050,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
     })
     const appDispatcher = createAppCapabilityDispatcher({
-      documentTextExtractor: documentTextExtractorDispatcher,
+      textExtractor: textExtractorDispatcher,
       documentTemplate: documentTemplateDispatcher,
       secrets: secretsDispatcher,
       soundNotifier: soundNotifierDispatcher,

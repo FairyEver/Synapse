@@ -1,6 +1,6 @@
 # Synapse App MCP API Reference
 
-## `app_document_text_extractor_document_extract`
+## `app_text_extractor_document_extract`
 
 Extract normalized plain text from one local PDF or DOCX. PDF extraction reads the existing text layer. DOCX extraction reads the main document's paragraphs, list text, table cells, and recognizable text boxes. The tool does not perform OCR or layout reconstruction, and does not promise DOCX header, footer, comment, footnote, endnote, or image text.
 

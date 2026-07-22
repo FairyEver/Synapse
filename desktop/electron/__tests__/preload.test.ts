@@ -308,50 +308,50 @@ describe("preload bridge", () => {
     )
   })
 
-  it("maps document text extractor methods and status events to canonical IPC channels", async () => {
+  it("maps text extractor methods and status events to canonical IPC channels", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()
 
-    await bridge.documentTextExtractor.document.choose()
-    await bridge.documentTextExtractor.document.extract({
+    await bridge.textExtractor.document.choose()
+    await bridge.textExtractor.document.extract({
       operationId: "run-1",
       filePath: "/tmp/report.pdf",
     })
-    await bridge.documentTextExtractor.document.cancel({ operationId: "run-1" })
-    await bridge.documentTextExtractor.output.choose({ defaultPath: "report.txt" })
-    await bridge.documentTextExtractor.text.save({
+    await bridge.textExtractor.document.cancel({ operationId: "run-1" })
+    await bridge.textExtractor.output.choose({ defaultPath: "report.txt" })
+    await bridge.textExtractor.text.save({
       outputPath: "/tmp/report.txt",
       text: "正文",
     })
-    bridge.documentTextExtractor.operation.onStatus(listener)
+    bridge.textExtractor.operation.onStatus(listener)
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       1,
-      "synapse:app:document_text_extractor:document:choose",
+      "synapse:app:text_extractor:document:choose",
       undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       2,
-      "synapse:app:document_text_extractor:document:extract",
+      "synapse:app:text_extractor:document:extract",
       { operationId: "run-1", filePath: "/tmp/report.pdf" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       3,
-      "synapse:app:document_text_extractor:operation:cancel",
+      "synapse:app:text_extractor:operation:cancel",
       { operationId: "run-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       4,
-      "synapse:app:document_text_extractor:output:choose",
+      "synapse:app:text_extractor:output:choose",
       { defaultPath: "report.txt" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       5,
-      "synapse:app:document_text_extractor:text:save",
+      "synapse:app:text_extractor:text:save",
       { outputPath: "/tmp/report.txt", text: "正文" },
     )
     expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe(
-      "synapse:app:document_text_extractor:operation:status",
+      "synapse:app:text_extractor:operation:status",
     )
 
     const wrapped = electronMock.ipcRenderer.on.mock.calls[0]?.[1]

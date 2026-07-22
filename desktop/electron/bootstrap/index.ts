@@ -14,7 +14,7 @@ export {
   coreAppIconDescriptor,
   coreConfigDescriptor,
   coreDatabaseDescriptor,
-  coreDocumentTextExtractorDescriptor,
+  coreTextExtractorDescriptor,
   coreDriveSyncDescriptor,
   coreLoggingDescriptor,
   coreModelPriceDescriptor,

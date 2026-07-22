@@ -1,10 +1,10 @@
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
-import type { DocumentTextExtractorService } from "../../../../app-capabilities/document-text-extractor/main/service"
-import { DocumentTextExtractionError } from "../../../../app-capabilities/document-text-extractor/shared/errors"
-import { documentTextExtractNodeExecutor } from "../../../../app-capabilities/document-text-extractor/workflow-node/executor.main"
-import { documentTextExtractNodeManifest } from "../../../../app-capabilities/document-text-extractor/workflow-node/manifest"
+import type { TextExtractorService } from "../../../../app-capabilities/text-extractor/main/service"
+import { TextExtractionError } from "../../../../app-capabilities/text-extractor/shared/errors"
+import { textExtractNodeExecutor } from "../../../../app-capabilities/text-extractor/workflow-node/executor.main"
+import { textExtractNodeManifest } from "../../../../app-capabilities/text-extractor/workflow-node/manifest"
 import type { WorkflowDefinition } from "../../../../src/types/workflow"
 import type { NodeExecutor } from "../../../../workflow-nodes/types"
 import { defaultCodexNodeConfig, type CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
@@ -148,7 +148,7 @@ describe("WorkflowEngine", () => {
       rejectTask = reject
     })
     const cancel = vi.fn(() => {
-      rejectTask(new DocumentTextExtractionError("EXTRACTION_CANCELLED"))
+      rejectTask(new TextExtractionError("EXTRACTION_CANCELLED"))
       return true
     })
     const service = {
@@ -161,8 +161,8 @@ describe("WorkflowEngine", () => {
           cancel,
         }
       }),
-    } as unknown as DocumentTextExtractorService
-    nodeTypeRegistry.register(documentTextExtractNodeManifest, documentTextExtractNodeExecutor)
+    } as unknown as TextExtractorService
+    nodeTypeRegistry.register(textExtractNodeManifest, textExtractNodeExecutor)
     nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
     const engine = new WorkflowEngine(
       { sendToAgent: vi.fn() },
@@ -170,7 +170,7 @@ describe("WorkflowEngine", () => {
       { resolveService: vi.fn(() => service) } as never,
     )
     const definition: WorkflowDefinition = {
-      id: "workflow-document-text-extract",
+      id: "workflow-text-extract",
       name: "Document extraction workflow",
       version: "v1",
       createdAt: 1,
@@ -179,8 +179,8 @@ describe("WorkflowEngine", () => {
       nodes: [
         {
           id: "extract-1",
-          name: "文档文本提取",
-          type: "document_text_extract",
+          name: "文本提取",
+          type: "text_extract",
           position: { x: 0, y: 0 },
           config: { filePath: path.resolve("tmp", "report.pdf"), variables: [] },
         },
@@ -209,7 +209,7 @@ describe("WorkflowEngine", () => {
 
     expect(runResult.nodeResults["extract-1"]).toMatchObject({
       status: "cancelled",
-      error: "EXTRACTION_CANCELLED: 文档文本提取已取消。",
+      error: "EXTRACTION_CANCELLED: 文本提取已取消。",
     })
     expect(runResult.status).toBe("cancelled")
     expect(cancel).toHaveBeenCalledOnce()

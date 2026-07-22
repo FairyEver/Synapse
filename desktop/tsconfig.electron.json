@@ -13,6 +13,6 @@
     "sourceMap": true,
     "types": ["node"]
   },
-  "include": ["electron/**/*.ts", "action-packages/**/*.ts", "app-capabilities/document-text-extractor/main/worker.ts", "database/shared/**/*.ts", "synapse-capabilities/shared/**/*.ts"],
+  "include": ["electron/**/*.ts", "action-packages/**/*.ts", "app-capabilities/text-extractor/main/worker.ts", "database/shared/**/*.ts", "synapse-capabilities/shared/**/*.ts"],
   "exclude": ["electron/preload.ts", "**/__tests__/**", "**/*.test.ts", "**/*.spec.ts"]
 }

@@ -179,7 +179,7 @@
       "node_modules/path-is-absolute/**",
       "node_modules/xmlbuilder/**",
       "dist-electron/action-packages/shared/**",
-      "dist-electron/app-capabilities/document-text-extractor/**",
+      "dist-electron/app-capabilities/text-extractor/**",
       "dist-electron/electron/services/usage-analysis/**",
       "dist-electron/electron/services/model-price/**",
       "dist-electron/src/**"

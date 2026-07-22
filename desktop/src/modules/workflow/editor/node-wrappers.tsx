@@ -10,7 +10,7 @@ import { WorkflowCallNodeCard } from "../../../../workflow-nodes/workflow-call/c
 import { CodexNodeCard } from "../../../../workflow-nodes/codex/card"
 import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
 import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-template/workflow-node/card"
-import { DocumentTextExtractNodeCard } from "../../../../app-capabilities/document-text-extractor/workflow-node/card"
+import { TextExtractNodeCard } from "../../../../app-capabilities/text-extractor/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { TextNodeConfig } from "../../../../workflow-nodes/text/schema"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
@@ -22,7 +22,7 @@ import type { WorkflowCallNodeConfig } from "../../../../workflow-nodes/workflow
 import type { CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
 import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
 import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/document-template/workflow-node/schema"
-import type { DocumentTextExtractNodeConfig } from "../../../../app-capabilities/document-text-extractor/workflow-node/schema"
+import type { TextExtractNodeConfig } from "../../../../app-capabilities/text-extractor/workflow-node/schema"
 
 export function TextNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
@@ -162,14 +162,14 @@ export function DocumentTemplateNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
-export function DocumentTextExtractNodeWrapper({ id, data, selected }: NodeProps) {
+export function TextExtractNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
-    <NodeContextMenu nodeId={id} nodeType="document_text_extract">
+    <NodeContextMenu nodeId={id} nodeType="text_extract">
       <div>
         <Handle type="target" position={Position.Left} />
-        <DocumentTextExtractNodeCard
-          config={data as DocumentTextExtractNodeConfig}
+        <TextExtractNodeCard
+          config={data as TextExtractNodeConfig}
           name={name}
           selected={selected}
           nodeId={id}
@@ -191,5 +191,5 @@ export const nodeTypes = {
   codex: CodexNodeWrapper,
   claude_code: ClaudeCodeNodeWrapper,
   document_template_docx_generate: DocumentTemplateNodeWrapper,
-  document_text_extract: DocumentTextExtractNodeWrapper,
+  text_extract: TextExtractNodeWrapper,
 }

@@ -397,22 +397,22 @@ const synapseBridge: SynapseBridge = {
     output: { choose: (input) => invoke(IPC_CHANNELS.documentTemplate.chooseOutputFile)(input) },
     docx: { generate: (input) => invoke(IPC_CHANNELS.documentTemplate.generateDocx)(input) },
   },
-  documentTextExtractor: {
+  textExtractor: {
     document: {
-      choose: () => invoke(IPC_CHANNELS.documentTextExtractor.chooseDocument)(),
-      extract: (input) => invoke(IPC_CHANNELS.documentTextExtractor.extractDocument)(input),
-      cancel: (input) => invoke(IPC_CHANNELS.documentTextExtractor.cancelExtraction)(input),
+      choose: () => invoke(IPC_CHANNELS.textExtractor.chooseDocument)(),
+      extract: (input) => invoke(IPC_CHANNELS.textExtractor.extractDocument)(input),
+      cancel: (input) => invoke(IPC_CHANNELS.textExtractor.cancelExtraction)(input),
     },
     output: {
-      choose: (input) => invoke(IPC_CHANNELS.documentTextExtractor.chooseOutput)(input),
+      choose: (input) => invoke(IPC_CHANNELS.textExtractor.chooseOutput)(input),
     },
     text: {
-      save: (input) => invoke(IPC_CHANNELS.documentTextExtractor.saveText)(input),
+      save: (input) => invoke(IPC_CHANNELS.textExtractor.saveText)(input),
     },
     operation: {
       onStatus: createRawPayloadSubscription(
         subscribe,
-        IPC_CHANNELS.documentTextExtractor.status,
+        IPC_CHANNELS.textExtractor.status,
       ),
     },
   },

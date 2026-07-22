@@ -7,23 +7,23 @@ export const DESKTOP_UPDATE_INTENT_TOKEN_MAX_LENGTH = 4_096
 // 桌面更新凭证在线验证超时（毫秒）：网络异常时快速降级到手动更新，不阻塞更新页导航。
 export const DESKTOP_UPDATE_INTENT_VERIFY_TIMEOUT_MS = 3_000
 
-// 文档文本提取单个源文件最大字节数：读取前后限制 PDF/DOCX 输入占用的主进程内存。
-export const DOCUMENT_TEXT_EXTRACTION_MAX_FILE_BYTES = 50 * 1024 * 1024
+// 文本提取单个源文件最大字节数：读取前后限制 PDF/DOCX 输入占用的主进程内存。
+export const TEXT_EXTRACTION_MAX_FILE_BYTES = 50 * 1024 * 1024
 
-// 文档文本提取规范化正文最大 UTF-8 字节数：超限时明确失败，禁止静默截断正文。
-export const DOCUMENT_TEXT_EXTRACTION_MAX_TEXT_BYTES = 5 * 1024 * 1024
+// 文本提取规范化正文最大 UTF-8 字节数：超限时明确失败，禁止静默截断正文。
+export const TEXT_EXTRACTION_MAX_TEXT_BYTES = 5 * 1024 * 1024
 
-// 文档文本提取 PDF 最大页数：限制异常文档在 Worker 中的解析规模。
-export const DOCUMENT_TEXT_EXTRACTION_MAX_PDF_PAGES = 2_000
+// 文本提取 PDF 最大页数：限制异常文档在 Worker 中的解析规模。
+export const TEXT_EXTRACTION_MAX_PDF_PAGES = 2_000
 
-// 文档文本提取单次 Worker 执行超时（毫秒）：从 Worker 启动后限制异常文档长期占用资源。
-export const DOCUMENT_TEXT_EXTRACTION_TIMEOUT_MS = 60_000
+// 文本提取单次 Worker 执行超时（毫秒）：从 Worker 启动后限制异常文档长期占用资源。
+export const TEXT_EXTRACTION_TIMEOUT_MS = 60_000
 
-// 文档文本提取 Worker 的 V8 老生代堆上限（MiB）：隔离恶意或异常文档的内存影响。
-export const DOCUMENT_TEXT_EXTRACTION_WORKER_MAX_OLD_GENERATION_MB = 512
+// 文本提取 Worker 的 V8 老生代堆上限（MiB）：隔离恶意或异常文档的内存影响。
+export const TEXT_EXTRACTION_WORKER_MAX_OLD_GENERATION_MB = 512
 
-// 文档文本提取全局并发数：限制所有 App、MCP 与 Workflow 请求共享的 Worker 数量。
-export const DOCUMENT_TEXT_EXTRACTION_MAX_CONCURRENCY = 2
+// 文本提取全局并发数：限制所有 App、MCP 与 Workflow 请求共享的 Worker 数量。
+export const TEXT_EXTRACTION_MAX_CONCURRENCY = 2
 
 // Agent 会话在最近活动结束后超过该时长时，提示用户新建对话以避免继续沿用长上下文。
 export const CONVERSATION_IDLE_ROLLOVER_PROMPT_MS = ONE_HOUR_MS

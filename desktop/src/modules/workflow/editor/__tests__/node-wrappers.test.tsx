@@ -23,7 +23,7 @@ describe("nodeTypes", () => {
     expect(nodeTypes.document_template_docx_generate).toBeTypeOf("function")
   })
 
-  it("registers the document text extraction node type", () => {
-    expect(nodeTypes.document_text_extract).toBeTypeOf("function")
+  it("registers the text extraction node type", () => {
+    expect(nodeTypes.text_extract).toBeTypeOf("function")
   })
 })

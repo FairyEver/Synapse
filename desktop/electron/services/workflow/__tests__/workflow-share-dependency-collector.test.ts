@@ -174,7 +174,7 @@ describe("collectWorkflowShareDependencies", () => {
     definition.nodes = [{
       id: "extract",
       name: "提取文档",
-      type: "document_text_extract",
+      type: "text_extract",
       position: { x: 0, y: 0 },
       config: { filePath: "/tmp/report.pdf", variables: [] },
     }]
@@ -186,7 +186,7 @@ describe("collectWorkflowShareDependencies", () => {
     })
 
     expect(result.requiredCapabilities).toContainEqual({
-      id: "app.document_text_extractor.document.extract",
+      id: "app.text_extractor.document.extract",
       minVersion: "1.0.0",
       installSourceId: "synapse.builtin",
     })
@@ -211,7 +211,7 @@ describe("collectWorkflowShareDependencies", () => {
     definition.nodes = [{
       id: "extract",
       name: "提取文档",
-      type: "document_text_extract",
+      type: "text_extract",
       position: { x: 0, y: 0 },
       config: {
         filePath: "{{source}}",

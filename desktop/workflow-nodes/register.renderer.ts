@@ -17,7 +17,7 @@ import { workflowCallNodeManifest } from "./workflow-call/manifest"
 import { codexNodeManifest } from "./codex/manifest"
 import { claudeCodeNodeManifest } from "./claude-code/manifest"
 import { documentTemplateNodeManifest } from "../app-capabilities/document-template/workflow-node/manifest"
-import { documentTextExtractNodeManifest } from "../app-capabilities/document-text-extractor/workflow-node/manifest"
+import { textExtractNodeManifest } from "../app-capabilities/text-extractor/workflow-node/manifest"
 
 nodeTypeRegistry.registerManifest(textNodeManifest)
 nodeTypeRegistry.registerManifest(promptNodeManifest)
@@ -29,4 +29,4 @@ nodeTypeRegistry.registerManifest(workflowCallNodeManifest)
 nodeTypeRegistry.registerManifest(codexNodeManifest)
 nodeTypeRegistry.registerManifest(claudeCodeNodeManifest)
 nodeTypeRegistry.registerManifest(documentTemplateNodeManifest)
-nodeTypeRegistry.registerManifest(documentTextExtractNodeManifest)
+nodeTypeRegistry.registerManifest(textExtractNodeManifest)

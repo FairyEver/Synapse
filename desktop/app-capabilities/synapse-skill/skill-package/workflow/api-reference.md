@@ -12,7 +12,7 @@ Workflow definition responses include `meta.schemaVersion` (SemVer). Preserve it
 
 ### app_workflow_node_type_list
 
-List available node types with summaries. Current built-in node types include `text`, `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `document_text_extract`, `codex`, `claude_code`, and `end`.
+List available node types with summaries. Current built-in node types include `text`, `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `text_extract`, `codex`, `claude_code`, and `end`.
 
 **Params:** none
 **Returns:** `[{ type, title, subtitle, color }]`
@@ -109,7 +109,7 @@ Generates a DOCX from a template. No provider needed. Config fields:
 
 The path fields and inline JSON support `{{variable}}` interpolation. The node output is the generated `outputPath`; generation metadata is also available in the node result outputs.
 
-### document_text_extract
+### text_extract
 
 Extracts complete text from one local PDF or DOCX file. No provider needed. Config fields:
 

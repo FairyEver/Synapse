@@ -79,8 +79,8 @@ describe("runnerNodeTypes", () => {
     expect(runnerNodeTypes.document_template_docx_generate).toBeTypeOf("function")
   })
 
-  it("registers the document text extraction node type", () => {
-    expect(runnerNodeTypes.document_text_extract).toBeTypeOf("function")
+  it("registers the text extraction node type", () => {
+    expect(runnerNodeTypes.text_extract).toBeTypeOf("function")
   })
 
   it("opens the agent conversation directly from a DAG node card", async () => {

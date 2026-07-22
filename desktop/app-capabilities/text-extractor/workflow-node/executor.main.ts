@@ -1,0 +1,77 @@
+import { interpolatePrompt } from "../../../electron/services/workflow/variable-resolver"
+import type { TextExtractorService } from "../main/service"
+import {
+  TextExtractionError,
+  isTextExtractionError,
+} from "../shared/errors"
+import { textExtractionInputSchema } from "../shared/schema"
+import type {
+  NodeExecutionInput,
+  NodeExecutionResult,
+  NodeExecutor,
+} from "../../../workflow-nodes/types"
+import type { TextExtractNodeConfig } from "./schema"
+
+const TEXT_EXTRACTOR_SERVICE_ID = "core.text-extractor"
+
+export const textExtractNodeExecutor: NodeExecutor<TextExtractNodeConfig> = {
+  async execute(
+    input: NodeExecutionInput<TextExtractNodeConfig>,
+  ): Promise<NodeExecutionResult> {
+    const startedAt = Date.now()
+    try {
+      const service = input.runtimeDeps?.resolveService?.<TextExtractorService>(
+        TEXT_EXTRACTOR_SERVICE_ID,
+      )
+      if (!service) throw new Error("文本提取能力不可用。")
+
+      const filePath = interpolatePrompt(input.config.filePath, input.resolvedVariables)
+      const extractionInput = textExtractionInputSchema.parse({ filePath })
+      const task = service.createTask(extractionInput, {
+        source: "workflow",
+        actor: input.context.actor ?? { kind: "system", id: "workflow-engine" },
+      })
+      const unsubscribeTask = task.subscribe((state) => {
+        if (state.status === "waiting") {
+          input.onProgress?.("waiting", "等待提取")
+        } else if (state.status === "running") {
+          input.onProgress?.("extracting", "提取中")
+        }
+      })
+      const cancelTask = () => task.cancel()
+      if (input.context.abortSignal.aborted) cancelTask()
+      else input.context.abortSignal.addEventListener("abort", cancelTask, { once: true })
+
+      try {
+        const result = await task.result
+        const outputs = {
+          format: result.format,
+          fileName: result.fileName,
+          size: result.size,
+          ...("pages" in result && result.pages !== undefined ? { pages: result.pages } : {}),
+        }
+        return {
+          status: "success",
+          output: result.text,
+          outputs,
+          durationMs: Date.now() - startedAt,
+        }
+      } finally {
+        unsubscribeTask()
+        input.context.abortSignal.removeEventListener("abort", cancelTask)
+      }
+    } catch (error) {
+      const normalized = input.context.abortSignal.aborted
+        ? new TextExtractionError("EXTRACTION_CANCELLED")
+        : isTextExtractionError(error)
+          ? error
+          : new TextExtractionError("EXTRACTION_FAILED")
+      return {
+        status: normalized.code === "EXTRACTION_CANCELLED" ? "cancelled" : "failed",
+        output: "",
+        error: `${normalized.code}: ${normalized.message}`,
+        durationMs: Date.now() - startedAt,
+      }
+    }
+  },
+}

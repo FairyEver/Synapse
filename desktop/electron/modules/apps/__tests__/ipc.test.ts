@@ -33,7 +33,7 @@ describe("appsIpcModule", () => {
   it("validates app ids and opens a valid app", async () => {
     expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "database" }).success).toBe(true)
     expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "document-template" }).success).toBe(true)
-    expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "document-text-extractor" }).success).toBe(true)
+    expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "text-extractor" }).success).toBe(true)
     expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "missing" }).success).toBe(false)
 
     const windowManager = {}
