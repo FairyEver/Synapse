@@ -228,6 +228,68 @@ describe("collectWorkflowShareDependencies", () => {
     expect(result.references.resources).toEqual([])
   })
 
+  it("declares default-app opening as one read-only file dependency and a shell risk", () => {
+    const definition = workflow()
+    definition.params = []
+    definition.defaultProviderId = undefined
+    definition.defaultProjectId = undefined
+    definition.nodes = [{
+      id: "open",
+      name: "默认应用打开",
+      type: "open_file",
+      position: { x: 0, y: 0 },
+      config: { filePath: "/tmp/report.html", variables: [] },
+    }]
+    const workflowRef = stableWorkflowReference(definition.id)
+    const result = collectWorkflowShareDependencies({
+      workflows: [definition],
+      workflowRefs: new Map([[definition.id, workflowRef]]),
+      providers: [],
+    })
+
+    expect(result.requiredCapabilities).toContainEqual({
+      id: "workflow.node.open_file",
+      minVersion: "1.0.0",
+      installSourceId: "synapse.builtin",
+    })
+    expect(result.references.resources).toEqual([
+      expect.objectContaining({
+        kind: "local_path",
+        entryType: "file",
+        cardinality: "one",
+        access: "read",
+        displayName: "report.html",
+      }),
+    ])
+    expect(result.risks.highRiskLocations).toEqual([
+      expect.objectContaining({ nodeType: "open_file", code: "shell.execute" }),
+    ])
+    expect(result.risks.portabilityWarnings).toEqual([])
+  })
+
+  it("does not export an open-file path supplied by a runtime binding", () => {
+    const definition = workflow()
+    definition.params[0].default = null
+    definition.nodes = [{
+      id: "open",
+      name: "默认应用打开",
+      type: "open_file",
+      position: { x: 0, y: 0 },
+      config: {
+        filePath: "{{source}}",
+        variables: [{ name: "source", source: { type: "param", param: "source" } }],
+      },
+    }]
+    const workflowRef = stableWorkflowReference(definition.id)
+    const result = collectWorkflowShareDependencies({
+      workflows: [definition],
+      workflowRefs: new Map([[definition.id, workflowRef]]),
+      providers: [],
+    })
+
+    expect(result.references.resources).toEqual([])
+  })
+
   it("matches equivalent Git remotes without exposing credentials or URLs", () => {
     const https = workflowShareGitRemoteFingerprint("https://token:secret@github.com/Team/Repo.git?token=secret")
     const ssh = workflowShareGitRemoteFingerprint("git@github.com:Team/Repo.git")

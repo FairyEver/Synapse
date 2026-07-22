@@ -12,7 +12,7 @@ Workflow definition responses include `meta.schemaVersion` (SemVer). Preserve it
 
 ### app_workflow_node_type_list
 
-List available node types with summaries. Current built-in node types include `text`, `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `text_extract`, `codex`, `claude_code`, and `end`.
+List available node types with summaries. Current built-in node types include `text`, `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `text_extract`, `open_file`, `codex`, `claude_code`, and `end`.
 
 **Params:** none
 **Returns:** `[{ type, title, subtitle, color }]`
@@ -117,6 +117,15 @@ Extracts complete text from one local PDF or DOCX file. No provider needed. Conf
 - `variables` (array) — variable bindings available to `filePath`
 
 The node output is the complete text. Empty documents succeed with an empty output. Result metadata contains `format`, `fileName`, `size`, and optional PDF `pages`, without duplicating the text. The node does not support OCR, multiple files, Drive references, or URLs.
+
+### open_file
+
+Submits one existing local regular file to the operating system's default application. No provider or project needed. Config fields:
+
+- `filePath` (string) — one absolute local file path; supports `{{variable}}` interpolation
+- `variables` (array) — variable bindings available to `filePath`
+
+The node rejects relative paths, URLs including `file://`, directories, symbolic links, and missing files. It does not select a specific application or accept multiple files. Execution requires `fs.read.outside-userdata` and `shell.exec`. Success means the native open request was accepted, not that the application finished launching or loading the file. The primary output and `outputs.path` are the exact submitted path. Automation and reruns perform the real action and may open the file repeatedly; cancellation after native submission cannot undo it.
 
 ### codex
 

@@ -17,6 +17,7 @@ import { ScriptNodeCard } from "../../../../workflow-nodes/script/card"
 import { WorkflowCallNodeCard } from "../../../../workflow-nodes/workflow-call/card"
 import { CodexNodeCard } from "../../../../workflow-nodes/codex/card"
 import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
+import { OpenFileNodeCard } from "../../../../workflow-nodes/open-file/card"
 import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-template/workflow-node/card"
 import { TextExtractNodeCard } from "../../../../app-capabilities/text-extractor/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
@@ -29,6 +30,7 @@ import type { ScriptNodeConfig } from "../../../../workflow-nodes/script/schema"
 import type { WorkflowCallNodeConfig } from "../../../../workflow-nodes/workflow-call/schema"
 import type { CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
 import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
+import type { OpenFileNodeConfig } from "../../../../workflow-nodes/open-file/schema"
 import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/document-template/workflow-node/schema"
 import type { TextExtractNodeConfig } from "../../../../app-capabilities/text-extractor/workflow-node/schema"
 import type { NodeRunResult } from "@/types/workflow"
@@ -301,6 +303,26 @@ function RunnerTextExtractNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
+function RunnerOpenFileNodeWrapper({ id, data, selected }: NodeProps) {
+  const nodeResults = useContext(RunnerNodeResultsContext)
+  const result = nodeResults[id]
+  const name = (data as { name?: string }).name
+  return (
+    <div className="relative">
+      <Handle type="target" position={Position.Left} />
+      <OpenFileNodeCard
+        config={data as OpenFileNodeConfig}
+        name={name}
+        selected={selected}
+        status={result?.status}
+        progressLabel={result?.progressLabel}
+        startedAt={result?.startedAt}
+      />
+      <Handle type="source" position={Position.Right} />
+    </div>
+  )
+}
+
 export const runnerNodeTypes = {
   text: RunnerTextNodeWrapper,
   prompt: RunnerPromptNodeWrapper,
@@ -313,4 +335,5 @@ export const runnerNodeTypes = {
   claude_code: RunnerClaudeCodeNodeWrapper,
   document_template_docx_generate: RunnerDocumentTemplateNodeWrapper,
   text_extract: RunnerTextExtractNodeWrapper,
+  open_file: RunnerOpenFileNodeWrapper,
 }

@@ -154,6 +154,8 @@ function collectTemplateTexts(node: WorkflowDefinition["nodes"][number]): string
       pushString(authConfig.basicUsername)
       pushString(authConfig.basicPassword)
     }
+  } else if (node.type === "open_file") {
+    pushString(cfg.filePath)
   }
 
   return texts

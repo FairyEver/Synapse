@@ -26,4 +26,8 @@ describe("nodeTypes", () => {
   it("registers the text extraction node type", () => {
     expect(nodeTypes.text_extract).toBeTypeOf("function")
   })
+
+  it("registers the default-app open-file node type", () => {
+    expect(nodeTypes.open_file).toBeTypeOf("function")
+  })
 })

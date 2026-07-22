@@ -1883,6 +1883,39 @@ describe("createWorkflowDispatcher", () => {
     expect(describeResult.data).not.toHaveProperty("availableProviders")
   })
 
+  it("discovers and describes the default-app open-file node", async () => {
+    const deps = makeDeps({ nodeTypeRegistry })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const listResult = await dispatcher.dispatch(
+      "app.workflow.node_type.list",
+      {},
+      { source: "api" },
+    )
+    expect(listResult.ok).toBe(true)
+    expect(listResult.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "open_file", title: "默认应用打开" }),
+    ]))
+
+    const describeResult = await dispatcher.dispatch(
+      "app.workflow.node_type.describe",
+      { nodeType: "open_file" },
+      { source: "api" },
+    )
+    expect(describeResult.ok).toBe(true)
+    expect(describeResult.data).toMatchObject({
+      type: "open_file",
+      configSchema: {
+        required: expect.arrayContaining(["filePath", "variables"]),
+        properties: {
+          filePath: expect.objectContaining({ type: "string" }),
+          variables: expect.objectContaining({ type: "array" }),
+        },
+      },
+    })
+    expect(describeResult.data).not.toHaveProperty("availableProviders")
+  })
+
   it("app.workflow.node_type.describe returns claude code config schema without providers", async () => {
     const listProviders = vi.fn(async () => [{ id: "p1", name: "P1", model: "m", haikuModel: "h", sonnetModel: "s", opusModel: "o" }])
     const deps = makeDeps({ nodeTypeRegistry, listProviders })

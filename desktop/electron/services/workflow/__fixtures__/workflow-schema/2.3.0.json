@@ -1,0 +1,36 @@
+{
+  "meta": { "schemaVersion": "2.3.0" },
+  "id": "open-file-workflow",
+  "name": "默认应用打开文件",
+  "version": "v_1720000000000_00000000_openfile",
+  "createdAt": 1720000000000,
+  "updatedAt": 1720000000000,
+  "params": [],
+  "nodes": [
+    {
+      "id": "text",
+      "name": "文本",
+      "type": "text",
+      "position": { "x": 0, "y": 0 },
+      "config": { "template": "/tmp/report.html", "variables": [] }
+    },
+    {
+      "id": "open-file",
+      "name": "默认应用打开",
+      "type": "open_file",
+      "position": { "x": 300, "y": 0 },
+      "config": { "filePath": "{{report_path}}", "variables": [{ "name": "report_path", "source": { "type": "node_output", "node": "text" } }] }
+    },
+    {
+      "id": "end",
+      "name": "结束",
+      "type": "end",
+      "position": { "x": 600, "y": 0 },
+      "config": { "outputType": "text", "template": "", "variables": [] }
+    }
+  ],
+  "edges": [
+    { "id": "text-to-open", "from": "text", "to": "open-file" },
+    { "id": "open-to-end", "from": "open-file", "to": "end" }
+  ]
+}

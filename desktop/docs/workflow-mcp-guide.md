@@ -6,7 +6,7 @@
 
 - 工作流是有向无环图（DAG）
 - 节点按拓扑序执行；无依赖关系的节点并行运行
-- 内置节点类型包括 `prompt`、`switch`、`http_request`、`script`、`workflow_call`、`document_template_docx_generate`、`text_extract`、`codex`、`claude_code` 和 `end`
+- 内置节点类型包括 `prompt`、`switch`、`http_request`、`script`、`workflow_call`、`document_template_docx_generate`、`text_extract`、`open_file`、`codex`、`claude_code` 和 `end`
 - 每个工作流必须有且仅有一个 `end` 节点，不允许环
 - 节点通过有向边连接（`from` → `to`）
 - switch 节点的出边必须携带 `branch` 字段
@@ -14,6 +14,7 @@
 - 调用工作流的节点类型固定为 `workflow_call`，不是 `app_workflow_call`
 - `document_template_docx_generate` 节点使用 DOCX 模板和 JSON 数据生成文档，并把输出文件路径作为节点输出
 - `text_extract` 节点从一个本地 PDF 或 DOCX 文件提取完整文本
+- `open_file` 节点把一个已有本地普通文件提交给系统默认应用，并输出实际提交的绝对路径
 - `codex` 节点在执行项目或任务工作目录中运行本机 `codex exec`，并把 Codex 最终回复作为自身输出
 - `claude_code` 节点在执行项目或任务工作目录中运行本机 `claude -p`，并把 Claude Code 最终回复作为自身输出
 
@@ -32,7 +33,7 @@
 | `static` | 硬编码值 | `{ "type": "static", "value": "你是一个翻译助手" }` |
 
 变量在节点执行前解析完毕。变量名支持字母、数字、下划线和中文。
-变量可用于 prompt/switch/codex/claude_code 提示词、end 输出模板、HTTP 文本字段、`workflow_call.paramTemplates`、`document_template_docx_generate` 的路径和内联 JSON 字段，以及 `text_extract.filePath`。script 节点会把变量作为环境变量注入，不支持在脚本文本中写 `{{变量名}}`。POSIX 使用 `$变量名`，cmd 使用 `%变量名%`，PowerShell 使用 `$env:变量名`。
+变量可用于 prompt/switch/codex/claude_code 提示词、end 输出模板、HTTP 文本字段、`workflow_call.paramTemplates`、`document_template_docx_generate` 的路径和内联 JSON 字段，以及 `text_extract.filePath` 和 `open_file.filePath`。script 节点会把变量作为环境变量注入，不支持在脚本文本中写 `{{变量名}}`。POSIX 使用 `$变量名`，cmd 使用 `%变量名%`，PowerShell 使用 `$env:变量名`。
 
 单个文件或文件夹变量注入绝对路径；多选资源变量注入保持顺序的 JSON 路径数组。例如 POSIX 脚本可用 `printf '%s\n' "$input_file"` 读取单文件路径，用 `printf '%s\n' "$input_files"` 输出多文件 JSON 数组。
 
@@ -164,6 +165,17 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 | `variables` | VariableBinding[] | `filePath` 使用的变量绑定 |
 
 输出：完整提取文本；空文档成功输出空字符串。节点结果 outputs 仅保存 `format`、`fileName`、`size` 和可选 PDF `pages`，不重复正文。不支持 OCR、多文件、Drive 引用或 URL。
+
+### open_file — 默认应用打开节点
+
+不需要 provider 或项目。它把一个已有本地普通文件提交给系统默认应用。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `filePath` | string | 绝对本机文件路径，支持 `{{变量名}}` |
+| `variables` | VariableBinding[] | `filePath` 使用的变量绑定 |
+
+插值后只接受已存在、非符号链接的绝对普通文件路径；拒绝相对路径、目录、`http/https`、`file://` 和多文件输入，也不支持指定应用。节点先检查 `fs.read.outside-userdata` 和 `shell.exec` 权限，任一拒绝都不会提交打开请求。主输出和 `outputs.path` 都是实际提交给系统的绝对路径。成功仅表示系统接受请求，不保证默认应用已完成启动、置前或加载文件。手动运行、子工作流、重新运行和 Automation 都会执行真实打开动作，可能重复打开；请求提交后取消不能撤销该动作。
 
 ### codex — Codex 节点
 
@@ -518,6 +530,7 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 - 创建 `workflow_call` 前先读取子工作流定义：文本、数字和选项参数使用 `paramTemplates`；文件/文件夹参数优先使用 `paramBindings`。多选资源参数只能直接绑定类型和 `allowMultiple` 一致的父参数
 - 创建 `document_template_docx_generate` 前，先用 `workflow_node_type_describe({ nodeType: "document_template_docx_generate" })` 读取最新 schema，并按 `dataSource` 提供 `dataPath` 或 `dataJson`
 - 创建 `text_extract` 前，先用 `workflow_node_type_describe({ nodeType: "text_extract" })` 读取最新 schema，并只提供 `filePath` 和 `variables`
+- 创建 `open_file` 前，先用 `workflow_node_type_describe({ nodeType: "open_file" })` 读取最新 schema，并只提供 `filePath` 和 `variables`
 - 创建 `codex` 前，先用 `workflow_node_type_describe({ nodeType: "codex" })` 读取最新 schema；不要给 codex 节点设置 `providerId` 或 `modelTier`
 - 创建 `claude_code` 前，先用 `workflow_node_type_describe({ nodeType: "claude_code" })` 读取最新 schema；不要给 claude_code 节点设置 `providerId` 或 `modelTier`
 - 步骤 8 在新增、删除或重连节点后调用，自动整理为左右层级排列，无需打开 UI

@@ -9,6 +9,7 @@ import { ScriptNodeCard } from "../../../../workflow-nodes/script/card"
 import { WorkflowCallNodeCard } from "../../../../workflow-nodes/workflow-call/card"
 import { CodexNodeCard } from "../../../../workflow-nodes/codex/card"
 import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
+import { OpenFileNodeCard } from "../../../../workflow-nodes/open-file/card"
 import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-template/workflow-node/card"
 import { TextExtractNodeCard } from "../../../../app-capabilities/text-extractor/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
@@ -21,6 +22,7 @@ import type { ScriptNodeConfig } from "../../../../workflow-nodes/script/schema"
 import type { WorkflowCallNodeConfig } from "../../../../workflow-nodes/workflow-call/schema"
 import type { CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
 import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
+import type { OpenFileNodeConfig } from "../../../../workflow-nodes/open-file/schema"
 import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/document-template/workflow-node/schema"
 import type { TextExtractNodeConfig } from "../../../../app-capabilities/text-extractor/workflow-node/schema"
 
@@ -149,6 +151,19 @@ export function ClaudeCodeNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
+export function OpenFileNodeWrapper({ id, data, selected }: NodeProps) {
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="open_file">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <OpenFileNodeCard config={data as OpenFileNodeConfig} name={name} selected={selected} nodeId={id} />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
 export function DocumentTemplateNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
@@ -190,6 +205,7 @@ export const nodeTypes = {
   workflow_call: WorkflowCallNodeWrapper,
   codex: CodexNodeWrapper,
   claude_code: ClaudeCodeNodeWrapper,
+  open_file: OpenFileNodeWrapper,
   document_template_docx_generate: DocumentTemplateNodeWrapper,
   text_extract: TextExtractNodeWrapper,
 }

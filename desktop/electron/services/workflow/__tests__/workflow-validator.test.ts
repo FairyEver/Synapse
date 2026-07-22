@@ -35,6 +35,26 @@ describe("validateWorkflow", () => {
     }))
   })
 
+  it("rejects unbound template variables in open-file paths", () => {
+    const definition = definitionWithTextNode()
+    definition.nodes[0] = {
+      id: "open-file-1",
+      name: "默认应用打开",
+      type: "open_file",
+      position: { x: 0, y: 0 },
+      config: { filePath: "{{missing}}", variables: [] },
+    }
+    definition.edges[0] = { id: "edge-1", from: "open-file-1", to: "end" }
+
+    const result = validateWorkflow(definition)
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      nodeId: "open-file-1",
+      message: expect.stringContaining("模板变量「missing」未绑定"),
+    }))
+  })
+
   it("rejects disconnected nodes as validation errors", () => {
     const result = validateWorkflow(definitionWithDisconnectedNode())
 

@@ -83,6 +83,10 @@ describe("runnerNodeTypes", () => {
     expect(runnerNodeTypes.text_extract).toBeTypeOf("function")
   })
 
+  it("registers the default-app open-file node type", () => {
+    expect(runnerNodeTypes.open_file).toBeTypeOf("function")
+  })
+
   it("opens the agent conversation directly from a DAG node card", async () => {
     const target: SynapseAgentConversationReference = {
       projectId: "project-1",

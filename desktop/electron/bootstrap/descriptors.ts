@@ -2174,6 +2174,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
       sendHttpRequest: createHttpSendHandler({ permissionGuard, auditSink }),
       permissionGuard,
       auditSink,
+      openPath: (filePath) => shell.openPath(filePath),
       resolveProjectWorkspacePath: async (projectId) => {
         const { config, repo, proj } = await loadWorkflowProject(projectId)
         return resolveWorkflowProjectWorkspacePath(config, repo, proj)
