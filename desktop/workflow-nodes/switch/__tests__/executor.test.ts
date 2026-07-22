@@ -76,10 +76,15 @@ describe("switchNodeExecutor", () => {
       platform: "workflow" as const,
     }
     const onAgentConversation = vi.fn()
+    const onProgress = vi.fn()
     const sendToAgent = vi.fn(async (
-      input: { onConversationCreated?: (conversationTarget: typeof target) => void },
+      input: {
+        onConversationCreated?: (conversationTarget: typeof target) => void
+        onResponseStarted?: () => void
+      },
     ) => {
       input.onConversationCreated?.(target)
+      input.onResponseStarted?.()
       return {
         status: "success" as const,
         response: "yes",
@@ -94,6 +99,7 @@ describe("switchNodeExecutor", () => {
       context: ctx,
       agentDeps: { sendToAgent },
       onAgentConversation,
+      onProgress,
     })
 
     expect(r).toMatchObject({
@@ -102,6 +108,7 @@ describe("switchNodeExecutor", () => {
       agentConversation: target,
     })
     expect(onAgentConversation).toHaveBeenCalledWith(target)
+    expect(onProgress).toHaveBeenCalledWith("processing_response", "处理中…")
   })
   it("uses defaultBranch on mismatch if configured", async () => {
     const r = await switchNodeExecutor.execute({

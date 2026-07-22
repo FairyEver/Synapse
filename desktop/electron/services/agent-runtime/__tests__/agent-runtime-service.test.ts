@@ -2588,6 +2588,36 @@ describe("AgentRuntimeService", () => {
     })
   })
 
+  it("notifies scheduled callers when the Agent starts responding", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const onResponseStarted = vi.fn()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "assistant", content: "开始处理", message: { content: [] } },
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "bypassPermissions",
+      prompt: "workflow prompt",
+      sessionPolicy: "fresh",
+      timeoutMs: 120_000,
+      sourcePlatform: "workflow",
+      onResponseStarted,
+    })
+
+    expect(result.status).toBe("success")
+    expect(onResponseStarted).toHaveBeenCalledTimes(1)
+  })
+
   it("returns scheduled agent usage and cost from the terminal SDK result", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const service = new AgentRuntimeService({

@@ -1,4 +1,4 @@
-import type { SynapseAgentConversationTarget } from "./agent-navigation"
+import type { SynapseAgentConversationReference, SynapseAgentConversationTarget } from "./agent-navigation"
 
 export type WorkflowParamType = "text" | "number" | "file" | "directory" | "option"
 export type WorkflowResourceEntryType = "file" | "directory"
@@ -109,7 +109,7 @@ export interface NodeRunResult {
   input: { variables: Record<string, string>; prompt?: string }
   output?: string
   outputs?: Record<string, unknown> & {
-    readonly agentConversation?: SynapseAgentConversationTarget
+    readonly agentConversation?: SynapseAgentConversationReference
   }
   activeBranch?: string; error?: string
   startedAt?: number; endedAt?: number; durationMs?: number

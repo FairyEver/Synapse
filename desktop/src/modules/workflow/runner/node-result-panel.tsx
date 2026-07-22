@@ -8,7 +8,7 @@ import { TokenUsageSummary } from "@/components/token-usage-summary"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { ChevronDown, Copy, MessageSquare, X } from "lucide-react"
 import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
-import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
+import type { SynapseAgentConversationReference } from "@/types/agent-navigation"
 import { agentConversationTargetFromOutputs } from "@/lib/agent-conversation-target"
 import { track } from "@/lib/ui-tracking"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -26,7 +26,7 @@ interface NodeResultPanelProps {
   definition?: WorkflowDefinition
   onClose: () => void
   onCopyNodeReport?: () => Promise<void>
-  onOpenAgentConversation?: (target: SynapseAgentConversationTarget) => void
+  onOpenAgentConversation?: (target: SynapseAgentConversationReference) => void
 }
 
 export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyNodeReport, onOpenAgentConversation }: NodeResultPanelProps) {

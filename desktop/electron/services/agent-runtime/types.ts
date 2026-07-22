@@ -394,6 +394,7 @@ export type ScheduledAgentSendInput = {
   readonly sourcePlatform?: ScheduledAgentSourcePlatform
   readonly userMeta?: Record<string, unknown>
   readonly onConversationCreated?: (target: SynapseAgentConversationTarget) => void
+  readonly onResponseStarted?: () => void
 }
 
 export type CancelTurnResult = {

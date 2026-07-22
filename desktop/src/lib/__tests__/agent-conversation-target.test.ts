@@ -47,14 +47,18 @@ describe("agent conversation target helpers", () => {
     })
   })
 
-  it("ignores incomplete Agent conversation targets", () => {
+  it("extracts a persisted Agent conversation reference without its session key", () => {
     expect(agentConversationTargetFromOutputs({
       agentConversation: {
         projectId: "project-1",
         conversationId: "conversation-1",
         platform: "workflow",
       },
-    })).toBeNull()
+    })).toEqual({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      platform: "workflow",
+    })
   })
 
   it("calls the bridge to open the target", async () => {

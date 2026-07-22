@@ -12,7 +12,7 @@ import {
 } from "../../services/agent-conversation-window-service"
 import {
   OPEN_AGENT_SESSION_EVENT,
-  type SynapseAgentConversationTarget,
+  type SynapseAgentConversationReference,
   type SynapseOpenAgentConversationResult,
 } from "../../../src/types/agent-navigation"
 import {
@@ -66,7 +66,7 @@ const renameSessionRequestSchema = projectRequestSchema.extend({
 const openConversationRequestSchema = z.object({
   projectId: z.string().min(1),
   conversationId: z.string().min(1),
-  sessionKey: z.string().min(1),
+  sessionKey: z.string().min(1).optional(),
   platform: z.enum(["automation", "workflow", "scheduled"]),
 })
 
@@ -227,9 +227,9 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
       windowManager.broadcast(
         OPEN_AGENT_SESSION_EVENT,
         {
-          projectId: request.projectId,
-          conversationId: request.conversationId,
-          sessionKey: request.sessionKey,
+          projectId: conversation.projectId,
+          conversationId: conversation.id,
+          sessionKey: conversation.sessionKey,
           sourceFilter: request.platform,
         },
         (window) => window.role === "main",
@@ -237,7 +237,7 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
       logger.info("Agent conversation opened.", {
         projectId: request.projectId,
         conversationId: request.conversationId,
-        sessionKey: request.sessionKey,
+        sessionKey: conversation.sessionKey,
         platform: request.platform,
       })
       return { opened: true }
@@ -431,12 +431,12 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
 
 function isRequestedConversation(
   conversation: ConversationEntryV1 | null,
-  request: SynapseAgentConversationTarget,
+  request: SynapseAgentConversationReference,
 ): conversation is ConversationEntryV1 {
   return Boolean(conversation)
     && conversation?.projectId === request.projectId
     && conversation.id === request.conversationId
-    && conversation.sessionKey === request.sessionKey
+    && (request.sessionKey === undefined || conversation.sessionKey === request.sessionKey)
     && conversation.platform === request.platform
 }
 

@@ -130,6 +130,16 @@ interface NormalizedTurnUsage {
   readonly summary?: ClaudeSdkUsageSummary
 }
 
+interface ConversationTurnOptions {
+  readonly abortSignal?: AbortSignal
+  readonly liveEventTimeoutMs?: number
+  readonly onResponseStarted?: () => void
+}
+
+interface NewConversationTurnOptions extends ConversationTurnOptions {
+  readonly onConversationCreated?: (conversation: ConversationEntryV1) => void
+}
+
 export class ConversationRouter {
   private readonly deps: ConversationRouterDeps
   private readonly repository: AgentSessionRepository
@@ -161,7 +171,7 @@ export class ConversationRouter {
 
   async send(
     message: AgentMessage,
-    options: { readonly abortSignal?: AbortSignal; readonly liveEventTimeoutMs?: number } = {},
+    options: ConversationTurnOptions = {},
   ): Promise<AgentRuntimeTurnResult> {
     this.assertProject(message)
     const conversation = await this.getOrCreateConversation(message)
@@ -171,7 +181,7 @@ export class ConversationRouter {
   async sendToConversation(
     message: AgentMessage,
     conversationId: string,
-    options: { readonly abortSignal?: AbortSignal; readonly liveEventTimeoutMs?: number } = {},
+    options: ConversationTurnOptions = {},
   ): Promise<AgentRuntimeTurnResult> {
     this.assertProject(message)
     const conversation = await this.repository.get(conversationId)
@@ -190,11 +200,7 @@ export class ConversationRouter {
   async sendNewSession(
     message: AgentMessage,
     name: string,
-    options: {
-      readonly abortSignal?: AbortSignal
-      readonly liveEventTimeoutMs?: number
-      readonly onConversationCreated?: (conversation: ConversationEntryV1) => void
-    } = {},
+    options: NewConversationTurnOptions = {},
   ): Promise<AgentRuntimeTurnResult> {
     this.assertProject(message)
     const providerId = await this.resolveNewConversationProviderId(message)
@@ -310,7 +316,7 @@ export class ConversationRouter {
   private async enqueueTurn(
     message: AgentMessage,
     conversation: ConversationEntryV1,
-    options: { readonly abortSignal?: AbortSignal; readonly liveEventTimeoutMs?: number } = {},
+    options: ConversationTurnOptions = {},
   ): Promise<AgentRuntimeTurnResult> {
     message = withReadablePathAttachmentContent(message)
     this.deps.replyTargets?.rememberReplyTarget(replyTargetFromMessage(message, conversation.id))
@@ -354,6 +360,7 @@ export class ConversationRouter {
         lifecycle,
         abortSignal: options.abortSignal,
         liveEventTimeoutMs: options.liveEventTimeoutMs,
+        onResponseStarted: options.onResponseStarted,
         resolve,
       }
       this.liveMessages.set(turn, liveMessage)
@@ -410,6 +417,7 @@ export class ConversationRouter {
             turn.turnId,
             ac.signal,
             turn.liveEventTimeoutMs,
+            turn.onResponseStarted,
           )
           if (ac.signal.aborted) {
             turn.resolve(this.buildCancelledResult(turn.message, turn.conversationId))
@@ -461,6 +469,7 @@ export class ConversationRouter {
     turnId: string,
     abortSignal?: AbortSignal,
     liveEventTimeoutMs?: number,
+    onResponseStarted?: () => void,
   ): Promise<AgentRuntimeTurnResult> {
     state.activeTurns += 1
     state.lastActivity = Date.now()
@@ -509,6 +518,7 @@ export class ConversationRouter {
           nativeSlashPassthrough,
           abortSignal,
           liveEventTimeoutMs,
+          onResponseStarted,
         )
         await this.appendAfterTurnEvents(message, result, conversation.id, turnId, sessionHandle.created)
 
@@ -643,6 +653,7 @@ export class ConversationRouter {
     nativeSlashPassthrough: Extract<AgentCommandRouterResult, { kind: "nativeSlash" }> | undefined,
     abortSignal?: AbortSignal,
     liveEventTimeoutMs = DEFAULT_LIVE_EVENT_TIMEOUT_MS,
+    onResponseStarted?: () => void,
   ): Promise<AgentRuntimeTurnResult> {
     const events: AgentEvent[] = []
     let resultText = ""
@@ -659,6 +670,7 @@ export class ConversationRouter {
     let streamedThinking = ""
     let streamedThinkingStartedAt: string | undefined
     let error: string | undefined
+    let responseStarted = false
 
     const flushStreamedThinkingHistory = async (): Promise<void> => {
       const content = streamedThinking.trim()
@@ -695,6 +707,10 @@ export class ConversationRouter {
           await this.sessionManager.closeCurrentTurn(conversation.id)
         }
         break
+      }
+      if (!responseStarted && isAgentResponseActivityEvent(event)) {
+        responseStarted = true
+        onResponseStarted?.()
       }
       const assistantText = assistantEventText(event)
       if (assistantText) latestAssistantText = assistantText
@@ -2621,6 +2637,17 @@ function assistantEventText(event: AgentEvent): string | undefined {
       : undefined
   const text = textFromBlocks(blocks)
   return text.trim().length > 0 ? text : undefined
+}
+
+function isAgentResponseActivityEvent(event: AgentEvent): boolean {
+  return event.type === "assistant"
+    || event.type === "text"
+    || event.type === "thinking"
+    || event.type === "toolUse"
+    || event.type === "toolResult"
+    || event.type === "permissionRequest"
+    || event.type === "stream"
+    || event.type === "result"
 }
 
 function textFromBlocks(blocks: readonly unknown[] | undefined): string {

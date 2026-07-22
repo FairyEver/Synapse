@@ -474,12 +474,14 @@ export class AgentRuntimeService {
           abortSignal: ac.signal,
           liveEventTimeoutMs: scheduledLiveEventTimeoutMs(timeoutMs),
           onConversationCreated: captureConversationTarget,
+          onResponseStarted: input.onResponseStarted,
         })
       } else {
         try {
           result = await this.conversationRouter.sendToConversation(message, input.lastConversationId, {
             abortSignal: ac.signal,
             liveEventTimeoutMs: scheduledLiveEventTimeoutMs(timeoutMs),
+            onResponseStarted: input.onResponseStarted,
           })
         } catch (resumeError) {
           const isNotFound = resumeError instanceof Error
@@ -491,6 +493,7 @@ export class AgentRuntimeService {
             abortSignal: ac.signal,
             liveEventTimeoutMs: scheduledLiveEventTimeoutMs(timeoutMs),
             onConversationCreated: captureConversationTarget,
+            onResponseStarted: input.onResponseStarted,
           })
         }
       }

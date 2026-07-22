@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { WorkflowDefinition, NodeRunResult, WorkflowRunDefinitionMigration, WorkflowRunStatus } from "@/types/workflow"
-import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
+import type { SynapseAgentConversationReference } from "@/types/agent-navigation"
 import { createRendererLogger } from "@/app-shell/logging"
 import "../../../../workflow-nodes/register.renderer"
 import { useWorkflowEvents } from "../hooks/use-workflow-events"
@@ -340,7 +340,7 @@ export function WorkflowRunnerApp() {
     })
   }, [workflowId])
 
-  const handleOpenAgentConversation = useCallback(async (target: SynapseAgentConversationTarget) => {
+  const handleOpenAgentConversation = useCallback(async (target: SynapseAgentConversationReference) => {
     try {
       const result = await openAgentConversationTarget(target)
       if (!result.opened) {

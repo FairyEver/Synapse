@@ -44,6 +44,7 @@ export interface QueuedTurn {
   readonly lifecycle: TurnLifecycle
   readonly abortSignal?: AbortSignal
   readonly liveEventTimeoutMs?: number
+  readonly onResponseStarted?: () => void
   resolve(result: unknown): void
 }
 

@@ -125,6 +125,7 @@ export interface AgentSendDeps {
     workflowNodeId?: string
     workflowNodeName?: string
     onConversationCreated?: (target: SynapseAgentConversationTarget) => void
+    onResponseStarted?: () => void
   }) => Promise<{
     status: "success" | "failed"
     response: string

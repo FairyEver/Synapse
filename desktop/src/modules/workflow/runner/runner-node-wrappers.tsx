@@ -32,12 +32,12 @@ import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-cod
 import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/document-template/workflow-node/schema"
 import type { TextExtractNodeConfig } from "../../../../app-capabilities/text-extractor/workflow-node/schema"
 import type { NodeRunResult } from "@/types/workflow"
-import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
+import type { SynapseAgentConversationReference } from "@/types/agent-navigation"
 import { agentConversationTargetFromOutputs } from "@/lib/agent-conversation-target"
 
 export const RunnerNodeResultsContext = createContext<Record<string, NodeRunResult>>({})
 export const RunnerOpenAgentConversationContext = createContext<
-  ((target: SynapseAgentConversationTarget) => void) | undefined
+  ((target: SynapseAgentConversationReference) => void) | undefined
 >(undefined)
 
 function RunnerTextNodeWrapper({ id, data, selected }: NodeProps) {

@@ -285,7 +285,7 @@ import type {
 } from "./agent-conversation-window"
 import type {
   OpenAgentSessionPayload,
-  SynapseAgentConversationTarget,
+  SynapseAgentConversationReference,
   SynapseOpenAgentConversationResult,
 } from "./agent-navigation"
 import type {
@@ -1674,7 +1674,7 @@ export type SynapseBridge = {
     listCommands: (projectId: string) => Promise<SynapseAgentPublishedCommand[]>
     openReference: (args: { projectId: string; reference: string }) => Promise<{ ok: true; path: string }>
     openConversation: (
-      target: SynapseAgentConversationTarget,
+      target: SynapseAgentConversationReference,
     ) => Promise<SynapseOpenAgentConversationResult>
     onOpenConversation: (listener: (payload: OpenAgentSessionPayload) => void) => () => void
     onEvent: (listener: (event: SynapseAgentDomainEvent) => void) => () => void

@@ -15,7 +15,7 @@ import {
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import type { WorkflowDefinition, NodeRunResult, WorkflowRunStatus } from "@/types/workflow"
-import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
+import type { SynapseAgentConversationReference } from "@/types/agent-navigation"
 import { Badge } from "@/components/ui/badge"
 import {
   ContextMenu,
@@ -88,7 +88,7 @@ interface DagViewProps {
   runState: WorkflowRunStatus["status"]
   selectedNodeId?: string | null
   onNodeSelect: (nodeId: string | null) => void
-  onOpenAgentConversation?: (target: SynapseAgentConversationTarget) => void
+  onOpenAgentConversation?: (target: SynapseAgentConversationReference) => void
 }
 
 function DagViewInner({ definition, nodeResults, runState, selectedNodeId, onNodeSelect, onOpenAgentConversation }: DagViewProps) {
