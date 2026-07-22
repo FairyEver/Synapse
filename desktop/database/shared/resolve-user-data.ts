@@ -1,6 +1,10 @@
 import { homedir } from "node:os"
 import { readFileSync } from "node:fs"
 import path from "node:path"
+import {
+  MCP_API_DEFAULT_TIMEOUT_MS,
+  MCP_API_TEXT_EXTRACTION_TIMEOUT_MS,
+} from "../../config"
 import { isProcessAlive } from "./process-liveness"
 
 type ServerInfo = {
@@ -43,7 +47,10 @@ async function apiCall(
 ): Promise<unknown> {
   const url = `http://127.0.0.1:${info.port}/api`
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 10_000)
+  const timeoutMs = action.startsWith("app.text_extractor.document.")
+    ? MCP_API_TEXT_EXTRACTION_TIMEOUT_MS
+    : MCP_API_DEFAULT_TIMEOUT_MS
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
   let response: Response
   try {
@@ -59,9 +66,11 @@ async function apiCall(
     })
   } catch (error) {
     if ((error as Error).name === "AbortError") {
-      throw new Error("Request timed out (10s)")
+      throw new Error(`Request timed out (${timeoutMs / 1_000}s)`, { cause: error })
     }
-    throw new Error(`Failed to connect to Synapse at 127.0.0.1:${info.port}: ${(error as Error).message}`)
+    throw new Error(`Failed to connect to Synapse at 127.0.0.1:${info.port}: ${(error as Error).message}`, {
+      cause: error,
+    })
   } finally {
     clearTimeout(timeout)
   }

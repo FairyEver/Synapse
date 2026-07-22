@@ -31,6 +31,8 @@ import { SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME } from "../../app-capabilities/sound-
 import {
   TEXT_EXTRACTOR_CAPABILITY_ID,
   TEXT_EXTRACTOR_MCP_TOOL_NAME,
+  TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,
+  TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME,
 } from "../../app-capabilities/text-extractor/shared/capability"
 import {
   MCP_TOOL_ACTIONS,
@@ -62,6 +64,7 @@ describe("App capability naming", () => {
 
   it("accepts extract as a canonical app capability action", () => {
     expect(isCanonicalCapabilityId(TEXT_EXTRACTOR_CAPABILITY_ID)).toBe(true)
+    expect(isCanonicalCapabilityId(TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID)).toBe(true)
   })
 })
 
@@ -78,6 +81,7 @@ describe("App capability domain", () => {
     expect(APP_MCP_TOOL_ACTIONS.app_document_template_docx_generate).toBe("app.document_template.docx.generate")
     expect(buildAppTools().map((tool) => tool.name)).toEqual([
       TEXT_EXTRACTOR_MCP_TOOL_NAME,
+      TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME,
       "app_document_template_docx_generate",
       "app_file_opener_file_open",
       "app_text_file_writer_file_write",

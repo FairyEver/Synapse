@@ -2,7 +2,15 @@ import { useMemo, type FormEvent } from "react"
 import { CircleAlert, Copy, FileText, FolderOpen, Save } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "../../../src/components/ui/alert"
 import { Button } from "../../../src/components/ui/button"
-import { Card, CardContent, CardFooter } from "../../../src/components/ui/card"
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "../../../src/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "../../../src/components/ui/field"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../../../src/components/ui/input-group"
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
@@ -44,7 +52,7 @@ export function TextExtractorModule() {
   return (
     <SystemAppWindowShell>
       <ScrollArea className="h-full min-h-0">
-        <form className="mx-auto grid w-full max-w-2xl gap-3 p-3 sm:p-5" onSubmit={submit} aria-busy={busy}>
+        <form className="mx-auto grid w-full max-w-3xl gap-3 p-3 sm:p-5" onSubmit={submit} aria-busy={busy}>
           <Card className="py-0">
             <CardContent className="p-4 sm:p-5">
               <FieldGroup>
@@ -99,13 +107,24 @@ export function TextExtractorModule() {
 
           {result ? (
             <Card className="py-0">
+              <CardHeader className="border-b py-3 sm:py-4">
+                <div className="min-w-0">
+                  <CardTitle><h2 id="text-extractor-result-title">提取结果</h2></CardTitle>
+                  <CardDescription>{formatResultSummary(result)}</CardDescription>
+                </div>
+                <CardAction className="flex items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" disabled={!result.text} onClick={() => void copyText()}>
+                    <Copy data-icon="inline-start" />
+                    复制文本
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" disabled={!result.text} onClick={() => void saveText()}>
+                    <Save data-icon="inline-start" />
+                    保存文本
+                  </Button>
+                </CardAction>
+              </CardHeader>
               <CardContent className="p-4 sm:p-5">
-                <ResultView
-                  result={result}
-                  preview={preview}
-                  onCopy={copyText}
-                  onSave={saveText}
-                />
+                <ResultView result={result} preview={preview} />
               </CardContent>
             </Card>
           ) : null}
@@ -141,29 +160,11 @@ function Status(props: { readonly phase: TextExtractionPhase; readonly hasFile: 
 function ResultView(props: {
   readonly result: TextExtractionResult
   readonly preview: { readonly text: string; readonly truncated: boolean } | null
-  readonly onCopy: () => Promise<void>
-  readonly onSave: () => Promise<void>
 }) {
   const hasText = props.result.text.length > 0
 
   return (
     <section className="flex flex-col gap-3" aria-labelledby="text-extractor-result-title">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 id="text-extractor-result-title" className="text-sm font-medium">提取结果</h2>
-          <p className="text-sm text-muted-foreground">{formatResultSummary(props.result)}</p>
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
-          <Button type="button" variant="outline" size="sm" disabled={!hasText} onClick={() => void props.onCopy()}>
-            <Copy data-icon="inline-start" />
-            复制文本
-          </Button>
-          <Button type="button" variant="outline" size="sm" disabled={!hasText} onClick={() => void props.onSave()}>
-            <Save data-icon="inline-start" />
-            保存文本
-          </Button>
-        </div>
-      </div>
       {hasText ? (
         <>
           <Textarea

@@ -30,6 +30,7 @@ Rules:
 ## Text Extraction
 
 Use `app_text_extractor_document_extract` when the user asks to extract text from a local PDF or DOCX document.
+Use `app_text_extractor_document_extract_to_file` when the user wants that text written directly to a local `.txt`, `.md`, or `.csv` file without returning the document body through MCP.
 
 Rules:
 
@@ -42,6 +43,9 @@ Rules:
 - Do not repeat the full source path or extracted text unnecessarily in the final answer.
 - Surface stable error codes when extraction fails; do not claim partial success because limits never truncate silently.
 - Treat `PERMISSION_DENIED` as a denied local-file read and ask the user to choose or authorize an accessible document; do not retry around the permission boundary.
+- For direct output, pass `filePath` and `outputPath` once. Omit `encoding` for UTF-8 and omit `overwrite` unless replacement is explicitly authorized.
+- The direct-output tool performs extraction and atomic writing inside Synapse, returns only source/output metadata, and never returns the extracted body. Do not call `app_text_file_writer_file_write` afterward.
+- Direct output still performs separate local-file read and write permission checks. A write failure does not create a partial target file.
 
 ## Document Template
 

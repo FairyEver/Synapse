@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
@@ -8,8 +8,10 @@ import type { TextExtractNodeConfig } from "../../workflow-node/schema"
 import type { NodeExecutionInput } from "../../../../workflow-nodes/types"
 import { TextExtractionError, TEXT_EXTRACTION_ERROR_CODES } from "../../shared/errors"
 import { createTextExtractorCapabilityDispatcher } from "../dispatcher"
+import { createTextExtractionToFileService } from "../extract-to-file-service"
 import { createTextExtractorIpcModule } from "../ipc"
 import { createTextExtractorService, type TextExtractorService } from "../service"
+import { TextFileWriterService } from "../../../text-file-writer/main/service"
 import { createDocxFixture, textParagraph } from "./docx-fixture"
 import { createPdfFixture } from "./pdf-fixture"
 
@@ -123,6 +125,52 @@ describe("text extraction release integration", () => {
       expect(JSON.stringify({ appResponse, mcpResponse, workflowResponse })).not.toContain(filePath)
     },
   )
+
+  it("extracts and writes a document without returning its body through MCP", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-document-direct-output-"))
+    const filePath = path.join(root, "source.pdf")
+    const outputPath = path.join(root, "source.pdf.extracted.md")
+    const text = "direct output body"
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true as const })) }
+    const auditSink = { record: vi.fn() }
+    const service = createTextExtractorService({
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+    const writer = new TextFileWriterService({
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+    const dispatcher = createTextExtractorCapabilityDispatcher({
+      service,
+      toFileService: createTextExtractionToFileService({ extractor: service, writer }),
+    })
+
+    try {
+      await writeFile(filePath, createPdfFixture([text]))
+      const response = await dispatcher.dispatch(
+        "app.text_extractor.document.extract_to_file",
+        { filePath, outputPath },
+        { source: "mcp-http" },
+      )
+      const actualOutputPath = await realpath(outputPath)
+
+      expect(response).toMatchObject({
+        ok: true,
+        data: {
+          source: { format: "pdf", fileName: "source.pdf", pages: 1 },
+          output: { path: actualOutputPath, format: "md", encoding: "utf8" },
+        },
+      })
+      expect(JSON.stringify(response)).not.toContain(text)
+      await expect(readFile(actualOutputPath, "utf8")).resolves.toBe(text)
+      expect(permissionGuard.check).toHaveBeenCalledTimes(2)
+      expect(auditSink.record).toHaveBeenCalledTimes(2)
+    } finally {
+      await service.stop()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 
   it("preserves a real permission denial across App, MCP, and Workflow", async () => {
     const filePath = path.resolve("permission-denied.pdf")

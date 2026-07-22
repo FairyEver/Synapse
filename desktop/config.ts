@@ -19,6 +19,12 @@ export const TEXT_EXTRACTION_MAX_PDF_PAGES = 2_000
 // 文本提取单次 Worker 执行超时（毫秒）：从 Worker 启动后限制异常文档长期占用资源。
 export const TEXT_EXTRACTION_TIMEOUT_MS = 60_000
 
+// MCP stdio 转发普通能力的请求超时（毫秒）：避免本地服务异常时长期占用 Agent 工具调用。
+export const MCP_API_DEFAULT_TIMEOUT_MS = 10_000
+
+// MCP stdio 转发文本提取能力的请求超时（毫秒）：覆盖 Worker 提取上限并预留本地传输与原子写入时间。
+export const MCP_API_TEXT_EXTRACTION_TIMEOUT_MS = TEXT_EXTRACTION_TIMEOUT_MS + 10_000
+
 // 文本提取 Worker 的 V8 老生代堆上限（MiB）：隔离恶意或异常文档的内存影响。
 export const TEXT_EXTRACTION_WORKER_MAX_OLD_GENERATION_MB = 512
 

@@ -7,17 +7,28 @@ import {
 import {
   TEXT_EXTRACTOR_CAPABILITY_ID,
   TEXT_EXTRACTOR_MCP_TOOL_NAME,
+  TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,
+  TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME,
   TEXT_EXTRACT_WORKFLOW_NODE_TYPE,
 } from "../capability"
 import { textExtractorCapabilityManifest } from "../manifest"
-import { textExtractionResultSchema } from "../schema"
+import {
+  textExtractionResultSchema,
+  textExtractionToFileInputSchema,
+} from "../schema"
 
 describe("text extractor capability", () => {
-  it("publishes one read-only format-neutral MCP tool", () => {
+  it("publishes read-only extraction and direct-to-file tools", () => {
     expect(textExtractorCapabilityManifest).toMatchObject({
       id: "text-extractor",
-      capabilities: [TEXT_EXTRACTOR_CAPABILITY_ID],
-      mcpTools: [TEXT_EXTRACTOR_MCP_TOOL_NAME],
+      capabilities: [
+        TEXT_EXTRACTOR_CAPABILITY_ID,
+        TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,
+      ],
+      mcpTools: [
+        TEXT_EXTRACTOR_MCP_TOOL_NAME,
+        TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME,
+      ],
       workflowNodes: [TEXT_EXTRACT_WORKFLOW_NODE_TYPE],
     })
     expect(APP_DOMAIN.capabilities).toContainEqual(expect.objectContaining({
@@ -27,6 +38,13 @@ describe("text extractor capability", () => {
     }))
     expect(APP_MCP_TOOL_ACTIONS[TEXT_EXTRACTOR_MCP_TOOL_NAME])
       .toBe(TEXT_EXTRACTOR_CAPABILITY_ID)
+    expect(APP_DOMAIN.capabilities).toContainEqual(expect.objectContaining({
+      id: TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,
+      mutates: true,
+      risk: "high",
+    }))
+    expect(APP_MCP_TOOL_ACTIONS[TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME])
+      .toBe(TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID)
     expect(buildAppTools()).toContainEqual(expect.objectContaining({
       name: TEXT_EXTRACTOR_MCP_TOOL_NAME,
       description: expect.stringMatching(/PDF.*DOCX/i),
@@ -42,6 +60,13 @@ describe("text extractor capability", () => {
         additionalProperties: false,
       },
     }))
+    expect(buildAppTools()).toContainEqual(expect.objectContaining({
+      name: TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME,
+      inputSchema: expect.objectContaining({
+        required: ["filePath", "outputPath"],
+        additionalProperties: false,
+      }),
+    }))
   })
 
   it("keeps PDF pages optional metadata out of DOCX results", () => {
@@ -51,6 +76,26 @@ describe("text extractor capability", () => {
       fileName: "document.docx",
       size: 42,
       pages: 1,
+    }).success).toBe(false)
+  })
+
+  it("defaults direct output to UTF-8 without overwrite and rejects relative paths", () => {
+    expect(textExtractionToFileInputSchema.parse({
+      filePath: "/tmp/source.pdf",
+      outputPath: "/tmp/source.md",
+    })).toEqual({
+      filePath: "/tmp/source.pdf",
+      outputPath: "/tmp/source.md",
+      encoding: "utf8",
+      overwrite: false,
+    })
+    expect(textExtractionToFileInputSchema.safeParse({
+      filePath: "source.pdf",
+      outputPath: "/tmp/source.md",
+    }).success).toBe(false)
+    expect(textExtractionToFileInputSchema.safeParse({
+      filePath: "/tmp/source.pdf",
+      outputPath: "source.md",
     }).success).toBe(false)
   })
 })

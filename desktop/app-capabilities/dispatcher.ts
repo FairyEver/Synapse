@@ -1,5 +1,8 @@
 import type { DispatchContext, DispatchResult } from "../synapse-capabilities/shared/types"
-import { TEXT_EXTRACTOR_CAPABILITY_ID } from "./text-extractor/shared/capability"
+import {
+  TEXT_EXTRACTOR_CAPABILITY_ID,
+  TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,
+} from "./text-extractor/shared/capability"
 import { DOCUMENT_TEMPLATE_CAPABILITY_ID } from "./document-template/shared/capability"
 import { SECRETS_CAPABILITY_IDS } from "./secrets/shared/capability"
 import { SOUND_NOTIFIER_PLAY_CAPABILITY_ID } from "./sound-notifier/shared/capability"
@@ -24,7 +27,10 @@ export function createAppCapabilityDispatcher(deps: {
 }): AppCapabilityDispatcher {
   return {
     async dispatch(action, params, context) {
-      if (action === TEXT_EXTRACTOR_CAPABILITY_ID) {
+      if (
+        action === TEXT_EXTRACTOR_CAPABILITY_ID
+        || action === TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID
+      ) {
         return deps.textExtractor.dispatch(action, params, context)
       }
       if (action === DOCUMENT_TEMPLATE_CAPABILITY_ID) {

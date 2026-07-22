@@ -5,6 +5,8 @@ import {
 import {
   TEXT_EXTRACTOR_CAPABILITY_ID,
   TEXT_EXTRACTOR_MCP_TOOL_NAME,
+  TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,
+  TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME,
 } from "../../app-capabilities/text-extractor/shared/capability"
 import {
   TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID,
@@ -74,6 +76,13 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     title: "Extract document text",
     description: "Extract normalized text and metadata from a local PDF or DOCX document.",
     mutates: false,
+  },
+  {
+    id: TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,
+    title: "Extract document text to file",
+    description: "Extract normalized text from a local PDF or DOCX and write it directly to a local text file.",
+    mutates: true,
+    risk: "high",
   },
   {
     id: DOCUMENT_TEMPLATE_CAPABILITY_ID,
@@ -225,6 +234,7 @@ export const APP_DOMAIN: CapabilityDomainDefinition = {
 
 export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [TEXT_EXTRACTOR_MCP_TOOL_NAME]: TEXT_EXTRACTOR_CAPABILITY_ID,
+  [TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME]: TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,
   [DOCUMENT_TEMPLATE_MCP_TOOL_NAME]: DOCUMENT_TEMPLATE_CAPABILITY_ID,
   [FILE_OPENER_MCP_TOOL_NAME]: FILE_OPENER_CAPABILITY_ID,
   [TEXT_FILE_WRITER_MCP_TOOL_NAME]: TEXT_FILE_WRITER_CAPABILITY_ID,
@@ -297,6 +307,30 @@ export function buildAppTools(): McpToolDefinition[] {
           filePath: stringField("Absolute local .pdf or .docx file path."),
         },
         required: ["filePath"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME,
+      description: "Extract complete normalized plain text from one local PDF or DOCX and write it directly to an absolute local .txt, .md, or .csv file inside Synapse. The text is not returned through MCP. Extraction and writing reuse the same limits, permission checks, and atomic file-write behavior as the dedicated tools. Existing output files are rejected unless overwrite is true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          filePath: stringField("Absolute local .pdf or .docx source path."),
+          outputPath: stringField(`Absolute local output path ending in ${TEXT_FILE_FORMATS.map((format) => `.${format}`).join(", ")}.`),
+          encoding: {
+            type: "string",
+            enum: TEXT_FILE_ENCODINGS,
+            default: DEFAULT_TEXT_FILE_ENCODING,
+            description: "Output character encoding. Defaults to utf8. A BOM is never added automatically.",
+          },
+          overwrite: {
+            type: "boolean",
+            default: DEFAULT_TEXT_FILE_OVERWRITE,
+            description: "When true, replace an unchanged existing regular output file. Defaults to false.",
+          },
+        },
+        required: ["filePath", "outputPath"],
         additionalProperties: false,
       },
     },

@@ -1,6 +1,7 @@
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import { TextExtractionError } from "../../shared/errors"
+import { TextFileWriteError } from "../../../text-file-writer/shared/errors"
 import { createTextExtractorCapabilityDispatcher } from "../dispatcher"
 
 const filePath = path.resolve("private/report.pdf")
@@ -71,6 +72,76 @@ describe("createTextExtractorCapabilityDispatcher", () => {
       { filePath: docxPath },
       { source: "mcp-http" },
     )).resolves.toEqual({ ok: true, data: result, affected: 1 })
+  })
+
+  it("returns only source and output metadata for direct extraction to file", async () => {
+    const outputPath = path.resolve("private/report.pdf.extracted.md")
+    const result = {
+      source: {
+        format: "pdf" as const,
+        fileName: "report.pdf",
+        size: 123,
+        pages: 2,
+      },
+      output: {
+        path: outputPath,
+        fileName: "report.pdf.extracted.md",
+        format: "md" as const,
+        encoding: "utf8" as const,
+        size: 42,
+        overwritten: true,
+      },
+    }
+    const extractToFile = vi.fn(async () => result)
+    const dispatcher = createTextExtractorCapabilityDispatcher({
+      service: { extract: vi.fn() },
+      toFileService: { extractToFile },
+    })
+    const context = { source: "mcp-http" as const }
+
+    await expect(dispatcher.dispatch(
+      "app.text_extractor.document.extract_to_file",
+      { filePath, outputPath, overwrite: true },
+      context,
+    )).resolves.toEqual({ ok: true, data: result, affected: 1 })
+    expect(extractToFile).toHaveBeenCalledWith({
+      filePath,
+      outputPath,
+      encoding: "utf8",
+      overwrite: true,
+    }, context)
+    expect(JSON.stringify(result)).not.toContain("document text")
+  })
+
+  it("preserves direct-write error details without exposing file paths", async () => {
+    const outputPath = path.resolve("private/report.pdf.extracted.md")
+    const dispatcher = createTextExtractorCapabilityDispatcher({
+      service: { extract: vi.fn() },
+      toFileService: {
+        extractToFile: vi.fn(async () => {
+          throw new TextFileWriteError("TARGET_CHANGED")
+        }),
+      },
+    })
+
+    const result = await dispatcher.dispatch(
+      "app.text_extractor.document.extract_to_file",
+      { filePath, outputPath, overwrite: true },
+      { source: "mcp-http" },
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      code: "TARGET_CHANGED",
+      error: "目标文件已发生变化，请重试。",
+      data: {
+        code: "TARGET_CHANGED",
+        message: "目标文件已发生变化，请重试。",
+        retryable: true,
+      },
+    })
+    expect(JSON.stringify(result)).not.toContain(filePath)
+    expect(JSON.stringify(result)).not.toContain(outputPath)
   })
 
 })

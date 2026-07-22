@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react"
 import { FilePenLine, FolderOpen } from "lucide-react"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { Button } from "../../../src/components/ui/button"
-import { Card, CardContent } from "../../../src/components/ui/card"
+import { Card, CardContent, CardFooter } from "../../../src/components/ui/card"
 import { Field, FieldContent, FieldGroup, FieldLabel } from "../../../src/components/ui/field"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../../../src/components/ui/input-group"
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
@@ -131,48 +131,50 @@ export function TextFileWriterModule() {
                 </Field>
               </FieldGroup>
 
-              <div className="grid gap-4 border-t pt-4">
-                <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-center">
-                  <Field orientation="horizontal" className="items-center gap-3">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field orientation="horizontal" className="items-center justify-between gap-3">
+                  <FieldContent>
                     <FieldLabel htmlFor="text-file-writer-encoding">字符编码</FieldLabel>
-                    <Select
-                      value={encoding}
-                      disabled={busy}
-                      onValueChange={(value) => {
-                        clearStatus()
-                        setEncoding(value as TextFileEncoding)
-                      }}
-                    >
-                      <SelectTrigger id="text-file-writer-encoding" className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TEXT_FILE_ENCODINGS.map((value) => (
-                          <SelectItem key={value} value={value}>{encodingLabel(value)}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field orientation="horizontal" className="items-center justify-between gap-3">
-                    <FieldContent><FieldLabel htmlFor="text-file-writer-overwrite">覆盖已存在文件</FieldLabel></FieldContent>
-                    <Switch
-                      id="text-file-writer-overwrite"
-                      checked={overwrite}
-                      disabled={busy}
-                      onCheckedChange={(checked) => {
-                        clearStatus()
-                        setOverwrite(checked === true)
-                      }}
-                    />
-                  </Field>
-                  <Button type="submit" className="w-full sm:w-28" disabled={!canWrite}>
-                    {busy ? <Spinner data-icon="inline-start" /> : null}
-                    {busy ? "写入中" : "写入文件"}
-                  </Button>
-                </div>
-                <WriteSummary busy={busy} path={path} status={status} onReveal={revealResult} />
+                  </FieldContent>
+                  <Select
+                    value={encoding}
+                    disabled={busy}
+                    onValueChange={(value) => {
+                      clearStatus()
+                      setEncoding(value as TextFileEncoding)
+                    }}
+                  >
+                    <SelectTrigger id="text-file-writer-encoding" className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TEXT_FILE_ENCODINGS.map((value) => (
+                        <SelectItem key={value} value={value}>{encodingLabel(value)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field orientation="horizontal" className="items-center justify-between gap-3">
+                  <FieldContent><FieldLabel htmlFor="text-file-writer-overwrite">覆盖已存在文件</FieldLabel></FieldContent>
+                  <Switch
+                    id="text-file-writer-overwrite"
+                    checked={overwrite}
+                    disabled={busy}
+                    onCheckedChange={(checked) => {
+                      clearStatus()
+                      setOverwrite(checked === true)
+                    }}
+                  />
+                </Field>
               </div>
             </CardContent>
+            <CardFooter className="flex-col items-stretch justify-between gap-2 sm:flex-row sm:items-center">
+              <WriteSummary busy={busy} path={path} status={status} onReveal={revealResult} />
+              <Button type="submit" className="w-full sm:w-28" disabled={!canWrite}>
+                {busy ? <Spinner data-icon="inline-start" /> : null}
+                {busy ? "写入中" : "写入文件"}
+              </Button>
+            </CardFooter>
           </Card>
         </form>
       </ScrollArea>
@@ -186,16 +188,22 @@ function WriteSummary({ busy, path, status, onReveal }: {
   readonly status: WriteStatus | null
   readonly onReveal: () => Promise<void>
 }) {
-  if (status?.kind === "error") return <p className="text-sm text-destructive" role="alert">{status.message}</p>
+  if (status?.kind === "error") {
+    return <p className="flex min-h-8 items-center text-sm text-destructive" role="alert">{status.message}</p>
+  }
   if (status?.kind === "success") {
     return (
-      <div className="flex min-h-8 items-center justify-between gap-3" role="status">
+      <div className="flex min-h-8 min-w-0 flex-1 items-center justify-between gap-3" role="status">
         <p className="min-w-0 truncate text-sm text-muted-foreground">已写入 {status.result.size} 字节</p>
         <Button type="button" variant="ghost" size="sm" onClick={() => void onReveal()}>在文件夹中显示</Button>
       </div>
     )
   }
-  return <p className="min-h-8 text-sm text-muted-foreground" role="status">{busy ? "写入中" : path ? "可写入" : "请输入文件路径"}</p>
+  return (
+    <p className="flex min-h-8 items-center text-sm text-muted-foreground" role="status" aria-live="polite">
+      {busy ? "写入中" : path ? "可写入" : "请输入文件路径"}
+    </p>
+  )
 }
 
 function errorMessage(error: unknown): string {

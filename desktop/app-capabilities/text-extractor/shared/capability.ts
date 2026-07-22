@@ -5,4 +5,8 @@ export const TEXT_EXTRACTOR_CAPABILITY_ID =
   "app.text_extractor.document.extract" as CapabilityId
 export const TEXT_EXTRACTOR_MCP_TOOL_NAME =
   "app_text_extractor_document_extract" as const
+export const TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID =
+  "app.text_extractor.document.extract_to_file" as CapabilityId
+export const TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME =
+  "app_text_extractor_document_extract_to_file" as const
 export const TEXT_EXTRACT_WORKFLOW_NODE_TYPE = "text_extract" as const

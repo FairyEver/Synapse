@@ -1,4 +1,3 @@
-import path from "node:path"
 import { z } from "zod"
 import { TEXT_FILE_WRITE_ERROR_CODES } from "./errors"
 
@@ -12,7 +11,7 @@ export const textFileEncodingSchema = z.enum(TEXT_FILE_ENCODINGS)
 
 export const textFileWriteInputSchema = z.object({
   text: z.string(),
-  path: z.string().min(1, "文件路径必填").refine(path.isAbsolute, "文件路径必须是绝对路径"),
+  path: z.string().min(1, "文件路径必填").refine(isAbsolutePath, "文件路径必须是绝对路径"),
   encoding: textFileEncodingSchema.optional().default(DEFAULT_TEXT_FILE_ENCODING),
   overwrite: z.boolean().optional().default(DEFAULT_TEXT_FILE_OVERWRITE),
 }).strict()
@@ -49,7 +48,6 @@ export type TextFileWriteResult = z.infer<typeof textFileWriteResultSchema>
 export type TextFileWriteResponse = z.infer<typeof textFileWriteResponseSchema>
 export type TextFileOutputChooseRequest = z.infer<typeof textFileOutputChooseRequestSchema>
 
-export function textFileFormatFromPath(filePath: string): TextFileFormat | null {
-  const extension = path.extname(filePath).slice(1).toLowerCase()
-  return TEXT_FILE_FORMATS.find((format) => format === extension) ?? null
+function isAbsolutePath(value: string): boolean {
+  return value.startsWith("/") || value.startsWith("\\") || /^[A-Za-z]:[\\/]/.test(value)
 }

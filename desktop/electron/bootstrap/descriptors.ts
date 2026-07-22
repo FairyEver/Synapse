@@ -43,6 +43,7 @@ import { createTextFileWriterCapabilityDispatcher } from "../../app-capabilities
 import { TextFileWriterService } from "../../app-capabilities/text-file-writer/main/service"
 import { TEXT_FILE_WRITER_SERVICE_ID } from "../../app-capabilities/text-file-writer/shared/capability"
 import { createTextExtractorCapabilityDispatcher } from "../../app-capabilities/text-extractor/main/dispatcher"
+import { createTextExtractionToFileService } from "../../app-capabilities/text-extractor/main/extract-to-file-service"
 import {
   createTextExtractorService,
   type TextExtractorService,
@@ -1073,6 +1074,10 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     })
     const textExtractorDispatcher = createTextExtractorCapabilityDispatcher({
       service: textExtractorService,
+      toFileService: createTextExtractionToFileService({
+        extractor: textExtractorService,
+        writer: textFileWriterService,
+      }),
     })
     const fileOpenerDispatcher = createFileOpenerCapabilityDispatcher({ service: fileOpenerService })
     const textFileWriterDispatcher = createTextFileWriterCapabilityDispatcher({ service: textFileWriterService })

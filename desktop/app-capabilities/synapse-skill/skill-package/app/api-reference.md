@@ -56,6 +56,24 @@ Limits:
 
 Stable errors include `UNSUPPORTED_FORMAT`, `INVALID_DOCUMENT`, `PASSWORD_PROTECTED`, `FILE_TOO_LARGE`, `TEXT_TOO_LARGE`, `PDF_PAGE_LIMIT_EXCEEDED`, `READ_FAILED`, `PERMISSION_DENIED`, `EXTRACTION_TIMEOUT`, `EXTRACTION_MEMORY_LIMIT`, `EXTRACTION_CANCELLED`, and `EXTRACTION_FAILED`. Limits fail explicitly and never return truncated text.
 
+## `app_text_extractor_document_extract_to_file`
+
+Extract normalized plain text from one local PDF or DOCX and write it directly to a local text file without returning the document body through MCP.
+
+Input:
+
+- `filePath` required: absolute local `.pdf` or `.docx` source path.
+- `outputPath` required: absolute local destination ending in `.txt`, `.md`, or `.csv`.
+- `encoding` optional: `utf8` or `utf16le`; defaults to `utf8`.
+- `overwrite` optional: explicit permission to replace an unchanged existing regular file; defaults to `false`.
+
+Output:
+
+- `source`: `{ format, fileName, size, pages? }`; `pages` is PDF-only.
+- `output`: `{ path, fileName, format, encoding, size, overwritten }`.
+
+Extraction and writing happen inside Synapse. The extracted `text` is passed directly to the shared text-file writer and is not included in the MCP response. The tool uses the same extraction limits, read permission, write permission, path safety, and atomic commit behavior as the two dedicated tools. Extraction failures use the extraction error codes above. Write failures use `INVALID_PATH`, `UNSUPPORTED_EXTENSION`, `INVALID_ENCODING`, `TARGET_EXISTS`, `UNSAFE_TARGET`, `TARGET_CHANGED`, `PERMISSION_DENIED`, `ABORTED`, or `WRITE_FAILED`; only `TARGET_CHANGED` is retryable.
+
 ## `app_document_template_docx_generate`
 
 Generate a local `.docx` file from a local `.docx` template and JSON object data.

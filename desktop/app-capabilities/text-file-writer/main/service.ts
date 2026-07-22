@@ -12,8 +12,9 @@ import {
 } from "../shared/errors"
 import {
   TEXT_FILE_ENCODINGS,
-  textFileFormatFromPath,
+  TEXT_FILE_FORMATS,
   textFileWriteInputSchema,
+  type TextFileFormat,
   type ParsedTextFileWriteInput,
   type TextFileWriteInput,
   type TextFileWriteResult,
@@ -185,6 +186,11 @@ function normalizeRequestedPath(value: string): string {
     throw new TextFileWriteError("INVALID_PATH")
   }
   return path.normalize(value)
+}
+
+function textFileFormatFromPath(filePath: string): TextFileFormat | null {
+  const extension = path.extname(filePath).slice(1).toLowerCase()
+  return TEXT_FILE_FORMATS.find((format) => format === extension) ?? null
 }
 
 async function resolveActualTarget(requestedPath: string): Promise<string> {

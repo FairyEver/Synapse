@@ -4,6 +4,12 @@ import {
   TEXT_EXTRACTION_ERROR_CODES,
   TEXT_SAVE_ERROR_CODES,
 } from "./errors"
+import {
+  DEFAULT_TEXT_FILE_ENCODING,
+  DEFAULT_TEXT_FILE_OVERWRITE,
+  textFileEncodingSchema,
+  textFileWriteResultSchema,
+} from "../../text-file-writer/shared/schema"
 
 export const textExtractionInputSchema = z.object({
   filePath: z.string().min(1).refine(path.isAbsolute, "必须使用绝对路径"),
@@ -51,6 +57,34 @@ export const textExtractionResponseSchema = z.discriminatedUnion("ok", [
   }).strict(),
 ])
 
+export const textExtractionToFileInputSchema = textExtractionInputSchema.extend({
+  outputPath: z.string().min(1).refine(path.isAbsolute, "必须使用绝对路径"),
+  encoding: textFileEncodingSchema.optional().default(DEFAULT_TEXT_FILE_ENCODING),
+  overwrite: z.boolean().optional().default(DEFAULT_TEXT_FILE_OVERWRITE),
+}).strict()
+
+const textExtractionSourceMetadataFields = {
+  fileName: z.string().min(1),
+  size: z.number().int().nonnegative(),
+}
+
+export const textExtractionSourceMetadataSchema = z.discriminatedUnion("format", [
+  z.object({
+    ...textExtractionSourceMetadataFields,
+    format: z.literal("pdf"),
+    pages: z.number().int().positive().optional(),
+  }).strict(),
+  z.object({
+    ...textExtractionSourceMetadataFields,
+    format: z.literal("docx"),
+  }).strict(),
+])
+
+export const textExtractionToFileResultSchema = z.object({
+  source: textExtractionSourceMetadataSchema,
+  output: textFileWriteResultSchema,
+}).strict()
+
 export const textExtractionStatusEventSchema = z.object({
   operationId: z.string().min(1),
   status: z.enum(["waiting", "running"]),
@@ -93,6 +127,9 @@ export const textSaveResponseSchema = z.discriminatedUnion("ok", [
 
 export type TextExtractionInput = z.infer<typeof textExtractionInputSchema>
 export type TextExtractionResult = z.infer<typeof textExtractionResultSchema>
+export type TextExtractionToFileInput = z.input<typeof textExtractionToFileInputSchema>
+export type ParsedTextExtractionToFileInput = z.output<typeof textExtractionToFileInputSchema>
+export type TextExtractionToFileResult = z.infer<typeof textExtractionToFileResultSchema>
 export type TextExtractionRequest = z.infer<typeof textExtractionRequestSchema>
 export type TextExtractionResponse = z.infer<typeof textExtractionResponseSchema>
 export type TextExtractionStatusEvent = z.infer<typeof textExtractionStatusEventSchema>
