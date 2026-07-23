@@ -125,7 +125,10 @@ jobs:
           "$LSREGISTER" -f "$APP_BUNDLE"
 
           stop_synapse() {
-            pkill -f "$APP_BINARY" >/dev/null 2>&1 || true
+            # The packaged app may legitimately block graceful quit for an
+            # interactive pending-push confirmation. Smoke teardown must stay
+            # non-interactive and isolate the cold/hot launch scenarios.
+            pkill -KILL -f "$APP_BINARY" >/dev/null 2>&1 || true
           }
 
           wait_for_synapse_exit() {

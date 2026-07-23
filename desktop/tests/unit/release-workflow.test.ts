@@ -101,6 +101,7 @@ describe("desktop release workflow", () => {
     expect(workflowText).toContain('APP_MOUNTED_LOG="App mounted."')
     expect(workflowText).toContain("Update open request navigated to About Synapse.")
     expect(workflowText).toContain("wait_for_synapse_exit")
+    expect(workflowText).toContain('pkill -KILL -f "$APP_BINARY"')
     expect(workflowText).toContain('wait_for_log "$APP_MOUNTED_LOG"')
     expect(workflowText).toContain("wait_for_navigation_log")
     expect(workflowText).toContain("Wait-NavigationLog")
