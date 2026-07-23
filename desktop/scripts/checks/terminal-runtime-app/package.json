@@ -1,0 +1,6 @@
+{
+  "name": "synapse-terminal-runtime-check",
+  "private": true,
+  "type": "module",
+  "main": "../verify-terminal-runtime.mjs"
+}

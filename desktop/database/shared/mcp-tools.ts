@@ -1,7 +1,4 @@
-// Shared MCP tool definitions.
-// Both the in-process HTTP MCP server (electron/database/mcp-server.ts) and
-// the stdio MCP bridge (database/mcp/index.ts) import from this file, so the
-// two surfaces can never drift.
+// Shared MCP tool definitions used by the in-process HTTP MCP server.
 //
 // Tool schemas are intentionally stateless: they describe capability, never
 // runtime state. Clients discover which tables exist by calling database_table_list,
@@ -599,8 +596,7 @@ function buildTools(): McpTool[] {
 }
 
 // Maps MCP tool names (snake_case) to canonical action ids used by the
-// in-process service, the HTTP JSON API (http-server.ts), and the stdio MCP
-// bridge (which forwards to HTTP).
+// in-process service, the HTTP JSON API (http-server.ts), and HTTP MCP.
 const DATABASE_MCP_TOOL_ACTIONS: Record<string, string> = buildMcpToolActions()
 const MCP_TOOL_ACTIONS: Record<string, string> = DATABASE_MCP_TOOL_ACTIONS
 

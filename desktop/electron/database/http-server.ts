@@ -3,7 +3,6 @@ import { randomBytes } from "node:crypto"
 import { chmodSync, readFileSync, writeFileSync, unlinkSync } from "node:fs"
 import path from "node:path"
 import { app } from "electron"
-import { mcpClientActorForSource } from "../../synapse-capabilities/shared/types"
 import { isProcessAlive } from "../../database/shared/process-liveness"
 import type { SynapseActionRouter } from "../capabilities/action-router"
 import type { DatabaseServerInfo } from "./types"
@@ -128,15 +127,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   }
 
   try {
-    const sourceHeader = req.headers["x-synapse-client"]
-    const source = sourceHeader === "mcp-stdio" ? sourceHeader : "api"
-    const result = await actionRouterForRequest().dispatch(
-      action,
-      params,
-      source === "mcp-stdio"
-        ? { source, actor: mcpClientActorForSource(source) }
-        : { source },
-    )
+    const result = await actionRouterForRequest().dispatch(action, params, { source: "api" })
     sendJson(res, 200, result)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

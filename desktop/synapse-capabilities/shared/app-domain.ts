@@ -9,26 +9,10 @@ import {
   TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME,
 } from "../../app-capabilities/text-extractor/shared/capability"
 import {
-  TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID,
-  TERMINAL_GROUP_COMMAND_DELETE_CAPABILITY_ID,
-  TERMINAL_GROUP_COMMAND_LAUNCH_CAPABILITY_ID,
-  TERMINAL_GROUP_COMMAND_UPDATE_CAPABILITY_ID,
-  TERMINAL_GROUP_CREATE_CAPABILITY_ID,
-  TERMINAL_GROUP_DELETE_CAPABILITY_ID,
-  TERMINAL_GROUP_LIST_CAPABILITY_ID,
-  TERMINAL_GROUP_RENAME_CAPABILITY_ID,
-  TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
-  TERMINAL_MCP_TOOL_NAMES,
-  TERMINAL_SESSION_CREATE_CAPABILITY_ID,
-  TERMINAL_SESSION_DELETE_CAPABILITY_ID,
-  TERMINAL_SESSION_GET_CAPABILITY_ID,
-  TERMINAL_SESSION_LIST_CAPABILITY_ID,
-  TERMINAL_SESSION_READ_CAPABILITY_ID,
-  TERMINAL_SESSION_RENAME_CAPABILITY_ID,
-  TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
-  TERMINAL_SESSION_STOP_CAPABILITY_ID,
-  TERMINAL_SESSION_WRITE_CAPABILITY_ID,
+  TERMINAL_CAPABILITY_CATALOG,
+  TERMINAL_MCP_TOOL_ACTIONS,
 } from "../../app-capabilities/terminal/shared/capability"
+import { buildTerminalMcpTools } from "../../app-capabilities/terminal/shared/mcp-tools"
 import {
   SECRETS_CAPABILITY_IDS,
   SECRETS_ITEM_CREATE_CAPABILITY_ID,
@@ -69,6 +53,13 @@ import {
   TEXT_FILE_ENCODINGS,
   TEXT_FILE_FORMATS,
 } from "../../app-capabilities/text-file-writer/shared/schema"
+import { TEXT_EXTRACTION_OUTPUT_FORMATS } from "../../app-capabilities/text-extractor/shared/schema"
+import {
+  HTML_GENERATOR_EJS_CAPABILITY_ID,
+  HTML_GENERATOR_EJS_FILE_CAPABILITY_ID,
+  HTML_GENERATOR_EJS_MCP_TOOL_NAME,
+  HTML_GENERATOR_EJS_FILE_MCP_TOOL_NAME,
+} from "../../app-capabilities/html-generator/shared/capability"
 
 const appCapabilities: readonly CapabilityDefinition[] = [
   {
@@ -100,118 +91,31 @@ const appCapabilities: readonly CapabilityDefinition[] = [
   {
     id: TEXT_FILE_WRITER_CAPABILITY_ID,
     title: "Write text to local file",
-    description: "Write one complete text value to an absolute local .txt, .md, or .csv path.",
+    description: "Write one complete text value to an absolute local .txt, .md, .csv, .html, or .htm path.",
     mutates: true,
     risk: "high",
   },
   {
-    id: TERMINAL_GROUP_CREATE_CAPABILITY_ID,
-    title: "Create terminal group",
-    description: "Create a Synapse terminal group after terminal permission approval.",
-    mutates: true,
-  },
-  {
-    id: TERMINAL_GROUP_LIST_CAPABILITY_ID,
-    title: "List terminal groups",
-    description: "List Synapse terminal groups and saved command settings after terminal permission approval.",
+    id: HTML_GENERATOR_EJS_CAPABILITY_ID,
+    title: "Generate HTML with EJS",
+    description: "Render a trusted executable EJS template string with structured JSON data and return the complete HTML text.",
     mutates: false,
+    risk: "high",
   },
   {
-    id: TERMINAL_GROUP_RENAME_CAPABILITY_ID,
-    title: "Rename terminal group",
-    description: "Rename a Synapse terminal group after terminal permission approval.",
+    id: HTML_GENERATOR_EJS_FILE_CAPABILITY_ID,
+    title: "Generate HTML file with EJS",
+    description: "Render a trusted executable EJS template string and write the complete HTML text to a local file.",
     mutates: true,
+    risk: "high",
   },
-  {
-    id: TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
-    title: "Update terminal group settings",
-    description: "Update a terminal group's name and default working directory.",
-    mutates: true,
-  },
-  {
-    id: TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID,
-    title: "Create terminal group command",
-    description: "Create a named command under a Synapse terminal group.",
-    mutates: true,
-  },
-  {
-    id: TERMINAL_GROUP_COMMAND_UPDATE_CAPABILITY_ID,
-    title: "Update terminal group command",
-    description: "Update a named command under a Synapse terminal group.",
-    mutates: true,
-  },
-  {
-    id: TERMINAL_GROUP_COMMAND_DELETE_CAPABILITY_ID,
-    title: "Delete terminal group command",
-    description: "Delete a named command from a Synapse terminal group.",
-    mutates: true,
-  },
-  {
-    id: TERMINAL_GROUP_COMMAND_LAUNCH_CAPABILITY_ID,
-    title: "Launch terminal group command",
-    description: "Create a new terminal session from a named terminal group command.",
-    mutates: true,
-  },
-  {
-    id: TERMINAL_GROUP_DELETE_CAPABILITY_ID,
-    title: "Delete terminal group",
-    description: "Delete a Synapse terminal group and all sessions in it.",
-    mutates: true,
-  },
-  {
-    id: TERMINAL_SESSION_CREATE_CAPABILITY_ID,
-    title: "Create terminal session",
-    description: "Create a Synapse-managed terminal session.",
-    mutates: true,
-  },
-  {
-    id: TERMINAL_SESSION_LIST_CAPABILITY_ID,
-    title: "List terminal sessions",
-    description: "List Synapse terminal sessions.",
-    mutates: false,
-  },
-  {
-    id: TERMINAL_SESSION_GET_CAPABILITY_ID,
-    title: "Get terminal session",
-    description: "Get terminal session status.",
-    mutates: false,
-  },
-  {
-    id: TERMINAL_SESSION_READ_CAPABILITY_ID,
-    title: "Read terminal output",
-    description: "Read retained terminal output by sequence cursor.",
-    mutates: false,
-  },
-  {
-    id: TERMINAL_SESSION_RENAME_CAPABILITY_ID,
-    title: "Rename terminal session",
-    description: "Rename a Synapse terminal session.",
-    mutates: true,
-  },
-  {
-    id: TERMINAL_SESSION_WRITE_CAPABILITY_ID,
-    title: "Write terminal input",
-    description: "Write raw input to a Synapse terminal session.",
-    mutates: true,
-  },
-  {
-    id: TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
-    title: "Resize terminal session",
-    description: "Resize a terminal session pty.",
-    mutates: true,
-  },
-  {
-    id: TERMINAL_SESSION_DELETE_CAPABILITY_ID,
-    title: "Delete terminal session",
-    description: "Delete a Synapse terminal session and its retained output.",
-    mutates: true,
-  },
-  {
-    id: TERMINAL_SESSION_STOP_CAPABILITY_ID,
-    title: "Stop terminal session",
-    description: "Stop a Synapse terminal session.",
-    mutates: true,
-  },
+  ...TERMINAL_CAPABILITY_CATALOG.map((item): CapabilityDefinition => ({
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    mutates: item.mutates,
+    risk: item.risk,
+  })),
   {
     id: SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
     title: "Play sound",
@@ -238,24 +142,9 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [DOCUMENT_TEMPLATE_MCP_TOOL_NAME]: DOCUMENT_TEMPLATE_CAPABILITY_ID,
   [FILE_OPENER_MCP_TOOL_NAME]: FILE_OPENER_CAPABILITY_ID,
   [TEXT_FILE_WRITER_MCP_TOOL_NAME]: TEXT_FILE_WRITER_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.groupCreate]: TERMINAL_GROUP_CREATE_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.groupList]: TERMINAL_GROUP_LIST_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.groupRename]: TERMINAL_GROUP_RENAME_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.groupUpdateSettings]: TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.groupCommandCreate]: TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.groupCommandUpdate]: TERMINAL_GROUP_COMMAND_UPDATE_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.groupCommandDelete]: TERMINAL_GROUP_COMMAND_DELETE_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.groupCommandLaunch]: TERMINAL_GROUP_COMMAND_LAUNCH_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.groupDelete]: TERMINAL_GROUP_DELETE_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.sessionCreate]: TERMINAL_SESSION_CREATE_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.sessionList]: TERMINAL_SESSION_LIST_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.sessionGet]: TERMINAL_SESSION_GET_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.sessionRead]: TERMINAL_SESSION_READ_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.sessionRename]: TERMINAL_SESSION_RENAME_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.sessionWrite]: TERMINAL_SESSION_WRITE_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.sessionResize]: TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.sessionDelete]: TERMINAL_SESSION_DELETE_CAPABILITY_ID,
-  [TERMINAL_MCP_TOOL_NAMES.sessionStop]: TERMINAL_SESSION_STOP_CAPABILITY_ID,
+  [HTML_GENERATOR_EJS_MCP_TOOL_NAME]: HTML_GENERATOR_EJS_CAPABILITY_ID,
+  [HTML_GENERATOR_EJS_FILE_MCP_TOOL_NAME]: HTML_GENERATOR_EJS_FILE_CAPABILITY_ID,
+  ...TERMINAL_MCP_TOOL_ACTIONS,
   [SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME]: SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
   [SECRETS_MCP_TOOL_NAMES.list]: SECRETS_ITEM_LIST_CAPABILITY_ID,
   [SECRETS_MCP_TOOL_NAMES.get]: SECRETS_ITEM_GET_CAPABILITY_ID,
@@ -273,20 +162,7 @@ const stringField = (
   ...options,
   description,
 })
-const positiveIntField = (description: string, maximum?: number) => ({
-  type: "integer",
-  minimum: 1,
-  ...(maximum ? { maximum } : {}),
-  description,
-})
-const nonnegativeIntField = (description: string) => ({
-  type: "integer",
-  minimum: 0,
-  description,
-})
 const booleanField = (description: string) => ({ type: "boolean", description })
-
-const sessionIdProperty = stringField("Terminal session id.", { minLength: 1 })
 const secretNameProperty = stringField("Secret name. Letters, digits, and underscores only.", {
   minLength: 1,
   pattern: SECRET_NAME_REGEX.source,
@@ -317,7 +193,7 @@ export function buildAppTools(): McpToolDefinition[] {
         type: "object",
         properties: {
           filePath: stringField("Absolute local .pdf or .docx source path."),
-          outputPath: stringField(`Absolute local output path ending in ${TEXT_FILE_FORMATS.map((format) => `.${format}`).join(", ")}.`),
+          outputPath: stringField(`Absolute local output path ending in ${TEXT_EXTRACTION_OUTPUT_FORMATS.map((format) => `.${format}`).join(", ")}.`),
           encoding: {
             type: "string",
             enum: TEXT_FILE_ENCODINGS,
@@ -369,7 +245,7 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: TEXT_FILE_WRITER_MCP_TOOL_NAME,
-      description: "Write one complete text value to an absolute local .txt, .md, or .csv file. Missing parent directories are created automatically. Text is preserved exactly apart from the selected encoding: utf8 by default or utf16le; no BOM, trimming, newline normalization, final newline, CSV processing, or Markdown processing is added. Existing files are rejected unless overwrite is true. Synapse sets no product-level text length limit, although IPC, memory, filesystem, and disk limits still apply.",
+      description: "Write one complete text value to an absolute local .txt, .md, .csv, .html, or .htm file. HTML and HTM support utf8 only; txt, md, and csv also support utf16le. Missing parent directories are created automatically. Text is preserved exactly apart from encoding; no BOM, trimming, newline normalization, final newline, format processing, HTML repair, or charset insertion is added. Existing files are rejected unless overwrite is true. Synapse sets no product-level text length limit, although IPC, memory, filesystem, and disk limits still apply.",
       inputSchema: {
         type: "object",
         properties: {
@@ -379,7 +255,7 @@ export function buildAppTools(): McpToolDefinition[] {
             type: "string",
             enum: TEXT_FILE_ENCODINGS,
             default: DEFAULT_TEXT_FILE_ENCODING,
-            description: "Character encoding. Defaults to utf8. A BOM is never added automatically.",
+            description: "Character encoding. Defaults to utf8. HTML and HTM accept utf8 only. A BOM is never added automatically.",
           },
           overwrite: {
             type: "boolean",
@@ -392,217 +268,46 @@ export function buildAppTools(): McpToolDefinition[] {
       },
     },
     {
-      name: TERMINAL_MCP_TOOL_NAMES.groupCreate,
-      description: "Create a Synapse terminal group after terminal permission approval.",
+      name: HTML_GENERATOR_EJS_MCP_TOOL_NAME,
+      description: "Render one trusted executable EJS template string with a structured JSON object and return the complete HTML text and UTF-8 byte size. EJS JavaScript executes in a one-shot Worker that is not a security sandbox; built-in include and template file loading are disabled. HTML Generator does not automatically save, open, preview, sanitize, or validate the result.",
       inputSchema: {
         type: "object",
         properties: {
-          name: stringField("Group name.", { minLength: 1, maxLength: 80 }),
-        },
-        required: ["name"],
-      },
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.groupList,
-      description: "List Synapse terminal groups and saved command settings after terminal permission approval.",
-      inputSchema: strictEmptyInputSchema,
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.groupRename,
-      description: "Rename a Synapse terminal group after terminal permission approval.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          groupId: stringField("Terminal group id.", { minLength: 1 }),
-          name: stringField("New group name. Leading and trailing whitespace is trimmed.", { minLength: 1, maxLength: 80 }),
-        },
-        required: ["groupId", "name"],
-      },
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.groupUpdateSettings,
-      description: "Update a terminal group's name and default working directory.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          groupId: stringField("Terminal group id.", { minLength: 1 }),
-          name: stringField("Group name. Leading and trailing whitespace is trimmed.", { minLength: 1, maxLength: 80 }),
-          settings: {
+          template: stringField("Trusted EJS template string. It executes JavaScript and must contain at least one character.", { minLength: 1 }),
+          data: {
             type: "object",
-            properties: {
-              defaultCwd: stringField("Optional existing absolute working directory for future sessions in this group.", { minLength: 1 }),
-            },
-            additionalProperties: false,
+            description: "Strict JSON object exposed to EJS as the data root.",
+            additionalProperties: true,
           },
         },
-        required: ["groupId", "name"],
+        required: ["template", "data"],
+        additionalProperties: false,
       },
     },
     {
-      name: TERMINAL_MCP_TOOL_NAMES.groupCommandCreate,
-      description: "Create a named command under a Synapse terminal group.",
+      name: HTML_GENERATOR_EJS_FILE_MCP_TOOL_NAME,
+      description: "Render one trusted executable EJS template string with a structured JSON object and write the complete result as UTF-8 to an absolute local .html or .htm path. EJS JavaScript executes in a one-shot Worker that is not a security sandbox; built-in include and template file loading are disabled. Existing files are rejected unless overwrite is true. The result is not opened, previewed, sanitized, or validated.",
       inputSchema: {
         type: "object",
         properties: {
-          groupId: stringField("Terminal group id.", { minLength: 1 }),
-          name: stringField("Command display name.", { minLength: 1, maxLength: 80 }),
-          command: stringField("Multi-line command text.", { minLength: 1, maxLength: 64 * 1024 }),
+          template: stringField("Trusted EJS template string. It executes JavaScript and must contain at least one character.", { minLength: 1 }),
+          data: {
+            type: "object",
+            description: "Strict JSON object exposed to EJS as the data root.",
+            additionalProperties: true,
+          },
+          outputPath: stringField("Absolute local output path ending in .html or .htm."),
+          overwrite: {
+            type: "boolean",
+            default: false,
+            description: "When true, replace an unchanged existing regular file. Defaults to false.",
+          },
         },
-        required: ["groupId", "name", "command"],
+        required: ["template", "data", "outputPath"],
+        additionalProperties: false,
       },
     },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.groupCommandUpdate,
-      description: "Update a named command under a Synapse terminal group.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          groupId: stringField("Terminal group id.", { minLength: 1 }),
-          commandId: stringField("Terminal group command id.", { minLength: 1 }),
-          name: stringField("Command display name.", { minLength: 1, maxLength: 80 }),
-          command: stringField("Multi-line command text.", { minLength: 1, maxLength: 64 * 1024 }),
-        },
-        required: ["groupId", "commandId", "name", "command"],
-      },
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.groupCommandDelete,
-      description: "Delete a named command from a Synapse terminal group.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          groupId: stringField("Terminal group id.", { minLength: 1 }),
-          commandId: stringField("Terminal group command id.", { minLength: 1 }),
-        },
-        required: ["groupId", "commandId"],
-      },
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.groupCommandLaunch,
-      description: "Create a new terminal session from a named command and run it in the group default directory.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          groupId: stringField("Terminal group id.", { minLength: 1 }),
-          commandId: stringField("Terminal group command id.", { minLength: 1 }),
-          cols: positiveIntField("Optional terminal columns. Defaults to 80.", 500),
-          rows: positiveIntField("Optional terminal rows. Defaults to 24.", 200),
-        },
-        required: ["groupId", "commandId"],
-      },
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.groupDelete,
-      description: "Delete a Synapse terminal group and every terminal session in it. Running sessions are stopped before deletion.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          groupId: stringField("Terminal group id.", { minLength: 1 }),
-        },
-        required: ["groupId"],
-      },
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.sessionCreate,
-      description: "Create a Synapse-managed terminal session using the user's default shell.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          groupId: stringField("Optional group id. Defaults to the first group or creates the default group.", { minLength: 1 }),
-          title: stringField("Optional session title.", { minLength: 1, maxLength: 120 }),
-          cwd: stringField("Optional existing absolute working directory.", { minLength: 1 }),
-          cols: positiveIntField("Optional terminal columns. Defaults to 80.", 500),
-          rows: positiveIntField("Optional terminal rows. Defaults to 24.", 200),
-        },
-      },
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.sessionList,
-      description: "List Synapse terminal sessions.",
-      inputSchema: strictEmptyInputSchema,
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.sessionGet,
-      description: "Get terminal session status.",
-      inputSchema: {
-        type: "object",
-        properties: { sessionId: sessionIdProperty },
-        required: ["sessionId"],
-      },
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.sessionRead,
-      description: "Read retained terminal output by sequence cursor.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          sessionId: sessionIdProperty,
-          afterSeq: nonnegativeIntField("Optional sequence cursor. Returns output after this sequence."),
-          limitBytes: positiveIntField("Optional maximum bytes to read. Maximum 1048576.", 1024 * 1024),
-        },
-        required: ["sessionId"],
-      },
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.sessionRename,
-      description: "Rename a Synapse terminal session.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          sessionId: sessionIdProperty,
-          title: stringField("New session title. Leading and trailing whitespace is trimmed.", { minLength: 1, maxLength: 120 }),
-        },
-        required: ["sessionId", "title"],
-      },
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.sessionWrite,
-      description: "Write raw input to a Synapse terminal session. Include a newline to submit a shell command.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          sessionId: sessionIdProperty,
-          data: stringField("Raw terminal input.", { minLength: 1, maxLength: 64 * 1024 }),
-        },
-        required: ["sessionId", "data"],
-      },
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.sessionResize,
-      description: "Resize a running terminal session pty.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          sessionId: sessionIdProperty,
-          cols: positiveIntField("Terminal columns.", 500),
-          rows: positiveIntField("Terminal rows.", 200),
-        },
-        required: ["sessionId", "cols", "rows"],
-      },
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.sessionDelete,
-      description: "Delete a Synapse terminal session and its retained output. Running sessions are stopped before deletion.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          sessionId: sessionIdProperty,
-        },
-        required: ["sessionId"],
-      },
-    },
-    {
-      name: TERMINAL_MCP_TOOL_NAMES.sessionStop,
-      description: "Stop a Synapse terminal session.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          sessionId: sessionIdProperty,
-          force: booleanField("When true, force stop if supported."),
-        },
-        required: ["sessionId"],
-      },
-    },
+    ...buildTerminalMcpTools(),
     {
       name: SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
       description: "Play a short local Sound Notifier reminder. Prefer eventType so the sound matches the reminder situation.",

@@ -7,13 +7,38 @@ Write one complete text value to a local text file.
 Input:
 
 - `text` required: complete string. Empty text is valid. The schema has no `maxLength` and the tool does not require chunking.
-- `path` required: current-OS absolute local path ending in `.txt`, `.md`, or `.csv`, matched case-insensitively on the final extension.
-- `encoding` optional: exactly `utf8` or `utf16le`; defaults to `utf8`.
+- `path` required: current-OS absolute local path ending in `.txt`, `.md`, `.csv`, `.html`, or `.htm`, matched case-insensitively on the final extension.
+- `encoding` optional: exactly `utf8` or `utf16le`; defaults to `utf8`. `.html` and `.htm` accept only `utf8`.
 - `overwrite` optional: explicit permission to replace an unchanged existing regular file; defaults to `false`.
 
 The tool creates missing parent directories. It does not expand `~`, environment variables, shell expressions, or `file://`; add a BOM; trim or normalize text; append a newline; or parse Markdown/CSV. The result is `{ path, fileName, format, encoding, size, overwritten }`, where `path` is the canonical actual target and `size` is the written byte count.
 
 Stable failures are `{ code, message, retryable }`. Codes are `INVALID_PATH`, `UNSUPPORTED_EXTENSION`, `INVALID_ENCODING`, `TARGET_EXISTS`, `UNSAFE_TARGET`, `TARGET_CHANGED`, `PERMISSION_DENIED`, `ABORTED`, and `WRITE_FAILED`; only `TARGET_CHANGED` is retryable. Failures do not commit a partial target file, although newly created parent directories can remain.
+
+## `app_html_generator_ejs_generate`
+
+Render a trusted EJS template string with structured JSON data and return the complete result without automatically saving, opening, previewing, or validating it. Template JavaScript runs in a one-shot Worker under the application's permission domain; the Worker timeout and termination controls are reliability boundaries, not a security sandbox. EJS include and template file loading are disabled.
+
+Input:
+
+- `template` required: non-empty EJS template string, at most 256 KiB as UTF-8 and containing no isolated UTF-16 surrogate.
+- `data` required: JSON-compatible top-level object. Its normalized JSON form is at most 512 KiB; templates access it through the explicit `data` root.
+
+The serialized `{ template, data }` request is limited to 768 KiB. Output may be empty, whitespace, an HTML fragment, or a full document and is limited to 5 MiB. The result is `{ html, size }`, where `size` is the UTF-8 byte count.
+
+Stable render failures are `{ code, message, retryable, line? }`. Codes are `INVALID_TEMPLATE`, `INVALID_DATA`, `TEMPLATE_TOO_LARGE`, `DATA_TOO_LARGE`, `INPUT_TOO_LARGE`, `TEMPLATE_COMPILE_FAILED`, `OUTPUT_TOO_LARGE`, `PERMISSION_DENIED`, `RENDER_QUEUE_FULL`, `RENDER_TIMEOUT`, `RENDER_MEMORY_LIMIT`, `RENDER_CANCELLED`, and `RENDER_FAILED`; only `RENDER_QUEUE_FULL` is retryable.
+
+## `app_html_generator_ejs_file_generate`
+
+Render through the same EJS core and atomically write the checked result through the shared Text File Writer.
+
+Input:
+
+- `template` and `data`: same contract and limits as `app_html_generator_ejs_generate`.
+- `outputPath` required: current-OS absolute local path ending in `.html` or `.htm`.
+- `overwrite` optional: explicit permission to replace an unchanged existing regular file; defaults to `false`.
+
+The result is `{ output: { path, fileName, format, encoding, size, overwritten } }`. `format` is `html` or `htm`, `encoding` is always `utf8`, and `size` is the rendered UTF-8 byte count. Render failures use the protocol above; write failures preserve the Text File Writer error protocol.
 
 ## `app_file_opener_file_open`
 
@@ -92,247 +117,6 @@ Output:
 - `fileName`: generated file name.
 - `size`: generated file size in bytes.
 - `generatedAt`: ISO timestamp.
-
-## Terminal
-
-`app_terminal_group_create`
-
-Create a terminal group after terminal permission approval.
-
-Input:
-
-- `name` required: group name.
-
-Output:
-
-- Terminal group.
-
-`app_terminal_group_list`
-
-List terminal groups and their saved command settings. This read requires terminal permission approval.
-
-Input: none.
-
-Output:
-
-- Terminal groups, including `settings.commands` command names and command text when configured.
-
-`app_terminal_group_rename`
-
-Rename a terminal group after terminal permission approval.
-
-Input:
-
-- `groupId` required: terminal group id.
-- `name` required: new group name. Leading and trailing whitespace is trimmed.
-
-Output:
-
-- Terminal group.
-
-`app_terminal_group_update_settings`
-
-Update a terminal group's name and default working directory.
-
-Input:
-
-- `groupId` required: terminal group id.
-- `name` required: group name. Leading and trailing whitespace is trimmed.
-- `settings.defaultCwd` optional: existing absolute working directory for future sessions in this group.
-
-Output:
-
-- Terminal group.
-
-`app_terminal_group_command_create`
-
-Create a named command under a terminal group.
-
-Input:
-
-- `groupId` required: terminal group id.
-- `name` required: command display name.
-- `command` required: multi-line command text.
-
-Output:
-
-- Terminal group command.
-
-`app_terminal_group_command_update`
-
-Update a named command under a terminal group.
-
-Input:
-
-- `groupId` required: terminal group id.
-- `commandId` required: terminal group command id.
-- `name` required: command display name.
-- `command` required: multi-line command text.
-
-Output:
-
-- Terminal group command.
-
-`app_terminal_group_command_delete`
-
-Delete a named command from a terminal group.
-
-Input:
-
-- `groupId` required: terminal group id.
-- `commandId` required: terminal group command id.
-
-Output:
-
-- `{ "ok": true }`
-
-`app_terminal_group_command_launch`
-
-Create a new terminal session from a named command and run it in the group default directory.
-
-Input:
-
-- `groupId` required: terminal group id.
-- `commandId` required: terminal group command id.
-- `cols` optional: terminal columns. Defaults to `80`.
-- `rows` optional: terminal rows. Defaults to `24`.
-
-Output:
-
-- Terminal session.
-
-`app_terminal_group_delete`
-
-Delete a terminal group and every terminal session in it. Running sessions are stopped before deletion.
-
-Input:
-
-- `groupId` required: terminal group id.
-
-Output:
-
-- `{ "ok": true }`
-
-`app_terminal_session_create`
-
-Create a Synapse-managed terminal session using the user's default shell.
-
-Input:
-
-- `groupId` optional: terminal group id.
-- `title` optional: session title.
-- `cwd` optional: existing absolute working directory.
-- `cols` optional: terminal columns. Defaults to `80`.
-- `rows` optional: terminal rows. Defaults to `24`.
-
-Output:
-
-- Terminal session.
-
-`app_terminal_session_list`
-
-List terminal sessions.
-
-Input: none.
-
-Output:
-
-- Terminal sessions.
-
-`app_terminal_session_get`
-
-Get terminal session status.
-
-Input:
-
-- `sessionId` required: terminal session id.
-
-Output:
-
-- Terminal session.
-
-`app_terminal_session_read`
-
-Read retained terminal output.
-
-Input:
-
-- `sessionId` required: terminal session id.
-- `afterSeq` optional: return output after this sequence.
-- `limitBytes` optional: maximum bytes to read. Maximum `1048576`.
-
-Output:
-
-- `session`: terminal session.
-- `chunks`: retained output chunks.
-- `nextSeq`: next output sequence cursor.
-- `firstSeq`: first retained sequence.
-- `truncated`: whether retention trimmed earlier output.
-
-`app_terminal_session_rename`
-
-Rename a terminal session.
-
-Input:
-
-- `sessionId` required: terminal session id.
-- `title` required: new session title. Leading and trailing whitespace is trimmed.
-
-Output:
-
-- Terminal session.
-
-`app_terminal_session_write`
-
-Write raw input to a Synapse terminal session. Include `\n` to submit a shell command.
-
-Input:
-
-- `sessionId` required: terminal session id.
-- `data` required: raw terminal input.
-
-Output:
-
-- `{ "ok": true }`
-
-`app_terminal_session_resize`
-
-Resize a running terminal session.
-
-Input:
-
-- `sessionId` required: terminal session id.
-- `cols` required: terminal columns.
-- `rows` required: terminal rows.
-
-Output:
-
-- `{ "ok": true }`
-
-`app_terminal_session_delete`
-
-Delete a terminal session and its retained output. Running sessions are stopped before deletion.
-
-Input:
-
-- `sessionId` required: terminal session id.
-
-Output:
-
-- `{ "ok": true }`
-
-`app_terminal_session_stop`
-
-Stop a Synapse terminal session.
-
-Input:
-
-- `sessionId` required: terminal session id.
-- `force` optional: force stop when supported.
-
-Output:
-
-- `{ "ok": true }`
 
 ## `app_sound_notifier_sound_play`
 

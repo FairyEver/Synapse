@@ -94,6 +94,29 @@ describe("sanitizeNodeResultsForSnapshot", () => {
     expect(result.outputs?.agentConversation?.sessionKey).toBe("raw-agent-session-key")
   })
 
+  it("preserves declared file-result paths while still redacting arbitrary output paths", () => {
+    const declaredPath = "/tmp/generated/report.html"
+    const sanitized = sanitizeNodeResultsForSnapshot({
+      "file-1": {
+        nodeId: "file-1",
+        status: "success",
+        input: { variables: {} },
+        output: declaredPath,
+        outputs: { path: declaredPath, format: "html" },
+      },
+      "text-1": {
+        nodeId: "text-1",
+        status: "success",
+        input: { variables: {} },
+        output: "/Users/liyang/private.txt",
+      },
+    })
+
+    expect(sanitized["file-1"]?.output).toBe(declaredPath)
+    expect(sanitized["file-1"]?.outputs?.path).toBe(declaredPath)
+    expect(sanitized["text-1"]?.output).toBe("[path]")
+  })
+
   it("sanitizes persisted node output, structured outputs, and errors", () => {
     const result: NodeRunResult = {
       nodeId: "http-1",

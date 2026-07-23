@@ -1,957 +1,461 @@
-import { chmod, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
+import { chmodSync, mkdtempSync, statSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { createTerminalService, ensureExecutableIfPresent, type PtyLike, type TerminalService } from "../service"
+import { describe, expect, it, vi } from "vitest"
+
+import { createTerminalService, ensureExecutableIfPresent, type PtyLike } from "../service"
 import type { TerminalStore, TerminalStoreState } from "../store"
-import type { TerminalGroup, TerminalOutputChunk, TerminalSession } from "../../shared/schema"
 
-type Disposable = { dispose(): void }
+const controllerA = { clientId: "client-a", controllerInstanceId: "task-a", actorKind: "connector" as const }
+const controllerB = { clientId: "client-a", controllerInstanceId: "task-b", actorKind: "connector" as const }
 
-class FakePty implements PtyLike {
-  readonly dataListeners: Array<(data: string) => void> = []
-  readonly exitListeners: Array<(event: { exitCode: number; signal?: number }) => void> = []
-  readonly write = vi.fn()
-  readonly resize = vi.fn()
-  readonly kill = vi.fn()
+describe("TerminalService core", () => {
+  it("marks a present node-pty spawn helper as executable", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-helper-"))
+    const filePath = path.join(root, "spawn-helper")
+    writeFileSync(filePath, "helper")
+    chmodSync(filePath, 0o644)
+    ensureExecutableIfPresent(filePath)
+    expect(statSync(filePath).mode & 0o111).not.toBe(0)
+  })
 
-  onData(listener: (data: string) => void): Disposable {
-    this.dataListeners.push(listener)
-    return {
-      dispose: () => {
-        const index = this.dataListeners.indexOf(listener)
-        if (index >= 0) this.dataListeners.splice(index, 1)
-      },
+  it("creates one UI/MCP-visible session, records real output, and invalidates attention evidence", async () => {
+    const harness = await startedHarness()
+    const session = await harness.service.createSession({ title: "Shell" })
+    harness.pty.emitData("hello\r\n")
+    await harness.service.flushPersistQueue()
+    const read = harness.service.readSession({ sessionId: session.id })
+    expect(read.chunks.map((chunk) => chunk.data)).toEqual(["hello\r\n"])
+    expect(read.session.attention).toMatchObject({ state: "unknown", reason: "output_changed", throughOutputSeq: 1 })
+    expect(harness.service.listSessions().map((item) => item.id)).toContain(session.id)
+  })
+
+  it("records explicit launch overrides as redacted facts", async () => {
+    const harness = await startedHarness()
+    const cwd = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-override-"))
+    const session = await harness.service.createSessionOverride({
+      title: "Override",
+      overrides: { cwd, cols: 100 },
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000000",
+    }, "client-a")
+    expect(session.launchFacts).toMatchObject({
+      cwdKind: "override",
+      overriddenFields: ["cwd", "cols"],
+      cols: 100,
+      legacyUnversioned: false,
+    })
+  })
+
+  it("allows one MCP client to keep more than eight sessions running", async () => {
+    const { service } = await startedHarness()
+    for (let index = 0; index < 9; index += 1) {
+      await service.createMcpSession({
+        title: `Session ${index + 1}`,
+        idempotencyKey: `terminal-client-session-${index + 1}`,
+      }, "client-a")
     }
-  }
-
-  onExit(listener: (event: { exitCode: number; signal?: number }) => void): Disposable {
-    this.exitListeners.push(listener)
-    return {
-      dispose: () => {
-        const index = this.exitListeners.indexOf(listener)
-        if (index >= 0) this.exitListeners.splice(index, 1)
-      },
-    }
-  }
-
-  emitData(data: string): void {
-    for (const listener of [...this.dataListeners]) listener(data)
-  }
-
-  emitExit(event: { exitCode: number; signal?: number }): void {
-    for (const listener of [...this.exitListeners]) listener(event)
-  }
-}
-
-let tempDir = ""
-
-beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-terminal-service-"))
-})
-
-afterEach(async () => {
-  await rm(tempDir, { recursive: true, force: true })
-})
-
-describe("TerminalService", () => {
-  it("marks a present node-pty spawn helper as executable", async () => {
-    const helperPath = path.join(tempDir, "spawn-helper")
-    await writeFile(helperPath, "#!/bin/sh\n")
-    await chmod(helperPath, 0o644)
-
-    ensureExecutableIfPresent(helperPath)
-
-    expect((await stat(helperPath)).mode & 0o111).not.toBe(0)
+    expect(service.listSessions().filter((session) => session.status === "running")).toHaveLength(9)
   })
 
-  it("creates a session and records output", async () => {
-    const store = createMemoryStore()
-    const pty = new FakePty()
-    const service = await createStartedService(store, { ptys: [pty] })
-    const onData = vi.fn()
-    service.events.on("data", onData)
-
-    const session = await service.createSession({ title: "Shell" })
-    pty.emitData("hello\n")
-    await service.flushPersistQueue()
-
-    const read = service.readSession({ sessionId: session.id })
-    expect(read.session).toMatchObject({
-      id: session.id,
-      status: "running",
-      lastOutputSeq: 1,
-      cwd: tempDir,
-      shell: "/bin/zsh",
-    })
-    expect(read.chunks.map((chunk) => chunk.data)).toEqual(["hello\n"])
-    expect(store.state.output.map((chunk) => chunk.data)).toEqual(["hello\n"])
-    expect(onData).toHaveBeenCalledWith({
-      sessionId: session.id,
-      chunk: expect.objectContaining({ sessionId: session.id, seq: 1, data: "hello\n", source: "pty" }),
-    })
-  })
-
-  it("renames a session with a trimmed title and persists the update", async () => {
-    const store = createMemoryStore()
-    const service = await createStartedService(store, { ptys: [new FakePty()] })
-    const session = await service.createSession({ title: "Shell" })
-    const onSessionChanged = vi.fn()
-    service.events.on("sessionChanged", onSessionChanged)
-
-    const updated = await withSessionActions(service).renameSession({
-      sessionId: session.id,
-      title: "  Build logs  ",
-    })
-
-    expect(updated).toMatchObject({ id: session.id, title: "Build logs" })
-    expect(service.getSession({ sessionId: session.id }).title).toBe("Build logs")
-    expect(store.state.sessions.find((item) => item.id === session.id)?.title).toBe("Build logs")
-    expect(onSessionChanged).toHaveBeenCalledWith(expect.objectContaining({
-      id: session.id,
-      title: "Build logs",
-    }))
-  })
-
-  it("renames a group with a trimmed name and persists the update", async () => {
-    const group = createGroup({ name: "默认分组" })
-    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
-    const service = await createStartedService(store)
-
-    const updated = await withGroupActions(service).renameGroup({
-      groupId: group.id,
-      name: "  构建  ",
-    })
-
-    expect(updated).toMatchObject({ id: group.id, name: "构建" })
-    expect(service.listGroups()).toEqual([expect.objectContaining({ id: group.id, name: "构建" })])
-    expect(store.state.groups).toEqual([expect.objectContaining({ id: group.id, name: "构建" })])
-  })
-
-  it("updates terminal group settings and persists the update", async () => {
-    const group = createGroup({ name: "默认分组" })
-    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
-    const service = await createStartedService(store)
-
-    const updated = await service.updateGroupSettings({
-      groupId: group.id,
-      name: "  构建  ",
-      settings: {
-        defaultCwd: tempDir,
-        startupCommand: "nvm use\npnpm dev",
-      },
-    })
-
-    expect(updated).toMatchObject({
-      id: group.id,
-      name: "构建",
-      settings: {
-        defaultCwd: tempDir,
-        commands: [
-          expect.objectContaining({
-            name: "启动命令",
-            command: "nvm use\npnpm dev",
-          }),
-        ],
-      },
-    })
-    expect(store.state.groups).toEqual([expect.objectContaining({
-      id: group.id,
-      name: "构建",
-      settings: {
-        defaultCwd: tempDir,
-        commands: [
-          expect.objectContaining({
-            name: "启动命令",
-            command: "nvm use\npnpm dev",
-          }),
-        ],
-      },
-    })])
-  })
-
-  it("rejects a missing group default cwd without persisting it", async () => {
-    const group = createGroup({ name: "默认分组" })
-    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
-    const service = await createStartedService(store)
-
-    await expect(service.updateGroupSettings({
-      groupId: group.id,
-      name: group.name,
-      settings: { defaultCwd: path.join(tempDir, "missing") },
-    })).rejects.toThrow("Terminal cwd must be an existing absolute path")
-
-    expect(service.listGroups()).toEqual([group])
-    expect(store.state.groups).toEqual([group])
-  })
-
-  it("migrates legacy startup command into a named group command", async () => {
-    const group = createGroup({
-      updatedAt: "2026-06-24T00:02:00.000Z",
-      settings: {
-        defaultCwd: tempDir,
-        startupCommand: "nvm use\npnpm dev",
-      },
-    })
-    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
-    const service = await createStartedService(store)
-
-    const [migrated] = service.listGroups()
-
-    expect(migrated.settings).toMatchObject({
-      defaultCwd: tempDir,
-      commands: [
-        expect.objectContaining({
-          name: "启动命令",
-          command: "nvm use\npnpm dev",
-          createdAt: "2026-06-24T00:02:00.000Z",
-          updatedAt: "2026-06-24T00:02:00.000Z",
-        }),
-      ],
-    })
-    expect(migrated.settings).not.toHaveProperty("startupCommand")
-    expect(store.state.groups[0]?.settings).not.toHaveProperty("startupCommand")
-  })
-
-  it("does not overwrite explicit commands when legacy startup command is also present", async () => {
-    const existingCommand = {
-      id: "cmd-dev",
-      name: "dev",
-      command: "pnpm dev",
-      createdAt: "2026-06-24T00:01:00.000Z",
-      updatedAt: "2026-06-24T00:01:00.000Z",
-    }
-    const group = createGroup({
-      settings: {
-        startupCommand: "pnpm old",
-        commands: [existingCommand],
-      },
-    })
-    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
-    const service = await createStartedService(store)
-
-    expect(service.listGroups()[0]?.settings).toEqual({
-      commands: [existingCommand],
-    })
-    expect(store.state.groups[0]?.settings).toEqual({
-      commands: [existingCommand],
-    })
-  })
-
-  it("creates clean sessions without running migrated commands", async () => {
-    const group = createGroup({
-      settings: {
-        startupCommand: "pnpm dev",
-      },
-    })
-    const pty = new FakePty()
-    const service = await createStartedService(
-      createMemoryStore({ groups: [group], sessions: [], output: [] }),
-      { ptys: [pty] },
-    )
-
-    await service.createSession({ groupId: group.id })
-
-    expect(pty.write).not.toHaveBeenCalled()
-  })
-
-  it("uses explicit cwd before group default cwd", async () => {
-    const explicitDir = await mkdtemp(path.join(os.tmpdir(), "synapse-terminal-explicit-"))
-    const group = createGroup({
-      settings: {
-        defaultCwd: tempDir,
-      },
-    })
-    const pty = new FakePty()
-    const spawnInputs: Array<{ cwd: string }> = []
-    const service = await createStartedService(
-      createMemoryStore({ groups: [group], sessions: [], output: [] }),
-      { ptys: [pty], spawnInputs },
-    )
-
-    const session = await service.createSession({ groupId: group.id, cwd: explicitDir })
-
-    expect(session.cwd).toBe(explicitDir)
-    expect(spawnInputs).toEqual([expect.objectContaining({ cwd: explicitDir })])
-    await rm(explicitDir, { recursive: true, force: true })
-  })
-
-  it("uses group default cwd when create session has no explicit cwd", async () => {
-    const group = createGroup({
-      settings: {
-        defaultCwd: tempDir,
-      },
-    })
-    const pty = new FakePty()
-    const spawnInputs: Array<{ cwd: string }> = []
-    const service = await createStartedService(
-      createMemoryStore({ groups: [group], sessions: [], output: [] }),
-      { ptys: [pty], spawnInputs },
-    )
-
-    const session = await service.createSession({ groupId: group.id })
-
-    expect(session.cwd).toBe(tempDir)
-    expect(spawnInputs).toEqual([expect.objectContaining({ cwd: tempDir })])
-  })
-
-  it("rejects invalid group default cwd before spawning a pty", async () => {
-    const group = createGroup({
-      settings: {
-        defaultCwd: path.join(tempDir, "missing"),
-        startupCommand: "pnpm dev",
-      },
-    })
-    const spawnInputs: Array<{ cwd: string }> = []
-    const service = await createStartedService(
-      createMemoryStore({ groups: [group], sessions: [], output: [] }),
-      { ptys: [new FakePty()], spawnInputs },
-    )
-
-    await expect(service.createSession({ groupId: group.id }))
-      .rejects.toThrow("Terminal cwd must be an existing absolute path")
-
-    expect(spawnInputs).toEqual([])
-    expect(service.listSessions()).toEqual([])
-  })
-
-  it("keeps runStartupCommand as a no-op when no pending command exists", async () => {
-    const group = createGroup({
-      settings: {
-        startupCommand: "nvm use\npnpm dev",
-      },
-    })
-    const pty = new FakePty()
-    const spawnInputs: Array<{ shell: string; cwd: string; cols: number; rows: number }> = []
-    const service = await createStartedService(
-      createMemoryStore({ groups: [group], sessions: [], output: [] }),
-      { ptys: [pty], spawnInputs },
-    )
-
-    const session = await service.createSession({ groupId: group.id })
-    pty.emitData("\u001b[?2004h")
-    pty.emitData("(base) $ ")
-
-    expect(spawnInputs).toEqual([expect.objectContaining({ shell: "/bin/zsh" })])
-    expect(pty.write).not.toHaveBeenCalled()
-
-    service.runStartupCommand({ sessionId: session.id })
-
-    expect(pty.write).not.toHaveBeenCalled()
-
-    service.runStartupCommand({ sessionId: session.id })
-
-    expect(pty.write).not.toHaveBeenCalled()
-  })
-
-  it("keeps command-like output for clean sessions", async () => {
-    const group = createGroup({
-      settings: {
-        startupCommand: "ls",
-      },
-    })
-    const pty = new FakePty()
-    const service = await createStartedService(
-      createMemoryStore({ groups: [group], sessions: [], output: [] }),
-      { ptys: [pty] },
-    )
-    const onData = vi.fn()
-    service.events.on("data", onData)
-
-    const session = await service.createSession({ groupId: group.id })
-    service.runStartupCommand({ sessionId: session.id })
-    pty.emitData("ls\r\n")
-    pty.emitData("README.md\r\n")
-    await service.flushPersistQueue()
-
-    expect(onData).toHaveBeenCalledTimes(2)
-    expect(service.readSession({ sessionId: session.id }).chunks.map((chunk) => chunk.data))
-      .toEqual(["ls\r\n", "README.md\r\n"])
-  })
-
-  it("does not write an empty startup command", async () => {
-    const group = createGroup({
-      settings: {},
-    })
-    const pty = new FakePty()
-    const service = await createStartedService(
-      createMemoryStore({ groups: [group], sessions: [], output: [] }),
-      { ptys: [pty] },
-    )
-
-    await service.createSession({ groupId: group.id })
-
-    expect(pty.write).not.toHaveBeenCalled()
-  })
-
-  it("creates updates and deletes terminal group commands", async () => {
-    const group = createGroup({ name: "前端项目" })
-    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
-    const service = await createStartedService(store)
-
-    const created = await service.createGroupCommand({
-      groupId: group.id,
-      name: "  dev  ",
-      command: "pnpm dev\r\n",
-    })
-    expect(created).toMatchObject({
-      name: "dev",
-      command: "pnpm dev",
-    })
-
-    const updated = await service.updateGroupCommand({
-      groupId: group.id,
-      commandId: created.id,
-      name: "  test  ",
-      command: "pnpm test",
-    })
-    expect(updated).toMatchObject({
-      id: created.id,
-      name: "test",
-      command: "pnpm test",
-    })
-
-    expect(service.listGroups()[0]?.settings?.commands).toEqual([updated])
-
-    await service.deleteGroupCommand({
-      groupId: group.id,
-      commandId: created.id,
-    })
-
-    expect(service.listGroups()[0]?.settings).toBeUndefined()
-    expect(store.state.groups[0]?.settings).toBeUndefined()
-  })
-
-  it("launches a group command in a new focused session shape", async () => {
-    const command = {
-      id: "cmd-dev",
-      name: "dev",
-      command: "nvm use\npnpm dev",
-      createdAt: "2026-06-24T00:01:00.000Z",
-      updatedAt: "2026-06-24T00:01:00.000Z",
-    }
-    const group = createGroup({
-      settings: {
-        defaultCwd: tempDir,
-        commands: [command],
-      },
-    })
-    const pty = new FakePty()
-    const spawnInputs: Array<{ cwd: string; cols: number; rows: number }> = []
-    const service = await createStartedService(
-      createMemoryStore({ groups: [group], sessions: [], output: [] }),
-      { ptys: [pty], spawnInputs },
-    )
-
-    const session = await service.launchGroupCommand({
-      groupId: group.id,
-      commandId: command.id,
-      cols: 120,
-      rows: 40,
-    })
-
-    expect(session).toMatchObject({
-      groupId: group.id,
-      title: "dev",
-      cwd: tempDir,
-      cols: 120,
-      rows: 40,
-      status: "running",
-    })
-    expect(spawnInputs).toEqual([expect.objectContaining({ cwd: tempDir, cols: 120, rows: 40 })])
-    expect(pty.write).toHaveBeenCalledWith("nvm use\rpnpm dev\r")
-  })
-
-  it("rejects launching an unknown group command", async () => {
-    const group = createGroup({
-      settings: {
-        commands: [{
-          id: "cmd-dev",
-          name: "dev",
-          command: "pnpm dev",
-          createdAt: "2026-06-24T00:01:00.000Z",
-          updatedAt: "2026-06-24T00:01:00.000Z",
-        }],
-      },
-    })
-    const pty = new FakePty()
-    const service = await createStartedService(
-      createMemoryStore({ groups: [group], sessions: [], output: [] }),
-      { ptys: [pty] },
-    )
-
-    await expect(service.launchGroupCommand({
-      groupId: group.id,
-      commandId: "missing",
-    })).rejects.toThrow("Terminal command not found")
-
-    expect(pty.write).not.toHaveBeenCalled()
-    expect(service.listSessions()).toEqual([])
-  })
-
-  it("rejects empty renamed terminal group names", async () => {
-    const group = createGroup()
-    const service = await createStartedService(createMemoryStore({ groups: [group], sessions: [], output: [] }))
-
-    await expect(withGroupActions(service).renameGroup({
-      groupId: group.id,
-      name: "   ",
-    })).rejects.toThrow("Terminal group name is required")
-  })
-
-  it("rejects empty renamed terminal titles", async () => {
-    const service = await createStartedService(createMemoryStore(), { ptys: [new FakePty()] })
-    const session = await service.createSession({ title: "Shell" })
-
-    await expect(withSessionActions(service).renameSession({
-      sessionId: session.id,
-      title: "   ",
-    })).rejects.toThrow("Terminal session title is required")
-  })
-
-  it("writes MCP raw data without session-level agent control", async () => {
-    const pty = new FakePty()
-    const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
+  it("allows only one controller instance to hold the automation write lease", async () => {
+    const { service } = await startedHarness()
     const session = await service.createSession({})
-
-    service.writeSession({ sessionId: session.id, data: "\u001b[A" })
-
-    expect(pty.write).toHaveBeenCalledWith("\u001b[A")
+    const lease = service.acquireControl({
+      sessionId: session.id, requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000001",
+    }, controllerA)
+    expect(lease.leaseId).toBeTruthy()
+    expect(lease.inputRevision).toBe(0)
+    expect(() => service.acquireControl({
+      sessionId: session.id, requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000002",
+    }, controllerB)).toThrow("control_busy")
+    expect(service.getSessionState(session.id, controllerB).lease).toMatchObject({ occupied: true, own: false })
   })
 
-  it("deletes an ended session and removes retained output", async () => {
-    const group = createGroup()
-    const session = createSession({ status: "exited", endedAt: "2026-06-24T00:00:03.000Z", lastOutputSeq: 2 })
-    const store = createMemoryStore({
-      groups: [group],
-      sessions: [session],
-      output: [
-        createOutput({ seq: 1, data: "old" }),
-        createOutput({ seq: 2, data: " output" }),
-      ],
-    })
-    const service = await createStartedService(store)
-    const onSessionDeleted = vi.fn()
-    service.events.on("sessionDeleted", onSessionDeleted)
-
-    await withSessionActions(service).deleteSession({ sessionId: session.id })
-
-    expect(service.listSessions()).toEqual([])
-    expect(store.state.sessions).toEqual([])
-    expect(store.state.output).toEqual([])
-    expect(onSessionDeleted).toHaveBeenCalledWith({ sessionId: session.id })
-    expect(() => service.readSession({ sessionId: session.id }))
-      .toThrow("Terminal session not found")
-  })
-
-  it("deletes a running session by killing the pty without reviving it on exit", async () => {
-    const store = createMemoryStore()
-    const pty = new FakePty()
-    const service = await createStartedService(store, { ptys: [pty] })
+  it("invalidates leases and bounded observes when unified authorization is revoked", async () => {
+    const { service } = await startedHarness()
     const session = await service.createSession({})
-    pty.emitData("active")
-    await service.flushPersistQueue()
-
-    await withSessionActions(service).deleteSession({ sessionId: session.id })
-    pty.emitExit({ exitCode: 143, signal: 15 })
-    await service.flushPersistQueue()
-
-    expect(pty.kill).toHaveBeenCalledTimes(1)
-    expect(service.listSessions()).toEqual([])
-    expect(store.state.sessions).toEqual([])
-    expect(store.state.output).toEqual([])
-    expect(() => service.writeSession({ sessionId: session.id, data: "x" }))
-      .toThrow("Terminal session not found")
+    service.acquireControl({
+      sessionId: session.id, requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000003",
+    }, controllerA)
+    const observation = service.observe({
+      sessionId: session.id,
+      afterStateRevision: service.getSession({ sessionId: session.id }).stateRevision,
+      afterOutputSeq: 0, maxWaitMs: 10_000,
+    }, false, controllerA.clientId)
+    service.revokeClientAccess(controllerA.clientId, `terminal:session:${session.id}`)
+    expect(service.getSessionState(session.id, controllerA).lease).toMatchObject({ occupied: false })
+    await expect(observation).resolves.toMatchObject({ cancelled: true })
   })
 
-  it("deletes an empty group and persists the update", async () => {
-    const group = createGroup()
-    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
-    const service = await createStartedService(store)
-
-    await withGroupActions(service).deleteGroup({ groupId: group.id })
-
-    expect(service.listGroups()).toEqual([])
-    expect(store.state.groups).toEqual([])
-  })
-
-  it("deletes a non-empty group with sessions and retained output", async () => {
-    const group = createGroup()
-    const session = createSession({ status: "exited", endedAt: "2026-06-24T00:00:03.000Z", lastOutputSeq: 2 })
-    const otherGroup = createGroup({ id: "g2", name: "Other", sortOrder: 1 })
-    const otherSession = createSession({ id: "s2", groupId: "g2" })
-    const store = createMemoryStore({
-      groups: [group, otherGroup],
-      sessions: [session, otherSession],
-      output: [
-        createOutput({ sessionId: session.id, seq: 1, data: "old" }),
-        createOutput({ sessionId: otherSession.id, seq: 1, data: "keep" }),
-      ],
-    })
-    const service = await createStartedService(store)
-    const onSessionDeleted = vi.fn()
-    service.events.on("sessionDeleted", onSessionDeleted)
-
-    await withGroupActions(service).deleteGroup({ groupId: group.id })
-
-    expect(service.listGroups()).toEqual([expect.objectContaining({ id: "g2" })])
-    expect(service.listSessions()).toEqual([expect.objectContaining({ id: "s2" })])
-    expect(store.state.output).toEqual([expect.objectContaining({ sessionId: "s2", data: "keep" })])
-    expect(onSessionDeleted).toHaveBeenCalledWith({ sessionId: session.id })
-  })
-
-  it("deletes a group with a running session by killing the pty without reviving it on exit", async () => {
-    const store = createMemoryStore()
-    const pty = new FakePty()
-    const service = await createStartedService(store, { ptys: [pty] })
+  it("orders semantic input by expectedInputRevision and returns idempotent results", async () => {
+    const { service, pty } = await startedHarness()
     const session = await service.createSession({})
-    pty.emitData("active")
-    await service.flushPersistQueue()
-
-    await withGroupActions(service).deleteGroup({ groupId: session.groupId })
-    pty.emitExit({ exitCode: 143, signal: 15 })
-    await service.flushPersistQueue()
-
-    expect(pty.kill).toHaveBeenCalledTimes(1)
-    expect(service.listGroups()).toEqual([])
-    expect(service.listSessions()).toEqual([])
-    expect(store.state.output).toEqual([])
-    expect(() => service.getSession({ sessionId: session.id }))
-      .toThrow("Terminal session not found")
+    const lease = service.acquireControl({
+      sessionId: session.id, requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000010",
+    }, controllerA)
+    const request = {
+      sessionId: session.id,
+      leaseId: lease.leaseId,
+      expectedInputRevision: 0,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000011",
+      actions: [{ type: "text" as const, text: "pwd" }, { type: "key" as const, key: "Enter" as const }],
+    }
+    const first = service.sendSemanticInput(request, controllerA)
+    const retry = service.sendSemanticInput(request, controllerA)
+    expect(retry).toEqual(first)
+    const renewed = service.renewControl({
+      sessionId: session.id,
+      leaseId: lease.leaseId,
+      requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000013",
+    }, controllerA)
+    expect(renewed.inputRevision).toBe(1)
+    expect(pty.write).toHaveBeenCalledTimes(2)
+    expect(service.getSession({ sessionId: session.id }).inputRevision).toBe(1)
+    expect(() => service.sendSemanticInput({ ...request, idempotencyKey: "019f8a39-0000-7000-8000-000000000012" }, controllerA))
+      .toThrow("revision_conflict")
   })
 
-  it("throws when deleting a missing group", async () => {
-    const service = await createStartedService(createMemoryStore())
+  it("submits short and long UTF-8 commands as ordered text and Enter PTY writes", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    const lease = service.acquireControl({
+      sessionId: session.id, requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000020",
+    }, controllerA)
+    await expect(service.sendCommand({
+      sessionId: session.id, leaseId: lease.leaseId,
+      expectedInputRevision: 0, idempotencyKey: "019f8a39-0000-7000-8000-000000000021",
+      text: "printf ok\nexit",
+    }, controllerA)).rejects.toThrow("invalid_argument")
+    const shortRequest = {
+      sessionId: session.id, leaseId: lease.leaseId,
+      expectedInputRevision: 0, idempotencyKey: "019f8a39-0000-7000-8000-000000000022",
+      text: "printf ok",
+    }
+    const shortResult = await service.sendCommand(shortRequest, controllerA)
+    const longText = "请在下载文件夹创建一个完整可用的番茄钟，并完成响应式、声音提醒和计时逻辑验证。".repeat(16)
+    const longResult = await service.sendCommand({
+      sessionId: session.id, leaseId: lease.leaseId,
+      expectedInputRevision: 1, idempotencyKey: "019f8a39-0000-7000-8000-000000000023",
+      text: longText,
+    }, controllerA)
+    const shortRetry = await service.sendCommand(shortRequest, controllerA)
 
-    await expect(withGroupActions(service).deleteGroup({ groupId: "missing" }))
-      .rejects.toThrow("Terminal group not found")
-  })
-
-  it("marks restored running sessions as lost", async () => {
-    const group = createGroup()
-    const runningSession = createSession({ status: "running" })
-    const store = createMemoryStore({ groups: [group], sessions: [runningSession], output: [] })
-    const service = await createStartedService(store)
-
-    const restored = service.getSession({ sessionId: runningSession.id })
-    expect(restored.status).toBe("lost")
-    expect(restored.endedAt).toBeDefined()
-    expect(store.state.sessions[0]).toMatchObject({ id: runningSession.id, status: "lost" })
-  })
-
-  it("readSession returns restored output after start", async () => {
-    const group = createGroup()
-    const session = createSession({ status: "exited", lastOutputSeq: 2, endedAt: "2026-06-24T00:00:03.000Z" })
-    const output = [
-      createOutput({ seq: 1, data: "old" }),
-      createOutput({ seq: 2, data: " output" }),
-    ]
-    const service = await createStartedService(createMemoryStore({
-      groups: [group],
-      sessions: [session],
-      output,
-    }))
-
-    expect(service.readSession({ sessionId: session.id })).toMatchObject({
-      session,
-      chunks: output,
-      nextSeq: 2,
-      firstSeq: 1,
-      truncated: false,
+    expect(pty.write.mock.calls).toEqual([
+      ["printf ok"],
+      ["\r"],
+      [longText],
+      ["\r"],
+    ])
+    expect(shortRetry).toEqual(shortResult)
+    expect(shortResult).toMatchObject({
+      outcome: "accepted",
+      inputRevisionBefore: 0,
+      inputRevisionAfter: 1,
+      acceptedActionCount: 2,
+      acceptedBytes: Buffer.byteLength("printf ok\r"),
+    })
+    expect(longResult).toMatchObject({
+      outcome: "accepted",
+      inputRevisionBefore: 1,
+      inputRevisionAfter: 2,
+      acceptedActionCount: 2,
+      acceptedBytes: Buffer.byteLength(`${longText}\r`),
     })
   })
 
-  it("resizeSession updates metadata and calls pty.resize", async () => {
-    const pty = new FakePty()
-    const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
-    const session = await service.createSession({ cols: 80, rows: 24 })
+  it("reports an uncertain command boundary when Enter fails after text was accepted", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    const lease = service.acquireControl({
+      sessionId: session.id, requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000024",
+    }, controllerA)
+    pty.write
+      .mockImplementationOnce(() => undefined)
+      .mockImplementationOnce(() => {
+        throw new Error("enter write failed")
+      })
+
+    const result = await service.sendCommand({
+      sessionId: session.id, leaseId: lease.leaseId,
+      expectedInputRevision: 0, idempotencyKey: "019f8a39-0000-7000-8000-000000000025",
+      text: "printf ok",
+    }, controllerA)
+
+    expect(pty.write.mock.calls).toEqual([["printf ok"], ["\r"]])
+    expect(result).toMatchObject({
+      outcome: "delivery_uncertain",
+      inputRevisionBefore: 0,
+      inputRevisionAfter: 1,
+      acceptedActionCount: 1,
+      acceptedBytes: Buffer.byteLength("printf ok"),
+      failedActionIndex: 1,
+    })
+  })
+
+  it("writes canonical Base64 raw bytes as Buffer without logging or re-encoding", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    const lease = service.acquireControl({
+      sessionId: session.id, requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000030",
+    }, controllerA)
+    const bytes = Buffer.from([0, 1, 2, 127, 195, 169, 255])
+    service.sendRaw({
+      sessionId: session.id, leaseId: lease.leaseId,
+      expectedInputRevision: 0, idempotencyKey: "019f8a39-0000-7000-8000-000000000031",
+      dataBase64: bytes.toString("base64"),
+    }, controllerA)
+    expect(pty.write).toHaveBeenCalledWith(bytes)
+  })
+
+  it("uses bracketed paste only with fresh core emulator evidence", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    const lease = service.acquireControl({
+      sessionId: session.id, requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000040",
+    }, controllerA)
+    const request = {
+      sessionId: session.id, leaseId: lease.leaseId,
+      expectedInputRevision: 0, expectedThroughOutputSeq: 0,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000041", text: "one\ntwo",
+    }
+    await expect(service.paste(request, controllerA)).rejects.toThrow("paste_mode_unavailable")
+    pty.emitData("\x1b[?2004h")
+    const result = await service.paste({ ...request, expectedThroughOutputSeq: 1 }, controllerA)
+    expect(result.outcome).toBe("accepted")
+    expect(pty.write).toHaveBeenLastCalledWith("\x1b[200~one\ntwo\x1b[201~")
+  })
+
+  it("UI input explicitly takes over and invalidates the automation lease", async () => {
+    const { service } = await startedHarness()
+    const session = await service.createSession({})
+    const lease = service.acquireControl({
+      sessionId: session.id, requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000050",
+    }, controllerA)
+    service.writeSession({ sessionId: session.id, data: "a" })
+    expect(service.getSessionState(session.id, controllerA).lease).toMatchObject({ occupied: false })
+    expect(service.releaseControl({ sessionId: session.id, leaseId: lease.leaseId }, controllerA))
+      .toMatchObject({ released: false, noOp: true })
+  })
+
+  it("coordinates resize with lease and sizeRevision without advancing inputRevision", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    const lease = service.acquireControl({
+      sessionId: session.id, requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000060",
+    }, controllerA)
+    const result = await service.resizeControlledSession({
+      sessionId: session.id, leaseId: lease.leaseId,
+      expectedSizeRevision: 1, cols: 120, rows: 40,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000061",
+    }, controllerA)
+    expect(result).toMatchObject({ noOp: false, sizeRevision: 2 })
+    expect(pty.resize).toHaveBeenCalledWith(120, 40)
+    expect(service.getSession({ sessionId: session.id }).inputRevision).toBe(0)
+  })
+
+  it("attaches the renderer to the authoritative emulator snapshot", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    pty.emitData("\u001b[2J\u001b[Hauthoritative-screen")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const snapshot = await service.attachSession({ sessionId: session.id })
+
+    expect(snapshot).toMatchObject({
+      degraded: false,
+      cols: 80,
+      rows: 24,
+      throughOutputSeq: 1,
+      sizeRevision: 1,
+      emulatorId: "xterm-headless",
+      emulatorVersion: "6.0.0",
+    })
+    expect(snapshot.serialized).toContain("authoritative-screen")
+  })
+
+  it("emits a resize barrier after all output accepted at the previous geometry", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    pty.emitData("before-resize")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const resized = new Promise<Record<string, unknown>>((resolve) => {
+      service.events.once("resized", resolve)
+    })
 
     await service.resizeSession({ sessionId: session.id, cols: 120, rows: 40 })
 
-    expect(pty.resize).toHaveBeenCalledWith(120, 40)
-    expect(service.getSession({ sessionId: session.id })).toMatchObject({ cols: 120, rows: 40 })
-  })
-
-  it("resizeSession ignores unchanged dimensions", async () => {
-    const pty = new FakePty()
-    const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
-    const session = await service.createSession({ cols: 80, rows: 24 })
-
-    await service.resizeSession({ sessionId: session.id, cols: 80, rows: 24 })
-
-    expect(pty.resize).not.toHaveBeenCalled()
-    expect(service.getSession({ sessionId: session.id })).toMatchObject({ cols: 80, rows: 24 })
-  })
-
-  it("resizeSession throws when the session is not running", async () => {
-    const pty = new FakePty()
-    const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
-    const session = await service.createSession({})
-    pty.emitExit({ exitCode: 0 })
-    await service.flushPersistQueue()
-
-    await expect(service.resizeSession({ sessionId: session.id, cols: 100, rows: 30 }))
-      .rejects.toThrow("Terminal session is not running")
-  })
-
-  it("stopSession marks killed and lets MCP stop sessions without session-level agent control", async () => {
-    const store = createMemoryStore()
-    const pty = new FakePty()
-    const service = await createStartedService(store, { ptys: [pty] })
-    const session = await service.createSession({})
-
-    await service.stopSession({ sessionId: session.id })
-
-    expect(pty.kill).toHaveBeenCalledTimes(1)
-    expect(service.getSession({ sessionId: session.id })).toMatchObject({ status: "killed" })
-    expect(store.state.sessions.find((item) => item.id === session.id)?.status).toBe("killed")
-  })
-
-  it("stopSession throws when the session is not running", async () => {
-    const pty = new FakePty()
-    const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
-    const session = await service.createSession({})
-    pty.emitExit({ exitCode: 0 })
-    await service.flushPersistQueue()
-
-    await expect(service.stopSession({ sessionId: session.id }))
-      .rejects.toThrow("Terminal session is not running")
-  })
-
-  it("onExit marks exited and removes runtime", async () => {
-    const pty = new FakePty()
-    const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
-    const session = await service.createSession({})
-    const onSessionChanged = vi.fn()
-    service.events.on("sessionChanged", onSessionChanged)
-
-    pty.emitExit({ exitCode: 2, signal: 15 })
-    await service.flushPersistQueue()
-
-    expect(service.getSession({ sessionId: session.id })).toMatchObject({
-      status: "exited",
-      exitCode: 2,
-      signal: 15,
-    })
-    expect(onSessionChanged).toHaveBeenCalledWith(expect.objectContaining({
-      id: session.id,
-      status: "exited",
-      exitCode: 2,
-      signal: 15,
-    }))
-    expect(() => service.writeSession({ sessionId: session.id, data: "x" }))
-      .toThrow("Terminal session is not running")
-  })
-
-  it("onExit keeps killed status when a killed session exits", async () => {
-    const pty = new FakePty()
-    const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
-    const session = await service.createSession({})
-
-    await service.stopSession({ sessionId: session.id })
-    pty.emitExit({ exitCode: 1 })
-    await service.flushPersistQueue()
-
-    expect(service.getSession({ sessionId: session.id })).toMatchObject({
-      status: "killed",
-      exitCode: 1,
+    await expect(resized).resolves.toMatchObject({
+      sessionId: session.id,
+      cols: 120,
+      rows: 40,
+      sizeRevision: 2,
+      throughOutputSeq: 1,
     })
   })
 
-  it("serializes quick output persistence and preserves final state", async () => {
-    let activeSaves = 0
-    let maxActiveSaves = 0
-    const store = createMemoryStore(undefined, async () => {
-      activeSaves += 1
-      maxActiveSaves = Math.max(maxActiveSaves, activeSaves)
-      await new Promise((resolve) => setTimeout(resolve, 5))
-      activeSaves -= 1
-    })
-    const pty = new FakePty()
-    const service = await createStartedService(store, { ptys: [pty] })
+  it("keeps normal stop asynchronous and marks ended only after the PTY exit event", async () => {
+    const { service, pty } = await startedHarness()
     const session = await service.createSession({})
-
-    pty.emitData("one")
-    pty.emitData("two")
-    pty.emitData("three")
-    await service.flushPersistQueue()
-
-    expect(maxActiveSaves).toBe(1)
-    expect(store.state.sessions.find((item) => item.id === session.id)?.lastOutputSeq).toBe(3)
-    expect(store.state.output.map((chunk) => chunk.data)).toEqual(["one", "two", "three"])
+    const operation = await service.stopControlledSession({
+      sessionId: session.id,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000070",
+    }, controllerA)
+    expect(operation).toMatchObject({ status: "delivered", kind: "stop" })
+    expect(service.getSession({ sessionId: session.id }).status).toBe("stopping")
+    expect(pty.kill).toHaveBeenCalledWith(process.platform === "win32" ? undefined : "SIGHUP")
+    pty.emitExit({ exitCode: 2, signal: 1 })
+    expect(service.getSession({ sessionId: session.id })).toMatchObject({ status: "ended", endCause: "normal_stop_confirmed", exitCode: 2, signal: 1 })
+    expect(service.getSessionState(session.id, controllerA).endFacts).toMatchObject({
+      stopOperationId: (operation as { operationId: string }).operationId,
+      requestedBy: "self",
+    })
+    expect(service.getOperation((operation as { operationId: string }).operationId)).toMatchObject({ status: "completed", finalLifecycle: "ended" })
   })
 
-  it("stop kills live ptys and persists sessions as lost", async () => {
-    const store = createMemoryStore()
-    const pty = new FakePty()
-    const service = await createStartedService(store, { ptys: [pty] })
-    const session = await service.createSession({})
-    pty.kill.mockImplementation(() => pty.emitExit({ exitCode: 143, signal: 15 }))
-
-    await service.stop()
-
-    expect(pty.kill).toHaveBeenCalledTimes(1)
-    expect(service.getSession({ sessionId: session.id })).toMatchObject({
+  it("recovers a delivered stop without replay and records the session as lost", async () => {
+    const first = await startedHarness()
+    const session = await first.service.createSession({})
+    const operation = await first.service.stopControlledSession({
+      sessionId: session.id,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000071",
+    }, controllerA)
+    await first.service.flushPersistQueue()
+    const recovered = createTerminalService({
+      store: first.store,
+      spawnPty: () => { throw new Error("recovery must not respawn or replay") },
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => os.tmpdir(),
+      resolveEffectivePath: () => "/usr/bin:/bin",
+    })
+    await recovered.start()
+    expect(recovered.getSession({ sessionId: session.id })).toMatchObject({
       status: "lost",
-      exitCode: 143,
-      signal: 15,
+      endCause: "runtime_unrecoverable_after_restart",
     })
-    expect(store.state.sessions.find((item) => item.id === session.id)?.status).toBe("lost")
-    expect(() => service.writeSession({ sessionId: session.id, data: "x" }))
-      .toThrow("Terminal session is not running")
+    expect(recovered.getOperation((operation as { operationId: string }).operationId)).toMatchObject({
+      status: "completed",
+      finalLifecycle: "lost",
+      finalCause: "runtime_unrecoverable_after_restart",
+    })
   })
 
-  it("coalesces quick output persistence into a bounded number of saves", async () => {
-    const saveStarted: Array<() => void> = []
-    const saveCalls: TerminalStoreState[] = []
-    let blockSaves = false
-    const store = createMemoryStore(undefined, async (state) => {
-      saveCalls.push(structuredClone(state))
-      if (blockSaves) await new Promise<void>((resolve) => saveStarted.push(resolve))
-    })
-    const pty = new FakePty()
-    const service = await createStartedService(store, { ptys: [pty] })
+  it("rejects delete for running/stopping sessions and never hides termination", async () => {
+    const { service } = await startedHarness()
     const session = await service.createSession({})
-
-    blockSaves = true
-    for (let index = 0; index < 100; index += 1) {
-      pty.emitData(`chunk-${index}`)
-    }
-    expect(saveStarted).toHaveLength(1)
-    expect(service.getPersistDiagnostics().idleWaiterCount).toBe(0)
-
-    saveStarted.shift()?.()
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(saveStarted).toHaveLength(1)
-    saveStarted.shift()?.()
-    await service.flushPersistQueue()
-
-    const outputSaves = saveCalls.filter((state) => state.output.length > 0)
-    expect(outputSaves).toHaveLength(2)
-    expect(store.state.sessions.find((item) => item.id === session.id)?.lastOutputSeq).toBe(100)
-    expect(store.state.output).toHaveLength(100)
-    expect(store.state.output.at(-1)?.data).toBe("chunk-99")
+    await expect(service.deleteSession({ sessionId: session.id })).rejects.toThrow("lifecycle_conflict")
+    expect(service.getSession({ sessionId: session.id }).status).toBe("running")
   })
 
-  it("surfaces and logs persistence failures", async () => {
-    const persistError = new Error("disk full")
-    const logger = { warn: vi.fn(), error: vi.fn() }
-    const store = createMemoryStore(undefined, async (state) => {
-      if (state.output.length > 0) throw persistError
+  it("persists a bounded delete operation tombstone for a terminal session", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    pty.emitExit({ exitCode: 0 })
+    const result = await service.deleteTerminalSession(session.id, "client-a")
+    expect(result.deleteOperationId).not.toBe(session.id)
+    expect(service.getOperation(result.deleteOperationId)).toMatchObject({
+      kind: "delete",
+      status: "completed",
+      finalLifecycle: "ended",
+      finalCause: "session_deleted",
     })
-    const pty = new FakePty()
-    const service = await createStartedService(store, { ptys: [pty], logger })
-    await service.createSession({})
+    expect(() => service.getSession({ sessionId: session.id })).toThrow("not_found")
+  })
 
-    pty.emitData("lost")
-    await service.flushPersistQueue()
+  it("deletes a non-empty group only through an unchanged terminal-session plan", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    pty.emitExit({ exitCode: 0 })
+    const plan = service.previewGroupDelete(session.groupId)
+    const result = await service.commitGroupDelete(plan.deletePlanId)
+    expect(result.sessionCount).toBe(1)
+    expect(service.listGroups().some((group) => group.id === session.groupId)).toBe(false)
+  })
 
-    expect(service.getLastPersistError()).toBe(persistError)
-    expect(logger.warn).toHaveBeenCalledWith("Terminal service failed to persist state.", {
-      error: persistError,
-    })
+  it("submits saved group commands as ordered text plus Enter and retains shell echo", async () => {
+    const { service, pty } = await startedHarness()
+    const group = service.listGroups()[0]!
+    const command = await service.createGroupCommand({ groupId: group.id, name: "dev", command: "nvm use\npnpm dev" })
+    const session = await service.launchGroupCommand({ groupId: group.id, commandId: command.id })
+    expect(pty.write.mock.calls.slice(-4)).toEqual([["nvm use"], ["\r"], ["pnpm dev"], ["\r"]])
+    pty.emitData("nvm use\r\n")
+    expect(service.readSession({ sessionId: session.id }).chunks.map((chunk) => chunk.data)).toContain("nvm use\r\n")
+  })
+
+  it("returns bounded observation watermarks without consuming shared output", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    pty.emitData("one")
+    const request = {
+      sessionId: session.id,
+      afterStateRevision: 1, afterOutputSeq: 0, maxWaitMs: 0,
+    }
+    const first = await service.observe(request, true)
+    const second = await service.observe(request, true)
+    expect(first.changed).toBe(true)
+    expect(second.chunks).toEqual(first.chunks)
+    expect(first.nextOutputSeq).toBe(1)
+  })
+
+  it("serves an ended session view from a bounded core checkpoint plus retained output", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    pty.emitData("checkpoint-view\r\n")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    pty.emitExit({ exitCode: 0 })
+    const view = await service.getView({ sessionId: session.id, kind: "screen", maxBytes: 64 * 1024 })
+    expect(view.degraded).toBe(false)
+    expect(view.lines.join("\n")).toContain("checkpoint-view")
+    expect(view.throughOutputSeq).toBe(1)
   })
 })
 
-async function createStartedService(
-  store: TerminalStore,
-  options: {
-    ptys?: FakePty[]
-    spawnInputs?: Array<{ shell: string; cwd: string; cols: number; rows: number }>
-    logger?: { warn(message: string, meta?: Record<string, unknown>): void }
-  } = {},
-): Promise<TerminalService> {
-  const queue = [...(options.ptys ?? [])]
+async function startedHarness() {
+  const pty = fakePty()
+  const store = memoryStore()
+  const cwd = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-service-"))
   const service = createTerminalService({
     store,
-    outputRetentionBytes: 10 * 1024,
+    spawnPty: () => pty,
     resolveDefaultShell: () => "/bin/zsh",
-    resolveDefaultCwd: () => tempDir,
-    logger: options.logger,
-    spawnPty: (input) => {
-      options.spawnInputs?.push(input)
-      const next = queue.shift()
-      if (!next) throw new Error("No fake pty available")
-      return next
-    },
+    resolveDefaultCwd: () => cwd,
+    resolveEffectivePath: () => "/usr/bin:/bin",
   })
   await service.start()
-  return service
+  return { service, pty, store }
 }
 
-function createMemoryStore(
-  initial: TerminalStoreState = { groups: [], sessions: [], output: [] },
-  onSave?: (state: TerminalStoreState) => Promise<void>,
-): TerminalStore & { state: TerminalStoreState } {
-  const store = {
-    state: structuredClone(initial),
-    async loadState() {
-      return structuredClone(store.state)
-    },
-    async saveState(state: TerminalStoreState) {
-      await onSave?.(state)
-      store.state = structuredClone(state)
-    },
+function memoryStore(): TerminalStore & { state: TerminalStoreState } {
+  const holder = {
+    persistenceProtection: "available" as const,
+    state: { groups: [], sessions: [], output: [], terminalDomainRevision: 0, operations: [], idempotency: [], checkpoints: [] } as TerminalStoreState,
+    async loadState() { return structuredClone(holder.state) },
+    async saveState(state: TerminalStoreState) { holder.state = structuredClone(state) },
   }
-  return store
+  return holder
 }
 
-function createGroup(overrides: Partial<TerminalGroup> = {}): TerminalGroup {
-  return {
-    id: "g1",
-    name: "Default",
-    createdAt: "2026-06-24T00:00:00.000Z",
-    updatedAt: "2026-06-24T00:00:00.000Z",
-    sortOrder: 0,
-    ...overrides,
+function fakePty() {
+  let dataListener: ((data: string) => void) | undefined
+  let exitListener: ((event: { exitCode: number; signal?: number }) => void) | undefined
+  const instance = {
+    onData: vi.fn((listener: (data: string) => void) => { dataListener = listener; return { dispose: vi.fn() } }),
+    onExit: vi.fn((listener: (event: { exitCode: number; signal?: number }) => void) => { exitListener = listener; return { dispose: vi.fn() } }),
+    write: vi.fn((_data: string | Buffer) => undefined),
+    resize: vi.fn(),
+    kill: vi.fn((_signal?: string) => undefined),
+    emitData: (data: string) => dataListener?.(data),
+    emitExit: (event: { exitCode: number; signal?: number }) => exitListener?.(event),
   }
-}
-
-function createSession(overrides: Partial<TerminalSession> = {}): TerminalSession {
-  return {
-    id: "s1",
-    groupId: "g1",
-    title: "zsh",
-    cwd: tempDir,
-    shell: "/bin/zsh",
-    status: "running",
-    createdAt: "2026-06-24T00:00:00.000Z",
-    updatedAt: "2026-06-24T00:00:00.000Z",
-    startedAt: "2026-06-24T00:00:00.000Z",
-    cols: 80,
-    rows: 24,
-    lastOutputSeq: 0,
-    ...overrides,
-  }
-}
-
-function createOutput(overrides: Partial<TerminalOutputChunk> = {}): TerminalOutputChunk {
-  return {
-    sessionId: "s1",
-    seq: 1,
-    data: "hello",
-    createdAt: "2026-06-24T00:00:01.000Z",
-    source: "pty",
-    ...overrides,
-  }
-}
-
-function withSessionActions(service: TerminalService): TerminalService & {
-  renameSession(input: { sessionId: string; title: string }): Promise<TerminalSession>
-  deleteSession(input: { sessionId: string }): Promise<void>
-} {
-  return service as TerminalService & {
-    renameSession(input: { sessionId: string; title: string }): Promise<TerminalSession>
-    deleteSession(input: { sessionId: string }): Promise<void>
-  }
-}
-
-function withGroupActions(service: TerminalService): TerminalService & {
-  renameGroup(input: { groupId: string; name: string }): Promise<TerminalGroup>
-  deleteGroup(input: { groupId: string }): Promise<void>
-} {
-  return service as TerminalService & {
-    renameGroup(input: { groupId: string; name: string }): Promise<TerminalGroup>
-    deleteGroup(input: { groupId: string }): Promise<void>
-  }
+  return instance as typeof instance & PtyLike
 }

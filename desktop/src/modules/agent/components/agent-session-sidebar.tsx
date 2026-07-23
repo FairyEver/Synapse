@@ -49,7 +49,10 @@ type AgentSessionSidebarProps = {
   onSourceFilterChange: (sourceFilter: ConversationSourceFilter) => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
-  onDeleteOthers: (session: SynapseAgentSessionSummary) => void
+  onDeleteOthers: (
+    session: SynapseAgentSessionSummary,
+    groupSessions: readonly SynapseAgentSessionSummary[],
+  ) => void
   onRename: (session: SynapseAgentSessionSummary, name: string) => void | Promise<void>
 }
 

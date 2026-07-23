@@ -1,14 +1,41 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { chmodSync, existsSync, statSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import * as pty from "node-pty"
-import { TERMINAL_SESSION_OUTPUT_RETENTION_BYTES } from "../../../config"
+
+import {
+  TERMINAL_CLIENT_LEASE_LIMIT,
+  TERMINAL_CLIENT_OBSERVE_LIMIT,
+  TERMINAL_CONTROLLER_LEASE_LIMIT,
+  TERMINAL_GLOBAL_OBSERVE_LIMIT,
+  TERMINAL_GLOBAL_OUTPUT_RETENTION_BYTES,
+  TERMINAL_GLOBAL_RUNNING_SESSION_LIMIT,
+  TERMINAL_RENDERER_SNAPSHOT_MAX_BYTES,
+  TERMINAL_SESSION_OBSERVE_LIMIT,
+  TERMINAL_SESSION_OUTPUT_RETENTION_BYTES,
+} from "../../../config"
+import type {
+  TerminalAcquireControlInput,
+  TerminalCommandInput,
+  TerminalCreateSessionOverrideInput,
+  TerminalCreateSessionInput as TerminalMcpCreateSessionInput,
+  TerminalObserveInput,
+  TerminalPasteInput,
+  TerminalRawInput,
+  TerminalResizeInput,
+  TerminalSemanticAction,
+  TerminalSemanticInput,
+  TerminalStopInput,
+} from "../shared/contract-schema"
+import { terminalContractError } from "../shared/errors"
 import type {
   TerminalCreateGroupCommandInput,
   TerminalCreateGroupInput,
   TerminalCreateSessionInput,
+  TerminalAttachSessionInput,
+  TerminalAttachSessionResult,
   TerminalDeleteGroupCommandInput,
   TerminalDeleteGroupInput,
   TerminalDeleteSessionInput,
@@ -16,7 +43,6 @@ import type {
   TerminalGroupCommand,
   TerminalGroupSettings,
   TerminalLaunchGroupCommandInput,
-  TerminalOutputChunk,
   TerminalReadSessionInput,
   TerminalReadSessionResult,
   TerminalRenameGroupInput,
@@ -29,37 +55,75 @@ import type {
   TerminalUpdateGroupSettingsInput,
   TerminalWriteSessionInput,
 } from "../shared/schema"
-import { encodeTerminalCommandInput } from "../shared/terminal-input"
+import { createTerminalCoreEmulator, type TerminalCoreEmulator } from "./emulator"
+import { resolveTerminalEnvironment } from "./environment"
 import { createTerminalOutputBuffer, type TerminalOutputBuffer } from "./output-buffer"
 import type { TerminalStore, TerminalStoreState } from "./store"
 
-export type PtyDisposable = {
-  dispose(): void
-}
-
+export type PtyDisposable = { dispose(): void }
 export type PtyLike = {
+  readonly pid?: number
   onData(listener: (data: string) => void): PtyDisposable
   onExit(listener: (event: { exitCode: number; signal?: number }) => void): PtyDisposable
-  write(data: string): void
+  write(data: string | Buffer): void
   resize(cols: number, rows: number): void
-  kill(): void
-}
-
-type TerminalRuntime = {
-  pty: PtyLike
-  buffer: TerminalOutputBuffer
-  disposables: PtyDisposable[]
-}
-
-type StartupEchoFilter = {
-  pending: string[]
+  kill(signal?: string): void
 }
 
 type SpawnPtyInput = {
-  shell: string
-  cwd: string
-  cols: number
-  rows: number
+  readonly shell: string
+  readonly cwd: string
+  readonly cols: number
+  readonly rows: number
+  readonly env: Record<string, string>
+}
+
+type TerminalRuntime = {
+  readonly pty: PtyLike
+  readonly buffer: TerminalOutputBuffer
+  readonly emulator: TerminalCoreEmulator
+  readonly disposables: PtyDisposable[]
+}
+
+export type TerminalControllerContext = {
+  readonly clientId: string
+  readonly controllerInstanceId: string
+  readonly actorKind: "user" | "agent" | "connector" | "extension" | "system"
+}
+
+type TerminalLeaseState = {
+  readonly leaseId: string
+  readonly clientId: string
+  readonly controllerInstanceId: string
+  readonly acquiredAt: string
+  readonly expiresAt: string
+  readonly leaseRevision: number
+}
+
+type TerminalOperationState = {
+  readonly operationId: string
+  readonly kind: "stop" | "force_stop" | "input" | "resize" | "delete" | "command_delivery"
+  readonly sessionId: string
+  status: "pending_delivery" | "delivered" | "delivery_uncertain" | "completed" | "failed"
+  readonly requestedAt: string
+  readonly requestedBy: string
+  updatedAt: string
+  relatedOperationId?: string
+  finalLifecycle?: TerminalSession["status"]
+  finalCause?: string
+  errorCode?: string
+  acceptedActionCount?: number
+  acceptedBytes?: number
+  failedActionIndex?: number
+}
+
+type IdempotencyEntry = {
+  readonly clientId: string
+  readonly capability: string
+  readonly idempotencyKey: string
+  readonly digest: string
+  readonly expiresAtMs: number
+  readonly result: unknown
 }
 
 type TerminalServiceLogger = {
@@ -68,60 +132,156 @@ type TerminalServiceLogger = {
 
 export type TerminalService = ReturnType<typeof createTerminalService>
 
+const DEFAULT_COLS = 80
+const DEFAULT_ROWS = 24
+const LEASE_MIN_MS = 1_000
+const LEASE_MAX_MS = 60_000
+const COMMAND_ENTER_FLUSH_DELAY_MS = 10
+const IDEMPOTENCY_RETENTION_MS = 24 * 60 * 60 * 1_000
+const DELETE_TOMBSTONE_RETENTION_MS = 24 * 60 * 60 * 1_000
+const MAX_SEMANTIC_ACTIONS = 128
+const MAX_SEMANTIC_BYTES = 256 * 1024
+const KEY_BYTES: Readonly<Record<string, string>> = {
+  Enter: "\r",
+  Tab: "\t",
+  Escape: "\x1b",
+  ArrowUp: "\x1b[A",
+  ArrowDown: "\x1b[B",
+  ArrowRight: "\x1b[C",
+  ArrowLeft: "\x1b[D",
+  Backspace: "\x7f",
+  "Ctrl+C": "\x03",
+  "Ctrl+D": "\x04",
+}
+
 export function createTerminalService(deps: {
-  store: TerminalStore
-  outputRetentionBytes?: number
-  resolveDefaultShell?: () => string
-  resolveDefaultCwd?: () => string
-  spawnPty?: (input: SpawnPtyInput) => PtyLike
-  logger?: TerminalServiceLogger
+  readonly store: TerminalStore
+  readonly outputRetentionBytes?: number
+  readonly globalOutputRetentionBytes?: number
+  readonly resolveDefaultShell?: () => string
+  readonly resolveDefaultCwd?: () => string
+  readonly resolveEffectivePath?: () => string | null
+  readonly spawnPty?: (input: SpawnPtyInput) => PtyLike
+  readonly logger?: TerminalServiceLogger
 }) {
   const events = new EventEmitter()
   const groups = new Map<string, TerminalGroup>()
   const sessions = new Map<string, TerminalSession>()
   const runtimes = new Map<string, TerminalRuntime>()
   const buffers = new Map<string, TerminalOutputBuffer>()
-  const pendingStartupCommands = new Map<string, string>()
-  const startupEchoFilters = new Map<string, StartupEchoFilter>()
+  const checkpoints = new Map<string, TerminalStoreState["checkpoints"][number]>()
+  const unpublishedSessions = new Map<string, number>()
+  const leases = new Map<string, TerminalLeaseState>()
+  const leaseRevisions = new Map<string, number>()
+  const operations = new Map<string, TerminalOperationState>()
+  const activeStopOperations = new Map<string, { stop?: string; force?: string }>()
+  const idempotency = new Map<string, IdempotencyEntry>()
+  const idempotencyInFlight = new Map<string, { digest: string; promise: Promise<unknown> }>()
+  const deletePlans = new Map<string, {
+    readonly deletePlanId: string
+    readonly groupId: string
+    readonly groupRevision: number
+    readonly membershipRevision: number
+    readonly commandCollectionRevision: number
+    readonly sessionFacts: readonly { sessionId: string; lifecycle: TerminalSession["status"]; lastOutputSeq: number }[]
+    readonly commandIds: readonly string[]
+    readonly expiresAt: string
+  }>()
+  const observeBySession = new Map<string, number>()
+  const observeByClient = new Map<string, number>()
+  const observeWaitersByClient = new Map<string, Set<{ readonly sessionId: string; readonly cancel: () => void }>>()
+  const pendingDomainEvents: Array<{
+    readonly domainRevision: number
+    readonly eventType: string
+    readonly objectId: string
+    readonly objectRevision: number
+    readonly occurredAt: string
+    readonly source: "terminal-core"
+    readonly operationId?: string
+  }> = []
+  let observeGlobal = 0
   const outputRetentionBytes = deps.outputRetentionBytes ?? TERMINAL_SESSION_OUTPUT_RETENTION_BYTES
+  const globalOutputRetentionBytes = deps.globalOutputRetentionBytes ?? TERMINAL_GLOBAL_OUTPUT_RETENTION_BYTES
+  let terminalDomainRevision = 0
   let persistInFlight: Promise<void> | undefined
   let persistPending = false
   let persistIdleWaiters: Array<() => void> = []
   let lastPersistError: unknown
 
-  function now(): string {
-    return new Date().toISOString()
-  }
+  function now(): string { return new Date().toISOString() }
 
   function snapshotState(): TerminalStoreState {
-    const output: TerminalOutputChunk[] = []
-    for (const buffer of buffers.values()) {
-      output.push(...buffer.snapshot())
-    }
+    pruneOperationTombstones()
+    const runtimeCheckpoints = [...runtimes.entries()].flatMap(([sessionId, runtime]) => {
+      const session = sessions.get(sessionId)
+      if (!session || runtime.emulator.sizeRevision !== session.sizeRevision) return []
+      const serialized = runtime.emulator.serialize()
+      if (Buffer.byteLength(serialized, "utf8") > 1024 * 1024) return []
+      return [{
+        sessionId,
+        throughOutputSeq: runtime.emulator.throughOutputSeq,
+        sizeRevision: session.sizeRevision,
+        emulatorId: "xterm-headless" as const,
+        emulatorVersion: "6.0.0" as const,
+        serialized,
+      }]
+    })
     return {
       groups: [...groups.values()],
       sessions: [...sessions.values()],
-      output,
+      output: [...buffers.values()].flatMap((buffer) => buffer.snapshot()),
+      terminalDomainRevision,
+      operations: [...operations.values()].map((operation) => ({
+        schemaVersion: 2 as const,
+        id: operation.operationId,
+        operationId: operation.operationId,
+        kind: operation.kind,
+        resourceType: "session" as const,
+        resourceId: operation.sessionId,
+        status: operation.status,
+        createdAt: operation.requestedAt,
+        updatedAt: operation.updatedAt,
+        requestedBy: operation.requestedBy,
+        ...(operation.relatedOperationId ? { relatedOperationId: operation.relatedOperationId } : {}),
+        ...(operation.finalLifecycle ? { finalLifecycle: operation.finalLifecycle } : {}),
+        ...(operation.finalCause ? { finalCause: operation.finalCause } : {}),
+        ...(operation.errorCode ? { errorCode: operation.errorCode } : {}),
+        ...(operation.acceptedActionCount !== undefined ? { acceptedActionCount: operation.acceptedActionCount } : {}),
+        ...(operation.acceptedBytes !== undefined ? { acceptedBytes: operation.acceptedBytes } : {}),
+        ...(operation.failedActionIndex !== undefined ? { failedActionIndex: operation.failedActionIndex } : {}),
+      })),
+      idempotency: [...idempotency.entries()].map(([scope, entry]) => ({ scope, ...entry })),
+      checkpoints: [...checkpoints.values(), ...runtimeCheckpoints]
+        .filter((checkpoint, index, items) => items.findLastIndex((item) => item.sessionId === checkpoint.sessionId) === index),
     }
   }
 
   function schedulePersist(): void {
     persistPending = true
-    if (!persistInFlight) {
-      persistInFlight = runPersistLoop()
-    }
-  }
-
-  function flushPersist(): Promise<void> {
-    schedulePersist()
-    return waitForPersistIdle()
+    if (!persistInFlight) persistInFlight = runPersistLoop()
   }
 
   async function runPersistLoop(): Promise<void> {
     try {
       do {
         persistPending = false
-        await persistSnapshot()
+        try {
+          const snapshot = snapshotState()
+          await deps.store.saveState(snapshot)
+          lastPersistError = undefined
+          const ready = pendingDomainEvents.filter((event) => event.domainRevision <= snapshot.terminalDomainRevision)
+          pendingDomainEvents.splice(0, ready.length)
+          for (const event of ready) events.emit("domainChanged", event)
+          for (const [sessionId, creationRevision] of unpublishedSessions) {
+            if (creationRevision > snapshot.terminalDomainRevision) continue
+            unpublishedSessions.delete(sessionId)
+            const session = sessions.get(sessionId)
+            if (session) events.emit("sessionChanged", session)
+          }
+        } catch (error) {
+          lastPersistError = error
+          deps.logger?.warn("Terminal service failed to persist state.", { error })
+        }
       } while (persistPending)
     } finally {
       persistInFlight = undefined
@@ -131,25 +291,46 @@ export function createTerminalService(deps: {
     }
   }
 
-  async function persistSnapshot(): Promise<void> {
-    try {
-      await deps.store.saveState(snapshotState())
-      lastPersistError = undefined
-    } catch (error) {
-      lastPersistError = error
-      deps.logger?.warn("Terminal service failed to persist state.", { error })
-    }
-  }
-
   function waitForPersistIdle(): Promise<void> {
     if (!persistInFlight) return Promise.resolve()
     return new Promise((resolve) => persistIdleWaiters.push(resolve))
   }
 
-  function ensureDefaultGroup(): TerminalGroup {
-    const existing = [...groups.values()].sort((left, right) => left.sortOrder - right.sortOrder)[0]
-    if (existing) return existing
+  async function flushPersist(): Promise<void> {
+    schedulePersist()
+    await waitForPersistIdle()
+  }
 
+  function bumpDomain(eventType: string, objectId: string, objectRevision: number, operationId?: string): void {
+    terminalDomainRevision += 1
+    pendingDomainEvents.push({
+      domainRevision: terminalDomainRevision,
+      eventType,
+      objectId,
+      objectRevision,
+      occurredAt: now(),
+      source: "terminal-core",
+      ...(operationId ? { operationId } : {}),
+    })
+  }
+
+  function unknownAttention(session: Pick<TerminalSession, "lastOutputSeq" | "sizeRevision">, reason: string) {
+    return {
+      state: "unknown" as const,
+      kind: "unknown" as const,
+      reason,
+      confidence: 0,
+      detectedAt: now(),
+      throughOutputSeq: session.lastOutputSeq,
+      sizeRevision: session.sizeRevision,
+      detectorId: "passive-terminal-v1",
+      detectorVersion: "1.0.0",
+    }
+  }
+
+  function ensureDefaultGroup(): TerminalGroup {
+    const existing = [...groups.values()].sort((a, b) => a.sortOrder - b.sortOrder)[0]
+    if (existing) return existing
     const timestamp = now()
     const group: TerminalGroup = {
       id: randomUUID(),
@@ -157,34 +338,33 @@ export function createTerminalService(deps: {
       createdAt: timestamp,
       updatedAt: timestamp,
       sortOrder: 0,
+      groupRevision: 1,
+      launchRevision: 1,
+      membershipRevision: 1,
+      commandCollectionRevision: 1,
     }
     groups.set(group.id, group)
+    bumpDomain("group.created", group.id, group.groupRevision)
+    return group
+  }
+
+  function getGroupOrThrow(groupId: string): TerminalGroup {
+    const group = groups.get(groupId)
+    if (!group) throw terminalContractError("not_found", "not_found")
     return group
   }
 
   function getSessionOrThrow(sessionId: string): TerminalSession {
     const session = sessions.get(sessionId)
-    if (!session) throw new Error("Terminal session not found")
+    if (!session) throw terminalContractError("not_found", "not_found")
     return session
   }
 
-  function getGroupOrThrow(groupId: string): TerminalGroup {
-    const group = groups.get(groupId)
-    if (!group) throw new Error("Terminal group not found")
-    return group
-  }
-
-  function getGroupCommandOrThrow(group: TerminalGroup, commandId: string): TerminalGroupCommand {
-    const command = group.settings?.commands?.find((item) => item.id === commandId)
-    if (!command) throw new Error("Terminal command not found")
-    return command
-  }
-
-  function getRunningRuntime(sessionId: string): TerminalRuntime {
+  function getRuntimeForInput(sessionId: string): TerminalRuntime {
     const session = getSessionOrThrow(sessionId)
     const runtime = runtimes.get(sessionId)
     if (!runtime || session.status !== "running") {
-      throw new Error("Terminal session is not running")
+      throw terminalContractError("lifecycle_conflict", "lifecycle", { details: { lifecycle: session.status } })
     }
     return runtime
   }
@@ -192,427 +372,1598 @@ export function createTerminalService(deps: {
   function cleanupRuntime(sessionId: string): void {
     const runtime = runtimes.get(sessionId)
     if (!runtime) return
+    const session = sessions.get(sessionId)
+    if (session && runtime.emulator.sizeRevision === session.sizeRevision) {
+      const serialized = runtime.emulator.serialize()
+      if (Buffer.byteLength(serialized, "utf8") <= 1024 * 1024) {
+        checkpoints.set(sessionId, {
+          sessionId,
+          throughOutputSeq: runtime.emulator.throughOutputSeq,
+          sizeRevision: session.sizeRevision,
+          emulatorId: "xterm-headless",
+          emulatorVersion: "6.0.0",
+          serialized,
+        })
+      }
+    }
     runtimes.delete(sessionId)
-    pendingStartupCommands.delete(sessionId)
-    startupEchoFilters.delete(sessionId)
-    for (const disposable of runtime.disposables) {
-      disposable.dispose()
-    }
+    runtime.emulator.dispose()
+    for (const disposable of runtime.disposables) disposable.dispose()
   }
 
-  function runPendingStartupCommand(sessionId: string): void {
-    const command = pendingStartupCommands.get(sessionId)
-    if (!command) return
-    pendingStartupCommands.delete(sessionId)
-    writeStartupCommand(sessionId, command)
+  function expireLease(sessionId: string, reason: string): void {
+    if (!leases.has(sessionId)) return
+    leases.delete(sessionId)
+    const revision = (leaseRevisions.get(sessionId) ?? 0) + 1
+    leaseRevisions.set(sessionId, revision)
+    updateSessionState(sessionId, (session) => ({ ...session }), `lease.${reason}`)
   }
 
-  function writeStartupCommand(sessionId: string, command: string): void {
-    const runtime = getRunningRuntime(sessionId)
-    startupEchoFilters.set(sessionId, createStartupEchoFilter(command))
-    runtime.pty.write(encodeTerminalCommandInput(command))
-  }
-
-  function filterStartupCommandEcho(sessionId: string, data: string): string {
-    const filter = startupEchoFilters.get(sessionId)
-    if (!filter) return data
-
-    let remainingData = data
-    while (filter.pending.length > 0 && remainingData) {
-      const pendingEcho = filter.pending[0]
-      if (!pendingEcho) {
-        filter.pending.shift()
-        continue
-      }
-      if (pendingEcho.startsWith(remainingData)) {
-        filter.pending[0] = pendingEcho.slice(remainingData.length)
-        remainingData = ""
-        break
-      }
-      if (remainingData.startsWith(pendingEcho)) {
-        remainingData = remainingData.slice(pendingEcho.length)
-        filter.pending.shift()
-        continue
-      }
-      break
-    }
-
-    if (filter.pending.length === 0 || remainingData) {
-      startupEchoFilters.delete(sessionId)
-    }
-    return remainingData
+  function updateSessionState(
+    sessionId: string,
+    transform: (session: TerminalSession) => TerminalSession,
+    changeType: string,
+  ): TerminalSession {
+    const current = getSessionOrThrow(sessionId)
+    const updated = transform({
+      ...current,
+      stateRevision: current.stateRevision + 1,
+      updatedAt: now(),
+    })
+    sessions.set(sessionId, updated)
+    events.emit("sessionChanged", updated)
+    events.emit("stateChanged", {
+      sessionId,
+      stateRevision: updated.stateRevision,
+      throughOutputSeq: updated.lastOutputSeq,
+      changeTypes: [changeType],
+    })
+    schedulePersist()
+    return updated
   }
 
   function attachRuntime(session: TerminalSession, child: PtyLike, buffer: TerminalOutputBuffer): void {
+    const emulator = createTerminalCoreEmulator({
+      cols: session.cols,
+      rows: session.rows,
+      sizeRevision: session.sizeRevision,
+      throughOutputSeq: session.lastOutputSeq,
+    })
     const dataDisposable = child.onData((data) => {
-      const runtime = runtimes.get(session.id)
       const current = sessions.get(session.id)
-      if (!runtime || !current || current.status !== "running") return
-
-      const filteredData = filterStartupCommandEcho(session.id, data)
-      if (!filteredData) return
-
-      const chunk = runtime.buffer.append(session.id, filteredData)
-      const updated = { ...current, lastOutputSeq: chunk.seq, updatedAt: now() }
+      const runtime = runtimes.get(session.id)
+      if (!current || !runtime || (current.status !== "running" && current.status !== "stopping")) return
+      const chunk = runtime.buffer.append(session.id, data)
+      void runtime.emulator.accept(data, chunk.seq).catch((error) => {
+        deps.logger?.warn("Terminal headless emulator rejected output.", { sessionId: session.id, error })
+      })
+      const updated: TerminalSession = {
+        ...current,
+        lastOutputSeq: chunk.seq,
+        updatedAt: now(),
+        attention: unknownAttention({ ...current, lastOutputSeq: chunk.seq }, "output_changed"),
+        stateRevision: current.stateRevision + 1,
+        discardedOutputBytes: runtime.buffer.discardedBytes,
+        discardedOutputChunks: runtime.buffer.discardedChunks,
+        ...(runtime.buffer.discardedChunks > current.discardedOutputChunks ? { lastEvictedAt: now() } : {}),
+      }
       sessions.set(session.id, updated)
-      events.emit("data", { sessionId: session.id, chunk })
+      enforceGlobalOutputQuota()
+      if (!unpublishedSessions.has(session.id)) {
+        events.emit("data", { sessionId: session.id, chunk })
+        events.emit("stateChanged", {
+          sessionId: session.id,
+          stateRevision: updated.stateRevision,
+          throughOutputSeq: chunk.seq,
+          changeTypes: ["output", "attention"],
+        })
+      }
       schedulePersist()
     })
     const exitDisposable = child.onExit((event) => {
       const current = sessions.get(session.id)
       if (!current) return
-
       cleanupRuntime(session.id)
+      expireLease(session.id, "session_ended")
       const timestamp = now()
+      const active = activeStopOperations.get(session.id)
+      const operationId = active?.force ?? active?.stop
+      const terminationOperation = operationId ? operations.get(operationId) : undefined
+      const cause = active?.force
+        ? "force_stop_confirmed"
+        : active?.stop
+          ? "normal_stop_confirmed"
+          : "process_exit"
       const updated: TerminalSession = {
         ...current,
-        status: current.status === "killed" || current.status === "lost" ? current.status : "exited",
+        status: "ended",
+        endCause: cause,
+        ...(terminationOperation ? {
+          stopOperationId: terminationOperation.operationId,
+          stopRequestedBy: terminationOperation.requestedBy,
+          stopRequestedAt: terminationOperation.requestedAt,
+        } : {}),
         exitCode: event.exitCode,
         signal: event.signal,
+        endedAt: timestamp,
         updatedAt: timestamp,
-        endedAt: current.endedAt ?? timestamp,
+        stateRevision: current.stateRevision + 1,
+        attention: unknownAttention(current, "not_running"),
       }
       sessions.set(session.id, updated)
-      events.emit("sessionChanged", updated)
+      if (operationId) completeOperation(operationId, updated.status, cause)
+      if (!unpublishedSessions.has(session.id)) {
+        events.emit("sessionChanged", updated)
+        events.emit("stateChanged", {
+          sessionId: session.id,
+          stateRevision: updated.stateRevision,
+          throughOutputSeq: updated.lastOutputSeq,
+          changeTypes: ["lifecycle", "operation", "attention", "lease"],
+        })
+      }
       void flushPersist()
     })
-    runtimes.set(session.id, {
-      pty: child,
-      buffer,
-      disposables: [dataDisposable, exitDisposable],
-    })
+    runtimes.set(session.id, { pty: child, buffer, emulator, disposables: [dataDisposable, exitDisposable] })
   }
 
-  function deleteSessionRecord(sessionId: string): void {
-    const session = getSessionOrThrow(sessionId)
-    const runtime = runtimes.get(session.id)
-    if (runtime) {
-      cleanupRuntime(session.id)
-      try {
-        runtime.pty.kill()
-      } catch (error) {
-        deps.logger?.warn("Terminal service failed to kill deleted session runtime.", {
-          error,
+  function enforceGlobalOutputQuota(): void {
+    let total = [...buffers.values()].reduce((sum, buffer) => sum + buffer.totalBytes, 0)
+    while (total > globalOutputRetentionBytes) {
+      const candidates = [...buffers.entries()]
+        .filter(([, buffer]) => buffer.totalBytes > 0)
+        .sort(([leftId, left], [rightId, right]) => {
+          const leftEnded = sessions.get(leftId)?.status === "running" || sessions.get(leftId)?.status === "stopping" ? 1 : 0
+          const rightEnded = sessions.get(rightId)?.status === "running" || sessions.get(rightId)?.status === "stopping" ? 1 : 0
+          if (leftEnded !== rightEnded) return leftEnded - rightEnded
+          return (left.snapshot()[0]?.createdAt ?? "").localeCompare(right.snapshot()[0]?.createdAt ?? "")
+        })
+      const candidate = candidates[0]
+      if (!candidate) break
+      const removed = candidate[1].evictOldest()
+      if (!removed) break
+      total -= removed.bytes
+      const session = sessions.get(candidate[0])
+      if (session) {
+        const updated = {
+          ...session,
+          discardedOutputBytes: candidate[1].discardedBytes,
+          discardedOutputChunks: candidate[1].discardedChunks,
+          lastEvictedAt: now(),
+          stateRevision: session.stateRevision + 1,
+          updatedAt: now(),
+          attention: unknownAttention(session, "output_evicted"),
+        }
+        sessions.set(session.id, updated)
+        events.emit("sessionChanged", updated)
+        events.emit("stateChanged", {
           sessionId: session.id,
+          stateRevision: updated.stateRevision,
+          throughOutputSeq: updated.lastOutputSeq,
+          changeTypes: ["output.gap"],
         })
       }
     }
-    sessions.delete(session.id)
-    buffers.delete(session.id)
-    events.emit("sessionDeleted", { sessionId: session.id })
   }
 
-  function withGroupCommands(group: TerminalGroup, commands: TerminalGroupCommand[]): TerminalGroup {
-    const settings = normalizeGroupSettings({
-      ...(group.settings?.defaultCwd ? { defaultCwd: group.settings.defaultCwd } : {}),
-      ...(commands.length > 0 ? { commands } : {}),
-    }, now())
-    const updated: TerminalGroup = {
-      ...group,
-      updatedAt: now(),
+  async function createSessionRecord(
+    input: TerminalCreateSessionInput,
+    source: "ui" | "mcp" = "ui",
+    launchOverrides?: {
+      readonly shell?: string
+      readonly environment?: Readonly<Record<string, string>>
+      readonly overriddenFields?: readonly ("cwd" | "shell" | "environment" | "cols" | "rows")[]
+    },
+    createdByClientId?: string,
+  ): Promise<TerminalSession> {
+    assertCreateQuota()
+    const group = input.groupId ? getGroupOrThrow(input.groupId) : ensureDefaultGroup()
+    const launchEnvironment = {
+      ...(group.settings?.environment ?? {}),
+      ...(launchOverrides?.environment ?? {}),
     }
-    if (settings) {
-      updated.settings = settings
-    } else {
-      delete updated.settings
-    }
-    return updated
-  }
-
-  async function createSessionRecord(input: TerminalCreateSessionInput): Promise<TerminalSession> {
-    const group = input.groupId ? groups.get(input.groupId) : ensureDefaultGroup()
-    if (!group) throw new Error("Terminal group not found")
-
-    const cwd = resolveCwd(input.cwd ?? group.settings?.defaultCwd ?? (deps.resolveDefaultCwd?.() ?? defaultCwd()))
-    const shell = deps.resolveDefaultShell?.() ?? defaultShell()
-    const cols = input.cols ?? 80
-    const rows = input.rows ?? 24
+    const environment = resolveTerminalEnvironment({
+      shell: launchOverrides?.shell ?? group.settings?.shell ?? deps.resolveDefaultShell?.(),
+      cwd: input.cwd ?? group.settings?.defaultCwd ?? deps.resolveDefaultCwd?.() ?? os.homedir(),
+      effectivePath: deps.resolveEffectivePath?.(),
+      overrides: launchEnvironment,
+    })
     const timestamp = now()
+    const sessionId = randomUUID()
     const session: TerminalSession = {
-      id: randomUUID(),
+      id: sessionId,
       groupId: group.id,
-      title: input.title ?? path.basename(shell),
-      cwd,
-      shell,
+      title: input.title?.trim() || path.basename(environment.cwd) || "终端",
+      cwd: environment.cwd,
+      shell: environment.shell,
       status: "running",
       createdAt: timestamp,
       updatedAt: timestamp,
       startedAt: timestamp,
-      cols,
-      rows,
+      cols: input.cols ?? DEFAULT_COLS,
+      rows: input.rows ?? DEFAULT_ROWS,
       lastOutputSeq: 0,
+      metadataRevision: 1,
+      stateRevision: 1,
+      inputRevision: 0,
+      sizeRevision: 1,
+      attention: {
+        state: "unknown",
+        kind: "unknown",
+        reason: "session_started",
+        confidence: 0,
+        detectedAt: timestamp,
+        throughOutputSeq: 0,
+        sizeRevision: 1,
+        detectorId: "passive-terminal-v1",
+        detectorVersion: "1.0.0",
+      },
+      creationSource: source,
+      ...(createdByClientId ? { createdByClientId } : {}),
+      endTimeUnknown: false,
+      inputHistoryBeforeBaselineUnknown: false,
+      launchRevisionApplied: group.launchRevision,
+      discardedOutputBytes: 0,
+      discardedOutputChunks: 0,
+      ...(Object.keys(launchEnvironment).length ? { launchEnvironment } : {}),
+      launchFacts: {
+        shellKind: launchOverrides?.overriddenFields?.includes("shell")
+          ? "override"
+          : group.settings?.shell ? "group" : "default",
+        cwdKind: launchOverrides?.overriddenFields?.includes("cwd")
+          ? "override"
+          : group.settings?.defaultCwd ? "group" : "default",
+        environmentKeys: Object.keys(launchEnvironment).sort(),
+        overriddenFields: [...(launchOverrides?.overriddenFields ?? [])],
+        cols: input.cols ?? DEFAULT_COLS,
+        rows: input.rows ?? DEFAULT_ROWS,
+        legacyUnversioned: false,
+      },
     }
     const buffer = createTerminalOutputBuffer({ maxBytes: outputRetentionBytes })
-    const child = deps.spawnPty?.({ shell, cwd, cols, rows }) ?? spawnNodePty({ shell, cwd, cols, rows })
-    buffers.set(session.id, buffer)
     sessions.set(session.id, session)
-    attachRuntime(session, child, buffer)
-    await flushPersist()
-    return session
+    buffers.set(session.id, buffer)
+    const nextGroup: TerminalGroup = {
+      ...group,
+      groupRevision: group.groupRevision + 1,
+      membershipRevision: group.membershipRevision + 1,
+      updatedAt: timestamp,
+    }
+    groups.set(group.id, nextGroup)
+    bumpDomain("session.created", session.id, session.metadataRevision)
+    unpublishedSessions.set(session.id, terminalDomainRevision)
+    try {
+      const child = (deps.spawnPty ?? spawnNodePty)({
+        shell: environment.shell,
+        cwd: environment.cwd,
+        cols: session.cols,
+        rows: session.rows,
+        env: environment.env,
+      })
+      attachRuntime(session, child, buffer)
+      await flushPersist()
+      return getSessionOrThrow(session.id)
+    } catch {
+      const failed: TerminalSession = {
+        ...session,
+        status: "failed",
+        endCause: "pty_start_failed",
+        endedAt: now(),
+        updatedAt: now(),
+        stateRevision: session.stateRevision + 1,
+        attention: unknownAttention(session, "not_running"),
+      }
+      sessions.set(session.id, failed)
+      await flushPersist()
+      return getSessionOrThrow(session.id)
+    }
   }
 
-  return {
-    events,
-    async start() {
-      groups.clear()
-      sessions.clear()
-      buffers.clear()
-      runtimes.clear()
-      pendingStartupCommands.clear()
-      startupEchoFilters.clear()
-
-      const state = await deps.store.loadState()
-      for (const group of state.groups) {
-        const settings = normalizeGroupSettings(group.settings, group.updatedAt)
-        const normalized = { ...group }
-        if (settings) {
-          normalized.settings = settings
-        } else {
-          delete normalized.settings
-        }
-        groups.set(group.id, normalized)
-      }
-
-      const outputBySession = new Map<string, TerminalOutputChunk[]>()
-      for (const chunk of state.output) {
-        const chunks = outputBySession.get(chunk.sessionId) ?? []
-        chunks.push(chunk)
-        outputBySession.set(chunk.sessionId, chunks)
-      }
-
-      const timestamp = now()
-      for (const session of state.sessions) {
-        const restoredSession: TerminalSession = session.status === "running"
-          ? { ...session, status: "lost", updatedAt: timestamp, endedAt: timestamp }
-          : session
-        sessions.set(session.id, restoredSession)
-        buffers.set(session.id, createTerminalOutputBuffer({
-          maxBytes: outputRetentionBytes,
-          initialChunks: outputBySession.get(session.id) ?? [],
-        }))
-      }
-
-      await flushPersist()
-    },
-    async stop() {
-      const timestamp = now()
-      for (const [sessionId, runtime] of [...runtimes.entries()]) {
-        const current = sessions.get(sessionId)
-        if (current?.status === "running") {
-          const updated: TerminalSession = {
-            ...current,
-            status: "lost",
-            updatedAt: timestamp,
-            endedAt: current.endedAt ?? timestamp,
+  async function start(): Promise<void> {
+    const state = await deps.store.loadState()
+    terminalDomainRevision = state.terminalDomainRevision
+    groups.clear()
+    sessions.clear()
+    buffers.clear()
+    checkpoints.clear()
+    operations.clear()
+    idempotency.clear()
+    for (const group of state.groups) groups.set(group.id, group)
+    for (const session of state.sessions) {
+      const restored = session.status === "running" || session.status === "stopping"
+        ? {
+            ...session,
+            status: "lost" as const,
+            endCause: "runtime_unrecoverable_after_restart",
+            stateRevision: session.stateRevision + 1,
+            updatedAt: now(),
+            endedAt: now(),
+            endTimeUnknown: false,
+            attention: unknownAttention(session, "runtime_unrecoverable_after_restart"),
           }
-          sessions.set(sessionId, updated)
-          events.emit("sessionChanged", updated)
-        }
-        try {
-          runtime.pty.kill()
-        } finally {
-          cleanupRuntime(sessionId)
-        }
-      }
-      await flushPersist()
-    },
-    flushPersistQueue() {
-      return waitForPersistIdle()
-    },
-    getLastPersistError() {
-      return lastPersistError
-    },
-    getPersistDiagnostics() {
-      return {
-        inFlight: Boolean(persistInFlight),
-        pending: persistPending,
-        idleWaiterCount: persistIdleWaiters.length,
-      }
-    },
-    listGroups(): TerminalGroup[] {
-      return [...groups.values()].sort((left, right) => left.sortOrder - right.sortOrder)
-    },
-    async createGroup(input: TerminalCreateGroupInput): Promise<TerminalGroup> {
-      const name = input.name.trim()
-      if (!name) throw new Error("Terminal group name is required")
-      if (name.length > 80) throw new Error("Terminal group name is too long")
-      const timestamp = now()
-      const group: TerminalGroup = {
-        id: randomUUID(),
-        name,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        sortOrder: groups.size,
-      }
-      groups.set(group.id, group)
-      await flushPersist()
-      return group
-    },
-    async renameGroup(input: TerminalRenameGroupInput): Promise<TerminalGroup> {
-      const group = getGroupOrThrow(input.groupId)
-      const name = input.name.trim()
-      if (!name) throw new Error("Terminal group name is required")
-      if (name.length > 80) throw new Error("Terminal group name is too long")
-      const updated = { ...group, name, updatedAt: now() }
-      groups.set(group.id, updated)
-      await flushPersist()
-      return updated
-    },
-    async updateGroupSettings(input: TerminalUpdateGroupSettingsInput): Promise<TerminalGroup> {
-      const group = getGroupOrThrow(input.groupId)
-      const name = input.name.trim()
-      if (!name) throw new Error("Terminal group name is required")
-      if (name.length > 80) throw new Error("Terminal group name is too long")
-      const settings = normalizeGroupSettings(input.settings, now())
-      if (settings?.defaultCwd) resolveCwd(settings.defaultCwd)
-      const updated: TerminalGroup = {
-        ...group,
-        name,
-        updatedAt: now(),
-      }
-      if (settings) {
-        updated.settings = settings
-      } else {
-        delete updated.settings
-      }
-      groups.set(group.id, updated)
-      await flushPersist()
-      return updated
-    },
-    async createGroupCommand(input: TerminalCreateGroupCommandInput): Promise<TerminalGroupCommand> {
-      const group = getGroupOrThrow(input.groupId)
-      const normalized = normalizeGroupCommandInput(input)
-      const timestamp = now()
-      const command: TerminalGroupCommand = {
-        id: randomUUID(),
-        name: normalized.name,
-        command: normalized.command,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      }
-      const updated = withGroupCommands(group, [...(group.settings?.commands ?? []), command])
-      groups.set(group.id, updated)
-      await flushPersist()
-      return command
-    },
-    async updateGroupCommand(input: TerminalUpdateGroupCommandInput): Promise<TerminalGroupCommand> {
-      const group = getGroupOrThrow(input.groupId)
-      const currentCommand = getGroupCommandOrThrow(group, input.commandId)
-      const normalized = normalizeGroupCommandInput(input)
-      const updatedCommand: TerminalGroupCommand = {
-        ...currentCommand,
-        name: normalized.name,
-        command: normalized.command,
-        updatedAt: now(),
-      }
-      const updated = withGroupCommands(
-        group,
-        (group.settings?.commands ?? []).map((command) =>
-          command.id === input.commandId ? updatedCommand : command),
-      )
-      groups.set(group.id, updated)
-      await flushPersist()
-      return updatedCommand
-    },
-    async deleteGroupCommand(input: TerminalDeleteGroupCommandInput): Promise<void> {
-      const group = getGroupOrThrow(input.groupId)
-      getGroupCommandOrThrow(group, input.commandId)
-      const updated = withGroupCommands(
-        group,
-        (group.settings?.commands ?? []).filter((command) => command.id !== input.commandId),
-      )
-      groups.set(group.id, updated)
-      await flushPersist()
-    },
-    async deleteGroup(input: TerminalDeleteGroupInput): Promise<void> {
-      const group = getGroupOrThrow(input.groupId)
-      const groupSessions = [...sessions.values()].filter((session) => session.groupId === group.id)
-      for (const session of groupSessions) {
-        deleteSessionRecord(session.id)
-      }
-      groups.delete(group.id)
-      await flushPersist()
-    },
-    listSessions(): TerminalSession[] {
-      return [...sessions.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-    },
-    getSession(input: { sessionId: string }): TerminalSession {
-      return getSessionOrThrow(input.sessionId)
-    },
-    async createSession(input: TerminalCreateSessionInput): Promise<TerminalSession> {
-      return createSessionRecord(input)
-    },
-    async launchGroupCommand(input: TerminalLaunchGroupCommandInput): Promise<TerminalSession> {
-      const group = getGroupOrThrow(input.groupId)
-      const command = getGroupCommandOrThrow(group, input.commandId)
-      const session = await createSessionRecord({
-        groupId: group.id,
-        title: command.name,
-        cols: input.cols,
-        rows: input.rows,
+        : session
+      sessions.set(restored.id, restored)
+      const chunks = state.output.filter((chunk) => chunk.sessionId === restored.id)
+      buffers.set(restored.id, createTerminalOutputBuffer({
+        maxBytes: outputRetentionBytes,
+        initialChunks: chunks,
+        initialDiscardedBytes: restored.discardedOutputBytes,
+        initialDiscardedChunks: restored.discardedOutputChunks,
+      }))
+    }
+    for (const operation of state.operations) {
+      const restoredSession = sessions.get(operation.resourceId)
+      const recoveredStatus = operation.status === "pending_delivery"
+        ? "delivery_uncertain" as const
+        : operation.status === "delivered" && restoredSession?.status === "lost"
+          ? "completed" as const
+          : operation.status
+      operations.set(operation.operationId, {
+        operationId: operation.operationId,
+        kind: operation.kind,
+        sessionId: operation.resourceId,
+        status: recoveredStatus,
+        requestedAt: operation.createdAt,
+        requestedBy: operation.requestedBy,
+        updatedAt: recoveredStatus === operation.status ? operation.updatedAt : now(),
+        relatedOperationId: operation.relatedOperationId,
+        finalLifecycle: recoveredStatus === "completed" ? "lost" : operation.finalLifecycle,
+        finalCause: recoveredStatus === "completed" ? "runtime_unrecoverable_after_restart" : operation.finalCause,
+        errorCode: recoveredStatus === "delivery_uncertain" ? "recovery_delivery_unknown" : operation.errorCode,
+        acceptedActionCount: operation.acceptedActionCount,
+        acceptedBytes: operation.acceptedBytes,
+        failedActionIndex: operation.failedActionIndex,
       })
-      writeStartupCommand(session.id, command.command)
-      return session
-    },
-    readSession(input: TerminalReadSessionInput): TerminalReadSessionResult {
-      const session = getSessionOrThrow(input.sessionId)
-      const buffer = buffers.get(input.sessionId)
-      if (!buffer) {
+      if (recoveredStatus === "completed" && restoredSession?.status === "lost") {
+        sessions.set(restoredSession.id, {
+          ...restoredSession,
+          stopOperationId: operation.operationId,
+          stopRequestedBy: operation.requestedBy,
+          stopRequestedAt: operation.createdAt,
+        })
+      }
+    }
+    for (const checkpoint of state.checkpoints) checkpoints.set(checkpoint.sessionId, checkpoint)
+    for (const entry of state.idempotency) {
+      if (entry.expiresAtMs > Date.now()) idempotency.set(entry.scope, {
+        clientId: entry.clientId,
+        capability: entry.capability,
+        idempotencyKey: entry.idempotencyKey,
+        digest: entry.digest,
+        expiresAtMs: entry.expiresAtMs,
+        result: entry.result,
+      })
+    }
+    ensureDefaultGroup()
+    await flushPersist()
+  }
+
+  async function stop(): Promise<void> {
+    for (const [sessionId, runtime] of runtimes) {
+      const current = sessions.get(sessionId)
+      if (current && (current.status === "running" || current.status === "stopping")) {
+        sessions.set(sessionId, {
+          ...current,
+          status: "lost",
+          endCause: "application_shutdown",
+          endedAt: now(),
+          endTimeUnknown: false,
+          stateRevision: current.stateRevision + 1,
+          updatedAt: now(),
+          attention: unknownAttention(current, "application_shutdown"),
+        })
+      }
+      cleanupRuntime(sessionId)
+      try { runtime.pty.kill() } catch (error) {
+        deps.logger?.warn("Terminal runtime shutdown failed.", { sessionId, error })
+      }
+    }
+    leases.clear()
+    await flushPersist()
+  }
+
+  function listGroups(): TerminalGroup[] {
+    return [...groups.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id))
+  }
+
+  function listSessions(): TerminalSession[] {
+    return [...sessions.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+  }
+
+  async function createGroup(input: TerminalCreateGroupInput): Promise<TerminalGroup> {
+    const timestamp = now()
+    const group: TerminalGroup = {
+      id: randomUUID(),
+      name: input.name.trim(),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      sortOrder: groups.size,
+      groupRevision: 1,
+      launchRevision: 1,
+      membershipRevision: 1,
+      commandCollectionRevision: 1,
+    }
+    groups.set(group.id, group)
+    bumpDomain("group.created", group.id, group.groupRevision)
+    await flushPersist()
+    return group
+  }
+
+  async function renameGroup(input: TerminalRenameGroupInput): Promise<TerminalGroup> {
+    const group = getGroupOrThrow(input.groupId)
+    const name = input.name.trim()
+    if (name === group.name) return group
+    const updated = { ...group, name, updatedAt: now(), groupRevision: group.groupRevision + 1 }
+    groups.set(group.id, updated)
+    bumpDomain("group.renamed", group.id, updated.groupRevision)
+    await flushPersist()
+    return updated
+  }
+
+  async function updateGroupSettings(input: TerminalUpdateGroupSettingsInput): Promise<TerminalGroup> {
+    const group = getGroupOrThrow(input.groupId)
+    const normalized = normalizeGroupSettings(input.settings, now())
+    if (normalized?.commands?.length || normalized?.environment || normalized?.startupCommand) requireSensitivePersistence()
+    const launchChanged = normalized?.defaultCwd !== group.settings?.defaultCwd
+      || normalized?.shell !== group.settings?.shell
+      || stableJson(normalized?.environment ?? {}) !== stableJson(group.settings?.environment ?? {})
+    const updated: TerminalGroup = {
+      ...group,
+      name: input.name.trim(),
+      ...(normalized ? { settings: normalized } : {}),
+      updatedAt: now(),
+      groupRevision: group.groupRevision + 1,
+      launchRevision: group.launchRevision + (launchChanged ? 1 : 0),
+    }
+    if (!normalized) delete updated.settings
+    groups.set(group.id, updated)
+    bumpDomain("group.updated", group.id, updated.groupRevision)
+    await flushPersist()
+    return updated
+  }
+
+  async function createGroupCommand(input: TerminalCreateGroupCommandInput): Promise<TerminalGroupCommand> {
+    requireSensitivePersistence()
+    const group = getGroupOrThrow(input.groupId)
+    const timestamp = now()
+    const command: TerminalGroupCommand = {
+      id: randomUUID(),
+      name: input.name.trim(),
+      command: normalizeSavedCommand(input.command),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      commandRevision: 1,
+    }
+    const commands = [...(group.settings?.commands ?? []), command]
+    setGroupCommands(group, commands, "command.created")
+    await flushPersist()
+    return command
+  }
+
+  async function updateGroupCommand(input: TerminalUpdateGroupCommandInput): Promise<TerminalGroupCommand> {
+    requireSensitivePersistence()
+    const group = getGroupOrThrow(input.groupId)
+    const existing = getCommand(group, input.commandId)
+    const updated: TerminalGroupCommand = {
+      ...existing,
+      name: input.name.trim(),
+      command: normalizeSavedCommand(input.command),
+      updatedAt: now(),
+      commandRevision: existing.commandRevision + 1,
+    }
+    setGroupCommands(group, (group.settings?.commands ?? []).map((item) => item.id === updated.id ? updated : item), "command.updated")
+    await flushPersist()
+    return updated
+  }
+
+  async function deleteGroupCommand(input: TerminalDeleteGroupCommandInput): Promise<void> {
+    const group = getGroupOrThrow(input.groupId)
+    getCommand(group, input.commandId)
+    setGroupCommands(group, (group.settings?.commands ?? []).filter((item) => item.id !== input.commandId), "command.deleted")
+    await flushPersist()
+  }
+
+  function setGroupCommands(group: TerminalGroup, commands: TerminalGroupCommand[], eventType: string): void {
+    const settings = normalizeGroupSettings({
+      ...(group.settings?.defaultCwd ? { defaultCwd: group.settings.defaultCwd } : {}),
+      ...(group.settings?.shell ? { shell: group.settings.shell } : {}),
+      ...(group.settings?.environment ? { environment: group.settings.environment } : {}),
+      ...(commands.length ? { commands } : {}),
+      ...(group.settings?.startupCommand ? { startupCommand: group.settings.startupCommand } : {}),
+    }, now())
+    const updated: TerminalGroup = {
+      ...group,
+      updatedAt: now(),
+      groupRevision: group.groupRevision + 1,
+      commandCollectionRevision: group.commandCollectionRevision + 1,
+      ...(settings ? { settings } : {}),
+    }
+    if (!settings) delete updated.settings
+    groups.set(group.id, updated)
+    bumpDomain(eventType, group.id, updated.commandCollectionRevision)
+  }
+
+  async function launchGroupCommand(
+    input: TerminalLaunchGroupCommandInput,
+    origin: { readonly source: "ui" | "mcp"; readonly clientId?: string } = { source: "ui" },
+  ): Promise<TerminalSession> {
+    const group = getGroupOrThrow(input.groupId)
+    const command = getCommand(group, input.commandId)
+    const session = await createSessionRecord({
+      groupId: group.id,
+      title: command.name,
+      cols: input.cols,
+      rows: input.rows,
+    }, origin.source, undefined, origin.clientId)
+    const operation = createOperation("command_delivery", session.id, "terminal-command-launch")
+    if (session.status !== "running") {
+      operation.status = "failed"
+      operation.errorCode = "session_start_failed"
+      operation.updatedAt = now()
+    } else {
+      const delivery = deliverSavedCommand(session.id, command.command)
+      operation.status = delivery.status
+      operation.acceptedActionCount = delivery.acceptedActionCount
+      operation.acceptedBytes = delivery.acceptedBytes
+      operation.failedActionIndex = delivery.failedActionIndex
+      operation.errorCode = delivery.status === "delivered" ? undefined : delivery.status === "failed" ? "command_delivery_failed" : "delivery_uncertain"
+      operation.updatedAt = now()
+    }
+    operations.set(operation.operationId, operation)
+    const updated = {
+      ...getSessionOrThrow(session.id),
+      commandId: command.id,
+      commandRevisionApplied: command.commandRevision,
+      commandDeliveryOperationId: operation.operationId,
+    }
+    sessions.set(session.id, updated)
+    await flushPersist()
+    if (!lastPersistError) events.emit("sessionChanged", updated)
+    return updated
+  }
+
+  function deliverSavedCommand(sessionId: string, body: string): {
+    status: "delivered" | "delivery_uncertain" | "failed"
+    acceptedActionCount: number
+    acceptedBytes: number
+    failedActionIndex?: number
+  } {
+    const runtime = getRuntimeForInput(sessionId)
+    const normalized = normalizeSavedCommand(body)
+    const lines = normalized.split("\n")
+    let acceptedActionCount = 0
+    let acceptedBytes = 0
+    let actionIndex = 0
+    for (const line of lines) {
+      for (const value of [line, KEY_BYTES.Enter]) {
+        try {
+          runtime.pty.write(value)
+          acceptedActionCount += 1
+          acceptedBytes += Buffer.byteLength(value, "utf8")
+          actionIndex += 1
+        } catch {
+          if (acceptedBytes > 0) advanceInputRevision(sessionId, "saved_command_input_uncertain")
+          return {
+            status: acceptedBytes > 0 ? "delivery_uncertain" : "failed",
+            acceptedActionCount,
+            acceptedBytes,
+            failedActionIndex: actionIndex,
+          }
+        }
+      }
+    }
+    if (acceptedActionCount > 0) advanceInputRevision(sessionId, "saved_command_input")
+    return { status: "delivered", acceptedActionCount, acceptedBytes }
+  }
+
+  async function deleteGroup(input: TerminalDeleteGroupInput): Promise<void> {
+    const group = getGroupOrThrow(input.groupId)
+    if ([...sessions.values()].some((session) => session.groupId === group.id)) {
+      throw terminalContractError("lifecycle_conflict", "conflict", { details: { code: "group_not_empty" } })
+    }
+    groups.delete(group.id)
+    bumpDomain("group.deleted", group.id, group.groupRevision)
+    await flushPersist()
+  }
+
+  function previewGroupDelete(groupId: string) {
+    const group = getGroupOrThrow(groupId)
+    const sessionFacts = [...sessions.values()]
+      .filter((session) => session.groupId === groupId)
+      .map((session) => ({ sessionId: session.id, lifecycle: session.status, lastOutputSeq: session.lastOutputSeq }))
+    const plan = {
+      deletePlanId: randomUUID(),
+      groupId,
+      groupRevision: group.groupRevision,
+      membershipRevision: group.membershipRevision,
+      commandCollectionRevision: group.commandCollectionRevision,
+      sessionFacts,
+      commandIds: (group.settings?.commands ?? []).map((command) => command.id),
+      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+    }
+    deletePlans.set(plan.deletePlanId, plan)
+    return {
+      deletePlanId: plan.deletePlanId,
+      groupId,
+      groupRevision: plan.groupRevision,
+      expiresAt: plan.expiresAt,
+      sessionCount: sessionFacts.length,
+      lifecycleCounts: Object.fromEntries(sessionFacts.map((item) => item.lifecycle).map((lifecycle) => [
+        lifecycle,
+        sessionFacts.filter((item) => item.lifecycle === lifecycle).length,
+      ])),
+      commandCount: plan.commandIds.length,
+      retainedOutputChunks: sessionFacts.reduce((sum, item) => sum + (buffers.get(item.sessionId)?.snapshot().length ?? 0), 0),
+      retainedOutputBytes: sessionFacts.reduce((sum, item) => sum + (buffers.get(item.sessionId)?.totalBytes ?? 0), 0),
+    }
+  }
+
+  async function commitGroupDelete(deletePlanId: string): Promise<{ deleteOperationId: string; sessionCount: number; commandCount: number }> {
+    const plan = deletePlans.get(deletePlanId)
+    if (!plan || Date.parse(plan.expiresAt) <= Date.now()) throw terminalContractError("revision_conflict", "conflict")
+    const group = getGroupOrThrow(plan.groupId)
+    const currentSessions = [...sessions.values()].filter((session) => session.groupId === group.id)
+    if (
+      group.groupRevision !== plan.groupRevision
+      || group.membershipRevision !== plan.membershipRevision
+      || group.commandCollectionRevision !== plan.commandCollectionRevision
+      || currentSessions.length !== plan.sessionFacts.length
+      || currentSessions.some((session) => {
+        const fact = plan.sessionFacts.find((item) => item.sessionId === session.id)
+        return !fact
+          || fact.lifecycle !== session.status
+          || fact.lastOutputSeq !== session.lastOutputSeq
+          || session.status === "running"
+          || session.status === "stopping"
+      })
+    ) {
+      throw terminalContractError("revision_conflict", "conflict")
+    }
+    const operationId = randomUUID()
+    for (const session of currentSessions) {
+      sessions.delete(session.id)
+      buffers.delete(session.id)
+      leases.delete(session.id)
+    }
+    groups.delete(group.id)
+    deletePlans.delete(deletePlanId)
+    bumpDomain("group.deleted", group.id, group.groupRevision, operationId)
+    await flushPersist()
+    if (!lastPersistError) {
+      for (const session of currentSessions) events.emit("sessionDeleted", { sessionId: session.id })
+    }
+    return { deleteOperationId: operationId, sessionCount: currentSessions.length, commandCount: plan.commandIds.length }
+  }
+
+  async function createSession(input: TerminalCreateSessionInput): Promise<TerminalSession> {
+    return createSessionRecord(input, "ui")
+  }
+
+  async function createMcpSession(input: TerminalMcpCreateSessionInput, clientId?: string): Promise<TerminalSession> {
+    if (input.groupId) {
+      const group = getGroupOrThrow(input.groupId)
+      if (input.expectedLaunchRevision !== group.launchRevision) {
+        throw terminalContractError("revision_conflict", "revision", {
+          details: { currentLaunchRevision: group.launchRevision },
+        })
+      }
+    } else if (input.expectedLaunchRevision !== undefined) {
+      throw terminalContractError("invalid_argument", "validation")
+    }
+    return createSessionRecord({ groupId: input.groupId, title: input.title }, "mcp", undefined, clientId)
+  }
+
+  async function createSessionOverride(input: TerminalCreateSessionOverrideInput, clientId?: string): Promise<TerminalSession> {
+    if (input.overrides.environment && Object.keys(input.overrides.environment).length > 0) requireSensitivePersistence()
+    if (input.groupId) {
+      const group = getGroupOrThrow(input.groupId)
+      if (input.expectedLaunchRevision !== group.launchRevision) {
+        throw terminalContractError("revision_conflict", "revision", {
+          details: { currentLaunchRevision: group.launchRevision },
+        })
+      }
+    }
+    return createSessionRecord({
+      groupId: input.groupId,
+      title: input.title,
+      cwd: input.overrides.cwd,
+      cols: input.overrides.cols,
+      rows: input.overrides.rows,
+    }, "mcp", {
+      shell: input.overrides.shell,
+      environment: input.overrides.environment,
+      overriddenFields: (Object.keys(input.overrides) as ("cwd" | "shell" | "environment" | "cols" | "rows")[]),
+    }, clientId)
+  }
+
+  function getSession(input: { sessionId: string }): TerminalSession {
+    return getSessionOrThrow(input.sessionId)
+  }
+
+  function readSession(input: TerminalReadSessionInput): TerminalReadSessionResult {
+    const session = getSessionOrThrow(input.sessionId)
+    const result = buffers.get(input.sessionId)?.read({
+      afterSeq: input.afterSeq,
+      limitBytes: input.limitBytes ?? 256 * 1024,
+    }) ?? {
+      chunks: [], nextSeq: input.afterSeq ?? 0, firstSeq: session.lastOutputSeq + 1,
+      truncated: session.lastOutputSeq > 0, gap: session.lastOutputSeq > 0, hasMore: false,
+      discardedBytes: 0, discardedChunks: 0,
+    }
+    return { session, ...result }
+  }
+
+  async function attachSession(input: TerminalAttachSessionInput): Promise<TerminalAttachSessionResult> {
+    const runtime = runtimes.get(input.sessionId)
+    if (runtime) {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const snapshot = await runtime.emulator.captureSnapshot(TERMINAL_RENDERER_SNAPSHOT_MAX_BYTES)
+        const session = getSessionOrThrow(input.sessionId)
+        if (snapshot.sizeRevision !== session.sizeRevision) continue
+        if (snapshot.serialized !== null) {
+          return {
+            session,
+            degraded: false,
+            serialized: snapshot.serialized,
+            cols: session.cols,
+            rows: session.rows,
+            throughOutputSeq: snapshot.throughOutputSeq,
+            sizeRevision: snapshot.sizeRevision,
+            emulatorId: "xterm-headless",
+            emulatorVersion: "6.0.0",
+            scrollbackTruncated: snapshot.scrollbackTruncated,
+            reasons: [],
+          }
+        }
         return {
           session,
-          chunks: [],
-          nextSeq: session.lastOutputSeq,
-          firstSeq: session.lastOutputSeq,
-          truncated: false,
+          degraded: true,
+          serialized: null,
+          cols: session.cols,
+          rows: session.rows,
+          throughOutputSeq: snapshot.throughOutputSeq,
+          sizeRevision: snapshot.sizeRevision,
+          emulatorId: "xterm-headless",
+          emulatorVersion: "6.0.0",
+          scrollbackTruncated: true,
+          reasons: ["snapshot_too_large"],
+        }
+      }
+      const session = getSessionOrThrow(input.sessionId)
+      return {
+        session,
+        degraded: true,
+        serialized: null,
+        cols: session.cols,
+        rows: session.rows,
+        throughOutputSeq: runtime.emulator.throughOutputSeq,
+        sizeRevision: session.sizeRevision,
+        emulatorId: "xterm-headless",
+        emulatorVersion: "6.0.0",
+        scrollbackTruncated: false,
+        reasons: ["snapshot_unstable"],
+      }
+    }
+
+    const session = getSessionOrThrow(input.sessionId)
+    const recovered = await restoreCheckpointEmulator(session)
+    if (!recovered) {
+      return {
+        session,
+        degraded: true,
+        serialized: null,
+        cols: session.cols,
+        rows: session.rows,
+        throughOutputSeq: session.lastOutputSeq,
+        sizeRevision: session.sizeRevision,
+        emulatorId: "xterm-headless",
+        emulatorVersion: "6.0.0",
+        scrollbackTruncated: false,
+        reasons: ["checkpoint_unavailable"],
+      }
+    }
+    try {
+      const snapshot = await recovered.captureSnapshot(TERMINAL_RENDERER_SNAPSHOT_MAX_BYTES)
+      if (snapshot.serialized !== null) {
+        return {
+          session,
+          degraded: false,
+          serialized: snapshot.serialized,
+          cols: session.cols,
+          rows: session.rows,
+          throughOutputSeq: snapshot.throughOutputSeq,
+          sizeRevision: snapshot.sizeRevision,
+          emulatorId: "xterm-headless",
+          emulatorVersion: "6.0.0",
+          scrollbackTruncated: snapshot.scrollbackTruncated,
+          reasons: [],
         }
       }
       return {
         session,
-        ...buffer.read({
-          afterSeq: input.afterSeq,
-          limitBytes: input.limitBytes ?? 64 * 1024,
-        }),
+        degraded: true,
+        serialized: null,
+        cols: session.cols,
+        rows: session.rows,
+        throughOutputSeq: snapshot.throughOutputSeq,
+        sizeRevision: snapshot.sizeRevision,
+        emulatorId: "xterm-headless",
+        emulatorVersion: "6.0.0",
+        scrollbackTruncated: true,
+        reasons: ["snapshot_too_large"],
       }
-    },
-    async renameSession(input: TerminalRenameSessionInput): Promise<TerminalSession> {
+    } finally {
+      recovered.dispose()
+    }
+  }
+
+  async function renameSession(input: TerminalRenameSessionInput): Promise<TerminalSession> {
+    const current = getSessionOrThrow(input.sessionId)
+    const title = input.title.trim()
+    if (title === current.title) return current
+    const updated = {
+      ...current,
+      title,
+      metadataRevision: current.metadataRevision + 1,
+      stateRevision: current.stateRevision + 1,
+      updatedAt: now(),
+    }
+    sessions.set(current.id, updated)
+    bumpDomain("session.renamed", updated.id, updated.metadataRevision)
+    await flushPersist()
+    if (!lastPersistError) events.emit("sessionChanged", updated)
+    return updated
+  }
+
+  function writeSession(input: TerminalWriteSessionInput): void {
+    expireLease(input.sessionId, "user_takeover")
+    const runtime = getRuntimeForInput(input.sessionId)
+    runtime.pty.write(input.data)
+    advanceInputRevision(input.sessionId, "user_input")
+  }
+
+  async function resizeSession(input: TerminalResizeSessionInput): Promise<void> {
+    await applySessionResize(input.sessionId, input.cols, input.rows)
+  }
+
+  async function deleteSession(input: TerminalDeleteSessionInput): Promise<void> {
+    await deleteTerminalSession(input.sessionId, "synapse-ui")
+  }
+
+  async function deleteTerminalSession(sessionId: string, requestedBy: string) {
+    const session = getSessionOrThrow(sessionId)
+    if (session.status === "running" || session.status === "stopping") {
+      throw terminalContractError("lifecycle_conflict", "lifecycle", { details: { lifecycle: session.status } })
+    }
+    const operation = createOperation("delete", session.id, requestedBy)
+    operation.status = "completed"
+    operation.finalLifecycle = session.status
+    operation.finalCause = "session_deleted"
+    operation.updatedAt = now()
+    sessions.delete(session.id)
+    buffers.delete(session.id)
+    leases.delete(session.id)
+    bumpDomain("session.deleted", session.id, session.metadataRevision, operation.operationId)
+    await flushPersist()
+    if (!lastPersistError) events.emit("sessionDeleted", { sessionId: session.id })
+    return {
+      deleteOperationId: operation.operationId,
+      sessionId: session.id,
+      lifecycle: session.status,
+      retainedOutputChunks: Math.max(0, session.lastOutputSeq - session.discardedOutputChunks),
+    }
+  }
+
+  async function stopSession(input: TerminalStopSessionInput): Promise<void> {
+    if (input.force) {
+      await forceStopControlledSession({ sessionId: input.sessionId, idempotencyKey: randomUUID() }, userController())
+      return
+    }
+    await stopControlledSession({ sessionId: input.sessionId, idempotencyKey: randomUUID() }, userController())
+  }
+
+  function runStartupCommand(input: TerminalRunStartupCommandInput): void {
+    const session = getSessionOrThrow(input.sessionId)
+    const group = getGroupOrThrow(session.groupId)
+    const startup = group.settings?.startupCommand
+    if (!startup) return
+    deliverSavedCommand(session.id, startup)
+  }
+
+  function acquireControl(input: TerminalAcquireControlInput, controller: TerminalControllerContext) {
+    getRuntimeForInput(input.sessionId)
+    clearExpiredLease(input.sessionId)
+    const existing = leases.get(input.sessionId)
+    if (existing) {
+      if (sameOwner(existing, controller)) return leaseResult(existing, getSessionOrThrow(input.sessionId))
+      throw terminalContractError("control_busy", "lease", {
+        retryable: true,
+        details: { occupied: true, expiresAt: existing.expiresAt },
+      })
+    }
+    const activeLeases = [...leases.values()].filter((lease) => Date.parse(lease.expiresAt) > Date.now())
+    if (activeLeases.filter((lease) => lease.clientId === controller.clientId).length >= TERMINAL_CLIENT_LEASE_LIMIT) {
+      throw terminalContractError("quota_exceeded", "quota", { retryable: true, details: { dimension: "client_leases" } })
+    }
+    if (activeLeases.filter((lease) => lease.controllerInstanceId === controller.controllerInstanceId).length >= TERMINAL_CONTROLLER_LEASE_LIMIT) {
+      throw terminalContractError("quota_exceeded", "quota", { retryable: true, details: { dimension: "controller_leases" } })
+    }
+    const acquiredAt = now()
+    const leaseRevision = (leaseRevisions.get(input.sessionId) ?? 0) + 1
+    const lease: TerminalLeaseState = {
+      leaseId: randomUUID(),
+      clientId: controller.clientId,
+      controllerInstanceId: controller.controllerInstanceId,
+      acquiredAt,
+      expiresAt: new Date(Date.now() + clamp(input.requestedLeaseMs, LEASE_MIN_MS, LEASE_MAX_MS)).toISOString(),
+      leaseRevision,
+    }
+    leases.set(input.sessionId, lease)
+    leaseRevisions.set(input.sessionId, leaseRevision)
+    const session = updateSessionState(input.sessionId, (value) => value, "lease.acquired")
+    return leaseResult(lease, session)
+  }
+
+  function renewControl(input: TerminalAcquireControlInput & { leaseId: string }, controller: TerminalControllerContext) {
+    const lease = requireLease(input.sessionId, input.leaseId, controller)
+    const renewed: TerminalLeaseState = {
+      ...lease,
+      expiresAt: new Date(Date.now() + clamp(input.requestedLeaseMs, LEASE_MIN_MS, LEASE_MAX_MS)).toISOString(),
+      leaseRevision: lease.leaseRevision + 1,
+    }
+    leases.set(input.sessionId, renewed)
+    leaseRevisions.set(input.sessionId, renewed.leaseRevision)
+    const session = updateSessionState(input.sessionId, (value) => value, "lease.renewed")
+    return leaseResult(renewed, session)
+  }
+
+  function releaseControl(input: { sessionId: string; leaseId: string }, controller: TerminalControllerContext) {
+    clearExpiredLease(input.sessionId)
+    const lease = leases.get(input.sessionId)
+    if (!lease) return { released: false, noOp: true, stateRevision: getSessionOrThrow(input.sessionId).stateRevision }
+    if (lease.leaseId !== input.leaseId || !sameOwner(lease, controller)) {
+      throw terminalContractError("lease_invalid", "lease")
+    }
+    leases.delete(input.sessionId)
+    leaseRevisions.set(input.sessionId, lease.leaseRevision + 1)
+    const session = updateSessionState(input.sessionId, (value) => value, "lease.released")
+    return { released: true, noOp: false, stateRevision: session.stateRevision }
+  }
+
+  function sendSemanticInput(input: TerminalSemanticInput, controller: TerminalControllerContext) {
+    if (input.actions.length > MAX_SEMANTIC_ACTIONS) throw terminalContractError("invalid_argument", "validation")
+    const encoded = input.actions.map(encodeSemanticAction)
+    const totalBytes = encoded.reduce((sum, value) => sum + Buffer.byteLength(value), 0)
+    if (totalBytes > MAX_SEMANTIC_BYTES) throw terminalContractError("invalid_argument", "validation")
+    return idempotent(controller.clientId, "session_input.send", input.idempotencyKey, input, () => {
+      validateInputRequest(input.sessionId, input.leaseId, input.expectedInputRevision, controller)
+      return deliverWrites(input.sessionId, encoded, "input")
+    })
+  }
+
+  async function sendCommand(input: TerminalCommandInput, controller: TerminalControllerContext) {
+    validateText(input.text, false)
+    return idempotentAsync(controller.clientId, "session_input.command", input.idempotencyKey, input, async () => {
+      validateInputRequest(input.sessionId, input.leaseId, input.expectedInputRevision, controller)
+      return deliverCommandWrites(input.sessionId, input.text)
+    })
+  }
+
+  async function deliverCommandWrites(sessionId: string, text: string) {
+    const runtime = getRuntimeForInput(sessionId)
+    const before = getSessionOrThrow(sessionId).inputRevision
+    const operation = createOperation("input", sessionId, "terminal-controller")
+    let acceptedActionCount = 0
+    let acceptedBytes = 0
+    let failedActionIndex: number | undefined
+    try {
+      runtime.pty.write(text)
+      acceptedActionCount = 1
+      acceptedBytes = Buffer.byteLength(text)
+      await new Promise<void>((resolve) => setTimeout(resolve, COMMAND_ENTER_FLUSH_DELAY_MS))
+      runtime.pty.write(KEY_BYTES.Enter)
+      acceptedActionCount = 2
+      acceptedBytes += Buffer.byteLength(KEY_BYTES.Enter)
+      operation.status = "delivered"
+    } catch {
+      failedActionIndex = acceptedActionCount
+      operation.status = acceptedBytes > 0 ? "delivery_uncertain" : "failed"
+      operation.errorCode = operation.status === "delivery_uncertain" ? "delivery_uncertain" : "internal_error"
+    }
+    if (acceptedBytes > 0) advanceInputRevision(sessionId, "automation_input")
+    operation.updatedAt = now()
+    operations.set(operation.operationId, operation)
+    const after = getSessionOrThrow(sessionId).inputRevision
+    return {
+      operationId: operation.operationId,
+      inputRevisionBefore: before,
+      inputRevisionAfter: after,
+      acceptedAt: operation.updatedAt,
+      acceptedActionCount,
+      acceptedBytes,
+      ...(failedActionIndex === undefined ? {} : { failedActionIndex }),
+      outcome: operation.status === "delivered"
+        ? "accepted"
+        : operation.status === "delivery_uncertain"
+          ? "delivery_uncertain"
+          : "partial",
+    }
+  }
+
+  async function paste(input: TerminalPasteInput, controller: TerminalControllerContext) {
+    if (hasForbiddenTextControl(input.text, true)) throw terminalContractError("invalid_argument", "validation")
+    return idempotentAsync(controller.clientId, "session_input.paste", input.idempotencyKey, input, async () => {
+      validateInputRequest(input.sessionId, input.leaseId, input.expectedInputRevision, controller)
+      const runtime = getRuntimeForInput(input.sessionId)
+      await runtime.emulator.ready()
+      const evidence = runtime.emulator.bracketedPasteEvidence()
+      if (!evidence.enabled || !evidence.fresh || evidence.throughOutputSeq < input.expectedThroughOutputSeq) {
+        throw terminalContractError("paste_mode_unavailable", "capability", {
+          details: { throughOutputSeq: evidence.throughOutputSeq, sizeRevision: evidence.sizeRevision },
+        })
+      }
+      const framed = `\x1b[200~${input.text}\x1b[201~`
+      return deliverWrites(input.sessionId, [framed], "input", { uncertainOnFailure: true })
+    })
+  }
+
+  function sendRaw(input: TerminalRawInput, controller: TerminalControllerContext) {
+    const decoded = Buffer.from(input.dataBase64, "base64")
+    if (!decoded.length || decoded.toString("base64") !== input.dataBase64) {
+      throw terminalContractError("invalid_argument", "validation")
+    }
+    if (decoded.byteLength > MAX_SEMANTIC_BYTES) throw terminalContractError("invalid_argument", "validation")
+    return idempotent(controller.clientId, "session_input.raw", input.idempotencyKey, input, () => {
+      validateInputRequest(input.sessionId, input.leaseId, input.expectedInputRevision, controller)
+      return deliverWrites(input.sessionId, [decoded], "input")
+    })
+  }
+
+  function deliverWrites(
+    sessionId: string,
+    writes: readonly (string | Buffer)[],
+    operationKind: "input",
+    options: {
+      readonly uncertainOnFailure?: boolean
+    } = {},
+  ) {
+    const runtime = getRuntimeForInput(sessionId)
+    const before = getSessionOrThrow(sessionId).inputRevision
+    const operation = createOperation(operationKind, sessionId, "terminal-controller")
+    let acceptedActionCount = 0
+    let acceptedBytes = 0
+    let failedActionIndex: number | undefined
+    try {
+      for (let index = 0; index < writes.length; index += 1) {
+        const value = writes[index]!
+        runtime.pty.write(value)
+        acceptedActionCount += 1
+        acceptedBytes += typeof value === "string" ? Buffer.byteLength(value) : value.byteLength
+      }
+      operation.status = "delivered"
+    } catch {
+      failedActionIndex = acceptedActionCount
+      operation.status = options.uncertainOnFailure ? "delivery_uncertain" : acceptedBytes > 0 ? "delivery_uncertain" : "failed"
+      operation.errorCode = operation.status === "delivery_uncertain" ? "delivery_uncertain" : "internal_error"
+    }
+    if (acceptedBytes > 0 || operation.status === "delivery_uncertain") advanceInputRevision(sessionId, "automation_input")
+    operation.updatedAt = now()
+    operations.set(operation.operationId, operation)
+    const after = getSessionOrThrow(sessionId).inputRevision
+    return {
+      operationId: operation.operationId,
+      inputRevisionBefore: before,
+      inputRevisionAfter: after,
+      acceptedAt: operation.updatedAt,
+      acceptedActionCount,
+      acceptedBytes,
+      ...(failedActionIndex === undefined ? {} : { failedActionIndex }),
+      outcome: operation.status === "delivered"
+        ? "accepted"
+        : operation.status === "delivery_uncertain"
+          ? "delivery_uncertain"
+          : "partial",
+    }
+  }
+
+  async function resizeControlledSession(input: TerminalResizeInput, controller: TerminalControllerContext) {
+    requireLease(input.sessionId, input.leaseId, controller)
+    const current = getSessionOrThrow(input.sessionId)
+    if (current.sizeRevision !== input.expectedSizeRevision) {
+      throw terminalContractError("revision_conflict", "revision", { details: { currentSizeRevision: current.sizeRevision } })
+    }
+    return idempotentAsync(controller.clientId, "session.resize", input.idempotencyKey, input, async () => {
+      if (current.cols === input.cols && current.rows === input.rows) {
+        return { noOp: true, sizeRevision: current.sizeRevision, stateRevision: current.stateRevision }
+      }
+      const updated = await applySessionResize(input.sessionId, input.cols, input.rows)
+      return { noOp: false, sizeRevision: updated.sizeRevision, stateRevision: updated.stateRevision }
+    })
+  }
+
+  async function applySessionResize(sessionId: string, cols: number, rows: number): Promise<TerminalSession> {
+    const runtime = getRuntimeForInput(sessionId)
+    const current = getSessionOrThrow(sessionId)
+    if (current.cols === cols && current.rows === rows) return current
+
+    runtime.pty.resize(cols, rows)
+    const updated: TerminalSession = {
+      ...current,
+      cols,
+      rows,
+      sizeRevision: current.sizeRevision + 1,
+      stateRevision: current.stateRevision + 1,
+      attention: unknownAttention({ ...current, sizeRevision: current.sizeRevision + 1 }, "resize"),
+      updatedAt: now(),
+    }
+    sessions.set(current.id, updated)
+    events.emit("sessionChanged", updated)
+    events.emit("stateChanged", {
+      sessionId,
+      stateRevision: updated.stateRevision,
+      throughOutputSeq: updated.lastOutputSeq,
+      changeTypes: ["size", "attention"],
+    })
+
+    const barrier = await runtime.emulator.resize(cols, rows, updated.sizeRevision)
+    events.emit("resized", {
+      sessionId,
+      cols,
+      rows,
+      sizeRevision: barrier.sizeRevision,
+      throughOutputSeq: barrier.throughOutputSeq,
+    })
+    schedulePersist()
+    return updated
+  }
+
+  async function stopControlledSession(input: TerminalStopInput, controller: TerminalControllerContext) {
+    return terminate(input, controller, false)
+  }
+
+  async function forceStopControlledSession(input: TerminalStopInput, controller: TerminalControllerContext) {
+    return terminate(input, controller, true)
+  }
+
+  async function terminate(input: TerminalStopInput, controller: TerminalControllerContext, force: boolean) {
+    const session = getSessionOrThrow(input.sessionId)
+    if (session.status === "ended" || session.status === "failed" || session.status === "lost") {
+      return { outcome: "terminal_noop", lifecycle: session.status, sessionId: session.id }
+    }
+    if (force && process.platform === "win32") {
+      throw terminalContractError("force_stop_unsupported", "capability")
+    }
+    const active = activeStopOperations.get(session.id) ?? {}
+    const existingId = force ? active.force : active.stop
+    if (existingId) return operations.get(existingId)
+    if (!force && session.status !== "running") {
+      if (active.stop) return operations.get(active.stop)
+      throw terminalContractError("lifecycle_conflict", "lifecycle", { details: { lifecycle: session.status } })
+    }
+    const operation = createOperation(force ? "force_stop" : "stop", session.id, controller.clientId)
+    if (force && active.stop) operation.relatedOperationId = active.stop
+    operations.set(operation.operationId, operation)
+    activeStopOperations.set(session.id, force
+      ? { ...active, force: operation.operationId }
+      : { ...active, stop: operation.operationId })
+    try {
+      const runtime = runtimes.get(session.id)
+      if (!runtime) throw new Error("missing runtime")
+      runtime.pty.kill(force ? "SIGKILL" : process.platform === "win32" ? undefined : "SIGHUP")
+      operation.status = "delivered"
+      operation.updatedAt = now()
+      if (session.status === "running") {
+        updateSessionState(session.id, (value) => ({ ...value, status: "stopping" }), "lifecycle.stopping")
+      } else {
+        updateSessionState(session.id, (value) => value, "operation.force_delivered")
+      }
+      expireLease(session.id, "stopping")
+      return operation
+    } catch {
+      operation.status = "failed"
+      operation.errorCode = force ? "force_stop_unsupported" : "normal_stop_unsupported"
+      operation.updatedAt = now()
+      updateSessionState(session.id, (value) => value, "operation.delivery_failed")
+      return operation
+    }
+  }
+
+  function createOperation(kind: TerminalOperationState["kind"], sessionId: string, requestedBy: string): TerminalOperationState {
+    const timestamp = now()
+    const operation: TerminalOperationState = {
+      operationId: randomUUID(), kind, sessionId, status: "pending_delivery",
+      requestedAt: timestamp, requestedBy, updatedAt: timestamp,
+    }
+    operations.set(operation.operationId, operation)
+    bumpDomain("operation.created", operation.operationId, 1, operation.operationId)
+    return operation
+  }
+
+  function completeOperation(operationId: string, lifecycle: TerminalSession["status"], cause: string): void {
+    const operation = operations.get(operationId)
+    if (!operation) return
+    operation.status = "completed"
+    operation.finalLifecycle = lifecycle
+    operation.finalCause = cause
+    operation.updatedAt = now()
+  }
+
+  function getOperation(operationId: string): TerminalOperationState {
+    const operation = operations.get(operationId)
+    if (!operation) throw terminalContractError("not_found", "not_found")
+    return { ...operation }
+  }
+
+  function observe(input: TerminalObserveInput, includeOutput: boolean, clientId = "synapse-ui") {
+    const session = getSessionOrThrow(input.sessionId)
+    validateWatermarks(session, input)
+    const immediate = buildObservation(input, includeOutput)
+    if (immediate.changed || input.maxWaitMs === 0) return Promise.resolve(immediate)
+    acquireObserveSlot(input.sessionId, clientId)
+    return new Promise<ReturnType<typeof buildObservation>>((resolve) => {
+      let settled = false
+      const clientWaiters = observeWaitersByClient.get(clientId) ?? new Set()
+      const finish = (cancelled = false) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        events.off("stateChanged", onChange)
+        clientWaiters.delete(waiter)
+        if (clientWaiters.size === 0) observeWaitersByClient.delete(clientId)
+        releaseObserveSlot(input.sessionId, clientId)
+        resolve({ ...buildObservation(input, includeOutput), ...(cancelled ? { cancelled: true } : {}) })
+      }
+      const waiter = { sessionId: input.sessionId, cancel: () => finish(true) }
+      clientWaiters.add(waiter)
+      observeWaitersByClient.set(clientId, clientWaiters)
+      const onChange = (event: { sessionId: string }) => {
+        if (event.sessionId === input.sessionId) finish()
+      }
+      const timer = setTimeout(finish, input.maxWaitMs)
+      events.on("stateChanged", onChange)
+    })
+  }
+
+  function revokeClientAccess(clientId: string, resource?: string): void {
+    const targetSessionId = resource?.startsWith("terminal:session:")
+      ? resource.slice("terminal:session:".length)
+      : undefined
+    for (const waiter of [...(observeWaitersByClient.get(clientId) ?? [])]) {
+      if (!targetSessionId || waiter.sessionId === targetSessionId) waiter.cancel()
+    }
+    for (const [sessionId, lease] of leases) {
+      if (lease.clientId === clientId && (!targetSessionId || targetSessionId === sessionId)) {
+        expireLease(sessionId, "authorization_revoked")
+      }
+    }
+  }
+
+  function assertCreateQuota(): void {
+    const running = [...sessions.values()].filter((session) => session.status === "running" || session.status === "stopping")
+    if (running.length >= TERMINAL_GLOBAL_RUNNING_SESSION_LIMIT) {
+      throw terminalContractError("quota_exceeded", "quota", { retryable: true, details: { dimension: "global_running_sessions" } })
+    }
+  }
+
+  function acquireObserveSlot(sessionId: string, clientId: string): void {
+    if ((observeBySession.get(sessionId) ?? 0) >= TERMINAL_SESSION_OBSERVE_LIMIT) {
+      throw terminalContractError("quota_exceeded", "quota", { retryable: true, details: { dimension: "session_observe" } })
+    }
+    if ((observeByClient.get(clientId) ?? 0) >= TERMINAL_CLIENT_OBSERVE_LIMIT) {
+      throw terminalContractError("quota_exceeded", "quota", { retryable: true, details: { dimension: "client_observe" } })
+    }
+    if (observeGlobal >= TERMINAL_GLOBAL_OBSERVE_LIMIT) {
+      throw terminalContractError("quota_exceeded", "quota", { retryable: true, details: { dimension: "global_observe" } })
+    }
+    observeBySession.set(sessionId, (observeBySession.get(sessionId) ?? 0) + 1)
+    observeByClient.set(clientId, (observeByClient.get(clientId) ?? 0) + 1)
+    observeGlobal += 1
+  }
+
+  function releaseObserveSlot(sessionId: string, clientId: string): void {
+    decrementCounter(observeBySession, sessionId)
+    decrementCounter(observeByClient, clientId)
+    observeGlobal = Math.max(0, observeGlobal - 1)
+  }
+
+  function validateWatermarks(session: TerminalSession, input: TerminalObserveInput): void {
+    if (input.afterStateRevision > session.stateRevision || input.afterOutputSeq > session.lastOutputSeq) {
+      throw terminalContractError("watermark_ahead", "cursor", {
+        details: { stateRevision: session.stateRevision, throughOutputSeq: session.lastOutputSeq },
+      })
+    }
+  }
+
+  function buildObservation(input: TerminalObserveInput, includeOutput: boolean) {
+    const state = getSessionState(input.sessionId, undefined)
+    const output = readSession({
+      sessionId: input.sessionId,
+      afterSeq: input.afterOutputSeq,
+      limitBytes: input.limitBytes ?? 256 * 1024,
+    })
+    const changeTypes: string[] = []
+    if (state.stateRevision > input.afterStateRevision) changeTypes.push("state")
+    if (state.throughOutputSeq > input.afterOutputSeq) changeTypes.push("output")
+    return {
+      changed: changeTypes.length > 0,
+      generatedAt: now(),
+      state,
+      changeTypes,
+      nextStateRevision: state.stateRevision,
+      nextOutputSeq: output.nextSeq,
+      outputRange: {
+        firstSeq: output.firstSeq,
+        throughSeq: output.nextSeq,
+        gap: output.gap,
+        truncated: output.truncated,
+        hasMore: output.hasMore,
+      },
+      ...(includeOutput ? { chunks: output.chunks } : {}),
+    }
+  }
+
+  function getSessionState(sessionId: string, controller?: TerminalControllerContext) {
+    clearExpiredLease(sessionId)
+    const session = getSessionOrThrow(sessionId)
+    const lease = leases.get(sessionId)
+    return {
+      sessionId,
+      lifecycle: session.status,
+      attention: session.attention,
+      lease: !lease
+        ? { occupied: false, leaseRevision: leaseRevisions.get(sessionId) ?? 0 }
+        : sameOwner(lease, controller)
+          ? {
+              occupied: true, own: true, leaseId: lease.leaseId,
+              acquiredAt: lease.acquiredAt, expiresAt: lease.expiresAt,
+              leaseRevision: lease.leaseRevision,
+            }
+          : { occupied: true, own: false, expiresAt: lease.expiresAt, leaseRevision: lease.leaseRevision },
+      stateRevision: session.stateRevision,
+      throughOutputSeq: session.lastOutputSeq,
+      inputRevision: session.inputRevision,
+      sizeRevision: session.sizeRevision,
+      ...(session.status === "ended" || session.status === "failed" || session.status === "lost" ? {
+        endFacts: {
+          cause: session.endCause ?? (session.status === "ended" ? "process_exit" : session.status === "failed" ? "infrastructure_failure" : "runtime_lost"),
+          exitCode: session.exitCode ?? null,
+          signal: session.signal ?? null,
+          endedAt: session.endedAt ?? null,
+          endTimeUnknown: session.endTimeUnknown,
+          ...(session.stopOperationId ? { stopOperationId: session.stopOperationId } : {}),
+          ...(session.stopRequestedBy ? { requestedBy: session.stopRequestedBy === controller?.clientId ? "self" : "other_actor" } : {}),
+          ...(session.stopRequestedAt ? { requestedAt: session.stopRequestedAt } : {}),
+        },
+      } : {}),
+    }
+  }
+
+  async function restoreCheckpointEmulator(session: TerminalSession): Promise<TerminalCoreEmulator | null> {
+    const checkpoint = checkpoints.get(session.id)
+    const firstRetainedSeq = buffers.get(session.id)?.snapshot()[0]?.seq ?? session.lastOutputSeq + 1
+    if (!checkpoint
+      || checkpoint.sizeRevision !== session.sizeRevision
+      || checkpoint.throughOutputSeq > session.lastOutputSeq
+      || (firstRetainedSeq !== 1 && checkpoint.throughOutputSeq < firstRetainedSeq - 1)) {
+      return null
+    }
+    const emulator = createTerminalCoreEmulator({
+      cols: session.cols,
+      rows: session.rows,
+      sizeRevision: session.sizeRevision,
+    })
+    try {
+      await emulator.accept(checkpoint.serialized, checkpoint.throughOutputSeq)
+      for (const chunk of buffers.get(session.id)?.snapshot() ?? []) {
+        if (chunk.seq > checkpoint.throughOutputSeq) await emulator.accept(chunk.data, chunk.seq)
+      }
+      return emulator
+    } catch (error) {
+      emulator.dispose()
+      throw error
+    }
+  }
+
+  async function getView(input: { sessionId: string; kind: "screen" | "scrollback"; tailLines?: number; maxBytes: number }) {
+    const runtime = runtimes.get(input.sessionId)
+    if (!runtime) {
       const session = getSessionOrThrow(input.sessionId)
-      const title = input.title.trim()
-      if (!title) throw new Error("Terminal session title is required")
-      if (title.length > 120) throw new Error("Terminal session title is too long")
-      const updated = { ...session, title, updatedAt: now() }
-      sessions.set(session.id, updated)
-      events.emit("sessionChanged", updated)
-      await flushPersist()
-      return updated
-    },
-    writeSession(input: TerminalWriteSessionInput): void {
-      getSessionOrThrow(input.sessionId)
-      getRunningRuntime(input.sessionId).pty.write(input.data)
-    },
-    runStartupCommand(input: TerminalRunStartupCommandInput): void {
-      getSessionOrThrow(input.sessionId)
-      runPendingStartupCommand(input.sessionId)
-    },
-    async resizeSession(input: TerminalResizeSessionInput): Promise<void> {
-      const runtime = getRunningRuntime(input.sessionId)
-      const session = getSessionOrThrow(input.sessionId)
-      if (session.cols === input.cols && session.rows === input.rows) return
-      sessions.set(session.id, { ...session, cols: input.cols, rows: input.rows, updatedAt: now() })
-      runtime.pty.resize(input.cols, input.rows)
-      await flushPersist()
-    },
-    async deleteSession(input: TerminalDeleteSessionInput): Promise<void> {
-      deleteSessionRecord(input.sessionId)
-      await flushPersist()
-    },
-    async stopSession(input: TerminalStopSessionInput): Promise<void> {
-      const session = getSessionOrThrow(input.sessionId)
-      const runtime = getRunningRuntime(input.sessionId)
-      const timestamp = now()
-      sessions.set(session.id, { ...session, status: "killed", updatedAt: timestamp, endedAt: timestamp })
-      runtime.pty.kill()
-      await flushPersist()
-    },
+      const emulator = await restoreCheckpointEmulator(session)
+      if (emulator) {
+        try {
+          return emulator.getView(input)
+        } finally {
+          emulator.dispose()
+        }
+      }
+      return {
+        kind: input.kind,
+        lines: [], cols: session.cols, rows: session.rows, cursor: { x: 0, y: 0 },
+        generatedAt: now(), throughOutputSeq: session.lastOutputSeq, sizeRevision: session.sizeRevision,
+        emulatorId: "xterm-headless", emulatorVersion: "6.0.0",
+        degraded: true, reasons: ["checkpoint_unavailable"], hasMore: false,
+      }
+    }
+    return runtime.emulator.getView(input)
+  }
+
+  function clearExpiredLease(sessionId: string): void {
+    const lease = leases.get(sessionId)
+    if (lease && Date.parse(lease.expiresAt) <= Date.now()) expireLease(sessionId, "expired")
+  }
+
+  function requireLease(sessionId: string, leaseId: string, controller: TerminalControllerContext): TerminalLeaseState {
+    clearExpiredLease(sessionId)
+    const lease = leases.get(sessionId)
+    if (!lease) throw terminalContractError("lease_expired", "lease")
+    if (lease.leaseId !== leaseId || !sameOwner(lease, controller)) {
+      throw terminalContractError("lease_invalid", "lease")
+    }
+    return lease
+  }
+
+  function validateInputRequest(
+    sessionId: string,
+    leaseId: string,
+    expectedInputRevision: number,
+    controller: TerminalControllerContext,
+  ): void {
+    requireLease(sessionId, leaseId, controller)
+    const session = getSessionOrThrow(sessionId)
+    if (session.inputRevision !== expectedInputRevision) {
+      throw terminalContractError("revision_conflict", "revision", {
+        details: { currentInputRevision: session.inputRevision },
+      })
+    }
+  }
+
+  function advanceInputRevision(sessionId: string, reason: string): TerminalSession {
+    return updateSessionState(sessionId, (session) => ({
+      ...session,
+      inputRevision: session.inputRevision + 1,
+      attention: unknownAttention(session, reason),
+    }), "input")
+  }
+
+  function idempotent<T>(
+    clientId: string,
+    capability: string,
+    key: string,
+    request: unknown,
+    operation: () => T,
+  ): T {
+    pruneIdempotency()
+    const scope = `${clientId}:${capability}:${key}`
+    const digest = createHash("sha256").update(stableJson(request)).digest("hex")
+    const existing = idempotency.get(scope)
+    if (existing) {
+      if (existing.digest !== digest) throw terminalContractError("idempotency_conflict", "idempotency")
+      return existing.result as T
+    }
+    const result = operation()
+    idempotency.set(scope, { clientId, capability, idempotencyKey: key, digest, expiresAtMs: Date.now() + IDEMPOTENCY_RETENTION_MS, result })
+    schedulePersist()
+    return result
+  }
+
+  async function idempotentAsync<T>(
+    clientId: string,
+    capability: string,
+    key: string,
+    request: unknown,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    pruneIdempotency()
+    const scope = `${clientId}:${capability}:${key}`
+    const digest = createHash("sha256").update(stableJson(request)).digest("hex")
+    const existing = idempotency.get(scope)
+    if (existing) {
+      if (existing.digest !== digest) throw terminalContractError("idempotency_conflict", "idempotency")
+      return existing.result as T
+    }
+    const pending = idempotencyInFlight.get(scope)
+    if (pending) {
+      if (pending.digest !== digest) throw terminalContractError("idempotency_conflict", "idempotency")
+      return pending.promise as Promise<T>
+    }
+    const promise = (async () => {
+      const result = await operation()
+      idempotency.set(scope, { clientId, capability, idempotencyKey: key, digest, expiresAtMs: Date.now() + IDEMPOTENCY_RETENTION_MS, result })
+      schedulePersist()
+      return result
+    })()
+    idempotencyInFlight.set(scope, { digest, promise })
+    try {
+      return await promise
+    } finally {
+      if (idempotencyInFlight.get(scope)?.promise === promise) idempotencyInFlight.delete(scope)
+    }
+  }
+
+  function runIdempotentOperation<T>(
+    clientId: string,
+    capability: string,
+    key: string,
+    request: unknown,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    return idempotentAsync(clientId, capability, key, request, operation)
+  }
+
+  function pruneIdempotency(): void {
+    const current = Date.now()
+    for (const [key, value] of idempotency) if (value.expiresAtMs <= current) idempotency.delete(key)
+  }
+
+  function pruneOperationTombstones(): void {
+    const cutoff = Date.now() - DELETE_TOMBSTONE_RETENTION_MS
+    for (const [operationId, operation] of operations) {
+      if (operation.kind === "delete" && !sessions.has(operation.sessionId) && Date.parse(operation.updatedAt) <= cutoff) {
+        operations.delete(operationId)
+      }
+    }
+  }
+
+  function requireSensitivePersistence(): void {
+    if (deps.store.persistenceProtection !== "available") {
+      throw terminalContractError("persistence_unavailable", "persistence", { retryable: true })
+    }
+  }
+
+  return {
+    start,
+    stop,
+    listGroups,
+    createGroup,
+    renameGroup,
+    updateGroupSettings,
+    createGroupCommand,
+    updateGroupCommand,
+    deleteGroupCommand,
+    launchGroupCommand,
+    deleteGroup,
+    previewGroupDelete,
+    commitGroupDelete,
+    listSessions,
+    createSession,
+    createMcpSession,
+    createSessionOverride,
+    getSession,
+    readSession,
+    attachSession,
+    renameSession,
+    writeSession,
+    resizeSession,
+    deleteSession,
+    deleteTerminalSession,
+    stopSession,
+    runStartupCommand,
+    acquireControl,
+    renewControl,
+    releaseControl,
+    sendSemanticInput,
+    sendCommand,
+    paste,
+    sendRaw,
+    resizeControlledSession,
+    stopControlledSession,
+    forceStopControlledSession,
+    getOperation,
+    observe,
+    revokeClientAccess,
+    getSessionState,
+    getView,
+    get terminalDomainRevision() { return terminalDomainRevision },
+    get lastPersistError() { return lastPersistError },
+    get persistenceProtection() { return deps.store.persistenceProtection ?? "unavailable" },
+    runIdempotentOperation,
+    flushPersistQueue: waitForPersistIdle,
+    getLastPersistError: () => lastPersistError,
+    getPersistDiagnostics: () => ({
+      inFlight: Boolean(persistInFlight),
+      pending: persistPending,
+      idleWaiterCount: persistIdleWaiters.length,
+    }),
+    get events() { return events },
   }
 }
 
@@ -620,126 +1971,134 @@ function spawnNodePty(input: SpawnPtyInput): PtyLike {
   ensureNodePtySpawnHelperExecutable()
   return pty.spawn(input.shell, [], {
     name: "xterm-256color",
-    cwd: input.cwd,
     cols: input.cols,
     rows: input.rows,
-    env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" },
+    cwd: input.cwd,
+    env: input.env,
   })
 }
 
 function ensureNodePtySpawnHelperExecutable(): void {
-  if (os.platform() === "win32") return
-
+  if (process.platform === "win32") return
   const packageRoot = path.dirname(require.resolve("node-pty/package.json"))
-  const helperCandidates = [
-    path.join(packageRoot, "build", "Release", "spawn-helper"),
-    path.join(packageRoot, "prebuilds", `${process.platform}-${process.arch}`, "spawn-helper"),
-  ]
-
-  for (const helperPath of helperCandidates) {
-    ensureExecutableIfPresent(resolveUnpackedPath(helperPath))
-  }
+  ensureExecutableIfPresent(path.join(packageRoot, "build", "Release", "spawn-helper"))
+  ensureExecutableIfPresent(path.join(packageRoot, "prebuilds", `${process.platform}-${process.arch}`, "spawn-helper"))
 }
 
 export function ensureExecutableIfPresent(filePath: string): void {
   if (!existsSync(filePath)) return
-
-  const mode = statSync(filePath).mode
-  if ((mode & 0o111) !== 0) return
-
-  chmodSync(filePath, mode | 0o755)
+  const mode = statSync(filePath).mode & 0o777
+  if ((mode & 0o111) === 0) chmodSync(filePath, mode | 0o755)
 }
 
-function resolveUnpackedPath(filePath: string): string {
-  return filePath
-    .replace("app.asar", "app.asar.unpacked")
-    .replace("node_modules.asar", "node_modules.asar.unpacked")
-}
-
-function defaultShell(): string {
-  if (os.platform() === "win32") return process.env.ComSpec || "powershell.exe"
-  return process.env.SHELL || "/bin/zsh"
-}
-
-function defaultCwd(): string {
-  return os.homedir() || process.cwd()
-}
-
-function resolveCwd(cwd: string): string {
-  if (!path.isAbsolute(cwd)) {
-    throw new Error("Terminal cwd must be an existing absolute path")
-  }
-  try {
-    if (!statSync(cwd).isDirectory()) {
-      throw new Error("not a directory")
-    }
-  } catch {
-    throw new Error("Terminal cwd must be an existing absolute path")
-  }
-  return cwd
-}
-
-function normalizeGroupSettings(
-  settings: TerminalGroupSettings | undefined,
-  legacyCommandTimestamp: string,
-): TerminalGroupSettings | undefined {
-  const defaultCwd = settings?.defaultCwd?.trim()
-  const commands = normalizeGroupCommands(settings?.commands)
-  const startupCommand = normalizeStartupCommand(settings?.startupCommand)
-  const normalized: TerminalGroupSettings = {
-    ...(defaultCwd ? { defaultCwd: validateAbsoluteCwdInput(defaultCwd) } : {}),
-    ...(commands.length > 0 ? { commands } : {}),
-  }
-  if (!normalized.commands && startupCommand) {
-    normalized.commands = [{
-      id: randomUUID(),
-      name: "启动命令",
-      command: startupCommand,
-      createdAt: legacyCommandTimestamp,
-      updatedAt: legacyCommandTimestamp,
-    }]
-  }
-  return Object.keys(normalized).length > 0 ? normalized : undefined
-}
-
-function normalizeGroupCommands(commands: TerminalGroupCommand[] | undefined): TerminalGroupCommand[] {
-  return (commands ?? []).map((command) => {
-    const normalized = normalizeGroupCommandInput(command)
-    return {
-      ...command,
-      name: normalized.name,
-      command: normalized.command,
-    }
-  })
-}
-
-function normalizeGroupCommandInput(input: { name: string; command: string }): { name: string; command: string } {
-  const name = input.name.trim()
-  if (!name) throw new Error("Terminal command name is required")
-  if (name.length > 80) throw new Error("Terminal command name is too long")
-  const command = normalizeStartupCommand(input.command)
-  if (!command) throw new Error("Terminal command is required")
-  if (Buffer.byteLength(command) > 64 * 1024) throw new Error("Terminal command is too long")
-  return { name, command }
-}
-
-function normalizeStartupCommand(command: string | undefined): string | undefined {
-  const normalized = command?.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
-  return normalized || undefined
-}
-
-function createStartupEchoFilter(command: string): StartupEchoFilter {
+function normalizeGroupSettings(settings: TerminalGroupSettings | undefined, timestamp: string): TerminalGroupSettings | undefined {
+  if (!settings) return undefined
+  const defaultCwd = settings.defaultCwd?.trim()
+  const shell = settings.shell?.trim()
+  const environment = settings.environment && Object.keys(settings.environment).length
+    ? Object.fromEntries(Object.entries(settings.environment).sort(([left], [right]) => left.localeCompare(right)))
+    : undefined
+  const commands = (settings.commands ?? []).map((command) => ({
+    ...command,
+    name: command.name.trim(),
+    command: normalizeSavedCommand(command.command),
+    updatedAt: command.updatedAt || timestamp,
+    commandRevision: command.commandRevision || 1,
+  }))
+  const startupCommand = settings.startupCommand?.trim()
+  if (!defaultCwd && !shell && !environment && !commands.length && !startupCommand) return undefined
   return {
-    pending: command
-      .split("\n")
-      .map((line) => `${line}\r\n`)
-      .filter((line) => line.trim().length > 0),
+    ...(defaultCwd ? { defaultCwd: path.resolve(defaultCwd) } : {}),
+    ...(shell ? { shell } : {}),
+    ...(environment ? { environment } : {}),
+    ...(commands.length ? { commands } : {}),
+    ...(startupCommand ? { startupCommand: normalizeSavedCommand(startupCommand) } : {}),
   }
 }
 
-function validateAbsoluteCwdInput(cwd: string): string {
-  if (!path.isAbsolute(cwd)) {
-    throw new Error("Terminal cwd must be an absolute path")
+function normalizeSavedCommand(command: string): string {
+  const normalized = command.replaceAll("\r\n", "\n").replaceAll("\r", "\n")
+  if (!normalized || hasForbiddenTextControl(normalized, true)) {
+    throw terminalContractError("invalid_argument", "validation")
   }
-  return cwd
+  return normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized
+}
+
+function getCommand(group: TerminalGroup, commandId: string): TerminalGroupCommand {
+  const command = group.settings?.commands?.find((item) => item.id === commandId)
+  if (!command) throw terminalContractError("not_found", "not_found")
+  return command
+}
+
+function encodeSemanticAction(action: TerminalSemanticAction): string {
+  if (action.type === "key") {
+    const encoded = KEY_BYTES[action.key]
+    if (!encoded) throw terminalContractError("invalid_argument", "validation")
+    return encoded
+  }
+  validateText(action.text, false)
+  return action.text
+}
+
+function validateText(value: string, allowLf: boolean): void {
+  if (!value || hasForbiddenTextControl(value, allowLf)) {
+    throw terminalContractError("invalid_argument", "validation")
+  }
+}
+
+function hasForbiddenTextControl(value: string, allowLf: boolean): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0)!
+    if (codePoint === 0x7f) return true
+    if (codePoint <= 0x08) return true
+    if (codePoint === 0x09) continue
+    if (codePoint === 0x0a) {
+      if (!allowLf) return true
+      continue
+    }
+    if (codePoint >= 0x0b && codePoint <= 0x1f) return true
+  }
+  return false
+}
+
+function sameOwner(lease: TerminalLeaseState, controller?: TerminalControllerContext): boolean {
+  return Boolean(controller
+    && lease.clientId === controller.clientId
+    && lease.controllerInstanceId === controller.controllerInstanceId)
+}
+
+function leaseResult(lease: TerminalLeaseState, session: TerminalSession) {
+  return {
+    leaseId: lease.leaseId,
+    acquiredAt: lease.acquiredAt,
+    expiresAt: lease.expiresAt,
+    leaseRevision: lease.leaseRevision,
+    stateRevision: session.stateRevision,
+    inputRevision: session.inputRevision,
+  }
+}
+
+function userController(): TerminalControllerContext {
+  return { clientId: "synapse-ui", controllerInstanceId: "renderer", actorKind: "user" }
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value))
+}
+
+function decrementCounter(counts: Map<string, number>, key: string): void {
+  const next = (counts.get(key) ?? 0) - 1
+  if (next > 0) counts.set(key, next)
+  else counts.delete(key)
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`
+  if (typeof value === "object" && value !== null) {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+      .join(",")}}`
+  }
+  return JSON.stringify(value)
 }

@@ -21,12 +21,23 @@ const bridgeState = vi.hoisted(() => ({
   dataListener: null as ((event: SynapseTerminalDataEvent) => void) | null,
   sessionChangedListener: null as ((session: SynapseTerminalSession) => void) | null,
   sessionDeletedListener: null as ((event: { sessionId: string }) => void) | null,
+  resizedListener: null as ((event: {
+    sessionId: string
+    cols: number
+    rows: number
+    sizeRevision: number
+    throughOutputSeq: number
+  }) => void) | null,
+  domainChangedListener: null as ((event: unknown) => void) | null,
   dataUnsubscribe: vi.fn(),
   sessionChangedUnsubscribe: vi.fn(),
   sessionDeletedUnsubscribe: vi.fn(),
-  deferredRead: null as null | {
+  resizedUnsubscribe: vi.fn(),
+  domainChangedUnsubscribe: vi.fn(),
+  deferredAttach: null as null | {
     promise: Promise<unknown>
     resolve: (value: unknown) => void
+    reject: (error: unknown) => void
   },
 }))
 
@@ -168,8 +179,25 @@ const terminalBridge = vi.hoisted(() => ({
     rows: input.rows ?? 24,
   })),
   getSession: vi.fn(async ({ sessionId }: { sessionId: string }) => getSession(sessionId)),
+  attachSession: vi.fn(async ({ sessionId }: { sessionId: string }) => {
+    if (bridgeState.deferredAttach) return bridgeState.deferredAttach.promise
+    const session = getSession(sessionId)
+    const chunks = bridgeState.chunks.filter((chunk) => chunk.sessionId === sessionId)
+    return {
+      session,
+      degraded: false as const,
+      serialized: chunks.map((chunk) => chunk.data).join(""),
+      cols: session.cols,
+      rows: session.rows,
+      throughOutputSeq: chunks.at(-1)?.seq ?? session.lastOutputSeq,
+      sizeRevision: session.sizeRevision,
+      emulatorId: "xterm-headless" as const,
+      emulatorVersion: "6.0.0" as const,
+      scrollbackTruncated: false,
+      reasons: [] as [],
+    }
+  }),
   readSession: vi.fn(async ({ sessionId }: { sessionId: string }) => {
-    if (bridgeState.deferredRead) return bridgeState.deferredRead.promise
     return {
       session: getSession(sessionId),
       chunks: bridgeState.chunks.filter((chunk) => chunk.sessionId === sessionId),
@@ -207,6 +235,14 @@ const terminalBridge = vi.hoisted(() => ({
     bridgeState.sessionDeletedListener = listener
     return bridgeState.sessionDeletedUnsubscribe
   }),
+  onResized: vi.fn((listener: NonNullable<typeof bridgeState.resizedListener>) => {
+    bridgeState.resizedListener = listener
+    return bridgeState.resizedUnsubscribe
+  }),
+  onDomainChanged: vi.fn((listener: (event: unknown) => void) => {
+    bridgeState.domainChangedListener = listener
+    return bridgeState.domainChangedUnsubscribe
+  }),
 }))
 
 const terminalDomainCache = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }))
@@ -225,11 +261,13 @@ const xtermState = vi.hoisted(() => ({
     open: ReturnType<typeof vi.fn>
     write: ReturnType<typeof vi.fn>
     clear: ReturnType<typeof vi.fn>
+    resize: ReturnType<typeof vi.fn>
     loadAddon: ReturnType<typeof vi.fn>
     onData: ReturnType<typeof vi.fn>
     dispose: ReturnType<typeof vi.fn>
     cols: number
     rows: number
+    options: { disableStdin?: boolean }
     emitInput: (data: string) => void
     inputDispose: ReturnType<typeof vi.fn>
     inputListener: ((data: string) => void) | null
@@ -274,6 +312,7 @@ vi.mock("@/lib/electron-bridge", () => ({
         list: terminalBridge.listSessions,
         create: terminalBridge.createSession,
         get: terminalBridge.getSession,
+        attach: terminalBridge.attachSession,
         read: terminalBridge.readSession,
         rename: terminalBridge.renameSession,
         write: terminalBridge.writeSession,
@@ -286,6 +325,8 @@ vi.mock("@/lib/electron-bridge", () => ({
         onData: terminalBridge.onData,
         onSessionChanged: terminalBridge.onSessionChanged,
         onSessionDeleted: terminalBridge.onSessionDeleted,
+        onResized: terminalBridge.onResized,
+        onDomainChanged: terminalBridge.onDomainChanged,
       },
     }
     if (domain === "shell") return shellBridge
@@ -298,21 +339,30 @@ vi.mock("@/app-shell/logging", () => ({
 }))
 
 vi.mock("@xterm/xterm", () => ({
-  Terminal: vi.fn().mockImplementation(function TerminalMock() {
+  Terminal: vi.fn().mockImplementation(function TerminalMock(options: {
+    cols?: number
+    rows?: number
+    disableStdin?: boolean
+  } = {}) {
     const instance = {
       open: vi.fn(),
       write: vi.fn((_data: string, callback?: () => void) => {
         callback?.()
       }),
       clear: vi.fn(),
+      resize: vi.fn((cols: number, rows: number) => {
+        instance.cols = cols
+        instance.rows = rows
+      }),
       loadAddon: vi.fn(),
       onData: vi.fn((listener: (data: string) => void) => {
         instance.inputListener = listener
         return { dispose: instance.inputDispose }
       }),
       dispose: vi.fn(),
-      cols: 100,
-      rows: 30,
+      cols: options.cols ?? 100,
+      rows: options.rows ?? 30,
+      options,
       emitInput: (data: string) => instance.inputListener?.(data),
       inputDispose: vi.fn(),
       inputListener: null as ((data: string) => void) | null,
@@ -421,10 +471,14 @@ beforeEach(() => {
   bridgeState.dataListener = null
   bridgeState.sessionChangedListener = null
   bridgeState.sessionDeletedListener = null
-  bridgeState.deferredRead = null
+  bridgeState.resizedListener = null
+  bridgeState.domainChangedListener = null
+  bridgeState.deferredAttach = null
   bridgeState.dataUnsubscribe.mockClear()
   bridgeState.sessionChangedUnsubscribe.mockClear()
   bridgeState.sessionDeletedUnsubscribe.mockClear()
+  bridgeState.resizedUnsubscribe.mockClear()
+  bridgeState.domainChangedUnsubscribe.mockClear()
   terminalBridge.listGroups.mockClear()
   terminalBridge.chooseDefaultCwd.mockClear()
   terminalBridge.createGroup.mockClear()
@@ -438,6 +492,7 @@ beforeEach(() => {
   terminalBridge.listSessions.mockClear()
   terminalBridge.createSession.mockClear()
   terminalBridge.getSession.mockClear()
+  terminalBridge.attachSession.mockClear()
   terminalBridge.readSession.mockClear()
   terminalBridge.renameSession.mockClear()
   terminalBridge.writeSession.mockClear()
@@ -452,6 +507,8 @@ beforeEach(() => {
   terminalBridge.onData.mockClear()
   terminalBridge.onSessionChanged.mockClear()
   terminalBridge.onSessionDeleted.mockClear()
+  terminalBridge.onResized.mockClear()
+  terminalBridge.onDomainChanged.mockClear()
   vi.mocked(XtermTerminal).mockClear()
   xtermState.instances = []
   xtermState.fitInstances = []
@@ -519,7 +576,7 @@ describe("TerminalModule", () => {
     const actions = document.querySelector("[data-embedded-system-app-actions]")
     const main = document.body.querySelector("main")
     expect(actions?.textContent).not.toContain("新建终端")
-    expect(document.body.textContent).toContain("已断开")
+    expect(document.body.textContent).toContain("已失联")
     expect(main?.textContent).not.toContain("同目录新开")
     expect(main?.textContent).not.toContain("终止进程")
     expect(XtermTerminal).toHaveBeenCalledWith(expect.objectContaining({
@@ -710,7 +767,7 @@ describe("TerminalModule", () => {
 
   it("renders a direct delete button instead of a session menu", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
-    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端", status: "ended" })]
 
     await renderModule()
 
@@ -753,11 +810,7 @@ describe("TerminalModule", () => {
 
     expect(document.querySelector("[data-slot='collapsible'][data-state='closed']")).toBeTruthy()
     expect(document.querySelector("[aria-label='终端输出与输入']")).toBeTruthy()
-    expect(terminalBridge.readSession).toHaveBeenLastCalledWith({
-      sessionId: "session-1",
-      afterSeq: 0,
-      limitBytes: 1024 * 1024,
-    })
+    expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-1" })
   })
 
   it("renames a terminal group from the group menu", async () => {
@@ -979,7 +1032,7 @@ describe("TerminalModule", () => {
       createGroup({ id: "group-logs", name: "日志", sortOrder: 1 }),
     ]
     bridgeState.sessions = [
-      createSession({ id: "session-1", groupId: "group-build", title: "构建终端", updatedAt: "2026-06-24T00:02:00.000Z" }),
+      createSession({ id: "session-1", groupId: "group-build", title: "构建终端", status: "ended", updatedAt: "2026-06-24T00:02:00.000Z" }),
       createSession({ id: "session-2", groupId: "group-logs", title: "日志终端", updatedAt: "2026-06-24T00:01:00.000Z" }),
     ]
 
@@ -990,17 +1043,13 @@ describe("TerminalModule", () => {
 
     expect(terminalBridge.deleteGroup).toHaveBeenCalledWith({ groupId: "group-build" })
     expect(document.body.textContent).not.toContain("构建终端")
-    expect(terminalBridge.readSession).toHaveBeenLastCalledWith({
-      sessionId: "session-2",
-      afterSeq: 0,
-      limitBytes: 1024 * 1024,
-    })
+    expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-2" })
   })
 
   it("deletes the active terminal session and selects the next session", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [
-      createSession({ id: "session-1", groupId: "group-1", title: "一号终端", updatedAt: "2026-06-24T00:02:00.000Z" }),
+      createSession({ id: "session-1", groupId: "group-1", title: "一号终端", status: "ended", updatedAt: "2026-06-24T00:02:00.000Z" }),
       createSession({ id: "session-2", groupId: "group-1", title: "二号终端", updatedAt: "2026-06-24T00:01:00.000Z" }),
     ]
 
@@ -1010,16 +1059,12 @@ describe("TerminalModule", () => {
     expect(terminalBridge.deleteSession).toHaveBeenCalledWith({ sessionId: "session-1" })
     expect(document.body.textContent).not.toContain("会停止该终端并删除保留输出")
     expect(document.body.textContent).not.toContain("一号终端")
-    expect(terminalBridge.readSession).toHaveBeenLastCalledWith({
-      sessionId: "session-2",
-      afterSeq: 0,
-      limitBytes: 1024 * 1024,
-    })
+    expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-2" })
   })
 
   it("deletes the last terminal session and returns to the empty state", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
-    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "临时终端" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "临时终端", status: "ended" })]
 
     await renderModule()
     await clickSessionDelete("临时终端")
@@ -1037,15 +1082,15 @@ describe("TerminalModule", () => {
     expect(toastState.error).toHaveBeenCalledWith("新建终端失败")
   })
 
-  it("shows a user-visible error when terminal output cannot be loaded", async () => {
+  it("shows a user-visible error when the terminal projection cannot be attached", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
-    terminalBridge.readSession.mockRejectedValueOnce(new Error("read failed"))
+    terminalBridge.attachSession.mockRejectedValueOnce(new Error("attach failed"))
 
     await renderModule()
 
-    expect(toastState.error).toHaveBeenCalledWith("读取终端输出失败")
-    expect(document.body.textContent).toContain("读取终端输出失败")
+    expect(toastState.error).toHaveBeenCalledWith("终端画面无法恢复")
+    expect(document.body.textContent).toContain("终端画面无法恢复")
   })
 
   it("shows a user-visible error when terminal input cannot be written", async () => {
@@ -1206,18 +1251,19 @@ describe("TerminalModule", () => {
     expect(webglState.instances[0]?.onContextLoss).toHaveBeenCalled()
   })
 
-  it("fits and resizes the terminal before retained output is written", async () => {
+  it("attaches the authoritative snapshot before requesting container geometry", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
     bridgeState.chunks = [createChunk({ sessionId: "session-1", seq: 1, data: "ready\r\n" })]
 
     await renderModule()
 
-    const fitCallOrder = xtermState.fitInstances[0]?.fit.mock.invocationCallOrder[0]
+    const attachCallOrder = terminalBridge.attachSession.mock.invocationCallOrder[0]
     const resizeCallOrder = terminalBridge.resizeSession.mock.invocationCallOrder[0]
     const writeCallOrder = xtermState.instances[0]?.write.mock.invocationCallOrder[0]
-    expect(fitCallOrder).toBeLessThan(writeCallOrder ?? 0)
-    expect(resizeCallOrder).toBeLessThan(writeCallOrder ?? 0)
+    expect(attachCallOrder).toBeLessThan(writeCallOrder ?? 0)
+    expect(writeCallOrder).toBeLessThan(resizeCallOrder ?? 0)
+    expect(xtermState.fitInstances[0]?.fit).not.toHaveBeenCalled()
     expect(terminalBridge.resizeSession).toHaveBeenCalledWith({
       sessionId: "session-1",
       cols: 100,
@@ -1237,7 +1283,7 @@ describe("TerminalModule", () => {
     await clickButton("Clear")
 
     expect(xtermState.instances[0]?.clear).toHaveBeenCalled()
-    expect(xtermState.fitInstances[0]?.fit).toHaveBeenCalledTimes(1)
+    expect(xtermState.fitInstances[0]?.fit).not.toHaveBeenCalled()
     expect(webglState.instances[0]?.clearTextureAtlas).toHaveBeenCalledTimes(1)
     expect(terminalBridge.resizeSession).not.toHaveBeenCalled()
   })
@@ -1283,12 +1329,8 @@ describe("TerminalModule", () => {
 
     await renderModule()
 
-    expect(terminalBridge.readSession).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      afterSeq: 0,
-      limitBytes: 1024 * 1024,
-    })
-    expect(xtermState.instances[0]?.write).toHaveBeenCalledWith("ready\r\n")
+    expect(terminalBridge.attachSession).toHaveBeenCalledWith({ sessionId: "session-1" })
+    expect(xtermState.instances[0]?.write.mock.calls.map(([data]) => data)).toContain("ready\r\n")
     expect(terminalBridge.runStartupCommand).not.toHaveBeenCalled()
 
     await act(async () => {
@@ -1301,7 +1343,7 @@ describe("TerminalModule", () => {
       data: "pwd\r",
     })
 
-    act(() => {
+    await act(async () => {
       bridgeState.dataListener?.({
         sessionId: "session-1",
         chunk: createChunk({ sessionId: "session-1", seq: 1, data: "old" }),
@@ -1315,11 +1357,13 @@ describe("TerminalModule", () => {
         chunk: createChunk({ sessionId: "session-1", seq: 2, data: "next\r\n" }),
       })
       resizeObservers[0]?.trigger()
+      await Promise.resolve()
+      await Promise.resolve()
     })
 
-    expect(xtermState.instances[0]?.write).toHaveBeenCalledWith("next\r\n")
-    expect(xtermState.instances[0]?.write).not.toHaveBeenCalledWith("old")
-    expect(xtermState.instances[0]?.write).not.toHaveBeenCalledWith("other")
+    expect(xtermState.instances[0]?.write.mock.calls.map(([data]) => data)).toContain("next\r\n")
+    expect(xtermState.instances[0]?.write.mock.calls.map(([data]) => data)).not.toContain("old")
+    expect(xtermState.instances[0]?.write.mock.calls.map(([data]) => data)).not.toContain("other")
     expect(terminalBridge.resizeSession).toHaveBeenCalledWith({
       sessionId: "session-1",
       cols: 100,
@@ -1333,6 +1377,7 @@ describe("TerminalModule", () => {
     expect(bridgeState.dataUnsubscribe).toHaveBeenCalled()
     expect(bridgeState.sessionChangedUnsubscribe).toHaveBeenCalled()
     expect(bridgeState.sessionDeletedUnsubscribe).toHaveBeenCalled()
+    expect(bridgeState.resizedUnsubscribe).toHaveBeenCalled()
     expect(xtermState.instances[0]?.inputDispose).toHaveBeenCalled()
     expect(xtermState.instances[0]?.dispose).toHaveBeenCalled()
     expect(resizeObservers[0]?.disconnect).toHaveBeenCalled()
@@ -1358,6 +1403,87 @@ describe("TerminalModule", () => {
     })
   })
 
+  it("keeps one xterm instance when session lifecycle changes", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    const session = createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    bridgeState.sessions = [session]
+
+    await renderModule()
+
+    await act(async () => {
+      bridgeState.sessionChangedListener?.({
+        ...session,
+        status: "ended",
+        stateRevision: session.stateRevision + 1,
+      })
+      await Promise.resolve()
+    })
+
+    expect(xtermState.instances).toHaveLength(1)
+    expect(xtermState.instances[0]?.dispose).not.toHaveBeenCalled()
+    expect(xtermState.instances[0]?.options.disableStdin).toBe(true)
+  })
+
+  it("applies output before and after a resize at the authoritative output watermark", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    const session = createSession({
+      id: "session-1",
+      groupId: "group-1",
+      title: "开发终端",
+      lastOutputSeq: 1,
+    })
+    bridgeState.sessions = [session]
+    bridgeState.chunks = [createChunk({ sessionId: session.id, seq: 1, data: "snapshot" })]
+
+    await renderModule()
+    const xterm = xtermState.instances[0]!
+    xterm.write.mockClear()
+    xterm.resize.mockClear()
+
+    await act(async () => {
+      bridgeState.sessionChangedListener?.({
+        ...session,
+        cols: 100,
+        rows: 30,
+        lastOutputSeq: 3,
+        sizeRevision: 2,
+        stateRevision: session.stateRevision + 1,
+      })
+      bridgeState.dataListener?.({
+        sessionId: session.id,
+        chunk: createChunk({ sessionId: session.id, seq: 2, data: "old-geometry" }),
+      })
+      bridgeState.dataListener?.({
+        sessionId: session.id,
+        chunk: createChunk({ sessionId: session.id, seq: 3, data: "new-geometry" }),
+      })
+      bridgeState.resizedListener?.({
+        sessionId: session.id,
+        cols: 100,
+        rows: 30,
+        sizeRevision: 2,
+        throughOutputSeq: 2,
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const oldWriteOrder = xterm.write.mock.calls
+      .find((call) => call[0] === "old-geometry")?.[1]
+    const oldWriteInvocation = xterm.write.mock.invocationCallOrder[
+      xterm.write.mock.calls.findIndex((call) => call[0] === "old-geometry")
+    ]
+    const newWriteInvocation = xterm.write.mock.invocationCallOrder[
+      xterm.write.mock.calls.findIndex((call) => call[0] === "new-geometry")
+    ]
+    const resizeInvocation = xterm.resize.mock.invocationCallOrder[0]
+    expect(oldWriteOrder).toEqual(expect.any(Function))
+    expect(oldWriteInvocation).toBeLessThan(resizeInvocation ?? 0)
+    expect(resizeInvocation).toBeLessThan(newWriteInvocation ?? 0)
+    expect(xtermState.instances).toHaveLength(1)
+  })
+
   it("does not request startup commands from terminal output", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
@@ -1379,12 +1505,11 @@ describe("TerminalModule", () => {
     expect(terminalBridge.runStartupCommand).not.toHaveBeenCalled()
   })
 
-  it("does not lose or duplicate data emitted before retained output finishes loading", async () => {
+  it("does not lose or duplicate data emitted before the authoritative snapshot attaches", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
-    const retainedChunk = createChunk({ sessionId: "session-1", seq: 1, data: "ready\r\n" })
     const liveChunk = createChunk({ sessionId: "session-1", seq: 2, data: "during-read\r\n" })
-    bridgeState.deferredRead = createDeferredRead()
+    bridgeState.deferredAttach = createDeferredAttach()
 
     await renderModule()
 
@@ -1396,12 +1521,18 @@ describe("TerminalModule", () => {
     })
 
     await act(async () => {
-      bridgeState.deferredRead?.resolve({
+      bridgeState.deferredAttach?.resolve({
         session: getSession("session-1"),
-        chunks: [retainedChunk],
-        nextSeq: 1,
-        truncated: false,
-        firstSeq: 1,
+        degraded: false,
+        serialized: "ready\r\n",
+        cols: 80,
+        rows: 24,
+        throughOutputSeq: 1,
+        sizeRevision: 1,
+        emulatorId: "xterm-headless",
+        emulatorVersion: "6.0.0",
+        scrollbackTruncated: false,
+        reasons: [],
       })
       await Promise.resolve()
     })
@@ -1412,7 +1543,25 @@ describe("TerminalModule", () => {
     expect(writes?.filter((data) => data === "during-read\r\n")).toHaveLength(1)
   })
 
-  it("restores every retained output page after switching back to a running session", async () => {
+  it("does not report an attach error when an MCP deletion races the active attach", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    bridgeState.deferredAttach = createDeferredAttach()
+
+    await renderModule()
+
+    await act(async () => {
+      bridgeState.sessionDeletedListener?.({ sessionId: "session-1" })
+      bridgeState.deferredAttach?.reject(new Error("session not found"))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("暂无会话")
+    expect(toastState.error).not.toHaveBeenCalledWith("终端画面无法恢复")
+  })
+
+  it("restores a switched session from one authoritative snapshot without replaying raw history", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [
       createSession({
@@ -1440,33 +1589,32 @@ describe("TerminalModule", () => {
       createChunk({ sessionId: "session-1", seq: 2, data: "while-hidden-1\r\n" }),
       createChunk({ sessionId: "session-1", seq: 3, data: "while-hidden-2\r\n" }),
     ]
-    terminalBridge.readSession.mockImplementation(async ({ sessionId, afterSeq = 0 }) => {
-      const retainedChunks = bridgeState.chunks.filter((chunk) =>
-        chunk.sessionId === sessionId && chunk.seq > afterSeq)
-      const chunks = retainedChunks.slice(0, 1)
+    terminalBridge.attachSession.mockImplementation(async ({ sessionId }) => {
+      const session = getSession(sessionId)
+      const chunks = bridgeState.chunks.filter((chunk) => chunk.sessionId === sessionId)
       return {
-        session: getSession(sessionId),
-        chunks,
-        nextSeq: chunks.at(-1)?.seq ?? afterSeq,
-        truncated: false,
-        firstSeq: retainedChunks[0]?.seq ?? 0,
+        session,
+        degraded: false as const,
+        serialized: "restored-screen",
+        cols: session.cols,
+        rows: session.rows,
+        throughOutputSeq: chunks.at(-1)?.seq ?? 0,
+        sizeRevision: session.sizeRevision,
+        emulatorId: "xterm-headless" as const,
+        emulatorVersion: "6.0.0" as const,
+        scrollbackTruncated: false,
+        reasons: [] as [],
       }
     })
-    terminalBridge.readSession.mockClear()
+    terminalBridge.attachSession.mockClear()
 
     await clickSession("构建终端")
 
     const restoredWrites = xtermState.instances.at(-1)?.write.mock.calls.map(([data]) => data)
-    expect(restoredWrites).toEqual([
-      "before-switch\r\n",
-      "while-hidden-1\r\n",
-      "while-hidden-2\r\n",
-    ])
-    expect(terminalBridge.readSession.mock.calls).toEqual([
-      [{ sessionId: "session-1", afterSeq: 0, limitBytes: 1024 * 1024 }],
-      [{ sessionId: "session-1", afterSeq: 1, limitBytes: 1024 * 1024 }],
-      [{ sessionId: "session-1", afterSeq: 2, limitBytes: 1024 * 1024 }],
-    ])
+    expect(restoredWrites).toEqual(["restored-screen"])
+    expect(terminalBridge.attachSession).toHaveBeenCalledTimes(1)
+    expect(terminalBridge.attachSession).toHaveBeenCalledWith({ sessionId: "session-1" })
+    expect(terminalBridge.readSession).not.toHaveBeenCalled()
   })
 })
 
@@ -1696,6 +1844,9 @@ function createSession(overrides: Partial<SynapseTerminalSession> = {}): Synapse
     cols: 80,
     rows: 24,
     lastOutputSeq: 0,
+    stateRevision: 1,
+    inputRevision: 0,
+    sizeRevision: 1,
     ...overrides,
   } satisfies SynapseTerminalSession
   bridgeState.sessions = bridgeState.sessions.some((item) => item.id === session.id)
@@ -1721,10 +1872,12 @@ function getSession(sessionId: string): SynapseTerminalSession {
   return session
 }
 
-function createDeferredRead(): NonNullable<typeof bridgeState.deferredRead> {
+function createDeferredAttach(): NonNullable<typeof bridgeState.deferredAttach> {
   let resolve: (value: unknown) => void = () => undefined
-  const promise = new Promise<unknown>((nextResolve) => {
+  let reject: (error: unknown) => void = () => undefined
+  const promise = new Promise<unknown>((nextResolve, nextReject) => {
     resolve = nextResolve
+    reject = nextReject
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }

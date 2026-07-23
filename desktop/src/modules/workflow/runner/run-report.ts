@@ -1,7 +1,7 @@
 import type { NodeRunResult, WorkflowDefinition, WorkflowNode, WorkflowRunStatus } from "@/types/workflow"
 import { formatTokenUsageValue, tokenUsageFields } from "@/lib/token-usage"
 import { resolveBranchLabel } from "../lib/branch-label"
-import { sanitizeWorkflowResultText, sanitizeWorkflowResultValue } from "./result-sanitize"
+import { sanitizeWorkflowPrimaryOutput, sanitizeWorkflowResultText, sanitizeWorkflowResultValue } from "./result-sanitize"
 
 interface WorkflowRunReportInput {
   readonly definition: WorkflowDefinition
@@ -100,7 +100,7 @@ export function formatNodeRunReport(input: NodeRunReportInput): string {
   }
 
   if (result.output !== undefined) {
-    sections.push(["## 输出", codeBlock("text", formatTextValue(result.output))].join("\n"))
+    sections.push(["## 输出", codeBlock("text", formatTextValue(result.output, result.outputs))].join("\n"))
   }
 
   const structuredOutputs = resolveReportStructuredOutputs(result)
@@ -223,10 +223,10 @@ function formatScalar(value: unknown): string {
   return String(value)
 }
 
-function formatTextValue(value: unknown): string {
+function formatTextValue(value: unknown, outputs?: Record<string, unknown>): string {
   if (value === null || value === undefined) return "未记录"
   if (value === "") return "空字符串"
-  return sanitizeWorkflowResultText(String(value))
+  return sanitizeWorkflowPrimaryOutput(String(value), outputs)
 }
 
 function formatJson(value: unknown): string {

@@ -281,6 +281,8 @@ describe("NodeTypeRegistry", () => {
       "document_template_docx_generate",
       "end",
       "file_opener_file_open",
+      "html_generator_ejs_file_generate",
+      "html_generator_ejs_generate",
       "http_request",
       "prompt",
       "script",

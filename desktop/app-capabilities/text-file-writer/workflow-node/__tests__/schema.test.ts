@@ -26,7 +26,7 @@ describe("text file writer workflow node schema", () => {
     expect(textFileWriterNodeManifest.share).toMatchObject({
       capability: {
         id: "app.text_file_writer.file.write",
-        minVersion: "1.0.0",
+        minVersion: "1.1.0",
       },
       resources: [{ path: ["path"], entryType: "file", cardinality: "one", access: "write" }],
     })

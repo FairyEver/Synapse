@@ -77,7 +77,7 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(toolNames).toHaveLength(177)
+    expect(toolNames).toHaveLength(208)
     expect(toolNames.every((toolName) => toolName.startsWith("app_"))).toBe(true)
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
@@ -147,8 +147,21 @@ describe("API and MCP capability surface", () => {
 
     expect(existsSync(new URL("database/cli", repoRoot))).toBe(false)
     expect(existsSync(new URL("electron/database/cli-installer.ts", repoRoot))).toBe(false)
-    expect(packageJson.scripts?.["build:database"]).not.toContain("dist-database/cli")
     expect(`${docsMatrix}\n${websiteMatrix}\n${websiteCapabilities}`).not.toMatch(/\bCLI command\b|CLI 命令|synapse database|synapse scheduler|synapse content/u)
+  })
+
+  it("does not ship the retired stdio MCP bridge", () => {
+    const packageJson = JSON.parse(readRepoFile("package.json")) as {
+      scripts?: Record<string, string>
+      build?: { extraResources?: Array<{ from?: string }> }
+    }
+
+    expect(existsSync(new URL("database/mcp/index.ts", repoRoot))).toBe(false)
+    expect(existsSync(new URL("database/shared/resolve-user-data.ts", repoRoot))).toBe(false)
+    expect(packageJson.scripts?.["build:database"]).toBeUndefined()
+    expect(packageJson.build?.extraResources).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ from: "dist-database" }),
+    ]))
   })
 
   it("uses only canonical app MCP tool names in the built-in Synapse skill docs", () => {
@@ -168,7 +181,7 @@ describe("API and MCP capability surface", () => {
       ...readMarkdownFiles(new URL("../docs/superpowers/plans/", repoRoot), "plans"),
     ].filter((file) => !file.path.includes("2026-05-25-api-mcp-cli-retirement-doc-cleanup"))
     const retiredSynapseCliPattern = /\bCLI command\b|CLI 命令|synapse database|synapse scheduler|synapse content/u
-    const supersededNote = "Superseded note: Synapse-owned CLI capability entrypoints were retired"
+    const supersededNote = "Superseded note: Synapse-owned CLI and stdio MCP capability entrypoints were retired"
 
     const offenders = superpowersDocs
       .filter((file) => retiredSynapseCliPattern.test(file.content) && !file.content.includes(supersededNote))

@@ -43,6 +43,16 @@ const CAPABILITY_ACTIONS = [
   "update_access",
   "update_settings",
   "launch",
+  "observe",
+  "acquire",
+  "renew",
+  "release",
+  "send",
+  "command",
+  "paste",
+  "raw",
+  "force_stop",
+  "commit",
 ] as const
 
 export type CapabilityAction = typeof CAPABILITY_ACTIONS[number]

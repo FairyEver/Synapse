@@ -376,6 +376,91 @@ describe("AgentSessionSidebar", () => {
     expect(document.body.textContent).toContain("Workflow Run")
   })
 
+  it("limits delete-others to sessions in the visible source and group", async () => {
+    const userSession = {
+      projectId: "project-1",
+      id: "user-conv",
+      sessionKey: "local:renderer",
+      platform: "local-renderer",
+      name: "User Chat",
+      active: true,
+      historyCount: 1,
+      createdAt: "2026-05-21T00:00:00.000Z",
+      updatedAt: "2026-05-21T00:01:00.000Z",
+    }
+    const workflowKeep = {
+      projectId: "project-1",
+      id: "workflow-keep",
+      sessionKey: "workflow:run-1",
+      platform: "workflow",
+      name: "Workflow Keep",
+      active: false,
+      historyCount: 1,
+      createdAt: "2026-05-21T00:00:00.000Z",
+      updatedAt: "2026-05-21T00:02:00.000Z",
+    }
+    const workflowOther = {
+      projectId: "project-1",
+      id: "workflow-other",
+      sessionKey: "workflow:run-2",
+      platform: "workflow",
+      name: "Workflow Other",
+      active: false,
+      historyCount: 1,
+      createdAt: "2026-05-21T00:00:00.000Z",
+      updatedAt: "2026-05-21T00:03:00.000Z",
+    }
+    const onDeleteOthers = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentSessionSidebar
+          sessions={[userSession, workflowKeep, workflowOther]}
+          archivedSessions={[]}
+          projects={[{ id: "project-1", name: "Project One", path: "/tmp/project-one" }]}
+          selectedProjectId="project-1"
+          selectedConversationId="workflow-keep"
+          sourceFilter="workflow"
+          unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
+          onCreateSession={vi.fn()}
+          onSourceFilterChange={vi.fn()}
+          onSelect={vi.fn()}
+          onDelete={vi.fn()}
+          onDeleteOthers={onDeleteOthers}
+          onRename={vi.fn()}
+        />,
+      )
+    })
+
+    const keepRow = [...document.querySelectorAll<HTMLElement>('[data-track="agent-session-select"]')]
+      .find((row) => row.textContent?.includes("Workflow Keep"))
+    expect(keepRow).toBeDefined()
+
+    await act(async () => {
+      keepRow!.dispatchEvent(new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+      }))
+      await Promise.resolve()
+    })
+
+    const deleteOthersItem = [...document.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((item) => item.textContent === "删除其他")
+    expect(deleteOthersItem).toBeDefined()
+
+    await act(async () => {
+      deleteOthersItem!.click()
+    })
+
+    expect(onDeleteOthers).toHaveBeenCalledWith(workflowKeep, [workflowKeep, workflowOther])
+  })
+
   it("renders an unread marker for an inactive session", () => {
     const html = renderToStaticMarkup(
       <AgentSessionSidebar

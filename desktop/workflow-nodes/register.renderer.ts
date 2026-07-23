@@ -20,6 +20,7 @@ import { fileOpenerNodeManifest } from "../app-capabilities/file-opener/workflow
 import { documentTemplateNodeManifest } from "../app-capabilities/document-template/workflow-node/manifest"
 import { textExtractNodeManifest } from "../app-capabilities/text-extractor/workflow-node/manifest"
 import { textFileWriterNodeManifest } from "../app-capabilities/text-file-writer/workflow-node/manifest"
+import { htmlGeneratorEjsFileNodeManifest, htmlGeneratorEjsNodeManifest } from "../app-capabilities/html-generator/workflow-node/manifest"
 
 nodeTypeRegistry.registerManifest(textNodeManifest)
 nodeTypeRegistry.registerManifest(promptNodeManifest)
@@ -34,3 +35,5 @@ nodeTypeRegistry.registerManifest(fileOpenerNodeManifest)
 nodeTypeRegistry.registerManifest(documentTemplateNodeManifest)
 nodeTypeRegistry.registerManifest(textExtractNodeManifest)
 nodeTypeRegistry.registerManifest(textFileWriterNodeManifest)
+nodeTypeRegistry.registerManifest(htmlGeneratorEjsNodeManifest)
+nodeTypeRegistry.registerManifest(htmlGeneratorEjsFileNodeManifest)

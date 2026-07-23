@@ -38,6 +38,8 @@ type TerminalRenderingInput = {
   readonly disableStdin: boolean
 }
 
+let terminalColorContext: CanvasRenderingContext2D | null | undefined
+
 export function createTerminalRenderingOptions(input: TerminalRenderingInput): ITerminalOptions {
   return {
     ...TERMINAL_VISUAL_OPTIONS,
@@ -50,7 +52,9 @@ export function createTerminalRenderingOptions(input: TerminalRenderingInput): I
 function createTerminalTheme(container: HTMLElement): ITheme {
   const scopedStyle = window.getComputedStyle(container)
   const rootStyle = window.getComputedStyle(document.documentElement)
-  const token = (fallback: string, ...names: string[]) => resolveCssToken(scopedStyle, rootStyle, names, fallback)
+  const token = (fallback: string, ...names: string[]) => normalizeTerminalColor(
+    resolveCssToken(scopedStyle, rootStyle, names, fallback),
+  )
 
   return {
     background: token("Canvas", "--background", "--surface"),
@@ -92,4 +96,34 @@ function resolveCssToken(
   }
 
   return fallback
+}
+
+function normalizeTerminalColor(value: string): string {
+  if (!/^(?:oklch|oklab|lch|lab|color)\(/i.test(value)) {
+    return value
+  }
+
+  const context = getTerminalColorContext()
+  if (!context) {
+    return value
+  }
+
+  context.clearRect(0, 0, 1, 1)
+  context.fillStyle = value
+  context.fillRect(0, 0, 1, 1)
+  const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`
+}
+
+function getTerminalColorContext(): CanvasRenderingContext2D | null {
+  if (terminalColorContext !== undefined) {
+    return terminalColorContext
+  }
+
+  const canvas = document.createElement("canvas")
+  canvas.width = 1
+  canvas.height = 1
+  terminalColorContext = canvas.getContext("2d", { willReadFrequently: true })
+  return terminalColorContext
 }

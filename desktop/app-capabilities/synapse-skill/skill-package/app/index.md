@@ -4,16 +4,29 @@ Use App MCP tools for capabilities provided by Synapse system apps.
 
 ## Text File Writer
 
-Use `app_text_file_writer_file_write` when the user asks to save a complete text value as a local `.txt`, `.md`, or `.csv` file.
+Use `app_text_file_writer_file_write` when the user asks to save a complete text value as a local `.txt`, `.md`, `.csv`, `.html`, or `.htm` file.
 
 Rules:
 
 - Pass the complete string once as `text` and one current-OS absolute path as `path`; do not split or reconstruct the content through shell commands.
-- The final path extension selects the format. Do not send a separate format field, add an extension, or rewrite `.txt`, `.md`, or `.csv` content.
-- Use only `utf8` or `utf16le`; omit `encoding` for UTF-8. Synapse does not add a BOM, trim text, normalize newlines, or append a final newline. Empty text is valid.
+- The final path extension selects the format. Do not send a separate format field, add an extension, or rewrite the content.
+- Use `utf8` or `utf16le` for `.txt`, `.md`, and `.csv`. HTML targets accept only `utf8`. Omit `encoding` for UTF-8. Synapse does not add a BOM, trim text, normalize newlines, or append a final newline. Empty text is valid.
 - Omit `overwrite` unless the caller explicitly authorizes replacement. A changed target returns retryable `TARGET_CHANGED`; do not silently retry over the newer file.
 - Missing parent directories are created automatically. Do not pass `~`, environment variables, shell expressions, or `file://` URLs.
 - Do not repeat the original text, complete path, or native failure details in logs or the final answer unless the user specifically needs the resulting path.
+
+## HTML Generator
+
+Use `app_html_generator_ejs_generate` to render a trusted EJS template and return the complete HTML string without automatically saving or opening it. Use `app_html_generator_ejs_file_generate` when the rendered result must be written directly to an absolute `.html` or `.htm` path.
+
+Rules:
+
+- EJS templates execute JavaScript in a one-shot Worker that shares the application's permission domain; it is a reliability boundary, not a security sandbox. Use only trusted template content.
+- Pass the template string as `template` and a JSON-compatible top-level object as `data`. Templates access values through the explicit `data` root, such as `<%= data.title %>`.
+- EJS include and template file loading are disabled. Do not pass a template path, EJS options, custom delimiters, encoding, or a mode field.
+- String generation returns the complete HTML and UTF-8 byte size. It does not automatically save, open, preview, sanitize, or validate the HTML.
+- File generation accepts only an absolute `.html` or `.htm` `outputPath`, always writes UTF-8, and defaults `overwrite` to `false`. It returns only the committed file metadata.
+- Rendering is bounded by fixed input, output, queue, Worker startup, execution, and memory limits. Surface the stable normalized error instead of retrying automatically; only `RENDER_QUEUE_FULL` is retryable.
 
 ## File Opener
 
@@ -59,25 +72,6 @@ Rules:
 - Do not use a symbolic link as `outputPath`; Document Template always rejects symbolic-link outputs.
 - Do not rewrite or enrich JSON data before calling the tool. Pass the user data as-is.
 - Do not repeat large JSON payloads or secret-looking values in the final answer.
-
-## Terminal
-
-Use Terminal tools when you need to work inside a Synapse-managed shell session.
-
-Rules:
-
-- Create a session with `app_terminal_session_create`, then read retained output with `app_terminal_session_read`.
-- Use `app_terminal_group_list` when you need group ids or saved command settings. The read requires terminal permission approval.
-- Use `app_terminal_group_create`, `app_terminal_group_update_settings`, `app_terminal_group_rename`, and `app_terminal_group_delete` to organize sessions. Creating or renaming a group requires terminal permission approval.
-- Use `app_terminal_group_update_settings` when future sessions in a group should start from a default directory.
-- Use `app_terminal_group_command_create`, `app_terminal_group_command_update`, and `app_terminal_group_command_delete` to manage saved commands in a group.
-- Use `app_terminal_group_command_launch` when the user asks to run a saved terminal command.
-- Use `afterSeq` from prior reads to avoid rereading the same output.
-- `app_terminal_session_write` writes raw terminal input; include `\n` when the shell should submit a command.
-- Use `app_terminal_session_rename` for display names and `app_terminal_session_delete` to remove a session plus retained output.
-- Deleting a terminal group removes every session in it. Running sessions are stopped before deletion.
-- Deleting a running terminal session stops it before removing the record.
-- Do not use Terminal tools as a broad command runner when a narrower MCP tool exists.
 
 ## Sound Notifier
 

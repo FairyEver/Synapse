@@ -25,7 +25,10 @@ type ProjectGroupProps = {
   onCreateSession: () => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
-  onDeleteOthers: (session: SynapseAgentSessionSummary) => void
+  onDeleteOthers: (
+    session: SynapseAgentSessionSummary,
+    groupSessions: readonly SynapseAgentSessionSummary[],
+  ) => void
   onRename: (session: SynapseAgentSessionSummary, name: string) => void | Promise<void>
 }
 
@@ -125,7 +128,7 @@ function ProjectGroup({
                 <ContextMenuItem
                   variant="destructive"
                   disabled={sessions.length <= 1}
-                  onClick={() => onDeleteOthers(session)}
+                  onClick={() => onDeleteOthers(session, sessions)}
                 >
                   删除其他
                 </ContextMenuItem>

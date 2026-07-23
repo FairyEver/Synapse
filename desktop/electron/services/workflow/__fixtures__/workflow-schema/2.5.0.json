@@ -1,0 +1,52 @@
+{
+  "meta": { "schemaVersion": "2.5.0" },
+  "id": "html-generator-workflow",
+  "name": "HTML 生成",
+  "version": "v_1720000000000_00000000_htmlgenerator",
+  "createdAt": 1720000000000,
+  "updatedAt": 1720000000000,
+  "params": [],
+  "nodes": [
+    {
+      "id": "data-source",
+      "name": "数据",
+      "type": "text",
+      "position": { "x": 0, "y": 0 },
+      "config": { "template": "{\"title\":\"Hello\"}", "variables": [] }
+    },
+    {
+      "id": "generate-html",
+      "name": "生成 HTML",
+      "type": "html_generator_ejs_generate",
+      "position": { "x": 300, "y": 0 },
+      "config": {
+        "template": "<h1><%= data.title %></h1>",
+        "variables": [{ "name": "data", "source": { "type": "node_output", "node": "data-source" } }]
+      }
+    },
+    {
+      "id": "generate-file",
+      "name": "生成 HTML 文件",
+      "type": "html_generator_ejs_file_generate",
+      "position": { "x": 600, "y": 0 },
+      "config": {
+        "template": "<h1><%= data.title %></h1>",
+        "outputPath": "/tmp/output.html",
+        "overwrite": false,
+        "variables": [{ "name": "data", "source": { "type": "node_output", "node": "data-source" } }]
+      }
+    },
+    {
+      "id": "end",
+      "name": "结束",
+      "type": "end",
+      "position": { "x": 900, "y": 0 },
+      "config": { "outputType": "text", "template": "", "variables": [] }
+    }
+  ],
+  "edges": [
+    { "id": "data-to-html", "from": "data-source", "to": "generate-html" },
+    { "id": "html-to-file", "from": "generate-html", "to": "generate-file" },
+    { "id": "file-to-end", "from": "generate-file", "to": "end" }
+  ]
+}

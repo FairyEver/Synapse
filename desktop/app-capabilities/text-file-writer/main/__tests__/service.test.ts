@@ -62,6 +62,24 @@ describe("TextFileWriterService", () => {
     expect(empty.size).toBe(0)
   })
 
+  it("writes HTML as exact UTF-8 bytes and rejects UTF-16 LE", async () => {
+    const directory = await createTempDirectory()
+    const outputPath = path.join(directory, "report.HTML")
+    const expectedPath = path.join(await realpath(directory), "report.HTML")
+    const html = "<!doctype html><meta charset=\"utf-8\"><h1>报告</h1>"
+    const { service } = createService()
+
+    await expect(service.write({ text: html, path: outputPath, encoding: "utf8" })).resolves.toMatchObject({
+      path: expectedPath,
+      format: "html",
+      encoding: "utf8",
+      size: Buffer.byteLength(html, "utf8"),
+    })
+    await expect(readFile(outputPath)).resolves.toEqual(Buffer.from(html, "utf8"))
+    await expect(service.write({ text: html, path: path.join(directory, "other.htm"), encoding: "utf16le" }))
+      .rejects.toMatchObject({ code: "INVALID_ENCODING" })
+  })
+
   it("refuses implicit overwrite and preserves the existing file mode on explicit overwrite", async () => {
     const directory = await createTempDirectory()
     const outputPath = path.join(directory, "report.txt")

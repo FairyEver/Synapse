@@ -19,11 +19,20 @@ export const TEXT_EXTRACTION_MAX_PDF_PAGES = 2_000
 // 文本提取单次 Worker 执行超时（毫秒）：从 Worker 启动后限制异常文档长期占用资源。
 export const TEXT_EXTRACTION_TIMEOUT_MS = 60_000
 
-// MCP stdio 转发普通能力的请求超时（毫秒）：避免本地服务异常时长期占用 Agent 工具调用。
-export const MCP_API_DEFAULT_TIMEOUT_MS = 10_000
+// HTML 生成 Worker 启动看门狗（毫秒）：限制模块初始化或打包路径异常长期占用渲染槽。
+export const HTML_GENERATION_WORKER_START_TIMEOUT_MS = 5_000
 
-// MCP stdio 转发文本提取能力的请求超时（毫秒）：覆盖 Worker 提取上限并预留本地传输与原子写入时间。
-export const MCP_API_TEXT_EXTRACTION_TIMEOUT_MS = TEXT_EXTRACTION_TIMEOUT_MS + 10_000
+// HTML 生成单次 EJS 编译与执行超时（毫秒）：超时后强制终止一次性 Worker。
+export const HTML_GENERATION_TIMEOUT_MS = 5_000
+
+// HTML 生成 Worker 的 V8 老生代堆上限（MiB）：限制单次模板缺陷造成的堆占用。
+export const HTML_GENERATION_WORKER_MAX_OLD_GENERATION_MB = 128
+
+// HTML 生成全局并发数：限制 App、MCP 与 Workflow 共享的运行中 EJS Worker 数量。
+export const HTML_GENERATION_MAX_CONCURRENCY = 2
+
+// HTML 生成全局等待队列上限：超过后立即返回可重试的队列已满错误。
+export const HTML_GENERATION_MAX_QUEUED = 4
 
 // 文本提取 Worker 的 V8 老生代堆上限（MiB）：隔离恶意或异常文档的内存影响。
 export const TEXT_EXTRACTION_WORKER_MAX_OLD_GENERATION_MB = 512
@@ -90,6 +99,36 @@ export const CONFIG_BACKUP_IMPORT_MAX_BYTES = 2 * 1024 * 1024
 
 // 终端会话单个 session 的输出保留上限：限制后台任务长时间输出占用内存和磁盘，超出后按最旧输出滚动清理。
 export const TERMINAL_SESSION_OUTPUT_RETENTION_BYTES = 10 * 1024 * 1024
+
+// 终端域全部会话的输出保留总上限：全局超限时优先淘汰终态会话的最早输出，最后才影响运行中会话且不会自动停止终端。
+export const TERMINAL_GLOBAL_OUTPUT_RETENTION_BYTES = 256 * 1024 * 1024
+
+// 终端渲染快照最大字节数：限制主进程向界面传递 xterm 状态的单次 IPC 负载，超限时优先裁剪最旧回滚历史。
+export const TERMINAL_RENDERER_SNAPSHOT_MAX_BYTES = 1024 * 1024
+
+// 终端域同时存活的 PTY 会话硬上限：达到后拒绝新建会话，但不会停止任何已有终端。
+export const TERMINAL_GLOBAL_RUNNING_SESSION_LIMIT = 32
+
+// 单个 Terminal MCP clientId 同时持有的写入租约上限：防止一个安装占满全部会话控制权。
+export const TERMINAL_CLIENT_LEASE_LIMIT = 8
+
+// 单个可信 controllerInstanceId 同时持有的写入租约上限：限制同一 Agent 任务的并行控制扇出。
+export const TERMINAL_CONTROLLER_LEASE_LIMIT = 4
+
+// 单会话同时挂起的 observe 上限：限制长轮询等待者数量，不限制即时读取。
+export const TERMINAL_SESSION_OBSERVE_LIMIT = 16
+
+// 单个 MCP clientId 同时挂起的 Terminal observe 上限：防止一个调用方耗尽全部等待槽位。
+export const TERMINAL_CLIENT_OBSERVE_LIMIT = 64
+
+// Terminal 域全部调用方同时挂起的 observe 上限：超限直接拒绝，不创建隐藏等待队列。
+export const TERMINAL_GLOBAL_OBSERVE_LIMIT = 256
+
+// 单个 Terminal MCP clientId 每分钟低风险读取请求上限：超限直接拒绝并返回可重新决策时间，不排队执行。
+export const TERMINAL_MCP_READ_RATE_LIMIT_PER_MINUTE = 600
+
+// 单个 Terminal MCP clientId 每分钟写入或管理请求上限：限制自动化突发副作用，不影响已接受操作和既有终端。
+export const TERMINAL_MCP_WRITE_RATE_LIMIT_PER_MINUTE = 120
 
 // Data Store 单表导出最大行数：限制表级导出一次可处理的记录数量，避免主进程长时间构造超大 SQL。
 export const DATA_STORE_TABLE_EXPORT_MAX_ROWS = 10_000

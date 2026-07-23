@@ -30,4 +30,9 @@ describe("nodeTypes", () => {
   it("registers the default-app open-file node type", () => {
     expect(nodeTypes.file_opener_file_open).toBeTypeOf("function")
   })
+
+  it("registers both HTML Generator node cards", () => {
+    expect(nodeTypes.html_generator_ejs_generate).toBeTypeOf("function")
+    expect(nodeTypes.html_generator_ejs_file_generate).toBeTypeOf("function")
+  })
 })

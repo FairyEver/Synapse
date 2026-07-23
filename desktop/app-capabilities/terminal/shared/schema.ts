@@ -1,6 +1,7 @@
 import { z } from "zod"
+import { terminalLaunchFactsSchema } from "./contract-schema"
 
-export const terminalSessionStatusSchema = z.enum(["running", "exited", "killed", "failed", "lost"])
+export const terminalSessionStatusSchema = z.enum(["running", "stopping", "ended", "failed", "lost"])
 
 export const terminalGroupCommandSchema = z.object({
   id: z.string().min(1),
@@ -8,10 +9,13 @@ export const terminalGroupCommandSchema = z.object({
   command: z.string().min(1).max(64 * 1024),
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
+  commandRevision: z.number().int().positive().default(1),
 }).strict()
 
 export const terminalGroupSettingsSchema = z.object({
   defaultCwd: z.string().min(1).optional(),
+  shell: z.string().min(1).optional(),
+  environment: z.record(z.string().min(1), z.string()).optional(),
   commands: z.array(terminalGroupCommandSchema).optional(),
   startupCommand: z.string().min(1).max(64 * 1024).optional(),
 }).strict()
@@ -23,6 +27,10 @@ export const terminalGroupSchema = z.object({
   updatedAt: z.string().min(1),
   sortOrder: z.number().int(),
   settings: terminalGroupSettingsSchema.optional(),
+  groupRevision: z.number().int().positive().default(1),
+  launchRevision: z.number().int().positive().default(1),
+  membershipRevision: z.number().int().positive().default(1),
+  commandCollectionRevision: z.number().int().positive().default(1),
 })
 
 export const terminalSessionSchema = z.object({
@@ -41,6 +49,48 @@ export const terminalSessionSchema = z.object({
   cols: z.number().int().positive(),
   rows: z.number().int().positive(),
   lastOutputSeq: z.number().int().nonnegative(),
+  metadataRevision: z.number().int().positive().default(1),
+  stateRevision: z.number().int().positive().default(1),
+  inputRevision: z.number().int().nonnegative().default(0),
+  sizeRevision: z.number().int().positive().default(1),
+  attention: z.object({
+    state: z.enum(["waiting", "not_waiting", "unknown"]),
+    kind: z.enum(["shell_ready", "agent_question", "approval", "password", "other_interaction", "unknown"]),
+    reason: z.string().min(1),
+    confidence: z.number().min(0).max(1),
+    detectedAt: z.string().min(1),
+    throughOutputSeq: z.number().int().nonnegative(),
+    sizeRevision: z.number().int().positive(),
+    detectorId: z.string().min(1),
+    detectorVersion: z.string().min(1),
+  }).default({
+    state: "unknown",
+    kind: "unknown",
+    reason: "insufficient_evidence",
+    confidence: 0,
+    detectedAt: new Date(0).toISOString(),
+    throughOutputSeq: 0,
+    sizeRevision: 1,
+    detectorId: "passive-terminal-v1",
+    detectorVersion: "1.0.0",
+  }),
+  creationSource: z.enum(["ui", "mcp", "legacy_unknown"]).default("legacy_unknown"),
+  createdByClientId: z.string().min(1).optional(),
+  endCause: z.string().min(1).optional(),
+  stopOperationId: z.string().min(1).optional(),
+  stopRequestedBy: z.string().min(1).optional(),
+  stopRequestedAt: z.string().min(1).optional(),
+  endTimeUnknown: z.boolean().default(false),
+  inputHistoryBeforeBaselineUnknown: z.boolean().default(false),
+  launchRevisionApplied: z.number().int().positive().nullable().default(null),
+  commandId: z.string().min(1).optional(),
+  commandRevisionApplied: z.number().int().positive().optional(),
+  commandDeliveryOperationId: z.string().min(1).optional(),
+  discardedOutputBytes: z.number().int().nonnegative().default(0),
+  discardedOutputChunks: z.number().int().nonnegative().default(0),
+  lastEvictedAt: z.string().min(1).optional(),
+  launchEnvironment: z.record(z.string().min(1), z.string()).optional(),
+  launchFacts: terminalLaunchFactsSchema.optional(),
 })
 
 export const terminalOutputChunkSchema = z.object({
@@ -111,6 +161,8 @@ export const terminalSessionIdInputSchema = z.object({
   sessionId: z.string().min(1),
 }).strict()
 
+export const terminalAttachSessionInputSchema = terminalSessionIdInputSchema
+
 export const terminalRenameSessionInputSchema = z.object({
   sessionId: z.string().min(1),
   title: z.string().min(1).max(120),
@@ -150,7 +202,44 @@ export const terminalReadSessionResultSchema = z.object({
   nextSeq: z.number().int().nonnegative(),
   truncated: z.boolean(),
   firstSeq: z.number().int().nonnegative(),
+  gap: z.boolean().default(false),
+  hasMore: z.boolean().default(false),
+  discardedBytes: z.number().int().nonnegative().default(0),
+  discardedChunks: z.number().int().nonnegative().default(0),
 })
+
+const terminalRendererSnapshotBaseSchema = z.object({
+  session: terminalSessionSchema,
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive(),
+  throughOutputSeq: z.number().int().nonnegative(),
+  sizeRevision: z.number().int().positive(),
+  emulatorId: z.literal("xterm-headless"),
+  emulatorVersion: z.literal("6.0.0"),
+})
+
+export const terminalAttachSessionResultSchema = z.discriminatedUnion("degraded", [
+  terminalRendererSnapshotBaseSchema.extend({
+    degraded: z.literal(false),
+    serialized: z.string(),
+    scrollbackTruncated: z.boolean(),
+    reasons: z.array(z.string()).length(0),
+  }).strict(),
+  terminalRendererSnapshotBaseSchema.extend({
+    degraded: z.literal(true),
+    serialized: z.null(),
+    scrollbackTruncated: z.boolean(),
+    reasons: z.array(z.string().min(1)).min(1),
+  }).strict(),
+])
+
+export const terminalResizedEventSchema = z.object({
+  sessionId: z.string().min(1),
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive(),
+  sizeRevision: z.number().int().positive(),
+  throughOutputSeq: z.number().int().nonnegative(),
+}).strict()
 
 export type TerminalGroup = z.infer<typeof terminalGroupSchema>
 export type TerminalGroupSettings = z.infer<typeof terminalGroupSettingsSchema>
@@ -175,3 +264,6 @@ export type TerminalResizeSessionInput = z.infer<typeof terminalResizeSessionInp
 export type TerminalStopSessionInput = z.infer<typeof terminalStopSessionInputSchema>
 export type TerminalRunStartupCommandInput = z.infer<typeof terminalRunStartupCommandInputSchema>
 export type TerminalReadSessionResult = z.infer<typeof terminalReadSessionResultSchema>
+export type TerminalAttachSessionInput = z.infer<typeof terminalAttachSessionInputSchema>
+export type TerminalAttachSessionResult = z.infer<typeof terminalAttachSessionResultSchema>
+export type TerminalResizedEvent = z.infer<typeof terminalResizedEventSchema>

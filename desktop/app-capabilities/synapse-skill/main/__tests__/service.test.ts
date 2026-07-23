@@ -248,6 +248,9 @@ describe("SynapseSkillService", () => {
       "secrets/index.md",
       "skill-repository/api-reference.md",
       "skill-repository/index.md",
+      "terminal/api-reference.md",
+      "terminal/examples.md",
+      "terminal/index.md",
       "workflow/api-reference.md",
       "workflow/index.md",
     ])
@@ -327,22 +330,62 @@ describe("SynapseSkillService", () => {
   })
 
   it("routes current domains through installed Synapse Skill paths", async () => {
-    const [skillRoot, automationIndex, contentIndex, databaseIndex, workflowIndex] = await Promise.all([
+    const [
+      skillRoot,
+      automationIndex,
+      contentIndex,
+      databaseIndex,
+      terminalIndex,
+      terminalExamples,
+      workflowIndex,
+    ] = await Promise.all([
       readFile(path.join(systemPackageRoot, "SKILL.md"), "utf8"),
       readFile(path.join(systemPackageRoot, "automation/index.md"), "utf8"),
       readFile(path.join(systemPackageRoot, "content/index.md"), "utf8"),
       readFile(path.join(systemPackageRoot, "database/index.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "terminal/index.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "terminal/examples.md"), "utf8"),
       readFile(path.join(systemPackageRoot, "workflow/index.md"), "utf8"),
     ])
-    const domainGuides = [automationIndex, contentIndex, databaseIndex, workflowIndex].join("\n")
+    const domainGuides = [automationIndex, contentIndex, databaseIndex, terminalIndex, workflowIndex].join("\n")
 
     expect(skillRoot).toContain("Terminal")
     expect(skillRoot).toContain("Sound Notifier")
+    expect(skillRoot).toContain("Terminal sessions")
     expect(domainGuides).not.toContain("synapse-skill/content.md")
     expect(domainGuides).not.toContain("files/<domain>/index.md")
     expect(domainGuides).toContain("`SKILL.md`")
     expect(domainGuides).toContain("`<domain>/index.md`")
     expect(databaseIndex).toContain("retired `database_*` names are not compatibility aliases")
+    expect(terminalIndex).toContain("On `permission_denied`")
+    expect(terminalIndex).toContain("development server or other long-running process")
+    expect(terminalIndex).toContain("Use the fewest calls that provide new evidence")
+    expect(terminalIndex).toContain("do not immediately read its state or screen")
+    expect(terminalIndex).toContain("make at most two consecutive observe calls")
+    expect(terminalIndex).toContain("Do not add ceremonial final reads")
+    expect(terminalIndex).toContain("For Claude Code, use Escape at most once")
+    expect(terminalIndex).toContain("Do not summarize away repeated control actions")
+    expect(terminalIndex).toContain("Do not run helper code, invoke another tool")
+    expect(terminalIndex).toContain("Build the final action sequence from the completed tool trace")
+    expect(terminalIndex).toContain("Do not send `pwd`, `echo`, `printf`, or another probe command")
+    expect(terminalIndex).toContain("there is no per-client running-session cap")
+    expect(terminalIndex).toContain("Treat lease freshness as unknown after an observe-and-reasoning boundary")
+    expect(terminalIndex).toContain("keep a lease-critical chain inside that call")
+    expect(terminalIndex).toContain("make at most one bounded read-only recovery probe")
+    expect(terminalIndex).toContain("prompt cleared")
+    expect(terminalIndex).toContain("send exactly one Enter key")
+    expect(terminalIndex).toContain("Do not resend the instruction text")
+    expect(terminalExamples).toContain("app_terminal_session_input_command")
+    expect(terminalExamples).toContain("do not replay the instruction")
+    expect(terminalExamples).toContain("prompt has cleared")
+    expect(terminalExamples).toContain("send exactly one Enter key")
+    expect(terminalExamples).toContain("do not resend the instruction text")
+    expect(terminalExamples).toContain("Exit an interactive program but keep the terminal")
+    expect(terminalExamples).toContain("normal exit from its input prompt uses `/exit`")
+    expect(terminalExamples).toContain("Do not send additional Ctrl+D at the shell prompt")
+    expect(terminalExamples).toContain("Do not send any input after a failed acquire or renew")
+    expect(terminalExamples).toContain("do not run helper code merely to generate the key")
+    expect(terminalExamples).toContain("Running sessions have no per-client count cap")
   })
 
   it("documents every canonical MCP tool in the installed package", async () => {

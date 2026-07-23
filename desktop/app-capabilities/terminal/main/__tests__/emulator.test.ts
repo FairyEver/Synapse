@@ -1,0 +1,76 @@
+import { Buffer } from "node:buffer"
+import { describe, expect, it } from "vitest"
+
+import { createTerminalCoreEmulator } from "../emulator"
+
+describe("TerminalCoreEmulator renderer snapshots", () => {
+  it("orders resize behind prior output and restores the serialized state", async () => {
+    const emulator = createTerminalCoreEmulator({
+      cols: 80,
+      rows: 24,
+      sizeRevision: 1,
+    })
+    const restored = createTerminalCoreEmulator({
+      cols: 100,
+      rows: 30,
+      sizeRevision: 2,
+    })
+    try {
+      await emulator.accept("\u001b[2J\u001b[Hbefore\u001b[?2004h", 1)
+      const resize = emulator.resize(100, 30, 2)
+      const laterOutput = emulator.accept("\u001b[30;1Hafter", 2)
+
+      await expect(resize).resolves.toEqual({
+        throughOutputSeq: 1,
+        sizeRevision: 2,
+      })
+      await laterOutput
+
+      const snapshot = await emulator.captureSnapshot(1024 * 1024)
+      expect(snapshot).toMatchObject({
+        throughOutputSeq: 2,
+        sizeRevision: 2,
+        scrollbackTruncated: false,
+      })
+      expect(snapshot.serialized).not.toBeNull()
+
+      await restored.accept(snapshot.serialized!, snapshot.throughOutputSeq)
+      expect(restored.getView({ kind: "screen", maxBytes: 64 * 1024 }))
+        .toMatchObject({
+          lines: emulator.getView({ kind: "screen", maxBytes: 64 * 1024 }).lines,
+          cursor: emulator.getView({ kind: "screen", maxBytes: 64 * 1024 }).cursor,
+          cols: 100,
+          rows: 30,
+          throughOutputSeq: 2,
+          sizeRevision: 2,
+        })
+      expect(restored.bracketedPasteEvidence().enabled).toBe(true)
+    } finally {
+      emulator.dispose()
+      restored.dispose()
+    }
+  })
+
+  it("trims the oldest scrollback to keep renderer snapshots bounded", async () => {
+    const emulator = createTerminalCoreEmulator({
+      cols: 80,
+      rows: 24,
+      scrollback: 2_000,
+      sizeRevision: 1,
+    })
+    try {
+      const output = Array.from({ length: 1_000 }, (_, index) =>
+        `${String(index).padStart(4, "0")} ${"终端历史".repeat(20)}\r\n`).join("")
+      await emulator.accept(output, 1)
+
+      const snapshot = await emulator.captureSnapshot(64 * 1024)
+
+      expect(snapshot.serialized).not.toBeNull()
+      expect(snapshot.scrollbackTruncated).toBe(true)
+      expect(Buffer.byteLength(snapshot.serialized!, "utf8")).toBeLessThanOrEqual(64 * 1024)
+      expect(snapshot.serialized).toContain("0999")
+    } finally {
+      emulator.dispose()
+    }
+  })
+})

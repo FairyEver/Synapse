@@ -23,7 +23,7 @@ export default defineConfig({
       "tests/perf/**/*.{test,spec}.ts",
       "tests/fuzz/**/*.{test,spec}.ts",
     ],
-    exclude: ["node_modules", "dist", "dist-electron", "dist-database"],
+    exclude: ["node_modules", "dist", "dist-electron"],
     reporters: process.env.CI ? ["default"] : ["default"],
     coverage: {
       provider: "v8",

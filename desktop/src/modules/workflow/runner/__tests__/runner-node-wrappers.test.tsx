@@ -87,6 +87,11 @@ describe("runnerNodeTypes", () => {
     expect(runnerNodeTypes.file_opener_file_open).toBeTypeOf("function")
   })
 
+  it("registers both HTML Generator runner cards", () => {
+    expect(runnerNodeTypes.html_generator_ejs_generate).toBeTypeOf("function")
+    expect(runnerNodeTypes.html_generator_ejs_file_generate).toBeTypeOf("function")
+  })
+
   it("opens the agent conversation directly from a DAG node card", async () => {
     const target: SynapseAgentConversationReference = {
       projectId: "project-1",

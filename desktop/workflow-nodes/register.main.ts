@@ -14,6 +14,12 @@ import { documentTemplateNodeExecutor } from "../app-capabilities/document-templ
 import { textExtractNodeManifest } from "../app-capabilities/text-extractor/workflow-node/manifest"
 import { textExtractNodeExecutor } from "../app-capabilities/text-extractor/workflow-node/executor.main"
 import { textFileWriterNodeManifest, textFileWriterNodeExecutor } from "../app-capabilities/text-file-writer/workflow-node"
+import {
+  htmlGeneratorEjsFileNodeExecutor,
+  htmlGeneratorEjsFileNodeManifest,
+  htmlGeneratorEjsNodeExecutor,
+  htmlGeneratorEjsNodeManifest,
+} from "../app-capabilities/html-generator/workflow-node"
 
 nodeTypeRegistry.register(textNodeManifest, textNodeExecutor)
 nodeTypeRegistry.register(promptNodeManifest, promptNodeExecutor)
@@ -28,3 +34,5 @@ nodeTypeRegistry.register(fileOpenerNodeManifest, fileOpenerNodeExecutor)
 nodeTypeRegistry.register(documentTemplateNodeManifest, documentTemplateNodeExecutor)
 nodeTypeRegistry.register(textExtractNodeManifest, textExtractNodeExecutor)
 nodeTypeRegistry.register(textFileWriterNodeManifest, textFileWriterNodeExecutor)
+nodeTypeRegistry.register(htmlGeneratorEjsNodeManifest, htmlGeneratorEjsNodeExecutor)
+nodeTypeRegistry.register(htmlGeneratorEjsFileNodeManifest, htmlGeneratorEjsFileNodeExecutor)

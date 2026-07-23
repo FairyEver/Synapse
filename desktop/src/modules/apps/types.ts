@@ -13,6 +13,7 @@ export const SYSTEM_APP_IDS = [
   "text-extractor",
   "file-opener",
   "text-file-writer",
+  "html-generator",
   "skill-installer",
   "skill-uninstaller",
   "synapse-skill",
@@ -43,6 +44,7 @@ export type SynapseSystemAppNamespace =
   | "text_extractor"
   | "file_opener"
   | "text_file_writer"
+  | "html_generator"
   | "skill_installer"
   | "skill_uninstaller"
   | "synapse_skill"

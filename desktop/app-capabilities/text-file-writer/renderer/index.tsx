@@ -16,6 +16,7 @@ import {
   DEFAULT_TEXT_FILE_ENCODING,
   DEFAULT_TEXT_FILE_OVERWRITE,
   TEXT_FILE_ENCODINGS,
+  isHtmlPath,
   type TextFileEncoding,
   type TextFileWriteResult,
 } from "../shared/schema"
@@ -33,7 +34,8 @@ export function TextFileWriterModule() {
   const [overwrite, setOverwrite] = useState<boolean>(DEFAULT_TEXT_FILE_OVERWRITE)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<WriteStatus | null>(null)
-  const canWrite = path.length > 0 && !busy
+  const invalidHtmlEncoding = isHtmlPath(path) && encoding === "utf16le"
+  const canWrite = path.length > 0 && !busy && !invalidHtmlEncoding
 
   const clearStatus = () => setStatus(null)
 
@@ -169,7 +171,7 @@ export function TextFileWriterModule() {
               </div>
             </CardContent>
             <CardFooter className="flex-col items-stretch justify-between gap-2 sm:flex-row sm:items-center">
-              <WriteSummary busy={busy} path={path} status={status} onReveal={revealResult} />
+              <WriteSummary busy={busy} path={path} status={status} invalidHtmlEncoding={invalidHtmlEncoding} onReveal={revealResult} />
               <Button type="submit" className="w-full sm:w-28" disabled={!canWrite}>
                 {busy ? <Spinner data-icon="inline-start" /> : null}
                 {busy ? "写入中" : "写入文件"}
@@ -182,12 +184,16 @@ export function TextFileWriterModule() {
   )
 }
 
-function WriteSummary({ busy, path, status, onReveal }: {
+function WriteSummary({ busy, path, status, invalidHtmlEncoding, onReveal }: {
   readonly busy: boolean
   readonly path: string
   readonly status: WriteStatus | null
+  readonly invalidHtmlEncoding: boolean
   readonly onReveal: () => Promise<void>
 }) {
+  if (invalidHtmlEncoding) {
+    return <p className="flex min-h-8 items-center text-sm text-destructive" role="alert">HTML 文件仅支持 UTF-8 编码。</p>
+  }
   if (status?.kind === "error") {
     return <p className="flex min-h-8 items-center text-sm text-destructive" role="alert">{status.message}</p>
   }

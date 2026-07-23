@@ -35,6 +35,8 @@ import type { SynapseKnowledgeBaseStorageMigrationProgress } from "../src/types/
 import type { SynapseGitUserFacingFailure } from "../src/types/git"
 import type {
   SynapseTerminalDataEvent,
+  SynapseTerminalDomainChangedEvent,
+  SynapseTerminalResizedEvent,
   SynapseTerminalSession,
   SynapseTerminalSessionDeletedEvent,
 } from "../src/types/terminal"
@@ -429,6 +431,17 @@ const synapseBridge: SynapseBridge = {
       write: (input) => invoke(IPC_CHANNELS.textFileWriter.writeFile)(input),
     },
   },
+  htmlGenerator: {
+    output: {
+      choose: (input) => invoke(IPC_CHANNELS.htmlGenerator.chooseOutput)(input),
+    },
+    ejs: {
+      generate: (input) => invoke(IPC_CHANNELS.htmlGenerator.generateHtml)(input),
+    },
+    ejsFile: {
+      generate: (input) => invoke(IPC_CHANNELS.htmlGenerator.generateFile)(input),
+    },
+  },
   skillUninstaller: {
     scan: invoke(IPC_CHANNELS["skill-uninstaller"].scan),
     scanNames: invoke(IPC_CHANNELS["skill-uninstaller"].scanNames),
@@ -522,6 +535,7 @@ const synapseBridge: SynapseBridge = {
       list: () => invoke(IPC_CHANNELS.terminal.listSessions)(),
       create: (input) => invoke(IPC_CHANNELS.terminal.createSession)(input),
       get: (input) => invoke(IPC_CHANNELS.terminal.getSession)(input),
+      attach: (input) => invoke(IPC_CHANNELS.terminal.attachSession)(input),
       read: (input) => invoke(IPC_CHANNELS.terminal.readSession)(input),
       rename: (input) => invoke(IPC_CHANNELS.terminal.renameSession)(input),
       write: (input) => invoke(IPC_CHANNELS.terminal.writeSession)(input),
@@ -534,6 +548,8 @@ const synapseBridge: SynapseBridge = {
       onData: createRawPayloadSubscription<SynapseTerminalDataEvent>(subscribe, IPC_CHANNELS.terminal.data),
       onSessionChanged: createRawPayloadSubscription<SynapseTerminalSession>(subscribe, IPC_CHANNELS.terminal.sessionChanged),
       onSessionDeleted: createRawPayloadSubscription<SynapseTerminalSessionDeletedEvent>(subscribe, IPC_CHANNELS.terminal.sessionDeleted),
+      onResized: createRawPayloadSubscription<SynapseTerminalResizedEvent>(subscribe, IPC_CHANNELS.terminal.resized),
+      onDomainChanged: createRawPayloadSubscription<SynapseTerminalDomainChangedEvent>(subscribe, IPC_CHANNELS.terminal.domainChanged),
     },
   },
   git: {

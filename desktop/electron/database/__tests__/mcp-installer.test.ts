@@ -340,6 +340,31 @@ describe("mcp-installer", () => {
     })
   })
 
+  it("migrates legacy stdio registration to token-free HTTP MCP", async () => {
+    const { autoRegisterMcp } = await import("../mcp-installer")
+    const settingsPath = path.join(state.home, ".cursor", "mcp.json")
+    writeFileSync(settingsPath, JSON.stringify({
+      mcpServers: {
+        "synapse-mcp": {
+          command: "node",
+          args: ["/Applications/Synapse.app/Contents/Resources/database/mcp/index.js"],
+          env: { SYNAPSE_TOKEN: "stale-token" },
+        },
+      },
+    }), "utf8")
+
+    await autoRegisterMcp(51234)
+
+    expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({
+      mcpServers: {
+        "synapse-mcp": {
+          type: "http",
+          url: "http://127.0.0.1:51234/mcp",
+        },
+      },
+    })
+  })
+
   it("detects Claude Code registration from ~/.claude.json", async () => {
     mkdirSync(state.home, { recursive: true })
     writeFileSync(path.join(state.home, ".claude.json"), JSON.stringify({

@@ -21,13 +21,19 @@ import {
   APP_MCP_TOOL_ACTIONS,
   buildAppTools,
 } from "../../synapse-capabilities/shared/app-domain"
-import { TERMINAL_MCP_TOOL_NAMES } from "../../app-capabilities/terminal/shared/capability"
+import { TERMINAL_CAPABILITY_CATALOG } from "../../app-capabilities/terminal/shared/capability"
 import {
   SECRETS_CAPABILITY_IDS,
   SECRETS_MCP_TOOL_NAMES,
 } from "../../app-capabilities/secrets/shared/capability"
 import { SECRET_NAME_REGEX } from "../../app-capabilities/secrets/shared/schema"
 import { SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME } from "../../app-capabilities/sound-notifier/shared/capability"
+import {
+  HTML_GENERATOR_EJS_CAPABILITY_ID,
+  HTML_GENERATOR_EJS_FILE_CAPABILITY_ID,
+  HTML_GENERATOR_EJS_FILE_MCP_TOOL_NAME,
+  HTML_GENERATOR_EJS_MCP_TOOL_NAME,
+} from "../../app-capabilities/html-generator/shared/capability"
 import {
   TEXT_EXTRACTOR_CAPABILITY_ID,
   TEXT_EXTRACTOR_MCP_TOOL_NAME,
@@ -60,6 +66,8 @@ describe("Synapse capability domains", () => {
 describe("App capability naming", () => {
   it("accepts generate as a canonical app capability action", () => {
     expect(isCanonicalCapabilityId("app.document_template.docx.generate")).toBe(true)
+    expect(isCanonicalCapabilityId(HTML_GENERATOR_EJS_CAPABILITY_ID)).toBe(true)
+    expect(isCanonicalCapabilityId(HTML_GENERATOR_EJS_FILE_CAPABILITY_ID)).toBe(true)
   })
 
   it("accepts extract as a canonical app capability action", () => {
@@ -85,13 +93,15 @@ describe("App capability domain", () => {
       "app_document_template_docx_generate",
       "app_file_opener_file_open",
       "app_text_file_writer_file_write",
-      ...Object.values(TERMINAL_MCP_TOOL_NAMES),
+      HTML_GENERATOR_EJS_MCP_TOOL_NAME,
+      HTML_GENERATOR_EJS_FILE_MCP_TOOL_NAME,
+      ...TERMINAL_CAPABILITY_CATALOG.map((capability) => capability.toolName),
       SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
       ...Object.values(SECRETS_MCP_TOOL_NAMES),
     ])
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_session_resize).toBe("app.terminal.session.resize")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_rename).toBe("app.terminal.group.rename")
-    expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_update_settings).toBe("app.terminal.group.update_settings")
+    expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_launch_update).toBe("app.terminal.group_launch.update")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_delete).toBe("app.terminal.group.delete")
     expect(APP_MCP_TOOL_ACTIONS.app_secrets_item_list).toBe("app.secrets.item.list")
     expect(APP_MCP_TOOL_ACTIONS.app_secrets_item_upsert).toBe("app.secrets.item.upsert")

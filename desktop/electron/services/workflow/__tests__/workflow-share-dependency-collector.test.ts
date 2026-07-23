@@ -311,7 +311,7 @@ describe("collectWorkflowShareDependencies", () => {
 
     expect(result.requiredCapabilities).toContainEqual({
       id: "app.text_file_writer.file.write",
-      minVersion: "1.0.0",
+      minVersion: "1.1.0",
       installSourceId: "synapse.builtin",
     })
     expect(result.references.resources).toEqual([
@@ -349,6 +349,77 @@ describe("collectWorkflowShareDependencies", () => {
     })
 
     expect(result.references.resources).toEqual([])
+  })
+
+  it("declares HTML Generator executable templates and only the file node write resource", () => {
+    const definition = workflow()
+    definition.params = []
+    definition.defaultProviderId = undefined
+    definition.defaultProjectId = undefined
+    definition.nodes = [
+      {
+        id: "data",
+        name: "Data",
+        type: "text",
+        position: { x: 0, y: 0 },
+        config: { template: "{}", variables: [] },
+      },
+      {
+        id: "render",
+        name: "生成 HTML",
+        type: "html_generator_ejs_generate",
+        position: { x: 100, y: 0 },
+        config: {
+          template: "<h1><%= data.title %></h1>",
+          variables: [{ name: "data", source: { type: "node_output", node: "data" } }],
+        },
+      },
+      {
+        id: "render-file",
+        name: "生成 HTML 文件",
+        type: "html_generator_ejs_file_generate",
+        position: { x: 200, y: 0 },
+        config: {
+          template: "<h1><%= data.title %></h1>",
+          outputPath: "/tmp/report.html",
+          overwrite: false,
+          variables: [{ name: "data", source: { type: "node_output", node: "data" } }],
+        },
+      },
+    ]
+    const workflowRef = stableWorkflowReference(definition.id)
+    const result = collectWorkflowShareDependencies({
+      workflows: [definition],
+      workflowRefs: new Map([[definition.id, workflowRef]]),
+      providers: [],
+    })
+
+    expect(result.requiredCapabilities).toEqual(expect.arrayContaining([
+      {
+        id: "app.html_generator.ejs.generate",
+        minVersion: "1.0.0",
+        installSourceId: "synapse.builtin",
+      },
+      {
+        id: "app.html_generator.ejs_file.generate",
+        minVersion: "1.0.0",
+        installSourceId: "synapse.builtin",
+      },
+    ]))
+    expect(result.references.resources).toEqual([
+      expect.objectContaining({
+        kind: "local_path",
+        entryType: "file",
+        cardinality: "one",
+        access: "write",
+        displayName: "report.html",
+      }),
+    ])
+    expect(result.risks.highRiskLocations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ nodeId: "render", fieldPath: ["template"], code: "shell.execute" }),
+      expect.objectContaining({ nodeId: "render-file", fieldPath: ["template"], code: "shell.execute" }),
+    ]))
+    expect(result.references.runtimes).toEqual([])
   })
 
   it("matches equivalent Git remotes without exposing credentials or URLs", () => {

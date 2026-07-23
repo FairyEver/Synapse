@@ -287,7 +287,7 @@ export function createNodeRuntimeShimScript(input: {
   return `#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexec "${input.runtimePath}" "$@"\n`
 }
 
-function findEnvEntry(
+export function findEnvEntry(
   env: Record<string, string | undefined> | undefined,
   key: string,
   platform: NodeJS.Platform | string = process.platform,

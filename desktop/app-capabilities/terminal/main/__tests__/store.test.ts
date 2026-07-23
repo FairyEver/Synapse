@@ -67,9 +67,9 @@ describe("terminal store", () => {
       output: [output],
     })
 
-    await expect(createTerminalStore({ baseDir: tempDir }).loadState()).resolves.toEqual({
-      groups: [group],
-      sessions: [session],
+    await expect(createTerminalStore({ baseDir: tempDir }).loadState()).resolves.toMatchObject({
+      groups: [expect.objectContaining(group)],
+      sessions: [expect.objectContaining(session)],
       output: [output],
     })
   })
@@ -79,6 +79,10 @@ describe("terminal store", () => {
       groups: [],
       sessions: [],
       output: [],
+      terminalDomainRevision: 0,
+      operations: [],
+      idempotency: [],
+      checkpoints: [],
     })
   })
 
@@ -91,9 +95,9 @@ describe("terminal store", () => {
       output: [],
     }))
 
-    await expect(createTerminalStore({ baseDir: tempDir }).loadState()).resolves.toEqual({
-      groups: [group],
-      sessions: [session],
+    await expect(createTerminalStore({ baseDir: tempDir }).loadState()).resolves.toMatchObject({
+      groups: [expect.objectContaining(group)],
+      sessions: [expect.objectContaining(session)],
       output: [],
     })
   })
@@ -109,12 +113,20 @@ describe("terminal store", () => {
       }],
       sessions: [],
       output: [],
+      terminalDomainRevision: 0,
+      operations: [],
+      idempotency: [],
+      checkpoints: [],
     }))
 
     await expect(createTerminalStore({ baseDir: tempDir }).loadState()).resolves.toEqual({
       groups: [expect.objectContaining({ id: "g1", name: "Legacy" })],
       sessions: [],
       output: [],
+      terminalDomainRevision: 0,
+      operations: [],
+      idempotency: [],
+      checkpoints: [],
     })
   })
 

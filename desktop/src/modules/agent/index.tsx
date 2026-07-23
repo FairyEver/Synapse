@@ -274,14 +274,10 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       onSourceFilterChange={setSourceFilter}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}
-      onDeleteOthers={async (keep) => {
-        const inArchived = chat.archivedSessions.some(
-          (session) => session.projectId === keep.projectId && session.id === keep.id,
+      onDeleteOthers={async (keep, groupSessions) => {
+        const others = groupSessions.filter(
+          (session) => !(session.projectId === keep.projectId && session.id === keep.id),
         )
-        const source = inArchived ? chat.archivedSessions : chat.sessions
-        const others = inArchived
-          ? source.filter((session) => !(session.projectId === keep.projectId && session.id === keep.id))
-          : source.filter((session) => session.projectId === keep.projectId && session.id !== keep.id)
         for (const session of others) {
           await chat.deleteSession(session)
         }

@@ -12,7 +12,7 @@ Workflow definition responses include `meta.schemaVersion` (SemVer). Preserve it
 
 ### app_workflow_node_type_list
 
-List available node types with summaries. Current built-in node types include `text`, `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `text_extract`, `file_opener_file_open`, `text_file_writer_file_write`, `codex`, `claude_code`, and `end`.
+List available node types with summaries. Current built-in node types include `text`, `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `text_extract`, `file_opener_file_open`, `text_file_writer_file_write`, `html_generator_ejs_generate`, `html_generator_ejs_file_generate`, `codex`, `claude_code`, and `end`.
 
 **Params:** none
 **Returns:** `[{ type, title, subtitle, color }]`
@@ -131,13 +131,33 @@ The node rejects relative paths, URLs including `file://`, directories, symbolic
 
 Writes one complete text value to a local text file. No provider or project needed. Config fields:
 
-- `path` (string) — current-OS absolute `.txt`, `.md`, or `.csv` target path; supports `{{variable}}` interpolation
+- `path` (string) — current-OS absolute `.txt`, `.md`, `.csv`, `.html`, or `.htm` target path; supports `{{variable}}` interpolation
 - `text` (string) — complete text, including an empty string; supports `{{variable}}` interpolation
 - `encoding` (enum: `utf8`/`utf16le`) — output encoding
 - `overwrite` (boolean) — explicit replacement permission; `false` rejects an existing target
 - `variables` (array) — explicit bindings available to `path` and `text`
 
-There is no separate `format` field and no text `maxLength`. The extension is matched case-insensitively and returned as lower-case `format`. The node preserves the text exactly apart from encoding, creates missing parent directories, and returns the canonical actual path as primary output plus `{ path, fileName, format, encoding, size, overwritten }` in `outputs`. It requires `fs.write.outside-userdata`. Stable failure outputs contain `code`, `message`, and `retryable`; only `TARGET_CHANGED` is retryable.
+There is no separate `format` field and no text `maxLength`. The extension is matched case-insensitively and returned as lower-case `format`. HTML targets accept only `utf8`; txt/md/csv continue to accept `utf8` or `utf16le`. The node preserves the text exactly apart from encoding, creates missing parent directories, and returns the canonical actual path as primary output plus `{ path, fileName, format, encoding, size, overwritten }` in `outputs`. It requires `fs.write.outside-userdata`. Stable failure outputs contain `code`, `message`, and `retryable`; only `TARGET_CHANGED` is retryable.
+
+### html_generator_ejs_generate
+
+Executes a trusted EJS template with one upstream pure-JSON object and returns the complete rendered string. No provider or project needed. Config fields:
+
+- `template` (string) — non-empty EJS source stored as executable node configuration; never processed by Workflow `{{variable}}` interpolation
+- `variables` (array) — exactly one binding named `data`, whose source is a non-empty upstream `node_output`
+
+The upstream primary output must be pure JSON text with a top-level object. Templates access it through the explicit `data` root. EJS include and template file loading are disabled. The node's primary output is the complete HTML string and structured outputs contain only `{ size }`, where size is UTF-8 bytes.
+
+### html_generator_ejs_file_generate
+
+Executes the same trusted EJS template and writes its result through the shared Text File Writer. No provider or project needed. Config fields:
+
+- `template` (string) — same EJS contract as the string node
+- `outputPath` (string) — absolute `.html` or `.htm` path after optional Workflow interpolation
+- `overwrite` (boolean) — explicit replacement permission; defaults to `false`
+- `variables` (array) — exactly one reserved upstream `data` binding plus optional ordinary bindings used only by `outputPath`
+
+`data` is parsed only for EJS and cannot be referenced as `{{data}}` in `outputPath`. The node always writes UTF-8. Its primary output is the canonical actual path and structured outputs are `{ path, fileName, format, encoding, size, overwritten }`. Render errors use the HTML Generator protocol; file errors preserve Text File Writer codes.
 
 ### codex
 
@@ -306,11 +326,11 @@ Replace a full workflow definition. Validates before saving.
 
 ### app_workflow_definition_delete
 
-Delete a current workflow definition. Cancels active runs and removes snapshots. The delete is rejected while another saved `workflow_call` still references the target.
+Delete a workflow definition, including a protected future-schema or migration-failed document. Cancels active runs and removes snapshots. The delete is rejected while another saved `workflow_call` still references the target.
 
 **Params:** `workflowId` (string, required)
 **Returns:** `{ ok: true }`
-**Notes:** Workflows reported by `app_workflow_definition_list` with `loadError` are protected and cannot be deleted. A future-schema document with `rawExportAvailable` must be preserved through the Synapse UI's raw export path; migration-failed source and diagnostics remain stored for later recovery.
+**Notes:** Workflows reported by `app_workflow_definition_list` with `loadError` cannot be fetched, edited, inspected as current, or run, but can be deleted after explicit user intent. If a future-schema document reports `rawExportAvailable`, offer the Synapse UI's raw export path before deletion when preservation is wanted.
 
 ---
 

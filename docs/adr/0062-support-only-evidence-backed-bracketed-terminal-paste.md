@@ -1,0 +1,9 @@
+# Support only evidence-backed bracketed Terminal paste
+
+`app.terminal.session_input.paste` requires `session.control` and the authenticated controller's current lease, but not raw-input permission. A request carries `expectedInputRevision`, a caller-scoped idempotency key, `expectedThroughOutputSeq`, and bounded UTF-8 text. Text may contain LF and an explicit character whitelist, but rejects CR, ESC, NUL, and every other unapproved control character. Paste never implies Enter.
+
+The service accepts paste only when its terminal-emulation state confirms bracketed-paste mode is enabled and the evidence is fresh and covers `expectedThroughOutputSeq`. Unknown, disabled, stale, or insufficient evidence returns `paste_mode_unavailable` before writing. The server generates the opening and closing control frames; callers cannot supply either frame.
+
+Before delivery, the service constructs and validates the complete framed payload against a hard size limit. It then submits the frame and body continuously using the fewest write units supported by the PTY backend. If an unconfirmable failure occurs after either bracketed-paste frame begins delivery, the result is not treated as an ordinary safely understood partial success. It returns `delivery_uncertain`, the known failed offset, necessary revision changes, and an operation identity. Callers must not automatically retry because that could duplicate text or leave the foreground program in an unclosed paste mode.
+
+Single-line ordinary text uses the semantic `text` action; explicit line submission uses ordered `text` plus Enter; every other paste behavior requires high-risk raw input. There is no literal fallback. Audit records only paste action type, character and byte counts, mode-evidence watermark, result, and `operationId`, never the body.

@@ -39,6 +39,13 @@ import type {
   TextFileWriteResponse,
 } from "../../app-capabilities/text-file-writer/shared/schema"
 import type {
+  HtmlGenerationFileInput,
+  HtmlGenerationFileResponse,
+  HtmlGenerationInput,
+  HtmlGenerationResponse,
+  HtmlGeneratorOutputChooseRequest,
+} from "../../app-capabilities/html-generator/shared/schema"
+import type {
   SkillUninstallBatchResult,
   SkillUninstallCancelRequest,
   SkillUninstallExecutionCancelRequest,
@@ -88,10 +95,13 @@ import type {
   SynapseSoundNotifierSettingsPatch,
 } from "./sound-notifier"
 import type {
+  SynapseTerminalAttachSessionInput,
+  SynapseTerminalAttachSessionResult,
   SynapseTerminalCreateGroupCommandInput,
   SynapseTerminalCreateGroupInput,
   SynapseTerminalCreateSessionInput,
   SynapseTerminalDataEvent,
+  SynapseTerminalDomainChangedEvent,
   SynapseTerminalDeleteGroupCommandInput,
   SynapseTerminalDeleteGroupInput,
   SynapseTerminalDeleteSessionInput,
@@ -103,6 +113,7 @@ import type {
   SynapseTerminalRenameGroupInput,
   SynapseTerminalRenameSessionInput,
   SynapseTerminalResizeSessionInput,
+  SynapseTerminalResizedEvent,
   SynapseTerminalRunStartupCommandInput,
   SynapseTerminalSession,
   SynapseTerminalSessionDeletedEvent,
@@ -996,6 +1007,17 @@ export type SynapseBridge = {
       write: (input: TextFileWriteInput) => Promise<TextFileWriteResponse>
     }
   }
+  htmlGenerator: {
+    output: {
+      choose: (input?: HtmlGeneratorOutputChooseRequest) => Promise<string | null>
+    }
+    ejs: {
+      generate: (input: HtmlGenerationInput) => Promise<HtmlGenerationResponse>
+    }
+    ejsFile: {
+      generate: (input: HtmlGenerationFileInput) => Promise<HtmlGenerationFileResponse>
+    }
+  }
   skillUninstaller: {
     scan: (request: SkillUninstallScanRequest) => Promise<SkillUninstallScanResult>
     scanNames: (request: SkillUninstallNameScanRequest) => Promise<SkillUninstallNameScanResult>
@@ -1093,6 +1115,7 @@ export type SynapseBridge = {
       list: () => Promise<SynapseTerminalSession[]>
       create: (input: SynapseTerminalCreateSessionInput) => Promise<SynapseTerminalSession>
       get: (input: { sessionId: string }) => Promise<SynapseTerminalSession>
+      attach: (input: SynapseTerminalAttachSessionInput) => Promise<SynapseTerminalAttachSessionResult>
       read: (input: SynapseTerminalReadSessionInput) => Promise<SynapseTerminalReadSessionResult>
       rename: (input: SynapseTerminalRenameSessionInput) => Promise<SynapseTerminalSession>
       write: (input: SynapseTerminalWriteSessionInput) => Promise<void>
@@ -1105,6 +1128,8 @@ export type SynapseBridge = {
       onData: (listener: (event: SynapseTerminalDataEvent) => void) => () => void
       onSessionChanged: (listener: (session: SynapseTerminalSession) => void) => () => void
       onSessionDeleted: (listener: (event: SynapseTerminalSessionDeletedEvent) => void) => () => void
+      onResized: (listener: (event: SynapseTerminalResizedEvent) => void) => () => void
+      onDomainChanged: (listener: (event: SynapseTerminalDomainChangedEvent) => void) => () => void
     }
   }
   git: {

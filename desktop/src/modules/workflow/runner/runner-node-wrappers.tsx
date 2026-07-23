@@ -21,6 +21,7 @@ import { FileOpenerNodeCard } from "../../../../app-capabilities/file-opener/wor
 import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-template/workflow-node/card"
 import { TextExtractNodeCard } from "../../../../app-capabilities/text-extractor/workflow-node/card"
 import { TextFileWriterNodeCard } from "../../../../app-capabilities/text-file-writer/workflow-node/card"
+import { HtmlGeneratorEjsFileNodeCard, HtmlGeneratorEjsNodeCard } from "../../../../app-capabilities/html-generator/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { TextNodeConfig } from "../../../../workflow-nodes/text/schema"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
@@ -35,6 +36,7 @@ import type { FileOpenerNodeConfig } from "../../../../app-capabilities/file-ope
 import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/document-template/workflow-node/schema"
 import type { TextExtractNodeConfig } from "../../../../app-capabilities/text-extractor/workflow-node/schema"
 import type { TextFileWriterNodeConfig } from "../../../../app-capabilities/text-file-writer/workflow-node/schema"
+import type { HtmlGeneratorEjsFileNodeConfig, HtmlGeneratorEjsNodeConfig } from "../../../../app-capabilities/html-generator/workflow-node/schema"
 import type { NodeRunResult } from "@/types/workflow"
 import type { SynapseAgentConversationReference } from "@/types/agent-navigation"
 import { agentConversationTargetFromOutputs } from "@/lib/agent-conversation-target"
@@ -345,6 +347,42 @@ function RunnerTextFileWriterNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
+function RunnerHtmlGeneratorEjsNodeWrapper({ id, data, selected }: NodeProps) {
+  const result = useContext(RunnerNodeResultsContext)[id]
+  return (
+    <div className="relative">
+      <Handle type="target" position={Position.Left} />
+      <HtmlGeneratorEjsNodeCard
+        config={data as HtmlGeneratorEjsNodeConfig}
+        name={(data as { name?: string }).name}
+        selected={selected}
+        status={result?.status}
+        progressLabel={result?.progressLabel}
+        startedAt={result?.startedAt}
+      />
+      <Handle type="source" position={Position.Right} />
+    </div>
+  )
+}
+
+function RunnerHtmlGeneratorEjsFileNodeWrapper({ id, data, selected }: NodeProps) {
+  const result = useContext(RunnerNodeResultsContext)[id]
+  return (
+    <div className="relative">
+      <Handle type="target" position={Position.Left} />
+      <HtmlGeneratorEjsFileNodeCard
+        config={data as HtmlGeneratorEjsFileNodeConfig}
+        name={(data as { name?: string }).name}
+        selected={selected}
+        status={result?.status}
+        progressLabel={result?.progressLabel}
+        startedAt={result?.startedAt}
+      />
+      <Handle type="source" position={Position.Right} />
+    </div>
+  )
+}
+
 export const runnerNodeTypes = {
   text: RunnerTextNodeWrapper,
   prompt: RunnerPromptNodeWrapper,
@@ -359,4 +397,6 @@ export const runnerNodeTypes = {
   text_extract: RunnerTextExtractNodeWrapper,
   file_opener_file_open: RunnerFileOpenerNodeWrapper,
   text_file_writer_file_write: RunnerTextFileWriterNodeWrapper,
+  html_generator_ejs_generate: RunnerHtmlGeneratorEjsNodeWrapper,
+  html_generator_ejs_file_generate: RunnerHtmlGeneratorEjsFileNodeWrapper,
 }

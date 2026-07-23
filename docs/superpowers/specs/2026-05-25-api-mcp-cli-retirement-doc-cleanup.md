@@ -5,7 +5,7 @@
 Synapse is retiring its own `synapse` CLI as a capability entrypoint. The supported capability surfaces are now:
 
 - MCP tools for external agents and automation.
-- Local HTTP `/api` actions as an internal transport for the stdio MCP bridge.
+- Authenticated local HTTP `/api` actions for internal callers.
 
 The capability registry remains the source of truth for capability IDs, MCP tool names, HTTP actions, and service methods.
 

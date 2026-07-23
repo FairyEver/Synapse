@@ -44,7 +44,7 @@ pnpm desktop:release:mac                               # 递增版本号、提�
 `push` 到 `main` 后，`.github/workflows/release.yml` 会自动：
 
 1. 装依赖（`pnpm install --frozen-lockfile`，需要根目录 `pnpm-lock.yaml` 已提交）。
-2. 依次执行 `pnpm --filter @synapse/desktop run build:renderer`、`pnpm --filter @synapse/desktop run build:electron`、`pnpm --filter @synapse/desktop run build:database`。
+2. 依次执行 `pnpm --filter @synapse/desktop run build:renderer`、`pnpm --filter @synapse/desktop run build:electron`。
 3. 执行 `pnpm --filter @synapse/desktop run package:mac` / `pnpm --filter @synapse/desktop run package:win`，并在对应 runner 上验证 `synapse` 协议注册、冷启动和热启动；smoke 必须从现有结构化 renderer 日志确认请求已被消费并导航到“关于 Synapse”，不能只检查进程存活。
 4. 把 `desktop/release/` 下的产物整理为腾讯云 CDN 发布目录：安装包和 blockmap 归档到 `https://desktop.release.synapse.d2.pub/v<version>/`，`latest.yml` / `latest-windows.yml` / `latest-mac.yml` 上传到 CDN 根目录供应用内更新检查。
 5. 刷新并验证 CDN，并静态确认 Release body 只包含 `https://synapse.d2.pub/desktop/update` 这个稳定 HTTPS 更新入口；该 workflow 不探测尚未部署的生产页面。生产页面的公网可用性由服务端部署完成后的 `deploy.sh` 门禁验收，首次上线必须先通过该验收，再在 `FairyEver/SynapseAppRelease` 发布客户端。

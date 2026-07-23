@@ -11,6 +11,8 @@ import {
   textFileWriteResultSchema,
 } from "../../text-file-writer/shared/schema"
 
+export const TEXT_EXTRACTION_OUTPUT_FORMATS = ["txt", "md", "csv"] as const
+
 export const textExtractionInputSchema = z.object({
   filePath: z.string().min(1).refine(path.isAbsolute, "必须使用绝对路径"),
 }).strict()
@@ -58,7 +60,10 @@ export const textExtractionResponseSchema = z.discriminatedUnion("ok", [
 ])
 
 export const textExtractionToFileInputSchema = textExtractionInputSchema.extend({
-  outputPath: z.string().min(1).refine(path.isAbsolute, "必须使用绝对路径"),
+  outputPath: z.string()
+    .min(1)
+    .refine(path.isAbsolute, "必须使用绝对路径")
+    .refine(isTextExtractionOutputPath, "输出文件必须是 .txt、.md 或 .csv"),
   encoding: textFileEncodingSchema.optional().default(DEFAULT_TEXT_FILE_ENCODING),
   overwrite: z.boolean().optional().default(DEFAULT_TEXT_FILE_OVERWRITE),
 }).strict()
@@ -137,3 +142,7 @@ export type TextOutputChooseRequest = z.infer<typeof textOutputChooseRequestSche
 export type TextSaveInput = z.infer<typeof textSaveInputSchema>
 export type TextSaveResult = z.infer<typeof textSaveResultSchema>
 export type TextSaveResponse = z.infer<typeof textSaveResponseSchema>
+
+function isTextExtractionOutputPath(value: string): boolean {
+  return TEXT_EXTRACTION_OUTPUT_FORMATS.includes(path.extname(value).slice(1).toLowerCase() as never)
+}

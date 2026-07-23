@@ -210,7 +210,7 @@ describe("WorkflowCard", () => {
     expect(onOpenActiveRun).toHaveBeenCalledWith("active-run")
   })
 
-  it("marks malformed workflows and disables unsafe actions", async () => {
+  it("marks malformed workflows, disables unsafe actions, and allows deletion", async () => {
     const onRun = vi.fn()
     const onExport = vi.fn()
     const onDelete = vi.fn()
@@ -227,16 +227,16 @@ describe("WorkflowCard", () => {
     const deleteButton = container.querySelector<HTMLButtonElement>('[aria-label="删除工作流"]')
     expect(runButton?.disabled).toBe(true)
     expect(exportButton?.disabled).toBe(true)
-    expect(deleteButton?.disabled).toBe(true)
+    expect(deleteButton?.disabled).toBe(false)
 
     await act(async () => {
       deleteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, altKey: true }))
     })
 
-    expect(onDelete).not.toHaveBeenCalled()
+    expect(onDelete).toHaveBeenCalledWith(true)
   })
 
-  it("allows raw export but not execution for future-schema workflows", async () => {
+  it("allows raw export and deletion but not execution for future-schema workflows", async () => {
     const onRun = vi.fn()
     const onExport = vi.fn()
     const container = await renderWorkflowCard({
@@ -254,7 +254,7 @@ describe("WorkflowCard", () => {
     const deleteButton = container.querySelector<HTMLButtonElement>('[aria-label="删除工作流"]')
     expect(runButton?.disabled).toBe(true)
     expect(exportButton?.disabled).toBe(false)
-    expect(deleteButton?.disabled).toBe(true)
+    expect(deleteButton?.disabled).toBe(false)
 
     await act(async () => {
       exportButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
@@ -262,6 +262,25 @@ describe("WorkflowCard", () => {
 
     expect(onExport).toHaveBeenCalledOnce()
     expect(onRun).not.toHaveBeenCalled()
+  })
+
+  it("offers raw export before deleting an abnormal workflow", async () => {
+    const onExport = vi.fn()
+    const container = await renderWorkflowCard({
+      meta: {
+        ...workflowMeta,
+        loadError: "工作流由更高版本创建",
+        rawExportAvailable: true,
+      },
+      onExport,
+    })
+
+    await openDeleteDialog(container)
+
+    expect(document.body.textContent).toContain("数据异常，删除后无法恢复")
+    expect(document.body.textContent).toContain("你可以先导出原文备份")
+    await act(async () => findButtonByText("导出原文")?.click())
+    expect(onExport).toHaveBeenCalledOnce()
   })
 })
 

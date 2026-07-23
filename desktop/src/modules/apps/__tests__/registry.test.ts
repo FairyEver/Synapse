@@ -27,6 +27,7 @@ describe("system app registry", () => {
       "text-extractor",
       "file-opener",
       "text-file-writer",
+      "html-generator",
       "skill-installer",
       "skill-uninstaller",
       "synapse-skill",
@@ -73,6 +74,21 @@ describe("system app registry", () => {
       dock: { pinnedByDefault: false, order: 241 },
       capabilities: { primaryMcpPrefix: "app_text_file_writer" },
     })
+    const htmlGenerator = getSystemAppManifest("html-generator")!
+    expect(htmlGenerator).toMatchObject({
+      id: "html-generator",
+      namespace: "html_generator",
+      name: "HTML 生成器",
+      windowTitle: "HTML 生成器",
+      dock: { pinnedByDefault: false, order: 243 },
+      window: { openable: true },
+      capabilities: { primaryMcpPrefix: "app_html_generator" },
+      removable: false,
+      renameable: false,
+      iconEditable: false,
+    })
+    expect(htmlGenerator.icon).not.toBe(getSystemAppManifest("text-file-writer")!.icon)
+    expect(htmlGenerator.icon).not.toBe(getSystemAppManifest("document-template")!.icon)
     expect(getSystemAppManifest("agent-personas")).toMatchObject({
       id: "agent-personas",
       namespace: "agent_personas",

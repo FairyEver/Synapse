@@ -15,6 +15,7 @@ import { FileOpenerNodePanel } from "../app-capabilities/file-opener/workflow-no
 import { DocumentTemplateNodePanel } from "../app-capabilities/document-template/workflow-node/panel"
 import { TextExtractNodePanel } from "../app-capabilities/text-extractor/workflow-node/panel"
 import { TextFileWriterNodePanel } from "../app-capabilities/text-file-writer/workflow-node/panel"
+import { HtmlGeneratorNodePanel } from "../app-capabilities/html-generator/workflow-node/panel"
 
 export interface NodePanelProps {
   config: Record<string, unknown>
@@ -49,6 +50,8 @@ const panelRegistry = new Map<string, PanelComponent>([
   ["document_template_docx_generate", DocumentTemplateNodePanel as unknown as PanelComponent],
   ["text_extract", TextExtractNodePanel as unknown as PanelComponent],
   ["text_file_writer_file_write", TextFileWriterNodePanel as unknown as PanelComponent],
+  ["html_generator_ejs_generate", HtmlGeneratorNodePanel as unknown as PanelComponent],
+  ["html_generator_ejs_file_generate", HtmlGeneratorNodePanel as unknown as PanelComponent],
 ])
 
 export function getPanel(type: string): PanelComponent | undefined {

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { z } from "zod"
+import { terminalOperationSchema } from "../shared/contract-schema"
 import {
   terminalGroupSchema,
   terminalOutputChunkSchema,
@@ -15,6 +16,25 @@ export const terminalStoreStateSchema = z.object({
   groups: z.array(terminalGroupSchema),
   sessions: z.array(terminalSessionSchema),
   output: z.array(terminalOutputChunkSchema),
+  terminalDomainRevision: z.number().int().nonnegative().default(0),
+  operations: z.array(terminalOperationSchema).default([]),
+  idempotency: z.array(z.object({
+    scope: z.string().min(1),
+    clientId: z.string().min(1),
+    capability: z.string().min(1),
+    idempotencyKey: z.string().min(1),
+    digest: z.string().regex(/^[a-f0-9]{64}$/),
+    expiresAtMs: z.number().int().positive(),
+    result: z.unknown(),
+  }).strict()).default([]),
+  checkpoints: z.array(z.object({
+    sessionId: z.string().min(1),
+    throughOutputSeq: z.number().int().nonnegative(),
+    sizeRevision: z.number().int().positive(),
+    emulatorId: z.literal("xterm-headless"),
+    emulatorVersion: z.literal("6.0.0"),
+    serialized: z.string(),
+  }).strict()).default([]),
 })
 
 export type TerminalStoreState = z.infer<typeof terminalStoreStateSchema>
@@ -25,7 +45,12 @@ export type TerminalStore = {
     groups: TerminalGroup[]
     sessions: TerminalSession[]
     output: TerminalOutputChunk[]
+    terminalDomainRevision?: number
+    operations?: TerminalStoreState["operations"]
+    idempotency?: TerminalStoreState["idempotency"]
+    checkpoints?: TerminalStoreState["checkpoints"]
   }): Promise<void>
+  readonly persistenceProtection?: "available" | "unavailable" | "degraded"
 }
 
 export function createTerminalStore(options: { baseDir: string }): TerminalStore {
@@ -38,7 +63,7 @@ export function createTerminalStore(options: { baseDir: string }): TerminalStore
         return parseTerminalStoreState(JSON.parse(raw))
       } catch (error) {
         if (isNodeError(error) && error.code === "ENOENT") {
-          return { groups: [], sessions: [], output: [] }
+          return { groups: [], sessions: [], output: [], terminalDomainRevision: 0, operations: [], idempotency: [], checkpoints: [] }
         }
         throw error
       }

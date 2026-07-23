@@ -304,6 +304,11 @@ export const IPC_CHANNELS = {
     "chooseOutput": "synapse:app:text_file_writer:output:choose",
     "writeFile": "synapse:app:text_file_writer:file:write",
   },
+  "htmlGenerator": {
+    "chooseOutput": "synapse:app:html_generator:output:choose",
+    "generateHtml": "synapse:app:html_generator:ejs:generate",
+    "generateFile": "synapse:app:html_generator:ejs_file:generate",
+  },
   "fileOpener": {
     "openFile": "synapse:app:file_opener:file:open",
   },
@@ -370,6 +375,7 @@ export const IPC_CHANNELS = {
     "listSessions": "synapse:app:terminal:session:list",
     "createSession": "synapse:app:terminal:session:create",
     "getSession": "synapse:app:terminal:session:get",
+    "attachSession": "synapse:app:terminal:session:attach",
     "readSession": "synapse:app:terminal:session:read",
     "renameSession": "synapse:app:terminal:session:rename",
     "writeSession": "synapse:app:terminal:session:write",
@@ -380,6 +386,8 @@ export const IPC_CHANNELS = {
     "data": "synapse:app:terminal:operation:data",
     "sessionChanged": "synapse:app:terminal:operation:session_changed",
     "sessionDeleted": "synapse:app:terminal:operation:session_deleted",
+    "resized": "synapse:app:terminal:operation:resized",
+    "domainChanged": "synapse:app:terminal:operation:domain_changed",
   },
   "git": {
     "checkEnvironment": "synapse:app:git:environment:check",

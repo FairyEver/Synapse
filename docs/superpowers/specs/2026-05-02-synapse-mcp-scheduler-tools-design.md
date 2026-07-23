@@ -1,6 +1,6 @@
 # Synapse MCP Scheduler Tools Design
 
-> Superseded note: Synapse-owned CLI capability entrypoints were retired after this document was written. Current capability access is MCP for external agents and local HTTP `/api` only as internal transport for the stdio MCP bridge.
+> Superseded note: Synapse-owned CLI and stdio MCP capability entrypoints were retired after this document was written. Current external capability access uses loopback HTTP MCP; local HTTP `/api` remains an authenticated internal API.
 
 ## Context
 

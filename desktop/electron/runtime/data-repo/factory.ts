@@ -93,6 +93,22 @@ export function createFileBackedDataRepository(
 
 export function sqliteIndexesFor(namespace: string): readonly string[] {
   switch (namespace) {
+    case "app.terminal.groups":
+      return ["json_extract(value, '$.createdAt'), id", "json_extract(value, '$.name'), id"]
+    case "app.terminal.commands":
+      return ["json_extract(value, '$.groupId'), json_extract(value, '$.createdAt'), id"]
+    case "app.terminal.sessions":
+      return [
+        "json_extract(value, '$.createdAt'), id",
+        "json_extract(value, '$.groupId'), json_extract(value, '$.createdAt'), id",
+        "json_extract(value, '$.lifecycle'), json_extract(value, '$.createdAt'), id",
+      ]
+    case "app.terminal.operations":
+      return ["json_extract(value, '$.resourceId'), json_extract(value, '$.createdAt'), id"]
+    case "app.terminal.idempotency":
+      return ["json_extract(value, '$.clientId'), json_extract(value, '$.expiresAt'), id"]
+    case "app.terminal.blocks":
+      return ["json_extract(value, '$.sessionId'), json_extract(value, '$.firstOutputSeq'), id"]
     case "conversations":
       return [
         "json_extract(value, '$.projectId')",

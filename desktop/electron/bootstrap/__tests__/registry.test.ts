@@ -86,6 +86,8 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.diagnostics",
         "core.text-extractor",
         "core.text-file-writer",
+        "core.html-generator",
+        "core.html-generator-file",
         "core.drive-sync",
         "core.event-bus",
         "core.execution-isolation",
@@ -152,7 +154,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.agent-personas",
     ])
     expect(byId.get("core.network-registry")?.dependsOn).toEqual([])
-    expect(byId.get("core.terminal")?.dependsOn).toEqual([])
+    expect(byId.get("core.terminal")?.dependsOn).toEqual(["core.data-repository"])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
     expect(byId.get("core.sound-notifier")?.dependsOn).toEqual(["core.data-repository", "core.window-manager"])
     expect(byId.get("core.text-extractor")?.dependsOn).toEqual([
@@ -162,6 +164,14 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.text-file-writer")?.dependsOn).toEqual([
       "core.permission-guard",
       "core.audit-sink",
+    ])
+    expect(byId.get("core.html-generator")?.dependsOn).toEqual([
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+    expect(byId.get("core.html-generator-file")?.dependsOn).toEqual([
+      "core.html-generator",
+      "core.text-file-writer",
     ])
     expect(byId.get("core.synapse-skill")?.dependsOn).toEqual([])
     expect(byId.get("core.drive-sync")?.dependsOn).toEqual([
@@ -271,6 +281,8 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.text-extractor",
       "core.file-opener",
       "core.text-file-writer",
+      "core.html-generator",
+      "core.html-generator-file",
       "provider",
     ])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([
@@ -313,6 +325,9 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.automation")).toBeLessThan(idx("core.database"))
     expect(idx("core.text-extractor")).toBeLessThan(idx("core.database"))
     expect(idx("core.text-file-writer")).toBeLessThan(idx("core.database"))
+    expect(idx("core.html-generator")).toBeLessThan(idx("core.html-generator-file"))
+    expect(idx("core.text-file-writer")).toBeLessThan(idx("core.html-generator-file"))
+    expect(idx("core.html-generator-file")).toBeLessThan(idx("core.database"))
     expect(idx("core.config")).toBeLessThan(idx("core.diagnostics"))
     expect(idx("core.config")).toBeLessThan(idx("repo.watch"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.project-containers"))

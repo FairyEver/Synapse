@@ -15,7 +15,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { cn } from "@/lib/utils"
 import { NODE_STATUS_LABEL, NODE_STATUS_VARIANT } from "../lib/status-display"
 import { resolveBranchLabel } from "../lib/branch-label"
-import { sanitizeWorkflowResultText, sanitizeWorkflowResultValue } from "./result-sanitize"
+import { sanitizeWorkflowPrimaryOutput, sanitizeWorkflowResultText, sanitizeWorkflowResultValue } from "./result-sanitize"
 
 const logger = createRendererLogger("workflow.runner")
 type ContentRenderMode = "markdown" | "plain"
@@ -62,7 +62,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
   const displayPrompt = result.input.prompt ? sanitizeWorkflowResultText(result.input.prompt) : undefined
   const displayOutput = binaryResponseSummary
     ? sanitizeWorkflowResultText(binaryResponseSummary)
-    : result.output != null ? sanitizeWorkflowResultText(result.output) : undefined
+    : result.output != null ? sanitizeWorkflowPrimaryOutput(result.output, result.outputs) : undefined
   const displayError = result.error ? sanitizeWorkflowResultText(result.error) : undefined
   const displayStructuredOutputs = structuredOutputs
     ? sanitizeWorkflowResultValue(structuredOutputs) as Record<string, unknown>

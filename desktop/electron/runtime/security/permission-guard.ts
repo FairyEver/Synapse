@@ -32,6 +32,24 @@ export type PermissionAction =
   | "workflow.mutate"
   | "content.read"
   | "content.mutate"
+  | "terminal.discover"
+  | "terminal.state.read"
+  | "terminal.metadata.read"
+  | "terminal.output.read"
+  | "terminal.command.read"
+  | "terminal.command.launch"
+  | "terminal.session.create"
+  | "terminal.session.override.create"
+  | "terminal.session.control"
+  | "terminal.session.rawInput"
+  | "terminal.session.resize"
+  | "terminal.session.stop"
+  | "terminal.session.forceStop"
+  | "terminal.metadata.manage"
+  | "terminal.group.manage"
+  | "terminal.command.manage"
+  | "terminal.session.delete"
+  | "terminal.group.delete"
 
 export type ActorIdentity =
   | { kind: "user"; id?: string; display?: string }
@@ -61,16 +79,21 @@ export type PermissionResult =
 export interface PermissionGuard {
   registerPolicy(policy: PermissionPolicy): () => void
   check(request: PermissionRequest): Promise<PermissionResult>
+  onRevoked?(listener: (event: { readonly actorId?: string; readonly resource?: string }) => void): () => void
 }
 
 export class PermissionGuardImpl implements PermissionGuard {
   private readonly policies: PermissionPolicy[] = []
+  private readonly revocationListeners = new Set<(event: { readonly actorId?: string; readonly resource?: string }) => void>()
 
   registerPolicy(policy: PermissionPolicy): () => void {
     this.policies.push(policy)
     return () => {
       const idx = this.policies.findIndex((p) => p.id === policy.id)
-      if (idx >= 0) this.policies.splice(idx, 1)
+      if (idx >= 0) {
+        this.policies.splice(idx, 1)
+        this.notifyRevocation({})
+      }
     }
   }
 
@@ -98,6 +121,15 @@ export class PermissionGuardImpl implements PermissionGuard {
     // No policy decided → default-allow user, default-deny others.
     if (request.actor.kind === "user") return { allowed: true }
     return { allowed: false, reason: "no policy allowed this action and actor is not user" }
+  }
+
+  onRevoked(listener: (event: { readonly actorId?: string; readonly resource?: string }) => void): () => void {
+    this.revocationListeners.add(listener)
+    return () => this.revocationListeners.delete(listener)
+  }
+
+  notifyRevocation(event: { readonly actorId?: string; readonly resource?: string }): void {
+    for (const listener of this.revocationListeners) listener(event)
   }
 }
 

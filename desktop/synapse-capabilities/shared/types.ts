@@ -12,6 +12,10 @@ export type DispatchActorIdentity =
 export type DispatchContext = {
   readonly source?: SynapseActionSource
   readonly actor?: DispatchActorIdentity
+  /** Stable local installation/caller identity supplied by the transport. */
+  readonly clientId?: string
+  /** Trusted per-Agent-task controller identity supplied by the transport, never a tool argument. */
+  readonly controllerInstanceId?: string
 }
 
 export function mcpClientActorForSource(source: Extract<SynapseActionSource, "mcp-http" | "mcp-stdio">): DispatchActorIdentity {

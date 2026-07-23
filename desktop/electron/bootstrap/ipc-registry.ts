@@ -37,6 +37,7 @@ import { documentTemplateIpcModule } from "../../app-capabilities/document-templ
 import { textExtractorIpcModule } from "../../app-capabilities/text-extractor/main/ipc"
 import { fileOpenerIpcModule } from "../../app-capabilities/file-opener/main/ipc"
 import { textFileWriterIpcModule } from "../../app-capabilities/text-file-writer/main/ipc"
+import { htmlGeneratorIpcModule } from "../../app-capabilities/html-generator/main/ipc"
 import { terminalIpcModule } from "../../app-capabilities/terminal/main/ipc"
 import { quickInputIpcModule } from "../../app-capabilities/quick-input/main/ipc"
 import { agentPersonasIpcModule } from "../../app-capabilities/agent-personas/main/ipc"
@@ -83,6 +84,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(textExtractorIpcModule, ctx)
   registry.register(fileOpenerIpcModule, ctx)
   registry.register(textFileWriterIpcModule, ctx)
+  registry.register(htmlGeneratorIpcModule, ctx)
   registry.register(terminalIpcModule, ctx)
   registry.register(quickInputIpcModule, ctx)
   registry.register(secretsIpcModule, ctx)
@@ -128,6 +130,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   textExtractorIpcModule,
   fileOpenerIpcModule,
   textFileWriterIpcModule,
+  htmlGeneratorIpcModule,
   terminalIpcModule,
   quickInputIpcModule,
   secretsIpcModule,

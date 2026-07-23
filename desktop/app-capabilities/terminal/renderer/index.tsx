@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react"
-import { CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Settings, Terminal as TerminalIcon, Trash2 } from "lucide-react"
+import { CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
@@ -62,6 +62,7 @@ import type {
   SynapseTerminalGroupCommand,
   SynapseTerminalCreateSessionInput,
   SynapseTerminalOutputChunk,
+  SynapseTerminalResizedEvent,
   SynapseTerminalSession,
 } from "../../../src/types/terminal"
 import { encodeTerminalCommandInput } from "../shared/terminal-input"
@@ -75,7 +76,6 @@ import {
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
-const TERMINAL_READ_PAGE_BYTES = 1024 * 1024
 const TERMINAL_WRITE_CHUNK_SIZE = 60 * 1024
 
 const logger = createRendererLogger("terminal.app")
@@ -91,6 +91,7 @@ export function TerminalModule() {
   const [renameTitle, setRenameTitle] = useState("")
   const [renameSaving, setRenameSaving] = useState(false)
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
+  const [stoppingSessionId, setStoppingSessionId] = useState<string | null>(null)
   const [groupDialogMode, setGroupDialogMode] = useState<"create" | "rename" | null>(null)
   const [groupRenameTarget, setGroupRenameTarget] = useState<SynapseTerminalGroup | null>(null)
   const [groupName, setGroupName] = useState("")
@@ -114,7 +115,8 @@ export function TerminalModule() {
   const [openGroupIds, setOpenGroupIds] = useState<Record<string, boolean>>({})
   const terminalContainerRef = useRef<HTMLDivElement | null>(null)
   const xtermRef = useRef<Terminal | null>(null)
-  const terminalGeometrySyncRef = useRef<(() => void) | null>(null)
+  const terminalGeometrySyncRef = useRef<((refreshRenderer?: boolean) => void) | null>(null)
+  const deletedSessionIdsRef = useRef(new Set<string>())
 
   const activeSession = useMemo(() => {
     if (!activeSessionId) return sessions[0] ?? null
@@ -122,8 +124,8 @@ export function TerminalModule() {
   }, [activeSessionId, sessions])
   const terminalSessionId = activeSession?.id ?? null
   const terminalSessionStatus = activeSession?.status ?? null
-  const terminalSessionCols = activeSession?.cols ?? DEFAULT_COLS
-  const terminalSessionRows = activeSession?.rows ?? DEFAULT_ROWS
+  const activeSessionRef = useRef(activeSession)
+  activeSessionRef.current = activeSession
 
   const sessionGroups = useMemo(() => groupSessions(groups, sessions), [groups, sessions])
   const commandManagerCommands = commandManagerTarget?.settings?.commands ?? []
@@ -278,6 +280,18 @@ export function TerminalModule() {
     }
   }, [terminalBridge])
 
+  const stopSession = useCallback(async (target: SynapseTerminalSession) => {
+    setStoppingSessionId(target.id)
+    try {
+      await terminalBridge.session.stop({ sessionId: target.id, force: target.status === "stopping" })
+    } catch (error) {
+      logger.error("Failed to stop terminal session.", error)
+      toast.error("停止终端失败")
+    } finally {
+      setStoppingSessionId((current) => current === target.id ? null : current)
+    }
+  }, [terminalBridge])
+
   const deleteGroup = useCallback(async (target = deleteGroupTarget) => {
     if (!target) return
     const groupId = target.id
@@ -304,6 +318,12 @@ export function TerminalModule() {
       setDeleteGroupSaving(false)
     }
   }, [deleteGroupTarget, sessions, terminalBridge])
+
+  const deleteGroupMembers = deleteGroupTarget
+    ? sessions.filter((session) => session.groupId === deleteGroupTarget.id)
+    : []
+  const deleteGroupHasActiveSessions = deleteGroupMembers.some((session) =>
+    session.status === "running" || session.status === "stopping")
 
   const startDeleteGroup = useCallback((group: SynapseTerminalGroup, event: MouseEvent<HTMLElement>) => {
     if (shouldBypassDeleteConfirm(event)) {
@@ -347,6 +367,8 @@ export function TerminalModule() {
         name,
         settings: {
           ...(defaultCwd ? { defaultCwd } : {}),
+          ...(groupSettingsTarget.settings?.shell ? { shell: groupSettingsTarget.settings.shell } : {}),
+          ...(groupSettingsTarget.settings?.environment ? { environment: groupSettingsTarget.settings.environment } : {}),
           ...(groupSettingsTarget.settings?.commands?.length ? { commands: groupSettingsTarget.settings.commands } : {}),
         },
       })
@@ -530,7 +552,7 @@ export function TerminalModule() {
     if (action.kind === "xterm-local") {
       if (action.operation === "clear") {
         xtermRef.current?.clear()
-        terminalGeometrySyncRef.current?.()
+        terminalGeometrySyncRef.current?.(true)
       }
       return
     }
@@ -552,16 +574,29 @@ export function TerminalModule() {
 
   useEffect(() => {
     const container = terminalContainerRef.current
-    if (!container || !terminalSessionId || !terminalSessionStatus) return undefined
+    const initialSession = activeSessionRef.current
+    if (!container || !terminalSessionId || !initialSession) return undefined
 
     setTerminalReadError(null)
     let disposed = false
     let lastSeq = 0
-    let lastResize = { cols: terminalSessionCols, rows: terminalSessionRows }
-    const xterm = new Terminal(createTerminalRenderingOptions({
-      container,
-      disableStdin: terminalSessionStatus !== "running",
-    }))
+    let attached = false
+    let projectionAvailable = false
+    let geometrySyncReady = false
+    let appliedSizeRevision = initialSession.sizeRevision
+    let announcedSizeRevision = initialSession.sizeRevision
+    let drainInFlight = false
+    let requestedResize = { cols: initialSession.cols, rows: initialSession.rows }
+    const pendingChunks: SynapseTerminalOutputChunk[] = []
+    const resizeBarriers = new Map<number, SynapseTerminalResizedEvent>()
+    const xterm = new Terminal({
+      ...createTerminalRenderingOptions({
+        container,
+        disableStdin: initialSession.status !== "running",
+      }),
+      cols: initialSession.cols,
+      rows: initialSession.rows,
+    })
     xtermRef.current = xterm
     const fitAddon = new FitAddon()
     const webLinksAddon = new WebLinksAddon((_event, uri) => {
@@ -575,28 +610,30 @@ export function TerminalModule() {
     xterm.open(container)
     const webglRenderer = loadWebglRenderer(xterm)
 
-    const syncTerminalGeometry = () => {
-      if (disposed) return
-      fitAddon.fit()
-      webglRenderer?.refresh()
+    const syncTerminalGeometry = (refreshRenderer = false) => {
+      if (disposed || !geometrySyncReady || !projectionAvailable) return
+      if (refreshRenderer) {
+        webglRenderer?.refresh()
+      }
       const proposed = fitAddon.proposeDimensions()
       const cols = proposed?.cols ?? xterm.cols
       const rows = proposed?.rows ?? xterm.rows
       if (!cols || !rows) return
-      if (lastResize.cols === cols && lastResize.rows === rows) return
-      lastResize = { cols, rows }
+      if (xterm.cols === cols && xterm.rows === rows) return
+      if (requestedResize.cols === cols && requestedResize.rows === rows) return
+      requestedResize = { cols, rows }
       void terminalBridge.session.resize({
         sessionId: terminalSessionId,
         cols,
         rows,
       }).catch((error) => {
+        requestedResize = { cols: xterm.cols, rows: xterm.rows }
         logger.warn("Failed to resize terminal session.", error)
       })
     }
     terminalGeometrySyncRef.current = syncTerminalGeometry
-    syncTerminalGeometry()
 
-    const resizeObserver = new ResizeObserver(syncTerminalGeometry)
+    const resizeObserver = new ResizeObserver(() => syncTerminalGeometry())
     resizeObserver.observe(container)
 
     const inputDisposable = xterm.onData((data) => {
@@ -609,28 +646,71 @@ export function TerminalModule() {
       })
     })
 
-    let initialReadComplete = false
-    const pendingChunks: SynapseTerminalOutputChunk[] = []
+    const writeTerminalData = (data: string) => new Promise<void>((resolve) => {
+      if (disposed) {
+        resolve()
+        return
+      }
+      xterm.write(data, resolve)
+    })
 
-    const writeChunk = (chunk: SynapseTerminalOutputChunk) => {
-      if (chunk.seq <= lastSeq) return
-      lastSeq = chunk.seq
-      xterm.write(chunk.data)
+    const writePendingChunksThrough = async (throughOutputSeq: number) => {
+      pendingChunks.sort((left, right) => left.seq - right.seq)
+      while (!disposed && pendingChunks.length > 0) {
+        const chunk = pendingChunks[0]!
+        if (chunk.seq > throughOutputSeq) break
+        pendingChunks.shift()
+        if (chunk.seq <= lastSeq) continue
+        await writeTerminalData(chunk.data)
+        lastSeq = chunk.seq
+      }
+    }
+
+    const drainProjection = async () => {
+      if (drainInFlight || !attached || !projectionAvailable || disposed) return
+      drainInFlight = true
+      try {
+        while (!disposed) {
+          const nextBarrier = [...resizeBarriers.values()]
+            .filter((event) => event.sizeRevision > appliedSizeRevision)
+            .sort((left, right) => left.sizeRevision - right.sizeRevision)[0]
+          if (nextBarrier) {
+            await writePendingChunksThrough(nextBarrier.throughOutputSeq)
+            if (disposed) return
+            xterm.resize(nextBarrier.cols, nextBarrier.rows)
+            webglRenderer?.refresh()
+            appliedSizeRevision = nextBarrier.sizeRevision
+            requestedResize = { cols: nextBarrier.cols, rows: nextBarrier.rows }
+            resizeBarriers.delete(nextBarrier.sizeRevision)
+            continue
+          }
+          if (announcedSizeRevision > appliedSizeRevision) return
+          if (pendingChunks.length === 0) return
+          await writePendingChunksThrough(Number.POSITIVE_INFINITY)
+        }
+      } finally {
+        drainInFlight = false
+        const hasApplicableBarrier = [...resizeBarriers.keys()].some((revision) => revision > appliedSizeRevision)
+        if (hasApplicableBarrier || (announcedSizeRevision <= appliedSizeRevision && pendingChunks.length > 0)) {
+          void drainProjection()
+        }
+      }
     }
 
     const unsubscribeData = terminalBridge.operation.onData((event) => {
       if (event.sessionId !== terminalSessionId || disposed) return
-      if (!initialReadComplete) {
-        pendingChunks.push(event.chunk)
-        return
-      }
-      writeChunk(event.chunk)
+      pendingChunks.push(event.chunk)
+      void drainProjection()
     })
 
     const unsubscribeSessionChanged = terminalBridge.operation.onSessionChanged((session) => {
       setSessions((current) => mergeSession(current, session))
+      if (session.id !== terminalSessionId || session.sizeRevision <= announcedSizeRevision) return
+      announcedSizeRevision = session.sizeRevision
+      void drainProjection()
     })
     const unsubscribeSessionDeleted = terminalBridge.operation.onSessionDeleted((event) => {
+      deletedSessionIdsRef.current.add(event.sessionId)
       setSessions((current) => {
         const nextSessions = current.filter((session) => session.id !== event.sessionId)
         setActiveSessionId((currentActiveId) => {
@@ -640,41 +720,50 @@ export function TerminalModule() {
         return nextSessions
       })
     })
+    const unsubscribeResized = terminalBridge.operation.onResized((event) => {
+      if (event.sessionId !== terminalSessionId || disposed || event.sizeRevision <= appliedSizeRevision) return
+      announcedSizeRevision = Math.max(announcedSizeRevision, event.sizeRevision)
+      resizeBarriers.set(event.sizeRevision, event)
+      void drainProjection()
+    })
+    const unsubscribeDomainChanged = terminalBridge.operation.onDomainChanged(() => {
+      void refreshSessions().catch((error) => {
+        logger.warn("Failed to refresh terminal objects after a domain change.", error)
+      })
+    })
 
-    const restoreRetainedOutput = async () => {
-      let afterSeq = 0
-      let targetSeq: number | null = null
-
-      while (!disposed) {
-        const result = await terminalBridge.session.read({
-          sessionId: terminalSessionId,
-          afterSeq,
-          limitBytes: TERMINAL_READ_PAGE_BYTES,
-        })
-        if (disposed) return
-
-        targetSeq ??= result.session.lastOutputSeq
-        for (const chunk of result.chunks) {
-          writeChunk(chunk)
-        }
-
-        if (result.nextSeq >= targetSeq || result.nextSeq <= afterSeq) break
-        afterSeq = result.nextSeq
-      }
-
+    const attachProjection = async () => {
+      const snapshot = await terminalBridge.session.attach({ sessionId: terminalSessionId })
       if (disposed) return
-      initialReadComplete = true
-      for (const chunk of pendingChunks.sort((a, b) => a.seq - b.seq)) {
-        writeChunk(chunk)
+      setSessions((current) => mergeSession(current, snapshot.session))
+      if (snapshot.degraded) {
+        setTerminalReadError("终端画面无法恢复")
+        attached = true
+        return
       }
-      pendingChunks.length = 0
+
+      xterm.resize(snapshot.cols, snapshot.rows)
+      await writeTerminalData(snapshot.serialized)
+      if (disposed) return
+      lastSeq = snapshot.throughOutputSeq
+      appliedSizeRevision = snapshot.sizeRevision
+      announcedSizeRevision = Math.max(announcedSizeRevision, snapshot.sizeRevision)
+      requestedResize = { cols: snapshot.cols, rows: snapshot.rows }
+      for (const revision of resizeBarriers.keys()) {
+        if (revision <= appliedSizeRevision) resizeBarriers.delete(revision)
+      }
+      attached = true
+      projectionAvailable = true
+      await drainProjection()
+      geometrySyncReady = true
+      syncTerminalGeometry()
     }
 
-    void restoreRetainedOutput().catch((error) => {
-      logger.error("Failed to read terminal output.", error)
-      if (!disposed) {
-        setTerminalReadError("读取终端输出失败")
-        toast.error("读取终端输出失败")
+    void attachProjection().catch((error) => {
+      logger.error("Failed to attach terminal projection.", error)
+      if (!disposed && !deletedSessionIdsRef.current.has(terminalSessionId)) {
+        setTerminalReadError("终端画面无法恢复")
+        toast.error("终端画面无法恢复")
       }
     })
 
@@ -683,6 +772,8 @@ export function TerminalModule() {
       unsubscribeData()
       unsubscribeSessionChanged()
       unsubscribeSessionDeleted()
+      unsubscribeResized()
+      unsubscribeDomainChanged()
       inputDisposable.dispose()
       webglRenderer?.dispose()
       resizeObserver.disconnect()
@@ -694,7 +785,13 @@ export function TerminalModule() {
       }
       xterm.dispose()
     }
-  }, [shellBridge, terminalBridge, terminalSessionCols, terminalSessionId, terminalSessionRows, terminalSessionStatus])
+  }, [refreshSessions, shellBridge, terminalBridge, terminalSessionId])
+
+  useEffect(() => {
+    if (xtermRef.current) {
+      xtermRef.current.options.disableStdin = terminalSessionStatus !== "running"
+    }
+  }, [terminalSessionStatus])
 
   const sidebar = (
     <ModuleSidebar
@@ -801,10 +898,11 @@ export function TerminalModule() {
                   data-track="terminal-session-select"
                   icon={<TerminalSessionStatusIcon status={session.status} />}
                   trailing={
-                    <TerminalSessionDeleteButton
-                      disabled={deletingSessionId === session.id}
+                    <TerminalSessionLifecycleButton
+                      disabled={deletingSessionId === session.id || stoppingSessionId === session.id}
                       session={session}
                       onDelete={() => { void deleteSession(session) }}
+                      onStop={() => { void stopSession(session) }}
                     />
                   }
                   trackValue={session.id}
@@ -1199,13 +1297,17 @@ export function TerminalModule() {
           <AlertDialogHeader>
             <AlertDialogTitle>删除分组</AlertDialogTitle>
             <AlertDialogDescription>
-              会删除该分组下的终端会话，运行中的会话会停止。
+              {deleteGroupHasActiveSessions
+                ? "请先停止该分组内运行中的终端。"
+                : deleteGroupMembers.length
+                  ? `将删除 ${deleteGroupMembers.length} 个已结束会话及其保留输出。`
+                  : "删除该空分组。"}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteGroupSaving}>取消</AlertDialogCancel>
             <AlertDialogAction
-              disabled={deleteGroupSaving}
+              disabled={deleteGroupSaving || deleteGroupHasActiveSessions}
               onClick={() => { void deleteGroup() }}
             >
               删除分组
@@ -1217,46 +1319,60 @@ export function TerminalModule() {
   )
 }
 
-function TerminalSessionDeleteButton({
+function TerminalSessionLifecycleButton({
   disabled,
   session,
   onDelete,
+  onStop,
 }: {
   readonly disabled: boolean
   readonly session: SynapseTerminalSession
   readonly onDelete: () => void
+  readonly onStop: () => void
 }) {
+  const active = session.status === "running" || session.status === "stopping"
+  const actionLabel = session.status === "running" ? "停止" : session.status === "stopping" ? "强制停止" : "删除"
   return (
     <Button
       type="button"
       size="icon-xs"
       variant="ghost"
       disabled={disabled}
-      aria-label={`删除终端会话：${session.title}`}
-      title="删除"
-      className="text-muted-foreground hover:text-destructive"
+      aria-label={`${actionLabel}终端会话：${session.title}`}
+      title={actionLabel}
+      className={cn("text-muted-foreground", active ? "hover:text-foreground" : "hover:text-destructive")}
       onClick={(event) => {
         event.stopPropagation()
-        onDelete()
+        if (active) onStop()
+        else onDelete()
       }}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <Trash2 className="size-3.5" />
+      {active ? <Square className="size-3.5" /> : <Trash2 className="size-3.5" />}
     </Button>
   )
 }
 
 function TerminalSessionStatusIcon({ status }: { readonly status: SynapseTerminalSession["status"] }) {
   const running = status === "running"
-  const Icon = running ? CircleDot : Link2Off
-  const label = running ? "运行中" : "已断开"
+  const stopping = status === "stopping"
+  const Icon = running ? CircleDot : stopping ? Square : Link2Off
+  const label = status === "running"
+    ? "运行中"
+    : status === "stopping"
+      ? "正在停止"
+      : status === "ended"
+        ? "已结束"
+        : status === "failed"
+          ? "启动失败"
+          : "已失联"
 
   return (
     <span
       title={label}
       className={cn(
         "inline-flex size-3.5 shrink-0 items-center justify-center",
-        running ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+        running ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
       )}
     >
       <Icon className="size-3.5" aria-hidden="true" />
@@ -1286,6 +1402,10 @@ function groupSessions(
       createdAt: "",
       updatedAt: "",
       sortOrder: Number.MAX_SAFE_INTEGER,
+      groupRevision: 1,
+      launchRevision: 1,
+      membershipRevision: 1,
+      commandCollectionRevision: 1,
       sessions: ungrouped,
     },
   ]

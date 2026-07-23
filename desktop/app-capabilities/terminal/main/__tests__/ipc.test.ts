@@ -79,6 +79,7 @@ describe("terminalIpcModule", () => {
     expect(terminalIpcModule.methods.listSessions.operationId).toBe("app.terminal.session.list")
     expect(terminalIpcModule.methods.createSession.operationId).toBe("app.terminal.session.create")
     expect(terminalIpcModule.methods.getSession.operationId).toBe("app.terminal.session.get")
+    expect(terminalIpcModule.methods.attachSession.operationId).toBe("app.terminal.session.attach")
     expect(terminalIpcModule.methods.readSession.operationId).toBe("app.terminal.session.read")
     expect(terminalIpcModule.methods.renameSession.operationId).toBe("app.terminal.session.rename")
     expect(terminalIpcModule.methods.writeSession.operationId).toBe("app.terminal.session.write")
@@ -90,6 +91,7 @@ describe("terminalIpcModule", () => {
     expect(terminalIpcModule.events.data.operationId).toBe("app.terminal.operation.data")
     expect(terminalIpcModule.events.sessionChanged.operationId).toBe("app.terminal.operation.session_changed")
     expect(terminalIpcModule.events.sessionDeleted.operationId).toBe("app.terminal.operation.session_deleted")
+    expect(terminalIpcModule.events.resized.operationId).toBe("app.terminal.operation.resized")
   })
 
   it("chooses a terminal group default cwd through the native directory dialog", async () => {
@@ -268,6 +270,17 @@ describe("terminalIpcModule", () => {
       sessionId: "session-1",
     }).success).toBe(true)
     expect(terminalIpcModule.events.sessionDeleted.payload.safeParse({}).success).toBe(false)
+    expect(terminalIpcModule.events.resized.payload.safeParse({
+      sessionId: "session-1",
+      cols: 120,
+      rows: 40,
+      sizeRevision: 2,
+      throughOutputSeq: 7,
+    }).success).toBe(true)
+    expect(terminalIpcModule.events.resized.payload.safeParse({
+      sessionId: "session-1",
+      cols: 120,
+    }).success).toBe(false)
   })
 
   it("is included in registered IPC modules", () => {
@@ -314,6 +327,13 @@ describe("terminalIpcModule", () => {
     })
     ;(service.events as EventEmitter).emit("sessionChanged", createSession())
     ;(service.events as EventEmitter).emit("sessionDeleted", { sessionId: "session-1" })
+    ;(service.events as EventEmitter).emit("resized", {
+      sessionId: "session-1",
+      cols: 120,
+      rows: 40,
+      sizeRevision: 2,
+      throughOutputSeq: 1,
+    })
 
     expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:app:terminal:operation:data", {
       sessionId: "session-1",
@@ -328,6 +348,13 @@ describe("terminalIpcModule", () => {
     expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:app:terminal:operation:session_changed", createSession())
     expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:app:terminal:operation:session_deleted", {
       sessionId: "session-1",
+    })
+    expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:app:terminal:operation:resized", {
+      sessionId: "session-1",
+      cols: 120,
+      rows: 40,
+      sizeRevision: 2,
+      throughOutputSeq: 1,
     })
   })
 })
@@ -384,6 +411,19 @@ function createService(): Partial<TerminalService> {
     listSessions: vi.fn(() => []),
     createSession: vi.fn(),
     getSession: vi.fn(() => session),
+    attachSession: vi.fn(async () => ({
+      session,
+      degraded: false,
+      serialized: "",
+      cols: 80,
+      rows: 24,
+      throughOutputSeq: 0,
+      sizeRevision: 1,
+      emulatorId: "xterm-headless",
+      emulatorVersion: "6.0.0",
+      scrollbackTruncated: false,
+      reasons: [],
+    })),
     readSession: vi.fn(() => ({
       session,
       chunks: [],

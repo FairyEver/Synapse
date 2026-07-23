@@ -230,6 +230,18 @@ const textExtractionRuntimeEntries = [
   "node_modules/pako/package.json",
   "node_modules/xmlbuilder/package.json",
 ]
+const htmlGenerationServiceEntry =
+  "dist-electron/app-capabilities/html-generator/main/service.js"
+const htmlGenerationWorkerLaunchEntry =
+  "dist-electron/app-capabilities/html-generator/main/worker-launch.js"
+const htmlGenerationWorkerEntry =
+  "dist-electron/app-capabilities/html-generator/main/worker.js"
+const htmlGenerationRuntimeEntries = [
+  "node_modules/ejs/package.json",
+  "node_modules/ejs/LICENSE",
+  "node_modules/ejs/lib/cjs/ejs.js",
+  "node_modules/ejs/lib/cjs/utils.js",
+]
 const documentParserLicenses = [
   {
     packageName: "unpdf",
@@ -276,9 +288,11 @@ const requiredExtraResourceFiles = [
     relativePath: "knowledge-base/synapse-knowledge-base-template/CLAUDE.md",
     label: "Knowledge Base runtime template",
   },
+]
+const forbiddenExtraResourceFiles = [
   {
     relativePath: "database/mcp/index.js",
-    label: "Database MCP runtime",
+    label: "retired stdio MCP bridge",
   },
 ]
 const usageAnalysisAllowedUnpackedPrefixes = [
@@ -461,6 +475,58 @@ function verifyTextExtractionWorker(header, unpackedPath, failures) {
   }
 }
 
+function verifyHtmlGenerationWorker(header, unpackedPath, failures) {
+  for (const [relativePath, label] of [
+    [htmlGenerationServiceEntry, "HTML generation service"],
+    [htmlGenerationWorkerLaunchEntry, "HTML generation worker launch contract"],
+    [htmlGenerationWorkerEntry, "HTML generation worker"],
+  ]) {
+    verifyUnpackedNode(header, unpackedPath, relativePath, failures, `${label} is missing from app.asar`)
+    verifyUnpackedSourceMap(header, unpackedPath, relativePath, failures, true)
+  }
+  for (const relativePath of htmlGenerationRuntimeEntries) {
+    verifyUnpackedNode(header, unpackedPath, relativePath, failures, "EJS runtime dependency is missing from app.asar")
+  }
+
+  const launchSource = readUnpackedText(
+    header,
+    unpackedPath,
+    htmlGenerationWorkerLaunchEntry,
+    failures,
+    "HTML generation worker launch contract",
+  )
+  if (launchSource && !launchSource.includes("app.asar.unpacked")) {
+    failures.push("HTML generation worker launch contract does not map app.asar to app.asar.unpacked")
+  }
+  const workerSource = readUnpackedText(
+    header,
+    unpackedPath,
+    htmlGenerationWorkerEntry,
+    failures,
+    "HTML generation worker",
+  )
+  if (workerSource && (!workerSource.includes("ejs-runtime") || !workerSource.includes("fileLoader"))) {
+    failures.push("HTML generation worker does not contain the EJS runtime and include defenses")
+  }
+
+  const packagePath = path.join(unpackedPath, "node_modules/ejs/package.json")
+  const licensePath = path.join(unpackedPath, "node_modules/ejs/LICENSE")
+  if (existsSync(packagePath) && existsSync(licensePath)) {
+    try {
+      const packageJson = JSON.parse(readFileSync(packagePath, "utf8"))
+      if (packageJson.version !== "6.0.1" || packageJson.main !== "./lib/cjs/ejs.js" || packageJson.license !== "Apache-2.0") {
+        failures.push("packaged EJS metadata does not match the pinned runtime contract")
+      }
+      const license = readFileSync(licensePath, "utf8")
+      if (!license.includes("Apache License") || !license.includes("Version 2.0")) {
+        failures.push("packaged EJS Apache-2.0 license content is invalid")
+      }
+    } catch (error) {
+      failures.push(`packaged EJS metadata is invalid: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+}
+
 function verifyDocumentParserLicense(unpackedPath, license, failures) {
   const { packageName, identity, requiredText } = license
   const packagePath = path.join(unpackedPath, "node_modules", packageName, "package.json")
@@ -532,6 +598,82 @@ async function runTextExtractionWorkerSmoke(unpackedPath, failures) {
   if (failures.length === failureCount) {
     console.log("Verified packaged text extraction worker smoke: PDF text/pages, DOCX text")
   }
+}
+
+async function runHtmlGenerationWorkerSmoke(unpackedPath, failures) {
+  const workerPath = path.join(unpackedPath, htmlGenerationWorkerEntry)
+  const workerLaunchPath = path.join(unpackedPath, htmlGenerationWorkerLaunchEntry)
+  const failureCount = failures.length
+  let launchHtmlGenerationWorker
+  try {
+    ({ launchHtmlGenerationWorker } = require(workerLaunchPath))
+  } catch {
+    failures.push("HTML generation worker launch contract cannot be loaded")
+    return
+  }
+  if (typeof launchHtmlGenerationWorker !== "function") {
+    failures.push("HTML generation worker launch contract is invalid")
+    return
+  }
+  let launch
+  try {
+    const worker = launchHtmlGenerationWorker({
+      baseDir: path.dirname(workerLaunchPath),
+      workerData: { template: "<h1><%= data.title %></h1>", data: { title: "packaged smoke" } },
+      maxOldGenerationSizeMb: 128,
+      workerFactory(filename, options) {
+        launch = { filename, options }
+        return new Worker(filename, options)
+      },
+    })
+    if (
+      launch?.filename !== workerPath
+      || launch.options?.resourceLimits?.maxOldGenerationSizeMb !== 128
+      || launch.options?.stdout !== true
+      || launch.options?.stderr !== true
+      || Object.keys(launch.options?.workerData ?? {}).sort().join(",") !== "data,template"
+    ) {
+      throw new Error("unexpected HTML generation Worker launch options")
+    }
+    const message = await waitForHtmlGenerationWorker(worker)
+    if (message?.type !== "success" || message.html !== "<h1>packaged smoke</h1>" || message.size !== 23) {
+      throw new Error("unexpected HTML generation Worker result")
+    }
+  } catch {
+    failures.push("HTML generation worker smoke failed: worker launch or execution error")
+  }
+  if (failures.length === failureCount) {
+    console.log("Verified packaged HTML generation Worker smoke")
+  }
+}
+
+function waitForHtmlGenerationWorker(worker) {
+  return new Promise((resolve, reject) => {
+    let started = false
+    let completing = false
+    const timeout = setTimeout(() => {
+      void worker.terminate()
+      reject(new Error("worker timeout"))
+    }, 10_000)
+    worker.on("message", (message) => {
+      if (message?.type === "started" && !started) {
+        started = true
+        return
+      }
+      clearTimeout(timeout)
+      completing = true
+      void worker.terminate().then(() => resolve(started ? message : null), reject)
+    })
+    worker.once("error", (error) => {
+      clearTimeout(timeout)
+      reject(error)
+    })
+    worker.once("exit", (code) => {
+      if (code === 0 || completing) return
+      clearTimeout(timeout)
+      reject(new Error(`worker exited with code ${code}`))
+    })
+  })
 }
 
 function assertTextExtractionWorkerLaunch(launch, expectedWorkerPath) {
@@ -640,6 +782,11 @@ function verifyExtraResources(resourcesPath, failures) {
       failures.push(`${resource.relativePath}: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
+  for (const resource of forbiddenExtraResourceFiles) {
+    if (existsSync(path.join(resourcesPath, resource.relativePath))) {
+      failures.push(`forbidden extra resource (${resource.label}): ${resource.relativePath}`)
+    }
+  }
 }
 
 async function verifyResources(resourcesPath, label) {
@@ -745,8 +892,10 @@ async function verifyResources(resourcesPath, label) {
   )
   verifySandboxedPreloadBundle(buffer, dataOffset, header, failures)
   verifyTextExtractionWorker(header, unpackedPath, failures)
+  verifyHtmlGenerationWorker(header, unpackedPath, failures)
   if (failures.length === 0) {
     await runTextExtractionWorkerSmoke(unpackedPath, failures)
+    await runHtmlGenerationWorkerSmoke(unpackedPath, failures)
   }
   verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures)
   verifyClaudeRuntime(unpackedPath, failures)

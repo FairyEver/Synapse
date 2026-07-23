@@ -18,6 +18,7 @@ import {
   type ParsedTextFileWriteInput,
   type TextFileWriteInput,
   type TextFileWriteResult,
+  isHtmlPath,
 } from "../shared/schema"
 
 const WRITE_CHUNK_BYTES = 1024 * 1024
@@ -57,6 +58,9 @@ export class TextFileWriterService {
     const parsed = parseInput(input)
     const format = textFileFormatFromPath(parsed.path)
     if (!format) throw new TextFileWriteError("UNSUPPORTED_EXTENSION")
+    if (isHtmlPath(parsed.path) && parsed.encoding !== "utf8") {
+      throw new TextFileWriteError("INVALID_ENCODING", { message: "HTML 文件仅支持 UTF-8 编码。" })
+    }
 
     const requestedPath = normalizeRequestedPath(parsed.path)
     const initialActualPath = await resolveActualTarget(requestedPath)
@@ -177,6 +181,9 @@ function parseInput(input: TextFileWriteInput): ParsedTextFileWriteInput {
   }
   if (raw.encoding !== undefined && !TEXT_FILE_ENCODINGS.includes(raw.encoding as never)) {
     throw new TextFileWriteError("INVALID_ENCODING")
+  }
+  if (typeof raw.path === "string" && isHtmlPath(raw.path) && raw.encoding === "utf16le") {
+    throw new TextFileWriteError("INVALID_ENCODING", { message: "HTML 文件仅支持 UTF-8 编码。" })
   }
   throw new TextFileWriteError("WRITE_FAILED")
 }

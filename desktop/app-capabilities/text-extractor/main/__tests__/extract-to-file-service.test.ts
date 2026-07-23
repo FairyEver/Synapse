@@ -2,11 +2,17 @@ import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import { TextExtractionError } from "../../shared/errors"
 import { createTextExtractionToFileService } from "../extract-to-file-service"
+import { textExtractionToFileInputSchema } from "../../shared/schema"
 
 const filePath = path.resolve("source.pdf")
 const outputPath = path.resolve("source.pdf.extracted.md")
 
 describe("TextExtractionToFileService", () => {
+  it("keeps the composition output contract restricted to txt, md, and csv", () => {
+    expect(textExtractionToFileInputSchema.safeParse({ filePath, outputPath: path.resolve("report.md") }).success).toBe(true)
+    expect(textExtractionToFileInputSchema.safeParse({ filePath, outputPath: path.resolve("report.html") }).success).toBe(false)
+  })
+
   it("keeps extracted text inside the service boundary and returns metadata only", async () => {
     const text = "完整正文"
     const extract = vi.fn(async () => ({

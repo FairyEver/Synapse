@@ -128,7 +128,6 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
               type="button"
               size="icon-sm"
               variant="ghost"
-              disabled={hasLoadError}
               aria-label="删除工作流"
               data-track="workflow-card-delete-open"
               onClick={(e) => {
@@ -145,7 +144,11 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
             <AlertDialogContent onClick={(event) => event.stopPropagation()}>
               <AlertDialogHeader>
                 <AlertDialogTitle>删除工作流</AlertDialogTitle>
-                <AlertDialogDescription>确定删除「{meta.name}」？此操作不可恢复。</AlertDialogDescription>
+                <AlertDialogDescription>
+                  {hasLoadError
+                    ? `「${meta.name}」的数据异常，删除后无法恢复。${meta.rawExportAvailable ? "你可以先导出原文备份。" : ""}`
+                    : `确定删除「${meta.name}」？此操作不可恢复。`}
+                </AlertDialogDescription>
               </AlertDialogHeader>
               {deletePlanLoading ? <p className="text-sm text-muted-foreground">正在检查关联工作流…</p> : null}
               {deletePlanError ? <p className="text-sm text-destructive">无法检查关联工作流，请关闭后重试。</p> : null}
@@ -165,6 +168,18 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
               ) : null}
               <AlertDialogFooter>
                 <AlertDialogCancel>取消</AlertDialogCancel>
+                {hasLoadError && meta.rawExportAvailable ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setDeleteDialogOpen(false)
+                      onExport()
+                    }}
+                  >
+                    导出原文
+                  </Button>
+                ) : null}
                 <AlertDialogAction
                   disabled={deletePlanLoading || deletePlanError}
                   onClick={() => onDelete(cleanupImportedChildren)}

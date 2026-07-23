@@ -82,6 +82,19 @@ describe("Workflow MCP RPC", () => {
   })
 })
 
+describe("Terminal MCP RPC", () => {
+  it("preserves the versioned Terminal result envelope", async () => {
+    const envelope = {
+      ok: true,
+      contractVersion: "2.0",
+      correlationId: "correlation-1",
+      outcome: "accepted",
+      data: { capabilitySetVersion: "2.0.0" },
+    }
+    await expect(callTool("app_terminal_capabilities_get", envelope)).resolves.toEqual(envelope)
+  })
+})
+
 describe("Database MCP RPC", () => {
   it("sanitizes tool execution errors before returning them to MCP clients", async () => {
     const response = await processMcpRequest(
@@ -211,9 +224,9 @@ describe("MCP RPC capability normalization coverage", () => {
     })
   })
 
-  it("unwraps dispatcher data for every registered non-database capability domain", async () => {
+  it("unwraps dispatcher data for every registered non-database, non-Terminal capability", async () => {
     const entries = Object.entries(MCP_TOOL_ACTIONS)
-      .filter(([, action]) => getActionDomainId(action) !== "database")
+      .filter(([, action]) => getActionDomainId(action) !== "database" && !action.startsWith("app.terminal."))
 
     expect(entries.length).toBeGreaterThan(0)
 

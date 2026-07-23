@@ -88,9 +88,6 @@ jobs:
       - name: Build Electron process
         run: pnpm --filter @synapse/desktop run build:electron
 
-      - name: Build database bundles
-        run: pnpm --filter @synapse/desktop run build:database
-
       - name: Package macOS installer
         if: matrix.os == 'macos-latest'
         env:

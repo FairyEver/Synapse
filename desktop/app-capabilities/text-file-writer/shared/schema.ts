@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { TEXT_FILE_WRITE_ERROR_CODES } from "./errors"
 
-export const TEXT_FILE_FORMATS = ["txt", "md", "csv"] as const
+export const TEXT_FILE_FORMATS = ["txt", "md", "csv", "html", "htm"] as const
 export const TEXT_FILE_ENCODINGS = ["utf8", "utf16le"] as const
 export const DEFAULT_TEXT_FILE_ENCODING = "utf8" as const
 export const DEFAULT_TEXT_FILE_OVERWRITE = false as const
@@ -14,7 +14,15 @@ export const textFileWriteInputSchema = z.object({
   path: z.string().min(1, "文件路径必填").refine(isAbsolutePath, "文件路径必须是绝对路径"),
   encoding: textFileEncodingSchema.optional().default(DEFAULT_TEXT_FILE_ENCODING),
   overwrite: z.boolean().optional().default(DEFAULT_TEXT_FILE_OVERWRITE),
-}).strict()
+}).strict().superRefine((value, context) => {
+  if (isHtmlPath(value.path) && value.encoding === "utf16le") {
+    context.addIssue({
+      code: "custom",
+      path: ["encoding"],
+      message: "HTML 文件仅支持 UTF-8 编码",
+    })
+  }
+})
 
 export const textFileWriteResultSchema = z.object({
   path: z.string(),
@@ -50,4 +58,8 @@ export type TextFileOutputChooseRequest = z.infer<typeof textFileOutputChooseReq
 
 function isAbsolutePath(value: string): boolean {
   return value.startsWith("/") || value.startsWith("\\") || /^[A-Za-z]:[\\/]/.test(value)
+}
+
+export function isHtmlPath(value: string): boolean {
+  return /\.(?:html|htm)$/i.test(value)
 }

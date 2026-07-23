@@ -3,6 +3,7 @@ import { sanitizeError } from "../error-sanitize"
 
 const SENSITIVE_OUTPUT_KEY_PATTERN = /^(authorization|cookie|set-cookie|.*(?:secret|token|password|credential|api[-_]?key|session[-_]?key).*)$/i
 const DEBUG_PATH_KEYS = new Set(["cwd", "stdoutPath", "stderrPath", "promptPath", "lastMessagePath"])
+const PRESERVED_STRUCTURED_PATH_KEYS = new Set(["path", ...DEBUG_PATH_KEYS])
 const WORKFLOW_HISTORY_OUTPUT_MAX_BYTES = 10_000
 const WORKFLOW_HISTORY_OUTPUT_MAX_COLLECTION_ITEMS = 200
 const WORKFLOW_HISTORY_OUTPUT_MAX_DEPTH = 12
@@ -46,7 +47,7 @@ export function sanitizeWorkflowEventForRenderer(event: WorkflowEvent): Workflow
     case "node:completed":
       return {
         ...event,
-        output: sanitizeWorkflowOutputForHistory(event.output),
+        output: sanitizeNodePrimaryOutputForHistory(event.output, event.result?.outputs),
         ...(event.result ? { result: sanitizeNodeRunResultForRenderer(event.result) } : {}),
       }
     case "node:failed":
@@ -133,7 +134,7 @@ function sanitizeNodeResultForSnapshot(result: NodeRunResult): NodeRunResult {
   return {
     ...result,
     ...(result.input ? { input: sanitizeNodeInput(result.input) } : {}),
-    ...(result.output !== undefined ? { output: sanitizeWorkflowOutputForHistory(result.output) } : {}),
+    ...(result.output !== undefined ? { output: sanitizeNodePrimaryOutputForHistory(result.output, result.outputs) } : {}),
     ...(result.outputs ? { outputs: sanitizeNodeOutputs(result.outputs) } : {}),
     ...(result.error !== undefined ? { error: sanitizeError(result.error) } : {}),
   }
@@ -170,6 +171,18 @@ function sanitizeNodeOutputs(outputs: NonNullable<NodeRunResult["outputs"]>): No
     ...sanitizedOutputs,
     agentConversation: sanitizeAgentConversationOutput(agentConversation),
   } as unknown as NodeRunResult["outputs"]
+}
+
+function sanitizeNodePrimaryOutputForHistory<T>(
+  output: T,
+  outputs: NodeRunResult["outputs"] | undefined,
+): T {
+  if (typeof output === "string" && outputs?.path === output) {
+    return sanitizeBoundedSnapshotString(output, "path", {
+      remainingBytes: WORKFLOW_HISTORY_OUTPUT_MAX_BYTES,
+    }) as T
+  }
+  return sanitizeWorkflowOutputForHistory(output)
 }
 
 function sanitizeSnapshotValue(
@@ -257,7 +270,7 @@ function sanitizeBoundedSnapshotString(value: string, key: string, budget: Outpu
     return consumeStringBudget("[redacted]", budget)
   }
   const boundedValue = consumeStringBudget(value, budget)
-  if (DEBUG_PATH_KEYS.has(key)) return boundedValue
+  if (PRESERVED_STRUCTURED_PATH_KEYS.has(key)) return boundedValue
   return sanitizeError(boundedValue)
 }
 

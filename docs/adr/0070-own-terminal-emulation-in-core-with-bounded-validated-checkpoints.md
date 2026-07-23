@@ -1,0 +1,13 @@
+# Own Terminal emulation in core with bounded validated checkpoints
+
+Canonical Terminal rendering and mode state belongs to the Terminal core service and exists independently of whether a Renderer is open. It consumes the same ordered PTY raw-output stream and maintains bounded screen, cursor, mode, and scrollback state bound to `throughOutputSeq`, `sizeRevision`, and emulator implementation and version. Renderer xterm may continue to display sessions, but neither MCP views nor attention facts depend on Renderer state. Core and Renderer should use compatible, preferably shared-origin terminal semantics with explicit difference tests.
+
+Renderer attaches from a bounded core-emulator serialization identified by `throughOutputSeq` and `sizeRevision`; it must not recreate a screen by replaying historical raw output at the latest dimensions. Runtime resize is an ordered emulator operation and publishes a geometry barrier with the last output sequence consumed at the previous dimensions. Renderer applies output through that barrier, resizes its existing xterm instance, then continues with later output. Missing or invalid snapshots are shown as degraded instead of falling back to an untrustworthy reconstruction.
+
+An emulator checkpoint may reference only reliably persisted output. Recovery validates output sequence, size revision, emulator version, and integrity facts before use and discards any failed checkpoint. Missing retained prefixes, missing checkpoints, or version mismatches return `degraded` with stable reasons rather than reconstructing a supposedly complete state from an incomplete suffix.
+
+Checkpoints and derived scrollback have the same sensitivity, authorization, deletion, per-session capacity, and global capacity boundaries as output bodies. They cannot retain unlimited text or silently extend history beyond output policy.
+
+Implementation is gated by a technical spike of an official headless emulator and serialization path in the Electron main process without DOM, on all three target platforms and in the packaged runtime. The spike verifies checkpoint serialization, semantic compatibility, performance, and memory bounds. The repository currently has no confirmed main-process headless dependency, and implementing an incomplete ANSI parser is prohibited. Any proposed `@xterm/headless`, serialization addon, or other dependency must be named in the final design and receive Li Yang's final approval before implementation.
+
+If the spike fails, the initial product retains the authoritative raw stream and marks rendered-view and attention functionality unsupported or degraded. It does not lower the correctness contract.

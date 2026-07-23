@@ -14,7 +14,7 @@ export type TextFileWriteErrorCode = typeof TEXT_FILE_WRITE_ERROR_CODES[number]
 
 const ERROR_MESSAGES: Record<TextFileWriteErrorCode, string> = {
   INVALID_PATH: "文件路径必须是当前系统可识别的绝对路径。",
-  UNSUPPORTED_EXTENSION: "当前仅支持 .txt、.md 和 .csv 文件。",
+  UNSUPPORTED_EXTENSION: "当前仅支持 .txt、.md、.csv、.html 和 .htm 文件。",
   INVALID_ENCODING: "字符编码必须是 utf8 或 utf16le。",
   TARGET_EXISTS: "目标文件已存在，请启用覆盖后重试。",
   UNSAFE_TARGET: "目标路径必须指向普通文件，且不能是符号链接。",
@@ -27,8 +27,8 @@ const ERROR_MESSAGES: Record<TextFileWriteErrorCode, string> = {
 export class TextFileWriteError extends Error {
   readonly retryable: boolean
 
-  constructor(readonly code: TextFileWriteErrorCode, options?: ErrorOptions) {
-    super(ERROR_MESSAGES[code], options)
+  constructor(readonly code: TextFileWriteErrorCode, options?: ErrorOptions & { readonly message?: string }) {
+    super(options?.message ?? ERROR_MESSAGES[code], options)
     this.name = "TextFileWriteError"
     this.retryable = code === "TARGET_CHANGED"
   }

@@ -7,6 +7,7 @@ import { documentTemplateAppDefinition } from "../../../app-capabilities/documen
 import { textExtractorAppDefinition } from "../../../app-capabilities/text-extractor/renderer/app-definition"
 import { fileOpenerAppDefinition } from "../../../app-capabilities/file-opener/renderer/app-definition"
 import { textFileWriterAppDefinition } from "../../../app-capabilities/text-file-writer/renderer/app-definition"
+import { htmlGeneratorAppDefinition } from "../../../app-capabilities/html-generator/renderer/app-definition"
 import { skillInstallerAppDefinition } from "../../../app-capabilities/skill-installer/renderer/app-definition"
 import { skillUninstallerAppDefinition } from "../../../app-capabilities/skill-uninstaller/renderer/app-definition"
 import { synapseSkillAppDefinition } from "../../../app-capabilities/synapse-skill/renderer/app-definition"
@@ -41,6 +42,7 @@ const systemAppDefinitions = [
   textExtractorAppDefinition,
   fileOpenerAppDefinition,
   textFileWriterAppDefinition,
+  htmlGeneratorAppDefinition,
   skillInstallerAppDefinition,
   skillUninstallerAppDefinition,
   synapseSkillAppDefinition,

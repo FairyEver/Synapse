@@ -33,7 +33,7 @@ export const textFileWriterNodeManifest: NodeManifest<TextFileWriterNodeConfig> 
     selfContained: false,
     capability: {
       id: TEXT_FILE_WRITER_CAPABILITY_ID,
-      minVersion: "1.0.0",
+      minVersion: "1.1.0",
       installSourceId: "synapse.builtin",
     },
     resources: [{ path: ["path"], entryType: "file", cardinality: "one", access: "write" }],

@@ -42,7 +42,7 @@ describe("textFileWriterIpcModule", () => {
     })).resolves.toBe(outputPath)
     expect(electron.showSaveDialog).toHaveBeenCalledWith(expect.objectContaining({
       defaultPath: "output.md",
-      filters: [{ name: "文本文件", extensions: ["txt", "md", "csv"] }],
+      filters: [{ name: "文本文件", extensions: ["txt", "md", "csv", "html", "htm"] }],
     }))
   })
 

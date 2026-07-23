@@ -84,6 +84,21 @@ export {
   type SoundNotifierSettingsEntryV3,
 } from "./sound-notifier"
 export {
+  terminalBlocksSchema,
+  terminalCommandBodiesSchema,
+  terminalCommandsSchema,
+  terminalDeleteIntentsSchema,
+  terminalDomainStateSchemaDefinition,
+  terminalGroupsSchema,
+  terminalGroupLaunchBodiesSchema,
+  terminalIdempotencySchema,
+  terminalLaunchBodiesSchema,
+  terminalOperationsSchema,
+  terminalSessionsSchema,
+  type TerminalBlockManifestEntry,
+  type TerminalDeleteIntentEntry,
+} from "./terminal"
+export {
   auditSchema,
   agentArtifactsSchema,
   agentCompressStateSchema,
@@ -170,6 +185,19 @@ import { agentPersonaItemsSchema, agentPersonaSettingsSchema } from "./agent-per
 import { agentPersonaRemoteCacheSchema } from "./agent-persona-remote-cache"
 import { soundNotifierSettingsSchemaDefinition } from "./sound-notifier"
 import {
+  terminalBlocksSchema,
+  terminalCommandBodiesSchema,
+  terminalCommandsSchema,
+  terminalDeleteIntentsSchema,
+  terminalDomainStateSchemaDefinition,
+  terminalGroupsSchema,
+  terminalGroupLaunchBodiesSchema,
+  terminalIdempotencySchema,
+  terminalLaunchBodiesSchema,
+  terminalOperationsSchema,
+  terminalSessionsSchema,
+} from "./terminal"
+import {
   auditSchema,
   agentArtifactsSchema,
   agentCompressStateSchema,
@@ -216,6 +244,17 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   agentPersonaSettingsSchema,
   agentPersonaRemoteCacheSchema,
   soundNotifierSettingsSchemaDefinition,
+  terminalGroupsSchema,
+  terminalGroupLaunchBodiesSchema,
+  terminalCommandsSchema,
+  terminalCommandBodiesSchema,
+  terminalSessionsSchema,
+  terminalOperationsSchema,
+  terminalIdempotencySchema,
+  terminalLaunchBodiesSchema,
+  terminalBlocksSchema,
+  terminalDeleteIntentsSchema,
+  terminalDomainStateSchemaDefinition,
   secretsSchema,
   providersSchema,
   projectsSchema,

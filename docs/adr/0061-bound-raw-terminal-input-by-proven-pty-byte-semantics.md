@@ -1,0 +1,9 @@
+# Bound raw Terminal input by proven PTY byte semantics
+
+`app.terminal.session_input.raw` is a high-risk escape hatch that requires `session.control`, `session.rawInput`, and the authenticated controller's current valid lease. Its request carries `sessionId`, `leaseId`, `expectedInputRevision`, a caller-scoped idempotency key, and one canonical Base64 payload. The service completely validates Base64 form and decoded size against a hard limit before any write. It accepts no alternative encoding modes, performs no parsing, normalization, or implicit Enter, and is not a command convenience API.
+
+Base64 is only a transport representation and does not promise arbitrary binary transparency. Exact-byte behavior is limited to the byte set that the underlying node-pty path can demonstrably preserve on macOS, Windows, and Linux. Before implementation, the current node-pty API and focused platform tests must prove whether `Buffer` or an equivalent lossless write path is supported. If the backend accepts only JavaScript strings, the service validates before writing that the decoded bytes are losslessly representable, such as valid UTF-8 plus explicitly supported control bytes, rejects every unsupported sequence, and publishes `supportedEncoding` and `limitations`. Latin-1 or UTF-8 round trips must never silently alter bytes.
+
+Raw and semantic input share mandatory `expectedInputRevision`, concurrency ordering, and bounded idempotency retention. Accepting any bytes advances the same input revision. Partial acceptance returns accepted byte count, failed byte offset, revisions, operation identity, and structured error without echoing the payload.
+
+Raw bytes, Base64 text, control sequences, and content digests never enter ordinary logs, audit, or error messages. Records contain only size, actor, result, and correlation identities.

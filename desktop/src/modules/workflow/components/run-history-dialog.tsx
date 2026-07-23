@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
+import { AlertCircle, ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogDescription, DialogFrame, DialogFrameBody, DialogFrameHeader } from "@/components/ui/dialog"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -24,6 +25,34 @@ function getFirstError(snapshot: WorkflowRunListItem): string | null {
     .filter((r) => r.error)
     .sort((a, b) => (a.startedAt ?? Number.MAX_SAFE_INTEGER) - (b.startedAt ?? Number.MAX_SAFE_INTEGER))[0]?.error ?? null
   return nodeError ?? snapshot.error ?? null
+}
+
+function getErrorSummary(error: string): string {
+  try {
+    const parsed = JSON.parse(error) as unknown
+    const messages: string[] = []
+    collectErrorMessages(parsed, messages, 0)
+    return [...new Set(messages)].slice(0, 3).join("；") || error
+  } catch {
+    return error
+  }
+}
+
+function collectErrorMessages(value: unknown, messages: string[], depth: number): void {
+  if (depth > 3 || messages.length >= 3 || value == null) return
+  if (Array.isArray(value)) {
+    for (const item of value) collectErrorMessages(item, messages, depth + 1)
+    return
+  }
+  if (typeof value !== "object") return
+
+  const record = value as Record<string, unknown>
+  if (typeof record.message === "string" && record.message.trim()) {
+    messages.push(record.message.trim())
+  }
+  for (const [key, child] of Object.entries(record)) {
+    if (key !== "message") collectErrorMessages(child, messages, depth + 1)
+  }
 }
 
 function isWorkflowTerminalEvent(event: WorkflowEvent, workflowId: string): boolean {
@@ -88,11 +117,6 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
     return () => { unsubscribe?.() }
   }, [open, workflowId, load])
 
-  const formatTime = (ts: number) => {
-    const d = new Date(ts)
-    return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`
-  }
-
   const handleOpenRunner = async (runId: string) => {
     track({
       component: "workflow",
@@ -118,25 +142,18 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent, runId: string) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault()
-      void handleOpenRunner(runId)
-    }
-  }
-
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[calc(100vh-4rem)] overflow-hidden p-0 sm:max-w-2xl" showCloseButton={false}>
-        <DialogFrame className="max-h-[calc(100vh-4rem)]">
-          <DialogFrameHeader title="运行历史">
+      <DialogContent className="h-[70vh] max-h-[calc(100vh-4rem)] overflow-hidden p-0 sm:max-w-3xl" showCloseButton={false}>
+        <DialogFrame>
+          <DialogFrameHeader title="运行历史" bordered>
             <DialogDescription className="sr-only">查看该工作流的历史运行记录。</DialogDescription>
           </DialogFrameHeader>
-          <DialogFrameBody className="px-5 py-4">
+          <DialogFrameBody className="min-h-0 overflow-hidden">
             {loading ? (
-              <p className="text-sm text-muted-foreground py-4 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />加载中…</p>
+              <p className="flex items-center gap-2 px-5 py-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />加载中…</p>
             ) : error ? (
-              <div className="py-4 space-y-3">
+              <div className="space-y-3 px-5 py-4">
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription className="text-xs">{error}</AlertDescription>
@@ -146,45 +163,17 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
                 </Button>
               </div>
             ) : snapshots.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4">暂无运行记录。</p>
+              <p className="px-5 py-8 text-sm text-muted-foreground">暂无运行记录。</p>
             ) : (
-              <ScrollArea className="min-h-0 max-h-[60vh]">
-                <div className="flex flex-col gap-2 pr-3">
-                  {snapshots.map((s) => {
-                    const firstError = getFirstError(s)
-                    const duration = s.endedAt == null ? null : formatDurationMs(s.endedAt - s.startedAt)
-                    return (
-                      <div
-                        key={s.runId}
-                        className="flex min-w-0 items-center gap-2 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        tabIndex={0}
-                        role="button"
-                        onClick={() => handleOpenRunner(s.runId)}
-                        onKeyDown={(e) => handleKeyDown(e, s.runId)}
-                      >
-                        <Badge variant={STATUS_VARIANT[s.status] ?? "outline"} className="text-xs shrink-0">
-                          {STATUS_LABEL[s.status] ?? s.status}
-                        </Badge>
-                        {s.definitionMigration && (
-                          <Badge variant="outline" className="text-xs shrink-0">结构不可读</Badge>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-muted-foreground truncate">{formatTime(s.startedAt)}</p>
-                          {firstError && (
-                            <p className="text-xs text-destructive truncate mt-0.5" title={firstError}>{firstError}</p>
-                          )}
-                        </div>
-                        {duration && (
-                          <span className="text-xs text-muted-foreground shrink-0">
-                            {duration}
-                          </span>
-                        )}
-                        <span className="text-xs text-muted-foreground shrink-0">
-                          {Object.keys(s.nodeResults).length} 个节点
-                        </span>
-                      </div>
-                    )
-                  })}
+              <ScrollArea className="h-full min-h-0" data-track="workflow-run-history-list">
+                <div className="flex flex-col gap-2 px-5 py-4">
+                  {snapshots.map((snapshot) => (
+                    <RunHistoryItem
+                      key={snapshot.runId}
+                      snapshot={snapshot}
+                      onOpen={() => { void handleOpenRunner(snapshot.runId) }}
+                    />
+                  ))}
                 </div>
               </ScrollArea>
             )}
@@ -193,4 +182,97 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
       </DialogContent>
     </Dialog>
   )
+}
+
+function RunHistoryItem({
+  snapshot,
+  onOpen,
+}: {
+  readonly snapshot: WorkflowRunListItem
+  readonly onOpen: () => void
+}) {
+  const [errorExpanded, setErrorExpanded] = useState(false)
+  const firstError = getFirstError(snapshot)
+  const errorSummary = firstError ? getErrorSummary(firstError) : null
+  const duration = snapshot.endedAt == null
+    ? null
+    : formatDurationMs(snapshot.endedAt - snapshot.startedAt)
+  const nodeCount = Object.keys(snapshot.nodeResults).length
+
+  return (
+    <article data-slot="run-history-item" className="min-w-0 overflow-hidden rounded-lg border bg-background">
+      <button
+        type="button"
+        data-slot="run-history-open"
+        className="flex w-full min-w-0 cursor-pointer flex-col gap-2.5 p-3 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+        onClick={onOpen}
+      >
+        <div className="flex w-full min-w-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Badge variant={STATUS_VARIANT[snapshot.status] ?? "outline"}>
+              {STATUS_LABEL[snapshot.status] ?? snapshot.status}
+            </Badge>
+            {snapshot.definitionMigration ? <Badge variant="outline">结构不可读</Badge> : null}
+          </div>
+          <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        </div>
+
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <time dateTime={new Date(snapshot.startedAt).toISOString()}>{formatTime(snapshot.startedAt)}</time>
+          {duration ? <span>{duration}</span> : null}
+          <span>{nodeCount} 个节点</span>
+        </div>
+      </button>
+
+      {firstError && errorSummary ? (
+        <Collapsible open={errorExpanded} onOpenChange={setErrorExpanded} data-track="workflow-run-history-error">
+          <div className="min-w-0 border-t bg-destructive/5 px-3 py-2.5">
+            <div className="flex min-w-0 items-start gap-2">
+              <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-destructive">错误详情</p>
+                {!errorExpanded ? (
+                  <p data-slot="run-history-error-summary" className="mt-1 line-clamp-2 max-w-full whitespace-pre-wrap break-all text-xs leading-5 text-destructive">
+                    {errorSummary}
+                  </p>
+                ) : null}
+              </div>
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  className="shrink-0 text-destructive"
+                  aria-label={`${errorExpanded ? "收起" : "展开"}错误详情`}
+                >
+                  {errorExpanded ? "收起" : "展开"}
+                  <ChevronDown className={errorExpanded ? "rotate-180" : undefined} />
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent className="min-w-0">
+              <pre
+                className="mt-2 max-h-48 max-w-full overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-2.5 font-mono text-xs leading-5 text-foreground"
+                data-allow-select="true"
+              >
+                {firstError}
+              </pre>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+      ) : null}
+    </article>
+  )
+}
+
+function formatTime(timestamp: number): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(timestamp)
 }

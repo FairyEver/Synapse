@@ -42,6 +42,13 @@ import { FILE_OPENER_SERVICE_ID } from "../../app-capabilities/file-opener/share
 import { createTextFileWriterCapabilityDispatcher } from "../../app-capabilities/text-file-writer/main/dispatcher"
 import { TextFileWriterService } from "../../app-capabilities/text-file-writer/main/service"
 import { TEXT_FILE_WRITER_SERVICE_ID } from "../../app-capabilities/text-file-writer/shared/capability"
+import { createHtmlGeneratorCapabilityDispatcher } from "../../app-capabilities/html-generator/main/dispatcher"
+import { createHtmlGenerationToFileService, type HtmlGenerationToFileService } from "../../app-capabilities/html-generator/main/file-service"
+import { HtmlGenerationService } from "../../app-capabilities/html-generator/main/service"
+import {
+  HTML_GENERATOR_FILE_SERVICE_ID,
+  HTML_GENERATOR_SERVICE_ID,
+} from "../../app-capabilities/html-generator/shared/capability"
 import { createTextExtractorCapabilityDispatcher } from "../../app-capabilities/text-extractor/main/dispatcher"
 import { createTextExtractionToFileService } from "../../app-capabilities/text-extractor/main/extract-to-file-service"
 import {
@@ -55,8 +62,11 @@ import { SOUND_NOTIFIER_SETTINGS_NAMESPACE } from "../../app-capabilities/sound-
 import { createSynapseSkillService, type SynapseSkillService } from "../../app-capabilities/synapse-skill/main/service"
 import { SYNAPSE_SKILL_SERVICE_ID } from "../../app-capabilities/synapse-skill/shared/capability"
 import { createTerminalCapabilityDispatcher } from "../../app-capabilities/terminal/main/dispatcher"
+import { createTerminalDataRepositoryStore } from "../../app-capabilities/terminal/main/data-repository-store"
+import { createTerminalEncryptedBlockStore } from "../../app-capabilities/terminal/main/encrypted-block-store"
+import { withLegacyTerminalMigration } from "../../app-capabilities/terminal/main/legacy-migration"
+import { createTerminalRepository } from "../../app-capabilities/terminal/main/repository"
 import { createTerminalService, type TerminalService } from "../../app-capabilities/terminal/main/service"
-import { createTerminalStore } from "../../app-capabilities/terminal/main/store"
 import { createQuickInputService, type QuickInputService } from "../../app-capabilities/quick-input/main/service"
 import {
   QUICK_INPUT_ITEMS_NAMESPACE,
@@ -358,9 +368,24 @@ export const coreAppIconDescriptor: ServiceDescriptor<{ initialized: true }> = {
 export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
   id: "core.terminal",
   criticality: "degraded",
+  dependsOn: ["core.data-repository"],
   create(ctx) {
+    const baseDir = path.join(app.getPath("userData"), "terminal")
+    const repository = createTerminalRepository(ctx.registry.get<DataRepository>("core.data-repository"))
+    const dataStore = createTerminalDataRepositoryStore({
+      repository,
+      blocks: createTerminalEncryptedBlockStore({ baseDir, safeStorage }),
+      logger: ctx.logger.child("terminal-persistence"),
+    })
     return createTerminalService({
-      store: createTerminalStore({ baseDir: path.join(app.getPath("userData"), "terminal") }),
+      store: withLegacyTerminalMigration({
+        baseDir,
+        target: dataStore,
+        targetIsEmpty: async () => {
+          const snapshot = await repository.loadSnapshot()
+          return snapshot.groups.length === 0 && snapshot.sessions.length === 0
+        },
+      }),
       logger: ctx.logger.child("terminal"),
     })
   },
@@ -509,6 +534,34 @@ export const coreTextFileWriterDescriptor: ServiceDescriptor<TextFileWriterServi
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       logger: ctx.logger.child("text-file-writer"),
+    })
+  },
+}
+
+export const coreHtmlGenerationDescriptor: ServiceDescriptor<HtmlGenerationService> = {
+  id: HTML_GENERATOR_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    return new HtmlGenerationService({
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      logger: ctx.logger.child("html-generator"),
+    })
+  },
+  async stop(instance) {
+    await instance.stop()
+  },
+}
+
+export const coreHtmlGenerationFileDescriptor: ServiceDescriptor<HtmlGenerationToFileService> = {
+  id: HTML_GENERATOR_FILE_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: [HTML_GENERATOR_SERVICE_ID, TEXT_FILE_WRITER_SERVICE_ID],
+  create(ctx) {
+    return createHtmlGenerationToFileService({
+      generator: ctx.registry.get<HtmlGenerationService>(HTML_GENERATOR_SERVICE_ID),
+      writer: ctx.registry.get<TextFileWriterService>(TEXT_FILE_WRITER_SERVICE_ID),
     })
   },
 }
@@ -932,6 +985,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     "core.text-extractor",
     FILE_OPENER_SERVICE_ID,
     TEXT_FILE_WRITER_SERVICE_ID,
+    HTML_GENERATOR_SERVICE_ID,
+    HTML_GENERATOR_FILE_SERVICE_ID,
     PROVIDER_SERVICE_ID,
   ],
   async create(ctx) {
@@ -953,6 +1008,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     )
     const fileOpenerService = ctx.registry.get<FileOpenerService>(FILE_OPENER_SERVICE_ID)
     const textFileWriterService = ctx.registry.get<TextFileWriterService>(TEXT_FILE_WRITER_SERVICE_ID)
+    const htmlGenerationService = ctx.registry.get<HtmlGenerationService>(HTML_GENERATOR_SERVICE_ID)
+    const htmlGenerationFileService = ctx.registry.get<HtmlGenerationToFileService>(HTML_GENERATOR_FILE_SERVICE_ID)
     const capabilityLogger = createMainLogger("bootstrap.workflow-capability")
     const runCompletions = new Map<string, Promise<unknown>>()
     const deletedWorkflowIds = new Set<string>()
@@ -1081,6 +1138,10 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     })
     const fileOpenerDispatcher = createFileOpenerCapabilityDispatcher({ service: fileOpenerService })
     const textFileWriterDispatcher = createTextFileWriterCapabilityDispatcher({ service: textFileWriterService })
+    const htmlGeneratorDispatcher = createHtmlGeneratorCapabilityDispatcher({
+      generator: htmlGenerationService,
+      fileGenerator: htmlGenerationFileService,
+    })
     const terminalDispatcher = createTerminalCapabilityDispatcher({
       service: terminalService,
       permissionGuard,
@@ -1102,6 +1163,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       soundNotifier: soundNotifierDispatcher,
       fileOpener: fileOpenerDispatcher,
       textFileWriter: textFileWriterDispatcher,
+      htmlGenerator: htmlGeneratorDispatcher,
     })
 
     const actionRouter = createSynapseActionRouter({
@@ -2109,7 +2171,15 @@ function resolveWorkflowProjectWorkspacePath(
 export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
   id: "core.workflow.engine",
   criticality: "degraded",
-  dependsOn: ["core.project-containers", "core.permission-guard", "core.audit-sink", "core.workflow", "core.workflow.snapshots", "knowledge-base.storage-migration-service"],
+  dependsOn: [
+    "core.project-containers",
+    "core.permission-guard",
+    "core.audit-sink",
+    "core.workflow",
+    "core.workflow.snapshots",
+    "knowledge-base.storage-migration-service",
+    HTML_GENERATOR_FILE_SERVICE_ID,
+  ],
   create(ctx) {
     const registry = ctx.registry
     const engineLogger = createMainLogger("service.workflow.engine.agent-deps")

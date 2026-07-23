@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
+import { randomUUID } from "node:crypto"
 import { createMainLogger } from "../services/log-store"
 import type { SynapseActionRouter } from "../capabilities/action-router"
 import { MCP_TOOL_ACTIONS } from "../../synapse-capabilities/shared/registry"
@@ -16,6 +17,7 @@ const logger = createMainLogger("database.mcp-server")
 const MCP_DEFAULT_PORT = 23578
 const MCP_PORT_ATTEMPTS = 5
 const MAX_BODY_SIZE = 1024 * 1024
+const MCP_HTTP_CONTROLLER_INSTANCE_ID = randomUUID()
 
 let server: Server | null = null
 let activePort = 0
@@ -28,6 +30,8 @@ async function executeTool(toolName: string, args: Record<string, unknown>): Pro
   return actionRouter.dispatch(action, args, {
     source: "mcp-http",
     actor: mcpClientActorForSource("mcp-http"),
+    clientId: "mcp-install:synapse-mcp/http",
+    controllerInstanceId: MCP_HTTP_CONTROLLER_INSTANCE_ID,
   })
 }
 

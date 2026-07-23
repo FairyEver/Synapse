@@ -1,8 +1,9 @@
 import type { AppDeepLinkDeclaration, MainAppCapabilityManifest } from "./manifest"
 import { fileOpenerCapabilityManifest } from "./file-opener/shared/manifest"
 import { textFileWriterCapabilityManifest } from "./text-file-writer/shared/manifest"
+import { htmlGeneratorCapabilityManifest } from "./html-generator/shared/manifest"
 
-const manifests = [fileOpenerCapabilityManifest, textFileWriterCapabilityManifest] as const satisfies readonly MainAppCapabilityManifest[]
+const manifests = [fileOpenerCapabilityManifest, textFileWriterCapabilityManifest, htmlGeneratorCapabilityManifest] as const satisfies readonly MainAppCapabilityManifest[]
 
 export function resolveDeclaredAppDeepLink(
   appId: string,

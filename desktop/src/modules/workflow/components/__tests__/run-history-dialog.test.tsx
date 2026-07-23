@@ -172,10 +172,65 @@ describe("RunHistoryDialog", () => {
       await Promise.resolve()
     })
 
-    expect(document.body.querySelector('[data-slot="dialog-content"]')?.className).toContain("sm:max-w-2xl")
+    expect(document.body.querySelector('[data-slot="dialog-content"]')?.className).toContain("sm:max-w-3xl")
+    expect(document.body.querySelector('[data-slot="dialog-content"]')?.className).toContain("h-[70vh]")
     expect(document.body.querySelector('[data-slot="dialog-content"]')?.className).toContain("overflow-hidden")
-    expect(document.body.querySelector('[data-slot="scroll-area-viewport"] .pr-3')).toBeTruthy()
-    expect(document.body.querySelector('[role="button"]')?.className).toContain("min-w-0")
+    expect(document.body.querySelector('[data-slot="dialog-frame"]')?.className).toContain("h-full")
+    expect(document.body.querySelector('[data-slot="dialog-frame-body"]')?.className).toContain("overflow-hidden")
+    expect(document.body.querySelector('[data-slot="scroll-area"]')?.className).toContain("h-full")
+    expect(document.body.querySelector('[data-slot="scroll-area-viewport"] .px-5')).toBeTruthy()
+    expect(document.body.querySelector('[data-slot="scroll-area-viewport"] .pr-3')).toBeNull()
+    expect(document.body.querySelector('[data-slot="run-history-item"]')?.className).toContain("overflow-hidden")
+    expect(document.body.querySelector('[data-slot="run-history-open"]')?.className).toContain("min-w-0")
+  })
+
+  it("summarizes structured errors and expands the full error without horizontal overflow", async () => {
+    const rawError = JSON.stringify([
+      {
+        code: "custom",
+        path: ["templatePath"],
+        message: "必须使用绝对路径",
+        diagnostic: "x".repeat(1_000),
+      },
+    ])
+    const openRunner = vi.fn()
+    installWorkflowBridge({
+      runHistory: vi.fn().mockResolvedValue([
+        createRunItem({
+          error: rawError,
+          nodeResults: {},
+        }),
+      ]),
+      openRunner,
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<RunHistoryDialog open workflowId="workflow-1" onClose={vi.fn()} />)
+      await Promise.resolve()
+    })
+
+    const summary = document.body.querySelector('[data-slot="run-history-error-summary"]')
+    expect(summary?.textContent).toBe("必须使用绝对路径")
+    expect(summary?.className).toContain("line-clamp-2")
+    expect(summary?.className).toContain("break-all")
+    expect(summary?.className).not.toContain("truncate")
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>('[aria-label="展开错误详情"]')?.click()
+    })
+
+    const detail = document.body.querySelector("[data-slot=collapsible-content] pre")
+    expect(detail?.textContent).toContain(rawError)
+    expect(detail?.className).toContain("max-w-full")
+    expect(detail?.className).toContain("overflow-auto")
+    expect(detail?.className).toContain("whitespace-pre-wrap")
+    expect(detail?.className).toContain("break-all")
+    expect(openRunner).not.toHaveBeenCalled()
   })
 
   it("shows workflow durations with readable minute and second units", async () => {
@@ -237,7 +292,7 @@ describe("RunHistoryDialog", () => {
       await Promise.resolve()
     })
 
-    const openButton = document.body.querySelector('[role="button"]')
+    const openButton = document.body.querySelector('[data-slot="run-history-open"]')
     expect(openButton).toBeDefined()
 
     await act(async () => {
@@ -326,7 +381,7 @@ describe("RunHistoryDialog", () => {
     expect(document.body.textContent).not.toContain("NaN")
 
     await act(async () => {
-      document.body.querySelector('[role="button"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      document.body.querySelector('[data-slot="run-history-open"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     })
 
     expect(openRunner).toHaveBeenCalledWith("workflow-1", "active-run")

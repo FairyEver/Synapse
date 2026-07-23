@@ -154,7 +154,7 @@ describe("MCP HTTP server", () => {
     expect(JSON.parse(response.body)).toEqual({ error: "Not found" })
   })
 
-  it("lists Automation MCP tools", async () => {
+  it("lists Automation and Terminal MCP tools", async () => {
     const { startMcpServer } = await import("../mcp-server")
     const port = await startMcpServer({
       dispatch: vi.fn(),
@@ -175,6 +175,12 @@ describe("MCP HTTP server", () => {
       "app_automation_webhook_list",
       "app_automation_trigger_type_list",
       "app_automation_executor_type_list",
+      "app_terminal_capabilities_get",
+      "app_terminal_group_list",
+      "app_terminal_session_create",
+      "app_terminal_session_output_read",
+      "app_terminal_session_input_send",
+      "app_terminal_session_stop",
     ]))
     expect(payload.result.tools.map((tool: { name: string }) => tool.name))
       .not.toContain("automation_item_list")
@@ -199,7 +205,46 @@ describe("MCP HTTP server", () => {
     expect(dispatch).toHaveBeenCalledWith("app.automation.item.list", { enabled: true }, {
       source: "mcp-http",
       actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
+      clientId: "mcp-install:synapse-mcp/http",
+      controllerInstanceId: expect.any(String),
     })
     expect(JSON.parse(response.body).result.content[0].text).toBe(JSON.stringify([{ id: "automation:1" }], null, 2))
+  })
+
+  it("calls Terminal tools through HTTP without Authorization and preserves structured errors", async () => {
+    const envelope = {
+      ok: false as const,
+      contractVersion: "2.0",
+      error: {
+        code: "permission_denied",
+        category: "authorization",
+        retryable: false,
+        correlationId: "correlation-1",
+      },
+    }
+    const dispatch = vi.fn(async () => envelope)
+    const { startMcpServer } = await import("../mcp-server")
+    const port = await startMcpServer({ dispatch: dispatch as never })
+
+    const response = await postJson(port, {
+      jsonrpc: "2.0",
+      id: 4,
+      method: "tools/call",
+      params: {
+        name: "app_terminal_group_list",
+        arguments: {},
+      },
+    })
+
+    expect(response.status).toBe(200)
+    expect(dispatch).toHaveBeenCalledWith("app.terminal.group.list", {}, expect.objectContaining({
+      source: "mcp-http",
+    }))
+    expect(JSON.parse(response.body)).toMatchObject({
+      result: {
+        isError: true,
+        content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }],
+      },
+    })
   })
 })

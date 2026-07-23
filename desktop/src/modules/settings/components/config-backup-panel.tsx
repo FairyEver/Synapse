@@ -61,6 +61,7 @@ function ConfigBackupPanel() {
               导出
             </Button>
           </div>
+          <p className="text-sm text-muted-foreground">不包含终端输出、检查点和已保存命令正文。</p>
         </div>
       </SettingsGroup>
 

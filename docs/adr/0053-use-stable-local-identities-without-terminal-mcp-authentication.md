@@ -1,0 +1,5 @@
+# Use stable local identities without Terminal MCP authentication
+
+Synapse Terminal MCP is a local capability exposed only through the loopback HTTP server. This transport does not require a Terminal-specific login, token, authentication handshake, or explicit grant. It uses the same local MCP user actor as the rest of Synapse MCP so a normally registered Codex, Claude Code, Cursor, or other supported client can call Terminal tools directly. The retired stdio bridge is not built or packaged, and existing stdio registrations are migrated to HTTP.
+
+The transport still assigns a stable `clientId` and a per-process or per-controller `controllerInstanceId`. These values are operational identities rather than credentials: they bind write leases, concurrency quotas, idempotency, observations, revocation cleanup, and audit correlation. Input leases, revisions, lifecycle checks, capability-specific permission categories, bounded output, redacted audit, and explicit user takeover remain unchanged. A future remote MCP transport must define its own standard authentication boundary without adding credentials or secondary authorization to the local MCP path.

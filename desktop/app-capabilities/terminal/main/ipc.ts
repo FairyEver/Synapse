@@ -6,6 +6,8 @@ import type { WindowManager } from "../../../electron/runtime/window"
 import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 import type { TerminalService } from "./service"
 import {
+  terminalAttachSessionInputSchema,
+  terminalAttachSessionResultSchema,
   terminalCreateGroupCommandInputSchema,
   terminalCreateGroupInputSchema,
   terminalCreateSessionInputSchema,
@@ -21,6 +23,7 @@ import {
   terminalRenameGroupInputSchema,
   terminalRenameSessionInputSchema,
   terminalResizeSessionInputSchema,
+  terminalResizedEventSchema,
   terminalRunStartupCommandInputSchema,
   terminalSessionIdInputSchema,
   terminalSessionSchema,
@@ -37,6 +40,16 @@ const terminalDataEventPayloadSchema = z.object({
 
 const terminalSessionDeletedEventPayloadSchema = z.object({
   sessionId: z.string().min(1),
+})
+
+const terminalDomainChangedEventPayloadSchema = z.object({
+  domainRevision: z.number().int().positive(),
+  eventType: z.string().min(1),
+  objectId: z.string().min(1),
+  objectRevision: z.number().int().nonnegative(),
+  occurredAt: z.string().min(1),
+  source: z.string().min(1),
+  operationId: z.string().min(1).optional(),
 })
 
 const terminalEventWiredServices = new WeakSet<TerminalService>()
@@ -62,6 +75,12 @@ function wireTerminalEvents(
   })
   service.events.on("sessionDeleted", (payload) => {
     windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.sessionDeleted.operationId), payload)
+  })
+  service.events.on("resized", (payload) => {
+    windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.resized.operationId), payload)
+  })
+  service.events.on("domainChanged", (payload) => {
+    windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.domainChanged.operationId), payload)
   })
   terminalEventWiredServices.add(service)
 }
@@ -154,8 +173,13 @@ export const terminalIpcModule: IpcModule = {
       kind: "invoke",
       request: terminalDeleteGroupInputSchema,
       response: z.void(),
-      handler: (ctx, request: z.infer<typeof terminalDeleteGroupInputSchema>) =>
-        resolveTerminalService(ctx).deleteGroup(request),
+      handler: async (ctx, request: z.infer<typeof terminalDeleteGroupInputSchema>) => {
+        const service = resolveTerminalService(ctx)
+        const members = service.listSessions().filter((session) => session.groupId === request.groupId)
+        if (members.length === 0) return service.deleteGroup(request)
+        const plan = service.previewGroupDelete(request.groupId)
+        await service.commitGroupDelete(plan.deletePlanId)
+      },
     },
     listSessions: {
       operationId: "app.terminal.session.list",
@@ -179,6 +203,14 @@ export const terminalIpcModule: IpcModule = {
       response: terminalSessionSchema,
       handler: (ctx, request: z.infer<typeof terminalSessionIdInputSchema>) =>
         resolveTerminalService(ctx).getSession(request),
+    },
+    attachSession: {
+      operationId: "app.terminal.session.attach",
+      kind: "invoke",
+      request: terminalAttachSessionInputSchema,
+      response: terminalAttachSessionResultSchema,
+      handler: (ctx, request: z.infer<typeof terminalAttachSessionInputSchema>) =>
+        resolveTerminalService(ctx).attachSession(request),
     },
     readSession: {
       operationId: "app.terminal.session.read",
@@ -252,6 +284,16 @@ export const terminalIpcModule: IpcModule = {
       operationId: "app.terminal.operation.session_deleted",
       kind: "event",
       payload: terminalSessionDeletedEventPayloadSchema,
+    },
+    resized: {
+      operationId: "app.terminal.operation.resized",
+      kind: "event",
+      payload: terminalResizedEventSchema,
+    },
+    domainChanged: {
+      operationId: "app.terminal.operation.domain_changed",
+      kind: "event",
+      payload: terminalDomainChangedEventPayloadSchema,
     },
   },
 }

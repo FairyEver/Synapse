@@ -219,9 +219,9 @@ describe("WorkflowService", () => {
     expect(cleanup.deleteForWorkflow).toHaveBeenCalledWith(def.id)
   })
   it.each([
-    ["future", { meta: { schemaVersion: "3.0.0" } }, "先导出原文备份"],
-    ["failed", { nodes: undefined }, "数据迁移失败"],
-  ])("preserves a protected %s workflow and its migration state when deletion is requested", async (_case, override, expectedMessage) => {
+    ["future", { meta: { schemaVersion: "3.0.0" } }],
+    ["failed", { nodes: undefined }],
+  ])("deletes a protected %s workflow and clears its migration state", async (_case, override) => {
     const dir = tmpDir()
     const original = { ...makeDef(), id: "protected-delete-workflow", ...override }
     writeFileSync(path.join(dir, "workflows.json"), JSON.stringify({
@@ -234,21 +234,33 @@ describe("WorkflowService", () => {
     const svc = new WorkflowService(repo, undefined, cleanup)
 
     await svc.list()
-    const workflowBefore = readFileSync(path.join(dir, "workflows.json"), "utf8")
-    const migrationStateBefore = readFileSync(path.join(dir, "workflow.migration-state.json"), "utf8")
+    await expect(svc.delete(original.id)).resolves.toBeUndefined()
 
-    await expect(svc.delete(original.id)).rejects.toThrow(expectedMessage)
+    const workflowStore = JSON.parse(readFileSync(path.join(dir, "workflows.json"), "utf8")) as { items: Record<string, unknown> }
+    const migrationStateStore = JSON.parse(readFileSync(path.join(dir, "workflow.migration-state.json"), "utf8")) as { items: Record<string, unknown> }
+    expect(workflowStore.items[original.id]).toBeUndefined()
+    expect(migrationStateStore.items[`current:${original.id}`]).toBeUndefined()
+    expect(cleanup.deleteForWorkflow).toHaveBeenCalledWith(original.id)
+  })
+  it("blocks deleting a protected workflow that is still called by a current workflow", async () => {
+    const { repo, svc } = createRepo()
+    await svc.save({ ...makeDef(), id: "protected-child" })
+    await svc.save({
+      ...makeDef(),
+      id: "parent",
+      nodes: [
+        { id: "call", name: "调用子流程", type: "workflow_call", position: { x: 0, y: 0 }, config: { workflowId: "protected-child", variables: [], paramTemplates: {} } },
+        { id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "", variables: [] } },
+      ],
+      edges: [{ id: "edge", from: "call", to: "end" }],
+    })
+    const workflows = repo.namespace<WorkflowEntryV1>("workflows")
+    const child = await workflows.get("protected-child")
+    if (!child) throw new Error("Fixture child workflow missing")
+    await workflows.upsert({ ...child, meta: { schemaVersion: "3.0.0" } })
 
-    expect(readFileSync(path.join(dir, "workflows.json"), "utf8")).toBe(workflowBefore)
-    expect(readFileSync(path.join(dir, "workflow.migration-state.json"), "utf8")).toBe(migrationStateBefore)
-    expect(cleanup.deleteForWorkflow).not.toHaveBeenCalled()
-    expect(logger.warn).toHaveBeenCalledWith(
-      "workflow delete blocked for protected document",
-      expect.objectContaining({
-        boundary: "workflow-service.delete",
-        id: original.id,
-      }),
-    )
+    await expect(svc.delete("protected-child")).rejects.toThrow("仍被以下工作流调用")
+    expect(await workflows.get("protected-child")).not.toBeNull()
   })
   it("returns empty list when no workflows exist", async () => {
     const { svc } = createRepo()

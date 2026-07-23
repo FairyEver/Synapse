@@ -16,6 +16,7 @@ export {
   createNodeRuntimeShimScript,
   dedupePath,
   ensureNodeRuntimeShims,
+  findEnvEntry,
   mergeEnvironmentWithPath,
   resolveCachedLoginShellPath,
   resolveExecutableInPath,

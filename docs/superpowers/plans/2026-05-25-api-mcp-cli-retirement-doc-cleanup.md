@@ -56,7 +56,7 @@ Expected: FAIL with affected `docs/superpowers` Markdown files listed.
 Use this note near the top of affected historical documents:
 
 ```md
-> Superseded note: Synapse-owned CLI capability entrypoints were retired after this document was written. Current capability access is MCP for external agents and local HTTP `/api` only as internal transport for the stdio MCP bridge.
+> Superseded note: Synapse-owned CLI and stdio MCP capability entrypoints were retired after this document was written. Current external capability access uses loopback HTTP MCP; local HTTP `/api` remains an authenticated internal API.
 ```
 
 - [ ] **Step 2: Replace active CLI capability chains**

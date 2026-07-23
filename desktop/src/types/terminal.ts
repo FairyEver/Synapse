@@ -1,4 +1,6 @@
 import type {
+  TerminalAttachSessionInput,
+  TerminalAttachSessionResult,
   TerminalCreateGroupCommandInput,
   TerminalCreateGroupInput,
   TerminalCreateSessionInput,
@@ -14,6 +16,7 @@ import type {
   TerminalRenameGroupInput,
   TerminalRenameSessionInput,
   TerminalResizeSessionInput,
+  TerminalResizedEvent,
   TerminalRunStartupCommandInput,
   TerminalSession,
   TerminalStopSessionInput,
@@ -35,12 +38,15 @@ export type SynapseTerminalDeleteGroupCommandInput = TerminalDeleteGroupCommandI
 export type SynapseTerminalLaunchGroupCommandInput = TerminalLaunchGroupCommandInput
 export type SynapseTerminalDeleteGroupInput = TerminalDeleteGroupInput
 export type SynapseTerminalCreateSessionInput = TerminalCreateSessionInput
+export type SynapseTerminalAttachSessionInput = TerminalAttachSessionInput
+export type SynapseTerminalAttachSessionResult = TerminalAttachSessionResult
 export type SynapseTerminalRenameSessionInput = TerminalRenameSessionInput
 export type SynapseTerminalDeleteSessionInput = TerminalDeleteSessionInput
 export type SynapseTerminalReadSessionInput = TerminalReadSessionInput
 export type SynapseTerminalReadSessionResult = TerminalReadSessionResult
 export type SynapseTerminalWriteSessionInput = TerminalWriteSessionInput
 export type SynapseTerminalResizeSessionInput = TerminalResizeSessionInput
+export type SynapseTerminalResizedEvent = TerminalResizedEvent
 export type SynapseTerminalStopSessionInput = TerminalStopSessionInput
 export type SynapseTerminalRunStartupCommandInput = TerminalRunStartupCommandInput
 
@@ -51,4 +57,14 @@ export type SynapseTerminalDataEvent = {
 
 export type SynapseTerminalSessionDeletedEvent = {
   readonly sessionId: string
+}
+
+export type SynapseTerminalDomainChangedEvent = {
+  readonly domainRevision: number
+  readonly eventType: string
+  readonly objectId: string
+  readonly objectRevision: number
+  readonly occurredAt: string
+  readonly source: string
+  readonly operationId?: string
 }

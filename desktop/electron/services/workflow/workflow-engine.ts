@@ -253,9 +253,7 @@ export class WorkflowEngine {
             })
           }
           const prompt = (cfg as Record<string, unknown>)["prompt"]
-          const template = (cfg as Record<string, unknown>)["template"]
-          const interpolatable = typeof prompt === "string" ? prompt : (typeof template === "string" ? template : undefined)
-          const resolvedPrompt = interpolatable !== undefined ? interpolatePrompt(interpolatable, resolved) : undefined
+          const resolvedPrompt = typeof prompt === "string" ? interpolatePrompt(prompt, resolved) : undefined
           const recordedPrompt = typeof prompt === "string" ? resolvedPrompt : undefined
 
           // Update NodeRunResult input for this node

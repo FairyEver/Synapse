@@ -916,7 +916,7 @@ function parseBackup(rawValue: unknown): SynapseConfigBackup {
   const normalizedDataRepository = dataRepository === undefined
     ? undefined
     : isDataRepositoryBackupPayload(dataRepository)
-      ? dataRepository
+      ? prepareTerminalOrdinaryRestore(dataRepository)
       : null
   if (dataRepository !== undefined && normalizedDataRepository === null) {
     errors.push("backup.dataRepository 必须是有效的数据仓库备份。")
@@ -943,7 +943,7 @@ async function writeBackupFile(filePath: string, backup: SynapseConfigBackup): P
 async function createConfigBackupPayload(exportedAt = new Date()): Promise<SynapseConfigBackup> {
   const config = await configStore.load()
   const dataRepository = dataRepositoryForBackup
-    ? await dataRepositoryForBackup.exportAll({ includeSecrets: false })
+    ? prepareTerminalOrdinaryBackup(await dataRepositoryForBackup.exportAll({ includeSecrets: false }))
     : undefined
   return {
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -969,6 +969,110 @@ async function createConfigBackupPayload(exportedAt = new Date()): Promise<Synap
     },
     identity: await userIdentityService.exportIdentity(),
     ...(dataRepository ? { dataRepository } : undefined),
+  }
+}
+
+const TERMINAL_BODY_NAMESPACES = new Set([
+  "app.terminal.command-bodies",
+  "app.terminal.group-launch-bodies",
+  "app.terminal.launch-bodies",
+  "app.terminal.blocks",
+  "app.terminal.delete-intents",
+  "app.terminal.idempotency",
+])
+
+function prepareTerminalOrdinaryBackup(
+  payload: SynapseDataRepositoryBackupPayload,
+): SynapseDataRepositoryBackupPayload {
+  return {
+    ...payload,
+    namespaces: payload.namespaces.map((entry) => {
+      if (TERMINAL_BODY_NAMESPACES.has(entry.name)) {
+        return { ...entry, data: { items: [] } }
+      }
+      if (entry.name === "app.terminal.commands") {
+        return mapBackupItems(entry, (item) => ({ ...item, bodyAvailable: false, bodyRef: undefined }))
+      }
+      if (entry.name === "app.terminal.groups") {
+        return mapBackupItems(entry, (item) => ({ ...item, launchBodyRef: undefined }))
+      }
+      if (entry.name === "app.terminal.sessions") {
+        return mapBackupItems(entry, (item) => ({ ...item, launchBodyRef: undefined }))
+      }
+      if (entry.name === "app.terminal.operations") {
+        return filterBackupItems(entry, (item) => item.status === "completed")
+      }
+      return entry
+    }),
+  }
+}
+
+function prepareTerminalOrdinaryRestore(
+  payload: SynapseDataRepositoryBackupPayload,
+): SynapseDataRepositoryBackupPayload {
+  const prepared = prepareTerminalOrdinaryBackup(payload)
+  return {
+    ...prepared,
+    namespaces: prepared.namespaces.map((entry) => {
+      if (entry.name !== "app.terminal.sessions") return entry
+      return mapBackupItems(entry, (item) => {
+        const nextOutputSeq = typeof item.nextOutputSeq === "number" ? item.nextOutputSeq : 1
+        const lifecycle = item.lifecycle === "running" || item.lifecycle === "stopping" ? "lost" : item.lifecycle
+        return {
+          ...item,
+          lifecycle,
+          firstRetainedOutputSeq: nextOutputSeq,
+          attention: {
+            state: "unknown",
+            kind: "unknown",
+            reason: "backup_excluded",
+            confidence: 0,
+            detectedAt: new Date().toISOString(),
+            throughOutputSeq: Math.max(0, nextOutputSeq - 1),
+            sizeRevision: typeof item.sizeRevision === "number" ? item.sizeRevision : 1,
+            detectorId: "backup-restore",
+            detectorVersion: "1.0.0",
+          },
+          ...(lifecycle === "lost" ? {
+            endFacts: {
+              cause: "restored_runtime_unavailable",
+              exitCode: null,
+              signal: null,
+              endedAt: null,
+              endTimeUnknown: true,
+            },
+          } : {}),
+        }
+      })
+    }),
+  }
+}
+
+function mapBackupItems(
+  entry: SynapseDataRepositoryBackupPayload["namespaces"][number],
+  transform: (item: Record<string, unknown>) => Record<string, unknown>,
+): SynapseDataRepositoryBackupPayload["namespaces"][number] {
+  if (!isRecord(entry.data) || !Array.isArray(entry.data.items)) return entry
+  return {
+    ...entry,
+    data: {
+      ...entry.data,
+      items: entry.data.items.map((item) => isRecord(item) ? transform(item) : item),
+    },
+  }
+}
+
+function filterBackupItems(
+  entry: SynapseDataRepositoryBackupPayload["namespaces"][number],
+  predicate: (item: Record<string, unknown>) => boolean,
+): SynapseDataRepositoryBackupPayload["namespaces"][number] {
+  if (!isRecord(entry.data) || !Array.isArray(entry.data.items)) return entry
+  return {
+    ...entry,
+    data: {
+      ...entry.data,
+      items: entry.data.items.filter((item) => isRecord(item) && predicate(item)),
+    },
   }
 }
 

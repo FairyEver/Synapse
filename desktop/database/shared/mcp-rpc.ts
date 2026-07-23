@@ -1,7 +1,5 @@
-// Shared MCP JSON-RPC handler used by both the in-process HTTP MCP server and
-// the stdio MCP bridge. The transport layer (HTTP body vs. stdin line) is
-// owned by each caller; this module only decides what to respond with for a
-// given parsed request, given a tool executor provided by the caller.
+// MCP JSON-RPC handler used by the in-process HTTP MCP server. This module
+// decides what to respond with for a parsed request and a provided executor.
 
 import {
   MCP_TOOL_ACTIONS,
@@ -54,6 +52,7 @@ function normalizeToolResult(action: string, result: unknown): unknown {
   if (!isRecord(result) || result.ok !== true) return result
 
   const domainId = getActionDomainId(action)
+  if (action.startsWith("app.terminal.")) return result
   if (domainId && domainId !== "database") {
     return result.data ?? null
   }

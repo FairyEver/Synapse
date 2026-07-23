@@ -60,6 +60,8 @@ For HTTP action, IPC channel, and preload bridge changes, see [API、IPC 与 Bri
 | `app.settings.repository.item.list` | `app_settings_repository_item_list` | `app.settings.repository.item.list` | `repositoryItemList` |
 | `app.document_template.docx.generate` | `app_document_template_docx_generate` | `app.document_template.docx.generate` | `documentTemplateDocxGenerate` |
 | `app.file_opener.file.open` | `app_file_opener_file_open` | `app.file_opener.file.open` | `fileOpenerFileOpen` |
+| `app.html_generator.ejs.generate` | `app_html_generator_ejs_generate` | `app.html_generator.ejs.generate` | `htmlGeneratorEjsGenerate` |
+| `app.html_generator.ejs_file.generate` | `app_html_generator_ejs_file_generate` | `app.html_generator.ejs_file.generate` | `htmlGeneratorEjsFileGenerate` |
 | `app.automation.item.list` | `app_automation_item_list` | `app.automation.item.list` | `automationItemList` |
 | `app.automation.item.get` | `app_automation_item_get` | `app.automation.item.get` | `automationItemGet` |
 | `app.automation.item.create` | `app_automation_item_create` | `app.automation.item.create` | `automationItemCreate` |

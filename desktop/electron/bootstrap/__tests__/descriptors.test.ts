@@ -134,6 +134,25 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreTextExtractorDescriptor.stop).toBeTypeOf("function")
   })
 
+  it("registers one HTML render core and a Writer composition service", async () => {
+    const {
+      coreHtmlGenerationDescriptor,
+      coreHtmlGenerationFileDescriptor,
+    } = await importBootstrap()
+    expect(coreHtmlGenerationDescriptor.id).toBe("core.html-generator")
+    expect(coreHtmlGenerationDescriptor.dependsOn).toEqual([
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+    expect(coreHtmlGenerationDescriptor.stop).toBeTypeOf("function")
+    expect(coreHtmlGenerationFileDescriptor.id).toBe("core.html-generator-file")
+    expect(coreHtmlGenerationFileDescriptor.dependsOn).toEqual([
+      "core.html-generator",
+      "core.text-file-writer",
+    ])
+    expect(coreHtmlGenerationFileDescriptor.stop).toBeUndefined()
+  })
+
   it("coreDatabaseDescriptor is degraded, depends on config, event bus, automation, and action runtime, has stop", async () => {
     const { coreDatabaseDescriptor } = await importBootstrap()
     expect(coreDatabaseDescriptor.id).toBe("core.database")
@@ -155,6 +174,8 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.text-extractor",
       "core.file-opener",
       "core.text-file-writer",
+      "core.html-generator",
+      "core.html-generator-file",
       "provider",
     ])
     expect(coreDatabaseDescriptor.stop).toBeTypeOf("function")

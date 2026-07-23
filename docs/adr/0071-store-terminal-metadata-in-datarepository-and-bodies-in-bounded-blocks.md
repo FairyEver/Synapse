@@ -1,0 +1,13 @@
+# Store Terminal metadata in DataRepository and bodies in bounded blocks
+
+Terminal structured data uses registered, versioned DataRepository namespaces such as `app.terminal.groups`, `app.terminal.commands`, `app.terminal.sessions`, `app.terminal.operations`, and `app.terminal.idempotency`, with list-shaped data preferring SQLite. Every record carries `schemaVersion`. Session identity, manifests, digests, revisions, quota indexes, and operation state remain in DataRepository. Local caller identity, permission checks, and audit remain in Synapse's shared runtime security domain.
+
+Raw PTY output and emulator-checkpoint bodies may use a Terminal-owned bounded file-block store. This is a narrowly approved exception to the normal system-App DataRepository rule after final design approval and does not extend to metadata. Each block has an unguessable internal identity, byte size, SHA-256 or equivalent integrity digest, content type, and owning session. File permissions are restrictive, paths never cross Renderer, IPC, or MCP, and output and checkpoint blocks remain sensitive bodies.
+
+Writes use staging, digest verification, atomic rename, and a metadata transaction or an equivalently safe ordering. Recovery cleans orphan staging and committed blocks, detects missing or corrupt referenced blocks, and reports degraded data rather than leaving metadata silently pointing to a partial file. Deletion first persists a recoverable intent; file deletion failure retains the metadata required to retry. Quota indexes can be checked and rebuilt from manifests and actual blocks.
+
+Legacy `terminal-state.json` migration declares an explicit baseline and complete migration table through the shared `VersionedDataMigrator`. It creates and verifies an exact-byte backup, rechecks the source digest before cutover, validates the complete target, switches atomically, and writes a permanent idempotent migration marker. Failure preserves the legacy source and permits retry. Success prevents old data from resurrecting after a user clears the new store.
+
+The final implementation design must explicitly decide whether Terminal metadata and body blocks enter existing backup and restore, what bodies are excluded, and the degraded behavior for missing data. It must not introduce new files with an unknown backup policy. If at-rest encryption is required, it reuses the shared encryption and key mechanisms rather than placing a new key in ordinary Terminal configuration.
+
+When this stable boundary is implemented, the same task updates `AGENTS.md`, registered data schemas and guidance, backup and restore documentation, and `RELEASE_NOTES_PENDING.md`. These implementation-facing files are intentionally not changed while the repository still uses the legacy store.
