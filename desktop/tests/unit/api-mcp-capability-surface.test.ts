@@ -77,7 +77,7 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(toolNames).toHaveLength(208)
+    expect(toolNames).toHaveLength(203)
     expect(toolNames.every((toolName) => toolName.startsWith("app_"))).toBe(true)
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })

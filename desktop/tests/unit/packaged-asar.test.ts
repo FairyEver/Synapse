@@ -108,7 +108,48 @@ function documentExtractionFiles(
   return { ...SYNTHETIC_DOCUMENT_EXTRACTION_FILES, ...overrides }
 }
 
+const HTML_GENERATION_MAIN_PATH =
+  "dist-electron/app-capabilities/html-generator/main"
+const SYNTHETIC_HTML_GENERATION_FILES: Readonly<Record<string, string>> = {
+  [`${HTML_GENERATION_MAIN_PATH}/service.js`]:
+    "const { launchHtmlGenerationWorker } = require('./worker-launch')\n",
+  [`${HTML_GENERATION_MAIN_PATH}/service.js.map`]: "{}",
+  [`${HTML_GENERATION_MAIN_PATH}/worker-launch.js`]: [
+    "const path = require('node:path')",
+    "const { Worker } = require('node:worker_threads')",
+    "function launchHtmlGenerationWorker(input) {",
+    "  const workerBaseDir = input.baseDir.replace(/([\\\\/])app\\.asar(?=[\\\\/])/, '$1app.asar.unpacked')",
+    "  return (input.workerFactory || ((filename, options) => new Worker(filename, options)))(path.join(workerBaseDir, 'worker.js'), {",
+    "    workerData: input.workerData,",
+    "    resourceLimits: { maxOldGenerationSizeMb: input.maxOldGenerationSizeMb },",
+    "    stdout: true,",
+    "    stderr: true,",
+    "  })",
+    "}",
+    "module.exports = { launchHtmlGenerationWorker }",
+    "",
+  ].join("\n"),
+  [`${HTML_GENERATION_MAIN_PATH}/worker-launch.js.map`]: "{}",
+  [`${HTML_GENERATION_MAIN_PATH}/worker.js`]: [
+    "const { parentPort, workerData } = require('node:worker_threads')",
+    "// ejs-runtime fileLoader",
+    "parentPort.postMessage({ type: 'started' })",
+    "const html = workerData.template.replace('<%= data.title %>', String(workerData.data.title))",
+    "parentPort.postMessage({ type: 'success', html, size: Buffer.byteLength(html, 'utf8') })",
+    "",
+  ].join("\n"),
+  [`${HTML_GENERATION_MAIN_PATH}/worker.js.map`]: "{}",
+  [`${HTML_GENERATION_MAIN_PATH}/ejs-runtime.js`]: "module.exports = require('ejs')\n",
+  [`${HTML_GENERATION_MAIN_PATH}/ejs-runtime.js.map`]: "{}",
+  "node_modules/ejs/package.json":
+    '{"version":"6.0.1","main":"./lib/cjs/ejs.js","license":"Apache-2.0"}\n',
+  "node_modules/ejs/LICENSE": "Apache License\nVersion 2.0, January 2004\n",
+  "node_modules/ejs/lib/cjs/ejs.js": "module.exports = {}\n",
+  "node_modules/ejs/lib/cjs/utils.js": "module.exports = {}\n",
+}
+
 interface CreateAsarBufferOptions {
+  readonly includeHtmlGeneration?: boolean
   readonly textExtractionContentOverrides?: DocumentExtractionContentOverrides
   readonly includeClaudeRuntimeGuard?: boolean
   readonly includeDeploymentConfig?: boolean
@@ -194,6 +235,43 @@ function createTextExtractionFiles(
   }
 }
 
+function createHtmlGenerationFiles(files: Readonly<Record<string, string>>) {
+  const node = (fileName: string) => createUnpackedFileNode(
+    files[`${HTML_GENERATION_MAIN_PATH}/${fileName}`],
+  )
+  return {
+    main: {
+      files: {
+        "service.js": node("service.js"),
+        "service.js.map": node("service.js.map"),
+        "worker-launch.js": node("worker-launch.js"),
+        "worker-launch.js.map": node("worker-launch.js.map"),
+        "worker.js": node("worker.js"),
+        "worker.js.map": node("worker.js.map"),
+        "ejs-runtime.js": node("ejs-runtime.js"),
+        "ejs-runtime.js.map": node("ejs-runtime.js.map"),
+      },
+    },
+  }
+}
+
+function createEjsFiles(files: Readonly<Record<string, string>>) {
+  return {
+    "package.json": createUnpackedFileNode(files["node_modules/ejs/package.json"]),
+    LICENSE: createUnpackedFileNode(files["node_modules/ejs/LICENSE"]),
+    lib: {
+      files: {
+        cjs: {
+          files: {
+            "ejs.js": createUnpackedFileNode(files["node_modules/ejs/lib/cjs/ejs.js"]),
+            "utils.js": createUnpackedFileNode(files["node_modules/ejs/lib/cjs/utils.js"]),
+          },
+        },
+      },
+    },
+  }
+}
+
 function createUnpdfFiles(files: Readonly<Record<string, string>>, omitIntegrity?: string) {
   const node = (relativePath: string) => createUnpackedFileNode(
     relativePath === omitIntegrity ? undefined : files[relativePath],
@@ -242,6 +320,7 @@ function createPackageManifestFiles(
 
 function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const {
+    includeHtmlGeneration = true,
     textExtractionContentOverrides = {},
     includeClaudeRuntimeGuard = true,
     includeDeploymentConfig = true,
@@ -253,6 +332,7 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     omitTextExtractionIntegrity,
   } = options
   const documentFiles = documentExtractionFiles(textExtractionContentOverrides)
+  const htmlGenerationFiles = SYNTHETIC_HTML_GENERATION_FILES
   const packageJson = Buffer.from(JSON.stringify({ main: "dist-electron/electron/main.js" }), "utf8")
   const mainJs = Buffer.from("require('./bootstrap/descriptors.js')\n", "utf8")
   const preloadJs = Buffer.from("const { contextBridge } = require('electron')\n", "utf8")
@@ -332,16 +412,27 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
               },
             },
           },
-          ...(includeTextExtraction
+          ...(includeTextExtraction || includeHtmlGeneration
             ? {
                 "app-capabilities": {
                   files: {
-                    "text-extractor": {
-                      files: createTextExtractionFiles(
-                        documentFiles,
-                        omitTextExtractionIntegrity,
-                      ),
-                    },
+                    ...(includeTextExtraction
+                      ? {
+                          "text-extractor": {
+                            files: createTextExtractionFiles(
+                              documentFiles,
+                              omitTextExtractionIntegrity,
+                            ),
+                          },
+                        }
+                      : {}),
+                    ...(includeHtmlGeneration
+                      ? {
+                          "html-generator": {
+                            files: createHtmlGenerationFiles(htmlGenerationFiles),
+                          },
+                        }
+                      : {}),
                   },
                 },
               }
@@ -426,6 +517,13 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                 },
               }
             : {}),
+          ...(includeHtmlGeneration
+            ? {
+                ejs: {
+                  files: createEjsFiles(htmlGenerationFiles),
+                },
+              }
+            : {}),
         },
       },
     },
@@ -467,7 +565,6 @@ describe("packaged asar verification", () => {
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "SKILL.md"], "# Synapse Skill\n")
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "database", "index.md"], "# Database\n")
     await writeUnpackedFixture(resourcesPath, ["knowledge-base", "synapse-knowledge-base-template", "CLAUDE.md"], "# Knowledge Base\n")
-    await writeUnpackedFixture(resourcesPath, ["database", "mcp", "index.js"], "module.exports = {}\n")
   }
 
   async function writeTextExtractionRuntimeFixtures(
@@ -484,12 +581,24 @@ describe("packaged asar verification", () => {
     }
   }
 
+  async function writeHtmlGenerationRuntimeFixtures(resourcesPath: string) {
+    for (const [relativePath, content] of Object.entries(SYNTHETIC_HTML_GENERATION_FILES)) {
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", ...relativePath.split("/")],
+        content,
+        { sourceMap: false },
+      )
+    }
+  }
+
   async function writeExtraResourceFixtures(
     resourcesPath: string,
     overrides: DocumentExtractionContentOverrides = {},
   ) {
     await writeRequiredExtraResourceFixtures(resourcesPath)
     await writeTextExtractionRuntimeFixtures(resourcesPath, overrides)
+    await writeHtmlGenerationRuntimeFixtures(resourcesPath)
   }
 
   it("verifies a Windows-style resources directory with unpacked files", async () => {
@@ -545,6 +654,7 @@ describe("packaged asar verification", () => {
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
       await writeTextExtractionRuntimeFixtures(resourcesPath)
+      await writeHtmlGenerationRuntimeFixtures(resourcesPath)
 
       await expect(execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),

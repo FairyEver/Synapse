@@ -62,6 +62,17 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.secrets.items",
         "app.secrets.settings",
         "app.sound-notifier.settings",
+        "app.terminal.blocks",
+        "app.terminal.command-bodies",
+        "app.terminal.commands",
+        "app.terminal.delete-intents",
+        "app.terminal.domain-state",
+        "app.terminal.group-launch-bodies",
+        "app.terminal.groups",
+        "app.terminal.idempotency",
+        "app.terminal.launch-bodies",
+        "app.terminal.operations",
+        "app.terminal.sessions",
         "automation.items",
         "automation.runs",
         "cheat-code.states",
@@ -147,6 +158,9 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     for (const schema of allSchemas) {
       const expected = schema.name === "secrets"
         || schema.name === "app.secrets.items"
+        || schema.name === "app.terminal.command-bodies"
+        || schema.name === "app.terminal.group-launch-bodies"
+        || schema.name === "app.terminal.launch-bodies"
         || schema.name === "webhook.config"
       expect(schema.encrypted ?? false, schema.name).toBe(expected)
     }

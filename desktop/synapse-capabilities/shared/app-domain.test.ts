@@ -79,11 +79,11 @@ describe("App capability domain", () => {
       },
     })
     expect((tool?.inputSchema.properties.text as Record<string, unknown> | undefined)).not.toHaveProperty("maxLength")
-    expect(tool?.description).toContain(".txt, .md, or .csv")
+    expect(tool?.description).toContain(".txt, .md, .csv, .html, or .htm")
   })
 
   it("maps public terminal rename and delete tools to their capabilities", () => {
-    expect(TERMINAL_SESSION_RENAME_CAPABILITY_ID).toBe("app.terminal.session.rename")
+    expect(TERMINAL_SESSION_RENAME_CAPABILITY_ID).toBe("app.terminal.session_metadata.rename")
     expect(TERMINAL_SESSION_DELETE_CAPABILITY_ID).toBe("app.terminal.session.delete")
     expect(APP_MCP_TOOL_ACTIONS[TERMINAL_MCP_TOOL_NAMES.sessionRename]).toBe(
       TERMINAL_SESSION_RENAME_CAPABILITY_ID,
@@ -94,7 +94,7 @@ describe("App capability domain", () => {
   })
 
   it("maps terminal group settings MCP tool to its capability", () => {
-    expect(TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID).toBe("app.terminal.group.update_settings")
+    expect(TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID).toBe("app.terminal.group_launch.update")
     expect(APP_MCP_TOOL_ACTIONS[TERMINAL_MCP_TOOL_NAMES.groupUpdateSettings]).toBe(
       TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
     )
@@ -115,18 +115,18 @@ describe("App capability domain", () => {
     })
   })
 
-  it("describes terminal group list saved command and permission behavior", () => {
+  it("describes terminal group list permission behavior", () => {
     const tool = buildAppTools().find((item) => item.name === TERMINAL_MCP_TOOL_NAMES.groupList)
 
-    expect(tool?.description).toContain("saved command settings")
-    expect(tool?.description).toContain("permission approval")
+    expect(tool?.description).toContain("Permissions: discover")
+    expect(tool?.description).toContain("risk: normal")
   })
 
   it("describes terminal group create and rename permission behavior", () => {
     const tools = new Map(buildAppTools().map((tool) => [tool.name, tool]))
 
-    expect(tools.get(TERMINAL_MCP_TOOL_NAMES.groupCreate)?.description).toContain("permission approval")
-    expect(tools.get(TERMINAL_MCP_TOOL_NAMES.groupRename)?.description).toContain("permission approval")
+    expect(tools.get(TERMINAL_MCP_TOOL_NAMES.groupCreate)?.description).toContain("Permissions: group.manage")
+    expect(tools.get(TERMINAL_MCP_TOOL_NAMES.groupRename)?.description).toContain("Permissions: group.manage")
   })
 
   it("keeps secret names immutable in the update MCP schema", () => {
@@ -172,17 +172,22 @@ describe("App capability domain", () => {
     expect(tools.get(TERMINAL_MCP_TOOL_NAMES.sessionRename)?.inputSchema).toMatchObject({
       type: "object",
       properties: {
-        sessionId: expect.objectContaining({ type: "string", minLength: 1 }),
+        sessionId: expect.objectContaining({ type: "string", format: "uuid" }),
         title: expect.objectContaining({ type: "string", minLength: 1, maxLength: 120 }),
+        expectedMetadataRevision: expect.objectContaining({ type: "integer", exclusiveMinimum: 0 }),
+        idempotencyKey: expect.objectContaining({ type: "string", minLength: 16, maxLength: 200 }),
       },
-      required: ["sessionId", "title"],
+      required: ["sessionId", "title", "expectedMetadataRevision", "idempotencyKey"],
+      additionalProperties: false,
     })
     expect(tools.get(TERMINAL_MCP_TOOL_NAMES.sessionDelete)?.inputSchema).toMatchObject({
       type: "object",
       properties: {
-        sessionId: expect.objectContaining({ type: "string", minLength: 1 }),
+        sessionId: expect.objectContaining({ type: "string", format: "uuid" }),
+        idempotencyKey: expect.objectContaining({ type: "string", minLength: 16, maxLength: 200 }),
       },
-      required: ["sessionId"],
+      required: ["sessionId", "idempotencyKey"],
+      additionalProperties: false,
     })
   })
 
@@ -192,17 +197,27 @@ describe("App capability domain", () => {
     expect(tools.get(TERMINAL_MCP_TOOL_NAMES.groupUpdateSettings)?.inputSchema).toMatchObject({
       type: "object",
       properties: {
-        groupId: expect.objectContaining({ type: "string", minLength: 1 }),
-        name: expect.objectContaining({ type: "string", minLength: 1, maxLength: 80 }),
+        groupId: expect.objectContaining({ type: "string", format: "uuid" }),
+        expectedLaunchRevision: expect.objectContaining({ type: "integer", exclusiveMinimum: 0 }),
         settings: expect.objectContaining({
           type: "object",
           properties: {
-            defaultCwd: expect.objectContaining({ type: "string", minLength: 1 }),
-            startupCommand: expect.objectContaining({ type: "string", minLength: 1 }),
+            defaultCwd: expect.objectContaining({ anyOf: expect.arrayContaining([
+              expect.objectContaining({ type: "string", minLength: 1 }),
+              expect.objectContaining({ type: "null" }),
+            ]) }),
+            shell: expect.objectContaining({ anyOf: expect.arrayContaining([
+              expect.objectContaining({ type: "string", minLength: 1 }),
+              expect.objectContaining({ type: "null" }),
+            ]) }),
+            environment: expect.objectContaining({ type: "object" }),
           },
+          additionalProperties: false,
         }),
+        idempotencyKey: expect.objectContaining({ type: "string", minLength: 16, maxLength: 200 }),
       },
-      required: ["groupId", "name"],
+      required: ["groupId", "expectedLaunchRevision", "settings", "idempotencyKey"],
+      additionalProperties: false,
     })
   })
 
