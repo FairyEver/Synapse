@@ -50,7 +50,7 @@ jobs:
         run: pnpm --filter @synapse/desktop run check:script-runtime:runtime-smoke:built
       - name: Run Linux runtime smoke
         if: runner.os == 'Linux'
-        run: xvfb-run -a pnpm --filter @synapse/desktop run check:script-runtime:runtime-smoke:built
+        run: xvfb-run -a pnpm --filter @synapse/desktop exec electron --no-sandbox scripts/checks/script-runtime-app
       - name: Build unsigned macOS packaged directory
         if: runner.os == 'macOS'
         env:
@@ -89,6 +89,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Typecheck
+        env:
+          NODE_OPTIONS: "--max-old-space-size=6144"
         run: pnpm --filter @synapse/desktop run typecheck
       - name: Build desktop
         run: pnpm --filter @synapse/desktop run build

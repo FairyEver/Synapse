@@ -5,10 +5,6 @@ import { createRequire } from "node:module"
 
 import { app } from "electron"
 
-if (process.platform === "linux" && process.env.CI) {
-  app.commandLine.appendSwitch("no-sandbox")
-}
-
 const smokeRoot = await mkdtemp(join(tmpdir(), "synapse-script-runtime-check-"))
 app.setPath("userData", smokeRoot)
 app.on("window-all-closed", () => {})
