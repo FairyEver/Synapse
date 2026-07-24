@@ -5,6 +5,9 @@ import type { DataChangeListener, DataNamespace } from "../../../runtime/data-re
 import { createBuiltinAutomationTriggerRegistry } from "../builtin-triggers"
 import { AutomationItemRepository } from "../item-repository"
 import type { AutomationItem } from "../types"
+import { javascriptRunActionManifest } from "../../../../app-capabilities/javascript-run/automation-action/manifest"
+import { nodejsRunActionManifest } from "../../../../app-capabilities/nodejs-run/automation-action/manifest"
+import type { ActionManifest } from "../../../../action-packages/types"
 
 describe("AutomationItemRepository", () => {
   it("creates automation items with defaults", async () => {
@@ -73,6 +76,43 @@ describe("AutomationItemRepository", () => {
     expect(enabled.enabled).toBe(true)
     expect(enabled.nextRunAt).toBeDefined()
     expect(enabled.configVersion).toBe(1)
+  })
+
+  it("creates script automations disabled and disables them after execution changes", async () => {
+    const repo = newRepo()
+    const item = await repo.create({
+      ...validCreateInput(),
+      enabled: true,
+      executor: {
+        type: "builtin.javascript-run",
+        config: {
+          source: "postMessage(null)",
+          inputs: [],
+          timeoutSeconds: 60,
+          saveRunContent: true,
+        },
+      },
+    })
+    expect(item.enabled).toBe(false)
+
+    const enabled = await repo.setEnabled(item.id, true)
+    expect(enabled.enabled).toBe(true)
+    const contentOnly = await repo.update(item.id, {
+      executor: {
+        ...enabled.executor,
+        config: { ...enabled.executor.config, saveRunContent: false },
+      },
+    })
+    expect(contentOnly.enabled).toBe(true)
+
+    const changed = await repo.update(item.id, {
+      executor: {
+        ...contentOnly.executor,
+        config: { ...contentOnly.executor.config, source: "postMessage({ changed: true })" },
+      },
+    })
+    expect(changed.enabled).toBe(false)
+    expect(changed.nextRunAt).toBeUndefined()
   })
 
   it("marks scheduled and run result", async () => {
@@ -198,11 +238,16 @@ describe("AutomationItemRepository", () => {
 })
 
 function newRepo(): AutomationItemRepository {
+  const manifests = new Map<string, ActionManifest>([
+    [javascriptRunActionManifest.id, javascriptRunActionManifest as unknown as ActionManifest],
+    [nodejsRunActionManifest.id, nodejsRunActionManifest as unknown as ActionManifest],
+  ])
   return new AutomationItemRepository({
     items: new MemoryNamespace<AutomationItem>("automation.items"),
     triggers: createBuiltinAutomationTriggerRegistry(),
     now: () => new Date("2026-06-03T00:00:00.000Z"),
     idFactory: () => "automation:1",
+    resolveActionManifest: (type) => manifests.get(type),
   })
 }
 

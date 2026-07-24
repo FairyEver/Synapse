@@ -93,10 +93,28 @@ function resourceLocator(raw: unknown): string | null {
 }
 
 export function interpolatePrompt(template: string, vars: Record<string, string>): string {
+  return interpolateTemplate(template, vars, (match, variable) => {
+    logger.warn("unbound template variable", { variable, match })
+  })
+}
+
+/**
+ * Uses the normal Workflow template syntax without logging template content or
+ * matched fragments. Intended for lock-screen-visible notification content.
+ */
+export function interpolatePromptSafely(template: string, vars: Record<string, string>): string {
+  return interpolateTemplate(template, vars)
+}
+
+function interpolateTemplate(
+  template: string,
+  vars: Record<string, string>,
+  onUnbound?: (match: string, variable: string) => void,
+): string {
   // Supports {{varName}} and {{$varName}} with spaces, dots, and hyphens.
   return template.replace(/\{\{\s*\$?([\p{L}\p{N}_.-]+)\s*\}\}/gu, (match, n: string) => {
     if (!(n in vars)) {
-      logger.warn("unbound template variable", { variable: n, match })
+      onUnbound?.(match, n)
       throw new Error(`模板变量「${n}」未绑定`)
     }
     return vars[n]

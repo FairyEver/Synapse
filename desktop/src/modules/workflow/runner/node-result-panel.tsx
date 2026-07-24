@@ -8,6 +8,8 @@ import { TokenUsageSummary } from "@/components/token-usage-summary"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { ChevronDown, Copy, MessageSquare, X } from "lucide-react"
 import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
+import { SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE } from "../../../../app-capabilities/system-notifier/shared/capability"
+import { JSON_REPAIR_WORKFLOW_NODE_TYPE } from "../../../../app-capabilities/json-repair/shared/capability"
 import type { SynapseAgentConversationReference } from "@/types/agent-navigation"
 import { agentConversationTargetFromOutputs } from "@/lib/agent-conversation-target"
 import { track } from "@/lib/ui-tracking"
@@ -30,6 +32,9 @@ interface NodeResultPanelProps {
 }
 
 export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyNodeReport, onOpenAgentConversation }: NodeResultPanelProps) {
+  const inputNodeType = definition?.nodes.find((node) => node.id === result.nodeId)?.type
+  const hidesSensitiveInput = inputNodeType === SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE
+    || inputNodeType === JSON_REPAIR_WORKFLOW_NODE_TYPE
   // Resolve activeBranch ID to user-configured label when definition is available
   const activeBranchLabel = (() => {
     if (!result.activeBranch || !definition) return result.activeBranch
@@ -58,8 +63,12 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
   }
   const binaryResponseSummary = describeBinaryHttpResponse(result.outputs)
   const structuredOutputs = resolveStructuredOutputs(result, Boolean(binaryResponseSummary))
-  const displayInputVariables = sanitizeWorkflowResultValue(result.input.variables) as Record<string, unknown>
-  const displayPrompt = result.input.prompt ? sanitizeWorkflowResultText(result.input.prompt) : undefined
+  const displayInputVariables = hidesSensitiveInput
+    ? {}
+    : sanitizeWorkflowResultValue(result.input.variables) as Record<string, unknown>
+  const displayPrompt = !hidesSensitiveInput && result.input.prompt
+    ? sanitizeWorkflowResultText(result.input.prompt)
+    : undefined
   const displayOutput = binaryResponseSummary
     ? sanitizeWorkflowResultText(binaryResponseSummary)
     : result.output != null ? sanitizeWorkflowPrimaryOutput(result.output, result.outputs) : undefined

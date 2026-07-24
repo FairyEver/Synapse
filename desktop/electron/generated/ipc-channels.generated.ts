@@ -266,6 +266,8 @@ export const IPC_CHANNELS = {
     "getAvailableAgents": "synapse:app:agent:operation:get_available_agents",
     "listCommands": "synapse:app:agent:operation:list_commands",
     "openReference": "synapse:app:agent:operation:open_reference",
+    "openReferenceDefault": "synapse:app:agent:reference:open_default",
+    "showReferenceInFolder": "synapse:app:agent:reference:show_in_folder",
     "event": "synapse:app:agent:state:changed",
     "detachedConversationsChanged": "synapse:app:agent:operation:detached_conversations_changed",
   },
@@ -360,6 +362,14 @@ export const IPC_CHANNELS = {
     "preview": "synapse:app:sound_notifier:sound:preview",
     "changed": "synapse:app:sound_notifier:operation:changed",
     "playRequested": "synapse:app:sound_notifier:operation:play_requested",
+  },
+  "systemNotifier": {
+    "getSettings": "synapse:app:system_notifier:settings:get",
+    "updateSettings": "synapse:app:system_notifier:settings:update",
+    "testNotification": "synapse:app:system_notifier:notification:test",
+  },
+  "jsonRepair": {
+    "repairText": "synapse:app:json_repair:text:repair",
   },
   "terminal": {
     "listGroups": "synapse:app:terminal:group:list",

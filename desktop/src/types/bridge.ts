@@ -16,6 +16,10 @@ import type {
   DatabaseWhereClause,
 } from "./database"
 import type {
+  AgentReferenceActionInput,
+  AgentReferenceActionResult,
+} from "./agent-reference-action"
+import type {
   SynapseAccountState,
   SynapseAccountStateChangedEvent,
 } from "./account"
@@ -45,6 +49,10 @@ import type {
   HtmlGenerationResponse,
   HtmlGeneratorOutputChooseRequest,
 } from "../../app-capabilities/html-generator/shared/schema"
+import type {
+  JsonRepairInput,
+  JsonRepairResponse,
+} from "../../app-capabilities/json-repair/shared/schema"
 import type {
   SkillUninstallBatchResult,
   SkillUninstallCancelRequest,
@@ -94,6 +102,11 @@ import type {
   SynapseSoundNotifierSettings,
   SynapseSoundNotifierSettingsPatch,
 } from "./sound-notifier"
+import type {
+  SynapseSystemNotificationResult,
+  SynapseSystemNotifierSettings,
+  SynapseSystemNotifierSettingsPatch,
+} from "./system-notifier"
 import type {
   SynapseTerminalAttachSessionInput,
   SynapseTerminalAttachSessionResult,
@@ -1096,6 +1109,20 @@ export type SynapseBridge = {
       onPlayRequested: (listener: (event: SynapseSoundNotifierPlayRequestedEvent) => void) => () => void
     }
   }
+  systemNotifier: {
+    settings: {
+      get: () => Promise<SynapseSystemNotifierSettings>
+      update: (input: SynapseSystemNotifierSettingsPatch) => Promise<SynapseSystemNotifierSettings>
+    }
+    notification: {
+      test: () => Promise<SynapseSystemNotificationResult>
+    }
+  }
+  jsonRepair: {
+    text: {
+      repair: (input: JsonRepairInput) => Promise<JsonRepairResponse>
+    }
+  }
   terminal: {
     group: {
       chooseDefaultCwd: () => Promise<string | null>
@@ -1717,6 +1744,8 @@ export type SynapseBridge = {
     }>>
     listCommands: (projectId: string) => Promise<SynapseAgentPublishedCommand[]>
     openReference: (args: { projectId: string; reference: string }) => Promise<{ ok: true; path: string }>
+    openReferenceDefault: (args: AgentReferenceActionInput) => Promise<AgentReferenceActionResult>
+    showReferenceInFolder: (args: AgentReferenceActionInput) => Promise<AgentReferenceActionResult>
     openConversation: (
       target: SynapseAgentConversationReference,
     ) => Promise<SynapseOpenAgentConversationResult>
@@ -1777,15 +1806,15 @@ export type SynapseBridge = {
       inspect: (def: WorkflowDefinition) => Promise<ValidationResult>
     }
     run: {
-      execute: (id: string, params: Record<string, unknown>) => Promise<{ runId: string } | { errors: ValidationError[] }>
+      execute: (id: string, params: Record<string, unknown>, scriptConfirmationToken?: string) => Promise<{ runId: string; definition?: WorkflowDefinition } | { errors: ValidationError[] }>
       disable: (runId: string) => Promise<void>
       listActive: () => Promise<WorkflowRunListItem[]>
       list: (workflowId: string) => Promise<WorkflowRunListItem[]>
       get: (runId: string, workflowId?: string) => Promise<WorkflowRunStatus | null>
     }
     operation: {
-      runDefinition: (def: WorkflowDefinition, params: Record<string, unknown>, force?: boolean) => Promise<{ runId: string } | { errors: ValidationError[] } | { conflict: true; activeRunId: string }>
-      rerun: (previousRunId: string, params: Record<string, unknown>, force?: boolean, workflowId?: string) => Promise<{ runId: string } | { errors: ValidationError[] } | { conflict: true; activeRunId: string }>
+      runDefinition: (def: WorkflowDefinition, params: Record<string, unknown>, force?: boolean, scriptConfirmationToken?: string) => Promise<{ runId: string; definition?: WorkflowDefinition } | { errors: ValidationError[] } | { conflict: true; activeRunId: string; definition?: WorkflowDefinition }>
+      rerun: (previousRunId: string, params: Record<string, unknown>, force?: boolean, workflowId?: string, scriptConfirmationToken?: string) => Promise<{ runId: string } | { errors: ValidationError[] } | { conflict: true; activeRunId: string }>
       openRunner: (workflowId: string, runId: string) => Promise<void>
       openEditor: (id: string, runId?: string) => Promise<void>
       editorState: () => Promise<{ openEditors: string[]; states: Array<{ workflowId: string; dirty: boolean; saving: boolean }> }>

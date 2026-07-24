@@ -1,6 +1,6 @@
 ---
 name: synapse-skill
-description: Use when operating Synapse through MCP tools, including Database, Drive, Workflow, Automation, Content, Skill Repository, model price rules, secrets, repositories, Terminal sessions, and app capabilities.
+description: Use when operating Synapse through MCP tools or submitting 问题反馈 to Synapse, including Database, Drive, Workflow, Automation, Content, Skill Repository, model price rules, secrets, repositories, Terminal sessions, and app capabilities.
 ---
 
 # Synapse Skill
@@ -23,7 +23,11 @@ First classify the user's intent, then read the matching domain file before usin
 - Local secrets and placeholder secret values -> `secrets/index.md`
 - Settings repositories -> `repository/index.md`
 - Synapse-managed Terminal groups, sessions, retained output, observation, leases, semantic input, resize, stop, and deletion -> `terminal/index.md`
-- Other App-provided capabilities such as text file writing, text extraction, document generation, and Sound Notifier playback -> `app/index.md`
+- Other App-provided capabilities such as text file writing, text extraction, document generation, JSON repair, Sound Notifier playback, System Notifier notifications, and problem feedback -> `app/index.md`
+
+When there is specific evidence that Synapse itself or a built-in Synapse Skill violates a documented or otherwise verified product contract, read `app/index.md` before suggesting problem feedback. Do not suggest feedback for ordinary validation, permission, rate-limit, transient network, user-project, third-party, editor, speculative, or purely aesthetic issues.
+
+Treat an App-provided capability configured inside a Workflow as a Workflow operation. Read `workflow/index.md` for its node schema, bindings, edges, validation, and execution behavior; do not also read `app/index.md` merely because the node is backed by an App capability. Read `app/index.md` when directly invoking an `app_*` capability tool outside a Workflow definition. A Workflow containing App-backed nodes is not automatically a multi-domain task.
 
 If the task spans multiple domains, handle each part in order and read each relevant domain file.
 

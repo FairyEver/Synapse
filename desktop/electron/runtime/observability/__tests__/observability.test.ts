@@ -182,6 +182,7 @@ describe("DiagnosticsCollector (T6.5)", () => {
           status: "running",
           criticality: "fatal",
           dependsOn: [],
+          startAfter: [],
           runIn: "main",
         },
       ],

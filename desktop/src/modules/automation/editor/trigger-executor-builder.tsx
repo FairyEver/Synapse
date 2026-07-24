@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/item"
 import { Separator } from "@/components/ui/separator"
 import { createPlatformActionDefaultConfig } from "../../../../action-packages/builtin/shell-defaults"
+import { listDiscoverableBuiltinAutomationActionTypes } from "../../../../app-capabilities/manifest-registry"
 import type { ActionConfig } from "../../../../action-packages/types"
 import type { AutomationTriggerConfig } from "@/automation-triggers/action-registry"
 import type { SynapseProjectConfig } from "@/types/config"
@@ -164,6 +165,11 @@ export function TriggerExecutorBuilder({
   const selectedExecutor = executorType ? rendererActionRegistry.get(executorType) : null
   const TriggerConfigForm = selectedTrigger?.ConfigForm
   const ExecutorConfigForm = selectedExecutor?.ConfigForm
+  const discoverableExecutorTypes = new Set(
+    listDiscoverableBuiltinAutomationActionTypes(
+      rendererActionRegistry.list().map((executor) => executor.manifest.id),
+    ),
+  )
 
   return (
     <div
@@ -246,10 +252,12 @@ export function TriggerExecutorBuilder({
           </div>
         ) : (
           <ChoiceList
-            items={rendererActionRegistry.list().map((executor) => ({
-              id: executor.manifest.id,
-              title: executor.manifest.title,
-            }))}
+            items={rendererActionRegistry.list()
+              .filter((executor) => discoverableExecutorTypes.has(executor.manifest.id))
+              .map((executor) => ({
+                id: executor.manifest.id,
+                title: executor.manifest.title,
+              }))}
             onSelect={(id) => onExecutorChange(
               id,
               createPlatformActionDefaultConfig(id, rendererActionRegistry.getDefaultConfig(id), platform),

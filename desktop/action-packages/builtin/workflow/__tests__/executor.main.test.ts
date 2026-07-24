@@ -64,6 +64,7 @@ describe("workflow action executor", () => {
       automationId: "auto-1",
       automationRunId: "auto-run-1",
       actor: context.actor,
+      expectedVersion: "v1",
     }))
     expect(result).toMatchObject({
       status: "success",

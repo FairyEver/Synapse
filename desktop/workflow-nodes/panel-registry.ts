@@ -16,6 +16,10 @@ import { DocumentTemplateNodePanel } from "../app-capabilities/document-template
 import { TextExtractNodePanel } from "../app-capabilities/text-extractor/workflow-node/panel"
 import { TextFileWriterNodePanel } from "../app-capabilities/text-file-writer/workflow-node/panel"
 import { HtmlGeneratorNodePanel } from "../app-capabilities/html-generator/workflow-node/panel"
+import { SystemNotifierNodePanel } from "../app-capabilities/system-notifier/workflow-node/panel"
+import { JsonRepairNodePanel } from "../app-capabilities/json-repair/workflow-node/panel"
+import { JavascriptRunNodePanel } from "../app-capabilities/javascript-run/workflow-node/panel"
+import { NodejsRunNodePanel } from "../app-capabilities/nodejs-run/workflow-node/panel"
 
 export interface NodePanelProps {
   config: Record<string, unknown>
@@ -52,6 +56,10 @@ const panelRegistry = new Map<string, PanelComponent>([
   ["text_file_writer_file_write", TextFileWriterNodePanel as unknown as PanelComponent],
   ["html_generator_ejs_generate", HtmlGeneratorNodePanel as unknown as PanelComponent],
   ["html_generator_ejs_file_generate", HtmlGeneratorNodePanel as unknown as PanelComponent],
+  ["system_notifier_notification_trigger", SystemNotifierNodePanel as unknown as PanelComponent],
+  ["json_repair_text_repair", JsonRepairNodePanel as unknown as PanelComponent],
+  ["javascript_run", JavascriptRunNodePanel as unknown as PanelComponent],
+  ["nodejs_run", NodejsRunNodePanel as unknown as PanelComponent],
 ])
 
 export function getPanel(type: string): PanelComponent | undefined {

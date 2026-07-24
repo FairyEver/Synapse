@@ -19,6 +19,8 @@ const USER_STATUS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/status$/
 const TEAM_ROLE_PERMISSIONS_PATH_PATTERN = /^\/api\/admin\/teams\/[^/]+\/access-roles\/[^/]+\/permissions$/
 const UNAUTHENTICATED_ADMIN_EMAIL = "unauthenticated"
 const ADMIN_WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
+const PROBLEM_FEEDBACK_ADMIN_PATH_PATTERN =
+  /^\/api\/admin\/problem-feedback(?:\/[^/]+)?$/u
 
 interface AuditPolicy {
   readonly success: boolean
@@ -112,6 +114,7 @@ function redactSensitiveBody(value: unknown): unknown {
 }
 
 function resolveAuditPolicy(method: string, path: string, hasAuthenticatedAdmin: boolean): AuditPolicy {
+  if (PROBLEM_FEEDBACK_ADMIN_PATH_PATTERN.test(path)) return noAudit
   if (path.startsWith("/api/admin/backup")) {
     const shouldAudit = shouldAuditBackupRequest(method, path)
     return { success: shouldAudit, failure: shouldAudit }

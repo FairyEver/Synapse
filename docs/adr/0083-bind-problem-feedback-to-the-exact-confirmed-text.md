@@ -1,0 +1,3 @@
+# Bind problem feedback to the exact confirmed text
+
+Problem feedback uses a “what you see is what is submitted” contract: privacy checks and redaction happen before the Agent shows the complete confirmation draft, and explicit user confirmation authorizes only that exact text. Any later edit requires a new full draft and confirmation; the MCP capability and server must reject unsafe content instead of silently changing it, and they must not attach undisclosed context or device information. Server-generated operational fields such as a record identifier or received time are outside the confirmed body and require a separately defined minimal metadata contract.

@@ -31,6 +31,8 @@ import {
   createWorkflowLastRunValues,
   type WorkflowLastRunValues,
 } from "../lib/run-param-last-values"
+import { ScriptConfirmationDialog } from "../editor/script-confirmation-dialog"
+import { useScriptConfirmationRun } from "../hooks/use-script-confirmation-run"
 
 const logger = createRendererLogger("workflow.list")
 type WorkflowBridge = NonNullable<Window["synapse"]>["workflow"]
@@ -86,6 +88,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
   } | null>(null)
   // Remember last-used param values per workflow so the dialog can pre-fill them on re-run
   const [lastRunValues, setLastRunValues] = useState<Record<string, WorkflowLastRunValues>>({})
+  const { runWithScriptConfirmation, scriptConfirmation } = useScriptConfirmationRun()
 
   // Track the latest run status per workflow so WorkflowCard can show a live badge.
   const [runStates, setRunStates] = useState<Record<string, WorkflowCardRunState>>({})
@@ -155,17 +158,22 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       }
       if (def.params.length === 0) {
         trackWorkflowRunSubmit(def, {}, false)
-        const result = await workflowApi.operation.runDefinition(def, {})
+        const result = await runWithScriptConfirmation((confirmationToken) =>
+          workflowApi.operation.runDefinition(def, {}, false, confirmationToken))
+        if (!result) return
         if ("errors" in result) {
           const errors = result.errors as { message?: string }[]
           toast.error(errors[0]?.message ?? "工作流校验失败")
           return
         }
         if ("conflict" in result) {
-          setConflictState({ def, params: {} })
+          setConflictState({
+            def: "definition" in result && result.definition ? result.definition : def,
+            params: {},
+          })
           return
         }
-        openRunner(workflowApi, def.id, result.runId)
+        openRunner(workflowApi, result.definition?.id ?? def.id, result.runId)
       } else {
         setRunTarget(def)
       }
@@ -279,19 +287,25 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     try {
       const workflowApi = requireBridgeDomain("workflow")
       trackWorkflowRunSubmit(def, params, false)
-      const result = await workflowApi.operation.runDefinition(def, params)
+      const result = await runWithScriptConfirmation((confirmationToken) =>
+        workflowApi.operation.runDefinition(def, params, false, confirmationToken))
+      if (!result) return
       if ("errors" in result) {
         const errors = result.errors as { message?: string }[]
         toast.error(errors[0]?.message ?? "工作流校验失败")
         return
       }
       if ("conflict" in result) {
-        setConflictState({ def, params, lastValues: nextLastValues })
+        setConflictState({
+          def: "definition" in result && result.definition ? result.definition : def,
+          params,
+          lastValues: nextLastValues,
+        })
         setRunTarget(null)
         return
       }
       setLastRunValues((prev) => ({ ...prev, [def.id]: nextLastValues }))
-      openRunner(workflowApi, def.id, result.runId)
+      openRunner(workflowApi, result.definition?.id ?? def.id, result.runId)
       setRunTarget(null)
       void refresh()
     } catch (err) {
@@ -309,7 +323,9 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     try {
       const workflowApi = requireBridgeDomain("workflow")
       trackWorkflowRunSubmit(def, params, true)
-      const forceResult = await workflowApi.operation.runDefinition(def, params, true)
+      const forceResult = await runWithScriptConfirmation((confirmationToken) =>
+        workflowApi.operation.runDefinition(def, params, true, confirmationToken))
+      if (!forceResult) return
       if ("errors" in forceResult) {
         const errors = forceResult.errors as Array<{ message?: string }>
         toast.error(errors[0]?.message ?? "运行失败：校验未通过")
@@ -320,7 +336,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
         return
       }
       if (lastValues) setLastRunValues((prev) => ({ ...prev, [def.id]: lastValues }))
-      openRunner(workflowApi, def.id, forceResult.runId)
+      openRunner(workflowApi, forceResult.definition?.id ?? def.id, forceResult.runId)
       void refresh()
     } catch (err) {
       showRunFailure(def, params, true, err)
@@ -531,6 +547,13 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <ScriptConfirmationDialog
+        open={scriptConfirmation.open}
+        scripts={scriptConfirmation.scripts}
+        confirming={scriptConfirmation.confirming}
+        onCancel={scriptConfirmation.cancel}
+        onConfirm={() => { void scriptConfirmation.confirm() }}
+      />
     </>
   )
 }

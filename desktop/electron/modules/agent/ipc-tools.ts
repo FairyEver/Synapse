@@ -6,11 +6,25 @@ import { BrowserWindow, dialog, shell } from "electron"
 import type { OpenDialogOptions } from "electron"
 import { z } from "zod"
 
-import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
+import type {
+  IpcHandlerContext,
+  IpcInvocationSender,
+  IpcMethodDescriptor,
+} from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { DataRepository } from "../../runtime/data-repo"
 import { quoteWindowsCommandArg } from "../../runtime/process/controlled-runner"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import {
+  AGENT_REFERENCE_ACTION_SERVICE_ID,
+  type AgentReferenceActionKind,
+  type AgentReferenceActionService,
+} from "../../services/agent-reference-action-service"
+import {
+  AGENT_REFERENCE_ACTION_ERROR_CODES,
+  AGENT_REFERENCE_MAX_CODE_POINTS,
+  type AgentReferenceActionResult,
+} from "../../../src/types/agent-reference-action"
 import { resolveLocalReference } from "../../services/agent-runtime/references"
 import type {
   CCProvider,
@@ -43,6 +57,10 @@ type UpdateProviderIpcInput = Omit<UpdateProviderInput, "env">
 const openReferenceRequestSchema = projectRequestSchema.extend({
   reference: z.string().min(1),
 })
+
+const referenceActionRequestSchema = projectRequestSchema.extend({
+  reference: z.string(),
+}).strict()
 
 const runtimeStatusRequestSchema = z.object({
   projectId: z.string().optional(),
@@ -179,6 +197,15 @@ const openReferenceResultSchema = z.object({
   ok: z.literal(true),
   path: z.string(),
 })
+
+const agentReferenceActionErrorCodeSchema = z.enum(AGENT_REFERENCE_ACTION_ERROR_CODES)
+const agentReferenceActionResultSchema = z.union([
+  z.object({ ok: z.literal(true) }).strict(),
+  z.object({
+    ok: z.literal(false),
+    code: agentReferenceActionErrorCodeSchema,
+  }).strict(),
+])
 
 const providerSummarySchema = z.object({
   id: z.string(),
@@ -341,6 +368,7 @@ const runtimeStatusSchema = z.object({
 
 type ProjectRequest = z.infer<typeof projectRequestSchema>
 type OpenReferenceRequest = z.infer<typeof openReferenceRequestSchema>
+type ReferenceActionRequest = z.infer<typeof referenceActionRequestSchema>
 type ProviderRequest = z.infer<typeof providerRequestSchema>
 type CreateProviderRequest = z.infer<typeof createProviderRequestSchema>
 type UpdateProviderRequest = z.infer<typeof updateProviderRequestSchema>
@@ -920,6 +948,99 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
       }
     },
   },
+  openReferenceDefault: {
+    kind: "invoke",
+    operationId: "app.agent.reference.open_default",
+    request: referenceActionRequestSchema,
+    response: agentReferenceActionResultSchema,
+    handler: (ctx, request: ReferenceActionRequest) =>
+      runReferenceAction(ctx, request, "open_default"),
+  },
+  showReferenceInFolder: {
+    kind: "invoke",
+    operationId: "app.agent.reference.show_in_folder",
+    request: referenceActionRequestSchema,
+    response: agentReferenceActionResultSchema,
+    handler: (ctx, request: ReferenceActionRequest) =>
+      runReferenceAction(ctx, request, "show_in_folder"),
+  },
+}
+
+async function runReferenceAction(
+  ctx: IpcHandlerContext,
+  request: ReferenceActionRequest,
+  action: AgentReferenceActionKind,
+): Promise<AgentReferenceActionResult> {
+  if ([...request.reference].length > AGENT_REFERENCE_MAX_CODE_POINTS) {
+    logger.warn("Agent reference action validation failed.", {
+      action,
+      code: "invalid_reference",
+      stage: "input_length",
+    })
+    return { ok: false, code: "invalid_reference" }
+  }
+
+  const service = ctx.resolve<AgentReferenceActionService>(AGENT_REFERENCE_ACTION_SERVICE_ID)
+  const validation = service.validateInput(request.reference)
+  if (!validation.ok) {
+    logger.warn("Agent reference action validation failed.", {
+      action,
+      code: validation.code,
+      stage: "input_validation",
+    })
+    return validation
+  }
+
+  let projectRoot: string
+  try {
+    const { project } = await resolveProjectAgent(ctx.resolve, request.projectId)
+    projectRoot = project.localPath
+  } catch {
+    logger.warn("Agent reference action project unavailable.", {
+      action,
+      code: "project_unavailable",
+    })
+    return { ok: false, code: "project_unavailable" }
+  }
+
+  const senderAbort = observeSender(ctx.sender)
+  try {
+    const input = {
+      projectId: request.projectId,
+      projectRoot,
+      reference: request.reference,
+      actor: { kind: "user" as const, id: "renderer" },
+      abortSignal: senderAbort.signal,
+    }
+    return action === "open_default"
+      ? await service.openDefault(input)
+      : await service.showInFolder(input)
+  } catch (error) {
+    logger.warn("Agent reference action IPC invariant failure.", {
+      action,
+      result: "ipc_failure",
+      errorName: error instanceof Error ? error.name : typeof error,
+    })
+    // The original error can contain a local path or native message and must not cross IPC.
+    // eslint-disable-next-line preserve-caught-error
+    throw new Error("Agent reference action failed unexpectedly.")
+  } finally {
+    senderAbort.dispose()
+  }
+}
+
+function observeSender(sender: IpcInvocationSender | undefined): {
+  readonly signal?: AbortSignal
+  readonly dispose: () => void
+} {
+  if (!sender) return { dispose: () => undefined }
+  const controller = new AbortController()
+  if (sender.isDestroyed()) {
+    controller.abort()
+    return { signal: controller.signal, dispose: () => undefined }
+  }
+  const dispose = sender.onDestroyed(() => controller.abort())
+  return { signal: controller.signal, dispose }
 }
 
 /** Try opening a file at a specific line using a known editor CLI. */

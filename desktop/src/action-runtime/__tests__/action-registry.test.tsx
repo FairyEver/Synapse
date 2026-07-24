@@ -10,6 +10,8 @@ describe("renderer action registry", () => {
       "builtin.http-request",
       "builtin.agent",
       "builtin.workflow",
+      "builtin.javascript-run",
+      "builtin.nodejs-run",
     ])
   })
 

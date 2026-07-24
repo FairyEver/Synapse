@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Optional } from "@nestjs/common"
+import type { Prisma } from "@prisma/client"
 import { PinoLogger } from "nestjs-pino"
 import { PrismaService } from "../prisma/prisma.service"
 import { formatAuditError } from "./audit-error"
@@ -14,6 +15,15 @@ export class AuditLogWriteError extends Error {
     super("审计日志写入失败。")
     this.name = "AuditLogWriteError"
   }
+}
+
+export interface AuditLogRecordInput {
+  readonly adminEmail: string
+  readonly action: string
+  readonly targetType: string
+  readonly targetId: string
+  readonly detail?: unknown
+  readonly ipAddress: string
 }
 
 interface AuditLogFilterOptions {
@@ -79,14 +89,7 @@ export class AuditLogService {
     return this.recordFailureCount
   }
 
-  async record(input: {
-    adminEmail: string
-    action: string
-    targetType: string
-    targetId: string
-    detail?: unknown
-    ipAddress: string
-  }): Promise<void> {
+  async record(input: AuditLogRecordInput): Promise<void> {
     for (let attempt = 1; attempt <= auditRecordMaxAttempts; attempt += 1) {
       try {
         await this.prisma.auditLog.create({
@@ -116,6 +119,26 @@ export class AuditLogService {
           throw new AuditLogWriteError()
         }
       }
+    }
+  }
+
+  async recordWithClient(
+    client: Pick<Prisma.TransactionClient, "auditLog">,
+    input: AuditLogRecordInput,
+  ): Promise<void> {
+    try {
+      await client.auditLog.create({
+        data: {
+          adminEmail: input.adminEmail,
+          action: input.action,
+          targetType: input.targetType,
+          targetId: input.targetId,
+          detail: input.detail ?? undefined,
+          ipAddress: input.ipAddress,
+        },
+      })
+    } catch {
+      throw new AuditLogWriteError()
     }
   }
 

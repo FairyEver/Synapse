@@ -348,6 +348,89 @@ describe("WorkflowList", () => {
     expect(container.querySelector('[data-testid="last-run-values"]')?.textContent).toContain("sk-secret")
   })
 
+  it("confirms imported scripts from the no-parameter run path", async () => {
+    const def = { ...parameterizedWorkflow, id: "workflow-param", params: [] }
+    workflowGet.mockResolvedValue(def)
+    workflowRunDefinition
+      .mockResolvedValueOnce(scriptReview("review-v1", "process.stdout.write('\"v1\"')"))
+      .mockResolvedValueOnce({ runId: "run-confirmed", definition: { ...def, version: "v2" } })
+    const container = await renderList()
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="run-workflow-param"]')?.click()
+      await Promise.resolve()
+    })
+    expect(document.body.textContent).toContain("process.stdout.write('\"v1\"')")
+
+    await act(async () => {
+      buttonByText("确认并运行")?.click()
+      await Promise.resolve()
+    })
+
+    expect(workflowRunDefinition).toHaveBeenNthCalledWith(1, def, {}, false, undefined)
+    expect(workflowRunDefinition).toHaveBeenNthCalledWith(2, def, {}, false, "review-v1")
+    expect(workflowOpenRunner).toHaveBeenCalledWith("workflow-param", "run-confirmed")
+  })
+
+  it("does not run after cancelling script confirmation from the parameterized path", async () => {
+    workflowRunDefinition.mockResolvedValueOnce(
+      scriptReview("review-v1", "process.stdout.write('null')"),
+    )
+    const container = await renderList()
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="run-workflow-param"]')?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="confirm-run-params"]')?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText("取消")?.click()
+      await Promise.resolve()
+    })
+
+    expect(workflowRunDefinition).toHaveBeenCalledOnce()
+    expect(workflowOpenRunner).not.toHaveBeenCalled()
+  })
+
+  it("requires a second explicit review when the force-run script set changes", async () => {
+    const def = { ...parameterizedWorkflow, id: "workflow-param", params: [] }
+    workflowGet.mockResolvedValue(def)
+    workflowRunDefinition
+      .mockResolvedValueOnce({ conflict: true, activeRunId: "active-run" })
+      .mockResolvedValueOnce(scriptReview("review-v1", "process.stdout.write('\"v1\"')"))
+      .mockResolvedValueOnce(scriptReview("review-v2", "process.stdout.write('\"v2\"')"))
+      .mockResolvedValueOnce({ runId: "run-force", definition: { ...def, version: "v3" } })
+    const container = await renderList()
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="run-workflow-param"]')?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText("取消旧运行并启动")?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText("确认并运行")?.click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("process.stdout.write('\"v2\"')")
+    expect(workflowRunDefinition).toHaveBeenCalledTimes(3)
+    expect(workflowOpenRunner).not.toHaveBeenCalled()
+
+    await act(async () => {
+      buttonByText("确认并运行")?.click()
+      await Promise.resolve()
+    })
+
+    expect(workflowRunDefinition).toHaveBeenNthCalledWith(4, def, {}, true, "review-v2")
+    expect(workflowOpenRunner).toHaveBeenCalledWith("workflow-param", "run-force")
+  })
+
   it("exports a workflow from the card action", async () => {
     workflowExportPackage.mockResolvedValue({
       path: "/tmp/parameterized.synapse-workflow.json",
@@ -582,3 +665,37 @@ describe("WorkflowList", () => {
     expect(container.querySelector('[data-testid="open-active-workflow-param"]')).toBeNull()
   })
 })
+
+async function renderList(): Promise<HTMLDivElement> {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+  await act(async () => {
+    root.render(<WorkflowList onCreate={vi.fn()} />)
+  })
+  return container
+}
+
+function buttonByText(text: string): HTMLButtonElement | undefined {
+  return Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
+    .find((button) => button.textContent?.trim() === text)
+}
+
+function scriptReview(token: string, source: string) {
+  return {
+    errors: [{
+      type: "script_confirmation_required",
+      message: "confirm scripts",
+      details: {
+        confirmationToken: token,
+        scripts: [{
+          workflowName: "Imported",
+          runtime: "Node.js",
+          nodeName: "Script",
+          source,
+        }],
+      },
+    }],
+  }
+}

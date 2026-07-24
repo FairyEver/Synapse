@@ -50,6 +50,11 @@ import { checkWorkflowShareCapabilities, installedWorkflowShareCapabilities } fr
 import { rewriteWorkflowSharePackage } from "./workflow-share-import-rewriter"
 import type { WorkflowShareStateService } from "./workflow-share-state-service"
 import type { WorkflowShareTransactionEntryV1 } from "../../runtime/data-repo"
+import {
+  collectUnconfirmedImportedScripts,
+  type ImportedScriptPreview,
+  type ImportedScriptReview,
+} from "./imported-script-trust"
 
 const PACKAGE_FORMAT = "synapse-workflow-package" as const
 const PACKAGE_FORMAT_VERSION = "3.0.0" as const
@@ -62,7 +67,9 @@ const MODEL_TIERS: readonly WorkflowPackageModelTier[] = ["default", "haiku", "s
 const logger = createMainLogger("service.workflow.package")
 
 interface WorkflowPackageServiceDeps {
-  readonly workflowService: Pick<WorkflowService, "getExportDocument" | "getLegacyMigrationExportDocument" | "save" | "commitAtomicBatch">
+  readonly workflowService:
+    & Pick<WorkflowService, "getExportDocument" | "getLegacyMigrationExportDocument" | "save" | "commitAtomicBatch">
+    & Partial<Pick<WorkflowService, "get">>
   readonly shareStateService?: Pick<WorkflowShareStateService, "initialize" | "getOrigin" | "findOriginByWorkflowId" | "getOrCreateExportLineage" | "prepareImport" | "prepareDelete" | "getUndoPlan" | "prepareUndo" | "commitImport" | "rollbackImport">
   readonly providerService: Pick<ProviderService, "listProviders">
   readonly permissionGuard: Pick<PermissionGuard, "check">
@@ -129,8 +136,59 @@ export interface WorkflowShareExportArtifactV4 {
   readonly preflight: WorkflowShareExportPreflight
 }
 
+export type ImportedScriptRunPreparation =
+  | {
+      readonly status: "ready"
+      readonly definition: WorkflowDefinition
+      readonly snapshotDefinitions: readonly WorkflowDefinition[]
+    }
+  | {
+      readonly status: "confirmation_required"
+      readonly errors: [{
+        readonly type: "script_confirmation_required"
+        readonly message: string
+        readonly retryable: true
+        readonly details: {
+          readonly scripts: readonly ImportedScriptPreview[]
+          readonly confirmationToken: string
+        }
+      }]
+    }
+  | {
+      readonly status: "save_failed"
+      readonly errors: WorkflowSaveError["errors"]
+    }
+  | {
+      readonly status: "version_conflict"
+      readonly errors: WorkflowSaveError["errors"]
+    }
+
+function importedScriptReviewToken(review: ImportedScriptReview): string {
+  return `sha256:${createHash("sha256")
+    .update(JSON.stringify(review.reachableRevisions))
+    .digest("hex")}`
+}
+
+function importedScriptConfirmationRequired(
+  review: ImportedScriptReview,
+  confirmationToken: string,
+): Extract<ImportedScriptRunPreparation, { status: "confirmation_required" }> {
+  return {
+    status: "confirmation_required",
+    errors: [{
+      type: "script_confirmation_required",
+      message: "导入的工作流包含脚本。首次运行前请确认将执行完整脚本及其副作用。",
+      retryable: true,
+      details: {
+        scripts: review.scripts,
+        confirmationToken,
+      },
+    }],
+  }
+}
+
 export class WorkflowPackageService {
-  private readonly workflowService: Pick<WorkflowService, "getExportDocument" | "getLegacyMigrationExportDocument" | "save" | "commitAtomicBatch">
+  private readonly workflowService: WorkflowPackageServiceDeps["workflowService"]
   private readonly shareStateService?: Pick<WorkflowShareStateService, "initialize" | "getOrigin" | "findOriginByWorkflowId" | "getOrCreateExportLineage" | "prepareImport" | "prepareDelete" | "getUndoPlan" | "prepareUndo" | "commitImport" | "rollbackImport">
   private readonly providerService: Pick<ProviderService, "listProviders">
   private readonly permissionGuard: Pick<PermissionGuard, "check">
@@ -182,6 +240,97 @@ export class WorkflowPackageService {
 
   async initialize(): Promise<void> {
     await this.shareStateService?.initialize()
+  }
+
+  async prepareImportedScriptsForRun(
+    entry: WorkflowDefinition,
+    confirmationToken?: string,
+    options: { readonly allowHistoricalEntry?: boolean } = {},
+  ): Promise<ImportedScriptRunPreparation> {
+    const storedEntry = await this.workflowService.get?.(entry.id) ?? null
+    if (
+      !options.allowHistoricalEntry
+      && storedEntry
+      && storedEntry.version !== entry.version
+    ) {
+      return {
+        status: "version_conflict",
+        errors: [{
+          type: "invalid_config",
+          message: "工作流已更新，请重新加载后再运行",
+          retryable: true,
+        }],
+      }
+    }
+    const authoritativeEntry = options.allowHistoricalEntry ? entry : (storedEntry ?? entry)
+    const collectReview = () => collectUnconfirmedImportedScripts({
+      entry: authoritativeEntry,
+      loadWorkflow: async (id) => this.workflowService.get?.(id) ?? null,
+    })
+    const review = await collectReview()
+    if (review.scripts.length === 0) {
+      return {
+        status: "ready",
+        definition: authoritativeEntry,
+        snapshotDefinitions: review.snapshotDefinitions,
+      }
+    }
+    const currentToken = importedScriptReviewToken(review)
+    if (confirmationToken !== currentToken) {
+      return importedScriptConfirmationRequired(review, currentToken)
+    }
+
+    const confirmedDefinitions = review.definitions.map((definition): WorkflowDefinition => ({
+      ...definition,
+      scriptTrust: { source: "imported", confirmed: true },
+    }))
+    const definitionsToPersist = options.allowHistoricalEntry
+      ? confirmedDefinitions.filter((definition) => definition.id !== authoritativeEntry.id)
+      : confirmedDefinitions
+    const expectedRevisions = new Map(
+      review.reachableRevisions
+        .filter(({ workflowId }) => !options.allowHistoricalEntry || workflowId !== authoritativeEntry.id)
+        .map(({ workflowId, revision }) => [workflowId, revision]),
+    )
+    const saved = definitionsToPersist.length === 0 && expectedRevisions.size === 0
+      ? { snapshot: { next: [] as WorkflowDefinition[] } }
+      : await this.workflowService.commitAtomicBatch(
+          definitionsToPersist,
+          [],
+          expectedRevisions,
+        )
+    if ("errors" in saved) {
+      const refreshedEntry = options.allowHistoricalEntry
+        ? authoritativeEntry
+        : await this.workflowService.get?.(entry.id) ?? authoritativeEntry
+      const refreshedReview = await collectUnconfirmedImportedScripts({
+        entry: refreshedEntry,
+        loadWorkflow: async (id) => this.workflowService.get?.(id) ?? null,
+      })
+      if (refreshedReview.scripts.length > 0) {
+        const refreshedToken = importedScriptReviewToken(refreshedReview)
+        if (refreshedToken !== confirmationToken) {
+          return importedScriptConfirmationRequired(refreshedReview, refreshedToken)
+        }
+      }
+      return { status: "save_failed", errors: saved.errors }
+    }
+    const confirmedById = new Map(
+      saved.snapshot.next.map((definition) => [definition.id, definition]),
+    )
+    const reviewedById = new Map(
+      confirmedDefinitions.map((definition) => [definition.id, definition]),
+    )
+    const snapshotDefinitions = review.snapshotDefinitions.map((definition) =>
+      confirmedById.get(definition.id) ?? reviewedById.get(definition.id) ?? definition)
+    const definition = confirmedById.get(entry.id)
+      ?? reviewedById.get(entry.id)
+      ?? authoritativeEntry
+    return {
+      status: "ready",
+      definition,
+      snapshotDefinitions,
+    }
   }
 
   async buildDeletePlan(workflowId: string): Promise<WorkflowShareDeletePlan> {
@@ -869,7 +1018,9 @@ export class WorkflowPackageService {
       }
     }
 
-    const imported = rewriteWorkflowForImport(currentPackage.workflow, currentPackage.modelReferences, mappingByRef, this.createId(), this.now().getTime(), options)
+    const imported = markImportedScriptTrust(
+      rewriteWorkflowForImport(currentPackage.workflow, currentPackage.modelReferences, mappingByRef, this.createId(), this.now().getTime(), options),
+    )
     const saveResult = await this.workflowService.save(imported)
     if ("errors" in saveResult) {
       logger.warn("workflow package import blocked by validation", {
@@ -987,8 +1138,9 @@ export class WorkflowPackageService {
     }
     let transaction: WorkflowShareTransactionEntryV1 | undefined
     const workflowIds = Object.fromEntries(rewritten.targetIds)
+    const importedDefinitions = rewritten.definitions.map(markImportedScriptTrust)
     const batchResult = await this.workflowService.commitAtomicBatch(
-      rewritten.definitions,
+      importedDefinitions,
       removeIds,
       expectedRevisions,
       this.shareStateService ? {
@@ -1020,10 +1172,10 @@ export class WorkflowPackageService {
       } : {},
     )
     if ("errors" in batchResult) return batchResult
-    this.onCommitted(rewritten.definitions.map((definition) => definition.id))
+    this.onCommitted(importedDefinitions.map((definition) => definition.id))
     return {
       workflowId,
-      workflowIds: rewritten.definitions.map((definition) => definition.id),
+      workflowIds: importedDefinitions.map((definition) => definition.id),
       versionHash: batchResult.versions.get(workflowId) ?? "",
       mutated: true,
       undoCreated: Boolean(this.shareStateService),
@@ -1351,6 +1503,16 @@ function rewriteWorkflowForImport(
   }
 
   return next
+}
+
+export function markImportedScriptTrust(definition: WorkflowDefinition): WorkflowDefinition {
+  return {
+    ...definition,
+    scriptTrust: {
+      source: "imported",
+      confirmed: false,
+    },
+  }
 }
 
 function workflowNeedsProjectMapping(workflow: WorkflowDefinition): boolean {

@@ -10,6 +10,59 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  script-runtime-contract:
+    name: Script runtime ${{ matrix.label }} ${{ matrix.evidence }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS
+            os: macos-latest
+            evidence: packaged artifact + runtime smoke
+            packaged: true
+          - label: Windows
+            os: windows-2022
+            evidence: packaged artifact + runtime smoke
+            packaged: true
+          - label: Linux
+            os: ubuntu-latest
+            evidence: runtime smoke
+            packaged: false
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.22.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build desktop
+        run: pnpm --filter @synapse/desktop run build
+      - name: Verify JavaScript and Node.js surfaces
+        run: pnpm --filter @synapse/desktop run check:script-runtime:surface
+      - name: Run macOS or Windows runtime smoke
+        if: runner.os != 'Linux'
+        run: pnpm --filter @synapse/desktop run check:script-runtime:runtime-smoke:built
+      - name: Run Linux runtime smoke
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm --filter @synapse/desktop run check:script-runtime:runtime-smoke:built
+      - name: Build unsigned macOS packaged directory
+        if: runner.os == 'macOS'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: pnpm --filter @synapse/desktop exec electron-builder --mac dir --arm64 --publish never
+      - name: Build Windows packaged directory
+        if: runner.os == 'Windows'
+        run: pnpm --filter @synapse/desktop exec electron-builder --win dir --x64 --publish never
+      - name: Run packaged artifact smoke
+        if: matrix.packaged
+        run: pnpm --filter @synapse/desktop run check:script-runtime:packaged
+
   desktop-macos:
     name: Desktop macOS typecheck + tests + hard-constraints
     runs-on: macos-latest

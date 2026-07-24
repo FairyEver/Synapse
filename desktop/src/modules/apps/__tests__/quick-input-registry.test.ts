@@ -16,9 +16,6 @@ describe("quick input app registry", () => {
       windowTitle: "快捷输入",
       dock: { pinnedByDefault: false },
       window: { openable: true },
-      capabilities: {
-        primaryMcpPrefix: "app_quick_input",
-      },
     })
     expect(listLaunchableSystemApps().map((item) => item.id)).toContain("quick-input")
     expect(DEFAULT_DOCK_APP_IDS).not.toContain("quick-input")

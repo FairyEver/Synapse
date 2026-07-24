@@ -1,0 +1,3 @@
+# Refuse problem-feedback redirects and insecure remote transport
+
+Problem-feedback submission requires HTTPS for every non-local deployment; only development endpoints on `localhost`, `127.0.0.1`, or `::1` may use HTTP. The anonymous POST never follows redirects, and any `3xx` response becomes `SUBMISSION_OUTCOME_UNKNOWN` because the configured endpoint received the request and might already have persisted it. URL validation, DNS, TLS, or connection-establishment failures become `SUBMISSION_FAILED` only when the desktop can determine that the body was not sent. MCP input cannot disable TLS validation, choose a proxy or headers, or alter redirect behavior.

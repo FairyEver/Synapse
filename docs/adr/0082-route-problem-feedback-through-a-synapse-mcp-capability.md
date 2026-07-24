@@ -1,0 +1,3 @@
+# Route problem feedback through a Synapse MCP capability
+
+V1 supports problem feedback only through the built-in Synapse Skill, a dedicated problem-feedback MCP capability, the Synapse desktop implementation, and an anonymous server submission endpoint. The Skill must not use `curl`, a browser, or hand-built HTTP requests because keeping transport, validation, privacy enforcement, and protocol evolution inside Synapse is more important than allowing alternate submission paths; “anonymous” means that no Synapse user account is required, not that server-side validation or abuse controls are absent.

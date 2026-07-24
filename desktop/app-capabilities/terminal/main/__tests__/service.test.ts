@@ -19,6 +19,27 @@ describe("TerminalService core", () => {
     expect(statSync(filePath).mode & 0o111).not.toBe(0)
   })
 
+  it("records PTY startup failures with session context", async () => {
+    const logger = { warn: vi.fn() }
+    const launchError = new Error("posix_spawnp failed")
+    const service = createTerminalService({
+      store: memoryStore(),
+      spawnPty: () => { throw launchError },
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => os.tmpdir(),
+      logger,
+    })
+    await service.start()
+
+    const session = await service.createSession({})
+
+    expect(session.status).toBe("failed")
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Terminal PTY process failed to start.",
+      { sessionId: session.id, error: launchError },
+    )
+  })
+
   it("creates one UI/MCP-visible session, records real output, and invalidates attention evidence", async () => {
     const harness = await startedHarness()
     const session = await harness.service.createSession({ title: "Shell" })

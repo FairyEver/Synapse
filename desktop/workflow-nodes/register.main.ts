@@ -20,6 +20,22 @@ import {
   htmlGeneratorEjsNodeExecutor,
   htmlGeneratorEjsNodeManifest,
 } from "../app-capabilities/html-generator/workflow-node"
+import {
+  systemNotifierNodeExecutor,
+  systemNotifierNodeManifest,
+} from "../app-capabilities/system-notifier/workflow-node"
+import {
+  jsonRepairNodeExecutor,
+  jsonRepairNodeManifest,
+} from "../app-capabilities/json-repair/workflow-node"
+import {
+  javascriptRunNodeExecutor,
+  javascriptRunNodeManifest,
+} from "../app-capabilities/javascript-run/workflow-node"
+import {
+  nodejsRunNodeExecutor,
+  nodejsRunNodeManifest,
+} from "../app-capabilities/nodejs-run/workflow-node"
 
 nodeTypeRegistry.register(textNodeManifest, textNodeExecutor)
 nodeTypeRegistry.register(promptNodeManifest, promptNodeExecutor)
@@ -36,3 +52,7 @@ nodeTypeRegistry.register(textExtractNodeManifest, textExtractNodeExecutor)
 nodeTypeRegistry.register(textFileWriterNodeManifest, textFileWriterNodeExecutor)
 nodeTypeRegistry.register(htmlGeneratorEjsNodeManifest, htmlGeneratorEjsNodeExecutor)
 nodeTypeRegistry.register(htmlGeneratorEjsFileNodeManifest, htmlGeneratorEjsFileNodeExecutor)
+nodeTypeRegistry.register(systemNotifierNodeManifest, systemNotifierNodeExecutor)
+nodeTypeRegistry.register(jsonRepairNodeManifest, jsonRepairNodeExecutor)
+nodeTypeRegistry.register(javascriptRunNodeManifest, javascriptRunNodeExecutor)
+nodeTypeRegistry.register(nodejsRunNodeManifest, nodejsRunNodeExecutor)

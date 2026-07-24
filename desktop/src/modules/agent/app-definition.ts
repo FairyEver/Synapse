@@ -8,9 +8,6 @@ export const agentAppDefinition = {
   windowTitle: "对话",
   dock: { pinnedByDefault: true, order: 10 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_agent",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

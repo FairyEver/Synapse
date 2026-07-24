@@ -53,6 +53,9 @@ const CAPABILITY_ACTIONS = [
   "raw",
   "force_stop",
   "commit",
+  "trigger",
+  "submit",
+  "repair",
 ] as const
 
 export type CapabilityAction = typeof CAPABILITY_ACTIONS[number]

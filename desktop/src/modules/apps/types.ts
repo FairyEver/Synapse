@@ -14,6 +14,7 @@ export const SYSTEM_APP_IDS = [
   "file-opener",
   "text-file-writer",
   "html-generator",
+  "json-repair",
   "skill-installer",
   "skill-uninstaller",
   "synapse-skill",
@@ -21,6 +22,7 @@ export const SYSTEM_APP_IDS = [
   "rule-installer",
   "quick-input",
   "sound-notifier",
+  "system-notifier",
   "terminal",
   "editor-scan",
   "usage-monitor",
@@ -45,6 +47,7 @@ export type SynapseSystemAppNamespace =
   | "file_opener"
   | "text_file_writer"
   | "html_generator"
+  | "json_repair"
   | "skill_installer"
   | "skill_uninstaller"
   | "synapse_skill"
@@ -52,6 +55,7 @@ export type SynapseSystemAppNamespace =
   | "rule_installer"
   | "quick_input"
   | "sound_notifier"
+  | "system_notifier"
   | "terminal"
   | "editor_scan"
   | "usage_monitor"
@@ -65,15 +69,11 @@ export type SynapseSystemAppDockVisibility = "always" | "workflow-entry-enabled"
 export type SynapseSystemAppDockMetadata = {
   readonly pinnedByDefault: boolean
   readonly order: number
-  readonly visibility?: SynapseSystemAppDockVisibility
+  readonly pinnable?: boolean
 }
 
 export type SynapseSystemAppWindowMetadata = {
   readonly openable: boolean
-}
-
-export type SynapseSystemAppCapabilityMetadata = {
-  readonly primaryMcpPrefix: `app_${string}`
 }
 
 export type SynapseSystemAppDefinition = {
@@ -83,9 +83,9 @@ export type SynapseSystemAppDefinition = {
   readonly name: string
   readonly windowTitle: string
   readonly defaultView?: SynapseSystemAppDefaultView
+  readonly visibility?: SynapseSystemAppDockVisibility
   readonly dock: SynapseSystemAppDockMetadata
   readonly window: SynapseSystemAppWindowMetadata
-  readonly capabilities: SynapseSystemAppCapabilityMetadata
   readonly removable: false
   readonly renameable: false
   readonly iconEditable: false

@@ -164,6 +164,124 @@ describe("NodeResultPanel", () => {
     })
   })
 
+  it("does not render System Notifier bodies or resolved variable values", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <NodeResultPanel
+          result={{
+            nodeId: "notify-1",
+            status: "success",
+            input: {
+              variables: { secret: "resolved-variable-canary" },
+              prompt: "private-prompt-canary",
+            },
+            output: "{\"success\":true}",
+            outputs: { success: true },
+          }}
+          nodeName="系统通知"
+          definition={{
+            id: "workflow-system-notifier",
+            name: "System Notifier workflow",
+            version: "v1",
+            createdAt: 1,
+            updatedAt: 1,
+            params: [],
+            nodes: [{
+              id: "notify-1",
+              name: "系统通知",
+              type: "system_notifier_notification_trigger",
+              position: { x: 0, y: 0 },
+              config: {
+                title: "Safe title",
+                body: "private-body-canary {{secret}}",
+                variables: [{
+                  name: "secret",
+                  source: { type: "static", value: "binding-value-canary" },
+                }],
+              },
+            }],
+            edges: [],
+          }}
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    const renderedText = container.textContent ?? ""
+    expect(renderedText).toContain("{\"success\":true}")
+    expect(renderedText).not.toContain("private-body-canary")
+    expect(renderedText).not.toContain("binding-value-canary")
+    expect(renderedText).not.toContain("resolved-variable-canary")
+    expect(renderedText).not.toContain("private-prompt-canary")
+    expect(renderedText).not.toContain("输入变量")
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
+
+  it("does not render JSON Repair text or resolved variable values", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <NodeResultPanel
+          result={{
+            nodeId: "repair-1",
+            status: "success",
+            input: {
+              variables: { secret: "resolved-variable-canary" },
+              prompt: "private-json-canary resolved-variable-canary",
+            },
+            output: "{\"ok\":true}",
+            outputs: { json: "{\"ok\":true}" },
+          }}
+          nodeName="JSON 修复"
+          definition={{
+            id: "workflow-json-repair",
+            name: "JSON Repair workflow",
+            version: "v1",
+            createdAt: 1,
+            updatedAt: 1,
+            params: [],
+            nodes: [{
+              id: "repair-1",
+              name: "JSON 修复",
+              type: "json_repair_text_repair",
+              position: { x: 0, y: 0 },
+              config: {
+                text: "private-json-canary {{secret}}",
+                variables: [{
+                  name: "secret",
+                  source: { type: "static", value: "binding-value-canary" },
+                }],
+              },
+            }],
+            edges: [],
+          }}
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    const renderedText = container.textContent ?? ""
+    expect(renderedText).toContain("{\"ok\":true}")
+    expect(renderedText).not.toContain("private-json-canary")
+    expect(renderedText).not.toContain("binding-value-canary")
+    expect(renderedText).not.toContain("resolved-variable-canary")
+    expect(renderedText).not.toContain("输入变量")
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
+
   it("hides structured markdown output when it duplicates the primary output", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

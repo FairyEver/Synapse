@@ -10,6 +10,7 @@ import { registerHttpBodyParsers } from "./common/http-body-parser"
 import { loadEnv } from "./config/env"
 import { LiveDesktopGateway } from "./live/live-desktop.gateway"
 import { registerLiveShutdownSignalHandlers } from "./live/live-shutdown-signals"
+import { isProblemFeedbackPublicPath } from "./problem-feedback/problem-feedback-http"
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv(process.env)
@@ -24,9 +25,13 @@ async function bootstrap(): Promise<void> {
       contentSecurityPolicy: process.env.NODE_ENV === "production",
     }),
   )
-  app.enableCors({
-    origin: process.env.NODE_ENV === "production" ? false : true,
-    credentials: true,
+  app.enableCors((request, callback) => {
+    callback(null, isProblemFeedbackPublicPath(request.originalUrl ?? request.url ?? "")
+      ? { origin: false, preflightContinue: true }
+      : {
+          origin: process.env.NODE_ENV === "production" ? false : true,
+          credentials: true,
+        })
   })
   app.enableShutdownHooks()
   const liveDesktopGateway = app.get(LiveDesktopGateway)

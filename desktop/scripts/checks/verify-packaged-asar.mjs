@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { createRequire } from "node:module"
@@ -175,6 +176,30 @@ function verifyUnpackedEntity(node, unpackedPath, relativePath, failures) {
   }
 }
 
+function verifySignedUnpackedNode(header, unpackedPath, relativePath, failures, message) {
+  const node = findNode(header, relativePath)
+  if (!node) {
+    failures.push(`${message}: ${relativePath}`)
+    return
+  }
+  if (!node.unpacked) {
+    failures.push(`${relativePath} must be unpacked`)
+    return
+  }
+  const filePath = path.join(unpackedPath, relativePath)
+  if (!existsSync(filePath)) {
+    failures.push(`missing unpacked file: ${relativePath}`)
+    return
+  }
+  try {
+    if (!statSync(filePath).isFile()) {
+      failures.push(`unpacked entry is not a file: ${relativePath}`)
+    }
+  } catch (error) {
+    failures.push(`${relativePath}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 function shouldRequireUnpackedSourceMap(relativePath) {
   return relativePath.startsWith("dist-electron/") && relativePath.endsWith(".js")
 }
@@ -241,6 +266,17 @@ const htmlGenerationRuntimeEntries = [
   "node_modules/ejs/LICENSE",
   "node_modules/ejs/lib/cjs/ejs.js",
   "node_modules/ejs/lib/cjs/utils.js",
+]
+const jsonRepairRuntimeEntries = [
+  "node_modules/repair-json-stream/package.json",
+  "node_modules/repair-json-stream/LICENSE",
+  "node_modules/repair-json-stream/dist/index.cjs",
+  "node_modules/repair-json-stream/dist/extract.cjs",
+]
+const terminalServiceEntry =
+  "dist-electron/app-capabilities/terminal/main/service.js"
+const terminalSignedRuntimeEntries = [
+  "node_modules/node-pty/build/Release/pty.node",
 ]
 const documentParserLicenses = [
   {
@@ -550,6 +586,80 @@ function verifyDocumentParserLicense(unpackedPath, license, failures) {
   }
 }
 
+function verifyJsonRepairRuntime(asarPath, header, failures) {
+  const failureCount = failures.length
+  for (const relativePath of jsonRepairRuntimeEntries) {
+    verifyPackedNode(
+      header,
+      relativePath,
+      failures,
+      "JSON Repair runtime is missing from packed app.asar",
+    )
+  }
+  if (failures.length !== failureCount) return
+
+  const smokeScript = [
+    "const fs = require('node:fs')",
+    "const path = require('node:path')",
+    "const { createRequire } = require('node:module')",
+    "const asarPath = process.argv[1]",
+    "const packagedRequire = createRequire(path.join(asarPath, 'package.json'))",
+    "const root = packagedRequire('repair-json-stream')",
+    "const extract = packagedRequire('repair-json-stream/extract')",
+    "const packageJson = JSON.parse(fs.readFileSync(path.join(asarPath, 'node_modules/repair-json-stream/package.json'), 'utf8'))",
+    "const license = fs.readFileSync(path.join(asarPath, 'node_modules/repair-json-stream/LICENSE'), 'utf8')",
+    "const result = {",
+    "  version: packageJson.version,",
+    "  license: packageJson.license,",
+    "  licenseText: license.includes('MIT License') && license.includes('Permission is hereby granted, free of charge'),",
+    "  repaired: typeof root.repairJson === 'function' ? root.repairJson('{value:1}') : null,",
+    "  stripped: typeof extract.stripLlmWrapper === 'function' ? extract.stripLlmWrapper('Result: {\"value\":1}') : null,",
+    "  extracted: typeof extract.extractAllJson === 'function' ? extract.extractAllJson('before {\"value\":1} after') : null,",
+    "}",
+    "process.stdout.write(JSON.stringify(result))",
+  ].join("\n")
+
+  let executablePath
+  try {
+    executablePath = require("electron")
+  } catch {
+    failures.push("packaged JSON Repair package-name resolution smoke could not start Electron")
+    return
+  }
+  const smoke = spawnSync(executablePath, ["-e", smokeScript, asarPath], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: "1",
+    },
+    timeout: 10_000,
+  })
+  if (smoke.status !== 0) {
+    failures.push("packaged JSON Repair package-name resolution smoke failed")
+    return
+  }
+
+  try {
+    const result = JSON.parse(smoke.stdout)
+    if (
+      result.version !== "1.3.1"
+      || result.license !== "MIT"
+      || result.licenseText !== true
+      || result.repaired !== '{"value":1}'
+      || result.stripped !== '{"value":1}'
+      || JSON.stringify(result.extracted) !== '["{\\"value\\":1}"]'
+    ) {
+      failures.push("packaged JSON Repair package-name resolution smoke failed")
+      return
+    }
+  } catch {
+    failures.push("packaged JSON Repair package-name resolution smoke failed")
+    return
+  }
+
+  console.log("Verified packaged JSON Repair runtime smoke")
+}
+
 async function runTextExtractionWorkerSmoke(unpackedPath, failures) {
   const workerPath = path.join(unpackedPath, textExtractionWorkerEntry)
   const workerLaunchPath = path.join(unpackedPath, textExtractionWorkerLaunchEntry)
@@ -767,6 +877,106 @@ function verifyClaudeRuntime(unpackedPath, failures) {
   failures.push(`Claude SDK native binary is missing: ${expectedRelativePaths.join(" or ")}`)
 }
 
+function verifyTerminalRuntime(header, resourcesPath, unpackedPath, failures) {
+  if (!findNode(header, terminalServiceEntry)) return
+
+  const platform = process.env.SYNAPSE_PACKAGED_ASAR_PLATFORM || process.platform
+  if (platform !== "darwin") return
+
+  verifyUnpackedNode(
+    header,
+    unpackedPath,
+    "node_modules/node-pty/package.json",
+    failures,
+    "Terminal native runtime dependency is missing from app.asar",
+  )
+  for (const relativePath of terminalSignedRuntimeEntries) {
+    verifySignedUnpackedNode(
+      header,
+      unpackedPath,
+      relativePath,
+      failures,
+      "Terminal native runtime dependency is missing from app.asar",
+    )
+  }
+
+  const nodePtySource = readUnpackedText(
+    header,
+    unpackedPath,
+    "node_modules/node-pty/lib/unixTerminal.js",
+    failures,
+    "Terminal node-pty launch module",
+  )
+  if (nodePtySource && !nodePtySource.includes("SYNAPSE_NODE_PTY_SPAWN_HELPER")) {
+    failures.push("Terminal node-pty launch module does not support the packaged Frameworks helper")
+  }
+
+  const appPath = path.dirname(path.dirname(resourcesPath))
+  if (!appPath.endsWith(".app")) return
+  const spawnHelperPath = path.join(
+    appPath,
+    "Contents",
+    "Frameworks",
+    "node-pty-spawn-helper",
+  )
+  if (existsSync(spawnHelperPath)) {
+    try {
+      if ((statSync(spawnHelperPath).mode & 0o111) === 0) {
+        failures.push("Terminal node-pty spawn-helper is not executable")
+      }
+    } catch (error) {
+      failures.push(`Terminal node-pty spawn-helper is unreadable: ${error instanceof Error ? error.message : String(error)}`)
+    }
+
+    const signature = spawnSync(
+      "codesign",
+      ["-d", "--entitlements", ":-", spawnHelperPath],
+      { encoding: "utf8", timeout: 10_000 },
+    )
+    const entitlements = `${signature.stdout ?? ""}\n${signature.stderr ?? ""}`
+    if (signature.status !== 0) {
+      failures.push("Terminal node-pty spawn-helper code signature is invalid")
+    } else if (entitlements.includes("com.apple.security.inherit")) {
+      failures.push("Terminal node-pty spawn-helper must not inherit macOS app entitlements")
+    }
+  } else {
+    failures.push("Terminal node-pty Frameworks spawn-helper is missing")
+  }
+
+  const executablePath = path.join(
+    appPath,
+    "Contents",
+    "MacOS",
+    path.basename(appPath, ".app"),
+  )
+  const packagePath = path.join(unpackedPath, "node_modules/node-pty")
+  if (!existsSync(executablePath) || !existsSync(packagePath)) return
+
+  const smokeScript = [
+    "const pty = require(process.argv[1])",
+    "const child = pty.spawn('/bin/sh', ['-lc', 'printf synapse-terminal-runtime-ok'], {",
+    "  name: 'xterm-256color', cols: 80, rows: 24, cwd: '/tmp', env: process.env,",
+    "})",
+    "child.onData((data) => process.stdout.write(data))",
+    "child.onExit(({ exitCode }) => process.exit(exitCode))",
+    "setTimeout(() => process.exit(124), 5000)",
+  ].join("\n")
+  const smoke = spawnSync(executablePath, ["-e", smokeScript, packagePath], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: "1",
+      SYNAPSE_NODE_PTY_SPAWN_HELPER: spawnHelperPath,
+    },
+    timeout: 10_000,
+  })
+  if (smoke.status !== 0 || !smoke.stdout?.includes("synapse-terminal-runtime-ok")) {
+    failures.push("Terminal node-pty packaged smoke failed: Frameworks spawn-helper could not create a PTY")
+  } else {
+    console.log("Verified packaged Terminal node-pty smoke")
+  }
+}
+
 function verifyExtraResources(resourcesPath, failures) {
   for (const resource of requiredExtraResourceFiles) {
     const filePath = path.join(resourcesPath, resource.relativePath)
@@ -863,6 +1073,19 @@ async function verifyResources(resourcesPath, label) {
     failures,
     "shared workspace package is missing from packed app.asar",
   )
+  for (const relativePath of [
+    "dist-electron/electron/script-runtime-smoke-bootstrap.js",
+    "dist-electron/electron/script-runtime-smoke.js",
+    "dist-electron/app-capabilities/script-runtime/main/chromium-worker-runner.js",
+    "dist-electron/app-capabilities/script-runtime/main/node-cli-runner.js",
+  ]) {
+    verifyPackedNode(
+      header,
+      relativePath,
+      failures,
+      "script runtime packaged gate entry is missing from app.asar",
+    )
+  }
   verifyPackedTextIncludes(
     buffer,
     dataOffset,
@@ -891,6 +1114,7 @@ async function verifyResources(resourcesPath, label) {
     "packaged Claude runtime diagnostics are missing from app.asar",
   )
   verifySandboxedPreloadBundle(buffer, dataOffset, header, failures)
+  verifyJsonRepairRuntime(asarPath, header, failures)
   verifyTextExtractionWorker(header, unpackedPath, failures)
   verifyHtmlGenerationWorker(header, unpackedPath, failures)
   if (failures.length === 0) {
@@ -899,6 +1123,7 @@ async function verifyResources(resourcesPath, label) {
   }
   verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures)
   verifyClaudeRuntime(unpackedPath, failures)
+  verifyTerminalRuntime(header, resourcesPath, unpackedPath, failures)
   verifyExtraResources(resourcesPath, failures)
 
   if (failures.length > 0) {

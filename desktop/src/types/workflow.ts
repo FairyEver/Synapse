@@ -1,4 +1,5 @@
 import type { SynapseAgentConversationReference, SynapseAgentConversationTarget } from "./agent-navigation"
+import type { JsonValue } from "../../app-capabilities/script-runtime/shared/json"
 
 export type WorkflowParamType = "text" | "number" | "file" | "directory" | "option"
 export type WorkflowResourceEntryType = "file" | "directory"
@@ -44,6 +45,12 @@ export type WorkflowVariableSource =
   | { readonly type: "param"; readonly param: string }
   | { readonly type: "node_output"; readonly node: string }
   | { readonly type: "static"; readonly value: string }
+export type WorkflowStructuredValueSource = {
+  readonly type: "node_value"
+  readonly node: string
+  readonly output: string
+  readonly path: readonly (string | number)[]
+}
 export type WorkflowParamBinding =
   | { readonly mode: "template"; readonly template: string }
   | { readonly mode: "value"; readonly source: WorkflowVariableSource }
@@ -61,6 +68,10 @@ export interface WorkflowDefinition {
   defaultModelTier?: "default" | "haiku" | "sonnet" | "opus"
   defaultNodeTimeoutMins?: number
   params: WorkflowParam[]; nodes: WorkflowNode[]; edges: WorkflowEdge[]
+  scriptTrust?: {
+    readonly source: "imported"
+    readonly confirmed: boolean
+  }
 }
 export interface WorkflowFutureDocument extends Record<string, unknown> {
   id: string
@@ -106,12 +117,16 @@ export interface WorkflowNodeUsageCostSnapshot {
 export interface NodeRunResult {
   nodeId: string
   status: "pending" | "running" | "success" | "failed" | "cancelled" | "skipped"
-  input: { variables: Record<string, string>; prompt?: string }
+  input: { variables: Record<string, string>; inputs?: Record<string, JsonValue>; prompt?: string }
   output?: string
   outputs?: Record<string, unknown> & {
     readonly agentConversation?: SynapseAgentConversationReference
   }
-  activeBranch?: string; error?: string
+  logs?: readonly { readonly label: string; readonly value: string }[]
+  activeBranch?: string
+  error?: string
+  errorCode?: string
+  errorReason?: string
   startedAt?: number; endedAt?: number; durationMs?: number
   progressLabel?: string
   usage?: Record<string, unknown>
@@ -171,7 +186,7 @@ export type WorkflowEvent =
   | { type: "workflow:cancelled"; runId: string; workflowId: string; result?: WorkflowRunResult }
   | { type: "workflow:snapshot-save-failed"; runId: string; workflowId: string; status: WorkflowRunResult["status"] }
 export interface ValidationError {
-  type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch" | "missing_end_node" | "multiple_end_nodes" | "missing_param" | "disconnected_node"
+  type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch" | "missing_end_node" | "multiple_end_nodes" | "missing_param" | "disconnected_node" | "script_confirmation_required"
   nodeId?: string; nodeName?: string; edgeId?: string; field?: string; message: string
   retryable?: boolean
   details?: Record<string, unknown>

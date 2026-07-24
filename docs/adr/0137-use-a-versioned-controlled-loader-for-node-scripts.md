@@ -1,0 +1,9 @@
+# Use a versioned controlled loader for Node scripts
+
+Status: deprecated; replaced by accepted ADR-0204
+
+Node.js Script Execution V1 runs in a controlled Node.js host rather than an ordinary CommonJS or ESM module environment. The capability version owns an explicit allowlist of built-in capabilities and does not inherit additions from Electron's bundled Node.js `builtinModules`. Scripts may use only literal `require("node:...")` identifiers accepted by the host. The host does not expose Node's native `require`, `module`, `exports`, `__filename`, `__dirname`, static or dynamic `import`, bare package names, relative or absolute module paths, `file:` URLs, `node_modules` resolution, Electron, `process`, or Node's native network globals. Network access continues through Synapse's shared broker.
+
+The allowlist distinguishes controlled read-only exports for computation from permission-bearing Synapse facades such as the V1 filesystem capability. The latter must authorize and audit operations rather than returning the native built-in module after one load-time check. `node:module`, `node:vm`, process and worker creation, inspector and runtime internals, WASI, tests, SQLite, direct network modules, and Electron are excluded. The exact positive allowlist remains a separate V1 decision and is fixed only when each module's authority and resource behavior have been reviewed.
+
+This loader prevents Synapse from resolving or loading non-allowlisted built-ins, local modules, or third-party packages. It is not code-provenance enforcement: users may paste arbitrary code, and later filesystem or dynamic-evaluation decisions may permit them to read or evaluate code themselves. Node.js Script Execution is trusted current-user execution, not a security sandbox or a hostile-code isolation boundary, and product copy must call it a controlled Node.js host rather than a complete Node.js-compatible environment.

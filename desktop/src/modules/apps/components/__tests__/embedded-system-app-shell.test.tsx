@@ -75,6 +75,12 @@ describe("EmbeddedSystemAppShell", () => {
     expect(document.querySelector("[data-embedded-system-app-actions] button[aria-label='新窗口打开']")).toBeTruthy()
   })
 
+  it("hides the open window action when the app is not openable", async () => {
+    await renderEmbeddedShell(roots, <div>内容</div>, { openable: false })
+
+    expect(document.querySelector("button[aria-label='新窗口打开']")).toBeNull()
+  })
+
   it("hides the dock header when no app slot is registered", async () => {
     await renderEmbeddedShell(roots, <div>内容</div>, { mode: "dock" })
 
@@ -97,7 +103,10 @@ describe("EmbeddedSystemAppShell", () => {
 async function renderEmbeddedShell(
   roots: Root[],
   children: React.ReactNode,
-  options: { readonly mode?: "launcher" | "dock" } = {},
+  options: {
+    readonly mode?: "launcher" | "dock"
+    readonly openable?: boolean
+  } = {},
 ): Promise<void> {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -110,7 +119,7 @@ async function renderEmbeddedShell(
         appName="资源仓库"
         mode={options.mode}
         onBack={vi.fn()}
-        onOpenWindow={vi.fn()}
+        onOpenWindow={options.openable === false ? undefined : vi.fn()}
       >
         {children}
       </EmbeddedSystemAppShell>,

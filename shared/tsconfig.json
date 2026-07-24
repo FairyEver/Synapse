@@ -16,6 +16,8 @@
     "src/live.ts",
     "src/urls.ts",
     "src/versioned-data-migrator.cts",
-    "src/webhook.ts"
+    "src/webhook.ts",
+    "src/problem-feedback.ts",
+    "src/problem-feedback-fixtures.ts"
   ]
 }

@@ -93,6 +93,33 @@ describe("ServiceRegistry.startAll lifecycle (T1.4)", () => {
     expect(registry.inspect().every((e) => e.status === "stopped")).toBe(true)
   })
 
+  it("stops order-only consumers before their targets", async () => {
+    const trace = makeTrace()
+    const registry = createServiceRegistry()
+    registry.register(tracingDescriptor(trace, "consumer", [], {
+      startAfter: ["target"],
+    }))
+    registry.register(tracingDescriptor(trace, "target"))
+
+    await registry.startAll()
+    expect(trace.events).toEqual([
+      "create:target",
+      "start:target",
+      "create:consumer",
+      "start:consumer",
+    ])
+    trace.events.length = 0
+
+    await registry.stopAll(15000)
+    expect(trace.events).toEqual(["stop:consumer", "stop:target"])
+    expect(registry.inspect()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "target", status: "stopped" }),
+        expect.objectContaining({ id: "consumer", status: "stopped" }),
+      ]),
+    )
+  })
+
   it("fatal service failure aborts startAll and surfaces FatalServiceFailureError", async () => {
     const registry = createServiceRegistry()
     registry.register({
@@ -143,6 +170,95 @@ describe("ServiceRegistry.startAll lifecycle (T1.4)", () => {
       "expected soft failure",
     )
     expect(registry.inspect().find((e) => e.id === "ok")?.status).toBe("running")
+  })
+
+  it("does not propagate an order-only dependency's degraded failure", async () => {
+    const trace = makeTrace()
+    const registry = createServiceRegistry()
+    registry.register(tracingDescriptor(trace, "consumer", [], {
+      criticality: "degraded",
+      startAfter: ["optional"],
+    }))
+    registry.register(tracingDescriptor(trace, "optional", [], {
+      criticality: "degraded",
+      create() {
+        trace.push("create", "optional")
+        throw new Error("optional unavailable")
+      },
+    }))
+
+    const result = await registry.startAll()
+
+    expect(trace.events).toEqual(["create:optional", "create:consumer", "start:consumer"])
+    expect(result.degraded.map((failure) => failure.id)).toEqual(["optional"])
+    expect(registry.inspect().find((entry) => entry.id === "consumer")?.status)
+      .toBe("running")
+  })
+
+  it("does not propagate an order-only dependency skipped by a hard failure", async () => {
+    const trace = makeTrace()
+    const registry = createServiceRegistry()
+    registry.register(tracingDescriptor(trace, "consumer", [], {
+      criticality: "degraded",
+      startAfter: ["optional"],
+    }))
+    registry.register(tracingDescriptor(trace, "optional", ["broken"], {
+      criticality: "degraded",
+    }))
+    registry.register(tracingDescriptor(trace, "broken", [], {
+      criticality: "degraded",
+      create() {
+        trace.push("create", "broken")
+        throw new Error("broken unavailable")
+      },
+    }))
+
+    const result = await registry.startAll()
+
+    expect(trace.events).toEqual(["create:broken", "create:consumer", "start:consumer"])
+    expect(result.degraded.map((failure) => failure.id)).toEqual(["broken", "optional"])
+    expect(registry.inspect()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "broken", status: "failed" }),
+        expect.objectContaining({ id: "optional", status: "failed" }),
+        expect.objectContaining({ id: "consumer", status: "running" }),
+      ]),
+    )
+  })
+
+  it("preserves hard failure propagation when an order-only edge is duplicated", async () => {
+    const trace = makeTrace()
+    const registry = createServiceRegistry()
+    registry.register(tracingDescriptor(trace, "consumer", ["dependency"], {
+      criticality: "degraded",
+      startAfter: ["dependency"],
+    }))
+    registry.register(tracingDescriptor(trace, "dependency", [], {
+      criticality: "degraded",
+      create() {
+        trace.push("create", "dependency")
+        throw new Error("dependency unavailable")
+      },
+    }))
+
+    expect(registry.planStartOrder().map((descriptor) => descriptor.id)).toEqual([
+      "dependency",
+      "consumer",
+    ])
+
+    const result = await registry.startAll()
+
+    expect(trace.events).toEqual(["create:dependency"])
+    expect(result.degraded.map((failure) => failure.id)).toEqual([
+      "dependency",
+      "consumer",
+    ])
+    expect(registry.inspect()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "dependency", status: "failed" }),
+        expect.objectContaining({ id: "consumer", status: "failed" }),
+      ]),
+    )
   })
 
   it("startAll throws on circular deps via planStartOrder", async () => {

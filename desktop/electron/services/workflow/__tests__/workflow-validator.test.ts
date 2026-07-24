@@ -55,6 +55,66 @@ describe("validateWorkflow", () => {
     }))
   })
 
+  it("rejects unbound template variables in System Notifier titles and bodies", () => {
+    const result = validateWorkflow(definitionWithSystemNotifierNode({
+      title: "Title {{missingTitle}}",
+      body: "Body {{missingBody}}",
+      variables: [],
+    }))
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        nodeId: "notify-1",
+        message: expect.stringContaining("模板变量「missingTitle」未绑定"),
+      }),
+      expect.objectContaining({
+        nodeId: "notify-1",
+        message: expect.stringContaining("模板变量「missingBody」未绑定"),
+      }),
+    ]))
+  })
+
+  it("accepts bound template variables in System Notifier titles and bodies", () => {
+    const result = validateWorkflow(definitionWithSystemNotifierNode({
+      title: "Title {{subject}}",
+      body: "Body {{$subject}}",
+      variables: [{ name: "subject", source: { type: "static", value: "ready" } }],
+    }))
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
+  it("validates JSON Repair text and template bindings before save", () => {
+    const missing = validateWorkflow(definitionWithJsonRepairNode({
+      text: "prefix {{missing}}",
+      variables: [],
+    }))
+    expect(missing.valid).toBe(false)
+    expect(missing.errors).toContainEqual(expect.objectContaining({
+      nodeId: "repair-1",
+      message: expect.stringContaining("模板变量「missing」未绑定"),
+    }))
+
+    const blank = validateWorkflow(definitionWithJsonRepairNode({
+      text: " ",
+      variables: [],
+    }))
+    expect(blank.valid).toBe(false)
+    expect(blank.errors).toContainEqual(expect.objectContaining({
+      nodeId: "repair-1",
+      message: expect.stringContaining("输入文本必填"),
+    }))
+
+    const bound = validateWorkflow(definitionWithJsonRepairNode({
+      text: "prefix {{$value}}",
+      variables: [{ name: "value", source: { type: "static", value: "{}" } }],
+    }))
+    expect(bound.valid).toBe(true)
+    expect(bound.errors).toEqual([])
+  })
+
   it("rejects disconnected nodes as validation errors", () => {
     const result = validateWorkflow(definitionWithDisconnectedNode())
 
@@ -891,6 +951,54 @@ function definitionWithTextNode(template = ""): WorkflowDefinition {
       endNode(),
     ],
     edges: [{ id: "edge-1", from: "text-1", to: "end" }],
+  }
+}
+
+function definitionWithSystemNotifierNode(
+  config: WorkflowDefinition["nodes"][number]["config"],
+): WorkflowDefinition {
+  return {
+    id: "workflow-system-notifier",
+    name: "Workflow",
+    version: "v1",
+    createdAt: 0,
+    updatedAt: 0,
+    params: [],
+    nodes: [
+      {
+        id: "notify-1",
+        name: "系统通知",
+        type: "system_notifier_notification_trigger",
+        position: { x: 0, y: 0 },
+        config,
+      },
+      endNode(),
+    ],
+    edges: [{ id: "edge-1", from: "notify-1", to: "end" }],
+  }
+}
+
+function definitionWithJsonRepairNode(
+  config: WorkflowDefinition["nodes"][number]["config"],
+): WorkflowDefinition {
+  return {
+    id: "workflow-json-repair",
+    name: "Workflow",
+    version: "v1",
+    createdAt: 0,
+    updatedAt: 0,
+    params: [],
+    nodes: [
+      {
+        id: "repair-1",
+        name: "JSON 修复",
+        type: "json_repair_text_repair",
+        position: { x: 0, y: 0 },
+        config,
+      },
+      endNode(),
+    ],
+    edges: [{ id: "edge-1", from: "repair-1", to: "end" }],
   }
 }
 

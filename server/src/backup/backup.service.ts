@@ -72,6 +72,7 @@ export function buildPgDumpOptions(
       decodeURIComponent(url.username),
       "-d",
       decodeURIComponent(url.pathname.replace(/^\//, "")),
+      "--exclude-table-data=public.\"ProblemFeedback\"",
       "-f",
       dumpFile,
     ],

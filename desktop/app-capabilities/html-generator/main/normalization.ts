@@ -3,9 +3,8 @@ import {
   HTML_GENERATION_INPUT_MAX_BYTES,
   HTML_GENERATION_OUTPUT_MAX_BYTES,
   HTML_GENERATION_TEMPLATE_MAX_BYTES,
-  type JsonObject,
-  type JsonValue,
-} from "../shared/schema"
+} from "../shared/limits"
+import type { JsonObject, JsonValue } from "../shared/schema"
 import { HtmlGenerationError } from "../shared/errors"
 
 export type NormalizedHtmlGenerationInput = {

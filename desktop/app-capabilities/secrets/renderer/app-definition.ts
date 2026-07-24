@@ -9,9 +9,6 @@ export const secretsAppDefinition = {
   windowTitle: "密钥库",
   dock: { pinnedByDefault: false, order: 260 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_secrets",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

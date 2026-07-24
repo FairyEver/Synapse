@@ -15,10 +15,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
   constructor(private readonly logger: PinoLogger) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    const response = host.switchToHttp().getResponse<Response>()
+    const http = host.switchToHttp()
+    const response = http.getResponse<Response>()
+    const request =
+      typeof http.getRequest === "function"
+        ? http.getRequest<{ readonly originalUrl?: string; readonly url?: string }>()
+        : {}
     const { statusCode, error, message, code } = this.resolve(exception)
+    const problemFeedbackPath = isProblemFeedbackPath(request.originalUrl ?? request.url ?? "")
 
-    if (statusCode >= 500) {
+    if (problemFeedbackPath) response.setHeader("Cache-Control", "no-store")
+    if (statusCode >= 500 && !problemFeedbackPath) {
       this.logger.error(createExceptionLogMetadata(exception), "Unhandled server exception")
     }
 
@@ -84,6 +91,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
         }
     }
   }
+}
+
+function isProblemFeedbackPath(url: string): boolean {
+  const pathname = url.split("?")[0] ?? ""
+  return pathname === "/api/problem-feedback"
+    || pathname === "/api/admin/problem-feedback"
+    || pathname.startsWith("/api/admin/problem-feedback/")
 }
 
 function createExceptionLogMetadata(exception: unknown): Record<string, unknown> {

@@ -9,7 +9,6 @@ export const htmlGeneratorAppDefinition = {
   windowTitle: "HTML 生成器",
   dock: { pinnedByDefault: false, order: 243 },
   window: { openable: true },
-  capabilities: { primaryMcpPrefix: "app_html_generator" },
   removable: false,
   renameable: false,
   iconEditable: false,

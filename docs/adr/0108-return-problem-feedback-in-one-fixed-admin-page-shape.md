@@ -1,0 +1,3 @@
+# Return problem feedback in one fixed admin page shape
+
+`GET /api/admin/problem-feedback` accepts only an optional positive decimal integer `page`, defaulting to one; `pageSize`, sorting, filtering, and unknown query parameters are rejected. It always uses ten records per page and returns exactly `{ data: Array<{ id, content, receivedAt }>, total, page, pageSize: 10 }`, with UTC ISO-8601 timestamps and unchanged content from which the UI derives its one-line preview. A page beyond the end returns that requested page, an empty array, and the current total rather than clamping. V1 takes no list snapshot, accepts page shifts under concurrent writes or deletes, and omits derivable fields such as `totalPages` and `hasNext`.

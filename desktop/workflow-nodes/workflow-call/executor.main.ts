@@ -20,7 +20,9 @@ export const workflowCallNodeExecutor: NodeExecutor<WorkflowCallNodeConfig> = {
     }
 
     input.onProgress?.("loading_workflow", "加载子工作流…")
-    const childDefinition = await workflowCall.getWorkflowDefinition(config.workflowId)
+    const childDefinition = input.workflowDefinitionSnapshot
+      ? input.workflowDefinitionSnapshot.get(config.workflowId) ?? null
+      : await workflowCall.getWorkflowDefinition(config.workflowId)
     if (!childDefinition) {
       return { status: "failed", output: "", error: "子工作流不存在", durationMs: Date.now() - start }
     }
@@ -62,6 +64,7 @@ export const workflowCallNodeExecutor: NodeExecutor<WorkflowCallNodeConfig> = {
     input.onProgress?.("running_child_workflow", "运行子工作流…")
     const childRun = await workflowCall.runWorkflow({
       definition: childDefinition,
+      definitionSnapshot: input.workflowDefinitionSnapshot,
       params: paramResult.params,
       projectId: childProjectId,
       triggerSource: "workflow-call",

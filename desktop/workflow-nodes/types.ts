@@ -3,6 +3,7 @@ import type { ZodType } from "zod"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../electron/runtime/security"
 import type { SynapseAgentConversationTarget } from "../src/types/agent-navigation"
 import type { WorkflowDefinition, WorkflowParam, WorkflowRunResult, WorkflowNodeUsageCostSnapshot } from "../src/types/workflow"
+import type { JsonValue } from "../app-capabilities/script-runtime/shared/json"
 
 export interface PortDefinition { id: string; label: string }
 export interface ConfigFieldDescriptor {
@@ -94,6 +95,8 @@ export interface NodeManifest<TConfig = unknown> {
   cardSummary: (config: TConfig) => { title: string; subtitle: string }
   configFields: readonly ConfigFieldDescriptor[]
   configSchema: ZodType<TConfig>
+  /** Public structured outputs available to node_value bindings. */
+  publicOutputs?: readonly string[]
   share: NodeShareContract
 }
 
@@ -164,8 +167,11 @@ export interface WorkflowCallStackEntry {
   workflowName?: string
 }
 
+export type WorkflowDefinitionSnapshot = ReadonlyMap<string, WorkflowDefinition>
+
 export interface WorkflowCallRunInput {
   definition: WorkflowDefinition
+  definitionSnapshot?: WorkflowDefinitionSnapshot
   params: Record<string, unknown>
   projectId?: string
   triggerSource: string
@@ -193,22 +199,27 @@ export interface WorkflowCallRuntimeDeps {
 export interface NodeExecutionInput<TConfig> {
   config: TConfig
   resolvedVariables: Record<string, string>
+  resolvedInputs?: Readonly<Record<string, JsonValue>>
   nodeOutputs?: Readonly<Record<string, string>>
   paramValues?: Record<string, unknown>
   paramDefinitions?: readonly WorkflowParam[]
   context: WorkflowRuntimeContext
   agentDeps: AgentSendDeps
   runtimeDeps?: NodeRuntimeDeps
+  workflowDefinitionSnapshot?: WorkflowDefinitionSnapshot
   onProgress?: (phase: string, label: string) => void
   onAgentConversation?: (target: SynapseAgentConversationTarget) => void
 }
 
 export interface NodeExecutionResult {
   status: "success" | "failed" | "cancelled"
-  output: string
+  output?: string
   outputs?: Record<string, unknown>
+  logs?: readonly { readonly label: string; readonly value: string }[]
   activeBranch?: string
   error?: string
+  errorCode?: string
+  errorReason?: string
   durationMs: number
   usage?: Record<string, unknown>
   modelName?: string

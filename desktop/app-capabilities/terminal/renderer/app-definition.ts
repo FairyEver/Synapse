@@ -9,9 +9,6 @@ export const terminalAppDefinition = {
   windowTitle: "终端",
   dock: { pinnedByDefault: true, order: 45 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_terminal",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

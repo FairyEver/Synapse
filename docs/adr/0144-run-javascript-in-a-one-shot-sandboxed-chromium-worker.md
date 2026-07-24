@@ -1,0 +1,19 @@
+# Run JavaScript in a one-shot sandboxed Chromium Worker
+
+Status: deprecated; replaced by accepted ADR-0204
+
+This API-table and renderer-process-isolation design was deprecated when the product model returned to ordinary script-file execution with only a minimal workflow input/result bridge. A Chromium Worker may still be used internally, but its enumerated Web API surface, ECMAScript baseline, Session model, renderer-PID exclusivity, and force-crash topology are no longer product-level commitments.
+
+Each JavaScript run uses a disposable sandboxed WebContents and Dedicated Worker backed by Electron's bundled Chromium V8. QuickJS/WASM, Node `vm`, `isolated-vm`, and workerd are not the product runtime. `app.javascript.run@1.0.0` fixes ECMAScript 2025 and a versioned host contract; Electron upgrades must pass a fixed compatibility suite and require a capability contract version change when compatibility cannot be preserved.
+
+The script remains an async function body and produces only the established explicit-return strict-JSON result. V1 does not disable `eval`, `Function`, BigInt, Intl, TypedArray, WeakRef, or WebAssembly. The versioned Web host exposes bounded console, Fetch types, URL and encoding, Abort, timeout and interval timers, `queueMicrotask`, `structuredClone`, Web Crypto, in-memory Blob/File/FormData, Streams and Compression, WebSocket, Events, MessageChannel, performance, `globalThis`/`self`, and a narrowed navigator. It exposes no DOM/UI, Node, Electron, or local-file API; File is an in-memory object. Worker creation, persistent storage, device, and UI APIs are deferred. SharedArrayBuffer and Atomics enter V1 only if the runner can establish stable `crossOriginIsolated` semantics and pass contract tests.
+
+Fetch and WebSocket use a per-run in-memory Session that does not inherit Synapse's default Session and follows system proxy/PAC behavior. They may reach targets available from the current machine, do not support `file:`, and do not use NetworkGrant, per-request PermissionGuard, or SSRF filtering. Returning a result closes outstanding timers and background network activity without converting their cancellation into result failure; completed side effects are not rolled back.
+
+Precise guest heap and stack hard quotas are not promised. Stability protection instead uses one-shot execution units, sampled RSS termination, hang/crash isolation, and bounded wall time, source, input, result, logs, IPC backpressure, and concurrency. Worker/host traffic may contain only validated standard data or stream protocols, never Electron or Node host objects; prototype, constructor, and bridge escape tests are release gates.
+
+Before implementation is accepted, a cross-platform spike must prove that the runner WebContents remains in an OS renderer process not shared with the main UI, another App window, or another runner for the entire run and again immediately before force termination. If continuous exclusivity cannot be proved, Synapse must not call a renderer-crash API that could harm shared WebContents and must change the execution topology or lower the force-kill guarantee. The spike must also settle attachment, background throttling, destruction, Session reclamation, and unresponsive behavior on macOS, Windows, and Linux.
+
+Dynamic `import()` remains unresolved. Its supported schemes, base URL, CORS, dependency graph, Session use, and cleanup must be fixed before inclusion. If those semantics cannot be made stable, V1 is explicitly a single-script host without module loading; that is a product contract rather than a user permission. Navigator fields and the isolated runner page CSP must likewise be enumerated instead of drifting with Chromium.
+
+This decision supersedes ADR 0133's QuickJS candidate, minimal brokered Web API, network authorization, and exact guest heap/stack direction, and completes the engine and API direction left open by ADR 0143.

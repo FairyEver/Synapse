@@ -325,6 +325,70 @@ describe("collectWorkflowShareDependencies", () => {
     ])
   })
 
+  it("declares only the System Notifier capability for its notification node", () => {
+    const definition = workflow()
+    definition.params = []
+    definition.defaultProviderId = undefined
+    definition.defaultProjectId = undefined
+    definition.nodes = [{
+      id: "notify",
+      name: "系统通知",
+      type: "system_notifier_notification_trigger",
+      position: { x: 0, y: 0 },
+      config: { title: "Synapse", body: "任务完成", variables: [] },
+    }]
+    const workflowRef = stableWorkflowReference(definition.id)
+    const result = collectWorkflowShareDependencies({
+      workflows: [definition],
+      workflowRefs: new Map([[definition.id, workflowRef]]),
+      providers: [],
+    })
+
+    expect(result.requiredCapabilities).toEqual([{
+      id: "app.system_notifier.notification.trigger",
+      minVersion: "1.0.0",
+      installSourceId: "synapse.builtin",
+    }])
+    expect(result.references.resources).toEqual([])
+    expect(result.references.models).toEqual([])
+    expect(result.references.projects).toEqual([])
+    expect(result.references.runtimes).toEqual([])
+    expect(result.risks.sensitiveLocations).toEqual([])
+    expect(result.risks.highRiskLocations).toEqual([])
+  })
+
+  it("declares only the JSON Repair capability for its repair node", () => {
+    const definition = workflow()
+    definition.params = []
+    definition.defaultProviderId = undefined
+    definition.defaultProjectId = undefined
+    definition.nodes = [{
+      id: "repair",
+      name: "JSON 修复",
+      type: "json_repair_text_repair",
+      position: { x: 0, y: 0 },
+      config: { text: "{answer: 42}", variables: [] },
+    }]
+    const workflowRef = stableWorkflowReference(definition.id)
+    const result = collectWorkflowShareDependencies({
+      workflows: [definition],
+      workflowRefs: new Map([[definition.id, workflowRef]]),
+      providers: [],
+    })
+
+    expect(result.requiredCapabilities).toEqual([{
+      id: "app.json_repair.text.repair",
+      minVersion: "1.0.0",
+      installSourceId: "synapse.builtin",
+    }])
+    expect(result.references.resources).toEqual([])
+    expect(result.references.models).toEqual([])
+    expect(result.references.projects).toEqual([])
+    expect(result.references.runtimes).toEqual([])
+    expect(result.risks.sensitiveLocations).toEqual([])
+    expect(result.risks.highRiskLocations).toEqual([])
+  })
+
   it("does not export a text-writer path supplied by a runtime binding", () => {
     const definition = workflow()
     definition.params[0].default = null

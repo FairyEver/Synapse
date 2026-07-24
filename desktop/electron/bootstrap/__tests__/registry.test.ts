@@ -61,6 +61,21 @@ vi.mock("electron", () => ({
 }))
 
 describe("buildServiceRegistry (T1.8)", () => {
+  it("registers Agent reference actions with permission and audit dependencies", { timeout: 30_000 }, async () => {
+    const { buildServiceRegistry } = await import("../registry")
+    const registry = buildServiceRegistry({
+      trayShowOrCreate: () => {},
+    })
+
+    const descriptor = registry.inspect().find((entry) =>
+      entry.id === "core.agent-reference-actions")
+
+    expect(descriptor?.dependsOn).toEqual([
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+  })
+
   it("registers all bootstrap services with correct dependsOn graph", async () => {
     const { buildServiceRegistry } = await import("../registry")
     const registry = buildServiceRegistry({
@@ -73,6 +88,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       [
         "core.action-runtime",
         "agent.conversation-window-service",
+        "core.agent-reference-actions",
         "core.audit-sink",
         "core.app-icon",
         "core.agent-personas",
@@ -100,12 +116,16 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.process-environment",
         "core.process-runtime",
         "core.project-containers",
+        "core.problem-feedback",
         "core.quick-input",
         "core.relay",
+        "core.script-runtime",
         "core.secrets",
         "core.side-channel",
         "core.sound-notifier",
         "core.synapse-skill",
+        "core.system-notifier",
+        "core.system-notifier.integration",
         "core.terminal",
         "core.update",
         "core.usage-analysis",
@@ -118,6 +138,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.workflow.run-statuses",
         "core.workflow.snapshots",
         "core.workflow.window-manager",
+        "core.json-repair",
         "git.access-service",
         "git.branch-service",
         "git.clone-service",
@@ -145,6 +166,10 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.audit-sink")?.dependsOn).toEqual(["core.data-repository"])
     expect(byId.get("core.data-repository")?.dependsOn).toEqual([])
     expect(byId.get("core.agent-personas")?.dependsOn).toEqual(["core.data-repository"])
+    expect(byId.get("core.agent-reference-actions")?.dependsOn).toEqual([
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
     expect(byId.get("core.secrets")?.dependsOn).toEqual(["core.data-repository", "core.config"])
     expect(byId.get("provider")?.dependsOn).toEqual([
       "core.data-repository",
@@ -157,6 +182,16 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.terminal")?.dependsOn).toEqual(["core.data-repository"])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
     expect(byId.get("core.sound-notifier")?.dependsOn).toEqual(["core.data-repository", "core.window-manager"])
+    expect(byId.get("core.system-notifier")?.dependsOn).toEqual([])
+    expect(byId.get("core.system-notifier.integration")?.dependsOn).toEqual([
+      "core.system-notifier",
+    ])
+    expect(byId.get("core.system-notifier.integration")?.startAfter).toEqual([
+      "core.data-repository",
+      "core.audit-sink",
+    ])
+    expect(byId.get("core.json-repair")?.dependsOn).toEqual([])
+    expect(byId.get("core.json-repair")?.startAfter).toEqual(["core.audit-sink"])
     expect(byId.get("core.text-extractor")?.dependsOn).toEqual([
       "core.permission-guard",
       "core.audit-sink",
@@ -214,6 +249,8 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.workflow.snapshots",
       "core.workflow.run-aborts",
       "core.workflow.run-statuses",
+      "core.script-runtime",
+      "core.secrets",
     ])
     expect(byId.get("core.project-containers")?.dependsOn).toEqual([
       "core.process-environment",
@@ -278,6 +315,9 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.audit-sink",
       "core.terminal",
       "core.sound-notifier",
+      "core.system-notifier.integration",
+      "core.problem-feedback",
+      "core.json-repair",
       "core.text-extractor",
       "core.file-opener",
       "core.text-file-writer",
@@ -332,6 +372,12 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.config")).toBeLessThan(idx("repo.watch"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.audit-sink"))
+    expect(idx("core.data-repository")).toBeLessThan(idx("core.system-notifier.integration"))
+    expect(idx("core.audit-sink")).toBeLessThan(idx("core.system-notifier.integration"))
+    expect(idx("core.system-notifier.integration")).toBeLessThan(idx("core.workflow.engine"))
+    expect(idx("core.system-notifier.integration")).toBeLessThan(idx("core.database"))
+    expect(idx("core.json-repair")).toBeLessThan(idx("core.workflow.engine"))
+    expect(idx("core.json-repair")).toBeLessThan(idx("core.database"))
     expect(idx("core.event-bus")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.permission-guard")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.audit-sink")).toBeLessThan(idx("core.project-containers"))

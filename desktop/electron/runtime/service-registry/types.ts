@@ -56,7 +56,14 @@ export interface ServiceContext {
 
 export interface ServiceDescriptor<Instance = unknown> {
   readonly id: string
+  /** Hard dependencies control start order and propagate startup failures. */
   readonly dependsOn?: readonly string[]
+  /**
+   * Order-only dependencies must be registered and start first, but their
+   * degraded startup failures do not propagate through this edge. A fatal
+   * service failure still aborts the registry startup.
+   */
+  readonly startAfter?: readonly string[]
   readonly criticality: ServiceCriticality
   /** Default "main". `utility` / `worker` consumed by ProcessRuntime in Phase 0.5+. */
   readonly runIn?: ServiceProcessKind
@@ -73,6 +80,7 @@ export interface ServiceInspectEntry {
   readonly status: ServiceStatus
   readonly criticality: ServiceCriticality
   readonly dependsOn: readonly string[]
+  readonly startAfter: readonly string[]
   readonly runIn: ServiceProcessKind
   readonly lastError?: Error
 }

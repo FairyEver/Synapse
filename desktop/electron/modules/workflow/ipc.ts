@@ -41,6 +41,7 @@ import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, 
 import { checkCapabilityPermission } from "../../capabilities/permission-audit"
 import { rendererBaseUrl } from "../shared/renderer-base-url"
 import { readWorkflowShareArchive, workflowShareManifestV4Schema } from "../../services/workflow/workflow-share-package-v4"
+import type { WorkflowDefinitionSnapshot } from "../../../workflow-nodes/types"
 
 const logger = createMainLogger("workflow.ipc")
 const DELETE_ABORT_WAIT_MS = 5_000
@@ -528,6 +529,10 @@ const workflowDefinitionSchema = z.object({
   defaultProviderId: z.string().optional(),
   defaultModelTier: z.enum(["default", "haiku", "sonnet", "opus"]).optional(),
   defaultNodeTimeoutMins: z.number().int().min(1).optional(),
+  scriptTrust: z.object({
+    source: z.literal("imported"),
+    confirmed: z.boolean(),
+  }).optional(),
   params: z.array(workflowParamSchema),
   nodes: z.array(z.object({ id: workflowNodeIdSchema, name: z.string(), type: z.string(), position: z.object({ x: z.number(), y: z.number() }).passthrough(), config: z.record(z.string(), z.unknown()) }).passthrough()),
   edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), branch: z.string().optional() }).passthrough()),
@@ -768,6 +773,8 @@ const nodeRunResultSchema: z.ZodType<NodeRunResult> = z.object({
   outputs: z.record(z.string(), z.unknown()).optional(),
   activeBranch: z.string().optional(),
   error: z.string().optional(),
+  errorCode: z.string().optional(),
+  errorReason: z.string().optional(),
   startedAt: z.number().optional(),
   endedAt: z.number().optional(),
   durationMs: z.number().optional(),
@@ -834,6 +841,7 @@ const validationResultSchema = z.object({
 
 interface RunLifecycleOptions {
   readonly def: WorkflowDefinition
+  readonly definitionSnapshot: WorkflowDefinitionSnapshot
   readonly params: Record<string, unknown>
   readonly projectId: string | undefined
   readonly triggerSource: string
@@ -845,7 +853,7 @@ interface RunLifecycleOptions {
 }
 
 function startRunWithLifecycle(options: RunLifecycleOptions): string {
-  const { def, params, projectId, triggerSource, engine, snapshots, eventBus, abortMap, runStatuses } = options
+  const { def, definitionSnapshot, params, projectId, triggerSource, engine, snapshots, eventBus, abortMap, runStatuses } = options
   const ac = new AbortController()
   const runId = randomUUID()
   const startedAt = Date.now()
@@ -864,7 +872,7 @@ function startRunWithLifecycle(options: RunLifecycleOptions): string {
       abortMap,
       runStatuses,
     })
-  }, ac.signal, projectId, triggerSource, { kind: "user", id: "local-user", display: "User" }).catch((err) => {
+  }, ac.signal, projectId, triggerSource, { kind: "user", id: "local-user", display: "User" }, undefined, undefined, definitionSnapshot).catch((err) => {
     handleEngineRejection({
       err,
       def,
@@ -914,11 +922,18 @@ function handleRunEvent(options: {
   } else if (event.type === "node:completed" || event.type === "node:failed" || event.type === "node:skipped") {
     nextNodeResults[event.nodeId] = event.result ?? nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: event.type === "node:skipped" ? "skipped" : "failed", input: { variables: {} } }
   }
-  const sanitizedNextNodeResults = sanitizeNodeResultsForSnapshot(nextNodeResults)
+  const sanitizedNextNodeResults = sanitizeNodeResultsForSnapshot(
+    nextNodeResults,
+    def,
+    { omitDisabledScriptContent: false },
+  )
   runStatuses.set(runId, { ...current, nodeResults: sanitizedNextNodeResults })
 
   const isTerminal = event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled"
-  const payload = sanitizeWorkflowEventForRenderer(isTerminal ? { ...event, workflowId: def.id } : event)
+  const payload = sanitizeWorkflowEventForRenderer(
+    isTerminal ? { ...event, workflowId: def.id } : event,
+    def,
+  )
   eventBus.emit(
     { domain: "workflow", type: event.type, payload, timestamp: new Date().toISOString() },
     { backpressure: "block" },
@@ -929,7 +944,11 @@ function handleRunEvent(options: {
   const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
   const endedAt = Date.now()
   const nodeResults = event.result?.nodeResults ?? nextNodeResults
-  const sanitizedNodeResults = sanitizeNodeResultsForSnapshot(nodeResults)
+  const sanitizedNodeResults = sanitizeNodeResultsForSnapshot(
+    nodeResults,
+    def,
+    { omitDisabledScriptContent: false },
+  )
   const durationMs = event.result?.durationMs ?? endedAt - startedAt
   logger.info("workflow run finished", { workflowId: def.id, runId, status, durationMs })
   runStatuses.set(runId, {
@@ -981,7 +1000,11 @@ function handleEngineRejection(options: {
   if (!current || current.status !== "running") return
   const endedAt = Date.now()
   const durationMs = endedAt - startedAt
-  const sanitizedNodeResults = sanitizeNodeResultsForSnapshot(current.nodeResults)
+  const sanitizedNodeResults = sanitizeNodeResultsForSnapshot(
+    current.nodeResults,
+    def,
+    { omitDisabledScriptContent: false },
+  )
   runStatuses.set(runId, {
     runId,
     workflowId: def.id,
@@ -1021,20 +1044,30 @@ async function resolveWorkflowProjectId(def: WorkflowDefinition): Promise<string
 async function loadWorkflowValidationOptions(
   workflowService: Partial<Pick<WorkflowService, "list" | "get">> | undefined,
   definition: Pick<WorkflowDefinition, "nodes">,
+  definitionSnapshot?: WorkflowDefinitionSnapshot,
 ): Promise<WorkflowValidationOptions> {
   const appConfig = await configStore.load()
   const targetIds = new Set(workflowCallTargetIds(definition))
   if (targetIds.size === 0) {
     return { configuredProjectIds: configuredWorkflowProjectIdsFromConfig(appConfig) }
   }
-  const workflows = typeof workflowService?.list === "function" ? await workflowService.list() : undefined
-  const readableWorkflows = workflows?.filter((workflow) => !workflow.loadError && targetIds.has(workflow.id))
-  const definitions = readableWorkflows && typeof workflowService?.get === "function"
-    ? await Promise.all(readableWorkflows.map((workflow) => workflowService.get!(workflow.id)))
+  const snapshotDefinitions = definitionSnapshot
+    ? [...definitionSnapshot.values()].filter((candidate) => targetIds.has(candidate.id))
     : undefined
+  const workflows = !definitionSnapshot && typeof workflowService?.list === "function"
+    ? await workflowService.list()
+    : undefined
+  const readableWorkflows = workflows?.filter((workflow) => !workflow.loadError && targetIds.has(workflow.id))
+  const definitions = snapshotDefinitions ?? (
+    readableWorkflows && typeof workflowService?.get === "function"
+      ? await Promise.all(readableWorkflows.map((workflow) => workflowService.get!(workflow.id)))
+      : undefined
+  )
   return {
     configuredProjectIds: configuredWorkflowProjectIdsFromConfig(appConfig),
-    availableWorkflowIds: readableWorkflows?.map((workflow) => workflow.id),
+    availableWorkflowIds: definitionSnapshot
+      ? definitions?.flatMap((candidate) => candidate ? [candidate.id] : [])
+      : readableWorkflows?.map((workflow) => workflow.id),
     workflowParamsById: definitions
       ? new Map(definitions.flatMap((definition) => definition ? [[definition.id, definition.params] as const] : []))
       : undefined,
@@ -1591,7 +1624,7 @@ export const workflowIpcModule: IpcModule = {
       handler: async (ctx, def) => {
         const d = def as { id: string; nodes: unknown[] }
         logger.info("workflow:validate requested", { id: d.id, nodeCount: d.nodes.length })
-        const workflowService = resolveWorkflowValidationService(ctx)
+        const workflowService = ctx.resolve<WorkflowService>("core.workflow")
         const result = await validateWorkflowWithResourceDefaults(def as never, await loadWorkflowValidationOptions(workflowService, def as never))
         logger.info("workflow:validate result", { id: d.id, valid: result.valid, errorCount: result.errors.length, warnCount: result.warnings.length })
         if (!result.valid) logger.warn("workflow:validate errors", { id: d.id, errors: result.errors })
@@ -1600,29 +1633,54 @@ export const workflowIpcModule: IpcModule = {
     },
     run: {
       operationId: "app.workflow.run.execute", kind: "invoke",
-      request: z.object({ id: workflowIdSchema, params: z.record(z.string(), z.unknown()) }),
+      request: z.object({
+        id: workflowIdSchema,
+        params: z.record(z.string(), z.unknown()),
+        scriptConfirmationToken: z.string().optional(),
+      }),
       response: z.union([
-        z.object({ runId: z.string() }),
+        z.object({
+          runId: z.string(),
+          definition: workflowDefinitionSchema.optional(),
+        }),
         z.object({ errors: z.array(validationErrorSchema) }),
       ]),
-      handler: async (ctx, { id, params }: { id: string; params: Record<string, unknown> }) => {
+      handler: async (ctx, { id, params, scriptConfirmationToken }: {
+        id: string
+        params: Record<string, unknown>
+        scriptConfirmationToken?: string
+      }) => {
         logger.info("workflow:run requested", { workflowId: id, paramKeys: Object.keys(params) })
         const svc = ctx.resolve<WorkflowService>("core.workflow")
+        const packageService = ctx.resolve<WorkflowPackageService>("core.workflow.package")
         const engine = ctx.resolve<WorkflowEngine>("core.workflow.engine")
         const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const abortMap = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts")
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
 
-        const def = await svc.get(id)
+        let def = await svc.get(id)
         if (!def) {
           logger.error("workflow:run failed - not found", { workflowId: id })
           throw new Error(`Workflow ${id} not found`)
         }
+        const scriptPreparation = await packageService.prepareImportedScriptsForRun(
+          def,
+          scriptConfirmationToken,
+        )
+        if (scriptPreparation.status !== "ready") return { errors: scriptPreparation.errors }
+        def = scriptPreparation.definition
+        const definitionSnapshot = new Map(
+          (scriptPreparation.snapshotDefinitions ?? [def])
+            .map((definition) => [definition.id, definition]),
+        )
 
         // Validate before running — prevents invalid workflows from executing
         // when triggered from paths that skip editor-side validation (e.g. list page "Run" button)
-        const validation = validateWorkflow(def, await loadWorkflowValidationOptions(svc, def))
+        const validation = validateWorkflow(
+          def,
+          await loadWorkflowValidationOptions(svc, def, definitionSnapshot),
+        )
         if (!validation.valid) {
           logger.warn("workflow:run blocked by validation", { workflowId: id, errors: validation.errors })
           return { errors: validation.errors }
@@ -1643,6 +1701,7 @@ export const workflowIpcModule: IpcModule = {
         const projectId = await resolveWorkflowProjectId(def)
         const runId = startRunWithLifecycle({
           def,
+          definitionSnapshot,
           params: effectiveParams,
           projectId,
           triggerSource: "renderer",
@@ -1655,18 +1714,38 @@ export const workflowIpcModule: IpcModule = {
 
         logger.info("workflow:run started", { workflowId: id, runId, workflowName: def.name, nodeCount: def.nodes.length, projectId })
 
-        return { runId }
+        return {
+          runId,
+          ...(scriptConfirmationToken ? { definition: def } : {}),
+        }
       },
     },
     runDefinition: {
       operationId: "app.workflow.operation.run_definition", kind: "invoke",
-      request: z.object({ definition: workflowDefinitionSchema, params: z.record(z.string(), z.unknown()), force: z.boolean().optional() }),
+      request: z.object({
+        definition: workflowDefinitionSchema,
+        params: z.record(z.string(), z.unknown()),
+        force: z.boolean().optional(),
+        scriptConfirmationToken: z.string().optional(),
+      }),
       response: z.union([
-        z.object({ runId: z.string() }),
+        z.object({
+          runId: z.string(),
+          definition: workflowDefinitionSchema.optional(),
+        }),
         z.object({ errors: z.array(validationErrorSchema) }),
-        z.object({ conflict: z.literal(true), activeRunId: z.string() }),
+        z.object({
+          conflict: z.literal(true),
+          activeRunId: z.string(),
+          definition: workflowDefinitionSchema.optional(),
+        }),
       ]),
-      handler: async (ctx, { definition: rawDef, params, force }: { definition: unknown; params: Record<string, unknown>; force?: boolean }) => {
+      handler: async (ctx, { definition: rawDef, params, force, scriptConfirmationToken }: {
+        definition: unknown
+        params: Record<string, unknown>
+        force?: boolean
+        scriptConfirmationToken?: string
+      }) => {
         const requestedDef = rawDef as import("../../../src/types/workflow").WorkflowDefinition
         logger.info("workflow:runDefinition requested", { workflowId: requestedDef.id, paramKeys: Object.keys(params) })
         const migration = migrateWorkflowDocument(rawDef)
@@ -1679,15 +1758,29 @@ export const workflowIpcModule: IpcModule = {
           })
           return { errors: [{ type: "invalid_config" as const, message: error.message }] }
         }
-        const def = migration.document
+        let def: WorkflowDefinition = migration.document
         const engine = ctx.resolve<WorkflowEngine>("core.workflow.engine")
         const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
-        const workflowService = resolveWorkflowValidationService(ctx)
+        const workflowService = ctx.resolve<WorkflowService>("core.workflow")
+        const packageService = ctx.resolve<WorkflowPackageService>("core.workflow.package")
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const abortMap = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts")
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
+        const scriptPreparation = await packageService.prepareImportedScriptsForRun(
+          def,
+          scriptConfirmationToken,
+        )
+        if (scriptPreparation.status !== "ready") return { errors: scriptPreparation.errors }
+        def = scriptPreparation.definition
+        const definitionSnapshot = new Map(
+          (scriptPreparation.snapshotDefinitions ?? [def])
+            .map((definition) => [definition.id, definition]),
+        )
 
-        const validation = validateWorkflow(def, await loadWorkflowValidationOptions(workflowService, def))
+        const validation = validateWorkflow(
+          def,
+          await loadWorkflowValidationOptions(workflowService, def, definitionSnapshot),
+        )
         if (!validation.valid) {
           logger.warn("workflow:runDefinition blocked by validation", { workflowId: def.id, errors: validation.errors })
           return { errors: validation.errors }
@@ -1703,7 +1796,11 @@ export const workflowIpcModule: IpcModule = {
           const activeRunId = findActiveRun(runStatuses, def.id)
           if (activeRunId) {
             logger.info("workflow:runDefinition conflict", { workflowId: def.id, activeRunId })
-            return { conflict: true as const, activeRunId }
+            return {
+              conflict: true as const,
+              activeRunId,
+              ...(scriptConfirmationToken ? { definition: def } : {}),
+            }
           }
         } else {
           const abortResult = await abortActiveRunsForWorkflow({
@@ -1720,6 +1817,7 @@ export const workflowIpcModule: IpcModule = {
         const projectId = await resolveWorkflowProjectId(def)
         const runId = startRunWithLifecycle({
           def,
+          definitionSnapshot,
           params: effectiveParams,
           projectId,
           triggerSource: "editor-run-definition",
@@ -1732,18 +1830,33 @@ export const workflowIpcModule: IpcModule = {
 
         logger.info("workflow:runDefinition started", { workflowId: def.id, runId, nodeCount: def.nodes.length })
 
-        return { runId }
+        return {
+          runId,
+          ...(scriptConfirmationToken ? { definition: def } : {}),
+        }
       },
     },
     rerun: {
       operationId: "app.workflow.operation.rerun", kind: "invoke",
-      request: z.object({ previousRunId: workflowRunIdSchema, workflowId: workflowIdSchema.optional(), params: z.record(z.string(), z.unknown()), force: z.boolean().optional() }),
+      request: z.object({
+        previousRunId: workflowRunIdSchema,
+        workflowId: workflowIdSchema.optional(),
+        params: z.record(z.string(), z.unknown()),
+        force: z.boolean().optional(),
+        scriptConfirmationToken: z.string().optional(),
+      }),
       response: z.union([
         z.object({ runId: z.string() }),
         z.object({ errors: z.array(validationErrorSchema) }),
         z.object({ conflict: z.literal(true), activeRunId: z.string() }),
       ]),
-      handler: async (ctx, { previousRunId, workflowId: requestedWorkflowId, params, force }: { previousRunId: string; workflowId?: string; params: Record<string, unknown>; force?: boolean }) => {
+      handler: async (ctx, { previousRunId, workflowId: requestedWorkflowId, params, force, scriptConfirmationToken }: {
+        previousRunId: string
+        workflowId?: string
+        params: Record<string, unknown>
+        force?: boolean
+        scriptConfirmationToken?: string
+      }) => {
         logger.info("workflow:rerun requested", { previousRunId })
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
         const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
@@ -1752,6 +1865,7 @@ export const workflowIpcModule: IpcModule = {
         let workflowId: string | undefined
         let previousParams: Record<string, unknown> | undefined
         let definitionMigration: import("../../../src/types/workflow").WorkflowRunDefinitionMigration | undefined
+        let usesCurrentDefinition = false
 
         const memoryStatus = runStatuses.get(previousRunId)
         if (memoryStatus) {
@@ -1797,6 +1911,7 @@ export const workflowIpcModule: IpcModule = {
           const currentDefinition = await ctx.resolve<WorkflowService>("core.workflow").get(workflowId)
           if (currentDefinition && !getRedactedWorkflowConfigKind(currentDefinition)) {
             def = currentDefinition
+            usesCurrentDefinition = true
             logger.info("workflow:rerun using current definition because history definition is redacted", { previousRunId, workflowId })
           } else {
             logger.warn("workflow:rerun blocked by redacted workflow config", { previousRunId, workflowId })
@@ -1820,11 +1935,26 @@ export const workflowIpcModule: IpcModule = {
 
         const engine = ctx.resolve<WorkflowEngine>("core.workflow.engine")
         const snapshotSvc = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
+        const packageService = ctx.resolve<WorkflowPackageService>("core.workflow.package")
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const abortMap = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts")
 
         const workflowService = resolveWorkflowValidationService(ctx)
-        const validation = validateWorkflow(def, await loadWorkflowValidationOptions(workflowService, def))
+        const scriptPreparation = await packageService.prepareImportedScriptsForRun(
+          def,
+          scriptConfirmationToken,
+          { allowHistoricalEntry: !usesCurrentDefinition },
+        )
+        if (scriptPreparation.status !== "ready") return { errors: scriptPreparation.errors }
+        def = scriptPreparation.definition
+        const definitionSnapshot = new Map(
+          (scriptPreparation.snapshotDefinitions ?? [def])
+            .map((definition) => [definition.id, definition]),
+        )
+        const validation = validateWorkflow(
+          def,
+          await loadWorkflowValidationOptions(workflowService, def, definitionSnapshot),
+        )
         if (!validation.valid) return { errors: validation.errors }
         const normalizedParams = await normalizeWorkflowRunParams(def, effectiveParams)
         if (normalizedParams.errors.length > 0) {
@@ -1856,6 +1986,7 @@ export const workflowIpcModule: IpcModule = {
         const projectId = await resolveWorkflowProjectId(def)
         const runId = startRunWithLifecycle({
           def,
+          definitionSnapshot,
           params: validatedParams,
           projectId,
           triggerSource: "rerun",

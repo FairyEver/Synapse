@@ -19,6 +19,7 @@ import { assertSafeWorkflowRunId } from "../services/workflow/workflow-id"
 import { sanitizeWorkflowRunStatus } from "../services/workflow/run-snapshot-sanitize"
 import { layoutWorkflowNodes } from "../../src/lib/workflow-auto-layout"
 import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../runtime/security"
+import { listDiscoverableBuiltinWorkflowNodeTypes } from "../../app-capabilities/manifest-registry"
 
 const logger = createMainLogger("capability.workflow-dispatcher")
 const workflowMutationChains = new WeakMap<WorkflowDispatchDeps, Map<string, Promise<void>>>()
@@ -234,7 +235,9 @@ type ActionHandler = (params: Record<string, unknown>, deps: WorkflowDispatchDep
 
 const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "app.workflow.node_type.list": async (_params, deps) => {
-    const types = deps.nodeTypeRegistry.listTypes()
+    const types = listDiscoverableBuiltinWorkflowNodeTypes(
+      deps.nodeTypeRegistry.listTypes(),
+    )
     const summaries = types.map((type) => {
       const manifest = deps.nodeTypeRegistry.getManifest(type)
       let title = manifest.title

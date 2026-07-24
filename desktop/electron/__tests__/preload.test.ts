@@ -520,6 +520,28 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps Agent reference actions to two narrow IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+    const request = {
+      projectId: "project-1",
+      reference: "/tmp/report.json:12:3",
+    }
+
+    await bridge.agent.openReferenceDefault(request)
+    await bridge.agent.showReferenceInFolder(request)
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      1,
+      "synapse:app:agent:reference:open_default",
+      request,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      2,
+      "synapse:app:agent:reference:show_in_folder",
+      request,
+    )
+  })
+
   it("maps installer preparation methods to narrow IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
@@ -1434,6 +1456,29 @@ describe("preload bridge", () => {
     expect(serializedLog).not.toContain("workflow-param-secret")
   })
 
+  it("forwards script confirmation tokens for workflow reruns", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.workflow.operation.rerun(
+      "previous-run",
+      { topic: "release" },
+      true,
+      "workflow-1",
+      "sha256:review-token",
+    )
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:app:workflow:operation:rerun",
+      {
+        previousRunId: "previous-run",
+        params: { topic: "release" },
+        force: true,
+        workflowId: "workflow-1",
+        scriptConfirmationToken: "sha256:review-token",
+      },
+    )
+  })
+
   it("passes direct update event payloads through", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()
@@ -1517,6 +1562,45 @@ describe("preload bridge", () => {
       "synapse:app:sound_notifier:operation:play_requested",
       expect.any(Function),
     )
+  })
+
+  it("maps the three System Notifier bridge methods without exposing events or an arbitrary trigger", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.systemNotifier.settings.get()
+    await bridge.systemNotifier.settings.update({ enabled: false, silent: true })
+    await bridge.systemNotifier.notification.test()
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      1,
+      "synapse:app:system_notifier:settings:get",
+      {},
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      2,
+      "synapse:app:system_notifier:settings:update",
+      { enabled: false, silent: true },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      3,
+      "synapse:app:system_notifier:notification:test",
+      {},
+    )
+    expect(Object.keys(bridge.systemNotifier)).toEqual(["settings", "notification"])
+    expect(Object.keys(bridge.systemNotifier.notification)).toEqual(["test"])
+  })
+
+  it("maps the single JSON Repair bridge method without events", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.jsonRepair.text.repair({ text: "{ok:true}" })
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:app:json_repair:text:repair",
+      { text: "{ok:true}" },
+    )
+    expect(Object.keys(bridge.jsonRepair)).toEqual(["text"])
+    expect(Object.keys(bridge.jsonRepair.text)).toEqual(["repair"])
   })
 
 })

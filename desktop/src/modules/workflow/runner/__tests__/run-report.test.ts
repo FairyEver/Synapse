@@ -68,6 +68,107 @@ describe("workflow run reports", () => {
     expect(report).toContain("## 设置")
   })
 
+  it("omits System Notifier bodies and variable values from node and workflow reports", () => {
+    const node: WorkflowNode = {
+      id: "notify-1",
+      name: "系统通知",
+      type: "system_notifier_notification_trigger",
+      position: { x: 0, y: 0 },
+      config: {
+        title: "Safe title",
+        body: "private-body-canary {{secret}}",
+        variables: [{
+          name: "secret",
+          source: { type: "static", value: "binding-value-canary" },
+        }],
+      },
+    }
+    const definition: WorkflowDefinition = {
+      ...workflowDefinition(),
+      nodes: [node],
+      edges: [],
+    }
+    const result = nodeResult("notify-1", {
+      input: { variables: { secret: "resolved-variable-canary" } },
+      output: "{\"success\":true}",
+      outputs: { success: true },
+    })
+    const nodeReport = formatNodeRunReport({
+      definition,
+      node,
+      result,
+      orderIndex: 1,
+    })
+    const workflowReport = formatWorkflowRunReport({
+      definition,
+      runId: "run-1",
+      runState: "completed",
+      runParams: {},
+      nodeResults: { "notify-1": result },
+    })
+
+    for (const report of [nodeReport, workflowReport]) {
+      expect(report).toContain("Safe title")
+      expect(report).toContain('"success": true')
+      expect(report).not.toContain("private-body-canary")
+      expect(report).not.toContain("binding-value-canary")
+      expect(report).not.toContain("resolved-variable-canary")
+      expect(report).not.toContain("变量绑定")
+      expect(report).not.toContain("运行输入变量")
+    }
+  })
+
+  it("omits JSON Repair text and variable values from node and workflow reports", () => {
+    const node: WorkflowNode = {
+      id: "repair-1",
+      name: "JSON 修复",
+      type: "json_repair_text_repair",
+      position: { x: 0, y: 0 },
+      config: {
+        text: "private-json-canary {{secret}}",
+        variables: [{
+          name: "secret",
+          source: { type: "static", value: "binding-value-canary" },
+        }],
+      },
+    }
+    const definition: WorkflowDefinition = {
+      ...workflowDefinition(),
+      nodes: [node],
+      edges: [],
+    }
+    const result = nodeResult("repair-1", {
+      input: {
+        variables: { secret: "resolved-variable-canary" },
+        prompt: "private-json-canary resolved-variable-canary",
+      },
+      output: "{\"ok\":true}",
+      outputs: { json: "{\"ok\":true}" },
+    })
+    const nodeReport = formatNodeRunReport({
+      definition,
+      node,
+      result,
+      orderIndex: 1,
+    })
+    const workflowReport = formatWorkflowRunReport({
+      definition,
+      runId: "run-1",
+      runState: "completed",
+      runParams: {},
+      nodeResults: { "repair-1": result },
+    })
+
+    for (const report of [nodeReport, workflowReport]) {
+      expect(report).toContain("{\"ok\":true}")
+      expect(report).not.toContain("private-json-canary")
+      expect(report).not.toContain("binding-value-canary")
+      expect(report).not.toContain("resolved-variable-canary")
+      expect(report).not.toContain("变量绑定")
+      expect(report).not.toContain("运行输入变量")
+    }
+  })
+
   it("marks running workflow reports as not snapshotted yet", () => {
     const report = formatWorkflowRunReport({
       definition: workflowDefinition(),

@@ -1,15 +1,13 @@
 import type { SynapseSystemAppId, SynapseSystemAppManifest } from "./types"
+import { listSystemAppDefinitions } from "./definitions"
 import { isSystemAppId } from "./types"
+import { isSystemAppEntryVisible } from "./visibility"
 
-export const DEFAULT_DOCK_APP_IDS = [
-  "agent",
-  "drive",
-  "automation",
-  "workflow",
-  "terminal",
-  "settings",
-  "launcher",
-] as const satisfies readonly SynapseSystemAppId[]
+export const DEFAULT_DOCK_APP_IDS: readonly SynapseSystemAppId[] =
+  listSystemAppDefinitions()
+    .filter((app) => app.dock.pinnedByDefault)
+    .toSorted((left, right) => left.dock.order - right.dock.order)
+    .map((app) => app.id)
 
 export const REQUIRED_DOCK_APP_ID = "launcher" as const satisfies SynapseSystemAppId
 
@@ -124,7 +122,7 @@ export function listDockApps(
   return normalizeDockAppIds(options.dockAppIds)
     .map((appId) => appById.get(appId))
     .filter((app): app is SynapseSystemAppManifest => Boolean(app))
-    .filter((app) => app.dock.visibility !== "workflow-entry-enabled" || options.workflowEntryVisible)
+    .filter((app) => isSystemAppEntryVisible(app, options))
 }
 
 export function listAddableDockApps(
@@ -138,9 +136,10 @@ export function listAddableDockApps(
 
   return apps
     .filter((app) => app.id !== REQUIRED_DOCK_APP_ID)
-    .filter((app) => app.window.openable)
-    .filter((app) => app.dock.visibility !== "workflow-entry-enabled" || options.workflowEntryVisible)
+    .filter((app) => app.dock.pinnable !== false)
+    .filter((app) => isSystemAppEntryVisible(app, options))
     .filter((app) => !pinned.has(app.id))
+    .toSorted((left, right) => left.dock.order - right.dock.order)
 }
 
 export function resolveDefaultDockAppId(

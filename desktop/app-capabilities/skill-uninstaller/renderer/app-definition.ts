@@ -9,9 +9,6 @@ export const skillUninstallerAppDefinition = {
   windowTitle: "Skill 卸载器",
   dock: { pinnedByDefault: false, order: 285 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_skill_uninstaller",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

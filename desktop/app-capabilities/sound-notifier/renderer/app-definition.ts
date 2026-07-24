@@ -9,9 +9,6 @@ export const soundNotifierAppDefinition = {
   windowTitle: "Sound Notifier",
   dock: { pinnedByDefault: false, order: 290 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_sound_notifier",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

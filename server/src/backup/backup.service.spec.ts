@@ -60,6 +60,7 @@ describe("buildPgDumpOptions", () => {
       "synapse_user",
       "-d",
       "synapse",
+      "--exclude-table-data=public.\"ProblemFeedback\"",
       "-f",
       "/tmp/dump.sql",
     ])
@@ -143,6 +144,7 @@ describe("backup package helpers", () => {
 
     expect(restore).toContain("server/.env.server")
     expect(restore).toContain("database.sql.gz")
+    expect(restore).toContain("不包含问题反馈记录")
     expect(restore).toContain("postgres-globals.sql")
     expect(scanForSecretLikeText(restore)).toBe(false)
   })

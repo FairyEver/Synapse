@@ -41,6 +41,8 @@ type ServerDataTableProps<TData, TValue> = {
   isLoading?: boolean
   loadingRowCount?: number
   emptyMessage?: ReactNode
+  showPageSize?: boolean
+  clampPage?: boolean
 }
 
 export function getServerDataTableErrorMessage(error: unknown) {
@@ -110,19 +112,21 @@ export function ServerDataTable<TData, TValue>({
   isLoading = false,
   loadingRowCount = 8,
   emptyMessage = '暂无数据',
+  showPageSize = true,
+  clampPage = true,
 }: ServerDataTableProps<TData, TValue>) {
   const pageCount = getServerDataTablePageCount(total, pageSize)
   const boundedPage = getServerDataTableBoundedPage(page, total, pageSize)
   const pagination = {
-    pageIndex: boundedPage - 1,
+    pageIndex: (clampPage ? boundedPage : page) - 1,
     pageSize,
   }
 
   useEffect(() => {
-    if (page !== boundedPage) {
+    if (clampPage && page !== boundedPage) {
       onPageChange(boundedPage)
     }
-  }, [boundedPage, onPageChange, page])
+  }, [boundedPage, clampPage, onPageChange, page])
 
   const table = useReactTable({
     data,
@@ -269,7 +273,11 @@ export function ServerDataTable<TData, TValue>({
         </Table>
       </div>
       {isLoading || errorMessage || !showPagination ? null : (
-        <DataTablePagination table={table} className='mt-auto' />
+        <DataTablePagination
+          table={table}
+          className='mt-auto'
+          showPageSize={showPageSize}
+        />
       )}
     </div>
   )

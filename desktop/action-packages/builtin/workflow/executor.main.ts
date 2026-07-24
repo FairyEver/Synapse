@@ -22,6 +22,7 @@ export interface WorkflowActionRuntimeDeps {
     readonly automationId: string
     readonly automationRunId: string
     readonly actor: ActorIdentity
+    readonly expectedVersion: string
   }) => Promise<{
     readonly runId: string
     readonly definition: WorkflowDefinition
@@ -69,6 +70,7 @@ export function createWorkflowAction(deps: WorkflowActionRuntimeDeps): MainActio
           automationId: context.taskId,
           automationRunId: context.runId,
           actor: context.actor,
+          expectedVersion: definition.version,
         })
         const status = workflowStatusToActionStatus(run.result.status)
         const label = status === "success" ? "完成" : status === "cancelled" ? "已停止" : "失败"

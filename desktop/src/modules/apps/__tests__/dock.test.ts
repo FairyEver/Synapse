@@ -16,6 +16,15 @@ import {
 } from "../dock"
 
 describe("app Dock model", () => {
+  it("derives the default Dock from registered metadata", () => {
+    expect(DEFAULT_DOCK_APP_IDS).toEqual(
+      listSystemApps()
+        .filter((app) => app.dock.pinnedByDefault)
+        .toSorted((left, right) => left.dock.order - right.dock.order)
+        .map((app) => app.id),
+    )
+  })
+
   it("seeds the default Dock with terminal before settings", () => {
     expect(seedDefaultDockAppIds()).toEqual([
       "agent",

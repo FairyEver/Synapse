@@ -18,11 +18,13 @@ import {
 type DataTablePaginationProps<TData> = {
   table: Table<TData>
   className?: string
+  showPageSize?: boolean
 }
 
 export function DataTablePagination<TData>({
   table,
   className,
+  showPageSize = true,
 }: DataTablePaginationProps<TData>) {
   const currentPage = table.getState().pagination.pageIndex + 1
   const totalPages = table.getPageCount()
@@ -40,7 +42,7 @@ export function DataTablePagination<TData>({
         <div className='flex w-25 items-center justify-center text-sm font-medium @2xl/content:hidden'>
           第 {currentPage} / {totalPages} 页
         </div>
-        <div className='flex items-center gap-2 @max-2xl/content:flex-row-reverse'>
+        {showPageSize ? <div className='flex items-center gap-2 @max-2xl/content:flex-row-reverse'>
           <Select
             value={`${table.getState().pagination.pageSize}`}
             onValueChange={(value) => {
@@ -59,7 +61,7 @@ export function DataTablePagination<TData>({
             </SelectContent>
           </Select>
           <p className='hidden text-sm font-medium sm:block'>每页行数</p>
-        </div>
+        </div> : null}
       </div>
 
       <div className='flex items-center sm:space-x-6 lg:space-x-8'>

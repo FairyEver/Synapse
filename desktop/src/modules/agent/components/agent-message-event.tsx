@@ -1,4 +1,10 @@
-import { isValidElement, type ComponentProps, type MouseEvent, type ReactNode } from "react"
+import {
+  isValidElement,
+  useMemo,
+  type ComponentProps,
+  type MouseEvent,
+  type ReactNode,
+} from "react"
 import { toast } from "sonner"
 import { CodeBlockCopyButton, Streamdown, type Components } from "streamdown"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -12,10 +18,17 @@ import type {
   SynapseAgentDisplayProfile,
   SynapseAgentMessageTimelineItem,
 } from "@/types/agent"
+import type { AgentReferenceActions } from "../hooks/use-agent-reference-actions"
 import { AgentMessageHeader } from "./agent-message-header"
 import { AgentMessageBubble } from "./agent-message-bubble"
 import { AgentMessageToolbar } from "./agent-message-toolbar"
 import { AgentUsageCard } from "./agent-usage-card"
+import {
+  createAgentLocalReferenceLink,
+  isAbsoluteLocalReferenceHref,
+  isBareWebDomainPathReference,
+  isLocalReferenceHref,
+} from "./agent-local-reference-link"
 import { errorLogMeta } from "../utils"
 
 import "streamdown/styles.css"
@@ -43,19 +56,6 @@ const agentMessageMarkdownClassName = cn(
   "[&_[data-streamdown='code-block']]:max-w-full [&_[data-streamdown='code-block']]:overflow-hidden",
 )
 const STREAMDOWN_COMPONENTS = {
-  a: ({ node: _node, href, children, ...props }) => {
-    const reference = streamdownLinkReference(href, children)
-
-    return (
-      <a
-        {...props}
-        data-reference={reference}
-        href={href}
-      >
-        {children}
-      </a>
-    )
-  },
   code: AgentMessageCode,
   table: AgentMessageTable,
   thead: AgentMessageTableHeader,
@@ -71,12 +71,14 @@ interface AgentMessageEventProps {
   readonly profile: SynapseAgentDisplayProfile
   readonly agentIcon?: string
   readonly onOpenReference: (reference: string) => void
+  readonly referenceActions?: AgentReferenceActions
 }
 
 function AgentMessageEvent({
   item,
   agentIcon,
   onOpenReference,
+  referenceActions = unavailableReferenceActions,
 }: AgentMessageEventProps) {
   const outgoing = item.role === "user"
 
@@ -111,22 +113,49 @@ function AgentMessageEvent({
       <AssistantMessageBody
         item={item}
         onOpenReference={onOpenReference}
+        referenceActions={referenceActions}
       />
     </article>
   )
 }
 
+const unavailableReferenceActions: AgentReferenceActions = {
+  openDefault: () => Promise.reject(new Error("Agent reference action unavailable.")),
+  showInFolder: () => Promise.reject(new Error("Agent reference action unavailable.")),
+}
+
 function AssistantMessageBody({
   item,
   onOpenReference,
+  referenceActions,
 }: {
   readonly item: SynapseAgentMessageTimelineItem
   readonly onOpenReference: (reference: string) => void
+  readonly referenceActions: AgentReferenceActions
 }) {
   const streaming = item.streaming === true
+  const referenceMenuEnabled = item.role === "assistant" && !streaming
+  const suppressNativeReferenceMenu = item.role === "assistant" && streaming
   const safeContent = redactSensitiveText(item.content)
   const preprocessed = wrapLocalReferences(renderLocalMarkdownImagesAsReferences(renderObsidianWikilinksAsBoldText(safeContent)))
   const hasUsage = Boolean(item.metadata?.usage)
+  const referenceLink = useMemo(() => createAgentLocalReferenceLink({
+    enabled: referenceMenuEnabled,
+    suppressNativeMenu: suppressNativeReferenceMenu,
+    messageId: item.id,
+    messageLength: item.content.length,
+    referenceActions,
+  }), [
+    item.content.length,
+    item.id,
+    referenceActions,
+    referenceMenuEnabled,
+    suppressNativeReferenceMenu,
+  ])
+  const streamdownComponents = useMemo(() => ({
+    ...STREAMDOWN_COMPONENTS,
+    a: referenceLink,
+  }) satisfies Components, [referenceLink])
 
   const handleClick = async (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target
@@ -199,7 +228,7 @@ function AssistantMessageBody({
       >
         <Streamdown
           className={agentMessageMarkdownClassName}
-          components={STREAMDOWN_COMPONENTS}
+          components={streamdownComponents}
           controls={STREAMDOWN_CONTROLS}
           isAnimating={streaming}
           linkSafety={{ enabled: false }}
@@ -639,53 +668,6 @@ function isProtocolUrlMatch(reference: string, content: string, offset: number):
   return /[A-Za-z][A-Za-z0-9+.-]*:\/\/$/.test(prefix)
     || (reference.startsWith("//") && /[A-Za-z][A-Za-z0-9+.-]*:$/.test(prefix))
     || (reference.startsWith("/") && /[A-Za-z][A-Za-z0-9+.-]*:\/$/.test(prefix))
-}
-
-function isLocalReferenceHref(href: string): boolean {
-  if (isBareWebDomainPathReference(href)) return false
-  return isAbsoluteLocalReferenceHref(href)
-    || href.startsWith("./")
-    || href.startsWith("../")
-    || href.startsWith(".\\")
-    || href.startsWith("..\\")
-    || /^[\w.-]+[\\/]/.test(href)
-}
-
-function isBareWebDomainPathReference(reference: string): boolean {
-  if (reference.includes("\\")
-    || isAbsoluteLocalReferenceHref(reference)
-    || reference.startsWith("./")
-    || reference.startsWith("../")
-    || reference.startsWith(".\\")
-    || reference.startsWith("..\\")) {
-    return false
-  }
-  const pathWithoutLine = reference.replace(/:\d+(?::\d+)?$/, "")
-  const firstSegment = pathWithoutLine.split("/")[0] ?? ""
-  return /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/u.test(firstSegment)
-}
-
-function isAbsoluteLocalReferenceHref(href: string): boolean {
-  return href.startsWith("file://")
-    || href.startsWith("/")
-    || /^[A-Za-z]:[\\/]/.test(href)
-    || /^[\\/]{2}[^\\/]+[\\/][^\\/]+/.test(href)
-}
-
-function streamdownLinkReference(href: string | undefined, children: ReactNode): string | undefined {
-  if (!href) return href
-  const childText = reactNodeText(children)
-  if (isLocalReferenceHref(href) && isLocalReferenceHref(childText)) {
-    return childText
-  }
-  return href
-}
-
-function reactNodeText(node: ReactNode): string {
-  if (typeof node === "string" || typeof node === "number") return String(node)
-  if (Array.isArray(node)) return node.map(reactNodeText).join("")
-  if (isValidElement<{ children?: ReactNode }>(node)) return reactNodeText(node.props.children)
-  return ""
 }
 
 export { AgentMessageEvent, renderObsidianWikilinksAsBoldText, wrapLocalReferences }

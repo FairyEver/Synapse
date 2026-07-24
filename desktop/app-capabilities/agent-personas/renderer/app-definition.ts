@@ -9,9 +9,6 @@ export const agentPersonasAppDefinition = {
   windowTitle: "智能体",
   dock: { pinnedByDefault: false, order: 15 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_agent_personas",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

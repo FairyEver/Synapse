@@ -9,9 +9,6 @@ export const usageMonitorAppDefinition = {
   defaultView: "cc",
   dock: { pinnedByDefault: false, order: 280 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_usage_monitor",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

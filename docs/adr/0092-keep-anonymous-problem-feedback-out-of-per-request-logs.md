@@ -1,0 +1,3 @@
+# Keep anonymous problem feedback out of per-request logs
+
+Anonymous problem-feedback submission produces no ordinary per-request access log and no global audit record. The desktop, server, reverse proxy, and WAF must not log the body, fragments, hashes, lengths, client IP, User-Agent, headers, raw exceptions, or stacks. Diagnostics are limited to unaffiliated aggregate counters under fixed stages and reason enums such as `accepted`, `invalid_input`, `privacy_rejected`, `rate_limited`, and `persistence_failed`; raw failures are normalized before aggregation. The client IP used by the memory limiter must not escape through error handling or the server's otherwise automatic HTTP logging.

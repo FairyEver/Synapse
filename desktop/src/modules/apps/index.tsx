@@ -91,7 +91,9 @@ export function AppsModule({
           setActiveAppId(null)
           setResourceContentOpenRequest(null)
         }}
-        onOpenWindow={() => void openAppWindow(activeApp.id)}
+        onOpenWindow={activeApp.window.openable
+          ? () => void openAppWindow(activeApp.id)
+          : undefined}
       >
         <SystemAppContent
           appId={activeApp.id}

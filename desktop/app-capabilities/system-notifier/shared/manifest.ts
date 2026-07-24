@@ -1,0 +1,15 @@
+import {
+  SYSTEM_NOTIFIER_APP_ID,
+  SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
+  SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
+  SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE,
+} from "./capability"
+
+export const systemNotifierCapabilityManifest = {
+  id: SYSTEM_NOTIFIER_APP_ID,
+  app: { id: SYSTEM_NOTIFIER_APP_ID },
+  capabilities: [SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID],
+  mcpTools: [SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME],
+  workflowNodes: [SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE],
+  deepLinks: [],
+} as const

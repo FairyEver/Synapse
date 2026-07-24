@@ -9,9 +9,6 @@ export const resourceRepositoryAppDefinition = {
   defaultView: "skill",
   dock: { pinnedByDefault: false, order: 210 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_resource_repository",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

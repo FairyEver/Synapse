@@ -23,7 +23,7 @@
  * T1.7 adds repo.* + ui.tray.
  */
 
-import { app, safeStorage, shell } from "electron"
+import { app, Notification, safeStorage, shell } from "electron"
 import os from "node:os"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
@@ -34,6 +34,7 @@ import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter, type SynapseActionRouter } from "../capabilities/action-router"
 import { createAppCapabilityDispatcher } from "../../app-capabilities/dispatcher"
 import { ipcOperationIdToChannel } from "../../synapse-capabilities/shared/naming"
+import { APP_DOMAIN } from "../../synapse-capabilities/shared/app-domain"
 import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabilities/document-template/main/dispatcher"
 import { createDocumentTemplateService } from "../../app-capabilities/document-template/main/service"
 import { createFileOpenerCapabilityDispatcher } from "../../app-capabilities/file-opener/main/dispatcher"
@@ -59,6 +60,19 @@ import { createSoundNotifierCapabilityDispatcher } from "../../app-capabilities/
 import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
 import { createSoundNotifierService, type SoundNotifierService } from "../../app-capabilities/sound-notifier/main/service"
 import { SOUND_NOTIFIER_SETTINGS_NAMESPACE } from "../../app-capabilities/sound-notifier/shared/capability"
+import { createElectronSystemNotificationAdapter } from "../../app-capabilities/system-notifier/main/adapter"
+import { createSystemNotifierCapabilityDispatcher } from "../../app-capabilities/system-notifier/main/dispatcher"
+import { SystemNotifierService } from "../../app-capabilities/system-notifier/main/service"
+import {
+  SYSTEM_NOTIFIER_SERVICE_ID,
+  SYSTEM_NOTIFIER_SETTINGS_NAMESPACE,
+} from "../../app-capabilities/system-notifier/shared/capability"
+import { createProblemFeedbackCapabilityDispatcher } from "../../app-capabilities/problem-feedback/main/dispatcher"
+import { ProblemFeedbackService } from "../../app-capabilities/problem-feedback/main/service"
+import { PROBLEM_FEEDBACK_SERVICE_ID } from "../../app-capabilities/problem-feedback/shared/capability"
+import { createJsonRepairCapabilityDispatcher } from "../../app-capabilities/json-repair/main/dispatcher"
+import { JsonRepairService } from "../../app-capabilities/json-repair/main/service"
+import { JSON_REPAIR_SERVICE_ID } from "../../app-capabilities/json-repair/shared/capability"
 import { createSynapseSkillService, type SynapseSkillService } from "../../app-capabilities/synapse-skill/main/service"
 import { SYNAPSE_SKILL_SERVICE_ID } from "../../app-capabilities/synapse-skill/shared/capability"
 import { createTerminalCapabilityDispatcher } from "../../app-capabilities/terminal/main/dispatcher"
@@ -73,6 +87,10 @@ import {
   QUICK_INPUT_SETTINGS_NAMESPACE,
 } from "../../app-capabilities/quick-input/shared/capability"
 import { createSecretsService, type SecretsService } from "../../app-capabilities/secrets/main/service"
+import {
+  SCRIPT_RUNTIME_SERVICE_ID,
+  ScriptRuntimeService,
+} from "../../app-capabilities/script-runtime/main/service"
 import { createSkillEnvBindingService } from "../../app-capabilities/secrets/main/skill-env-binding-service"
 import { createSecretsCapabilityDispatcher } from "../../app-capabilities/secrets/main/dispatcher"
 import {
@@ -83,6 +101,10 @@ import { AgentPersonaCache } from "../../app-capabilities/agent-personas/main/ca
 import { RemoteAgentPersonaClient } from "../../app-capabilities/agent-personas/main/remote-client"
 import { createAgentPersonaService, type AgentPersonaService } from "../../app-capabilities/agent-personas/main/service"
 import { AGENT_PERSONAS_REMOTE_CACHE_NAMESPACE } from "../../app-capabilities/agent-personas/shared/capability"
+import {
+  AGENT_REFERENCE_ACTION_SERVICE_ID,
+  AgentReferenceActionService,
+} from "../services/agent-reference-action-service"
 import { createAutomationCapabilityDispatcher } from "../capabilities/automation-dispatcher"
 import { createContentCapabilityDispatcher } from "../capabilities/content-dispatcher"
 import { createDriveCapabilityDispatcher } from "../capabilities/drive-dispatcher"
@@ -96,7 +118,6 @@ import { logStore, createMainLogger } from "../services/log-store"
 import {
   assertKnowledgeBaseStorageMigrationInactive,
   KNOWLEDGE_BASE_MIGRATION_ACTIVE_ERROR,
-  resolveProjectAgent,
 } from "../modules/agent/ipc-shared"
 import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
@@ -137,7 +158,6 @@ import { ProviderReferenceScanner } from "../services/provider/provider-referenc
 import { createProviderReferenceScannerDeps } from "../services/provider/provider-reference-scanner-deps"
 import type {
   AgentPersonaRemoteCacheEntryV1,
-  ConversationEntryV1,
   DriveSyncBaselineEntryV1,
   DriveSyncBindingEntryV1,
   DriveSyncConflictEntryV1,
@@ -148,6 +168,7 @@ import type {
   SecretItemEntryV1,
   SecretSettingsEntryV1,
   SoundNotifierSettingsEntryV3,
+  SystemNotifierSettingsEntryV1,
 } from "../runtime/data-repo"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { SideChannelService } from "../services/side-channel"
@@ -223,6 +244,7 @@ import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import { configuredWorkflowProjectIdsFromConfig, validateWorkflow } from "../services/workflow/workflow-validator"
 import { normalizeWorkflowRunParams } from "../services/workflow/workflow-param-normalizer"
+import { collectUnconfirmedImportedScripts } from "../services/workflow/imported-script-trust"
 import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowEventForRenderer, sanitizeWorkflowRunSnapshot } from "../services/workflow/run-snapshot-sanitize"
 import { agentProviderFailureFromResponse } from "../services/workflow/workflow-utils"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
@@ -250,18 +272,24 @@ type RunWorkflowHandlerOptions = {
   readonly automationId?: string
   readonly automationRunId?: string
   readonly actor?: ActorIdentity
+  readonly expectedVersion?: string
 }
 
-async function loadWorkflowValidationOptions(workflowService: Pick<WorkflowService, "list" | "get">) {
-  const [appConfig, workflows] = await Promise.all([
-    configStore.load(),
-    workflowService.list(),
-  ])
-  const readableWorkflows = workflows.filter((workflow) => !workflow.loadError)
-  const definitions = await Promise.all(readableWorkflows.map((workflow) => workflowService.get(workflow.id)))
+async function loadWorkflowValidationOptions(
+  workflowService: Pick<WorkflowService, "list" | "get">,
+  definitionSnapshot?: import("../../workflow-nodes/types").WorkflowDefinitionSnapshot,
+) {
+  const appConfig = await configStore.load()
+  const workflows = definitionSnapshot ? undefined : await workflowService.list()
+  const readableWorkflows = workflows?.filter((workflow) => !workflow.loadError)
+  const definitions = definitionSnapshot
+    ? [...definitionSnapshot.values()]
+    : await Promise.all((readableWorkflows ?? []).map((workflow) => workflowService.get(workflow.id)))
   return {
     configuredProjectIds: configuredWorkflowProjectIdsFromConfig(appConfig),
-    availableWorkflowIds: readableWorkflows.map((workflow) => workflow.id),
+    availableWorkflowIds: definitionSnapshot
+      ? definitions.flatMap((definition) => definition ? [definition.id] : [])
+      : readableWorkflows?.map((workflow) => workflow.id),
     workflowParamsById: new Map(
       definitions.flatMap((definition) => definition ? [[definition.id, definition.params] as const] : []),
     ),
@@ -331,6 +359,28 @@ export const coreProcessEnvironmentDescriptor: ServiceDescriptor<ProcessEnvironm
       }),
       shimError,
     }
+  },
+}
+
+export const coreScriptRuntimeDescriptor: ServiceDescriptor<ScriptRuntimeService> = {
+  id: SCRIPT_RUNTIME_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.process-environment"],
+  create(ctx) {
+    const environment = ctx.registry.get<ProcessEnvironmentService>("core.process-environment")
+    return new ScriptRuntimeService({
+      defaultWorkingDirectory: app.getPath("userData"),
+      node: {
+        executablePath: app.getPath("exe"),
+        baseEnv: buildHostEnvironment({
+          baseEnv: process.env,
+          shellPath: environment.shell.shellPath,
+          appendPathEntries: environment.nodeRuntimeBinPath
+            ? [environment.nodeRuntimeBinPath]
+            : [],
+        }),
+      },
+    })
   },
 }
 
@@ -495,6 +545,64 @@ export const coreSoundNotifierDescriptor: ServiceDescriptor<SoundNotifierService
   },
 }
 
+export const coreSystemNotifierDescriptor: ServiceDescriptor<SystemNotifierService> = {
+  id: SYSTEM_NOTIFIER_SERVICE_ID,
+  criticality: "degraded",
+  create() {
+    return new SystemNotifierService(createMainLogger("core.system-notifier"))
+  },
+  stop(instance) {
+    instance.dispose()
+  },
+}
+
+export const coreProblemFeedbackDescriptor: ServiceDescriptor<ProblemFeedbackService> = {
+  id: PROBLEM_FEEDBACK_SERVICE_ID,
+  criticality: "degraded",
+  create() {
+    return new ProblemFeedbackService(
+      SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.apiBaseUrl,
+      { allowDevelopmentLoopbackHttp: !app.isPackaged },
+    )
+  },
+}
+
+export const SYSTEM_NOTIFIER_INTEGRATION_SERVICE_ID = "core.system-notifier.integration"
+
+function optionalSystemNotifierPort<T>(resolve: () => T): T | undefined {
+  try {
+    return resolve()
+  } catch {
+    return undefined
+  }
+}
+
+export const coreSystemNotifierIntegrationDescriptor: ServiceDescriptor<{ readonly initialized: true }> = {
+  id: SYSTEM_NOTIFIER_INTEGRATION_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: [SYSTEM_NOTIFIER_SERVICE_ID],
+  startAfter: ["core.data-repository", "core.audit-sink"],
+  async create(ctx) {
+    const service = ctx.registry.get<SystemNotifierService>(SYSTEM_NOTIFIER_SERVICE_ID)
+    const settings = optionalSystemNotifierPort(
+      () => ctx.registry.get<DataRepository>("core.data-repository")
+        .namespace<SystemNotifierSettingsEntryV1>(SYSTEM_NOTIFIER_SETTINGS_NAMESPACE),
+    )
+    const adapter = createElectronSystemNotificationAdapter(
+      Notification,
+      (stage, reason) => service.recordAdapterFailure(stage, reason),
+    )
+    await service.initialize({
+      settings,
+      auditSink: optionalSystemNotifierPort(
+        () => ctx.registry.get<AuditSink>("core.audit-sink"),
+      ),
+      adapter,
+    })
+    return { initialized: true }
+  },
+}
+
 export const coreTextExtractorDescriptor: ServiceDescriptor<TextExtractorService> = {
   id: "core.text-extractor",
   criticality: "degraded",
@@ -511,6 +619,24 @@ export const coreTextExtractorDescriptor: ServiceDescriptor<TextExtractorService
   },
 }
 
+export const coreJsonRepairDescriptor: ServiceDescriptor<JsonRepairService> = {
+  id: JSON_REPAIR_SERVICE_ID,
+  criticality: "degraded",
+  startAfter: ["core.audit-sink"],
+  create(ctx) {
+    let auditSink: AuditSink | undefined
+    try {
+      auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    } catch {
+      auditSink = undefined
+    }
+    return new JsonRepairService({
+      auditSink,
+      logger: ctx.logger.child("json-repair"),
+    })
+  },
+}
+
 export const coreFileOpenerDescriptor: ServiceDescriptor<FileOpenerService> = {
   id: FILE_OPENER_SERVICE_ID,
   criticality: "degraded",
@@ -521,6 +647,21 @@ export const coreFileOpenerDescriptor: ServiceDescriptor<FileOpenerService> = {
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       openPath: (filePath) => shell.openPath(filePath),
       logger: ctx.logger.child("file-opener"),
+    })
+  },
+}
+
+export const coreAgentReferenceActionsDescriptor: ServiceDescriptor<AgentReferenceActionService> = {
+  id: AGENT_REFERENCE_ACTION_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    return new AgentReferenceActionService({
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      openPath: (targetPath) => shell.openPath(targetPath),
+      showItemInFolder: (targetPath) => shell.showItemInFolder(targetPath),
+      logger: ctx.logger.child("agent-reference-actions"),
     })
   },
 }
@@ -680,6 +821,8 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
     "core.workflow.snapshots",
     "core.workflow.run-aborts",
     "core.workflow.run-statuses",
+    SCRIPT_RUNTIME_SERVICE_ID,
+    "core.secrets",
   ],
   create(ctx) {
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
@@ -697,6 +840,12 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
     const capabilityLogger = createMainLogger("bootstrap.workflow-action")
     return createBuiltinMainActionRegistry({
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      scriptRuntime: ctx.registry.get<ScriptRuntimeService>(SCRIPT_RUNTIME_SERVICE_ID),
+      secrets: ctx.registry.get<SecretsService>("core.secrets"),
+      builtinCapabilityRegistrations: {
+        workflowNodeTypes: nodeTypeRegistry.listTypes(),
+        capabilityIds: APP_DOMAIN.capabilities.map((capability) => capability.id),
+      },
       workflowRuntime: {
         getWorkflowDefinition: (workflowId) => workflowService.get(workflowId),
         runWorkflowAndWait: createRunWorkflowAndWait({
@@ -705,11 +854,11 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
           snapshotService,
           eventBus: ctx.registry.get<EventBus>("core.event-bus"),
           runAborts,
-        runStatuses,
-        runCompletions,
-        capabilityLogger,
-        loadValidationOptions: () => loadWorkflowValidationOptions(workflowService),
-      }),
+          runStatuses,
+          runCompletions,
+          capabilityLogger,
+          loadValidationOptions: (snapshot) => loadWorkflowValidationOptions(workflowService, snapshot),
+        }),
       },
       getAgentRuntime: async (projectId) => {
         const containers = ctx.registry.get<ProjectContainerRegistry>("core.project-containers")
@@ -743,13 +892,40 @@ export function createRunWorkflowHandler(deps: {
   runCompletions: Map<string, Promise<unknown>>
   capabilityLogger: ReturnType<typeof createMainLogger>
   isWorkflowDeleted?: (workflowId: string) => boolean
-  loadValidationOptions?: () => Promise<import("../services/workflow/workflow-validator").WorkflowValidationOptions>
+  loadValidationOptions?: (
+    snapshot: import("../../workflow-nodes/types").WorkflowDefinitionSnapshot,
+  ) => Promise<import("../services/workflow/workflow-validator").WorkflowValidationOptions>
 }) {
   return async (id: string, params: Record<string, unknown>, options?: RunWorkflowHandlerOptions): Promise<{ runId: string } | { errors: ValidationError[] }> => {
     const { workflowService, workflowEngine, snapshotService, eventBus, runAborts, runStatuses, runCompletions, capabilityLogger, isWorkflowDeleted, loadValidationOptions } = deps
     const def = await workflowService.get(id)
     if (!def) return { errors: [{ type: "invalid_config" as const, message: "Workflow not found" }] }
-    const validation = validateWorkflow(def, await loadValidationOptions?.())
+    if (options?.expectedVersion && def.version !== options.expectedVersion) {
+      return {
+        errors: [{
+          type: "invalid_config" as const,
+          message: "工作流已更新，请重新触发运行",
+          retryable: true,
+        }],
+      }
+    }
+    const importedScriptReview = await collectUnconfirmedImportedScripts({
+      entry: def,
+      loadWorkflow: (workflowId) => workflowService.get(workflowId),
+    })
+    if (importedScriptReview.scripts.length > 0) {
+      return {
+        errors: [{
+          type: "script_confirmation_required" as const,
+          message: "导入的工作流包含未确认脚本，请先手动运行并确认。",
+          retryable: true,
+        }],
+      }
+    }
+    const definitionSnapshot = new Map(
+      importedScriptReview.snapshotDefinitions.map((definition) => [definition.id, definition]),
+    )
+    const validation = validateWorkflow(def, await loadValidationOptions?.(definitionSnapshot))
     if (!validation.valid) return { errors: validation.errors }
     const normalizedParams = await normalizeWorkflowRunParams(def, params)
     if (normalizedParams.errors.length > 0) return { errors: normalizedParams.errors }
@@ -801,16 +977,27 @@ export function createRunWorkflowHandler(deps: {
       } else if (event.type === "node:completed" || event.type === "node:failed" || event.type === "node:skipped") {
         nextNodeResults[event.nodeId] = event.result ?? nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: "failed", input: { variables: {} } }
       }
-      const sanitizedNextNodeResults = sanitizeNodeResultsForSnapshot(nextNodeResults)
+      const sanitizedNextNodeResults = sanitizeNodeResultsForSnapshot(
+        nextNodeResults,
+        def,
+        { omitDisabledScriptContent: false },
+      )
       runStatuses.set(runId, { ...current, nodeResults: sanitizedNextNodeResults })
       const isTerminalEvt = event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled"
-      const emitPayload = sanitizeWorkflowEventForRenderer(isTerminalEvt ? { ...event, workflowId: id } : event)
+      const emitPayload = sanitizeWorkflowEventForRenderer(
+        isTerminalEvt ? { ...event, workflowId: id } : event,
+        def,
+      )
       eventBus.emit({ domain: "workflow", type: event.type, payload: emitPayload, timestamp: new Date().toISOString() }, { backpressure: "block" })
       if (isTerminalEvt) {
         runAborts.delete(runId)
         const endedAt = Date.now()
         const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
-        const terminalNodeResults = sanitizeNodeResultsForSnapshot(event.result?.nodeResults ?? nextNodeResults)
+        const terminalNodeResults = sanitizeNodeResultsForSnapshot(
+          event.result?.nodeResults ?? nextNodeResults,
+          def,
+          { omitDisabledScriptContent: false },
+        )
         runStatuses.set(runId, { ...current, runId, workflowId: id, status, nodeResults: terminalNodeResults, startedAt, endedAt, durationMs: event.result?.durationMs ?? endedAt - startedAt, ...(event.type === "workflow:failed" ? { error: sanitizeError(event.error) } : {}) })
         if (!isWorkflowDeleted?.(id)) {
           Promise.resolve(snapshotService.save(sanitizeWorkflowRunSnapshot({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: event.result?.nodeResults ?? nextNodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) }))).catch((err) => {
@@ -824,14 +1011,18 @@ export function createRunWorkflowHandler(deps: {
           })
         }
       }
-    }, ac.signal, projectId, source, options?.actor, undefined, attribution).catch((err) => {
+    }, ac.signal, projectId, source, options?.actor, undefined, attribution, definitionSnapshot).catch((err) => {
       const diagnostic = capabilityRejectionDiagnostic(err)
       capabilityLogger.error("workflow engine rejected (mcp dispatch)", { workflowId: id, runId, ...diagnostic })
       runAborts.delete(runId)
       const current = runStatuses.get(runId)
       if (current && current.status === "running") {
         const endedAt = Date.now()
-        const sanitizedNodeResults = sanitizeNodeResultsForSnapshot(current.nodeResults)
+        const sanitizedNodeResults = sanitizeNodeResultsForSnapshot(
+          current.nodeResults,
+          def,
+          { omitDisabledScriptContent: false },
+        )
         runStatuses.set(runId, {
           ...current, runId, workflowId: id,
           status: "failed",
@@ -884,7 +1075,9 @@ export function createRunWorkflowAndWait(deps: {
   runCompletions: Map<string, Promise<unknown>>
   capabilityLogger: ReturnType<typeof createMainLogger>
   isWorkflowDeleted?: (workflowId: string) => boolean
-  loadValidationOptions?: () => Promise<import("../services/workflow/workflow-validator").WorkflowValidationOptions>
+  loadValidationOptions?: (
+    snapshot: import("../../workflow-nodes/types").WorkflowDefinitionSnapshot,
+  ) => Promise<import("../services/workflow/workflow-validator").WorkflowValidationOptions>
 }) {
   return async (input: {
     readonly workflowId: string
@@ -894,6 +1087,7 @@ export function createRunWorkflowAndWait(deps: {
     readonly automationId?: string
     readonly automationRunId?: string
     readonly actor?: ActorIdentity
+    readonly expectedVersion?: string
   }) => {
     const handler = createRunWorkflowHandler(deps)
     const started = await handler(input.workflowId, input.params, {
@@ -902,6 +1096,7 @@ export function createRunWorkflowAndWait(deps: {
       automationId: input.automationId,
       automationRunId: input.automationRunId,
       actor: input.actor,
+      expectedVersion: input.expectedVersion,
     })
     if ("errors" in started) {
       throw new Error(started.errors[0]?.message ?? "工作流启动失败")
@@ -910,7 +1105,7 @@ export function createRunWorkflowAndWait(deps: {
     const completion = deps.runCompletions.get(started.runId)
     const completionResult = completion ? await completion : undefined
     const status = deps.runStatuses.get(started.runId)
-    const definition = await deps.workflowService.get(input.workflowId)
+    const definition = status?.definition ?? await deps.workflowService.get(input.workflowId)
     if (!definition) {
       throw new Error("工作流不存在")
     }
@@ -982,6 +1177,9 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     "core.audit-sink",
     "core.terminal",
     "core.sound-notifier",
+    SYSTEM_NOTIFIER_INTEGRATION_SERVICE_ID,
+    PROBLEM_FEEDBACK_SERVICE_ID,
+    JSON_REPAIR_SERVICE_ID,
     "core.text-extractor",
     FILE_OPENER_SERVICE_ID,
     TEXT_FILE_WRITER_SERVICE_ID,
@@ -1029,7 +1227,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
         runCompletions,
         capabilityLogger,
         isWorkflowDeleted: (workflowId) => deletedWorkflowIds.has(workflowId),
-        loadValidationOptions: () => loadWorkflowValidationOptions(workflowService),
+        loadValidationOptions: (snapshot) => loadWorkflowValidationOptions(workflowService, snapshot),
       }),
       cancelRun: (runId: string) => {
         const controller = runAborts.get(runId)
@@ -1150,6 +1348,15 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     const soundNotifierDispatcher = createSoundNotifierCapabilityDispatcher({
       service: ctx.registry.get<SoundNotifierService>("core.sound-notifier"),
     })
+    const systemNotifierDispatcher = createSystemNotifierCapabilityDispatcher({
+      service: ctx.registry.get<SystemNotifierService>(SYSTEM_NOTIFIER_SERVICE_ID),
+    })
+    const problemFeedbackDispatcher = createProblemFeedbackCapabilityDispatcher({
+      service: ctx.registry.get<ProblemFeedbackService>(PROBLEM_FEEDBACK_SERVICE_ID),
+    })
+    const jsonRepairDispatcher = createJsonRepairCapabilityDispatcher({
+      service: ctx.registry.get<JsonRepairService>(JSON_REPAIR_SERVICE_ID),
+    })
     const secretsDispatcher = createSecretsCapabilityDispatcher({
       service: ctx.registry.get<SecretsService>("core.secrets"),
       permissionGuard,
@@ -1161,6 +1368,9 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       documentTemplate: documentTemplateDispatcher,
       secrets: secretsDispatcher,
       soundNotifier: soundNotifierDispatcher,
+      systemNotifier: systemNotifierDispatcher,
+      problemFeedback: problemFeedbackDispatcher,
+      jsonRepair: jsonRepairDispatcher,
       fileOpener: fileOpenerDispatcher,
       textFileWriter: textFileWriterDispatcher,
       htmlGenerator: htmlGeneratorDispatcher,
@@ -1824,14 +2034,17 @@ export const coreAutomationDescriptor: ServiceDescriptor<AutomationService> = {
     const eventBus = ctx.registry.get<EventBus>("core.event-bus")
     const defaultCwd = app.getPath("userData")
     const triggers = createBuiltinAutomationTriggerRegistry()
+    const actions = ctx.registry.get<MainActionRegistry>("core.action-runtime")
     const items = new AutomationItemRepository({
       items: dataRepository.namespace("automation.items"),
       triggers,
+      resolveActionManifest: (type) => actions.list()
+        .find((action) => action.manifest.id === type)
+        ?.manifest,
     })
     const runs = new AutomationRunRepository({
       runs: dataRepository.namespace("automation.runs"),
     })
-    const actions = ctx.registry.get<MainActionRegistry>("core.action-runtime")
     const execution = new AutomationExecutionService({
       items,
       runs,
@@ -1839,6 +2052,14 @@ export const coreAutomationDescriptor: ServiceDescriptor<AutomationService> = {
       permissionGuard,
       auditSink,
       defaultCwd,
+      resolveProjectWorkspacePath: async (projectId) => {
+        const config = await configStore.load()
+        const repo = config.repositories.find((candidate) => candidate.uuid === projectId)
+        const project = !repo
+          ? config.global.projects.find((candidate) => candidate.id === projectId)
+          : undefined
+        return resolveWorkflowProjectWorkspacePath(config, repo, project)
+      },
     })
     return new AutomationService({
       items,
@@ -2177,8 +2398,12 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
     "core.audit-sink",
     "core.workflow",
     "core.workflow.snapshots",
+    SYSTEM_NOTIFIER_INTEGRATION_SERVICE_ID,
+    JSON_REPAIR_SERVICE_ID,
     "knowledge-base.storage-migration-service",
     HTML_GENERATOR_FILE_SERVICE_ID,
+    SCRIPT_RUNTIME_SERVICE_ID,
+    "core.secrets",
   ],
   create(ctx) {
     const registry = ctx.registry
@@ -2309,7 +2534,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
           const startedAt = Date.now()
           const validation = validateWorkflow(
             input.definition,
-            await loadWorkflowValidationOptions(workflowService),
+            await loadWorkflowValidationOptions(workflowService, input.definitionSnapshot),
           )
           const normalizedParams = validation.valid
             ? await normalizeWorkflowRunParams(input.definition, input.params)
@@ -2362,6 +2587,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
             input.actor,
             input.callStack,
             buildWorkflowRunAttribution(input),
+            input.definitionSnapshot,
           )
           const endedAt = Date.now()
           const resultError = (result as WorkflowRunResult & { error?: unknown }).error

@@ -12,6 +12,7 @@ export type DispatchActorIdentity =
 export type DispatchContext = {
   readonly source?: SynapseActionSource
   readonly actor?: DispatchActorIdentity
+  readonly abortSignal?: AbortSignal
   /** Stable local installation/caller identity supplied by the transport. */
   readonly clientId?: string
   /** Trusted per-Agent-task controller identity supplied by the transport, never a tool argument. */

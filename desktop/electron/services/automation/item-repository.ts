@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 
+import type { ActionManifest } from "../../../action-packages/types"
 import type { DataChangeEvent, DataNamespace } from "../../runtime/data-repo"
 import type { AutomationTriggerRegistry } from "./trigger-registry"
 import type {
@@ -21,6 +22,7 @@ export interface AutomationItemRepositoryDeps {
   readonly triggers: AutomationTriggerRegistry
   readonly now?: () => Date
   readonly idFactory?: () => string
+  readonly resolveActionManifest?: (type: string) => ActionManifest | undefined
 }
 
 export class AutomationItemRepository {
@@ -28,6 +30,7 @@ export class AutomationItemRepository {
   private readonly triggers: AutomationTriggerRegistry
   private readonly now: () => Date
   private readonly idFactory: () => string
+  private readonly resolveActionManifest: (type: string) => ActionManifest | undefined
   private readonly itemQueues = new Map<string, Promise<void>>()
   private readonly itemCache = new Map<string, AutomationItem>()
   private readonly webhookTriggerIndex = new Map<string, Set<string>>()
@@ -38,12 +41,14 @@ export class AutomationItemRepository {
     this.triggers = deps.triggers
     this.now = deps.now ?? (() => new Date())
     this.idFactory = deps.idFactory ?? (() => `automation:${randomUUID()}`)
+    this.resolveActionManifest = deps.resolveActionManifest ?? (() => undefined)
     this.items.onChange((change) => this.applyItemChange(change))
   }
 
   async create(input: AutomationCreateInput): Promise<AutomationItem> {
     const now = this.isoNow()
-    const enabled = input.enabled ?? true
+    const actionPolicy = this.resolveActionManifest(input.executor.type)?.automationPolicy
+    const enabled = actionPolicy?.initiallyDisabled ? false : input.enabled ?? true
     const trigger = this.normalizeTrigger(input.trigger)
     const item: AutomationItem = {
       id: this.idFactory(),
@@ -89,9 +94,17 @@ export class AutomationItemRepository {
         configVersion: existing.configVersion + 1,
       }
       validateItem(candidate)
+      const executionChanged = actionExecutionChanged(
+        existing,
+        candidate,
+        this.resolveActionManifest,
+      )
+      const effectiveCandidate = executionChanged
+        ? { ...candidate, enabled: false }
+        : candidate
       return {
-        ...candidate,
-        nextRunAt: candidate.enabled ? this.computeNextRunAtIso(candidate, this.now()) : undefined,
+        ...effectiveCandidate,
+        nextRunAt: effectiveCandidate.enabled ? this.computeNextRunAtIso(effectiveCandidate, this.now()) : undefined,
       }
     })
     if (!next) throw new Error(`Automation "${id}" was not found`)
@@ -282,6 +295,59 @@ export class AutomationItemRepository {
   private isoNow(): string {
     return this.now().toISOString()
   }
+}
+
+function actionExecutionChanged(
+  previous: AutomationItem,
+  next: AutomationItem,
+  resolveManifest: (type: string) => ActionManifest | undefined,
+): boolean {
+  const previousPolicy = resolveManifest(previous.executor.type)?.automationPolicy
+  const nextPolicy = resolveManifest(next.executor.type)?.automationPolicy
+  if (!previousPolicy?.disableOnExecutionChange && !nextPolicy?.disableOnExecutionChange) return false
+  const ignoredFields = new Set([
+    ...(previousPolicy?.nonExecutionConfigFields ?? []),
+    ...(nextPolicy?.nonExecutionConfigFields ?? []),
+  ])
+  return canonicalExecutionValue({
+    scope: previous.scope,
+    cwd: previous.cwd,
+    trigger: previous.trigger,
+    executor: {
+      type: previous.executor.type,
+      config: withoutConfigFields(previous.executor.config, ignoredFields),
+    },
+    policy: previous.policy,
+  }) !== canonicalExecutionValue({
+    scope: next.scope,
+    cwd: next.cwd,
+    trigger: next.trigger,
+    executor: {
+      type: next.executor.type,
+      config: withoutConfigFields(next.executor.config, ignoredFields),
+    },
+    policy: next.policy,
+  })
+}
+
+function withoutConfigFields(
+  config: Record<string, unknown>,
+  ignoredFields: ReadonlySet<string>,
+): Record<string, unknown> {
+  const executionConfig = { ...config }
+  for (const field of ignoredFields) delete executionConfig[field]
+  return executionConfig
+}
+
+function canonicalExecutionValue(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalExecutionValue).join(",")}]`
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalExecutionValue(item)}`)
+      .join(",")}}`
+  }
+  return JSON.stringify(value)
 }
 
 function normalizePolicy(policy: Partial<AutomationPolicy> | undefined): AutomationPolicy {

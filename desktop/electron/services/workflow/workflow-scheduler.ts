@@ -9,8 +9,11 @@ export interface NodeExecOutcome {
   status: "success" | "failed" | "cancelled" | "skipped"
   output?: string
   outputs?: Record<string, unknown>
+  logs?: readonly { readonly label: string; readonly value: string }[]
   activeBranch?: string
   error?: string
+  errorCode?: string
+  errorReason?: string
   durationMs?: number
   usage?: Record<string, unknown>
   modelName?: string

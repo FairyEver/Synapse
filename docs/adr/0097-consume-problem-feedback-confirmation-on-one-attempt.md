@@ -1,0 +1,3 @@
+# Consume problem-feedback confirmation on one attempt
+
+One explicit problem-feedback confirmation authorizes exactly one MCP invocation, and that invocation performs at most one HTTP POST with transport retries disabled. Success, rate limiting, determinate failure, unknown outcome, and even a known pre-send failure all consume the confirmation. Any later attempt requires the Agent to display the complete body and obtain a new explicit confirmation even when the text is unchanged; standing authorization cannot replace per-attempt confirmation. After success, the same issue is not submitted again unless the user explicitly requests a new feedback record and confirms it.

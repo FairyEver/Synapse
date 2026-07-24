@@ -1,5 +1,6 @@
 import { parentPort, workerData } from "node:worker_threads"
-import { HTML_GENERATION_OUTPUT_MAX_BYTES, type JsonObject } from "../shared/schema"
+import { HTML_GENERATION_OUTPUT_MAX_BYTES } from "../shared/limits"
+import type { JsonObject } from "../shared/schema"
 import { isWellFormedUnicode } from "./normalization"
 import { ejsRuntime } from "./ejs-runtime"
 import type { HtmlGenerationWorkerInput, HtmlGenerationWorkerMessage } from "./worker-protocol"

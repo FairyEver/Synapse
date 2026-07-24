@@ -171,6 +171,9 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.audit-sink",
       "core.terminal",
       "core.sound-notifier",
+      "core.system-notifier.integration",
+      "core.problem-feedback",
+      "core.json-repair",
       "core.text-extractor",
       "core.file-opener",
       "core.text-file-writer",
@@ -179,6 +182,115 @@ describe("bootstrap descriptors (T1.5)", () => {
       "provider",
     ])
     expect(coreDatabaseDescriptor.stop).toBeTypeOf("function")
+  })
+
+  it("keeps the System Notifier facade dependency-free and integrates ordinary ports separately", async () => {
+    const {
+      coreSystemNotifierDescriptor,
+      coreSystemNotifierIntegrationDescriptor,
+    } = await importBootstrap()
+
+    expect(coreSystemNotifierDescriptor).toMatchObject({
+      id: "core.system-notifier",
+      criticality: "degraded",
+    })
+    expect(coreSystemNotifierDescriptor.dependsOn).toBeUndefined()
+    expect(coreSystemNotifierIntegrationDescriptor).toMatchObject({
+      id: "core.system-notifier.integration",
+      criticality: "degraded",
+      dependsOn: ["core.system-notifier"],
+      startAfter: ["core.data-repository", "core.audit-sink"],
+    })
+  })
+
+  it("attaches available storage and audit ports to the same System Notifier facade", async () => {
+    const { coreSystemNotifierIntegrationDescriptor } = await importBootstrap()
+    const settings = { getSingleton: vi.fn() }
+    const auditSink = { record: vi.fn() }
+    const service = {
+      initialize: vi.fn(async () => undefined),
+      recordAdapterFailure: vi.fn(),
+    }
+    const registry = {
+      get: vi.fn((id: string) => {
+        if (id === "core.system-notifier") return service
+        if (id === "core.data-repository") {
+          return { namespace: vi.fn(() => settings) }
+        }
+        if (id === "core.audit-sink") return auditSink
+        throw new Error(`unexpected service ${id}`)
+      }),
+    }
+
+    await expect(coreSystemNotifierIntegrationDescriptor.create({
+      ...makeFakeContext(),
+      registry,
+    } as never)).resolves.toEqual({ initialized: true })
+    expect(service.initialize).toHaveBeenCalledWith({
+      settings,
+      auditSink,
+      adapter: expect.objectContaining({ kind: "noop" }),
+    })
+  })
+
+  it("initializes the System Notifier facade when optional storage and audit ports are unavailable", async () => {
+    const { coreSystemNotifierIntegrationDescriptor } = await importBootstrap()
+    const service = {
+      initialize: vi.fn(async () => undefined),
+      recordAdapterFailure: vi.fn(),
+    }
+    const registry = {
+      get: vi.fn((id: string) => {
+        if (id === "core.system-notifier") return service
+        if (id === "core.data-repository") {
+          return {
+            namespace: () => {
+              throw new Error("unavailable namespace")
+            },
+          }
+        }
+        throw new Error(`unavailable service ${id}`)
+      }),
+    }
+
+    await expect(coreSystemNotifierIntegrationDescriptor.create({
+      ...makeFakeContext(),
+      registry,
+    } as never)).resolves.toEqual({ initialized: true })
+    expect(service.initialize).toHaveBeenCalledWith({
+      settings: undefined,
+      auditSink: undefined,
+      adapter: expect.objectContaining({ kind: "noop" }),
+    })
+  })
+
+  it("makes Database and Workflow consumers wait for System Notifier initialization", async () => {
+    const {
+      coreDatabaseDescriptor,
+      coreWorkflowEngineDescriptor,
+    } = await importBootstrap()
+
+    expect(coreDatabaseDescriptor.dependsOn).toContain("core.system-notifier.integration")
+    expect(coreDatabaseDescriptor.dependsOn).not.toContain("core.system-notifier")
+    expect(coreWorkflowEngineDescriptor.dependsOn).toContain("core.system-notifier.integration")
+    expect(coreWorkflowEngineDescriptor.dependsOn).not.toContain("core.system-notifier")
+  })
+
+  it("registers one stateless JSON Repair service shared by Database and Workflow", async () => {
+    const {
+      coreDatabaseDescriptor,
+      coreJsonRepairDescriptor,
+      coreWorkflowEngineDescriptor,
+    } = await importBootstrap()
+
+    expect(coreJsonRepairDescriptor).toMatchObject({
+      id: "core.json-repair",
+      criticality: "degraded",
+      startAfter: ["core.audit-sink"],
+    })
+    expect(coreJsonRepairDescriptor.dependsOn).toBeUndefined()
+    expect(coreDatabaseDescriptor.dependsOn).toContain("core.json-repair")
+    expect(coreWorkflowEngineDescriptor.dependsOn).toContain("core.json-repair")
   })
 
   it("coreActionRuntimeDescriptor creates the shared action registry", async () => {
@@ -195,6 +307,8 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.workflow.snapshots",
       "core.workflow.run-aborts",
       "core.workflow.run-statuses",
+      "core.script-runtime",
+      "core.secrets",
     ])
     expect(coreActionRuntimeDescriptor.create).toBeTypeOf("function")
   })
@@ -1094,6 +1208,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       undefined,
       [{ workflowId: "parent", workflowName: "Parent" }, { workflowId: "child-workflow", workflowName: "Child Workflow" }],
       undefined,
+      undefined,
     )
     expect(snapshotService.save).toHaveBeenCalledWith(expect.objectContaining({
       workflowId: "child-workflow",
@@ -1911,7 +2026,93 @@ describe("bootstrap descriptors (T1.5)", () => {
       actor,
       undefined,
       undefined,
+      expect.any(Map),
     )
+  })
+
+  it("createRunWorkflowHandler keeps Automation child execution on the checked snapshot", async () => {
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn().mockResolvedValue({
+          repositories: [{ uuid: "repo-1", localPath: "/tmp/repo" }],
+          activeRepoUuid: "repo-1",
+        }),
+      },
+    }))
+
+    const { createRunWorkflowHandler } = await importBootstrap()
+    const childV1 = {
+      id: "child-1",
+      name: "Child",
+      version: "child-v1",
+      scriptTrust: { source: "imported" as const, confirmed: true },
+      createdAt: 1,
+      updatedAt: 1,
+      params: [],
+      nodes: [
+        { id: "script", type: "nodejs_run" as const, name: "Script", position: { x: 0, y: 0 }, config: { source: "process.stdout.write('reviewed-v1')", inputs: [], timeoutSeconds: 60, saveRunContent: true, moduleMode: "commonjs" as const } },
+        { id: "end", type: "end" as const, name: "End", position: { x: 200, y: 0 }, config: { outputType: "text" as const, template: "", variables: [] } },
+      ],
+      edges: [{ id: "script-end", from: "script", to: "end" }],
+    }
+    const childV2 = {
+      ...childV1,
+      version: "child-v2",
+      nodes: childV1.nodes.map((node) => node.id === "script"
+        ? { ...node, config: { ...node.config, source: "process.stdout.write('unreviewed-v2')" } }
+        : node),
+    }
+    const root = {
+      id: "wf-1",
+      name: "Root",
+      version: "root-v1",
+      createdAt: 1,
+      updatedAt: 1,
+      params: [],
+      nodes: [
+        { id: "call", type: "workflow_call" as const, name: "Call", position: { x: 200, y: 0 }, config: { workflowId: childV1.id, variables: [], paramTemplates: {}, paramBindings: {} } },
+        { id: "end", type: "end" as const, name: "End", position: { x: 400, y: 0 }, config: { outputType: "text" as const, template: "", variables: [] } },
+      ],
+      edges: [{ id: "call-end", from: "call", to: "end" }],
+    }
+    let childReadCount = 0
+    const workflowService = {
+      get: vi.fn(async (id: string) => {
+        if (id === root.id) return root
+        childReadCount += 1
+        return childReadCount === 1 ? childV1 : childV2
+      }),
+    }
+    const workflowEngine = {
+      run: vi.fn(async () => ({ status: "completed", nodeResults: {}, durationMs: 1 })),
+    }
+    const handler = createRunWorkflowHandler({
+      workflowService: workflowService as never,
+      workflowEngine: workflowEngine as never,
+      snapshotService: { save: vi.fn() } as never,
+      eventBus: { emit: vi.fn() } as never,
+      runAborts: new Map(),
+      runStatuses: new Map() as never,
+      runCompletions: new Map(),
+      capabilityLogger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() } as never,
+    })
+
+    const result = await handler(root.id, {}, {
+      triggerSource: "automation",
+      expectedVersion: root.version,
+      automationId: "auto-1",
+      automationRunId: "auto-run-1",
+      actor: { kind: "user", id: "automation", display: "Automation" },
+    })
+
+    expect(result).toEqual({ runId: expect.any(String) })
+    expect(childReadCount).toBe(1)
+    const snapshot = (workflowEngine.run.mock.calls[0] as unknown[] | undefined)?.[10] as Map<
+      string,
+      typeof root | typeof childV1
+    >
+    expect(snapshot.get(childV1.id)).toBe(childV1)
+    expect(JSON.stringify([...snapshot.values()])).not.toContain("unreviewed-v2")
   })
 
   it("createRunWorkflowHandler skips snapshots after workflow deletion tombstone", async () => {

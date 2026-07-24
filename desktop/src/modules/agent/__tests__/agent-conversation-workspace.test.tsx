@@ -10,6 +10,15 @@ import type { SynapseProjectConfig } from "@/types/config"
 import { AgentConversationWorkspace } from "../components/agent-conversation-workspace"
 import type { AgentConversationWorkspaceController } from "../components/agent-conversation-workspace"
 
+const mocks = vi.hoisted(() => ({
+  referenceActions: {
+    openDefault: vi.fn(),
+    showInFolder: vi.fn(),
+  },
+  timelineProps: [] as Array<{ readonly referenceActions?: unknown }>,
+  useAgentReferenceActions: vi.fn(),
+}))
+
 vi.mock("@/app-shell/config", () => ({
   useAppConfig: () => ({
     config: {
@@ -41,7 +50,14 @@ vi.mock("../components/agent-composer", () => ({
 }))
 
 vi.mock("../components/agent-timeline", () => ({
-  AgentTimeline: () => <div data-testid="agent-timeline" />,
+  AgentTimeline: (props: { readonly referenceActions?: unknown }) => {
+    mocks.timelineProps.push(props)
+    return <div data-testid="agent-timeline" />
+  },
+}))
+
+vi.mock("../hooks/use-agent-reference-actions", () => ({
+  useAgentReferenceActions: mocks.useAgentReferenceActions,
 }))
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -65,6 +81,8 @@ const session: SynapseAgentSessionSummary = {
 let roots: Root[] = []
 
 beforeEach(() => {
+  mocks.timelineProps.length = 0
+  mocks.useAgentReferenceActions.mockReturnValue(mocks.referenceActions)
   Object.defineProperty(window, "synapse", {
     configurable: true,
     writable: true,
@@ -99,6 +117,18 @@ afterEach(() => {
 })
 
 describe("AgentConversationWorkspace", () => {
+  it("injects the same reference actions into the shared main and detached timeline path", () => {
+    renderWorkspace({ mode: "embedded" })
+    const embeddedProps = mocks.timelineProps.at(-1)
+    renderWorkspace({ mode: "window" })
+    const detachedProps = mocks.timelineProps.at(-1)
+
+    expect(mocks.useAgentReferenceActions).toHaveBeenNthCalledWith(1, "project-1")
+    expect(mocks.useAgentReferenceActions).toHaveBeenNthCalledWith(2, "project-1")
+    expect(embeddedProps?.referenceActions).toBe(mocks.referenceActions)
+    expect(detachedProps?.referenceActions).toBe(mocks.referenceActions)
+  })
+
   it("renders embedded conversation controls and opens detached window", () => {
     const onOpenDetached = vi.fn()
     const container = renderWorkspace({

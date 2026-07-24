@@ -7,6 +7,7 @@ const defaultLoggerMock = vi.hoisted(() => ({
 }))
 
 import { createSystemAppWindowService } from "../system-app-window-service"
+import { getSystemAppDefinition } from "../../../src/modules/apps/definitions"
 
 type BroadcastFilter = (window: { readonly id: number }) => boolean
 
@@ -101,6 +102,45 @@ describe("createSystemAppWindowService", () => {
     expect(window.loadURL).toHaveBeenCalledWith(
       "app://index.html?window=system-app&appId=text-extractor",
     )
+  })
+
+  it("uses windowTitle instead of the launcher name", async () => {
+    const window = createWindowMock()
+    const createWindow = vi.fn(() => window as never)
+    const definition = getSystemAppDefinition("database")!
+    const service = createSystemAppWindowService({
+      createWindow,
+      baseUrl: () => "app://index.html",
+      getAppDefinition: () => ({
+        ...definition,
+        name: "Launcher label",
+        windowTitle: "Detached title",
+      }),
+    })
+
+    await service.open("database")
+
+    expect(createWindow).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Synapse AI Studio Detached title",
+    }))
+  })
+
+  it("rejects apps that do not support detached windows", async () => {
+    const createWindow = vi.fn()
+    const definition = getSystemAppDefinition("database")!
+    const service = createSystemAppWindowService({
+      createWindow,
+      baseUrl: () => "app://index.html",
+      getAppDefinition: () => ({
+        ...definition,
+        window: { openable: false },
+      }),
+    })
+
+    await expect(service.open("database")).rejects.toThrow(
+      "does not support detached windows",
+    )
+    expect(createWindow).not.toHaveBeenCalled()
   })
 
   it("removes closed windows so the app can reopen", async () => {

@@ -62,6 +62,7 @@ import type {
   PermissionResponseTarget,
   SendMessageOptions,
 } from "../hooks/use-chat-connection"
+import { useAgentReferenceActions } from "../hooks/use-agent-reference-actions"
 import { latestTimelineContentSignal, useStickToBottom } from "../hooks/use-stick-to-bottom"
 import { AgentComposer } from "./agent-composer"
 import { AgentSessionRenameDialog } from "./agent-session-rename-dialog"
@@ -157,6 +158,7 @@ function AgentConversationWorkspace({
   onUserSessionRequested,
 }: AgentConversationWorkspaceProps) {
   const { config } = useAppConfig()
+  const referenceActions = useAgentReferenceActions(target.projectId)
   const [draft, setDraft] = useState("")
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([])
   const [creatingConversation, setCreatingConversation] = useState(false)
@@ -676,6 +678,7 @@ function AgentConversationWorkspace({
         sending={chat.sending}
         pendingPermissions={currentPendingPermissions}
         onOpenReference={openReference}
+        referenceActions={referenceActions}
         onRespondPermission={(requestId, behavior, updatedInput, message, scope) =>
           chat.respondPermission({ projectId: target.projectId, requestId }, behavior, updatedInput, message, scope)}
         viewportRef={stick.viewportRef}

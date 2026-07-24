@@ -1,0 +1,3 @@
+# Persist only the problem-feedback record minimum
+
+Each V1 problem-feedback record persists exactly three fields: a server-generated opaque and non-inferable `id`, the exact confirmed `content`, and a server-assigned UTC `receivedAt`. It does not persist initiation source, Agent judgment, client or device facts, network identity, confirmation evidence, body hashes or lengths, categories, status, or processing notes. Any request information later justified for abuse controls must remain outside the feedback record, follow a separately approved minimal lifetime, and not leak into long-lived application or proxy logs.

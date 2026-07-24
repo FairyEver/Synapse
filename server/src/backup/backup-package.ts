@@ -129,7 +129,7 @@ export function createRestoreMarkdown(input: RestoreMarkdownInput): string {
     "",
     "## 文件说明",
     "",
-    "- `database.sql.gz`：业务数据库 dump。",
+    "- `database.sql.gz`：业务数据库 dump，不包含问题反馈记录。",
     "- `postgres-globals.sql`：PostgreSQL 角色和全局权限。",
     "- `drive-cos-manifest.json`：Drive COS 对象清单，不包含文件内容。",
     "- `backup-manifest.json`：备份元信息和校验和。",

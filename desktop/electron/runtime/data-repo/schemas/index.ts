@@ -84,6 +84,10 @@ export {
   type SoundNotifierSettingsEntryV3,
 } from "./sound-notifier"
 export {
+  systemNotifierSettingsSchemaDefinition,
+  type SystemNotifierSettingsEntryV1,
+} from "./system-notifier"
+export {
   terminalBlocksSchema,
   terminalCommandBodiesSchema,
   terminalCommandsSchema,
@@ -184,6 +188,7 @@ import { secretsItemsSchema, secretsSettingsSchema } from "./secrets"
 import { agentPersonaItemsSchema, agentPersonaSettingsSchema } from "./agent-personas"
 import { agentPersonaRemoteCacheSchema } from "./agent-persona-remote-cache"
 import { soundNotifierSettingsSchemaDefinition } from "./sound-notifier"
+import { systemNotifierSettingsSchemaDefinition } from "./system-notifier"
 import {
   terminalBlocksSchema,
   terminalCommandBodiesSchema,
@@ -244,6 +249,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   agentPersonaSettingsSchema,
   agentPersonaRemoteCacheSchema,
   soundNotifierSettingsSchemaDefinition,
+  systemNotifierSettingsSchemaDefinition,
   terminalGroupsSchema,
   terminalGroupLaunchBodiesSchema,
   terminalCommandsSchema,

@@ -7,6 +7,7 @@ import {
   getActionDomainId,
 } from "../../synapse-capabilities/shared/registry"
 import { sanitizeError } from "../../src/lib/error-sanitize"
+import { JSON_REPAIR_CAPABILITY_ID } from "../../app-capabilities/json-repair/shared/capability"
 
 type JsonRpcId = number | string | null
 
@@ -49,6 +50,13 @@ function isDryRun(data: unknown): boolean {
 }
 
 function normalizeToolResult(action: string, result: unknown): unknown {
+  if (
+    action === JSON_REPAIR_CAPABILITY_ID
+    && isFailedDispatchResult(result)
+    && isRecord(result.data)
+  ) {
+    return result.data
+  }
   if (!isRecord(result) || result.ok !== true) return result
 
   const domainId = getActionDomainId(action)
@@ -99,7 +107,9 @@ function normalizeToolResult(action: string, result: unknown): unknown {
   }
 }
 
-function isFailedDispatchResult(result: unknown): boolean {
+function isFailedDispatchResult(
+  result: unknown,
+): result is Record<string, unknown> & { readonly ok: false } {
   return isRecord(result) && result.ok === false
 }
 

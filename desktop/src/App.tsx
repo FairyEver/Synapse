@@ -46,6 +46,7 @@ import {
 } from "@/modules/apps/dock"
 import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
 import { getSystemAppManifest, listSystemApps } from "@/modules/apps/registry"
+import { isSystemAppEntryVisible } from "@/modules/apps/visibility"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
 import type { SynapseSystemAppId } from "@/modules/apps/types"
@@ -63,9 +64,10 @@ function MainApp() {
   const activeRepository = useActiveRepository()
   const hasRepositories = useHasRepositories()
   const manager = useRepositoryManager()
+  const initialWorkflowEntryVisible = isWorkflowEntryVisible({})
   const initialDockAppId = resolveDefaultDockAppId(listSystemApps(), {
     dockAppIds: config.global.dockAppIds,
-    workflowEntryVisible: false,
+    workflowEntryVisible: initialWorkflowEntryVisible,
   })
   const [activeAppId, setActiveAppIdRaw] = useState<ActiveAppId>(() => hasRepositories ? initialDockAppId : "agent")
   const [pendingAgentSession, setPendingAgentSession] =
@@ -73,7 +75,7 @@ function MainApp() {
   const [pendingAppContentOpenRequest, setPendingAppContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
   const [launcherResetKey, setLauncherResetKey] = useState(0)
-  const [workflowEntryVisible, setWorkflowEntryVisible] = useState(false)
+  const [workflowEntryVisible, setWorkflowEntryVisible] = useState(initialWorkflowEntryVisible)
   const dock = useDockPreferences({ workflowEntryVisible })
   const knowledgeBaseStorageMigration = useKnowledgeBaseStorageMigration()
 
@@ -124,7 +126,7 @@ function MainApp() {
     const bridge = getSynapseBridge()
 
     if (!bridge) {
-      setWorkflowEntryVisible(false)
+      setWorkflowEntryVisible(isWorkflowEntryVisible({}))
       return
     }
 
@@ -139,13 +141,15 @@ function MainApp() {
       .catch((error) => {
         logger.error("Failed to read workflow entry cheat code state.", error)
         if (!cancelled) {
-          setWorkflowEntryVisible(false)
+          setWorkflowEntryVisible(isWorkflowEntryVisible({}))
         }
       })
 
     const unsubscribe = bridge.cheatCodes.onStateChanged((state) => {
       if (state.name === WORKFLOW_ENTRY_CHEAT_CODE_NAME) {
-        setWorkflowEntryVisible(state.active)
+        setWorkflowEntryVisible(isWorkflowEntryVisible({
+          [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: state.active,
+        }))
       }
     })
 
@@ -156,7 +160,8 @@ function MainApp() {
   }, [])
 
   useEffect(() => {
-    if (activeAppId === "workflow" && !workflowEntryVisible) {
+    const activeApp = getSystemAppManifest(activeAppId)
+    if (activeApp && !isSystemAppEntryVisible(activeApp, { workflowEntryVisible })) {
       setActiveAppId(resolveDefaultDockAppId(listSystemApps(), {
         dockAppIds: dock.dockAppIds,
         workflowEntryVisible: false,

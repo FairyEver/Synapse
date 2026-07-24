@@ -1,7 +1,14 @@
 import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResult, WorkflowNodeUsageCostSnapshot } from "../../../src/types/workflow"
 import type { SynapseAgentConversationReference } from "../../../src/types/agent-navigation"
-import type { AgentSendDeps, NodeExecutionResult, NodeRuntimeDeps, WorkflowCallStackEntry } from "../../../workflow-nodes/types"
+import type { AgentSendDeps, NodeExecutionResult, NodeRuntimeDeps, WorkflowCallStackEntry, WorkflowDefinitionSnapshot } from "../../../workflow-nodes/types"
 import type { ActorIdentity } from "../../runtime/security"
+import { SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/system-notifier/shared/capability"
+import { JSON_REPAIR_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/json-repair/shared/capability"
+import {
+  JAVASCRIPT_RUN_WORKFLOW_NODE_TYPE,
+  NODEJS_RUN_WORKFLOW_NODE_TYPE,
+} from "../../../app-capabilities/script-runtime/shared/capability"
+import type { WorkflowScriptInputBinding } from "../../../app-capabilities/script-runtime/shared/input"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { DEFAULT_AGENT_TIMEOUT_MINS } from "../../../workflow-nodes/agent-timeout"
 import { interpolatePrompt, resolveVariables } from "./variable-resolver"
@@ -10,6 +17,10 @@ import type { NodeExecOutcome, NodeTask, SchedulerCallbacks } from "./workflow-s
 import { createMainLogger } from "../log-store"
 import { sanitizeError } from "../error-sanitize"
 import { computeFullExecutionSet } from "./workflow-utils"
+import {
+  collectPublicNodeValues,
+  resolveWorkflowScriptInputs,
+} from "./script-input-resolver"
 
 const logger = createMainLogger("service.workflow.engine")
 const DEFAULT_WORKFLOW_MAX_CONCURRENCY = 5
@@ -127,6 +138,7 @@ export class WorkflowEngine {
     actor?: ActorIdentity,
     callStack?: readonly WorkflowCallStackEntry[],
     attribution?: WorkflowRunAttribution,
+    definitionSnapshot?: WorkflowDefinitionSnapshot,
   ): Promise<WorkflowRunResult> {
     const effectiveAbortSignal = abortSignal ?? this.abortSignal ?? new AbortController().signal
     if (effectiveAbortSignal.aborted) {
@@ -137,19 +149,17 @@ export class WorkflowEngine {
     }
     emit({ type: "workflow:started", runId, workflowId: def.id })
     const startMs = Date.now()
-    const paramKeys = Object.keys(paramValues)
     logger.info("workflow run started", {
       runId,
       workflowId: def.id,
       projectId: projectId ?? "(none)",
       nodeCount: def.nodes.length,
-      paramKeys,
-      paramCount: paramKeys.length,
       triggerSource: triggerSource ?? "unknown",
     })
 
     const nodeResults: Record<string, NodeRunResult> = {}
     const nodeOutputs: Record<string, string> = {}
+    const publicNodeValues: Record<string, Record<string, import("../../../app-capabilities/script-runtime/shared/json").JsonValue>> = {}
     const workflowCallStack: readonly WorkflowCallStackEntry[] = callStack && callStack.length > 0
       ? callStack
       : [{ workflowId: def.id, workflowName: def.name }]
@@ -255,11 +265,30 @@ export class WorkflowEngine {
           const prompt = (cfg as Record<string, unknown>)["prompt"]
           const resolvedPrompt = typeof prompt === "string" ? interpolatePrompt(prompt, resolved) : undefined
           const recordedPrompt = typeof prompt === "string" ? resolvedPrompt : undefined
+          const isScriptFileNode = node.type === JAVASCRIPT_RUN_WORKFLOW_NODE_TYPE
+            || node.type === NODEJS_RUN_WORKFLOW_NODE_TYPE
+          const resolvedInputs = isScriptFileNode
+            ? await resolveWorkflowScriptInputs({
+                bindings: ((cfg as Record<string, unknown>).inputs ?? []) as WorkflowScriptInputBinding[],
+                definition: def,
+                paramValues,
+                legacyNodeOutputs: nodeOutputs,
+                publicNodeValues,
+                runtimeDeps: this.runtimeDeps,
+              })
+            : undefined
 
           // Update NodeRunResult input for this node
           const nr = nodeResults[nodeId]
           if (nr) {
-            nr.input = { variables: resolved, ...(recordedPrompt !== undefined ? { prompt: recordedPrompt } : {}) }
+            nr.input = isScriptFileNode
+              ? { variables: {}, inputs: resolvedInputs }
+              : (
+              node.type === SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE
+              || node.type === JSON_REPAIR_WORKFLOW_NODE_TYPE
+            )
+              ? { variables: {} }
+              : { variables: resolved, ...(recordedPrompt !== undefined ? { prompt: recordedPrompt } : {}) }
           }
           emit({ type: "node:started", runId, nodeId, startedAt: nr?.startedAt, result: nr ? { ...nr } : undefined })
 
@@ -278,6 +307,7 @@ export class WorkflowEngine {
           const execResult = await executor.execute({
             config: cfg,
             resolvedVariables: resolved,
+            ...(resolvedInputs ? { resolvedInputs } : {}),
             ...(node.type === "workflow_call" ? { nodeOutputs: { ...nodeOutputs } } : {}),
             paramValues,
             paramDefinitions: def.params,
@@ -296,6 +326,7 @@ export class WorkflowEngine {
             },
             agentDeps: this.agentDeps,
             runtimeDeps: this.runtimeDeps,
+            ...(definitionSnapshot ? { workflowDefinitionSnapshot: definitionSnapshot } : {}),
             onProgress: (phase, label) => {
               emit({ type: "node:progress", runId, nodeId, phase, label })
             },
@@ -316,10 +347,13 @@ export class WorkflowEngine {
               status: "cancelled",
               output: execResult.output,
               outputs: mergeAgentConversationOutput(execResult.outputs, execResult.agentConversation),
+              logs: execResult.logs,
               agentConversation: execResult.agentConversation,
               error: execResult.status === "cancelled" && execResult.error
                 ? execResult.error
                 : "运行被取消",
+              errorCode: execResult.errorCode,
+              errorReason: execResult.errorReason,
               durationMs: execResult.durationMs,
             }
           }
@@ -328,8 +362,12 @@ export class WorkflowEngine {
           return {
             nodeId, status: execResult.status, output: execResult.output,
             outputs: mergeAgentConversationOutput(execResult.outputs, execResult.agentConversation),
+            logs: execResult.logs,
             activeBranch: execResult.activeBranch,
-            error: execResult.error, durationMs: execResult.durationMs,
+            error: execResult.error,
+            errorCode: execResult.errorCode,
+            errorReason: execResult.errorReason,
+            durationMs: execResult.durationMs,
             usage: execResult.usage,
             modelName: execResult.modelName,
             costUsd: execResult.costUsd,
@@ -345,7 +383,11 @@ export class WorkflowEngine {
           }
           const diagnostic = errorDiagnostic(err)
           const rawMessage = err instanceof Error ? err.message : String(err)
-          const visibleError = `节点执行异常：${sanitizeError(rawMessage)}`
+          const isScriptFileNode = node.type === JAVASCRIPT_RUN_WORKFLOW_NODE_TYPE
+            || node.type === NODEJS_RUN_WORKFLOW_NODE_TYPE
+          const visibleError = isScriptFileNode
+            ? `INVALID_INPUT: ${sanitizeError(rawMessage)}`
+            : `节点执行异常：${sanitizeError(rawMessage)}`
           logger.warn("node threw exception", {
             runId, nodeId, nodeName: node.name, nodeType: node.type,
             triggerSource: triggerSource ?? "unknown",
@@ -371,7 +413,15 @@ export class WorkflowEngine {
           // Initialize from the outcome so the failure is recorded correctly
           // instead of being silently dropped and later marked as "skipped".
           if (outcome.status === "failed") {
-            nr = { nodeId: outcome.nodeId, status: "failed", input: { variables: {} }, error: outcome.error, endedAt: Date.now() }
+            nr = {
+              nodeId: outcome.nodeId,
+              status: "failed",
+              input: { variables: {} },
+              error: outcome.error,
+              errorCode: outcome.errorCode,
+              errorReason: outcome.errorReason,
+              endedAt: Date.now(),
+            }
             nodeResults[outcome.nodeId] = nr
           } else {
             return
@@ -383,8 +433,11 @@ export class WorkflowEngine {
           outcome.outputs,
           outcome.agentConversation ?? nr.outputs?.agentConversation,
         )
+        nr.logs = outcome.logs
         nr.activeBranch = outcome.activeBranch
         nr.error = outcome.error
+        nr.errorCode = outcome.errorCode
+        nr.errorReason = outcome.errorReason
         nr.usage = outcome.usage
         nr.costUsd = outcome.costUsd
         nr.costCny = outcome.costCny
@@ -394,6 +447,16 @@ export class WorkflowEngine {
         nr.durationMs = outcome.durationMs
 
         if (outcome.status === "success") {
+          const nodeType = def.nodes.find((node) => node.id === outcome.nodeId)?.type
+          if (nodeType) {
+            const declared = nodeTypeRegistry.getManifest(nodeType).publicOutputs ?? []
+            if (declared.length > 0) {
+              publicNodeValues[outcome.nodeId] = collectPublicNodeValues({
+                nodeType,
+                outputs: outcome.outputs,
+              })
+            }
+          }
           logger.info("node succeeded", {
             runId, nodeId: outcome.nodeId, nodeName: nodeNames[outcome.nodeId], durationMs: nr.durationMs,
             triggerSource: triggerSource ?? "unknown",
@@ -471,6 +534,8 @@ export class WorkflowEngine {
           ...(outcome.outputs !== undefined ? { outputs: outcome.outputs } : {}),
           ...(outcome.activeBranch !== undefined ? { activeBranch: outcome.activeBranch } : {}),
           ...(outcome.error ? { error: outcome.error } : {}),
+          ...(outcome.errorCode ? { errorCode: outcome.errorCode } : {}),
+          ...(outcome.errorReason ? { errorReason: outcome.errorReason } : {}),
           ...(outcome.durationMs !== undefined ? { durationMs: outcome.durationMs } : {}),
         }
         nodeResults[nodeId] = res

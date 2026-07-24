@@ -106,6 +106,7 @@ export class ServiceRegistryImpl implements ServiceRegistry {
         status: entry.status,
         criticality: entry.descriptor.criticality,
         dependsOn: entry.descriptor.dependsOn ?? [],
+        startAfter: entry.descriptor.startAfter ?? [],
         runIn,
         lastError: entry.lastError,
       }
@@ -130,8 +131,8 @@ export class ServiceRegistryImpl implements ServiceRegistry {
     for (const descriptor of order) {
       const entry = this.requireEntry(descriptor.id)
 
-      // If any of this service's deps failed (fatal-failed or degraded-failed),
-      // propagate.
+      // Only hard dependency failures propagate. startAfter edges constrain
+      // ordering without propagating a degraded failure through this edge.
       const depFailed = (descriptor.dependsOn ?? []).some((dep) =>
         failedOrSkippedIds.has(dep),
       )

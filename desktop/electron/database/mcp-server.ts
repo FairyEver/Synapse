@@ -23,7 +23,11 @@ let server: Server | null = null
 let activePort = 0
 let actionRouter: SynapseActionRouter | null = null
 
-async function executeTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
+async function executeTool(
+  toolName: string,
+  args: Record<string, unknown>,
+  abortSignal?: AbortSignal,
+): Promise<unknown> {
   const action = MCP_TOOL_ACTIONS[toolName]
   if (!action) throw new Error(`Unknown tool: ${toolName}`)
   if (!actionRouter) throw new Error("Synapse action router is not initialized")
@@ -32,6 +36,7 @@ async function executeTool(toolName: string, args: Record<string, unknown>): Pro
     actor: mcpClientActorForSource("mcp-http"),
     clientId: "mcp-install:synapse-mcp/http",
     controllerInstanceId: MCP_HTTP_CONTROLLER_INSTANCE_ID,
+    abortSignal,
   })
 }
 
@@ -143,8 +148,21 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     return
   }
 
-  const response = await processMcpRequest(body, SYNAPSE_MCP_SERVER_IDENTITY, executeTool)
-  sendRpcResponse(res, response)
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  req.once("aborted", abort)
+  res.once("close", abort)
+  try {
+    const response = await processMcpRequest(
+      body,
+      SYNAPSE_MCP_SERVER_IDENTITY,
+      (toolName, args) => executeTool(toolName, args, controller.signal),
+    )
+    sendRpcResponse(res, response)
+  } finally {
+    req.off("aborted", abort)
+    res.off("close", abort)
+  }
 }
 
 // --- Server lifecycle ---

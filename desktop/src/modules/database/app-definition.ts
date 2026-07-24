@@ -8,9 +8,6 @@ export const databaseAppDefinition = {
   windowTitle: "本地数据库",
   dock: { pinnedByDefault: false, order: 230 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_database",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

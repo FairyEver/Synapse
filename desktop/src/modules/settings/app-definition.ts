@@ -8,9 +8,6 @@ export const settingsAppDefinition = {
   windowTitle: "设置",
   dock: { pinnedByDefault: true, order: 50 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_settings",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

@@ -1,4 +1,8 @@
-import type { MainActionRegistry } from "../../action-runtime/action-registry"
+import type {
+  MainActionDefinition,
+  MainActionRegistry,
+  RegisteredMainActionDefinition,
+} from "../../action-runtime/action-registry"
 import { buildAutomationTemplateVariables } from "../../action-runtime/template-variables"
 import { ControlledProcessPermissionError } from "../../runtime/process"
 import type { AuditSink, PermissionGuard, PermissionRequest } from "../../runtime/security"
@@ -22,6 +26,7 @@ export interface AutomationExecutionServiceDeps {
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
   readonly defaultCwd: string
+  readonly resolveProjectWorkspacePath?: (projectId: string) => Promise<string | null>
   readonly logger?: AutomationExecutionLogger
 }
 
@@ -101,20 +106,46 @@ export class AutomationExecutionService {
         taskName: item.name,
         runId: run.id,
         triggeredBy: actionTriggeredBy(triggeredBy),
-        cwd: resolveCwd(item, this.deps.defaultCwd),
+        cwd: await resolveCwd(item, this.deps.defaultCwd, this.deps.resolveProjectWorkspacePath),
         actor: { kind: "user", id: "automation", display: "Automation" } as const,
         abortSignal: controller.signal,
         configVersion: item.configVersion ?? 0,
         templateVariables,
+        triggerInput: effectiveTriggerContext.event ?? {
+          triggeredBy: effectiveTriggerContext.triggeredBy,
+          triggeredAt: effectiveTriggerContext.triggeredAt,
+          scheduledAt: effectiveTriggerContext.scheduledAt,
+        },
       }
-      permissionRequest = executor.buildPermissionRequest({ config, context })
-      const permission = await this.deps.permissionGuard.check(permissionRequest)
-      if (!permission.allowed) {
+      if (requiresAuthorization(executor)) {
+        const request = executor.buildPermissionRequest({ config, context })
+        permissionRequest = request
+        const permission = await this.deps.permissionGuard.check(request)
+        if (!permission.allowed) {
+          this.deps.auditSink.record({
+            action: request.action,
+            actor: request.actor,
+            resource: request.resource,
+            outcome: "denied",
+            metadata: {
+              source: "automation",
+              automationId: item.id,
+              runId: run.id,
+              triggerType: item.trigger.type,
+              executorType: item.executor.type,
+              triggeredBy,
+              reason: permission.reason,
+            },
+          })
+          permissionDenied = true
+          throw new Error(permission.reason)
+        }
+
         this.deps.auditSink.record({
-          action: permissionRequest.action,
-          actor: permissionRequest.actor,
-          resource: permissionRequest.resource,
-          outcome: "denied",
+          action: request.action,
+          actor: request.actor,
+          resource: request.resource,
+          outcome: "allowed",
           metadata: {
             source: "automation",
             automationId: item.id,
@@ -122,29 +153,13 @@ export class AutomationExecutionService {
             triggerType: item.trigger.type,
             executorType: item.executor.type,
             triggeredBy,
-            reason: permission.reason,
           },
         })
-        permissionDenied = true
-        throw new Error(permission.reason)
+        permissionAllowed = true
       }
-
-      this.deps.auditSink.record({
-        action: permissionRequest.action,
-        actor: permissionRequest.actor,
-        resource: permissionRequest.resource,
-        outcome: "allowed",
-        metadata: {
-          source: "automation",
-          automationId: item.id,
-          runId: run.id,
-          triggerType: item.trigger.type,
-          executorType: item.executor.type,
-          triggeredBy,
-        },
-      })
-      permissionAllowed = true
-      const previousOutputs = await this.getLastSuccessOutputs(item.id)
+      const previousOutputs = executor.manifest.previousOutputs === "none"
+        ? undefined
+        : await this.getLastSuccessOutputs(item.id)
       executorPending = true
       const result = await executor.execute({ config, context, previousOutputs })
       if (controller.signal.aborted) {
@@ -163,16 +178,31 @@ export class AutomationExecutionService {
           status: result.status,
           ...resultErrorDiagnostic(result.error),
         }
-        this.deps.auditSink.record({
-          action: permissionRequest.action,
-          actor: permissionRequest.actor,
-          resource: permissionRequest.resource,
-          outcome: "failed",
-          metadata,
-        })
+        if (permissionRequest) {
+          this.deps.auditSink.record({
+            action: permissionRequest.action,
+            actor: permissionRequest.actor,
+            resource: permissionRequest.resource,
+            outcome: "failed",
+            metadata,
+          })
+        }
         this.logger.warn("Automation executor failed.", metadata)
       }
-      const sanitizedResult = sanitizePersistableActionRunResult(result)
+      const persistenceField = executor.manifest.automationPolicy?.runContentPersistenceConfigField
+      const shouldPersistRunContent = !persistenceField
+        || (config as Record<string, unknown>)[persistenceField] !== false
+      const historyResult = shouldPersistRunContent
+        ? result
+        : {
+            ...result,
+            logs: undefined,
+            outputs: undefined,
+            usage: undefined,
+          }
+      const sanitizedResult = executor.manifest.resultPersistence === "raw"
+        ? historyResult
+        : sanitizePersistableActionRunResult(historyResult)
       const persistableResult = sanitizedResult.error
         ? { ...sanitizedResult, error: persistableActionError(sanitizedResult.error) }
         : sanitizedResult
@@ -378,9 +408,24 @@ export class AutomationExecutionService {
   }
 }
 
-function resolveCwd(item: AutomationItem, defaultCwd: string): string {
+function requiresAuthorization(
+  action: RegisteredMainActionDefinition,
+): action is MainActionDefinition {
+  return action.manifest.authorization !== "none"
+}
+
+async function resolveCwd(
+  item: AutomationItem,
+  defaultCwd: string,
+  resolveProjectWorkspacePath?: (projectId: string) => Promise<string | null>,
+): Promise<string> {
   const cwd = item.cwd?.trim()
-  return cwd ? cwd : defaultCwd
+  if (cwd) return cwd
+  if (item.scope.type === "project") {
+    const projectPath = await resolveProjectWorkspacePath?.(item.scope.projectId)
+    if (projectPath) return projectPath
+  }
+  return defaultCwd
 }
 
 function actionTriggeredBy(triggeredBy: AutomationRunTrigger): "schedule" | "manual" | "missed_run" {

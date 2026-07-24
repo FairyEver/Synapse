@@ -8,9 +8,6 @@ export const automationAppDefinition = {
   windowTitle: "自动化",
   dock: { pinnedByDefault: true, order: 30 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_automation",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

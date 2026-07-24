@@ -16,6 +16,7 @@ import type {
 } from "../services/automation/types"
 import type { ActionRunMetrics } from "../../action-packages/types"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
+import { listDiscoverableBuiltinAutomationActionTypes } from "../../app-capabilities/manifest-registry"
 
 type AutomationServicePort = Pick<
   AutomationService,
@@ -114,7 +115,14 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
 
           case "app.automation.executor_type.list": {
             const platform = deps.platform ?? process.platform
-            const descriptors = deps.actions.list().map((definition) => ({
+            const discoverableTypes = new Set(
+              listDiscoverableBuiltinAutomationActionTypes(
+                deps.actions.list().map((definition) => definition.manifest.id),
+              ),
+            )
+            const descriptors = deps.actions.list()
+              .filter((definition) => discoverableTypes.has(definition.manifest.id))
+              .map((definition) => ({
               type: definition.manifest.id,
               title: definition.manifest.title,
               permissions: [...definition.manifest.permissions],
@@ -124,7 +132,7 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
                 platform,
               ),
               configFields: definition.manifest.configFields,
-            }))
+              }))
             result = { ok: true, data: descriptors, total: descriptors.length }
             break
           }

@@ -701,6 +701,14 @@ model AuditLog {
   @@index([createdAt])
 }
 
+model ProblemFeedback {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  content    String
+  receivedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([receivedAt(sort: Desc), id(sort: Desc)])
+}
+
 model UserHandleRedirect {
   id        String   @id @default(cuid())
   userId    String

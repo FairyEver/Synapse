@@ -9,6 +9,8 @@ import { SOUND_NOTIFIER_PLAY_CAPABILITY_ID } from "../sound-notifier/shared/capa
 import { FILE_OPENER_CAPABILITY_ID } from "../file-opener/shared/capability"
 import { TEXT_FILE_WRITER_CAPABILITY_ID } from "../text-file-writer/shared/capability"
 import { createAppCapabilityDispatcher } from "../dispatcher"
+import { PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID } from "../problem-feedback/shared/capability"
+import { JSON_REPAIR_CAPABILITY_ID } from "../json-repair/shared/capability"
 
 describe("createAppCapabilityDispatcher", () => {
   it("routes app capability actions to their dispatchers", async () => {
@@ -30,7 +32,22 @@ describe("createAppCapabilityDispatcher", () => {
     const textFileWriter = {
       dispatch: vi.fn(async () => ({ ok: true as const, data: { path: "/tmp/report.md" } })),
     }
-    const dispatcher = createAppCapabilityDispatcher({ documentTemplate, textExtractor, secrets, soundNotifier, fileOpener, textFileWriter })
+    const systemNotifier = { dispatch: vi.fn(async () => ({ ok: true as const })) }
+    const htmlGenerator = { dispatch: vi.fn(async () => ({ ok: true as const })) }
+    const problemFeedback = { dispatch: vi.fn(async () => ({ ok: true as const })) }
+    const jsonRepair = { dispatch: vi.fn(async () => ({ ok: true as const })) }
+    const dispatcher = createAppCapabilityDispatcher({
+      documentTemplate,
+      textExtractor,
+      secrets,
+      soundNotifier,
+      systemNotifier,
+      fileOpener,
+      textFileWriter,
+      htmlGenerator,
+      problemFeedback,
+      jsonRepair,
+    })
 
     await dispatcher.dispatch(DOCUMENT_TEMPLATE_CAPABILITY_ID, {}, { source: "mcp-http" })
     await dispatcher.dispatch(TEXT_EXTRACTOR_CAPABILITY_ID, {}, { source: "mcp-http" })
@@ -39,6 +56,8 @@ describe("createAppCapabilityDispatcher", () => {
     await dispatcher.dispatch(SECRETS_ITEM_LIST_CAPABILITY_ID, {}, { source: "mcp-http" })
     await dispatcher.dispatch(FILE_OPENER_CAPABILITY_ID, {}, { source: "mcp-http" })
     await dispatcher.dispatch(TEXT_FILE_WRITER_CAPABILITY_ID, {}, { source: "mcp-http" })
+    await dispatcher.dispatch(PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID, {}, { source: "mcp-http" })
+    await dispatcher.dispatch(JSON_REPAIR_CAPABILITY_ID, {}, { source: "mcp-http" })
 
     expect(documentTemplate.dispatch).toHaveBeenCalledWith(DOCUMENT_TEMPLATE_CAPABILITY_ID, {}, { source: "mcp-http" })
     expect(textExtractor.dispatch).toHaveBeenCalledWith(TEXT_EXTRACTOR_CAPABILITY_ID, {}, { source: "mcp-http" })
@@ -47,6 +66,8 @@ describe("createAppCapabilityDispatcher", () => {
     expect(secrets.dispatch).toHaveBeenCalledWith(SECRETS_ITEM_LIST_CAPABILITY_ID, {}, { source: "mcp-http" })
     expect(fileOpener.dispatch).toHaveBeenCalledWith(FILE_OPENER_CAPABILITY_ID, {}, { source: "mcp-http" })
     expect(textFileWriter.dispatch).toHaveBeenCalledWith(TEXT_FILE_WRITER_CAPABILITY_ID, {}, { source: "mcp-http" })
+    expect(problemFeedback.dispatch).toHaveBeenCalledWith(PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID, {}, { source: "mcp-http" })
+    expect(jsonRepair.dispatch).toHaveBeenCalledWith(JSON_REPAIR_CAPABILITY_ID, {}, { source: "mcp-http" })
   })
 
   it("rejects unknown app actions", async () => {
@@ -55,8 +76,12 @@ describe("createAppCapabilityDispatcher", () => {
       textExtractor: { dispatch: vi.fn() },
       secrets: { dispatch: vi.fn() },
       soundNotifier: { dispatch: vi.fn() },
+      systemNotifier: { dispatch: vi.fn() },
       fileOpener: { dispatch: vi.fn() },
       textFileWriter: { dispatch: vi.fn() },
+      htmlGenerator: { dispatch: vi.fn() },
+      problemFeedback: { dispatch: vi.fn() },
+      jsonRepair: { dispatch: vi.fn() },
     })
 
     await expect(dispatcher.dispatch("app.unknown.action", {}, { source: "mcp-http" }))

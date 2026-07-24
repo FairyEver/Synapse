@@ -8,6 +8,8 @@ Use this skill only for Synapse workflow definitions, workflow nodes, workflow e
 
 Do not treat this domain file as the umbrella guidance for every Synapse MCP capability. Database tables and rows, Automation schedules/items, built-in rules, built-in skills, prompts, and other Synapse resource publishing flows belong to their matching consolidated `synapse-skill` domain attachments when that domain exists.
 
+App-provided capabilities exposed as Workflow node types, including HTML generation, JSON repair, file opening, text writing, text extraction, document generation, JavaScript execution, and Node.js execution, still belong to this Workflow domain when the task is to configure or edit the node inside a Workflow. Use `app/index.md` only when directly invoking a capability that actually declares an `app_*` tool outside a Workflow definition. `javascript_run` and `nodejs_run` intentionally have no MCP tool, System App, launcher, or Deep Link surface; do not invent `app_javascript_*` or `app_nodejs_*` calls.
+
 If a user asks for another Synapse MCP domain while this domain file is active, return to `SKILL.md` for routing and read the matching `<domain>/index.md` attachment before using that domain's tools. If no current domain attachment exists, use the relevant MCP tools directly and keep the workflow-specific guidance here out of that task.
 
 Workflow definitions returned by Synapse contain `meta.schemaVersion`, a SemVer document-schema version managed by Synapse. Preserve the complete `meta` object when sending a fetched definition back through a whole-definition update. Do not invent, downgrade, or remove this value. It is separate from `version`, which is the save revision hash. Legacy definitions are migrated by Synapse before MCP access; a future or failed document cannot be fetched, updated, run, or inspected as a current definition. `app_workflow_definition_inspect` applies the same migration gate and returns `valid: false` for future or failed schemas; do not interpret or edit a definition after that result. `app_workflow_definition_list` may report `loadError`; such an entry can still be deleted with `app_workflow_definition_delete` after the user explicitly asks to remove it. `rawExportAvailable` means a future document can first be preserved through the Synapse UI's protected raw export path. That path writes the untouched workflow JSON document, not an importable Synapse workflow package, and rejects symbolic-link destinations.
@@ -23,6 +25,8 @@ A **file_opener_file_open** node is exported as configuration only; the target f
 A **text_file_writer_file_write** node is also exported as configuration only; neither its text nor its target file bytes become a package attachment. A literal `path` is an external local write dependency that must be mapped on import, while a parameter- or upstream-derived path remains owned by that source. Import requires `app.text_file_writer.file.write@1.1.0` and preserves its high-risk file-write permission boundary.
 
 The two HTML Generator nodes share their EJS `template` configuration and report it as `shell.execute` risk because it executes trusted JavaScript. `html_generator_ejs_generate` requires `app.html_generator.ejs.generate@1.0.0` and has no file resource. `html_generator_ejs_file_generate` requires `app.html_generator.ejs_file.generate@1.0.0` and declares `outputPath` as a writable file resource. Their reserved `data` binding points to an upstream node inside the shared graph; generated HTML and template dependencies are not package attachments.
+
+A **json_repair_text_repair** node requires only `app.json_repair.text.repair@1.0.0`. Its text and variable bindings remain workflow configuration; the share contract declares no model, project, runtime, file, sensitive-field, or high-risk dependency.
 
 Do not simulate share import by calling `app_workflow_definition_create` or `app_workflow_definition_update` with copied JSON. That bypasses recursive child inclusion, stable dependency mappings, capability checks, lineage updates, crash recovery, and undo. Use the UI sharing flow when the user wants a reproducible workflow package. The V1/V2/V3 JSON readers remain for historical imports, but new exports use package format V4; package `formatVersion`, workflow `meta.schemaVersion`, save `version`, and node capability versions are independent.
 
@@ -40,13 +44,16 @@ Do not simulate share import by calling `app_workflow_definition_create` or `app
 - **text_file_writer_file_write** — Writes one complete string to a local `.txt`, `.md`, `.csv`, `.html`, or `.htm` file and returns the canonical actual path. HTML targets use UTF-8 only. No provider or project needed.
 - **html_generator_ejs_generate** — Executes a trusted EJS template with one upstream pure-JSON object and returns the complete rendered HTML string. No provider or project needed.
 - **html_generator_ejs_file_generate** — Executes the same trusted EJS template and writes the result as UTF-8 to an absolute `.html` or `.htm` path. No provider or project needed.
+- **json_repair_text_repair** — Repairs one interpolated string into complete validated JSON text. No provider or project needed.
+- **javascript_run** — Runs one ordinary classic JavaScript file in a disposable Chromium Dedicated Worker. Receives one strict-JSON object and publishes the first strict-JSON `postMessage` value as `outputs.result`. No provider or project needed.
+- **nodejs_run** — Runs one ordinary CommonJS or ESM file with the current Electron Node CLI runtime. Receives one strict-JSON object on stdin and publishes stdout as `outputs.result` only when exit code is zero and stdout contains exactly one strict-JSON document. No provider needed.
 - **codex** — Runs local `codex exec` in the selected project or an optional task working directory, passes the prompt through stdin, and returns Codex's final reply text. Requires an execution project, but does not use Synapse provider/model fields.
 - **claude_code** — Runs local `claude -p` in the selected project or an optional task working directory, passes the prompt as the print query, and returns Claude Code's final reply text. Requires an execution project, but does not use Synapse provider/model fields.
 - **end** — Terminal node (every workflow has exactly one). Defines the final output template. Cannot be deleted.
 
 ## Provider / Model Configuration
 
-Only **prompt** and **switch** nodes require a provider (AI service), model tier, and execution project. **script**, **codex**, and **claude_code** nodes require an execution project but do not use `providerId` or `modelTier`. **text**, **http_request**, **workflow_call**, **document_template_docx_generate**, **text_extract**, **file_opener_file_open**, **text_file_writer_file_write**, and both **html_generator** nodes execute without provider or project configuration on that node. Inside a workflow called by **workflow_call**, child prompt/switch nodes still need effective project/provider/model settings, and child script/codex/claude_code nodes still need an effective project. Configure project/provider/model with these exact field names:
+Only **prompt** and **switch** nodes require a provider (AI service), model tier, and execution project. **script**, **codex**, and **claude_code** nodes require an execution project but do not use `providerId` or `modelTier`. **nodejs_run** may use its explicit `workingDirectory`, the workflow project workspace, or Synapse's default working directory; it does not require a provider. **text**, **http_request**, **workflow_call**, **document_template_docx_generate**, **text_extract**, **file_opener_file_open**, **text_file_writer_file_write**, **json_repair_text_repair**, **javascript_run**, and both **html_generator** nodes execute without provider or project configuration on that node. Inside a workflow called by **workflow_call**, child prompt/switch nodes still need effective project/provider/model settings, and child script/codex/claude_code nodes still need an effective project. Configure project/provider/model with these exact field names:
 
 - **Workflow defaults** — Set `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optionally `defaultNodeTimeoutMins` on the workflow definition. Prompt/switch nodes inherit project/provider/model/timeout defaults unless they override; script nodes use `defaultProjectId` as their execution project; codex/claude_code nodes inherit project and timeout defaults unless they override. When no timeout is configured for prompt/switch/codex/claude_code, the default is 60 minutes.
 - **Node overrides** — Set `projectId`, `providerId`, `modelTier`, and optionally `timeoutMins` directly on prompt/switch config. For codex config, set Codex CLI fields such as `projectId`, `workingDirectory`, `timeoutMins`, `enableSearch`, `additionalWritableDirs`, `images`, `configOverrides`, and debug or safety flags. For claude_code config, set Claude Code CLI fields such as `projectId`, `workingDirectory`, `timeoutMins`, `permissionMode`, `model`, `settingSources`, `settingsPath`, `mcpConfigPath`, `allowedTools`, `disallowedTools`, `additionalDirectories`, and debug flags. Do not set `providerId` or `modelTier` on codex or claude_code nodes.
@@ -70,7 +77,7 @@ When you see this URI, parse it as `providerId = <providerId>` and `modelTier = 
 ## Creating a Workflow (Standard Flow)
 
 1. Call `app_workflow_node_type_list` to see available node types.
-2. Call `app_workflow_node_type_describe` for every node type you will configure. Include every field listed in `configSchema.required`, including required booleans and arrays. Use `nodeType: "prompt"` or `"switch"` before choosing any AI node config; use the exact node type `"workflow_call"` (not `"app_workflow_call"`) before creating a nested workflow call node; use `nodeType: "document_template_docx_generate"` before configuring document generation; use `nodeType: "text_extract"` before configuring text extraction; use `nodeType: "file_opener_file_open"` before configuring default-app file opening; use `nodeType: "text_file_writer_file_write"` before configuring text file writing; use `nodeType: "html_generator_ejs_generate"` or `"html_generator_ejs_file_generate"` before configuring HTML generation; use `nodeType: "codex"` before setting Codex CLI options; use `nodeType: "claude_code"` before setting Claude Code CLI options.
+2. Call `app_workflow_node_type_describe` for every node type you will configure. Include every field listed in `configSchema.required`, including required booleans and arrays. Use `nodeType: "prompt"` or `"switch"` before choosing any AI node config; use the exact node type `"workflow_call"` (not `"app_workflow_call"`) before creating a nested workflow call node; use `nodeType: "document_template_docx_generate"` before configuring document generation; use `nodeType: "text_extract"` before configuring text extraction; use `nodeType: "file_opener_file_open"` before configuring default-app file opening; use `nodeType: "text_file_writer_file_write"` before configuring text file writing; use `nodeType: "html_generator_ejs_generate"` or `"html_generator_ejs_file_generate"` before configuring HTML generation; use `nodeType: "javascript_run"` or `"nodejs_run"` before configuring script-file execution; use `nodeType: "codex"` before setting Codex CLI options; use `nodeType: "claude_code"` before setting Claude Code CLI options.
 3. Call `app_workflow_definition_create` with `name`, `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` when known. This returns `{ id, versionHash }` and creates a workflow with a default end node.
 4. If defaults were not set during create, call `app_workflow_definition_get`, update the full definition with `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins`, then call `app_workflow_definition_update`.
 5. Call `app_workflow_param_update` to define input parameters.
@@ -95,6 +102,46 @@ If `app_workflow_run_get` returns `definitionMigration`, the archived run's embe
 Strict validation runs after every MCP mutation. Do not create disconnected placeholders and plan to connect them later; that save will be rejected. Use connected `app_workflow_node_create` calls or a full `app_workflow_definition_update` instead.
 
 Workflow node IDs must use only letters, numbers, `_`, or `-`. Never create or preserve node IDs containing path separators, `..`, absolute paths, or spaces.
+
+## Editing an Existing Workflow Safely
+
+Prefer atomic node and edge mutations when each intermediate save can remain valid. Use a whole-definition update when replacing node types, removing several connected nodes, or rewiring a complex graph would otherwise create invalid intermediate states.
+
+For a whole-definition update:
+
+1. Fetch the current definition and record its `version`.
+2. Describe every node type whose config will be created or changed.
+3. Build a complete candidate from the fetched definition. Preserve the full `meta` object and every unrelated field, node, edge, parameter, and default.
+4. Call `app_workflow_definition_inspect` on the candidate before saving.
+5. Immediately before saving, fetch the workflow again and compare its `version` with the recorded value. If it changed, discard the stale candidate and rebuild from the latest definition. `app_workflow_definition_update` has no expected-version precondition, so this check reduces but cannot eliminate a concurrent-edit race.
+6. Save the complete candidate, call `app_workflow_layout_update` when topology changed, fetch the saved definition, and inspect that saved definition again.
+
+Do not report a candidate inspection as a saved result. Do not report a saved definition inspection as a successful execution.
+
+### Replacing Custom Logic with a Capability Node
+
+Preserve the existing behavioral contract before replacing a prompt or script with a dedicated capability node: final output, file path, overwrite behavior, downstream consumers, ordering dependencies, permissions, and user-visible side effects.
+
+Use this general pattern:
+
+1. Identify which part is data preparation and which part is the deterministic capability action.
+2. Keep any necessary preparation in an upstream node whose primary output exactly matches the capability node's input contract.
+3. Store fixed capability configuration, such as an EJS template, directly in the capability node when its schema requires configuration rather than upstream content.
+4. Rewire the graph as one valid candidate. Remove obsolete template or helper nodes only after all bindings and edges stop referencing them.
+5. Preserve stable node IDs when practical, especially for the node that still represents the same user-visible action. Give newly separated preparation nodes new descriptive IDs.
+6. Preserve `overwrite: true` only when the user explicitly requests replacement or the existing workflow already intentionally replaces the same fixed target and the requested change is behavior-preserving. Otherwise use `false`.
+7. Layout, refetch, and inspect the saved graph.
+
+For HTML generation, a common replacement is:
+
+```text
+prompt/script producing one pure JSON object
+  -> html_generator_ejs_generate or html_generator_ejs_file_generate
+  -> optional file_opener_file_open
+  -> end
+```
+
+The preparation node must return only JSON text with a top-level object. Paths, Markdown fences, prose, arrays, and summaries are not valid substitutes for the reserved `data` binding.
 
 ## Workflow Parameters
 
@@ -207,6 +254,60 @@ Use **html_generator_ejs_generate** with `template` and exactly one reserved `da
 Use **html_generator_ejs_file_generate** with the same `template` and reserved `data` binding plus `outputPath`, `overwrite`, and any ordinary variables needed only by the path. `outputPath` may use those ordinary `{{variable}}` bindings but cannot use `{{data}}`; after interpolation it must be an absolute `.html` or `.htm` path. File output is always UTF-8 and reuses the shared Text File Writer.
 
 Both nodes execute JavaScript in a one-shot Worker under the application's permission domain and require the existing `shell.exec` permission. The Worker is terminated on bounded startup, execution, memory, output, or cancellation failures but is not a security sandbox. EJS include and template file loading are disabled. String generation returns the complete in-memory HTML for downstream nodes with structured output `{ size }`; history and renderer snapshots may show `[truncated]` without changing the value delivered during that run. File generation returns the canonical actual path with full Writer metadata and does not retain the HTML body in history. Neither node opens, previews, sanitizes, or validates the generated HTML.
+
+## JSON Repair Node
+
+Use **json_repair_text_repair** when the Workflow author explicitly wants repaired JSON text.
+
+- Config is exactly `text` and `variables`. The template supports `{{name}}` and `{{$name}}`; bind every referenced variable explicitly.
+- After interpolation, the shared JSON Repair validator enforces non-blank well-formed Unicode and the 128 KiB UTF-8 input limit.
+- Success returns the repaired JSON text as the primary output and `{ json }` as structured output. Preserve that text instead of parsing and re-serializing it.
+- Best-effort repair can change meaning. The result remains untrusted and is not sanitization, business validation, or Schema validation.
+- Node configuration, runtime input values, and variable values are omitted from cards, reports, and persisted run snapshots. Do not add policy, batch, file, formatting, or retry fields.
+
+## System Notification Node
+
+Use **system_notifier_notification_trigger** when the Workflow author explicitly wants a native system notification.
+
+- Config is exactly `title`, `body`, and shared `variables`. Both templates support `{{name}}` and `{{$name}}`.
+- Bind every referenced variable explicitly. Binding or interpolation failure happens before notification acceptance and fails the node without notifying.
+- After interpolation, title and body use the same strict single-line, no-edge-whitespace, 64/256-Unicode-code-point contract as the direct App tool.
+- Success returns primary output `{"success":true}` and structured output `{ success: true }`. This means the valid request was accepted; it does not prove delivery or display.
+- Do not add platform options, retries, notification ids, idempotency keys, or delivery checks. Each accepted run is an independent event.
+- The direct-Agent proactive notification rules in `app/index.md` do not limit an explicitly configured Workflow node.
+
+## JavaScript and Node.js Script Nodes
+
+Use **javascript_run** or **nodejs_run** only when the Workflow author intends to execute the complete stored source as an ordinary script file.
+
+- Both configs include `source`, typed `inputs`, `timeoutSeconds`, and `saveRunContent`. Node.js also includes `moduleMode` (`commonjs` or `esm`) and optional `workingDirectory`.
+- Each input binding has a unique `name` and a source of `static_json`, Workflow `param`, legacy string `node_output`, structured `node_value`, or `secret`. The runner receives one JSON object assembled from those bindings.
+- JavaScript receives that object as the Worker's first message. The first strict-JSON value sent through `postMessage` becomes `outputs.result`; `console` output is logging, not a result.
+- Node.js receives the object on stdin. It succeeds only after exiting with code `0` and writing exactly one strict-JSON document to stdout; stderr is logging. CommonJS, ESM, relative imports, local `node_modules`, filesystem, network, subprocess, and other native Node behavior are not restricted or made portable by Synapse.
+- Both nodes expose only `outputs.result`. Do not infer extra outputs from object keys, logs, stderr, console messages, or runtime metadata.
+- `saveRunContent: false` omits script input, result, and logs from persisted history but does not remove the live `outputs.result` value used by downstream nodes in the same run.
+- Timeout, cancellation, disposable execution units, bounded output/logs, and global concurrency protect Synapse stability. They are not a security sandbox or a resource-permission system. Do not add or claim API, module, package, network, filesystem, Secret, `NetworkGrant`, or `FilesystemGrant` allowlists.
+- Local run and local Automation enablement express authorization. Imported Workflows show one confirmation containing all potentially executable scripts before the first run; they do not ask for per-resource permission.
+- The matching Automation Actions are `builtin.javascript-run` and `builtin.nodejs-run`. They are Automation creation surfaces, not MCP tools or System Apps.
+
+When embedding the complete JSON object inside `<script type="application/json">`, use raw EJS output for the serialized object and escape characters that could terminate or disrupt the script block:
+
+```ejs
+<script id="report-data" type="application/json">
+<%- JSON.stringify(data)
+  .replace(/</g, '\\u003c')
+  .replace(/\u2028/g, '\\u2028')
+  .replace(/\u2029/g, '\\u2029') %>
+</script>
+```
+
+This pattern is for a JSON data block. Continue to use escaped EJS output such as `<%= data.title %>` for ordinary HTML text unless the template intentionally supplies trusted markup.
+
+## Validation Levels
+
+`app_workflow_definition_inspect` validates the document schema, node configs, bindings, graph structure, and known static constraints. It does not execute upstream nodes, parse their future outputs, render EJS with runtime data, verify runtime file permissions, or prove that side effects such as writing or opening a file will succeed.
+
+Run the Workflow only when execution is requested or needed for verification, required parameters are available, and its side effects are authorized. After execution, poll the run to a terminal state and inspect the relevant node results. If the Workflow is not executed, state clearly that the saved definition passed structural validation but runtime behavior was not exercised.
 
 ## Running Codex
 

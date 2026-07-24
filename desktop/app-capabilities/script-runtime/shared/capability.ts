@@ -1,0 +1,13 @@
+export const JAVASCRIPT_RUN_PACKAGE_ID = "javascript-run"
+export const JAVASCRIPT_RUN_PACKAGE_VERSION = "1.0.0"
+export const JAVASCRIPT_RUN_CAPABILITY_ID = "app.javascript.script.execute"
+export const JAVASCRIPT_RUN_CAPABILITY_VERSION = "1.0.0"
+export const JAVASCRIPT_RUN_WORKFLOW_NODE_TYPE = "javascript_run"
+export const JAVASCRIPT_RUN_AUTOMATION_ACTION_TYPE = "builtin.javascript-run"
+
+export const NODEJS_RUN_PACKAGE_ID = "nodejs-run"
+export const NODEJS_RUN_PACKAGE_VERSION = "1.0.0"
+export const NODEJS_RUN_CAPABILITY_ID = "app.nodejs.script.execute"
+export const NODEJS_RUN_CAPABILITY_VERSION = "1.0.0"
+export const NODEJS_RUN_WORKFLOW_NODE_TYPE = "nodejs_run"
+export const NODEJS_RUN_AUTOMATION_ACTION_TYPE = "builtin.nodejs-run"

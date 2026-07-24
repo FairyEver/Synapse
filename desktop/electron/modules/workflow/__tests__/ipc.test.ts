@@ -65,6 +65,14 @@ vi.mock("../../../services/workflow/workflow-validator", () => ({
   })),
 }))
 
+const scriptPreparationService = {
+  prepareImportedScriptsForRun: vi.fn(async (definition: WorkflowDefinition) => ({
+    status: "ready" as const,
+    definition,
+    snapshotDefinitions: [definition],
+  })),
+}
+
 describe("workflowIpcModule", () => {
   beforeEach(() => {
     logStoreMock.logger.error.mockClear()
@@ -291,6 +299,7 @@ describe("workflowIpcModule", () => {
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       if (serviceId === "core.workflow.engine") return engine as T
       if (serviceId === "core.workflow.snapshots") return snapshots as T
       if (serviceId === "core.event-bus") return eventBus as T
@@ -402,6 +411,7 @@ describe("workflowIpcModule", () => {
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       if (serviceId === "core.workflow.engine") return engine as T
       if (serviceId === "core.workflow.snapshots") return snapshots as T
       if (serviceId === "core.event-bus") return eventBus as T
@@ -478,6 +488,7 @@ describe("workflowIpcModule", () => {
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       if (serviceId === "core.workflow.engine") return engine as T
       if (serviceId === "core.workflow.snapshots") return snapshots as T
       if (serviceId === "core.event-bus") return eventBus as T
@@ -493,6 +504,7 @@ describe("workflowIpcModule", () => {
       expect.anything(), expect.anything(), expect.anything(),
       expect.anything(), expect.anything(), undefined,
       "renderer", expect.anything(),
+      undefined, undefined, expect.any(Map),
     )
 
     // workflow:runDefinition → "editor-run-definition"
@@ -505,6 +517,7 @@ describe("workflowIpcModule", () => {
       expect.anything(), expect.anything(),
       expect.anything(), expect.anything(), undefined,
       "editor-run-definition", expect.anything(),
+      undefined, undefined, expect.any(Map),
     )
 
     // workflow:rerun → "rerun"
@@ -525,6 +538,7 @@ describe("workflowIpcModule", () => {
       if (serviceId === "core.event-bus") return eventBus as T
       if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
       if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       throw new Error(`Unknown service: ${serviceId}`)
     }
     harness2.registry.register(workflowIpcModule, { moduleId: "workflow", resolve: resolve2 })
@@ -533,7 +547,82 @@ describe("workflowIpcModule", () => {
       expect.anything(), expect.anything(), expect.anything(),
       expect.anything(), expect.anything(), undefined,
       "rerun", expect.anything(),
+      undefined, undefined, expect.any(Map),
     )
+  })
+
+  it("forwards the script review token and returns the authoritative confirmed definition", async () => {
+    const requestedDefinition = workflowDefinition()
+    const authoritativeDefinition: WorkflowDefinition = {
+      ...requestedDefinition,
+      version: "v2-confirmed",
+      scriptTrust: { source: "imported", confirmed: true },
+    }
+    const reviewedChild: WorkflowDefinition = {
+      ...workflowDefinition(),
+      id: "child-reviewed",
+      version: "child-v1-confirmed",
+      scriptTrust: { source: "imported", confirmed: true },
+    }
+    const packageService = {
+      prepareImportedScriptsForRun: vi.fn(async () => ({
+        status: "ready" as const,
+        definition: authoritativeDefinition,
+        snapshotDefinitions: [authoritativeDefinition, reviewedChild],
+      })),
+    }
+    const engine = { run: vi.fn(async () => undefined) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return { get: vi.fn(async () => authoritativeDefinition) } as T
+      if (serviceId === "core.workflow.package") return packageService as T
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return { save: vi.fn(async () => undefined) } as T
+      if (serviceId === "core.event-bus") return { emit: vi.fn() } as T
+      if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
+      if (serviceId === "core.workflow.run-statuses") return new Map<string, WorkflowRunStatus>() as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:app:workflow:operation:run_definition", {
+      definition: requestedDefinition,
+      params: {},
+      scriptConfirmationToken: "sha256:review-v2",
+    })
+
+    expect(packageService.prepareImportedScriptsForRun).toHaveBeenCalledWith(
+      expect.objectContaining({ id: requestedDefinition.id }),
+      "sha256:review-v2",
+    )
+    expect(result).toEqual({
+      runId: expect.any(String),
+      definition: expect.objectContaining({
+        version: "v2-confirmed",
+        scriptTrust: { source: "imported", confirmed: true },
+      }),
+    })
+    expect(engine.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: "v2-confirmed",
+        scriptTrust: { source: "imported", confirmed: true },
+      }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      "editor-run-definition",
+      expect.anything(),
+      undefined,
+      undefined,
+      expect.any(Map),
+    )
+    const definitionSnapshot = (engine.run.mock.calls[0] as unknown[] | undefined)?.[10] as Map<
+      string,
+      WorkflowDefinition
+    >
+    expect(definitionSnapshot.get(reviewedChild.id)).toBe(reviewedChild)
   })
 
   it.each([
@@ -601,6 +690,7 @@ describe("workflowIpcModule", () => {
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       if (serviceId === "core.workflow.engine") return engine as T
       if (serviceId === "core.workflow.snapshots") return snapshots as T
       if (serviceId === "core.event-bus") return eventBus as T
@@ -648,6 +738,7 @@ describe("workflowIpcModule", () => {
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       if (serviceId === "core.workflow.engine") return engine as T
       if (serviceId === "core.workflow.snapshots") return snapshots as T
       if (serviceId === "core.event-bus") return eventBus as T
@@ -713,6 +804,7 @@ describe("workflowIpcModule", () => {
       if (serviceId === "core.event-bus") return eventBus as T
       if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
       if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       throw new Error(`Unknown service: ${serviceId}`)
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
@@ -772,11 +864,13 @@ describe("workflowIpcModule", () => {
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       if (serviceId === "core.workflow.engine") return engine as T
       if (serviceId === "core.workflow.snapshots") return snapshots as T
       if (serviceId === "core.event-bus") return { emit: vi.fn() } as T
       if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
       if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       throw new Error(`Unknown service: ${serviceId}`)
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
@@ -799,6 +893,9 @@ describe("workflowIpcModule", () => {
       undefined,
       "rerun",
       expect.anything(),
+      undefined,
+      undefined,
+      expect.any(Map),
     )
   })
 
@@ -823,11 +920,13 @@ describe("workflowIpcModule", () => {
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       if (serviceId === "core.workflow.engine") return engine as T
       if (serviceId === "core.workflow.snapshots") return snapshots as T
       if (serviceId === "core.event-bus") return { emit: vi.fn() } as T
       if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
       if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       throw new Error(`Unknown service: ${serviceId}`)
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
@@ -914,6 +1013,7 @@ describe("workflowIpcModule", () => {
       if (serviceId === "core.event-bus") return { emit: vi.fn() } as T
       if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
       if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       throw new Error(`Unknown service: ${serviceId}`)
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
@@ -957,6 +1057,7 @@ describe("workflowIpcModule", () => {
       if (serviceId === "core.event-bus") return { emit: vi.fn() } as T
       if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
       if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       throw new Error(`Unknown service: ${serviceId}`)
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
@@ -974,7 +1075,189 @@ describe("workflowIpcModule", () => {
       undefined,
       "rerun",
       expect.anything(),
+      undefined,
+      undefined,
+      expect.any(Map),
     )
+  })
+
+  it("re-reviews a current child revision before rerunning a historical parent, including force rerun", async () => {
+    const historicalRoot = workflowCallingDefinition("workflow-1", "child-1")
+    const currentRoot = { ...historicalRoot, version: "root-current-v2" }
+    const childV1 = importedNodeWorkflowDefinition("child-1", "process.stdout.write('reviewed-v1')", "child-v1")
+    const childV2 = importedNodeWorkflowDefinition("child-1", "process.stdout.write('unreviewed-v2')", "child-v2")
+    let currentChild = childV1
+    const workflow = {
+      get: vi.fn(async (id: string) => id === historicalRoot.id ? currentRoot : currentChild),
+      getExportDocument: vi.fn(),
+      getLegacyMigrationExportDocument: vi.fn(),
+      save: vi.fn(),
+      commitAtomicBatch: vi.fn(async (definitions: readonly WorkflowDefinition[]) => {
+        const confirmed = definitions.map((definition) => ({
+          ...definition,
+          version: `${definition.version}-confirmed`,
+          scriptTrust: { source: "imported" as const, confirmed: true },
+        }))
+        const confirmedChild = confirmed.find(({ id }) => id === currentChild.id)
+        if (confirmedChild) currentChild = confirmedChild
+        return {
+          versions: new Map(confirmed.map(({ id, version }) => [id, version])),
+          snapshot: { previous: definitions, next: confirmed },
+        }
+      }),
+    }
+    const packageService = new WorkflowPackageService({
+      workflowService: workflow as never,
+      providerService: { listProviders: vi.fn(async () => []) },
+      permissionGuard: { check: vi.fn() } as unknown as PermissionGuard,
+      auditSink: { record: vi.fn() } as unknown as AuditSink,
+    })
+    const engine = { run: vi.fn(async () => undefined) }
+    const snapshots = {
+      save: vi.fn(async () => undefined),
+      findByRunId: vi.fn(async () => ({
+        runId: "previous-run",
+        workflowId: historicalRoot.id,
+        version: historicalRoot.version,
+        status: "completed" as const,
+        startedAt: 1,
+        endedAt: 2,
+        params: {},
+        nodeResults: {},
+        definition: historicalRoot,
+      })),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return packageService as T
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.event-bus") return { emit: vi.fn() } as T
+      if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
+      if (serviceId === "core.workflow.run-statuses") return new Map<string, WorkflowRunStatus>() as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const first = await harness.invoke("synapse:app:workflow:operation:rerun", {
+      previousRunId: "previous-run",
+      params: {},
+    }) as { errors: Array<{ details: { confirmationToken: string } }> }
+    expect(first).toEqual(expect.objectContaining({
+      errors: [expect.objectContaining({ type: "script_confirmation_required" })],
+    }))
+    const firstToken = first.errors[0]?.details.confirmationToken
+    expect(firstToken).toEqual(expect.any(String))
+    expect(engine.run).not.toHaveBeenCalled()
+
+    currentChild = childV2
+    const changed = await harness.invoke("synapse:app:workflow:operation:rerun", {
+      previousRunId: "previous-run",
+      params: {},
+      force: true,
+      scriptConfirmationToken: firstToken,
+    }) as { errors: Array<{ details: { confirmationToken: string; scripts: Array<{ source: string }> } }> }
+    const changedToken = changed.errors[0]?.details.confirmationToken
+    expect(changedToken).not.toBe(firstToken)
+    expect(changed.errors[0]?.details.scripts).toEqual([
+      expect.objectContaining({ source: "process.stdout.write('unreviewed-v2')" }),
+    ])
+    expect(engine.run).not.toHaveBeenCalled()
+
+    const confirmed = await harness.invoke("synapse:app:workflow:operation:rerun", {
+      previousRunId: "previous-run",
+      params: {},
+      force: true,
+      scriptConfirmationToken: changedToken,
+    })
+
+    expect(confirmed).toEqual({ runId: expect.any(String) })
+    const snapshot = (engine.run.mock.calls[0] as unknown[] | undefined)?.[10] as Map<
+      string,
+      WorkflowDefinition
+    >
+    expect(snapshot.get(historicalRoot.id)?.version).toBe(historicalRoot.version)
+    expect(snapshot.get("child-1")).toMatchObject({
+      version: "child-v2-confirmed",
+      scriptTrust: { source: "imported", confirmed: true },
+    })
+    expect(snapshot.get("child-1")?.nodes[0]?.config.source).toBe("process.stdout.write('unreviewed-v2')")
+  })
+
+  it("routes a redacted script-history fallback through current-definition confirmation", async () => {
+    const historicalDefinition = httpAndScriptWorkflowDefinition("raw-bearer-token", "[redacted]")
+    const currentDefinition = importedNodeWorkflowDefinition(
+      historicalDefinition.id,
+      "process.stdout.write('current-unconfirmed')",
+      historicalDefinition.version,
+    )
+    const packageService = {
+      prepareImportedScriptsForRun: vi.fn(async (
+        definition: WorkflowDefinition,
+        token?: string,
+      ) => token
+        ? { status: "ready" as const, definition, snapshotDefinitions: [definition] }
+        : {
+            status: "confirmation_required" as const,
+            errors: [{
+              type: "script_confirmation_required" as const,
+              message: "需要确认",
+              details: {
+                confirmationToken: "sha256:current-script",
+                scripts: [{
+                  workflowName: definition.name,
+                  nodeName: "Script",
+                  runtime: "Node.js",
+                  source: "process.stdout.write('current-unconfirmed')",
+                }],
+              },
+            }],
+          }),
+    }
+    const engine = { run: vi.fn(async () => undefined) }
+    const workflow = { get: vi.fn(async () => currentDefinition) }
+    const snapshots = {
+      findByRunId: vi.fn(async () => ({
+        runId: "previous-run",
+        workflowId: historicalDefinition.id,
+        version: historicalDefinition.version,
+        status: "completed" as const,
+        startedAt: 1,
+        endedAt: 2,
+        params: {},
+        nodeResults: {},
+        definition: historicalDefinition,
+      })),
+      save: vi.fn(),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return packageService as T
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.event-bus") return { emit: vi.fn() } as T
+      if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
+      if (serviceId === "core.workflow.run-statuses") return new Map<string, WorkflowRunStatus>() as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const first = await harness.invoke("synapse:app:workflow:operation:rerun", {
+      previousRunId: "previous-run",
+      params: {},
+    })
+
+    expect(first).toEqual(expect.objectContaining({
+      errors: [expect.objectContaining({ type: "script_confirmation_required" })],
+    }))
+    expect(packageService.prepareImportedScriptsForRun).toHaveBeenCalledWith(
+      currentDefinition,
+      undefined,
+      { allowHistoricalEntry: false },
+    )
+    expect(engine.run).not.toHaveBeenCalled()
   })
 
   it("blocks workflow delete when the active run does not finish after abort timeout", async () => {
@@ -998,7 +1281,12 @@ describe("workflowIpcModule", () => {
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow") return workflow as T
-      if (serviceId === "core.workflow.package") return { assertDeleteAllowed: vi.fn(async () => false) } as T
+      if (serviceId === "core.workflow.package") {
+        return {
+          ...scriptPreparationService,
+          assertDeleteAllowed: vi.fn(async () => false),
+        } as T
+      }
       if (serviceId === "core.workflow.engine") return engine as T
       if (serviceId === "core.workflow.snapshots") return snapshots as T
       if (serviceId === "core.workflow.window-manager") return windowManager as T
@@ -1052,8 +1340,14 @@ describe("workflowIpcModule", () => {
     const eventBus = { emit: vi.fn() }
     const snapshots = { save: vi.fn(async () => undefined) }
     const engine = { run: vi.fn(async () => undefined) }
+    const workflow = {
+      list: vi.fn(async () => []),
+      get: vi.fn(async () => null),
+    }
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       if (serviceId === "core.workflow.engine") return engine as T
       if (serviceId === "core.workflow.snapshots") return snapshots as T
       if (serviceId === "core.event-bus") return eventBus as T
@@ -1073,6 +1367,9 @@ describe("workflowIpcModule", () => {
       expect.anything(), expect.anything(), undefined,
       "editor-run-definition",
       expect.anything(),
+      undefined,
+      undefined,
+      expect.any(Map),
     )
   })
 
@@ -1909,6 +2206,7 @@ describe("workflowIpcModule", () => {
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       if (serviceId === "core.workflow.engine") return engine as T
       if (serviceId === "core.workflow.snapshots") return { save: vi.fn() } as T
       if (serviceId === "core.event-bus") return { emit: vi.fn() } as T
@@ -2074,6 +2372,7 @@ describe("workflowIpcModule", () => {
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
       if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.package") return scriptPreparationService as T
       if (serviceId === "core.workflow.engine") return engine as T
       if (serviceId === "core.workflow.snapshots") return { save: vi.fn() } as T
       if (serviceId === "core.event-bus") return eventBus as T
@@ -2446,5 +2745,67 @@ function httpAndScriptWorkflowDefinition(bearerToken: string, scriptToken: strin
         },
       },
     ],
+  }
+}
+
+function workflowCallingDefinition(id: string, childId: string): WorkflowDefinition {
+  return {
+    ...workflowDefinition(),
+    id,
+    nodes: [
+      {
+        id: "call",
+        name: "Call child",
+        type: "workflow_call",
+        position: { x: 0, y: 0 },
+        config: {
+          workflowId: childId,
+          variables: [],
+          paramTemplates: {},
+          paramBindings: {},
+        },
+      },
+      {
+        id: "end",
+        name: "End",
+        type: "end",
+        position: { x: 200, y: 0 },
+        config: { outputType: "text", template: "", variables: [] },
+      },
+    ],
+    edges: [{ id: "call-end", from: "call", to: "end" }],
+  }
+}
+
+function importedNodeWorkflowDefinition(id: string, source: string, version: string): WorkflowDefinition {
+  return {
+    ...workflowDefinition(),
+    id,
+    name: id,
+    version,
+    scriptTrust: { source: "imported", confirmed: false },
+    nodes: [
+      {
+        id: "node",
+        name: "Script",
+        type: "nodejs_run",
+        position: { x: 0, y: 0 },
+        config: {
+          source,
+          inputs: [],
+          timeoutSeconds: 60,
+          saveRunContent: true,
+          moduleMode: "commonjs",
+        },
+      },
+      {
+        id: "end",
+        name: "End",
+        type: "end",
+        position: { x: 200, y: 0 },
+        config: { outputType: "text", template: "", variables: [] },
+      },
+    ],
+    edges: [{ id: "node-end", from: "node", to: "end" }],
   }
 }

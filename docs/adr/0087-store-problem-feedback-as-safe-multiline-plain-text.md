@@ -1,0 +1,3 @@
+# Store problem feedback as safe multiline plain text
+
+Problem-feedback `content` is a non-empty string whose leading and trailing whitespace is rejected rather than trimmed. Ordinary Unicode, internal spaces, and LF line breaks are preserved exactly; CR, tabs, NUL and other control characters, Unicode line and paragraph separators, unpaired UTF-16 surrogates, and bidirectional text controls are rejected, and no Unicode normalization is performed. Markdown, HTML, and URL syntax remain inert characters: the administrator surface escapes and displays the body as plain text without parsing, rendering, or activating them.

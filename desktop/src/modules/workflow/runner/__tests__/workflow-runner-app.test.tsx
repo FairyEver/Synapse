@@ -467,9 +467,122 @@ describe("WorkflowRunnerApp", () => {
       await Promise.resolve()
     })
 
-    expect(rerun).toHaveBeenCalledWith("run-1", {}, undefined, "workflow-1")
+    expect(rerun).toHaveBeenCalledWith("run-1", {}, undefined, "workflow-1", undefined)
     expect(new URLSearchParams(window.location.search).get("runId")).toBe("run-2")
     expect(new URLSearchParams(window.location.search).get("workflowId")).toBe("workflow-1")
+  })
+
+  it("requires explicit script confirmation before rerun starts", async () => {
+    let workflowEventHandlers: Parameters<typeof useWorkflowEvents>[1] | undefined
+    vi.mocked(useWorkflowEvents).mockImplementation((_runId, handlers) => {
+      workflowEventHandlers = handlers
+    })
+    const rerun = vi.fn(async (
+      _runId: string,
+      _params: Record<string, unknown>,
+      _force?: boolean,
+      _workflowId?: string,
+      token?: string,
+    ) => token
+      ? { runId: "run-2" }
+      : scriptConfirmationRequired("review-token-1", "process.stdout.write('reviewed')"))
+    installWorkflowBridge({ rerun, runStatus: vi.fn(async () => ({ definition: workflowDefinition(), params: {} })) })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(<WorkflowRunnerApp />)
+      await Promise.resolve()
+    })
+    await act(async () => {
+      workflowEventHandlers?.onCompleted?.({})
+      await Promise.resolve()
+    })
+
+    const rerunButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("重新运行"))
+    await act(async () => {
+      rerunButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(rerun).toHaveBeenCalledTimes(1)
+    expect(new URLSearchParams(window.location.search).get("runId")).toBe("run-1")
+    expect(document.body.textContent).toContain("process.stdout.write('reviewed')")
+
+    const confirmButton = Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("确认并运行"))
+    await act(async () => {
+      confirmButton?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(rerun).toHaveBeenLastCalledWith("run-1", {}, undefined, "workflow-1", "review-token-1")
+    expect(new URLSearchParams(window.location.search).get("runId")).toBe("run-2")
+  })
+
+  it("does not let force rerun bypass script confirmation", async () => {
+    let workflowEventHandlers: Parameters<typeof useWorkflowEvents>[1] | undefined
+    vi.mocked(useWorkflowEvents).mockImplementation((_runId, handlers) => {
+      workflowEventHandlers = handlers
+    })
+    const rerun = vi.fn(async (
+      _runId: string,
+      _params: Record<string, unknown>,
+      force?: boolean,
+      _workflowId?: string,
+      token?: string,
+    ) => {
+      if (!force) return { conflict: true as const, activeRunId: "active-run" }
+      return token
+        ? { runId: "run-forced" }
+        : scriptConfirmationRequired("force-review-token", "process.stdout.write('force-reviewed')")
+    })
+    installWorkflowBridge({ rerun, runStatus: vi.fn(async () => ({ definition: workflowDefinition(), params: {} })) })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(<WorkflowRunnerApp />)
+      await Promise.resolve()
+    })
+    await act(async () => {
+      workflowEventHandlers?.onCompleted?.({})
+      await Promise.resolve()
+    })
+
+    const rerunButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("重新运行"))
+    await act(async () => {
+      rerunButton?.click()
+      await Promise.resolve()
+    })
+    const continueButton = Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("继续重新运行"))
+    await act(async () => {
+      continueButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(rerun).toHaveBeenLastCalledWith("run-1", {}, true, "workflow-1", undefined)
+    expect(new URLSearchParams(window.location.search).get("runId")).toBe("run-1")
+    expect(document.body.textContent).toContain("process.stdout.write('force-reviewed')")
+
+    const confirmButton = Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("确认并运行"))
+    await act(async () => {
+      confirmButton?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(rerun).toHaveBeenLastCalledWith("run-1", {}, true, "workflow-1", "force-review-token")
+    expect(new URLSearchParams(window.location.search).get("runId")).toBe("run-forced")
   })
 
   it("copies the whole workflow run report from the toolbar", async () => {
@@ -582,7 +695,13 @@ function installWorkflowBridge(overrides: {
   readonly openEditor?: (workflowId: string) => Promise<unknown>
   readonly onEvent?: (listener: (event: WorkflowEvent) => void) => () => void
   readonly onRunnerSwitchRun?: (listener: (payload: { runId: string }) => void) => () => void
-  readonly rerun?: (runId: string, params: Record<string, unknown>) => Promise<unknown>
+  readonly rerun?: (
+    runId: string,
+    params: Record<string, unknown>,
+    force?: boolean,
+    workflowId?: string,
+    scriptConfirmationToken?: string,
+  ) => Promise<unknown>
   readonly runStatus?: (runId: string) => Promise<unknown>
 }): void {
   ;(window as unknown as { synapse: { workflow: Record<string, unknown> } }).synapse = {
@@ -608,6 +727,24 @@ function installWorkflowBridge(overrides: {
         openEditor: overrides.openEditor ?? vi.fn(),
       },
     },
+  }
+}
+
+function scriptConfirmationRequired(token: string, source: string) {
+  return {
+    errors: [{
+      type: "script_confirmation_required",
+      message: "需要确认",
+      details: {
+        confirmationToken: token,
+        scripts: [{
+          workflowName: "Workflow",
+          runtime: "Node.js",
+          nodeName: "Script",
+          source,
+        }],
+      },
+    }],
   }
 }
 

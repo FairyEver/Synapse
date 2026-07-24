@@ -4,6 +4,48 @@ import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, 
 import type { NodeRunResult, WorkflowDefinition, WorkflowRunSnapshot } from "../../../../src/types/workflow"
 
 describe("sanitizeNodeResultsForSnapshot", () => {
+  it("preserves script result diagnostics when run content is omitted", () => {
+    const result: NodeRunResult = {
+      nodeId: "script-1",
+      status: "failed",
+      input: { variables: {}, inputs: { secret: "not-retained" } },
+      error: "INVALID_RESULT: Script result is invalid.",
+      errorCode: "INVALID_RESULT",
+      errorReason: "unsupported_value",
+      logs: [{ label: "stdout", value: "not-retained" }],
+    }
+    const definition: WorkflowDefinition = {
+      id: "workflow-1",
+      name: "Script workflow",
+      version: "v1",
+      createdAt: 1,
+      updatedAt: 1,
+      params: [],
+      nodes: [{
+        id: "script-1",
+        name: "JavaScript",
+        type: "javascript_run",
+        position: { x: 0, y: 0 },
+        config: {
+          source: "return undefined",
+          inputs: [],
+          timeoutSeconds: 60,
+          saveRunContent: false,
+        },
+      }],
+      edges: [],
+    }
+
+    const sanitized = sanitizeNodeResultsForSnapshot({ "script-1": result }, definition)
+
+    expect(sanitized["script-1"]).toMatchObject({
+      errorCode: "INVALID_RESULT",
+      errorReason: "unsupported_value",
+    })
+    expect(sanitized["script-1"]?.input).toEqual({ variables: {} })
+    expect(sanitized["script-1"]?.logs).toBeUndefined()
+  })
+
   it("bounds large node outputs without mutating engine results", () => {
     const largeOutput = "中".repeat(40_000)
     const result: NodeRunResult = {
@@ -543,5 +585,124 @@ describe("sanitizeWorkflowRunSnapshot", () => {
     expect(raw).not.toContain("raw-token")
     expect(raw).not.toContain("/Users/liyang/private.txt")
     expect(snapshot.params.apiToken).toBe("sk-raw-secret")
+  })
+
+  it("does not persist System Notifier bodies, bindings, or resolved variable values", () => {
+    const snapshot: WorkflowRunSnapshot = {
+      runId: "run-1",
+      workflowId: "workflow-system-notifier",
+      version: "v1",
+      startedAt: 1,
+      status: "completed",
+      params: {},
+      definition: {
+        id: "workflow-system-notifier",
+        name: "System Notifier workflow",
+        version: "v1",
+        createdAt: 1,
+        updatedAt: 1,
+        params: [],
+        nodes: [
+          {
+            id: "notify-1",
+            name: "系统通知",
+            type: "system_notifier_notification_trigger",
+            position: { x: 0, y: 0 },
+            config: {
+              title: "Safe title",
+              body: "private-body-canary {{secret}}",
+              variables: [{
+                name: "secret",
+                source: { type: "static", value: "resolved-variable-canary" },
+              }],
+            },
+          },
+        ],
+        edges: [],
+      },
+      nodeResults: {
+        "notify-1": {
+          nodeId: "notify-1",
+          status: "success",
+          input: {
+            variables: { secret: "resolved-variable-canary" },
+          },
+          output: "{\"success\":true}",
+          outputs: { success: true },
+        },
+      },
+    }
+
+    const sanitized = sanitizeWorkflowRunSnapshot(snapshot)
+    const raw = JSON.stringify(sanitized)
+
+    expect(sanitized.definition?.nodes[0]?.config).toEqual({
+      title: "Safe title",
+      body: "[redacted]",
+      variables: [],
+    })
+    expect(sanitized.nodeResults["notify-1"]?.input).toEqual({ variables: {} })
+    expect(raw).not.toContain("private-body-canary")
+    expect(raw).not.toContain("resolved-variable-canary")
+  })
+
+  it("does not persist JSON Repair text, bindings, or resolved variable values", () => {
+    const snapshot: WorkflowRunSnapshot = {
+      runId: "run-1",
+      workflowId: "workflow-json-repair",
+      version: "v1",
+      startedAt: 1,
+      status: "completed",
+      params: {},
+      definition: {
+        id: "workflow-json-repair",
+        name: "JSON Repair workflow",
+        version: "v1",
+        createdAt: 1,
+        updatedAt: 1,
+        params: [],
+        nodes: [
+          {
+            id: "repair-1",
+            name: "JSON 修复",
+            type: "json_repair_text_repair",
+            position: { x: 0, y: 0 },
+            config: {
+              text: "private-json-canary {{secret}}",
+              variables: [{
+                name: "secret",
+                source: { type: "static", value: "binding-value-canary" },
+              }],
+            },
+          },
+        ],
+        edges: [],
+      },
+      nodeResults: {
+        "repair-1": {
+          nodeId: "repair-1",
+          status: "success",
+          input: {
+            variables: { secret: "resolved-variable-canary" },
+            prompt: "private-json-canary resolved-variable-canary",
+          },
+          output: "{\"ok\":true}",
+          outputs: { json: "{\"ok\":true}" },
+        },
+      },
+    }
+
+    const sanitized = sanitizeWorkflowRunSnapshot(snapshot)
+    const raw = JSON.stringify(sanitized)
+
+    expect(sanitized.definition?.nodes[0]?.config).toEqual({
+      text: "[redacted]",
+      variables: [],
+    })
+    expect(sanitized.nodeResults["repair-1"]?.input).toEqual({ variables: {} })
+    expect(raw).not.toContain("private-json-canary")
+    expect(raw).not.toContain("binding-value-canary")
+    expect(raw).not.toContain("resolved-variable-canary")
+    expect(raw).toContain("{\\\"ok\\\":true}")
   })
 })

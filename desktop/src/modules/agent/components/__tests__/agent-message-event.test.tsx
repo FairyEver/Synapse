@@ -12,7 +12,7 @@ import {
   wrapLocalReferences,
 } from "../agent-message-event"
 
-const { rendererLogger, shellBridge, track } = vi.hoisted(() => ({
+const { rendererLogger, shellBridge, toastError, track } = vi.hoisted(() => ({
   shellBridge: {
     openExternal: vi.fn(),
   },
@@ -22,12 +22,13 @@ const { rendererLogger, shellBridge, track } = vi.hoisted(() => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+  toastError: vi.fn(),
   track: vi.fn(),
 }))
 
 vi.mock("sonner", () => ({
   toast: {
-    error: vi.fn(),
+    error: toastError,
   },
 }))
 
@@ -40,6 +41,7 @@ vi.mock("@/lib/electron-bridge", () => ({
 }))
 
 vi.mock("@/lib/ui-tracking", () => ({
+  extractLabel: (element: HTMLElement) => element.textContent?.trim(),
   track,
 }))
 
@@ -713,6 +715,348 @@ describe("AgentMessageEvent", () => {
     expect(window.navigator.clipboard.writeText).toHaveBeenCalled()
     expect(rendererLogger.warn).not.toHaveBeenCalled()
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("do-not-log")
+  })
+
+  it("shows the two fixed local-reference actions and keeps the alias selectable", async () => {
+    const openDefault = vi.fn(async () => ({ ok: true as const }))
+    const showInFolder = vi.fn(async () => ({
+      ok: false as const,
+      code: "not_found_or_inaccessible" as const,
+    }))
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-reference-menu",
+            kind: "message",
+            role: "assistant",
+            content: "[打开报告](/tmp/private-report.json:12:3)",
+            timestamp: "2026-07-23T03:15:00.000Z",
+          }}
+          profile={profile}
+          onOpenReference={vi.fn()}
+          referenceActions={{ openDefault, showInFolder }}
+        />,
+      )
+    })
+
+    const link = container.querySelector<HTMLAnchorElement>("a[data-reference]")
+    expect(link?.textContent).toBe("打开报告")
+    expect(link?.className).toContain("select-text")
+
+    await act(async () => {
+      link?.dispatchEvent(new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+      }))
+      await Promise.resolve()
+    })
+
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+    expect(items.map((item) => item.textContent?.trim())).toEqual([
+      "使用默认应用打开",
+      "在文件夹中显示",
+    ])
+    expect(items[0]?.querySelector("svg")?.getAttribute("class")).toContain("lucide-external-link")
+    expect(items[1]?.querySelector("svg")?.getAttribute("class")).toContain("lucide-folder-search")
+
+    await act(async () => {
+      items[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+    expect(openDefault).toHaveBeenCalledWith("/tmp/private-report.json:12:3")
+    expect(toastError).not.toHaveBeenCalled()
+
+    await act(async () => {
+      link?.dispatchEvent(new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+      }))
+      await Promise.resolve()
+      document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')[1]
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+    expect(showInFolder).toHaveBeenCalledWith("/tmp/private-report.json:12:3")
+    expect(toastError).toHaveBeenCalledWith("在文件夹中显示失败")
+    expect(track).toHaveBeenCalledWith(expect.objectContaining({
+      name: "agent-reference-show-in-folder",
+      action: "complete",
+      metadata: expect.objectContaining({
+        operation: "show_in_folder",
+        messageId: "message-reference-menu",
+        result: "not_found_or_inaccessible",
+      }),
+    }))
+    expect(JSON.stringify(track.mock.calls)).not.toContain("/tmp/private-report.json")
+  })
+
+  it("keeps completed local-reference text selectable and preserves Enter and left-click opening", async () => {
+    const onOpenReference = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-reference-selection",
+            kind: "message",
+            role: "assistant",
+            content: "[报告别名](/tmp/report.json)",
+            timestamp: "2026-07-23T03:15:00.000Z",
+          }}
+          profile={profile}
+          onOpenReference={onOpenReference}
+        />,
+      )
+    })
+
+    const link = container.querySelector<HTMLAnchorElement>("a[data-reference]")
+    const range = document.createRange()
+    range.selectNodeContents(link as Node)
+    window.getSelection()?.removeAllRanges()
+    window.getSelection()?.addRange(range)
+    const copyEvent = new Event("copy", { bubbles: true, cancelable: true })
+    link?.dispatchEvent(copyEvent)
+    const enterEvent = new KeyboardEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      bubbles: true,
+      cancelable: true,
+    })
+    link?.dispatchEvent(enterEvent)
+
+    expect(window.getSelection()?.toString()).toBe("报告别名")
+    expect(copyEvent.defaultPrevented).toBe(false)
+    expect(enterEvent.defaultPrevented).toBe(false)
+
+    await act(async () => {
+      link?.dispatchEvent(new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      }))
+    })
+    expect(onOpenReference).toHaveBeenCalledWith("/tmp/report.json")
+  })
+
+  it("folds an IPC rejection into the generic Toast and ipc_failure telemetry", async () => {
+    const privatePath = "/tmp/private-report.json"
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-reference-ipc-failure",
+            kind: "message",
+            role: "assistant",
+            content: privatePath,
+            timestamp: "2026-07-23T03:15:00.000Z",
+          }}
+          profile={profile}
+          onOpenReference={vi.fn()}
+          referenceActions={{
+            openDefault: vi.fn(async () => {
+              throw new Error(`native failure for ${privatePath}`)
+            }),
+            showInFolder: vi.fn(),
+          }}
+        />,
+      )
+    })
+
+    const link = container.querySelector<HTMLAnchorElement>("a[data-reference]")
+    await act(async () => {
+      link?.dispatchEvent(new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+      }))
+      await Promise.resolve()
+      document.body.querySelector<HTMLElement>('[role="menuitem"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+
+    expect(toastError).toHaveBeenCalledWith("打开失败")
+    expect(track).toHaveBeenCalledWith(expect.objectContaining({
+      name: "agent-reference-open-default",
+      metadata: expect.objectContaining({ result: "ipc_failure" }),
+    }))
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain(privatePath)
+    expect(JSON.stringify(track.mock.calls)).not.toContain(privatePath)
+  })
+
+  it("opens the same completed-reference menu with Shift+F10", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-reference-keyboard",
+            kind: "message",
+            role: "assistant",
+            content: "/tmp/report.json",
+            timestamp: "2026-07-23T03:15:00.000Z",
+          }}
+          profile={profile}
+          onOpenReference={vi.fn()}
+        />,
+      )
+    })
+
+    const link = container.querySelector<HTMLAnchorElement>("a[data-reference]")
+    link?.focus()
+    await act(async () => {
+      link?.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "F10",
+        code: "F10",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }))
+      await Promise.resolve()
+    })
+
+    expect(Array.from(document.body.querySelectorAll('[role="menuitem"]')).map((item) => item.textContent?.trim()))
+      .toEqual(["使用默认应用打开", "在文件夹中显示"])
+  })
+
+  it("opens the same completed-reference menu with the Context Menu key", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-reference-context-menu-key",
+            kind: "message",
+            role: "assistant",
+            content: "/tmp/report.json",
+            timestamp: "2026-07-23T03:15:00.000Z",
+          }}
+          profile={profile}
+          onOpenReference={vi.fn()}
+        />,
+      )
+    })
+
+    const link = container.querySelector<HTMLAnchorElement>("a[data-reference]")
+    link?.focus()
+    await act(async () => {
+      link?.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "ContextMenu",
+        code: "ContextMenu",
+        bubbles: true,
+        cancelable: true,
+      }))
+      await Promise.resolve()
+    })
+
+    expect(Array.from(document.body.querySelectorAll('[role="menuitem"]')).map((item) => item.textContent?.trim()))
+      .toEqual(["使用默认应用打开", "在文件夹中显示"])
+  })
+
+  it.each(["user", "system", "tool"] as const)(
+    "does not enable local-reference actions for %s messages",
+    async (role) => {
+      const openDefault = vi.fn(async () => ({ ok: true as const }))
+      const showInFolder = vi.fn(async () => ({ ok: true as const }))
+      const container = document.createElement("div")
+      document.body.appendChild(container)
+      const root = createRoot(container)
+      roots.push(root)
+
+      await act(async () => {
+        root.render(
+          <AgentMessageEvent
+            item={{
+              id: `message-reference-${role}`,
+              kind: "message",
+              role,
+              content: "/tmp/report.json",
+              timestamp: "2026-07-23T03:15:00.000Z",
+            }}
+            profile={profile}
+            onOpenReference={vi.fn()}
+            referenceActions={{
+              openDefault,
+              showInFolder,
+            }}
+          />,
+        )
+      })
+
+      const link = container.querySelector<HTMLAnchorElement>("a[data-reference]")
+      const event = new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+      })
+      await act(async () => {
+        link?.dispatchEvent(event)
+        await Promise.resolve()
+      })
+
+      expect(document.body.querySelector('[role="menuitem"]')).toBeNull()
+      expect(openDefault).not.toHaveBeenCalled()
+      expect(showInFolder).not.toHaveBeenCalled()
+    },
+  )
+
+  it("suppresses the native local-link menu while the assistant message is streaming", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-reference-streaming",
+            kind: "message",
+            role: "assistant",
+            content: "/tmp/report.json",
+            timestamp: "2026-07-23T03:15:00.000Z",
+            streaming: true,
+          }}
+          profile={profile}
+          onOpenReference={vi.fn()}
+        />,
+      )
+    })
+
+    const event = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+    })
+    container.querySelector<HTMLAnchorElement>("a[data-reference]")?.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(document.body.querySelector('[role="menuitem"]')).toBeNull()
   })
 
   it("renders an Agent usage card for assistant messages with usage metadata", async () => {

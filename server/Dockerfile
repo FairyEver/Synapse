@@ -4,6 +4,7 @@ WORKDIR /app
 
 FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY patches/ patches/
 COPY shared/package.json shared/package.json
 COPY server/package.json server/package.json
 COPY dashboard/package.json dashboard/package.json

@@ -6,9 +6,12 @@ import {
 import { DOCUMENT_TEMPLATE_CAPABILITY_ID } from "./document-template/shared/capability"
 import { SECRETS_CAPABILITY_IDS } from "./secrets/shared/capability"
 import { SOUND_NOTIFIER_PLAY_CAPABILITY_ID } from "./sound-notifier/shared/capability"
+import { SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID } from "./system-notifier/shared/capability"
 import { FILE_OPENER_CAPABILITY_ID } from "./file-opener/shared/capability"
 import { TEXT_FILE_WRITER_CAPABILITY_ID } from "./text-file-writer/shared/capability"
 import { HTML_GENERATOR_CAPABILITY_IDS } from "./html-generator/shared/capability"
+import { PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID } from "./problem-feedback/shared/capability"
+import { JSON_REPAIR_CAPABILITY_ID } from "./json-repair/shared/capability"
 
 type AppCapabilitySubDispatcher = {
   dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult>
@@ -24,9 +27,12 @@ export function createAppCapabilityDispatcher(deps: {
   readonly documentTemplate: AppCapabilitySubDispatcher
   readonly secrets?: AppCapabilitySubDispatcher
   readonly soundNotifier: AppCapabilitySubDispatcher
+  readonly systemNotifier: AppCapabilitySubDispatcher
   readonly fileOpener: AppCapabilitySubDispatcher
   readonly textFileWriter: AppCapabilitySubDispatcher
   readonly htmlGenerator: AppCapabilitySubDispatcher
+  readonly problemFeedback: AppCapabilitySubDispatcher
+  readonly jsonRepair: AppCapabilitySubDispatcher
 }): AppCapabilityDispatcher {
   return {
     async dispatch(action, params, context) {
@@ -42,6 +48,9 @@ export function createAppCapabilityDispatcher(deps: {
       if (action === SOUND_NOTIFIER_PLAY_CAPABILITY_ID) {
         return deps.soundNotifier.dispatch(action, params, context)
       }
+      if (action === SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID) {
+        return deps.systemNotifier.dispatch(action, params, context)
+      }
       if (action === FILE_OPENER_CAPABILITY_ID) {
         return deps.fileOpener.dispatch(action, params, context)
       }
@@ -50,6 +59,12 @@ export function createAppCapabilityDispatcher(deps: {
       }
       if (htmlGeneratorCapabilityIds.has(action)) {
         return deps.htmlGenerator.dispatch(action, params, context)
+      }
+      if (action === PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID) {
+        return deps.problemFeedback.dispatch(action, params, context)
+      }
+      if (action === JSON_REPAIR_CAPABILITY_ID) {
+        return deps.jsonRepair.dispatch(action, params, context)
       }
       if (deps.secrets && secretsCapabilityIds.has(action)) {
         return deps.secrets.dispatch(action, params, context)

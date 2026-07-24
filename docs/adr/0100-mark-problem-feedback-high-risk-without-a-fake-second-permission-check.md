@@ -1,0 +1,3 @@
+# Mark problem feedback high-risk without a fake second permission check
+
+The problem-feedback capability remains `risk: "high"` so an MCP host can apply its own approval policy, but the core service does not call the internal `PermissionGuard` or write the local `AuditSink`: the current guard cannot prove that the user confirmed the exact conversation draft and would create a misleading second-confirmation claim plus prohibited per-request audit data. The built-in Synapse Skill owns explicit per-attempt confirmation, and the tool accepts no forgeable `confirmed` flag, confirmation token, or body hash. Its dispatcher accepts only trusted `mcp-http` and `mcp-stdio` contexts; Workflow, IPC, Deep Link, and other origins are rejected before service execution.

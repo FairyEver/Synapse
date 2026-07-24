@@ -9,9 +9,6 @@ export const ruleInstallerAppDefinition = {
   windowTitle: "Rule 安装器",
   dock: { pinnedByDefault: false, order: 281 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_rule_installer",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

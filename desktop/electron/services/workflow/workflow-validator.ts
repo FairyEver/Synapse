@@ -1,6 +1,12 @@
 import type { WorkflowDefinition, WorkflowParam, WorkflowParamBinding, ValidationResult, ValidationError, ValidationWarning } from "../../../src/types/workflow"
 import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../config"
 import type { SynapseConfig } from "../../../src/types/config"
+import { SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/system-notifier/shared/capability"
+import { JSON_REPAIR_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/json-repair/shared/capability"
+import {
+  JAVASCRIPT_RUN_WORKFLOW_NODE_TYPE,
+  NODEJS_RUN_WORKFLOW_NODE_TYPE,
+} from "../../../app-capabilities/script-runtime/shared/capability"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { createMainLogger } from "../log-store"
 import { computeEndReachable } from "./workflow-utils"
@@ -156,6 +162,11 @@ function collectTemplateTexts(node: WorkflowDefinition["nodes"][number]): string
     }
   } else if (node.type === "file_opener_file_open") {
     pushString(cfg.path)
+  } else if (node.type === SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE) {
+    pushString(cfg.title)
+    pushString(cfg.body)
+  } else if (node.type === JSON_REPAIR_WORKFLOW_NODE_TYPE) {
+    pushString(cfg.text)
   }
 
   return texts
@@ -349,6 +360,22 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
         seenVar.add(vname)
       }
     }
+    const scriptInputs = (
+      node.type === JAVASCRIPT_RUN_WORKFLOW_NODE_TYPE
+      || node.type === NODEJS_RUN_WORKFLOW_NODE_TYPE
+    ) && Array.isArray((node.config as Record<string, unknown>).inputs)
+      ? (node.config as Record<string, unknown>).inputs as Array<Record<string, unknown>>
+      : []
+    if (scriptInputs.length > 0) {
+      const names = new Set<string>()
+      for (const binding of scriptInputs) {
+        const name = binding.name
+        if (typeof name === "string" && names.has(name)) {
+          errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」存在重复的输入名称「${name}」` })
+        }
+        if (typeof name === "string") names.add(name)
+      }
+    }
 
     if (node.type === "workflow_call") {
       const cfg = node.config as Record<string, unknown>
@@ -519,6 +546,36 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
           const missingParamName = (src["param"] as string) ?? "未知"
           errors.push({ type: "invalid_config", nodeId: node.id, message: `节点 "${node.name}" 引用了不存在的工作流参数 "${missingParamName}"` })
           logger.warn("variable references non-existent param", { workflowId: def.id, nodeId: node.id, nodeName: node.name, missingParam: missingParamName })
+        }
+      }
+      for (const binding of scriptInputs) {
+        const src = binding.source as Record<string, unknown> | undefined
+        if ((src?.type === "node_output" || src?.type === "node_value") && !anc.has(src.node as string)) {
+          errors.push({
+            type: "unreachable_reference",
+            nodeId: node.id,
+            message: `节点 "${node.name}" 引用了不可达上游节点 "${byId.get(src.node as string)?.name ?? src.node}"`,
+          })
+        }
+        if (src?.type === "param" && !def.params.some((param) => param.name === src.param)) {
+          errors.push({
+            type: "invalid_config",
+            nodeId: node.id,
+            message: `节点 "${node.name}" 引用了不存在的工作流参数 "${String(src.param ?? "未知")}"`,
+          })
+        }
+        if (src?.type === "node_value") {
+          const sourceNode = byId.get(src.node as string)
+          if (sourceNode) {
+            const publicOutputs = nodeTypeRegistry.getManifest(sourceNode.type).publicOutputs ?? []
+            if (!publicOutputs.includes(src.output as string)) {
+              errors.push({
+                type: "invalid_config",
+                nodeId: node.id,
+                message: `节点 "${sourceNode.name}" 未声明公共输出 "${String(src.output)}"`,
+              })
+            }
+          }
         }
       }
 

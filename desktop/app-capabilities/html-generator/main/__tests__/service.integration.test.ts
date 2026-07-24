@@ -13,6 +13,14 @@ afterEach(async () => {
 })
 
 describe("HTML Generator real Worker", () => {
+  it("renders without loading main-process validation dependencies", async () => {
+    const { service } = createService(undefined, "zod")
+    await expect(service.generate({
+      template: "<h1><%= data.title %></h1>",
+      data: { title: "packaged worker" },
+    })).resolves.toMatchObject({ html: "<h1>packaged worker</h1>" })
+  })
+
   it("renders standard escaped/raw EJS tags against the explicit data root", async () => {
     const { service } = createService()
     await expect(service.generate({
@@ -90,7 +98,10 @@ describe("HTML Generator real Worker", () => {
   }, 10_000)
 })
 
-function createService(logger?: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> }) {
+function createService(
+  logger?: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> },
+  blockedWorkerModule?: string,
+) {
   const permissionGuard = { check: vi.fn(async () => ({ allowed: true as const })) }
   const auditSink = { record: vi.fn() }
   const service = new HtmlGenerationService({
@@ -100,7 +111,20 @@ function createService(logger?: { info: ReturnType<typeof vi.fn>; warn: ReturnTy
     workerBaseDir: path.resolve("app-capabilities/html-generator/main"),
     workerFactory(filename, options) {
       const apiPath = resolveTsxCjsApi()
-      const bootstrap = `require(${JSON.stringify(apiPath)}).require(${JSON.stringify(filename)}, __filename)`
+      const blockModule = blockedWorkerModule
+        ? [
+            'const Module = require("node:module")',
+            "const originalLoad = Module._load",
+            "Module._load = function(request, parent, isMain) {",
+            `  if (request === ${JSON.stringify(blockedWorkerModule)}) throw new Error("blocked Worker module")`,
+            "  return originalLoad.call(this, request, parent, isMain)",
+            "}",
+          ].join("\n")
+        : ""
+      const bootstrap = [
+        blockModule,
+        `require(${JSON.stringify(apiPath)}).require(${JSON.stringify(filename)}, __filename)`,
+      ].filter(Boolean).join("\n")
       return new Worker(bootstrap, { ...options, eval: true })
     },
   })

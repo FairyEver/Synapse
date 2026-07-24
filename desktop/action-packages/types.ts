@@ -8,6 +8,8 @@ export type ActionRunResult = {
   readonly logs?: readonly ActionRunLog[]
   readonly outputs?: Record<string, unknown>
   readonly error?: string
+  readonly errorCode?: string
+  readonly errorReason?: string
   readonly metrics?: ActionRunMetrics
   readonly usage?: Record<string, unknown>
   readonly costUsd?: number
@@ -64,10 +66,21 @@ export type ActionConfigFieldDescriptor = {
   readonly defaultValue?: unknown
 }
 
+export type ActionAutomationPolicy = {
+  readonly initiallyDisabled?: boolean
+  readonly disableOnExecutionChange?: boolean
+  readonly nonExecutionConfigFields?: readonly string[]
+  readonly runContentPersistenceConfigField?: string
+}
+
 export type ActionManifest<TConfig extends ActionConfig = ActionConfig> = {
   readonly id: string
   readonly title: string
   readonly permissions: readonly ActionPermissionName[]
+  readonly authorization?: "permission_guard" | "none"
+  readonly previousOutputs?: "last_success" | "none"
+  readonly resultPersistence?: "sanitized" | "raw"
+  readonly automationPolicy?: ActionAutomationPolicy
   readonly defaultConfig: TConfig
   readonly configSchema: z.ZodType<TConfig>
   readonly validateStoredConfig?: (config: ActionConfig) => ActionStoredConfigValidation

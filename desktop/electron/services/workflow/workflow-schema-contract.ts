@@ -11,6 +11,7 @@ export const WORKFLOW_DOCUMENT_SCHEMA_CONTRACT = {
     defaultProviderId: "optional-string",
     defaultModelTier: "optional-enum:default|haiku|sonnet|opus",
     defaultNodeTimeoutMins: "optional-positive-integer",
+    scriptTrust: "optional-imported-script-confirmation",
   },
   param: {
     name: "required-string",

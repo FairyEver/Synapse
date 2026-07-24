@@ -9,7 +9,6 @@ export const textFileWriterAppDefinition = {
   windowTitle: "文本写入文件",
   dock: { pinnedByDefault: false, order: 241 },
   window: { openable: true },
-  capabilities: { primaryMcpPrefix: "app_text_file_writer" },
   removable: false,
   renameable: false,
   iconEditable: false,

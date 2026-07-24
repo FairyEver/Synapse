@@ -200,6 +200,45 @@ describe("workflowCallNodeExecutor", () => {
     expect(result.error).toBe("子工作流不存在")
   })
 
+  it("runs the reviewed child revision from the run snapshot without reading current storage", async () => {
+    const runtimeDeps = deps()
+    const reviewedChild = {
+      ...childDefinition,
+      version: "reviewed-v1",
+      name: "已审阅子工作流",
+    }
+    const definitionSnapshot = new Map([
+      ["parent-1", { ...childDefinition, id: "parent-1", name: "父工作流" }],
+      [reviewedChild.id, reviewedChild],
+    ])
+    const input = makeInput({}, runtimeDeps)
+    input.workflowDefinitionSnapshot = definitionSnapshot
+
+    const result = await workflowCallNodeExecutor.execute(input)
+
+    expect(result.status).toBe("success")
+    expect(runtimeDeps.workflowCall?.getWorkflowDefinition).not.toHaveBeenCalled()
+    expect(runtimeDeps.workflowCall?.runWorkflow).toHaveBeenCalledWith(expect.objectContaining({
+      definition: reviewedChild,
+      definitionSnapshot,
+    }))
+  })
+
+  it("does not fall back to a child that appeared after snapshot collection", async () => {
+    const runtimeDeps = deps()
+    const input = makeInput({}, runtimeDeps)
+    input.workflowDefinitionSnapshot = new Map([
+      ["parent-1", { ...childDefinition, id: "parent-1", name: "父工作流" }],
+    ])
+
+    const result = await workflowCallNodeExecutor.execute(input)
+
+    expect(result.status).toBe("failed")
+    expect(result.error).toBe("子工作流不存在")
+    expect(runtimeDeps.workflowCall?.getWorkflowDefinition).not.toHaveBeenCalled()
+    expect(runtimeDeps.workflowCall?.runWorkflow).not.toHaveBeenCalled()
+  })
+
   it("fails on indirect recursion", async () => {
     const runtimeDeps = deps()
     const result = await workflowCallNodeExecutor.execute(makeInput({}, {

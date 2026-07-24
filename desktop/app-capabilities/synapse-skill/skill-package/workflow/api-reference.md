@@ -12,7 +12,7 @@ Workflow definition responses include `meta.schemaVersion` (SemVer). Preserve it
 
 ### app_workflow_node_type_list
 
-List available node types with summaries. Current built-in node types include `text`, `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `text_extract`, `file_opener_file_open`, `text_file_writer_file_write`, `html_generator_ejs_generate`, `html_generator_ejs_file_generate`, `codex`, `claude_code`, and `end`.
+List available node types with summaries. Current built-in node types include `text`, `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `text_extract`, `file_opener_file_open`, `text_file_writer_file_write`, `html_generator_ejs_generate`, `html_generator_ejs_file_generate`, `json_repair_text_repair`, `system_notifier_notification_trigger`, `javascript_run`, `nodejs_run`, `codex`, `claude_code`, and `end`.
 
 **Params:** none
 **Returns:** `[{ type, title, subtitle, color }]`
@@ -159,6 +159,51 @@ Executes the same trusted EJS template and writes its result through the shared 
 
 `data` is parsed only for EJS and cannot be referenced as `{{data}}` in `outputPath`. The node always writes UTF-8. Its primary output is the canonical actual path and structured outputs are `{ path, fileName, format, encoding, size, overwritten }`. Render errors use the HTML Generator protocol; file errors preserve Text File Writer codes.
 
+### json_repair_text_repair
+
+Repairs one interpolated string into complete validated JSON text. No provider or project is needed. Config fields:
+
+- `text` (string) — non-empty template with optional `{{variable}}` or `{{$variable}}` placeholders
+- `variables` (array) — explicit bindings used by the template
+
+After interpolation, the shared validator requires a non-blank, well-formed string no larger than 128 KiB as UTF-8. The node uses the same best-effort repair pipeline, 1 MiB result limit, nesting limit, finite-number check, and stable errors as the direct App capability. Its primary output is the exact repaired JSON text and structured output is `{ json }`. The result remains untrusted and is not sanitized or checked against a Schema.
+
+### system_notifier_notification_trigger
+
+Triggers one native system notification with fire-and-forget semantics. No provider or project is needed. Config fields:
+
+- `title` (string) — non-empty title template with optional `{{variable}}` or `{{$variable}}` placeholders
+- `body` (string) — non-empty body template using the same variable bindings
+- `variables` (array) — explicit bindings shared by both templates
+
+After interpolation, the title and body must be single-line strings with no leading or trailing whitespace and are limited to 64 and 256 Unicode code points respectively. Binding, interpolation, or input validation failure occurs before notification acceptance and fails the node. Accepted execution returns primary output `{"success":true}` and structured outputs `{ success: true }`; this never proves delivery or display and must not be used to trigger retries.
+
+### javascript_run
+
+Runs `source` once as an ordinary classic JavaScript file in a disposable Chromium Dedicated Worker. No provider or project is needed.
+
+- `source` (string, at most 1 MiB) — complete script-file source
+- `inputs` (array) — named strict-JSON bindings from `static_json`, Workflow `param`, legacy string `node_output`, structured `node_value`, or `secret`
+- `timeoutSeconds` (integer, 1-900, default 60)
+- `saveRunContent` (boolean, default true) — controls persistence of script input, result, and logs
+
+The Worker receives the assembled input object as its first message. Its first strict-JSON `postMessage` value becomes `outputs.result`; later messages are ignored and console output is logging. The node has no DOM, Node.js, Electron, or local-file API, but standard JavaScript and the Worker's natural network and dynamic-code behavior remain available. Timeout, cancellation, output limits, and the disposable Worker protect application stability and are not an API or network sandbox.
+
+### nodejs_run
+
+Runs `source` once as an ordinary Node.js file through Electron's Node CLI mode. No provider is needed.
+
+- `source` (string, at most 1 MiB) — complete script-file source
+- `inputs` (array) — same named strict-JSON binding forms as `javascript_run`
+- `moduleMode` (`"commonjs"` or `"esm"`, default `"commonjs"`)
+- `workingDirectory?` (string) — explicit cwd; otherwise uses the workflow project workspace when available, then Synapse's default working directory
+- `timeoutSeconds` (integer, 1-900, default 60)
+- `saveRunContent` (boolean, default true)
+
+The script reads the assembled input object from stdin. Success requires exit code `0` and stdout containing exactly one strict-UTF-8, strict-JSON document with only optional surrounding JSON whitespace; that value becomes `outputs.result`. stderr is logging and stdout is reserved for the result. CommonJS, ESM, relative modules, local `node_modules`, environment, filesystem, network, subprocess, dynamic code, and WebAssembly follow the native Node runtime; Synapse does not install dependencies or add package, module, path, API, network, filesystem, or Secret allowlists.
+
+Both script nodes expose only `outputs.result`; object keys do not become dynamic ports. `saveRunContent: false` changes history persistence, not the live value available to downstream nodes. Local execution and local Automation enablement are the authorization acts. Imported Workflows use one first-run whole-script confirmation for potentially executable scripts, without `NetworkGrant`, `FilesystemGrant`, or per-resource checks. These capabilities declare Workflow and Automation surfaces only: there is no direct `app_javascript_*` or `app_nodejs_*` MCP tool, System App, launcher entry, or Deep Link.
+
 ### codex
 
 Runs local `codex exec` in an execution project. No Synapse provider needed; do not set `providerId` or `modelTier`.
@@ -283,7 +328,7 @@ Validate a workflow definition without saving.
 
 **Params:** `definition` (object, required) — full WorkflowDefinition including the complete Synapse-managed `meta` object with `meta.schemaVersion`
 **Returns:** `{ valid, errors, warnings }`
-**Notes:** Inspection rejects missing schema metadata before graph validation, then applies the same schema migration gate as save. Supported legacy definitions are migrated in memory before validation; future or failed schemas return `valid: false` with an `invalid_config` error and must not be interpreted or edited. It applies the same definition and local multi-resource default checks as save, including filesystem type, accessibility, and canonical-path uniqueness. Validation errors may include `nodeId`, `nodeName`, `field`, `retryable`, and `details` such as `missingField`, `providerId`, `modelTier`, `projectId`, and `timeoutMs`.
+**Notes:** Inspection rejects missing schema metadata before graph validation, then applies the same schema migration gate as save. Supported legacy definitions are migrated in memory before validation; future or failed schemas return `valid: false` with an `invalid_config` error and must not be interpreted or edited. It applies the same definition and local multi-resource default checks as save, including filesystem type, accessibility, and canonical-path uniqueness. Validation errors may include `nodeId`, `nodeName`, `field`, `retryable`, and `details` such as `missingField`, `providerId`, `modelTier`, `projectId`, and `timeoutMs`. Inspection does not execute nodes, validate future upstream output contents, render EJS with runtime data, or prove runtime permissions and side effects.
 
 ### app_workflow_run_get
 
@@ -322,7 +367,7 @@ Replace a full workflow definition. Validates before saving.
 
 **Params:** `definition` (object, required) — must include `id` and the complete Synapse-managed `meta` object with `meta.schemaVersion`
 **Returns:** `{ versionHash }`
-**Notes:** Config is replaced entirely, not merged. Include `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` to set workflow-level defaults.
+**Notes:** Config is replaced entirely, not merged. Include `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` to set workflow-level defaults. The tool has no expected-version parameter. For an existing Workflow, record the fetched `version`, inspect the complete candidate, then refetch immediately before saving and rebuild from the latest definition if the version changed. After saving, refetch and inspect the persisted definition.
 
 ### app_workflow_definition_delete
 

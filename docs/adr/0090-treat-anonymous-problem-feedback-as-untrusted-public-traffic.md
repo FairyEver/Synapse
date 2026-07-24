@@ -1,0 +1,3 @@
+# Treat anonymous problem feedback as untrusted public traffic
+
+The supported V1 product path is the built-in Synapse Skill through the dedicated MCP capability and desktop implementation, but the anonymous server endpoint treats every request as untrusted public traffic and does not claim that direct requests can be prevented. V1 adds no client attestation, device registration, extractable shared secret, or cosmetic request signature, and it does not persist device identity to infer official-client origin. Safety instead relies on bounded request bodies, complete server-side validation, rate limiting, and separately operated perimeter controls.

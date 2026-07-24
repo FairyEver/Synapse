@@ -8,6 +8,41 @@ import { RunSnapshotService } from "../run-snapshot-service"
 import { WORKFLOW_SCHEMA_VERSION } from "../workflow-document-migration"
 
 describe("RunSnapshotService", () => {
+  it("persists and reloads structured script result diagnostics", async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), "synapse-run-snapshots-"))
+    const service = new RunSnapshotService(dataDir)
+    const value = snapshot("run-invalid-result", 1)
+    value.status = "failed"
+    value.nodeResults["script-1"] = {
+      nodeId: "script-1",
+      status: "failed",
+      input: { variables: {} },
+      error: "INVALID_RESULT: Node.js stdout is not valid JSON.",
+      errorCode: "INVALID_RESULT",
+      errorReason: "invalid_json",
+    }
+
+    try {
+      await service.save(value)
+
+      const loaded = await service.get("run-invalid-result", "workflow-1")
+      const listed = await service.list("workflow-1")
+      const raw = JSON.parse(await readFile(
+        path.join(dataDir, "workflow-runs", "workflow-1", "run-invalid-result.json"),
+        "utf-8",
+      )) as WorkflowRunSnapshot
+
+      for (const persisted of [loaded, listed[0], raw]) {
+        expect(persisted?.nodeResults["script-1"]).toMatchObject({
+          errorCode: "INVALID_RESULT",
+          errorReason: "invalid_json",
+        })
+      }
+    } finally {
+      await rm(dataDir, { recursive: true, force: true })
+    }
+  })
+
   it("prunes debug artifact directories with stale run snapshots", async () => {
     const dataDir = await mkdtemp(path.join(os.tmpdir(), "synapse-run-snapshots-"))
     const service = new RunSnapshotService(dataDir)

@@ -26,7 +26,7 @@ import type { DriveMarkdownImageSourceContext } from './drive-markdown-image-sou
 import { DriveMarkdownRenderer } from './markdown-renderer'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
 
-const READING_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-4xl px-4 md:px-6'
+const READING_CONTAINER_CLASSNAME = 'mx-auto h-full w-full max-w-4xl px-4 md:px-6'
 const MEDIA_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-6xl px-4 md:px-6'
 const FULL_CONTAINER_CLASSNAME = 'h-full min-h-0 w-full'
 const DRIVE_EDIT_UNAVAILABLE_LABELS: Record<DriveBrowserEditUnavailableReason, string> = {

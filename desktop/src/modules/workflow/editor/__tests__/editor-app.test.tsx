@@ -388,6 +388,205 @@ describe("WorkflowEditorApp", () => {
     expect(toastError).toHaveBeenCalledWith(validationMessage)
   })
 
+  it("retries an imported script run once after explicit confirmation", async () => {
+    const save = vi.fn().mockResolvedValue({ versionHash: "v2" })
+    const runDefinition = vi.fn()
+      .mockResolvedValueOnce({
+        errors: [{
+          type: "script_confirmation_required",
+          message: "confirm scripts",
+          details: {
+            confirmationToken: "review-v1",
+            scripts: [
+              {
+                workflowName: "Parent",
+                runtime: "JavaScript",
+                nodeName: "Browser",
+                source: "postMessage(null)",
+              },
+              {
+                workflowName: "Child",
+                runtime: "Node.js",
+                nodeName: "Node",
+                source: "process.stdout.write('null')",
+              },
+            ],
+          },
+        }],
+      })
+      .mockResolvedValueOnce({
+        runId: "run-1",
+        definition: {
+          ...definition(),
+          version: "v3-confirmed",
+          scriptTrust: { source: "imported", confirmed: true },
+        },
+      })
+    const workflowApi = createWorkflowApi({
+      get: vi.fn().mockResolvedValue(definition()),
+      openRunner: vi.fn().mockResolvedValue(undefined),
+      runDefinition,
+      save,
+      onEditorRefocus: vi.fn(() => vi.fn()),
+      onDefinitionUpdated: vi.fn(() => vi.fn()),
+    })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: { workflow: workflowApi },
+    })
+    window.history.replaceState({}, "", "/?workflowId=workflow-1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowEditorApp />)
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText("Run workflow").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("Parent")
+    expect(document.body.textContent).toContain("Child")
+    await act(async () => {
+      buttonByText("确认并运行").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(runDefinition).toHaveBeenCalledTimes(2)
+    expect(runDefinition.mock.calls[1]?.slice(2)).toEqual([false, "review-v1"])
+    expect(workflowApi.operation.openRunner).toHaveBeenCalledWith("workflow-1", "run-1")
+
+    await act(async () => {
+      buttonByText("Change workflow").click()
+      buttonByText("Run workflow").click()
+      await Promise.resolve()
+    })
+    expect(save.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({
+      version: "v3-confirmed",
+      scriptTrust: { source: "imported", confirmed: true },
+    }))
+  })
+
+  it("keeps a local entry local when only an imported child is confirmed", async () => {
+    const authoritativeLocal = { ...definition(), version: "v3-child-confirmed" }
+    const save = vi.fn().mockResolvedValue({ versionHash: "v2" })
+    const runDefinition = vi.fn()
+      .mockResolvedValueOnce({
+        errors: [{
+          type: "script_confirmation_required",
+          message: "confirm child",
+          details: {
+            confirmationToken: "child-review",
+            scripts: [{
+              workflowName: "Child",
+              runtime: "Node.js",
+              nodeName: "Node",
+              source: "process.stdout.write('null')",
+            }],
+          },
+        }],
+      })
+      .mockResolvedValueOnce({ runId: "run-child", definition: authoritativeLocal })
+    const workflowApi = createWorkflowApi({
+      get: vi.fn().mockResolvedValue(definition()),
+      openRunner: vi.fn().mockResolvedValue(undefined),
+      runDefinition,
+      save,
+      onEditorRefocus: vi.fn(() => vi.fn()),
+      onDefinitionUpdated: vi.fn(() => vi.fn()),
+    })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: { workflow: workflowApi },
+    })
+    window.history.replaceState({}, "", "/?workflowId=workflow-1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowEditorApp />)
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText("Run workflow").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText("确认并运行").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText("Change workflow").click()
+      buttonByText("Run workflow").click()
+      await Promise.resolve()
+    })
+
+    expect(save.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({
+      version: "v3-child-confirmed",
+    }))
+    expect(save.mock.calls.at(-1)?.[0]).not.toHaveProperty("scriptTrust")
+  })
+
+  it("does not confirm or retry an imported script run after cancellation", async () => {
+    const runDefinition = vi.fn().mockResolvedValue({
+      errors: [{
+        type: "script_confirmation_required",
+        message: "confirm scripts",
+        details: {
+          confirmationToken: "review-v1",
+          scripts: [{
+            workflowName: "Parent",
+            runtime: "Node.js",
+            nodeName: "Node",
+            source: "process.stdout.write('null')",
+          }],
+        },
+      }],
+    })
+    const workflowApi = createWorkflowApi({
+      get: vi.fn().mockResolvedValue(definition()),
+      openRunner: vi.fn(),
+      runDefinition,
+      save: vi.fn().mockResolvedValue({ versionHash: "v2" }),
+      onEditorRefocus: vi.fn(() => vi.fn()),
+      onDefinitionUpdated: vi.fn(() => vi.fn()),
+    })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: { workflow: workflowApi },
+    })
+    window.history.replaceState({}, "", "/?workflowId=workflow-1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowEditorApp />)
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText("Run workflow").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText("取消").click()
+      await Promise.resolve()
+    })
+
+    expect(runDefinition).toHaveBeenCalledOnce()
+    expect(workflowApi.operation.openRunner).not.toHaveBeenCalled()
+  })
+
   it("collapses the floating validation card", async () => {
     const workflowApi = createWorkflowApi({
       get: vi.fn().mockResolvedValue(definitionWithPrompt()),

@@ -12,6 +12,7 @@ import type {
   SynapseAgentToolProgressTimelineItem,
   SynapseAgentToolResultTimelineItem,
 } from "@/types/agent"
+import type { AgentReferenceActions } from "../hooks/use-agent-reference-actions"
 import { AgentMessageEvent } from "./agent-message-event"
 import { AgentAnnotation } from "./agent-annotation"
 import { AgentPermissionCard } from "./agent-permission-card"
@@ -26,6 +27,7 @@ function AgentTimelineItem({
   pendingPermissions,
   latestPendingItemIds,
   onOpenReference,
+  referenceActions,
   onRespondPermission,
   toolResult,
 }: {
@@ -36,6 +38,7 @@ function AgentTimelineItem({
   readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
   readonly latestPendingItemIds?: ReadonlySet<string>
   readonly onOpenReference: (reference: string) => void
+  readonly referenceActions?: AgentReferenceActions
   readonly onRespondPermission: (
     requestId: string,
     behavior: "allow" | "deny",
@@ -52,6 +55,7 @@ function AgentTimelineItem({
           profile={profile}
           agentIcon={agentIcon}
           onOpenReference={onOpenReference}
+          referenceActions={referenceActions}
         />
       )
     case "thinking":

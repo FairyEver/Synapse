@@ -28,6 +28,12 @@ import {
 } from "../../app-capabilities/secrets/shared/capability"
 import { SECRET_NAME_REGEX } from "../../app-capabilities/secrets/shared/schema"
 import { SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME } from "../../app-capabilities/sound-notifier/shared/capability"
+import { SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME } from "../../app-capabilities/system-notifier/shared/capability"
+import { PROBLEM_FEEDBACK_SUBMIT_MCP_TOOL_NAME } from "../../app-capabilities/problem-feedback/shared/capability"
+import {
+  JSON_REPAIR_CAPABILITY_ID,
+  JSON_REPAIR_MCP_TOOL_NAME,
+} from "../../app-capabilities/json-repair/shared/capability"
 import {
   HTML_GENERATOR_EJS_CAPABILITY_ID,
   HTML_GENERATOR_EJS_FILE_CAPABILITY_ID,
@@ -73,6 +79,8 @@ describe("App capability naming", () => {
   it("accepts extract as a canonical app capability action", () => {
     expect(isCanonicalCapabilityId(TEXT_EXTRACTOR_CAPABILITY_ID)).toBe(true)
     expect(isCanonicalCapabilityId(TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID)).toBe(true)
+    expect(isCanonicalCapabilityId("app.system_notifier.notification.trigger")).toBe(true)
+    expect(isCanonicalCapabilityId(JSON_REPAIR_CAPABILITY_ID)).toBe(true)
   })
 })
 
@@ -81,6 +89,10 @@ describe("App capability domain", () => {
     expect(APP_DOMAIN.id).toBe("app")
     expect(APP_DOMAIN.capabilities).toContainEqual(expect.objectContaining({
       id: TEXT_EXTRACTOR_CAPABILITY_ID,
+      mutates: false,
+    }))
+    expect(APP_DOMAIN.capabilities).toContainEqual(expect.objectContaining({
+      id: JSON_REPAIR_CAPABILITY_ID,
       mutates: false,
     }))
     expect(APP_DOMAIN.capabilities.map((capability) => capability.id)).toContain("app.document_template.docx.generate")
@@ -97,6 +109,9 @@ describe("App capability domain", () => {
       HTML_GENERATOR_EJS_FILE_MCP_TOOL_NAME,
       ...TERMINAL_CAPABILITY_CATALOG.map((capability) => capability.toolName),
       SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
+      SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
+      PROBLEM_FEEDBACK_SUBMIT_MCP_TOOL_NAME,
+      JSON_REPAIR_MCP_TOOL_NAME,
       ...Object.values(SECRETS_MCP_TOOL_NAMES),
     ])
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_session_resize).toBe("app.terminal.session.resize")

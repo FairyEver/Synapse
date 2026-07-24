@@ -516,6 +516,20 @@ const synapseBridge: SynapseBridge = {
       onPlayRequested: createRawPayloadSubscription(subscribe, IPC_CHANNELS.soundNotifier.playRequested),
     },
   },
+  systemNotifier: {
+    settings: {
+      get: () => invoke(IPC_CHANNELS.systemNotifier.getSettings)({}),
+      update: (input) => invoke(IPC_CHANNELS.systemNotifier.updateSettings)(input),
+    },
+    notification: {
+      test: () => invoke(IPC_CHANNELS.systemNotifier.testNotification)({}),
+    },
+  },
+  jsonRepair: {
+    text: {
+      repair: (input) => invoke(IPC_CHANNELS.jsonRepair.repairText)(input),
+    },
+  },
   terminal: {
     group: {
       chooseDefaultCwd: () => invoke(IPC_CHANNELS.terminal.chooseDefaultCwd)(),
@@ -1113,6 +1127,8 @@ const synapseBridge: SynapseBridge = {
     getRuntimeStatus: invoke(IPC_CHANNELS.agent.getRuntimeStatus),
     listCommands: (projectId) => invoke(IPC_CHANNELS.agent.listCommands)({ projectId }),
     openReference: (args) => invoke(IPC_CHANNELS.agent.openReference)(args),
+    openReferenceDefault: (args) => invoke(IPC_CHANNELS.agent.openReferenceDefault)(args),
+    showReferenceInFolder: (args) => invoke(IPC_CHANNELS.agent.showReferenceInFolder)(args),
     openConversation: (target) => invoke(IPC_CHANNELS.agent.openConversation)(target),
     getAvailableAgents: () => invoke(IPC_CHANNELS.agent.getAvailableAgents)({}),
     onOpenConversation: createRawPayloadSubscription<OpenAgentSessionPayload>(
@@ -1157,17 +1173,24 @@ const synapseBridge: SynapseBridge = {
       inspect: (def) => invoke(IPC_CHANNELS.workflow.validate)(def),
     },
     run: {
-      execute: (id: string, params: Record<string, unknown>) => invoke(IPC_CHANNELS.workflow.run)({ id, params }),
+      execute: (id: string, params: Record<string, unknown>, scriptConfirmationToken?: string) =>
+        invoke(IPC_CHANNELS.workflow.run)({ id, params, scriptConfirmationToken }),
       disable: (runId: string) => invoke(IPC_CHANNELS.workflow.cancel)({ runId }),
       listActive: () => invoke(IPC_CHANNELS.workflow.activeRuns)(),
       list: (workflowId: string) => invoke(IPC_CHANNELS.workflow.runHistory)({ workflowId }),
       get: (runId: string, workflowId?: string) => invoke(IPC_CHANNELS.workflow.runStatus)({ runId, workflowId }),
     },
     operation: {
-      runDefinition: (def: unknown, params: Record<string, unknown>, force?: boolean) =>
-        invoke(IPC_CHANNELS.workflow.runDefinition)({ definition: def, params, force }),
-      rerun: (previousRunId: string, params: Record<string, unknown>, force?: boolean, workflowId?: string) =>
-        invoke(IPC_CHANNELS.workflow.rerun)({ previousRunId, params, force, workflowId }),
+      runDefinition: (def: unknown, params: Record<string, unknown>, force?: boolean, scriptConfirmationToken?: string) =>
+        invoke(IPC_CHANNELS.workflow.runDefinition)({ definition: def, params, force, scriptConfirmationToken }),
+      rerun: (previousRunId: string, params: Record<string, unknown>, force?: boolean, workflowId?: string, scriptConfirmationToken?: string) =>
+        invoke(IPC_CHANNELS.workflow.rerun)({
+          previousRunId,
+          params,
+          force,
+          workflowId,
+          scriptConfirmationToken,
+        }),
       openRunner: (workflowId: string, runId: string) =>
         invoke(IPC_CHANNELS.workflow.openRunner)({ workflowId, runId }),
       openEditor: (id: string, runId?: string) => invoke(IPC_CHANNELS.workflow.openEditor)({ id, runId }),

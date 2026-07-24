@@ -3,7 +3,6 @@ import { EventEmitter } from "node:events"
 import { chmodSync, existsSync, statSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import * as pty from "node-pty"
 
 import {
   TERMINAL_CLIENT_LEASE_LIMIT,
@@ -141,6 +140,8 @@ const IDEMPOTENCY_RETENTION_MS = 24 * 60 * 60 * 1_000
 const DELETE_TOMBSTONE_RETENTION_MS = 24 * 60 * 60 * 1_000
 const MAX_SEMANTIC_ACTIONS = 128
 const MAX_SEMANTIC_BYTES = 256 * 1024
+const NODE_PTY_SPAWN_HELPER_ENV = "SYNAPSE_NODE_PTY_SPAWN_HELPER"
+let nodePtyModule: typeof import("node-pty") | undefined
 const KEY_BYTES: Readonly<Record<string, string>> = {
   Enter: "\r",
   Tab: "\t",
@@ -642,7 +643,8 @@ export function createTerminalService(deps: {
       attachRuntime(session, child, buffer)
       await flushPersist()
       return getSessionOrThrow(session.id)
-    } catch {
+    } catch (error) {
+      deps.logger?.warn("Terminal PTY process failed to start.", { sessionId, error })
       const failed: TerminalSession = {
         ...session,
         status: "failed",
@@ -1969,6 +1971,7 @@ export function createTerminalService(deps: {
 
 function spawnNodePty(input: SpawnPtyInput): PtyLike {
   ensureNodePtySpawnHelperExecutable()
+  const pty = loadNodePty()
   return pty.spawn(input.shell, [], {
     name: "xterm-256color",
     cols: input.cols,
@@ -1978,11 +1981,36 @@ function spawnNodePty(input: SpawnPtyInput): PtyLike {
   })
 }
 
+function loadNodePty(): typeof import("node-pty") {
+  if (nodePtyModule) return nodePtyModule
+  const packagedHelperPath = resolvePackagedNodePtySpawnHelper()
+  if (packagedHelperPath) {
+    process.env[NODE_PTY_SPAWN_HELPER_ENV] = packagedHelperPath
+  } else {
+    delete process.env[NODE_PTY_SPAWN_HELPER_ENV]
+  }
+  nodePtyModule = require("node-pty") as typeof import("node-pty")
+  return nodePtyModule
+}
+
 function ensureNodePtySpawnHelperExecutable(): void {
   if (process.platform === "win32") return
+  const packagedHelperPath = resolvePackagedNodePtySpawnHelper()
+  if (packagedHelperPath) {
+    ensureExecutableIfPresent(packagedHelperPath)
+    return
+  }
   const packageRoot = path.dirname(require.resolve("node-pty/package.json"))
   ensureExecutableIfPresent(path.join(packageRoot, "build", "Release", "spawn-helper"))
   ensureExecutableIfPresent(path.join(packageRoot, "prebuilds", `${process.platform}-${process.arch}`, "spawn-helper"))
+}
+
+function resolvePackagedNodePtySpawnHelper(): string | null {
+  if (process.platform !== "darwin") return null
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
+  if (!resourcesPath) return null
+  const helperPath = path.resolve(resourcesPath, "..", "Frameworks", "node-pty-spawn-helper")
+  return existsSync(helperPath) ? helperPath : null
 }
 
 export function ensureExecutableIfPresent(filePath: string): void {

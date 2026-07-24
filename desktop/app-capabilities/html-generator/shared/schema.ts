@@ -1,10 +1,12 @@
 import { z } from "zod"
 import { HTML_GENERATION_ERROR_CODES } from "./errors"
 
-export const HTML_GENERATION_TEMPLATE_MAX_BYTES = 256 * 1024
-export const HTML_GENERATION_DATA_MAX_BYTES = 512 * 1024
-export const HTML_GENERATION_INPUT_MAX_BYTES = 768 * 1024
-export const HTML_GENERATION_OUTPUT_MAX_BYTES = 5 * 1024 * 1024
+export {
+  HTML_GENERATION_DATA_MAX_BYTES,
+  HTML_GENERATION_INPUT_MAX_BYTES,
+  HTML_GENERATION_OUTPUT_MAX_BYTES,
+  HTML_GENERATION_TEMPLATE_MAX_BYTES,
+} from "./limits"
 
 export type JsonValue = null | string | boolean | number | JsonValue[] | JsonObject
 export type JsonObject = { [key: string]: JsonValue }

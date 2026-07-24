@@ -1,0 +1,3 @@
+# Store problem feedback in three database columns
+
+The problem-feedback table contains only `id UUID PRIMARY KEY` with a database-generated random UUID v4 default, `content TEXT NOT NULL`, and `receivedAt TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP`. One atomic insert lets the database create both operational values; requests cannot supply them, and no cuid, ULID, sequence, time-coded identifier, lifecycle timestamp, version, or ORM audit column is added. Lists order by `receivedAt DESC, id DESC`, with a matching composite index that also supports 180-day expiry. V1 uses page-number pagination at exactly ten records per page and accepts shifts caused by concurrent inserts or deletes; indexes are not additional business fields.

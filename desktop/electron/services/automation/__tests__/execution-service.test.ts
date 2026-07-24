@@ -9,6 +9,7 @@ import {
   MainActionRegistry,
   type ActionExecutionInput,
   type MainActionDefinition,
+  type RegisteredMainActionDefinition,
 } from "../../../action-runtime/action-registry"
 import type { DataChangeListener, DataNamespace } from "../../../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
@@ -18,7 +19,7 @@ import { AutomationItemRepository } from "../item-repository"
 import { AutomationRunRepository } from "../run-repository"
 import type { AutomationItem, AutomationRun } from "../types"
 
-const testActionSchema = z.object({ message: z.string().min(1) })
+const testActionSchema = z.object({ message: z.string().min(1) }).passthrough()
 type TestActionConfig = z.infer<typeof testActionSchema>
 
 describe("AutomationExecutionService", () => {
@@ -100,6 +101,83 @@ describe("AutomationExecutionService", () => {
       "trigger.automationName": "Daily report",
       "trigger.cron": "0 9 * * *",
     }))
+  })
+
+  it("runs raw script actions without permission checks or previous outputs", async () => {
+    let observedPreviousOutputs: Record<string, unknown> | undefined
+    const check = vi.fn(async () => ({ allowed: false, reason: "must not be called" }))
+    const harness = await createExecutionHarness({
+      permissionGuard: { registerPolicy: () => () => {}, check },
+      action: {
+        ...testAction,
+        manifest: {
+          ...testAction.manifest,
+          authorization: "none",
+          previousOutputs: "none",
+          resultPersistence: "raw",
+        },
+        execute: async ({ previousOutputs }) => {
+          observedPreviousOutputs = previousOutputs
+          return {
+            status: "success",
+            logs: [{ label: "stderr", value: "Authorization: Bearer visible-log" }],
+            outputs: { result: { apiKey: "visible-result" } },
+          }
+        },
+      },
+    })
+
+    const run = await harness.service.runItem(harness.item, "manual")
+
+    expect(check).not.toHaveBeenCalled()
+    expect(observedPreviousOutputs).toBeUndefined()
+    expect(run.result).toEqual({
+      status: "success",
+      logs: [{ label: "stderr", value: "Authorization: Bearer visible-log" }],
+      outputs: { result: { apiKey: "visible-result" } },
+    })
+    expect(harness.auditEvents).toEqual([])
+  })
+
+  it("omits run content only when the Action policy field is false", async () => {
+    const harness = await createExecutionHarness({
+      action: {
+        ...testAction,
+        manifest: {
+          ...testAction.manifest,
+          automationPolicy: {
+            runContentPersistenceConfigField: "saveRunContent",
+          },
+        },
+        execute: async () => ({
+          status: "success",
+          summary: "ok",
+          logs: [{ label: "stdout", value: "visible live log" }],
+          outputs: { result: { value: 42 } },
+          usage: { tokens: 3 },
+        }),
+      },
+    })
+    const item = {
+      ...harness.item,
+      executor: {
+        ...harness.item.executor,
+        config: {
+          ...harness.item.executor.config,
+          saveRunContent: false,
+        },
+      },
+    }
+
+    const run = await harness.service.runItem(item, "manual")
+
+    expect(run.result).toEqual({
+      status: "success",
+      summary: "ok",
+      logs: undefined,
+      outputs: undefined,
+      usage: undefined,
+    })
   })
 
   it("persists denied permission as a failed run", async () => {
@@ -228,7 +306,7 @@ describe("AutomationExecutionService", () => {
 })
 
 async function createExecutionHarness(options: {
-  readonly action?: MainActionDefinition<TestActionConfig>
+  readonly action?: RegisteredMainActionDefinition<TestActionConfig>
   readonly logger?: {
     info?: (message: string, metadata: Record<string, unknown>) => void
     warn: (message: string, metadata: Record<string, unknown>) => void

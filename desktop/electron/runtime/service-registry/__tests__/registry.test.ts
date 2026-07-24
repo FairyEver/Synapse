@@ -33,6 +33,7 @@ describe("ServiceRegistry register/inspect (T1.3)", () => {
       status: "pending",
       criticality: "fatal",
       dependsOn: [],
+      startAfter: [],
       runIn: "main",
       lastError: undefined,
     })
@@ -105,9 +106,25 @@ describe("ServiceRegistry register/inspect (T1.3)", () => {
     expect(order).toEqual(["a", "b", "c"])
   })
 
+  it("planStartOrder() honors order-only dependencies", () => {
+    const registry = createServiceRegistry()
+    registry.register(fixtureDescriptor("consumer", [], { startAfter: ["optional"] }))
+    registry.register(fixtureDescriptor("optional"))
+    expect(registry.planStartOrder().map((d) => d.id)).toEqual([
+      "optional",
+      "consumer",
+    ])
+  })
+
   it("planStartOrder() throws UnknownDependencyError for missing deps", () => {
     const registry = createServiceRegistry()
     registry.register(fixtureDescriptor("a", ["ghost"]))
+    expect(() => registry.planStartOrder()).toThrowError(UnknownDependencyError)
+  })
+
+  it("planStartOrder() rejects unknown order-only dependencies", () => {
+    const registry = createServiceRegistry()
+    registry.register(fixtureDescriptor("a", [], { startAfter: ["ghost"] }))
     expect(() => registry.planStartOrder()).toThrowError(UnknownDependencyError)
   })
 
@@ -115,6 +132,13 @@ describe("ServiceRegistry register/inspect (T1.3)", () => {
     const registry = createServiceRegistry()
     registry.register(fixtureDescriptor("a", ["b"]))
     registry.register(fixtureDescriptor("b", ["a"]))
+    expect(() => registry.planStartOrder()).toThrowError(CircularDependencyError)
+  })
+
+  it("planStartOrder() detects cycles across hard and order-only dependencies", () => {
+    const registry = createServiceRegistry()
+    registry.register(fixtureDescriptor("a", ["b"]))
+    registry.register(fixtureDescriptor("b", [], { startAfter: ["a"] }))
     expect(() => registry.planStartOrder()).toThrowError(CircularDependencyError)
   })
 

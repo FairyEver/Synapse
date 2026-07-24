@@ -8,9 +8,6 @@ export const driveAppDefinition = {
   windowTitle: "云盘",
   dock: { pinnedByDefault: true, order: 20 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_drive",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

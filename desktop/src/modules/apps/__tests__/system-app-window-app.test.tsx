@@ -139,6 +139,12 @@ describe("SystemAppWindowApp", () => {
     expect(document.body.textContent).toContain("终端窗口")
   })
 
+  it("renders workflow after the main process has authorized its window", async () => {
+    window.history.replaceState({}, "", "/?window=system-app&appId=workflow")
+    await renderSystemAppWindow(roots)
+    expect(document.body.textContent).toContain("工作流窗口")
+  })
+
   it("renders the text extractor system app", async () => {
     window.history.replaceState({}, "", "/?window=system-app&appId=text-extractor")
     await renderSystemAppWindow(roots)

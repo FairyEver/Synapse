@@ -1,0 +1,3 @@
+# Keep problem feedback on a minimal non-browser HTTP surface
+
+The anonymous route accepts only `POST` with `application/json` and an optional UTF-8 charset; request content encoding must be absent or `identity`, and other media or encodings are rejected determinately. The desktop sends only `Content-Type: application/json; charset=utf-8` and `Accept: application/json`, with no `Origin`, `Referer`, authorization, cookie, or identifying header. The route grants no CORS access or dedicated `OPTIONS` behavior in any environment and neither treats nor records credentials, cookies, or origins that an unsupported caller supplies; missing headers are not client proof. Client, server, proxy, and WAF caching are disabled for both request and response.

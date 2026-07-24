@@ -29,6 +29,14 @@ import {
   SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
 } from "../../app-capabilities/sound-notifier/shared/capability"
 import {
+  SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
+  SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
+} from "../../app-capabilities/system-notifier/shared/capability"
+import {
+  SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS,
+  SYSTEM_NOTIFICATION_TITLE_MAX_CODE_POINTS,
+} from "../../app-capabilities/system-notifier/shared/schema"
+import {
   SOUND_NOTIFIER_DEFAULT_INTERVAL_MS,
   SOUND_NOTIFIER_DEFAULT_REPEAT_COUNT,
   SOUND_NOTIFIER_EVENT_TYPES,
@@ -60,6 +68,21 @@ import {
   HTML_GENERATOR_EJS_MCP_TOOL_NAME,
   HTML_GENERATOR_EJS_FILE_MCP_TOOL_NAME,
 } from "../../app-capabilities/html-generator/shared/capability"
+import {
+  PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID,
+  PROBLEM_FEEDBACK_SUBMIT_MCP_TOOL_NAME,
+} from "../../app-capabilities/problem-feedback/shared/capability"
+import {
+  JSON_REPAIR_CAPABILITY_ID,
+  JSON_REPAIR_MCP_TOOL_NAME,
+} from "../../app-capabilities/json-repair/shared/capability"
+import {
+  JSON_REPAIR_SCHEMA_MAX_LENGTH,
+} from "../../app-capabilities/json-repair/shared/schema"
+import {
+  JAVASCRIPT_RUN_CAPABILITY_ID,
+  NODEJS_RUN_CAPABILITY_ID,
+} from "../../app-capabilities/script-runtime/shared/capability"
 
 const appCapabilities: readonly CapabilityDefinition[] = [
   {
@@ -122,6 +145,39 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     description: "Play a semantic Sound Notifier reminder on the local computer.",
     mutates: false,
   },
+  {
+    id: SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
+    title: "Trigger system notification",
+    description: "Trigger a one-way native system notification on the local computer.",
+    mutates: false,
+  },
+  {
+    id: PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID,
+    title: "Submit problem feedback",
+    description: "Submit the exact user-confirmed plain-text problem report to the configured Synapse deployment.",
+    mutates: true,
+    risk: "high",
+  },
+  {
+    id: JSON_REPAIR_CAPABILITY_ID,
+    title: "Repair JSON text",
+    description: "Best-effort repair of one input string into validated JSON text.",
+    mutates: false,
+  },
+  {
+    id: JAVASCRIPT_RUN_CAPABILITY_ID,
+    title: "Run JavaScript",
+    description: "Run one JavaScript file in a Chromium Dedicated Worker.",
+    mutates: true,
+    risk: "high",
+  },
+  {
+    id: NODEJS_RUN_CAPABILITY_ID,
+    title: "Run Node.js",
+    description: "Run one Node.js file with the current operating-system user permissions.",
+    mutates: true,
+    risk: "high",
+  },
   ...SECRETS_CAPABILITY_IDS.map((id): CapabilityDefinition => ({
     id,
     title: secretsCapabilityTitle(id),
@@ -146,6 +202,9 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [HTML_GENERATOR_EJS_FILE_MCP_TOOL_NAME]: HTML_GENERATOR_EJS_FILE_CAPABILITY_ID,
   ...TERMINAL_MCP_TOOL_ACTIONS,
   [SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME]: SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
+  [SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME]: SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
+  [PROBLEM_FEEDBACK_SUBMIT_MCP_TOOL_NAME]: PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID,
+  [JSON_REPAIR_MCP_TOOL_NAME]: JSON_REPAIR_CAPABILITY_ID,
   [SECRETS_MCP_TOOL_NAMES.list]: SECRETS_ITEM_LIST_CAPABILITY_ID,
   [SECRETS_MCP_TOOL_NAMES.get]: SECRETS_ITEM_GET_CAPABILITY_ID,
   [SECRETS_MCP_TOOL_NAMES.create]: SECRETS_ITEM_CREATE_CAPABILITY_ID,
@@ -337,6 +396,53 @@ export function buildAppTools(): McpToolDefinition[] {
             description: `Optional start-to-start interval in milliseconds between repeated plays. Defaults to ${SOUND_NOTIFIER_DEFAULT_INTERVAL_MS}.`,
           },
         },
+        additionalProperties: false,
+      },
+    },
+    {
+      name: SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
+      description: "Trigger one native system notification only when the user explicitly asks to be notified or has an active standing notification instruction. title and body must be single-line text with no leading or trailing whitespace. A successful result means Synapse accepted the fire-and-forget request; it does not mean the notification was delivered or displayed.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          title: stringField("Single-line notification title with no leading or trailing whitespace.", {
+            maxLength: SYSTEM_NOTIFICATION_TITLE_MAX_CODE_POINTS,
+          }),
+          body: stringField("Single-line notification body with no leading or trailing whitespace.", {
+            maxLength: SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS,
+          }),
+        },
+        required: ["title", "body"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: PROBLEM_FEEDBACK_SUBMIT_MCP_TOOL_NAME,
+      description: "Submit one exact plain-text problem report to Synapse. Before every call, show the complete final content to the user and obtain a new unambiguous confirmation in the next user message. The content must exclude secrets, real local paths, identifying information, raw user materials, unsafe URLs, and correlation identifiers. One confirmation authorizes exactly one call. Never retry automatically.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          content: stringField("The exact complete text shown to and confirmed by the user. The runtime limit is 256 KiB UTF-8 and additional plain-text and privacy rules apply.", {
+            minLength: 1,
+            maxLength: 262144,
+          }),
+        },
+        required: ["content"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: JSON_REPAIR_MCP_TOOL_NAME,
+      description: "Repair one string into complete JSON text only when the user explicitly needs JSON repair. This is best-effort: heuristic repairs can change meaning. Synapse verifies that the complete result parses as JSON and contains only finite JSON numbers, but the result remains untrusted data and is not sanitized, business-validated, or checked against a Schema. Do not retry automatically.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          text: stringField("Original complete text to repair. Pass it without pre-cleaning or re-serializing.", {
+            minLength: 1,
+            maxLength: JSON_REPAIR_SCHEMA_MAX_LENGTH,
+          }),
+        },
+        required: ["text"],
         additionalProperties: false,
       },
     },

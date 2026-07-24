@@ -9,9 +9,6 @@ export const quickInputAppDefinition = {
   windowTitle: "快捷输入",
   dock: { pinnedByDefault: false, order: 250 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_quick_input",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

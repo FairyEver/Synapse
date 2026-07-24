@@ -1,0 +1,3 @@
+# Bind problem feedback to the build-configured server
+
+The desktop submits problem feedback only to its build-generated `apiBaseUrl + /problem-feedback`: official builds use the official deployment, while development, test, and self-hosted builds use their own configured deployments and administrators. MCP input and runtime settings cannot override the destination, and the feature does not hardcode one upstream address across all builds. Submission uses a dedicated anonymous HTTP client that does not read login state or attach `Authorization`, cookies, account data, or device identifiers; it must not reuse an account client that injects credentials.

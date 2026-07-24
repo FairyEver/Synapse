@@ -10,8 +10,20 @@ import {
   SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
   SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
 } from "../../app-capabilities/sound-notifier/shared/capability"
+import {
+  SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
+  SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
+} from "../../app-capabilities/system-notifier/shared/capability"
+import {
+  PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID,
+  PROBLEM_FEEDBACK_SUBMIT_MCP_TOOL_NAME,
+} from "../../app-capabilities/problem-feedback/shared/capability"
 import { SECRETS_MCP_TOOL_NAMES } from "../../app-capabilities/secrets/shared/capability"
 import { DOCUMENT_TEMPLATE_MCP_TOOL_NAME } from "../../app-capabilities/document-template/shared/capability"
+import {
+  JSON_REPAIR_CAPABILITY_ID,
+  JSON_REPAIR_MCP_TOOL_NAME,
+} from "../../app-capabilities/json-repair/shared/capability"
 import {
   TEXT_FILE_WRITER_CAPABILITY_ID,
   TEXT_FILE_WRITER_MCP_TOOL_NAME,
@@ -80,6 +92,36 @@ describe("App capability domain", () => {
     })
     expect((tool?.inputSchema.properties.text as Record<string, unknown> | undefined)).not.toHaveProperty("maxLength")
     expect(tool?.description).toContain(".txt, .md, .csv, .html, or .htm")
+  })
+
+  it("registers one strict, non-mutating JSON Repair MCP tool", () => {
+    const tool = buildAppTools().find((item) => item.name === JSON_REPAIR_MCP_TOOL_NAME)
+
+    expect(APP_DOMAIN.capabilities).toContainEqual({
+      id: JSON_REPAIR_CAPABILITY_ID,
+      title: "Repair JSON text",
+      description: "Best-effort repair of one input string into validated JSON text.",
+      mutates: false,
+    })
+    expect(APP_MCP_TOOL_ACTIONS[JSON_REPAIR_MCP_TOOL_NAME]).toBe(JSON_REPAIR_CAPABILITY_ID)
+    expect(tool?.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        text: expect.objectContaining({
+          type: "string",
+          minLength: 1,
+          maxLength: 131_072,
+        }),
+      },
+      required: ["text"],
+      additionalProperties: false,
+    })
+    expect(tool?.description).toContain("best-effort")
+    expect(tool?.description).toContain("heuristic repairs can change meaning")
+    expect(tool?.description).toContain("remains untrusted data")
+    expect(tool?.description).toContain("not sanitized")
+    expect(tool?.description).toContain("Schema")
+    expect(tool?.description).toContain("Do not retry automatically")
   })
 
   it("maps public terminal rename and delete tools to their capabilities", () => {
@@ -240,6 +282,58 @@ describe("App capability domain", () => {
       .not.toContain("volume")
     expect(JSON.stringify(buildAppTools().find((tool) => tool.name === SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME)?.inputSchema))
       .toContain("legacy")
+  })
+
+  it("registers the stable System Notifier trigger contract", () => {
+    expect(() => assertCanonicalCapabilityId(SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID)).not.toThrow()
+    expect(APP_DOMAIN.capabilities).toContainEqual({
+      id: SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
+      title: "Trigger system notification",
+      description: expect.any(String),
+      mutates: false,
+    })
+    expect(APP_MCP_TOOL_ACTIONS[SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME])
+      .toBe(SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID)
+    const tool = buildAppTools().find((item) => item.name === SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME)
+    expect(tool).toMatchObject({
+      inputSchema: {
+        type: "object",
+        required: ["title", "body"],
+        additionalProperties: false,
+        properties: {
+          title: expect.objectContaining({ type: "string", maxLength: 64 }),
+          body: expect.objectContaining({ type: "string", maxLength: 256 }),
+        },
+      },
+    })
+    expect(tool?.description).toContain("does not mean the notification was delivered or displayed")
+  })
+
+  it("registers the high-risk problem feedback submission contract", () => {
+    expect(APP_DOMAIN.capabilities).toContainEqual({
+      id: PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID,
+      title: "Submit problem feedback",
+      description: expect.any(String),
+      mutates: true,
+      risk: "high",
+    })
+    expect(APP_MCP_TOOL_ACTIONS[PROBLEM_FEEDBACK_SUBMIT_MCP_TOOL_NAME])
+      .toBe(PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID)
+    expect(buildAppTools().find((item) => item.name === PROBLEM_FEEDBACK_SUBMIT_MCP_TOOL_NAME))
+      .toMatchObject({
+        inputSchema: {
+          type: "object",
+          required: ["content"],
+          additionalProperties: false,
+          properties: {
+            content: expect.objectContaining({
+              type: "string",
+              minLength: 1,
+              maxLength: 262144,
+            }),
+          },
+        },
+      })
   })
 
 })

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 
@@ -9,13 +9,42 @@ function readRepoFile(path: string): string {
 }
 
 describe("server deployment configuration", () => {
+  it("excludes problem feedback data from every first-party database dump", () => {
+    const shellSurfaces = [
+      "server/README.md",
+      ...readdirSync(repositoryRoot, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".sh"))
+        .map((entry) => entry.name),
+      ...collectRepoFiles("server", (path) => path.endsWith(".sh")),
+      ...collectRepoFiles("scripts", (path) => path.endsWith(".sh")),
+    ]
+    const shellCommands = shellSurfaces.flatMap((path) =>
+      extractPgDumpCommands(readRepoFile(path)).map((command) => ({ path, command })))
+    expect(shellCommands.length).toBeGreaterThan(0)
+    for (const { path, command } of shellCommands) {
+      expect(command, `${path} contains an unsafe pg_dump command`).toContain(
+        "--exclude-table-data='public.\"ProblemFeedback\"'",
+      )
+    }
+
+    const backupService = readRepoFile("server/src/backup/backup.service.ts")
+    const calls = [...backupService.matchAll(/execFileAsync\("pg_dump",\s*([^,)]+)/gu)]
+    expect(calls).not.toHaveLength(0)
+    expect(calls.every((match) => match[1]?.trim() === "pgDump.args")).toBe(true)
+    expect(backupService).toContain(
+      '"--exclude-table-data=public.\\"ProblemFeedback\\""',
+    )
+  })
+
   it("backs up the remote database before syncing and rebuilding", () => {
     const deployScript = readRepoFile("deploy.sh")
 
     expect(deployScript).toContain("backup_remote_database")
     expect(deployScript).toContain("synapse-online-before-deploy-${DEPLOY_ID}.sql")
     expect(deployScript).toContain("synapse-final-before-switch-${DEPLOY_ID}.sql")
-    expect(deployScript).toContain('docker compose --env-file .env exec -T postgres pg_dump -U "$postgres_user" "$postgres_db"')
+    expect(deployScript).toContain("pg_dump")
+    expect(deployScript).toContain("--exclude-table-data='public.\"ProblemFeedback\"'")
+    expect(deployScript).toContain('-U "$postgres_user" "$postgres_db"')
     expect(deployScript).toContain("chmod 600 \"$BACKUP_FILE\"")
     expect(deployScript).not.toContain("docker compose --env-file .env down")
     expect(deployScript).not.toContain("docker compose down")
@@ -101,6 +130,22 @@ describe("server deployment configuration", () => {
     expect(compose).toContain("healthcheck:")
     expect(compose).toContain("http://127.0.0.1:3000/healthz")
     expect(compose).not.toContain("http://127.0.0.1:3001/healthz")
+    expect(compose).toContain("TRUST_PROXY: loopback")
+  })
+
+  it("keeps problem feedback behind one coarse in-memory nginx admission", () => {
+    const compose = readRepoFile("server/compose.yml")
+    const nginx = readRepoFile("server/nginx.conf")
+
+    expect(nginx).toContain("location = /api/problem-feedback")
+    expect(nginx).toContain("client_max_body_size 1m")
+    expect(nginx).toContain("limit_req zone=problem_feedback_network")
+    expect(nginx).toContain("limit_req zone=problem_feedback_global")
+    expect(nginx).toContain("proxy_request_buffering off")
+    expect(nginx).toContain("access_log off")
+    expect(nginx).toContain("proxy_set_header X-Forwarded-For $remote_addr")
+    expect(nginx).not.toContain("Retry-After")
+    expect(compose).not.toMatch(/\b(?:redis|valkey)\b/iu)
   })
 
   it("uses the configured postgres identity in compose", () => {
@@ -147,6 +192,14 @@ describe("server deployment configuration", () => {
     expect(dockerfile).toContain("COPY --from=build /app/shared ./shared")
   })
 
+  it("syncs pnpm patches required by the server Docker build", () => {
+    const deployScript = readRepoFile("deploy.sh")
+    const dockerfile = readRepoFile("server/Dockerfile")
+
+    expect(dockerfile).toContain("COPY patches/ patches/")
+    expect(deployScript).toContain("--include='/patches/***'")
+  })
+
   it("documents the hardened deployment failure path", () => {
     const readme = readRepoFile("server/README.md")
 
@@ -161,7 +214,9 @@ describe("server deployment configuration", () => {
 
     expect(deployScript).toContain("backup_remote_database")
     expect(deployScript).toContain('mkdir -p "$(dirname "$BACKUP_FILE")"')
-    expect(deployScript).toContain('docker compose --env-file .env exec -T postgres pg_dump -U "$postgres_user" "$postgres_db"')
+    expect(deployScript).toContain("pg_dump")
+    expect(deployScript).toContain("--exclude-table-data='public.\"ProblemFeedback\"'")
+    expect(deployScript).toContain('-U "$postgres_user" "$postgres_db"')
 
     const backupStep = deployScript.indexOf('"在线备份远程数据库"')
     const syncStep = deployScript.indexOf('"同步代码到服务器"')
@@ -414,3 +469,37 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("map $http_upgrade $connection_upgrade")
   })
 })
+
+function extractPgDumpCommands(source: string): string[] {
+  const lines = source.split("\n")
+  const commands: string[] = []
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? ""
+    if (!/\bpg_dump\b/u.test(line)) continue
+    const command = [line]
+    while (command.at(-1)?.trimEnd().endsWith("\\")) {
+      index += 1
+      command.push(lines[index] ?? "")
+    }
+    commands.push(command.join("\n"))
+  }
+  return commands
+}
+
+function collectRepoFiles(
+  directory: string,
+  include: (path: string) => boolean,
+): string[] {
+  const absoluteDirectory = join(repositoryRoot, directory)
+  const files: string[] = []
+  for (const entry of readdirSync(absoluteDirectory, { withFileTypes: true })) {
+    const path = directory ? `${directory}/${entry.name}` : entry.name
+    if (entry.isDirectory()) {
+      if (["data", "dist", "logs", "node_modules"].includes(entry.name)) continue
+      files.push(...collectRepoFiles(path, include))
+    } else if (include(path)) {
+      files.push(path)
+    }
+  }
+  return files
+}

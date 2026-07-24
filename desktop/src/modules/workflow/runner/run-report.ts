@@ -1,4 +1,6 @@
 import type { NodeRunResult, WorkflowDefinition, WorkflowNode, WorkflowRunStatus } from "@/types/workflow"
+import { SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE } from "../../../../app-capabilities/system-notifier/shared/capability"
+import { JSON_REPAIR_WORKFLOW_NODE_TYPE } from "../../../../app-capabilities/json-repair/shared/capability"
 import { formatTokenUsageValue, tokenUsageFields } from "@/lib/token-usage"
 import { resolveBranchLabel } from "../lib/branch-label"
 import { sanitizeWorkflowPrimaryOutput, sanitizeWorkflowResultText, sanitizeWorkflowResultValue } from "./result-sanitize"
@@ -79,6 +81,8 @@ export function formatWorkflowRunReport(input: WorkflowRunReportInput): string {
 
 export function formatNodeRunReport(input: NodeRunReportInput): string {
   const { definition, node, result } = input
+  const hidesSensitiveInput = node.type === SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE
+    || node.type === JSON_REPAIR_WORKFLOW_NODE_TYPE
   const sections = [
     `# 节点运行报告：${node.name}`,
     formatNodeBasicInfo(definition, node, result, input.orderIndex),
@@ -86,11 +90,11 @@ export function formatNodeRunReport(input: NodeRunReportInput): string {
   ]
 
   const variables = node.config.variables
-  if (variables !== undefined) {
+  if (!hidesSensitiveInput && variables !== undefined) {
     sections.push(["## 变量绑定", codeBlock("json", formatJson(sanitizeWorkflowResultValue(variables)))].join("\n"))
   }
 
-  if (result.input.variables && Object.keys(result.input.variables).length > 0) {
+  if (!hidesSensitiveInput && result.input.variables && Object.keys(result.input.variables).length > 0) {
     sections.push(["## 运行输入变量", codeBlock("json", formatJson(sanitizeWorkflowResultValue(result.input.variables)))].join("\n"))
   }
 
@@ -126,6 +130,15 @@ export function formatNodeRunReport(input: NodeRunReportInput): string {
 }
 
 function sanitizeNodeConfigForReport(node: WorkflowNode): unknown {
+  if (node.type === JSON_REPAIR_WORKFLOW_NODE_TYPE) {
+    return { text: "[redacted]" }
+  }
+  if (node.type === SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE) {
+    return {
+      title: sanitizeWorkflowResultValue(node.config.title),
+    }
+  }
+
   const sanitized = sanitizeWorkflowResultValue(node.config)
   if (node.type !== "codex" || !isRecord(sanitized)) return sanitized
   const overrides = sanitized.configOverrides

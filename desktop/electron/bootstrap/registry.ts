@@ -19,6 +19,7 @@ import type { ProcessRuntime } from "../runtime/process"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
 import {
   coreActionRuntimeDescriptor,
+  coreAgentReferenceActionsDescriptor,
   coreAgentConversationWindowDescriptor,
   coreAppIconDescriptor,
   coreAuditSinkDescriptor,
@@ -41,8 +42,10 @@ import {
   coreLoggingDescriptor,
   coreModelPriceDescriptor,
   coreProcessEnvironmentDescriptor,
+  coreScriptRuntimeDescriptor,
   coreNetworkRegistryDescriptor,
   corePermissionGuardDescriptor,
+  coreProblemFeedbackDescriptor,
   coreProcessRuntimeDescriptor,
   coreProjectContainerRegistryDescriptor,
   coreAgentPersonasDescriptor,
@@ -51,12 +54,15 @@ import {
   coreRelayDescriptor,
   coreSideChannelDescriptor,
   coreSoundNotifierDescriptor,
+  coreSystemNotifierDescriptor,
+  coreSystemNotifierIntegrationDescriptor,
   coreSynapseSkillDescriptor,
   coreTerminalDescriptor,
   coreUsageAnalysisDescriptor,
   coreHttpTestDescriptor,
   coreKnowledgeBaseDescriptor,
   coreKnowledgeBaseStorageMigrationDescriptor,
+  coreJsonRepairDescriptor,
   coreUpdateDescriptor,
   coreWindowManagerDescriptor,
   coreWorkflowServiceDescriptor,
@@ -100,6 +106,7 @@ export function buildServiceRegistry(
   // Order doesn't matter for register(); topo at startAll resolves it.
   registry.register(coreLoggingDescriptor)
   registry.register(coreProcessEnvironmentDescriptor)
+  registry.register(coreScriptRuntimeDescriptor)
   registry.register(coreConfigDescriptor)
   registry.register(coreDataRepositoryDescriptor)
   registry.register(corePermissionGuardDescriptor)
@@ -121,11 +128,16 @@ export function buildServiceRegistry(
   registry.register(coreSecretsDescriptor)
   registry.register(coreAgentPersonasDescriptor)
   registry.register(coreSoundNotifierDescriptor)
+  registry.register(coreSystemNotifierDescriptor)
+  registry.register(coreProblemFeedbackDescriptor)
+  registry.register(coreSystemNotifierIntegrationDescriptor)
   registry.register(coreTextExtractorDescriptor)
   registry.register(coreFileOpenerDescriptor)
+  registry.register(coreAgentReferenceActionsDescriptor)
   registry.register(coreTextFileWriterDescriptor)
   registry.register(coreHtmlGenerationDescriptor)
   registry.register(coreHtmlGenerationFileDescriptor)
+  registry.register(coreJsonRepairDescriptor)
   registry.register(coreDriveSyncDescriptor)
   registry.register(coreRelayDescriptor)
   registry.register(coreAutomationIngressDescriptor)

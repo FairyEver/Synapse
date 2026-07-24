@@ -207,6 +207,7 @@ describe("MCP HTTP server", () => {
       actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       clientId: "mcp-install:synapse-mcp/http",
       controllerInstanceId: expect.any(String),
+      abortSignal: expect.any(AbortSignal),
     })
     expect(JSON.parse(response.body).result.content[0].text).toBe(JSON.stringify([{ id: "automation:1" }], null, 2))
   })

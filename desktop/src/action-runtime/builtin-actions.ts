@@ -9,6 +9,12 @@ import { AgentConfigForm } from "../../action-packages/builtin/agent/config.rend
 import { workflowActionManifest, type WorkflowActionConfig } from "../../action-packages/builtin/workflow"
 import { WorkflowConfigForm } from "../../action-packages/builtin/workflow/config.renderer"
 import { WorkflowActionResultView } from "../../action-packages/builtin/workflow/result.renderer"
+import { javascriptRunActionManifest } from "../../app-capabilities/javascript-run/automation-action/manifest"
+import { JavascriptRunActionConfigForm } from "../../app-capabilities/javascript-run/automation-action/config.renderer"
+import type { JavascriptAutomationConfig } from "../../app-capabilities/script-runtime/shared/schema"
+import { nodejsRunActionManifest } from "../../app-capabilities/nodejs-run/automation-action/manifest"
+import { NodejsRunActionConfigForm } from "../../app-capabilities/nodejs-run/automation-action/config.renderer"
+import type { NodejsAutomationConfig } from "../../app-capabilities/script-runtime/shared/schema"
 import { ActionResultView } from "./action-result-view"
 import {
   RendererActionRegistry,
@@ -53,9 +59,25 @@ const workflowRendererAction: RendererActionDefinition<WorkflowActionConfig> = {
   ResultView: WorkflowActionResultView,
 }
 
+const javascriptRunRendererAction: RendererActionDefinition<JavascriptAutomationConfig> = {
+  manifest: javascriptRunActionManifest,
+  summarizeConfig: () => "JavaScript",
+  ConfigForm: JavascriptRunActionConfigForm,
+  ResultView: ActionResultView,
+}
+
+const nodejsRunRendererAction: RendererActionDefinition<NodejsAutomationConfig> = {
+  manifest: nodejsRunActionManifest,
+  summarizeConfig: (config) => `Node.js · ${config.moduleMode === "esm" ? "ESM" : "CommonJS"}`,
+  ConfigForm: NodejsRunActionConfigForm,
+  ResultView: ActionResultView,
+}
+
 export const rendererActionRegistry = new RendererActionRegistry()
 rendererActionRegistry.register(commandRendererAction)
 rendererActionRegistry.register(scriptRendererAction)
 rendererActionRegistry.register(httpRequestRendererAction)
 rendererActionRegistry.register(agentRendererAction)
 rendererActionRegistry.register(workflowRendererAction)
+rendererActionRegistry.register(javascriptRunRendererAction)
+rendererActionRegistry.register(nodejsRunRendererAction)

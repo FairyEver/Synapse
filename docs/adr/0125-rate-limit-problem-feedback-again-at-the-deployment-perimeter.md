@@ -1,0 +1,5 @@
+# Keep V1 problem-feedback admission behind one coarse perimeter
+
+V1 officially supports exactly one Nginx ingress and one Server admission instance for the problem-feedback route, and both the repository Compose topology and official deployment preserve that shape. Nginx enforces the one-MiB request limit and coarse local shared-memory network and global throttles before reading or buffering the body. This perimeter layer does not promise the application's exact thresholds or token-bucket semantics, cross-instance atomicity, or zero deduction from one throttle when another denies a request; the application's in-memory dual token buckets remain the exact authority. Nginx returns the strict `429` JSON without a retry header, keeps no persistent limiter state, and writes no body to disk buffers, captures, samples, or dead letters. No Redis, Valkey, or new shared limiter service is introduced.
+
+If the wider service later becomes multi-instance, the route must remain pinned to one admission instance. Multi-ingress horizontal expansion is unsupported until a separate design passes the same privacy and failure tests.

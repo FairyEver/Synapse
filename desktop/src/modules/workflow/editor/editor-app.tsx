@@ -25,6 +25,8 @@ import { buildWorkflowValidationDisplayItems, type WorkflowValidationDisplayItem
 import { WorkflowErrorCard } from "./workflow-error-card"
 import { syncSwitchBranchReferences } from "./switch-branch-sync"
 import { useWorkflowEditorMutationState } from "../hooks/use-workflow-editor-mutation-state"
+import { ScriptConfirmationDialog } from "./script-confirmation-dialog"
+import { useScriptConfirmationRun } from "../hooks/use-script-confirmation-run"
 
 const logger = createRendererLogger("workflow.editor")
 
@@ -55,6 +57,7 @@ export function WorkflowEditorApp() {
   definitionRef.current = definition
   const isDirtyRef = useRef(false)
   const savingRef = useRef(false)
+  const { runWithScriptConfirmation, scriptConfirmation } = useScriptConfirmationRun()
 
   useWorkflowEditorMutationState(workflowId, dirty, saving)
   const validationItems = useMemo(
@@ -336,23 +339,36 @@ export function WorkflowEditorApp() {
       }
       const saved = definitionRef.current
       if (!saved) return null
-      const result = await window.synapse?.workflow.operation.runDefinition(saved, params)
+      const runDefinition = window.synapse?.workflow.operation.runDefinition
+      const result = runDefinition
+        ? await runWithScriptConfirmation((confirmationToken) =>
+            runDefinition(saved, params, false, confirmationToken))
+        : undefined
       if (!result) {
-        setRunErrors([{ type: "invalid_config", message: "运行失败：IPC 通道不可用" }])
+        if (!runDefinition) {
+          setRunErrors([{ type: "invalid_config", message: "运行失败：IPC 通道不可用" }])
+        }
         return null
       }
       if ("errors" in result) {
         setRunErrors(result.errors)
         return null
       }
+      const authoritativeDefinition = "definition" in result && result.definition
+        ? result.definition
+        : saved
+      if ("definition" in result && result.definition) {
+        definitionRef.current = result.definition
+        setDefinition(result.definition)
+      }
       if ("conflict" in result) {
-        setConflictState({ saved, params })
+        setConflictState({ saved: authoritativeDefinition, params })
         return null
       }
-      window.synapse?.workflow.operation.openRunner(saved.id, result.runId).catch((err) => {
+      window.synapse?.workflow.operation.openRunner(authoritativeDefinition.id, result.runId).catch((err) => {
         logger.warn("Workflow runner open failed after run.", {
           boundary: "renderer.workflow.editor.run",
-          workflowId: saved.id,
+          workflowId: authoritativeDefinition.id,
           runId: result.runId,
           ...errorDiagnostic(err),
         })
@@ -378,9 +394,13 @@ export function WorkflowEditorApp() {
     setConflictState(null)
     setRunning(true)
     try {
-      const forceResult = await window.synapse?.workflow.operation.runDefinition(saved, params, true)
+      const runDefinition = window.synapse?.workflow.operation.runDefinition
+      const forceResult = runDefinition
+        ? await runWithScriptConfirmation((confirmationToken) =>
+            runDefinition(saved, params, true, confirmationToken))
+        : undefined
       if (!forceResult) {
-        toast.error("运行失败：无法连接到主进程")
+        if (!runDefinition) toast.error("运行失败：无法连接到主进程")
         return
       }
       if ("errors" in forceResult) {
@@ -392,10 +412,17 @@ export function WorkflowEditorApp() {
         toast.error("仍有运行中的实例，请先取消")
         return
       }
-      window.synapse?.workflow.operation.openRunner(saved.id, forceResult.runId).catch((err) => {
+      const authoritativeDefinition = "definition" in forceResult && forceResult.definition
+        ? forceResult.definition
+        : saved
+      if ("definition" in forceResult && forceResult.definition) {
+        definitionRef.current = forceResult.definition
+        setDefinition(forceResult.definition)
+      }
+      window.synapse?.workflow.operation.openRunner(authoritativeDefinition.id, forceResult.runId).catch((err) => {
         logger.warn("Workflow runner open failed after force run.", {
           boundary: "renderer.workflow.editor.force-run",
-          workflowId: saved.id,
+          workflowId: authoritativeDefinition.id,
           runId: forceResult.runId,
           ...errorDiagnostic(err),
         })
@@ -515,6 +542,13 @@ export function WorkflowEditorApp() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    <ScriptConfirmationDialog
+      open={scriptConfirmation.open}
+      scripts={scriptConfirmation.scripts}
+      confirming={scriptConfirmation.confirming}
+      onCancel={scriptConfirmation.cancel}
+      onConfirm={() => { void scriptConfirmation.confirm() }}
+    />
     </ErrorBoundary>
     </ProviderLookupProvider>
   )

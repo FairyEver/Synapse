@@ -15,6 +15,7 @@ import { HealthModule } from "./health/health.module"
 import { InvitationsModule } from "./invitations/invitations.module"
 import { LiveModule } from "./live/live.module"
 import { PrismaModule } from "./prisma/prisma.module"
+import { ProblemFeedbackModule } from "./problem-feedback/problem-feedback.module"
 import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
 import { TeamsModule } from "./teams/teams.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
@@ -24,6 +25,8 @@ import { UpdateIntentModule } from "./update-intent/update-intent.module"
 import { DEFAULT_API_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "./common/rate-limits"
 
 type RequestLogObject = {
+  readonly method?: unknown
+  readonly originalUrl?: unknown
   readonly url?: unknown
 } & Record<string, unknown>
 
@@ -33,7 +36,15 @@ type RequestLogObject = {
     ScheduleModule.forRoot(),
     LoggerModule.forRoot({
       pinoHttp: {
-        autoLogging: true,
+        autoLogging: {
+          ignore(request) {
+            const candidate = request as typeof request & { readonly originalUrl?: unknown }
+            const url = typeof candidate.originalUrl === "string"
+              ? candidate.originalUrl
+              : typeof candidate.url === "string" ? candidate.url : ""
+            return url.split("?")[0] === "/api/problem-feedback"
+          },
+        },
         redact: ["req.headers.cookie", "req.headers.authorization"],
         serializers: {
           req(request: RequestLogObject) {
@@ -74,6 +85,7 @@ type RequestLogObject = {
     DriveModule,
     AdminModule,
     BackupModule,
+    ProblemFeedbackModule,
     UpdateIntentModule,
     HealthModule,
   ],

@@ -1,0 +1,3 @@
+# Keep problem feedback discoverable without an offline outbox
+
+Supported Synapse versions always register `app_problem_feedback_report_submit` in MCP discovery regardless of network state, server health, or user login, and perform no health preflight before the one confirmed POST. The desktop keeps the body only in memory for the current call and creates no draft, outbox, queue, failure record, crash recovery, or next-launch delivery. A request known not to have been sent returns `SUBMISSION_FAILED`; one that may have reached the server but lost a determinate response returns `SUBMISSION_OUTCOME_UNKNOWN`. Recovery never causes automatic delivery and requires a new complete draft and confirmation.

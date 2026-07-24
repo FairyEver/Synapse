@@ -147,6 +147,30 @@ describe('DriveRendererShell', () => {
     expect(html).toContain('data-drive-code-renderer="true"')
   })
 
+  it('centers the download-only state in the available preview area', () => {
+    const html = renderToStaticMarkup(
+      <DriveRendererContent
+        snapshot={baseSnapshot({
+          current: {
+            ...baseSnapshot().current,
+            name: 'report.docx',
+            mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            previewKind: 'download-only',
+          },
+          preview: null,
+        })}
+        selected={{ id: 'download', label: '下载', container: 'reading' }}
+      />,
+    )
+
+    expect(html).toContain('data-drive-download-state="true"')
+    expect(html).toContain('min-h-full items-center justify-center')
+    expect(html).toContain('无法在线预览')
+    expect(html).toContain('该文件格式暂不支持在线预览，请下载后查看。')
+    expect(html).toContain('href="/drive/items/file/download"')
+    expect(html).toContain('下载文件')
+  })
+
   it('does not make the markdown renderer host the scroll container', () => {
     const html = renderToStaticMarkup(
       <DriveRendererContent

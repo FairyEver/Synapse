@@ -32,6 +32,8 @@ import { SecretsModule } from "../../../../app-capabilities/secrets/renderer"
 import { RuleInstallerModule } from "../../../../app-capabilities/rule-installer/renderer"
 import { QuickInputModule } from "../../../../app-capabilities/quick-input/renderer"
 import { SoundNotifierModule } from "../../../../app-capabilities/sound-notifier/renderer"
+import { SystemNotifierModule } from "../../../../app-capabilities/system-notifier/renderer"
+import { JsonRepairModule } from "../../../../app-capabilities/json-repair/renderer"
 import { TerminalModule } from "../../../../app-capabilities/terminal/renderer"
 import { AppLauncherGrid } from "./app-launcher-grid"
 import { EmbeddedSystemAppShell } from "./embedded-system-app-shell"
@@ -77,7 +79,7 @@ function SystemAppContent({
     )
   }
   if (appId === "agent-personas") return <AgentPersonasModule />
-  if (appId === "workflow") return workflowEntryVisible ? <WorkflowModule /> : null
+  if (appId === "workflow") return <WorkflowModule />
   if (appId === "drive") return <DriveModule />
   if (appId === "automation") return <AutomationModule />
   if (appId === "launcher") {
@@ -112,13 +114,19 @@ function SystemAppContent({
   if (appId === "rule-installer") return <RuleInstallerModule />
   if (appId === "quick-input") return <QuickInputModule />
   if (appId === "sound-notifier") return <SoundNotifierModule />
+  if (appId === "system-notifier") return <SystemNotifierModule />
+  if (appId === "json-repair") return <JsonRepairModule />
   if (appId === "terminal") return <TerminalModule />
   if (appId === "git") return <GitModule />
   if (appId === "editor-scan") return <EditorScanModule />
   if (appId === "usage-monitor") return <UsageMonitorModule />
   if (appId === "model-price") return <ModelPriceModule />
 
-  return null
+  return assertNever(appId)
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled system app: ${String(value)}`)
 }
 
 function LauncherContent({
@@ -192,7 +200,9 @@ function LauncherContent({
           setActiveAppId(null)
           setResourceContentOpenRequest(null)
         }}
-        onOpenWindow={() => void openAppWindow(activeApp.id)}
+        onOpenWindow={activeApp.window.openable
+          ? () => void openAppWindow(activeApp.id)
+          : undefined}
       >
         <SystemAppContent
           appId={activeApp.id}

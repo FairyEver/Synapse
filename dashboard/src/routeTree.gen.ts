@@ -25,6 +25,7 @@ import { Route as AuthenticatedTeamsIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedSystemIndexRouteImport } from './routes/_authenticated/system/index'
 import { Route as AuthenticatedSkillRepositoriesIndexRouteImport } from './routes/_authenticated/skill-repositories/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
+import { Route as AuthenticatedProblemFeedbackIndexRouteImport } from './routes/_authenticated/problem-feedback/index'
 import { Route as AuthenticatedMyDevicesIndexRouteImport } from './routes/_authenticated/my-devices/index'
 import { Route as AuthenticatedLogsIndexRouteImport } from './routes/_authenticated/logs/index'
 import { Route as AuthenticatedInvitationsIndexRouteImport } from './routes/_authenticated/invitations/index'
@@ -127,6 +128,12 @@ const AuthenticatedSettingsIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+const AuthenticatedProblemFeedbackIndexRoute =
+  AuthenticatedProblemFeedbackIndexRouteImport.update({
+    id: '/problem-feedback/',
+    path: '/problem-feedback/',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedMyDevicesIndexRoute =
   AuthenticatedMyDevicesIndexRouteImport.update({
@@ -250,6 +257,7 @@ export interface FileRoutesByFullPath {
   '/invitations/': typeof AuthenticatedInvitationsIndexRoute
   '/logs/': typeof AuthenticatedLogsIndexRoute
   '/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
+  '/problem-feedback/': typeof AuthenticatedProblemFeedbackIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/skill-repositories/': typeof AuthenticatedSkillRepositoriesIndexRoute
   '/system/': typeof AuthenticatedSystemIndexRoute
@@ -283,6 +291,7 @@ export interface FileRoutesByTo {
   '/invitations': typeof AuthenticatedInvitationsIndexRoute
   '/logs': typeof AuthenticatedLogsIndexRoute
   '/my-devices': typeof AuthenticatedMyDevicesIndexRoute
+  '/problem-feedback': typeof AuthenticatedProblemFeedbackIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/skill-repositories': typeof AuthenticatedSkillRepositoriesIndexRoute
   '/system': typeof AuthenticatedSystemIndexRoute
@@ -319,6 +328,7 @@ export interface FileRoutesById {
   '/_authenticated/invitations/': typeof AuthenticatedInvitationsIndexRoute
   '/_authenticated/logs/': typeof AuthenticatedLogsIndexRoute
   '/_authenticated/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
+  '/_authenticated/problem-feedback/': typeof AuthenticatedProblemFeedbackIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/skill-repositories/': typeof AuthenticatedSkillRepositoriesIndexRoute
   '/_authenticated/system/': typeof AuthenticatedSystemIndexRoute
@@ -355,6 +365,7 @@ export interface FileRouteTypes {
     | '/invitations/'
     | '/logs/'
     | '/my-devices/'
+    | '/problem-feedback/'
     | '/settings/'
     | '/skill-repositories/'
     | '/system/'
@@ -388,6 +399,7 @@ export interface FileRouteTypes {
     | '/invitations'
     | '/logs'
     | '/my-devices'
+    | '/problem-feedback'
     | '/settings'
     | '/skill-repositories'
     | '/system'
@@ -423,6 +435,7 @@ export interface FileRouteTypes {
     | '/_authenticated/invitations/'
     | '/_authenticated/logs/'
     | '/_authenticated/my-devices/'
+    | '/_authenticated/problem-feedback/'
     | '/_authenticated/settings/'
     | '/_authenticated/skill-repositories/'
     | '/_authenticated/system/'
@@ -561,6 +574,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings/'
       preLoaderRoute: typeof AuthenticatedSettingsIndexRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
+    '/_authenticated/problem-feedback/': {
+      id: '/_authenticated/problem-feedback/'
+      path: '/problem-feedback'
+      fullPath: '/problem-feedback/'
+      preLoaderRoute: typeof AuthenticatedProblemFeedbackIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/my-devices/': {
       id: '/_authenticated/my-devices/'
@@ -713,6 +733,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedInvitationsIndexRoute: typeof AuthenticatedInvitationsIndexRoute
   AuthenticatedLogsIndexRoute: typeof AuthenticatedLogsIndexRoute
   AuthenticatedMyDevicesIndexRoute: typeof AuthenticatedMyDevicesIndexRoute
+  AuthenticatedProblemFeedbackIndexRoute: typeof AuthenticatedProblemFeedbackIndexRoute
   AuthenticatedSkillRepositoriesIndexRoute: typeof AuthenticatedSkillRepositoriesIndexRoute
   AuthenticatedSystemIndexRoute: typeof AuthenticatedSystemIndexRoute
   AuthenticatedTeamsIndexRoute: typeof AuthenticatedTeamsIndexRoute
@@ -742,6 +763,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedInvitationsIndexRoute: AuthenticatedInvitationsIndexRoute,
   AuthenticatedLogsIndexRoute: AuthenticatedLogsIndexRoute,
   AuthenticatedMyDevicesIndexRoute: AuthenticatedMyDevicesIndexRoute,
+  AuthenticatedProblemFeedbackIndexRoute:
+    AuthenticatedProblemFeedbackIndexRoute,
   AuthenticatedSkillRepositoriesIndexRoute:
     AuthenticatedSkillRepositoriesIndexRoute,
   AuthenticatedSystemIndexRoute: AuthenticatedSystemIndexRoute,

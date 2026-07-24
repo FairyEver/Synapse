@@ -9,9 +9,7 @@ export const fileOpenerAppDefinition = {
   windowTitle: "默认应用打开",
   dock: { pinnedByDefault: false, order: 242 },
   window: { openable: true },
-  capabilities: { primaryMcpPrefix: "app_file_opener" },
   removable: false,
   renameable: false,
   iconEditable: false,
 } as const satisfies SynapseSystemAppDefinition
-

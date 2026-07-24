@@ -1,0 +1,3 @@
+# Return minimal machine-only problem-feedback HTTP errors
+
+The public endpoint returns only strict machine JSON: HTTP `200` `{ "success": true }`; `400` `{ "code": "INVALID_INPUT", "data": { "field", "reason" } }`; `422` `{ "code": "PRIVACY_RISK", "data": { "category" } }`; `429` `{ "code": "RATE_LIMITED" }`; and `503` `{ "code": "SUBMISSION_FAILED" }`. HTTP never returns unknown outcome, and error objects forbid unknown fields plus `ok`, human text, status, retryability, timestamps, or request identifiers; `data` exists only for the first two errors. Server and perimeter use the same determinate shapes, while the desktop maps them to fixed MCP text. Every response is sub-16-KiB UTF-8 JSON with `Cache-Control: no-store`.

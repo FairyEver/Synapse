@@ -21,6 +21,10 @@ import { documentTemplateNodeManifest } from "../app-capabilities/document-templ
 import { textExtractNodeManifest } from "../app-capabilities/text-extractor/workflow-node/manifest"
 import { textFileWriterNodeManifest } from "../app-capabilities/text-file-writer/workflow-node/manifest"
 import { htmlGeneratorEjsFileNodeManifest, htmlGeneratorEjsNodeManifest } from "../app-capabilities/html-generator/workflow-node/manifest"
+import { systemNotifierNodeManifest } from "../app-capabilities/system-notifier/workflow-node/manifest"
+import { jsonRepairNodeManifest } from "../app-capabilities/json-repair/workflow-node/manifest"
+import { javascriptRunNodeManifest } from "../app-capabilities/javascript-run/workflow-node/manifest"
+import { nodejsRunNodeManifest } from "../app-capabilities/nodejs-run/workflow-node/manifest"
 
 nodeTypeRegistry.registerManifest(textNodeManifest)
 nodeTypeRegistry.registerManifest(promptNodeManifest)
@@ -37,3 +41,7 @@ nodeTypeRegistry.registerManifest(textExtractNodeManifest)
 nodeTypeRegistry.registerManifest(textFileWriterNodeManifest)
 nodeTypeRegistry.registerManifest(htmlGeneratorEjsNodeManifest)
 nodeTypeRegistry.registerManifest(htmlGeneratorEjsFileNodeManifest)
+nodeTypeRegistry.registerManifest(systemNotifierNodeManifest)
+nodeTypeRegistry.registerManifest(jsonRepairNodeManifest)
+nodeTypeRegistry.registerManifest(javascriptRunNodeManifest)
+nodeTypeRegistry.registerManifest(nodejsRunNodeManifest)

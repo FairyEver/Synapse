@@ -29,6 +29,8 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import { toast } from "sonner"
 import { formatNodeRunReport, formatWorkflowRunReport } from "./run-report"
 import { openAgentConversationTarget } from "@/lib/agent-conversation-target"
+import { useScriptConfirmationRun } from "../hooks/use-script-confirmation-run"
+import { ScriptConfirmationDialog } from "../editor/script-confirmation-dialog"
 
 const logger = createRendererLogger("workflow.runner")
 
@@ -61,6 +63,7 @@ export function WorkflowRunnerApp() {
   const [retrySignal, setRetrySignal] = useState(0)
   const [confirmRerunActiveRunId, setConfirmRerunActiveRunId] = useState<string | null>(null)
   const [hydratedRunId, setHydratedRunId] = useState<string | null>(null)
+  const { runWithScriptConfirmation, scriptConfirmation } = useScriptConfirmationRun()
 
   const runIdRef = useRef(runId)
   runIdRef.current = runId
@@ -254,10 +257,14 @@ export function WorkflowRunnerApp() {
     setRerunning(true)
     logger.info("rerun requested", { runId, paramKeys: Object.keys(runParams) })
     try {
-      const result = await window.synapse?.workflow.operation.rerun(runId, runParams, undefined, workflowId)
-      if (!result) {
-        logger.warn("rerun returned empty result — IPC bridge unavailable", { runId })
+      const workflowApi = window.synapse?.workflow
+      if (!workflowApi) {
         setRunError("重新运行失败：IPC 通道不可用")
+        return
+      }
+      const result = await runWithScriptConfirmation((confirmationToken) =>
+        workflowApi.operation.rerun(runId, runParams, undefined, workflowId, confirmationToken))
+      if (!result) {
         return
       }
       if ("conflict" in result) {
@@ -295,7 +302,7 @@ export function WorkflowRunnerApp() {
     } finally {
       setRerunning(false)
     }
-  }, [runId, runParams, workflowId])
+  }, [runId, runParams, runWithScriptConfirmation, workflowId])
 
   const handleConfirmRerun = useCallback(async () => {
     if (!runId || !confirmRerunActiveRunId) return
@@ -303,7 +310,13 @@ export function WorkflowRunnerApp() {
     setRerunning(true)
     logger.info("confirmed rerun with force", { runId, activeRunId: confirmRerunActiveRunId })
     try {
-      const result = await window.synapse?.workflow.operation.rerun(runId, runParams, true, workflowId)
+      const workflowApi = window.synapse?.workflow
+      if (!workflowApi) {
+        setRunError("重新运行失败：IPC 通道不可用")
+        return
+      }
+      const result = await runWithScriptConfirmation((confirmationToken) =>
+        workflowApi.operation.rerun(runId, runParams, true, workflowId, confirmationToken))
       if (!result || "conflict" in result || "errors" in result) {
         setRunError("重新运行失败，请重试")
         return
@@ -327,7 +340,7 @@ export function WorkflowRunnerApp() {
     } finally {
       setRerunning(false)
     }
-  }, [runId, runParams, confirmRerunActiveRunId, workflowId])
+  }, [runId, runParams, confirmRerunActiveRunId, runWithScriptConfirmation, workflowId])
 
   const handleOpenEditor = useCallback(() => {
     void window.synapse?.workflow.operation.openEditor(workflowId).catch((err) => {
@@ -561,6 +574,13 @@ export function WorkflowRunnerApp() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    <ScriptConfirmationDialog
+      open={scriptConfirmation.open}
+      scripts={scriptConfirmation.scripts}
+      confirming={scriptConfirmation.confirming}
+      onCancel={scriptConfirmation.cancel}
+      onConfirm={() => { void scriptConfirmation.confirm() }}
+    />
     </ProviderLookupProvider>
   )
 }

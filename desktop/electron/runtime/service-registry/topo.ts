@@ -20,7 +20,7 @@ export interface TopoNode {
 
 /**
  * Returns nodes in start order (deps before dependents).
- * Throws UnknownDependencyError if any dependsOn entry is not registered.
+ * Throws UnknownDependencyError if any ordering edge targets an unregistered service.
  * Throws CircularDependencyError with the offending cycle path if a cycle exists.
  */
 export function topoSort<T extends TopoNode>(nodes: readonly T[]): T[] {
@@ -131,5 +131,8 @@ function findCycle<T extends TopoNode>(remaining: readonly T[]): string[] {
 
 /** Helper for ServiceDescriptor to TopoNode adapter. */
 export function descriptorAsNode<T>(d: ServiceDescriptor<T>): TopoNode {
-  return { id: d.id, dependsOn: d.dependsOn ?? [] }
+  return {
+    id: d.id,
+    dependsOn: [...new Set([...(d.dependsOn ?? []), ...(d.startAfter ?? [])])],
+  }
 }

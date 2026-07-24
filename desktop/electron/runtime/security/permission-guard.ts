@@ -50,6 +50,8 @@ export type PermissionAction =
   | "terminal.command.manage"
   | "terminal.session.delete"
   | "terminal.group.delete"
+  | "notification.trigger"
+  | "json.repair"
 
 export type ActorIdentity =
   | { kind: "user"; id?: string; display?: string }

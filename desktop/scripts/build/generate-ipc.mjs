@@ -74,6 +74,8 @@ const MODULE_SOURCES = [
   { id: "agentPersonas", importPath: "app-capabilities/agent-personas/main/ipc.ts" },
   { id: "driveSync", importPath: "electron/modules/drive-sync/ipc.ts" },
   { id: "soundNotifier", importPath: "app-capabilities/sound-notifier/main/ipc.ts" },
+  { id: "systemNotifier", importPath: "app-capabilities/system-notifier/main/ipc.ts" },
+  { id: "jsonRepair", importPath: "app-capabilities/json-repair/main/ipc.ts" },
   { id: "terminal", importPath: "app-capabilities/terminal/main/ipc.ts" },
   { id: "git", importPath: "electron/modules/git/ipc.ts" },
   { id: "ops", importPath: "electron/modules/ops/ipc.ts" },

@@ -15,6 +15,8 @@ import { secretsAppManifest } from "../../../app-capabilities/secrets/renderer/a
 import { ruleInstallerAppManifest } from "../../../app-capabilities/rule-installer/renderer/app-manifest"
 import { quickInputAppManifest } from "../../../app-capabilities/quick-input/renderer/app-manifest"
 import { soundNotifierAppManifest } from "../../../app-capabilities/sound-notifier/renderer/app-manifest"
+import { systemNotifierAppManifest } from "../../../app-capabilities/system-notifier/renderer/app-manifest"
+import { jsonRepairAppManifest } from "../../../app-capabilities/json-repair/renderer/app-manifest"
 import { terminalAppManifest } from "../../../app-capabilities/terminal/renderer/app-manifest"
 import { editorScanAppManifest } from "@/modules/editor-scan/app-manifest"
 import { gitAppManifest } from "@/modules/git/app-manifest"
@@ -26,6 +28,7 @@ import { workflowAppManifest } from "@/modules/workflow/app-manifest"
 import { launcherAppManifest } from "./launcher-app-manifest"
 import type { SynapseSystemAppManifest } from "./types"
 import { isSystemAppId } from "./types"
+import { isSystemAppEntryVisible } from "./visibility"
 
 const systemApps = [
   agentAppManifest,
@@ -43,6 +46,7 @@ const systemApps = [
   fileOpenerAppManifest,
   textFileWriterAppManifest,
   htmlGeneratorAppManifest,
+  jsonRepairAppManifest,
   skillInstallerAppManifest,
   skillUninstallerAppManifest,
   synapseSkillAppManifest,
@@ -50,6 +54,7 @@ const systemApps = [
   ruleInstallerAppManifest,
   quickInputAppManifest,
   soundNotifierAppManifest,
+  systemNotifierAppManifest,
   terminalAppManifest,
   editorScanAppManifest,
   usageMonitorAppManifest,
@@ -65,7 +70,9 @@ export function listLaunchableSystemApps(options?: {
 }): readonly SynapseSystemAppManifest[] {
   return systemApps
     .filter((app) => app.id !== "launcher")
-    .filter((app) => app.id !== "workflow" || options?.workflowEntryVisible === true)
+    .filter((app) => isSystemAppEntryVisible(app, {
+      workflowEntryVisible: options?.workflowEntryVisible === true,
+    }))
 }
 
 export function getSystemAppManifest(appId: string): SynapseSystemAppManifest | null {

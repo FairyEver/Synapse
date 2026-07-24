@@ -37,6 +37,7 @@ import {
   secretsSchema,
   secretsSettingsSchema,
   soundNotifierSettingsSchemaDefinition,
+  systemNotifierSettingsSchemaDefinition,
   runMigrations,
   webhookConfigSchema,
   webhookRunsSchema,
@@ -62,6 +63,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.secrets.items",
         "app.secrets.settings",
         "app.sound-notifier.settings",
+        "app.system-notifier.settings",
         "app.terminal.blocks",
         "app.terminal.command-bodies",
         "app.terminal.commands",
@@ -147,6 +149,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(quickInputItemsSchema.backend).toBe("sqlite")
     expect(quickInputSettingsSchema.backend).toBe("json")
     expect(soundNotifierSettingsSchemaDefinition.backend).toBe("json")
+    expect(systemNotifierSettingsSchemaDefinition.backend).toBe("json")
     expect(driveSyncBindingsSchema.backend).toBe("sqlite")
     expect(driveSyncBaselineSchema.backend).toBe("sqlite")
     expect(driveSyncOperationsSchema.backend).toBe("sqlite")
@@ -302,6 +305,15 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         volume: 70,
       }),
     ).toBe(false)
+    expect(systemNotifierSettingsSchemaDefinition.validate({
+      schemaVersion: 1,
+      enabled: true,
+      silent: false,
+    })).toBe(true)
+    expect(systemNotifierSettingsSchemaDefinition.validate({
+      schemaVersion: 1,
+      enabled: true,
+    })).toBe(false)
     expect(
       driveSyncBindingsSchema.validate({
         id: "binding-1",

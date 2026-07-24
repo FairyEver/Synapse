@@ -1,4 +1,10 @@
 import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowNode, WorkflowRunResult, WorkflowRunSnapshot, WorkflowRunStatus } from "../../../src/types/workflow"
+import { SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/system-notifier/shared/capability"
+import { JSON_REPAIR_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/json-repair/shared/capability"
+import {
+  JAVASCRIPT_RUN_WORKFLOW_NODE_TYPE,
+  NODEJS_RUN_WORKFLOW_NODE_TYPE,
+} from "../../../app-capabilities/script-runtime/shared/capability"
 import { sanitizeError } from "../error-sanitize"
 
 const SENSITIVE_OUTPUT_KEY_PATTERN = /^(authorization|cookie|set-cookie|.*(?:secret|token|password|credential|api[-_]?key|session[-_]?key).*)$/i
@@ -11,10 +17,55 @@ const TRUNCATED_OUTPUT_MARKER = "[truncated]"
 
 export function sanitizeNodeResultsForSnapshot(
   nodeResults: Record<string, NodeRunResult>,
+  definition?: Pick<WorkflowDefinition, "nodes">,
+  options: { readonly omitDisabledScriptContent?: boolean } = {},
 ): Record<string, NodeRunResult> {
+  const hiddenInputNodeIds = new Set(
+    definition?.nodes
+      .filter((node) =>
+        node.type === SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE
+        || node.type === JSON_REPAIR_WORKFLOW_NODE_TYPE)
+      .map((node) => node.id) ?? [],
+  )
+  const omittedScriptContentNodeIds = new Set(
+    options.omitDisabledScriptContent === false
+      ? []
+      : definition?.nodes
+        .filter((node) =>
+          (
+            node.type === JAVASCRIPT_RUN_WORKFLOW_NODE_TYPE
+            || node.type === NODEJS_RUN_WORKFLOW_NODE_TYPE
+          )
+          && node.config.saveRunContent === false)
+        .map((node) => node.id) ?? [],
+  )
+  const rawScriptContentNodeIds = new Set(
+    definition?.nodes
+      .filter((node) =>
+        node.type === JAVASCRIPT_RUN_WORKFLOW_NODE_TYPE
+        || node.type === NODEJS_RUN_WORKFLOW_NODE_TYPE)
+      .map((node) => node.id) ?? [],
+  )
   const sanitized: Record<string, NodeRunResult> = {}
   for (const [nodeId, result] of Object.entries(nodeResults)) {
-    sanitized[nodeId] = sanitizeNodeResultForSnapshot(result)
+    const sanitizedResult = rawScriptContentNodeIds.has(nodeId)
+      ? sanitizeUserScriptNodeResult(result)
+      : sanitizeNodeResultForSnapshot(result)
+    sanitized[nodeId] = omittedScriptContentNodeIds.has(nodeId)
+      ? {
+          nodeId: sanitizedResult.nodeId,
+          status: sanitizedResult.status,
+          input: { variables: {} },
+          ...(sanitizedResult.error !== undefined ? { error: sanitizedResult.error } : {}),
+          ...(sanitizedResult.errorCode !== undefined ? { errorCode: sanitizedResult.errorCode } : {}),
+          ...(sanitizedResult.errorReason !== undefined ? { errorReason: sanitizedResult.errorReason } : {}),
+          ...(sanitizedResult.startedAt !== undefined ? { startedAt: sanitizedResult.startedAt } : {}),
+          ...(sanitizedResult.endedAt !== undefined ? { endedAt: sanitizedResult.endedAt } : {}),
+          ...(sanitizedResult.durationMs !== undefined ? { durationMs: sanitizedResult.durationMs } : {}),
+        }
+      : hiddenInputNodeIds.has(nodeId)
+      ? { ...sanitizedResult, input: { variables: {} } }
+      : sanitizedResult
   }
   return sanitized
 }
@@ -23,7 +74,7 @@ export function sanitizeWorkflowRunSnapshot(snapshot: WorkflowRunSnapshot): Work
   return {
     ...snapshot,
     params: sanitizeWorkflowOutputForHistory(snapshot.params),
-    nodeResults: sanitizeNodeResultsForSnapshot(snapshot.nodeResults),
+    nodeResults: sanitizeNodeResultsForSnapshot(snapshot.nodeResults, snapshot.definition),
     ...(snapshot.definition ? { definition: sanitizeWorkflowDefinitionForSnapshot(snapshot.definition) } : {}),
     ...(snapshot.error !== undefined ? { error: sanitizeError(snapshot.error) } : {}),
   }
@@ -32,38 +83,43 @@ export function sanitizeWorkflowRunSnapshot(snapshot: WorkflowRunSnapshot): Work
 export function sanitizeWorkflowRunStatus(status: WorkflowRunStatus): WorkflowRunStatus {
   return {
     ...status,
-    nodeResults: sanitizeNodeResultsForSnapshot(status.nodeResults),
+    nodeResults: sanitizeNodeResultsForSnapshot(status.nodeResults, status.definition, {
+      omitDisabledScriptContent: false,
+    }),
     ...(status.error !== undefined ? { error: sanitizeError(status.error) } : {}),
     ...(status.params !== undefined ? { params: sanitizeWorkflowOutputForHistory(status.params) } : {}),
     ...(status.definition ? { definition: sanitizeWorkflowDefinitionForSnapshot(status.definition) } : {}),
   }
 }
 
-export function sanitizeWorkflowEventForRenderer(event: WorkflowEvent): WorkflowEvent {
+export function sanitizeWorkflowEventForRenderer(
+  event: WorkflowEvent,
+  definition?: Pick<WorkflowDefinition, "nodes">,
+): WorkflowEvent {
   switch (event.type) {
     case "node:started":
     case "node:skipped":
-      return event.result ? { ...event, result: sanitizeNodeRunResultForRenderer(event.result) } : event
+      return event.result ? { ...event, result: sanitizeNodeRunResultForRenderer(event.result, definition) } : event
     case "node:completed":
       return {
         ...event,
         output: sanitizeNodePrimaryOutputForHistory(event.output, event.result?.outputs),
-        ...(event.result ? { result: sanitizeNodeRunResultForRenderer(event.result) } : {}),
+        ...(event.result ? { result: sanitizeNodeRunResultForRenderer(event.result, definition) } : {}),
       }
     case "node:failed":
       return {
         ...event,
         error: sanitizeError(event.error),
-        ...(event.result ? { result: sanitizeNodeRunResultForRenderer(event.result) } : {}),
+        ...(event.result ? { result: sanitizeNodeRunResultForRenderer(event.result, definition) } : {}),
       }
     case "workflow:completed":
-      return { ...event, result: sanitizeWorkflowRunResultForRenderer(event.result) }
+      return { ...event, result: sanitizeWorkflowRunResultForRenderer(event.result, definition) }
     case "workflow:failed":
     case "workflow:cancelled":
       return {
         ...event,
         ...(event.type === "workflow:failed" ? { error: sanitizeError(event.error) } : {}),
-        ...(event.result ? { result: sanitizeWorkflowRunResultForRenderer(event.result) } : {}),
+        ...(event.result ? { result: sanitizeWorkflowRunResultForRenderer(event.result, definition) } : {}),
       }
     default:
       return event
@@ -88,6 +144,26 @@ export function sanitizeWorkflowDefinitionForSnapshot(definition: WorkflowDefini
 }
 
 function sanitizeWorkflowNodeForSnapshot(node: WorkflowNode): WorkflowNode {
+  if (node.type === JSON_REPAIR_WORKFLOW_NODE_TYPE) {
+    return {
+      ...node,
+      config: {
+        text: "[redacted]",
+        variables: [],
+      },
+    }
+  }
+  if (node.type === SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE) {
+    return {
+      ...node,
+      config: {
+        title: sanitizeSnapshotValue(node.config.title, new WeakMap(), "title"),
+        body: "[redacted]",
+        variables: [],
+      },
+    }
+  }
+
   const sanitizedConfig = sanitizeWorkflowNodeConfigForSnapshot(node)
   if (node.type !== "codex" && node.type !== "claude_code") {
     return {
@@ -136,19 +212,46 @@ function sanitizeNodeResultForSnapshot(result: NodeRunResult): NodeRunResult {
     ...(result.input ? { input: sanitizeNodeInput(result.input) } : {}),
     ...(result.output !== undefined ? { output: sanitizeNodePrimaryOutputForHistory(result.output, result.outputs) } : {}),
     ...(result.outputs ? { outputs: sanitizeNodeOutputs(result.outputs) } : {}),
+    ...(result.logs ? {
+      logs: result.logs.map((entry) => ({
+        label: sanitizeError(entry.label),
+        value: sanitizeError(entry.value),
+      })),
+    } : {}),
     ...(result.error !== undefined ? { error: sanitizeError(result.error) } : {}),
   }
 }
 
-function sanitizeNodeRunResultForRenderer(result: NodeRunResult): NodeRunResult {
-  return sanitizeNodeResultsForSnapshot({ [result.nodeId]: result })[result.nodeId] ?? result
+function sanitizeNodeRunResultForRenderer(
+  result: NodeRunResult,
+  definition?: Pick<WorkflowDefinition, "nodes">,
+): NodeRunResult {
+  return sanitizeNodeResultsForSnapshot(
+    { [result.nodeId]: result },
+    definition,
+    { omitDisabledScriptContent: false },
+  )[result.nodeId] ?? result
 }
 
-function sanitizeWorkflowRunResultForRenderer(result: WorkflowRunResult): WorkflowRunResult {
+function sanitizeWorkflowRunResultForRenderer(
+  result: WorkflowRunResult,
+  definition?: Pick<WorkflowDefinition, "nodes">,
+): WorkflowRunResult {
   return {
     ...result,
-    nodeResults: sanitizeNodeResultsForSnapshot(result.nodeResults),
+    nodeResults: sanitizeNodeResultsForSnapshot(
+      result.nodeResults,
+      definition,
+      { omitDisabledScriptContent: false },
+    ),
     ...(result.output !== undefined ? { output: sanitizeWorkflowOutputForHistory(result.output) } : {}),
+  }
+}
+
+function sanitizeUserScriptNodeResult(result: NodeRunResult): NodeRunResult {
+  return {
+    ...result,
+    ...(result.error !== undefined ? { error: sanitizeError(result.error) } : {}),
   }
 }
 
@@ -157,6 +260,7 @@ function sanitizeNodeInput(input: NodeRunResult["input"]): NodeRunResult["input"
     variables: Object.fromEntries(
       Object.entries(input.variables).map(([key, value]) => [key, sanitizeError(value)]),
     ),
+    ...(input.inputs !== undefined ? { inputs: sanitizeWorkflowOutputForHistory(input.inputs) } : {}),
     ...(input.prompt !== undefined ? { prompt: sanitizeError(input.prompt) } : {}),
   }
 }

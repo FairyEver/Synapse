@@ -9,9 +9,6 @@ const synapseSkillAppDefinition = {
   windowTitle: "Synapse Skill",
   dock: { pinnedByDefault: false, order: 290 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_synapse_skill",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

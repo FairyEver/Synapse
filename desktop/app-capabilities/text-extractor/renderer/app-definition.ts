@@ -9,9 +9,6 @@ export const textExtractorAppDefinition = {
   windowTitle: "文本提取",
   dock: { pinnedByDefault: false, order: 245 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_text_extractor",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

@@ -96,8 +96,35 @@ describe("workflow document migration", () => {
     expect(source).toEqual(original)
   })
 
+  it("migrates 2.5.0 to the current schema without changing the workflow body", async () => {
+    const source = await fixture("2.5.0") as Record<string, unknown>
+    const original = structuredClone(source)
+    const result = migrateWorkflowDocument(source)
+
+    expect(result).toMatchObject({ kind: "current", migrated: true })
+    if (result.kind !== "current") return
+    expect(result.document).toEqual({
+      ...original,
+      meta: { schemaVersion: WORKFLOW_SCHEMA_VERSION },
+    })
+    expect(source).toEqual(original)
+  })
+
+  it("migrates 2.6.0 to 2.7.0 without changing the workflow body", async () => {
+    const source = await fixture("2.6.0") as Record<string, unknown>
+    const original = structuredClone(source)
+    const result = migrateWorkflowDocument(source)
+    expect(result).toMatchObject({ kind: "current", migrated: true })
+    if (result.kind !== "current") return
+    expect(result.document).toEqual({
+      ...original,
+      meta: { schemaVersion: WORKFLOW_SCHEMA_VERSION },
+    })
+    expect(source).toEqual(original)
+  })
+
   it("validates the current fixture without rewriting its source", async () => {
-    const source = await fixture("2.5.0")
+    const source = await fixture("2.7.0")
     const original = structuredClone(source)
     const result = migrateWorkflowDocument(source)
     expect(result).toMatchObject({ kind: "current", migrated: false })
@@ -130,7 +157,7 @@ describe("workflow document migration", () => {
     expect(source).toEqual(original)
   })
 
-  it.each(["0.0.0", "1.0.0", "2.0.0", "2.1.0", "2.2.0", "2.3.0", "2.4.0", "2.5.0"])(
+  it.each(["0.0.0", "1.0.0", "2.0.0", "2.1.0", "2.2.0", "2.3.0", "2.4.0", "2.5.0", "2.6.0", "2.7.0"])(
     "isolates %s documents whose node config violates the registered schema",
     async (version) => {
       const source = await fixture(version) as Record<string, unknown>
@@ -190,7 +217,7 @@ describe("workflow document migration", () => {
       (source.params as Array<Record<string, unknown>>)[0]!.allowMultiple = "yes"
     }],
   ])("rejects a current document with invalid %s structure", async (_field, mutate) => {
-    const source = await fixture("2.5.0") as Record<string, unknown>
+    const source = await fixture("2.7.0") as Record<string, unknown>
     source.params = [{ name: "topic", type: "text", default: null }]
     mutate(source)
     expect(migrateWorkflowDocument(source)).toMatchObject({ kind: "failed" })

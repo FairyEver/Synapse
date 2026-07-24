@@ -113,6 +113,12 @@ export type AuditLog = {
   createdAt: string
 }
 
+export type ProblemFeedbackRow = {
+  id: string
+  content: string
+  receivedAt: string
+}
+
 export type AdminUserRow = {
   id: string
   email: string
@@ -1141,6 +1147,16 @@ export const driveFileVersionsApi = {
 export const adminApi = {
   getSystemOverview: () =>
     request<SystemOverview>(`${adminApiBasePath}/system`),
+  listProblemFeedback: (page = 1) =>
+    request<PaginatedResponse<ProblemFeedbackRow>>(
+      `${adminApiBasePath}/problem-feedback?page=${page}`,
+      { cache: 'no-store' }
+    ),
+  deleteProblemFeedback: (id: string) =>
+    request<{ success: true }>(
+      `${adminApiBasePath}/problem-feedback/${encodeURIComponent(id)}`,
+      { method: 'DELETE', cache: 'no-store' }
+    ),
   listInvitations: (options: PaginationOptions = {}) =>
     request<PaginatedResponse<AdminInvitationRow>>(
       `${adminApiBasePath}/invitations${paginationSuffix(options)}`

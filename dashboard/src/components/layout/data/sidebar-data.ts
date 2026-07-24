@@ -12,6 +12,7 @@ import {
   Webhook,
   MonitorSmartphone,
   FolderKanban,
+  MessageSquareWarning,
 } from 'lucide-react'
 import { Logo } from '@/assets/logo'
 import type { AuthUser } from '@/stores/auth-store'
@@ -54,6 +55,11 @@ const adminNavGroup = {
       title: '审计日志',
       url: '/audit-logs',
       icon: FileText,
+    },
+    {
+      title: '问题反馈',
+      url: '/problem-feedback',
+      icon: MessageSquareWarning,
     },
     {
       title: 'Webhook 历史',

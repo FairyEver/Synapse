@@ -14,6 +14,14 @@ export interface LocalReference {
   readonly endColumn?: number
 }
 
+export interface ParsedLocalReferenceInput {
+  readonly path: string
+  readonly line?: number
+  readonly column?: number
+  readonly endLine?: number
+  readonly endColumn?: number
+}
+
 export interface ReferenceViewOptions {
   readonly head?: number
   readonly context?: number
@@ -33,11 +41,9 @@ export function resolveLocalReference(
   workspacePath: string,
   options: { readonly allowOutsideWorkspace?: boolean } = {},
 ): LocalReference | null {
-  const normalized = normalizeReferenceInput(input)
-  if (!normalized || isWebUrl(normalized)) return null
-  const parsed = splitLocationSuffix(normalized)
+  const parsed = parseLocalReferenceInput(input)
+  if (!parsed) return null
   const rawPath = parsed.path
-  if (!rawPath || isWebUrl(rawPath)) return null
 
   let candidate: string
   try {
@@ -60,6 +66,13 @@ export function resolveLocalReference(
     endLine: parsed.endLine,
     endColumn: parsed.endColumn,
   }
+}
+
+export function parseLocalReferenceInput(input: string): ParsedLocalReferenceInput | null {
+  const normalized = normalizeReferenceInput(input)
+  if (!normalized || isWebUrl(normalized)) return null
+  const parsed = splitLocationSuffix(normalized)
+  return parsed.path && !isWebUrl(parsed.path) ? parsed : null
 }
 
 export async function renderReferenceView(

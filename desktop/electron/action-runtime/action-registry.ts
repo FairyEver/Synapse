@@ -19,6 +19,7 @@ export type ActionRuntimeContext = {
   readonly abortSignal: AbortSignal
   readonly configVersion?: number
   readonly templateVariables?: Record<string, string>
+  readonly triggerInput?: unknown
 }
 
 export type ActionPermissionInput<TConfig extends ActionConfig = ActionConfig> = {
@@ -32,16 +33,35 @@ export type ActionExecutionInput<TConfig extends ActionConfig = ActionConfig> = 
   readonly previousOutputs?: Record<string, unknown>
 }
 
-export type MainActionDefinition<TConfig extends ActionConfig = ActionConfig> = {
-  readonly manifest: ActionManifest<TConfig>
-  buildPermissionRequest(input: ActionPermissionInput<TConfig>): PermissionRequest
+type ActionDefinitionBase<TConfig extends ActionConfig> = {
   execute(input: ActionExecutionInput<TConfig>): Promise<ActionRunResult>
 }
 
-export class MainActionRegistry {
-  private readonly actions = new Map<string, MainActionDefinition>()
+export type MainActionDefinition<TConfig extends ActionConfig = ActionConfig> =
+  & ActionDefinitionBase<TConfig>
+  & {
+    readonly manifest: ActionManifest<TConfig> & {
+      readonly authorization?: "permission_guard"
+    }
+    buildPermissionRequest(input: ActionPermissionInput<TConfig>): PermissionRequest
+  }
 
-  register(action: MainActionDefinition): void {
+export type NoAuthorizationMainActionDefinition<TConfig extends ActionConfig = ActionConfig> =
+  & ActionDefinitionBase<TConfig>
+  & {
+    readonly manifest: ActionManifest<TConfig> & {
+      readonly authorization: "none"
+    }
+  }
+
+export type RegisteredMainActionDefinition<TConfig extends ActionConfig = ActionConfig> =
+  | MainActionDefinition<TConfig>
+  | NoAuthorizationMainActionDefinition<TConfig>
+
+export class MainActionRegistry {
+  private readonly actions = new Map<string, RegisteredMainActionDefinition>()
+
+  register(action: RegisteredMainActionDefinition): void {
     const { id } = action.manifest
     if (this.actions.has(id)) {
       throw new Error(`Task action "${id}" is already registered`)
@@ -49,7 +69,7 @@ export class MainActionRegistry {
     this.actions.set(id, action)
   }
 
-  get(id: string): MainActionDefinition {
+  get(id: string): RegisteredMainActionDefinition {
     const action = this.actions.get(id)
     if (!action) {
       throw new Error(`Task action "${id}" is not registered`)
@@ -57,7 +77,7 @@ export class MainActionRegistry {
     return action
   }
 
-  list(): readonly MainActionDefinition[] {
+  list(): readonly RegisteredMainActionDefinition[] {
     return [...this.actions.values()]
   }
 

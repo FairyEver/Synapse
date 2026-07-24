@@ -15,6 +15,8 @@ import { secretsAppDefinition } from "../../../app-capabilities/secrets/renderer
 import { ruleInstallerAppDefinition } from "../../../app-capabilities/rule-installer/renderer/app-definition"
 import { quickInputAppDefinition } from "../../../app-capabilities/quick-input/renderer/app-definition"
 import { soundNotifierAppDefinition } from "../../../app-capabilities/sound-notifier/renderer/app-definition"
+import { systemNotifierAppDefinition } from "../../../app-capabilities/system-notifier/renderer/app-definition"
+import { jsonRepairAppDefinition } from "../../../app-capabilities/json-repair/renderer/app-definition"
 import { terminalAppDefinition } from "../../../app-capabilities/terminal/renderer/app-definition"
 import { editorScanAppDefinition } from "../editor-scan/app-definition"
 import { gitAppDefinition } from "../git/app-definition"
@@ -43,6 +45,7 @@ const systemAppDefinitions = [
   fileOpenerAppDefinition,
   textFileWriterAppDefinition,
   htmlGeneratorAppDefinition,
+  jsonRepairAppDefinition,
   skillInstallerAppDefinition,
   skillUninstallerAppDefinition,
   synapseSkillAppDefinition,
@@ -50,6 +53,7 @@ const systemAppDefinitions = [
   ruleInstallerAppDefinition,
   quickInputAppDefinition,
   soundNotifierAppDefinition,
+  systemNotifierAppDefinition,
   terminalAppDefinition,
   editorScanAppDefinition,
   usageMonitorAppDefinition,

@@ -104,6 +104,9 @@ jobs:
       - name: Verify packaged app
         run: pnpm --filter @synapse/desktop run check:packaged-asar
 
+      - name: Verify packaged JavaScript and Node.js runtime
+        run: pnpm --filter @synapse/desktop run check:script-runtime:packaged
+
       - name: Smoke macOS packaged update protocol
         if: matrix.label == 'macOS'
         env:

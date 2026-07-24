@@ -220,7 +220,9 @@ cd "$REMOTE_DIR/server"
 postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
 postgres_db=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
 
-docker compose --env-file .env exec -T postgres pg_dump -U "$postgres_user" "$postgres_db" > "$BACKUP_FILE"
+docker compose --env-file .env exec -T postgres pg_dump \
+  --exclude-table-data='public."ProblemFeedback"' \
+  -U "$postgres_user" "$postgres_db" > "$BACKUP_FILE"
 test -s "$BACKUP_FILE"
 chmod 600 "$BACKUP_FILE"
 
@@ -269,6 +271,7 @@ sync_remote_code() {
     --include='/server/***' \
     --include='/dashboard/***' \
     --include='/shared/***' \
+    --include='/patches/***' \
     --include='/pnpm-lock.yaml' \
     --include='/pnpm-workspace.yaml' \
     --include='/package.json' \

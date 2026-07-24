@@ -28,6 +28,7 @@ type SystemAppWindowLogger = {
 type SystemAppWindowServiceDeps = {
   readonly createWindow: (options: Electron.BrowserWindowConstructorOptions) => BrowserWindow
   readonly baseUrl: () => string
+  readonly getAppDefinition?: (appId: SynapseSystemAppId) => SynapseSystemAppDefinition | null
   readonly windowManager?: WindowManager
   readonly getPreloadPath?: () => string
   readonly logger?: SystemAppWindowLogger
@@ -49,7 +50,7 @@ function systemAppWindowManagerId(appId: SynapseSystemAppId): string {
 }
 
 function buildSystemAppWindowTitle(definition: SynapseSystemAppDefinition): string {
-  return `Synapse AI Studio ${definition.name}`
+  return `Synapse AI Studio ${definition.windowTitle}`
 }
 
 function sendToSystemAppWindow(
@@ -74,10 +75,17 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
 
   return {
     async open(appId: SynapseSystemAppId, options: SynapseSystemAppOpenOptions = {}): Promise<void> {
-      const definition = getSystemAppDefinition(appId)
+      const definition = (deps.getAppDefinition ?? getSystemAppDefinition)(appId)
       if (!definition) {
         logger.warn("Rejected unknown system app window request.", { appId })
         throw new Error("Unknown system app.")
+      }
+      if (!definition.window.openable) {
+        logger.warn("Rejected non-openable system app window request.", {
+          appId,
+          appType: definition.type,
+        })
+        throw new Error("System app does not support detached windows.")
       }
 
       const existing = detachedWindows.get(appId)

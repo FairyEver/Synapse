@@ -5,7 +5,12 @@ import type { TextExtractorService } from "../../../../app-capabilities/text-ext
 import { TextExtractionError } from "../../../../app-capabilities/text-extractor/shared/errors"
 import { textExtractNodeExecutor } from "../../../../app-capabilities/text-extractor/workflow-node/executor.main"
 import { textExtractNodeManifest } from "../../../../app-capabilities/text-extractor/workflow-node/manifest"
-import type { WorkflowDefinition } from "../../../../src/types/workflow"
+import { javascriptRunNodeManifest } from "../../../../app-capabilities/javascript-run/workflow-node/manifest"
+import type { JavascriptWorkflowConfig } from "../../../../app-capabilities/script-runtime/shared/schema"
+import type { SystemNotifierService } from "../../../../app-capabilities/system-notifier/main/service"
+import { systemNotifierNodeExecutor } from "../../../../app-capabilities/system-notifier/workflow-node/executor.main"
+import { systemNotifierNodeManifest } from "../../../../app-capabilities/system-notifier/workflow-node/manifest"
+import type { WorkflowDefinition, WorkflowEvent } from "../../../../src/types/workflow"
 import type { NodeExecutor } from "../../../../workflow-nodes/types"
 import { defaultCodexNodeConfig, type CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
 import { defaultClaudeCodeNodeConfig, type ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
@@ -31,6 +36,48 @@ vi.mock("../../log-store", () => ({
 }))
 
 describe("WorkflowEngine", () => {
+  it.each([
+    "missing",
+    "invalid_json",
+    "multiple_json_values",
+    "unsupported_value",
+  ])("preserves INVALID_RESULT/%s through node results and failure events", async (errorReason) => {
+    const executor: NodeExecutor<JavascriptWorkflowConfig> = {
+      execute: vi.fn(async () => ({
+        status: "failed" as const,
+        error: "INVALID_RESULT: Script result is invalid.",
+        errorCode: "INVALID_RESULT",
+        errorReason,
+        durationMs: 2,
+      })),
+    }
+    const events: WorkflowEvent[] = []
+    nodeTypeRegistry.register(javascriptRunNodeManifest, executor)
+    nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
+    const engine = new WorkflowEngine({ sendToAgent: vi.fn() })
+
+    const result = await engine.run(
+      workflowWithJavascriptNode(),
+      {},
+      "run-invalid-result",
+      (event) => events.push(event),
+    )
+
+    expect(result.nodeResults["javascript-1"]).toMatchObject({
+      status: "failed",
+      errorCode: "INVALID_RESULT",
+      errorReason,
+    })
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "node:failed",
+      nodeId: "javascript-1",
+      result: expect.objectContaining({
+        errorCode: "INVALID_RESULT",
+        errorReason,
+      }),
+    }))
+  })
+
   it("records text-node variables and output without labeling the template as a prompt", async () => {
     nodeTypeRegistry.register(textNodeManifest, textNodeExecutor)
     nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
@@ -76,6 +123,82 @@ describe("WorkflowEngine", () => {
       output: "fixed",
     })
     expect(result.nodeResults["text-1"]?.input).not.toHaveProperty("prompt")
+  })
+
+  it("uses resolved System Notifier content without retaining it in run results or events", async () => {
+    const trigger = vi.fn(() => ({ success: true } as const))
+    const events: unknown[] = []
+    nodeTypeRegistry.register(systemNotifierNodeManifest, systemNotifierNodeExecutor)
+    nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
+    const engine = new WorkflowEngine(
+      { sendToAgent: vi.fn() },
+      undefined,
+      {
+        resolveService: vi.fn(() => ({ trigger } as unknown as SystemNotifierService)),
+      } as never,
+    )
+    const definition: WorkflowDefinition = {
+      id: "workflow-system-notifier",
+      name: "System Notifier workflow",
+      version: "v1",
+      createdAt: 1,
+      updatedAt: 1,
+      params: [],
+      nodes: [
+        {
+          id: "notify-1",
+          name: "系统通知",
+          type: "system_notifier_notification_trigger",
+          position: { x: 0, y: 0 },
+          config: {
+            title: "Title {{secret}}",
+            body: "Private body {{secret}}",
+            variables: [{ name: "secret", source: { type: "static", value: "resolved-variable-canary" } }],
+          },
+        },
+        {
+          id: "end",
+          name: "End",
+          type: "end",
+          position: { x: 200, y: 0 },
+          config: {
+            outputType: "text",
+            template: "{{result}}",
+            variables: [{ name: "result", source: { type: "node_output", node: "notify-1" } }],
+          },
+        },
+      ],
+      edges: [{ id: "edge-1", from: "notify-1", to: "end" }],
+    }
+
+    const result = await engine.run(
+      definition,
+      {},
+      "run-1",
+      (event) => events.push(event),
+    )
+
+    expect(trigger).toHaveBeenCalledWith(
+      {
+        title: "Title resolved-variable-canary",
+        body: "Private body resolved-variable-canary",
+      },
+      expect.objectContaining({
+        workflowId: "workflow-system-notifier",
+        runId: "run-1",
+        nodeId: "notify-1",
+      }),
+    )
+    expect(result.nodeResults["notify-1"]).toMatchObject({
+      status: "success",
+      input: { variables: {} },
+      output: "{\"success\":true}",
+      outputs: { success: true },
+    })
+    expect(JSON.stringify(result.nodeResults["notify-1"])).not.toContain("Private body")
+    expect(JSON.stringify(result.nodeResults["notify-1"])).not.toContain("resolved-variable-canary")
+    expect(JSON.stringify(events)).not.toContain("Private body")
+    expect(JSON.stringify(events)).not.toContain("resolved-variable-canary")
   })
 
   it("applies workflow default timeout to codex nodes with blank timeout", async () => {
@@ -357,6 +480,43 @@ function workflowWithNodeOutputCall(): WorkflowDefinition {
       { id: "edge-1", from: "prepare", to: "call" },
       { id: "edge-2", from: "call", to: "end" },
     ],
+  }
+}
+
+function workflowWithJavascriptNode(): WorkflowDefinition {
+  return {
+    id: "workflow-javascript",
+    name: "JavaScript workflow",
+    version: "v1",
+    createdAt: 1,
+    updatedAt: 1,
+    params: [],
+    nodes: [
+      {
+        id: "javascript-1",
+        name: "JavaScript",
+        type: "javascript_run",
+        position: { x: 0, y: 0 },
+        config: {
+          source: "return undefined",
+          inputs: [],
+          timeoutSeconds: 60,
+          saveRunContent: true,
+        },
+      },
+      {
+        id: "end",
+        name: "End",
+        type: "end",
+        position: { x: 200, y: 0 },
+        config: {
+          outputType: "text",
+          template: "{{result}}",
+          variables: [{ name: "result", source: { type: "node_output", node: "javascript-1" } }],
+        },
+      },
+    ],
+    edges: [{ id: "edge-1", from: "javascript-1", to: "end" }],
   }
 }
 

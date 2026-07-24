@@ -147,14 +147,40 @@ const SYNTHETIC_HTML_GENERATION_FILES: Readonly<Record<string, string>> = {
   "node_modules/ejs/lib/cjs/ejs.js": "module.exports = {}\n",
   "node_modules/ejs/lib/cjs/utils.js": "module.exports = {}\n",
 }
+const SYNTHETIC_JSON_REPAIR_FILES = {
+  "node_modules/repair-json-stream/package.json": JSON.stringify({
+    name: "repair-json-stream",
+    version: "1.3.1",
+    license: "MIT",
+    main: "./dist/index.cjs",
+    exports: {
+      ".": {
+        require: { default: "./dist/index.cjs" },
+      },
+      "./extract": {
+        require: { default: "./dist/extract.cjs" },
+      },
+    },
+  }),
+  "node_modules/repair-json-stream/LICENSE":
+    "MIT License\nPermission is hereby granted, free of charge\n",
+  "node_modules/repair-json-stream/dist/index.cjs":
+    "exports.repairJson = input => input === '{value:1}' ? '{\"value\":1}' : input\n",
+  "node_modules/repair-json-stream/dist/extract.cjs":
+    "exports.stripLlmWrapper = input => input.startsWith('Result: ') ? input.slice(8) : input; exports.extractAllJson = input => [input.slice(input.indexOf('{'), input.lastIndexOf('}') + 1)]\n",
+} as const
 
 interface CreateAsarBufferOptions {
   readonly includeHtmlGeneration?: boolean
+  readonly includeJsonRepair?: boolean
+  readonly omitJsonRepairRootExport?: boolean
+  readonly omitJsonRepairExtractExport?: boolean
   readonly textExtractionContentOverrides?: DocumentExtractionContentOverrides
   readonly includeClaudeRuntimeGuard?: boolean
   readonly includeDeploymentConfig?: boolean
   readonly includeTextExtraction?: boolean
   readonly includePreloadBundle?: boolean
+  readonly includeScriptRuntime?: boolean
   readonly includeSharedPackage?: boolean
   readonly includeUsageAnalysisWorkers?: boolean
   readonly includeUnpackedSourceMaps?: boolean
@@ -321,11 +347,15 @@ function createPackageManifestFiles(
 function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const {
     includeHtmlGeneration = true,
+    includeJsonRepair = true,
+    omitJsonRepairRootExport = false,
+    omitJsonRepairExtractExport = false,
     textExtractionContentOverrides = {},
     includeClaudeRuntimeGuard = true,
     includeDeploymentConfig = true,
     includeTextExtraction = true,
     includePreloadBundle = true,
+    includeScriptRuntime = true,
     includeSharedPackage = true,
     includeUsageAnalysisWorkers = false,
     includeUnpackedSourceMaps = true,
@@ -341,6 +371,10 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const claudeSdkSession = Buffer.from("inspectPackagedClaudeRuntime(); queryOptions.pathToClaudeCodeExecutable = executablePath;\n", "utf8")
   const deploymentConfig = Buffer.from("exports.SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG = { apiBaseUrl: 'https://app.example.com/api' };\n", "utf8")
   const sharedIndex = Buffer.from("export const DESKTOP_CLIENT_ID = 'synapse-desktop';\n", "utf8")
+  const scriptRuntimeSmokeBootstrap = Buffer.from("exports.startScriptRuntimeSmokeBootstrap = async () => {}\n", "utf8")
+  const scriptRuntimeSmoke = Buffer.from("exports.runScriptRuntimeSmoke = async () => {}\n", "utf8")
+  const chromiumWorkerRunner = Buffer.from("exports.runChromiumWorkerScript = async () => ({ status: 'success' })\n", "utf8")
+  const nodeCliRunner = Buffer.from("exports.runNodeCliScript = async () => ({ status: 'success' })\n", "utf8")
   let offset = 0
   const packageNode = createPackedFileNode(offset, packageJson)
   offset += packageJson.length
@@ -367,6 +401,49 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     offset += deploymentConfig.length
   }
   const sharedIndexNode = createPackedFileNode(offset, sharedIndex)
+  if (includeSharedPackage) {
+    offset += sharedIndex.length
+  }
+  const scriptRuntimeSmokeNode = createPackedFileNode(offset, scriptRuntimeSmoke)
+  if (includeScriptRuntime) {
+    offset += scriptRuntimeSmoke.length
+  }
+  const scriptRuntimeSmokeBootstrapNode = createPackedFileNode(offset, scriptRuntimeSmokeBootstrap)
+  if (includeScriptRuntime) {
+    offset += scriptRuntimeSmokeBootstrap.length
+  }
+  const chromiumWorkerRunnerNode = createPackedFileNode(offset, chromiumWorkerRunner)
+  if (includeScriptRuntime) {
+    offset += chromiumWorkerRunner.length
+  }
+  const nodeCliRunnerNode = createPackedFileNode(offset, nodeCliRunner)
+  if (includeScriptRuntime) {
+    offset += nodeCliRunner.length
+  }
+  const jsonRepairPackageJson = JSON.parse(
+    SYNTHETIC_JSON_REPAIR_FILES["node_modules/repair-json-stream/package.json"],
+  )
+  if (omitJsonRepairRootExport) {
+    delete jsonRepairPackageJson.exports["."]
+  }
+  if (omitJsonRepairExtractExport) {
+    delete jsonRepairPackageJson.exports["./extract"]
+  }
+  const jsonRepairFiles = {
+    ...SYNTHETIC_JSON_REPAIR_FILES,
+    "node_modules/repair-json-stream/package.json": JSON.stringify(jsonRepairPackageJson),
+  }
+  const jsonRepairBuffers = Object.fromEntries(
+    Object.entries(jsonRepairFiles)
+      .map(([relativePath, content]) => [relativePath, Buffer.from(content, "utf8")]),
+  ) as Record<keyof typeof SYNTHETIC_JSON_REPAIR_FILES, Buffer>
+  const jsonRepairNodes = Object.fromEntries(
+    Object.entries(jsonRepairBuffers).map(([relativePath, content]) => {
+      const node = createPackedFileNode(offset, content)
+      offset += content.length
+      return [relativePath, node]
+    }),
+  ) as Record<keyof typeof SYNTHETIC_JSON_REPAIR_FILES, ReturnType<typeof createPackedFileNode>>
   const header = Buffer.from(JSON.stringify({
     files: {
       "package.json": packageNode,
@@ -375,6 +452,12 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
           electron: {
             files: {
               "main.js": mainNode,
+              ...(includeScriptRuntime
+                ? {
+                    "script-runtime-smoke-bootstrap.js": scriptRuntimeSmokeBootstrapNode,
+                    "script-runtime-smoke.js": scriptRuntimeSmokeNode,
+                  }
+                : {}),
               ...(includePreloadBundle ? { "preload.js": preloadNode } : {}),
               generated: {
                 files: {
@@ -412,7 +495,7 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
               },
             },
           },
-          ...(includeTextExtraction || includeHtmlGeneration
+          ...(includeTextExtraction || includeHtmlGeneration || includeScriptRuntime
             ? {
                 "app-capabilities": {
                   files: {
@@ -430,6 +513,20 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                       ? {
                           "html-generator": {
                             files: createHtmlGenerationFiles(htmlGenerationFiles),
+                          },
+                        }
+                      : {}),
+                    ...(includeScriptRuntime
+                      ? {
+                          "script-runtime": {
+                            files: {
+                              main: {
+                                files: {
+                                  "chromium-worker-runner.js": chromiumWorkerRunnerNode,
+                                  "node-cli-runner.js": nodeCliRunnerNode,
+                                },
+                              },
+                            },
                           },
                         }
                       : {}),
@@ -524,16 +621,37 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                 },
               }
             : {}),
+          ...(includeJsonRepair
+            ? {
+                "repair-json-stream": {
+                  files: {
+                    "package.json": jsonRepairNodes["node_modules/repair-json-stream/package.json"],
+                    LICENSE: jsonRepairNodes["node_modules/repair-json-stream/LICENSE"],
+                    dist: {
+                      files: {
+                        "index.cjs": jsonRepairNodes["node_modules/repair-json-stream/dist/index.cjs"],
+                        "extract.cjs": jsonRepairNodes["node_modules/repair-json-stream/dist/extract.cjs"],
+                      },
+                    },
+                  },
+                },
+              }
+            : {}),
         },
       },
     },
   }), "utf8")
+  const headerPadding = Buffer.alloc((4 - (header.length % 4)) % 4)
+  const headerPickleSize = 8 + header.length + headerPadding.length
   const prefix = Buffer.alloc(16)
-  prefix.writeUInt32LE(8 + header.length, 4)
+  prefix.writeUInt32LE(4, 0)
+  prefix.writeUInt32LE(headerPickleSize, 4)
+  prefix.writeUInt32LE(headerPickleSize - 4, 8)
   prefix.writeUInt32LE(header.length, 12)
   return Buffer.concat([
     prefix,
     header,
+    headerPadding,
     packageJson,
     mainJs,
     ...(includePreloadBundle ? [preloadJs] : []),
@@ -542,10 +660,23 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     ...(includeClaudeRuntimeGuard ? [claudeSdkSession] : []),
     ...(includeDeploymentConfig ? [deploymentConfig] : []),
     ...(includeSharedPackage ? [sharedIndex] : []),
+    ...(includeScriptRuntime
+      ? [scriptRuntimeSmoke, scriptRuntimeSmokeBootstrap, chromiumWorkerRunner, nodeCliRunner]
+      : []),
+    ...(includeJsonRepair ? Object.values(jsonRepairBuffers) : []),
   ])
 }
 
 describe("packaged asar verification", () => {
+  it("does not apply sandbox inheritance to nested macOS executables", async () => {
+    const entitlements = await readFile(
+      path.join(process.cwd(), "build/entitlements.mac.inherit.plist"),
+      "utf8",
+    )
+
+    expect(entitlements).not.toContain("com.apple.security.inherit")
+  })
+
   async function writeUnpackedFixture(
     resourcesPath: string,
     segments: readonly string[],
@@ -601,6 +732,34 @@ describe("packaged asar verification", () => {
     await writeHtmlGenerationRuntimeFixtures(resourcesPath)
   }
 
+  async function expectJsonRepairExportFailure(
+    options: Pick<
+      CreateAsarBufferOptions,
+      "omitJsonRepairRootExport" | "omitJsonRepairExtractExport"
+    >,
+  ) {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer(options))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining(
+          "packaged JSON Repair package-name resolution smoke failed",
+        ),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  }
+
   it("verifies a Windows-style resources directory with unpacked files", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
     try {
@@ -617,10 +776,43 @@ describe("packaged asar verification", () => {
       ])
 
       expect(result.stdout).toContain("Verified packaged text extraction worker smoke")
+      expect(result.stdout).toContain("Verified packaged JSON Repair runtime smoke")
       expect(result.stdout).toContain("Verified resources")
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  })
+
+  it("rejects packages missing the JSON Repair runtime", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(
+        path.join(resourcesPath, "app.asar"),
+        createAsarBuffer({ includeJsonRepair: false }),
+      )
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("JSON Repair runtime is missing from packed app.asar"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects a packaged JSON Repair dependency missing its root export", async () => {
+    await expectJsonRepairExportFailure({ omitJsonRepairRootExport: true })
+  })
+
+  it("rejects a packaged JSON Repair dependency missing its extract subpath export", async () => {
+    await expectJsonRepairExportFailure({ omitJsonRepairExtractExport: true })
   })
 
   it("verifies a macOS app bundle resources directory with unpacked files", async () => {
@@ -1039,6 +1231,27 @@ describe("packaged asar verification", () => {
         root,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("node_modules/@synapse/shared/dist/index.js"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects packages missing the script runtime packaged gate entries", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeScriptRuntime: false }))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("script runtime packaged gate entry is missing"),
       })
     } finally {
       await rm(root, { recursive: true, force: true })

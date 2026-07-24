@@ -9,9 +9,6 @@ export const skillInstallerAppDefinition = {
   windowTitle: "Skill 安装器",
   dock: { pinnedByDefault: false, order: 280 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_skill_installer",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

@@ -8,9 +8,6 @@ export const editorScanAppDefinition = {
   windowTitle: "IDE 管理",
   dock: { pinnedByDefault: false, order: 270 },
   window: { openable: true },
-  capabilities: {
-    primaryMcpPrefix: "app_editor_scan",
-  },
   removable: false,
   renameable: false,
   iconEditable: false,

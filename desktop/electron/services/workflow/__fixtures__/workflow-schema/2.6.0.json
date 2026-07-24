@@ -1,0 +1,42 @@
+{
+  "meta": { "schemaVersion": "2.6.0" },
+  "id": "system-notifier-workflow",
+  "name": "系统通知",
+  "version": "v_1720000000000_00000000_systemnotifier",
+  "createdAt": 1720000000000,
+  "updatedAt": 1720000000000,
+  "params": [],
+  "nodes": [
+    {
+      "id": "message-source",
+      "name": "消息",
+      "type": "text",
+      "position": { "x": 0, "y": 0 },
+      "config": { "template": "构建完成", "variables": [] }
+    },
+    {
+      "id": "notify",
+      "name": "系统通知",
+      "type": "system_notifier_notification_trigger",
+      "position": { "x": 300, "y": 0 },
+      "config": {
+        "title": "Synapse",
+        "body": "{{$message}}",
+        "variables": [
+          { "name": "message", "source": { "type": "node_output", "node": "message-source" } }
+        ]
+      }
+    },
+    {
+      "id": "end",
+      "name": "结束",
+      "type": "end",
+      "position": { "x": 600, "y": 0 },
+      "config": { "outputType": "text", "template": "", "variables": [] }
+    }
+  ],
+  "edges": [
+    { "id": "message-to-notify", "from": "message-source", "to": "notify" },
+    { "id": "notify-to-end", "from": "notify", "to": "end" }
+  ]
+}

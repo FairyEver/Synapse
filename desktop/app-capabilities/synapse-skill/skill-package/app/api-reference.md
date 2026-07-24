@@ -40,6 +40,23 @@ Input:
 
 The result is `{ output: { path, fileName, format, encoding, size, overwritten } }`. `format` is `html` or `htm`, `encoding` is always `utf8`, and `size` is the rendered UTF-8 byte count. Render failures use the protocol above; write failures preserve the Text File Writer error protocol.
 
+## `app_json_repair_text_repair`
+
+Repair one input string into one complete, validated JSON text result.
+
+Input:
+
+- `text` required: non-blank, well-formed UTF-16 string. Multiline and control content are preserved. Unknown fields are rejected.
+- The JSON Schema `maxLength: 131072` is a coarse preflight hint. The authoritative limit is 128 KiB after UTF-8 encoding.
+
+Output:
+
+- `{ json: string }`, where `json` is the exact repaired text that passed final `JSON.parse`, finite-number validation, a 1 MiB UTF-8 output limit, and a maximum nesting depth of 128.
+
+The best-effort pipeline handles complete JSON root values, common malformed JSON, fenced JSON, LLM wrappers, JSONP/MongoDB forms, and whole-input NDJSON using `repair-json-stream` 1.3.1. When ordinary prose contains JSON, only object or array candidates are considered, in source order, until the first candidate succeeds. Heuristic repair can change meaning. The result remains untrusted and is not sanitized, business-validated, or checked against a Schema. Legal keys such as `__proto__`, `constructor`, and `prototype` are preserved.
+
+Stable error codes are `INVALID_INPUT`, `INPUT_TOO_LARGE`, `OUTPUT_TOO_LARGE`, `MAX_DEPTH_EXCEEDED`, `NO_JSON_FOUND`, `JSON_REPAIR_FAILED`, `NON_FINITE_NUMBER`, `CANCELLED`, and `INTERNAL_ERROR`. All errors are non-retryable and contain no input, candidate, parse position, or upstream exception text. Only `INVALID_INPUT` includes restricted `data.field` and `data.reason`.
+
 ## `app_file_opener_file_open`
 
 Submit one local file to the operating system's default application.
@@ -138,3 +155,50 @@ Output:
 - `presetId`: preset that was selected for this request.
 - `repeatCount`: repeat count used for this request.
 - `intervalMs`: interval used for this request.
+
+## `app_system_notifier_notification_trigger`
+
+Trigger one native system notification on the current computer with fire-and-forget semantics.
+
+Input:
+
+- `title` required: non-empty single-line string, exactly equal to its trimmed value, at most 64 Unicode code points.
+- `body` required: non-empty single-line string, exactly equal to its trimmed value, at most 256 Unicode code points.
+
+Both fields reject CR, LF, Tab, NUL, other Unicode control characters, Unicode line and paragraph separators, and unpaired UTF-16 surrogates. Valid Unicode is preserved without NFC/NFKC normalization or automatic truncation. No other input fields are accepted.
+
+Output:
+
+- `{ success: true }`
+
+The fixed success result means only that a valid call crossed the System Notifier acceptance point. Synapse may suppress the native attempt because notifications are disabled, settings are unavailable, the process-local rate limit is reached, Electron notifications are unsupported, system permission is off, or construction or `show()` failed synchronously. None of those states are exposed to the caller, and success never proves delivery or display.
+
+Invalid input returns `INVALID_INPUT` with only `data.field` (`request`, `title`, or `body`) and `data.reason` (`required`, `type`, `leading_or_trailing_whitespace`, `forbidden_character`, `invalid_unicode`, `too_long`, or `unknown_field`). The error never returns the rejected value, a snippet, or its actual length.
+
+## `app_problem_feedback_report_submit`
+
+Submit exactly one user-confirmed plain-text problem report to the Synapse deployment built into the current desktop version. This tool is high risk because it persists user text remotely. It is available only through direct App MCP and never as a Workflow node, Deep Link, Renderer IPC, CLI, browser form, or HTTP fallback.
+
+Input:
+
+- `content` required: the exact complete string shown to and confirmed by the user. No other fields are accepted.
+- The schema `minLength: 1` and `maxLength: 262144` are only coarse client hints. The shared runtime validator is authoritative.
+- The true maximum is 256 KiB after UTF-8 encoding. Synapse does not impose a separate word or line limit and never truncates or splits an oversized report.
+- Content must be non-empty and equal to its trimmed value. LF is allowed and preserved. CR, Tab, NUL, other control characters, Unicode line or paragraph separators, bidirectional text controls, and unpaired UTF-16 surrogates are rejected. No Unicode normalization is performed.
+- Markdown, HTML, and URL syntax are stored only as text. Content must not contain prohibited secrets, raw local paths, identity data, raw user materials, unsafe URLs, or correlation identifiers. Passing deterministic validation does not prove that all privacy risks were found.
+
+The caller must show the complete final content and obtain a new unambiguous confirmation in the immediately following user message. One confirmation authorizes exactly one invocation. Never retry automatically.
+
+Success exposes only:
+
+- `{ success: true }`
+
+Failure is marked `isError: true` and normalized to `{ ok: false, code, error, data? }`:
+
+- `INVALID_INPUT`: `data` contains only `field` (`request` or `content`) and the stable `reason`.
+- `PRIVACY_RISK`: `data` contains only `category`: `authentication_secret`, `local_path`, `identity`, `user_content`, `unsafe_url`, or `correlation_identifier`.
+- `RATE_LIMITED`: no `data`; do not infer or announce a retry time.
+- `SUBMISSION_FAILED`: no `data`; Synapse can determine the report was not submitted.
+- `SUBMISSION_OUTCOME_UNKNOWN`: no `data`; the report may have been submitted. Explain duplicate risk and do not retry without a new displayed draft and confirmation.
+
+Failures never expose the content, a snippet, length, HTTP status, service address, request identifier, retryability flag, wait time, or internal exception.

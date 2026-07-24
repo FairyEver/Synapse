@@ -81,7 +81,7 @@ function EmbeddedSystemAppShellInner({
         actions={(
           <>
             {slot?.actions}
-            {launcherMode ? (
+            {launcherMode && onOpenWindow ? (
               <SystemAppTopBarActionButton
                 iconOnly
                 type="button"

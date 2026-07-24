@@ -9,6 +9,10 @@ import {
   getActionDomainId,
 } from "../../synapse-capabilities/shared/registry"
 import { capabilityIdToMcpTool, type CapabilityId } from "../../synapse-capabilities/shared/naming"
+import {
+  JAVASCRIPT_RUN_CAPABILITY_ID,
+  NODEJS_RUN_CAPABILITY_ID,
+} from "../../app-capabilities/script-runtime/shared/capability"
 
 const repoRoot = new URL("../../", import.meta.url)
 const RETIRED_MCP_PREFIXES = [
@@ -25,10 +29,20 @@ function allCapabilityIds(): CapabilityId[] {
   return CAPABILITY_DOMAINS.flatMap((domain) => domain.capabilities.map((capability) => capability.id)).sort()
 }
 
+const NON_MCP_CAPABILITY_IDS = new Set<CapabilityId>([
+  JAVASCRIPT_RUN_CAPABILITY_ID,
+  NODEJS_RUN_CAPABILITY_ID,
+])
+
+function mcpCapabilityIds(): CapabilityId[] {
+  return allCapabilityIds().filter((capabilityId) => !NON_MCP_CAPABILITY_IDS.has(capabilityId))
+}
+
 function conventionalPrimaryCapabilityIds(): CapabilityId[] {
   return CAPABILITY_DOMAINS
     .filter((domain) => domain.id !== "skill_repository")
     .flatMap((domain) => domain.capabilities.map((capability) => capability.id))
+    .filter((capabilityId) => !NON_MCP_CAPABILITY_IDS.has(capabilityId))
     .sort()
 }
 
@@ -64,8 +78,8 @@ function readMarkdownFiles(root: URL, prefix = ""): Array<{ path: string; conten
 }
 
 describe("API and MCP capability surface", () => {
-  it("keeps every registered capability exposed with only canonical MCP tool names", () => {
-    const actionIds = allCapabilityIds()
+  it("keeps explicitly exposed capabilities mapped to only canonical MCP tool names", () => {
+    const actionIds = mcpCapabilityIds()
     const toolNames = buildAllMcpTools().map((tool) => tool.name).sort()
     const mappedToolNames = Object.keys(MCP_TOOL_ACTIONS).sort()
     const mappedActionIds = [...new Set(Object.values(MCP_TOOL_ACTIONS))].sort()
@@ -77,7 +91,7 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(toolNames).toHaveLength(203)
+    expect(toolNames).toHaveLength(206)
     expect(toolNames.every((toolName) => toolName.startsWith("app_"))).toBe(true)
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
@@ -173,6 +187,28 @@ describe("API and MCP capability surface", () => {
       .filter((toolName) => docsText.includes(`\`${toolName}\``))
 
     expect(documentedRetiredToolNames).toEqual([])
+  })
+
+  it("documents JSON Repair direct-call and Workflow boundaries with the implementation", () => {
+    const skill = readRepoFile("app-capabilities/synapse-skill/skill-package/SKILL.md")
+    const appGuide = readRepoFile("app-capabilities/synapse-skill/skill-package/app/index.md")
+    const appApi = readRepoFile("app-capabilities/synapse-skill/skill-package/app/api-reference.md")
+    const workflowGuide = readRepoFile("app-capabilities/synapse-skill/skill-package/workflow/index.md")
+    const workflowApi = readRepoFile("app-capabilities/synapse-skill/skill-package/workflow/api-reference.md")
+
+    expect(skill).toContain("JSON repair")
+    expect(appGuide).toContain("`app_json_repair_text_repair`")
+    expect(appGuide).toContain("only when the user explicitly needs JSON repair")
+    expect(appGuide).toContain("Do not pre-clean")
+    expect(appGuide).toContain("Do not parse and re-serialize")
+    expect(appGuide).toContain("Do not retry automatically")
+    expect(appGuide).toContain("do not restrict a Workflow author")
+    expect(appApi).toContain("best-effort")
+    expect(appApi).toContain("remains untrusted")
+    expect(appApi).toContain("checked against a Schema")
+    expect(workflowGuide).toContain("**json_repair_text_repair**")
+    expect(workflowGuide).toContain("`app.json_repair.text.repair@1.0.0`")
+    expect(workflowApi).toContain("### json_repair_text_repair")
   })
 
   it("marks historical superpowers docs before mentioning retired Synapse CLI entrypoints", () => {

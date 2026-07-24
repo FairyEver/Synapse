@@ -335,10 +335,10 @@ MANUAL_IMAGE_TAG=manual-$(date +%Y%m%d_%H%M%S)
 POSTGRES_USER=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
 POSTGRES_DB=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
 docker compose --env-file .env exec -T postgres pg_dumpall -U "$POSTGRES_USER" --globals-only > ../backups/globals/synapse-globals-before-manual-deploy_$(date +%Y%m%d_%H%M%S).sql
-docker compose --env-file .env exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > ../backups/synapse-before-manual-deploy_$(date +%Y%m%d_%H%M%S).sql
+docker compose --env-file .env exec -T postgres pg_dump --exclude-table-data='public."ProblemFeedback"' -U "$POSTGRES_USER" "$POSTGRES_DB" > ../backups/synapse-before-manual-deploy_$(date +%Y%m%d_%H%M%S).sql
 SYNAPSE_SERVER_IMAGE_TAG=$MANUAL_IMAGE_TAG docker compose --env-file .env build server
 docker compose --env-file .env stop server
-docker compose --env-file .env exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > ../backups/synapse-final-before-manual-switch_$(date +%Y%m%d_%H%M%S).sql
+docker compose --env-file .env exec -T postgres pg_dump --exclude-table-data='public."ProblemFeedback"' -U "$POSTGRES_USER" "$POSTGRES_DB" > ../backups/synapse-final-before-manual-switch_$(date +%Y%m%d_%H%M%S).sql
 SYNAPSE_SERVER_IMAGE_TAG=$MANUAL_IMAGE_TAG docker compose --env-file .env up -d --no-build server
 ```
 
@@ -377,7 +377,7 @@ cd /www/wwwroot/synapse/server
 mkdir -p ../backups
 POSTGRES_USER=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
 POSTGRES_DB=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
-docker compose --env-file .env exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > ../backups/synapse-manual_$(date +%Y%m%d_%H%M%S).sql
+docker compose --env-file .env exec -T postgres pg_dump --exclude-table-data='public."ProblemFeedback"' -U "$POSTGRES_USER" "$POSTGRES_DB" > ../backups/synapse-manual_$(date +%Y%m%d_%H%M%S).sql
 
 # 查看备份文件
 ls -la ../backups/*.sql
@@ -421,7 +421,7 @@ cd /www/wwwroot/synapse/server
 mkdir -p ../backups
 POSTGRES_USER=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
 POSTGRES_DB=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
-docker compose --env-file .env exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > ../backups/synapse-server_$(date +%Y%m%d_%H%M%S).sql
+docker compose --env-file .env exec -T postgres pg_dump --exclude-table-data='public."ProblemFeedback"' -U "$POSTGRES_USER" "$POSTGRES_DB" > ../backups/synapse-server_$(date +%Y%m%d_%H%M%S).sql
 exit
 
 # 2. 拉回本地
@@ -442,7 +442,7 @@ docker compose --env-file .env exec -T postgres psql -U "$POSTGRES_USER" -d "$PO
 cd /Users/liyang/.codex/worktrees/f240/Synapse/server
 POSTGRES_USER=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
 POSTGRES_DB=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
-docker compose --env-file .env exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > synapse-local.sql
+docker compose --env-file .env exec -T postgres pg_dump --exclude-table-data='public."ProblemFeedback"' -U "$POSTGRES_USER" "$POSTGRES_DB" > synapse-local.sql
 
 # 2. 上传到服务器备份目录
 scp synapse-local.sql root@你的服务器IP:/www/wwwroot/synapse/backups/synapse-local.sql

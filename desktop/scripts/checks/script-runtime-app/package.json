@@ -1,0 +1,6 @@
+{
+  "name": "synapse-script-runtime-check",
+  "private": true,
+  "type": "module",
+  "main": "../verify-script-runtime.mjs"
+}

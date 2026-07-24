@@ -6,6 +6,7 @@ import type {
   SynapseAgentTimelineItem,
 } from "@/types/agent"
 import { useActivePhaseTicker } from "../hooks/use-active-phase-ticker"
+import type { AgentReferenceActions } from "../hooks/use-agent-reference-actions"
 import { AgentPhaseRow } from "./agent-phase-row"
 import { AgentProcessGroup } from "./agent-process-group"
 import { AgentRunStatus } from "./agent-run-status"
@@ -23,6 +24,7 @@ function AgentTimeline({
   sending,
   pendingPermissions,
   onOpenReference,
+  referenceActions,
   onRespondPermission,
   viewportRef,
 }: {
@@ -32,6 +34,7 @@ function AgentTimeline({
   readonly sending: boolean
   readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
   readonly onOpenReference: (reference: string) => void
+  readonly referenceActions?: AgentReferenceActions
   readonly onRespondPermission: (
     requestId: string,
     behavior: "allow" | "deny",
@@ -91,6 +94,7 @@ function AgentTimeline({
                           pendingPermissions={pendingPermissions}
                           latestPendingItemIds={latestPendingItemIds}
                           onOpenReference={onOpenReference}
+                          referenceActions={referenceActions}
                           onRespondPermission={onRespondPermission}
                         />
                       )
@@ -111,6 +115,7 @@ function AgentTimeline({
                   pendingPermissions={pendingPermissions}
                   latestPendingItemIds={latestPendingItemIds}
                   onOpenReference={onOpenReference}
+                  referenceActions={referenceActions}
                   onRespondPermission={onRespondPermission}
                 />
               )

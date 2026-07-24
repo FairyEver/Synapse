@@ -14,6 +14,10 @@ import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-
 import { TextExtractNodeCard } from "../../../../app-capabilities/text-extractor/workflow-node/card"
 import { TextFileWriterNodeCard } from "../../../../app-capabilities/text-file-writer/workflow-node/card"
 import { HtmlGeneratorEjsFileNodeCard, HtmlGeneratorEjsNodeCard } from "../../../../app-capabilities/html-generator/workflow-node/card"
+import { SystemNotifierNodeCard } from "../../../../app-capabilities/system-notifier/workflow-node/card"
+import { JsonRepairNodeCard } from "../../../../app-capabilities/json-repair/workflow-node/card"
+import { JavascriptRunNodeCard } from "../../../../app-capabilities/javascript-run/workflow-node/card"
+import { NodejsRunNodeCard } from "../../../../app-capabilities/nodejs-run/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { TextNodeConfig } from "../../../../workflow-nodes/text/schema"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
@@ -29,6 +33,9 @@ import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/do
 import type { TextExtractNodeConfig } from "../../../../app-capabilities/text-extractor/workflow-node/schema"
 import type { TextFileWriterNodeConfig } from "../../../../app-capabilities/text-file-writer/workflow-node/schema"
 import type { HtmlGeneratorEjsFileNodeConfig, HtmlGeneratorEjsNodeConfig } from "../../../../app-capabilities/html-generator/workflow-node/schema"
+import type { SystemNotifierNodeConfig } from "../../../../app-capabilities/system-notifier/workflow-node/schema"
+import type { JsonRepairNodeConfig } from "../../../../app-capabilities/json-repair/workflow-node/schema"
+import type { JavascriptWorkflowConfig, NodejsWorkflowConfig } from "../../../../app-capabilities/script-runtime/shared/schema"
 
 export function TextNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
@@ -238,6 +245,68 @@ export function HtmlGeneratorEjsFileNodeWrapper({ id, data, selected }: NodeProp
   )
 }
 
+export function SystemNotifierNodeWrapper({ id, data, selected }: NodeProps) {
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="system_notifier_notification_trigger">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <SystemNotifierNodeCard
+          config={data as SystemNotifierNodeConfig}
+          name={name}
+          selected={selected}
+          nodeId={id}
+        />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
+export function JsonRepairNodeWrapper({ id, data, selected }: NodeProps) {
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="json_repair_text_repair">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <JsonRepairNodeCard
+          config={data as JsonRepairNodeConfig}
+          name={name}
+          selected={selected}
+          nodeId={id}
+        />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
+export function JavascriptRunNodeWrapper({ id, data, selected }: NodeProps) {
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="javascript_run">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <JavascriptRunNodeCard config={data as JavascriptWorkflowConfig} name={name} selected={selected} nodeId={id} />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
+export function NodejsRunNodeWrapper({ id, data, selected }: NodeProps) {
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="nodejs_run">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <NodejsRunNodeCard config={data as NodejsWorkflowConfig} name={name} selected={selected} nodeId={id} />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
 export const nodeTypes = {
   text: TextNodeWrapper,
   prompt: PromptNodeWrapper,
@@ -254,4 +323,8 @@ export const nodeTypes = {
   text_file_writer_file_write: TextFileWriterNodeWrapper,
   html_generator_ejs_generate: HtmlGeneratorEjsNodeWrapper,
   html_generator_ejs_file_generate: HtmlGeneratorEjsFileNodeWrapper,
+  system_notifier_notification_trigger: SystemNotifierNodeWrapper,
+  json_repair_text_repair: JsonRepairNodeWrapper,
+  javascript_run: JavascriptRunNodeWrapper,
+  nodejs_run: NodejsRunNodeWrapper,
 }

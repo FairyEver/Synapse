@@ -28,6 +28,7 @@ describe("system app registry", () => {
       "file-opener",
       "text-file-writer",
       "html-generator",
+      "json-repair",
       "skill-installer",
       "skill-uninstaller",
       "synapse-skill",
@@ -35,6 +36,7 @@ describe("system app registry", () => {
       "rule-installer",
       "quick-input",
       "sound-notifier",
+      "system-notifier",
       "terminal",
       "editor-scan",
       "usage-monitor",
@@ -47,24 +49,17 @@ describe("system app registry", () => {
       id: "launcher",
       namespace: "launcher",
       name: "应用",
-      dock: { pinnedByDefault: true, order: 50 },
+      dock: { pinnedByDefault: true, order: 60 },
     })
     expect(getSystemAppManifest("database")).toMatchObject({
       namespace: "database",
-      capabilities: {
-        primaryMcpPrefix: "app_database",
-      },
     })
     expect(getSystemAppManifest("resource-repository")).toMatchObject({
       namespace: "resource_repository",
-      capabilities: {
-        primaryMcpPrefix: "app_resource_repository",
-      },
     })
     expect(getSystemAppManifest("file-opener")).toMatchObject({
       namespace: "file_opener",
       dock: { pinnedByDefault: false, order: 242 },
-      capabilities: { primaryMcpPrefix: "app_file_opener" },
     })
     expect(getSystemAppManifest("text-file-writer")).toMatchObject({
       id: "text-file-writer",
@@ -72,7 +67,6 @@ describe("system app registry", () => {
       name: "文本写入文件",
       windowTitle: "文本写入文件",
       dock: { pinnedByDefault: false, order: 241 },
-      capabilities: { primaryMcpPrefix: "app_text_file_writer" },
     })
     const htmlGenerator = getSystemAppManifest("html-generator")!
     expect(htmlGenerator).toMatchObject({
@@ -82,22 +76,26 @@ describe("system app registry", () => {
       windowTitle: "HTML 生成器",
       dock: { pinnedByDefault: false, order: 243 },
       window: { openable: true },
-      capabilities: { primaryMcpPrefix: "app_html_generator" },
       removable: false,
       renameable: false,
       iconEditable: false,
     })
     expect(htmlGenerator.icon).not.toBe(getSystemAppManifest("text-file-writer")!.icon)
     expect(htmlGenerator.icon).not.toBe(getSystemAppManifest("document-template")!.icon)
+    expect(getSystemAppManifest("json-repair")).toMatchObject({
+      id: "json-repair",
+      namespace: "json_repair",
+      name: "JSON Repair",
+      windowTitle: "JSON Repair",
+      dock: { pinnedByDefault: false, order: 244 },
+      window: { openable: true },
+    })
     expect(getSystemAppManifest("agent-personas")).toMatchObject({
       id: "agent-personas",
       namespace: "agent_personas",
       name: "智能体",
       windowTitle: "智能体",
       dock: { pinnedByDefault: false, order: 15 },
-      capabilities: {
-        primaryMcpPrefix: "app_agent_personas",
-      },
     })
     expect(getSystemAppManifest("synapse-skill")).toMatchObject({
       id: "synapse-skill",
@@ -105,9 +103,6 @@ describe("system app registry", () => {
       name: "Synapse Skill",
       windowTitle: "Synapse Skill",
       dock: { pinnedByDefault: false, order: 290 },
-      capabilities: {
-        primaryMcpPrefix: "app_synapse_skill",
-      },
     })
     expect(getSystemAppManifest("secrets")).toMatchObject({
       id: "secrets",
@@ -115,9 +110,6 @@ describe("system app registry", () => {
       name: "密钥库",
       windowTitle: "密钥库",
       dock: { pinnedByDefault: false, order: 260 },
-      capabilities: {
-        primaryMcpPrefix: "app_secrets",
-      },
     })
     expect(getSystemAppManifest("skill-uninstaller")).toMatchObject({
       id: "skill-uninstaller",
@@ -125,9 +117,6 @@ describe("system app registry", () => {
       name: "Skill 卸载器",
       windowTitle: "Skill 卸载器",
       dock: { pinnedByDefault: false, order: 285 },
-      capabilities: {
-        primaryMcpPrefix: "app_skill_uninstaller",
-      },
     })
     expect(getSystemAppManifest("text-extractor")).toMatchObject({
       id: "text-extractor",
@@ -136,9 +125,6 @@ describe("system app registry", () => {
       windowTitle: "文本提取",
       dock: { pinnedByDefault: false, order: 245 },
       window: { openable: true },
-      capabilities: {
-        primaryMcpPrefix: "app_text_extractor",
-      },
     })
   })
 
@@ -160,7 +146,10 @@ describe("system app registry", () => {
   })
 
   it("marks every system app as fixed", () => {
-    for (const app of listSystemApps()) {
+    const apps = listSystemApps()
+    expect(new Set(apps.map((app) => app.namespace)).size).toBe(apps.length)
+
+    for (const app of apps) {
       expect(app.type).toBe("system")
       expect(app.removable).toBe(false)
       expect(app.renameable).toBe(false)
@@ -171,7 +160,6 @@ describe("system app registry", () => {
       expect(app.namespace.length).toBeGreaterThan(0)
       expect(app.dock).toBeDefined()
       expect(app.window).toBeDefined()
-      expect(app.capabilities?.primaryMcpPrefix).toMatch(/^app_[a-z0-9_]+$/)
     }
   })
 
@@ -188,6 +176,8 @@ describe("system app registry", () => {
     expect(definitions.every((app) => !("icon" in app))).toBe(true)
     expect(getSystemAppDefinition("model-price")?.windowTitle).toBe("价格管理")
     expect(getSystemAppDefinition("sound-notifier")?.windowTitle).toBe("Sound Notifier")
+    expect(getSystemAppDefinition("system-notifier")?.windowTitle).toBe("System Notifier")
+    expect(getSystemAppDefinition("json-repair")?.windowTitle).toBe("JSON Repair")
   })
 
   it("gets and parses known app ids only", () => {

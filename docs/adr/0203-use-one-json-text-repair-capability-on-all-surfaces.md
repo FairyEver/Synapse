@@ -1,0 +1,3 @@
+# Use one JSON text repair capability on all surfaces
+
+JSON Repair uses App ID `json-repair`, namespace `json_repair`, service `core.json-repair`, capability `app.json_repair.text.repair@1.0.0`, MCP tool `app_json_repair_text_repair`, Workflow node `json_repair_text_repair`, and the same capability identity for IPC. In the capability ID, `repair` is only the terminal action suffix; the canonical `PermissionAction` and audit action are both `json.repair`. This pure non-mutating, normal-risk transformation does not pass through PermissionGuard; every surface resolves the same core service so repair semantics cannot diverge.

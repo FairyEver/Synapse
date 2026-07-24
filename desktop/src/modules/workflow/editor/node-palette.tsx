@@ -1,11 +1,14 @@
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
+import { listDiscoverableBuiltinWorkflowNodeTypes } from "../../../../app-capabilities/manifest-registry"
 
 interface NodePaletteProps {
   collapsed?: boolean
 }
 
 export function NodePalette({ collapsed }: NodePaletteProps) {
-  const types = nodeTypeRegistry.listTypes().filter((t) => t !== "end")
+  const types = listDiscoverableBuiltinWorkflowNodeTypes(
+    nodeTypeRegistry.listTypes(),
+  ).filter((type) => type !== "end")
 
   if (collapsed) {
     return <div className="h-full bg-muted" />
