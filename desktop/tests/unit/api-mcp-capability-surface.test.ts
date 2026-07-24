@@ -13,6 +13,10 @@ import {
   JAVASCRIPT_RUN_CAPABILITY_ID,
   NODEJS_RUN_CAPABILITY_ID,
 } from "../../app-capabilities/script-runtime/shared/capability"
+import {
+  CLIPBOARD_TEXT_READ_CAPABILITY_ID,
+  CLIPBOARD_TEXT_WRITE_CAPABILITY_ID,
+} from "../../app-capabilities/clipboard/shared/capability"
 
 const repoRoot = new URL("../../", import.meta.url)
 const RETIRED_MCP_PREFIXES = [
@@ -32,6 +36,8 @@ function allCapabilityIds(): CapabilityId[] {
 const NON_MCP_CAPABILITY_IDS = new Set<CapabilityId>([
   JAVASCRIPT_RUN_CAPABILITY_ID,
   NODEJS_RUN_CAPABILITY_ID,
+  CLIPBOARD_TEXT_READ_CAPABILITY_ID,
+  CLIPBOARD_TEXT_WRITE_CAPABILITY_ID,
 ])
 
 function mcpCapabilityIds(): CapabilityId[] {
