@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest"
+import { build } from "esbuild"
+import { fileURLToPath } from "node:url"
 import {
   filterDiscoverableTypes,
   listDiscoverableBuiltinAutomationActionTypes,
   listDiscoverableBuiltinWorkflowNodeTypes,
   listBuiltinCapabilityPackages,
   validateBuiltinCapabilityPackages,
-} from "../manifest-registry"
+} from "../surface-discovery"
 import {
   JAVASCRIPT_RUN_AUTOMATION_ACTION_TYPE,
   JAVASCRIPT_RUN_CAPABILITY_ID,
@@ -22,6 +24,19 @@ import { javascriptRunActionManifest } from "../javascript-run/automation-action
 import { nodejsRunActionManifest } from "../nodejs-run/automation-action/manifest"
 
 describe("script capability packages", () => {
+  it("keeps Renderer surface discovery free of Node built-ins", async () => {
+    const result = await build({
+      entryPoints: [fileURLToPath(new URL("../surface-discovery.ts", import.meta.url))],
+      bundle: true,
+      platform: "browser",
+      format: "esm",
+      write: false,
+      logLevel: "silent",
+    })
+
+    expect(result.outputFiles.map((file) => file.text).join("\n")).not.toContain("node:path")
+  })
+
   it("declares exactly Workflow and Automation surfaces", async () => {
     const packages = listBuiltinCapabilityPackages()
     expect(packages).toHaveLength(2)

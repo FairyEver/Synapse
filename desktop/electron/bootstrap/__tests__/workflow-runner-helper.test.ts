@@ -129,6 +129,7 @@ describe("createRunWorkflowAndWait", () => {
       actor,
       undefined,
       { automationId: "auto-1", automationRunId: "auto-run-1" },
+      new Map([["wf-1", definition]]),
     )
   })
 

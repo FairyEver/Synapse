@@ -528,9 +528,10 @@ describe("WorkflowEngine", () => {
     expect(logPayload).not.toContain(secretError)
     expect(logPayload).not.toContain("/Users/liyang/private/source.txt")
     expect(logPayload).not.toContain("raw-error")
+    expect(logPayload).not.toContain("apiToken")
     expect(logger.info).toHaveBeenCalledWith("workflow run started", expect.objectContaining({
-      paramKeys: ["apiToken"],
-      paramCount: 1,
+      workflowId: "wf-logs",
+      nodeCount: 2,
     }))
     expect(logger.info).toHaveBeenCalledWith("node started", expect.objectContaining({
       inputVariableKeys: ["secret"],

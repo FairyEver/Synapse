@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/item"
 import { Separator } from "@/components/ui/separator"
 import { createPlatformActionDefaultConfig } from "../../../../action-packages/builtin/shell-defaults"
-import { listDiscoverableBuiltinAutomationActionTypes } from "../../../../app-capabilities/manifest-registry"
+import { listDiscoverableBuiltinAutomationActionTypes } from "../../../../app-capabilities/surface-discovery"
 import type { ActionConfig } from "../../../../action-packages/types"
 import type { AutomationTriggerConfig } from "@/automation-triggers/action-registry"
 import type { SynapseProjectConfig } from "@/types/config"

@@ -1,5 +1,5 @@
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
-import { listDiscoverableBuiltinWorkflowNodeTypes } from "../../../../app-capabilities/manifest-registry"
+import { listDiscoverableBuiltinWorkflowNodeTypes } from "../../../../app-capabilities/surface-discovery"
 
 interface NodePaletteProps {
   collapsed?: boolean
