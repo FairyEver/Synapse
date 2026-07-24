@@ -5,6 +5,10 @@ import { createRequire } from "node:module"
 
 import { app } from "electron"
 
+if (process.platform === "linux" && process.env.CI) {
+  app.commandLine.appendSwitch("no-sandbox")
+}
+
 const smokeRoot = await mkdtemp(join(tmpdir(), "synapse-script-runtime-check-"))
 app.setPath("userData", smokeRoot)
 app.on("window-all-closed", () => {})
@@ -15,7 +19,7 @@ const { runScriptRuntimeSmoke } = require("../../dist-electron/electron/script-r
 async function run() {
   await runScriptRuntimeSmoke(app.getPath("exe"))
   process.stdout.write("synapse-script-runtime-runtime-smoke-ok\n")
-  await rm(smokeRoot, { recursive: true, force: true })
+  await rm(smokeRoot, { recursive: true, force: true }).catch(() => undefined)
   app.exit(0)
 }
 

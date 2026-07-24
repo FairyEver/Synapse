@@ -6,7 +6,7 @@ import { isSystemAppEntryVisible } from "./visibility"
 export const DEFAULT_DOCK_APP_IDS: readonly SynapseSystemAppId[] =
   listSystemAppDefinitions()
     .filter((app) => app.dock.pinnedByDefault)
-    .toSorted((left, right) => left.dock.order - right.dock.order)
+    .sort((left, right) => left.dock.order - right.dock.order)
     .map((app) => app.id)
 
 export const REQUIRED_DOCK_APP_ID = "launcher" as const satisfies SynapseSystemAppId
@@ -134,12 +134,12 @@ export function listAddableDockApps(
 ): readonly SynapseSystemAppManifest[] {
   const pinned = new Set(normalizeDockAppIds(options.dockAppIds))
 
-  return apps
+  return [...apps]
     .filter((app) => app.id !== REQUIRED_DOCK_APP_ID)
     .filter((app) => app.dock.pinnable !== false)
     .filter((app) => isSystemAppEntryVisible(app, options))
     .filter((app) => !pinned.has(app.id))
-    .toSorted((left, right) => left.dock.order - right.dock.order)
+    .sort((left, right) => left.dock.order - right.dock.order)
 }
 
 export function resolveDefaultDockAppId(
