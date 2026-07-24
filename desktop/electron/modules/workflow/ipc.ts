@@ -524,6 +524,7 @@ const workflowParamSchema = z.object({
 const workflowDefinitionSchema = z.object({
   id: workflowIdSchema, name: z.string(), description: z.string().optional(),
   version: z.string(), createdAt: z.number(), updatedAt: z.number(),
+  layoutDirection: z.enum(["horizontal", "vertical"]),
   meta: z.object({ schemaVersion: z.string() }).passthrough().optional(),
   defaultProjectId: z.string().optional(),
   defaultProviderId: z.string().optional(),
@@ -925,7 +926,10 @@ function handleRunEvent(options: {
   const sanitizedNextNodeResults = sanitizeNodeResultsForSnapshot(
     nextNodeResults,
     def,
-    { omitDisabledScriptContent: false },
+    {
+      omitDisabledScriptContent: false,
+      omitClipboardReadContent: false,
+    },
   )
   runStatuses.set(runId, { ...current, nodeResults: sanitizedNextNodeResults })
 
@@ -947,7 +951,10 @@ function handleRunEvent(options: {
   const sanitizedNodeResults = sanitizeNodeResultsForSnapshot(
     nodeResults,
     def,
-    { omitDisabledScriptContent: false },
+    {
+      omitDisabledScriptContent: false,
+      omitClipboardReadContent: false,
+    },
   )
   const durationMs = event.result?.durationMs ?? endedAt - startedAt
   logger.info("workflow run finished", { workflowId: def.id, runId, status, durationMs })
@@ -1003,7 +1010,10 @@ function handleEngineRejection(options: {
   const sanitizedNodeResults = sanitizeNodeResultsForSnapshot(
     current.nodeResults,
     def,
-    { omitDisabledScriptContent: false },
+    {
+      omitDisabledScriptContent: false,
+      omitClipboardReadContent: false,
+    },
   )
   runStatuses.set(runId, {
     runId,

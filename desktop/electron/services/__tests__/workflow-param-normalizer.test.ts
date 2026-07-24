@@ -12,6 +12,7 @@ function def(params: WorkflowDefinition["params"]): WorkflowDefinition {
     version: "v1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params,
     nodes: [{ id: "end", name: "结束", type: "end", position: { x: 0, y: 0 }, config: { outputType: "text", template: "", variables: [] } }],
     edges: [],

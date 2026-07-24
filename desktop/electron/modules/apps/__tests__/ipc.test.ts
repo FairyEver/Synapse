@@ -32,9 +32,22 @@ describe("appsIpcModule", () => {
 
   it("validates app ids and opens a valid app", async () => {
     expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "database" }).success).toBe(true)
-    expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "document-template" }).success).toBe(true)
-    expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "text-extractor" }).success).toBe(true)
-    expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "system-notifier" }).success).toBe(true)
+    for (const removedAppId of [
+      "document-template",
+      "text-extractor",
+      "file-opener",
+      "text-file-writer",
+      "html-generator",
+      "json-repair",
+      "skill-installer",
+      "skill-uninstaller",
+      "rule-installer",
+      "sound-notifier",
+      "system-notifier",
+    ]) {
+      expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: removedAppId }).success)
+        .toBe(false)
+    }
     expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "missing" }).success).toBe(false)
 
     const windowManager = {}
@@ -61,21 +74,6 @@ describe("appsIpcModule", () => {
     expect(systemAppWindowServiceMock.open).toHaveBeenCalledWith("resource-repository", {
       contentOpenRequest,
     })
-  })
-
-  it("rejects open parameters for System Notifier", async () => {
-    await expect(appsIpcModule.methods.openSystemApp.handler(createContext({}), {
-      appId: "system-notifier",
-      options: {
-        contentOpenRequest: {
-          kind: "detail",
-          requestId: "request-1",
-          contentType: "skill",
-          contentId: "skill-1",
-        },
-      },
-    })).rejects.toThrow("does not accept open parameters")
-    expect(systemAppWindowServiceMock.open).not.toHaveBeenCalled()
   })
 
   it("rejects direct workflow windows while the workflow entry is hidden", async () => {

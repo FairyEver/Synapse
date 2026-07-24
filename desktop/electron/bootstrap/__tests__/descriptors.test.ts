@@ -293,6 +293,21 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreWorkflowEngineDescriptor.dependsOn).toContain("core.json-repair")
   })
 
+  it("registers one Clipboard service for Workflow without a hard audit dependency", async () => {
+    const {
+      coreClipboardDescriptor,
+      coreWorkflowEngineDescriptor,
+    } = await importBootstrap()
+
+    expect(coreClipboardDescriptor).toMatchObject({
+      id: "core.clipboard",
+      criticality: "degraded",
+      startAfter: ["core.audit-sink"],
+    })
+    expect(coreClipboardDescriptor.dependsOn).toBeUndefined()
+    expect(coreWorkflowEngineDescriptor.dependsOn).toContain("core.clipboard")
+  })
+
   it("coreActionRuntimeDescriptor creates the shared action registry", async () => {
     const { coreActionRuntimeDescriptor } = await importBootstrap()
     expect(coreActionRuntimeDescriptor.id).toBe("core.action-runtime")

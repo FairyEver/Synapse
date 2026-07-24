@@ -48,6 +48,7 @@ import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
 import { getSystemAppManifest, listSystemApps } from "@/modules/apps/registry"
 import { isSystemAppEntryVisible } from "@/modules/apps/visibility"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
+import { AppSwitchTransition } from "@/modules/apps/components/app-switch-transition"
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
 import type { SynapseSystemAppId } from "@/modules/apps/types"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
@@ -292,19 +293,21 @@ function MainApp() {
       >
         <div className="flex h-full min-h-0 flex-col">
           <ErrorBoundary fallbackTitle="应用出现问题">
-            <EmbeddedSystemAppShell appName={getSystemAppManifest(activeAppId)?.name ?? ""} mode="dock">
-              <SystemAppContent
-                appId={activeAppId}
-                launcherResetKey={launcherResetKey}
-                workflowEntryVisible={workflowEntryVisible}
-                resourceContentOpenRequest={pendingAppContentOpenRequest}
-                onResourceContentOpenRequestConsumed={(requestId) => {
-                  setPendingAppContentOpenRequest((current) => current?.requestId === requestId ? null : current)
-                }}
-                pendingAgentSession={pendingAgentSession}
-                onPendingAgentSessionConsumed={() => setPendingAgentSession(null)}
-              />
-            </EmbeddedSystemAppShell>
+            <AppSwitchTransition transitionKey={activeAppId}>
+              <EmbeddedSystemAppShell appName={getSystemAppManifest(activeAppId)?.name ?? ""} mode="dock">
+                <SystemAppContent
+                  appId={activeAppId}
+                  launcherResetKey={launcherResetKey}
+                  workflowEntryVisible={workflowEntryVisible}
+                  resourceContentOpenRequest={pendingAppContentOpenRequest}
+                  onResourceContentOpenRequestConsumed={(requestId) => {
+                    setPendingAppContentOpenRequest((current) => current?.requestId === requestId ? null : current)
+                  }}
+                  pendingAgentSession={pendingAgentSession}
+                  onPendingAgentSessionConsumed={() => setPendingAgentSession(null)}
+                />
+              </EmbeddedSystemAppShell>
+            </AppSwitchTransition>
           </ErrorBoundary>
         </div>
         <KnowledgeBaseStorageMigrationDialog

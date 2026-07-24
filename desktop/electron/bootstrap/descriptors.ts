@@ -23,7 +23,7 @@
  * T1.7 adds repo.* + ui.tray.
  */
 
-import { app, Notification, safeStorage, shell } from "electron"
+import { app, clipboard, Notification, safeStorage, shell } from "electron"
 import os from "node:os"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
@@ -73,6 +73,9 @@ import { PROBLEM_FEEDBACK_SERVICE_ID } from "../../app-capabilities/problem-feed
 import { createJsonRepairCapabilityDispatcher } from "../../app-capabilities/json-repair/main/dispatcher"
 import { JsonRepairService } from "../../app-capabilities/json-repair/main/service"
 import { JSON_REPAIR_SERVICE_ID } from "../../app-capabilities/json-repair/shared/capability"
+import { createElectronClipboardAdapter } from "../../app-capabilities/clipboard/main/adapter"
+import { ClipboardService } from "../../app-capabilities/clipboard/main/service"
+import { CLIPBOARD_SERVICE_ID } from "../../app-capabilities/clipboard/shared/capability"
 import { createSynapseSkillService, type SynapseSkillService } from "../../app-capabilities/synapse-skill/main/service"
 import { SYNAPSE_SKILL_SERVICE_ID } from "../../app-capabilities/synapse-skill/shared/capability"
 import { createTerminalCapabilityDispatcher } from "../../app-capabilities/terminal/main/dispatcher"
@@ -637,6 +640,25 @@ export const coreJsonRepairDescriptor: ServiceDescriptor<JsonRepairService> = {
   },
 }
 
+export const coreClipboardDescriptor: ServiceDescriptor<ClipboardService> = {
+  id: CLIPBOARD_SERVICE_ID,
+  criticality: "degraded",
+  startAfter: ["core.audit-sink"],
+  create(ctx) {
+    let auditSink: AuditSink | undefined
+    try {
+      auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    } catch {
+      auditSink = undefined
+    }
+    return new ClipboardService(
+      createElectronClipboardAdapter(clipboard),
+      auditSink,
+      createMainLogger("core.clipboard"),
+    )
+  },
+}
+
 export const coreFileOpenerDescriptor: ServiceDescriptor<FileOpenerService> = {
   id: FILE_OPENER_SERVICE_ID,
   criticality: "degraded",
@@ -980,7 +1002,10 @@ export function createRunWorkflowHandler(deps: {
       const sanitizedNextNodeResults = sanitizeNodeResultsForSnapshot(
         nextNodeResults,
         def,
-        { omitDisabledScriptContent: false },
+        {
+          omitDisabledScriptContent: false,
+          omitClipboardReadContent: false,
+        },
       )
       runStatuses.set(runId, { ...current, nodeResults: sanitizedNextNodeResults })
       const isTerminalEvt = event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled"
@@ -996,7 +1021,10 @@ export function createRunWorkflowHandler(deps: {
         const terminalNodeResults = sanitizeNodeResultsForSnapshot(
           event.result?.nodeResults ?? nextNodeResults,
           def,
-          { omitDisabledScriptContent: false },
+          {
+            omitDisabledScriptContent: false,
+            omitClipboardReadContent: false,
+          },
         )
         runStatuses.set(runId, { ...current, runId, workflowId: id, status, nodeResults: terminalNodeResults, startedAt, endedAt, durationMs: event.result?.durationMs ?? endedAt - startedAt, ...(event.type === "workflow:failed" ? { error: sanitizeError(event.error) } : {}) })
         if (!isWorkflowDeleted?.(id)) {
@@ -1021,7 +1049,10 @@ export function createRunWorkflowHandler(deps: {
         const sanitizedNodeResults = sanitizeNodeResultsForSnapshot(
           current.nodeResults,
           def,
-          { omitDisabledScriptContent: false },
+          {
+            omitDisabledScriptContent: false,
+            omitClipboardReadContent: false,
+          },
         )
         runStatuses.set(runId, {
           ...current, runId, workflowId: id,
@@ -2400,6 +2431,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
     "core.workflow.snapshots",
     SYSTEM_NOTIFIER_INTEGRATION_SERVICE_ID,
     JSON_REPAIR_SERVICE_ID,
+    CLIPBOARD_SERVICE_ID,
     "knowledge-base.storage-migration-service",
     HTML_GENERATOR_FILE_SERVICE_ID,
     SCRIPT_RUNTIME_SERVICE_ID,

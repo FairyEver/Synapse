@@ -4,6 +4,7 @@ import type { AgentSendDeps, NodeExecutionResult, NodeRuntimeDeps, WorkflowCallS
 import type { ActorIdentity } from "../../runtime/security"
 import { SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/system-notifier/shared/capability"
 import { JSON_REPAIR_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/json-repair/shared/capability"
+import { CLIPBOARD_TEXT_WRITE_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/clipboard/shared/capability"
 import {
   JAVASCRIPT_RUN_WORKFLOW_NODE_TYPE,
   NODEJS_RUN_WORKFLOW_NODE_TYPE,
@@ -286,6 +287,7 @@ export class WorkflowEngine {
               : (
               node.type === SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE
               || node.type === JSON_REPAIR_WORKFLOW_NODE_TYPE
+              || node.type === CLIPBOARD_TEXT_WRITE_WORKFLOW_NODE_TYPE
             )
               ? { variables: {} }
               : { variables: resolved, ...(recordedPrompt !== undefined ? { prompt: recordedPrompt } : {}) }

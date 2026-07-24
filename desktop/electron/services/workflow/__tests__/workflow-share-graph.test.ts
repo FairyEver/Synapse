@@ -12,6 +12,7 @@ function definition(id: string, children: readonly string[] = []): WorkflowDefin
     meta: { schemaVersion: "2.0.0" },
     createdAt: 1,
     updatedAt: 2,
+    layoutDirection: "horizontal" as const,
     params: [],
     nodes: [
       ...children.map((child, index) => ({

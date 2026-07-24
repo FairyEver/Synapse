@@ -507,6 +507,7 @@ export class WorkflowService {
     const now = this.migrationOptions.now?.() ?? Date.now()
     const def: WorkflowDefinition = {
       id, name: "新工作流", version: "", createdAt: now, updatedAt: now, params: [],
+      layoutDirection: "horizontal",
       meta: { schemaVersion: WORKFLOW_SCHEMA_VERSION },
       defaultProjectId,
       defaultProviderId: defaultProviderModel?.providerId,

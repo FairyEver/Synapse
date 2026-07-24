@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import {
   ReactFlow,
   Background,
+  ControlButton,
   Controls,
   ReactFlowProvider,
   PanOnScrollMode,
@@ -10,6 +11,7 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  useUpdateNodeInternals,
   useOnSelectionChange,
   addEdge,
   applyEdgeChanges,
@@ -21,15 +23,18 @@ import {
   type NodeChange,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { Clipboard, LayoutGrid, Maximize2, Trash2 } from "lucide-react"
+import { Clipboard, Download, LayoutGrid, Maximize2, Trash2 } from "lucide-react"
 import { nodeTypes } from "./node-wrappers"
 import { BranchEdge } from "./custom-edge"
 import { CanvasActionsContext, type NodeClipboard } from "./canvas-context"
-import type { WorkflowDefinition, WorkflowNode, WorkflowEdge } from "@/types/workflow"
+import type { WorkflowDefinition, WorkflowLayoutDirection, WorkflowNode, WorkflowEdge } from "@/types/workflow"
 import { createRendererLogger } from "@/app-shell/logging"
 import { autoLayoutNodes } from "./auto-layout"
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
 import { resolveBranchLabel } from "../lib/branch-label"
+import { errorDiagnostic } from "../lib/error-utils"
+import { WorkflowLayoutDirectionProvider } from "../workflow-layout-direction-context"
+import { exportWorkflowViewportAsPng } from "./workflow-image-export"
 
 const logger = createRendererLogger("workflow.editor.canvas")
 
@@ -60,6 +65,7 @@ export interface WorkflowCanvasHandle {
   deleteNodes: (nodeIds: string[]) => void
   copyNodes: (nodeIds: string[]) => void
   selectNode: (nodeId: string) => void
+  updateLayoutDirection: (direction: WorkflowLayoutDirection) => void
 }
 
 function defToFlow(def: WorkflowDefinition) {
@@ -120,7 +126,9 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
   const { nodes: initNodes, edges: initEdges } = defToFlow(definition)
   const [nodes, setNodes] = useNodesState(initNodes)
   const [edges, setEdges] = useEdgesState(initEdges)
-  const { screenToFlowPosition, fitView, setViewport } = useReactFlow()
+  const { screenToFlowPosition, fitView, setViewport, getNodesBounds } = useReactFlow<WorkflowFlowNode, WorkflowFlowEdge>()
+  const updateNodeInternals = useUpdateNodeInternals()
+  const reactFlowRootRef = useRef<HTMLDivElement>(null)
   const nodesRef = useRef(nodes)
   nodesRef.current = nodes
   const edgesRef = useRef(edges)
@@ -131,6 +139,8 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
   const definitionRef = useRef(definition)
   definitionRef.current = definition
   const [clipboard, setClipboard] = useState<NodeClipboard | null>(null)
+  const [isExportingImage, setIsExportingImage] = useState(false)
+  const imageExportInProgressRef = useRef(false)
   // Refs for imperative handle — declared early so useImperativeHandle closure can access them
   const deleteNodesRef = useRef<(nodeIds: string[]) => void>(() => {})
   const copyNodesRef = useRef<(nodeIds: string[]) => void>(() => {})
@@ -185,7 +195,40 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
       setNodes((nds) => nds.map((node) => ({ ...node, selected: node.id === nodeId })))
       onNodeSelectRef.current?.(nodeId)
     },
+    updateLayoutDirection: (layoutDirection) => {
+      if (layoutDirection === definitionRef.current.layoutDirection) return
+      try {
+        const layouted = autoLayoutNodes(nodesRef.current, edgesRef.current, { layoutDirection }) as WorkflowFlowNode[]
+        const newDef = {
+          ...definitionRef.current,
+          layoutDirection,
+          nodes: layouted.map(flowNodeToWorkflowNode),
+        }
+        nodesRef.current = layouted
+        definitionRef.current = newDef
+        setNodes(layouted)
+        onChange(newDef)
+        logger.info("layout direction changed", {
+          layoutDirection,
+          nodeCount: layouted.length,
+        })
+      } catch {
+        toast.error("布局失败，请重试")
+      }
+    },
   }))
+
+  const previousLayoutDirectionRef = useRef(definition.layoutDirection)
+  useEffect(() => {
+    if (previousLayoutDirectionRef.current === definition.layoutDirection) return
+    previousLayoutDirectionRef.current = definition.layoutDirection
+    const nodeIds = nodesRef.current.map((node) => node.id)
+    updateNodeInternals(nodeIds)
+    const fitFrame = requestAnimationFrame(() => {
+      void fitView(CANVAS_FIT_VIEW_OPTIONS)
+    })
+    return () => cancelAnimationFrame(fitFrame)
+  }, [definition.layoutDirection, fitView, updateNodeInternals])
 
   const getSelectedNodeIds = useCallback((): string[] => {
     return nodesRef.current.filter((n) => n.selected).map((n) => n.id)
@@ -484,7 +527,10 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
   }, [onNodeSelect, onRequestRename])
 
   const handleAutoLayout = useCallback(() => {
-    const layouted = autoLayoutNodes(nodesRef.current, edgesRef.current) as WorkflowFlowNode[]
+    const layouted = autoLayoutNodes(nodesRef.current, edgesRef.current, {
+      layoutDirection: definitionRef.current.layoutDirection,
+    }) as WorkflowFlowNode[]
+    nodesRef.current = layouted
     setNodes(layouted)
     const wfNodes: WorkflowNode[] = layouted.map(flowNodeToWorkflowNode)
     const newDef = { ...definitionRef.current, nodes: wfNodes }
@@ -505,6 +551,32 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
       void fitView(CANVAS_FIT_VIEW_OPTIONS)
     })
   }, [fitView, setViewport])
+
+  const handleExportPng = useCallback(async () => {
+    if (imageExportInProgressRef.current || nodesRef.current.length === 0) return
+
+    imageExportInProgressRef.current = true
+    setIsExportingImage(true)
+    try {
+      const viewport = reactFlowRootRef.current?.querySelector<HTMLElement>(".react-flow__viewport")
+      if (!viewport) throw new Error("React Flow viewport is unavailable.")
+
+      await exportWorkflowViewportAsPng({
+        viewport,
+        bounds: getNodesBounds(nodesRef.current),
+        workflowName: definitionRef.current.name,
+      })
+    } catch (error) {
+      logger.error("workflow PNG export failed", {
+        workflowId: definitionRef.current.id,
+        ...errorDiagnostic(error),
+      })
+      toast.error("导出图片失败，请重试")
+    } finally {
+      imageExportInProgressRef.current = false
+      setIsExportingImage(false)
+    }
+  }, [getNodesBounds])
 
   const canvasActions = useMemo(() => ({
     clipboard, getSelectedNodeIds, copyNodes, pasteNodes, disconnectNodes, deleteNodes, deleteEdges, requestRename,
@@ -597,21 +669,32 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
 
   return (
     <CanvasActionsContext.Provider value={canvasActions}>
-      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-        onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange}
-        onConnect={onConnect} onNodeDragStop={onNodeDragStop}
-        onDrop={onDrop} onDragOver={onDragOver}
-        onPaneClick={() => { closePaneMenu(); closeEdgeMenu() }}
-        onMoveStart={() => { closePaneMenu(); closeEdgeMenu() }}
-        onPaneContextMenu={onPaneContextMenu}
-        onEdgeContextMenu={onEdgeContextMenu}
-        edgeTypes={edgeTypes}
-        selectionOnDrag selectionMode={SelectionMode.Partial}
-        fitView fitViewOptions={CANVAS_FIT_VIEW_OPTIONS}
-        panOnScroll panOnScrollMode={PanOnScrollMode.Free}>
-        <Background />
-        <Controls fitViewOptions={CANVAS_FIT_VIEW_OPTIONS} onFitView={handleFitView} />
-      </ReactFlow>
+      <WorkflowLayoutDirectionProvider value={definition.layoutDirection}>
+        <ReactFlow ref={reactFlowRootRef} nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+          onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange}
+          onConnect={onConnect} onNodeDragStop={onNodeDragStop}
+          onDrop={onDrop} onDragOver={onDragOver}
+          onPaneClick={() => { closePaneMenu(); closeEdgeMenu() }}
+          onMoveStart={() => { closePaneMenu(); closeEdgeMenu() }}
+          onPaneContextMenu={onPaneContextMenu}
+          onEdgeContextMenu={onEdgeContextMenu}
+          edgeTypes={edgeTypes}
+          selectionOnDrag selectionMode={SelectionMode.Partial}
+          fitView fitViewOptions={CANVAS_FIT_VIEW_OPTIONS}
+          panOnScroll panOnScrollMode={PanOnScrollMode.Free}>
+          <Background />
+          <Controls fitViewOptions={CANVAS_FIT_VIEW_OPTIONS} onFitView={handleFitView}>
+            <ControlButton
+              aria-label="导出 PNG"
+              disabled={nodes.length === 0 || isExportingImage}
+              onClick={() => void handleExportPng()}
+              title="导出 PNG"
+            >
+              <Download />
+            </ControlButton>
+          </Controls>
+        </ReactFlow>
+      </WorkflowLayoutDirectionProvider>
       {paneMenu && (
         <div
           className="fixed z-50 min-w-32 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"

@@ -20,22 +20,12 @@ import { WorkflowModule } from "@/modules/workflow"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
 import { AgentPersonasModule } from "../../../../app-capabilities/agent-personas/renderer"
-import { DocumentTemplateModule } from "../../../../app-capabilities/document-template/renderer"
-import { TextExtractorModule } from "../../../../app-capabilities/text-extractor/renderer"
-import { FileOpenerModule } from "../../../../app-capabilities/file-opener/renderer"
-import { TextFileWriterModule } from "../../../../app-capabilities/text-file-writer/renderer"
-import { HtmlGeneratorModule } from "../../../../app-capabilities/html-generator/renderer"
-import { SkillInstallerModule } from "../../../../app-capabilities/skill-installer/renderer"
-import { SkillUninstallerModule } from "../../../../app-capabilities/skill-uninstaller/renderer"
 import { SynapseSkillModule } from "../../../../app-capabilities/synapse-skill/renderer"
 import { SecretsModule } from "../../../../app-capabilities/secrets/renderer"
-import { RuleInstallerModule } from "../../../../app-capabilities/rule-installer/renderer"
 import { QuickInputModule } from "../../../../app-capabilities/quick-input/renderer"
-import { SoundNotifierModule } from "../../../../app-capabilities/sound-notifier/renderer"
-import { SystemNotifierModule } from "../../../../app-capabilities/system-notifier/renderer"
-import { JsonRepairModule } from "../../../../app-capabilities/json-repair/renderer"
 import { TerminalModule } from "../../../../app-capabilities/terminal/renderer"
 import { AppLauncherGrid } from "./app-launcher-grid"
+import { AppSwitchTransition } from "./app-switch-transition"
 import { EmbeddedSystemAppShell } from "./embedded-system-app-shell"
 import { getSystemAppManifest, listLaunchableSystemApps } from "../registry"
 import type { SynapseSystemAppId, SynapseSystemAppOpenOptions } from "../types"
@@ -102,20 +92,9 @@ function SystemAppContent({
     )
   }
   if (appId === "database") return <DatabaseModule />
-  if (appId === "document-template") return <DocumentTemplateModule />
-  if (appId === "text-extractor") return <TextExtractorModule />
-  if (appId === "file-opener") return <FileOpenerModule />
-  if (appId === "text-file-writer") return <TextFileWriterModule />
-  if (appId === "html-generator") return <HtmlGeneratorModule />
-  if (appId === "skill-installer") return <SkillInstallerModule />
-  if (appId === "skill-uninstaller") return <SkillUninstallerModule />
   if (appId === "synapse-skill") return <SynapseSkillModule />
   if (appId === "secrets") return <SecretsModule />
-  if (appId === "rule-installer") return <RuleInstallerModule />
   if (appId === "quick-input") return <QuickInputModule />
-  if (appId === "sound-notifier") return <SoundNotifierModule />
-  if (appId === "system-notifier") return <SystemNotifierModule />
-  if (appId === "json-repair") return <JsonRepairModule />
   if (appId === "terminal") return <TerminalModule />
   if (appId === "git") return <GitModule />
   if (appId === "editor-scan") return <EditorScanModule />
@@ -194,24 +173,26 @@ function LauncherContent({
   const activeApp = activeAppId ? getSystemAppManifest(activeAppId) : null
   if (activeApp) {
     return (
-      <EmbeddedSystemAppShell
-        appName={activeApp.name}
-        onBack={() => {
-          setActiveAppId(null)
-          setResourceContentOpenRequest(null)
-        }}
-        onOpenWindow={activeApp.window.openable
-          ? () => void openAppWindow(activeApp.id)
-          : undefined}
-      >
-        <SystemAppContent
-          appId={activeApp.id}
-          workflowEntryVisible={workflowEntryVisible}
-          resourceContentOpenRequest={resourceContentOpenRequest}
-          onResourceContentOpenRequestConsumed={handleResourceContentOpenRequestConsumed}
-          onContentOpenRequest={openResourceRepository}
-        />
-      </EmbeddedSystemAppShell>
+      <AppSwitchTransition transitionKey={activeApp.id} animateOnMount>
+        <EmbeddedSystemAppShell
+          appName={activeApp.name}
+          onBack={() => {
+            setActiveAppId(null)
+            setResourceContentOpenRequest(null)
+          }}
+          onOpenWindow={activeApp.window.openable
+            ? () => void openAppWindow(activeApp.id)
+            : undefined}
+        >
+          <SystemAppContent
+            appId={activeApp.id}
+            workflowEntryVisible={workflowEntryVisible}
+            resourceContentOpenRequest={resourceContentOpenRequest}
+            onResourceContentOpenRequestConsumed={handleResourceContentOpenRequestConsumed}
+            onContentOpenRequest={openResourceRepository}
+          />
+        </EmbeddedSystemAppShell>
+      </AppSwitchTransition>
     )
   }
 

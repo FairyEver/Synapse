@@ -503,6 +503,7 @@ function definition(): WorkflowDefinition {
     version: "v1",
     createdAt: 1,
     updatedAt: 1,
+    layoutDirection: "horizontal" as const,
     meta: { schemaVersion: "2.7.0" },
     params: [],
     nodes: [
@@ -566,6 +567,7 @@ function singleInputDefinition(
     version: "v1",
     createdAt: 1,
     updatedAt: 1,
+    layoutDirection: "horizontal" as const,
     meta: { schemaVersion: "2.7.0" },
     params: [],
     nodes: [

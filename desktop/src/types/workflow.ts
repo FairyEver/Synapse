@@ -41,6 +41,7 @@ export interface WorkflowNode {
 }
 export interface WorkflowEdge { id: string; from: string; to: string; branch?: string }
 export interface WorkflowSchemaMeta { schemaVersion: string }
+export type WorkflowLayoutDirection = "horizontal" | "vertical"
 export type WorkflowVariableSource =
   | { readonly type: "param"; readonly param: string }
   | { readonly type: "node_output"; readonly node: string }
@@ -61,6 +62,7 @@ export interface WorkflowVariableBinding {
 export interface WorkflowDefinition {
   id: string; name: string; description?: string; version: string
   createdAt: number; updatedAt: number
+  layoutDirection: WorkflowLayoutDirection
   /** Persisted document schema version. Missing only on legacy input before migration. */
   meta?: WorkflowSchemaMeta
   defaultProjectId?: string

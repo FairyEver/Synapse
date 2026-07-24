@@ -82,6 +82,10 @@ import {
   JAVASCRIPT_RUN_CAPABILITY_ID,
   NODEJS_RUN_CAPABILITY_ID,
 } from "../../app-capabilities/script-runtime/shared/capability"
+import {
+  CLIPBOARD_TEXT_READ_CAPABILITY_ID,
+  CLIPBOARD_TEXT_WRITE_CAPABILITY_ID,
+} from "../../app-capabilities/clipboard/shared/capability"
 
 const appCapabilities: readonly CapabilityDefinition[] = [
   {
@@ -162,6 +166,20 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     title: "Repair JSON text",
     description: "Best-effort repair of one input string into validated JSON text.",
     mutates: false,
+  },
+  {
+    id: CLIPBOARD_TEXT_READ_CAPABILITY_ID,
+    title: "Read system clipboard text",
+    description: "Read up to 1 MiB of plain text from the standard system clipboard through a Workflow node.",
+    mutates: false,
+    risk: "high",
+  },
+  {
+    id: CLIPBOARD_TEXT_WRITE_CAPABILITY_ID,
+    title: "Write system clipboard text",
+    description: "Write up to 1 MiB of plain text to the standard system clipboard through a Workflow node.",
+    mutates: true,
+    risk: "high",
   },
   {
     id: JAVASCRIPT_RUN_CAPABILITY_ID,

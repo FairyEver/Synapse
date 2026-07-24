@@ -9,20 +9,9 @@ export const SYSTEM_APP_IDS = [
   "resource-repository",
   "git",
   "database",
-  "document-template",
-  "text-extractor",
-  "file-opener",
-  "text-file-writer",
-  "html-generator",
-  "json-repair",
-  "skill-installer",
-  "skill-uninstaller",
   "synapse-skill",
   "secrets",
-  "rule-installer",
   "quick-input",
-  "sound-notifier",
-  "system-notifier",
   "terminal",
   "editor-scan",
   "usage-monitor",
@@ -42,20 +31,9 @@ export type SynapseSystemAppNamespace =
   | "resource_repository"
   | "git"
   | "database"
-  | "document_template"
-  | "text_extractor"
-  | "file_opener"
-  | "text_file_writer"
-  | "html_generator"
-  | "json_repair"
-  | "skill_installer"
-  | "skill_uninstaller"
   | "synapse_skill"
   | "secrets"
-  | "rule_installer"
   | "quick_input"
-  | "sound_notifier"
-  | "system_notifier"
   | "terminal"
   | "editor_scan"
   | "usage_monitor"

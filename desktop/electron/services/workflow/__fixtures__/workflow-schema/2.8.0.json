@@ -1,0 +1,42 @@
+{
+  "meta": { "schemaVersion": "2.8.0" },
+  "id": "json-repair-workflow",
+  "name": "JSON 修复",
+  "version": "v_1720000000000_00000000_jsonrepair",
+  "createdAt": 1720000000000,
+  "updatedAt": 1720000000000,
+  "layoutDirection": "horizontal",
+  "params": [],
+  "nodes": [
+    {
+      "id": "source",
+      "name": "输入",
+      "type": "text",
+      "position": { "x": 0, "y": 0 },
+      "config": { "template": "{answer: 42}", "variables": [] }
+    },
+    {
+      "id": "repair",
+      "name": "JSON 修复",
+      "type": "json_repair_text_repair",
+      "position": { "x": 300, "y": 0 },
+      "config": {
+        "text": "{{$source}}",
+        "variables": [
+          { "name": "source", "source": { "type": "node_output", "node": "source" } }
+        ]
+      }
+    },
+    {
+      "id": "end",
+      "name": "结束",
+      "type": "end",
+      "position": { "x": 600, "y": 0 },
+      "config": { "outputType": "text", "template": "", "variables": [] }
+    }
+  ],
+  "edges": [
+    { "id": "source-to-repair", "from": "source", "to": "repair" },
+    { "id": "repair-to-end", "from": "repair", "to": "end" }
+  ]
+}

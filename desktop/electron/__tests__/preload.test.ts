@@ -1433,6 +1433,7 @@ describe("preload bridge", () => {
       version: "1",
       createdAt: 0,
       updatedAt: 0,
+      layoutDirection: "horizontal" as const,
       params: [],
       nodes: [{
         id: "node-1",

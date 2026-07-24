@@ -15,6 +15,7 @@ const childDefinition: WorkflowDefinition = {
   version: "v-child",
   createdAt: 0,
   updatedAt: 0,
+  layoutDirection: "horizontal" as const,
   defaultProjectId: "child-project",
   params: [{ name: "topic", type: "text", default: null }],
   nodes: [],

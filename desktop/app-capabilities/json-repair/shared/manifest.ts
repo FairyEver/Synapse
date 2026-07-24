@@ -7,7 +7,7 @@ import {
 
 export const jsonRepairCapabilityManifest = {
   id: JSON_REPAIR_APP_ID,
-  app: { id: JSON_REPAIR_APP_ID },
+  app: null,
   capabilities: [JSON_REPAIR_CAPABILITY_ID],
   mcpTools: [JSON_REPAIR_MCP_TOOL_NAME],
   workflowNodes: [JSON_REPAIR_WORKFLOW_NODE_TYPE],

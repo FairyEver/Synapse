@@ -7,9 +7,7 @@ import {
 
 export const documentTemplateCapabilityManifest = {
   id: DOCUMENT_TEMPLATE_APP_ID,
-  app: {
-    id: DOCUMENT_TEMPLATE_APP_ID,
-  },
+  app: null,
   capabilities: [DOCUMENT_TEMPLATE_CAPABILITY_ID],
   mcpTools: [DOCUMENT_TEMPLATE_MCP_TOOL_NAME],
   workflowNodes: [DOCUMENT_TEMPLATE_WORKFLOW_NODE_TYPE],

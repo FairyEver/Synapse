@@ -226,6 +226,10 @@ export function WorkflowEditorApp() {
     setRenameSignal((s) => s + 1)
   }, [])
 
+  const handleLayoutDirectionChange = useCallback((layoutDirection: WorkflowDefinition["layoutDirection"]) => {
+    canvasRef.current?.updateLayoutDirection(layoutDirection)
+  }, [])
+
   const handleCloseDiscard = () => {
     isDirtyRef.current = false
     setShowCloseDialog(false)
@@ -512,6 +516,7 @@ export function WorkflowEditorApp() {
             projects={projects}
             defaultProjectName={defaultProjectName}
             onDefinitionChange={handleDefinitionChange}
+            onLayoutDirectionChange={handleLayoutDirectionChange}
             validationItems={selectedNodeValidationItems}
           />
         </ResizablePanel>

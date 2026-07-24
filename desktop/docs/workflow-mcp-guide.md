@@ -513,7 +513,7 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
                                                          → 添加已连接节点（position 可省略，自动布局）
 6. workflow_edge_create({ workflowId, from, to })       → 在单次保存后仍有效时补充连接
 7. workflow_node_update({ workflowId, nodeId, patch })  → 配置节点（设置 prompt、variables、paramTemplates 等）
-8. workflow_layout_update({ workflowId })               → 自动排列节点位置
+8. workflow_layout_update({ workflowId, direction? })   → 按当前方向排列；显式 LR/TB 同时改变布局方向
 9. workflow_definition_inspect({ definition })          → 校验完整性
 10. workflow_run_execute({ workflowId, params })         → 执行工作流
 11. workflow_run_get({ workflowId, runId })              → 轮询运行结果

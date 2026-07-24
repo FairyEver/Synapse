@@ -1,4 +1,4 @@
-import { Handle, Position, type NodeProps } from "@xyflow/react"
+import { Handle, type NodeProps } from "@xyflow/react"
 import { NodeContextMenu } from "./node-context-menu"
 import { TextNodeCard } from "../../../../workflow-nodes/text/card"
 import { PromptNodeCard } from "../../../../workflow-nodes/prompt/card"
@@ -18,6 +18,11 @@ import { SystemNotifierNodeCard } from "../../../../app-capabilities/system-noti
 import { JsonRepairNodeCard } from "../../../../app-capabilities/json-repair/workflow-node/card"
 import { JavascriptRunNodeCard } from "../../../../app-capabilities/javascript-run/workflow-node/card"
 import { NodejsRunNodeCard } from "../../../../app-capabilities/nodejs-run/workflow-node/card"
+import { ClipboardNodeCard } from "../../../../app-capabilities/clipboard/workflow-node/card"
+import {
+  clipboardTextReadNodeManifest,
+  clipboardTextWriteNodeManifest,
+} from "../../../../app-capabilities/clipboard/workflow-node/manifest"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { TextNodeConfig } from "../../../../workflow-nodes/text/schema"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
@@ -36,15 +41,33 @@ import type { HtmlGeneratorEjsFileNodeConfig, HtmlGeneratorEjsNodeConfig } from 
 import type { SystemNotifierNodeConfig } from "../../../../app-capabilities/system-notifier/workflow-node/schema"
 import type { JsonRepairNodeConfig } from "../../../../app-capabilities/json-repair/workflow-node/schema"
 import type { JavascriptWorkflowConfig, NodejsWorkflowConfig } from "../../../../app-capabilities/script-runtime/shared/schema"
+import {
+  useWorkflowHandlePositions,
+  useWorkflowLayoutDirection,
+} from "../workflow-layout-direction-context"
+import {
+  resolveSwitchBranchHandlePercent,
+  resolveSwitchNodeWidth,
+} from "@/lib/workflow-layout-direction"
+
+function WorkflowTargetHandle() {
+  const { target } = useWorkflowHandlePositions()
+  return <Handle type="target" position={target} />
+}
+
+function WorkflowSourceHandle() {
+  const { source } = useWorkflowHandlePositions()
+  return <Handle type="source" position={source} />
+}
 
 export function TextNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
     <NodeContextMenu nodeId={id} nodeType="text">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <TextNodeCard config={data as TextNodeConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -55,9 +78,9 @@ export function PromptNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="prompt">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <PromptNodeCard config={data as PromptNodeConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -66,18 +89,31 @@ export function PromptNodeWrapper({ id, data, selected }: NodeProps) {
 export function SwitchNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   const branches = (data as { branches?: Array<{ id: string; label: string }> }).branches ?? []
+  const layoutDirection = useWorkflowLayoutDirection()
+  const { source } = useWorkflowHandlePositions()
+  const width = layoutDirection === "vertical"
+    ? resolveSwitchNodeWidth(layoutDirection, branches.length)
+    : undefined
   return (
     <NodeContextMenu nodeId={id} nodeType="switch">
       <div>
-        <Handle type="target" position={Position.Left} />
-        <SwitchNodeCard config={data as SwitchNodeConfig} name={name} selected={selected} nodeId={id} />
+        <WorkflowTargetHandle />
+        <SwitchNodeCard
+          config={data as SwitchNodeConfig}
+          name={name}
+          selected={selected}
+          nodeId={id}
+          width={width}
+        />
         {branches.map((b, i) => (
           <Handle
             key={b.id}
             type="source"
-            position={Position.Right}
+            position={source}
             id={b.id}
-            style={{ top: `${SWITCH_HEADER_H + (i + 0.5) * SWITCH_BRANCH_H}px` }}
+            style={layoutDirection === "vertical"
+              ? { left: `${resolveSwitchBranchHandlePercent(i, branches.length)}%` }
+              : { top: `${SWITCH_HEADER_H + (i + 0.5) * SWITCH_BRANCH_H}px` }}
           />
         ))}
       </div>
@@ -90,7 +126,7 @@ export function EndNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="end">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <EndNodeCard config={data as EndNodeConfig} name={name} selected={selected} nodeId={id} />
       </div>
     </NodeContextMenu>
@@ -102,9 +138,9 @@ export function HttpRequestNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="http_request">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <HttpRequestNodeCard config={data as HttpRequestNodeConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -115,9 +151,9 @@ export function ScriptNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="script">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <ScriptNodeCard config={data as ScriptNodeConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -128,9 +164,9 @@ export function WorkflowCallNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="workflow_call">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <WorkflowCallNodeCard config={data as WorkflowCallNodeConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -141,9 +177,9 @@ export function CodexNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="codex">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <CodexNodeCard config={data as CodexNodeConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -154,9 +190,9 @@ export function ClaudeCodeNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="claude_code">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <ClaudeCodeNodeCard config={data as ClaudeCodeNodeConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -167,9 +203,9 @@ export function FileOpenerNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="file_opener_file_open">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <FileOpenerNodeCard config={data as FileOpenerNodeConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -180,9 +216,9 @@ export function DocumentTemplateNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="document_template_docx_generate">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <DocumentTemplateNodeCard config={data as DocumentTemplateNodeConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -193,14 +229,14 @@ export function TextExtractNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="text_extract">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <TextExtractNodeCard
           config={data as TextExtractNodeConfig}
           name={name}
           selected={selected}
           nodeId={id}
         />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -211,9 +247,9 @@ export function TextFileWriterNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="text_file_writer_file_write">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <TextFileWriterNodeCard config={data as TextFileWriterNodeConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -224,9 +260,9 @@ export function HtmlGeneratorEjsNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="html_generator_ejs_generate">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <HtmlGeneratorEjsNodeCard config={data as HtmlGeneratorEjsNodeConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -237,9 +273,9 @@ export function HtmlGeneratorEjsFileNodeWrapper({ id, data, selected }: NodeProp
   return (
     <NodeContextMenu nodeId={id} nodeType="html_generator_ejs_file_generate">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <HtmlGeneratorEjsFileNodeCard config={data as HtmlGeneratorEjsFileNodeConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -250,14 +286,14 @@ export function SystemNotifierNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="system_notifier_notification_trigger">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <SystemNotifierNodeCard
           config={data as SystemNotifierNodeConfig}
           name={name}
           selected={selected}
           nodeId={id}
         />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -268,14 +304,14 @@ export function JsonRepairNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="json_repair_text_repair">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <JsonRepairNodeCard
           config={data as JsonRepairNodeConfig}
           name={name}
           selected={selected}
           nodeId={id}
         />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -286,9 +322,9 @@ export function JavascriptRunNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="javascript_run">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <JavascriptRunNodeCard config={data as JavascriptWorkflowConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -299,9 +335,45 @@ export function NodejsRunNodeWrapper({ id, data, selected }: NodeProps) {
   return (
     <NodeContextMenu nodeId={id} nodeType="nodejs_run">
       <div>
-        <Handle type="target" position={Position.Left} />
+        <WorkflowTargetHandle />
         <NodejsRunNodeCard config={data as NodejsWorkflowConfig} name={name} selected={selected} nodeId={id} />
-        <Handle type="source" position={Position.Right} />
+        <WorkflowSourceHandle />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
+export function ClipboardTextWriteNodeWrapper({ id, data, selected }: NodeProps) {
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="clipboard_text_write">
+      <div>
+        <WorkflowTargetHandle />
+        <ClipboardNodeCard
+          manifest={clipboardTextWriteNodeManifest}
+          name={name}
+          selected={selected}
+          nodeId={id}
+        />
+        <WorkflowSourceHandle />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
+export function ClipboardTextReadNodeWrapper({ id, data, selected }: NodeProps) {
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="clipboard_text_read">
+      <div>
+        <WorkflowTargetHandle />
+        <ClipboardNodeCard
+          manifest={clipboardTextReadNodeManifest}
+          name={name}
+          selected={selected}
+          nodeId={id}
+        />
+        <WorkflowSourceHandle />
       </div>
     </NodeContextMenu>
   )
@@ -327,4 +399,6 @@ export const nodeTypes = {
   json_repair_text_repair: JsonRepairNodeWrapper,
   javascript_run: JavascriptRunNodeWrapper,
   nodejs_run: NodejsRunNodeWrapper,
+  clipboard_text_write: ClipboardTextWriteNodeWrapper,
+  clipboard_text_read: ClipboardTextReadNodeWrapper,
 }

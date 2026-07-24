@@ -9,7 +9,7 @@ import { fileOpenInputSchema } from "./schema"
 
 export const fileOpenerCapabilityManifest = {
   id: FILE_OPENER_APP_ID,
-  app: { id: FILE_OPENER_APP_ID },
+  app: null,
   capabilities: [FILE_OPENER_CAPABILITY_ID],
   mcpTools: [FILE_OPENER_MCP_TOOL_NAME],
   workflowNodes: [FILE_OPENER_WORKFLOW_NODE_TYPE],
@@ -20,7 +20,7 @@ export const fileOpenerCapabilityManifest = {
   }],
 } as const satisfies {
   readonly id: string
-  readonly app: { readonly id: string }
+  readonly app: null
   readonly capabilities: readonly string[]
   readonly mcpTools: readonly string[]
   readonly workflowNodes: readonly string[]

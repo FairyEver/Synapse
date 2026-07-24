@@ -7,9 +7,9 @@ import { CopyIdButton } from "@/modules/workflow/components/copy-id-button"
 import { useProviderLookup } from "../provider-lookup-context"
 import { statusClass, type NodeStatus } from "../node-status-utils"
 
-export function SwitchNodeCard({ config, name, selected, status, progressLabel, startedAt, nodeId }: {
+export function SwitchNodeCard({ config, name, selected, status, progressLabel, startedAt, nodeId, width }: {
   config: SwitchNodeConfig; name?: string; selected?: boolean; status?: NodeStatus
-  progressLabel?: string; startedAt?: number; nodeId?: string
+  progressLabel?: string; startedAt?: number; nodeId?: string; width?: number
 }) {
   const Icon = switchNodeManifest.icon
   const timer = useRunningTimer(startedAt, status === "running")
@@ -26,7 +26,7 @@ export function SwitchNodeCard({ config, name, selected, status, progressLabel, 
   return (
     <div
       className={cn("relative rounded-lg border bg-card w-56 overflow-hidden flex flex-col", selected && "ring-2 ring-primary", statusClass(status))}
-      style={{ height: totalHeight }}
+      style={{ height: totalHeight, width }}
     >
       <div className="px-3 py-2 flex flex-col justify-center shrink-0" style={{ height: SWITCH_HEADER_H }}>
         <div className="flex items-center gap-2 mb-1.5">

@@ -21,6 +21,7 @@ describe("text extractor capability", () => {
   it("publishes read-only extraction and direct-to-file tools", () => {
     expect(textExtractorCapabilityManifest).toMatchObject({
       id: "text-extractor",
+      app: null,
       capabilities: [
         TEXT_EXTRACTOR_CAPABILITY_ID,
         TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,

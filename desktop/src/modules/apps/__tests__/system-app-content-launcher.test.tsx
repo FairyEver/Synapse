@@ -92,30 +92,6 @@ vi.mock("@/modules/workflow", () => ({
   WorkflowModule: () => <div>工作流内容</div>,
 }))
 
-vi.mock("../../../../app-capabilities/document-template/renderer", () => ({
-  DocumentTemplateModule: () => <div>文档模板内容</div>,
-}))
-
-vi.mock("../../../../app-capabilities/text-extractor/renderer", () => ({
-  TextExtractorModule: () => <div>文本提取内容</div>,
-}))
-
-vi.mock("../../../../app-capabilities/skill-installer/renderer", () => ({
-  SkillInstallerModule: () => <div>Skill 安装器内容</div>,
-}))
-
-vi.mock("../../../../app-capabilities/skill-uninstaller/renderer", () => ({
-  SkillUninstallerModule: () => <div>Skill 卸载器内容</div>,
-}))
-
-vi.mock("../../../../app-capabilities/rule-installer/renderer", () => ({
-  RuleInstallerModule: () => <div>Rule 安装器内容</div>,
-}))
-
-vi.mock("../../../../app-capabilities/sound-notifier/renderer", () => ({
-  SoundNotifierModule: () => <div>Sound Notifier 内容</div>,
-}))
-
 vi.mock("../../../../app-capabilities/terminal/renderer", () => ({
   TerminalModule: () => <div>终端内容</div>,
 }))
@@ -199,33 +175,6 @@ describe("SystemAppContent launcher", () => {
     expect(onConsumed).toHaveBeenCalledWith("request-1")
   })
 
-  it("renders skill-uninstaller through the system app host", async () => {
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
-
-    await act(async () => {
-      root.render(<SystemAppContent appId="skill-uninstaller" />)
-      await Promise.resolve()
-    })
-
-    expect(document.body.textContent).toContain("Skill 卸载器内容")
-  })
-
-  it("renders text-extractor through the system app host", async () => {
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
-
-    await act(async () => {
-      root.render(<SystemAppContent appId="text-extractor" />)
-      await Promise.resolve()
-    })
-
-    expect(document.body.textContent).toContain("文本提取内容")
-  })
 })
 
 async function renderLauncher(

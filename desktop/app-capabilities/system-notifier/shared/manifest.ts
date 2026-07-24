@@ -7,7 +7,7 @@ import {
 
 export const systemNotifierCapabilityManifest = {
   id: SYSTEM_NOTIFIER_APP_ID,
-  app: { id: SYSTEM_NOTIFIER_APP_ID },
+  app: null,
   capabilities: [SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID],
   mcpTools: [SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME],
   workflowNodes: [SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE],

@@ -7,6 +7,7 @@ export const WORKFLOW_DOCUMENT_SCHEMA_CONTRACT = {
     version: "required-revision-string",
     createdAt: "required-number",
     updatedAt: "required-number",
+    layoutDirection: "required-enum:horizontal|vertical",
     defaultProjectId: "optional-string",
     defaultProviderId: "optional-string",
     defaultModelTier: "optional-enum:default|haiku|sonnet|opus",

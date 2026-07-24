@@ -82,9 +82,6 @@ export const appsIpcModule: IpcModule = {
       response: z.void(),
       handler: async (ctx, request: OpenSystemAppRequest) => {
         await assertSystemAppVisible(ctx, request.appId)
-        if (request.appId === "system-notifier" && request.options?.contentOpenRequest) {
-          throw new Error("System Notifier window does not accept open parameters.")
-        }
         const service = getSystemAppWindowService(ctx.resolve<WindowManager>("core.window-manager"))
         await service.open(request.appId, request.options)
       },

@@ -72,7 +72,7 @@ function createRepo(): { repo: DataRepositoryImpl; svc: WorkflowService; dir: st
 function makeDef(): WorkflowDefinition {
   const id = randomUUID()
   return {
-    id, name: "WF", version: "", createdAt: 0, updatedAt: 0, params: [],
+    id, name: "WF", version: "", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
     nodes: [{ id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "", variables: [] } }],
     edges: [],
   }
@@ -127,6 +127,30 @@ describe("WorkflowService", () => {
     await expect(svc.save(makeDef())).resolves.toHaveProperty("versionHash")
 
     expect(list).not.toHaveBeenCalled()
+  })
+
+  it("includes layout direction and node coordinates in the revision hash", async () => {
+    const { svc } = createRepo()
+    const horizontal = makeDef()
+    const vertical = {
+      ...horizontal,
+      layoutDirection: "vertical" as const,
+      nodes: horizontal.nodes.map((node) => ({
+        ...node,
+        position: { x: node.position.x + 25, y: node.position.y + 50 },
+      })),
+    }
+
+    const horizontalResult = await svc.save(horizontal)
+    const verticalResult = await svc.save(vertical)
+    if ("errors" in horizontalResult || "errors" in verticalResult) {
+      throw new Error("Fixture save failed")
+    }
+    const horizontalDigest = horizontalResult.versionHash.split("_").at(-1)
+    const verticalDigest = verticalResult.versionHash.split("_").at(-1)
+    expect(horizontalDigest).toMatch(/^[a-f0-9]{8}$/)
+    expect(verticalDigest).toMatch(/^[a-f0-9]{8}$/)
+    expect(verticalDigest).not.toBe(horizontalDigest)
   })
 
   it("loads only referenced child definitions when saving a workflow call", async () => {
@@ -321,6 +345,7 @@ describe("WorkflowService", () => {
     const def = await svc.get(id)
     expect(def).not.toBeNull()
     expect(def!.name).toBe("新工作流")
+    expect(def!.layoutDirection).toBe("horizontal")
     expect(def!.defaultNodeTimeoutMins).toBe(60)
     expect(def!.nodes).toHaveLength(1)
     expect(def!.nodes[0].type).toBe("end")
@@ -602,6 +627,7 @@ describe("WorkflowService", () => {
           version: "v_broken",
           createdAt: 100,
           updatedAt: 200,
+          layoutDirection: "horizontal" as const,
           params: [],
           edges: [],
         },
@@ -696,12 +722,16 @@ describe("WorkflowService", () => {
     const dir = tmpDir()
     const def = makeDef()
     const second = { ...makeDef(), id: "second-legacy-workflow" }
+    const legacyDef = { ...def } as Partial<WorkflowDefinition>
+    const legacySecond = { ...second } as Partial<WorkflowDefinition>
+    delete legacyDef.layoutDirection
+    delete legacySecond.layoutDirection
     const original = `${JSON.stringify({
       schemaVersion: 1,
       singleton: null,
       items: {
-        [def.id]: { ...def, schemaVersion: 1 },
-        [second.id]: { ...second, schemaVersion: 1 },
+        [def.id]: { ...legacyDef, schemaVersion: 1 },
+        [second.id]: { ...legacySecond, schemaVersion: 1 },
       },
     }, null, 2)}\n`
     writeFileSync(path.join(dir, "workflows.json"), original, "utf8")
@@ -722,6 +752,10 @@ describe("WorkflowService", () => {
     expect(readFileSync(path.join(dir, "workflow-migration-backups", backups[0]!), "utf8")).toBe(original)
     expect((await svc.get(def.id))?.meta?.schemaVersion).toBe(WORKFLOW_SCHEMA_VERSION)
     expect((await svc.get(second.id))?.meta?.schemaVersion).toBe(WORKFLOW_SCHEMA_VERSION)
+    expect(await svc.get(def.id)).toMatchObject({
+      layoutDirection: "horizontal",
+      nodes: [expect.objectContaining({ position: def.nodes[0]!.position })],
+    })
   })
   it("recovers the newest valid workflow from configured legacy repository storage only once", async () => {
     const dir = tmpDir()

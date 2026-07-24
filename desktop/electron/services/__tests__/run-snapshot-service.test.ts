@@ -143,6 +143,7 @@ describe("RunSnapshotService", () => {
         version: "v1",
         createdAt: 1,
         updatedAt: 2,
+        layoutDirection: "horizontal" as const,
         params: [],
         edges: [],
         nodes: [
@@ -251,6 +252,7 @@ describe("RunSnapshotService", () => {
         version: "v1",
         createdAt: 1,
         updatedAt: 2,
+        layoutDirection: "horizontal" as const,
         params: [],
         nodes: [{
           id: "end",

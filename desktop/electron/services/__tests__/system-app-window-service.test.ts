@@ -89,21 +89,6 @@ describe("createSystemAppWindowService", () => {
     }))
   })
 
-  it("uses the text extractor title in its independent window", async () => {
-    const window = createWindowMock()
-    const createWindow = vi.fn(() => window as never)
-    const service = createSystemAppWindowService({ createWindow, baseUrl: () => "app://index.html" })
-
-    await service.open("text-extractor")
-
-    expect(createWindow).toHaveBeenCalledWith(expect.objectContaining({
-      title: "Synapse AI Studio 文本提取",
-    }))
-    expect(window.loadURL).toHaveBeenCalledWith(
-      "app://index.html?window=system-app&appId=text-extractor",
-    )
-  })
-
   it("uses windowTitle instead of the launcher name", async () => {
     const window = createWindowMock()
     const createWindow = vi.fn(() => window as never)

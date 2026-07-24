@@ -277,6 +277,8 @@ describe("NodeTypeRegistry", () => {
 
     expect(manifests.map((manifest) => manifest.type).sort()).toEqual([
       "claude_code",
+      "clipboard_text_read",
+      "clipboard_text_write",
       "codex",
       "document_template_docx_generate",
       "end",

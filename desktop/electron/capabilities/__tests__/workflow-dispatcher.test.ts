@@ -11,8 +11,17 @@ const logStoreMock = vi.hoisted(() => ({
     warn: vi.fn(),
   },
 }))
+const layoutWorkflowNodesMock = vi.hoisted(() => vi.fn())
 
 vi.mock("electron", () => ({ app: { getPath: () => "/tmp", getAppPath: () => "/tmp" } }))
+
+vi.mock("../../../src/lib/workflow-auto-layout", async () => {
+  const actual = await vi.importActual<typeof import("../../../src/lib/workflow-auto-layout")>(
+    "../../../src/lib/workflow-auto-layout",
+  )
+  layoutWorkflowNodesMock.mockImplementation(actual.layoutWorkflowNodes)
+  return { ...actual, layoutWorkflowNodes: layoutWorkflowNodesMock }
+})
 
 import { createWorkflowDispatcher, type WorkflowDispatchDeps } from "../workflow-dispatcher"
 import type { WorkflowDefinition, WorkflowRunSnapshot, WorkflowRunStatus } from "../../../src/types/workflow"
@@ -32,7 +41,7 @@ function makeDeps(overrides: Partial<WorkflowDispatchDeps> = {}): WorkflowDispat
       get: vi.fn(async (id: string) => {
         if (id === "wf-1") return {
           id: "wf-1", name: "Test", description: "", version: "v1",
-          createdAt: 1, updatedAt: 2, params: [],
+           createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
           nodes: [endNode("n1")],
           edges: [],
         }
@@ -104,6 +113,7 @@ describe("createWorkflowDispatcher", () => {
     logStoreMock.logger.error.mockClear()
     logStoreMock.logger.info.mockClear()
     logStoreMock.logger.warn.mockClear()
+    layoutWorkflowNodesMock.mockClear()
   })
 
   it("describes option params in the workflow param update MCP schema", () => {
@@ -197,10 +207,16 @@ describe("createWorkflowDispatcher", () => {
       }).properties?.definition
 
       expect(definitionSchema?.required).toContain("meta")
+      expect(definitionSchema?.required).toContain("layoutDirection")
       expect(definitionSchema?.properties?.meta?.required).toContain("schemaVersion")
     }
     expect(tools.find((item) => item.name === "app_workflow_definition_inspect")?.description)
       .toContain("required Synapse-managed meta.schemaVersion")
+    const layoutTool = tools.find((item) => item.name === "app_workflow_layout_update")
+    expect(layoutTool?.description).toContain("atomically changes the persisted workflow layout direction")
+    expect((layoutTool?.inputSchema as {
+      properties?: { direction?: { description?: string } }
+    }).properties?.direction?.description).toContain("changes the workflow's persisted layout direction")
   })
 
   it("app.workflow.definition.list dispatches correctly", async () => {
@@ -330,6 +346,7 @@ describe("createWorkflowDispatcher", () => {
         version: "v1",
         createdAt: 1,
         updatedAt: 2,
+        layoutDirection: "horizontal" as const,
         params: [],
         nodes: [{
           id: "codex",
@@ -413,7 +430,7 @@ describe("createWorkflowDispatcher", () => {
     const releaseFirstSave = deferred<{ versionHash: string }>()
     const baseDefinition: WorkflowDefinition = {
       id: "wf-1", name: "Test", description: "", version: "v1",
-      createdAt: 1, updatedAt: 2, meta: { schemaVersion: "1.0.0" }, params: [],
+       createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, meta: { schemaVersion: "1.0.0" }, params: [],
       nodes: [endNode("n1")],
       edges: [],
     }
@@ -455,7 +472,7 @@ describe("createWorkflowDispatcher", () => {
     const releaseFirstSave = deferred<{ versionHash: string }>()
     const baseDefinition: WorkflowDefinition = {
       id: "wf-1", name: "Test", description: "", version: "v1",
-      createdAt: 1, updatedAt: 2, params: [],
+       createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
       defaultProjectId: "project-1",
       nodes: [
         scriptNode("n1", "Prompt", 100, 200),
@@ -500,7 +517,7 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
     const definitionWithoutId: Record<string, unknown> = {
       id: "wf-1", name: "Test", description: "", version: "v1",
-      createdAt: 1, updatedAt: 2, params: [],
+       createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
       nodes: [endNode("n1")],
       edges: [],
     }
@@ -519,7 +536,7 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
     const definition = {
       id: "wf-1", name: "Test", description: "", version: "v1",
-      createdAt: 1, updatedAt: 2, params: [],
+       createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
       nodes: [endNode("n1")],
       edges: [],
     }
@@ -543,7 +560,7 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
     const definition = {
       id: "wf-1", name: "Test", description: "", version: "v1",
-      createdAt: 1, updatedAt: 2, params: [],
+       createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
       nodes: [endNode("n1")],
       edges: [],
     }
@@ -567,7 +584,7 @@ describe("createWorkflowDispatcher", () => {
     const definition = {
       id: "wf-future", name: "Future", description: "", version: "v1",
       meta: { schemaVersion: "99.0.0" },
-      createdAt: 1, updatedAt: 2, params: [],
+       createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
       nodes: [endNode("n1")],
       edges: [],
     }
@@ -610,6 +627,7 @@ describe("createWorkflowDispatcher", () => {
       meta: { schemaVersion: "1.0.0" },
       createdAt: 1,
       updatedAt: 2,
+      layoutDirection: "horizontal" as const,
       params: [{ name: "input_files", type: "file", default: null, allowMultiple: true }],
       nodes: [
         {
@@ -659,6 +677,7 @@ describe("createWorkflowDispatcher", () => {
       meta: { schemaVersion: "1.0.0" },
       createdAt: 1,
       updatedAt: 2,
+      layoutDirection: "horizontal" as const,
       params: [{ name: "topic", type: "text" }],
       nodes: [endNode()],
       edges: [],
@@ -689,6 +708,7 @@ describe("createWorkflowDispatcher", () => {
         meta: { schemaVersion: "1.0.0" },
         createdAt: 1,
         updatedAt: 2,
+        layoutDirection: "horizontal" as const,
         params: [{
           name: "inputs",
           type: "file",
@@ -724,6 +744,7 @@ describe("createWorkflowDispatcher", () => {
       version: "v1",
       createdAt: 1,
       updatedAt: 2,
+      layoutDirection: "horizontal" as const,
       params: [],
       nodes: [
         {
@@ -861,7 +882,7 @@ describe("createWorkflowDispatcher", () => {
     }
     const definition: WorkflowDefinition = {
       id: "wf-1", name: "Updated", description: "", version: "v1",
-      createdAt: 1, updatedAt: 2, meta: { schemaVersion: "1.0.0" }, params: [],
+       createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, meta: { schemaVersion: "1.0.0" }, params: [],
       nodes: [endNode("n1")],
       edges: [],
     }
@@ -1031,7 +1052,7 @@ describe("createWorkflowDispatcher", () => {
         params: {
           definition: {
             id: "wf-inspect", name: "Inspect", description: "", version: "v1",
-            createdAt: 1, updatedAt: 2, meta: { schemaVersion: "1.0.0" }, params: [],
+             createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, meta: { schemaVersion: "1.0.0" }, params: [],
             nodes: [endNode("end")],
             edges: [],
           },
@@ -1172,7 +1193,7 @@ describe("createWorkflowDispatcher", () => {
   it("app.workflow.definition.create accepts workflow default project, provider, model tier, and timeout", async () => {
     const created = {
       id: "wf-new", name: "新工作流", description: "", version: "v_new",
-      createdAt: 1, updatedAt: 2, params: [],
+       createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
       defaultProjectId: "project-1",
       defaultProviderId: "local-claude-code",
       defaultModelTier: "sonnet" as const,
@@ -1512,7 +1533,7 @@ describe("createWorkflowDispatcher", () => {
   it("reads workflow.node.delete state only through the mutation lock", async () => {
     const definition: WorkflowDefinition = {
       id: "wf-1", name: "Test", description: "", version: "v1",
-      createdAt: 1, updatedAt: 2, params: [],
+       createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
       nodes: [
         scriptNode("n1", "Prompt", 100, 200),
         endNode(),
@@ -1576,7 +1597,7 @@ describe("createWorkflowDispatcher", () => {
   it("app.workflow.node.create rejects invalid mutations without saving or mutating the loaded definition", async () => {
     const storedDefinition: WorkflowDefinition = {
       id: "wf-1", name: "Test", description: "", version: "v1",
-      createdAt: 1, updatedAt: 2, params: [],
+       createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
       nodes: [endNode()],
       edges: [],
     }
@@ -1607,7 +1628,7 @@ describe("createWorkflowDispatcher", () => {
         ...makeDeps().workflowService,
         get: vi.fn(async () => ({
           id: "wf-1", name: "Test", description: "", version: "v1",
-          createdAt: 1, updatedAt: 2, params: [],
+           createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
           defaultProjectId: "project-1",
           nodes: [
             scriptNode("n1", "Prepare", 200, 200),
@@ -1652,7 +1673,7 @@ describe("createWorkflowDispatcher", () => {
   it("serializes concurrent workflow mutations so later writes include earlier changes", async () => {
     let storedDefinition = {
       id: "wf-1", name: "Test", description: "", version: "v1",
-      createdAt: 1, updatedAt: 2, params: [],
+       createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
       defaultProjectId: "project-1",
       nodes: [scriptNode("a", "Script A", 200, 200), endNode()],
       edges: [{ id: "e1", from: "a", to: "end" }],
@@ -1706,7 +1727,7 @@ describe("createWorkflowDispatcher", () => {
         ...makeDeps().workflowService,
         get: vi.fn(async () => ({
           id: "wf-1", name: "Test", description: "", version: "v1",
-          createdAt: 1, updatedAt: 2, params: [],
+           createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
           defaultProjectId: "project-1",
           nodes: [
             scriptNode("n1", "Prompt", 200, 200),
@@ -1736,7 +1757,7 @@ describe("createWorkflowDispatcher", () => {
         ...makeDeps().workflowService,
         get: vi.fn(async () => ({
           id: "wf-1", name: "Test", description: "", version: "v1",
-          createdAt: 1, updatedAt: 2, params: [],
+           createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
           defaultProjectId: "project-1",
           nodes: [
             scriptNode("n1", "Prompt", 200, 200),
@@ -1771,7 +1792,7 @@ describe("createWorkflowDispatcher", () => {
         ...makeDeps().workflowService,
         get: vi.fn(async () => ({
           id: "wf-1", name: "Test", description: "", version: "v1",
-          createdAt: 1, updatedAt: 2, params: [],
+           createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
           defaultProjectId: "project-1",
           nodes: [
             scriptNode("n1", "Prompt", 200, 200),
@@ -1960,13 +1981,13 @@ describe("createWorkflowDispatcher", () => {
     ]))
   })
 
-  it("app.workflow.layout.update repositions nodes with dagre LR", async () => {
+  it("app.workflow.layout.update uses the persisted direction when direction is omitted", async () => {
     const deps = makeDeps({
       workflowService: {
         ...makeDeps().workflowService,
         get: vi.fn(async () => ({
           id: "wf-1", name: "Test", description: "", version: "v1",
-          createdAt: 1, updatedAt: 2, params: [],
+          createdAt: 1, updatedAt: 2, layoutDirection: "vertical" as const, params: [],
           defaultProjectId: "project-1",
           nodes: [
             scriptNode("a", "Prompt A", 0, 0),
@@ -1992,17 +2013,18 @@ describe("createWorkflowDispatcher", () => {
     const posA = savedDef.nodes.find((n: { id: string }) => n.id === "a").position
     const posB = savedDef.nodes.find((n: { id: string }) => n.id === "b").position
     const posC = savedDef.nodes.find((n: { id: string }) => n.id === "c").position
-    expect(posA.x).toBeLessThan(posB.x)
-    expect(posB.x).toBeLessThan(posC.x)
+    expect(posA.y).toBeLessThan(posB.y)
+    expect(posB.y).toBeLessThan(posC.y)
+    expect(savedDef.layoutDirection).toBe("vertical")
   })
 
-  it("app.workflow.layout.update supports TB direction", async () => {
+  it("app.workflow.layout.update atomically changes persisted direction with explicit TB", async () => {
     const deps = makeDeps({
       workflowService: {
         ...makeDeps().workflowService,
         get: vi.fn(async () => ({
           id: "wf-1", name: "Test", description: "", version: "v1",
-          createdAt: 1, updatedAt: 2, params: [],
+           createdAt: 1, updatedAt: 2, layoutDirection: "horizontal" as const, params: [],
           defaultProjectId: "project-1",
           nodes: [
             scriptNode("a", "A", 0, 0),
@@ -2024,6 +2046,54 @@ describe("createWorkflowDispatcher", () => {
     const posA = savedDef.nodes.find((n: { id: string }) => n.id === "a").position
     const posB = savedDef.nodes.find((n: { id: string }) => n.id === "b").position
     expect(posA.y).toBeLessThan(posB.y)
+    expect(savedDef.layoutDirection).toBe("vertical")
+  })
+
+  it("app.workflow.layout.update only recalculates coordinates for the same explicit direction", async () => {
+    const originalNodes = [
+      scriptNode("a", "A", 700, 900),
+      endNode("b", "B", 100, 50),
+    ]
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        get: vi.fn(async () => ({
+          id: "wf-1", name: "Test", description: "", version: "v1",
+          createdAt: 1, updatedAt: 2, layoutDirection: "vertical" as const, params: [],
+          defaultProjectId: "project-1",
+          nodes: originalNodes,
+          edges: [{ id: "e1", from: "a", to: "b" }],
+        })),
+        save: vi.fn(async () => ({ versionHash: "v_same" })),
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+
+    await createWorkflowDispatcher(deps).dispatch(
+      "app.workflow.layout.update",
+      { workflowId: "wf-1", direction: "TB" },
+      { source: "mcp-http" },
+    )
+
+    const savedDef = (deps.workflowService.save as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(savedDef.layoutDirection).toBe("vertical")
+    expect(savedDef.nodes.map((node: WorkflowDefinition["nodes"][number]) => node.position))
+      .not.toEqual(originalNodes.map((node) => node.position))
+  })
+
+  it("app.workflow.layout.update writes nothing when layout calculation fails", async () => {
+    layoutWorkflowNodesMock.mockImplementationOnce(() => {
+      throw new Error("layout failed")
+    })
+    const deps = makeDeps()
+
+    await expect(createWorkflowDispatcher(deps).dispatch(
+      "app.workflow.layout.update",
+      { workflowId: "wf-1", direction: "TB" },
+      { source: "mcp-http" },
+    )).rejects.toThrow("layout failed")
+
+    expect(deps.workflowService.save).not.toHaveBeenCalled()
+    expect(deps.eventBus.emit).not.toHaveBeenCalled()
   })
 
   it("throws on unknown action", async () => {

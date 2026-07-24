@@ -536,13 +536,20 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
 
   "app.workflow.layout.update": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
-    const direction = typeof params.direction === "string" && (params.direction === "LR" || params.direction === "TB")
-      ? params.direction
-      : "LR"
+    const direction = params.direction
+    if (direction !== undefined && direction !== "LR" && direction !== "TB") {
+      throw new Error("direction must be LR or TB")
+    }
     const nodeWidth = 220
     return atomicMutate(deps, workflowId, (def) => {
-      if (def.nodes.length === 0) return
-      def.nodes = layoutWorkflowNodes(def.nodes, def.edges, { direction, nodeWidth })
+      const layoutDirection = direction === "LR"
+        ? "horizontal"
+        : direction === "TB"
+          ? "vertical"
+          : def.layoutDirection
+      const nodes = layoutWorkflowNodes(def.nodes, def.edges, { layoutDirection, nodeWidth })
+      def.layoutDirection = layoutDirection
+      def.nodes = nodes
     })
   },
 }

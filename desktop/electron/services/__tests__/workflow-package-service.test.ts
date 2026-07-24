@@ -33,6 +33,7 @@ function workflowDefinition(): WorkflowDefinition {
     meta: { schemaVersion: "2.0.0" },
     createdAt: 1,
     updatedAt: 2,
+    layoutDirection: "vertical" as const,
     defaultProviderId: "provider-deepseek",
     defaultModelTier: "sonnet",
     defaultProjectId: "exporter-project",
@@ -49,14 +50,14 @@ function workflowDefinition(): WorkflowDefinition {
         id: "n2",
         name: "终审",
         type: "prompt",
-        position: { x: 200, y: 0 },
+        position: { x: 0, y: 200 },
         config: { providerId: "provider-claude", modelTier: "opus", prompt: "Review", variables: [] },
       },
       {
         id: "end",
         name: "结束",
         type: "end",
-        position: { x: 400, y: 0 },
+        position: { x: 0, y: 400 },
         config: { outputType: "text", template: "", variables: [] },
       },
     ],
@@ -79,6 +80,7 @@ function codexOnlyPackage(): SynapseWorkflowPackageV1 {
       meta: { schemaVersion: "2.0.0" },
       createdAt: 1,
       updatedAt: 2,
+      layoutDirection: "horizontal" as const,
       defaultProjectId: "exporter-project",
       params: [],
       nodes: [
@@ -113,6 +115,7 @@ function claudeCodeOnlyPackage(): SynapseWorkflowPackageV1 {
       version: "v_old",
       createdAt: 1,
       updatedAt: 2,
+      layoutDirection: "horizontal" as const,
       defaultProjectId: "exporter-project",
       params: [],
       nodes: [
@@ -276,6 +279,9 @@ describe("WorkflowPackageService", () => {
     ]))
     const exportedWorkflow = Object.values(parsed.workflows)[0]
     expect(exportedWorkflow.id).toBe("workflow-source")
+    expect(exportedWorkflow.layoutDirection).toBe("vertical")
+    expect(exportedWorkflow.nodes.map((node) => node.position))
+      .toEqual(workflowDefinition().nodes.map((node) => node.position))
     expect(JSON.stringify(parsed.manifest.references)).not.toContain("provider-deepseek")
     expect(JSON.stringify(parsed.manifest.references)).not.toContain("exporter-project")
     expect(JSON.stringify(exportedWorkflow)).not.toContain("provider-deepseek")
@@ -433,6 +439,9 @@ describe("WorkflowPackageService", () => {
     expect(imported.defaultProviderId).toBe("local-openai")
     expect(imported.defaultModelTier).toBe("sonnet")
     expect(imported.defaultProjectId).toBe("local-project")
+    expect(imported.layoutDirection).toBe("vertical")
+    expect(imported.nodes.map((node) => node.position))
+      .toEqual(workflowDefinition().nodes.map((node) => node.position))
     expect(imported.nodes.find((node) => node.id === "n1")?.config.projectId).toBeUndefined()
     expect(imported.nodes.find((node) => node.id === "n1")?.config.providerId).toBeUndefined()
     expect(imported.nodes.find((node) => node.id === "n2")?.config.providerId).toBe("local-openai")

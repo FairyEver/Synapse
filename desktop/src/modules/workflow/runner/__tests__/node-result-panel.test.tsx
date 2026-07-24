@@ -189,6 +189,7 @@ describe("NodeResultPanel", () => {
             version: "v1",
             createdAt: 1,
             updatedAt: 1,
+            layoutDirection: "horizontal" as const,
             params: [],
             nodes: [{
               id: "notify-1",
@@ -249,6 +250,7 @@ describe("NodeResultPanel", () => {
             version: "v1",
             createdAt: 1,
             updatedAt: 1,
+            layoutDirection: "horizontal" as const,
             params: [],
             nodes: [{
               id: "repair-1",

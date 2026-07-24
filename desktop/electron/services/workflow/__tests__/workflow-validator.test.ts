@@ -115,6 +115,30 @@ describe("validateWorkflow", () => {
     expect(bound.errors).toEqual([])
   })
 
+  it("validates Clipboard write text and template bindings before save", () => {
+    const missing = validateWorkflow(definitionWithClipboardWriteNode({
+      text: "{{missing}}",
+      variables: [],
+    }))
+    expect(missing.valid).toBe(false)
+    expect(missing.errors).toContainEqual(expect.objectContaining({
+      nodeId: "clipboard-write",
+      message: expect.stringContaining("模板变量「missing」未绑定"),
+    }))
+
+    const empty = validateWorkflow(definitionWithClipboardWriteNode({
+      text: "",
+      variables: [],
+    }))
+    expect(empty.valid).toBe(false)
+
+    const whitespace = validateWorkflow(definitionWithClipboardWriteNode({
+      text: " \n\t",
+      variables: [],
+    }))
+    expect(whitespace.valid).toBe(true)
+  })
+
   it("rejects disconnected nodes as validation errors", () => {
     const result = validateWorkflow(definitionWithDisconnectedNode())
 
@@ -881,6 +905,7 @@ function definitionWithDisconnectedNode(): WorkflowDefinition {
     version: "v1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params: [],
     nodes: [
       {
@@ -916,6 +941,7 @@ function definitionWithScriptNode(overrides: Partial<WorkflowDefinition> = {}): 
     version: "v1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params: [],
     nodes: [
       {
@@ -939,6 +965,7 @@ function definitionWithTextNode(template = ""): WorkflowDefinition {
     version: "v1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params: [],
     nodes: [
       {
@@ -963,6 +990,7 @@ function definitionWithSystemNotifierNode(
     version: "v1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params: [],
     nodes: [
       {
@@ -987,6 +1015,7 @@ function definitionWithJsonRepairNode(
     version: "v1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params: [],
     nodes: [
       {
@@ -1002,6 +1031,31 @@ function definitionWithJsonRepairNode(
   }
 }
 
+function definitionWithClipboardWriteNode(
+  config: WorkflowDefinition["nodes"][number]["config"],
+): WorkflowDefinition {
+  return {
+    id: "workflow-clipboard-write",
+    name: "Workflow",
+    version: "v1",
+    createdAt: 0,
+    updatedAt: 0,
+    layoutDirection: "horizontal" as const,
+    params: [],
+    nodes: [
+      {
+        id: "clipboard-write",
+        name: "写入剪贴板",
+        type: "clipboard_text_write",
+        position: { x: 0, y: 0 },
+        config,
+      },
+      endNode(),
+    ],
+    edges: [{ id: "edge-1", from: "clipboard-write", to: "end" }],
+  }
+}
+
 function definitionWithWorkflowCall(
   parentParam: WorkflowDefinition["params"][number],
   configPatch: Record<string, unknown> = {},
@@ -1012,6 +1066,7 @@ function definitionWithWorkflowCall(
     version: "v1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params: [parentParam],
     nodes: [
       {
@@ -1042,6 +1097,7 @@ function definitionWithCodexNode(overrides: Partial<WorkflowDefinition> = {}): W
     version: "v1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params: [],
     nodes: [
       codexNode(),
@@ -1059,6 +1115,7 @@ function definitionWithClaudeCodeNode(overrides: Partial<WorkflowDefinition> = {
     version: "v1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params: [],
     nodes: [
       claudeCodeNode(),
@@ -1076,6 +1133,7 @@ function definitionWithPromptNode(overrides: Partial<WorkflowDefinition> = {}): 
     version: "v1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params: [],
     defaultProviderId: "provider-1",
     defaultModelTier: "sonnet",
@@ -1095,6 +1153,7 @@ function definitionWithSwitchNode(overrides: Partial<WorkflowDefinition> = {}): 
     version: "v1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params: [],
     defaultProviderId: "provider-1",
     defaultModelTier: "sonnet",
@@ -1114,6 +1173,7 @@ function definitionWithHttpRequestNode(config: { readonly url: string }): Workfl
     version: "v1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params: [],
     nodes: [
       {

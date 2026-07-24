@@ -77,29 +77,30 @@ Synapse 当前不是通过一个统一 manifest 自动生成全部产品入口�
 
 #### `desktop/app-capabilities` 产品表面
 
-“应用页”表示当前注册为 System App 并会进入应用启动器；“默认 Dock”只表示首次默认固定，非默认应用仍可由用户固定。数字表示当前注册数量，`—` 表示没有该表面。
+“应用页”表示当前是否注册为 System App；“否”表示不存在 System App 身份、启动器入口、Dock 入口或独立应用窗口。“默认 Dock”只表示首次默认固定。数字表示当前注册数量，`—` 表示没有该表面。
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
 | Agent Personas | 是 | 否 | — | — | — | — |
-| Document Template | 是 | 否 | 1 | — | 1 | — |
-| File Opener | 是 | 否 | 1 | — | 1 | `open` |
-| HTML Generator | 是 | 否 | 2 | — | 2 | — |
+| Clipboard | 否 | 否 | 2 | — | — | — |
+| Document Template | 否 | 否 | 1 | — | 1 | — |
+| File Opener | 否 | 否 | 1 | — | 1 | `open` |
+| HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
-| JSON Repair | 是 | 否 | 1 | — | 1 | — |
+| JSON Repair | 否 | 否 | 1 | — | 1 | — |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
 | Quick Input | 是 | 否 | — | — | — | — |
-| Rule Installer | 是 | 否 | — | — | — | — |
+| Rule Installer | 否 | 否 | — | — | — | — |
 | Secrets | 是 | 否 | — | — | 6 | — |
-| Skill Installer | 是 | 否 | — | — | — | — |
-| Skill Uninstaller | 是 | 否 | — | — | — | — |
-| Sound Notifier | 是 | 否 | — | — | 1 | — |
+| Skill Installer | 否 | 否 | — | — | — | — |
+| Skill Uninstaller | 否 | 否 | — | — | — | — |
+| Sound Notifier | 否 | 否 | — | — | 1 | — |
 | Synapse Skill | 是 | 否 | — | — | — | — |
-| System Notifier | 是 | 否 | 1 | — | 1 | — |
+| System Notifier | 否 | 否 | 1 | — | 1 | — |
 | Terminal | 是 | 是 | — | — | 41 | — |
-| Text Extractor | 是 | 否 | 1 | — | 2 | — |
-| Text File Writer | 是 | 否 | 1 | — | 1 | — |
+| Text Extractor | 否 | 否 | 1 | — | 2 | — |
+| Text File Writer | 否 | 否 | 1 | — | 1 | — |
 | Script Runtime | 否 | 否 | — | — | — | — |
 | Screenshot | 否 | 否 | — | — | — | — |
 
@@ -107,7 +108,7 @@ Synapse 当前不是通过一个统一 manifest 自动生成全部产品入口�
 - Script Runtime 是 JavaScript Run 与 Node.js Run 共用的内部执行基础设施，不直接注册用户产品表面。
 - Screenshot 当前是空目录占位，没有运行时注册。
 - 能力包中 Workflow Node 与 Automation Action 的 `discovery: "visible" | "hidden"` 控制创建选择器和对应 MCP 类型列表；`hidden` 不注销类型，已有配置仍可加载、描述和执行。System App 启动器不读取该字段。
-- System App 的 `visibility` 控制启动器、Dock 和窗口 IPC 的条件入口；当前只有 Workflow 使用 `workflow-entry-enabled`。除 Launcher 自身和受该策略控制的 Workflow 外，注册进 `systemApps` 的应用都会进入应用启动器。
+- System App 的 `visibility` 控制已注册应用的启动器和 Dock 条件入口；当前只有 Workflow 使用 `workflow-entry-enabled`。未注册为 System App 的能力包不得出现在 `SYSTEM_APP_IDS`、System App definitions/registry、System App 内容宿主或应用窗口 IPC 中。
 
 #### 普通业务模块 System App
 
@@ -134,7 +135,7 @@ Synapse 当前不是通过一个统一 manifest 自动生成全部产品入口�
 
 | Domain | Capability 数 | MCP Tool 数 |
 |---|---:|---:|
-| `app` | 60 | 58 |
+| `app` | 62 | 58 |
 | `database` | 30 | 30 |
 | `model_price` | 11 | 11 |
 | `repository` | 1 | 1 |
@@ -143,9 +144,9 @@ Synapse 当前不是通过一个统一 manifest 自动生成全部产品入口�
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
 | `drive` | 48 | 48 |
-| 合计 | 208 | 206 |
+| 合计 | 210 | 206 |
 
-`app` domain 中 capability 与 MCP Tool 相差的两项固定为 `app.javascript.script.execute` 和 `app.nodejs.script.execute`；它们是已注册 capability，但不是 MCP Tool。
+`app` domain 中 capability 与 MCP Tool 相差的四项固定为 `app.javascript.script.execute`、`app.nodejs.script.execute`、`app.clipboard.text.write` 和 `app.clipboard.text.read`；它们是已注册 capability，但不是 MCP Tool。
 
 #### 清单同步硬规则
 
@@ -195,7 +196,7 @@ Single-context: use the root `CONTEXT.md` and `docs/adr/`. See `docs/agents/doma
 
 ### Notifier 基础提醒能力
 
-- Sound Notifier 是声音提醒系统应用，负责本机语义声音提示、重复提醒参数，以及对外提供声音提醒 MCP 能力。
+- Sound Notifier 是声音提醒能力包，负责本机语义声音提示、重复提醒参数，以及对外提供声音提醒 MCP 能力；它不注册为 System App。
 - System Notifier 负责跨平台触发当前电脑上的原生系统通知、默认通知行为设置，以及对外提供系统通知 MCP 能力和 Workflow 节点。其调用固定采用 fire-and-forget 语义：稳定 API 的输入校验仍须拒绝缺字段、类型错误、内容超限等调用错误；参数合法后不等待或处理通知展示、点击、关闭等回调，MCP 与 Workflow 调用方恒定获得成功结果，不因系统不支持、通知权限关闭、Electron 发送或展示失败等底层投递问题而失败。底层失败只能进入内部日志或诊断。它不是通知中心、可靠投递系统或通知历史存储。
 - System Notifier V1 公共 API 只保留所有目标平台含义一致的最小内容字段，不暴露 `actions`、`reply`、`urgency`、`timeoutType`、自定义声音、图标路径、`toastXml` 等平台特有参数，也不要求调用方协商平台能力；平台差异由内部适配器和用户默认设置吸收。
 - System Notifier V1 输入严格且仅包含必填、非空白的 `title` 与 `body`，不增加 `eventType`、`level`、`source`、`subtitle` 或调用级 `silent`。调用来源从 MCP 或 Workflow 执行上下文和审计记录取得，不允许调用方在通知内容中自报。
@@ -205,26 +206,26 @@ Single-context: use the root `CONTEXT.md` and `docs/adr/`. See `docs/agents/doma
 - System Notifier V1 不增加 Synapse 逐次确认或 `PermissionGuard`：MCP 工具被调用或 Workflow 作者放置节点即视为当前调用授权。每个合法调用只审计 capability、可信 actor、入口来源、工作流/运行/节点身份及内容长度等元数据；审计、普通日志和底层失败日志不得保存 `title`、`body`、其摘要或哈希。操作系统通知权限关闭属于底层状态，仍固定成功。
 - System Notifier V1 必须有当前进程内、调用方不可观察且只按可信调用身份与入口计数的防轰炸限流。它不读取、比较或保存通知内容；超限合法调用不触发 Electron 通知但仍返回 `{ success: true }` 并保留无正文审计，限流诊断只记录聚合计数。不得实现内容去重或合并。
 - System Notifier V1 防轰炸限流采用双层内存令牌桶：调用身份桶容量为 5、每 10 秒补充 1 个令牌；进程全局桶容量为 20、每 2 秒补充 1 个令牌；投递尝试必须同时取得两个桶的令牌。MCP 身份键优先使用可信 `source + clientId + controllerInstanceId` 并在缺失时逐级退化到可信 actor；Workflow 身份键使用 `workflowId + nodeId` 且不得加入 `runId`。闲置身份桶 10 分钟后清理。V1 阈值固定，不暴露为 MCP 参数或用户设置。
-- System Notifier 必须作为独立系统 App 提供：App ID 为 `system-notifier`，名称为 `System Notifier`，可从启动器打开但不默认加入 Dock。界面只承载默认设置与发送测试通知，不显示通知历史、投递状态、权限状态、失败记录或调用审计。核心投递位于 Electron 主进程且不得依赖窗口；测试通知复用同一 core service 和内部适配器，并使用独立可信 UI 调用身份。
+- System Notifier 不注册为 System App，不得进入 `SYSTEM_APP_IDS`、System App definitions/registry、启动器、Dock、Dock 可添加列表或独立应用窗口。核心投递位于 Electron 主进程且不得依赖窗口；保留的 Renderer 设置模块和测试通知 IPC 不是产品应用入口，只用于内部兼容与测试，测试通知复用同一 core service 和内部适配器，并使用独立可信 UI 调用身份。
 - System Notifier V1 设置严格且仅包含 `schemaVersion: 1`、默认 `true` 的 `enabled` 和默认 `false` 的 `silent`。`enabled=false` 时合法调用仍校验、审计并返回 `{ success: true }`，但不尝试原生通知；`silent=true` 只表示内部适配器请求系统静音，不承诺系统完全遵守。设置使用 `app.system-notifier.settings` DataRepository namespace，不增加其它展示、内容或限流设置。
-- System Notifier 的稳定身份固定为：App ID `system-notifier`、namespace `system_notifier`、service ID `core.system-notifier`、capability ID `app.system_notifier.notification.trigger`、MCP tool `app_system_notifier_notification_trigger`、Workflow node type `system_notifier_notification_trigger`。V1 只公开 `trigger`；设置读写与测试通知只走系统 App IPC。MCP 与 Workflow 必须共用该 capability ID 和 core service，不得因底层 Electron 使用 `show()` 而把公共 action 命名为 `show`。
+- System Notifier 的稳定身份固定为：package ID `system-notifier`、namespace `system_notifier`、service ID `core.system-notifier`、capability ID `app.system_notifier.notification.trigger`、MCP tool `app_system_notifier_notification_trigger`、Workflow node type `system_notifier_notification_trigger`。V1 只公开 `trigger`；设置读写与测试通知只走专用 Renderer IPC。MCP 与 Workflow 必须共用该 capability ID 和 core service，不得因底层 Electron 使用 `show()` 而把公共 action 命名为 `show`。
 - System Notifier Workflow 节点名称为“系统通知”，配置严格包含 `title`、`body`、`variables`，标题与正文都支持现有变量插值。保存时校验模板非空；运行时先插值，再复用 MCP 共享输入 Schema 校验非空白及 64/256 Unicode 码点上限，校验失败时节点失败，通过后才进入固定成功语义。端口固定为 `in`/“输入”和 `out`/“结果”；主输出为 `{"success":true}`，结构化输出为 `{ success: true }`。节点分享契约依赖 `app.system_notifier.notification.trigger >= 1.0.0`，不声明额外资源、模型、项目、敏感字段或高风险权限；卡片摘要只显示配置标题，不显示正文。
 - System Notifier MCP 工具实现后必须同步更新内置 `desktop/app-capabilities/synapse-skill/skill-package/app/index.md` 与 `app/api-reference.md`：只允许 Agent 在用户当前明确要求系统通知或已有明确持续指令时调用，不得因普通回复完成、轻量任务结束、等待输入或错误而擅自通知；每个约定事件只调用一次，不得因无法确认展示结果而重试。`title` 与 `body` 不得放入 Token、密码、验证码、私钥、完整路径等可能在锁屏泄露的敏感内容；`{ success: true }` 不得解释为已送达或已展示。Workflow 作者显式放置的节点不受 Agent 主动调用规则限制。工具尚未实现时不得提前在运行时指南中宣称其可用。
 - System Notifier 只负责通用、单向、非交互式系统通知投递。现有自动更新通知继续由 Update Service 自己拥有，不得迁入 System Notifier，因为它的 `click` 回调和页面导航属于交互式业务流程。未来纯提醒应复用 System Notifier；通知点击或按钮属于业务流程时由对应模块专有实现。两者可以共享很薄的 Electron 构造辅助函数，但不得共用带回调语义的领域 service。
-- System Notifier 系统 App 的测试通知绕过 `enabled`，但继续使用当前 `silent`，并经过共享输入 Schema、无正文审计、调用身份桶和全局桶。测试调用使用独立可信 UI 身份和固定内容 `{ title: "System Notifier", body: "这是一条测试通知" }`；绕过标记只存在于内部 UI 调用上下文，不得进入 MCP、Workflow 或公共 Schema。UI 不显示发送成功或失败 Toast。
-- System Notifier 系统 App 使用收窄居中、单层工作卡片，只保留“启用通知”“静音通知”两个现有 `Switch` 和同层级 outline 的“发送测试通知”，不得添加页面介绍、嵌套卡片、额外分区标题或保存按钮。开关切换后自动保存，保存期间禁用控件，失败时回滚并只提示“保存失败”，成功不显示 Toast；`enabled=false` 时仍允许调整静音和发送测试通知。加载使用 Skeleton，加载失败使用现有 Alert 与“重试”。
+- System Notifier 内部 Renderer 模块的测试通知绕过 `enabled`，但继续使用当前 `silent`，并经过共享输入 Schema、无正文审计、调用身份桶和全局桶。测试调用使用独立可信 UI 身份和固定内容 `{ title: "System Notifier", body: "这是一条测试通知" }`；绕过标记只存在于内部 UI 调用上下文，不得进入 MCP、Workflow 或公共 Schema。UI 不显示发送成功或失败 Toast。
+- System Notifier 内部 Renderer 模块使用收窄居中、单层工作卡片，只保留“启用通知”“静音通知”两个现有 `Switch` 和同层级 outline 的“发送测试通知”，不得添加页面介绍、嵌套卡片、额外分区标题或保存按钮。开关切换后自动保存，保存期间禁用控件，失败时回滚并只提示“保存失败”，成功不显示 Toast；`enabled=false` 时仍允许调整静音和发送测试通知。加载使用 Skeleton，加载失败使用现有 Alert 与“重试”。
 - System Notifier 主进程适配器不得注册任何 Electron `Notification` 事件监听器，包括 `failed`、`show`、`click`、`close`、`reply` 和 `action`；它只捕获构造通知或调用 `show()` 时的同步异常，并写入不含原始错误文本、`title` 或 `body` 的脱敏结构化日志。同步异常不得写状态、触发重试或改变 `{ success: true }`。`show()` 返回后立即释放业务引用，不维护活动通知列表或生命周期模型。
-- System Notifier 的 `app.system-notifier.settings` namespace 无记录时使用默认 `enabled=true`、`silent=false`；已有记录但读取失败、版本无效或内容损坏时按 `enabled=false` fail-closed，合法 MCP/Workflow 调用仍审计并返回 `{ success: true }`，但不尝试通知。不得自动覆盖、重置或修复异常设置；系统 App 只显示“加载失败”与“重试”。用户显式测试通知仍可触发，无法取得 `silent` 时使用默认 `false`。
+- System Notifier 的 `app.system-notifier.settings` namespace 无记录时使用默认 `enabled=true`、`silent=false`；已有记录但读取失败、版本无效或内容损坏时按 `enabled=false` fail-closed，合法 MCP/Workflow 调用仍审计并返回 `{ success: true }`，但不尝试通知。不得自动覆盖、重置或修复异常设置；内部 Renderer 模块只显示“加载失败”与“重试”。用户显式测试通知仍可触发，无法取得 `silent` 时使用默认 `false`。
 - System Notifier 共享输入 Schema 对 `title` 与 `body` 采用严格、无修改的单行纯文本规则：值必须等于各自 `trim()` 结果，首尾空白不得自动裁剪；禁止 CR、LF、Tab、NUL、其它 Unicode `Cc` 控制字符、Unicode 行/段分隔符和未配对 UTF-16 surrogate。允许普通 Unicode、组合字符和 emoji，不执行 NFC/NFKC 归一化；合法字符原样交给 Electron，并按 Unicode 码点计入 64/256 上限。
 - System Notifier 输入错误统一序列化为 `{ ok: false, code: "INVALID_INPUT", error: "Invalid system notification input.", data: { field, reason } }`。`field` 只能是 `request`、`title` 或 `body`；`reason` 只能是 `required`、`type`、`leading_or_trailing_whitespace`、`forbidden_character`、`invalid_unicode`、`too_long` 或 `unknown_field`。不得返回原值、内容片段、实际长度或 Zod issues。MCP 将其标记为 `isError: true`，Workflow 使用同一序列化结果令节点失败；本地化只影响入口的人类文案，不得改变 `code`、`field` 或 `reason`。合法调用除 `INVALID_INPUT` 外不得向调用方暴露设置、限流或投递错误。
 - System Notifier Workflow 节点在开始执行时，以及完成变量插值和共享输入校验后、进入 core service 前，都必须检查 `abortSignal`。接受点前取消时返回 `cancelled`，不审计且不触发通知；合法请求一旦进入 core service 即越过接受点，后续取消不能撤回，节点固定成功并输出 `{ success: true }`。不得创建可取消句柄或撤销 API；MCP 越过相同接受点后即使客户端断开也不撤销投递尝试。
 - System Notifier core service 的处理顺序固定为：接收已通过共享 Schema 的内容与可信上下文；尝试写无正文审计，审计故障只记脱敏日志；读取内存中的有效设置快照；普通调用在 `enabled=false` 或设置 fail-closed 时直接返回 `{ success: true }` 且不消耗限流令牌，测试调用只跳过启用判断；同时取得身份桶和全局桶令牌，失败时只记聚合诊断并固定成功；取得令牌后同步构造 Electron `Notification` 并调用一次 `show()`，同步异常被吞掉并脱敏记录；`show()` 返回后释放引用并固定成功。不得增加微任务队列或内部异步调度层。
-- `core.system-notifier` 启动时读取并校验设置 singleton，建立不可变内存快照；无记录时使用默认值，记录异常时 service 仍须运行、快照标记 `unavailable` 并 fail-closed。`settings.get` 每次重新读取存储，成功后刷新快照，失败只向系统 App 返回加载错误；`settings.update` 先校验并持久化，成功后原子替换快照，失败时保留旧快照供 UI 回滚。不得定时轮询或监听文件，正常设置修改统一经过 core service。health check 可以把设置不可用报告为 degraded，但该状态不得进入通知调用结果。DataRepository 使用 `json` backend、`schemaVersion: 1`，并注册进 `allSchemas`。
-- System Notifier 系统 App IPC 只提供三个方法且不提供事件：`app.system_notifier.settings.get` 接受严格空对象并返回完整设置；`app.system_notifier.settings.update` 接受只允许 `enabled?`、`silent?` 且至少包含一个字段的严格 patch，并返回完整最新设置；`app.system_notifier.notification.test` 接受严格空对象、使用固定测试内容并返回 `{ success: true }`。不得向 Renderer 提供可传任意 `title`/`body` 的 trigger IPC，也不得广播 `changed`、`failed`、`shown` 等事件。handler 只负责校验、补充可信 UI 上下文并调用 core service，不得复制业务逻辑。
+- `core.system-notifier` 启动时读取并校验设置 singleton，建立不可变内存快照；无记录时使用默认值，记录异常时 service 仍须运行、快照标记 `unavailable` 并 fail-closed。`settings.get` 每次重新读取存储，成功后刷新快照，失败只向内部 Renderer 模块返回加载错误；`settings.update` 先校验并持久化，成功后原子替换快照，失败时保留旧快照供 UI 回滚。不得定时轮询或监听文件，正常设置修改统一经过 core service。health check 可以把设置不可用报告为 degraded，但该状态不得进入通知调用结果。DataRepository 使用 `json` backend、`schemaVersion: 1`，并注册进 `allSchemas`。
+- System Notifier 专用 Renderer IPC 只提供三个方法且不提供事件：`app.system_notifier.settings.get` 接受严格空对象并返回完整设置；`app.system_notifier.settings.update` 接受只允许 `enabled?`、`silent?` 且至少包含一个字段的严格 patch，并返回完整最新设置；`app.system_notifier.notification.test` 接受严格空对象、使用固定测试内容并返回 `{ success: true }`。不得向 Renderer 提供可传任意 `title`/`body` 的 trigger IPC，也不得广播 `changed`、`failed`、`shown` 等事件。handler 只负责校验、补充可信 UI 上下文并调用 core service，不得复制业务逻辑。
 - System Notifier MCP capability catalog 使用 `app.system_notifier.notification.trigger`、标题 `Trigger system notification`、`mutates: false` 且不标记 high risk。tools/list JSON Schema 必须要求 `title`、`body`，分别声明 `maxLength: 64`、`maxLength: 256`，并设 `additionalProperties: false`；描述必须说明只按用户明确通知意图调用、内容单行且无首尾空白、成功不表示送达或展示。dispatcher 以共享运行时 Schema 为完整校验权威，失败返回既定 `INVALID_INPUT`，成功调用 `core.system-notifier` 并返回 `{ ok: true, data: { success: true } }`，不得返回 `affected`；MCP 规范化后 Agent 只看到 `{ "success": true }`。
 - 新增 `system_notifier_notification_trigger` 注册节点时，Workflow 文档 Schema 必须从 `2.5.0` 升级到 `2.6.0`，补充 `2.6.0` 空迁移、历史样本并更新 schema contract。System Notifier capability 初始版本为 `1.0.0`；Workflow 分享包继续使用 `4.0.0`，由 `requiredCapabilities` 表达 `app.system_notifier.notification.trigger >= 1.0.0` 依赖。Workflow 保存修订哈希与 DataRepository envelope 版本不得因此手工调整。
 - `core.system-notifier` 必须在主进程正常启动阶段始终以同一 service 接口注册进 ServiceRegistry，并在 MCP 与 Workflow 可用前完成初始化；`core.data-repository` 与 `core.audit-sink` 不得成为会阻止其注册或启动的硬依赖，也不得依赖 `core.window-manager`。存储不可用时使用 `unavailable` 快照、普通 trigger fail-closed 且 settings IPC 返回加载错误；审计不可用时只记脱敏日志并继续；Electron 通知适配器不可用或构造失败时切换为 no-op degraded adapter。上述普通依赖故障都不得让工具注册或固定成功面消失；只有代码级真实不变量破坏进入全局 degraded 健康状态。MCP、Workflow 与 IPC 必须解析同一实例；退出时只清理令牌桶和业务引用，不等待通知完成且不补发。
-- `system-notifier` 复用现有系统 App 单实例窗口机制，重复打开只聚焦已有窗口；它可从启动器打开并允许用户自行固定到 Dock，但不得进入默认 Dock。V1 manifest 的 `deepLinks` 必须为空，不提供 `synapse://app/system-notifier/...`，打开窗口也不接受设置、测试触发或通知内容参数，所有窗口内操作只走既定三个 IPC 方法。MCP 或 Workflow trigger 不得自动打开、聚焦或唤醒 System Notifier 窗口。
+- `system-notifier` 不得复用或注册 System App 单实例窗口机制。V1 manifest 的 `deepLinks` 必须为空，不提供 `synapse://app/system-notifier/...`；MCP 或 Workflow trigger 不得打开、聚焦或唤醒任何 System Notifier 窗口。
 - System Notifier V1 只使用一个 Electron 原生通知适配器，并在 `app.whenReady()` 后初始化；`Notification.isSupported()` 为 `false` 时切换到 no-op degraded adapter。每次获准投递尝试只执行 `new Notification({ title, body, silent }).show()`，不得设置其它字段。适配器不得读取或请求系统通知权限、显示 Synapse 权限引导或在发送前探测，也不得按 `darwin`、`win32`、`linux` 分叉业务规则；平台差异只能封装在薄构造层。通知的应用身份、系统归属和分组沿用 Electron 与当前打包身份，不增加调用方可控标识。
 - System Notifier limiter 是主进程同步单例并使用可注入的单调时钟。每次调用必须按同一时刻刷新身份桶与全局桶，只有二者都至少有 1 个令牌时才各扣 1 个；任一不足时两个桶都不得扣除。被限流调用更新身份最后活动时间但不改变令牌；`enabled=false` 或设置 fail-closed 的普通调用完全不得接触 limiter。身份桶只由后续调用惰性扫描，连续 10 分钟无调用后删除，不设置常驻清理定时器；全局桶只在进程退出时清理。令牌按时间连续补充并以容量为上限，不跨进程共享或持久化。
 - 每个越过接受点的合法 System Notifier 调用只写一条审计：`action: "notification.trigger"`、`resource: "app.system_notifier.notification.trigger"`、`outcome: "allowed"`，其中 `allowed` 只表示调用已被接受。`notification.trigger` 只加入 `PermissionAction` 供审计使用，不得接入 `PermissionGuard`。审计顶层使用可信 actor，公共元数据只含 `source`、`titleCodePointLength`、`bodyCodePointLength`；MCP 追加可信 `clientId`、`controllerInstanceId`，Workflow 追加 `workflowId`、`runId`、`nodeId`，测试通知使用固定 `source: "system-app-test"` 与可信 UI actor。不得记录节点名、工作流名、title/body、摘要、哈希、`enabled`、`rateLimited`、`attempted`、`supported` 或底层结果。`INVALID_INPUT` 与接受点前取消不审计；审计失败不得补写或重试。

@@ -36,6 +36,12 @@ import {
   nodejsRunNodeExecutor,
   nodejsRunNodeManifest,
 } from "../app-capabilities/nodejs-run/workflow-node"
+import {
+  clipboardTextReadNodeExecutor,
+  clipboardTextReadNodeManifest,
+  clipboardTextWriteNodeExecutor,
+  clipboardTextWriteNodeManifest,
+} from "../app-capabilities/clipboard/workflow-node"
 
 nodeTypeRegistry.register(textNodeManifest, textNodeExecutor)
 nodeTypeRegistry.register(promptNodeManifest, promptNodeExecutor)
@@ -56,3 +62,5 @@ nodeTypeRegistry.register(systemNotifierNodeManifest, systemNotifierNodeExecutor
 nodeTypeRegistry.register(jsonRepairNodeManifest, jsonRepairNodeExecutor)
 nodeTypeRegistry.register(javascriptRunNodeManifest, javascriptRunNodeExecutor)
 nodeTypeRegistry.register(nodejsRunNodeManifest, nodejsRunNodeExecutor)
+nodeTypeRegistry.register(clipboardTextWriteNodeManifest, clipboardTextWriteNodeExecutor)
+nodeTypeRegistry.register(clipboardTextReadNodeManifest, clipboardTextReadNodeExecutor)

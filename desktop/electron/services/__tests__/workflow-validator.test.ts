@@ -12,7 +12,7 @@ const nodeEnd = { id: "end", name: "结束", type: "end", position: { x: 400, y:
 
 // base now includes an End Node so existing tests keep passing
 const base: WorkflowDefinition = {
-  id: "wf", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+  id: "wf", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
   defaultProjectId: "project-1",
   nodes: [nodeA, nodeB, nodeEnd],
   edges: [{ id: "e1", from: "a", to: "b" }, { id: "e2", from: "b", to: "end" }],
@@ -22,6 +22,10 @@ describe("validateWorkflow", () => {
   it("returns valid for a clean two-node DAG with end node", () => {
     const r = validateWorkflow(base)
     expect(r.valid).toBe(true); expect(r.errors).toHaveLength(0)
+  })
+  it("does not change topology validation when layout direction changes", () => {
+    expect(validateWorkflow({ ...base, layoutDirection: "vertical" }))
+      .toEqual(validateWorkflow(base))
   })
   it("accepts valid option parameters", () => {
     const result = validateWorkflow({

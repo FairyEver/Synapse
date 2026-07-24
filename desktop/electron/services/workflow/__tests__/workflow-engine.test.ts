@@ -10,6 +10,15 @@ import type { JavascriptWorkflowConfig } from "../../../../app-capabilities/scri
 import type { SystemNotifierService } from "../../../../app-capabilities/system-notifier/main/service"
 import { systemNotifierNodeExecutor } from "../../../../app-capabilities/system-notifier/workflow-node/executor.main"
 import { systemNotifierNodeManifest } from "../../../../app-capabilities/system-notifier/workflow-node/manifest"
+import type { ClipboardService } from "../../../../app-capabilities/clipboard/main/service"
+import {
+  clipboardTextReadNodeExecutor,
+  clipboardTextWriteNodeExecutor,
+} from "../../../../app-capabilities/clipboard/workflow-node/executor.main"
+import {
+  clipboardTextReadNodeManifest,
+  clipboardTextWriteNodeManifest,
+} from "../../../../app-capabilities/clipboard/workflow-node/manifest"
 import type { WorkflowDefinition, WorkflowEvent } from "../../../../src/types/workflow"
 import type { NodeExecutor } from "../../../../workflow-nodes/types"
 import { defaultCodexNodeConfig, type CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
@@ -88,6 +97,7 @@ describe("WorkflowEngine", () => {
       version: "v1",
       createdAt: 1,
       updatedAt: 1,
+      layoutDirection: "horizontal" as const,
       params: [],
       nodes: [
         {
@@ -143,6 +153,7 @@ describe("WorkflowEngine", () => {
       version: "v1",
       createdAt: 1,
       updatedAt: 1,
+      layoutDirection: "horizontal" as const,
       params: [],
       nodes: [
         {
@@ -199,6 +210,128 @@ describe("WorkflowEngine", () => {
     expect(JSON.stringify(result.nodeResults["notify-1"])).not.toContain("resolved-variable-canary")
     expect(JSON.stringify(events)).not.toContain("Private body")
     expect(JSON.stringify(events)).not.toContain("resolved-variable-canary")
+  })
+
+  it("uses resolved Clipboard write text without retaining it in run results or events", async () => {
+    const write = vi.fn(() => ({ success: true as const }))
+    const events: unknown[] = []
+    nodeTypeRegistry.register(clipboardTextWriteNodeManifest, clipboardTextWriteNodeExecutor)
+    nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
+    const engine = new WorkflowEngine(
+      { sendToAgent: vi.fn() },
+      undefined,
+      {
+        resolveService: vi.fn(() => ({ write } as unknown as ClipboardService)),
+      } as never,
+    )
+    const definition: WorkflowDefinition = {
+      id: "workflow-clipboard-write",
+      name: "Clipboard write",
+      version: "v1",
+      createdAt: 1,
+      updatedAt: 1,
+      layoutDirection: "horizontal",
+      params: [],
+      nodes: [
+        {
+          id: "write",
+          name: "写入剪贴板",
+          type: "clipboard_text_write",
+          position: { x: 0, y: 0 },
+          config: {
+            text: "Private {{value}}",
+            variables: [{
+              name: "value",
+              source: { type: "static", value: "resolved-canary" },
+            }],
+          },
+        },
+        {
+          id: "end",
+          name: "End",
+          type: "end",
+          position: { x: 200, y: 0 },
+          config: {
+            outputType: "text",
+            template: "",
+            variables: [],
+          },
+        },
+      ],
+      edges: [{ id: "write-to-end", from: "write", to: "end" }],
+    }
+
+    const result = await engine.run(definition, {}, "run-1", (event) => events.push(event))
+
+    expect(write).toHaveBeenCalledWith(
+      "Private resolved-canary",
+      expect.objectContaining({
+        workflowId: definition.id,
+        runId: "run-1",
+        nodeId: "write",
+      }),
+    )
+    expect(result.nodeResults.write).toMatchObject({
+      status: "success",
+      input: { variables: {} },
+      output: "{\"success\":true}",
+      outputs: { success: true },
+    })
+    expect(JSON.stringify(result.nodeResults.write)).not.toContain("resolved-canary")
+    expect(JSON.stringify(events)).not.toContain("resolved-canary")
+  })
+
+  it("keeps the complete Clipboard read result in the active engine data flow", async () => {
+    const text = "中".repeat(20_000)
+    const read = vi.fn(() => ({ text }))
+    nodeTypeRegistry.register(clipboardTextReadNodeManifest, clipboardTextReadNodeExecutor)
+    nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
+    const engine = new WorkflowEngine(
+      { sendToAgent: vi.fn() },
+      undefined,
+      {
+        resolveService: vi.fn(() => ({ read } as unknown as ClipboardService)),
+      } as never,
+    )
+    const definition: WorkflowDefinition = {
+      id: "workflow-clipboard-read",
+      name: "Clipboard read",
+      version: "v1",
+      createdAt: 1,
+      updatedAt: 1,
+      layoutDirection: "horizontal",
+      params: [],
+      nodes: [
+        {
+          id: "read",
+          name: "读取剪贴板",
+          type: "clipboard_text_read",
+          position: { x: 0, y: 0 },
+          config: {},
+        },
+        {
+          id: "end",
+          name: "End",
+          type: "end",
+          position: { x: 200, y: 0 },
+          config: {
+            outputType: "text",
+            template: "{{value}}",
+            variables: [{
+              name: "value",
+              source: { type: "node_output", node: "read" },
+            }],
+          },
+        },
+      ],
+      edges: [{ id: "read-to-end", from: "read", to: "end" }],
+    }
+
+    const result = await engine.run(definition, {}, "run-1", vi.fn())
+
+    expect(result.nodeResults.read?.output).toBe(text)
+    expect(result.nodeResults.read?.outputs).toEqual({ text })
+    expect(result.nodeResults.end?.output).toBe(text)
   })
 
   it("applies workflow default timeout to codex nodes with blank timeout", async () => {
@@ -298,6 +431,7 @@ describe("WorkflowEngine", () => {
       version: "v1",
       createdAt: 1,
       updatedAt: 1,
+      layoutDirection: "horizontal" as const,
       params: [],
       nodes: [
         {
@@ -427,6 +561,7 @@ function childWorkflowWithFileParam(): WorkflowDefinition {
     version: "v1",
     createdAt: 1,
     updatedAt: 1,
+    layoutDirection: "horizontal" as const,
     params: [{ name: "input_file", type: "file", default: null }],
     nodes: [],
     edges: [],
@@ -440,6 +575,7 @@ function workflowWithNodeOutputCall(): WorkflowDefinition {
     version: "v1",
     createdAt: 1,
     updatedAt: 1,
+    layoutDirection: "horizontal" as const,
     defaultProjectId: "project-1",
     params: [],
     nodes: [
@@ -490,6 +626,7 @@ function workflowWithJavascriptNode(): WorkflowDefinition {
     version: "v1",
     createdAt: 1,
     updatedAt: 1,
+    layoutDirection: "horizontal" as const,
     params: [],
     nodes: [
       {
@@ -527,6 +664,7 @@ function workflowWithCodexNode(): WorkflowDefinition {
     version: "v1",
     createdAt: 1,
     updatedAt: 1,
+    layoutDirection: "horizontal" as const,
     defaultProjectId: "project-1",
     defaultNodeTimeoutMins: 30,
     params: [],
@@ -560,6 +698,7 @@ function workflowWithClaudeCodeNode(): WorkflowDefinition {
     version: "v1",
     createdAt: 1,
     updatedAt: 1,
+    layoutDirection: "horizontal" as const,
     defaultProjectId: "project-1",
     defaultNodeTimeoutMins: 30,
     params: [],

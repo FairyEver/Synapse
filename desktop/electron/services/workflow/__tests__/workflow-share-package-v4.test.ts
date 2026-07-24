@@ -18,8 +18,9 @@ const workflow: WorkflowDefinition = {
   meta: { schemaVersion: "2.0.0" },
   createdAt: 1,
   updatedAt: 2,
+  layoutDirection: "vertical" as const,
   params: [],
-  nodes: [{ id: "end", name: "End", type: "end", position: { x: 0, y: 0 }, config: { outputType: "text", template: "", variables: [] } }],
+  nodes: [{ id: "end", name: "End", type: "end", position: { x: 15, y: 35 }, config: { outputType: "text", template: "", variables: [] } }],
   edges: [],
 }
 const workflowRef = stableWorkflowReference(workflow.id)
@@ -68,6 +69,10 @@ describe("workflow share package V4", () => {
 
     expect(read.manifest).toEqual(built.manifest)
     expect(read.workflows[workflowRef]).toEqual(workflow)
+    expect(read.workflows[workflowRef]).toMatchObject({
+      layoutDirection: "vertical",
+      nodes: [expect.objectContaining({ position: { x: 15, y: 35 } })],
+    })
     expect(read.manifest.files).toEqual([
       expect.objectContaining({ path: `workflows/${workflowRef}.json`, mediaType: "application/vnd.synapse.workflow+json" }),
     ])

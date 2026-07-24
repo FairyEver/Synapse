@@ -48,7 +48,7 @@ afterEach(() => {
 describe("WorkflowEngine", () => {
   it("runs a two-node chain with end node and emits events", async () => {
     const def: WorkflowDefinition = {
-      id: "wf1", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf1", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeB, nodeEnd],
       edges: [{ id: "e1", from: "a", to: "b" }, { id: "e2", from: "b", to: "end" }],
     }
@@ -68,6 +68,7 @@ describe("WorkflowEngine", () => {
       version: "v1",
       createdAt: 0,
       updatedAt: 0,
+      layoutDirection: "horizontal" as const,
       params: [],
       nodes: [null],
       edges: [],
@@ -85,7 +86,7 @@ describe("WorkflowEngine", () => {
 
   it("populates WorkflowRunResult.output from end node template", async () => {
     const def: WorkflowDefinition = {
-      id: "wf-out", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-out", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, { ...nodeEnd, config: { outputType: "text", template: "result: done", variables: [] } }],
       edges: [{ id: "e1", from: "a", to: "end" }],
     }
@@ -124,6 +125,7 @@ describe("WorkflowEngine", () => {
       version: "v1",
       createdAt: 0,
       updatedAt: 0,
+      layoutDirection: "horizontal" as const,
       params: [],
       nodes: [
         { id: "probe", name: "Probe", type: "stack_probe", position: { x: 0, y: 0 }, config: {} },
@@ -146,7 +148,7 @@ describe("WorkflowEngine", () => {
 
   it("stores workflow usage cost snapshots from Agent Runtime local cost metadata", async () => {
     const def: WorkflowDefinition = {
-      id: "wf-usage", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-usage", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeEnd],
       edges: [{ id: "e1", from: "a", to: "end" }],
     }
@@ -217,7 +219,7 @@ describe("WorkflowEngine", () => {
 
   it("logs aggregate usage and total cost when workflow completes", async () => {
     const def: WorkflowDefinition = {
-      id: "wf-aggregate-usage", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-aggregate-usage", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeB, nodeEnd],
       edges: [{ id: "e1", from: "a", to: "b" }, { id: "e2", from: "b", to: "end" }],
     }
@@ -254,7 +256,7 @@ describe("WorkflowEngine", () => {
 
   it("does not treat bare SDK cost fields as Synapse workflow cost snapshots", async () => {
     const def: WorkflowDefinition = {
-      id: "wf-sdk-cost", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-sdk-cost", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeEnd],
       edges: [{ id: "e1", from: "a", to: "end" }],
     }
@@ -286,7 +288,7 @@ describe("WorkflowEngine", () => {
 
   it("stores unpriced workflow usage snapshots without CNY cost", async () => {
     const def: WorkflowDefinition = {
-      id: "wf-unpriced", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-unpriced", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeEnd],
       edges: [{ id: "e1", from: "a", to: "end" }],
     }
@@ -322,7 +324,7 @@ describe("WorkflowEngine", () => {
       platform: "workflow" as const,
     }
     const def: WorkflowDefinition = {
-      id: "wf-agent-target", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-agent-target", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeEnd],
       edges: [{ id: "e1", from: "a", to: "end" }],
     }
@@ -369,7 +371,7 @@ describe("WorkflowEngine", () => {
       type: "costly-failure",
     }
     const def: WorkflowDefinition = {
-      id: "wf-costly-failure", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-costly-failure", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [failingNode, nodeEnd],
       edges: [{ id: "e1", from: "costly-failure", to: "end" }],
     }
@@ -389,7 +391,7 @@ describe("WorkflowEngine", () => {
   it("skips nodes not connected to end node", async () => {
     const orphan = { id: "orphan", name: "Orphan", type: "prompt", position: { x: 0, y: 200 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "orphan" } }
     const def: WorkflowDefinition = {
-      id: "wf-prune", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-prune", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, orphan, nodeEnd],
       edges: [{ id: "e1", from: "a", to: "end" }],
     }
@@ -405,7 +407,7 @@ describe("WorkflowEngine", () => {
   it("aborts when signal fires before start", async () => {
     const ctrl = new AbortController()
     ctrl.abort()
-    const def: WorkflowDefinition = { id: "wf2", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [], nodes: [nodeA, nodeEnd], edges: [{ id: "e1", from: "a", to: "end" }] }
+    const def: WorkflowDefinition = { id: "wf2", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [], nodes: [nodeA, nodeEnd], edges: [{ id: "e1", from: "a", to: "end" }] }
     const engine = new WorkflowEngine(fakeAgent("x"), ctrl.signal)
     const result = await engine.run(def, {}, "run2", () => {})
     expect(result.status).toBe("cancelled")
@@ -429,7 +431,7 @@ describe("WorkflowEngine", () => {
       type: "abort-on-start",
     }
     const def: WorkflowDefinition = {
-      id: "wf-cancel-downstream", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-cancel-downstream", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [abortingNode, nodeB, nodeEnd],
       edges: [{ id: "e1", from: "abort", to: "b" }, { id: "e2", from: "b", to: "end" }],
     }
@@ -446,7 +448,7 @@ describe("WorkflowEngine", () => {
   })
 
   it("marks node failed and short-circuits when executor fails", async () => {
-    const def: WorkflowDefinition = { id: "wf3", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [], nodes: [nodeA, nodeB, nodeEnd], edges: [{ id: "e1", from: "a", to: "b" }, { id: "e2", from: "b", to: "end" }] }
+    const def: WorkflowDefinition = { id: "wf3", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [], nodes: [nodeA, nodeB, nodeEnd], edges: [{ id: "e1", from: "a", to: "b" }, { id: "e2", from: "b", to: "end" }] }
     const events: WorkflowEvent[] = []
     const engine = new WorkflowEngine({ sendToAgent: vi.fn().mockResolvedValue({ status: "failed" as const, response: "", error: "boom", durationMs: 0 }) })
     const result = await engine.run(def, {}, "run3", (e) => events.push(e))
@@ -456,7 +458,7 @@ describe("WorkflowEngine", () => {
   })
 
   it("does not run downstream nodes after parallel root failures", async () => {
-    const def: WorkflowDefinition = { id: "wf4", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [], nodes: [nodeA, { ...nodeB, config: { ...nodeB.config, prompt: "second" } }, nodeEnd], edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "b", to: "end" }] }
+    const def: WorkflowDefinition = { id: "wf4", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [], nodes: [nodeA, { ...nodeB, config: { ...nodeB.config, prompt: "second" } }, nodeEnd], edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "b", to: "end" }] }
     const events: WorkflowEvent[] = []
     const agent = { sendToAgent: vi.fn().mockResolvedValue({ status: "failed" as const, response: "", error: "boom", durationMs: 0 }) }
     const engine = new WorkflowEngine(agent)
@@ -479,6 +481,7 @@ describe("WorkflowEngine", () => {
       version: "v1",
       createdAt: 0,
       updatedAt: 0,
+      layoutDirection: "horizontal" as const,
       params: [{ name: "apiToken", type: "text", default: null }],
       nodes: [
         {
@@ -553,7 +556,7 @@ describe("WorkflowEngine", () => {
 
   it("logs triggerSource when provided, defaults to unknown otherwise", async () => {
     const def: WorkflowDefinition = {
-      id: "wf-trigger", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-trigger", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeEnd],
       edges: [{ id: "e1", from: "a", to: "end" }],
     }
@@ -586,6 +589,7 @@ describe("WorkflowEngine", () => {
       version: "v1",
       createdAt: 0,
       updatedAt: 0,
+      layoutDirection: "horizontal" as const,
       params: [],
       nodes: [throwingNode, nodeEnd],
       edges: [{ id: "e1", from: "throwing", to: "end" }],
@@ -618,7 +622,7 @@ describe("WorkflowEngine", () => {
   it("runs parallel roots A,B simultaneously before C (end node)", async () => {
     const nodeC = { id: "c", name: "C", type: "prompt", position: { x: 100, y: 100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "c" } }
     const def: WorkflowDefinition = {
-      id: "wf-par", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-par", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeC, nodeEnd],
       edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "c", to: "end" }],
     }
@@ -639,6 +643,7 @@ describe("WorkflowEngine", () => {
     const nodeNoProvider = { id: "np", name: "NP", type: "prompt", position: { x: 0, y: 0 }, config: { variables: [], prompt: "test" } }
     const def: WorkflowDefinition = {
       id: "wf-default-provider", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      layoutDirection: "horizontal" as const,
       defaultProviderId: "resolved-provider", defaultModelTier: "opus" as const,
       params: [],
       nodes: [nodeNoProvider, nodeEnd],
@@ -656,6 +661,7 @@ describe("WorkflowEngine", () => {
     const nodeWithProvider = { id: "wp", name: "WP", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "node-provider", modelTier: "haiku", variables: [], prompt: "test" } }
     const def: WorkflowDefinition = {
       id: "wf-override", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      layoutDirection: "horizontal" as const,
       defaultProviderId: "wf-provider", defaultModelTier: "opus" as const,
       params: [],
       nodes: [nodeWithProvider, nodeEnd],
@@ -679,6 +685,7 @@ describe("WorkflowEngine", () => {
     }
     const def: WorkflowDefinition = {
       id: "wf-project-default", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      layoutDirection: "horizontal" as const,
       defaultProjectId: "workflow-project",
       params: [],
       nodes: [nodeWithBlankProject, nodeEnd],
@@ -696,6 +703,7 @@ describe("WorkflowEngine", () => {
     const nodeNoTimeout = { id: "nt", name: "NT", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test" } }
     const def: WorkflowDefinition = {
       id: "wf-default-timeout", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      layoutDirection: "horizontal" as const,
       defaultNodeTimeoutMins: 45,
       params: [],
       nodes: [nodeNoTimeout, nodeEnd],
@@ -713,6 +721,7 @@ describe("WorkflowEngine", () => {
     const nodeNoTimeout = { id: "nt", name: "NT", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test" } }
     const def: WorkflowDefinition = {
       id: "wf-timeout-fallback", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      layoutDirection: "horizontal" as const,
       params: [],
       nodes: [nodeNoTimeout, nodeEnd],
       edges: [{ id: "e1", from: "nt", to: "end" }],
@@ -729,6 +738,7 @@ describe("WorkflowEngine", () => {
     const nodeWithTimeout = { id: "wt", name: "WT", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test", timeoutMins: 5 } }
     const def: WorkflowDefinition = {
       id: "wf-timeout-override", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      layoutDirection: "horizontal" as const,
       defaultNodeTimeoutMins: 45,
       params: [],
       nodes: [nodeWithTimeout, nodeEnd],
@@ -750,6 +760,7 @@ describe("WorkflowEngine", () => {
     )
     const def: WorkflowDefinition = {
       id: "wf-not-project", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      layoutDirection: "horizontal" as const,
       params: [],
       nodes: [
         { id: "capture", name: "Capture", type: "project-capture", position: { x: 0, y: 0 }, config: { variables: [], prompt: "test" } },
@@ -776,7 +787,7 @@ describe("WorkflowEngine", () => {
   it("parallel root failure skips downstream but lets other running nodes finish", async () => {
     const nodeC = { id: "c", name: "C", type: "prompt", position: { x: 100, y: 100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "c" } }
     const def: WorkflowDefinition = {
-      id: "wf-par-fail", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-par-fail", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeC, nodeEnd],
       edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "c", to: "end" }],
     }
@@ -802,7 +813,7 @@ describe("WorkflowEngine", () => {
     const nodeA3 = { id: "a3", name: "A3", type: "prompt", position: { x: 100, y: 100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "side2" } }
     const nodeBB = { id: "bb", name: "BB", type: "prompt", position: { x: 200, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "after-main" } }
     const def: WorkflowDefinition = {
-      id: "wf-side", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-side", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeA1, nodeA2, nodeA3, nodeBB, nodeEnd],
       edges: [
         { id: "e1", from: "a", to: "a1" },
@@ -834,7 +845,7 @@ describe("WorkflowEngine", () => {
     const nodeA1b = { id: "a1b", name: "A1b", type: "prompt", position: { x: 300, y: -100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "chain3" } }
     const nodeA2 = { id: "a2", name: "A2", type: "prompt", position: { x: 100, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "main" } }
     const def: WorkflowDefinition = {
-      id: "wf-chain", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-chain", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeA1, nodeA1a, nodeA1b, nodeA2, nodeEnd],
       edges: [
         { id: "e1", from: "a", to: "a1" },
@@ -856,7 +867,7 @@ describe("WorkflowEngine", () => {
     const nodeA1 = { id: "a1", name: "A1", type: "prompt", position: { x: 100, y: -100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "side" } }
     const nodeA2 = { id: "a2", name: "A2", type: "prompt", position: { x: 100, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "main" } }
     const def: WorkflowDefinition = {
-      id: "wf-side-fail", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-side-fail", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeA1, nodeA2, nodeEnd],
       edges: [
         { id: "e1", from: "a", to: "a1" },
@@ -894,7 +905,7 @@ describe("WorkflowEngine", () => {
       },
     }
     const def: WorkflowDefinition = {
-      id: "wf-side-ref", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-side-ref", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeA1, nodeA2, endWithRef],
       edges: [
         { id: "e1", from: "a", to: "a1" },
@@ -914,7 +925,7 @@ describe("WorkflowEngine", () => {
     const nodeX = { id: "x", name: "X", type: "prompt", position: { x: 200, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "join" } }
     const nodeA2 = { id: "a2", name: "A2", type: "prompt", position: { x: 100, y: 50 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "main" } }
     const def: WorkflowDefinition = {
-      id: "wf-diamond", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-diamond", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeA1, nodeA3, nodeX, nodeA2, nodeEnd],
       edges: [
         { id: "e1", from: "a", to: "a1" },
@@ -938,7 +949,7 @@ describe("WorkflowEngine", () => {
     const nodeA2 = { id: "a2", name: "A2", type: "prompt", position: { x: 100, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "fast-main" } }
     const nodeBB = { id: "bb", name: "BB", type: "prompt", position: { x: 200, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "after" } }
     const def: WorkflowDefinition = {
-      id: "wf-timing", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-timing", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeA1, nodeA2, nodeBB, nodeEnd],
       edges: [
         { id: "e1", from: "a", to: "a1" },
@@ -973,7 +984,7 @@ describe("WorkflowEngine", () => {
 
   it("behaves identically when no side-effect branches exist (regression)", async () => {
     const def: WorkflowDefinition = {
-      id: "wf-no-side", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-no-side", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [nodeA, nodeB, nodeEnd],
       edges: [{ id: "e1", from: "a", to: "b" }, { id: "e2", from: "b", to: "end" }],
     }
@@ -991,7 +1002,7 @@ describe("WorkflowEngine", () => {
       config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "?", branches: [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }], defaultBranch: "no" },
     }
     const def: WorkflowDefinition = {
-      id: "wf-sw-end", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-sw-end", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [sw, nodeA, nodeEnd],
       edges: [
         { id: "e1", from: "sw", to: "a", branch: "yes" },
@@ -1013,7 +1024,7 @@ describe("WorkflowEngine", () => {
       config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "?", branches: [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }], defaultBranch: "no" },
     }
     const def: WorkflowDefinition = {
-      id: "wf-sw-both-end", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-sw-both-end", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [sw, nodeEnd],
       edges: [
         { id: "e1", from: "sw", to: "end", branch: "yes" },
@@ -1035,7 +1046,7 @@ describe("WorkflowEngine", () => {
     const nodeX = { id: "x", name: "X", type: "prompt", position: { x: 200, y: -50 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "yes-path" } }
     const nodeY = { id: "y", name: "Y", type: "prompt", position: { x: 200, y: 50 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "no-path" } }
     const def: WorkflowDefinition = {
-      id: "wf-sw-diamond", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      id: "wf-sw-diamond", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, layoutDirection: "horizontal" as const, params: [],
       nodes: [sw, nodeX, nodeY, nodeEnd],
       edges: [
         { id: "e1", from: "sw", to: "x", branch: "yes" },

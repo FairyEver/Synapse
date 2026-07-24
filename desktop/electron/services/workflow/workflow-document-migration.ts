@@ -11,7 +11,7 @@ import { LOCAL_CLAUDE_CODE_PROVIDER_ID } from "../provider/types"
 import { assertSafeWorkflowId } from "./workflow-id"
 import { validateWorkflowParamConfiguration } from "./workflow-param-validator"
 
-export const WORKFLOW_SCHEMA_VERSION = "2.7.0"
+export const WORKFLOW_SCHEMA_VERSION = "2.9.0"
 export const WORKFLOW_LEGACY_BASELINE_VERSION = "0.0.0"
 
 type VersionedWorkflowDefinition = WorkflowDefinition & VersionedData & Record<string, unknown>
@@ -45,6 +45,8 @@ const workflowMigrations: DataMigrationRegistry<VersionedWorkflowDefinition> = {
   "2.5.0": migrateWorkflowV2_4ToV2_5,
   "2.6.0": migrateWorkflowV2_5ToV2_6,
   "2.7.0": migrateWorkflowV2_6ToV2_7,
+  "2.8.0": migrateWorkflowV2_7ToV2_8,
+  "2.9.0": migrateWorkflowV2_8ToV2_9,
 }
 
 export function migrateWorkflowDocument(source: unknown): WorkflowDocumentMigrationResult {
@@ -183,6 +185,22 @@ function migrateWorkflowV2_6ToV2_7(source: VersionedWorkflowDefinition): Version
   return source
 }
 
+function migrateWorkflowV2_7ToV2_8(source: VersionedWorkflowDefinition): VersionedWorkflowDefinition {
+  const document = source as Record<string, unknown>
+  if (document.layoutDirection === undefined) {
+    document.layoutDirection = "horizontal"
+    return source
+  }
+  if (document.layoutDirection !== "horizontal" && document.layoutDirection !== "vertical") {
+    throw new Error("Workflow field \"layoutDirection\" has an invalid value.")
+  }
+  return source
+}
+
+function migrateWorkflowV2_8ToV2_9(source: VersionedWorkflowDefinition): VersionedWorkflowDefinition {
+  return source
+}
+
 function assertCurrentWorkflowDocument(value: unknown): asserts value is VersionedWorkflowDefinition {
   if (!isRecord(value)) throw new Error("Workflow document must be an object.")
   if (!isRecord(value.meta) || value.meta.schemaVersion !== WORKFLOW_SCHEMA_VERSION) {
@@ -194,6 +212,9 @@ function assertCurrentWorkflowDocument(value: unknown): asserts value is Version
   assertString(value.version, "version")
   assertNumber(value.createdAt, "createdAt")
   assertNumber(value.updatedAt, "updatedAt")
+  if (value.layoutDirection !== "horizontal" && value.layoutDirection !== "vertical") {
+    throw new Error("Workflow field \"layoutDirection\" has an invalid value.")
+  }
   assertOptionalString(value.description, "description")
   assertOptionalString(value.defaultProjectId, "defaultProjectId")
   assertOptionalString(value.defaultProviderId, "defaultProviderId")

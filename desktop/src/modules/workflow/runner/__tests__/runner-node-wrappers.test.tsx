@@ -3,6 +3,8 @@
  */
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
+import { renderToStaticMarkup } from "react-dom/server"
+import type { NodeProps } from "@xyflow/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { NodeRunResult } from "@/types/workflow"
@@ -12,10 +14,15 @@ import {
   RunnerNodeResultsContext,
   runnerNodeTypes,
 } from "../runner-node-wrappers"
+import { WorkflowLayoutDirectionProvider } from "../../workflow-layout-direction-context"
 
+const handleCalls = vi.hoisted(() => [] as Array<Record<string, unknown>>)
 vi.mock("@xyflow/react", () => ({
-  Handle: () => null,
-  Position: { Left: "left", Right: "right" },
+  Handle: ({ type, position, id, style }: Record<string, unknown>) => {
+    handleCalls.push({ type, position, id, style })
+    return null
+  },
+  Position: { Left: "left", Right: "right", Top: "top", Bottom: "bottom" },
 }))
 
 vi.mock("../../../../workflow-nodes/provider-lookup-context", () => ({
@@ -92,6 +99,42 @@ describe("runnerNodeTypes", () => {
     expect(runnerNodeTypes.html_generator_ejs_file_generate).toBeTypeOf("function")
   })
 
+  it("matches editor semantics for vertical Switch connection points", () => {
+    const SwitchNode = runnerNodeTypes.switch
+    handleCalls.length = 0
+
+    const markup = renderToStaticMarkup(
+      <WorkflowLayoutDirectionProvider value="vertical">
+        <RunnerNodeResultsContext.Provider value={{}}>
+          <SwitchNode {...nodeProps("switch", {
+            name: "Switch",
+            branches: [
+              { id: "branch-a", label: "A" },
+              { id: "branch-b", label: "B" },
+            ],
+          })} />
+        </RunnerNodeResultsContext.Provider>
+      </WorkflowLayoutDirectionProvider>,
+    )
+
+    expect(handleCalls).toEqual([
+      expect.objectContaining({ type: "target", position: "top" }),
+      expect.objectContaining({
+        type: "source",
+        position: "bottom",
+        id: "branch-a",
+        style: { left: "33.33333333333333%" },
+      }),
+      expect.objectContaining({
+        type: "source",
+        position: "bottom",
+        id: "branch-b",
+        style: { left: "66.66666666666666%" },
+      }),
+    ])
+    expect(markup).toContain("width:220px")
+  })
+
   it("opens the agent conversation directly from a DAG node card", async () => {
     const target: SynapseAgentConversationReference = {
       projectId: "project-1",
@@ -151,4 +194,21 @@ function nodeResult(nodeId: string, target: SynapseAgentConversationReference): 
     input: { variables: {} },
     outputs: { agentConversation: target },
   }
+}
+
+function nodeProps(id: string, data: Record<string, unknown>): NodeProps {
+  return {
+    id,
+    data,
+    selected: false,
+    type: id,
+    zIndex: 0,
+    isConnectable: false,
+    positionAbsoluteX: 0,
+    positionAbsoluteY: 0,
+    dragging: false,
+    draggable: false,
+    selectable: true,
+    deletable: false,
+  } as unknown as NodeProps
 }

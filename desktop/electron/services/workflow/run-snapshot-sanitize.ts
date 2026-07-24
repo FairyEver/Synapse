@@ -2,6 +2,10 @@ import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowNode, Wo
 import { SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/system-notifier/shared/capability"
 import { JSON_REPAIR_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/json-repair/shared/capability"
 import {
+  CLIPBOARD_TEXT_READ_WORKFLOW_NODE_TYPE,
+  CLIPBOARD_TEXT_WRITE_WORKFLOW_NODE_TYPE,
+} from "../../../app-capabilities/clipboard/shared/capability"
+import {
   JAVASCRIPT_RUN_WORKFLOW_NODE_TYPE,
   NODEJS_RUN_WORKFLOW_NODE_TYPE,
 } from "../../../app-capabilities/script-runtime/shared/capability"
@@ -18,14 +22,25 @@ const TRUNCATED_OUTPUT_MARKER = "[truncated]"
 export function sanitizeNodeResultsForSnapshot(
   nodeResults: Record<string, NodeRunResult>,
   definition?: Pick<WorkflowDefinition, "nodes">,
-  options: { readonly omitDisabledScriptContent?: boolean } = {},
+  options: {
+    readonly omitDisabledScriptContent?: boolean
+    readonly omitClipboardReadContent?: boolean
+  } = {},
 ): Record<string, NodeRunResult> {
   const hiddenInputNodeIds = new Set(
     definition?.nodes
       .filter((node) =>
         node.type === SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE
-        || node.type === JSON_REPAIR_WORKFLOW_NODE_TYPE)
+        || node.type === JSON_REPAIR_WORKFLOW_NODE_TYPE
+        || node.type === CLIPBOARD_TEXT_WRITE_WORKFLOW_NODE_TYPE)
       .map((node) => node.id) ?? [],
+  )
+  const omittedClipboardReadNodeIds = new Set(
+    options.omitClipboardReadContent === false
+      ? []
+      : definition?.nodes
+        .filter((node) => node.type === CLIPBOARD_TEXT_READ_WORKFLOW_NODE_TYPE)
+        .map((node) => node.id) ?? [],
   )
   const omittedScriptContentNodeIds = new Set(
     options.omitDisabledScriptContent === false
@@ -51,7 +66,10 @@ export function sanitizeNodeResultsForSnapshot(
     const sanitizedResult = rawScriptContentNodeIds.has(nodeId)
       ? sanitizeUserScriptNodeResult(result)
       : sanitizeNodeResultForSnapshot(result)
-    sanitized[nodeId] = omittedScriptContentNodeIds.has(nodeId)
+    sanitized[nodeId] = (
+      omittedScriptContentNodeIds.has(nodeId)
+      || omittedClipboardReadNodeIds.has(nodeId)
+    )
       ? {
           nodeId: sanitizedResult.nodeId,
           status: sanitizedResult.status,
@@ -85,6 +103,7 @@ export function sanitizeWorkflowRunStatus(status: WorkflowRunStatus): WorkflowRu
     ...status,
     nodeResults: sanitizeNodeResultsForSnapshot(status.nodeResults, status.definition, {
       omitDisabledScriptContent: false,
+      omitClipboardReadContent: false,
     }),
     ...(status.error !== undefined ? { error: sanitizeError(status.error) } : {}),
     ...(status.params !== undefined ? { params: sanitizeWorkflowOutputForHistory(status.params) } : {}),
@@ -144,6 +163,12 @@ export function sanitizeWorkflowDefinitionForSnapshot(definition: WorkflowDefini
 }
 
 function sanitizeWorkflowNodeForSnapshot(node: WorkflowNode): WorkflowNode {
+  if (node.type === CLIPBOARD_TEXT_WRITE_WORKFLOW_NODE_TYPE) {
+    return {
+      ...node,
+      config: { ...node.config },
+    }
+  }
   if (node.type === JSON_REPAIR_WORKFLOW_NODE_TYPE) {
     return {
       ...node,
@@ -229,7 +254,10 @@ function sanitizeNodeRunResultForRenderer(
   return sanitizeNodeResultsForSnapshot(
     { [result.nodeId]: result },
     definition,
-    { omitDisabledScriptContent: false },
+    {
+      omitDisabledScriptContent: false,
+      omitClipboardReadContent: false,
+    },
   )[result.nodeId] ?? result
 }
 
@@ -242,7 +270,10 @@ function sanitizeWorkflowRunResultForRenderer(
     nodeResults: sanitizeNodeResultsForSnapshot(
       result.nodeResults,
       definition,
-      { omitDisabledScriptContent: false },
+      {
+        omitDisabledScriptContent: false,
+        omitClipboardReadContent: false,
+      },
     ),
     ...(result.output !== undefined ? { output: sanitizeWorkflowOutputForHistory(result.output) } : {}),
   }

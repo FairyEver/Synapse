@@ -41,7 +41,8 @@ describe("app Dock model", () => {
   it("normalizes stored Dock ids without restoring removed defaults", () => {
     expect(normalizeDockAppIds(undefined)).toEqual(DEFAULT_DOCK_APP_IDS)
     expect(normalizeDockAppIds([])).toEqual(["launcher"])
-    expect(normalizeDockAppIds(["database", "ghost", "database"])).toEqual(["database", "launcher"])
+    expect(normalizeDockAppIds(["database", "system-notifier", "ghost", "database"]))
+      .toEqual(["database", "launcher"])
     expect(normalizeDockAppIds(["launcher", "agent"])).toEqual(["launcher", "agent"])
   })
 

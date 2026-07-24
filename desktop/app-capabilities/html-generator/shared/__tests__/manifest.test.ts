@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest"
 import { htmlGeneratorCapabilityManifest } from "../manifest"
 
 describe("HTML Generator capability manifest", () => {
-  it("registers one App, two capabilities, two tools, two nodes, and no deep link", () => {
+  it("registers two capabilities, tools, and nodes without a System App or deep link", () => {
     expect(htmlGeneratorCapabilityManifest).toEqual({
       id: "html-generator",
-      app: { id: "html-generator" },
+      app: null,
       capabilities: [
         "app.html_generator.ejs.generate",
         "app.html_generator.ejs_file.generate",

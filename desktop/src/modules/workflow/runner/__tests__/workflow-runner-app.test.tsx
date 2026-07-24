@@ -755,6 +755,7 @@ function workflowDefinition(): WorkflowDefinition {
     version: "1",
     createdAt: 1,
     updatedAt: 1,
+    layoutDirection: "horizontal" as const,
     nodes: [{
       id: "node-1",
       name: "Prompt node",

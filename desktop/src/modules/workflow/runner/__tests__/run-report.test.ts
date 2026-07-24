@@ -463,6 +463,7 @@ function workflowDefinition(): WorkflowDefinition {
     version: "1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     defaultProjectId: "project-1",
     defaultProviderId: "provider-1",
     defaultModelTier: "sonnet",

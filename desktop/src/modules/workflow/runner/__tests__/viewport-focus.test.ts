@@ -106,6 +106,7 @@ function definition(): WorkflowDefinition {
     version: "1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params: [],
     nodes: [
       { id: "a", name: "A", type: "prompt", position: { x: 0, y: 0 }, config: {} },

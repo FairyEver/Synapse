@@ -28,6 +28,7 @@ function definition(version: string, name = "工作流"): WorkflowDefinition {
     version,
     createdAt: 1,
     updatedAt: 1,
+    layoutDirection: "horizontal" as const,
     meta: { schemaVersion: "2.0.0" },
     params: [],
     nodes: [{ id: "end", name: "结束", type: "end", position: { x: 0, y: 0 }, config: { outputType: "text", template: "", variables: [] } }],

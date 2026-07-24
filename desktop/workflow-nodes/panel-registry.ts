@@ -20,6 +20,7 @@ import { SystemNotifierNodePanel } from "../app-capabilities/system-notifier/wor
 import { JsonRepairNodePanel } from "../app-capabilities/json-repair/workflow-node/panel"
 import { JavascriptRunNodePanel } from "../app-capabilities/javascript-run/workflow-node/panel"
 import { NodejsRunNodePanel } from "../app-capabilities/nodejs-run/workflow-node/panel"
+import { ClipboardTextWriteNodePanel } from "../app-capabilities/clipboard/workflow-node/panel"
 
 export interface NodePanelProps {
   config: Record<string, unknown>
@@ -60,6 +61,7 @@ const panelRegistry = new Map<string, PanelComponent>([
   ["json_repair_text_repair", JsonRepairNodePanel as unknown as PanelComponent],
   ["javascript_run", JavascriptRunNodePanel as unknown as PanelComponent],
   ["nodejs_run", NodejsRunNodePanel as unknown as PanelComponent],
+  ["clipboard_text_write", ClipboardTextWriteNodePanel as unknown as PanelComponent],
 ])
 
 export function getPanel(type: string): PanelComponent | undefined {

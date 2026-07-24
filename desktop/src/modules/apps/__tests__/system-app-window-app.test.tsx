@@ -61,40 +61,16 @@ vi.mock("../../../../app-capabilities/agent-personas/renderer", () => ({
   AgentPersonasModule: () => <div>智能体窗口</div>,
 }))
 
-vi.mock("../../../../app-capabilities/document-template/renderer", () => ({
-  DocumentTemplateModule: () => <div>文档模板窗口</div>,
-}))
-
-vi.mock("../../../../app-capabilities/text-extractor/renderer", () => ({
-  TextExtractorModule: () => <div>文本提取窗口</div>,
-}))
-
 vi.mock("../../../../app-capabilities/terminal/renderer", () => ({
   TerminalModule: () => <div>终端窗口</div>,
-}))
-
-vi.mock("../../../../app-capabilities/sound-notifier/renderer", () => ({
-  SoundNotifierModule: () => <div>Sound Notifier 窗口</div>,
 }))
 
 vi.mock("../../../../app-capabilities/secrets/renderer", () => ({
   SecretsModule: () => <div>密钥库窗口</div>,
 }))
 
-vi.mock("../../../../app-capabilities/skill-installer/renderer", () => ({
-  SkillInstallerModule: () => <div>Skill 安装器窗口</div>,
-}))
-
-vi.mock("../../../../app-capabilities/skill-uninstaller/renderer", () => ({
-  SkillUninstallerModule: () => <div>Skill 卸载器窗口</div>,
-}))
-
 vi.mock("../../../../app-capabilities/synapse-skill/renderer", () => ({
   SynapseSkillModule: () => <div>Synapse Skill 窗口</div>,
-}))
-
-vi.mock("../../../../app-capabilities/rule-installer/renderer", () => ({
-  RuleInstallerModule: () => <div>Rule 安装器窗口</div>,
 }))
 
 vi.mock("../../../../app-capabilities/quick-input/renderer", () => ({
@@ -145,22 +121,10 @@ describe("SystemAppWindowApp", () => {
     expect(document.body.textContent).toContain("工作流窗口")
   })
 
-  it("renders the text extractor system app", async () => {
-    window.history.replaceState({}, "", "/?window=system-app&appId=text-extractor")
-    await renderSystemAppWindow(roots)
-    expect(document.body.textContent).toContain("文本提取窗口")
-  })
-
   it("renders the secrets system app", async () => {
     window.history.replaceState({}, "", "/?window=system-app&appId=secrets")
     await renderSystemAppWindow(roots)
     expect(document.body.textContent).toContain("密钥库窗口")
-  })
-
-  it("renders the skill uninstaller system app", async () => {
-    window.history.replaceState({}, "", "/?window=system-app&appId=skill-uninstaller")
-    await renderSystemAppWindow(roots)
-    expect(document.body.textContent).toContain("Skill 卸载器窗口")
   })
 
   it("renders a short error for unknown app ids", async () => {

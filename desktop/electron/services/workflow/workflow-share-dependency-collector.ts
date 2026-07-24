@@ -413,6 +413,7 @@ function modelTierAt(root: unknown, path?: NodeShareConfigPath): WorkflowPackage
 }
 
 function matchesRisk(value: unknown, declaration: NodeShareRiskDeclaration): boolean {
+  if (declaration.when === "always") return true
   if (declaration.equals !== undefined) return value === declaration.equals
   if (declaration.when === "truthy") return Boolean(value)
   return isPresent(value)

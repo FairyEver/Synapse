@@ -16,6 +16,7 @@ const reactFlowMock = vi.hoisted(() => ({
   viewportInitialized: true,
 }))
 const reactFlowProps = vi.hoisted(() => [] as Array<{ fitView?: boolean; minZoom?: number }>)
+const updateNodeInternalsMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@xyflow/react", async () => {
   return {
@@ -80,8 +81,10 @@ vi.mock("@xyflow/react", async () => {
     PanOnScrollMode: { Free: "free" },
     ReactFlowProvider: ({ children }: { children?: ReactNode }) => <>{children}</>,
     SelectionMode: { Partial: "partial" },
+    Position: { Left: "left", Right: "right", Top: "top", Bottom: "bottom" },
     getBezierPath: () => ["M 0 0 L 120 0", 60, 0],
     useReactFlow: () => ({ ...reactFlowMock }),
+    useUpdateNodeInternals: () => updateNodeInternalsMock,
   }
 })
 
@@ -338,6 +341,61 @@ describe("DagView", () => {
       platform: "workflow",
     })
   })
+
+  it("refreshes node internals before fitting when snapshot direction changes", async () => {
+    const order: string[] = []
+    updateNodeInternalsMock.mockImplementation(() => {
+      order.push("internals")
+    })
+    reactFlowMock.fitView.mockImplementation(async () => {
+      order.push("fit")
+      return true
+    })
+    const frameCallbacks: FrameRequestCallback[] = []
+    const rafSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frameCallbacks.push(callback)
+      return frameCallbacks.length
+    })
+    const cancelAnimationFrameSpy = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {})
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const horizontal = definition()
+
+    await act(async () => {
+      root.render(
+        <DagView
+          definition={horizontal}
+          nodeResults={{}}
+          runState="running"
+          onNodeSelect={vi.fn()}
+        />,
+      )
+    })
+    updateNodeInternalsMock.mockClear()
+    order.length = 0
+
+    await act(async () => {
+      root.render(
+        <DagView
+          definition={{ ...horizontal, layoutDirection: "vertical" }}
+          nodeResults={{}}
+          runState="running"
+          onNodeSelect={vi.fn()}
+        />,
+      )
+    })
+
+    expect(updateNodeInternalsMock).toHaveBeenCalledWith(["a", "b"])
+    expect(order).toEqual(["internals"])
+    await act(async () => {
+      frameCallbacks[0]?.(0)
+    })
+    expect(order).toEqual(["internals", "fit"])
+    rafSpy.mockRestore()
+    cancelAnimationFrameSpy.mockRestore()
+  })
 })
 
 function nodeResult(nodeId: string, status: NodeRunResult["status"]): NodeRunResult {
@@ -351,6 +409,7 @@ function definition(): WorkflowDefinition {
     version: "1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     params: [],
     nodes: [
       { id: "a", name: "A", type: "prompt", position: { x: 0, y: 0 }, config: {} },

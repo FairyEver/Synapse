@@ -34,7 +34,7 @@ const workflowCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.workflow.edge.delete" as CapabilityId, title: "Delete edge", description: "Delete an edge by ID.", mutates: true },
   { id: "app.workflow.param.update" as CapabilityId, title: "Update params", description: "Replace the workflow parameter list.", mutates: true },
   // Layout
-  { id: "app.workflow.layout.update" as CapabilityId, title: "Auto-layout", description: "Reposition workflow nodes using the same pure auto-layout algorithm as the UI editor.", mutates: true },
+  { id: "app.workflow.layout.update" as CapabilityId, title: "Auto-layout", description: "Reposition workflow nodes using the persisted workflow layout direction or atomically change that direction when explicitly requested.", mutates: true },
 ]
 
 export const WORKFLOW_DOMAIN: CapabilityDomainDefinition = {
@@ -154,7 +154,7 @@ const workflowParamSchema = {
 
 const workflowDefinitionSchema = {
   type: "object",
-  description: "Full WorkflowDefinition object. Preserve the Synapse-managed meta.schemaVersion returned by definition_get; it is separate from the version save revision. Include workflow defaults such as defaultProjectId when prompt/switch/script/codex/claude_code nodes inherit it, defaultProviderId and defaultModelTier when prompt/switch nodes inherit them, and defaultNodeTimeoutMins when prompt/switch/codex/claude_code nodes inherit it.",
+  description: "Full WorkflowDefinition object. Preserve the Synapse-managed meta.schemaVersion and required layoutDirection returned by definition_get; they are separate from the version save revision. Include workflow defaults such as defaultProjectId when prompt/switch/script/codex/claude_code nodes inherit it, defaultProviderId and defaultModelTier when prompt/switch nodes inherit them, and defaultNodeTimeoutMins when prompt/switch/codex/claude_code nodes inherit it.",
   properties: {
     meta: {
       type: "object",
@@ -170,6 +170,11 @@ const workflowDefinitionSchema = {
     version: { type: "string" },
     createdAt: { type: "number" },
     updatedAt: { type: "number" },
+    layoutDirection: {
+      type: "string",
+      enum: ["horizontal", "vertical"],
+      description: "Persisted workflow layout direction. horizontal uses left-to-right flow; vertical uses top-to-bottom flow.",
+    },
     defaultProjectId: { type: "string", description: "Workflow-level default project/repository id. Prompt, switch, codex, and claude_code nodes need this unless their config sets projectId. Script nodes also need this because script config has no node-level projectId." },
     defaultProviderId: { type: "string", description: "Workflow-level default providerId. Prompt and switch nodes need this unless their config sets providerId." },
     defaultModelTier: modelTierSchema,
@@ -265,7 +270,7 @@ const workflowDefinitionSchema = {
       },
     },
   },
-  required: ["meta", "id", "name", "params", "nodes", "edges"],
+  required: ["meta", "id", "name", "layoutDirection", "params", "nodes", "edges"],
 }
 
 export function buildWorkflowTools(): McpToolDefinition[] {
@@ -502,12 +507,12 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     // Layout
     {
       name: "workflow_layout_update",
-      description: "Reposition all nodes in a workflow using the same pure auto-layout algorithm as the UI editor. Saves the updated positions. Call this after adding, deleting, or reconnecting nodes so the workflow opens cleanly in the UI.",
+      description: "Reposition all nodes using the same pure auto-layout algorithm as the UI editor. Without direction, uses the workflow's persisted layout direction. An explicit LR or TB direction atomically changes the persisted workflow layout direction together with all node positions. Call this after adding, deleting, or reconnecting nodes so the workflow opens cleanly in the UI.",
       inputSchema: {
         type: "object",
         properties: {
           workflowId: { type: "string", description: "Workflow ID." },
-          direction: { type: "string", enum: ["LR", "TB"], description: "Layout direction: LR (left-to-right, default) or TB (top-to-bottom)." },
+          direction: { type: "string", enum: ["LR", "TB"], description: "Optional compatibility direction. LR sets horizontal layout and TB sets vertical layout; when supplied, it changes the workflow's persisted layout direction together with node positions." },
         },
         required: ["workflowId"],
       },

@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo } from "react"
+import { useCallback, useContext, useEffect, useMemo, useRef } from "react"
 import {
   ReactFlow,
   Background,
@@ -12,6 +12,7 @@ import {
   type Edge,
   type EdgeProps,
   useReactFlow,
+  useUpdateNodeInternals,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import type { WorkflowDefinition, NodeRunResult, WorkflowRunStatus } from "@/types/workflow"
@@ -37,6 +38,7 @@ import {
   focusRunningNodes,
   getRunningNodeIds,
 } from "./viewport-focus"
+import { WorkflowLayoutDirectionProvider } from "../workflow-layout-direction-context"
 
 const edgeTypes = { default: RunnerEdge, branch: RunnerEdge }
 
@@ -93,6 +95,7 @@ interface DagViewProps {
 
 function DagViewInner({ definition, nodeResults, runState, selectedNodeId, onNodeSelect, onOpenAgentConversation }: DagViewProps) {
   const reactFlow = useReactFlow()
+  const updateNodeInternals = useUpdateNodeInternals()
 
   const nodes: Node[] = useMemo(() =>
     definition.nodes.map((n) => ({
@@ -133,6 +136,17 @@ function DagViewInner({ definition, nodeResults, runState, selectedNodeId, onNod
     [definition],
   )
   const allNodeKey = allNodeIds.join("\n")
+  const previousLayoutDirectionRef = useRef(definition.layoutDirection)
+
+  useEffect(() => {
+    updateNodeInternals(allNodeIds)
+    if (previousLayoutDirectionRef.current === definition.layoutDirection) return
+    previousLayoutDirectionRef.current = definition.layoutDirection
+    const frame = window.requestAnimationFrame(() => {
+      void fitWorkflowNodes(allNodeIds, reactFlow)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [allNodeIds, definition.layoutDirection, reactFlow, updateNodeInternals])
 
   const handleFitAllNodes = useCallback(() => {
     void fitWorkflowNodes(allNodeIds, reactFlow)
@@ -156,45 +170,47 @@ function DagViewInner({ definition, nodeResults, runState, selectedNodeId, onNod
   }, [allNodeKey, reactFlow, reactFlow.viewportInitialized, runState])
 
   return (
-    <RunnerOpenAgentConversationContext.Provider value={onOpenAgentConversation}>
-      <RunnerNodeResultsContext.Provider value={nodeResults}>
-        <ContextMenu>
-          <ContextMenuTrigger asChild>
-            <div className="h-full w-full">
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                nodeTypes={runnerNodeTypes}
-                edgeTypes={edgeTypes}
-                onNodeClick={(_e, node) => onNodeSelect(node.id)}
-                onPaneClick={() => onNodeSelect(null)}
-                panOnScroll
-                panOnScrollMode={PanOnScrollMode.Free}
-                selectionMode={SelectionMode.Partial}
-                nodesDraggable={false}
-                nodesConnectable={false}
-                edgesReconnectable={false}
-                minZoom={WORKFLOW_RUNNER_MIN_ZOOM}
-                fitView={shouldFitInitialView}
-                fitViewOptions={FIT_WORKFLOW_NODES_OPTIONS}
-              >
-                <Background />
-                <Controls
-                  showInteractive={false}
+    <WorkflowLayoutDirectionProvider value={definition.layoutDirection}>
+      <RunnerOpenAgentConversationContext.Provider value={onOpenAgentConversation}>
+        <RunnerNodeResultsContext.Provider value={nodeResults}>
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <div className="h-full w-full">
+                <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  nodeTypes={runnerNodeTypes}
+                  edgeTypes={edgeTypes}
+                  onNodeClick={(_e, node) => onNodeSelect(node.id)}
+                  onPaneClick={() => onNodeSelect(null)}
+                  panOnScroll
+                  panOnScrollMode={PanOnScrollMode.Free}
+                  selectionMode={SelectionMode.Partial}
+                  nodesDraggable={false}
+                  nodesConnectable={false}
+                  edgesReconnectable={false}
+                  minZoom={WORKFLOW_RUNNER_MIN_ZOOM}
+                  fitView={shouldFitInitialView}
                   fitViewOptions={FIT_WORKFLOW_NODES_OPTIONS}
-                />
-              </ReactFlow>
-            </div>
-          </ContextMenuTrigger>
-          <ContextMenuContent>
-            <ContextMenuItem onSelect={handleFitAllNodes}>
-              <Maximize2 className="size-4" />
-              适应画布
-            </ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
-      </RunnerNodeResultsContext.Provider>
-    </RunnerOpenAgentConversationContext.Provider>
+                >
+                  <Background />
+                  <Controls
+                    showInteractive={false}
+                    fitViewOptions={FIT_WORKFLOW_NODES_OPTIONS}
+                  />
+                </ReactFlow>
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem onSelect={handleFitAllNodes}>
+                <Maximize2 className="size-4" />
+                适应画布
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+        </RunnerNodeResultsContext.Provider>
+      </RunnerOpenAgentConversationContext.Provider>
+    </WorkflowLayoutDirectionProvider>
   )
 }
 

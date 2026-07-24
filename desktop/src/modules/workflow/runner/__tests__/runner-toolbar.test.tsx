@@ -105,6 +105,7 @@ function definition(): WorkflowDefinition {
     version: "1",
     createdAt: 0,
     updatedAt: 0,
+    layoutDirection: "horizontal" as const,
     nodes: [],
     edges: [],
     params: [],

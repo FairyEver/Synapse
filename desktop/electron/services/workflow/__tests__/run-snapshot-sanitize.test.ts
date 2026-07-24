@@ -20,6 +20,7 @@ describe("sanitizeNodeResultsForSnapshot", () => {
       version: "v1",
       createdAt: 1,
       updatedAt: 1,
+      layoutDirection: "horizontal" as const,
       params: [],
       nodes: [{
         id: "script-1",
@@ -287,6 +288,7 @@ describe("sanitizeWorkflowDefinitionForSnapshot", () => {
       version: "1.0.0",
       createdAt: 1,
       updatedAt: 2,
+      layoutDirection: "horizontal" as const,
       params: [
         {
           name: "token",
@@ -353,6 +355,7 @@ describe("sanitizeWorkflowDefinitionForSnapshot", () => {
       version: "1.0.0",
       createdAt: 1,
       updatedAt: 2,
+      layoutDirection: "horizontal" as const,
       params: [],
       edges: [],
       nodes: [
@@ -412,6 +415,7 @@ describe("sanitizeWorkflowDefinitionForSnapshot", () => {
       version: "1.0.0",
       createdAt: 1,
       updatedAt: 2,
+      layoutDirection: "horizontal" as const,
       params: [],
       edges: [],
       nodes: [
@@ -443,6 +447,7 @@ describe("sanitizeWorkflowDefinitionForSnapshot", () => {
       version: "1.0.0",
       createdAt: 1,
       updatedAt: 2,
+      layoutDirection: "horizontal" as const,
       params: [],
       edges: [],
       nodes: [
@@ -526,6 +531,7 @@ describe("sanitizeWorkflowDefinitionForSnapshot", () => {
       version: "1.0.0",
       createdAt: 1,
       updatedAt: 2,
+      layoutDirection: "horizontal" as const,
       params: [],
       edges: [],
       nodes: [
@@ -601,6 +607,7 @@ describe("sanitizeWorkflowRunSnapshot", () => {
         version: "v1",
         createdAt: 1,
         updatedAt: 1,
+        layoutDirection: "horizontal" as const,
         params: [],
         nodes: [
           {
@@ -660,6 +667,7 @@ describe("sanitizeWorkflowRunSnapshot", () => {
         version: "v1",
         createdAt: 1,
         updatedAt: 1,
+        layoutDirection: "horizontal" as const,
         params: [],
         nodes: [
           {

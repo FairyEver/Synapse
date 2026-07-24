@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { AlertTriangle, ChevronDown, Copy, Ellipsis, SlidersHorizontal, Trash2 } from "lucide-react"
+import { AlertTriangle, ArrowDown, ArrowRight, ChevronDown, Copy, Ellipsis, SlidersHorizontal, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -8,8 +8,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { SynapseProjectConfig } from "@/types/config"
-import type { WorkflowDefinition } from "@/types/workflow"
+import type { WorkflowDefinition, WorkflowLayoutDirection } from "@/types/workflow"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import { MODEL_TIER_DISPLAY_LABELS } from "@/lib/provider-model"
 import { getPanel } from "../../../../workflow-nodes/panel-registry"
@@ -35,10 +36,11 @@ interface NodeConfigPanelProps {
   projects: readonly SynapseProjectConfig[]
   defaultProjectName?: string
   onDefinitionChange?: (def: WorkflowDefinition) => void
+  onLayoutDirectionChange?: (direction: WorkflowLayoutDirection) => void
   validationItems?: readonly WorkflowValidationDisplayItem[]
 }
 
-export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange, onNameChange, onDeleteNode, onCopyNode, renameSignal, projects, defaultProjectName, onDefinitionChange, validationItems = [] }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange, onNameChange, onDeleteNode, onCopyNode, renameSignal, projects, defaultProjectName, onDefinitionChange, onLayoutDirectionChange, validationItems = [] }: NodeConfigPanelProps) {
   // Hooks must be called before any early return (React Rules of Hooks).
   const upstreamNodes = useUpstreamNodes(nodeId ?? "", definition)
   const nameInputRef = useRef<HTMLInputElement>(null)
@@ -192,17 +194,23 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
           </ScrollArea>
         </>
       ) : (
-        <GlobalSettingsForm definition={definition} projects={projects} onChange={onDefinitionChange} />
+        <GlobalSettingsForm
+          definition={definition}
+          projects={projects}
+          onChange={onDefinitionChange}
+          onLayoutDirectionChange={onLayoutDirectionChange}
+        />
       )}
     </div>
   )
 }
 
 const NO_PROJECT_VALUE = "__none__"
-function GlobalSettingsForm({ definition, projects, onChange }: {
+function GlobalSettingsForm({ definition, projects, onChange, onLayoutDirectionChange }: {
   definition: WorkflowDefinition
   projects: readonly SynapseProjectConfig[]
   onChange?: (def: WorkflowDefinition) => void
+  onLayoutDirectionChange?: (direction: WorkflowLayoutDirection) => void
 }) {
   const [paramsOpen, setParamsOpen] = useState(false)
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
@@ -232,6 +240,28 @@ function GlobalSettingsForm({ definition, projects, onChange }: {
             onChange={(e) => onChange?.({ ...definition, description: e.target.value || undefined })}
             placeholder="添加描述"
           />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">布局方向</Label>
+          <ToggleGroup
+            type="single"
+            value={definition.layoutDirection}
+            onValueChange={(value) => {
+              if (value !== "horizontal" && value !== "vertical") return
+              if (value === definition.layoutDirection) return
+              onLayoutDirectionChange?.(value)
+            }}
+            className="w-full"
+          >
+            <ToggleGroupItem value="horizontal" className="flex-1" aria-label="左右布局">
+              <ArrowRight className="size-3.5" />
+              左右
+            </ToggleGroupItem>
+            <ToggleGroupItem value="vertical" className="flex-1" aria-label="上下布局">
+              <ArrowDown className="size-3.5" />
+              上下
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">默认供应商</Label>

@@ -1,0 +1,45 @@
+{
+  "meta": { "schemaVersion": "2.9.0" },
+  "id": "clipboard-workflow",
+  "name": "剪贴板文本",
+  "version": "v_1720000000000_00000000_clipboard",
+  "createdAt": 1720000000000,
+  "updatedAt": 1720000000000,
+  "layoutDirection": "horizontal",
+  "params": [],
+  "nodes": [
+    {
+      "id": "read",
+      "name": "读取剪贴板",
+      "type": "clipboard_text_read",
+      "position": { "x": 0, "y": 0 },
+      "config": {}
+    },
+    {
+      "id": "write",
+      "name": "写入剪贴板",
+      "type": "clipboard_text_write",
+      "position": { "x": 300, "y": 0 },
+      "config": {
+        "text": "{{$clipboardText}}",
+        "variables": [
+          {
+            "name": "clipboardText",
+            "source": { "type": "node_output", "node": "read" }
+          }
+        ]
+      }
+    },
+    {
+      "id": "end",
+      "name": "结束",
+      "type": "end",
+      "position": { "x": 600, "y": 0 },
+      "config": { "outputType": "text", "template": "", "variables": [] }
+    }
+  ],
+  "edges": [
+    { "id": "read-to-write", "from": "read", "to": "write" },
+    { "id": "write-to-end", "from": "write", "to": "end" }
+  ]
+}

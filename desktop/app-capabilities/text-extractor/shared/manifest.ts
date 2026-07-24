@@ -9,9 +9,7 @@ import {
 
 export const textExtractorCapabilityManifest = {
   id: TEXT_EXTRACTOR_APP_ID,
-  app: {
-    id: TEXT_EXTRACTOR_APP_ID,
-  },
+  app: null,
   capabilities: [
     TEXT_EXTRACTOR_CAPABILITY_ID,
     TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,

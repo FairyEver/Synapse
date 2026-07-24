@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react"
-import { Handle, Position, type NodeProps } from "@xyflow/react"
+import { Handle, type NodeProps } from "@xyflow/react"
 import { MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -26,6 +26,12 @@ import { SystemNotifierNodeCard } from "../../../../app-capabilities/system-noti
 import { JsonRepairNodeCard } from "../../../../app-capabilities/json-repair/workflow-node/card"
 import { JavascriptRunNodeCard } from "../../../../app-capabilities/javascript-run/workflow-node/card"
 import { NodejsRunNodeCard } from "../../../../app-capabilities/nodejs-run/workflow-node/card"
+import { ClipboardNodeCard } from "../../../../app-capabilities/clipboard/workflow-node/card"
+import {
+  clipboardTextReadNodeManifest,
+  clipboardTextWriteNodeManifest,
+} from "../../../../app-capabilities/clipboard/workflow-node/manifest"
+import type { LucideIcon } from "lucide-react"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { TextNodeConfig } from "../../../../workflow-nodes/text/schema"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
@@ -47,11 +53,29 @@ import type { JavascriptWorkflowConfig, NodejsWorkflowConfig } from "../../../..
 import type { NodeRunResult } from "@/types/workflow"
 import type { SynapseAgentConversationReference } from "@/types/agent-navigation"
 import { agentConversationTargetFromOutputs } from "@/lib/agent-conversation-target"
+import {
+  useWorkflowHandlePositions,
+  useWorkflowLayoutDirection,
+} from "../workflow-layout-direction-context"
+import {
+  resolveSwitchBranchHandlePercent,
+  resolveSwitchNodeWidth,
+} from "@/lib/workflow-layout-direction"
 
 export const RunnerNodeResultsContext = createContext<Record<string, NodeRunResult>>({})
 export const RunnerOpenAgentConversationContext = createContext<
   ((target: SynapseAgentConversationReference) => void) | undefined
 >(undefined)
+
+function WorkflowTargetHandle() {
+  const { target } = useWorkflowHandlePositions()
+  return <Handle type="target" position={target} />
+}
+
+function WorkflowSourceHandle() {
+  const { source } = useWorkflowHandlePositions()
+  return <Handle type="source" position={source} />
+}
 
 function RunnerTextNodeWrapper({ id, data, selected }: NodeProps) {
   const nodeResults = useContext(RunnerNodeResultsContext)
@@ -59,14 +83,14 @@ function RunnerTextNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <TextNodeCard
         config={data as TextNodeConfig}
         name={name}
         selected={selected}
         status={result?.status}
       />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -105,7 +129,7 @@ function RunnerPromptNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <PromptNodeCard
         config={data as PromptNodeConfig}
         name={name}
@@ -115,7 +139,7 @@ function RunnerPromptNodeWrapper({ id, data, selected }: NodeProps) {
         startedAt={result?.startedAt}
       />
       <AgentConversationNodeAction result={result} />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -125,9 +149,14 @@ function RunnerSwitchNodeWrapper({ id, data, selected }: NodeProps) {
   const result = nodeResults[id]
   const name = (data as { name?: string }).name
   const branches = (data as { branches?: Array<{ id: string; label: string }> }).branches ?? []
+  const layoutDirection = useWorkflowLayoutDirection()
+  const { source } = useWorkflowHandlePositions()
+  const width = layoutDirection === "vertical"
+    ? resolveSwitchNodeWidth(layoutDirection, branches.length)
+    : undefined
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <SwitchNodeCard
         config={data as SwitchNodeConfig}
         name={name}
@@ -135,15 +164,18 @@ function RunnerSwitchNodeWrapper({ id, data, selected }: NodeProps) {
         status={result?.status}
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
+        width={width}
       />
       <AgentConversationNodeAction result={result} />
       {branches.map((b, i) => (
         <Handle
           key={b.id}
           type="source"
-          position={Position.Right}
+          position={source}
           id={b.id}
-          style={{ top: `${SWITCH_HEADER_H + (i + 0.5) * SWITCH_BRANCH_H}px` }}
+          style={layoutDirection === "vertical"
+            ? { left: `${resolveSwitchBranchHandlePercent(i, branches.length)}%` }
+            : { top: `${SWITCH_HEADER_H + (i + 0.5) * SWITCH_BRANCH_H}px` }}
         />
       ))}
     </div>
@@ -156,7 +188,7 @@ function RunnerEndNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <EndNodeCard
         config={data as EndNodeConfig}
         name={name}
@@ -176,7 +208,7 @@ function RunnerHttpRequestNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <HttpRequestNodeCard
         config={data as HttpRequestNodeConfig}
         name={name}
@@ -186,7 +218,7 @@ function RunnerHttpRequestNodeWrapper({ id, data, selected }: NodeProps) {
         startedAt={result?.startedAt}
       />
       <AgentConversationNodeAction result={result} />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -197,7 +229,7 @@ function RunnerScriptNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <ScriptNodeCard
         config={data as ScriptNodeConfig}
         name={name}
@@ -207,7 +239,7 @@ function RunnerScriptNodeWrapper({ id, data, selected }: NodeProps) {
         startedAt={result?.startedAt}
       />
       <AgentConversationNodeAction result={result} />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -218,7 +250,7 @@ function RunnerWorkflowCallNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <WorkflowCallNodeCard
         config={data as WorkflowCallNodeConfig}
         name={name}
@@ -227,7 +259,7 @@ function RunnerWorkflowCallNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -238,7 +270,7 @@ function RunnerCodexNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <CodexNodeCard
         config={data as CodexNodeConfig}
         name={name}
@@ -248,7 +280,7 @@ function RunnerCodexNodeWrapper({ id, data, selected }: NodeProps) {
         startedAt={result?.startedAt}
       />
       <AgentConversationNodeAction result={result} />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -259,7 +291,7 @@ function RunnerClaudeCodeNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <ClaudeCodeNodeCard
         config={data as ClaudeCodeNodeConfig}
         name={name}
@@ -269,7 +301,7 @@ function RunnerClaudeCodeNodeWrapper({ id, data, selected }: NodeProps) {
         startedAt={result?.startedAt}
       />
       <AgentConversationNodeAction result={result} />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -280,7 +312,7 @@ function RunnerDocumentTemplateNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <DocumentTemplateNodeCard
         config={data as DocumentTemplateNodeConfig}
         name={name}
@@ -289,7 +321,7 @@ function RunnerDocumentTemplateNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -300,7 +332,7 @@ function RunnerTextExtractNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <TextExtractNodeCard
         config={data as TextExtractNodeConfig}
         name={name}
@@ -309,7 +341,7 @@ function RunnerTextExtractNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -320,7 +352,7 @@ function RunnerFileOpenerNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <FileOpenerNodeCard
         config={data as FileOpenerNodeConfig}
         name={name}
@@ -329,7 +361,7 @@ function RunnerFileOpenerNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -340,7 +372,7 @@ function RunnerTextFileWriterNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <TextFileWriterNodeCard
         config={data as TextFileWriterNodeConfig}
         name={name}
@@ -349,7 +381,7 @@ function RunnerTextFileWriterNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -358,7 +390,7 @@ function RunnerHtmlGeneratorEjsNodeWrapper({ id, data, selected }: NodeProps) {
   const result = useContext(RunnerNodeResultsContext)[id]
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <HtmlGeneratorEjsNodeCard
         config={data as HtmlGeneratorEjsNodeConfig}
         name={(data as { name?: string }).name}
@@ -367,7 +399,7 @@ function RunnerHtmlGeneratorEjsNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -376,7 +408,7 @@ function RunnerHtmlGeneratorEjsFileNodeWrapper({ id, data, selected }: NodeProps
   const result = useContext(RunnerNodeResultsContext)[id]
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <HtmlGeneratorEjsFileNodeCard
         config={data as HtmlGeneratorEjsFileNodeConfig}
         name={(data as { name?: string }).name}
@@ -385,7 +417,7 @@ function RunnerHtmlGeneratorEjsFileNodeWrapper({ id, data, selected }: NodeProps
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -394,7 +426,7 @@ function RunnerSystemNotifierNodeWrapper({ id, data, selected }: NodeProps) {
   const result = useContext(RunnerNodeResultsContext)[id]
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <SystemNotifierNodeCard
         config={data as SystemNotifierNodeConfig}
         name={(data as { name?: string }).name}
@@ -403,7 +435,7 @@ function RunnerSystemNotifierNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -412,7 +444,7 @@ function RunnerJsonRepairNodeWrapper({ id, data, selected }: NodeProps) {
   const result = useContext(RunnerNodeResultsContext)[id]
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <JsonRepairNodeCard
         config={data as JsonRepairNodeConfig}
         name={(data as { name?: string }).name}
@@ -420,7 +452,7 @@ function RunnerJsonRepairNodeWrapper({ id, data, selected }: NodeProps) {
         status={result?.status}
         startedAt={result?.startedAt}
       />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -429,7 +461,7 @@ function RunnerJavascriptRunNodeWrapper({ id, data, selected }: NodeProps) {
   const result = useContext(RunnerNodeResultsContext)[id]
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <JavascriptRunNodeCard
         config={data as JavascriptWorkflowConfig}
         name={(data as { name?: string }).name}
@@ -438,7 +470,7 @@ function RunnerJavascriptRunNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
 }
@@ -447,7 +479,7 @@ function RunnerNodejsRunNodeWrapper({ id, data, selected }: NodeProps) {
   const result = useContext(RunnerNodeResultsContext)[id]
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} />
+      <WorkflowTargetHandle />
       <NodejsRunNodeCard
         config={data as NodejsWorkflowConfig}
         name={(data as { name?: string }).name}
@@ -456,9 +488,39 @@ function RunnerNodejsRunNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
-      <Handle type="source" position={Position.Right} />
+      <WorkflowSourceHandle />
     </div>
   )
+}
+
+function RunnerClipboardNodeWrapper({
+  id,
+  data,
+  selected,
+  manifest,
+}: NodeProps & { manifest: { readonly title: string; readonly icon: LucideIcon } }) {
+  const result = useContext(RunnerNodeResultsContext)[id]
+  return (
+    <div className="relative">
+      <WorkflowTargetHandle />
+      <ClipboardNodeCard
+        manifest={manifest}
+        name={(data as { name?: string }).name}
+        selected={selected}
+        status={result?.status}
+        startedAt={result?.startedAt}
+      />
+      <WorkflowSourceHandle />
+    </div>
+  )
+}
+
+function RunnerClipboardTextWriteNodeWrapper(props: NodeProps) {
+  return <RunnerClipboardNodeWrapper {...props} manifest={clipboardTextWriteNodeManifest} />
+}
+
+function RunnerClipboardTextReadNodeWrapper(props: NodeProps) {
+  return <RunnerClipboardNodeWrapper {...props} manifest={clipboardTextReadNodeManifest} />
 }
 
 export const runnerNodeTypes = {
@@ -481,4 +543,6 @@ export const runnerNodeTypes = {
   json_repair_text_repair: RunnerJsonRepairNodeWrapper,
   javascript_run: RunnerJavascriptRunNodeWrapper,
   nodejs_run: RunnerNodejsRunNodeWrapper,
+  clipboard_text_write: RunnerClipboardTextWriteNodeWrapper,
+  clipboard_text_read: RunnerClipboardTextReadNodeWrapper,
 }

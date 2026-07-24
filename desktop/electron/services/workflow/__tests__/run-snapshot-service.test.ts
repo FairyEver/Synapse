@@ -4,6 +4,7 @@ import path from "node:path"
 import { describe, expect, it } from "vitest"
 
 import type { WorkflowRunSnapshot } from "../../../../src/types/workflow"
+import "../../../../workflow-nodes/register.main"
 import { RunSnapshotService } from "../run-snapshot-service"
 import { WORKFLOW_SCHEMA_VERSION } from "../workflow-document-migration"
 
@@ -122,6 +123,45 @@ describe("RunSnapshotService", () => {
         kind: "failed",
         sourceVersion: "1.0.0",
       })
+    } finally {
+      await rm(dataDir, { recursive: true, force: true })
+    }
+  })
+
+  it("migrates an old snapshot direction only in memory and writes it explicitly for a rerun snapshot", async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), "synapse-run-snapshots-"))
+    const service = new RunSnapshotService(dataDir)
+    const file = path.join(dataDir, "workflow-runs", "workflow-1", "run-old.json")
+    const oldDefinition = JSON.parse(await readFile(
+      path.join(__dirname, "..", "__fixtures__", "workflow-schema", "2.7.0.json"),
+      "utf-8",
+    )) as Record<string, unknown>
+    oldDefinition.id = "workflow-1"
+    const oldNodes = oldDefinition.nodes as Array<{ position: { x: number; y: number } }>
+    oldNodes[0]!.position = { x: 31, y: 47 }
+    const raw = {
+      ...snapshot("run-old", 1),
+      definition: oldDefinition,
+    }
+
+    try {
+      await mkdir(path.dirname(file), { recursive: true })
+      await writeFile(file, JSON.stringify(raw), "utf-8")
+
+      const loaded = await service.get("run-old", "workflow-1")
+
+      expect(loaded?.definition?.layoutDirection).toBe("horizontal")
+      expect(loaded?.definition?.nodes[0]?.position).toEqual({ x: 31, y: 47 })
+      await expect(readFile(file, "utf-8")).resolves.toBe(JSON.stringify(raw))
+      if (!loaded) throw new Error("Old snapshot fixture did not load")
+
+      await service.save({ ...loaded, runId: "run-rerun" })
+      const rerunRaw = JSON.parse(await readFile(
+        path.join(dataDir, "workflow-runs", "workflow-1", "run-rerun.json"),
+        "utf-8",
+      )) as WorkflowRunSnapshot
+      expect(rerunRaw.definition?.layoutDirection).toBe("horizontal")
+      expect(rerunRaw.definition?.nodes[0]?.position).toEqual({ x: 31, y: 47 })
     } finally {
       await rm(dataDir, { recursive: true, force: true })
     }

@@ -25,6 +25,10 @@ import { systemNotifierNodeManifest } from "../app-capabilities/system-notifier/
 import { jsonRepairNodeManifest } from "../app-capabilities/json-repair/workflow-node/manifest"
 import { javascriptRunNodeManifest } from "../app-capabilities/javascript-run/workflow-node/manifest"
 import { nodejsRunNodeManifest } from "../app-capabilities/nodejs-run/workflow-node/manifest"
+import {
+  clipboardTextReadNodeManifest,
+  clipboardTextWriteNodeManifest,
+} from "../app-capabilities/clipboard/workflow-node/manifest"
 
 nodeTypeRegistry.registerManifest(textNodeManifest)
 nodeTypeRegistry.registerManifest(promptNodeManifest)
@@ -45,3 +49,5 @@ nodeTypeRegistry.registerManifest(systemNotifierNodeManifest)
 nodeTypeRegistry.registerManifest(jsonRepairNodeManifest)
 nodeTypeRegistry.registerManifest(javascriptRunNodeManifest)
 nodeTypeRegistry.registerManifest(nodejsRunNodeManifest)
+nodeTypeRegistry.registerManifest(clipboardTextWriteNodeManifest)
+nodeTypeRegistry.registerManifest(clipboardTextReadNodeManifest)

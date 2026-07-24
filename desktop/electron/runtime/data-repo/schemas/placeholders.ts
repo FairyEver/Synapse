@@ -1122,6 +1122,8 @@ export interface WorkflowEntryV1 extends Record<string, unknown> {
   version: string
   createdAt: number
   updatedAt: number
+  /** Optional only at the permissive storage envelope; document migration makes it required. */
+  layoutDirection?: "horizontal" | "vertical"
   defaultProjectId?: string
   defaultProviderId?: string
   defaultModelTier?: "default" | "haiku" | "sonnet" | "opus"

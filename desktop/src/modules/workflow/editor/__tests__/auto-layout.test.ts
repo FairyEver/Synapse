@@ -27,7 +27,7 @@ describe("autoLayoutNodes", () => {
   it("arranges a linear chain left-to-right", () => {
     const nodes = [makeNode("a"), makeNode("b"), makeNode("c")]
     const edges = [makeEdge("a", "b"), makeEdge("b", "c")]
-    const result = autoLayoutNodes(nodes, edges, { direction: "LR" })
+    const result = autoLayoutNodes(nodes, edges, { layoutDirection: "horizontal" as const })
 
     const posA = result.find((n) => n.id === "a")!.position
     const posB = result.find((n) => n.id === "b")!.position
@@ -40,7 +40,7 @@ describe("autoLayoutNodes", () => {
   it("arranges a linear chain top-to-bottom when direction is TB", () => {
     const nodes = [makeNode("a"), makeNode("b")]
     const edges = [makeEdge("a", "b")]
-    const result = autoLayoutNodes(nodes, edges, { direction: "TB" })
+    const result = autoLayoutNodes(nodes, edges, { layoutDirection: "vertical" })
 
     const posA = result.find((n) => n.id === "a")!.position
     const posB = result.find((n) => n.id === "b")!.position

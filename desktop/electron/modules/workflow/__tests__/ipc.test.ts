@@ -2678,13 +2678,14 @@ describe("workflowIpcModule", () => {
 
 })
 
-function workflowDefinition() {
+function workflowDefinition(): WorkflowDefinition {
   return {
     id: "workflow-1",
     name: "Workflow",
     version: "v1",
     createdAt: 1,
     updatedAt: 1,
+    layoutDirection: "horizontal" as const,
     params: [],
     nodes: [],
     edges: [],

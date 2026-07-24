@@ -139,6 +139,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.workflow.snapshots",
         "core.workflow.window-manager",
         "core.json-repair",
+        "core.clipboard",
         "git.access-service",
         "git.branch-service",
         "git.clone-service",
@@ -192,6 +193,8 @@ describe("buildServiceRegistry (T1.8)", () => {
     ])
     expect(byId.get("core.json-repair")?.dependsOn).toEqual([])
     expect(byId.get("core.json-repair")?.startAfter).toEqual(["core.audit-sink"])
+    expect(byId.get("core.clipboard")?.dependsOn).toEqual([])
+    expect(byId.get("core.clipboard")?.startAfter).toEqual(["core.audit-sink"])
     expect(byId.get("core.text-extractor")?.dependsOn).toEqual([
       "core.permission-guard",
       "core.audit-sink",
@@ -378,6 +381,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.system-notifier.integration")).toBeLessThan(idx("core.database"))
     expect(idx("core.json-repair")).toBeLessThan(idx("core.workflow.engine"))
     expect(idx("core.json-repair")).toBeLessThan(idx("core.database"))
+    expect(idx("core.clipboard")).toBeLessThan(idx("core.workflow.engine"))
     expect(idx("core.event-bus")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.permission-guard")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.audit-sink")).toBeLessThan(idx("core.project-containers"))

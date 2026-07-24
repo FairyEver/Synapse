@@ -3,20 +3,9 @@ import { agentPersonasAppDefinition } from "../../../app-capabilities/agent-pers
 import { automationAppDefinition } from "../automation/app-definition"
 import { databaseAppDefinition } from "../database/app-definition"
 import { driveAppDefinition } from "../drive/app-definition"
-import { documentTemplateAppDefinition } from "../../../app-capabilities/document-template/renderer/app-definition"
-import { textExtractorAppDefinition } from "../../../app-capabilities/text-extractor/renderer/app-definition"
-import { fileOpenerAppDefinition } from "../../../app-capabilities/file-opener/renderer/app-definition"
-import { textFileWriterAppDefinition } from "../../../app-capabilities/text-file-writer/renderer/app-definition"
-import { htmlGeneratorAppDefinition } from "../../../app-capabilities/html-generator/renderer/app-definition"
-import { skillInstallerAppDefinition } from "../../../app-capabilities/skill-installer/renderer/app-definition"
-import { skillUninstallerAppDefinition } from "../../../app-capabilities/skill-uninstaller/renderer/app-definition"
 import { synapseSkillAppDefinition } from "../../../app-capabilities/synapse-skill/renderer/app-definition"
 import { secretsAppDefinition } from "../../../app-capabilities/secrets/renderer/app-definition"
-import { ruleInstallerAppDefinition } from "../../../app-capabilities/rule-installer/renderer/app-definition"
 import { quickInputAppDefinition } from "../../../app-capabilities/quick-input/renderer/app-definition"
-import { soundNotifierAppDefinition } from "../../../app-capabilities/sound-notifier/renderer/app-definition"
-import { systemNotifierAppDefinition } from "../../../app-capabilities/system-notifier/renderer/app-definition"
-import { jsonRepairAppDefinition } from "../../../app-capabilities/json-repair/renderer/app-definition"
 import { terminalAppDefinition } from "../../../app-capabilities/terminal/renderer/app-definition"
 import { editorScanAppDefinition } from "../editor-scan/app-definition"
 import { gitAppDefinition } from "../git/app-definition"
@@ -40,20 +29,9 @@ const systemAppDefinitions = [
   resourceRepositoryAppDefinition,
   gitAppDefinition,
   databaseAppDefinition,
-  documentTemplateAppDefinition,
-  textExtractorAppDefinition,
-  fileOpenerAppDefinition,
-  textFileWriterAppDefinition,
-  htmlGeneratorAppDefinition,
-  jsonRepairAppDefinition,
-  skillInstallerAppDefinition,
-  skillUninstallerAppDefinition,
   synapseSkillAppDefinition,
   secretsAppDefinition,
-  ruleInstallerAppDefinition,
   quickInputAppDefinition,
-  soundNotifierAppDefinition,
-  systemNotifierAppDefinition,
   terminalAppDefinition,
   editorScanAppDefinition,
   usageMonitorAppDefinition,

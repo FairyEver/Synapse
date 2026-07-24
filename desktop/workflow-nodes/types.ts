@@ -60,7 +60,7 @@ export interface NodeShareSensitiveDeclaration {
 export interface NodeShareRiskDeclaration {
   readonly path: NodeShareConfigPath
   readonly id: string
-  readonly when: "present" | "truthy"
+  readonly when: "always" | "present" | "truthy"
   readonly equals?: unknown
 }
 

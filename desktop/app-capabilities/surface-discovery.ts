@@ -4,8 +4,10 @@ import type {
 } from "./manifest"
 import { javascriptRunPackageManifest } from "./javascript-run/shared/manifest"
 import { nodejsRunPackageManifest } from "./nodejs-run/shared/manifest"
+import { clipboardPackageManifest } from "./clipboard/shared/manifest"
 
 const builtinCapabilityPackages = [
+  clipboardPackageManifest,
   javascriptRunPackageManifest,
   nodejsRunPackageManifest,
 ] as const satisfies readonly BuiltinCapabilityPackageManifestV1[]

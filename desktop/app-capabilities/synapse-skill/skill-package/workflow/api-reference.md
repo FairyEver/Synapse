@@ -4,7 +4,7 @@ All tools are accessed via the `synapse-mcp` MCP server.
 
 Workflow share export/import is intentionally not exposed as an MCP tool in this version. Use the Synapse Workflow UI for `.synapse-workflow` V4 packages. Whole-definition MCP create/update calls do not provide package lineage, recursive child inclusion, dependency mapping, transaction recovery, or share undo.
 
-Workflow definition responses include `meta.schemaVersion` (SemVer). Preserve it on whole-definition updates. Do not confuse it with the `version` save revision. Synapse migrates supported legacy documents before returning them and blocks future or failed documents from fetch, update, and execution. List metadata can expose `loadError`; `rawExportAvailable` refers only to the Synapse UI's protected raw export path, which writes the untouched workflow JSON document rather than an importable Synapse workflow package and rejects symbolic-link destinations.
+Workflow definition responses include `meta.schemaVersion` (SemVer) and required `layoutDirection` (`"horizontal"` or `"vertical"`). Preserve both on whole-definition updates. Do not confuse schema metadata with the `version` save revision. Synapse migrates supported legacy documents before returning them and blocks future or failed documents from fetch, update, and execution. List metadata can expose `loadError`; `rawExportAvailable` refers only to the Synapse UI's protected raw export path, which writes the untouched workflow JSON document rather than an importable Synapse workflow package and rejects symbolic-link destinations.
 
 ---
 
@@ -12,7 +12,7 @@ Workflow definition responses include `meta.schemaVersion` (SemVer). Preserve it
 
 ### app_workflow_node_type_list
 
-List available node types with summaries. Current built-in node types include `text`, `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `text_extract`, `file_opener_file_open`, `text_file_writer_file_write`, `html_generator_ejs_generate`, `html_generator_ejs_file_generate`, `json_repair_text_repair`, `system_notifier_notification_trigger`, `javascript_run`, `nodejs_run`, `codex`, `claude_code`, and `end`.
+List available node types with summaries. Current built-in node types include `text`, `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `document_template_docx_generate`, `text_extract`, `file_opener_file_open`, `text_file_writer_file_write`, `html_generator_ejs_generate`, `html_generator_ejs_file_generate`, `json_repair_text_repair`, `system_notifier_notification_trigger`, `clipboard_text_write`, `clipboard_text_read`, `javascript_run`, `nodejs_run`, `codex`, `claude_code`, and `end`.
 
 **Params:** none
 **Returns:** `[{ type, title, subtitle, color }]`
@@ -178,6 +178,21 @@ Triggers one native system notification with fire-and-forget semantics. No provi
 
 After interpolation, the title and body must be single-line strings with no leading or trailing whitespace and are limited to 64 and 256 Unicode code points respectively. Binding, interpolation, or input validation failure occurs before notification acceptance and fails the node. Accepted execution returns primary output `{"success":true}` and structured outputs `{ success: true }`; this never proves delivery or display and must not be used to trigger retries.
 
+### clipboard_text_write
+
+Writes plain text to the standard system Clipboard. Only configure or run this node when the user currently and explicitly asks for a Clipboard workflow.
+
+- `text` (string) — non-empty template with optional `{{variable}}` or `{{$variable}}` placeholders
+- `variables` (array) — explicit bindings used by the template
+
+Incoming `in` edges control execution order only and never supply text implicitly. After interpolation, the text must be valid Unicode, contain no NUL, and be at most 1 MiB as UTF-8; whitespace-only text is valid and is written unchanged. Success returns primary output `{"success":true}` and structured outputs `{ success: true }`. The result does not include the written text and does not prove that another application has not overwritten the Clipboard.
+
+### clipboard_text_read
+
+Reads plain text from the standard system Clipboard. Config is strictly `{}`. Only configure or run this node when the user currently and explicitly asks for a Clipboard workflow; never read the Clipboard for an ordinary answer, environment check, or context gathering.
+
+Empty Clipboard content or Clipboard content with no plain-text representation succeeds with primary output `""` and structured outputs `{ text: "" }`. Non-empty results must be valid Unicode, contain no NUL, and be at most 1 MiB as UTF-8. The complete value remains available to downstream nodes during the active run. Workflow MCP run status/results expose only the existing bounded preview, and persisted run snapshots omit this node's `output` and `outputs.text`.
+
 ### javascript_run
 
 Runs `source` once as an ordinary classic JavaScript file in a disposable Chromium Dedicated Worker. No provider or project is needed.
@@ -321,7 +336,7 @@ List all workflow definitions.
 Get full workflow definition by ID.
 
 **Params:** `workflowId` (string, required)
-**Returns:** Full `WorkflowDefinition` object (nodes, edges, params, `defaultProjectId?`, `defaultProviderId?`, `defaultModelTier?`, `defaultNodeTimeoutMins?`) or `null`
+**Returns:** Full `WorkflowDefinition` object (nodes, edges, params, required `layoutDirection`, `defaultProjectId?`, `defaultProviderId?`, `defaultModelTier?`, `defaultNodeTimeoutMins?`) or `null`
 ### app_workflow_definition_inspect
 
 Validate a workflow definition without saving.
@@ -365,7 +380,7 @@ Create a new empty workflow with a default end node.
 
 Replace a full workflow definition. Validates before saving.
 
-**Params:** `definition` (object, required) — must include `id` and the complete Synapse-managed `meta` object with `meta.schemaVersion`
+**Params:** `definition` (object, required) — must include `id`, required `layoutDirection`, and the complete Synapse-managed `meta` object with `meta.schemaVersion`
 **Returns:** `{ versionHash }`
 **Notes:** Config is replaced entirely, not merged. Include `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` to set workflow-level defaults. The tool has no expected-version parameter. For an existing Workflow, record the fetched `version`, inspect the complete candidate, then refetch immediately before saving and rebuild from the latest definition if the version changed. After saving, refetch and inspect the persisted definition.
 
@@ -448,11 +463,11 @@ For option / 选项 params, set `options` to an array of strings. The option lab
 
 ### app_workflow_layout_update
 
-Reposition all nodes using the same pure auto-layout algorithm as the UI editor. Saves the updated positions.
+Reposition all nodes using the same pure auto-layout algorithm as the UI editor. Saves the updated positions and uses the workflow's persisted layout direction unless an explicit compatibility direction is supplied.
 
-**Params:** `workflowId` (string, required), `direction?` (string, `"LR"` or `"TB"`, default `"LR"`)
+**Params:** `workflowId` (string, required), `direction?` (string, `"LR"` or `"TB"`)
 **Returns:** `{ versionHash, validation? }`
-**Notes:** `LR` arranges nodes left-to-right, `TB` arranges top-to-bottom. The UI editor reflects the changes on next load. Call this after adding, deleting, or reconnecting nodes so agents can clean up layout without opening the UI.
+**Notes:** When omitted, direction comes from the workflow's persisted `layoutDirection`. Explicit `LR` atomically sets `layoutDirection: "horizontal"` and repositions every node; explicit `TB` atomically sets `layoutDirection: "vertical"` and repositions every node. The UI editor reflects the saved direction and positions on next load. Call this after adding, deleting, or reconnecting nodes so agents can clean up layout without opening the UI.
 
 ---
 

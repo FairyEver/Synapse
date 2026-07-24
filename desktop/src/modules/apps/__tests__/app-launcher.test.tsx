@@ -115,12 +115,25 @@ describe("AppsModule", () => {
     expect(findButton("资源仓库")).toBeTruthy()
     expect(findButton("Git")).toBeTruthy()
     expect(findButton("本地数据库")).toBeTruthy()
-    expect(findButton("模板生成文档")).toBeTruthy()
-    expect(findButton("文本提取")).toBeTruthy()
     expect(findButton("终端")).toBeTruthy()
     expect(findButton("IDE 管理")).toBeTruthy()
     expect(findButton("用量监控")).toBeTruthy()
     expect(findButton("价格管理")).toBeTruthy()
+    for (const removedCapabilityName of [
+      "模板生成文档",
+      "文本提取",
+      "默认应用打开",
+      "文本写入文件",
+      "HTML 生成器",
+      "JSON Repair",
+      "Skill 安装器",
+      "Skill 卸载器",
+      "Rule 安装器",
+      "Sound Notifier",
+      "System Notifier",
+    ]) {
+      expect(document.body.textContent).not.toContain(removedCapabilityName)
+    }
     expect(document.body.textContent).not.toContain("Agent 会话")
     expect(document.body.textContent).not.toContain("流程编排")
     expect(document.body.textContent).not.toContain("文件与分享")
@@ -153,6 +166,58 @@ describe("AppsModule", () => {
     expect(document.querySelectorAll(".lucide-chevron-right")).toHaveLength(0)
     expect(document.querySelector(".lucide-external-link")).toBeNull()
     expect(findButton("资源仓库")).toBeInstanceOf(HTMLButtonElement)
+  })
+
+  it("reveals launcher icons with compositor-only native animations", async () => {
+    const cancelAnimation = vi.fn()
+    const animationCalls: Array<[
+      Keyframe[] | PropertyIndexedKeyframes,
+      KeyframeAnimationOptions,
+    ]> = []
+    const animateElement = vi.fn((
+      keyframes: Keyframe[] | PropertyIndexedKeyframes,
+      options?: number | KeyframeAnimationOptions,
+    ) => {
+      animationCalls.push([keyframes, options as KeyframeAnimationOptions])
+      return { cancel: cancelAnimation } as unknown as Animation
+    })
+    Object.defineProperty(HTMLElement.prototype, "animate", {
+      configurable: true,
+      value: animateElement,
+    })
+
+    try {
+      await renderAppsModule(roots)
+
+      const launcherItems = document.querySelectorAll("[data-app-launcher-item]")
+      const firstAnimation = animationCalls[0]
+      const centerAnimation = animationCalls[7]
+
+      expect(launcherItems).toHaveLength(15)
+      expect(animateElement).toHaveBeenCalledTimes(15)
+      expect(firstAnimation).toBeTruthy()
+      expect(centerAnimation).toBeTruthy()
+      if (!firstAnimation || !centerAnimation) return
+      expect(firstAnimation[0]).toEqual([
+        {
+          opacity: 0,
+          transform: "translate3d(16px, 8px, 0) scale(0.75)",
+        },
+        {
+          opacity: 1,
+          transform: "translate3d(0, 0, 0) scale(1)",
+        },
+      ])
+      expect(centerAnimation[1]).toMatchObject({
+        duration: 400,
+        easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+        fill: "backwards",
+      })
+      expect(Number(centerAnimation[1].delay))
+        .toBeLessThan(Number(firstAnimation[1].delay))
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, "animate")
+    }
   })
 
   it("opens the clicked app in the current window", async () => {

@@ -5,6 +5,7 @@ describe("fileOpenerCapabilityManifest", () => {
   it("explicitly exposes only the open deep-link action", () => {
     expect(fileOpenerCapabilityManifest).toMatchObject({
       id: "file-opener",
+      app: null,
       capabilities: ["app.file_opener.file.open"],
       mcpTools: ["app_file_opener_file_open"],
       workflowNodes: ["file_opener_file_open"],
@@ -12,4 +13,3 @@ describe("fileOpenerCapabilityManifest", () => {
     })
   })
 })
-

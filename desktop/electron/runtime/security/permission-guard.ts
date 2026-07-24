@@ -52,6 +52,8 @@ export type PermissionAction =
   | "terminal.group.delete"
   | "notification.trigger"
   | "json.repair"
+  | "clipboard.read"
+  | "clipboard.write"
 
 export type ActorIdentity =
   | { kind: "user"; id?: string; display?: string }

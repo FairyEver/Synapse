@@ -510,6 +510,7 @@ function definition(id = "imported"): WorkflowDefinition {
     version: "v1",
     createdAt: 1,
     updatedAt: 1,
+    layoutDirection: "horizontal" as const,
     meta: { schemaVersion: "2.7.0" },
     params: [],
     edges: [

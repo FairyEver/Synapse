@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
 import { AppLauncherGrid } from "./components/app-launcher-grid"
+import { AppSwitchTransition } from "./components/app-switch-transition"
 import { EmbeddedSystemAppShell } from "./components/embedded-system-app-shell"
 import { SystemAppContent } from "./components/system-app-content"
 import { getSystemAppManifest, listLaunchableSystemApps } from "./registry"
@@ -85,24 +86,26 @@ export function AppsModule({
 
   if (activeApp) {
     return (
-      <EmbeddedSystemAppShell
-        appName={activeApp.name}
-        onBack={() => {
-          setActiveAppId(null)
-          setResourceContentOpenRequest(null)
-        }}
-        onOpenWindow={activeApp.window.openable
-          ? () => void openAppWindow(activeApp.id)
-          : undefined}
-      >
-        <SystemAppContent
-          appId={activeApp.id}
-          workflowEntryVisible={workflowEntryVisible}
-          resourceContentOpenRequest={resourceContentOpenRequest}
-          onResourceContentOpenRequestConsumed={handleResourceContentOpenRequestConsumed}
-          onContentOpenRequest={openResourceRepository}
-        />
-      </EmbeddedSystemAppShell>
+      <AppSwitchTransition transitionKey={activeApp.id} animateOnMount>
+        <EmbeddedSystemAppShell
+          appName={activeApp.name}
+          onBack={() => {
+            setActiveAppId(null)
+            setResourceContentOpenRequest(null)
+          }}
+          onOpenWindow={activeApp.window.openable
+            ? () => void openAppWindow(activeApp.id)
+            : undefined}
+        >
+          <SystemAppContent
+            appId={activeApp.id}
+            workflowEntryVisible={workflowEntryVisible}
+            resourceContentOpenRequest={resourceContentOpenRequest}
+            onResourceContentOpenRequestConsumed={handleResourceContentOpenRequestConsumed}
+            onContentOpenRequest={openResourceRepository}
+          />
+        </EmbeddedSystemAppShell>
+      </AppSwitchTransition>
     )
   }
 

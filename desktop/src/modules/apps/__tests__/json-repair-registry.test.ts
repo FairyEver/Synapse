@@ -2,21 +2,13 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { inflateSync } from "node:zlib"
 import { describe, expect, it } from "vitest"
-import { DEFAULT_DOCK_APP_IDS } from "../dock"
-import { getSystemAppManifest, listLaunchableSystemApps } from "../registry"
+import { parseSystemAppId } from "../definitions"
+import { getSystemAppManifest } from "../registry"
 
 describe("JSON Repair app registry", () => {
-  it("registers the stable launchable app outside the default Dock", () => {
-    expect(getSystemAppManifest("json-repair")).toMatchObject({
-      id: "json-repair",
-      namespace: "json_repair",
-      name: "JSON Repair",
-      windowTitle: "JSON Repair",
-      dock: { pinnedByDefault: false, order: 244 },
-      window: { openable: true },
-    })
-    expect(listLaunchableSystemApps().map((item) => item.id)).toContain("json-repair")
-    expect(DEFAULT_DOCK_APP_IDS).not.toContain("json-repair")
+  it("does not register JSON Repair as a system app", () => {
+    expect(getSystemAppManifest("json-repair")).toBeNull()
+    expect(parseSystemAppId("json-repair")).toBeNull()
   })
 
   it("ships a readable RGBA PNG icon at 32px, 64px, and 256px", async () => {

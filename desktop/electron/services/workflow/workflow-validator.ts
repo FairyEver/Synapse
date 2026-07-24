@@ -3,6 +3,7 @@ import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../config"
 import type { SynapseConfig } from "../../../src/types/config"
 import { SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/system-notifier/shared/capability"
 import { JSON_REPAIR_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/json-repair/shared/capability"
+import { CLIPBOARD_TEXT_WRITE_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/clipboard/shared/capability"
 import {
   JAVASCRIPT_RUN_WORKFLOW_NODE_TYPE,
   NODEJS_RUN_WORKFLOW_NODE_TYPE,
@@ -166,6 +167,8 @@ function collectTemplateTexts(node: WorkflowDefinition["nodes"][number]): string
     pushString(cfg.title)
     pushString(cfg.body)
   } else if (node.type === JSON_REPAIR_WORKFLOW_NODE_TYPE) {
+    pushString(cfg.text)
+  } else if (node.type === CLIPBOARD_TEXT_WRITE_WORKFLOW_NODE_TYPE) {
     pushString(cfg.text)
   }
 

@@ -8,6 +8,7 @@ const definition: WorkflowDefinition = {
   version: "v1",
   createdAt: 1,
   updatedAt: 2,
+  layoutDirection: "horizontal" as const,
   params: [{ name: "topic", type: "text", default: null }],
   nodes: [],
   edges: [],
