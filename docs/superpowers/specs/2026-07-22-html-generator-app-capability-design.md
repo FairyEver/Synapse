@@ -284,6 +284,8 @@ Render audit resource is the capability id. Metadata is limited to source, templ
 
 ## Shared Text File Writer extension
 
+This section records the historical Writer 1.1.0 expansion made for HTML Generator. ADR 0205 later removes the shared Writer's extension and extension-specific encoding restrictions in 1.2.0; HTML Generator still enforces its own `.html`/`.htm` UTF-8 output contract.
+
 `TEXT_FILE_FORMATS` adds `html` and `htm` globally. Writer App, MCP, Workflow, IPC, and Service accept complete HTML text while retaining existing path safety, directory creation, permission, target queue, concurrent-change check, temporary file, and atomic commit behavior.
 
 Extensions are matched case-insensitively; returned `format` is lowercase and the requested path is not rewritten. `.html` and `.htm` accept only `utf8`. Combining either with `utf16le` uses the existing `INVALID_ENCODING` code and a safe HTML-only-UTF-8 message. Writer UI prevents submission but does not silently change encoding; Service remains authoritative. Existing txt/md/csv UTF-8 and UTF-16LE behavior is unchanged.

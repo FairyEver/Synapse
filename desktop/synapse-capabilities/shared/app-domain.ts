@@ -59,7 +59,6 @@ import {
   DEFAULT_TEXT_FILE_ENCODING,
   DEFAULT_TEXT_FILE_OVERWRITE,
   TEXT_FILE_ENCODINGS,
-  TEXT_FILE_FORMATS,
 } from "../../app-capabilities/text-file-writer/shared/schema"
 import { TEXT_EXTRACTION_OUTPUT_FORMATS } from "../../app-capabilities/text-extractor/shared/schema"
 import {
@@ -114,7 +113,7 @@ const appCapabilities: readonly CapabilityDefinition[] = [
   {
     id: TEXT_FILE_WRITER_CAPABILITY_ID,
     title: "Write text to local file",
-    description: "Write one complete text value to an absolute local .txt, .md, .csv, .html, or .htm path.",
+    description: "Write one complete text value to any absolute local file path.",
     mutates: true,
     risk: "high",
   },
@@ -304,17 +303,17 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: TEXT_FILE_WRITER_MCP_TOOL_NAME,
-      description: "Write one complete text value to an absolute local .txt, .md, .csv, .html, or .htm file. HTML and HTM support utf8 only; txt, md, and csv also support utf16le. Missing parent directories are created automatically. Text is preserved exactly apart from encoding; no BOM, trimming, newline normalization, final newline, format processing, HTML repair, or charset insertion is added. Existing files are rejected unless overwrite is true. Synapse sets no product-level text length limit, although IPC, memory, filesystem, and disk limits still apply.",
+      description: "Write one complete text value to any absolute local file path, including paths with arbitrary extensions or no extension. Missing parent directories are created automatically. Text is preserved exactly apart from encoding; no BOM, trimming, newline normalization, final newline, or format-specific processing is added. Existing files are rejected unless overwrite is true. Synapse sets no product-level text length limit, although IPC, memory, filesystem, and disk limits still apply.",
       inputSchema: {
         type: "object",
         properties: {
           text: stringField("Complete text to write. Empty text is valid and no product-level maximum length is imposed."),
-          path: stringField(`Absolute local output path ending in ${TEXT_FILE_FORMATS.map((format) => `.${format}`).join(", ")}.`),
+          path: stringField("Absolute local output path. Any extension or no extension is accepted."),
           encoding: {
             type: "string",
             enum: TEXT_FILE_ENCODINGS,
             default: DEFAULT_TEXT_FILE_ENCODING,
-            description: "Character encoding. Defaults to utf8. HTML and HTM accept utf8 only. A BOM is never added automatically.",
+            description: "Character encoding. Defaults to utf8. A BOM is never added automatically.",
           },
           overwrite: {
             type: "boolean",

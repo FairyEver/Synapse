@@ -38,6 +38,61 @@ describe("JsonRepairService", () => {
     expect(new JsonRepairService().repair(validated(text), context)).toEqual({ json: text })
   })
 
+  it("prioritizes embedded json fences before permissive whole-text repair", () => {
+    const text = [
+      "Verification checklist:",
+      "- selected titles: [0]",
+      "",
+      "```json",
+      "{\"ok\":true}",
+      "```",
+    ].join("\n")
+    const service = new JsonRepairService({
+      upstream: {
+        repairJson: (input) => input === text ? "[0]" : input,
+        stripLlmWrapper: (input) => input,
+        extractAllJson: () => [],
+      },
+    })
+
+    expect(service.repair(validated(text), context)).toEqual({
+      json: "{\"ok\":true}",
+    })
+  })
+
+  it("keeps valid JSON authoritative when a string contains a json fence", () => {
+    const text = JSON.stringify({
+      content: "```json\n{\"nested\":true}\n```",
+    })
+
+    expect(new JsonRepairService().repair(validated(text), context)).toEqual({
+      json: text,
+    })
+  })
+
+  it("repairs unescaped quoted phrases inside LLM string values", () => {
+    const text = [
+      "{\"course\":{\"learning_title_structure\":[",
+      "{\"pattern\":\"以\"聚焦/掌握/吃透/洞察/抓\"开头\"}",
+      "]},\"schemes\":[",
+      "{\"style_note\":\"首句用\"吃透\"\"抓实\"强化操作感\"}",
+      "]}",
+    ].join("")
+
+    const result = new JsonRepairService().repair(validated(text), context)
+
+    expect(JSON.parse(result.json)).toEqual({
+      course: {
+        learning_title_structure: [
+          { pattern: "以\"聚焦/掌握/吃透/洞察/抓\"开头" },
+        ],
+      },
+      schemes: [
+        { style_note: "首句用\"吃透\"\"抓实\"强化操作感" },
+      ],
+    })
+  })
+
   it("preserves all legal object keys", () => {
     const text = "{\"__proto__\":{\"x\":1},\"constructor\":2,\"prototype\":3}"
     expect(new JsonRepairService().repair(validated(text), context)).toEqual({ json: text })

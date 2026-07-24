@@ -6,13 +6,13 @@ When an App capability is configured as a node inside a Workflow, use `workflow/
 
 ## Text File Writer
 
-Use `app_text_file_writer_file_write` when the user asks to save a complete text value as a local `.txt`, `.md`, `.csv`, `.html`, or `.htm` file.
+Use `app_text_file_writer_file_write` when the user asks to save a complete text value to any local file path.
 
 Rules:
 
 - Pass the complete string once as `text` and one current-OS absolute path as `path`; do not split or reconstruct the content through shell commands.
-- The final path extension selects the format. Do not send a separate format field, add an extension, or rewrite the content.
-- Use `utf8` or `utf16le` for `.txt`, `.md`, and `.csv`. HTML targets accept only `utf8`. Omit `encoding` for UTF-8. Synapse does not add a BOM, trim text, normalize newlines, or append a final newline. Empty text is valid.
+- Any extension or no extension is accepted. Do not send a separate format field, add an extension, or rewrite the content.
+- Use `utf8` or `utf16le` for any target. Omit `encoding` for UTF-8. Synapse does not add a BOM, trim text, normalize newlines, or append a final newline. Empty text is valid.
 - Omit `overwrite` unless the caller explicitly authorizes replacement. A changed target returns retryable `TARGET_CHANGED`; do not silently retry over the newer file.
 - Missing parent directories are created automatically. Do not pass `~`, environment variables, shell expressions, or `file://` URLs.
 - Do not repeat the original text, complete path, or native failure details in logs or the final answer unless the user specifically needs the resulting path.

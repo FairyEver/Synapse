@@ -91,7 +91,9 @@ describe("App capability domain", () => {
       },
     })
     expect((tool?.inputSchema.properties.text as Record<string, unknown> | undefined)).not.toHaveProperty("maxLength")
-    expect(tool?.description).toContain(".txt, .md, .csv, .html, or .htm")
+    expect(tool?.description).toContain("arbitrary extensions or no extension")
+    expect((tool?.inputSchema.properties.path as Record<string, unknown> | undefined)?.description)
+      .toContain("Any extension or no extension")
   })
 
   it("registers one strict, non-mutating JSON Repair MCP tool", () => {

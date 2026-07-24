@@ -12,13 +12,11 @@ import {
 } from "../shared/errors"
 import {
   TEXT_FILE_ENCODINGS,
-  TEXT_FILE_FORMATS,
   textFileWriteInputSchema,
   type TextFileFormat,
   type ParsedTextFileWriteInput,
   type TextFileWriteInput,
   type TextFileWriteResult,
-  isHtmlPath,
 } from "../shared/schema"
 
 const WRITE_CHUNK_BYTES = 1024 * 1024
@@ -57,10 +55,6 @@ export class TextFileWriterService {
   async write(input: TextFileWriteInput, context: TextFileWriteContext = {}): Promise<TextFileWriteResult> {
     const parsed = parseInput(input)
     const format = textFileFormatFromPath(parsed.path)
-    if (!format) throw new TextFileWriteError("UNSUPPORTED_EXTENSION")
-    if (isHtmlPath(parsed.path) && parsed.encoding !== "utf8") {
-      throw new TextFileWriteError("INVALID_ENCODING", { message: "HTML 文件仅支持 UTF-8 编码。" })
-    }
 
     const requestedPath = normalizeRequestedPath(parsed.path)
     const initialActualPath = await resolveActualTarget(requestedPath)
@@ -182,9 +176,6 @@ function parseInput(input: TextFileWriteInput): ParsedTextFileWriteInput {
   if (raw.encoding !== undefined && !TEXT_FILE_ENCODINGS.includes(raw.encoding as never)) {
     throw new TextFileWriteError("INVALID_ENCODING")
   }
-  if (typeof raw.path === "string" && isHtmlPath(raw.path) && raw.encoding === "utf16le") {
-    throw new TextFileWriteError("INVALID_ENCODING", { message: "HTML 文件仅支持 UTF-8 编码。" })
-  }
   throw new TextFileWriteError("WRITE_FAILED")
 }
 
@@ -195,9 +186,8 @@ function normalizeRequestedPath(value: string): string {
   return path.normalize(value)
 }
 
-function textFileFormatFromPath(filePath: string): TextFileFormat | null {
-  const extension = path.extname(filePath).slice(1).toLowerCase()
-  return TEXT_FILE_FORMATS.find((format) => format === extension) ?? null
+function textFileFormatFromPath(filePath: string): TextFileFormat {
+  return path.extname(filePath).slice(1).toLowerCase()
 }
 
 async function resolveActualTarget(requestedPath: string): Promise<string> {

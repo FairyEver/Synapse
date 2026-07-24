@@ -170,6 +170,8 @@ describe("workflow MCP tool definitions", () => {
       .toContain("file_opener_file_open")
     expect(stringProperty(objectProperty(configProperties, "path"), "description"))
       .toContain("text_file_writer_file_write")
+    expect(stringProperty(objectProperty(configProperties, "path"), "description"))
+      .toContain("any extension or no extension")
     expect(stringProperty(objectProperty(configProperties, "text"), "description"))
       .toContain("no schema maxLength")
     expect(objectProperty(configProperties, "encoding")).toMatchObject({

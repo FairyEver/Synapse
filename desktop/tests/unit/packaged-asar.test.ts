@@ -168,6 +168,29 @@ const SYNTHETIC_JSON_REPAIR_FILES = {
     "exports.repairJson = input => input === '{value:1}' ? '{\"value\":1}' : input\n",
   "node_modules/repair-json-stream/dist/extract.cjs":
     "exports.stripLlmWrapper = input => input.startsWith('Result: ') ? input.slice(8) : input; exports.extractAllJson = input => [input.slice(input.indexOf('{'), input.lastIndexOf('}') + 1)]\n",
+  "node_modules/jsonrepair/package.json": JSON.stringify({
+    name: "jsonrepair",
+    version: "3.15.0",
+    license: "ISC",
+    main: "lib/cjs/index.js",
+    exports: {
+      ".": {
+        require: "./lib/cjs/index.js",
+      },
+    },
+  }),
+  "node_modules/jsonrepair/LICENSE.md":
+    "The ISC License\nPermission to use, copy, modify, and/or distribute\n",
+  "node_modules/jsonrepair/lib/cjs/package.json":
+    "{\"type\":\"commonjs\"}\n",
+  "node_modules/jsonrepair/lib/cjs/index.js":
+    "exports.jsonrepair = () => '{\"value\":\"a\\\\\"b\\\\\"c\"}'\n",
+  "node_modules/jsonrepair/lib/cjs/regular/jsonrepair.js":
+    "exports.jsonrepair = require('../index.js').jsonrepair\n",
+  "node_modules/jsonrepair/lib/cjs/utils/JSONRepairError.js":
+    "exports.JSONRepairError = Error\n",
+  "node_modules/jsonrepair/lib/cjs/utils/stringUtils.js":
+    "exports.isWhitespace = value => /\\s/.test(value)\n",
 } as const
 
 interface CreateAsarBufferOptions {
@@ -631,6 +654,33 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                       files: {
                         "index.cjs": jsonRepairNodes["node_modules/repair-json-stream/dist/index.cjs"],
                         "extract.cjs": jsonRepairNodes["node_modules/repair-json-stream/dist/extract.cjs"],
+                      },
+                    },
+                  },
+                },
+                jsonrepair: {
+                  files: {
+                    "package.json": jsonRepairNodes["node_modules/jsonrepair/package.json"],
+                    "LICENSE.md": jsonRepairNodes["node_modules/jsonrepair/LICENSE.md"],
+                    lib: {
+                      files: {
+                        cjs: {
+                          files: {
+                            "package.json": jsonRepairNodes["node_modules/jsonrepair/lib/cjs/package.json"],
+                            "index.js": jsonRepairNodes["node_modules/jsonrepair/lib/cjs/index.js"],
+                            regular: {
+                              files: {
+                                "jsonrepair.js": jsonRepairNodes["node_modules/jsonrepair/lib/cjs/regular/jsonrepair.js"],
+                              },
+                            },
+                            utils: {
+                              files: {
+                                "JSONRepairError.js": jsonRepairNodes["node_modules/jsonrepair/lib/cjs/utils/JSONRepairError.js"],
+                                "stringUtils.js": jsonRepairNodes["node_modules/jsonrepair/lib/cjs/utils/stringUtils.js"],
+                              },
+                            },
+                          },
+                        },
                       },
                     },
                   },

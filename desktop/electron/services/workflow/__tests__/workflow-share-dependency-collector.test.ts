@@ -311,7 +311,7 @@ describe("collectWorkflowShareDependencies", () => {
 
     expect(result.requiredCapabilities).toContainEqual({
       id: "app.text_file_writer.file.write",
-      minVersion: "1.1.0",
+      minVersion: "1.2.0",
       installSourceId: "synapse.builtin",
     })
     expect(result.references.resources).toEqual([

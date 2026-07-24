@@ -26,10 +26,27 @@ describe("text file writer workflow node schema", () => {
     expect(textFileWriterNodeManifest.share).toMatchObject({
       capability: {
         id: "app.text_file_writer.file.write",
-        minVersion: "1.1.0",
+        minVersion: "1.2.0",
       },
       resources: [{ path: ["path"], entryType: "file", cardinality: "one", access: "write" }],
     })
     expect(textFileWriterNodeManifest.configFields.map((field) => field.name)).not.toContain("format")
+  })
+
+  it("accepts arbitrary extensions and UTF-16 LE HTML targets", () => {
+    expect(textFileWriterNodeConfigSchema.safeParse({
+      path: path.resolve("report.custom"),
+      text: "hello",
+      encoding: "utf8",
+      overwrite: false,
+      variables: [],
+    }).success).toBe(true)
+    expect(textFileWriterNodeConfigSchema.safeParse({
+      path: path.resolve("report.html"),
+      text: "<h1>hello</h1>",
+      encoding: "utf16le",
+      overwrite: false,
+      variables: [],
+    }).success).toBe(true)
   })
 })

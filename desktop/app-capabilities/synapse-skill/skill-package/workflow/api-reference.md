@@ -131,13 +131,13 @@ The node rejects relative paths, URLs including `file://`, directories, symbolic
 
 Writes one complete text value to a local text file. No provider or project needed. Config fields:
 
-- `path` (string) — current-OS absolute `.txt`, `.md`, `.csv`, `.html`, or `.htm` target path; supports `{{variable}}` interpolation
+- `path` (string) — current-OS absolute target path with any extension or no extension; supports `{{variable}}` interpolation
 - `text` (string) — complete text, including an empty string; supports `{{variable}}` interpolation
 - `encoding` (enum: `utf8`/`utf16le`) — output encoding
 - `overwrite` (boolean) — explicit replacement permission; `false` rejects an existing target
 - `variables` (array) — explicit bindings available to `path` and `text`
 
-There is no separate `format` field and no text `maxLength`. The extension is matched case-insensitively and returned as lower-case `format`. HTML targets accept only `utf8`; txt/md/csv continue to accept `utf8` or `utf16le`. The node preserves the text exactly apart from encoding, creates missing parent directories, and returns the canonical actual path as primary output plus `{ path, fileName, format, encoding, size, overwritten }` in `outputs`. It requires `fs.write.outside-userdata`. Stable failure outputs contain `code`, `message`, and `retryable`; only `TARGET_CHANGED` is retryable.
+There is no separate `format` field, extension allowlist, or text `maxLength`. The lower-case final extension is returned as `format`, or `""` when the path has none. Every target accepts `utf8` or `utf16le`. The node preserves the text exactly apart from encoding, creates missing parent directories, and returns the canonical actual path as primary output plus `{ path, fileName, format, encoding, size, overwritten }` in `outputs`. It requires `fs.write.outside-userdata`. Stable failure outputs contain `code`, `message`, and `retryable`; only `TARGET_CHANGED` is retryable.
 
 ### html_generator_ejs_generate
 

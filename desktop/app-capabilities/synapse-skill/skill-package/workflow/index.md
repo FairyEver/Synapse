@@ -22,7 +22,7 @@ Import uses up to six fixed steps to check content, risks/capabilities, model ma
 
 A **file_opener_file_open** node is exported as configuration only; the target file bytes are never included. A literal `path` is an external read-only file dependency that must be mapped on import, while a path derived from a workflow parameter or upstream output remains owned by that source. Import requires `app.file_opener.file.open@1.0.0` and reports the node as `shell.execute` high risk; it must not be downgraded to a script when that capability is unavailable.
 
-A **text_file_writer_file_write** node is also exported as configuration only; neither its text nor its target file bytes become a package attachment. A literal `path` is an external local write dependency that must be mapped on import, while a parameter- or upstream-derived path remains owned by that source. Import requires `app.text_file_writer.file.write@1.1.0` and preserves its high-risk file-write permission boundary.
+A **text_file_writer_file_write** node is also exported as configuration only; neither its text nor its target file bytes become a package attachment. A literal `path` is an external local write dependency that must be mapped on import, while a parameter- or upstream-derived path remains owned by that source. Import requires `app.text_file_writer.file.write@1.2.0` and preserves its high-risk file-write permission boundary.
 
 The two HTML Generator nodes share their EJS `template` configuration and report it as `shell.execute` risk because it executes trusted JavaScript. `html_generator_ejs_generate` requires `app.html_generator.ejs.generate@1.0.0` and has no file resource. `html_generator_ejs_file_generate` requires `app.html_generator.ejs_file.generate@1.0.0` and declares `outputPath` as a writable file resource. Their reserved `data` binding points to an upstream node inside the shared graph; generated HTML and template dependencies are not package attachments.
 
@@ -41,7 +41,7 @@ Do not simulate share import by calling `app_workflow_definition_create` or `app
 - **document_template_docx_generate** — Generates a DOCX from a template using a JSON file or inline JSON data, then returns the generated output path. No provider needed.
 - **text_extract** — Extracts complete text from one local PDF or DOCX file. No provider needed.
 - **file_opener_file_open** — Submits one existing local regular file to the operating system's default application and returns the submitted path. No provider or project needed.
-- **text_file_writer_file_write** — Writes one complete string to a local `.txt`, `.md`, `.csv`, `.html`, or `.htm` file and returns the canonical actual path. HTML targets use UTF-8 only. No provider or project needed.
+- **text_file_writer_file_write** — Writes one complete string to any local file path and returns the canonical actual path. Any extension or no extension is accepted. No provider or project needed.
 - **html_generator_ejs_generate** — Executes a trusted EJS template with one upstream pure-JSON object and returns the complete rendered HTML string. No provider or project needed.
 - **html_generator_ejs_file_generate** — Executes the same trusted EJS template and writes the result as UTF-8 to an absolute `.html` or `.htm` path. No provider or project needed.
 - **json_repair_text_repair** — Repairs one interpolated string into complete validated JSON text. No provider or project needed.
@@ -243,9 +243,9 @@ Success means Electron accepted the `shell.openPath()` request and returned an e
 
 ## Writing Text to a Local File
 
-Use a **text_file_writer_file_write** node with exactly `path`, `text`, `encoding`, `overwrite`, and `variables`. Both string fields use explicit `{{variable}}` bindings; an incoming control edge never becomes implicit text input. The final interpolated `path` must be a current-OS absolute `.txt`, `.md`, `.csv`, `.html`, or `.htm` path. Do not add `format`: the final extension selects it.
+Use a **text_file_writer_file_write** node with exactly `path`, `text`, `encoding`, `overwrite`, and `variables`. Both string fields use explicit `{{variable}}` bindings; an incoming control edge never becomes implicit text input. The final interpolated `path` must be a current-OS absolute path; any extension or no extension is accepted. Do not add `format`: the Writer returns the lower-case final extension, or an empty string when none exists.
 
-`encoding` is exactly `utf8` or `utf16le`, but `.html` and `.htm` paths accept only `utf8`. `overwrite` must stay `false` unless replacement was explicitly authorized. Text is preserved exactly: no BOM, trimming, newline normalization, final newline, Markdown parsing, CSV processing, or HTML validation. Empty text is valid. Success uses the canonical actual path as the primary output and returns `{ path, fileName, format, encoding, size, overwritten }` as structured outputs. `TARGET_CHANGED` is retryable; cancellation before commit leaves the target unmodified. Missing parent directories may remain after a failed run.
+`encoding` is exactly `utf8` or `utf16le` for every target. `overwrite` must stay `false` unless replacement was explicitly authorized. Text is preserved exactly: no BOM, trimming, newline normalization, final newline, or format-specific parsing or validation. Empty text is valid. Success uses the canonical actual path as the primary output and returns `{ path, fileName, format, encoding, size, overwritten }` as structured outputs. `TARGET_CHANGED` is retryable; cancellation before commit leaves the target unmodified. Missing parent directories may remain after a failed run.
 
 ## Generating HTML with EJS
 

@@ -7,13 +7,13 @@ Write one complete text value to a local text file.
 Input:
 
 - `text` required: complete string. Empty text is valid. The schema has no `maxLength` and the tool does not require chunking.
-- `path` required: current-OS absolute local path ending in `.txt`, `.md`, `.csv`, `.html`, or `.htm`, matched case-insensitively on the final extension.
-- `encoding` optional: exactly `utf8` or `utf16le`; defaults to `utf8`. `.html` and `.htm` accept only `utf8`.
+- `path` required: current-OS absolute local path. Any extension or no extension is accepted.
+- `encoding` optional: exactly `utf8` or `utf16le`; defaults to `utf8` for every target.
 - `overwrite` optional: explicit permission to replace an unchanged existing regular file; defaults to `false`.
 
-The tool creates missing parent directories. It does not expand `~`, environment variables, shell expressions, or `file://`; add a BOM; trim or normalize text; append a newline; or parse Markdown/CSV. The result is `{ path, fileName, format, encoding, size, overwritten }`, where `path` is the canonical actual target and `size` is the written byte count.
+The tool creates missing parent directories. It does not expand `~`, environment variables, shell expressions, or `file://`; add a BOM; trim or normalize text; append a newline; or parse the content according to the path. The result is `{ path, fileName, format, encoding, size, overwritten }`, where `path` is the canonical actual target, `format` is the lower-case final extension or `""` when none exists, and `size` is the written byte count.
 
-Stable failures are `{ code, message, retryable }`. Codes are `INVALID_PATH`, `UNSUPPORTED_EXTENSION`, `INVALID_ENCODING`, `TARGET_EXISTS`, `UNSAFE_TARGET`, `TARGET_CHANGED`, `PERMISSION_DENIED`, `ABORTED`, and `WRITE_FAILED`; only `TARGET_CHANGED` is retryable. Failures do not commit a partial target file, although newly created parent directories can remain.
+Stable failures are `{ code, message, retryable }`. Codes are `INVALID_PATH`, `INVALID_ENCODING`, `TARGET_EXISTS`, `UNSAFE_TARGET`, `TARGET_CHANGED`, `PERMISSION_DENIED`, `ABORTED`, and `WRITE_FAILED`; only `TARGET_CHANGED` is retryable. The Writer never returns `UNSUPPORTED_EXTENSION`. Failures do not commit a partial target file, although newly created parent directories can remain.
 
 ## `app_html_generator_ejs_generate`
 
@@ -114,7 +114,7 @@ Output:
 - `source`: `{ format, fileName, size, pages? }`; `pages` is PDF-only.
 - `output`: `{ path, fileName, format, encoding, size, overwritten }`.
 
-Extraction and writing happen inside Synapse. The extracted `text` is passed directly to the shared text-file writer and is not included in the MCP response. The tool uses the same extraction limits, read permission, write permission, path safety, and atomic commit behavior as the two dedicated tools. Extraction failures use the extraction error codes above. Write failures use `INVALID_PATH`, `UNSUPPORTED_EXTENSION`, `INVALID_ENCODING`, `TARGET_EXISTS`, `UNSAFE_TARGET`, `TARGET_CHANGED`, `PERMISSION_DENIED`, `ABORTED`, or `WRITE_FAILED`; only `TARGET_CHANGED` is retryable.
+Extraction and writing happen inside Synapse. The extracted `text` is passed directly to the shared text-file writer and is not included in the MCP response. The tool uses the same extraction limits, read permission, write permission, path safety, and atomic commit behavior as the two dedicated tools. Extraction failures use the extraction error codes above. Write failures use `INVALID_PATH`, `INVALID_ENCODING`, `TARGET_EXISTS`, `UNSAFE_TARGET`, `TARGET_CHANGED`, `PERMISSION_DENIED`, `ABORTED`, or `WRITE_FAILED`; only `TARGET_CHANGED` is retryable.
 
 ## `app_document_template_docx_generate`
 

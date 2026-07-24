@@ -62,22 +62,24 @@ describe("TextFileWriterService", () => {
     expect(empty.size).toBe(0)
   })
 
-  it("writes HTML as exact UTF-8 bytes and rejects UTF-16 LE", async () => {
+  it("writes arbitrary extensions and extensionless paths with either encoding", async () => {
     const directory = await createTempDirectory()
-    const outputPath = path.join(directory, "report.HTML")
-    const expectedPath = path.join(await realpath(directory), "report.HTML")
-    const html = "<!doctype html><meta charset=\"utf-8\"><h1>报告</h1>"
+    const jsonPath = path.join(directory, "report.JSON")
+    const extensionlessPath = path.join(directory, "README")
+    const htmlPath = path.join(directory, "report.html")
     const { service } = createService()
 
-    await expect(service.write({ text: html, path: outputPath, encoding: "utf8" })).resolves.toMatchObject({
-      path: expectedPath,
-      format: "html",
+    await expect(service.write({ text: "{\"ok\":true}", path: jsonPath })).resolves.toMatchObject({
+      path: path.join(await realpath(directory), "report.JSON"),
+      format: "json",
       encoding: "utf8",
-      size: Buffer.byteLength(html, "utf8"),
     })
-    await expect(readFile(outputPath)).resolves.toEqual(Buffer.from(html, "utf8"))
-    await expect(service.write({ text: html, path: path.join(directory, "other.htm"), encoding: "utf16le" }))
-      .rejects.toMatchObject({ code: "INVALID_ENCODING" })
+    await expect(service.write({ text: "notes", path: extensionlessPath })).resolves.toMatchObject({
+      format: "",
+    })
+    await expect(service.write({ text: "<h1>报告</h1>", path: htmlPath, encoding: "utf16le" }))
+      .resolves.toMatchObject({ format: "html", encoding: "utf16le" })
+    await expect(readFile(htmlPath)).resolves.toEqual(Buffer.from("<h1>报告</h1>", "utf16le"))
   })
 
   it("refuses implicit overwrite and preserves the existing file mode on explicit overwrite", async () => {
@@ -112,7 +114,6 @@ describe("TextFileWriterService", () => {
     const { service } = createService()
 
     await expect(service.write({ text: "x", path: "relative.txt" })).rejects.toMatchObject({ code: "INVALID_PATH" })
-    await expect(service.write({ text: "x", path: path.join(directory, "note.json") })).rejects.toMatchObject({ code: "UNSUPPORTED_EXTENSION" })
     await expect(service.write({ text: "x", path: regularPath, encoding: "UTF-8" as never })).rejects.toMatchObject({ code: "INVALID_ENCODING" })
     await expect(service.write({ text: "x", path: linkedPath, overwrite: true })).rejects.toMatchObject({ code: "UNSAFE_TARGET" })
     await expect(service.write({ text: "x", path: directoryPath, overwrite: true })).rejects.toMatchObject({ code: "UNSAFE_TARGET" })

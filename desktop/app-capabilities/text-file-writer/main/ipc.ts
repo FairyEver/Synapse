@@ -2,7 +2,6 @@ import { BrowserWindow, dialog } from "electron"
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
 import type { TextFileWriterService } from "./service"
 import {
-  TEXT_FILE_FORMATS,
   textFileOutputChooseRequestSchema,
   textFileWriteInputSchema,
   textFileWriteResultSchema,
@@ -25,7 +24,6 @@ export const textFileWriterIpcModule: IpcModule = {
         const options = {
           title: "选择输出文件",
           defaultPath: request?.defaultPath ?? "output.md",
-          filters: [{ name: "文本文件", extensions: [...TEXT_FILE_FORMATS] }],
         }
         const parent = focusedWindow()
         const result = parent

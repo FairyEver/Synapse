@@ -1,3 +1,4 @@
+import { createRequire } from "node:module"
 import { repairJson } from "repair-json-stream"
 import {
   extractAllJson,
@@ -23,6 +24,11 @@ import {
   containsNonFiniteNumber,
 } from "./limits"
 
+const requireJsonRepair = createRequire(__filename)
+const { jsonrepair } = requireJsonRepair("jsonrepair") as {
+  readonly jsonrepair: (input: string) => string
+}
+
 export interface JsonRepairCallContext {
   readonly source: string
   readonly actor: ActorIdentity
@@ -46,7 +52,7 @@ export interface JsonRepairUpstream {
 }
 
 const defaultUpstream: JsonRepairUpstream = {
-  repairJson,
+  repairJson: repairJsonWithQuotedStringFallback,
   stripLlmWrapper,
   extractAllJson,
 }
@@ -105,6 +111,16 @@ export class JsonRepairService {
       sawUpstreamFailure: false,
     }
 
+    const exactResult = this.tryAcceptValidJson(source, state)
+    if (exactResult) return exactResult
+
+    const fencedCandidates = extractEmbeddedJsonFences(source)
+    state.sawEmbeddedCandidate = fencedCandidates.length > 0
+    for (const candidate of fencedCandidates) {
+      const candidateResult = this.tryRepair(candidate, state)
+      if (candidateResult) return candidateResult
+    }
+
     const wholeResult = this.tryRepair(source, state)
     if (wholeResult) return wholeResult
 
@@ -132,7 +148,7 @@ export class JsonRepairService {
       state.sawUpstreamFailure = true
     }
 
-    state.sawEmbeddedCandidate = candidates.length > 0
+    state.sawEmbeddedCandidate ||= candidates.length > 0
     for (const candidate of candidates) {
       const candidateResult = this.tryRepair(candidate, state)
       if (candidateResult) return candidateResult
@@ -143,6 +159,25 @@ export class JsonRepairService {
       throw new JsonRepairError("JSON_REPAIR_FAILED")
     }
     throw new JsonRepairError("NO_JSON_FOUND")
+  }
+
+  private tryAcceptValidJson(
+    input: string,
+    state: AttemptState,
+  ): JsonRepairResult | null {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(input)
+    } catch {
+      return null
+    }
+
+    assertRepairedTextResources(input)
+    if (containsNonFiniteNumber(parsed)) {
+      state.sawNonFiniteNumber = true
+      return null
+    }
+    return { json: input }
   }
 
   private tryRepair(input: string, state: AttemptState): JsonRepairResult | null {
@@ -211,4 +246,68 @@ export function unwrapSingleJsonFence(input: string): string {
   const trimmed = input.trim()
   const match = /^(?:```|```json)\r?\n([\s\S]*?)\r?\n```$/i.exec(trimmed)
   return match?.[1] ?? input
+}
+
+function extractEmbeddedJsonFences(input: string): string[] {
+  return Array.from(
+    input.matchAll(/```json[ \t]*\r?\n([\s\S]*?)\r?\n```/gi),
+    (match) => match[1] ?? "",
+  )
+}
+
+function repairJsonWithQuotedStringFallback(input: string): string {
+  let primaryResult: string | null = null
+  let primaryError: unknown
+  try {
+    primaryResult = repairJson(input)
+    if (isValidJsonText(primaryResult)) return primaryResult
+  } catch (error) {
+    primaryError = error
+  }
+
+  if (!containsUnescapedQuotedPhrase(input)) {
+    if (primaryResult !== null) return primaryResult
+    throw primaryError ?? new Error("Primary JSON repair failed.")
+  }
+
+  let fallbackResult: string | null = null
+  try {
+    fallbackResult = jsonrepair(input)
+    if (isValidJsonText(fallbackResult)) return fallbackResult
+  } catch {
+    // The targeted normalization below handles adjacent quoted phrases.
+  }
+
+  const normalized = escapeAdjacentQuotedPhrases(input)
+  if (normalized !== input) {
+    try {
+      return jsonrepair(normalized)
+    } catch {
+      // Preserve the original repair result for the service's existing validation.
+    }
+  }
+
+  if (primaryResult !== null) return primaryResult
+  if (fallbackResult !== null) return fallbackResult
+  throw new Error("JSON repair strategies failed.")
+}
+
+function escapeAdjacentQuotedPhrases(input: string): string {
+  return input.replace(
+    /(?<=[\p{L}\p{N}])""(?=[\p{L}\p{N}])/gu,
+    "\\\"\\\"",
+  )
+}
+
+function containsUnescapedQuotedPhrase(input: string): boolean {
+  return /[\p{L}\p{N}]"[\p{L}\p{N}]/u.test(input)
+}
+
+function isValidJsonText(input: string): boolean {
+  try {
+    JSON.parse(input)
+    return true
+  } catch {
+    return false
+  }
 }

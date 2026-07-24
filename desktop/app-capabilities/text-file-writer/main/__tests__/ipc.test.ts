@@ -42,8 +42,8 @@ describe("textFileWriterIpcModule", () => {
     })).resolves.toBe(outputPath)
     expect(electron.showSaveDialog).toHaveBeenCalledWith(expect.objectContaining({
       defaultPath: "output.md",
-      filters: [{ name: "文本文件", extensions: ["txt", "md", "csv", "html", "htm"] }],
     }))
+    expect(electron.showSaveDialog.mock.calls[0]?.[0]).not.toHaveProperty("filters")
   })
 
   it("returns unified success and failure envelopes", async () => {

@@ -272,6 +272,13 @@ const jsonRepairRuntimeEntries = [
   "node_modules/repair-json-stream/LICENSE",
   "node_modules/repair-json-stream/dist/index.cjs",
   "node_modules/repair-json-stream/dist/extract.cjs",
+  "node_modules/jsonrepair/package.json",
+  "node_modules/jsonrepair/LICENSE.md",
+  "node_modules/jsonrepair/lib/cjs/package.json",
+  "node_modules/jsonrepair/lib/cjs/index.js",
+  "node_modules/jsonrepair/lib/cjs/regular/jsonrepair.js",
+  "node_modules/jsonrepair/lib/cjs/utils/JSONRepairError.js",
+  "node_modules/jsonrepair/lib/cjs/utils/stringUtils.js",
 ]
 const terminalServiceEntry =
   "dist-electron/app-capabilities/terminal/main/service.js"
@@ -606,15 +613,22 @@ function verifyJsonRepairRuntime(asarPath, header, failures) {
     "const packagedRequire = createRequire(path.join(asarPath, 'package.json'))",
     "const root = packagedRequire('repair-json-stream')",
     "const extract = packagedRequire('repair-json-stream/extract')",
+    "const fallback = packagedRequire('jsonrepair')",
     "const packageJson = JSON.parse(fs.readFileSync(path.join(asarPath, 'node_modules/repair-json-stream/package.json'), 'utf8'))",
     "const license = fs.readFileSync(path.join(asarPath, 'node_modules/repair-json-stream/LICENSE'), 'utf8')",
+    "const fallbackPackageJson = JSON.parse(fs.readFileSync(path.join(asarPath, 'node_modules/jsonrepair/package.json'), 'utf8'))",
+    "const fallbackLicense = fs.readFileSync(path.join(asarPath, 'node_modules/jsonrepair/LICENSE.md'), 'utf8')",
     "const result = {",
     "  version: packageJson.version,",
     "  license: packageJson.license,",
     "  licenseText: license.includes('MIT License') && license.includes('Permission is hereby granted, free of charge'),",
+    "  fallbackVersion: fallbackPackageJson.version,",
+    "  fallbackLicense: fallbackPackageJson.license,",
+    "  fallbackLicenseText: fallbackLicense.includes('The ISC License') && fallbackLicense.includes('Permission to use, copy, modify, and/or distribute'),",
     "  repaired: typeof root.repairJson === 'function' ? root.repairJson('{value:1}') : null,",
     "  stripped: typeof extract.stripLlmWrapper === 'function' ? extract.stripLlmWrapper('Result: {\"value\":1}') : null,",
     "  extracted: typeof extract.extractAllJson === 'function' ? extract.extractAllJson('before {\"value\":1} after') : null,",
+    "  fallbackRepaired: typeof fallback.jsonrepair === 'function' ? fallback.jsonrepair('{\"value\":\"a\"b\"c\"}') : null,",
     "}",
     "process.stdout.write(JSON.stringify(result))",
   ].join("\n")
@@ -645,9 +659,13 @@ function verifyJsonRepairRuntime(asarPath, header, failures) {
       result.version !== "1.3.1"
       || result.license !== "MIT"
       || result.licenseText !== true
+      || result.fallbackVersion !== "3.15.0"
+      || result.fallbackLicense !== "ISC"
+      || result.fallbackLicenseText !== true
       || result.repaired !== '{"value":1}'
       || result.stripped !== '{"value":1}'
       || JSON.stringify(result.extracted) !== '["{\\"value\\":1}"]'
+      || result.fallbackRepaired !== '{"value":"a\\"b\\"c"}'
     ) {
       failures.push("packaged JSON Repair package-name resolution smoke failed")
       return
