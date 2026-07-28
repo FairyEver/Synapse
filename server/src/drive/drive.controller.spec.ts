@@ -444,6 +444,8 @@ describe("DriveController", () => {
     const response = await request(app!.getHttpServer()).get("/sites/site_public/").expect(200)
     expect(sites.resolvePublicSite).toHaveBeenCalledWith("site_public", { cookie: null, relativePath: "" })
     expect(response.headers["content-type"]).toContain("text/html")
+    expectDriveHtmlRenderCsp(response.headers["content-security-policy"])
+    expect(response.headers["referrer-policy"]).toBe("no-referrer")
     expect(response.text).toBe("<h1>Home</h1>")
   })
 

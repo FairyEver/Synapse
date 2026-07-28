@@ -1191,6 +1191,10 @@ export class DrivePublicController {
     response.setHeader("Cache-Control", driveSiteCacheControl(access.asset.relativePath, { accessMode: access.site.accessMode }))
     if (access.site.accessMode === "password") response.setHeader("Vary", "Cookie")
     response.setHeader("X-Content-Type-Options", "nosniff")
+    if (isDriveSiteHtmlPath(access.asset.relativePath)) {
+      response.setHeader("Content-Security-Policy", DRIVE_HTML_RENDER_CSP)
+      response.setHeader("Referrer-Policy", "no-referrer")
+    }
     if (object.size !== undefined) response.setHeader("Content-Length", object.size.toString())
     await pipeline(object.stream as Readable, response)
   }
