@@ -1,6 +1,6 @@
 ---
 name: synapse-skill
-description: Use when operating Synapse through MCP tools or submitting 问题反馈 to Synapse, including Database, Drive, Workflow, Automation, Content, Skill Repository, model price rules, secrets, repositories, Terminal sessions, and app capabilities.
+description: Use when operating Synapse through MCP tools or submitting 问题反馈 to Synapse, including Database, Drive, local Markdown document upload or sharing with linked images and HTML, Workflow, Automation, Content, Skill Repository, model price rules, secrets, repositories, Terminal sessions, and app capabilities.
 ---
 
 # Synapse Skill
@@ -14,7 +14,7 @@ Use only the canonical `app_*` MCP tool names documented by each domain. Retired
 First classify the user's intent, then read the matching domain file before using tools:
 
 - Database, tables, rows, columns, choices, SQL, table folders, mutation logs -> `database/index.md`
-- Drive files, folders, upload, download, preview, HTML page sharing, static site publishing or republishing, public assets, trash, versions -> `drive/index.md`
+- Drive files, folders, upload, download, preview, local Markdown document publishing with linked images or HTML, HTML page sharing, static site publishing or republishing, public assets, trash, versions -> `drive/index.md`
 - Workflow definitions, nodes, edges, DAG validation, layout, variables, providers, workflow runs -> `workflow/index.md`
 - Automation items, schedules, cron/interval triggers, executors, enablement, manual runs, active runs, run history -> `automation/index.md`
 - Cloud Skill repositories, local Skill upload, cloud Skill repository update, repository management URL -> `skill-repository/index.md`

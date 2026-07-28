@@ -329,6 +329,39 @@ describe("SynapseSkillService", () => {
     expect(modelPriceApiText).toContain("already indexed usage totals")
   })
 
+  it("documents grouped upload destinations and local Markdown publishing", async () => {
+    const [skillRoot, driveIndex, driveApiText] = await Promise.all([
+      readFile(path.join(systemPackageRoot, "SKILL.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "drive/index.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "drive/api-reference.md"), "utf8"),
+    ])
+
+    expect(skillRoot).toContain("local Markdown document upload or sharing with linked images and HTML")
+    expect(skillRoot).toContain("local Markdown document publishing with linked images or HTML")
+    expect(driveIndex).toContain("## Upload Destination Selection")
+    expect(driveIndex).toContain("For one local file with no requested destination")
+    expect(driveIndex).toContain("use the local folder basename as the Drive folder name")
+    expect(driveIndex).toContain("Use the primary Markdown basename without its extension")
+    expect(driveIndex).toContain("use the common local parent folder basename")
+    expect(driveIndex).toContain("pass its item id as `parentId` for every ordinary file upload")
+    expect(driveIndex).toContain("Referenced Markdown images are the only placement exception")
+    expect(driveIndex).toContain("## Local Markdown Publishing Flow")
+    expect(driveIndex).toContain("Treat explicitly selected inputs and the Markdown's referenced local assets as one publishing transaction")
+    expect(driveIndex).toContain("Upload every supported referenced local image with `app_drive_direct_link_upload`")
+    expect(driveIndex).toContain("A referenced HTML target must receive its own share or site URL")
+    expect(driveIndex).toContain("do not share that HTML merely because it is next to the Markdown")
+    expect(driveIndex).toContain("inserting `_final` before the source `.md` extension")
+    expect(driveIndex).toContain("passing the original Markdown basename as `name`")
+    expect(driveIndex).toContain("Do not create a folder share as a shortcut")
+    expect(driveIndex).toContain("omit `passwordEnabled`, `expiresIn`, `accessMode`, and `editorEmails`")
+    expect(driveIndex).toContain("Do not hardcode those defaults in this skill")
+    expect(driveIndex).not.toContain("for a new share, omitting it uses `3d`")
+    expect(driveApiText).toContain("use the current Synapse version's default for a new share")
+    expect(driveApiText).not.toContain("New shares default to password required")
+    expect(driveApiText).not.toContain("New shares default to `3d`")
+    expect(driveIndex).toContain("Do not upload the final Markdown if any required upload")
+  })
+
   it("routes current domains through installed Synapse Skill paths", async () => {
     const [
       skillRoot,

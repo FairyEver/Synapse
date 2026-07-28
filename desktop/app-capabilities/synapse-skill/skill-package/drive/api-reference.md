@@ -231,8 +231,8 @@ Create or reuse a public Drive share link and return the `/share/...` URL. Exist
 Input:
 
 - `itemId` required: Drive file or folder item id.
-- `passwordEnabled` optional: `false` only when the user asks for a no-password link. New shares default to password required; existing shares keep their current setting when omitted.
-- `expiresIn` optional: `3d`, `7d`, `30d`, `1y`, or `forever`. New shares default to `3d`; existing shares keep their current expiry when omitted.
+- `passwordEnabled` optional: `false` only when the user asks for a no-password link. Omit it to use the current Synapse version's default for a new share; existing shares keep their current setting when omitted.
+- `expiresIn` optional: `3d`, `7d`, `30d`, `1y`, or `forever`. Omit it to use the current Synapse version's default for a new share; existing shares keep their current expiry when omitted.
 - `accessMode` optional: `link_read`, `link_edit`, or `specified_users_edit`. Existing shares keep their current mode when omitted.
 - `editorEmails` optional: email list for `specified_users_edit`; leave empty for other modes.
 

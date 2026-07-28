@@ -55,7 +55,7 @@ Use these tools only for Synapse Drive:
 - `app_drive_trash_delete`
 - `app_drive_item_restore`
 
-Do not use this skill for database records, Resource Repository resources, Automation schedules/items, workflow definitions, provider settings, or general local file editing.
+Do not use this skill for database records, Resource Repository resources, Automation schedules/items, workflow definitions, provider settings, or general local file editing unrelated to a Drive operation.
 
 ## Drive Link Intake Flow
 
@@ -74,6 +74,45 @@ Do not use these tools to edit shared files, create comments, import shared cont
 Do not repeat passwords in the final answer.
 When using Codex `--json` or raw MCP event logs for debugging, remember tool arguments can include passwords. Do not save, quote, or attach those raw logs unless the password parameters are removed first.
 
+## Upload Destination Selection
+
+Choose one Drive destination before uploading and reuse it for every ordinary Drive item produced by the request.
+
+1. Use an explicitly requested Drive folder or path. Create or reuse it before uploading.
+2. For one local file with no requested destination, upload it to the Drive root without creating a wrapper folder.
+3. For one local folder with no requested destination, use the local folder basename as the Drive folder name under the Drive root. Reuse a same-name Drive folder and preserve the local relative structure.
+4. For multiple explicitly selected files with no requested destination:
+   - Use the primary Markdown basename without its extension when the user identifies a primary Markdown or exactly one selected Markdown exists.
+   - Otherwise, use the common local parent folder basename.
+   - If there are multiple Markdown candidates with no primary one, or no meaningful common parent folder, ask one concise naming question before any remote write.
+   - Create or reuse that Drive folder, then pass its item id as `parentId` for every ordinary file upload.
+5. Keep the final Markdown, standalone HTML files, explicitly included attachments, and HTML dependency source folders inside the selected Drive destination. A site URL or share URL is a public identity for an item in that destination, not a replacement storage location.
+6. Referenced Markdown images are the only placement exception: `app_drive_direct_link_upload` stores public assets in the flat Public Assets collection, which cannot be nested in an ordinary Drive folder. Keep their returned URLs in the final Markdown.
+
+## Local Markdown Publishing Flow
+
+Use this flow when the user asks to upload or share a local Markdown document. Treat explicitly selected inputs and the Markdown's referenced local assets as one publishing transaction, and apply **Upload Destination Selection** before any remote write.
+
+1. Preflight the source before any remote write.
+   - Read the Markdown and inventory local image targets from Markdown image links, image reference definitions, and HTML `<img src>` elements. Inventory local `.html` targets from Markdown links.
+   - Resolve local targets relative to the source Markdown directory. Leave `http:`, `https:`, `data:`, and fragment-only targets unchanged.
+   - Deduplicate references by resolved local path so each source file is uploaded once and its returned public URL is reused.
+   - Stop and ask when a referenced file is missing. For local images, accept only PNG, JPG, JPEG, GIF, WebP, AVIF, and ICO; stop and ask how to handle SVG or another unsupported image format.
+   - Ignore unrelated neighboring files. If the user explicitly includes an unreferenced HTML file or a whole directory, upload it as requested, but do not share that HTML merely because it is next to the Markdown.
+   - Derive the sibling output path by inserting `_final` before the source `.md` extension. If that path already exists, ask before overwriting it.
+2. Upload every supported referenced local image with `app_drive_direct_link_upload`. Replace every corresponding Markdown target with the returned `/files/<assetId>` URL. Do not upload Markdown images as ordinary Drive files or leave a local image path in the publishable copy.
+3. Inspect each referenced local HTML file without modifying it.
+   - For standalone HTML, call `app_drive_file_upload`, then `app_drive_share_create`; use the returned `/share/...` URL in the Markdown.
+   - For HTML with complete local relative dependencies, upload the dependency folder with `app_drive_folder_upload`, publish it with `app_drive_site_create`, and use the returned `/sites/...` URL in the Markdown.
+   - If dependencies are missing or the route cannot be determined, ask one concise question before uploading the HTML or rewriting its link.
+   - If the user explicitly says to upload the HTML as-is, upload the unchanged HTML file and share that file even when referenced local dependencies are missing. Do not silently bundle, rewrite, or repair the HTML; report that missing dependencies can affect rendering.
+   - Never upload HTML as a public asset. A referenced HTML target must receive its own share or site URL even when the top-level request says only to upload the Markdown.
+4. After every referenced asset has a usable remote URL, create the preflighted `_final.md` sibling copy and preserve the source file.
+5. Rewrite only the inventoried targets in the final copy. Verify that no targeted local image or HTML reference remains, then upload the final copy with `app_drive_file_upload` while passing the original Markdown basename as `name`.
+6. If the user asked to share the Markdown, call `app_drive_share_create` for the uploaded Markdown item itself. Do not create a folder share as a shortcut, and keep every referenced HTML share or site independent.
+7. Pass only share settings the user explicitly requested, and apply them to every file share in this transaction unless the user scopes them to one artifact. When the user did not specify password enablement, expiry, access mode, or editor emails, omit `passwordEnabled`, `expiresIn`, `accessMode`, and `editorEmails` so the current Synapse version supplies its defaults. Do not hardcode those defaults in this skill. `app_drive_site_create` requires access settings; ask for its required values when the user did not provide them.
+8. Do not upload the final Markdown if any required upload, share, site publication, rewrite, or verification fails. Do not delete already-created assets or shares without explicit authorization; report the completed remote writes and the blocking failure.
+
 ## HTML Publishing Route
 
 Choose the public route from both the final publishable artifact and the user's explicit intent. A standalone HTML file defaults to a Drive share; casual words such as "page", "website", or "site" do not by themselves request a folder-backed site.
@@ -85,7 +124,7 @@ Choose the public route from both the final publishable artifact and the user's 
 3. Otherwise, if the result is one standalone HTML file, call `app_drive_file_upload`, then `app_drive_share_create`. This is the preferred route even when the user casually calls the file a website or site.
    - Standalone means the HTML does not require sibling local CSS, JavaScript, images, fonts, or other files. Inline content, data URLs, and remote URLs do not make it a multi-file site.
 4. If the result contains multiple HTML pages, a build output bundle, or HTML that depends on local relative assets, call `app_drive_folder_upload`, then `app_drive_site_create` for the uploaded folder.
-5. If local dependencies are missing or the artifact shape cannot be inspected, ask one concise question instead of guessing the route.
+5. If local dependencies are missing or the artifact shape cannot be inspected, ask one concise question instead of guessing the route, unless the user explicitly requested an unchanged as-is file upload.
 
 ## Updating Published HTML
 
@@ -114,7 +153,7 @@ Updating either route does not live-reload pages already open in a visitor's bro
 
 ## Default Flow
 
-1. If the user did not specify a target folder, omit `parentId` so the file or folder is uploaded to the Drive root directory.
+1. Apply **Upload Destination Selection**. Only a single local file with no requested destination goes directly to the Drive root; a local folder or multiple selected files use one shared Drive folder.
 2. When listing a folder with `app_drive_item_list`, pass `limit` for large folders and continue with `page.nextOffset` until `page.hasMore` is false.
 3. For a single local file, call `app_drive_file_upload` with `filePath`, optional `parentId`, optional `name`, and optional `mimeType`.
 4. For a local folder, call `app_drive_folder_upload` with `folderPath`, optional `parentId`, and optional `folderName`. Preserve `uploadedFiles[].relativePath` and `createdDirectories[].relativePath` from the result.
@@ -129,8 +168,8 @@ Updating either route does not live-reload pages already open in a visitor's bro
 9. If the user asks to rename an existing public asset, call `app_drive_direct_link_rename` with `assetId` and `name`. The `/files/<assetId>` URL is preserved.
 10. If the user asks to share an existing Drive file or folder, call `app_drive_share_create` for the item and return the `/share/...` public URL.
    - When a share already exists, omit access settings unless the user explicitly asks to change password, expiry, or edit access. Reusing an existing share preserves its current settings.
-   - Pass `passwordEnabled: false` only when the user asks for a no-password link. For a new share, omitting it keeps the default password requirement.
-   - Pass `expiresIn` when the user asks for a specific duration. Supported values are `3d`, `7d`, `30d`, `1y`, and `forever`; for a new share, omitting it uses `3d`.
+   - Pass `passwordEnabled: false` only when the user asks for a no-password link. Otherwise omit it and let the current Synapse version apply its default.
+   - Pass `expiresIn` when the user asks for a specific duration. Supported values are `3d`, `7d`, `30d`, `1y`, and `forever`; otherwise omit it and let the current Synapse version apply its default.
    - Pass `accessMode: "link_read"` for a new read-only link, `accessMode: "link_edit"` when logged-in link holders may edit supported text files, or `accessMode: "specified_users_edit"` with `editorEmails` when only specific logged-in users may edit.
    - Do not pass `editorEmails` for read-only or link-edit links. For `specified_users_edit`, provide one or more email addresses.
    - Use the `app_drive_share_create` result when the user needs the password for a specific share. `app_drive_share_list` lists existing shares without returning passwords.
@@ -171,6 +210,9 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 
 ## Common Requests
 
+- "用 Synapse Skill 把这个 Markdown 上传到云盘": apply **Local Markdown Publishing Flow**; publish referenced local images and HTML before uploading the final Markdown, but do not share the Markdown itself.
+- "用 Synapse Skill 把这个 Markdown 上传到云盘并分享": apply **Local Markdown Publishing Flow**, then share the uploaded Markdown item separately.
+- "把这几个文件上传到云盘": apply **Upload Destination Selection** and place every ordinary Drive item in the automatically named shared folder.
 - "上传这个文件并给我链接": call `app_drive_file_upload`, then `app_drive_share_create`.
 - "把这个单文件 HTML 做成网站": call `app_drive_file_upload`, then `app_drive_share_create` when it is standalone and the user did not explicitly ask to publish its whole folder.
 - "发布这个包含 assets 的构建目录": call `app_drive_folder_upload`, then `app_drive_site_create`.
@@ -189,7 +231,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "停用站点": call `app_drive_site_disable`.
 - "启用站点": call `app_drive_site_enable`.
 - "删除站点": call `app_drive_site_delete`.
-- "把这个目录传到云盘": call `app_drive_folder_upload`.
+- "把这个目录传到云盘": apply **Upload Destination Selection**, then call `app_drive_folder_upload` so the Drive folder uses the local folder basename.
 - "打开/预览这个文件": call `app_drive_item_preview_get`.
 - "读取这个 Markdown": call `app_drive_file_content_read`.
 - "下载这个文件到本地": call `app_drive_file_download_create`.
