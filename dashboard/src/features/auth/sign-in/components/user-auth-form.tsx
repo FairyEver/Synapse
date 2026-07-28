@@ -73,7 +73,7 @@ export function UserAuthForm({
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className={cn('grid gap-3', className)}
+        className={cn('grid gap-4 sm:gap-3', className)}
         {...props}
       >
         <FormField
@@ -84,8 +84,15 @@ export function UserAuthForm({
               <FormLabel>邮箱</FormLabel>
               <FormControl>
                 <Input
+                  type='email'
+                  inputMode='email'
                   autoComplete='email'
+                  autoCapitalize='none'
+                  autoCorrect='off'
+                  enterKeyHint='next'
+                  spellCheck={false}
                   placeholder='name@example.com'
+                  className='h-11 sm:h-9'
                   {...field}
                 />
               </FormControl>
@@ -103,7 +110,7 @@ export function UserAuthForm({
                 <Link
                   to='/forgot-password'
                   search={buildAuthRedirectSearch(redirectTo)}
-                  className='text-sm font-medium text-muted-foreground hover:opacity-75'
+                  className='flex min-h-11 items-center text-sm font-medium text-muted-foreground hover:opacity-75 sm:min-h-0'
                 >
                   忘记密码？
                 </Link>
@@ -111,7 +118,9 @@ export function UserAuthForm({
               <FormControl>
                 <PasswordInput
                   autoComplete='current-password'
+                  enterKeyHint='go'
                   placeholder='请输入密码'
+                  className='[&_button]:size-11 [&_input]:h-11 [&_input]:pe-11 sm:[&_button]:size-6 sm:[&_input]:h-9 sm:[&_input]:pe-9'
                   {...field}
                 />
               </FormControl>
@@ -119,7 +128,7 @@ export function UserAuthForm({
             </FormItem>
           )}
         />
-        <Button className='mt-2' disabled={isLoading}>
+        <Button className='mt-2 h-11 sm:h-9' disabled={isLoading}>
           {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
           登录
         </Button>
