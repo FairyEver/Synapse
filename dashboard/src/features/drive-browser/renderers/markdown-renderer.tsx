@@ -18,7 +18,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
+import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import type { DriveAnnotationContext } from '../use-drive-annotations'
@@ -89,6 +97,8 @@ function DriveMarkdownBody({
   const documentScrollRef = useRef<HTMLDivElement | null>(null)
   const commentAnchorLayerRef = useRef<HTMLDivElement | null>(null)
   const commentsTouchedRef = useRef(false)
+  const layoutMode = useFilePreviewLayoutMode()
+  const isCompact = layoutMode === 'compact'
   const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
   const annotationsEnabled = isDriveMarkdownItem(current)
   const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
@@ -105,6 +115,7 @@ function DriveMarkdownBody({
   })
   const [outlineOpen, setOutlineOpen] = useState(true)
   const [commentsOpen, setCommentsOpen] = useState(false)
+  const [compactPanel, setCompactPanel] = useState<'outline' | 'comments' | null>(null)
   const [widthMode, setWidthMode] = useState<MarkdownWidthMode>('reading')
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [pendingTarget, setPendingTarget] = useState<DriveAnnotationTextRangeTargetV1 | null>(null)
@@ -127,6 +138,10 @@ function DriveMarkdownBody({
     setAnnotationOverlayRects([])
     window.getSelection()?.removeAllRanges()
   }, [annotationStateKey])
+
+  useEffect(() => {
+    setCompactPanel(null)
+  }, [layoutMode])
 
   const annotated = useMemo(
     () => renderMarkdownAnnotationHtml(renderedHtml, annotations.threads),
@@ -269,14 +284,26 @@ function DriveMarkdownBody({
   }, [syncCommentScrollTransform])
 
   useEffect(() => {
-    if (commentsTouchedRef.current || annotations.threads.length === 0) return
+    if (isCompact || commentsTouchedRef.current || annotations.threads.length === 0) return
     setCommentsOpen(true)
-  }, [annotations.threads.length])
+  }, [annotations.threads.length, isCompact])
 
   const setCommentPanelOpen = useCallback((open: boolean) => {
+    if (isCompact) {
+      setCompactPanel(open ? 'comments' : null)
+      return
+    }
     commentsTouchedRef.current = true
     setCommentsOpen(open)
-  }, [])
+  }, [isCompact])
+
+  const setOutlinePanelOpen = useCallback((open: boolean) => {
+    if (isCompact) {
+      setCompactPanel(open ? 'outline' : null)
+      return
+    }
+    setOutlineOpen(open)
+  }, [isCompact])
 
   const clearPendingComment = useCallback(() => {
     setPendingTarget(null)
@@ -310,8 +337,9 @@ function DriveMarkdownBody({
         id: 'markdown-outline',
         label: '目录',
         icon: ListTree,
-        pressed: outlineOpen,
-        onPressedChange: setOutlineOpen,
+        compactPlacement: 'primary',
+        pressed: isCompact ? compactPanel === 'outline' : outlineOpen,
+        onPressedChange: setOutlinePanelOpen,
       })
     }
     if (annotationsEnabled) {
@@ -321,7 +349,8 @@ function DriveMarkdownBody({
           id: 'markdown-comments',
           label: `评论 ${commentCount}`,
           icon: MessageSquare,
-          pressed: commentsOpen,
+          compactPlacement: 'primary',
+          pressed: isCompact ? compactPanel === 'comments' : commentsOpen,
           onPressedChange: setCommentPanelOpen,
         }
       )
@@ -332,22 +361,34 @@ function DriveMarkdownBody({
     annotationsEnabled,
     commentCount,
     commentsOpen,
+    compactPanel,
     imageSources.toolbarItem,
+    isCompact,
     outline.length,
     outlineOpen,
     setCommentPanelOpen,
+    setOutlinePanelOpen,
     widthMode,
   ])
 
   useRegisterDriveRendererToolbarItems('markdown', toolbarItems)
 
-  const focusThread = (threadId: string) => {
+  const scrollToThread = (threadId: string) => {
     setActiveThreadId(threadId)
-    setCommentPanelOpen(true)
     const root = bodyRef.current
     const overlayRect = findOverlayRectByThreadId(annotationOverlayRects, threadId, root)
     if (!root || !overlayRect) return
     scrollPreviewContainerToRect(root, overlayRect)
+  }
+
+  const focusThreadFromDocument = (threadId: string) => {
+    setCommentPanelOpen(true)
+    scrollToThread(threadId)
+  }
+
+  const focusThreadFromRail = (threadId: string) => {
+    if (isCompact) setCompactPanel(null)
+    scrollToThread(threadId)
   }
 
   const syncSelectionActionFromCurrentSelection = useCallback(() => {
@@ -404,7 +445,7 @@ function DriveMarkdownBody({
     const threadId = findOverlayThreadAtPoint(annotationOverlayRects, event.clientX, event.clientY, bodyRef.current)
       ?? findRenderedOverlayThreadAtPoint(event.clientX, event.clientY, bodyRef.current)
     if (!threadId) return
-    focusThread(threadId)
+    focusThreadFromDocument(threadId)
   }
 
   const outlinePanelOpen = outline.length > 0 && outlineOpen
@@ -440,6 +481,75 @@ function DriveMarkdownBody({
       setCommentCreateError(getCommentActionErrorMessage(cause))
     }
   }
+
+  const documentView = (
+    <div ref={documentScrollRef} data-testid='markdown-document-scroll' className='h-full min-w-0 overflow-auto px-4 py-6 md:px-6'>
+      <div
+        data-markdown-width-mode={widthMode}
+        className={cn(
+          'relative mx-auto',
+          widthMode === 'reading' ? 'max-w-3xl' : 'w-full max-w-none'
+        )}
+      >
+        <div
+          ref={bodyRef}
+          data-testid='markdown-body'
+          className={MARKDOWN_BODY_CLASSNAME}
+          onClick={handleBodyClick}
+          onMouseUp={syncSelectionActionFromCurrentSelection}
+          onPointerUp={syncSelectionActionFromCurrentSelection}
+          onKeyUp={syncSelectionActionFromCurrentSelection}
+          dangerouslySetInnerHTML={{ __html: annotated.html }}
+        />
+        {annotationOverlayRects.length > 0 ? (
+          <div aria-hidden className='pointer-events-none absolute inset-0'>
+            {annotationOverlayRects.map((rect) => (
+              <div
+                key={rect.key}
+                data-drive-annotation-overlay-kind={rect.kind}
+                data-drive-annotation-overlay-thread-id={rect.threadId ?? undefined}
+                className={cn(
+                  'absolute mix-blend-multiply dark:mix-blend-screen',
+                  rect.kind === 'pending'
+                    ? 'bg-amber-200/55 ring-1 ring-amber-300/70 dark:bg-amber-800/40 dark:ring-amber-600/60'
+                    : rect.threadId === activeThreadId
+                      ? 'bg-amber-200/70 ring-1 ring-amber-400/70 dark:bg-amber-800/45 dark:ring-amber-600/70'
+                      : 'bg-amber-200/55 dark:bg-amber-800/35'
+                )}
+                style={{
+                  top: rect.top,
+                  left: rect.left,
+                  width: rect.width,
+                  height: rect.height,
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
+        {preview.truncated ? (
+          <div className='mt-4 border-t pt-2 text-xs text-muted-foreground'>内容已截断</div>
+        ) : null}
+      </div>
+    </div>
+  )
+
+  const renderCommentsRail = (mode: 'anchored' | 'list') => (
+    <MarkdownCommentsRail
+      mode={mode}
+      threads={railThreads}
+      activeThreadId={activeThreadId}
+      canReply={canCreateAnnotation}
+      loading={annotations.loading}
+      anchorBaseOffset={commentAnchorBaseOffset}
+      anchoredLayerRef={setCommentAnchorLayer}
+      onFocusThread={focusThreadFromRail}
+      onRefresh={() => { void annotations.refresh() }}
+      onReply={annotations.reply}
+      onUpdateComment={annotations.updateComment}
+      onDeleteComment={annotations.deleteComment}
+      onDeleteThread={annotations.deleteThread}
+    />
+  )
 
   return (
     <div className='h-full min-h-0 overflow-hidden bg-background'>
@@ -493,118 +603,96 @@ function DriveMarkdownBody({
         </DialogContent>
       </Dialog>
       <div ref={layoutRef} data-testid='markdown-layout' className='h-full min-h-0 w-full overflow-hidden'>
-        <ResizablePanelGroup orientation='horizontal' className='h-full min-h-0'>
-          {outlinePanelOpen ? (
-            <>
-              <ResizablePanel
-                defaultSize={outlinePanelDefaultSize}
-                minSize={outlinePanelMinSize}
-                maxSize={outlinePanelMaxSize}
-                data-panel-size={outlinePanelDefaultSize}
-                data-panel-min-size={outlinePanelMinSize}
-                data-panel-max-size={outlinePanelMaxSize}
-                data-markdown-resizable-panel='outline'
-                className='h-full min-h-0 !overflow-visible'
-              >
-                <aside className='h-full overflow-hidden px-4 py-6 md:px-6'>
-                  <nav className='sticky top-6 max-h-[calc(100vh-3rem)] overflow-auto' aria-label='目录'>
-                    <p className='mb-2 text-xs font-medium text-muted-foreground'>目录</p>
-                    <MarkdownOutlineTree items={outline} />
-                  </nav>
-                </aside>
-              </ResizablePanel>
-              <ResizableHandle withHandle />
-            </>
-          ) : null}
-          <ResizablePanel
-            defaultSize={documentPanelDefaultSize}
-            minSize='35%'
-            data-markdown-resizable-panel='document'
-            className='h-full min-h-0 min-w-0 !overflow-visible'
-          >
-            <div ref={documentScrollRef} data-testid='markdown-document-scroll' className='h-full min-w-0 overflow-auto px-4 py-6 md:px-6'>
-              <div
-                data-markdown-width-mode={widthMode}
-                className={cn(
-                  'relative mx-auto',
-                  widthMode === 'reading' ? 'max-w-3xl' : 'w-full max-w-none'
-                )}
-              >
-                <div
-                  ref={bodyRef}
-                  data-testid='markdown-body'
-                  className={MARKDOWN_BODY_CLASSNAME}
-                  onClick={handleBodyClick}
-                  onMouseUp={syncSelectionActionFromCurrentSelection}
-                  onPointerUp={syncSelectionActionFromCurrentSelection}
-                  onKeyUp={syncSelectionActionFromCurrentSelection}
-                  dangerouslySetInnerHTML={{ __html: annotated.html }}
-                />
-                {annotationOverlayRects.length > 0 ? (
-                  <div aria-hidden className='pointer-events-none absolute inset-0'>
-                    {annotationOverlayRects.map((rect) => (
-                      <div
-                        key={rect.key}
-                        data-drive-annotation-overlay-kind={rect.kind}
-                        data-drive-annotation-overlay-thread-id={rect.threadId ?? undefined}
-                        className={cn(
-                          'absolute mix-blend-multiply dark:mix-blend-screen',
-                          rect.kind === 'pending'
-                            ? 'bg-amber-200/55 ring-1 ring-amber-300/70 dark:bg-amber-800/40 dark:ring-amber-600/60'
-                            : rect.threadId === activeThreadId
-                              ? 'bg-amber-200/70 ring-1 ring-amber-400/70 dark:bg-amber-800/45 dark:ring-amber-600/70'
-                              : 'bg-amber-200/55 dark:bg-amber-800/35'
-                        )}
-                        style={{
-                          top: rect.top,
-                          left: rect.left,
-                          width: rect.width,
-                          height: rect.height,
-                        }}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-                {preview.truncated ? (
-                  <div className='mt-4 border-t pt-2 text-xs text-muted-foreground'>内容已截断</div>
-                ) : null}
-              </div>
-            </div>
-          </ResizablePanel>
-          {commentsOpen ? (
-            <>
-              <ResizableHandle withHandle />
-              <ResizablePanel
-                defaultSize={commentsPanelDefaultSize}
-                minSize={commentsPanelMinSize}
-                maxSize={commentsPanelMaxSize}
-                data-panel-size={commentsPanelDefaultSize}
-                data-panel-min-size={commentsPanelMinSize}
-                data-panel-max-size={commentsPanelMaxSize}
-                data-markdown-resizable-panel='comments'
-                className='h-full min-h-0 !overflow-visible'
-              >
-                <aside className='h-full min-h-0 self-stretch overflow-hidden border-l bg-background'>
-                  <MarkdownCommentsRail
-                    threads={railThreads}
-                    activeThreadId={activeThreadId}
-                    canReply={canCreateAnnotation}
-                    loading={annotations.loading}
-                    anchorBaseOffset={commentAnchorBaseOffset}
-                    anchoredLayerRef={setCommentAnchorLayer}
-                    onFocusThread={focusThread}
-                    onRefresh={() => { void annotations.refresh() }}
-                    onReply={annotations.reply}
-                    onUpdateComment={annotations.updateComment}
-                    onDeleteComment={annotations.deleteComment}
-                    onDeleteThread={annotations.deleteThread}
-                  />
-                </aside>
-              </ResizablePanel>
-            </>
-          ) : null}
-        </ResizablePanelGroup>
+        {isCompact ? documentView : (
+          <ResizablePanelGroup orientation='horizontal' className='h-full min-h-0'>
+            {outlinePanelOpen ? (
+              <>
+                <ResizablePanel
+                  defaultSize={outlinePanelDefaultSize}
+                  minSize={outlinePanelMinSize}
+                  maxSize={outlinePanelMaxSize}
+                  data-panel-size={outlinePanelDefaultSize}
+                  data-panel-min-size={outlinePanelMinSize}
+                  data-panel-max-size={outlinePanelMaxSize}
+                  data-markdown-resizable-panel='outline'
+                  className='h-full min-h-0 !overflow-visible'
+                >
+                  <aside className='h-full overflow-hidden px-4 py-6 md:px-6'>
+                    <nav className='sticky top-6 max-h-[calc(100vh-3rem)] overflow-auto' aria-label='目录'>
+                      <p className='mb-2 text-xs font-medium text-muted-foreground'>目录</p>
+                      <MarkdownOutlineTree items={outline} />
+                    </nav>
+                  </aside>
+                </ResizablePanel>
+                <ResizableHandle withHandle />
+              </>
+            ) : null}
+            <ResizablePanel
+              defaultSize={documentPanelDefaultSize}
+              minSize='35%'
+              data-markdown-resizable-panel='document'
+              className='h-full min-h-0 min-w-0 !overflow-visible'
+            >
+              {documentView}
+            </ResizablePanel>
+            {commentsOpen ? (
+              <>
+                <ResizableHandle withHandle />
+                <ResizablePanel
+                  defaultSize={commentsPanelDefaultSize}
+                  minSize={commentsPanelMinSize}
+                  maxSize={commentsPanelMaxSize}
+                  data-panel-size={commentsPanelDefaultSize}
+                  data-panel-min-size={commentsPanelMinSize}
+                  data-panel-max-size={commentsPanelMaxSize}
+                  data-markdown-resizable-panel='comments'
+                  className='h-full min-h-0 !overflow-visible'
+                >
+                  <aside className='h-full min-h-0 self-stretch overflow-hidden border-l bg-background'>
+                    {renderCommentsRail('anchored')}
+                  </aside>
+                </ResizablePanel>
+              </>
+            ) : null}
+          </ResizablePanelGroup>
+        )}
       </div>
+      {isCompact && outline.length > 0 ? (
+        <Sheet
+          open={compactPanel === 'outline'}
+          onOpenChange={(open) => setOutlinePanelOpen(open)}
+        >
+          <SheetContent side='left' data-markdown-sheet='outline' className='gap-0 overflow-hidden'>
+            <SheetHeader className='pr-14'>
+              <SheetTitle>目录</SheetTitle>
+              <SheetDescription className='sr-only'>跳转到文档标题</SheetDescription>
+            </SheetHeader>
+            <nav className='min-h-0 flex-1 overflow-auto px-4 pb-4' aria-label='目录'>
+              <MarkdownOutlineTree
+                items={outline}
+                compact
+                onSelect={() => setCompactPanel(null)}
+              />
+            </nav>
+          </SheetContent>
+        </Sheet>
+      ) : null}
+      {isCompact && annotationsEnabled ? (
+        <Sheet
+          open={compactPanel === 'comments'}
+          onOpenChange={(open) => setCommentPanelOpen(open)}
+        >
+          <SheetContent side='right' data-markdown-sheet='comments' className='gap-0 overflow-hidden'>
+            <SheetHeader className='sr-only'>
+              <SheetTitle>评论</SheetTitle>
+              <SheetDescription>查看和管理文档评论</SheetDescription>
+            </SheetHeader>
+            <div className='min-h-0 flex-1 overflow-auto'>
+              {renderCommentsRail('list')}
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : null}
       {annotations.error ? (
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>{annotations.error}</div>
       ) : null}
@@ -913,29 +1001,58 @@ function sameOverlayRects(left: readonly MarkdownAnnotationOverlayRect[], right:
   })
 }
 
-export function MarkdownOutlineTree({ items }: { readonly items: readonly DriveMarkdownOutlineItemDto[] }) {
+export function MarkdownOutlineTree({
+  items,
+  compact = false,
+  onSelect,
+}: {
+  readonly items: readonly DriveMarkdownOutlineItemDto[]
+  readonly compact?: boolean
+  readonly onSelect?: (itemId: string) => void
+}) {
   return (
     <ul className='space-y-1'>
       {items.map((item) => (
-        <MarkdownOutlineNode key={item.id} item={item} />
+        <MarkdownOutlineNode
+          key={item.id}
+          item={item}
+          compact={compact}
+          onSelect={onSelect}
+        />
       ))}
     </ul>
   )
 }
 
-function MarkdownOutlineNode({ item }: { readonly item: DriveMarkdownOutlineItemDto }) {
+function MarkdownOutlineNode({
+  item,
+  compact,
+  onSelect,
+}: {
+  readonly item: DriveMarkdownOutlineItemDto
+  readonly compact: boolean
+  readonly onSelect?: (itemId: string) => void
+}) {
   return (
     <li>
       <a
         className={cn(
-          'block truncate rounded-sm py-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'truncate rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          compact ? 'flex min-h-11 items-center py-2 text-sm' : 'block py-1 text-xs',
           outlineDepthClassName(item.depth)
         )}
         href={`#${item.id}`}
+        onClick={() => onSelect?.(item.id)}
       >
         {item.text}
       </a>
-      {item.children.length > 0 ? <MarkdownOutlineTree items={item.children} /> : null}
+      {item.children.length > 0 ? (
+        <MarkdownOutlineTree
+          items={item.children}
+          compact={compact}
+          onSelect={onSelect}
+        />
+      ) : null}
     </li>
   )
 }

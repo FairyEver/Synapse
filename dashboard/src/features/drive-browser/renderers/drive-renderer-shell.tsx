@@ -4,6 +4,7 @@ import {
   type DriveBrowserSnapshotDto,
   type DriveFileContentUpdateResult,
 } from '@synapse/shared'
+import { FilePreviewLayout } from '@/features/file-browser/preview/file-preview-layout'
 import { cn } from '@/lib/utils'
 import { DriveFileVersionsDialog } from '../drive-file-versions-dialog'
 import { getDriveFileVersionItemId } from '../shared/drive-view-model'
@@ -134,7 +135,7 @@ function DriveRendererShellChrome({
   const useFloatingChrome = body && selected.id === 'iframe'
 
   return (
-    <section className='h-full min-h-0 bg-background flex flex-col'>
+    <FilePreviewLayout className='flex h-full min-h-0 w-full flex-col overflow-hidden bg-background'>
       {useFloatingChrome ? (
         <DrivePreviewFloatingMenu
           snapshot={snapshot}
@@ -172,7 +173,7 @@ function DriveRendererShellChrome({
           onOpenChange={setVersionsOpen}
         />
       ) : null}
-    </section>
+    </FilePreviewLayout>
   )
 }
 

@@ -2246,7 +2246,11 @@ ${renderDrivePublicPageCss()}
 <body>
 <main class="drive-public-page">
   <section class="drive-public-shell drive-public-status-shell" aria-labelledby="drive-public-status-title">
-    <div class="drive-public-panel">
+    <div class="drive-public-brand" aria-label="Synapse">
+      <img class="drive-public-logo" src="/console/synapse-logo.png" alt="" width="32" height="32">
+      <span class="drive-public-brand-name">Synapse</span>
+    </div>
+    <div class="drive-public-panel drive-public-status-panel">
       <p class="drive-public-meta">404</p>
       <h1 class="drive-public-title" id="drive-public-status-title">${title}</h1>
       <p class="drive-public-description">${message}</p>
@@ -2270,14 +2274,14 @@ function isNotFoundException(error: unknown): error is NotFoundException {
 
 function renderDrivePasswordPage(input: { readonly actionPath: string; readonly error?: boolean }): string {
   const actionPath = escapeAttribute(input.actionPath)
-  const error = input.error ? `<p class="drive-password-error" id="drive-password-error">密码错误</p>` : ""
+  const error = input.error ? `<p class="drive-password-error" id="drive-password-error" role="alert">密码不正确，请重试。</p>` : ""
   const inputErrorAttributes = input.error ? ` aria-invalid="true" aria-describedby="drive-password-error"` : ""
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>输入密码</title>
+<title>此分享受密码保护</title>
 <style>
 ${renderDrivePublicPageCss()}
 </style>
@@ -2285,16 +2289,20 @@ ${renderDrivePublicPageCss()}
 <body>
 <main class="drive-public-page">
   <section class="drive-public-shell drive-password-shell" aria-labelledby="drive-password-title">
+    <div class="drive-public-brand" aria-label="Synapse">
+      <img class="drive-public-logo" src="/console/synapse-logo.png" alt="" width="32" height="32">
+      <span class="drive-public-brand-name">Synapse</span>
+    </div>
     <form class="drive-public-panel drive-password-form" method="post" action="${actionPath}">
       <div class="drive-public-header">
-        <h1 class="drive-public-title" id="drive-password-title">输入密码</h1>
+        <h1 class="drive-public-title" id="drive-password-title">此分享受密码保护</h1>
       </div>
       <div class="drive-password-field">
         <label class="drive-password-label" for="drive-password">访问密码</label>
         <input class="drive-password-input" id="drive-password" name="password" type="password" autocomplete="current-password" required${inputErrorAttributes}>
         ${error}
       </div>
-      <button class="drive-password-button" type="submit">打开</button>
+      <button class="drive-password-button" type="submit">打开分享</button>
     </form>
   </section>
 </main>
@@ -2310,7 +2318,7 @@ function renderDrivePublicPageCss(): string {
   return `
 :root {
   color-scheme: light dark;
-  --background: Canvas;
+  --background: ButtonFace;
   --foreground: CanvasText;
   --card: Canvas;
   --card-foreground: CanvasText;
@@ -2337,22 +2345,45 @@ body {
 }
 .drive-public-page {
   min-height: 100vh;
+  min-height: 100svh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem;
+  padding: 2rem 1rem;
 }
 .drive-public-shell {
   width: min(100%, 24rem);
+  display: grid;
+  gap: 1.5rem;
+}
+.drive-public-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.drive-public-logo {
+  display: block;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius);
+}
+.drive-public-brand-name {
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 600;
 }
 .drive-public-panel {
   display: grid;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 1.25rem;
+  padding: 1.5rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: calc(var(--radius) + 0.25rem);
   background: var(--card);
   color: var(--card-foreground);
+}
+.drive-public-status-panel {
+  gap: 0.5rem;
 }
 .drive-public-header {
   display: grid;
@@ -2368,8 +2399,8 @@ body {
 .drive-public-title {
   margin: 0;
   color: var(--foreground);
-  font-size: 1.25rem;
-  line-height: 1.75rem;
+  font-size: 1.125rem;
+  line-height: 1.5rem;
   font-weight: 600;
   letter-spacing: 0;
 }
@@ -2395,10 +2426,10 @@ body {
 }
 .drive-password-input {
   width: 100%;
-  min-height: 2rem;
+  min-height: 2.25rem;
   border: 1px solid var(--input);
   border-radius: var(--radius);
-  padding: 0.25rem 0.625rem;
+  padding: 0.5rem 0.75rem;
   background: transparent;
   color: var(--foreground);
   font: inherit;
@@ -2418,10 +2449,10 @@ body {
   outline-color: var(--destructive);
 }
 .drive-password-button {
-  min-height: 2rem;
+  min-height: 2.25rem;
   border: 1px solid var(--primary);
   border-radius: var(--radius);
-  padding: 0.25rem 0.625rem;
+  padding: 0.5rem 1rem;
   background: var(--primary);
   color: var(--primary-foreground);
   font: inherit;
@@ -2456,7 +2487,7 @@ body {
     padding: 1rem;
   }
   .drive-public-panel {
-    padding: 0.875rem;
+    padding: 1.25rem;
   }
 }
 `

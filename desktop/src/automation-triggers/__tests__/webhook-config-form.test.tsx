@@ -35,6 +35,7 @@ const webhook: DashboardWebhookDto = {
 type AccountBridgeMock = {
   getState: ReturnType<typeof vi.fn>
   startLogin: ReturnType<typeof vi.fn>
+  cancelLogin: ReturnType<typeof vi.fn>
   refresh: ReturnType<typeof vi.fn>
   logout: ReturnType<typeof vi.fn>
   listWebhooks: ReturnType<typeof vi.fn>
@@ -140,6 +141,7 @@ function installAccountBridge(overrides: Partial<AccountBridgeMock>) {
   const account = {
     getState: vi.fn().mockResolvedValue({ status: "unauthenticated" } satisfies SynapseAccountState),
     startLogin: vi.fn(),
+    cancelLogin: vi.fn(),
     refresh: vi.fn(),
     logout: vi.fn(),
     listWebhooks: vi.fn().mockResolvedValue([]),

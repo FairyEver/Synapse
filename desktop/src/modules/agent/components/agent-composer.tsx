@@ -55,7 +55,7 @@ import {
   type AgentSlashFragment,
 } from "../slash-menu"
 
-const SINGLE_LINE_HEIGHT = 48
+const SINGLE_LINE_HEIGHT = 36
 const MAX_TEXTAREA_HEIGHT = 160
 const logger = createRendererLogger("agent")
 const SUPPORTED_IMAGE_MIME_TYPES = new Set<AgentDraftImageAttachment["mimeType"]>([
@@ -207,7 +207,10 @@ function AgentComposer({
     const el = textareaRef.current
     if (!el) return
     el.style.height = "auto"
-    const scrollHeight = Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT)
+    const scrollHeight = Math.max(
+      SINGLE_LINE_HEIGHT,
+      Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT),
+    )
     el.style.height = `${scrollHeight}px`
     setMultiline(scrollHeight > SINGLE_LINE_HEIGHT)
   }, [draft])
@@ -524,7 +527,7 @@ function AgentComposer({
           editor={(
             <Textarea
               ref={textareaRef}
-              className="agent-composer__input max-h-40 min-h-12 resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0 disabled:bg-transparent dark:bg-transparent dark:disabled:bg-transparent"
+              className="agent-composer__input max-h-40 min-h-9 resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0 disabled:bg-transparent dark:bg-transparent dark:disabled:bg-transparent"
               value={draft}
               onChange={(e) => {
                 onDraftChange(e.target.value)

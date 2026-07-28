@@ -1,23 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
-import type { LucideIcon } from 'lucide-react'
+import type { FilePreviewToolbarItem } from '../preview/file-preview-toolbar'
 
-export type FileRendererToolbarItem =
-  | {
-      readonly kind: 'status'
-      readonly id: string
-      readonly label: string
-    }
-  | {
-      readonly kind: 'button'
-      readonly id: string
-      readonly label: string
-      readonly icon?: LucideIcon
-      readonly variant?: 'default' | 'outline' | 'secondary' | 'ghost'
-      readonly disabled?: boolean
-      readonly loading?: boolean
-      readonly href?: string
-      readonly onClick?: () => void
-    }
+export type FileRendererToolbarItem = FilePreviewToolbarItem
 
 export type FileRendererToolbarContextValue = {
   readonly items: readonly FileRendererToolbarItem[]

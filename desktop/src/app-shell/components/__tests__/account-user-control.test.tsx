@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { buildAccountDashboardHomeUrl } from "@/lib/account-dashboard-url"
 import type { SynapseAccountState } from "@/types/account"
 
-function createAuthenticatedState(): SynapseAccountState {
+function createAuthenticatedState(): Extract<SynapseAccountState, { status: "authenticated" }> {
   return {
     status: "authenticated",
     connectivity: "online",
@@ -20,6 +20,14 @@ function createAuthenticatedState(): SynapseAccountState {
       teams: [],
       syncedAt: "2026-06-01T00:00:00.000Z",
     },
+  }
+}
+
+function createOfflineState(): SynapseAccountState {
+  return {
+    ...createAuthenticatedState(),
+    connectivity: "offline",
+    offlineReason: "server_unavailable",
   }
 }
 
@@ -41,6 +49,7 @@ const accountState = vi.hoisted((): { current: SynapseAccountState } => ({
 }))
 
 const accountActions = vi.hoisted(() => ({
+  cancelLogin: vi.fn(),
   logout: vi.fn(),
   refresh: vi.fn(),
   startLogin: vi.fn(),
@@ -56,6 +65,7 @@ vi.mock("@/app-shell/account", () => ({
     isLoading: false,
     pendingAction: null,
     startLogin: accountActions.startLogin,
+    cancelLogin: accountActions.cancelLogin,
     refresh: accountActions.refresh,
     logout: accountActions.logout,
   }),
@@ -82,6 +92,7 @@ let roots: Root[] = []
 beforeEach(() => {
   accountState.current = createAuthenticatedState()
   accountActions.startLogin.mockResolvedValue({ status: "authenticating", loginUrl: "https://example.com/login" })
+  accountActions.cancelLogin.mockResolvedValue({ status: "unauthenticated" })
   accountActions.refresh.mockResolvedValue(accountState.current)
   accountActions.logout.mockResolvedValue({ status: "unauthenticated" })
   shellBridge.openExternal.mockResolvedValue(undefined)
@@ -148,29 +159,71 @@ describe("AccountUserControl", () => {
     expect(container.textContent).toContain("user@example.com")
   })
 
-  it("shows offline account identity and keeps sync available", () => {
-    accountState.current = {
-      status: "authenticated",
-      connectivity: "offline",
-      offlineReason: "server_unavailable",
-      profile: {
-        user: {
-          id: "user-1",
-          email: "user@example.com",
-          status: "active",
-          handle: "ada",
-        },
-        teams: [],
-        syncedAt: "2026-06-01T00:00:00.000Z",
-      },
-    }
+  it("shows clear recovery actions for an offline account", async () => {
+    accountState.current = createOfflineState()
 
     const panel = renderControl("panel")
 
     expect(panel.textContent).toContain("ada")
     expect(panel.textContent).toContain("离线")
-    expect(panel.textContent).toContain("同步")
+    expect(panel.textContent).toContain("重试连接")
+    expect(panel.textContent).toContain("重新登录")
     expect(panel.textContent).toContain("退出")
+    expect(panel.textContent).not.toContain("同步账号")
+
+    const buttons = Array.from(panel.querySelectorAll("button"))
+    const buttonNamed = (name: string) => buttons.find((button) => button.textContent?.includes(name))
+
+    await act(async () => {
+      buttonNamed("重试连接")?.click()
+      await Promise.resolve()
+    })
+    expect(accountActions.refresh).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      buttonNamed("重新登录")?.click()
+      await Promise.resolve()
+    })
+    expect(accountActions.startLogin).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      buttonNamed("退出")?.click()
+      await Promise.resolve()
+    })
+    expect(accountActions.logout).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows the same recovery actions in the offline toolbar menu", async () => {
+    accountState.current = createOfflineState()
+    const toolbar = renderControl("toolbar")
+
+    await act(async () => {
+      toolbar.querySelector("button")?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }))
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("重试连接")
+    expect(document.body.textContent).toContain("重新登录")
+    expect(document.body.textContent).toContain("退出登录")
+    expect(document.body.textContent).not.toContain("同步账号")
+  })
+
+  it("hides manual refresh actions for an online account", async () => {
+    const panel = renderControl("panel")
+    const toolbar = renderControl("toolbar")
+
+    expect(panel.textContent).not.toContain("同步")
+    expect(panel.textContent).not.toContain("重试连接")
+    expect(panel.textContent).not.toContain("重新登录")
+
+    await act(async () => {
+      toolbar.querySelector("button")?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }))
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).not.toContain("同步账号")
+    expect(document.body.textContent).not.toContain("重试连接")
+    expect(document.body.textContent).not.toContain("重新登录")
   })
 
   it("shows cancel controls while waiting for browser authentication", async () => {
@@ -190,13 +243,15 @@ describe("AccountUserControl", () => {
       toolbar.querySelector("button")?.click()
       await Promise.resolve()
     })
-    expect(accountActions.logout).toHaveBeenCalledTimes(1)
+    expect(accountActions.cancelLogin).toHaveBeenCalledTimes(1)
+    expect(accountActions.logout).not.toHaveBeenCalled()
 
     await act(async () => {
       panel.querySelector("button")?.click()
       await Promise.resolve()
     })
-    expect(accountActions.logout).toHaveBeenCalledTimes(2)
+    expect(accountActions.cancelLogin).toHaveBeenCalledTimes(2)
+    expect(accountActions.logout).not.toHaveBeenCalled()
   })
 
   it("renders the top bar account control in packaged builds", () => {

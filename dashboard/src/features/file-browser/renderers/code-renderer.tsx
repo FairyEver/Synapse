@@ -114,6 +114,7 @@ export function FileBrowserCodeRenderer({
         id: 'code-save',
         label: '保存',
         icon: Save,
+        compactPlacement: 'primary',
         loading: editContext?.savingText,
         disabled: !dirty || editContext?.savingText || editContext?.reloading,
         onClick: () => { void handleSave() },

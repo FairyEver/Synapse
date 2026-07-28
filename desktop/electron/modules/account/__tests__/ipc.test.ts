@@ -39,6 +39,7 @@ vi.mock("../../../services/account-service", () => ({
   accountService: {
     getState: () => ({ status: "unauthenticated" }),
     startLogin: async () => ({ state: { status: "unauthenticated" } }),
+    cancelLogin: async () => ({ status: "unauthenticated" }),
     refreshFromStorage: async () => ({ status: "unauthenticated" }),
     logout: async () => ({ status: "unauthenticated" }),
     listWebhooks: async () => [],
@@ -124,6 +125,7 @@ describe("accountIpcModule", () => {
     expect(accountIpcModule.id).toBe("account")
     expect(accountIpcModule.methods.getState.operationId).toBe("app.account.operation.get_state")
     expect(accountIpcModule.methods.startLogin.operationId).toBe("app.account.operation.start_login")
+    expect(accountIpcModule.methods.cancelLogin.operationId).toBe("app.account.operation.cancel_login")
     expect(accountIpcModule.methods.refresh.operationId).toBe("app.account.operation.refresh")
     expect(accountIpcModule.methods.logout.operationId).toBe("app.account.operation.logout")
     expect(accountIpcModule.methods.listWebhooks.operationId).toBe("app.account.webhooks.list")

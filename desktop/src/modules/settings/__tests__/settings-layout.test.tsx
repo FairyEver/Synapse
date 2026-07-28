@@ -40,6 +40,7 @@ vi.mock("@/app-shell/account", () => ({
     isLoading: false,
     pendingAction: null,
     startLogin: vi.fn(async () => ({ status: "authenticating", loginUrl: "https://example.com/login" })),
+    cancelLogin: vi.fn(async () => ({ status: "unauthenticated" })),
     refresh: vi.fn(async () => ({ status: "unauthenticated" })),
     logout: vi.fn(async () => ({ status: "unauthenticated" })),
   }),

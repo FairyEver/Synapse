@@ -444,7 +444,7 @@ describe("AgentComposer", () => {
     expect(html).toContain("agent-composer-input-box rounded-2xl border border-border bg-card")
     expect(html).toContain("focus-within:border-ring")
     expect(html).toContain("agent-composer-input-box__toolbar flex items-center justify-between")
-    expect(html).toContain("agent-composer__input max-h-40 min-h-12")
+    expect(html).toContain("agent-composer__input max-h-40 min-h-9")
     expect(html).toContain("px-2")
     expect(html).toContain("py-2")
   })

@@ -1014,6 +1014,13 @@ export const accountIpcModule: IpcModule = {
       response: accountStateSchema,
       handler: async () => (await accountService.startLogin()).state,
     },
+    cancelLogin: {
+      kind: "invoke",
+      operationId: "app.account.operation.cancel_login",
+      request: z.void(),
+      response: accountStateSchema,
+      handler: async () => accountService.cancelLogin(),
+    },
     refresh: {
       kind: "invoke",
       operationId: "app.account.operation.refresh",

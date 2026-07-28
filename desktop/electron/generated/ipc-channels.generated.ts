@@ -10,6 +10,7 @@ export const IPC_CHANNELS = {
   "account": {
     "getState": "synapse:app:account:operation:get_state",
     "startLogin": "synapse:app:account:operation:start_login",
+    "cancelLogin": "synapse:app:account:operation:cancel_login",
     "refresh": "synapse:app:account:operation:refresh",
     "logout": "synapse:app:account:operation:logout",
     "listWebhooks": "synapse:app:account:webhooks:list",

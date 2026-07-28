@@ -40,6 +40,7 @@ export type MarkdownCommentsRailThread = {
 }
 
 export function MarkdownCommentsRail({
+  mode = 'anchored',
   threads,
   activeThreadId,
   canReply,
@@ -53,6 +54,7 @@ export function MarkdownCommentsRail({
   onDeleteComment,
   onDeleteThread,
 }: {
+  readonly mode?: 'anchored' | 'list'
   readonly threads: readonly MarkdownCommentsRailThread[]
   readonly activeThreadId: string | null
   readonly canReply: boolean
@@ -71,16 +73,26 @@ export function MarkdownCommentsRail({
   const layout = useMemo(() => layoutRailThreads(threads, measuredHeights, anchorBaseOffset), [anchorBaseOffset, measuredHeights, threads])
 
   useLayoutEffect(() => {
+    if (mode === 'list') return
     const next: Record<string, number> = {}
     for (const [threadId, element] of cardRefs.current) {
       next[threadId] = Math.ceil(element.getBoundingClientRect().height || element.offsetHeight || COMMENT_CARD_ESTIMATED_HEIGHT)
     }
     setMeasuredHeights((current) => sameHeightMap(current, next) ? current : next)
-  }, [threads])
+  }, [mode, threads])
+
+  const compact = mode === 'list'
 
   return (
-    <div data-markdown-comments-rail='true' className='h-full min-h-full bg-background'>
-      <div className='sticky top-0 z-10 flex h-10 shrink-0 items-center justify-between border-b bg-background px-3 text-sm font-medium'>
+    <div
+      data-markdown-comments-rail='true'
+      data-markdown-comments-mode={mode}
+      className='h-full min-h-full bg-background'
+    >
+      <div className={cn(
+        'sticky top-0 z-10 flex shrink-0 items-center justify-between border-b bg-background px-3 text-sm font-medium',
+        compact ? 'h-12 pr-14' : 'h-10'
+      )}>
         <span>评论</span>
         <div className='flex items-center gap-1'>
           <span className='text-xs font-normal text-muted-foreground'>{threads.length}</span>
@@ -89,7 +101,7 @@ export function MarkdownCommentsRail({
               type='button'
               variant='ghost'
               size='icon'
-              className='size-7'
+              className={compact ? 'size-11' : 'size-7'}
               aria-label='刷新评论'
               disabled={loading}
               onClick={onRefresh}
@@ -103,7 +115,29 @@ export function MarkdownCommentsRail({
         {threads.length === 0 ? (
           <div className='px-3 py-6 text-sm text-muted-foreground'>暂无评论</div>
         ) : null}
-        {layout.anchored.length > 0 ? (
+        {compact && threads.length > 0 ? (
+          <div className='space-y-3 p-3'>
+            {threads.map((item) => (
+              <div
+                key={item.thread.id}
+                data-markdown-comment-thread-id={item.thread.id}
+              >
+                <ThreadView
+                  thread={item.thread}
+                  active={item.thread.id === activeThreadId}
+                  canReply={canReply}
+                  compact
+                  onFocusThread={onFocusThread}
+                  onReply={onReply}
+                  onUpdateComment={onUpdateComment}
+                  onDeleteComment={onDeleteComment}
+                  onDeleteThread={onDeleteThread}
+                />
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {!compact && layout.anchored.length > 0 ? (
           <div
             ref={anchoredLayerRef}
             data-markdown-comments-anchored-layer='true'
@@ -122,6 +156,7 @@ export function MarkdownCommentsRail({
                   thread={item.thread}
                   active={item.thread.id === activeThreadId}
                   canReply={canReply}
+                  compact={false}
                   onFocusThread={onFocusThread}
                   onReply={onReply}
                   onUpdateComment={onUpdateComment}
@@ -132,7 +167,7 @@ export function MarkdownCommentsRail({
             ))}
           </div>
         ) : null}
-        {layout.orphaned.length > 0 ? (
+        {!compact && layout.orphaned.length > 0 ? (
           <div className={cn('space-y-3 p-3', layout.anchored.length > 0 && 'pt-0')}>
             {layout.orphaned.map((item) => (
               <div
@@ -144,6 +179,7 @@ export function MarkdownCommentsRail({
                   thread={item.thread}
                   active={item.thread.id === activeThreadId}
                   canReply={canReply}
+                  compact={false}
                   onFocusThread={onFocusThread}
                   onReply={onReply}
                   onUpdateComment={onUpdateComment}
@@ -163,6 +199,7 @@ function ThreadView({
   thread,
   active,
   canReply,
+  compact,
   onFocusThread,
   onReply,
   onUpdateComment,
@@ -172,6 +209,7 @@ function ThreadView({
   readonly thread: DriveAnnotationThreadDto
   readonly active: boolean
   readonly canReply: boolean
+  readonly compact: boolean
   readonly onFocusThread: (threadId: string) => void
   readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
@@ -198,7 +236,7 @@ function ThreadView({
             <div className='rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground'>位置已变化</div>
           ) : <span />}
           {thread.permissions.canDelete && !firstVisibleCommentId ? (
-            <ThreadActionMenu onDeleteThread={() => onDeleteThread(thread.id)} />
+            <ThreadActionMenu compact={compact} onDeleteThread={() => onDeleteThread(thread.id)} />
           ) : null}
         </div>
       ) : null}
@@ -209,6 +247,7 @@ function ThreadView({
             comment={comment}
             replyToName={comment.parentCommentId ? displayAuthor(authorByCommentId.get(comment.parentCommentId)) : null}
             canReply={canReply}
+            compact={compact}
             onReply={(body) => onReply({ threadId: thread.id, parentCommentId: comment.id, body })}
             onUpdateComment={onUpdateComment}
             onDeleteComment={onDeleteComment}
@@ -224,6 +263,7 @@ function CommentView({
   comment,
   replyToName,
   canReply,
+  compact,
   onReply,
   onUpdateComment,
   onDeleteComment,
@@ -232,6 +272,7 @@ function CommentView({
   readonly comment: DriveAnnotationCommentDto
   readonly replyToName: string | null
   readonly canReply: boolean
+  readonly compact: boolean
   readonly onReply: (body: string) => CommentActionPromise
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
@@ -249,6 +290,7 @@ function CommentView({
           <span className='text-xs text-muted-foreground'>{comment.editedAt ? '已编辑' : null}</span>
           {comment.permissions.canDelete || onDeleteThread ? (
             <CommentActionMenu
+              compact={compact}
               onDeleteComment={comment.permissions.canDelete ? () => onDeleteComment(comment.id) : undefined}
               onDeleteThread={onDeleteThread}
             />
@@ -259,10 +301,10 @@ function CommentView({
       <p className='whitespace-pre-wrap break-words text-sm leading-5'>{comment.body}</p>
       <div className='-ml-2 flex flex-wrap items-center gap-1'>
         {canReply ? (
-          <Button type='button' variant='ghost' size='sm' className='h-7 px-2 text-xs' onClick={() => setTextDialog({ mode: 'reply', value: '' })}>回复</Button>
+          <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} onClick={() => setTextDialog({ mode: 'reply', value: '' })}>回复</Button>
         ) : null}
         {comment.permissions.canEdit ? (
-          <Button type='button' variant='ghost' size='sm' className='h-7 px-2 text-xs' onClick={() => setTextDialog({ mode: 'edit', value: comment.body })}>编辑</Button>
+          <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} onClick={() => setTextDialog({ mode: 'edit', value: comment.body })}>编辑</Button>
         ) : null}
       </div>
       {textDialog ? (
@@ -350,9 +392,11 @@ function CommentTextDialog({
 }
 
 function CommentActionMenu({
+  compact = false,
   onDeleteComment,
   onDeleteThread,
 }: {
+  readonly compact?: boolean
   readonly onDeleteComment?: () => CommentActionPromise
   readonly onDeleteThread?: () => CommentActionPromise
 }) {
@@ -363,7 +407,7 @@ function CommentActionMenu({
     <>
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
-          <Button type='button' variant='ghost' size='icon' className='h-7 w-7' aria-label='更多评论操作' onClick={() => setMenuOpen(true)}>
+          <Button type='button' variant='ghost' size='icon' className={compact ? 'size-11' : 'h-7 w-7'} aria-label='更多评论操作' onClick={() => setMenuOpen(true)}>
             <MoreHorizontal />
           </Button>
         </DropdownMenuTrigger>
@@ -395,8 +439,10 @@ function CommentActionMenu({
 }
 
 function ThreadActionMenu({
+  compact = false,
   onDeleteThread,
 }: {
+  readonly compact?: boolean
   readonly onDeleteThread: () => CommentActionPromise
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -405,7 +451,7 @@ function ThreadActionMenu({
     <>
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
-          <Button type='button' variant='ghost' size='icon' className='h-7 w-7' aria-label='讨论操作' onClick={() => setMenuOpen(true)}>
+          <Button type='button' variant='ghost' size='icon' className={compact ? 'size-11' : 'h-7 w-7'} aria-label='讨论操作' onClick={() => setMenuOpen(true)}>
             <MoreHorizontal />
           </Button>
         </DropdownMenuTrigger>

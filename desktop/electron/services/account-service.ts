@@ -371,6 +371,7 @@ export class AccountService {
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private retryAttempt = 0
   private refreshInFlight: Promise<SynapseAccountState> | null = null
+  private loginFallbackState: SynapseAccountState | null = null
 
   constructor(deps: AccountServiceDeps = {}) {
     this.namespace = deps.namespace ?? createNamespace()
@@ -1725,6 +1726,7 @@ export class AccountService {
   }
 
   async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {
+    this.loginFallbackState = this.state
     this.cancelOfflineRetry()
     const baseUrl = apiBaseUrl()
     const state = createState()
@@ -1890,6 +1892,7 @@ export class AccountService {
           }
           if (committed.activeAttempt) return this.state
           this.cancelOfflineRetry()
+          this.loginFallbackState = null
           this.setState({ status: "authenticated", connectivity: "online", profile: refreshed.profile })
           logger.info("Desktop account authenticated after callback exchange recovery.", authenticatedLogMeta(
             "handleAuthCallback",
@@ -1931,6 +1934,7 @@ export class AccountService {
         return this.state
       }
       this.cancelOfflineRetry()
+      this.loginFallbackState = null
       this.setState({ status: "authenticated", connectivity: "online", profile })
       logger.info("Desktop account authenticated.", authenticatedLogMeta("handleAuthCallback", profile))
     } catch (error) {
@@ -1960,6 +1964,7 @@ export class AccountService {
         }
         if (committed.activeAttempt) return this.state
         this.cancelOfflineRetry()
+        this.loginFallbackState = null
         this.setState({ status: "authenticated", connectivity: "online", profile: refreshed.profile })
         logger.info("Desktop account authenticated after refresh recovery.", authenticatedLogMeta(
           "handleAuthCallback",
@@ -1968,11 +1973,11 @@ export class AccountService {
       } catch (refreshError) {
         logger.warn("Desktop account callback refresh recovery failed.", { error: refreshError })
         this.accessToken = null
-        const beforeClear = await this.readPersisted(
-          "Failed to read stored account before clearing failed callback refresh token.",
+        const beforeRestore = await this.readPersisted(
+          "Failed to read stored account before restoring the previous refresh token.",
         )
-        await this.clearStoredRefreshTokenIfCurrent(tokens.refreshToken)
-        if (beforeClear?.refreshToken !== tokens.refreshToken) return this.state
+        await this.restoreStoredRefreshTokenIfCurrent(tokens.refreshToken, persisted?.refreshToken)
+        if (beforeRestore?.refreshToken !== tokens.refreshToken) return this.state
         const latest = await this.readPersisted("Failed to read stored account after account callback recovery failed.")
         if (this.hasDifferentActiveAttempt(latest, callbackState)) return this.state
         this.setState({
@@ -2100,10 +2105,63 @@ export class AccountService {
     return this.refreshFromStorage({ reason: "manual" })
   }
 
+  async cancelLogin(): Promise<SynapseAccountState> {
+    const revision = this.bumpAuthRevision()
+    this.cancelOfflineRetry()
+
+    let persisted: PersistedAccount | null
+    try {
+      persisted = await this.runStorageMutation(async () => {
+        if (this.authRevision !== revision) return null
+        const current = await this.namespace.getSingleton()
+        if (!current?.activeAttempt) return current
+        const nextPersisted: PersistedAccount = { ...current }
+        delete nextPersisted.activeAttempt
+        await this.namespace.setSingleton(nextPersisted)
+        return nextPersisted
+      })
+    } catch (error) {
+      logger.warn("Failed to cancel desktop account login.", { error })
+      this.setState({
+        status: "error",
+        message: "取消登录失败，请重试。",
+        profile: this.loginFallbackState && "profile" in this.loginFallbackState
+          ? this.loginFallbackState.profile
+          : undefined,
+      })
+      return this.state
+    }
+
+    if (this.authRevision !== revision) return this.state
+    const fallbackState = this.loginFallbackState
+    this.loginFallbackState = null
+
+    if (fallbackState?.status === "authenticated") {
+      if (fallbackState.connectivity === "offline") {
+        this.scheduleOfflineRetry(
+          fallbackState.offlineReason ?? "profile_sync_failed",
+          fallbackState.profile,
+        )
+      } else {
+        this.setState(fallbackState)
+      }
+      return this.state
+    }
+
+    if (persisted?.refreshToken && persisted.lastProfile) {
+      this.scheduleOfflineRetry("profile_sync_failed", persisted.lastProfile)
+      return this.state
+    }
+
+    this.setState({ status: "unauthenticated" })
+    return this.state
+  }
+
   async logout(): Promise<SynapseAccountState> {
     const persisted = await this.readPersisted("Failed to read stored account before logout.")
     this.bumpAuthRevision()
     this.cancelOfflineRetry()
+    this.loginFallbackState = null
     this.accessToken = null
     if (persisted?.refreshToken) {
       await this.postJson(`${apiBaseUrl()}/auth/logout`, {
@@ -2250,16 +2308,23 @@ export class AccountService {
     }
   }
 
-  private async clearStoredRefreshTokenIfCurrent(expectedRefreshToken: string | undefined): Promise<void> {
+  private async restoreStoredRefreshTokenIfCurrent(
+    expectedRefreshToken: string | undefined,
+    previousRefreshToken: string | undefined,
+  ): Promise<void> {
     if (!expectedRefreshToken) return
     await this.runStorageMutation(async () => {
-      const persisted = await this.readPersisted("Failed to read stored account before clearing refresh token.")
+      const persisted = await this.readPersisted("Failed to read stored account before restoring refresh token.")
       if (persisted?.refreshToken !== expectedRefreshToken) return
       const nextPersisted: PersistedAccount = { ...persisted }
-      delete nextPersisted.refreshToken
+      if (previousRefreshToken) {
+        nextPersisted.refreshToken = previousRefreshToken
+      } else {
+        delete nextPersisted.refreshToken
+      }
       await this.namespace.setSingleton(nextPersisted)
     }).catch((error) => {
-      logger.warn("Failed to clear stored account refresh token.", { error })
+      logger.warn("Failed to restore stored account refresh token.", { error })
     })
   }
 

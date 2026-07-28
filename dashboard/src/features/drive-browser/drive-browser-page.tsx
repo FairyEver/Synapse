@@ -4,8 +4,10 @@ import type {
   DriveBrowserSurface,
 } from '@synapse/shared'
 import { Loader2 } from 'lucide-react'
+import { Logo } from '@/assets/logo'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -81,6 +83,30 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
     return <DriveSingleFileReaderView snapshot={state.snapshot} editContext={state} annotationContext={annotationContext} />
   }
 
+  if (props.context === 'share' && state.status !== 'ready') {
+    return (
+      <DriveShareEntryLayout>
+        {state.status === 'loading' ? <DriveShareEntryLoading /> : null}
+        {state.status === 'invalidShare' ? <DriveShareInvalidState /> : null}
+        {state.status === 'error' ? (
+          <DriveShareErrorState
+            message={state.message}
+            retrying={state.retrying}
+            onRetry={state.retry}
+          />
+        ) : null}
+        {state.status === 'passwordRequired' ? (
+          <DriveBrowserPasswordForm
+            message={state.message}
+            unlocking={state.unlocking}
+            unlockError={state.unlockError ?? (initialPasswordRejectedKey === shareTargetKey ? state.message : null)}
+            onUnlock={state.unlock}
+          />
+        ) : null}
+      </DriveShareEntryLayout>
+    )
+  }
+
   const content = (
     <div
       className={cn(
@@ -95,20 +121,11 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
       )}
     >
       {state.status === 'loading' ? <DriveBrowserLoading mode={loadingMode} /> : null}
-      {state.status === 'invalidShare' ? <DriveInvalidShareState /> : null}
       {state.status === 'error' ? (
         <DriveBrowserError
           message={state.message}
           retrying={state.retrying}
           onRetry={state.retry}
-        />
-      ) : null}
-      {state.status === 'passwordRequired' ? (
-        <DriveBrowserPasswordForm
-          message={state.message}
-          unlocking={state.unlocking}
-          unlockError={state.unlockError ?? (initialPasswordRejectedKey === shareTargetKey ? state.message : null)}
-          onUnlock={state.unlock}
         />
       ) : null}
       {state.status === 'ready' ? (
@@ -219,6 +236,20 @@ export function DriveSingleFileReaderView({
   )
 }
 
+function DriveShareEntryLayout({ children }: { readonly children: React.ReactNode }) {
+  return (
+    <main className='flex min-h-svh w-full bg-muted/30 px-4 py-8 sm:px-6'>
+      <div className='mx-auto my-auto flex w-full max-w-sm flex-col gap-6'>
+        <div className='flex items-center justify-center gap-2' aria-label='Synapse'>
+          <Logo className='size-8' alt='' />
+          <span className='text-lg font-semibold'>Synapse</span>
+        </div>
+        {children}
+      </div>
+    </main>
+  )
+}
+
 function DriveBrowserPasswordForm({
   message,
   unlocking,
@@ -232,44 +263,106 @@ function DriveBrowserPasswordForm({
 }) {
   const [password, setPassword] = useState('')
   const passwordInputId = 'drive-share-password'
-  const passwordHelpId = 'drive-share-password-help'
   const passwordErrorId = 'drive-share-password-error'
   const unlockErrorMessage = unlockError === message ? '密码不正确，请重试。' : unlockError
   return (
     <form
-      className='flex w-full flex-col gap-4 rounded-lg border bg-background p-5'
       onSubmit={(event) => {
         event.preventDefault()
+        if (unlocking || password.length === 0) return
         onUnlock(password)
       }}
     >
-      <div className='space-y-1.5'>
-        <h1 className='text-base font-semibold'>输入访问密码</h1>
-        <p id={passwordHelpId} className='text-sm text-muted-foreground'>{message}</p>
-      </div>
-      <div className='space-y-2'>
-        <Label htmlFor={passwordInputId}>密码</Label>
-        <Input
-          id={passwordInputId}
-          type='password'
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          autoComplete='current-password'
-          autoFocus
-          aria-invalid={Boolean(unlockError)}
-          aria-describedby={unlockError ? passwordErrorId : passwordHelpId}
-        />
-      </div>
-      {unlockErrorMessage ? (
-        <Alert id={passwordErrorId} variant='destructive' aria-live='polite'>
-          <AlertDescription>{unlockErrorMessage}</AlertDescription>
-        </Alert>
-      ) : null}
-      <Button type='submit' disabled={unlocking || password.length === 0}>
-        {unlocking ? <Loader2 className='animate-spin' /> : null}
-        {unlocking ? '验证中' : '打开'}
-      </Button>
+      <Card className='gap-5 shadow-none'>
+        <CardHeader>
+          <h1 className='text-lg font-semibold'>此分享受密码保护</h1>
+        </CardHeader>
+        <CardContent className='space-y-5'>
+          <div className='space-y-2'>
+            <Label htmlFor={passwordInputId}>访问密码</Label>
+            <Input
+              id={passwordInputId}
+              type='password'
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete='current-password'
+              autoFocus
+              required
+              disabled={unlocking}
+              aria-invalid={Boolean(unlockError)}
+              aria-describedby={unlockError ? passwordErrorId : undefined}
+            />
+            {unlockErrorMessage ? (
+              <p
+                id={passwordErrorId}
+                className='text-sm text-destructive'
+                role='alert'
+                aria-live='polite'
+              >
+                {unlockErrorMessage}
+              </p>
+            ) : null}
+          </div>
+          <Button className='w-full' type='submit' disabled={unlocking || password.length === 0}>
+            {unlocking ? <Loader2 className='animate-spin' /> : null}
+            {unlocking ? '正在打开' : '打开分享'}
+          </Button>
+        </CardContent>
+      </Card>
     </form>
+  )
+}
+
+function DriveShareEntryLoading() {
+  return (
+    <Card className='gap-5 shadow-none' aria-busy='true'>
+      <CardHeader>
+        <Skeleton className='h-6 w-44' />
+      </CardHeader>
+      <CardContent className='space-y-5'>
+        <div className='space-y-2'>
+          <Skeleton className='h-4 w-20' />
+          <Skeleton className='h-9 w-full' />
+        </div>
+        <Skeleton className='h-9 w-full' />
+      </CardContent>
+    </Card>
+  )
+}
+
+function DriveShareInvalidState() {
+  return (
+    <Card className='gap-2 shadow-none'>
+      <CardHeader>
+        <h1 className='text-lg font-semibold'>链接已失效</h1>
+        <p className='text-sm text-muted-foreground'>请向文件所有者确认最新链接。</p>
+      </CardHeader>
+    </Card>
+  )
+}
+
+function DriveShareErrorState({
+  message,
+  retrying,
+  onRetry,
+}: {
+  readonly message: string
+  readonly retrying: boolean
+  readonly onRetry: () => void
+}) {
+  return (
+    <Card className='gap-5 shadow-none'>
+      <CardHeader>
+        <h1 className='text-lg font-semibold'>无法打开分享</h1>
+        <p className='text-sm text-muted-foreground'>{message}</p>
+      </CardHeader>
+      <CardContent>
+        <Button className='w-full' type='button' variant='outline' disabled={retrying} onClick={onRetry}>
+          {retrying ? <Loader2 className='animate-spin' /> : null}
+          重试
+        </Button>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -302,17 +395,6 @@ function DriveReaderLoading() {
           <Skeleton className='h-4 w-10/12' />
         </div>
         <Skeleton className='h-56 w-full' />
-      </div>
-    </div>
-  )
-}
-
-function DriveInvalidShareState() {
-  return (
-    <div className='flex w-full flex-col gap-3 rounded-lg border bg-background p-5'>
-      <div className='space-y-1.5'>
-        <h1 className='text-base font-semibold'>链接已失效</h1>
-        <p className='text-sm text-muted-foreground'>请向文件所有者确认最新链接。</p>
       </div>
     </div>
   )

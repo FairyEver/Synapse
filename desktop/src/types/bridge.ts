@@ -1207,6 +1207,7 @@ export type SynapseBridge = {
   account: {
     getState: () => Promise<SynapseAccountState>
     startLogin: () => Promise<SynapseAccountState>
+    cancelLogin: () => Promise<SynapseAccountState>
     refresh: () => Promise<SynapseAccountState>
     logout: () => Promise<SynapseAccountState>
     listWebhooks: () => Promise<DashboardWebhookDto[]>

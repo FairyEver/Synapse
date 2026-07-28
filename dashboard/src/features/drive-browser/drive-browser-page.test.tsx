@@ -64,6 +64,96 @@ afterEach(() => {
 })
 
 describe('DriveBrowserPage', () => {
+  it('renders the branded share password form and submits the entered password', async () => {
+    const unlock = vi.fn()
+    mockDriveBrowserState({
+      status: 'passwordRequired',
+      message: '请输入密码。',
+      unlock,
+      unlocking: false,
+      unlockError: null,
+    })
+
+    renderPage(<DriveBrowserPage context='share' shareId='share-1' />)
+
+    const input = document.querySelector<HTMLInputElement>('#drive-share-password')
+    const button = buttonWithText('打开分享')
+    expect(document.querySelector('[aria-label="Synapse"]')).not.toBeNull()
+    expect(document.querySelector<HTMLImageElement>('[aria-label="Synapse"] img')?.src).toContain('synapse-logo.png')
+    expect(document.body.textContent).toContain('此分享受密码保护')
+    expect(document.querySelector('label[for="drive-share-password"]')?.textContent).toBe('访问密码')
+    expect(document.body.textContent).not.toContain('请输入密码。')
+    expect(input?.required).toBe(true)
+    expect(document.activeElement).toBe(input)
+    expect(button?.disabled).toBe(true)
+
+    if (!input || !button) throw new Error('Missing password controls.')
+    await inputValue(input, 'letmein')
+    expect(button.disabled).toBe(false)
+
+    await act(async () => {
+      button.click()
+    })
+    expect(unlock).toHaveBeenCalledWith('letmein')
+  })
+
+  it('disables the password controls while opening the share', async () => {
+    mockDriveBrowserState({
+      status: 'passwordRequired',
+      message: '请输入密码。',
+      unlock: vi.fn(),
+      unlocking: false,
+      unlockError: null,
+    })
+    renderPage(<DriveBrowserPage context='share' shareId='share-1' />)
+
+    const input = document.querySelector<HTMLInputElement>('#drive-share-password')
+    if (!input) throw new Error('Missing password input.')
+    await inputValue(input, 'letmein')
+
+    mockDriveBrowserState({
+      status: 'passwordRequired',
+      message: '请输入密码。',
+      unlock: vi.fn(),
+      unlocking: true,
+      unlockError: null,
+    })
+    rerenderPage(<DriveBrowserPage context='share' shareId='share-1' />)
+
+    expect(input.disabled).toBe(true)
+    expect(buttonWithText('正在打开')?.disabled).toBe(true)
+  })
+
+  it('renders password errors beside the field without nesting an alert card', () => {
+    mockDriveBrowserState({
+      status: 'passwordRequired',
+      message: '请输入密码。',
+      unlock: vi.fn(),
+      unlocking: false,
+      unlockError: '请输入密码。',
+    })
+
+    renderPage(<DriveBrowserPage context='share' shareId='share-1' />)
+
+    const input = document.querySelector<HTMLInputElement>('#drive-share-password')
+    const error = document.querySelector<HTMLElement>('#drive-share-password-error')
+    expect(error?.textContent).toBe('密码不正确，请重试。')
+    expect(error?.getAttribute('role')).toBe('alert')
+    expect(input?.getAttribute('aria-invalid')).toBe('true')
+    expect(input?.getAttribute('aria-describedby')).toBe('drive-share-password-error')
+    expect(document.querySelector('[data-slot="alert"]')).toBeNull()
+  })
+
+  it('uses the branded share shell while loading', () => {
+    mockDriveBrowserState({ status: 'loading' })
+
+    renderPage(<DriveBrowserPage context='share' shareId='share-1' />)
+
+    expect(document.querySelector('[aria-label="Synapse"]')).not.toBeNull()
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull()
+    expect(document.querySelector('main')?.className).toContain('bg-muted/30')
+  })
+
   it('clears consumed initial share passwords when unlock falls back to the password form', () => {
     const onInitialPasswordConsumed = vi.fn()
     mockDriveBrowserState({
@@ -125,9 +215,29 @@ describe('DriveBrowserPage', () => {
 
     renderPage(<DriveBrowserPage context='share' shareId='share-1' />)
 
+    expect(document.querySelector('[aria-label="Synapse"]')).not.toBeNull()
     expect(document.body.textContent).toContain('链接已失效')
     expect(document.body.textContent).toContain('请向文件所有者确认最新链接。')
     expect(document.body.textContent).not.toContain('文件未找到')
+  })
+
+  it('uses the branded share error state and retries in place', () => {
+    const retry = vi.fn()
+    mockDriveBrowserState({
+      status: 'error',
+      message: '网络错误',
+      retry,
+      retrying: false,
+    })
+
+    renderPage(<DriveBrowserPage context='share' shareId='share-1' />)
+
+    buttonWithText('重试')?.click()
+
+    expect(document.querySelector('[aria-label="Synapse"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('无法打开分享')
+    expect(document.body.textContent).toContain('网络错误')
+    expect(retry).toHaveBeenCalledTimes(1)
   })
 
   it('lets users retry after a browser load error', () => {
@@ -145,6 +255,7 @@ describe('DriveBrowserPage', () => {
 
     expect(document.body.textContent).toContain('网络错误')
     expect(retry).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('[aria-label="Synapse"]')).toBeNull()
   })
 
   it('allows selected-text comments in console markdown file views', async () => {
@@ -324,6 +435,16 @@ function selectStrongText(): void {
 function buttonWithText(text: string): HTMLButtonElement | null {
   return Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
     .find((button) => button.textContent?.includes(text)) ?? null
+}
+
+async function inputValue(input: HTMLInputElement, value: string) {
+  await act(async () => {
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    valueSetter?.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await Promise.resolve()
+  })
 }
 
 function rowWithText(text: string): HTMLTableRowElement | null {

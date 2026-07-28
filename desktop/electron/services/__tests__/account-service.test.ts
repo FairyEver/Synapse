@@ -2243,6 +2243,46 @@ describe("AccountService", () => {
     expect(error?.message).toContain("access denied")
   })
 
+  it("restores the previous refresh token when offline reauthentication fails", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url) => {
+        if (String(url).endsWith("/auth/desktop/token")) {
+          return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          return jsonResponse({ error: "access denied" }, 401)
+        }
+        if (String(url).endsWith("/auth/refresh")) {
+          return jsonResponse({ error: "refresh denied" }, 401)
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+    await expect(service.refreshFromStorage()).resolves.toMatchObject({
+      status: "authenticated",
+      connectivity: "offline",
+    })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+
+    const state = await service.handleAuthCallback(
+      `synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`,
+    )
+
+    expect(state).toMatchObject({
+      status: "error",
+      message: "登录失败，请重试。",
+      profile: storedProfile,
+    })
+    expect(await namespace.getSingleton()).toMatchObject({
+      refreshToken: "refresh-old",
+      lastProfile: storedProfile,
+    })
+    expect(await namespace.getSingleton()).not.toHaveProperty("activeAttempt")
+  })
+
   it("refreshes from stored refresh token and keeps access token in memory only", async () => {
     const calls: string[] = []
     const { namespace, service } = await createTestAccountService({
@@ -3058,6 +3098,50 @@ describe("AccountService", () => {
 
     expect(state).toEqual({ status: "unauthenticated" })
     expect(await namespace.getSingleton()).toBeNull()
+  })
+
+  it("cancels offline reauthentication without clearing stored credentials", async () => {
+    const fetch = vi.fn(async (url) => {
+      if (String(url).endsWith("/auth/refresh")) {
+        return jsonResponse({ error: "deploying" }, 503)
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const offline = await service.refreshFromStorage()
+    expect(offline).toMatchObject({
+      status: "authenticated",
+      connectivity: "offline",
+      offlineReason: "server_unavailable",
+    })
+
+    const started = await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(started.state.status).toBe("authenticating")
+    expect(attempt).toBeTruthy()
+
+    const restored = await service.cancelLogin()
+
+    expect(restored).toMatchObject({
+      status: "authenticated",
+      connectivity: "offline",
+      offlineReason: "server_unavailable",
+      profile: storedProfile,
+    })
+    expect(await namespace.getSingleton()).toMatchObject({
+      refreshToken: "refresh-old",
+      lastProfile: storedProfile,
+    })
+    expect(await namespace.getSingleton()).not.toHaveProperty("activeAttempt")
+
+    const staleCallback = await service.handleAuthCallback(
+      `synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`,
+    )
+
+    expect(staleCallback).toEqual(restored)
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 
   it("ignores callbacks for a login attempt cancelled by logout", async () => {

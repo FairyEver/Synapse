@@ -408,6 +408,7 @@ export function DriveMDXeditorRenderer({
           id: 'mdxeditor-save',
           label: '保存',
           icon: Save,
+          compactPlacement: 'primary',
           loading: editContext?.savingText,
           disabled: !dirty || uploadingImage || editContext?.savingText || editContext?.reloading,
           onClick: () => { void handleSave() },

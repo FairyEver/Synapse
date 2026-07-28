@@ -134,7 +134,7 @@ describe("RunParamsDialog", () => {
     expect(dialog?.textContent).toContain("设置运行参数")
     expect(document.body.querySelector<HTMLLabelElement>('label[for="workflow-run-param-preset"]')?.textContent).toBe("预设")
     expect(document.body.querySelector<HTMLLabelElement>('label[for="topic"]')?.textContent).toBe("topic")
-    expect(document.body.querySelector<HTMLTextAreaElement>("#topic")).toBeTruthy()
+    expect(document.body.querySelector<HTMLTextAreaElement>("#topic")?.rows).toBe(3)
     expect(document.body.querySelector<HTMLInputElement>("#count")).toBeTruthy()
 
     await act(async () => { clickButton("运行") })

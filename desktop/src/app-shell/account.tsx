@@ -12,13 +12,14 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseAccountProfile, SynapseAccountState } from "@/types/account"
 
-type AccountPendingAction = "refresh" | "logout" | "login"
+type AccountPendingAction = "refresh" | "logout" | "login" | "cancelLogin"
 
 type AccountContextValue = {
   state: SynapseAccountState
   isLoading: boolean
   pendingAction: AccountPendingAction | null
   startLogin: () => Promise<SynapseAccountState>
+  cancelLogin: () => Promise<SynapseAccountState>
   refresh: () => Promise<SynapseAccountState>
   logout: () => Promise<SynapseAccountState>
 }
@@ -115,6 +116,16 @@ function AccountProvider({ children }: { children: ReactNode }) {
     return runAccountAction("refresh", bridge.account.refresh)
   }, [runAccountAction])
 
+  const cancelLogin = useCallback(async () => {
+    const bridge = getSynapseBridge()
+    if (!bridge?.account) {
+      const nextState = createActionErrorState(stateRef.current)
+      setState(nextState)
+      return nextState
+    }
+    return runAccountAction("cancelLogin", bridge.account.cancelLogin)
+  }, [runAccountAction])
+
   const logout = useCallback(async () => {
     const bridge = getSynapseBridge()
     if (!bridge?.account) {
@@ -127,6 +138,7 @@ function AccountProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AccountContextValue>(
     () => ({
+      cancelLogin,
       isLoading,
       logout,
       pendingAction,
@@ -134,7 +146,7 @@ function AccountProvider({ children }: { children: ReactNode }) {
       startLogin,
       state,
     }),
-    [isLoading, logout, pendingAction, refresh, startLogin, state],
+    [cancelLogin, isLoading, logout, pendingAction, refresh, startLogin, state],
   )
 
   return (

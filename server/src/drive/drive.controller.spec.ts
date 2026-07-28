@@ -504,6 +504,8 @@ describe("DriveController", () => {
     expect(response.headers["cache-control"]).toBe("private, no-store")
     expect(response.headers.vary).toBe("Cookie")
     expect(response.text).toContain("drive-password-shell")
+    expect(response.text).toContain('/console/synapse-logo.png')
+    expect(response.text).toContain("此分享受密码保护")
     expect(response.text).toContain('action="/sites/site_secret/docs/"')
     expect(storage.getObjectStream).not.toHaveBeenCalled()
   })
@@ -1730,10 +1732,11 @@ describe("DriveController", () => {
       .send({ password: "wrong" })
       .expect(200)
 
-    expect(response.text).toContain("密码错误")
+    expect(response.text).toContain("密码不正确，请重试。")
     expect(response.text).toContain("drive-password-shell")
     expect(response.text).toContain('aria-invalid="true"')
     expect(response.text).toContain('aria-describedby="drive-password-error"')
+    expect(response.text).toContain('role="alert"')
   })
 
   it("renders password errors on direct download password posts", async () => {
@@ -1744,7 +1747,7 @@ describe("DriveController", () => {
       .send({ password: "wrong" })
       .expect(200)
 
-    expect(response.text).toContain("密码错误")
+    expect(response.text).toContain("密码不正确，请重试。")
     expect(response.text).toContain("drive-password-shell")
     expect(response.text).toContain('action="/share/shr_file/download"')
     expect(response.text).toContain('aria-invalid="true"')
@@ -1758,7 +1761,7 @@ describe("DriveController", () => {
       .get("/share/shr_file/download?password=wrong")
       .expect(200)
 
-    expect(response.text).toContain("密码错误")
+    expect(response.text).toContain("密码不正确，请重试。")
     expect(response.text).toContain("drive-password-shell")
     expect(response.text).toContain('action="/share/shr_file/download"')
     expect(response.text).toContain('aria-invalid="true"')
@@ -1778,7 +1781,7 @@ describe("DriveController", () => {
       .get("/share/shr_file/render?password=wrong")
       .expect(200)
 
-    expect(response.text).toContain("密码错误")
+    expect(response.text).toContain("密码不正确，请重试。")
     expect(response.text).toContain("drive-password-shell")
     expect(response.text).toContain('action="/share/shr_file/render"')
     expect(response.text).toContain('aria-invalid="true"')
@@ -1799,13 +1802,17 @@ describe("DriveController", () => {
       .get("/share/shr_file/download")
       .expect(200)
 
-    expect(response.text).toContain("输入密码")
+    expect(response.text).toContain("此分享受密码保护")
+    expect(response.text).toContain("打开分享")
     expect(response.text).toContain("drive-password-shell")
+    expect(response.text).toContain("drive-public-brand")
+    expect(response.text).toContain('<img class="drive-public-logo" src="/console/synapse-logo.png" alt="" width="32" height="32">')
     expect(response.text).toContain('action="/share/shr_file/download"')
-    expect(response.text).toContain("--background: Canvas")
+    expect(response.text).toContain("--background: ButtonFace")
     expect(response.text).toContain("color-scheme: light dark")
     expect(response.text).not.toContain("oklch(")
     expect(response.text).not.toContain("color-mix(")
+    expect(response.text).not.toContain("<script")
     expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
       shareId: "shr_file",
       password: undefined,
@@ -1823,6 +1830,8 @@ describe("DriveController", () => {
 
     expect(response.text).toContain("链接已失效")
     expect(response.text).toContain("请向文件所有者确认最新链接。")
+    expect(response.text).toContain('/console/synapse-logo.png')
+    expect(response.text).toContain("drive-public-brand")
     expect(response.text).not.toContain("文件未找到")
   })
 
@@ -1833,8 +1842,10 @@ describe("DriveController", () => {
       .get("/share/shr_file/render")
       .expect(200)
 
-    expect(response.text).toContain("输入密码")
+    expect(response.text).toContain("此分享受密码保护")
+    expect(response.text).toContain("打开分享")
     expect(response.text).toContain("drive-password-shell")
+    expect(response.text).toContain('/console/synapse-logo.png')
     expect(response.text).toContain('action="/share/shr_file/render"')
     expect(drive.resolveShareRenderAccess).toHaveBeenCalledWith({
       shareId: "shr_file",

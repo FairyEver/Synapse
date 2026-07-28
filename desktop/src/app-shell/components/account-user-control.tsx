@@ -1,4 +1,4 @@
-import { ChevronDown, CircleUserRound, LoaderCircle, LogOut, RefreshCw, Settings } from "lucide-react"
+import { ChevronDown, CircleUserRound, LoaderCircle, LogIn, LogOut, RefreshCw, Settings } from "lucide-react"
 import { useAccount } from "@/app-shell/account"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -51,6 +51,7 @@ function AccountUserControl({
   onOpenSettings,
 }: AccountUserControlProps) {
   const {
+    cancelLogin,
     isLoading,
     logout,
     pendingAction,
@@ -75,7 +76,7 @@ function AccountUserControl({
   }
 
   const handleCancelLogin = () => {
-    void runAndReport(logout)
+    void runAndReport(cancelLogin)
   }
 
   const handleRefresh = () => {
@@ -114,10 +115,18 @@ function AccountUserControl({
         <div className="flex shrink-0 items-center gap-2">
           {state.status === "authenticated" ? (
             <>
-              <Button variant="outline" size="sm" disabled={isBusy} onClick={handleRefresh}>
-                <RefreshCw data-icon="inline-start" className={pendingAction === "refresh" ? "animate-spin" : undefined} />
-                同步
-              </Button>
+              {isAccountOffline(state) ? (
+                <>
+                  <Button variant="outline" size="sm" disabled={isBusy} onClick={handleRefresh}>
+                    <RefreshCw data-icon="inline-start" className={pendingAction === "refresh" ? "animate-spin" : undefined} />
+                    重试连接
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={isBusy} onClick={handleLogin}>
+                    <LogIn data-icon="inline-start" />
+                    重新登录
+                  </Button>
+                </>
+              ) : null}
               <Button variant="outline" size="sm" disabled={isBusy} onClick={handleLogout}>
                 <LogOut data-icon="inline-start" />
                 退出
@@ -185,11 +194,19 @@ function AccountUserControl({
             账号设置
           </DropdownMenuItem>
         ) : null}
-        <DropdownMenuItem onSelect={handleRefresh} disabled={isBusy}>
-          <RefreshCw className={pendingAction === "refresh" ? "animate-spin" : undefined} />
-          同步账号
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
+        {isAccountOffline(state) ? (
+          <>
+            <DropdownMenuItem onSelect={handleRefresh} disabled={isBusy}>
+              <RefreshCw className={pendingAction === "refresh" ? "animate-spin" : undefined} />
+              重试连接
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleLogin} disabled={isBusy}>
+              <LogIn />
+              重新登录
+            </DropdownMenuItem>
+          </>
+        ) : null}
+        {onOpenSettings || isAccountOffline(state) ? <DropdownMenuSeparator /> : null}
         <DropdownMenuItem variant="destructive" onSelect={handleLogout} disabled={isBusy}>
           <LogOut />
           退出登录

@@ -94,6 +94,7 @@ const accountState = vi.hoisted((): { current: SynapseAccountState } => ({
 }))
 
 const accountActions = vi.hoisted(() => ({
+  cancelLogin: vi.fn(),
   logout: vi.fn(),
   refresh: vi.fn(),
   startLogin: vi.fn(),
@@ -111,6 +112,7 @@ vi.mock("@/app-shell/account", () => ({
     isLoading: false,
     pendingAction: null,
     startLogin: accountActions.startLogin,
+    cancelLogin: accountActions.cancelLogin,
     refresh: accountActions.refresh,
     logout: accountActions.logout,
   }),

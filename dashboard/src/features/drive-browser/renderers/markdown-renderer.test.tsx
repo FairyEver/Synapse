@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DriveDocumentImageImportResult, DriveDocumentImageSource, DriveDocumentImageSourcesDto } from '@synapse/shared'
 import { DriveMarkdownRenderer } from './markdown-renderer'
 import { useAuthStore } from '@/stores/auth-store'
+import { FilePreviewLayout } from '@/features/file-browser/preview/file-preview-layout'
 import { driveBrowserApi } from '@/lib/api'
 import { DrivePreviewToolbarItemView } from './drive-preview-header'
 import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
@@ -290,6 +291,79 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.querySelector('[data-testid="markdown-body"]')?.parentElement?.className).not.toContain('ml-auto')
 
     windowAddEventListener.mockRestore()
+  })
+
+  it('uses mutually exclusive outline and comment sheets in compact preview layouts', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
+
+    await act(async () => undefined)
+    await setPreviewWidth(390)
+
+    expect(document.querySelector('[data-slot="resizable-panel-group"]')).toBeNull()
+    expect(document.querySelector('[data-markdown-sheet]')).toBeNull()
+
+    await click(buttonWithText('目录'))
+    expect(document.querySelector('[data-markdown-sheet="outline"]')).not.toBeNull()
+    expect(document.querySelector('[data-markdown-sheet="comments"]')).toBeNull()
+
+    await click(buttonWithText('评论 1'))
+    expect(document.querySelector('[data-markdown-sheet="outline"]')).toBeNull()
+    expect(document.querySelector('[data-markdown-sheet="comments"]')).not.toBeNull()
+    expect(document.querySelector('[data-markdown-comments-mode="list"]')).not.toBeNull()
+    expect(commentAnchorLayer()).toBeNull()
+  })
+
+  it('closes compact sheets after selecting outline and comment targets', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
+
+    await act(async () => undefined)
+    await setPreviewWidth(390)
+
+    await click(buttonWithText('目录'))
+    const outlineLink = document.querySelector<HTMLAnchorElement>('a[href="#heading-1"]')
+    if (!outlineLink) throw new Error('Missing compact outline link')
+    await click(outlineLink)
+    expect(document.querySelector('[data-markdown-sheet="outline"]')).toBeNull()
+
+    await click(buttonWithText('评论 1'))
+    await click(elementWithText('Comment body'))
+    expect(document.querySelector('[data-markdown-sheet="comments"]')).toBeNull()
+    expect(scrollContainerScrollToMock).toHaveBeenCalled()
+  })
+
+  it('preserves regular outline preferences across compact mode changes', async () => {
+    renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
+
+    await click(buttonWithText('目录'))
+    expect(document.querySelector('[data-markdown-resizable-panel="outline"]')).toBeNull()
+
+    await setPreviewWidth(834)
+    await click(buttonWithText('目录'))
+    expect(document.querySelector('[data-markdown-sheet="outline"]')).not.toBeNull()
+
+    await setPreviewWidth(1280)
+    expect(document.querySelector('[data-markdown-sheet="outline"]')).toBeNull()
+    expect(document.querySelector('[data-markdown-resizable-panel="outline"]')).toBeNull()
+  })
+
+  it('keeps compact comment interactions separate from regular panel preferences', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown()
+
+    await act(async () => undefined)
+    await click(buttonWithText('评论 1'))
+    expect(document.querySelector('[data-markdown-resizable-panel="comments"]')).toBeNull()
+
+    await setPreviewWidth(390)
+    await click(buttonWithText('评论 1'))
+    expect(document.querySelector('[data-markdown-sheet="comments"]')).not.toBeNull()
+    await click(buttonWithText('评论 1'))
+    expect(document.querySelector('[data-markdown-sheet="comments"]')).toBeNull()
+
+    await setPreviewWidth(1280)
+    expect(document.querySelector('[data-markdown-resizable-panel="comments"]')).toBeNull()
   })
 
   it('counts replies in the toolbar comments total', async () => {
@@ -862,13 +936,15 @@ function renderMarkdown({
     root?.render(
       <DriveRendererToolbarProvider>
         <ToolbarHost />
-        <DriveMarkdownRenderer
-          current={input.currentItem}
-          preview={input.previewData}
-          edit={input.edit}
-          annotationContext={input.annotationContext}
-          editContext={input.editContext}
-        />
+        <FilePreviewLayout>
+          <DriveMarkdownRenderer
+            current={input.currentItem}
+            preview={input.previewData}
+            edit={input.edit}
+            annotationContext={input.annotationContext}
+            editContext={input.editContext}
+          />
+        </FilePreviewLayout>
       </DriveRendererToolbarProvider>
     )
   }
@@ -1118,9 +1194,12 @@ function selectionAction() {
 }
 
 function elementWithText(text: string) {
-  const element = Array.from(document.querySelectorAll('section, article, p')).find((item) => item.textContent?.includes(text))
+  const element = ['p', 'article', 'section']
+    .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+    .find((item) => item.textContent?.includes(text))
   if (!element) throw new Error(`Missing element ${text}`)
-  return element as HTMLElement
+  const commentThread = element.closest('[data-markdown-comment-thread-id]')?.querySelector('section')
+  return (commentThread ?? element) as HTMLElement
 }
 
 function commentRailShell() {
@@ -1188,9 +1267,26 @@ function triggerMarkdownResize() {
   observer.callback([], observer as unknown as ResizeObserver)
 }
 
+async function setPreviewWidth(width: number) {
+  const observer = previewLayoutResizeObserver()
+  if (!observer) throw new Error('Missing preview layout ResizeObserver')
+  await act(async () => {
+    observer.callback([
+      {
+        contentRect: domRect({ left: 0, top: 0, width, height: 844 }),
+      } as ResizeObserverEntry,
+    ], observer as unknown as ResizeObserver)
+  })
+}
+
 function markdownResizeObserver() {
   const body = document.querySelector('[data-testid="markdown-body"]')
   return resizeObservers.find((observer) => body ? observer.observedElements.includes(body) : false) ?? null
+}
+
+function previewLayoutResizeObserver() {
+  const layout = document.querySelector('[data-file-preview-layout]')
+  return resizeObservers.find((observer) => layout ? observer.observedElements.includes(layout) : false) ?? null
 }
 
 async function flushAnimationFrames() {

@@ -619,6 +619,7 @@ const synapseBridge: SynapseBridge = {
   account: {
     getState: invoke(IPC_CHANNELS.account.getState),
     startLogin: invoke(IPC_CHANNELS.account.startLogin),
+    cancelLogin: invoke(IPC_CHANNELS.account.cancelLogin),
     refresh: invoke(IPC_CHANNELS.account.refresh),
     logout: invoke(IPC_CHANNELS.account.logout),
     listWebhooks: invoke(IPC_CHANNELS.account.listWebhooks),

@@ -34,6 +34,7 @@ function installBridge(startLogin: () => Promise<SynapseAccountState>) {
   const account = {
     getState: vi.fn().mockResolvedValue({ status: "unauthenticated" } satisfies SynapseAccountState),
     startLogin: vi.fn(startLogin),
+    cancelLogin: vi.fn(),
     refresh: vi.fn(),
     logout: vi.fn(),
     onStateChanged: vi.fn(() => () => undefined),
@@ -93,6 +94,55 @@ describe("AccountProvider", () => {
     await act(async () => {
       login.resolve({ status: "authenticating", loginUrl: "https://example.com/login" })
       await login.promise
+    })
+
+    expect(button?.dataset.pending).toBe("")
+  })
+
+  it("marks login cancellation as pending and uses the dedicated bridge method", async () => {
+    const accountBridge = installBridge(async () => ({ status: "unauthenticated" }))
+    const cancellation = createDeferred<SynapseAccountState>()
+    accountBridge.cancelLogin.mockImplementation(() => cancellation.promise)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    function CancelProbe() {
+      const account = useAccount()
+      return (
+        <button
+          data-pending={account.pendingAction ?? ""}
+          onClick={() => {
+            void account.cancelLogin()
+          }}
+          type="button"
+        >
+          cancel
+        </button>
+      )
+    }
+
+    await act(async () => {
+      root?.render(
+        <AccountProvider>
+          <CancelProbe />
+        </AccountProvider>,
+      )
+    })
+    await act(async () => {})
+
+    const button = container.querySelector("button")
+    await act(async () => {
+      button?.click()
+    })
+
+    expect(accountBridge.cancelLogin).toHaveBeenCalledTimes(1)
+    expect(accountBridge.logout).not.toHaveBeenCalled()
+    expect(button?.dataset.pending).toBe("cancelLogin")
+
+    await act(async () => {
+      cancellation.resolve({ status: "unauthenticated" })
+      await cancellation.promise
     })
 
     expect(button?.dataset.pending).toBe("")

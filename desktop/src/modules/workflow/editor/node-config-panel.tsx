@@ -242,15 +242,18 @@ function GlobalSettingsForm({ definition, projects, onChange, onLayoutDirectionC
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">布局方向</Label>
+          <Label id="workflow-layout-direction-label" className="text-xs">布局方向</Label>
           <ToggleGroup
             type="single"
+            variant="outline"
+            size="sm"
             value={definition.layoutDirection}
             onValueChange={(value) => {
               if (value !== "horizontal" && value !== "vertical") return
               if (value === definition.layoutDirection) return
               onLayoutDirectionChange?.(value)
             }}
+            aria-labelledby="workflow-layout-direction-label"
             className="w-full"
           >
             <ToggleGroupItem value="horizontal" className="flex-1" aria-label="左右布局">

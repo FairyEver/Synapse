@@ -7,6 +7,8 @@ import type { WorkflowDefinition } from "@/types/workflow"
 const toggleGroupCalls = vi.hoisted(() => [] as Array<{
   value?: string
   onValueChange?: (value: string) => void
+  variant?: string
+  size?: string
 }>)
 
 vi.mock("@/app-shell/logging", () => ({
@@ -34,14 +36,18 @@ vi.mock("@/components/ui/toggle-group", () => ({
     value,
     onValueChange,
     className,
+    variant,
+    size,
   }: {
     children: ReactNode
     value?: string
     onValueChange?: (value: string) => void
     className?: string
+    variant?: string
+    size?: string
   }) => {
-    toggleGroupCalls.push({ value, onValueChange })
-    return <div className={className}>{children}</div>
+    toggleGroupCalls.push({ value, onValueChange, variant, size })
+    return <div className={className} data-variant={variant} data-size={size}>{children}</div>
   },
   ToggleGroupItem: ({
     children,
@@ -142,6 +148,8 @@ describe("NodeConfigPanel", () => {
     expect(html).not.toContain('data-slot="scroll-area" class="flex-1 p-3"')
     expect(html).toContain('class="space-y-4 p-3"')
     expect(html).toContain("布局方向")
+    expect(html).toContain('data-variant="outline"')
+    expect(html).toContain('data-size="sm"')
     expect(html).toContain('data-value="horizontal"')
     expect(html).toContain('data-value="vertical"')
     expect(html).toContain('class="flex-1" data-value="horizontal"')

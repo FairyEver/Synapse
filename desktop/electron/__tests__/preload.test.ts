@@ -485,6 +485,17 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps account login cancellation to its dedicated IPC channel", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.account.cancelLogin()
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:app:account:operation:cancel_login",
+      undefined,
+    )
+  })
+
   it("maps agent conversation window replacement to the agent IPC channel", async () => {
     const bridge = await loadPreloadBridge()
 

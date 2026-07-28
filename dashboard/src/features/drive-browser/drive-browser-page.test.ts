@@ -73,6 +73,7 @@ vi.mock('@mdxeditor/editor', async () => {
     UndoRedo: () => null,
     codeBlockPlugin: () => null,
     codeMirrorPlugin: () => null,
+    diffSourcePlugin: () => null,
     headingsPlugin: () => null,
     imagePlugin: () => null,
     linkDialogPlugin: () => null,
@@ -549,7 +550,8 @@ describe('drive browser view model', () => {
 
     expect(html).toContain('data-drive-code-renderer="true"')
     expect(html).toContain('class="h-svh min-h-0 overflow-hidden bg-background"')
-    expect(html).toContain('class="h-full min-h-0 bg-background flex flex-col"')
+    expect(html).toContain('data-file-preview-layout="regular"')
+    expect(html).toContain('class="min-w-0 flex h-full min-h-0 w-full flex-col overflow-hidden bg-background"')
     expect(html).toContain('data-drive-preview-header="true"')
     expect(html).not.toContain('max-w-4xl')
     expect(html).not.toContain('max-w-6xl')

@@ -346,13 +346,13 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
   return (
     <>
       <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen && !submitting && !savingPreset) onCancel() }}>
-        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
+        <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
           <form onSubmit={(event) => { void handleSubmit(event) }} className="grid min-w-0 gap-4">
             <DialogHeader>
               <DialogTitle>设置运行参数</DialogTitle>
             </DialogHeader>
             {params.length > 0 && (
-              <div className="grid gap-1.5 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] sm:items-center">
+              <div className="grid gap-1.5">
                 <Label htmlFor="workflow-run-param-preset" className="leading-5">预设</Label>
                 <div className="flex min-w-0 items-center gap-2">
                   <Select
@@ -399,8 +399,8 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
                   const isMultiResource = (param.type === "file" || param.type === "directory") && param.allowMultiple === true
                   const labelId = `workflow-run-param-${paramIndex}-label`
                   return (
-                    <div key={param.name} className="grid gap-1.5 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] sm:items-start">
-                      <Label id={labelId} htmlFor={isMultiResource ? undefined : param.name} className="pt-1.5 leading-5">
+                    <div key={param.name} className="grid gap-1.5">
+                      <Label id={labelId} htmlFor={isMultiResource ? undefined : param.name} className="leading-5">
                         {param.description ?? param.name}
                       </Label>
                       <div className="grid min-w-0 gap-1.5">

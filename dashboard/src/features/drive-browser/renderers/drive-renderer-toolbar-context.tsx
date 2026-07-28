@@ -1,47 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
-import type { LucideIcon } from 'lucide-react'
+import type {
+  FilePreviewToolbarItem,
+  FilePreviewToolbarMenuItem,
+} from '@/features/file-browser/preview/file-preview-toolbar'
 
-export type DriveRendererToolbarItem =
-  | {
-      readonly kind: 'status'
-      readonly id: string
-      readonly label: string
-    }
-  | {
-      readonly kind: 'button'
-      readonly id: string
-      readonly label: string
-      readonly icon?: LucideIcon
-      readonly variant?: 'default' | 'outline' | 'secondary' | 'ghost'
-      readonly disabled?: boolean
-      readonly loading?: boolean
-      readonly href?: string
-      readonly external?: boolean
-      readonly onClick?: () => void
-    }
-  | {
-      readonly kind: 'toggle'
-      readonly id: string
-      readonly label: string
-      readonly icon?: LucideIcon
-      readonly pressed: boolean
-      readonly disabled?: boolean
-      readonly onPressedChange: (pressed: boolean) => void
-    }
-  | {
-      readonly kind: 'menu'
-      readonly id: string
-      readonly label: string
-      readonly icon?: LucideIcon
-      readonly items: readonly DriveRendererToolbarMenuItem[]
-    }
-
-export type DriveRendererToolbarMenuItem = {
-  readonly id: string
-  readonly label: string
-  readonly disabled?: boolean
-  readonly onSelect: () => void
-}
+export type DriveRendererToolbarItem = FilePreviewToolbarItem
+export type DriveRendererToolbarMenuItem = FilePreviewToolbarMenuItem
 
 export type DriveRendererToolbarContextValue = {
   readonly items: readonly DriveRendererToolbarItem[]
