@@ -449,6 +449,16 @@ describe("DriveController", () => {
     expect(response.text).toBe("<h1>Home</h1>")
   })
 
+  it("redirects a static site root without a trailing slash and preserves its query", async () => {
+    const response = await request(app!.getHttpServer())
+      .get("/sites/site_public?ref=shared")
+      .expect(302)
+
+    expect(response.headers.location).toBe("/sites/site_public/?ref=shared")
+    expect(sites.resolvePublicSite).not.toHaveBeenCalled()
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
   it("prevents shared caching for protected static site assets", async () => {
     sites.resolvePublicSite.mockResolvedValue({
       status: "ok",

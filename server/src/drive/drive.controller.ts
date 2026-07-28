@@ -1112,6 +1112,11 @@ export class DrivePublicController {
 
   @Get("/sites/:siteId")
   async serveSiteRoot(@Param("siteId") siteId: string, @Req() request: Request, @Res() response: Response) {
+    if (!request.path.endsWith("/")) {
+      const url = new URL(request.originalUrl || request.url, "http://synapse.local")
+      response.redirect(302, `${url.pathname}/${url.search}`)
+      return
+    }
     await this.serveSiteAsset(siteId, "", request, response)
   }
 
