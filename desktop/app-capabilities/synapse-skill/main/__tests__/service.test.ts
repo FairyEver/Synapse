@@ -56,6 +56,17 @@ describe("SynapseSkillService", () => {
     expect(source.sourceFingerprint).toMatch(/^sha256:[a-f0-9]{64}$/)
   })
 
+  it("changes the package fingerprint when an attachment changes", async () => {
+    const packageRoot = await createPackageRoot()
+    const service = createSynapseSkillService({ packageRoot })
+    const before = await service.prepareInstallSource()
+
+    await writeFile(path.join(packageRoot, "database", "index.md"), "# Updated Database\n", "utf8")
+    const after = await service.prepareInstallSource()
+
+    expect(after.sourceFingerprint).not.toBe(before.sourceFingerprint)
+  })
+
   it("releases an idle prepared source", async () => {
     const packageRoot = await createPackageRoot()
     const service = createSynapseSkillService({ packageRoot })
@@ -246,6 +257,7 @@ describe("SynapseSkillService", () => {
       "repository/index.md",
       "secrets/api-reference.md",
       "secrets/index.md",
+      "skill-authoring/index.md",
       "skill-repository/api-reference.md",
       "skill-repository/index.md",
       "terminal/api-reference.md",
@@ -254,6 +266,27 @@ describe("SynapseSkillService", () => {
       "workflow/api-reference.md",
       "workflow/index.md",
     ])
+  })
+
+  it("documents local Skill authoring without taking over Synapse publishing", async () => {
+    const [skillRoot, authoringGuide] = await Promise.all([
+      readFile(path.join(systemPackageRoot, "SKILL.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "skill-authoring/index.md"), "utf8"),
+    ])
+
+    expect(skillRoot).toContain("开发 Skill")
+    expect(skillRoot).toContain("修改现有 Skill")
+    expect(skillRoot).toContain("`skill-authoring/index.md`")
+    expect(skillRoot).toContain("not local Skill file authoring")
+    expect(skillRoot).toContain("A request only to publish or manage an existing Skill in Synapse is a Content operation")
+    expect(authoringGuide).toContain("Inspect and edit the actual files")
+    expect(authoringGuide).toContain("Limit YAML frontmatter to `name` and `description`")
+    expect(authoringGuide).toContain("Use progressive disclosure")
+    expect(authoringGuide).toContain("[A-Za-z_][A-Za-z0-9_]*")
+    expect(authoringGuide).toContain("Redacting logs afterward does not remove secrets")
+    expect(authoringGuide).toContain("Do not let dry runs")
+    expect(authoringGuide).toContain("Keep the Skill directory name and `name` unchanged")
+    expect(authoringGuide).toContain("summarizes every actual file change")
   })
 
   it("keeps system Synapse Skill domain guidance aligned with MCP tools", async () => {

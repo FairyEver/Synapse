@@ -2,13 +2,10 @@ import { useEffect, useState } from "react"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
-import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import type { ResourceRepositoryViewId } from "@/modules/apps/types"
 import { PromptsModule } from "@/modules/prompts"
 import { RulesModule } from "@/modules/rules"
 import { SkillsModule } from "@/modules/skills"
-import { BookOpen } from "lucide-react"
-import { SkillAuthoringGuideDialog } from "./skill-authoring-guide-dialog"
 
 const RESOURCE_TABS: readonly { readonly id: ResourceRepositoryViewId; readonly label: string }[] = [
   { id: "skill", label: "技能" },
@@ -32,7 +29,6 @@ export function ResourceRepositoryModule({
   onInitialContentOpenRequestConsumed,
 }: ResourceRepositoryModuleProps) {
   const [view, setView] = useState<ResourceRepositoryViewId>(() => viewFromContentOpenRequest(initialContentOpenRequest))
-  const [guideOpen, setGuideOpen] = useState(false)
 
   useEffect(() => {
     if (initialContentOpenRequest) {
@@ -40,45 +36,29 @@ export function ResourceRepositoryModule({
     }
   }, [initialContentOpenRequest])
 
-  const guideAction = view === "skill" ? (
-    <SystemAppTopBarActionButton
-      iconOnly
-      type="button"
-      aria-label="Skill 开发提示词"
-      tooltip="Skill 开发提示词"
-      onClick={() => setGuideOpen(true)}
-    >
-      <BookOpen />
-    </SystemAppTopBarActionButton>
-  ) : undefined
-
   return (
-    <>
-      <SystemAppWindowShell
-        tabs={RESOURCE_TABS}
-        value={view}
-        onValueChange={setView}
-        actions={guideAction}
-      >
-        <Tabs value={view} className="contents">
-          <TabsContent value="skill" className="m-0 h-full data-[state=inactive]:hidden">
-            <SkillsModule
-              pendingContentOpenRequest={initialContentOpenRequest}
-              onPendingContentOpenRequestConsumed={onInitialContentOpenRequestConsumed}
-            />
-          </TabsContent>
-          <TabsContent value="rule" className="m-0 h-full data-[state=inactive]:hidden">
-            <RulesModule
-              pendingContentOpenRequest={initialContentOpenRequest}
-              onPendingContentOpenRequestConsumed={onInitialContentOpenRequestConsumed}
-            />
-          </TabsContent>
-          <TabsContent value="prompt" className="m-0 h-full data-[state=inactive]:hidden">
-            <PromptsModule />
-          </TabsContent>
-        </Tabs>
-      </SystemAppWindowShell>
-      <SkillAuthoringGuideDialog open={guideOpen} onOpenChange={setGuideOpen} />
-    </>
+    <SystemAppWindowShell
+      tabs={RESOURCE_TABS}
+      value={view}
+      onValueChange={setView}
+    >
+      <Tabs value={view} className="contents">
+        <TabsContent value="skill" className="m-0 h-full data-[state=inactive]:hidden">
+          <SkillsModule
+            pendingContentOpenRequest={initialContentOpenRequest}
+            onPendingContentOpenRequestConsumed={onInitialContentOpenRequestConsumed}
+          />
+        </TabsContent>
+        <TabsContent value="rule" className="m-0 h-full data-[state=inactive]:hidden">
+          <RulesModule
+            pendingContentOpenRequest={initialContentOpenRequest}
+            onPendingContentOpenRequestConsumed={onInitialContentOpenRequestConsumed}
+          />
+        </TabsContent>
+        <TabsContent value="prompt" className="m-0 h-full data-[state=inactive]:hidden">
+          <PromptsModule />
+        </TabsContent>
+      </Tabs>
+    </SystemAppWindowShell>
   )
 }

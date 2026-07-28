@@ -39,7 +39,7 @@ describe("ResourceRepositoryModule", () => {
     await renderResourceRepository(roots)
 
     expect(document.body.textContent).toContain("技能内容")
-    expect(findButtonByAccessibleName("Skill 开发提示词")).toBeInstanceOf(HTMLButtonElement)
+    expect(findButtonByAccessibleName("Skill 开发提示词")).toBeUndefined()
 
     await clickButton("规则")
     expect(document.body.textContent).toContain("规则内容")
@@ -50,18 +50,7 @@ describe("ResourceRepositoryModule", () => {
     expect(findButtonByAccessibleName("Skill 开发提示词")).toBeUndefined()
 
     await clickButton("技能")
-    expect(findButtonByAccessibleName("Skill 开发提示词")).toBeInstanceOf(HTMLButtonElement)
-  })
-
-  it("opens the Skill authoring guide from the skills action", async () => {
-    await renderResourceRepository(roots)
-
-    const action = findButtonByAccessibleName("Skill 开发提示词")
-    if (!(action instanceof HTMLButtonElement)) throw new Error("Skill guide action not found")
-    await clickElement(action)
-
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Skill 开发提示词")
-    expect(findButtons("复制完整提示词")).toHaveLength(1)
+    expect(findButtonByAccessibleName("Skill 开发提示词")).toBeUndefined()
   })
 
   it("opens on the requested content type and forwards the pending request", async () => {
