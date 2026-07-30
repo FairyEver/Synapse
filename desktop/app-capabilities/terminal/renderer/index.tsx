@@ -66,6 +66,7 @@ import type {
   SynapseTerminalSession,
 } from "../../../src/types/terminal"
 import { encodeTerminalCommandInput } from "../shared/terminal-input"
+import { isTerminalShiftEnterEvent } from "./terminal-keyboard"
 import { createTerminalRenderingOptions } from "./terminal-rendering"
 import {
   getTerminalToolbarActions,
@@ -636,7 +637,8 @@ export function TerminalModule() {
     const resizeObserver = new ResizeObserver(() => syncTerminalGeometry())
     resizeObserver.observe(container)
 
-    const inputDisposable = xterm.onData((data) => {
+    const writeTerminalInput = (data: string) => {
+      if (disposed || xterm.options.disableStdin) return
       void terminalBridge.session.write({
         sessionId: terminalSessionId,
         data,
@@ -644,7 +646,17 @@ export function TerminalModule() {
         logger.error("Failed to write terminal input.", error)
         toast.error("写入终端失败")
       })
+    }
+
+    xterm.attachCustomKeyEventHandler((event) => {
+      if (!isTerminalShiftEnterEvent(event)) return true
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.type === "keydown") writeTerminalInput("\n")
+      return false
     })
+
+    const inputDisposable = xterm.onData(writeTerminalInput)
 
     const writeTerminalData = (data: string) => new Promise<void>((resolve) => {
       if (disposed) {

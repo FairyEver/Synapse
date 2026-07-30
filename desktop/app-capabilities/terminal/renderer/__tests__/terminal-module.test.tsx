@@ -263,14 +263,17 @@ const xtermState = vi.hoisted(() => ({
     clear: ReturnType<typeof vi.fn>
     resize: ReturnType<typeof vi.fn>
     loadAddon: ReturnType<typeof vi.fn>
+    attachCustomKeyEventHandler: ReturnType<typeof vi.fn>
     onData: ReturnType<typeof vi.fn>
     dispose: ReturnType<typeof vi.fn>
     cols: number
     rows: number
     options: { disableStdin?: boolean }
     emitInput: (data: string) => void
+    emitKeyEvent: (event: KeyboardEvent) => boolean | undefined
     inputDispose: ReturnType<typeof vi.fn>
     inputListener: ((data: string) => void) | null
+    keyEventHandler: ((event: KeyboardEvent) => boolean) | null
   }>,
   fitInstances: [] as Array<{ fit: ReturnType<typeof vi.fn>; proposeDimensions: ReturnType<typeof vi.fn> }>,
   webLinksInstances: [] as Array<{
@@ -355,6 +358,9 @@ vi.mock("@xterm/xterm", () => ({
         instance.rows = rows
       }),
       loadAddon: vi.fn(),
+      attachCustomKeyEventHandler: vi.fn((handler: (event: KeyboardEvent) => boolean) => {
+        instance.keyEventHandler = handler
+      }),
       onData: vi.fn((listener: (data: string) => void) => {
         instance.inputListener = listener
         return { dispose: instance.inputDispose }
@@ -364,8 +370,10 @@ vi.mock("@xterm/xterm", () => ({
       rows: options.rows ?? 30,
       options,
       emitInput: (data: string) => instance.inputListener?.(data),
+      emitKeyEvent: (event: KeyboardEvent) => instance.keyEventHandler?.(event),
       inputDispose: vi.fn(),
       inputListener: null as ((data: string) => void) | null,
+      keyEventHandler: null as ((event: KeyboardEvent) => boolean) | null,
     }
     xtermState.instances.push(instance)
     return instance
@@ -1102,6 +1110,92 @@ describe("TerminalModule", () => {
 
     await act(async () => {
       xtermState.instances[0]?.emitInput("pwd\r")
+      await Promise.resolve()
+    })
+
+    expect(toastState.error).toHaveBeenCalledWith("写入终端失败")
+  })
+
+  it("writes one line feed for a Shift+Enter key sequence", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    const results: Array<boolean | undefined> = []
+    const events = ["keydown", "keypress", "keyup"].map((type) => new KeyboardEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      key: "Enter",
+      shiftKey: true,
+    }))
+    await act(async () => {
+      for (const event of events) {
+        results.push(xtermState.instances[0]?.emitKeyEvent(event))
+      }
+      await Promise.resolve()
+    })
+
+    expect(results).toEqual([false, false, false])
+    expect(events.every((event) => event.defaultPrevented)).toBe(true)
+    expect(terminalBridge.writeSession).toHaveBeenCalledTimes(1)
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "\n",
+    })
+  })
+
+  it("leaves plain Enter, modified Shift+Enter, and IME input to xterm", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    const events = [
+      new KeyboardEvent("keydown", { key: "Enter" }),
+      new KeyboardEvent("keydown", { altKey: true, key: "Enter", shiftKey: true }),
+      new KeyboardEvent("keydown", { ctrlKey: true, key: "Enter", shiftKey: true }),
+      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, shiftKey: true }),
+      new KeyboardEvent("keydown", { isComposing: true, key: "Enter", shiftKey: true }),
+    ]
+
+    expect(events.map((event) => xtermState.instances[0]?.emitKeyEvent(event)))
+      .toEqual([true, true, true, true, true])
+    expect(terminalBridge.writeSession).not.toHaveBeenCalled()
+  })
+
+  it("does not write Shift+Enter into a read-only terminal", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({
+      id: "session-1",
+      groupId: "group-1",
+      title: "开发终端",
+      status: "lost",
+    })]
+
+    await renderModule()
+
+    const result = xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", {
+      key: "Enter",
+      shiftKey: true,
+    }))
+
+    expect(result).toBe(false)
+    expect(terminalBridge.writeSession).not.toHaveBeenCalled()
+  })
+
+  it("shows a user-visible error when Shift+Enter cannot be written", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    terminalBridge.writeSession.mockRejectedValueOnce(new Error("write failed"))
+
+    await renderModule()
+
+    await act(async () => {
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", {
+        key: "Enter",
+        shiftKey: true,
+      }))
       await Promise.resolve()
     })
 
