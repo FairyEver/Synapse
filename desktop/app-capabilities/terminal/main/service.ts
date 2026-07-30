@@ -55,7 +55,7 @@ import type {
   TerminalWriteSessionInput,
 } from "../shared/schema"
 import { createTerminalCoreEmulator, type TerminalCoreEmulator } from "./emulator"
-import { resolveTerminalEnvironment } from "./environment"
+import { resolveTerminalEnvironment, resolveTerminalShellArgs } from "./environment"
 import { createTerminalOutputBuffer, type TerminalOutputBuffer } from "./output-buffer"
 import type { TerminalStore, TerminalStoreState } from "./store"
 
@@ -1972,7 +1972,7 @@ export function createTerminalService(deps: {
 function spawnNodePty(input: SpawnPtyInput): PtyLike {
   ensureNodePtySpawnHelperExecutable()
   const pty = loadNodePty()
-  return pty.spawn(input.shell, [], {
+  return pty.spawn(input.shell, resolveTerminalShellArgs(input.shell), {
     name: "xterm-256color",
     cols: input.cols,
     rows: input.rows,

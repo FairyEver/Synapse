@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { resolveTerminalEnvironment } from "../environment"
+import {
+  resolveTerminalEnvironment,
+  resolveTerminalShellArgs,
+} from "../environment"
 
 describe("TerminalEnvironmentResolver", () => {
   it("constructs a Unix environment from an allowlist instead of cloning Electron", () => {
@@ -24,6 +27,7 @@ describe("TerminalEnvironmentResolver", () => {
       USER: "test",
       SHELL: "/bin/zsh",
       PATH: "/opt/homebrew/bin:/usr/bin:/bin",
+      LANG: "en_US.UTF-8",
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
     })
@@ -73,5 +77,47 @@ describe("TerminalEnvironmentResolver", () => {
       overrides: { USER_API_TOKEN: "explicit" },
     })
     expect(result.env.USER_API_TOKEN).toBe("explicit")
+  })
+
+  it("provides a UTF-8 locale for macOS GUI environments without locale variables", () => {
+    const result = resolveTerminalEnvironment({
+      platform: "darwin",
+      baseEnv: {
+        HOME: "/Users/test",
+        USER: "test",
+        SHELL: "/bin/bash",
+        PATH: "/usr/bin:/bin",
+      },
+      cwd: "/Users/test",
+      validateFilesystem: false,
+    })
+
+    expect(result.env.LANG).toBe("en_US.UTF-8")
+  })
+
+  it("preserves an explicit macOS character locale", () => {
+    const result = resolveTerminalEnvironment({
+      platform: "darwin",
+      baseEnv: {
+        HOME: "/Users/test",
+        SHELL: "/bin/bash",
+        PATH: "/usr/bin:/bin",
+        LC_CTYPE: "zh_CN.UTF-8",
+      },
+      cwd: "/Users/test",
+      validateFilesystem: false,
+    })
+
+    expect(result.env.LC_CTYPE).toBe("zh_CN.UTF-8")
+    expect(result.env).not.toHaveProperty("LANG")
+  })
+
+  it.each([
+    ["/bin/bash", "darwin", ["-l"]],
+    ["/bin/zsh", "darwin", ["-l"]],
+    ["/opt/homebrew/bin/fish", "darwin", []],
+    ["/bin/bash", "linux", []],
+  ] as const)("resolves launch arguments for %s on %s", (shell, platform, expected) => {
+    expect(resolveTerminalShellArgs(shell, platform)).toEqual(expected)
   })
 })

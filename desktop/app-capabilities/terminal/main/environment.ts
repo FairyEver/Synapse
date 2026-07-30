@@ -61,6 +61,14 @@ export function resolveTerminalEnvironment(input: {
     validateEnvironmentEntry(key, value)
     env[key] = value
   }
+  if (
+    platform === "darwin"
+    && !env.LANG?.trim()
+    && !env.LC_ALL?.trim()
+    && !env.LC_CTYPE?.trim()
+  ) {
+    env.LANG = "en_US.UTF-8"
+  }
 
   return { shell, cwd, env, environmentKeys: Object.keys(env).sort() }
 }
@@ -73,6 +81,14 @@ export function resolveDefaultTerminalShell(
     return findEnvEntry(env, "ComSpec", platform)?.value || "powershell.exe"
   }
   return findEnvEntry(env, "SHELL", platform)?.value || "/bin/zsh"
+}
+
+export function resolveTerminalShellArgs(
+  shell: string,
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  if (platform !== "darwin") return []
+  return ["bash", "zsh"].includes(path.basename(shell)) ? ["-l"] : []
 }
 
 function validateEnvironmentEntry(key: string, value: string): void {
