@@ -782,7 +782,7 @@ export class EditorInstallCore {
               },
             })
           } catch (error) {
-            if (backupPathForRestore && await pathExists(backupPathForRestore)) {
+            if (backupPathForRestore && await pathEntryExists(backupPathForRestore)) {
               const restoreAuditMetadata = {
                 ...auditMetadata,
                 operation: `${operation}-backup-restore`,

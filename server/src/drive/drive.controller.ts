@@ -44,6 +44,7 @@ import { DriveUploadTooLargeError, type DriveStoragePort, LocalDriveStorage } fr
 const driveAccessCookieNamePrefix = "synapse_drive_access"
 const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
 const DRIVE_HTML_RENDER_CSP = "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; media-src 'self' data: blob: https:; connect-src 'self' https:; worker-src 'self' blob: data:; frame-src 'self' https:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock;"
+const DRIVE_SITE_HTML_RENDER_CSP = DRIVE_HTML_RENDER_CSP.replace("sandbox allow-scripts", "sandbox allow-scripts allow-same-origin")
 const PUBLIC_ASSET_CACHE_CONTROL = "no-cache, must-revalidate"
 type DriveAccessCookieKind = "share" | "site"
 
@@ -1197,7 +1198,7 @@ export class DrivePublicController {
     if (access.site.accessMode === "password") response.setHeader("Vary", "Cookie")
     response.setHeader("X-Content-Type-Options", "nosniff")
     if (isDriveSiteHtmlPath(access.asset.relativePath)) {
-      response.setHeader("Content-Security-Policy", DRIVE_HTML_RENDER_CSP)
+      response.setHeader("Content-Security-Policy", DRIVE_SITE_HTML_RENDER_CSP)
       response.setHeader("Referrer-Policy", "no-referrer")
     }
     if (object.size !== undefined) response.setHeader("Content-Length", object.size.toString())

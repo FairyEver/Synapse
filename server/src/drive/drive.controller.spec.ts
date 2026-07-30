@@ -444,7 +444,7 @@ describe("DriveController", () => {
     const response = await request(app!.getHttpServer()).get("/sites/site_public/").expect(200)
     expect(sites.resolvePublicSite).toHaveBeenCalledWith("site_public", { cookie: null, relativePath: "" })
     expect(response.headers["content-type"]).toContain("text/html")
-    expectDriveHtmlRenderCsp(response.headers["content-security-policy"])
+    expectDriveHtmlRenderCsp(response.headers["content-security-policy"], { allowSameOrigin: true })
     expect(response.headers["referrer-policy"]).toBe("no-referrer")
     expect(response.text).toBe("<h1>Home</h1>")
   })
@@ -2285,14 +2285,17 @@ function driveAccessCookieName(kind: "share", publicId: string): string {
   return `synapse_drive_access_${kind}_${Buffer.from(publicId, "utf8").toString("base64url")}`
 }
 
-function expectDriveHtmlRenderCsp(value: string | undefined): void {
+function expectDriveHtmlRenderCsp(value: string | undefined, options: { readonly allowSameOrigin?: boolean } = {}): void {
   expect(value).toContain("frame-ancestors 'self'")
   expect(value).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:")
   expect(value).toContain("connect-src 'self' https:")
-  expect(value).toContain("sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock")
+  expect(value).toContain(options.allowSameOrigin
+    ? "sandbox allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock"
+    : "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock")
   expect(value).toContain("object-src 'none'")
   expect(value).toContain("base-uri 'none'")
-  expect(value).not.toContain("allow-same-origin")
+  if (options.allowSameOrigin) expect(value).toContain("allow-same-origin")
+  else expect(value).not.toContain("allow-same-origin")
   expect(value).not.toContain("allow-top-navigation")
   expect(value).not.toContain("script-src 'none'")
 }

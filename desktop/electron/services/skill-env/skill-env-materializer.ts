@@ -105,6 +105,28 @@ function assertUsableIdentity(entry: EntryIdentity, label: string): void {
   }
 }
 
+async function readTargetSymlinkSnapshot(
+  targetPath: string,
+): Promise<FileSnapshot | null> {
+  let entry
+  try {
+    entry = await lstat(targetPath, { bigint: true })
+  } catch (error) {
+    if (isMissingPathError(error)) return null
+    throw error
+  }
+  if (!entry.isSymbolicLink()) return null
+  assertUsableIdentity(entry, "Skill 目标符号链接")
+  return {
+    ctimeNs: entry.ctimeNs,
+    dev: entry.dev,
+    ino: entry.ino,
+    mtimeNs: entry.mtimeNs,
+    mode: entry.mode,
+    size: entry.size,
+  }
+}
+
 function isSameFilesystemPath(left: string, right: string): boolean {
   return arePathsEqualForCompare(left, right, {
     platform: process.platform,
@@ -352,6 +374,35 @@ async function assertTargetStillMissing(targetPath: string): Promise<void> {
   throw createChangedTargetDirectoryError()
 }
 
+async function assertSameTargetSymlink(
+  targetPath: string,
+  expected: FileSnapshot,
+): Promise<void> {
+  let current
+  try {
+    current = await lstat(targetPath, { bigint: true })
+  } catch (error) {
+    if (isMissingPathError(error)) throw createChangedTargetDirectoryError()
+    throw error
+  }
+  if (!current.isSymbolicLink() || !hasSameFileSnapshot(expected, current)) {
+    throw createChangedTargetDirectoryError()
+  }
+}
+
+function createSymlinkMaterializationGuard(
+  targetPath: string,
+  targetSymlink: FileSnapshot,
+): SkillEnvMaterializationGuard {
+  return {
+    validate: () => assertSameTargetSymlink(targetPath, targetSymlink),
+    validateMovedTarget: (movedTargetPath) =>
+      assertSameTargetSymlink(movedTargetPath, targetSymlink),
+    validateMovedTargetForRestore: (movedTargetPath) =>
+      assertSameTargetSymlink(movedTargetPath, targetSymlink),
+  }
+}
+
 function createMaterializationGuard(
   targetPath: string,
   targetDirectory: TargetDirectoryIdentity | null,
@@ -447,8 +498,13 @@ export async function materializeSkillEnv(
   const stagedEnvPath = path.join(input.stagingDirectoryPath, SKILL_RUNTIME_ENV_PATH)
 
   await assertStagingHasNoRuntimeEnv(input.stagingDirectoryPath)
-  const targetDirectory = await readTargetDirectoryIdentity(input.existingTargetDirectoryPath)
   const inheritExistingEnv = input.inheritExistingEnv !== false
+  const targetSymlink = inheritExistingEnv
+    ? null
+    : await readTargetSymlinkSnapshot(input.existingTargetDirectoryPath)
+  const targetDirectory = targetSymlink === null
+    ? await readTargetDirectoryIdentity(input.existingTargetDirectoryPath)
+    : null
   const existing = targetDirectory === null || !inheritExistingEnv
     ? null
     : await readExistingEnv(input.existingTargetDirectoryPath, targetDirectory)
@@ -462,11 +518,18 @@ export async function materializeSkillEnv(
         .then((value): ExistingEnvGuardSnapshot => value === null
           ? { kind: "missing" }
           : { kind: "file", value })
-  input.registerPrecondition?.(createMaterializationGuard(
-    input.existingTargetDirectoryPath,
-    targetDirectory,
-    envGuard,
-  ))
+  input.registerPrecondition?.(
+    targetSymlink
+      ? createSymlinkMaterializationGuard(
+          input.existingTargetDirectoryPath,
+          targetSymlink,
+        )
+      : createMaterializationGuard(
+          input.existingTargetDirectoryPath,
+          targetDirectory,
+          envGuard,
+        ),
+  )
 
   let example: string
   try {

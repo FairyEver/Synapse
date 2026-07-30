@@ -1,4 +1,4 @@
-import { lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { lstat, mkdtemp, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -1119,6 +1119,105 @@ describe("EditorInstallService security", () => {
         resource: targetPath,
       }),
     ]))
+  })
+
+  it("replaces a relative Skill directory symlink without following it", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    const linkedSkillPath = path.join(root, "linked-skills", "test-skill")
+    const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
+    const relativeLink = path.relative(path.dirname(targetPath), linkedSkillPath)
+    await mkdir(linkedSkillPath, { recursive: true })
+    await writeFile(path.join(linkedSkillPath, "SKILL.md"), "# Linked Skill\n", "utf8")
+    await mkdir(path.dirname(targetPath), { recursive: true })
+    await symlink(relativeLink, targetPath, "dir")
+
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: "目标位置已有其他 Skill。",
+      scope: "global",
+      status: "conflict",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockImplementation(async (
+      { stagingDirectoryPath }: { stagingDirectoryPath: string },
+    ) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# Installed Skill\n", "utf8")
+    })
+
+    await expect(editorInstallService.installToEditor({
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      replaceConfirmed: true,
+      scope: "global",
+    }, {
+      actor: { kind: "user" },
+      auditSink: new InMemoryAuditSink(),
+      permissionGuard: createPermissionGuard(),
+    })).resolves.toMatchObject({
+      contentId: "skill-1",
+      targetPath,
+    })
+
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8"))
+      .resolves.toBe("# Installed Skill\n")
+    const installedEntry = await lstat(targetPath)
+    expect(installedEntry.isDirectory()).toBe(true)
+    expect(installedEntry.isSymbolicLink()).toBe(false)
+    expect((await lstat(backupPath)).isSymbolicLink()).toBe(true)
+    await expect(readlink(backupPath)).resolves.toBe(relativeLink)
+    await expect(readFile(path.join(linkedSkillPath, "SKILL.md"), "utf8"))
+      .resolves.toBe("# Linked Skill\n")
+  })
+
+  it("restores a relative Skill directory symlink when replacement fails", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    const linkedSkillPath = path.join(root, "linked-skills", "test-skill")
+    const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
+    const relativeLink = path.relative(path.dirname(targetPath), linkedSkillPath)
+    await mkdir(linkedSkillPath, { recursive: true })
+    await writeFile(path.join(linkedSkillPath, "SKILL.md"), "# Linked Skill\n", "utf8")
+    await mkdir(path.dirname(targetPath), { recursive: true })
+    await symlink(relativeLink, targetPath, "dir")
+
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: "目标位置已有其他 Skill。",
+      scope: "global",
+      status: "conflict",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockRejectedValue(new Error("prepare failed"))
+
+    await expect(editorInstallService.installToEditor({
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      replaceConfirmed: true,
+      scope: "global",
+    }, {
+      actor: { kind: "user" },
+      auditSink: new InMemoryAuditSink(),
+      permissionGuard: createPermissionGuard(),
+    })).rejects.toThrow("prepare failed")
+
+    expect((await lstat(targetPath)).isSymbolicLink()).toBe(true)
+    await expect(readlink(targetPath)).resolves.toBe(relativeLink)
+    await expect(lstat(backupPath)).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(linkedSkillPath, "SKILL.md"), "utf8"))
+      .resolves.toBe("# Linked Skill\n")
   })
 
   it("preserves a concurrent target and desktop backup when replacement fails after backup", async () => {
