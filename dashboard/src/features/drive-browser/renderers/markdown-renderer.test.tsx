@@ -455,6 +455,20 @@ describe('DriveMarkdownRenderer', () => {
     expect(pendingOverlay()).not.toBeNull()
   })
 
+  it('preserves the native text selection while syncing the comment action', async () => {
+    renderMarkdown()
+    selectStrongText()
+
+    await act(async () => {
+      document.dispatchEvent(new Event('selectionchange'))
+    })
+    await flushAnimationFrames()
+
+    expect(window.getSelection()?.toString()).toBe('重点')
+    expect(buttonWithText('添加评论')).not.toBeNull()
+    expect(pendingOverlay()).not.toBeNull()
+  })
+
   it('shows an error when creating a comment fails', async () => {
     annotationsMock.createThread.mockRejectedValueOnce(new Error('文件已有新内容。'))
     renderMarkdown()

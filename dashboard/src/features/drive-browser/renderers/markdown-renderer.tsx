@@ -147,6 +147,10 @@ function DriveMarkdownBody({
     () => renderMarkdownAnnotationHtml(renderedHtml, annotations.threads),
     [annotations.threads, renderedHtml]
   )
+  const annotatedHtmlProperty = useMemo(
+    () => ({ __html: annotated.html }),
+    [annotated.html]
+  )
   const canCommentAnnotations = effectiveAnnotationContext?.context === 'owner' || Boolean(effectiveAnnotationContext?.canComment)
   const canCreateAnnotation = annotationsEnabled
     && Boolean(effectiveAnnotationContext)
@@ -499,7 +503,7 @@ function DriveMarkdownBody({
           onMouseUp={syncSelectionActionFromCurrentSelection}
           onPointerUp={syncSelectionActionFromCurrentSelection}
           onKeyUp={syncSelectionActionFromCurrentSelection}
-          dangerouslySetInnerHTML={{ __html: annotated.html }}
+          dangerouslySetInnerHTML={annotatedHtmlProperty}
         />
         {annotationOverlayRects.length > 0 ? (
           <div aria-hidden className='pointer-events-none absolute inset-0'>
