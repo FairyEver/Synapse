@@ -458,7 +458,7 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("location = /dashboard")
     expect(nginx).toContain("return 301 /console/;")
     expect(nginx).toContain("location = /admin")
-    expect(nginx).toContain("location = /admin/ {\n    alias /app/dashboard/dist/admin.html;\n  }")
+    expect(nginx).toContain("location = /admin/ {\n    root /app/dashboard/dist;\n    try_files /admin.html =404;\n  }")
     expect(nginx).toContain("location /admin/")
     expect(nginx).toContain("try_files $uri $uri/ /admin/admin.html;")
     expect(nginx).toContain("return 301 /admin/$1$is_args$args;")
