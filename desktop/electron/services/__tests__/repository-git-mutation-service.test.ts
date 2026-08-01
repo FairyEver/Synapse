@@ -132,10 +132,11 @@ describe("repository git mutation service", () => {
     }
 
     expect(await readUnpushedCommitCount(repository, {
+      repositoryUuid: repository.uuid,
+      localPath: root,
       status: "ready",
       isGitRepository: true,
       gitRootPath: root,
-      repository,
     })).toBe(1)
   })
 
