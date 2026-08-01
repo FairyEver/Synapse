@@ -1,5 +1,7 @@
 # Team Permission and Desktop Login Design
 
+> Retired on 2026-07-31. The remaining team relationship domain was removed from the product and database; this document is retained only as a historical decision record.
+>
 > Superseded on 2026-05-25 by `docs/superpowers/specs/2026-05-25-personal-module-permissions-design.md`.
 > Team-based permissions are no longer the product direction. Product access is granted directly to individual users through `module.*` permissions.
 

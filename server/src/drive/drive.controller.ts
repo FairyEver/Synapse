@@ -7,8 +7,9 @@ import { Readable, Writable } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
-import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
+import { UserAuthService } from "../auth/user-auth.service"
+import { userSessionCookieName } from "../auth/user-web-session"
 import { formatAuditError } from "../common/audit-error"
 import { AuditLogService } from "../common/audit-log.service"
 import { attachmentContentDisposition, inlineContentDisposition } from "../common/content-disposition"
@@ -978,7 +979,7 @@ export class DrivePublicController {
     private readonly drive: DriveService,
     @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
     @Optional() private readonly publicAssets?: DrivePublicAssetService,
-    @Optional() private readonly dashboardAuth?: AdminAuthService,
+    @Optional() private readonly userAuth?: UserAuthService,
     @Optional() private readonly annotations?: DriveAnnotationService,
     @Optional() private readonly sites?: DriveSiteService,
     @Optional() private readonly documentImages?: DriveDocumentImageService,
@@ -1679,12 +1680,12 @@ export class DrivePublicController {
   }
 
   private async resolveOptionalUserId(request: Request): Promise<string | null> {
-    if (!this.dashboardAuth) return null
-    const token = readRequestCookie(request, "synapse_admin")
+    if (!this.userAuth) return null
+    const token = readRequestCookie(request, userSessionCookieName)
     const session = token
-      ? await this.dashboardAuth.verifyDashboardSession(token)
+      ? await this.userAuth.verifyWebSession(token)
       : null
-    return session?.role === "user" ? session.id : null
+    return session?.userId ?? null
   }
 
   @Get("/share/:shareId/download")

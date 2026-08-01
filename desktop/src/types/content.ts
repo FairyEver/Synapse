@@ -229,6 +229,7 @@ type SynapseContentMutationResultBase = {
 
 export type SynapseContentMutationSuccessResult = SynapseContentMutationResultBase & {
   status: "saved"
+  syncStatus: "synced" | "pending" | "recovery-needed" | "local-only"
   title: string
   latestHistoryDirname: string
   modifiedAt: string

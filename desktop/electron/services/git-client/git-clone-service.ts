@@ -13,8 +13,8 @@ import {
 
 type CloneInput = {
   readonly remoteUrl: string
-  readonly targetPath: string
-  readonly name: string
+  readonly parentDirectory: string
+  readonly directoryName: string
 }
 
 type CloneResult = {
@@ -31,7 +31,13 @@ type CloneDeps = {
   readonly pathExists: (filePath: string) => Promise<boolean>
 }
 
+type CloneOptions = {
+  readonly operationId?: string
+  readonly signal?: AbortSignal
+}
+
 export function detectRemoteKind(remoteUrl: string): SynapseGitRemoteKind {
+  if (/^http:\/\//i.test(remoteUrl)) return "http"
   if (/^https:\/\//i.test(remoteUrl)) return "https"
   if (/^(ssh:\/\/|[^@\s]+@[^:\s]+:.+)/i.test(remoteUrl)) return "ssh"
   return "unknown"
@@ -39,18 +45,23 @@ export function detectRemoteKind(remoteUrl: string): SynapseGitRemoteKind {
 
 export function createGitCloneService(deps: CloneDeps) {
   return {
-    async clone(input: CloneInput): Promise<CloneResult> {
+    async clone(input: CloneInput, options: CloneOptions = {}): Promise<CloneResult> {
       const operation = "git.clone"
-      const operationId = createGitOperationId()
+      const operationId = options.operationId ?? createGitOperationId()
       const startedAt = performance.now()
       const remoteUrl = input.remoteUrl.trim()
-      const targetPath = path.resolve(input.targetPath)
+      const parentDirectory = path.resolve(input.parentDirectory)
+      const directoryName = input.directoryName.trim()
+      if (!directoryName || directoryName === "." || directoryName === ".." || path.basename(directoryName) !== directoryName) {
+        throw new Error("仓库目录名无效。")
+      }
+      const targetPath = path.join(parentDirectory, directoryName)
       const remoteKind = detectRemoteKind(remoteUrl)
       logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, {
         remoteKind,
         remoteUrl: sanitizeRemoteUrl(remoteUrl),
         targetPath,
-        nameLength: input.name.length,
+        nameLength: directoryName.length,
       })
       if (!remoteUrl) {
         logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "missing-remote-url", { targetPath })
@@ -69,13 +80,14 @@ export function createGitCloneService(deps: CloneDeps) {
         await deps.commandRunner.run({
           cwd: path.dirname(targetPath),
           args: ["clone", "--progress", remoteUrl, targetPath],
+          abortSignal: options.signal,
           operation,
           operationId,
           repoPath: targetPath,
           remoteUrl,
           timeoutMs: 300_000,
         })
-        const repository = await deps.registry.addLocal({ name: input.name, localPath: targetPath })
+        const repository = await deps.registry.addLocal({ name: directoryName, localPath: targetPath })
         logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, {
           repositoryId: repository.id,
           repoPath: repository.localPath,

@@ -11,6 +11,7 @@ async function makeRegistry() {
   return createGitRepositoryRegistry({
     userDataPath: tempDir,
     now: () => new Date("2026-06-17T10:00:00.000Z"),
+    resolveGitRoot: async (localPath) => path.resolve(localPath),
   })
 }
 
@@ -35,53 +36,36 @@ describe("git repository registry", () => {
     await registry.markOpened(added.id)
     expect((await registry.list())[0]?.lastOpenedAt).toBe("2026-06-17T10:00:00.000Z")
 
-    await registry.remove({ repositoryId: added.id, mode: "keep-local" })
+    await registry.remove(added.id)
     expect(await registry.list()).toEqual([])
   })
 
-  it("trashes local files before removing repository records", async () => {
-    const trashItem = vi.fn(async () => undefined)
+  it("registers the resolved Git root when a repository subdirectory is selected", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-git-registry-"))
-    const localPath = path.join(tempDir, "docs")
-    await mkdir(localPath)
+    const rootPath = path.join(tempDir, "docs")
     const registry = createGitRepositoryRegistry({
       userDataPath: tempDir,
       now: () => new Date("2026-06-17T10:00:00.000Z"),
-      trashItem,
+      resolveGitRoot: async () => rootPath,
     })
-    const added = await registry.addLocal({ name: "Docs", localPath })
 
-    await registry.remove({ repositoryId: added.id, mode: "trash-local" })
+    const added = await registry.addLocal({ name: "Docs", localPath: path.join(rootPath, "nested") })
 
-    expect(trashItem).toHaveBeenCalledWith(localPath)
-    expect(await registry.list()).toEqual([])
+    expect(added.localPath).toBe(rootPath)
   })
 
-  it("keeps repository records when trashing local files fails", async () => {
-    const trashItem = vi.fn(async () => {
-      throw new Error("trash failed")
-    })
-    const logger = { error: vi.fn(), info: vi.fn() }
+  it("does not register paths that cannot be resolved to a Git root", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-git-registry-"))
-    const localPath = path.join(tempDir, "docs")
-    await mkdir(localPath)
     const registry = createGitRepositoryRegistry({
-      logger,
       userDataPath: tempDir,
-      now: () => new Date("2026-06-17T10:00:00.000Z"),
-      trashItem,
+      resolveGitRoot: async () => {
+        throw new Error("所选目录不是 Git 仓库。")
+      },
     })
-    const added = await registry.addLocal({ name: "Docs", localPath })
 
-    await expect(registry.remove({ repositoryId: added.id, mode: "trash-local" })).rejects.toThrow("trash failed")
-
-    expect(await registry.list()).toEqual([added])
-    expect(logger.error).toHaveBeenCalledWith("Git operation failed.", expect.objectContaining({
-      operation: "git.repository.remove",
-      operationId: expect.any(String),
-      repositoryId: added.id,
-      mode: "trash-local",
-    }))
+    await expect(registry.addLocal({ name: "Docs", localPath: "/tmp/not-git" }))
+      .rejects.toThrow("所选目录不是 Git 仓库。")
+    expect(await registry.list()).toEqual([])
   })
 
   it("deduplicates repositories by normalized path", async () => {
@@ -112,6 +96,7 @@ describe("git repository registry", () => {
       userDataPath: tempDir,
       now: () => new Date("2026-06-17T10:00:00.000Z"),
       platform: "win32",
+      resolveGitRoot: async (localPath) => localPath,
     })
     const first = await registry.addLocal({ name: "Repo", localPath: "C:\\Work\\Repo" })
     const second = await registry.addLocal({ name: "Repo Again", localPath: "c:\\work\\repo\\" })
@@ -136,6 +121,7 @@ describe("git repository registry", () => {
       logger,
       userDataPath: tempDir,
       now: () => new Date("2026-06-17T10:00:00.000Z"),
+      resolveGitRoot: async (localPath) => path.resolve(localPath),
     })
     const first = await registry.addLocal({ name: "Docs", localPath: "/tmp/docs" })
     await registry.addLocal({ name: "Website", localPath: "/tmp/website" })
@@ -144,13 +130,15 @@ describe("git repository registry", () => {
     await writeFile(registryPath, "{\"version\":1,\"repositories\":[", "utf8")
 
     await expect(registry.list()).resolves.toEqual([first])
+    await expect(registry.list()).resolves.toEqual([first])
+    await expect(readFile(registryPath, "utf8")).resolves.toContain(first.id)
     expect(logger.error).toHaveBeenCalledWith("Git repository registry is malformed.", { quarantined: true })
     expect(logger.info).toHaveBeenCalledWith("Recovered Git repository registry from backup.", {
       repositoryCount: 1,
     })
   })
 
-  it("quarantines malformed registry files instead of blocking repository listing", async () => {
+  it("keeps malformed registry files and reports corruption when no backup is available", async () => {
     const logger = { error: vi.fn(), info: vi.fn() }
     tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-git-registry-"))
     const registryDir = path.join(tempDir, "git-client")
@@ -160,13 +148,14 @@ describe("git repository registry", () => {
       logger,
       userDataPath: tempDir,
       now: () => new Date("2026-06-17T10:00:00.000Z"),
+      resolveGitRoot: async (localPath) => path.resolve(localPath),
     })
 
-    await expect(registry.list()).resolves.toEqual([])
+    await expect(registry.list()).rejects.toThrow("Git 仓库列表已损坏且没有可用备份")
 
     const entries = await readdir(registryDir)
     expect(entries.some((entry) => /^repositories\.invalid-.*\.json$/.test(entry))).toBe(true)
-    expect(entries).not.toContain("repositories.json")
+    expect(entries).toContain("repositories.json")
     expect(logger.error).toHaveBeenCalledWith("Git repository registry is malformed.", { quarantined: true })
   })
 })

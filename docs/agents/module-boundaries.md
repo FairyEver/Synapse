@@ -1,0 +1,88 @@
+# 模块长期边界
+
+本文件只记录跨入口、跨存储或容易被后续改动破坏的稳定边界。修改某个模块前还必须在 `docs/` 中搜索其设计规格和 ADR。
+
+## App 能力包
+
+### Text Extractor
+
+- app id `text-extractor`，namespace `text_extractor`。
+- 只读：`app.text_extractor.document.extract` / `app_text_extractor_document_extract` / Workflow `text_extract`。
+- 直接保存：`app.text_extractor.document.extract_to_file` / `app_text_extractor_document_extract_to_file`。必须在主进程组合提取与 Text File Writer，正文不得经过 MCP 响应或第二次请求。
+- PDF、DOCX、App、MCP、Workflow 复用同一格式中立服务、限制和错误契约。主进程完成权限、审计、安全打开和身份校验；Worker 只接收已验证字节，不重新打开路径。正文、片段和未脱敏完整路径不进入日志/审计。
+
+### Text File Writer
+
+- app id `text-file-writer`，namespace `text_file_writer`，capability `app.text_file_writer.file.write`，tool/node `app_text_file_writer_file_write`，无 Deep Link。
+- 所有入口复用能力包 `main/service.ts`：绝对真实目标、默认拒绝覆盖、原子写入、`fs.write.outside-userdata` 权限与审计。
+- Writer 不限制扩展名，支持 `utf8/utf16le`；`format` 返回小写末尾扩展名或空字符串。组合调用方仍保留自身扩展名契约：Text Extractor `.txt/.md/.csv`，HTML Generator `.html/.htm`。
+- 不设正文长度上限，不记录正文，不在入口复制校验/写入逻辑。
+
+### HTML Generator
+
+- app id `html-generator`，namespace `html_generator`。
+- 字符串能力 `app.html_generator.ejs.generate`，文件能力 `app.html_generator.ejs_file.generate`，对应 tool/node 使用下划线形式。
+- EJS 模板是受信任可执行配置；Workflow 只允许上游绑定严格 JSON 对象数据，不动态替换模板。
+- 所有入口复用单例渲染核心，在一次性 Worker 固定 EJS 版本/options、禁用 include，并执行输入输出限制、超时、终止、调度、`shell.exec` 权限、脱敏错误和审计。
+- Worker 不是安全沙箱。生成器不预览、打开、清洗或验证 HTML；文件能力组合 Text File Writer 以 UTF-8 写入绝对 `.html/.htm` 路径。
+
+### File Opener
+
+- app id `file-opener`，namespace `file_opener`，capability `app.file_opener.file.open`，tool/node `app_file_opener_file_open`，Deep Link action `open`。
+- 所有入口复用 `FileOpenerService.open()`，参数统一为 `path`；只接受一个已有绝对本地普通文件，拒绝 URL、目录和符号链接。
+- 成功只表示操作系统接受请求，不承诺外部应用启动、聚焦或完成加载。
+
+### Terminal
+
+- app id `terminal`，capability 使用 `app.terminal.<subdomain>.<action>`，tool 名严格点转下划线。
+- UI、IPC、MCP 复用 `desktop/app-capabilities/terminal/main/service.ts` 的分组、会话、命令、历史和不可变 `sessionId`。
+- 不得新增通用 `shell.exec`、MCP 专属终端、静默输入抢占、隐式停止删除或自动强杀旁路。
+- 生命周期、注意三态、写入租约、输入/尺寸修订和输出水位相互正交。loopback MCP 不要求 Terminal 专属 token，但传输层必须提供稳定 `clientId` 与 `controllerInstanceId` 约束租约、幂等、配额和审计。
+- 结构元数据使用已注册 `app.terminal.*` DataRepository；原始输出/检查点只进入专属有界加密块存储，安全存储不可用时不得回退明文。
+- 普通备份排除输出、检查点、命令正文、活动租约、删除意图和短期幂等记录；恢复中的运行会话转为 `lost`，不得重投生命周期操作。
+
+### Notifier
+
+- Sound Notifier 是声音能力包，不是 System App。
+- System Notifier 的完整权威规格是 `docs/superpowers/specs/2026-07-23-system-notifier-v1-design.md`。修改前必须完整阅读，不得以本摘要代替。
+
+## Drive
+
+- `公开素材`使用稳定、匿名、不过期 `/files/<assetId>`。允许 JPG/JPEG/PNG/WebP/GIF/AVIF/ICO 和 PDF/DOCX/XLSX/PPTX/TXT/MD/CSV；禁止 SVG、主动网页内容、压缩包、可执行、旧 Office 和宏格式。
+- 图片 inline，文档 attachment；替换只允许同一大类。需要密码、有效期或敏感控制时使用普通 Drive 分享，不得绕过。
+- 独立 HTML 在用户未明确发布整个文件夹时默认 `/share/...`；多文件站点或明确发布文件夹时使用 `/sites/...`。文件夹即使只有 `index.html` 也可发布为 Site；仅指定上传目标文件夹或泛称网站不等于发布整个文件夹。
+
+## Agent 与 Knowledge Base
+
+- Agent 会话只能基于已配置项目，新会话绑定 `agentType`；运行状态按 conversation 隔离，同项目多会话不得共享队列、busy 或 live session。
+- persona 是 conversation 级固定身份，只能在新建对话时选择，创建后不得在 composer、IPC 或 live session 切换。
+- 普通/未绑定模型 persona 使用新建对话选择的模型；绑定模型 persona 固定使用其当前绑定并保存为基础模型。
+- conversation 保存 persona ID 和创建时 snapshot，每轮使用当前可访问的最新配置；配置变化关闭并重建 live session。persona 不存在、无权访问或缓存缺失时不得降级普通对话：保留历史查看/复制/导出，禁用发送并引导新建。
+- slash menu 只插入，不立即发送，也不是通用命令面板。
+- Quick Input 是独立 System App。Agent 只消费其文本并默认直接发送；不得恢复“直接发送”开关或塞回 slash menu。
+- 其它 Knowledge Base 规则见 `docs/agents/knowledge-base.md`。
+
+## Workflow 与 Automation
+
+- Workflow 保持外层 DAG；MCP/agent 写操作走 get → mutate → validate → save，校验失败不得保存，不得删除 end 节点。
+- 文件/文件夹参数用 `allowMultiple` 明确单选/多选。多选是有序、非空、最多 100 项且不重复的资源引用数组；两者不得自动转换。子工作流直接绑定时资源类型与 `allowMultiple` 必须一致。
+- loop 退出由子图真实节点和 Loop Output 的 continue/break 出口表达，不得退回隐藏配置表达式。
+- Scheduler 子进程环境经过 allowlist；`PATH` 按用户配置和 login shell 合并；运行诊断必须保留并用于失败排查。
+
+## Rule、Skill、Content 与 Secrets
+
+- 写入编辑器目录、覆盖、替换、备份失败等敏感路径必须确认、权限检查和审计；备份失败阻断替换。安装与复制文案不得混用。
+- 资源仓库非只读 Skill 采用协作编辑：有写权限且完成仓库身份配置的用户可更新，原 `createdBy` 不变并记录修改者；删除、恢复、永久删除仅创建者。该规则不改变云 Skill Repository owner 模型，不扩展到 Rule/Prompt。
+- Skill 卸载统一使用 `skill-uninstaller`：无路径只扫已注册 Agent 全局 Skill 根，有路径则受限递归；单个 `SKILL.md` 最大 1 MiB，超限标记不完整并继续下级；执行前重验名称、真实路径和符号链接，确认后只移入系统废纸篓。IDE 管理不得另写删除逻辑。
+- 可持续配置在根 `.env.example` 声明，安装器生成/合并本地 `.env`；每个 Skill 最多 100 个变量。不得把真实 `.env` 写入资源仓库，也不得把持续同步值替换进 `SKILL.md`。
+- 密钥名称与 `.env` key 构成关联，创建后不可改名；Secrets update 至少包含 `value` 或 `description`。值变化只扫描可信编辑器 Skill 目录，经用户确认进入内存串行队列，不保存安装实例、不静默改写。
+- Skill `.env` 扫描、重装合并和队列更新上限 1 MiB。macOS/Linux 新文件默认 owner-only；重装不放宽权限。Windows 可扫描但队列写入逐项失败并提示手动处理，不降级非原子写。
+- 发布统一排除 `.env`、`.env.*`（根 `.env.example` 除外）、`.synapse.json`、`.synapse.repository.json`、其它隐藏项和符号链接。`.synapse.json` 只存资源仓库身份，云身份只存 `.synapse.repository.json`。
+- 云上传读取身份时拒绝符号链接/非普通文件，校验路径在 Skill 目录内且读取前后身份未变化，并经过本地文件读取权限和审计；失败必须在远端更新前阻断。
+- 发布不得基于正文中 token/Authorization/URL 参数模式或 `id_rsa`、`.pem`、`.key` 文件名做硬阻断；仍必须执行路径、容量、符号链接、运行时 `.env` 排除和权限规则。
+- 发布保存区分本地提交与远端同步。只有预检快照、保存后内容和身份文件并发复查一致时更新关联；仓库已保存但关联失败时不得重复提交，提供重试关联入口。
+
+## 扫描与发布
+
+- 扫描详情“发布到仓库”不得静默落库；覆盖路径只预填本地版本并进入内容详情编辑态，用户保存后才写入。
+- 修改编辑器 Rule/Skill/Prompt 安装、扫描、复制或兼容策略前，阅读 `docs/reference/editor-integration-matrix.md`。

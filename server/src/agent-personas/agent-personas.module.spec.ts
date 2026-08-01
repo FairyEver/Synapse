@@ -4,9 +4,7 @@ import { AgentPersonasModule } from "./agent-personas.module"
 
 const env = {
   DATABASE_URL: "postgresql://synapse:synapse@localhost:5433/synapse",
-  ADMIN_EMAIL: "admin@synapse.local",
-  ADMIN_PASSWORD: "local-admin-password",
-  ADMIN_JWT_SECRET: "admin-jwt-secret-for-local-tests-32",
+  ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
   USER_ACCESS_JWT_SECRET: "user-jwt-secret-for-local-tests-32",
 }
 

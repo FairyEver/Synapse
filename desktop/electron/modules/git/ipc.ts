@@ -1,4 +1,5 @@
 import { z } from "zod"
+import path from "node:path"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { GitBranchService } from "../../services/git-client/git-branch-service"
 import type { GitCloneService } from "../../services/git-client/git-clone-service"
@@ -6,11 +7,13 @@ import type { GitCommitService } from "../../services/git-client/git-commit-serv
 import type { GitAccessService } from "../../services/git-client/git-access-service"
 import type { GitEnvironmentService } from "../../services/git-client/git-environment-service"
 import type { GitHistoryService } from "../../services/git-client/git-history-service"
+import type { GitOperationCoordinator } from "../../services/git-client/git-operation-coordinator"
 import type { GitRepositoryRegistry } from "../../services/git-client/git-repository-registry"
 import type { GitStatusService } from "../../services/git-client/git-status-service"
 import type { GitSyncService } from "../../services/git-client/git-sync-service"
 import type { SynapseGitRepository } from "../../../src/types/git"
 import { createMainLogger } from "../../services/log-store"
+import { createGitOperationId } from "../../services/git-client/git-logging"
 
 const logger = createMainLogger("ipc.git")
 
@@ -61,7 +64,7 @@ const sshPublicKeySchema = z.object({
   content: z.string(),
 })
 
-const protocolSchema = z.enum(["https", "ssh", "file", "unknown"])
+const protocolSchema = z.enum(["http", "https", "ssh", "file", "unknown"])
 
 const providerSchema = z.enum(["github", "gitee", "gitlab", "generic"])
 
@@ -92,6 +95,7 @@ const userFacingFailureSchema = z.object({
   detail: z.string().nullable(),
   host: z.string().nullable(),
   message: z.string(),
+  port: z.number().int().min(1).max(65535).nullable().optional(),
   primaryAction: z.enum([
     "install-git",
     "set-identity",
@@ -111,12 +115,19 @@ const userFacingFailureSchema = z.object({
 const checkAccessSchema = z.object({
   hosts: z.array(z.object({
     host: z.string(),
+    port: z.number().int().min(1).max(65535).nullable().optional(),
     protocol: protocolSchema,
     provider: providerSchema,
   }).strict()).optional(),
 }).strict()
 
 const credentialHelperSchema = z.object({
+  helpers: z.array(z.object({
+    classification: z.enum(["safe", "plaintext", "custom"]),
+    source: z.string().nullable(),
+    value: z.string(),
+  })),
+  management: z.enum(["unconfigured", "synapse-supported", "insecure", "external"]),
   helper: z.string().nullable(),
   safe: z.boolean(),
   source: z.string().nullable(),
@@ -128,6 +139,7 @@ const accessStateSchema = z.object({
   hosts: z.array(z.object({
     host: z.string(),
     lastFailure: userFacingFailureSchema.nullable(),
+    port: z.number().int().min(1).max(65535).nullable(),
     protocol: protocolSchema,
     provider: providerSchema,
   })),
@@ -148,13 +160,15 @@ const configureCredentialHelperSchema = z.object({
 const saveHttpsCredentialSchema = z.object({
   host: z.string(),
   password: z.string(),
-  protocol: z.literal("https"),
+  port: z.number().int().min(1).max(65535).nullable().optional(),
+  protocol: z.enum(["http", "https"]),
   username: z.string(),
 }).strict()
 
 const clearHttpsCredentialSchema = z.object({
   host: z.string(),
-  protocol: z.literal("https"),
+  port: z.number().int().min(1).max(65535).nullable().optional(),
+  protocol: z.enum(["http", "https"]),
   username: z.string().nullable().optional(),
 }).strict()
 
@@ -164,7 +178,9 @@ const generateSshKeySchema = z.object({
 
 const testSshConnectionSchema = z.object({
   host: z.string(),
+  port: z.number().int().min(1).max(65535).nullable().optional(),
   provider: providerSchema.optional(),
+  username: z.string().nullable().optional(),
 }).strict()
 
 const sshTestResultSchema = z.object({
@@ -173,6 +189,20 @@ const sshTestResultSchema = z.object({
   ok: z.boolean(),
   title: z.string(),
 })
+
+const sshHostKeyCandidateSchema = z.object({
+  changed: z.boolean(),
+  fingerprints: z.array(z.string()),
+  host: z.string(),
+  port: z.number().int(),
+  trusted: z.boolean(),
+})
+
+const trustSshHostKeySchema = z.object({
+  fingerprints: z.array(z.string()).min(1),
+  host: z.string(),
+  port: z.number().int().min(1).max(65535).nullable().optional(),
+}).strict()
 
 const configureIdentitySchema = z.object({
   userName: z.string(),
@@ -186,8 +216,9 @@ const addLocalRepositorySchema = z.object({
 
 const cloneRepositorySchema = z.object({
   remoteUrl: z.string(),
-  targetPath: z.string(),
-  name: z.string(),
+  parentDirectory: z.string(),
+  directoryName: z.string(),
+  operationId: z.string().min(1).optional(),
 }).strict()
 
 const cloneResultSchema = z.object({
@@ -199,9 +230,12 @@ const repositoryIdSchema = z.object({
   repositoryId: z.string(),
 }).strict()
 
-const removeRepositorySchema = repositoryIdSchema.extend({
-  mode: z.enum(["keep-local", "trash-local"]),
+const repositoryOperationSchema = z.object({
+  repositoryId: z.string(),
+  operationId: z.string().min(1).optional(),
 }).strict()
+
+const removeRepositorySchema = repositoryIdSchema
 
 const snapshotSchema = z.object({
   repositoryId: z.string(),
@@ -209,6 +243,7 @@ const snapshotSchema = z.object({
   isGitRepository: z.boolean(),
   currentBranch: z.string().nullable(),
   upstream: z.string().nullable(),
+  trackingStatus: z.enum(["tracked", "untracked", "detached"]),
   ahead: z.number(),
   behind: z.number(),
   hasConflicts: z.boolean(),
@@ -224,25 +259,38 @@ const repositorySummarySchema = z.object({
 const diffRequestSchema = repositoryIdSchema.extend({
   path: z.string(),
   originalPath: z.string().nullable().optional(),
-  staged: z.boolean(),
+  status: z.enum(["added", "modified", "deleted", "renamed", "untracked", "conflicted", "unknown"]),
 }).strict()
 
 const diffResultSchema = z.object({
   path: z.string(),
   originalPath: z.string().nullable(),
   binary: z.boolean(),
+  truncated: z.boolean(),
   text: z.string(),
 })
 
 const commitRequestSchema = repositoryIdSchema.extend({
   message: z.string(),
   paths: z.array(z.string()),
+  operationId: z.string().min(1).optional(),
 }).strict()
 
 const operationResultSchema = z.object({
   completedAt: z.string(),
   message: z.string(),
 })
+
+const pushTargetSchema = z.object({
+  name: z.string(),
+  url: z.string(),
+  preferred: z.boolean(),
+})
+
+const pushRequestSchema = repositoryIdSchema.extend({
+  remoteName: z.string().optional(),
+  operationId: z.string().min(1).optional(),
+}).strict()
 
 const branchSchema = z.object({
   name: z.string(),
@@ -251,7 +299,24 @@ const branchSchema = z.object({
 
 const branchRequestSchema = repositoryIdSchema.extend({
   branchName: z.string(),
+  operationId: z.string().min(1).optional(),
 }).strict()
+
+const cancelOperationSchema = z.object({ operationId: z.string().min(1) }).strict()
+
+const operationStatePayloadSchema = z.object({
+  domain: z.literal("git"),
+  type: z.literal("operation.changed"),
+  payload: z.object({
+    operationId: z.string(),
+    operation: z.string(),
+    repositoryId: z.string().nullable(),
+    status: z.enum(["queued", "running", "completed", "failed", "cancelled"]),
+    queuePosition: z.number(),
+  }),
+  timestamp: z.string(),
+  scope: z.object({ repositoryId: z.string().optional() }).optional(),
+})
 
 const commitSummarySchema = z.object({
   hash: z.string(),
@@ -265,6 +330,9 @@ const commitSummarySchema = z.object({
 const commitDetailSchema = commitSummarySchema.extend({
   files: z.array(fileChangeSchema),
   diff: z.string(),
+  filesTruncated: z.boolean(),
+  diffTruncated: z.boolean(),
+  truncated: z.boolean(),
 })
 
 const historyListRequestSchema = repositoryIdSchema.extend({
@@ -280,6 +348,8 @@ type ConfigureIdentityRequest = z.infer<typeof configureIdentitySchema>
 type AddLocalRepositoryRequest = z.infer<typeof addLocalRepositorySchema>
 type CloneRepositoryRequest = z.infer<typeof cloneRepositorySchema>
 type RepositoryIdRequest = z.infer<typeof repositoryIdSchema>
+type RepositoryOperationRequest = z.infer<typeof repositoryOperationSchema>
+type PushRequest = z.infer<typeof pushRequestSchema>
 type RemoveRepositoryRequest = z.infer<typeof removeRepositorySchema>
 type DiffRequest = z.infer<typeof diffRequestSchema>
 type CommitRequest = z.infer<typeof commitRequestSchema>
@@ -292,6 +362,8 @@ type SaveHttpsCredentialRequest = z.infer<typeof saveHttpsCredentialSchema>
 type ClearHttpsCredentialRequest = z.infer<typeof clearHttpsCredentialSchema>
 type GenerateSshKeyRequest = z.infer<typeof generateSshKeySchema>
 type TestSshConnectionRequest = z.infer<typeof testSshConnectionSchema>
+type TrustSshHostKeyRequest = z.infer<typeof trustSshHostKeySchema>
+type CancelOperationRequest = z.infer<typeof cancelOperationSchema>
 
 async function resolveRepository(ctx: IpcHandlerContext, repositoryId: string): Promise<SynapseGitRepository> {
   const registry = ctx.resolve<GitRepositoryRegistry>("git.repository-registry")
@@ -305,6 +377,31 @@ async function resolveRepository(ctx: IpcHandlerContext, repositoryId: string): 
     throw new Error("找不到对应的 Git 仓库。")
   }
   return repository
+}
+
+async function runRepositoryOperation<T>(
+  ctx: IpcHandlerContext,
+  repository: SynapseGitRepository,
+  input: { readonly operationId?: string },
+  operation: string,
+  task: (signal: AbortSignal, operationId: string) => Promise<T>,
+): Promise<T> {
+  const operationId = input.operationId ?? createGitOperationId()
+  return ctx.resolve<GitOperationCoordinator>("git.operation-coordinator").run({
+    key: repository.localPath,
+    operation,
+    operationId,
+    repositoryId: repository.id,
+    task: (signal) => task(signal, operationId),
+  })
+}
+
+async function runRepositoryRead<T>(
+  ctx: IpcHandlerContext,
+  repository: SynapseGitRepository,
+  task: () => Promise<T>,
+): Promise<T> {
+  return ctx.resolve<GitOperationCoordinator>("git.operation-coordinator").read(repository.localPath, task)
 }
 
 export const gitIpcModule: IpcModule = {
@@ -373,6 +470,20 @@ export const gitIpcModule: IpcModule = {
       response: sshTestResultSchema,
       handler: async (ctx, input: TestSshConnectionRequest) => ctx.resolve<GitAccessService>("git.access-service").testSshConnection(input),
     },
+    scanSshHostKey: {
+      operationId: "app.git.access.scan_ssh_host_key",
+      kind: "invoke",
+      request: testSshConnectionSchema,
+      response: sshHostKeyCandidateSchema,
+      handler: async (ctx, input: TestSshConnectionRequest) => ctx.resolve<GitAccessService>("git.access-service").scanSshHostKey(input),
+    },
+    trustSshHostKey: {
+      operationId: "app.git.access.trust_ssh_host_key",
+      kind: "invoke",
+      request: trustSshHostKeySchema,
+      response: z.void(),
+      handler: async (ctx, input: TrustSshHostKeyRequest) => ctx.resolve<GitAccessService>("git.access-service").trustSshHostKey(input),
+    },
     listRepositories: {
       operationId: "app.git.repositories.list",
       kind: "invoke",
@@ -388,7 +499,18 @@ export const gitIpcModule: IpcModule = {
       handler: async (ctx) => {
         const registry = ctx.resolve<GitRepositoryRegistry>("git.repository-registry")
         const statusService = ctx.resolve<GitStatusService>("git.status-service")
-        return statusService.listSummaries(await registry.list())
+        return Promise.all((await registry.list()).map(async (repository) => {
+          try {
+            const snapshot = await runRepositoryRead(ctx, repository, () => statusService.getSnapshot(repository))
+            return { repository, snapshot, error: null }
+          } catch (error) {
+            return {
+              repository,
+              snapshot: null,
+              error: error instanceof Error ? error.message : "读取仓库状态失败。",
+            }
+          }
+        }))
       },
     },
     addLocalRepository: {
@@ -403,99 +525,180 @@ export const gitIpcModule: IpcModule = {
       kind: "invoke",
       request: removeRepositorySchema,
       response: z.void(),
-      handler: async (ctx, input: RemoveRepositoryRequest) => ctx.resolve<GitRepositoryRegistry>("git.repository-registry").remove(input),
+      handler: async (ctx, input: RemoveRepositoryRequest) => ctx.resolve<GitRepositoryRegistry>("git.repository-registry").remove(input.repositoryId),
     },
     cloneRepository: {
       operationId: "app.git.repositories.clone",
       kind: "invoke",
       request: cloneRepositorySchema,
       response: cloneResultSchema,
-      handler: async (ctx, input: CloneRepositoryRequest) => ctx.resolve<GitCloneService>("git.clone-service").clone(input),
+      handler: async (ctx, input: CloneRepositoryRequest) => {
+        const operationId = input.operationId ?? createGitOperationId()
+        return ctx.resolve<GitOperationCoordinator>("git.operation-coordinator").run({
+          key: path.resolve(input.parentDirectory, input.directoryName),
+          operation: "clone",
+          operationId,
+          task: (signal) => ctx.resolve<GitCloneService>("git.clone-service").clone(input, { operationId, signal }),
+        })
+      },
     },
     getSnapshot: {
       operationId: "app.git.status.get_snapshot",
       kind: "invoke",
       request: repositoryIdSchema,
       response: snapshotSchema,
-      handler: async (ctx, input: RepositoryIdRequest) => ctx.resolve<GitStatusService>("git.status-service").getSnapshot(await resolveRepository(ctx, input.repositoryId)),
+      handler: async (ctx, input: RepositoryIdRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryRead(ctx, repository, () => ctx.resolve<GitStatusService>("git.status-service").getSnapshot(repository))
+      },
     },
     getDiff: {
       operationId: "app.git.status.get_diff",
       kind: "invoke",
       request: diffRequestSchema,
       response: diffResultSchema,
-      handler: async (ctx, input: DiffRequest) => ctx.resolve<GitStatusService>("git.status-service").getDiff(await resolveRepository(ctx, input.repositoryId), input),
+      handler: async (ctx, input: DiffRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryRead(ctx, repository, () => ctx.resolve<GitStatusService>("git.status-service").getDiff(repository, input))
+      },
     },
     commit: {
       operationId: "app.git.commit.create",
       kind: "invoke",
       request: commitRequestSchema,
       response: operationResultSchema,
-      handler: async (ctx, input: CommitRequest) => ctx.resolve<GitCommitService>("git.commit-service").commit(await resolveRepository(ctx, input.repositoryId), input),
+      handler: async (ctx, input: CommitRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryOperation(ctx, repository, input, "commit", (signal, operationId) => (
+          ctx.resolve<GitCommitService>("git.commit-service").commit(repository, input, { operationId, signal })
+        ))
+      },
     },
     fetch: {
       operationId: "app.git.sync.fetch",
       kind: "invoke",
-      request: repositoryIdSchema,
+      request: repositoryOperationSchema,
       response: operationResultSchema,
-      handler: async (ctx, input: RepositoryIdRequest) => ctx.resolve<GitSyncService>("git.sync-service").fetch(await resolveRepository(ctx, input.repositoryId)),
+      handler: async (ctx, input: RepositoryOperationRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryOperation(ctx, repository, input, "fetch", (signal, operationId) => (
+          ctx.resolve<GitSyncService>("git.sync-service").fetch(repository, { operationId, signal })
+        ))
+      },
     },
     pull: {
       operationId: "app.git.sync.pull",
       kind: "invoke",
-      request: repositoryIdSchema,
+      request: repositoryOperationSchema,
       response: operationResultSchema,
-      handler: async (ctx, input: RepositoryIdRequest) => ctx.resolve<GitSyncService>("git.sync-service").pull(await resolveRepository(ctx, input.repositoryId)),
+      handler: async (ctx, input: RepositoryOperationRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryOperation(ctx, repository, input, "pull", (signal, operationId) => (
+          ctx.resolve<GitSyncService>("git.sync-service").pull(repository, { operationId, signal })
+        ))
+      },
     },
     push: {
       operationId: "app.git.sync.push",
       kind: "invoke",
-      request: repositoryIdSchema,
+      request: pushRequestSchema,
       response: operationResultSchema,
-      handler: async (ctx, input: RepositoryIdRequest) => ctx.resolve<GitSyncService>("git.sync-service").push(await resolveRepository(ctx, input.repositoryId)),
+      handler: async (ctx, input: PushRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryOperation(ctx, repository, input, "push", (signal, operationId) => (
+          ctx.resolve<GitSyncService>("git.sync-service").push(repository, input.remoteName, { operationId, signal })
+        ))
+      },
+    },
+    listPushTargets: {
+      operationId: "app.git.sync.list_push_targets",
+      kind: "invoke",
+      request: repositoryIdSchema,
+      response: z.array(pushTargetSchema),
+      handler: async (ctx, input: RepositoryIdRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryRead(ctx, repository, () => ctx.resolve<GitSyncService>("git.sync-service").listPushTargets(repository))
+      },
     },
     sync: {
       operationId: "app.git.sync.sync",
       kind: "invoke",
-      request: repositoryIdSchema,
+      request: repositoryOperationSchema,
       response: operationResultSchema,
-      handler: async (ctx, input: RepositoryIdRequest) => ctx.resolve<GitSyncService>("git.sync-service").sync(await resolveRepository(ctx, input.repositoryId)),
+      handler: async (ctx, input: RepositoryOperationRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryOperation(ctx, repository, input, "sync", (signal, operationId) => (
+          ctx.resolve<GitSyncService>("git.sync-service").sync(repository, { operationId, signal })
+        ))
+      },
     },
     listBranches: {
       operationId: "app.git.branches.list",
       kind: "invoke",
       request: repositoryIdSchema,
       response: z.array(branchSchema),
-      handler: async (ctx, input: RepositoryIdRequest) => ctx.resolve<GitBranchService>("git.branch-service").list(await resolveRepository(ctx, input.repositoryId)),
+      handler: async (ctx, input: RepositoryIdRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryRead(ctx, repository, () => ctx.resolve<GitBranchService>("git.branch-service").list(repository))
+      },
     },
     checkoutBranch: {
       operationId: "app.git.branches.checkout",
       kind: "invoke",
       request: branchRequestSchema,
       response: z.void(),
-      handler: async (ctx, input: BranchRequest) => ctx.resolve<GitBranchService>("git.branch-service").checkout(await resolveRepository(ctx, input.repositoryId), input.branchName),
+      handler: async (ctx, input: BranchRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryOperation(ctx, repository, input, "checkout", (signal, operationId) => (
+          ctx.resolve<GitBranchService>("git.branch-service").checkout(repository, input.branchName, { operationId, signal })
+        ))
+      },
     },
     createBranch: {
       operationId: "app.git.branches.create",
       kind: "invoke",
       request: branchRequestSchema,
       response: z.void(),
-      handler: async (ctx, input: BranchRequest) => ctx.resolve<GitBranchService>("git.branch-service").create(await resolveRepository(ctx, input.repositoryId), input.branchName),
+      handler: async (ctx, input: BranchRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryOperation(ctx, repository, input, "create-branch", (signal, operationId) => (
+          ctx.resolve<GitBranchService>("git.branch-service").create(repository, input.branchName, { operationId, signal })
+        ))
+      },
     },
     listHistory: {
       operationId: "app.git.history.list",
       kind: "invoke",
       request: historyListRequestSchema,
       response: z.array(commitSummarySchema),
-      handler: async (ctx, input: HistoryListRequest) => ctx.resolve<GitHistoryService>("git.history-service").list(await resolveRepository(ctx, input.repositoryId), input),
+      handler: async (ctx, input: HistoryListRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryRead(ctx, repository, () => ctx.resolve<GitHistoryService>("git.history-service").list(repository, input))
+      },
     },
     getCommit: {
       operationId: "app.git.history.get_commit",
       kind: "invoke",
       request: commitDetailRequestSchema,
       response: commitDetailSchema,
-      handler: async (ctx, input: CommitDetailRequest) => ctx.resolve<GitHistoryService>("git.history-service").getCommit(await resolveRepository(ctx, input.repositoryId), input.hash),
+      handler: async (ctx, input: CommitDetailRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryRead(ctx, repository, () => ctx.resolve<GitHistoryService>("git.history-service").getCommit(repository, input.hash))
+      },
+    },
+    cancelOperation: {
+      operationId: "app.git.operation.cancel",
+      kind: "invoke",
+      request: cancelOperationSchema,
+      response: z.boolean(),
+      handler: (ctx, input: CancelOperationRequest) => ctx.resolve<GitOperationCoordinator>("git.operation-coordinator").cancel(input.operationId),
     },
   },
-  events: {},
+  events: {
+    operationChanged: {
+      kind: "event",
+      operationId: "app.git.operation.changed",
+      payload: operationStatePayloadSchema,
+    },
+  },
 }

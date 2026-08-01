@@ -36,7 +36,7 @@ const maxDeviceNameLength = 120
 export default function MyDevicesPage() {
   const queryClient = useQueryClient()
   const authUser = useAuthStore((state) => state.auth.user)
-  const sessionId = authUser?.role === 'user' ? authUser.sessionId : 'anonymous'
+  const sessionId = authUser?.sessionId ?? 'anonymous'
   const [devices, setDevices] = useState<DashboardDeviceRow[]>([])
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)

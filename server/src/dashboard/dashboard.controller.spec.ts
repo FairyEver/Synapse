@@ -19,7 +19,7 @@ describe("DashboardController", () => {
           status: "active",
           handle: "ada",
         },
-        teams: [{ id: "team-1", name: "Team", membershipId: "membership-1", membershipRole: "owner" }],
+        teams: [],
       }),
     }
     const controller = new DashboardController(auth as never)
@@ -31,7 +31,7 @@ describe("DashboardController", () => {
         status: "active",
         handle: "ada",
       },
-      teams: [{ id: "team-1", name: "Team", membershipId: "membership-1", membershipRole: "owner" }],
+      teams: [],
     })
     expect(auth.getMe).toHaveBeenCalledWith("user-1")
   })

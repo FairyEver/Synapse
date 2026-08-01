@@ -7,6 +7,7 @@ import type {
 const EMPTY_RESULT: SynapseGitStatusParseResult = {
   currentBranch: null,
   upstream: null,
+  trackingStatus: "detached",
   ahead: 0,
   behind: 0,
   hasConflicts: false,
@@ -190,6 +191,7 @@ export function parseGitStatusPorcelainV2(stdout: string): SynapseGitStatusParse
     ...result,
     currentBranch,
     upstream,
+    trackingStatus: currentBranch === null ? "detached" : upstream ? "tracked" : "untracked",
     ahead,
     behind,
     hasConflicts,

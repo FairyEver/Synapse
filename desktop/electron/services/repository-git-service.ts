@@ -1,5 +1,6 @@
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
+  SynapseRepositoryLocalState,
   SynapseRepositoryOperationKind,
   SynapseRepositoryOperationResult,
   SynapseRepositoryProgressEvent,
@@ -9,7 +10,7 @@ import { assertNoPreexistingGitRebase } from "./git-rebase-guard"
 import { createGitOperationId, gitErrorMeta, summarizeGitArgs } from "./git-client/git-logging"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage, isNonFastForwardError } from "./git-error-utils"
-import { repositoryLockManager } from "./repository-lock-manager"
+import { runRepositoryGitExclusive } from "./repository-git-mutation-service"
 import { repositoryStore } from "./repository-store"
 
 type ProgressListener = (event: SynapseRepositoryProgressEvent) => void
@@ -211,7 +212,16 @@ class RepositoryGitService {
   async syncRepository(
     repository: SynapseRepositoryConfig,
     onProgress: ProgressListener,
-    options?: { skipLock?: boolean },
+  ): Promise<SynapseRepositoryOperationResult> {
+    return runRepositoryGitExclusive(repository, "sync", (repositoryState) => (
+      this.syncRepositoryInExclusive(repository, repositoryState, onProgress)
+    ))
+  }
+
+  async syncRepositoryInExclusive(
+    repository: SynapseRepositoryConfig,
+    currentState: SynapseRepositoryLocalState,
+    onProgress: ProgressListener,
   ): Promise<SynapseRepositoryOperationResult> {
     const operationId = createGitOperationId()
     const startedAt = performance.now()
@@ -221,18 +231,6 @@ class RepositoryGitService {
       repositoryUuid: repository.uuid,
       localPath: repository.localPath,
     })
-    const currentState = await repositoryStore.getRepositoryState(repository)
-
-    if (currentState.status !== "ready") {
-      logger.warn("Repository sync aborted because local path is missing.", {
-        operation: "repository.sync",
-        operationId,
-        repositoryUuid: repository.uuid,
-        localPath: repository.localPath,
-      })
-      throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
-    }
-
     if (!currentState.isGitRepository) {
       logger.info("Repository sync resolved as a local-only refresh.", {
         operation: "repository.sync",
@@ -248,9 +246,6 @@ class RepositoryGitService {
       }
     }
 
-    const release = options?.skipLock
-      ? () => {}
-      : await repositoryLockManager.acquire(repository.uuid, "sync")
     try {
       onProgress({
         repositoryUuid: repository.uuid,
@@ -299,7 +294,6 @@ class RepositoryGitService {
           await runRepositoryGitCommand(repository.uuid, "sync", [
             "pull",
             "--rebase",
-            "-X", "theirs",
             "--progress",
           ], {
             cwd: repository.localPath,
@@ -400,8 +394,6 @@ class RepositoryGitService {
         ...gitErrorMeta(error),
       })
       throw error
-    } finally {
-      release()
     }
   }
 }

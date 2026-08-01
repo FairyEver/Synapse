@@ -63,7 +63,7 @@ describe("AgentConfigForm", () => {
       agentType: "claude-code",
       providerId: "local-claude-code",
       modelTier: "default",
-      providerName: "ClaudeCode/Synapse",
+      providerName: "CC/Synapse",
       mode: "default",
       prompt: "Reply OK",
       sessionPolicy: "fresh",
@@ -77,8 +77,8 @@ describe("AgentConfigForm", () => {
       root.render(<AgentConfigForm value={value} onChange={vi.fn()} />)
     })
 
-    expect(document.body.textContent).toContain("ClaudeCode/Synapse Claude Code 默认")
-    expect(document.body.textContent).not.toContain("ClaudeCode/Synapse 主模型")
+    expect(document.body.textContent).toContain("CC/Synapse Claude Code 默认")
+    expect(document.body.textContent).not.toContain("CC/Synapse 主模型")
   })
 })
 

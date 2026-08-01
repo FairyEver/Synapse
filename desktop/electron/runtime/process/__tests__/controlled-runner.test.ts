@@ -799,3 +799,23 @@ describe("diagnostics", () => {
     expect(result.diagnostics!.envKeys).toEqual(expect.arrayContaining(["PATH"]))
   })
 })
+
+describe("bounded output", () => {
+  it("truncates buffered output when requested", async () => {
+    const guard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const runner = createControlledProcessRunner({ permissionGuard: guard, auditSink })
+
+    const result = await runner.run({
+      actor: { kind: "user" },
+      action: "shell.exec",
+      command: process.execPath,
+      args: ["-e", "process.stdout.write('abcdefghij')"],
+      output: { stdout: "buffer", maxBufferBytes: 4, overflow: "truncate" },
+    })
+
+    expect(result.stdout).toBe("abcd")
+    expect(result.stdoutTruncated).toBe(true)
+    expect(result.exitCode).toBe(0)
+  })
+})

@@ -85,7 +85,7 @@ function ClaudeCodeRuleProjectInstallForm({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>ClaudeCode/Synapse 规则元数据</DialogTitle>
+          <DialogTitle>CC/Synapse 规则元数据</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-2">

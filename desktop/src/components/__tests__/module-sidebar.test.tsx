@@ -44,7 +44,7 @@ async function renderSidebar() {
   document.body.appendChild(container)
   const root = createRoot(container)
   roots.push(root)
-  const label = "ClaudeCode/Synapse"
+  const label = "CC/Synapse"
 
   await act(async () => {
     root.render(

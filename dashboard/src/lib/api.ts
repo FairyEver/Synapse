@@ -61,11 +61,16 @@ import { ApiError, readErrorMessage, requestJson } from './api-client'
 
 export { ApiError } from './api-client'
 
-export type AdminSession = {
+export type DashboardSession = {
   email: string
   handle: string | null
-  role: 'admin' | 'user'
   sessionId: string
+}
+
+export type AdminSession = {
+  actorLabel: '平台管理员'
+  sessionId: string
+  expiresAt: string
 }
 
 export type SystemOverview = {
@@ -73,24 +78,15 @@ export type SystemOverview = {
   counts: {
     auditLogs: number
     users: number
-    teams: number
-    invitations: number
   }
   userStatus: {
     active: number
     disabled: number
   }
-  invitationStatus: {
-    pending: number
-    used: number
-    expired: number
-  }
   dailyTrend: Array<{
     date: string
     label: string
     users: number
-    teams: number
-    invitations: number
     auditLogs: number
   }>
 }
@@ -104,7 +100,10 @@ export type PaginatedResponse<T> = {
 
 export type AuditLog = {
   id: string
-  adminEmail: string
+  actorType: 'user' | 'platform_admin' | 'system' | 'unknown'
+  actorId: string | null
+  actorLabel: string
+  adminSessionId: string | null
   action: string
   targetType: string
   targetId: string
@@ -125,11 +124,6 @@ export type AdminUserRow = {
   handle: string
   adminNote: string | null
   status: 'active' | 'disabled'
-  memberships: Array<{
-    id?: string
-    role: 'owner' | 'member'
-    team: { id: string; name: string }
-  }>
   createdAt: string
   updatedAt: string
 }
@@ -170,15 +164,6 @@ export type DashboardDeviceRow = {
   disconnectReason?: string
 }
 
-export type AdminTeamRow = {
-  id: string
-  name: string
-  createdByUser: { email: string }
-  memberCount: number
-  createdAt: string
-  updatedAt: string
-}
-
 export type DashboardMe = {
   user: {
     id: string
@@ -186,32 +171,8 @@ export type DashboardMe = {
     status: 'active' | 'disabled'
     handle: string
   }
-  teams: Array<{
-    id: string
-    name: string
-    membershipId: string
-    membershipRole: 'owner' | 'member'
-  }>
-}
-
-export type AdminInvitationRow = {
-  id: string
-  type: 'team_join'
-  status: 'pending' | 'used' | 'expired'
-  expiresAt: string
-  usedAt: string | null
-  createdByAdmin: { email: string } | null
-  createdByUser: { email: string } | null
-  team: { name: string } | null
-  acceptedByUser: { email: string } | null
-  createdAt: string
-}
-
-export type AdminInvitationCreateResult = {
-  id: string
-  token: string
-  inviteUrl: string
-  expiresAt: string
+  /** @deprecated Team support has been removed. Kept empty for one compatibility release. */
+  teams: []
 }
 
 export type AdminSkillRepositoryRow = {
@@ -375,28 +336,40 @@ const skillRepositoryApiBasePath = '/api/skill-repositories'
 const driveApiBasePath = '/api/drive'
 const driveBrowserApiBasePath = '/api/drive/browser'
 const desktopAuthorizePath = '/api/auth/desktop/authorize'
-const authExpiredListeners = new Set<() => void>()
+const userAuthExpiredListeners = new Set<() => void>()
+const adminAuthExpiredListeners = new Set<() => void>()
 
 async function request<T>(path: string, options: RequestInit = {}) {
   try {
     return await requestJson<T>(path, options)
   } catch (error) {
-    if (error instanceof ApiError && shouldNotifyAuthExpired(path, error.status, error.code)) {
-      notifyAuthExpired()
+    const isAdminUnlockFailure = path === `${adminApiBasePath}/session` && options.method === 'POST'
+    if (!isAdminUnlockFailure && error instanceof ApiError && shouldNotifyAuthExpired(path, error.status, error.code)) {
+      notifyAuthExpired(path)
     }
     throw error
   }
 }
 
 export function subscribeAuthExpired(listener: () => void) {
-  authExpiredListeners.add(listener)
+  userAuthExpiredListeners.add(listener)
   return () => {
-    authExpiredListeners.delete(listener)
+    userAuthExpiredListeners.delete(listener)
   }
 }
 
-function notifyAuthExpired() {
-  for (const listener of authExpiredListeners) {
+export function subscribeAdminAuthExpired(listener: () => void) {
+  adminAuthExpiredListeners.add(listener)
+  return () => {
+    adminAuthExpiredListeners.delete(listener)
+  }
+}
+
+function notifyAuthExpired(path: string) {
+  const listeners = path.startsWith(adminApiBasePath)
+    ? adminAuthExpiredListeners
+    : userAuthExpiredListeners
+  for (const listener of listeners) {
     listener()
   }
 }
@@ -454,10 +427,6 @@ type PaginationOptions = {
   pageSize?: number
   sortBy?: string
   sortOrder?: 'asc' | 'desc'
-}
-
-export type AdminTeamListQuery = PaginationOptions & {
-  search?: string
 }
 
 export type AdminDriveListQuery = PaginationOptions & {
@@ -575,7 +544,7 @@ async function downloadFile(path: string, filename: string) {
   if (!response.ok) {
     const message = await readErrorMessage(response)
     if (shouldNotifyAuthExpired(path, response.status)) {
-      notifyAuthExpired()
+      notifyAuthExpired(path)
     }
     throw new ApiError(message, response.status)
   }
@@ -594,9 +563,9 @@ export function getBackupDownloadUrl(filename: string) {
 }
 
 export const dashboardApi = {
-  getSession: () => request<AdminSession>(`${consoleApiBasePath}/session`),
+  getSession: () => request<DashboardSession>(`${consoleApiBasePath}/session`),
   login: (credentials: { email: string; password: string }) =>
-    request<AdminSession>(`${consoleApiBasePath}/login`, {
+    request<DashboardSession>(`${consoleApiBasePath}/login`, {
       method: 'POST',
       body: JSON.stringify(credentials),
     }),
@@ -1145,6 +1114,14 @@ export const driveFileVersionsApi = {
 }
 
 export const adminApi = {
+  getSession: () => request<AdminSession>(`${adminApiBasePath}/session`),
+  unlock: (accessSecret: string) =>
+    request<AdminSession>(`${adminApiBasePath}/session`, {
+      method: 'POST',
+      body: JSON.stringify({ accessSecret }),
+    }),
+  logout: () =>
+    request<{ ok: true }>(`${adminApiBasePath}/session`, { method: 'DELETE' }),
   getSystemOverview: () =>
     request<SystemOverview>(`${adminApiBasePath}/system`),
   listProblemFeedback: (page = 1) =>
@@ -1156,20 +1133,6 @@ export const adminApi = {
     request<{ success: true }>(
       `${adminApiBasePath}/problem-feedback/${encodeURIComponent(id)}`,
       { method: 'DELETE', cache: 'no-store' }
-    ),
-  listInvitations: (options: PaginationOptions = {}) =>
-    request<PaginatedResponse<AdminInvitationRow>>(
-      `${adminApiBasePath}/invitations${paginationSuffix(options)}`
-    ),
-  createInvitation: (input: { teamId: string }) =>
-    request<AdminInvitationCreateResult>(`${adminApiBasePath}/invitations`, {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
-  deleteInvitation: (id: string) =>
-    request<{ ok: true }>(
-      `${adminApiBasePath}/invitations/${encodeURIComponent(id)}`,
-      { method: 'DELETE' }
     ),
   listUsers: (options: PaginationOptions = {}) =>
     request<PaginatedResponse<AdminUserRow>>(
@@ -1207,16 +1170,6 @@ export const adminApi = {
         method: 'PATCH',
         body: JSON.stringify({ adminNote }),
       }
-    ),
-  listTeams: (options: AdminTeamListQuery = {}) =>
-    request<PaginatedResponse<AdminTeamRow>>(
-      `${adminApiBasePath}/teams${querySuffix({
-        page: options.page,
-        pageSize: options.pageSize,
-        sortBy: options.sortBy,
-        sortOrder: options.sortOrder,
-        search: options.search,
-      })}`
     ),
   listBackups: () => request<BackupFile[]>(`${adminApiBasePath}/backup/list`),
   triggerBackup: () =>
@@ -1344,15 +1297,6 @@ export const userAuthApi = {
     }),
   resetPassword: (input: { token: string; password: string }) =>
     request<{ ok: true }>('/api/auth/password-reset/confirm', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
-}
-
-export const userApi = {
-  register: userAuthApi.register,
-  joinTeam: (input: { token: string }) =>
-    request<unknown>('/api/teams/join', {
       method: 'POST',
       body: JSON.stringify(input),
     }),

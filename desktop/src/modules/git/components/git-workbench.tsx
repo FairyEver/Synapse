@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ArrowLeft, Info, MoreHorizontal } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -22,7 +22,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { SynapseGitRepository } from "@/types/git"
+import type { SynapseGitOperationState, SynapseGitRepository, SynapseGitRepositorySnapshot } from "@/types/git"
 import type { GitOperationFailure } from "../hooks/use-git-operations"
 import { readOperationFailure } from "../hooks/use-git-operations"
 import { useGitHistory } from "../hooks/use-git-history"
@@ -38,15 +38,22 @@ type GitWorkbenchProps = {
   readonly onBack: () => void
   readonly onOperationFailure?: (failure: GitOperationFailure | null) => void
   readonly onHandleFailure?: (failure: GitOperationFailure) => void
+  readonly onSelectPushRemote?: (
+    repositoryId: string,
+    trackingStatus: SynapseGitRepositorySnapshot["trackingStatus"],
+  ) => Promise<string | null | undefined>
 }
 
-export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleFailure }: GitWorkbenchProps) {
+export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleFailure, onSelectPushRemote }: GitWorkbenchProps) {
   const [view, setView] = useState("changes")
   const [busy, setBusy] = useState<"sync" | "pull" | "push" | null>(null)
+  const [operationPhase, setOperationPhase] = useState<SynapseGitOperationState["status"] | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [operationFailure, setOperationFailure] = useState<GitOperationFailure | null>(null)
   const [branchRefreshKey, setBranchRefreshKey] = useState(0)
   const [commitDialogOpen, setCommitDialogOpen] = useState(false)
+  const activeOperationIdRef = useRef<string | null>(null)
+  const retryActionRef = useRef<(() => void) | null>(null)
   const status = useGitWorktreeStatus(repository)
   const history = useGitHistory(repository, { enabled: view === "history" })
   const currentBranch = status.snapshot?.currentBranch ?? null
@@ -54,6 +61,14 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   const recommendedAction = actionPlan.primaryAction
   const changes = status.snapshot?.changes ?? []
   const repositoryDisplayPath = formatRepositoryDisplayPath(repository.localPath)
+
+  useEffect(() => {
+    const subscribe = requireSynapseBridge().git.onOperationChanged
+    if (typeof subscribe !== "function") return
+    return subscribe((state) => {
+      if (state.operationId === activeOperationIdRef.current) setOperationPhase(state.status)
+    })
+  }, [])
 
   const refreshAll = async () => {
     await status.refresh()
@@ -67,34 +82,55 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
     setBranchRefreshKey((value) => value + 1)
   }
 
-  const run = async (kind: "sync" | "pull" | "push", action: () => Promise<unknown>) => {
+  const run = async (kind: "sync" | "pull" | "push", action: (operationId: string) => Promise<unknown>) => {
+    const operationId = globalThis.crypto?.randomUUID?.() ?? `git-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+    activeOperationIdRef.current = operationId
     setBusy(kind)
+    setOperationPhase("queued")
     setOperationError(null)
     setOperationFailure(null)
     try {
-      await action()
+      await action(operationId)
       await refreshAll()
     } catch (err) {
+      if (err instanceof Error && (err.name === "GitOperationCancelledError" || /操作已取消/.test(err.message))) {
+        await refreshAll()
+        setOperationError(null)
+        setOperationFailure(null)
+        return
+      }
       const failure = readOperationFailure(err, undefined, repository.id, kind)
       setOperationError(err instanceof Error ? err.message : "操作失败。")
       setOperationFailure(failure)
+      retryActionRef.current = failure && (failure.category === "network" || failure.category === "timeout")
+        ? () => { void run(kind, action) }
+        : null
       onOperationFailure?.(failure)
     } finally {
+      if (activeOperationIdRef.current === operationId) activeOperationIdRef.current = null
       setBusy(null)
+      setOperationPhase(null)
     }
+  }
+
+  const runPush = async () => {
+    const trackingStatus = status.snapshot?.trackingStatus ?? "detached"
+    const remoteName = await onSelectPushRemote?.(repository.id, trackingStatus)
+    if (remoteName === null) return
+    await run("push", (operationId) => requireSynapseBridge().git.push(repository.id, remoteName, operationId))
   }
 
   const runRecommendedAction = () => {
     if (recommendedAction === "pull") {
-      void run("pull", () => requireSynapseBridge().git.pull(repository.id))
+      void run("pull", (operationId) => requireSynapseBridge().git.pull(repository.id, operationId))
       return
     }
     if (recommendedAction === "push") {
-      void run("push", () => requireSynapseBridge().git.push(repository.id))
+      void runPush()
       return
     }
     if (recommendedAction === "sync") {
-      void run("sync", () => requireSynapseBridge().git.sync(repository.id))
+      void run("sync", (operationId) => requireSynapseBridge().git.sync(repository.id, operationId))
       return
     }
     setView("changes")
@@ -103,7 +139,9 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
     }
   }
 
-  const recommendedLabel = busy === recommendedAction ? `${actionPlan.primaryLabel}中` : actionPlan.primaryLabel
+  const recommendedLabel = busy === recommendedAction
+    ? (operationPhase === "queued" ? "等待中" : `${actionPlan.primaryLabel}中`)
+    : actionPlan.primaryLabel
   const canRunGitOperation = busy === null
   const failureActionLabel = canHandleGitFailureAction(operationFailure) ? getGitFailureActionLabel(operationFailure) : null
 
@@ -189,19 +227,19 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
                   disabled={!canRunGitOperation}
-                  onSelect={() => void run("pull", () => requireSynapseBridge().git.pull(repository.id))}
+                  onSelect={() => void run("pull", (operationId) => requireSynapseBridge().git.pull(repository.id, operationId))}
                 >
                   拉取
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!canRunGitOperation}
-                  onSelect={() => void run("push", () => requireSynapseBridge().git.push(repository.id))}
+                  onSelect={() => void runPush()}
                 >
                   推送
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!canRunGitOperation}
-                  onSelect={() => void run("sync", () => requireSynapseBridge().git.sync(repository.id))}
+                  onSelect={() => void run("sync", (operationId) => requireSynapseBridge().git.sync(repository.id, operationId))}
                 >
                   同步
                 </DropdownMenuItem>
@@ -215,6 +253,19 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
             >
               {recommendedLabel}
             </Button>
+            {busy ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const operationId = activeOperationIdRef.current
+                  if (operationId) void requireSynapseBridge().git.cancelOperation(operationId)
+                }}
+              >
+                取消
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -231,7 +282,13 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
                     variant="outline"
                     size="sm"
                     className="self-start"
-                    onClick={() => onHandleFailure?.(operationFailure)}
+                    onClick={() => {
+                      if (operationFailure.primaryAction === "retry" && retryActionRef.current) {
+                        retryActionRef.current()
+                        return
+                      }
+                      onHandleFailure?.(operationFailure)
+                    }}
                   >
                     {failureActionLabel}
                   </Button>
@@ -256,7 +313,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
             commitDialogOpen={commitDialogOpen}
             onCommitDialogOpenChange={setCommitDialogOpen}
             onCommitted={history.hasLoaded ? history.refresh : undefined}
-            onPush={() => void run("push", () => requireSynapseBridge().git.push(repository.id))}
+            onPush={() => void runPush()}
           />
         </TabsContent>
         <TabsContent value="history" className="m-0 min-h-0 min-w-0 flex-1 data-[state=inactive]:hidden">

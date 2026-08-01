@@ -1,5 +1,7 @@
 # Team Permission Foundation Implementation Plan
 
+> Retired on 2026-07-31. The team relationship and permission domain was removed from the product and database; this plan is historical only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the server-side permission foundation for team entitlements, team-local access roles, effective permission calculation, and Admin APIs.

@@ -173,6 +173,12 @@ export function GitChangesTab({
                     ) : null}
                   </div>
                 </div>
+                {status.diff.truncated ? (
+                  <Alert>
+                    <AlertTitle>差异内容已截断</AlertTitle>
+                    <AlertDescription>内容过大，仅显示前 2 MiB。</AlertDescription>
+                  </Alert>
+                ) : null}
                 <pre className="block w-full min-w-0 max-w-full overflow-x-auto rounded-lg border bg-muted p-3 text-xs leading-relaxed text-foreground">
                   {status.diff.binary ? "文件已变更。" : <GitDiffText text={status.diff.text || "没有文本差异。"} />}
                 </pre>

@@ -35,8 +35,8 @@ describe("provider model helpers", () => {
     expect(resolveModelName(provider, "default")).toBeUndefined()
     expect(isProviderModelTierSelectable(provider, "default")).toBe(true)
     expect(resolveModelDisplayName(provider, "default")).toBe(LOCAL_CLAUDE_CODE_DEFAULT_MODEL_LABEL)
-    expect(formatProviderModelLabel("ClaudeCode/Synapse", undefined, "default", provider))
-      .toBe(`ClaudeCode/Synapse ${LOCAL_CLAUDE_CODE_DEFAULT_MODEL_LABEL}`)
+    expect(formatProviderModelLabel("CC/Synapse", undefined, "default", provider))
+      .toBe(`CC/Synapse ${LOCAL_CLAUDE_CODE_DEFAULT_MODEL_LABEL}`)
   })
 
   it("does not allow empty tiers for non-local providers", () => {

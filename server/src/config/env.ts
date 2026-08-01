@@ -32,6 +32,11 @@ const optionalEnvString = z.preprocess((value) => {
   return value
 }, z.string().optional())
 
+const adminAccessSecretSchema = z.string()
+  .regex(/^[A-Za-z0-9_-]{43,}$/u, "must contain at least 43 Base64URL characters")
+  .refine((value) => new Set(value).size >= 16, "must be a high-entropy random value")
+  .refine((value) => !/(.)\1{7}/u.test(value), "must not contain repeated-character runs")
+
 const cosConfigGroups = [
   {
     name: "DRIVE_COS",
@@ -64,9 +69,7 @@ const cosConfigGroups = [
 const envSchema = z
   .object({
     DATABASE_URL: z.string().min(1),
-    ADMIN_EMAIL: z.string().email(),
-    ADMIN_PASSWORD: z.string().min(12),
-    ADMIN_JWT_SECRET: z.string().min(32),
+    ADMIN_ACCESS_SECRET: adminAccessSecretSchema,
     USER_ACCESS_JWT_SECRET: z.string().min(32),
     DESKTOP_UPDATE_INTENT_SECRET: optionalEnvString,
     USER_ACCESS_TOKEN_MINUTES: z.coerce.number().int().positive().default(15),
@@ -109,9 +112,9 @@ const envSchema = z
       })
     }
   })
-  .refine((env) => env.USER_ACCESS_JWT_SECRET !== env.ADMIN_JWT_SECRET, {
+  .refine((env) => env.USER_ACCESS_JWT_SECRET !== env.ADMIN_ACCESS_SECRET, {
     path: ["USER_ACCESS_JWT_SECRET"],
-    message: "USER_ACCESS_JWT_SECRET must be different from ADMIN_JWT_SECRET",
+    message: "USER_ACCESS_JWT_SECRET must be different from ADMIN_ACCESS_SECRET",
   })
   .refine((env) => env.NODE_ENV !== "production" || !!env.APP_PUBLIC_URL, {
     path: ["APP_PUBLIC_URL"],
@@ -123,7 +126,7 @@ const envSchema = z
   })
   .refine((env) => {
     if (env.NODE_ENV !== "production" || !env.DESKTOP_UPDATE_INTENT_SECRET) return true
-    return env.DESKTOP_UPDATE_INTENT_SECRET !== env.ADMIN_JWT_SECRET
+    return env.DESKTOP_UPDATE_INTENT_SECRET !== env.ADMIN_ACCESS_SECRET
       && env.DESKTOP_UPDATE_INTENT_SECRET !== env.USER_ACCESS_JWT_SECRET
   }, {
     path: ["DESKTOP_UPDATE_INTENT_SECRET"],
@@ -157,9 +160,7 @@ const envSchema = z
 
 export interface ServerEnv {
   readonly databaseUrl: string
-  readonly adminEmail: string
-  readonly adminPassword: string
-  readonly adminJwtSecret: string
+  readonly adminAccessSecret: string
   readonly userAccessJwtSecret: string
   readonly desktopUpdateIntentSecret?: string
   readonly userAccessTokenMinutes: number
@@ -196,9 +197,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
 
   return {
     databaseUrl: result.data.DATABASE_URL,
-    adminEmail: result.data.ADMIN_EMAIL,
-    adminPassword: result.data.ADMIN_PASSWORD,
-    adminJwtSecret: result.data.ADMIN_JWT_SECRET,
+    adminAccessSecret: result.data.ADMIN_ACCESS_SECRET,
     userAccessJwtSecret: result.data.USER_ACCESS_JWT_SECRET,
     desktopUpdateIntentSecret: result.data.DESKTOP_UPDATE_INTENT_SECRET,
     userAccessTokenMinutes: result.data.USER_ACCESS_TOKEN_MINUTES,

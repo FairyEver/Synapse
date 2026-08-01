@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { adminApi, dashboardApi, driveApi, driveBrowserApi, driveFileVersionsApi, shouldNotifyAuthExpired, subscribeAuthExpired } from './api'
+import { adminApi, dashboardApi, driveApi, driveBrowserApi, driveFileVersionsApi, shouldNotifyAuthExpired, subscribeAdminAuthExpired, subscribeAuthExpired } from './api'
 
 describe('adminApi.users', () => {
   afterEach(() => {
@@ -233,7 +233,7 @@ describe('adminApi.downloadBackup', () => {
 
   it('notifies auth expiration when the backup download request returns 401', async () => {
     const authExpired = vi.fn()
-    const unsubscribe = subscribeAuthExpired(authExpired)
+    const unsubscribe = subscribeAdminAuthExpired(authExpired)
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ message: '会话已过期。' }), {
         headers: { 'Content-Type': 'application/json' },
@@ -960,35 +960,6 @@ describe('adminApi.devices', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/admin/devices?page=2&pageSize=10&sortBy=lastSeenAt&sortOrder=desc',
-      expect.objectContaining({ credentials: 'include' })
-    )
-  })
-})
-
-describe('adminApi.teams', () => {
-  afterEach(() => {
-    vi.restoreAllMocks()
-    vi.unstubAllGlobals()
-  })
-
-  it('serializes team search pagination options', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ data: [], total: 0, page: 1, pageSize: 20 }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 200,
-      })
-    )
-
-    await adminApi.listTeams({
-      page: 1,
-      pageSize: 20,
-      sortBy: 'name',
-      sortOrder: 'asc',
-      search: '研发',
-    })
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/admin/teams?page=1&pageSize=20&sortBy=name&sortOrder=asc&search=%E7%A0%94%E5%8F%91',
       expect.objectContaining({ credentials: 'include' })
     )
   })

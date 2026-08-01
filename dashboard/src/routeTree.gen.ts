@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as ShareShareIdRouteImport } from './routes/share/$shareId'
-import { Route as authTeamInviteRouteImport } from './routes/(auth)/team-invite'
 import { Route as authSignUpRouteImport } from './routes/(auth)/sign-up'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
 import { Route as authResetPasswordRouteImport } from './routes/(auth)/reset-password'
@@ -20,23 +19,12 @@ import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-p
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedWebhooksIndexRouteImport } from './routes/_authenticated/webhooks/index'
 import { Route as AuthenticatedWebhookDeliveriesIndexRouteImport } from './routes/_authenticated/webhook-deliveries/index'
-import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
-import { Route as AuthenticatedTeamsIndexRouteImport } from './routes/_authenticated/teams/index'
-import { Route as AuthenticatedSystemIndexRouteImport } from './routes/_authenticated/system/index'
 import { Route as AuthenticatedSkillRepositoriesIndexRouteImport } from './routes/_authenticated/skill-repositories/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
-import { Route as AuthenticatedProblemFeedbackIndexRouteImport } from './routes/_authenticated/problem-feedback/index'
 import { Route as AuthenticatedMyDevicesIndexRouteImport } from './routes/_authenticated/my-devices/index'
-import { Route as AuthenticatedLogsIndexRouteImport } from './routes/_authenticated/logs/index'
-import { Route as AuthenticatedInvitationsIndexRouteImport } from './routes/_authenticated/invitations/index'
 import { Route as AuthenticatedDriveIndexRouteImport } from './routes/_authenticated/drive/index'
-import { Route as AuthenticatedDevicesIndexRouteImport } from './routes/_authenticated/devices/index'
-import { Route as AuthenticatedBackupIndexRouteImport } from './routes/_authenticated/backup/index'
-import { Route as AuthenticatedAuditLogsIndexRouteImport } from './routes/_authenticated/audit-logs/index'
-import { Route as AuthenticatedAdminDriveIndexRouteImport } from './routes/_authenticated/admin-drive/index'
 import { Route as AuthenticatedWebhooksWebhookIdRouteImport } from './routes/_authenticated/webhooks/$webhookId'
 import { Route as AuthenticatedSkillRepositoriesExploreRouteImport } from './routes/_authenticated/skill-repositories/explore'
-import { Route as AuthenticatedSkillRepositoriesAdminRouteImport } from './routes/_authenticated/skill-repositories/admin'
 import { Route as AuthenticatedSkillRepositoriesRepositoryIdRouteImport } from './routes/_authenticated/skill-repositories/$repositoryId'
 import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/desktop'
 import { Route as ShareShareIdItemsBrowserItemIdRouteImport } from './routes/share/$shareId_/items/$browserItemId'
@@ -56,11 +44,6 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
 const ShareShareIdRoute = ShareShareIdRouteImport.update({
   id: '/share/$shareId',
   path: '/share/$shareId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const authTeamInviteRoute = authTeamInviteRouteImport.update({
-  id: '/(auth)/team-invite',
-  path: '/team-invite',
   getParentRoute: () => rootRouteImport,
 } as any)
 const authSignUpRoute = authSignUpRouteImport.update({
@@ -101,22 +84,6 @@ const AuthenticatedWebhookDeliveriesIndexRoute =
     path: '/webhook-deliveries/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
-  id: '/users/',
-  path: '/users/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedTeamsIndexRoute = AuthenticatedTeamsIndexRouteImport.update({
-  id: '/teams/',
-  path: '/teams/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedSystemIndexRoute =
-  AuthenticatedSystemIndexRouteImport.update({
-    id: '/system/',
-    path: '/system/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedSkillRepositoriesIndexRoute =
   AuthenticatedSkillRepositoriesIndexRouteImport.update({
     id: '/skill-repositories/',
@@ -129,27 +96,10 @@ const AuthenticatedSettingsIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
-const AuthenticatedProblemFeedbackIndexRoute =
-  AuthenticatedProblemFeedbackIndexRouteImport.update({
-    id: '/problem-feedback/',
-    path: '/problem-feedback/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedMyDevicesIndexRoute =
   AuthenticatedMyDevicesIndexRouteImport.update({
     id: '/my-devices/',
     path: '/my-devices/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedLogsIndexRoute = AuthenticatedLogsIndexRouteImport.update({
-  id: '/logs/',
-  path: '/logs/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedInvitationsIndexRoute =
-  AuthenticatedInvitationsIndexRouteImport.update({
-    id: '/invitations/',
-    path: '/invitations/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedDriveIndexRoute = AuthenticatedDriveIndexRouteImport.update({
@@ -157,30 +107,6 @@ const AuthenticatedDriveIndexRoute = AuthenticatedDriveIndexRouteImport.update({
   path: '/drive/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedDevicesIndexRoute =
-  AuthenticatedDevicesIndexRouteImport.update({
-    id: '/devices/',
-    path: '/devices/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedBackupIndexRoute =
-  AuthenticatedBackupIndexRouteImport.update({
-    id: '/backup/',
-    path: '/backup/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedAuditLogsIndexRoute =
-  AuthenticatedAuditLogsIndexRouteImport.update({
-    id: '/audit-logs/',
-    path: '/audit-logs/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedAdminDriveIndexRoute =
-  AuthenticatedAdminDriveIndexRouteImport.update({
-    id: '/admin-drive/',
-    path: '/admin-drive/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedWebhooksWebhookIdRoute =
   AuthenticatedWebhooksWebhookIdRouteImport.update({
     id: '/webhooks/$webhookId',
@@ -191,12 +117,6 @@ const AuthenticatedSkillRepositoriesExploreRoute =
   AuthenticatedSkillRepositoriesExploreRouteImport.update({
     id: '/skill-repositories/explore',
     path: '/skill-repositories/explore',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedSkillRepositoriesAdminRoute =
-  AuthenticatedSkillRepositoriesAdminRouteImport.update({
-    id: '/skill-repositories/admin',
-    path: '/skill-repositories/admin',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSkillRepositoriesRepositoryIdRoute =
@@ -242,27 +162,15 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof authResetPasswordRoute
   '/sign-in': typeof authSignInRoute
   '/sign-up': typeof authSignUpRoute
-  '/team-invite': typeof authTeamInviteRoute
   '/share/$shareId': typeof ShareShareIdRoute
   '/auth/desktop': typeof authAuthDesktopRoute
   '/skill-repositories/$repositoryId': typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
-  '/skill-repositories/admin': typeof AuthenticatedSkillRepositoriesAdminRoute
   '/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
-  '/admin-drive/': typeof AuthenticatedAdminDriveIndexRoute
-  '/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
-  '/backup/': typeof AuthenticatedBackupIndexRoute
-  '/devices/': typeof AuthenticatedDevicesIndexRoute
   '/drive/': typeof AuthenticatedDriveIndexRoute
-  '/invitations/': typeof AuthenticatedInvitationsIndexRoute
-  '/logs/': typeof AuthenticatedLogsIndexRoute
   '/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
-  '/problem-feedback/': typeof AuthenticatedProblemFeedbackIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/skill-repositories/': typeof AuthenticatedSkillRepositoriesIndexRoute
-  '/system/': typeof AuthenticatedSystemIndexRoute
-  '/teams/': typeof AuthenticatedTeamsIndexRoute
-  '/users/': typeof AuthenticatedUsersIndexRoute
   '/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/drive/folders/$folderId': typeof AuthenticatedDriveFoldersFolderIdRoute
@@ -275,28 +183,16 @@ export interface FileRoutesByTo {
   '/reset-password': typeof authResetPasswordRoute
   '/sign-in': typeof authSignInRoute
   '/sign-up': typeof authSignUpRoute
-  '/team-invite': typeof authTeamInviteRoute
   '/share/$shareId': typeof ShareShareIdRoute
   '/': typeof AuthenticatedIndexRoute
   '/auth/desktop': typeof authAuthDesktopRoute
   '/skill-repositories/$repositoryId': typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
-  '/skill-repositories/admin': typeof AuthenticatedSkillRepositoriesAdminRoute
   '/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
-  '/admin-drive': typeof AuthenticatedAdminDriveIndexRoute
-  '/audit-logs': typeof AuthenticatedAuditLogsIndexRoute
-  '/backup': typeof AuthenticatedBackupIndexRoute
-  '/devices': typeof AuthenticatedDevicesIndexRoute
   '/drive': typeof AuthenticatedDriveIndexRoute
-  '/invitations': typeof AuthenticatedInvitationsIndexRoute
-  '/logs': typeof AuthenticatedLogsIndexRoute
   '/my-devices': typeof AuthenticatedMyDevicesIndexRoute
-  '/problem-feedback': typeof AuthenticatedProblemFeedbackIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/skill-repositories': typeof AuthenticatedSkillRepositoriesIndexRoute
-  '/system': typeof AuthenticatedSystemIndexRoute
-  '/teams': typeof AuthenticatedTeamsIndexRoute
-  '/users': typeof AuthenticatedUsersIndexRoute
   '/webhook-deliveries': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
   '/drive/folders/$folderId': typeof AuthenticatedDriveFoldersFolderIdRoute
@@ -312,28 +208,16 @@ export interface FileRoutesById {
   '/(auth)/reset-password': typeof authResetPasswordRoute
   '/(auth)/sign-in': typeof authSignInRoute
   '/(auth)/sign-up': typeof authSignUpRoute
-  '/(auth)/team-invite': typeof authTeamInviteRoute
   '/share/$shareId': typeof ShareShareIdRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/auth/desktop': typeof authAuthDesktopRoute
   '/_authenticated/skill-repositories/$repositoryId': typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
-  '/_authenticated/skill-repositories/admin': typeof AuthenticatedSkillRepositoriesAdminRoute
   '/_authenticated/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/_authenticated/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
-  '/_authenticated/admin-drive/': typeof AuthenticatedAdminDriveIndexRoute
-  '/_authenticated/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
-  '/_authenticated/backup/': typeof AuthenticatedBackupIndexRoute
-  '/_authenticated/devices/': typeof AuthenticatedDevicesIndexRoute
   '/_authenticated/drive/': typeof AuthenticatedDriveIndexRoute
-  '/_authenticated/invitations/': typeof AuthenticatedInvitationsIndexRoute
-  '/_authenticated/logs/': typeof AuthenticatedLogsIndexRoute
   '/_authenticated/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
-  '/_authenticated/problem-feedback/': typeof AuthenticatedProblemFeedbackIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/skill-repositories/': typeof AuthenticatedSkillRepositoriesIndexRoute
-  '/_authenticated/system/': typeof AuthenticatedSystemIndexRoute
-  '/_authenticated/teams/': typeof AuthenticatedTeamsIndexRoute
-  '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/_authenticated/drive/folders/$folderId': typeof AuthenticatedDriveFoldersFolderIdRoute
@@ -350,27 +234,15 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/sign-in'
     | '/sign-up'
-    | '/team-invite'
     | '/share/$shareId'
     | '/auth/desktop'
     | '/skill-repositories/$repositoryId'
-    | '/skill-repositories/admin'
     | '/skill-repositories/explore'
     | '/webhooks/$webhookId'
-    | '/admin-drive/'
-    | '/audit-logs/'
-    | '/backup/'
-    | '/devices/'
     | '/drive/'
-    | '/invitations/'
-    | '/logs/'
     | '/my-devices/'
-    | '/problem-feedback/'
     | '/settings/'
     | '/skill-repositories/'
-    | '/system/'
-    | '/teams/'
-    | '/users/'
     | '/webhook-deliveries/'
     | '/webhooks/'
     | '/drive/folders/$folderId'
@@ -383,28 +255,16 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/sign-in'
     | '/sign-up'
-    | '/team-invite'
     | '/share/$shareId'
     | '/'
     | '/auth/desktop'
     | '/skill-repositories/$repositoryId'
-    | '/skill-repositories/admin'
     | '/skill-repositories/explore'
     | '/webhooks/$webhookId'
-    | '/admin-drive'
-    | '/audit-logs'
-    | '/backup'
-    | '/devices'
     | '/drive'
-    | '/invitations'
-    | '/logs'
     | '/my-devices'
-    | '/problem-feedback'
     | '/settings'
     | '/skill-repositories'
-    | '/system'
-    | '/teams'
-    | '/users'
     | '/webhook-deliveries'
     | '/webhooks'
     | '/drive/folders/$folderId'
@@ -419,28 +279,16 @@ export interface FileRouteTypes {
     | '/(auth)/reset-password'
     | '/(auth)/sign-in'
     | '/(auth)/sign-up'
-    | '/(auth)/team-invite'
     | '/share/$shareId'
     | '/_authenticated/'
     | '/(auth)/auth/desktop'
     | '/_authenticated/skill-repositories/$repositoryId'
-    | '/_authenticated/skill-repositories/admin'
     | '/_authenticated/skill-repositories/explore'
     | '/_authenticated/webhooks/$webhookId'
-    | '/_authenticated/admin-drive/'
-    | '/_authenticated/audit-logs/'
-    | '/_authenticated/backup/'
-    | '/_authenticated/devices/'
     | '/_authenticated/drive/'
-    | '/_authenticated/invitations/'
-    | '/_authenticated/logs/'
     | '/_authenticated/my-devices/'
-    | '/_authenticated/problem-feedback/'
     | '/_authenticated/settings/'
     | '/_authenticated/skill-repositories/'
-    | '/_authenticated/system/'
-    | '/_authenticated/teams/'
-    | '/_authenticated/users/'
     | '/_authenticated/webhook-deliveries/'
     | '/_authenticated/webhooks/'
     | '/_authenticated/drive/folders/$folderId'
@@ -455,7 +303,6 @@ export interface RootRouteChildren {
   authResetPasswordRoute: typeof authResetPasswordRoute
   authSignInRoute: typeof authSignInRoute
   authSignUpRoute: typeof authSignUpRoute
-  authTeamInviteRoute: typeof authTeamInviteRoute
   ShareShareIdRoute: typeof ShareShareIdRoute
   authAuthDesktopRoute: typeof authAuthDesktopRoute
   ShareShareIdItemsBrowserItemIdRoute: typeof ShareShareIdItemsBrowserItemIdRoute
@@ -482,13 +329,6 @@ declare module '@tanstack/react-router' {
       path: '/share/$shareId'
       fullPath: '/share/$shareId'
       preLoaderRoute: typeof ShareShareIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/(auth)/team-invite': {
-      id: '/(auth)/team-invite'
-      path: '/team-invite'
-      fullPath: '/team-invite'
-      preLoaderRoute: typeof authTeamInviteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/(auth)/sign-up': {
@@ -540,27 +380,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWebhookDeliveriesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/users/': {
-      id: '/_authenticated/users/'
-      path: '/users'
-      fullPath: '/users/'
-      preLoaderRoute: typeof AuthenticatedUsersIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/teams/': {
-      id: '/_authenticated/teams/'
-      path: '/teams'
-      fullPath: '/teams/'
-      preLoaderRoute: typeof AuthenticatedTeamsIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/system/': {
-      id: '/_authenticated/system/'
-      path: '/system'
-      fullPath: '/system/'
-      preLoaderRoute: typeof AuthenticatedSystemIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/skill-repositories/': {
       id: '/_authenticated/skill-repositories/'
       path: '/skill-repositories'
@@ -575,13 +394,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsIndexRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
-    '/_authenticated/problem-feedback/': {
-      id: '/_authenticated/problem-feedback/'
-      path: '/problem-feedback'
-      fullPath: '/problem-feedback/'
-      preLoaderRoute: typeof AuthenticatedProblemFeedbackIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/my-devices/': {
       id: '/_authenticated/my-devices/'
       path: '/my-devices'
@@ -589,53 +401,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMyDevicesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/logs/': {
-      id: '/_authenticated/logs/'
-      path: '/logs'
-      fullPath: '/logs/'
-      preLoaderRoute: typeof AuthenticatedLogsIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/invitations/': {
-      id: '/_authenticated/invitations/'
-      path: '/invitations'
-      fullPath: '/invitations/'
-      preLoaderRoute: typeof AuthenticatedInvitationsIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/drive/': {
       id: '/_authenticated/drive/'
       path: '/drive'
       fullPath: '/drive/'
       preLoaderRoute: typeof AuthenticatedDriveIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/devices/': {
-      id: '/_authenticated/devices/'
-      path: '/devices'
-      fullPath: '/devices/'
-      preLoaderRoute: typeof AuthenticatedDevicesIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/backup/': {
-      id: '/_authenticated/backup/'
-      path: '/backup'
-      fullPath: '/backup/'
-      preLoaderRoute: typeof AuthenticatedBackupIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/audit-logs/': {
-      id: '/_authenticated/audit-logs/'
-      path: '/audit-logs'
-      fullPath: '/audit-logs/'
-      preLoaderRoute: typeof AuthenticatedAuditLogsIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/admin-drive/': {
-      id: '/_authenticated/admin-drive/'
-      path: '/admin-drive'
-      fullPath: '/admin-drive/'
-      preLoaderRoute: typeof AuthenticatedAdminDriveIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/webhooks/$webhookId': {
@@ -650,13 +420,6 @@ declare module '@tanstack/react-router' {
       path: '/skill-repositories/explore'
       fullPath: '/skill-repositories/explore'
       preLoaderRoute: typeof AuthenticatedSkillRepositoriesExploreRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/skill-repositories/admin': {
-      id: '/_authenticated/skill-repositories/admin'
-      path: '/skill-repositories/admin'
-      fullPath: '/skill-repositories/admin'
-      preLoaderRoute: typeof AuthenticatedSkillRepositoriesAdminRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/skill-repositories/$repositoryId': {
@@ -722,22 +485,11 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedSkillRepositoriesRepositoryIdRoute: typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
-  AuthenticatedSkillRepositoriesAdminRoute: typeof AuthenticatedSkillRepositoriesAdminRoute
   AuthenticatedSkillRepositoriesExploreRoute: typeof AuthenticatedSkillRepositoriesExploreRoute
   AuthenticatedWebhooksWebhookIdRoute: typeof AuthenticatedWebhooksWebhookIdRoute
-  AuthenticatedAdminDriveIndexRoute: typeof AuthenticatedAdminDriveIndexRoute
-  AuthenticatedAuditLogsIndexRoute: typeof AuthenticatedAuditLogsIndexRoute
-  AuthenticatedBackupIndexRoute: typeof AuthenticatedBackupIndexRoute
-  AuthenticatedDevicesIndexRoute: typeof AuthenticatedDevicesIndexRoute
   AuthenticatedDriveIndexRoute: typeof AuthenticatedDriveIndexRoute
-  AuthenticatedInvitationsIndexRoute: typeof AuthenticatedInvitationsIndexRoute
-  AuthenticatedLogsIndexRoute: typeof AuthenticatedLogsIndexRoute
   AuthenticatedMyDevicesIndexRoute: typeof AuthenticatedMyDevicesIndexRoute
-  AuthenticatedProblemFeedbackIndexRoute: typeof AuthenticatedProblemFeedbackIndexRoute
   AuthenticatedSkillRepositoriesIndexRoute: typeof AuthenticatedSkillRepositoriesIndexRoute
-  AuthenticatedSystemIndexRoute: typeof AuthenticatedSystemIndexRoute
-  AuthenticatedTeamsIndexRoute: typeof AuthenticatedTeamsIndexRoute
-  AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedWebhookDeliveriesIndexRoute: typeof AuthenticatedWebhookDeliveriesIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
   AuthenticatedDriveFoldersFolderIdRoute: typeof AuthenticatedDriveFoldersFolderIdRoute
@@ -750,26 +502,13 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedSkillRepositoriesRepositoryIdRoute:
     AuthenticatedSkillRepositoriesRepositoryIdRoute,
-  AuthenticatedSkillRepositoriesAdminRoute:
-    AuthenticatedSkillRepositoriesAdminRoute,
   AuthenticatedSkillRepositoriesExploreRoute:
     AuthenticatedSkillRepositoriesExploreRoute,
   AuthenticatedWebhooksWebhookIdRoute: AuthenticatedWebhooksWebhookIdRoute,
-  AuthenticatedAdminDriveIndexRoute: AuthenticatedAdminDriveIndexRoute,
-  AuthenticatedAuditLogsIndexRoute: AuthenticatedAuditLogsIndexRoute,
-  AuthenticatedBackupIndexRoute: AuthenticatedBackupIndexRoute,
-  AuthenticatedDevicesIndexRoute: AuthenticatedDevicesIndexRoute,
   AuthenticatedDriveIndexRoute: AuthenticatedDriveIndexRoute,
-  AuthenticatedInvitationsIndexRoute: AuthenticatedInvitationsIndexRoute,
-  AuthenticatedLogsIndexRoute: AuthenticatedLogsIndexRoute,
   AuthenticatedMyDevicesIndexRoute: AuthenticatedMyDevicesIndexRoute,
-  AuthenticatedProblemFeedbackIndexRoute:
-    AuthenticatedProblemFeedbackIndexRoute,
   AuthenticatedSkillRepositoriesIndexRoute:
     AuthenticatedSkillRepositoriesIndexRoute,
-  AuthenticatedSystemIndexRoute: AuthenticatedSystemIndexRoute,
-  AuthenticatedTeamsIndexRoute: AuthenticatedTeamsIndexRoute,
-  AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedWebhookDeliveriesIndexRoute:
     AuthenticatedWebhookDeliveriesIndexRoute,
   AuthenticatedWebhooksIndexRoute: AuthenticatedWebhooksIndexRoute,
@@ -790,7 +529,6 @@ const rootRouteChildren: RootRouteChildren = {
   authResetPasswordRoute: authResetPasswordRoute,
   authSignInRoute: authSignInRoute,
   authSignUpRoute: authSignUpRoute,
-  authTeamInviteRoute: authTeamInviteRoute,
   ShareShareIdRoute: ShareShareIdRoute,
   authAuthDesktopRoute: authAuthDesktopRoute,
   ShareShareIdItemsBrowserItemIdRoute: ShareShareIdItemsBrowserItemIdRoute,

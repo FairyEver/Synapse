@@ -190,6 +190,7 @@ export class WebhookService implements OnModuleInit {
         include: webhookWithLatestDelivery,
       })
       await this.createWebhookAudit(tx, {
+        actorId: userId,
         actorEmail,
         action: "webhook.create",
         webhook,
@@ -232,6 +233,7 @@ export class WebhookService implements OnModuleInit {
       })
       if (!updated) throw new NotFoundException("Webhook not found")
       await this.createWebhookAudit(tx, {
+        actorId: userId,
         actorEmail,
         action: "webhook.update",
         webhook: updated,
@@ -263,6 +265,7 @@ export class WebhookService implements OnModuleInit {
       })
       if (result.count === 0) throw new NotFoundException("Webhook not found")
       await this.createWebhookAudit(tx, {
+        actorId: userId,
         actorEmail,
         action: "webhook.delete",
         webhook,
@@ -288,6 +291,7 @@ export class WebhookService implements OnModuleInit {
       })
       if (!updated) throw new NotFoundException("Webhook not found")
       await this.createWebhookAudit(tx, {
+        actorId: userId,
         actorEmail,
         action: "webhook.reset_secret",
         webhook: updated,
@@ -725,6 +729,7 @@ export class WebhookService implements OnModuleInit {
   }
 
   private async createWebhookAudit(tx: Prisma.TransactionClient, input: {
+    readonly actorId: string
     readonly actorEmail: string
     readonly action: "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.reset_secret"
     readonly webhook: Pick<WebhookRecord, "id" | "publicId" | "name" | "enabled">
@@ -733,7 +738,9 @@ export class WebhookService implements OnModuleInit {
   }): Promise<void> {
     await tx.auditLog.create({
       data: {
-        adminEmail: input.actorEmail,
+        actorType: "user",
+        actorId: input.actorId,
+        actorLabel: input.actorEmail,
         action: input.action,
         targetType: "webhook",
         targetId: input.webhook.id,

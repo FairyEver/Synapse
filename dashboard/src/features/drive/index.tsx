@@ -14,6 +14,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { LongText } from '@/components/long-text'
 import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -101,14 +102,18 @@ export default function DriveAdminPage() {
           <DataTableColumnHeader column={column} title='名称' />
         ),
         cell: ({ row }) => <DriveItemName item={row.original} />,
+        meta: { className: 'max-w-0 w-1/3' },
       },
       {
         id: 'user',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='用户' />
         ),
-        cell: ({ row }) => row.original.userEmail ?? row.original.userId,
+        cell: ({ row }) => (
+          <LongText>{row.original.userEmail ?? row.original.userId}</LongText>
+        ),
         enableSorting: false,
+        meta: { className: 'max-w-0 w-1/4' },
       },
       {
         accessorKey: 'type',
@@ -119,6 +124,7 @@ export default function DriveAdminPage() {
           <Badge variant='outline'>{driveItemTypeLabel(row.original.type)}</Badge>
         ),
         enableSorting: false,
+        meta: { className: 'w-20' },
       },
       {
         accessorKey: 'storageStatus',
@@ -130,6 +136,7 @@ export default function DriveAdminPage() {
             {driveDisplayStatusLabel(row.original)}
           </Badge>
         ),
+        meta: { className: 'w-28' },
       },
       {
         accessorKey: 'size',
@@ -137,10 +144,15 @@ export default function DriveAdminPage() {
           <DataTableColumnHeader column={column} title='大小' />
         ),
         cell: ({ row }) => (
-          <div className='text-right'>
+          <div className='text-right tabular-nums'>
             {row.original.type === 'folder' ? '-' : formatDriveBytes(row.original.size)}
           </div>
         ),
+        meta: {
+          className: 'w-24',
+          thClassName: 'text-right',
+          tdClassName: 'text-right',
+        },
       },
       {
         id: 'shared',
@@ -153,13 +165,17 @@ export default function DriveAdminPage() {
           </Badge>
         ),
         enableSorting: false,
+        meta: { className: 'w-24' },
       },
       {
         accessorKey: 'createdAt',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='上传时间' />
         ),
-        cell: ({ row }) => <RelativeTime value={row.original.createdAt} />,
+        cell: ({ row }) => (
+          <RelativeTime className='tabular-nums' value={row.original.createdAt} />
+        ),
+        meta: { className: 'w-32' },
       },
       {
         id: 'actions',
@@ -172,7 +188,7 @@ export default function DriveAdminPage() {
           return (
             <div className='flex justify-end gap-2'>
               {item.type === 'file' && item.storageStatus === 'active' ? (
-                <Button asChild variant='ghost' className='h-8 w-8 p-0'>
+                <Button asChild variant='ghost' size='icon' className='size-8'>
                   <a href={adminApi.downloadDriveItemUrl(item.id)}>
                     <Download data-icon='inline-start' />
                     <span className='sr-only'>下载</span>
@@ -182,7 +198,8 @@ export default function DriveAdminPage() {
               {canRestore ? (
                 <Button
                   variant='ghost'
-                  className='h-8 w-8 p-0'
+                  size='icon'
+                  className='size-8'
                   disabled={restoreMutation.isPending}
                   onClick={() => restoreMutation.mutate(item.id)}
                 >
@@ -193,7 +210,8 @@ export default function DriveAdminPage() {
               {canDelete ? (
                 <Button
                   variant='ghost'
-                  className='h-8 w-8 p-0'
+                  size='icon'
+                  className='size-8'
                   disabled={deleteMutation.isPending}
                   onClick={() => setDeleteTarget(item)}
                 >
@@ -206,6 +224,11 @@ export default function DriveAdminPage() {
         },
         enableSorting: false,
         enableHiding: false,
+        meta: {
+          className: 'w-28',
+          thClassName: 'text-right',
+          tdClassName: 'text-right',
+        },
       },
     ],
     [deleteMutation.isPending, restoreMutation.isPending, restoreMutation.mutate]
@@ -240,7 +263,7 @@ export default function DriveAdminPage() {
               toolbar={
                 <div className='flex flex-wrap items-center gap-2'>
                   <Input
-                    placeholder='搜索'
+                    placeholder='按名称筛选...'
                     value={search}
                     onChange={(event) => {
                       setSearch(event.target.value)
@@ -249,7 +272,7 @@ export default function DriveAdminPage() {
                     className='h-8 w-45 lg:w-62.5'
                   />
                   <Input
-                    placeholder='用户 ID'
+                    placeholder='按用户 ID 筛选...'
                     value={userId}
                     onChange={(event) => {
                       setUserId(event.target.value)

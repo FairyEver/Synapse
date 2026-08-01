@@ -11,6 +11,8 @@ import { GitWorkbench } from "../components/git-workbench"
 import type { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 import type { SynapseGitRepositorySnapshot } from "@/types/git"
 
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
 const repository = { id: "repo-1", name: "Docs", localPath: "/repo", addedAt: "now", lastOpenedAt: null }
 const bridge = vi.hoisted(() => ({
   git: {
@@ -50,7 +52,7 @@ describe("GitWorkbench", () => {
       hasConflicts: false,
       changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
     })
-    bridge.git.getDiff.mockResolvedValue({ path: "docs/a.md", originalPath: null, binary: false, text: "+hello" })
+    bridge.git.getDiff.mockResolvedValue({ path: "docs/a.md", originalPath: null, binary: false, truncated: false, text: "+hello" })
     bridge.git.listBranches.mockResolvedValue([{ name: "main", current: true }, { name: "docs", current: false }])
     bridge.git.listHistory.mockResolvedValue([
       { hash: "abc", shortHash: "abc123", subject: "更新文档", authorName: "张三", authorEmail: "zhang@example.com", committedAt: "2026-06-17T10:00:00+08:00" },
@@ -64,6 +66,9 @@ describe("GitWorkbench", () => {
       committedAt: "2026-06-17T10:00:00+08:00",
       files: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
       diff: "+hello",
+      filesTruncated: false,
+      diffTruncated: false,
+      truncated: false,
     })
     bridge.git.commit.mockResolvedValue({ completedAt: "now", message: "已提交选中文件。" })
     bridge.git.pull.mockResolvedValue({ completedAt: "now", message: "已拉取远程更新。" })
@@ -71,9 +76,9 @@ describe("GitWorkbench", () => {
     bridge.git.sync.mockResolvedValue({ completedAt: "now", message: "已同步仓库。" })
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const root of roots.splice(0)) {
-      root.unmount()
+      await act(async () => root.unmount())
     }
   })
 
@@ -177,7 +182,7 @@ describe("GitWorkbench", () => {
       await flush()
     })
 
-    expect(findButton("同步中").textContent).toContain("同步中")
+    expect(findButton("等待中").textContent).toContain("等待中")
 
     pendingSync.resolve({ completedAt: "now", message: "已同步。" })
     await act(async () => {
@@ -272,9 +277,11 @@ describe("GitWorkbench", () => {
     bridge.git.getSnapshot.mockResolvedValue(gitSnapshot({ changes: [], ahead: 0, behind: 2 }))
     await renderWorkbench(roots)
     await click(findButton("拉取远程更新"))
-    expect(bridge.git.pull).toHaveBeenCalledWith("repo-1")
+    expect(bridge.git.pull).toHaveBeenCalledWith("repo-1", expect.any(String))
 
-    roots.splice(0).forEach((root) => root.unmount())
+    await act(async () => {
+      roots.splice(0).forEach((root) => root.unmount())
+    })
     document.body.innerHTML = ""
     vi.clearAllMocks()
     bridge.git.getSnapshot.mockResolvedValue(gitSnapshot({ changes: [], ahead: 1, behind: 0 }))
@@ -283,9 +290,11 @@ describe("GitWorkbench", () => {
     bridge.git.push.mockResolvedValue({ completedAt: "now", message: "已推送本地提交。" })
     await renderWorkbench(roots)
     await click(findButton("推送本地提交"))
-    expect(bridge.git.push).toHaveBeenCalledWith("repo-1")
+    expect(bridge.git.push).toHaveBeenCalledWith("repo-1", undefined, expect.any(String))
 
-    roots.splice(0).forEach((root) => root.unmount())
+    await act(async () => {
+      roots.splice(0).forEach((root) => root.unmount())
+    })
     document.body.innerHTML = ""
     vi.clearAllMocks()
     bridge.git.getSnapshot.mockResolvedValue(gitSnapshot({ changes: [], ahead: 1, behind: 1 }))
@@ -294,7 +303,7 @@ describe("GitWorkbench", () => {
     bridge.git.sync.mockResolvedValue({ completedAt: "now", message: "已同步仓库。" })
     await renderWorkbench(roots)
     await click(findButton("同步"))
-    expect(bridge.git.sync).toHaveBeenCalledWith("repo-1")
+    expect(bridge.git.sync).toHaveBeenCalledWith("repo-1", expect.any(String))
   })
 
   it("uses shared empty states for empty worktree panes without an inline submit panel", () => {
@@ -305,6 +314,7 @@ describe("GitWorkbench", () => {
         isGitRepository: true,
         currentBranch: "main",
         upstream: "origin/main",
+        trackingStatus: "tracked",
         ahead: 0,
         behind: 0,
         hasConflicts: false,
@@ -379,6 +389,9 @@ describe("GitWorkbench", () => {
           committedAt: "2026-06-15T16:21:42+08:00",
           files: [{ path: longPath, originalPath: null, status: "modified", staged: false, conflicted: false }],
           diff: longDiffLine,
+          filesTruncated: false,
+          diffTruncated: false,
+          truncated: false,
         },
         loading: false,
         detailLoading: false,
@@ -420,15 +433,16 @@ describe("GitWorkbench", () => {
         repositoryId: "repo-1",
         pathExists: true,
         isGitRepository: true,
-        currentBranch: "main",
-        upstream: "origin/main",
+          currentBranch: "main",
+          upstream: "origin/main",
+          trackingStatus: "tracked",
         ahead: 0,
         behind: 0,
         hasConflicts: false,
         changes: [{ path: longPath, originalPath: null, status: "modified", staged: false, conflicted: false }],
       },
       selectedFile: { path: longPath, originalPath: null, status: "modified", staged: false, conflicted: false },
-      diff: { path: longPath, originalPath: null, binary: false, text: longDiffLine },
+      diff: { path: longPath, originalPath: null, binary: false, truncated: false, text: longDiffLine },
       selectedPaths: [longPath],
       loading: false,
       diffLoading: false,
@@ -506,6 +520,9 @@ describe("GitWorkbench", () => {
           committedAt: "2026-06-15T16:21:42+08:00",
           files: [],
           diff: "",
+          filesTruncated: false,
+          diffTruncated: false,
+          truncated: false,
         },
         loading: false,
         detailLoading: false,
@@ -576,6 +593,7 @@ function gitSnapshot(overrides: Partial<SynapseGitRepositorySnapshot> = {}): Syn
     isGitRepository: true,
     currentBranch: "main",
     upstream: "origin/main",
+    trackingStatus: "tracked",
     ahead: 0,
     behind: 0,
     hasConflicts: false,
@@ -590,7 +608,7 @@ function createStatus(overrides: Partial<ReturnType<typeof useGitWorktreeStatus>
       changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
     }),
     selectedFile: { path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false },
-    diff: { path: "docs/a.md", originalPath: null, binary: false, text: "+hello" },
+    diff: { path: "docs/a.md", originalPath: null, binary: false, truncated: false, text: "+hello" },
     selectedPaths: ["docs/a.md"],
     loading: false,
     diffLoading: false,

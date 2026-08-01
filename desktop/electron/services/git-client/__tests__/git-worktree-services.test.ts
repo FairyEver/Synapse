@@ -127,10 +127,11 @@ describe("git worktree services", () => {
       commandRunner: { run: vi.fn().mockResolvedValue({ stdout: "diff --git a/docs/a.md b/docs/a.md\n+hello\n", stderr: "" }) },
       pathExists: async () => true,
     })
-    await expect(textService.getDiff(repository, { path: "docs/a.md", staged: false })).resolves.toEqual({
+    await expect(textService.getDiff(repository, { path: "docs/a.md", status: "modified" })).resolves.toEqual({
       path: "docs/a.md",
       originalPath: null,
       binary: false,
+      truncated: false,
       text: "diff --git a/docs/a.md b/docs/a.md\n+hello\n",
     })
 
@@ -138,7 +139,30 @@ describe("git worktree services", () => {
       commandRunner: { run: vi.fn().mockResolvedValue({ stdout: "Binary files a/logo.png and b/logo.png differ\n", stderr: "" }) },
       pathExists: async () => true,
     })
-    await expect(binaryService.getDiff(repository, { path: "logo.png", staged: false })).resolves.toMatchObject({ binary: true })
+    await expect(binaryService.getDiff(repository, { path: "logo.png", status: "modified" })).resolves.toMatchObject({ binary: true })
+  })
+
+  it("shows the complete working-tree diff for tracked files", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "diff", stderr: "", stdoutTruncated: false })
+    const service = createGitStatusService({ commandRunner: { run }, pathExists: async () => true })
+
+    await service.getDiff(repository, { path: "docs/a.md", status: "modified" })
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["diff", "HEAD", "--", "docs/a.md"],
+    }))
+  })
+
+  it("shows untracked files as additions", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "diff", stderr: "", stdoutTruncated: false })
+    const service = createGitStatusService({ commandRunner: { run }, pathExists: async () => true })
+
+    await service.getDiff(repository, { path: "docs/new.md", status: "untracked" })
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["diff", "--no-index", "--no-ext-diff", "--", "/dev/null", "docs/new.md"],
+      acceptedExitCodes: [0, 1],
+    }))
   })
 
   it("commits selected files", async () => {
@@ -151,8 +175,8 @@ describe("git worktree services", () => {
       message: "已提交选中文件。",
     })
 
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["add", "--", "docs/a.md"] }))
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["commit", "-m", "更新文档", "--", "docs/a.md"] }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["--literal-pathspecs", "add", "--", "docs/a.md"] }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["--literal-pathspecs", "commit", "--only", "-m", "更新文档", "--", "docs/a.md"] }))
     const started = logger.info.mock.calls.find((call) => call[0] === "Git operation started.")?.[1] as { operationId?: string } | undefined
     const completed = logger.info.mock.calls.find((call) => call[0] === "Git operation completed.")?.[1] as { operationId?: string } | undefined
     expect(started?.operationId).toEqual(expect.any(String))
@@ -219,6 +243,70 @@ describe("git worktree services", () => {
     }))
   })
 
+  it("sets upstream on the first push of a local branch", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const getSnapshot = vi.fn().mockResolvedValue({
+      changes: [],
+      behind: 0,
+      ahead: 0,
+      currentBranch: "feature",
+      trackingStatus: "untracked",
+    })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot })
+
+    await service.push(repository, "origin")
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["push", "--set-upstream", "origin", "feature"],
+    }))
+  })
+
+  it("lists push targets and marks the Git-configured default", async () => {
+    const run = vi.fn()
+      .mockResolvedValueOnce({ stdout: "origin\nbackup\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "ssh://git@example.com/team/docs.git\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "ssh://git@backup.example.com/team/docs.git\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "backup\n", stderr: "" })
+    const getSnapshot = vi.fn().mockResolvedValue({
+      changes: [],
+      behind: 0,
+      ahead: 0,
+      currentBranch: "feature",
+      trackingStatus: "untracked",
+    })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot })
+
+    await expect(service.listPushTargets(repository)).resolves.toEqual([
+      { name: "origin", url: "ssh://example.com/team/docs.git", preferred: false },
+      { name: "backup", url: "ssh://backup.example.com/team/docs.git", preferred: true },
+    ])
+  })
+
+  it("prefers remote.pushDefault over branch.remote", async () => {
+    const run = vi.fn()
+      .mockResolvedValueOnce({ stdout: "origin\nfork\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "ssh://git@example.com/team/docs.git\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "ssh://git@fork.example.com/team/docs.git\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "fork\n", stderr: "" })
+    const getSnapshot = vi.fn().mockResolvedValue({
+      changes: [],
+      behind: 0,
+      ahead: 0,
+      currentBranch: "feature",
+      trackingStatus: "untracked",
+    })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot })
+
+    await expect(service.listPushTargets(repository)).resolves.toEqual([
+      { name: "origin", url: "ssh://example.com/team/docs.git", preferred: false },
+      { name: "fork", url: "ssh://fork.example.com/team/docs.git", preferred: true },
+    ])
+    expect(run).not.toHaveBeenCalledWith(expect.objectContaining({
+      args: ["config", "--get", "branch.feature.remote"],
+    }))
+  })
+
   it("blocks sync when worktree has changes", async () => {
     const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const service = createGitSyncService({
@@ -269,6 +357,17 @@ describe("git worktree services", () => {
       subject: "更新文档",
       files: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
       diff: "diff --git a/docs/a.md b/docs/a.md\n+hello\n",
+      filesTruncated: false,
+      diffTruncated: false,
+      truncated: false,
     })
+    expect(run).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      maxBufferBytes: 2 * 1024 * 1024,
+      outputOverflow: "truncate",
+    }))
+    expect(run).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      maxBufferBytes: 2 * 1024 * 1024,
+      outputOverflow: "truncate",
+    }))
   })
 })

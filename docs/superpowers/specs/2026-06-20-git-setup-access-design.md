@@ -205,7 +205,9 @@ SSH
 
 ### Credential Helper
 
-Synapse 读取全局和仓库级 `credential.helper`。如果没有安全凭证保存方式，访问页显示：
+Synapse 使用 `--show-origin --get-all` 读取完整 `credential.helper` 链及来源。状态分为未配置、Synapse 支持的安全 helper、已知明文 helper、外部配置管理。自定义 helper 或多 helper 链属于外部管理：Synapse 不覆盖、不重排，也不阻断用户直接执行 Git 操作。只有完全未配置，或用户配置中唯一 helper 为已知明文 `store` 时，才允许切换到平台安全 helper；失败时恢复原值。
+
+如果没有安全凭证保存方式，访问页显示：
 
 ```text
 凭证保存
@@ -221,6 +223,10 @@ Synapse 读取全局和仓库级 `credential.helper`。如果没有安全凭证�
 - Linux：第一期不主动配置图形化凭证保存。
 
 不得默认配置 `git-credential-store`，因为它会把凭证明文写到磁盘。
+
+### SSH 主机密钥
+
+SSH remote descriptor 保留用户名和端口。连接测试使用真实用户名、端口、批处理模式和严格 host-key 校验。未知主机先通过 `ssh-keyscan` 获取公钥并显示 SHA-256 指纹，用户确认后原子写入 `known_hosts`。已有主机记录与扫描结果不一致时视为 host-key changed，Synapse 不提供覆盖操作，只显示诊断并要求人工核验。所有 `.ssh` 写入、网络访问和进程执行必须经过 PermissionGuard 与 AuditSink。
 
 ### GitHub HTTPS
 
@@ -267,13 +273,13 @@ GitHub
 
 ```text
 git credential approve
-protocol=https
-host=git.company.com
+protocol=<remote 的 http 或 https>
+host=<remote host；非默认端口必须保留为 host:port，IPv6 使用 [host]:port>
 username=<user input>
 password=<password input>
 ```
 
-Synapse 不持久化用户名密码。凭证由当前 Git credential helper 保存。
+保存、查询和清除必须使用完全相同的协议与 host/port 上下文，避免 HTTP、HTTPS 和非默认端口之间串用凭据。旧的无端口 HTTPS 凭据继续按原 host 查询。Synapse 不持久化用户名密码；凭证由当前 Git credential helper 保存。
 
 ### SSH
 
@@ -522,8 +528,8 @@ Renderer 保存短期 `pendingGitAction`，窗口关闭即丢弃。
 
 ```ts
 type PendingGitAction =
-  | { type: "clone"; input: CloneInput; host: string; protocol: "https" | "ssh" }
-  | { type: "pull" | "push" | "sync"; repositoryId: string; host: string; protocol: "https" | "ssh" }
+  | { type: "clone"; input: CloneInput; host: string; port: number | null; protocol: "http" | "https" | "ssh" }
+  | { type: "pull" | "push" | "sync"; repositoryId: string; host: string; port: number | null; protocol: "http" | "https" | "ssh" }
 ```
 
 ## Main Process Architecture
@@ -538,9 +544,9 @@ desktop/electron/services/git-client/git-access-service.ts
 
 - 读取 credential helper。
 - 配置 credential helper。
-- 保存 HTTPS 凭证。
-- 清除指定 host 的 HTTPS 凭证。
-- 解析 remote URL 的 protocol、host 和 provider。
+- 保存 HTTP/HTTPS 凭证。
+- 按协议和 host/port 清除 HTTP/HTTPS 凭证。
+- 解析 remote URL 的 protocol、host、port、username 和 provider。
 - 生成 SSH 公钥。
 - 测试 SSH 连接。
 - 返回 provider 对应外部页面。

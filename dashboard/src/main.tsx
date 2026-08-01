@@ -24,23 +24,17 @@ function resolveRouterBasepath(pathname: string) {
   return pathname === '/console' || pathname.startsWith('/console/') ? '/console' : '/'
 }
 
-const router = createRouter({
+export const dashboardRouter = createRouter({
   routeTree,
   context: { queryClient },
   defaultPreload: 'intent',
   basepath: resolveRouterBasepath(window.location.pathname),
 })
 
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router
-  }
-}
-
 subscribeAuthExpired(() => {
-  const redirect = normalizeDashboardRedirect(router.state.location.href)
+  const redirect = normalizeDashboardRedirect(dashboardRouter.state.location.href)
   useAuthStore.getState().auth.reset()
-  router.navigate({
+  dashboardRouter.navigate({
     to: '/sign-in',
     search: redirect ? { redirect } : {},
     replace: true,
@@ -61,7 +55,7 @@ async function bootstrap() {
         <ThemeProvider>
           <FontProvider>
             <DirectionProvider>
-              <RouterProvider router={router} />
+              <RouterProvider router={dashboardRouter} />
             </DirectionProvider>
           </FontProvider>
         </ThemeProvider>

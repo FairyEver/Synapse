@@ -20,12 +20,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { SynapseGitRepository, SynapseGitRepositoryRemoveInput, SynapseGitRepositoryRemoveMode, SynapseGitRepositorySummary } from "@/types/git"
+import type { SynapseGitRepository, SynapseGitRepositorySummary } from "@/types/git"
 import type { GitOperationBusyState, GitOperationFailure, GitRepositoryOperation } from "../hooks/use-git-operations"
 import { canHandleGitFailureAction, getGitFailureActionLabel } from "../lib/git-failure-view"
 import {
@@ -43,9 +41,10 @@ type GitRepositoryListProps = {
   readonly busy: GitOperationBusyState
   readonly onOpenRepository: (repository: SynapseGitRepository) => void
   readonly onPull: (repositoryId: string) => void
-  readonly onPush: (repositoryId: string) => void
+  readonly onPush: (repositoryId: string, trackingStatus: "tracked" | "untracked" | "detached") => void
   readonly onSync: (repositoryId: string) => void
-  readonly onRemoveRepository: (input: SynapseGitRepositoryRemoveInput) => Promise<boolean>
+  readonly onCancel: (repositoryId: string) => void
+  readonly onRemoveRepository: (repositoryId: string) => Promise<boolean>
   readonly onHandleFailure?: (failure: GitOperationFailure) => void
 }
 
@@ -73,10 +72,11 @@ function isRepositoryOperationBusy(
   return busy.repositories[repositoryId] === operation
 }
 
-function operationLabel(operation: GitRepositoryOperation): string {
-  if (operation === "pull") return "拉取中"
-  if (operation === "push") return "推送中"
-  if (operation === "sync") return "同步中"
+function operationLabel(operation: GitRepositoryOperation, phase?: string): string {
+  const suffix = phase === "queued" ? "等待中" : "执行中"
+  if (operation === "pull") return `拉取${suffix}`
+  if (operation === "push") return `推送${suffix}`
+  if (operation === "sync") return `同步${suffix}`
   return "删除中"
 }
 
@@ -90,6 +90,7 @@ export function GitRepositoryList({
   onPull,
   onPush,
   onSync,
+  onCancel,
   onRemoveRepository,
   onHandleFailure,
 }: GitRepositoryListProps) {
@@ -97,7 +98,6 @@ export function GitRepositoryList({
   const failureActionLabel = canHandleGitFailureAction(failure) ? getGitFailureActionLabel(failure) : null
   const [filter, setFilter] = useState<"all" | "attention" | "clean" | "unavailable">("all")
   const [removalTarget, setRemovalTarget] = useState<SynapseGitRepository | null>(null)
-  const [removalMode, setRemovalMode] = useState<SynapseGitRepositoryRemoveMode>("keep-local")
   const [removalError, setRemovalError] = useState<string | null>(null)
   const filteredSummaries = useMemo(() => summaries.filter((summary) => {
     if (filter === "attention") return needsGitAttention(summary.snapshot, summary.error)
@@ -108,13 +108,11 @@ export function GitRepositoryList({
 
   const closeRemovalDialog = () => {
     setRemovalTarget(null)
-    setRemovalMode("keep-local")
     setRemovalError(null)
   }
 
   const openRemovalDialog = (repository: SynapseGitRepository) => {
     setRemovalTarget(repository)
-    setRemovalMode("keep-local")
     setRemovalError(null)
   }
 
@@ -122,17 +120,14 @@ export function GitRepositoryList({
     if (!removalTarget) return
 
     setRemovalError(null)
-    const removed = await onRemoveRepository({
-      repositoryId: removalTarget.id,
-      mode: removalMode,
-    })
+    const removed = await onRemoveRepository(removalTarget.id)
 
     if (removed) {
       closeRemovalDialog()
       return
     }
 
-    setRemovalError(removalMode === "trash-local" ? "移到废纸篓失败。" : "删除记录失败。")
+    setRemovalError("移除记录失败。")
   }
 
   return (
@@ -147,29 +142,15 @@ export function GitRepositoryList({
       >
         <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>删除 Git 仓库？</AlertDialogTitle>
+            <AlertDialogTitle>移除 Git 仓库？</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
-                <p>选择是否同时处理本地目录。</p>
+                <p>只会从 Synapse 列表移除，本地目录不会改变。</p>
                 {removalTarget ? (
                   <p className="break-all text-foreground" data-allow-select="true">
                     目录：{removalTarget.localPath}
                   </p>
                 ) : null}
-                <RadioGroup
-                  value={removalMode}
-                  onValueChange={(value) => setRemovalMode(value as SynapseGitRepositoryRemoveMode)}
-                  disabled={isRepositoryOperationBusy(busy, removalTarget?.id ?? "", "remove")}
-                >
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem id="git-remove-keep-local" value="keep-local" />
-                    <Label htmlFor="git-remove-keep-local">仅移除列表记录</Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem id="git-remove-trash-local" value="trash-local" />
-                    <Label htmlFor="git-remove-trash-local">移到废纸篓并移除记录</Label>
-                  </div>
-                </RadioGroup>
                 {removalError ? (
                   <p className="text-destructive">{removalError}</p>
                 ) : null}
@@ -182,15 +163,15 @@ export function GitRepositoryList({
             </AlertDialogCancel>
             <Button
               type="button"
-              variant={removalMode === "trash-local" ? "destructive" : "default"}
+              variant="destructive"
               disabled={isRepositoryOperationBusy(busy, removalTarget?.id ?? "", "remove")}
               onClick={() => {
                 void handleRemoveRepository()
               }}
             >
               {isRepositoryOperationBusy(busy, removalTarget?.id ?? "", "remove")
-                ? "删除中..."
-                : removalMode === "trash-local" ? "移到废纸篓" : "删除记录"}
+                ? "移除中..."
+                : "移除"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -262,7 +243,7 @@ export function GitRepositoryList({
                           return
                         }
                         if (actionPlan.primaryAction === "push") {
-                          onPush(repository.id)
+                          onPush(repository.id, snapshot?.trackingStatus ?? "detached")
                           return
                         }
                         if (actionPlan.primaryAction === "sync") {
@@ -272,7 +253,7 @@ export function GitRepositoryList({
                         onOpenRepository(repository)
                       }
                       const primaryLabel = runningOperation && actionPlan.primaryAction === runningOperation
-                        ? operationLabel(runningOperation)
+                        ? operationLabel(runningOperation, busy.repositoryPhases?.[repository.id])
                         : actionPlan.primaryLabel
 
                       return (
@@ -320,6 +301,16 @@ export function GitRepositoryList({
                           ) : null}
                           {primaryLabel}
                         </Button>
+                        {runningOperation && runningOperation !== "remove" ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={(event) => stopAction(event, () => onCancel(repository.id))}
+                          >
+                            取消
+                          </Button>
+                        ) : null}
                         {actionPlan.primaryAction !== "open" ? (
                           <Button
                             type="button"
@@ -349,7 +340,7 @@ export function GitRepositoryList({
                               <Download data-icon="inline-start" />
                               拉取
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => onPush(repository.id)}>
+                            <DropdownMenuItem onSelect={() => onPush(repository.id, snapshot?.trackingStatus ?? "detached")}>
                               <Upload data-icon="inline-start" />
                               推送
                             </DropdownMenuItem>

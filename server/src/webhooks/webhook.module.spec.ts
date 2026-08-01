@@ -5,9 +5,7 @@ import { WebhookModule } from "./webhook.module"
 
 const requiredEnv = {
   DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-  ADMIN_EMAIL: "admin@synapse.com",
-  ADMIN_PASSWORD: "admin-password-with-length",
-  ADMIN_JWT_SECRET: "admin-jwt-secret-with-enough-length-32chars",
+  ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
   USER_ACCESS_JWT_SECRET: "user-jwt-secret-with-enough-length-32chars",
 }
 

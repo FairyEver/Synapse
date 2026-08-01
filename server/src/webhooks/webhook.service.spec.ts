@@ -131,7 +131,9 @@ describe("WebhookService", () => {
 
     expect(tx.auditLog.create).toHaveBeenCalledWith({
       data: {
-        adminEmail: "user@example.com",
+        actorType: "user",
+        actorId: "user-1",
+        actorLabel: "user@example.com",
         action: "webhook.create",
         targetType: "webhook",
         targetId: "webhook-1",

@@ -8,6 +8,8 @@ interface AuthGuardFailureAuditInput {
   readonly auditLog?: AuditLogService
   readonly logger?: Pick<PinoLogger, "warn">
   readonly request: Pick<Request, "ip" | "method" | "path">
+  readonly tokenPresent?: boolean
+  /** @deprecated The value is never recorded; callers should pass tokenPresent. */
   readonly token?: string
 }
 
@@ -21,7 +23,7 @@ export async function recordAuthGuardFailure(input: AuthGuardFailureAuditInput):
       detail: {
         method: input.request.method,
         path: input.request.path,
-        tokenPresent: Boolean(input.token),
+        tokenPresent: input.tokenPresent ?? Boolean(input.token),
       },
       ipAddress: input.request.ip ?? "",
     })
@@ -35,7 +37,7 @@ export async function recordAuthGuardFailure(input: AuthGuardFailureAuditInput):
         : {}),
       method: input.request.method,
       path: input.request.path,
-      tokenPresent: Boolean(input.token),
+      tokenPresent: input.tokenPresent ?? Boolean(input.token),
     }, "Failed to record auth guard audit log")
   }
 }

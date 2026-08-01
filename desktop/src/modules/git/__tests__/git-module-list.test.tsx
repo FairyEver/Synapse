@@ -133,6 +133,8 @@ function gitAccess(overrides: Record<string, unknown> = {}) {
   return {
     checkedAt: "2026-06-18T10:00:00.000Z",
     credentialHelper: {
+      helpers: [{ classification: "safe", source: "global", value: "osxkeychain" }],
+      management: "synapse-supported",
       helper: "osxkeychain",
       safe: true,
       source: "global",
@@ -224,9 +226,9 @@ describe("GitModule repository list", () => {
     bridge.shell.openExternal.mockResolvedValue(undefined)
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const root of roots.splice(0)) {
-      root.unmount()
+      await act(async () => root.unmount())
     }
   })
 
@@ -347,6 +349,7 @@ describe("GitModule repository list", () => {
     expect(bridge.git.saveHttpsCredential).toHaveBeenCalledWith({
       host: "git.company.com",
       password: "company-password",
+      port: null,
       protocol: "https",
       username: "writer",
     })
@@ -374,6 +377,7 @@ describe("GitModule repository list", () => {
 
     expect(bridge.git.clearHttpsCredential).toHaveBeenCalledWith({
       host: "git.company.com",
+      port: null,
       protocol: "https",
     })
   })
@@ -384,6 +388,8 @@ describe("GitModule repository list", () => {
     }))
     bridge.git.checkAccess.mockResolvedValue(gitAccess({
       credentialHelper: {
+        helpers: [],
+        management: "unconfigured",
         helper: null,
         safe: false,
         source: null,
@@ -421,7 +427,7 @@ describe("GitModule repository list", () => {
 
     await click(findButton("克隆仓库"))
     await changeInput("仓库地址", "https://github.com/acme/docs.git")
-    await changeInput("保存到", "/work/docs")
+    await changeInput("父目录", "/work")
     await click(findButton("开始克隆"))
 
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("请处理 GitHub 访问。")
@@ -471,7 +477,7 @@ describe("GitModule repository list", () => {
 
     await click(findButton("克隆仓库"))
     await changeInput("仓库地址", "https://git.company.com/team/docs.git")
-    await changeInput("保存到", "/work/docs")
+    await changeInput("父目录", "/work")
     await click(findButton("开始克隆"))
 
     const dialog = document.querySelector('[role="dialog"]')
@@ -491,6 +497,7 @@ describe("GitModule repository list", () => {
     expect(bridge.git.saveHttpsCredential).toHaveBeenCalledWith({
       host: "git.company.com",
       password: "company-password",
+      port: null,
       protocol: "https",
       username: "writer",
     })
@@ -518,7 +525,7 @@ describe("GitModule repository list", () => {
 
     await click(findButton("克隆仓库"))
     await changeInput("仓库地址", "https://git.company.com/team/docs.git")
-    await changeInput("保存到", "/work/docs")
+    await changeInput("父目录", "/work")
     await click(findButton("开始克隆"))
 
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("请设置 Git 用户名和邮箱后重试。")
@@ -559,7 +566,7 @@ describe("GitModule repository list", () => {
 
     await click(findButton("克隆仓库"))
     await changeInput("仓库地址", "https://github.com/acme/docs.git")
-    await changeInput("保存到", "/work/docs")
+    await changeInput("父目录", "/work")
     await click(findButton("开始克隆"))
     await click(findButton("处理 GitHub 访问"))
 
@@ -572,7 +579,7 @@ describe("GitModule repository list", () => {
     expect(retryButton.textContent).toContain("重试中")
 
     retry.resolve()
-    await flush()
+    await act(async () => flush())
   })
 
   it("clears stale clone retry context when retry fails with a non-access failure", async () => {
@@ -611,7 +618,7 @@ describe("GitModule repository list", () => {
 
     await click(findButton("克隆仓库"))
     await changeInput("仓库地址", "https://github.com/acme/docs.git")
-    await changeInput("保存到", "/work/docs")
+    await changeInput("父目录", "/work")
     await click(findButton("开始克隆"))
     await click(findButton("处理 GitHub 访问"))
     expect(findButton("重试克隆")).toBeTruthy()
@@ -645,7 +652,7 @@ describe("GitModule repository list", () => {
 
     await click(findButton("克隆仓库"))
     await changeInput("仓库地址", "https://github.com/acme/docs.git")
-    await changeInput("保存到", "/work/docs")
+    await changeInput("父目录", "/work")
     await click(findButton("开始克隆"))
 
     expect(document.body.textContent).toContain("目录不可用")
@@ -681,7 +688,7 @@ describe("GitModule repository list", () => {
 
     await click(findButton("克隆仓库"))
     await changeInput("仓库地址", "git@github.com:acme/docs.git")
-    await changeInput("保存到", "/work/docs")
+    await changeInput("父目录", "/work")
     await click(findButton("开始克隆"))
 
     await click(findButton("处理 SSH"))
@@ -756,7 +763,7 @@ describe("GitModule repository list", () => {
     expect(countButtons("重试拉取")).toBe(0)
   })
 
-  it("does not render failure action buttons for unhandled retry failures", async () => {
+  it("renders retry actions for network failures in list and workbench", async () => {
     const repository = { id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }
     const networkError = new Error("网络不可用。") as Error & { userFacingFailure: unknown }
     networkError.userFacingFailure = {
@@ -779,13 +786,13 @@ describe("GitModule repository list", () => {
     await click(findButton("拉取远程更新"))
 
     expect(document.body.textContent).toContain("网络不可用")
-    expect(countButtons("重试")).toBe(0)
+    expect(countButtons("重试")).toBe(1)
 
     await click(findButton("进入"))
     await click(findButton("拉取远程更新"))
 
     expect(document.body.textContent).toContain("网络不可用")
-    expect(countButtons("重试")).toBe(0)
+    expect(countButtons("重试")).toBe(1)
   })
 
   it("shows environment diagnostics and repository issues", async () => {
@@ -835,14 +842,14 @@ describe("GitModule repository list", () => {
 
     await click(findButton("克隆仓库"))
     await changeInput("仓库地址", "https://git.example.com/team/docs.git")
-    await changeInput("保存到", "/work/docs")
+    await changeInput("父目录", "/work")
     await click(findButton("开始克隆"))
 
-    expect(bridge.git.cloneRepository).toHaveBeenCalledWith({
+    expect(bridge.git.cloneRepository).toHaveBeenCalledWith(expect.objectContaining({
       remoteUrl: "https://git.example.com/team/docs.git",
-      targetPath: "/work/docs",
-      name: "docs",
-    })
+      parentDirectory: "/work",
+      directoryName: "docs",
+    }))
   })
 
   it("configures missing Git identity after confirmation", async () => {
@@ -880,7 +887,7 @@ describe("GitModule repository list", () => {
   })
 
   it("uses native folder selection for clone target path", async () => {
-    bridge.settings.repository.chooseDirectory.mockResolvedValue("/work/docs")
+    bridge.settings.repository.chooseDirectory.mockResolvedValue("/work")
     bridge.git.cloneRepository.mockResolvedValue({
       repository: { id: "repo-1", name: "docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
       remoteKind: "https",
@@ -893,11 +900,11 @@ describe("GitModule repository list", () => {
     await click(findButton("开始克隆"))
 
     expect(bridge.settings.repository.chooseDirectory).toHaveBeenCalled()
-    expect(bridge.git.cloneRepository).toHaveBeenCalledWith({
+    expect(bridge.git.cloneRepository).toHaveBeenCalledWith(expect.objectContaining({
       remoteUrl: "https://git.example.com/team/docs.git",
-      targetPath: "/work/docs",
-      name: "docs",
-    })
+      parentDirectory: "/work",
+      directoryName: "docs",
+    }))
   })
 
   it("uses native folder selection and folder name for local repositories", async () => {
@@ -939,14 +946,14 @@ describe("GitModule repository list", () => {
 
     await click(syncButtons[0])
 
-    expect(bridge.git.sync).toHaveBeenCalledWith("repo-1")
+    expect(bridge.git.sync).toHaveBeenCalledWith("repo-1", expect.any(String))
     expect(syncButtons[0].disabled).toBe(true)
     expect(syncButtons[0].querySelector(".animate-spin")).not.toBeNull()
     expect(syncButtons[1].disabled).toBe(false)
     expect(syncButtons[1].querySelector(".animate-spin")).toBeNull()
 
     sync.resolve()
-    await flush()
+    await act(async () => flush())
   })
 
   it("shows one primary next action for common repository states", async () => {
@@ -995,43 +1002,30 @@ describe("GitModule repository list", () => {
     await click(findButtonByName("Docs 更多操作"))
     await click(findMenuItem("移除仓库"))
     const removalDialogText = document.body.textContent ?? ""
-    expect(removalDialogText).toContain("删除 Git 仓库？")
-    expect(removalDialogText).toContain("仅移除列表记录")
+    expect(removalDialogText).toContain("移除 Git 仓库？")
+    expect(removalDialogText).toContain("只会从 Synapse 列表移除")
     expect(removalDialogText).toContain("目录：/work/docs")
-    expect(removalDialogText.indexOf("目录：/work/docs")).toBeLessThan(
-      removalDialogText.indexOf("仅移除列表记录"),
+    expect(removalDialogText.indexOf("只会从 Synapse 列表移除")).toBeLessThan(
+      removalDialogText.indexOf("目录：/work/docs"),
     )
 
-    await click(findButton("删除记录"))
+    await click(findButton("移除"))
 
-    expect(bridge.git.removeRepository).toHaveBeenCalledWith({
-      repositoryId: "repo-1",
-      mode: "keep-local",
-    })
+    expect(bridge.git.removeRepository).toHaveBeenCalledWith("repo-1")
     expect(bridge.git.listRepositorySummaries).toHaveBeenCalledTimes(2)
   })
 
-  it("trashes local files when selected and keeps the dialog open on failure", async () => {
+  it("does not offer deleting local files", async () => {
     bridge.git.listRepositorySummaries.mockResolvedValue([
       summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }),
     ])
-    bridge.git.removeRepository.mockRejectedValue(new Error("移到废纸篓失败"))
     await renderGitModule(roots)
 
     await click(findButtonByName("Docs 更多操作"))
     await click(findMenuItem("移除仓库"))
-    await click(labelByText("移到废纸篓并移除记录"))
     expect(document.body.textContent).toContain("/work/docs")
-
-    const confirmButton = findButton("移到废纸篓")
-    await click(confirmButton)
-
-    expect(bridge.git.removeRepository).toHaveBeenCalledWith({
-      repositoryId: "repo-1",
-      mode: "trash-local",
-    })
-    expect(document.body.textContent).toContain("移到废纸篓失败")
-    expect(document.body.textContent).toContain("删除 Git 仓库？")
+    expect(document.body.textContent).not.toContain("废纸篓")
+    expect(bridge.git.removeRepository).not.toHaveBeenCalled()
   })
 })
 
@@ -1165,15 +1159,6 @@ function inputByLabel(label: string): HTMLInputElement {
     throw new Error(`Input not found: ${label}`)
   }
   return input
-}
-
-function labelByText(text: string): HTMLLabelElement {
-  const labelElement = Array.from(document.querySelectorAll("label"))
-    .find((item) => item.textContent?.includes(text))
-  if (!(labelElement instanceof HTMLLabelElement)) {
-    throw new Error(`Label not found: ${text}`)
-  }
-  return labelElement
 }
 
 function setNativeInputValue(input: HTMLInputElement, value: string): void {

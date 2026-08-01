@@ -135,8 +135,11 @@ desktop/src/modules/git/assets/icon.png
 │ 仓库地址                                                   │
 │ [ https://git.company.com/team/docs.git                 ]  │
 │                                                            │
-│ 保存到                                                     │
-│ [ /Users/me/work/docs                                  ]   │
+│ 父目录                                                     │
+│ [ /Users/me/work                                       ]   │
+│ 仓库目录名                                                 │
+│ [ docs                                                ]   │
+│ 最终路径 /Users/me/work/docs                               │
 │                                                            │
 │ 检查结果                                                   │
 │ Git 可用                                                   │
@@ -149,6 +152,12 @@ desktop/src/modules/git/assets/icon.png
 HTTPS 是默认推荐路径。首次 clone 时认证交给系统 Git 和 Git Credential Manager 处理，Synapse 不保存账号密码、token 或 cookie。
 
 SSH 是高级路径。Synapse 可以检测 `ssh` 是否可用、是否存在常见 SSH key、生成 SSH key、复制公钥、测试连接。Synapse 不保存私钥，也不要求用户把私钥粘贴到应用里。
+
+克隆目标始终由“父目录 + 单段仓库目录名”计算；已存在的目标子目录必须拒绝，不能覆盖。添加本地仓库时必须解析真实路径并验证 Git 顶层目录，仓库子目录统一登记为其真实 Git 根目录。
+
+工作台采用文件级提交语义：预览显示 `HEAD` 到当前工作树的完整文件变化，提交所选文件时包含该文件的全部变化。未跟踪文件使用 `/dev/null` 到文件的新增差异。差异和提交详情使用受控输出上限；提交文件列表与 diff 分别报告截断状态，截断只影响显示，不改变提交内容。
+
+同一真实 Git 根目录的修改操作使用可见 FIFO 队列；Git System App 与内容仓库共用同一仓库锁。读取等待当前修改完成。clone、fetch、pull、push、sync 支持 operation ID 和取消，取消后重新读取真实状态。
 
 没有 Git 时显示安装引导。安装引导按平台给出短操作，并提供重新检测入口。应用不内置 Git，也不在第一期自动下载安装器。
 
@@ -220,6 +229,8 @@ SSH 是高级路径。Synapse 可以检测 `ssh` 是否可用、是否存在常�
 ```
 
 第一期不自动 merge、不自动 rebase。遇到 non-fast-forward、冲突、认证失败或网络错误时停止操作，刷新状态并显示短提示。
+
+默认 push remote 严格按 Git 配置解析：`branch.<name>.pushRemote` → `remote.pushDefault` → `branch.<name>.remote` → `origin` → 唯一远端。存在多个远端且仍无法判定时必须要求用户选择，不得使用配置文件中的第一个远端。
 
 状态文案控制在操作层面：
 
@@ -366,6 +377,8 @@ type GitRepositorySnapshot = {
 
 历史按当前分支分页加载。
 
+仓库、分支、历史列表或提交选择变化都会使旧详情请求失效。只有最新请求代次可以更新详情、错误与 loading，避免较慢的旧响应覆盖当前选择。
+
 ```ts
 type GitCommitSummary = {
   hash: string
@@ -376,6 +389,10 @@ type GitCommitSummary = {
   committedAt: string
 }
 ```
+
+提交详情同时返回 `filesTruncated`、`diffTruncated`，并保留兼容聚合字段 `truncated`。文件列表和 diff 分别执行固定输出限流，UI 分区提示截断，不将截断显示为命令失败。
+
+仓库注册表使用主文件和备份文件。主文件缺失或结构无效而备份有效时，必须先将备份原子恢复为主文件再返回；两者均无效时保留原始证据并显式报告损坏，禁止静默返回空仓库列表。
 
 ## Git 命令策略
 
@@ -500,7 +517,7 @@ Git 模块遵循现有 Synapse shadcn/Radix 基线。
 
 仓库操作：
 
-- HTTPS 和 SSH URL 能正确识别。
+- HTTP、HTTPS 和 SSH URL 能正确识别，并保留用户名、IPv6 host 与非默认端口。
 - clone 目标目录已存在时不静默覆盖。
 - 添加已有 Git 目录成功。
 - 添加非 Git 目录时给出明确状态。
@@ -521,6 +538,7 @@ Git 模块遵循现有 Synapse shadcn/Radix 基线。
 - `pull --ff-only` 遇到 non-fast-forward 时停止。
 - 冲突状态能识别并归类。
 - push 被拒绝时提示先拉取或同步。
+- 多远端 push 目标遵循 Git 的 pushRemote、pushDefault、branch remote、origin、唯一远端优先级。
 
 分支：
 

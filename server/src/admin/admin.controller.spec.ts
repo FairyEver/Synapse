@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { GUARDS_METADATA } from "@nestjs/common/constants"
 import { AdminController } from "./admin.controller"
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
-import { maxBulkInvitationDeleteIds, type AdminService } from "./admin.service"
+import type { AdminService } from "./admin.service"
 import { auditLogExportLimit, type AuditLogService } from "../common/audit-log.service"
 import type { LiveDeviceService } from "../live/live-device.service"
 import type { WebhookService } from "../webhooks/webhook.service"
@@ -46,6 +46,20 @@ describe("AdminController", () => {
 
   it("keeps admin routes behind the admin auth guard", () => {
     expect(Reflect.getMetadata(GUARDS_METADATA, AdminController)).toContain(AdminAuthGuard)
+  })
+
+  it("does not expose retired team or invitation handlers", () => {
+    const prototype = AdminController.prototype as unknown as Record<string, unknown>
+
+    for (const handler of [
+      "listTeams",
+      "listInvitations",
+      "createInvitation",
+      "deleteInvitation",
+      "deleteInvitations",
+    ]) {
+      expect(prototype).not.toHaveProperty(handler)
+    }
   })
 
   it("passes audit log filters to the audit service", async () => {
@@ -135,17 +149,13 @@ describe("AdminController", () => {
     const record = vi.fn().mockResolvedValue(undefined)
     const service = {
       getSystemOverview: vi.fn().mockResolvedValue({ counts: {} }),
-      listInvitations: list,
       listUsers: list,
-      listTeams: list,
     }
     const controller = createController(service as never, { record })
     const request = { admin: { email: "admin@example.com" }, ip: "203.0.113.11" } as never
 
     await controller.getSystemOverview(request)
-    await controller.listInvitations({}, request)
     await controller.listUsers({}, request)
-    await controller.listTeams({ search: "  研发  " }, request)
 
     expect(record).toHaveBeenCalledWith(expect.objectContaining({
       adminEmail: "admin@example.com",
@@ -155,25 +165,10 @@ describe("AdminController", () => {
       ipAddress: "203.0.113.11",
     }))
     expect(record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "admin.invitations.list",
-      targetType: "invitation",
-      targetId: "list",
-    }))
-    expect(record).toHaveBeenCalledWith(expect.objectContaining({
       action: "admin.users.list",
       targetType: "user",
       targetId: "list",
     }))
-    expect(record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "admin.teams.list",
-      targetType: "team",
-      targetId: "list",
-      detail: expect.objectContaining({ search: "研发" }),
-    }))
-    expect(list).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 1, pageSize: 20 }),
-      { search: "研发" },
-    )
   })
 
   it("lists devices for administrators and records audit metadata", async () => {
@@ -280,39 +275,6 @@ describe("AdminController", () => {
     expect(response.end).toHaveBeenCalledOnce()
     expect(record).not.toHaveBeenCalled()
   })
-
-  it("creates team invitations for administrators", async () => {
-    vi.stubEnv("APP_PUBLIC_URL", "https://app.example.com")
-    const createInvitation = vi.fn().mockResolvedValue({
-      id: "invite-1",
-      inviteUrl: "https://app.example.com/console/team-invite?token=token-1",
-    })
-    const controller = createController({ createInvitation } as never)
-    const request = {
-      admin: { id: "admin-1", email: "admin@example.com" },
-      ip: "203.0.113.44",
-    } as never
-
-    await expect(controller.createInvitation({ teamId: "team-1" }, request))
-      .resolves
-      .toMatchObject({ id: "invite-1" })
-    expect(createInvitation).toHaveBeenCalledWith(
-      { teamId: "team-1" },
-      { id: "admin-1", email: "admin@example.com" },
-      "https://app.example.com",
-      "203.0.113.44",
-    )
-  })
-
-  it("rejects invalid team invitation creation fields", () => {
-    const createInvitation = vi.fn()
-    const controller = createController({ createInvitation } as never)
-
-    expect(() => controller.createInvitation({ teamId: "" }, {} as never))
-      .toThrow("邀请创建请求无效：teamId 至少 1 个字符")
-    expect(createInvitation).not.toHaveBeenCalled()
-  })
-
   it("exports audit logs without list pagination", async () => {
     const listForExport = vi.fn().mockResolvedValue([
       {
@@ -437,33 +399,6 @@ describe("AdminController", () => {
       .toThrow(`导出记录超过 ${auditLogExportLimit} 条，请缩小时间范围。`)
     expect(response.send).not.toHaveBeenCalled()
   })
-
-  it("deletes invitations through the service", async () => {
-    const deleteInvitation = vi.fn().mockResolvedValue({ ok: true })
-    const controller = createController({ deleteInvitation } as never)
-
-    await expect(controller.deleteInvitation("invite-1", {
-      admin: { id: "admin-1", email: "admin@example.com" },
-      ip: "203.0.113.20",
-    } as never))
-      .resolves
-      .toEqual({ ok: true })
-    expect(deleteInvitation).toHaveBeenCalledWith("invite-1", "admin@example.com", "203.0.113.20")
-  })
-
-  it("deletes invitations in bulk through the service", async () => {
-    const deleteInvitations = vi.fn().mockResolvedValue({ ok: true, count: 2 })
-    const controller = createController({ deleteInvitations } as never)
-
-    await expect(controller.deleteInvitations(
-      { ids: ["invite-1", "invite-2"] },
-      { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.30" } as never,
-    ))
-      .resolves
-      .toEqual({ ok: true, count: 2 })
-    expect(deleteInvitations).toHaveBeenCalledWith(["invite-1", "invite-2"], "admin@example.com", "203.0.113.30")
-  })
-
   it("marks skill repositories removed through the service", async () => {
     const setSkillRepositoryRemoved = vi.fn().mockResolvedValue({ id: "repo-1", status: "removed" })
     const controller = createController({ setSkillRepositoryRemoved } as never)
@@ -487,26 +422,6 @@ describe("AdminController", () => {
 
     expect(setSkillRepositoryRemoved).toHaveBeenCalledWith("repo-1", false, "admin@example.com", "203.0.113.79")
   })
-
-  it("rejects empty bulk invitation deletion", async () => {
-    const controller = createController({ deleteInvitations: vi.fn() } as never)
-
-    expect(() => controller.deleteInvitations({ ids: [] }, {} as never))
-      .toThrow("邀请 ID 无效：ids 至少选择 1 项")
-  })
-
-  it("rejects oversized bulk invitation deletion", async () => {
-    const deleteInvitations = vi.fn()
-    const controller = createController({ deleteInvitations } as never)
-
-    expect(() => controller.deleteInvitations(
-      { ids: Array.from({ length: maxBulkInvitationDeleteIds + 1 }, (_, index) => `invite-${index}`) },
-      {} as never,
-    ))
-      .toThrow(`邀请 ID 无效：ids 最多选择 ${maxBulkInvitationDeleteIds} 项`)
-    expect(deleteInvitations).not.toHaveBeenCalled()
-  })
-
   it("rejects invalid user status", async () => {
     const controller = createController({ updateUserStatus: vi.fn() } as never)
 

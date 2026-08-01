@@ -19,16 +19,8 @@ const accountUserSchema = z.object({
   status: z.enum(["active", "disabled"]),
 })
 
-const accountTeamSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  membershipId: z.string(),
-  membershipRole: z.enum(["owner", "member"]),
-})
-
 const accountProfileSchema = z.object({
   user: accountUserSchema,
-  teams: z.array(accountTeamSchema),
   syncedAt: z.string(),
 })
 

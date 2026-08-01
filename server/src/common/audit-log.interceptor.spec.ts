@@ -97,9 +97,8 @@ describe("AuditLogInterceptor", () => {
   it("preserves the original operation error when failed audit writing fails", async () => {
     const auditError = new Error("审计日志写入失败。")
     const auditLog = { record: vi.fn().mockRejectedValue(auditError) }
-    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
     const logger = { warn: vi.fn() }
-    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never, logger as never)
+    const interceptor = new AuditLogInterceptor(auditLog as never, logger as never)
     const sourceError = new Error("用户不存在。")
 
     await expect(lastValueFrom(interceptor.intercept(
@@ -188,9 +187,9 @@ describe("AuditLogInterceptor", () => {
     await lastValueFrom(interceptor.intercept(
       createContext({
         method: "POST",
-        path: "/api/teams",
+        path: "/api/auth/logout",
       }),
-      { handle: () => of({ id: "team-1" }) },
+      { handle: () => of({ ok: true }) },
     ))
 
     expect(auditLog.record).not.toHaveBeenCalled()
@@ -359,9 +358,9 @@ describe("AuditLogInterceptor", () => {
 
     await lastValueFrom(interceptor.intercept(
       createContext({
-        method: "DELETE",
-        path: "/api/admin/invitations/invite-1",
-        params: { id: "invite-1" },
+        method: "PATCH",
+        path: "/api/admin/users/user-1/status",
+        params: { id: "user-1" },
       }),
       { handle: () => of({ ok: true }) },
     ))
@@ -435,33 +434,6 @@ describe("AuditLogInterceptor", () => {
     expect(JSON.stringify(detail)).not.toContain("internal.example.com")
     expect(JSON.stringify(detail)).not.toContain("/Users/liyang/private")
   })
-
-  it("records failed team role permission updates with the role permission audit action", async () => {
-    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
-    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
-    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
-
-    await expect(lastValueFrom(interceptor.intercept(
-      createContext({
-        method: "PUT",
-        path: "/api/admin/teams/team-1/access-roles/role-1/permissions",
-        params: { teamId: "team-1", roleId: "role-1" },
-        body: { permissionKeys: ["module.unknown"] },
-        admin: { id: "admin-1", email: "current-admin@example.com" },
-      }),
-      { handle: () => throwError(() => new Error("团队角色权限无效。")) },
-    ))).rejects.toThrow("团队角色权限无效。")
-
-    await vi.waitFor(() => {
-      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
-        adminEmail: "current-admin@example.com",
-        action: "admin.team_role_permissions.update.failed",
-        targetType: "team_access_role",
-        targetId: "role-1",
-      }))
-    })
-  })
-
   it("records failed log file list reads with the controller audit action", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }

@@ -12,12 +12,10 @@ import { BackupModule } from "./backup/backup.module"
 import { DashboardModule } from "./dashboard/dashboard.module"
 import { DriveModule } from "./drive/drive.module"
 import { HealthModule } from "./health/health.module"
-import { InvitationsModule } from "./invitations/invitations.module"
 import { LiveModule } from "./live/live.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { ProblemFeedbackModule } from "./problem-feedback/problem-feedback.module"
 import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
-import { TeamsModule } from "./teams/teams.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 import { sanitizeWebhookLogRequest } from "./webhooks/webhook-sanitize"
 import { WebhookModule } from "./webhooks/webhook.module"
@@ -45,7 +43,7 @@ type RequestLogObject = {
             return url.split("?")[0] === "/api/problem-feedback"
           },
         },
-        redact: ["req.headers.cookie", "req.headers.authorization"],
+        redact: ["req.headers.cookie", "req.headers.authorization", "req.body.accessSecret"],
         serializers: {
           req(request: RequestLogObject) {
             return sanitizeWebhookLogRequest(request)
@@ -73,10 +71,8 @@ type RequestLogObject = {
       },
     }),
     PrismaModule,
-    InvitationsModule,
     UserAuthModule,
     LiveModule,
-    TeamsModule,
     WebhookModule,
     AdminAuthModule,
     DashboardModule,

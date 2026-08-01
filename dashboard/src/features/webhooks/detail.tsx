@@ -98,7 +98,7 @@ export default function WebhookDetailPage() {
       queryClient.removeQueries({ queryKey: ['dashboard-webhook', deletedId] })
       void queryClient.invalidateQueries({ queryKey: ['dashboard-webhooks'] })
       toast.success('已删除')
-      void navigate({ to: '/webhooks' })
+      void navigate({ to: '/webhooks/' })
     },
     onError: (error) => toast.error(getWebhookErrorMessage(error, '删除失败')),
   })
@@ -111,7 +111,7 @@ export default function WebhookDetailPage() {
       <Main className='flex max-w-4xl flex-col gap-4'>
         <div>
           <Button asChild variant='outline' size='sm'>
-            <Link to='/webhooks'>返回</Link>
+            <Link to='/webhooks/'>返回</Link>
           </Button>
         </div>
 
@@ -159,7 +159,7 @@ export default function WebhookDetailPage() {
             <CardContent className='flex flex-col items-start gap-3'>
               <div className='font-medium'>未找到 Webhook</div>
               <Button asChild variant='outline' size='sm'>
-                <Link to='/webhooks'>返回列表</Link>
+                <Link to='/webhooks/'>返回列表</Link>
               </Button>
             </CardContent>
           </Card>

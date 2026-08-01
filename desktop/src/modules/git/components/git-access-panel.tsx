@@ -24,7 +24,9 @@ import type {
   SynapseGitGenerateSshKeyInput,
   SynapseGitProviderLinks,
   SynapseGitSaveHttpsCredentialInput,
+  SynapseGitSshHostKeyCandidate,
   SynapseGitSshTestResult,
+  SynapseGitTestSshConnectionInput,
 } from "@/types/git"
 import type { PendingGitAction } from "../hooks/use-pending-git-action"
 import { GitCredentialDialog, type GitCredentialDialogMode } from "./git-credential-dialog"
@@ -40,9 +42,9 @@ type GitAccessPanelProps = {
   readonly onRefresh: () => Promise<void>
   readonly onConfigureCredentialHelper: (input: { readonly helper: string }) => Promise<boolean>
   readonly onSaveHttpsCredential: (input: SynapseGitSaveHttpsCredentialInput) => Promise<boolean>
-  readonly onClearHttpsCredential: (input: { readonly host: string; readonly protocol: "https" }) => Promise<boolean>
+  readonly onClearHttpsCredential: (input: { readonly host: string; readonly port?: number | null; readonly protocol: "http" | "https" }) => Promise<boolean>
   readonly onGenerateSshKey: (input: SynapseGitGenerateSshKeyInput) => Promise<boolean>
-  readonly onTestSshConnection: (input: { readonly host: string; readonly provider?: SynapseGitAccessHostState["provider"] }) => Promise<SynapseGitSshTestResult | null>
+  readonly onTestSshConnection: (input: SynapseGitTestSshConnectionInput) => Promise<SynapseGitSshTestResult | null>
   readonly retrying: boolean
   readonly onRetryPendingAction: () => Promise<void>
 }
@@ -73,6 +75,7 @@ function hostFromPendingAction(pendingAction: PendingGitAction | null): SynapseG
   return {
     host: pendingAction.host,
     lastFailure: null,
+    port: pendingAction.port ?? null,
     protocol: pendingAction.protocol,
     provider: pendingAction.provider,
   }
@@ -130,24 +133,30 @@ export function GitAccessPanel({
   const [message, setMessage] = useState<string | null>(null)
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [sshTestResult, setSshTestResult] = useState<SynapseGitSshTestResult | null>(null)
+  const [sshHostKeyCandidate, setSshHostKeyCandidate] = useState<SynapseGitSshHostKeyCandidate | null>(null)
   const [httpsHostInput, setHttpsHostInput] = useState("")
   const [clearCredentialHost, setClearCredentialHost] = useState<string | null>(null)
   const lastAutoCredentialKeyRef = useRef<string | null>(null)
 
   const pendingHost = hostFromPendingAction(pendingAction)
   const accessPendingHost = pendingHost
-    ? access?.hosts.find((host) => host.host === pendingHost.host && host.protocol === pendingHost.protocol) ?? null
+    ? access?.hosts.find((host) => (
+      host.host === pendingHost.host
+      && (host.port ?? null) === pendingHost.port
+      && host.protocol === pendingHost.protocol
+    )) ?? null
     : null
   const selectedHost = useMemo(() => (
     accessPendingHost
       ?? pendingHost
       ?? null
   ), [accessPendingHost, pendingHost])
-  const selectedHttpsHost = selectedHost?.protocol === "https" ? selectedHost : null
+  const selectedHttpsHost = selectedHost?.protocol === "http" || selectedHost?.protocol === "https" ? selectedHost : null
   const manualHttpsHost = normalizeHost(httpsHostInput)
   const activeHttpsHost = selectedHttpsHost ?? (manualHttpsHost ? {
     host: manualHttpsHost,
     lastFailure: null,
+    port: null,
     protocol: "https" as const,
     provider: providerFromHost(manualHttpsHost),
   } : null)
@@ -155,6 +164,10 @@ export function GitAccessPanel({
   const sshLinks = providerLinks(access, selectedHost)
   const credentialMode: GitCredentialDialogMode = activeHttpsHost?.provider === "github" ? "github-token" : "generic"
   const helper = recommendedCredentialHelper(platform)
+  const helperManagement = access?.credentialHelper.management ?? "unconfigured"
+  const helperStatus = helperManagement === "synapse-supported"
+    ? "可用"
+    : helperManagement === "external" ? "外部管理" : helperManagement === "insecure" ? "明文存储" : "未配置"
   const canUseHost = Boolean(selectedHost?.host)
   const canUseHttps = Boolean(activeHttpsHost?.host)
   const isGithubHttps = activeHttpsHost?.provider === "github"
@@ -169,11 +182,11 @@ export function GitAccessPanel({
       return
     }
     if (!activeHttpsHost?.host || activeHttpsHost.provider === "github") return
-    const credentialKey = `${pendingAction.type}:${activeHttpsHost.host}:https`
+    const credentialKey = `${pendingAction.type}:${activeHttpsHost.protocol}:${activeHttpsHost.host}:${String(activeHttpsHost.port ?? "")}`
     if (lastAutoCredentialKeyRef.current === credentialKey) return
     lastAutoCredentialKeyRef.current = credentialKey
     setCredentialOpen(true)
-  }, [activeHttpsHost?.host, activeHttpsHost?.provider, pendingAction])
+  }, [activeHttpsHost?.host, activeHttpsHost?.port, activeHttpsHost?.protocol, activeHttpsHost?.provider, pendingAction])
 
   const runAction = async (label: string, action: () => Promise<void>) => {
     setBusyAction(label)
@@ -211,9 +224,24 @@ export function GitAccessPanel({
     await runAction("test-ssh", async () => {
       const result = await onTestSshConnection({
         host: selectedHost.host,
+        port: pendingAction?.port,
         provider: selectedHost.provider,
+        username: pendingAction?.username,
       })
       setSshTestResult(result)
+      if (result && !result.ok && /host key verification failed|authenticity of host|no .* host key is known/i.test(result.detail ?? "")) {
+        const candidate = await requireSynapseBridge().git.scanSshHostKey({
+          host: selectedHost.host,
+          port: pendingAction?.port,
+          provider: selectedHost.provider,
+          username: pendingAction?.username,
+        })
+        if (candidate.changed) {
+          setMessage("SSH 主机密钥与 known_hosts 记录不一致，请人工核验；Synapse 不会覆盖现有记录。")
+          return
+        }
+        if (!candidate.trusted) setSshHostKeyCandidate(candidate)
+      }
     })
   }
 
@@ -229,7 +257,11 @@ export function GitAccessPanel({
     const host = clearCredentialHost ?? activeHttpsHost?.host
     if (!host) return
     await runAction("clear-credential", async () => {
-      await onClearHttpsCredential({ host, protocol: "https" })
+      await onClearHttpsCredential({
+        host,
+        port: activeHttpsHost?.host === host ? activeHttpsHost.port ?? null : null,
+        protocol: activeHttpsHost?.host === host && activeHttpsHost.protocol === "http" ? "http" : "https",
+      })
       setMessage("已清除凭据。")
     })
   }
@@ -249,7 +281,8 @@ export function GitAccessPanel({
             await onSaveHttpsCredential({
               host: activeHttpsHost.host,
               password: input.password,
-              protocol: "https",
+              port: activeHttpsHost.port ?? null,
+              protocol: activeHttpsHost.protocol === "http" ? "http" : "https",
               username: input.username,
             })
             return null
@@ -264,6 +297,46 @@ export function GitAccessPanel({
             return null
           }}
         />
+        <AlertDialog
+          open={sshHostKeyCandidate !== null}
+          onOpenChange={(open) => { if (!open) setSshHostKeyCandidate(null) }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>确认 SSH 主机密钥</AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="grid gap-2">
+                  <span>{sshHostKeyCandidate ? `${sshHostKeyCandidate.host}:${String(sshHostKeyCandidate.port)}` : ""}</span>
+                  {sshHostKeyCandidate?.fingerprints.map((fingerprint) => (
+                    <span key={fingerprint} className="break-all font-mono text-xs" data-allow-select="true">{fingerprint}</span>
+                  ))}
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction onClick={() => {
+                const candidate = sshHostKeyCandidate
+                if (!candidate) return
+                void runAction("trust-ssh-host", async () => {
+                  await requireSynapseBridge().git.trustSshHostKey({
+                    fingerprints: candidate.fingerprints,
+                    host: candidate.host,
+                    port: candidate.port,
+                  })
+                  setSshHostKeyCandidate(null)
+                  if (pendingAction) {
+                    await onRetryPendingAction()
+                  } else {
+                    setMessage("已信任 SSH 主机密钥。")
+                  }
+                })
+              }}>
+                信任
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <AlertDialog
           open={clearCredentialHost !== null}
           onOpenChange={(open) => {
@@ -295,7 +368,7 @@ export function GitAccessPanel({
                 <Button type="button" size="sm" disabled={retrying} onClick={() => void onRetryPendingAction()}>
                   {retrying ? "重试中" : retryLabel(pendingAction)}
                 </Button>
-                {pendingAction.protocol === "https" && activeHttpsHost && !isGithubHttps ? (
+                {(pendingAction.protocol === "http" || pendingAction.protocol === "https") && activeHttpsHost && !isGithubHttps ? (
                   <Button type="button" variant="outline" size="sm" onClick={() => setCredentialOpen(true)}>
                     登录仓库
                   </Button>
@@ -342,7 +415,7 @@ export function GitAccessPanel({
           <CardContent className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={access?.credentialHelper.safe ? "secondary" : "outline"}>
-                {access?.credentialHelper.safe ? "可用" : "需配置"}
+                {helperStatus}
               </Badge>
               <span className="text-sm text-muted-foreground">{fallbackValue(access?.credentialHelper.helper)}</span>
             </div>
@@ -350,7 +423,7 @@ export function GitAccessPanel({
               <FieldRow label="helper" value={access?.credentialHelper.helper} />
               <FieldRow label="来源" value={access?.credentialHelper.source} />
             </div>
-            {!access?.credentialHelper.safe && helper ? (
+            {(helperManagement === "unconfigured" || helperManagement === "insecure") && helper ? (
               <div>
                 <Button
                   type="button"

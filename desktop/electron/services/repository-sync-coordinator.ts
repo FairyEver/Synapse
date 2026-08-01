@@ -15,7 +15,6 @@ import { classifyGitFailure } from "./git-error-utils"
 import { createMainLogger } from "./log-store"
 import { pendingPushesService } from "./pending-pushes-service"
 import { repositoryGitService } from "./repository-git-service"
-import { repositoryLockManager } from "./repository-lock-manager"
 import { repositoryMaintenanceService } from "./repository-maintenance-service"
 import { repositoryStore } from "./repository-store"
 
@@ -95,8 +94,11 @@ class RepositorySyncCoordinator {
   }
 
   async refreshSnapshot(repository: SynapseRepositoryConfig): Promise<SynapseRepositorySyncSnapshot> {
-    const pending = await pendingPushesService.readState(repository)
-    const snapshot = this.createSnapshotFromPending(repository.uuid, pending)
+    const [pending, unpushedCommitCount] = await Promise.all([
+      pendingPushesService.readState(repository),
+      contentSubmissionService.readUnpushedCommitCount(repository),
+    ])
+    const snapshot = this.createSnapshotFromPending(repository.uuid, pending, unpushedCommitCount)
 
     this.emitSnapshot(snapshot)
     this.syncRetryTimerFromSnapshot(repository, snapshot)
@@ -222,16 +224,16 @@ class RepositorySyncCoordinator {
     })
 
     try {
-      const release = await repositoryLockManager.acquire(repository.uuid, "sync")
-      try {
+      return await contentSubmissionService.runRepositoryGitExclusive(repository, "sync", async (repositoryState) => {
         const pending = await pendingPushesService.readState(repository)
+        const unpushedCommitCount = await contentSubmissionService.readUnpushedCommitCount(repository)
 
-        if (pending.count > 0) {
+        if (pending.count > 0 || unpushedCommitCount > 0) {
           let shouldContinue = false
 
           do {
             shouldContinue = await this.runPushOnce(repository, reason, {
-              alreadyExclusive: true,
+              repositoryState,
             })
           } while (shouldContinue)
 
@@ -241,12 +243,11 @@ class RepositorySyncCoordinator {
             completedAt: this.now().toISOString(),
             pendingPushCount: (await pendingPushesService.readState(repository)).count,
           }
-          release()
           await this.refreshSnapshot(repository)
           return result
         }
 
-        const result = await repositoryGitService.syncRepository(repository, (event) => {
+        const result = await repositoryGitService.syncRepositoryInExclusive(repository, repositoryState, (event) => {
           this.emitLegacyProgress(event)
           const current = this.getSnapshot(repository.uuid)
 
@@ -257,14 +258,10 @@ class RepositorySyncCoordinator {
             phase: "running",
             message: event.statusText,
           })
-        }, { skipLock: true })
-        release()
+        })
         await this.refreshSnapshot(repository)
         return result
-      } catch (error) {
-        release()
-        throw error
-      }
+      })
     } catch (error) {
       await this.handleOperationFailure(repository, "sync", error)
       throw error
@@ -306,10 +303,10 @@ class RepositorySyncCoordinator {
         statusText: "正在准备整理...",
         percent: 0,
       })
-      const release = await repositoryLockManager.acquire(repository.uuid, "maintenance")
-      let result: Awaited<ReturnType<typeof repositoryMaintenanceService.runManualMaintenance>>
-      try {
-        result = await repositoryMaintenanceService.runManualMaintenance(repository, (statusText) => {
+      const result = await contentSubmissionService.runRepositoryGitExclusive(
+        repository,
+        "maintenance",
+        (repositoryState) => repositoryMaintenanceService.runManualMaintenanceInExclusive(repository, repositoryState, (statusText) => {
           this.emitLegacyProgress({
             repositoryUuid: repository.uuid,
             operation: "maintenance",
@@ -325,10 +322,8 @@ class RepositorySyncCoordinator {
             phase: "running",
             message: statusText,
           })
-        })
-      } finally {
-        release()
-      }
+        }),
+      )
 
       await this.refreshSnapshot(repository)
 
@@ -397,9 +392,21 @@ class RepositorySyncCoordinator {
   private createSnapshotFromPending(
     repositoryUuid: string,
     pending: SynapsePendingPushState,
+    unpushedCommitCount = 0,
   ): SynapseRepositorySyncSnapshot {
-    if (pending.count === 0) {
+    if (pending.count === 0 && unpushedCommitCount === 0) {
       return createEmptySnapshot(repositoryUuid)
+    }
+
+    if (pending.count === 0) {
+      return {
+        ...createEmptySnapshot(repositoryUuid),
+        status: "pending",
+        pendingCount: unpushedCommitCount,
+        message: `${unpushedCommitCount} 个本地提交等待同步`,
+        canRetryNow: true,
+        primaryAction: "retry",
+      }
     }
 
     const firstError = pending.firstErrorItem
@@ -421,7 +428,7 @@ class RepositorySyncCoordinator {
       status: failureSnapshotState?.status ?? "pending",
       operation: null,
       phase: failureSnapshotState?.phase ?? (nextRetryAt ? "retry-wait" : "completed"),
-      pendingCount: pending.count,
+      pendingCount: Math.max(pending.count, unpushedCommitCount),
       pendingItems: pending.items,
       message: firstError?.lastError ?? `${pending.count} 条变更等待同步`,
       detail: failureCategory ? undefined : firstError?.title ?? undefined,
@@ -497,12 +504,13 @@ class RepositorySyncCoordinator {
     repository: SynapseRepositoryConfig,
     _reason: SyncRequestReason,
     options: {
-      alreadyExclusive?: boolean
+      repositoryState?: Awaited<ReturnType<typeof repositoryStore.getRepositoryState>>
     } = {},
   ): Promise<boolean> {
     const pending = await pendingPushesService.readState(repository, { limit: null })
+    const unpushedCommitCount = await contentSubmissionService.readUnpushedCommitCount(repository)
 
-    if (pending.count === 0) {
+    if (pending.count === 0 && unpushedCommitCount === 0) {
       this.emitSnapshot(createEmptySnapshot(repository.uuid))
       return false
     }
@@ -511,13 +519,15 @@ class RepositorySyncCoordinator {
     const attemptedAt = this.now().toISOString()
     const nextRetryCount = Math.max(1, ...pending.items.map((item) => item.retryCount + 1))
 
-    await pendingPushesService.markAttempt(repository, attemptedAt, attemptedIds)
+    if (attemptedIds.length > 0) {
+      await pendingPushesService.markAttempt(repository, attemptedAt, attemptedIds)
+    }
     this.emitSnapshot({
       repositoryUuid: repository.uuid,
       status: "syncing",
       operation: "push",
       phase: "running",
-      pendingCount: pending.count,
+      pendingCount: Math.max(pending.count, unpushedCommitCount),
       pendingItems: pending.items,
       message: "正在同步变更",
       lastAttemptAt: attemptedAt,
@@ -533,15 +543,9 @@ class RepositorySyncCoordinator {
         statusText: "正在准备推送...",
         percent: 0,
       })
-      const flushOptions = options.alreadyExclusive
-        ? { skipLock: true, recordFailure: false }
-        : { recordFailure: false }
-
       const tFlush = Date.now()
       logger.info("runPushOnce: flushPendingPushes starting.", { repositoryUuid: repository.uuid, pendingCount: pending.count })
-      await contentSubmissionService.flushPendingPushes(
-        repository,
-        (statusText: string) => {
+      const onProgress = (statusText: string) => {
           this.emitLegacyProgress({
             repositoryUuid: repository.uuid,
             operation: "push",
@@ -557,16 +561,28 @@ class RepositorySyncCoordinator {
             phase: "running",
             message: statusText,
           })
-        },
-        flushOptions,
-      )
+        }
+      if (options.repositoryState) {
+        await contentSubmissionService.flushPendingPushesInExclusive(
+          repository,
+          options.repositoryState,
+          onProgress,
+          { recordFailure: false },
+        )
+      } else {
+        await contentSubmissionService.flushPendingPushes(repository, onProgress, { recordFailure: false })
+      }
       logger.info("runPushOnce: flushPendingPushes done.", { durationMs: Date.now() - tFlush, repositoryUuid: repository.uuid })
 
       const remaining = await pendingPushesService.readState(repository)
 
       return remaining.count > 0
     } catch (error) {
-      await this.handlePushFailure(repository, attemptedIds, nextRetryCount, error)
+      if (attemptedIds.length > 0) {
+        await this.handlePushFailure(repository, attemptedIds, nextRetryCount, error)
+      } else {
+        await this.handleOperationFailure(repository, "push", error)
+      }
       throw error
     }
   }

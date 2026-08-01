@@ -228,7 +228,6 @@ function authenticatedOnline(userId: string) {
     connectivity: "online" as const,
     profile: {
       user: { id: userId, email: `${userId}@example.test`, displayName: null, status: "active" as const },
-      teams: [],
       syncedAt: "2026-07-01T00:00:00.000Z",
     },
   }

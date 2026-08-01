@@ -83,7 +83,7 @@ describe('ServerDataTable', () => {
   it('shows column visibility controls for hideable server columns', async () => {
     type Row = {
       email: string
-      teamName: string
+      repositoryName: string
     }
 
     const columns: ColumnDef<Row>[] = [
@@ -94,17 +94,17 @@ describe('ServerDataTable', () => {
         ),
       },
       {
-        id: 'teamName',
+        id: 'repositoryName',
         header: ({ column }) => (
-          createElement(DataTableColumnHeader, { column, title: '团队' })
+          createElement(DataTableColumnHeader, { column, title: '仓库' })
         ),
-        cell: ({ row }) => row.original.teamName,
+        cell: ({ row }) => row.original.repositoryName,
         enableSorting: false,
       },
     ]
 
     renderServerTable(columns, [
-      { email: 'admin@example.com', teamName: '核心团队' },
+      { email: 'admin@example.com', repositoryName: '核心仓库' },
     ])
 
     const viewButton = buttonByText('View')
@@ -113,7 +113,7 @@ describe('ServerDataTable', () => {
     await click(viewButton)
 
     expect(document.body.textContent).toContain('email')
-    expect(document.body.textContent).toContain('teamName')
+    expect(document.body.textContent).toContain('repositoryName')
   })
 })
 

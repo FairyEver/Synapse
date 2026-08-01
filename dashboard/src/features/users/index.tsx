@@ -13,6 +13,7 @@ import {
 } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { LongText } from '@/components/long-text'
 import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -158,15 +159,17 @@ export default function UsersPage() {
         <DataTableColumnHeader column={column} title='邮箱' />
       ),
       cell: ({ row }) => (
-        <span className='font-medium'>{row.original.email}</span>
+        <LongText className='font-medium'>{row.original.email}</LongText>
       ),
+      meta: { className: 'max-w-0 w-1/4' },
     },
     {
       accessorKey: 'handle',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='用户名' />
       ),
-      cell: ({ row }) => row.original.handle || '-',
+      cell: ({ row }) => <LongText>{row.original.handle || '-'}</LongText>,
+      meta: { className: 'max-w-0 w-1/5' },
     },
     {
       accessorKey: 'adminNote',
@@ -176,17 +179,15 @@ export default function UsersPage() {
       cell: ({ row }) => {
         const adminNote = row.original.adminNote?.trim()
         return adminNote ? (
-          <span
-            className='block max-w-xs truncate text-muted-foreground'
-            title={adminNote}
-          >
+          <LongText className='max-w-40 text-muted-foreground'>
             {adminNote}
-          </span>
+          </LongText>
         ) : (
           <span className='text-muted-foreground'>-</span>
         )
       },
       enableSorting: false,
+      meta: { className: 'w-40' },
     },
     {
       accessorKey: 'status',
@@ -200,15 +201,7 @@ export default function UsersPage() {
           {row.original.status === 'active' ? '正常' : '禁用'}
         </Badge>
       ),
-    },
-    {
-      id: 'teams',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='团队' />
-      ),
-      cell: ({ row }) =>
-        row.original.memberships.map((m) => m.team.name).join(', ') || '-',
-      enableSorting: false,
+      meta: { className: 'w-20' },
     },
     {
       id: 'liveClients',
@@ -240,13 +233,17 @@ export default function UsersPage() {
         )
       },
       enableSorting: false,
+      meta: { className: 'w-24' },
     },
     {
       accessorKey: 'createdAt',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='创建时间' />
       ),
-      cell: ({ row }) => <RelativeTime value={row.original.createdAt} />,
+      cell: ({ row }) => (
+        <RelativeTime className='tabular-nums' value={row.original.createdAt} />
+      ),
+      meta: { className: 'w-32' },
     },
     {
       id: 'actions',
@@ -254,7 +251,7 @@ export default function UsersPage() {
         <div className='flex justify-end gap-2'>
           <Button
             variant='ghost'
-            className='h-8 px-2'
+            size='sm'
             onClick={() => openAdminNoteDialog(row.original)}
           >
             <Pencil className='size-4' />
@@ -262,7 +259,7 @@ export default function UsersPage() {
           </Button>
           <Button
             variant='ghost'
-            className='h-8 px-2'
+            size='sm'
             disabled={
               toggleStatus.isPending &&
               statusTarget?.user.id === row.original.id
@@ -274,6 +271,7 @@ export default function UsersPage() {
         </div>
       ),
       meta: {
+        className: 'w-36',
         thClassName: 'text-right',
         tdClassName: 'text-right',
       },
@@ -300,24 +298,22 @@ export default function UsersPage() {
         <h1 className='text-lg font-semibold'>用户管理</h1>
       </Header>
       <Main>
-        {isTableLoading ? (
-          <div className='text-muted-foreground'>加载中...</div>
-        ) : (
-          <ServerDataTable
-            columns={columns}
-            data={data?.data ?? []}
-            page={page}
-            pageSize={pageSize}
-            total={data?.total ?? 0}
-            toolbar={liveClientToolbar}
-            error={tableError}
-            onRetry={retryTable}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            sorting={sorting}
-            onSortingChange={setSorting}
-          />
-        )}
+        <ServerDataTable
+          columns={columns}
+          data={data?.data ?? []}
+          page={page}
+          pageSize={pageSize}
+          total={data?.total ?? 0}
+          toolbar={liveClientToolbar}
+          error={tableError}
+          isLoading={isTableLoading}
+          loadingRowCount={Math.min(pageSize, DEFAULT_DASHBOARD_PAGE_SIZE)}
+          onRetry={retryTable}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          sorting={sorting}
+          onSortingChange={setSorting}
+        />
         <ConfirmDialog
           open={Boolean(statusTarget)}
           onOpenChange={(open) => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitCommitDetail, SynapseGitCommitSummary, SynapseGitRepository } from "@/types/git"
 
@@ -14,21 +14,30 @@ export function useGitHistory(repository: SynapseGitRepository, options: UseGitH
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasLoaded, setHasLoaded] = useState(false)
+  const listRequestIdRef = useRef(0)
+  const detailRequestIdRef = useRef(0)
 
   const loadCommit = useCallback(async (hash: string) => {
+    const requestId = ++detailRequestIdRef.current
     setDetailLoading(true)
     setError(null)
     try {
-      setSelectedCommit(await requireSynapseBridge().git.getCommit(repository.id, hash))
+      const detail = await requireSynapseBridge().git.getCommit(repository.id, hash)
+      if (detailRequestIdRef.current === requestId) setSelectedCommit(detail)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "读取提交详情失败。")
+      if (detailRequestIdRef.current === requestId) {
+        setError(err instanceof Error ? err.message : "读取提交详情失败。")
+      }
     } finally {
-      setDetailLoading(false)
+      if (detailRequestIdRef.current === requestId) setDetailLoading(false)
     }
   }, [repository.id])
 
   const refresh = useCallback(async () => {
+    const requestId = ++listRequestIdRef.current
+    detailRequestIdRef.current += 1
     setLoading(true)
+    setDetailLoading(false)
     setError(null)
     try {
       const next = await requireSynapseBridge().git.listHistory({
@@ -36,15 +45,30 @@ export function useGitHistory(repository: SynapseGitRepository, options: UseGitH
         limit: 40,
         offset: 0,
       })
-      setCommits(next)
-      setSelectedCommit(null)
-      setHasLoaded(true)
+      if (listRequestIdRef.current === requestId) {
+        setCommits(next)
+        setSelectedCommit(null)
+        setHasLoaded(true)
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "读取历史失败。")
-      setHasLoaded(true)
+      if (listRequestIdRef.current === requestId) {
+        setError(err instanceof Error ? err.message : "读取历史失败。")
+        setHasLoaded(true)
+      }
     } finally {
-      setLoading(false)
+      if (listRequestIdRef.current === requestId) setLoading(false)
     }
+  }, [repository.id])
+
+  useEffect(() => {
+    listRequestIdRef.current += 1
+    detailRequestIdRef.current += 1
+    setCommits([])
+    setSelectedCommit(null)
+    setLoading(false)
+    setDetailLoading(false)
+    setError(null)
+    setHasLoaded(false)
   }, [repository.id])
 
   useEffect(() => {

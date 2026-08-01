@@ -443,7 +443,7 @@ describe("server deployment configuration", () => {
     expect(viteConfig).not.toContain("download|zip")
   })
 
-  it("serves the console bundle and redirects legacy dashboard paths", () => {
+  it("serves independent console and admin bundles with explicit legacy redirects", () => {
     const nginx = readRepoFile("server/nginx.conf")
 
     expect(nginx).toContain("location = /console")
@@ -453,11 +453,21 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("try_files $uri $uri/ /console/index.html;")
     expect(nginx).toContain("location = /dashboard")
     expect(nginx).toContain("return 301 /console/;")
+    expect(nginx).toContain("location = /admin")
+    expect(nginx).toContain("location /admin/")
+    expect(nginx).toContain("try_files $uri $uri/ /admin/admin.html;")
+    expect(nginx).toContain("return 301 /admin/$1$is_args$args;")
     expect(nginx).toContain("location /dashboard/")
-    expect(nginx).toContain("return 301 /console/$is_args$args;")
-    expect(nginx).toContain("location ~ ^/dashboard/(.*)$")
-    expect(nginx).toContain("return 301 /console/$1$is_args$args;")
+    expect(nginx).toContain("return 404;")
     expect(nginx).toContain("return 302 /console/;")
+  })
+
+  it("returns 404 before SPA fallback for retired team and invitation pages", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+    const retiredRoutes = nginx.indexOf("(?:team-invite|(?:console|dashboard)/team-invite")
+
+    expect(retiredRoutes).toBeGreaterThan(0)
+    expect(nginx.slice(retiredRoutes, retiredRoutes + 220)).toContain("return 404;")
   })
 
   it("forwards public origin and websocket upgrade headers to the api server", () => {

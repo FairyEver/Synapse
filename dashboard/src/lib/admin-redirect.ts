@@ -1,0 +1,21 @@
+const adminRoutePatterns = [
+  /^\/system\/?$/u,
+  /^\/users\/?$/u,
+  /^\/devices\/?$/u,
+  /^\/skill-repositories\/?$/u,
+  /^\/webhook-deliveries\/?$/u,
+  /^\/audit-logs\/?$/u,
+  /^\/problem-feedback\/?$/u,
+  /^\/backup\/?$/u,
+  /^\/drive\/?$/u,
+  /^\/logs\/?$/u,
+]
+
+export function normalizeAdminRedirect(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return undefined
+  const url = new URL(value, 'http://synapse.local')
+  if (url.origin !== 'http://synapse.local') return undefined
+  return adminRoutePatterns.some((pattern) => pattern.test(url.pathname))
+    ? `${url.pathname}${url.search}${url.hash}`
+    : undefined
+}

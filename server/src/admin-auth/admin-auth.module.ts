@@ -1,37 +1,23 @@
 import { Module } from "@nestjs/common"
-import { JwtModule } from "@nestjs/jwt"
 import { loadEnv } from "../config/env"
 import { AuditLogService } from "../common/audit-log.service"
 import { PrismaModule } from "../prisma/prisma.module"
 import { AdminAuthController } from "./admin-auth.controller"
 import { AdminAuthGuard } from "./admin-auth.guard"
-import { AdminAuthService } from "./admin-auth.service"
-import { AdminBootstrapService, adminBootstrapEnvToken } from "./admin-bootstrap.service"
+import { AdminAuthService, adminAuthOptionsToken } from "./admin-auth.service"
 
 @Module({
-  imports: [
-    PrismaModule,
-    JwtModule.registerAsync({
-      useFactory: () => {
-        const env = loadEnv(process.env)
-        return {
-          secret: env.adminJwtSecret,
-          signOptions: { expiresIn: "8h" },
-        }
-      },
-    }),
-  ],
+  imports: [PrismaModule],
   controllers: [AdminAuthController],
   providers: [
     AdminAuthService,
     {
-      provide: adminBootstrapEnvToken,
+      provide: adminAuthOptionsToken,
       useFactory: () => {
         const env = loadEnv(process.env)
-        return { adminEmail: env.adminEmail, adminPassword: env.adminPassword }
+        return { accessSecret: env.adminAccessSecret }
       },
     },
-    AdminBootstrapService,
     AdminAuthGuard,
     AuditLogService,
   ],

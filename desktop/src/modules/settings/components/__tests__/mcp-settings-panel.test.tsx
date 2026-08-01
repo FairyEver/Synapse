@@ -109,9 +109,9 @@ describe("McpSettingsPanel", () => {
     renderPanel()
     await flush()
 
-    expect(document.body.textContent).toContain("ClaudeCode/Synapse")
+    expect(document.body.textContent).toContain("CC/Synapse")
     expect(document.body.textContent).toContain("配置读取失败")
-    expect(document.body.textContent).not.toContain("ClaudeCode/Synapse未注册")
+    expect(document.body.textContent).not.toContain("CC/Synapse未注册")
     const registerButton = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
       .find((button) => button.textContent === "注册")
     expect(registerButton?.disabled).toBe(true)

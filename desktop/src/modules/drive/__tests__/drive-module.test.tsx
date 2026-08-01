@@ -87,7 +87,6 @@ const accountState = vi.hoisted((): { current: SynapseAccountState } => ({
         status: "active",
         handle: "ada",
       },
-      teams: [],
       syncedAt: "2026-06-01T00:00:00.000Z",
     },
   },
@@ -4264,7 +4263,6 @@ function createAuthenticatedState(): SynapseAccountState {
         status: "active",
         handle: "ada",
       },
-      teams: [],
       syncedAt: "2026-06-01T00:00:00.000Z",
     },
   }

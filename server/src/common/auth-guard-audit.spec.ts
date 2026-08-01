@@ -19,11 +19,11 @@ describe("recordAuthGuardFailure", () => {
     })
 
     await recordAuthGuardFailure({
-      action: "teams.auth.verify.failed",
+      action: "user.auth.verify.failed",
       auditLog: auditLog as never,
       request: {
         method: "GET",
-        path: "/api/teams/me",
+        path: "/api/auth/me",
         ip: "203.0.113.44",
       },
       token,
@@ -31,12 +31,12 @@ describe("recordAuthGuardFailure", () => {
 
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "unknown",
-      action: "teams.auth.verify.failed",
+      action: "user.auth.verify.failed",
       targetType: "auth",
       targetId: "unknown",
       detail: {
         method: "GET",
-        path: "/api/teams/me",
+        path: "/api/auth/me",
         tokenPresent: true,
       },
       ipAddress: "203.0.113.44",

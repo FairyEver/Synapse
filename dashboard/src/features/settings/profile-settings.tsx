@@ -38,13 +38,13 @@ export function ProfileSettings() {
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['dashboard-me'],
     queryFn: dashboardApi.getMe,
-    enabled: authUser?.role === 'user',
+    enabled: Boolean(authUser),
   })
   const updateProfile = useMutation({
     mutationFn: dashboardApi.updateMe,
     onSuccess: (nextData) => {
       queryClient.setQueryData(['dashboard-me'], nextData)
-      if (authUser?.role === 'user') {
+      if (authUser) {
         setAuthUser({
           ...authUser,
           email: nextData.user.email,
@@ -61,10 +61,6 @@ export function ProfileSettings() {
       setHandle(data.user.handle ?? '')
     }
   }, [data])
-
-  if (authUser?.role !== 'user') {
-    return <div className='text-sm text-muted-foreground'>暂无可配置项</div>
-  }
 
   if (isLoading) {
     return <div className='text-sm text-muted-foreground'>加载中...</div>

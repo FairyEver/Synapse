@@ -39,7 +39,7 @@ Add a main-process `RepositorySyncCoordinator` as the only owner of repository s
 Responsibilities:
 
 - Track one execution loop per repository.
-- Read and update pending push state.
+- Read and update pending push metadata, while treating Git upstream/ahead state as the source of truth for whether commits remain unpushed.
 - Start push, pull, sync, maintenance, and recovery attempts through existing services.
 - Merge duplicate requests from multiple entry points.
 - Classify Git failures.
@@ -121,6 +121,9 @@ Rules:
 - Push failures caused by remote being ahead trigger `pull --rebase` then push retry.
 - All remote Git operations use a shared timeout.
 - Every running operation must emit a final snapshot.
+- Git System App and content-repository mutations share a FIFO lock keyed by the normalized local Git root. A running lock is released only from the owning operation's `finally` path; elapsed time never force-releases it.
+- Content create, update, delete, restore, purge, maintenance, pending enqueue, and push hold that real-root lock across the complete mutation transaction. Public lock-owning entry points are separate from internal already-locked entry points; nested `skipLock` modes are not allowed.
+- Diverged content sync may retry with ordinary `pull --rebase`, but it must not use a merge strategy that silently selects either side. If the rebase started by this attempt conflicts, abort that rebase, preserve the pre-rebase worktree state, stop before push, and enter `attention`.
 
 Retry:
 
@@ -135,6 +138,9 @@ Normal content operations:
 - Create, update, and restore are local-first.
 - If local write and commit succeed, return saved.
 - Push failure records pending state and sync snapshot. It does not turn the save into a failure.
+- Automatic commits normalize repository-relative paths and use literal pathspecs plus path-limited commits. They never consume unrelated entries already present in the user's index.
+- Existing repository/global identity is used only when both `user.name` and `user.email` are configured. Otherwise a complete Synapse Bot identity is supplied to that commit command only; repository configuration is never rewritten.
+- If the commit succeeds but pending metadata cannot be recorded, return `recovery-needed`: the content is locally saved, and reload recovers pending state from Git ahead/local-only commits.
 
 High-risk operations:
 
@@ -184,7 +190,7 @@ Other UI surfaces:
 
 - Multiple save entry points fire at once: merge into one coordinator execution loop.
 - Repeated sync clicks: merge, do not spawn concurrent Git commands.
-- App exits after commit but before push: pending row survives and recovery runs on next launch.
+- App exits after commit but before the pending row is durable: reload compares `HEAD` with its upstream, or with all remotes when no upstream exists, and restores a pending snapshot.
 - Network flaps: leave `syncing`, move to `offline` or `pending`, and retry later.
 - Remote ahead: attempt `pull --rebase` then push.
 - Rebase conflict or divergent branch: move to `attention`; tell user to resolve with their Git tool.
@@ -238,6 +244,10 @@ Unit tests:
 IPC/service tests:
 
 - Content create/update/restore schedule coordinator push after pending enqueue.
+- Pre-staged unrelated paths remain staged and absent from automatic content commits for create, update, delete, rename, and special-character paths.
+- A real same-line divergence stops on conflict, preserves both commits, and leaves no Synapse-started rebase behind.
+- Pending metadata write failure and commit-before-exit recovery are detected from Git ahead/local-only state.
+- Same-root mutations serialize for the full file-write/commit/enqueue transaction while different roots remain independent.
 - Delete/purge still perform remote checks before destructive mutation.
 - Manual sync flushes pending pushes before pull.
 - App quit pending flow uses coordinator-owned flush behavior.

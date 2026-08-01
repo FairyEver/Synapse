@@ -44,7 +44,6 @@ const authenticatedState: SynapseAccountState = {
   connectivity: "online",
   profile: {
     user: { id: "user-1", email: "u@example.com", handle: "user-1", status: "active" },
-    teams: [],
     syncedAt: "2026-06-06T10:00:00.000Z",
   },
 }

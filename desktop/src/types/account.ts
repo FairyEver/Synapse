@@ -5,16 +5,8 @@ export type SynapseAccountUser = {
   status: "active" | "disabled"
 }
 
-export type SynapseAccountTeam = {
-  id: string
-  name: string
-  membershipId: string
-  membershipRole: "owner" | "member"
-}
-
 export type SynapseAccountProfile = {
   user: SynapseAccountUser
-  teams: SynapseAccountTeam[]
   syncedAt: string
 }
 

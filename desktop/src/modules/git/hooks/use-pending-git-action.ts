@@ -3,16 +3,18 @@ import type { SynapseGitProvider } from "@/types/git"
 
 type PendingGitActionBase = {
   readonly host: string
-  readonly protocol: "https" | "ssh"
+  readonly port?: number | null
+  readonly protocol: "http" | "https" | "ssh"
   readonly provider: SynapseGitProvider
+  readonly username?: string | null
 }
 
 export type PendingGitCloneAction = PendingGitActionBase & {
   readonly type: "clone"
   readonly input: {
-    readonly name: string
+    readonly directoryName: string
+    readonly parentDirectory: string
     readonly remoteUrl: string
-    readonly targetPath: string
   }
 }
 

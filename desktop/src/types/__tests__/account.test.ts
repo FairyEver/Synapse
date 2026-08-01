@@ -10,7 +10,6 @@ import type { SynapseBridge } from "../bridge"
 
 const profile = {
   user: { id: "u1", email: "u@example.com", handle: "u1", status: "active" },
-  teams: [],
   syncedAt: "2026-06-06T00:00:00.000Z",
 } satisfies SynapseAccountProfile
 

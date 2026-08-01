@@ -27,7 +27,7 @@ const CATEGORY_ACTION_LABELS: Partial<Record<SynapseGitFailureCategory, string>>
   path: ACTION_LABELS["choose-directory"],
   dirty: ACTION_LABELS["open-workbench"],
   conflict: ACTION_LABELS["open-workbench"],
-  "non-fast-forward": ACTION_LABELS.retry,
+  "non-fast-forward": ACTION_LABELS["open-workbench"],
   timeout: ACTION_LABELS.retry,
   network: ACTION_LABELS.retry,
 }
@@ -59,6 +59,9 @@ export function shouldRouteFailureToAccess(failure: SynapseGitUserFacingFailure 
 
 export function canHandleGitFailureAction(failure: SynapseGitUserFacingFailure | null | undefined): boolean {
   if (!failure) return false
+  if (failure.primaryAction === "retry") {
+    return failure.category === "network" || failure.category === "timeout"
+  }
   return failure.category === "git-missing"
     || failure.primaryAction === "install-git"
     || failure.category === "missing-identity"

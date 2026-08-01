@@ -1,10 +1,10 @@
 import { Module } from "@nestjs/common"
-import { AdminAuthModule } from "../admin-auth/admin-auth.module"
 import { UserAuthModule } from "../auth/user-auth.module"
+import { DashboardAuthController } from "./dashboard-auth.controller"
 import { DashboardController } from "./dashboard.controller"
 
 @Module({
-  imports: [AdminAuthModule, UserAuthModule],
-  controllers: [DashboardController],
+  imports: [UserAuthModule],
+  controllers: [DashboardAuthController, DashboardController],
 })
 export class DashboardModule {}

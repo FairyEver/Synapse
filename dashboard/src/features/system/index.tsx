@@ -3,8 +3,6 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Clock,
   FileText,
-  Mail,
-  Shield,
   Users,
   type LucideIcon,
 } from 'lucide-react'
@@ -130,7 +128,7 @@ function SystemDashboard({
       </div>
 
       <TabsContent value='overview' className='flex flex-col gap-4'>
-        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
           {stats.map((stat) => (
             <SystemStatCard key={stat.title} stat={stat} />
           ))}
@@ -164,11 +162,8 @@ function SystemDashboard({
         </div>
       </TabsContent>
 
-      <TabsContent
-        value='activity'
-        className='grid grid-cols-1 gap-4 lg:grid-cols-7'
-      >
-        <Card className='lg:col-span-4'>
+      <TabsContent value='activity'>
+        <Card>
           <CardHeader>
             <CardTitle>管理操作</CardTitle>
             <CardDescription>最近 7 天</CardDescription>
@@ -178,21 +173,6 @@ function SystemDashboard({
           </CardContent>
         </Card>
 
-        <Card className='lg:col-span-3'>
-          <CardHeader>
-            <CardTitle>邀请状态</CardTitle>
-            <CardDescription>当前邀请</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <StatusDistribution
-              items={[
-                { label: '待使用', value: data.invitationStatus.pending },
-                { label: '已使用', value: data.invitationStatus.used },
-                { label: '已过期', value: data.invitationStatus.expired },
-              ]}
-            />
-          </CardContent>
-        </Card>
       </TabsContent>
     </Tabs>
   )
@@ -240,12 +220,6 @@ function GrowthChart({ data }: { data: SystemOverview['dailyTrend'] }) {
           radius={[4, 4, 0, 0]}
           className='fill-primary'
         />
-        <Bar
-          dataKey='teams'
-          fill='currentColor'
-          radius={[4, 4, 0, 0]}
-          className='fill-muted-foreground'
-        />
       </BarChart>
     </ResponsiveContainer>
   )
@@ -275,13 +249,6 @@ function AuditChart({ data }: { data: SystemOverview['dailyTrend'] }) {
           stroke='var(--primary)'
           fill='var(--primary)'
           fillOpacity={0.15}
-        />
-        <Area
-          type='monotone'
-          dataKey='invitations'
-          stroke='var(--muted-foreground)'
-          fill='var(--muted-foreground)'
-          fillOpacity={0.1}
         />
       </AreaChart>
     </ResponsiveContainer>
@@ -327,8 +294,8 @@ function StatusDistribution({
 function SystemSkeleton() {
   return (
     <div className='flex flex-col gap-4'>
-      <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-        {Array.from({ length: 4 }, (_, index) => (
+      <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
+        {Array.from({ length: 3 }, (_, index) => (
           <Card key={index}>
             <CardHeader className='pb-2'>
               <Skeleton className='h-4 w-20' />
@@ -370,18 +337,6 @@ function buildStats(data: SystemOverview | undefined): StatCard[] {
       value: data?.counts.users ?? '-',
       detail: `${data?.userStatus.active ?? 0} 个启用`,
       icon: Users,
-    },
-    {
-      title: '团队',
-      value: data?.counts.teams ?? '-',
-      detail: '当前团队总数',
-      icon: Shield,
-    },
-    {
-      title: '邀请',
-      value: data?.counts.invitations ?? '-',
-      detail: `${data?.invitationStatus.pending ?? 0} 个待使用`,
-      icon: Mail,
     },
     {
       title: '审计日志',

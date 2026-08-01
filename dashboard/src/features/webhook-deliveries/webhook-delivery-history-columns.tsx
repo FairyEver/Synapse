@@ -1,6 +1,7 @@
 import type { WebhookDeliveryHistoryDto } from '@synapse/shared'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTableColumnHeader } from '@/components/data-table'
+import { LongText } from '@/components/long-text'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { getWebhookDeliveryStatusLabel } from '@/features/webhooks/webhook-display'
@@ -28,7 +29,10 @@ export function buildWebhookDeliveryHistoryColumns({
         <DataTableColumnHeader column={column} title='时间' />
       ),
       cell: ({ row }) =>
-        formatWebhookDeliveryHistoryDateTime(row.original.receivedAt),
+        <span className='tabular-nums'>
+          {formatWebhookDeliveryHistoryDateTime(row.original.receivedAt)}
+        </span>,
+      meta: { className: 'w-40' },
     },
     {
       id: 'webhook',
@@ -51,6 +55,7 @@ export function buildWebhookDeliveryHistoryColumns({
         </div>
       ),
       enableSorting: false,
+      meta: { className: 'max-w-0 w-1/3' },
     },
     {
       accessorKey: 'method',
@@ -58,6 +63,7 @@ export function buildWebhookDeliveryHistoryColumns({
         <DataTableColumnHeader column={column} title='方法' />
       ),
       cell: ({ row }) => <Badge variant='outline'>{row.original.method}</Badge>,
+      meta: { className: 'w-20' },
     },
     {
       accessorKey: 'status',
@@ -73,6 +79,7 @@ export function buildWebhookDeliveryHistoryColumns({
           {getWebhookDeliveryStatusLabel(row.original.status)}
         </Badge>
       ),
+      meta: { className: 'w-32' },
     },
     {
       id: 'clients',
@@ -82,6 +89,7 @@ export function buildWebhookDeliveryHistoryColumns({
       cell: ({ row }) => formatWebhookDeliveryClientSummary(row.original),
       enableSorting: false,
       meta: {
+        className: 'w-20',
         thClassName: 'text-right',
         tdClassName: 'text-right tabular-nums',
       },
@@ -93,13 +101,14 @@ export function buildWebhookDeliveryHistoryColumns({
       ),
       cell: ({ row }) => formatWebhookDeliveryHistoryBody(row.original),
       enableSorting: false,
+      meta: { className: 'w-24' },
     },
     {
       id: 'actions',
       cell: ({ row }) => (
         <Button
           variant='ghost'
-          className='h-8 px-2'
+          size='sm'
           onClick={() => onOpenDetail(row.original)}
         >
           详情
@@ -107,7 +116,11 @@ export function buildWebhookDeliveryHistoryColumns({
       ),
       enableSorting: false,
       enableHiding: false,
-      meta: { thClassName: 'text-right', tdClassName: 'text-right' },
+      meta: {
+        className: 'w-16',
+        thClassName: 'text-right',
+        tdClassName: 'text-right',
+      },
     },
   ]
 
@@ -117,8 +130,11 @@ export function buildWebhookDeliveryHistoryColumns({
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='用户' />
       ),
-      cell: ({ row }) => row.original.user?.email ?? '-',
+      cell: ({ row }) => (
+        <LongText>{row.original.user?.email ?? '-'}</LongText>
+      ),
       enableSorting: false,
+      meta: { className: 'max-w-0 w-1/4' },
     })
   }
 

@@ -2,7 +2,7 @@ import type { SynapseAgentBaseDefinition } from "../../types"
 
 export const agentBaseDefinition = {
   id: "claude-code",
-  label: "ClaudeCode/Synapse",
+  label: "CC/Synapse",
   order: 10,
   relatedEditorId: "claude-code",
   runtime: {
@@ -34,7 +34,7 @@ export const agentBaseDefinition = {
     mcp: true,
   },
   displayProfile: {
-    agentLabel: "ClaudeCode/Synapse",
+    agentLabel: "CC/Synapse",
     thinkingDefaultCollapsed: false,
     toolDefaultCollapsed: "auto",
     toolPreviewLines: 6,

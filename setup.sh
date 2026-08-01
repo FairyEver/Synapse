@@ -104,23 +104,13 @@ if [ -f .env ]; then
   esac
 fi
 
-# 生成密钥
-echo ">>> 生成 JWT Secret..."
-JWT_SECRET=$(openssl rand -hex 32)
+# 生成密钥；不得输出到终端或日志。
+echo ">>> 生成服务端密钥..."
+ADMIN_ACCESS_SECRET=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')
 USER_ACCESS_JWT_SECRET=$(openssl rand -hex 32)
 DESKTOP_UPDATE_INTENT_SECRET=$(openssl rand -hex 32)
-echo "  ADMIN_JWT_SECRET: $JWT_SECRET"
-echo "  USER_ACCESS_JWT_SECRET: $USER_ACCESS_JWT_SECRET"
+echo "  服务端密钥已生成。"
 echo ""
-
-# 收集用户输入
-read -p "管理员邮箱: " ADMIN_EMAIL
-read -p "管理员密码 (至少12位): " ADMIN_PASSWORD
-
-while [ ${#ADMIN_PASSWORD} -lt 12 ]; do
-  echo "  ❌ 密码不足12位，请重新输入"
-  read -p "管理员密码 (至少12位): " ADMIN_PASSWORD
-done
 
 read -p "数据库密码 (留空使用随机生成): " DB_PASSWORD
 
@@ -185,9 +175,7 @@ POSTGRES_PASSWORD=$DB_PASSWORD
 DATABASE_URL=postgresql://synapse:$DB_PASSWORD@postgres:5432/synapse
 POSTGRES_HOST_PORT=5432
 
-ADMIN_EMAIL=$ADMIN_EMAIL
-ADMIN_PASSWORD=$ADMIN_PASSWORD
-ADMIN_JWT_SECRET=$JWT_SECRET
+ADMIN_ACCESS_SECRET=$ADMIN_ACCESS_SECRET
 USER_ACCESS_JWT_SECRET=$USER_ACCESS_JWT_SECRET
 DESKTOP_UPDATE_INTENT_SECRET=$DESKTOP_UPDATE_INTENT_SECRET
 USER_ACCESS_TOKEN_MINUTES=15

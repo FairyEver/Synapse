@@ -55,6 +55,16 @@ export function getGitActionPlan(snapshot: SynapseGitRepositorySnapshot | null, 
     }
   }
 
+  if (snapshot.trackingStatus === "detached") {
+    return {
+      statusText: "游离 HEAD",
+      primaryAction: "open",
+      primaryLabel: "查看状态",
+      blockerText: "当前未在本地分支上",
+      recoveryText: "切换到本地分支后再同步。",
+    }
+  }
+
   const changeCount = getGitChangeCount(snapshot)
   if (changeCount > 0) {
     return {
@@ -63,6 +73,16 @@ export function getGitActionPlan(snapshot: SynapseGitRepositorySnapshot | null, 
       primaryLabel: "提交改动",
       blockerText: "有未提交改动",
       recoveryText: "选择文件并提交。",
+    }
+  }
+
+  if (snapshot.trackingStatus === "untracked") {
+    return {
+      statusText: "未设置上游",
+      primaryAction: "push",
+      primaryLabel: "首次推送",
+      blockerText: null,
+      recoveryText: "选择远端并设置上游分支。",
     }
   }
 
@@ -119,6 +139,7 @@ export function needsGitAttention(snapshot: SynapseGitRepositorySnapshot | null,
       || !snapshot?.pathExists
       || !snapshot.isGitRepository
       || snapshot.hasConflicts
+      || snapshot.trackingStatus !== "tracked"
       || snapshot.changes.length > 0
       || snapshot.ahead > 0
       || snapshot.behind > 0,

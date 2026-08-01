@@ -137,7 +137,7 @@ const item: ScanItemForDetail = {
   fileCount: 1,
   synapseContentId: null,
   editorId: "claude-code",
-  editorLabel: "ClaudeCode/Synapse",
+  editorLabel: "CC/Synapse",
   scope: "global",
   trash: { mode: "path" },
 }

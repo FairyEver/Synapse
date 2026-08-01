@@ -467,17 +467,20 @@ import type {
   SynapseGitCommitSummary,
   SynapseGitDiffResult,
   SynapseGitEnvironmentState,
+  SynapseGitFileStatus,
   SynapseGitGenerateSshKeyInput,
   SynapseGitOperationResult,
+  SynapseGitOperationState,
   SynapseGitProvider,
   SynapseGitProtocol,
+  SynapseGitPushTarget,
   SynapseGitRemoteKind,
   SynapseGitRepository,
-  SynapseGitRepositoryRemoveInput,
   SynapseGitRepositorySummary,
   SynapseGitRepositorySnapshot,
   SynapseGitSaveHttpsCredentialInput,
   SynapseGitSshPublicKey,
+  SynapseGitSshHostKeyCandidate,
   SynapseGitSshTestResult,
   SynapseGitTestSshConnectionInput,
 } from "./git"
@@ -1169,34 +1172,41 @@ export type SynapseBridge = {
     clearHttpsCredential: (input: SynapseGitClearHttpsCredentialInput) => Promise<void>
     generateSshKey: (input: SynapseGitGenerateSshKeyInput) => Promise<void>
     testSshConnection: (input: SynapseGitTestSshConnectionInput) => Promise<SynapseGitSshTestResult>
+    scanSshHostKey: (input: SynapseGitTestSshConnectionInput) => Promise<SynapseGitSshHostKeyCandidate>
+    trustSshHostKey: (input: { host: string; port?: number | null; fingerprints: readonly string[] }) => Promise<void>
     listRepositories: () => Promise<SynapseGitRepository[]>
     listRepositorySummaries: () => Promise<SynapseGitRepositorySummary[]>
     addLocalRepository: (input: { name: string; localPath: string }) => Promise<SynapseGitRepository>
-    removeRepository: (input: SynapseGitRepositoryRemoveInput) => Promise<void>
+    removeRepository: (repositoryId: string) => Promise<void>
     cloneRepository: (input: {
       remoteUrl: string
-      targetPath: string
-      name: string
+      parentDirectory: string
+      directoryName: string
+      operationId?: string
     }) => Promise<{ repository: SynapseGitRepository; remoteKind: SynapseGitRemoteKind }>
     getSnapshot: (repositoryId: string) => Promise<SynapseGitRepositorySnapshot>
     getDiff: (input: {
       repositoryId: string
       path: string
       originalPath?: string | null
-      staged: boolean
+      status: SynapseGitFileStatus
     }) => Promise<SynapseGitDiffResult>
     commit: (input: {
       repositoryId: string
       message: string
       paths: string[]
+      operationId?: string
     }) => Promise<SynapseGitOperationResult>
-    fetch: (repositoryId: string) => Promise<SynapseGitOperationResult>
-    pull: (repositoryId: string) => Promise<SynapseGitOperationResult>
-    push: (repositoryId: string) => Promise<SynapseGitOperationResult>
-    sync: (repositoryId: string) => Promise<SynapseGitOperationResult>
+    fetch: (repositoryId: string, operationId?: string) => Promise<SynapseGitOperationResult>
+    pull: (repositoryId: string, operationId?: string) => Promise<SynapseGitOperationResult>
+    push: (repositoryId: string, remoteName?: string, operationId?: string) => Promise<SynapseGitOperationResult>
+    listPushTargets: (repositoryId: string) => Promise<SynapseGitPushTarget[]>
+    sync: (repositoryId: string, operationId?: string) => Promise<SynapseGitOperationResult>
     listBranches: (repositoryId: string) => Promise<SynapseGitBranch[]>
-    checkoutBranch: (repositoryId: string, branchName: string) => Promise<void>
-    createBranch: (repositoryId: string, branchName: string) => Promise<void>
+    checkoutBranch: (repositoryId: string, branchName: string, operationId?: string) => Promise<void>
+    createBranch: (repositoryId: string, branchName: string, operationId?: string) => Promise<void>
+    cancelOperation: (operationId: string) => Promise<boolean>
+    onOperationChanged: (listener: (state: SynapseGitOperationState) => void) => () => void
     listHistory: (input: {
       repositoryId: string
       limit: number

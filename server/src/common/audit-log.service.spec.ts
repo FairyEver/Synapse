@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 import { BadRequestException } from "@nestjs/common"
 import type { PrismaService } from "../prisma/prisma.service"
-import { AuditLogService, AuditLogWriteError } from "./audit-log.service"
+import { AuditLogService, AuditLogWriteError, auditActors } from "./audit-log.service"
 
 const auditInput = {
-  adminEmail: "admin@example.com",
+  actor: auditActors.platformAdmin("admin-session-1"),
   action: "admin.user.status_update",
   targetType: "user",
   targetId: "user-1",
@@ -22,9 +22,16 @@ describe("AuditLogService", () => {
 
     await service.record(auditInput)
 
-    expect(prisma.auditLog.create).toHaveBeenCalledWith({
-      data: auditInput,
-    })
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({ data: {
+      actorType: "platform_admin",
+      actorLabel: "平台管理员",
+      adminSessionId: "admin-session-1",
+      action: auditInput.action,
+      targetType: auditInput.targetType,
+      targetId: auditInput.targetId,
+      detail: auditInput.detail,
+      ipAddress: auditInput.ipAddress,
+    } })
     expect(logger.warn).not.toHaveBeenCalled()
   })
 
@@ -48,7 +55,8 @@ describe("AuditLogService", () => {
       action: auditInput.action,
       targetType: auditInput.targetType,
       targetId: auditInput.targetId,
-      adminEmail: auditInput.adminEmail,
+      actorType: "platform_admin",
+      actorId: undefined,
       attempt: 2,
       maxAttempts: 2,
       recordFailureCount: 2,
@@ -76,7 +84,8 @@ describe("AuditLogService", () => {
       action: auditInput.action,
       targetType: auditInput.targetType,
       targetId: auditInput.targetId,
-      adminEmail: auditInput.adminEmail,
+      actorType: "platform_admin",
+      actorId: undefined,
       attempt: 1,
       maxAttempts: 2,
       recordFailureCount: 1,
@@ -92,11 +101,11 @@ describe("AuditLogService", () => {
     const service = new AuditLogService(prisma as unknown as PrismaService, logger as never)
 
     await expect(service.record(auditInput)).rejects.toThrow(AuditLogWriteError)
-    await expect(service.record({ ...auditInput, action: "admin.team.update" })).rejects.toThrow(AuditLogWriteError)
+    await expect(service.record({ ...auditInput, action: "admin.user.update" })).rejects.toThrow(AuditLogWriteError)
 
     expect(service.getRecordFailureCount()).toBe(4)
     expect(logger.warn).toHaveBeenLastCalledWith(expect.objectContaining({
-      action: "admin.team.update",
+      action: "admin.user.update",
       attempt: 2,
       recordFailureCount: 4,
     }), "Failed to record audit log")

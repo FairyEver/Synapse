@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto"
-import { readFile, rm } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import path from "node:path"
 import type { SynapseGitRepository } from "../../../src/types/git"
-import type { SynapseGitRepositoryRemoveInput } from "../../../src/types/git"
 import type { StructuredLogger } from "../../runtime/logging"
 import {
   copyToTimestampedBackup,
@@ -23,6 +22,8 @@ type RegistryFile = {
   readonly repositories: readonly SynapseGitRepository[]
 }
 
+class RegistryCorruptionError extends Error {}
+
 type AddLocalInput = {
   readonly name: string
   readonly localPath: string
@@ -31,9 +32,9 @@ type AddLocalInput = {
 type RegistryDeps = {
   readonly logger?: Pick<StructuredLogger, "error" | "info">
   readonly platform?: NodeJS.Platform | string
+  readonly resolveGitRoot: (localPath: string) => Promise<string>
   readonly userDataPath: string
   readonly now?: () => Date
-  readonly trashItem?: (targetPath: string) => Promise<void>
 }
 
 function registryFilePath(userDataPath: string): string {
@@ -52,55 +53,80 @@ function sanitizeName(name: string, localPath: string): string {
 async function readRegistryFile(filePath: string): Promise<RegistryFile | null> {
   try {
     const raw = await readFile(filePath, "utf8")
-    const parsed = JSON.parse(raw) as Partial<RegistryFile>
-    return {
-      version: 1,
-      repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [],
+    const parsed = JSON.parse(raw) as unknown
+    if (!isRegistryFile(parsed)) {
+      throw new RegistryCorruptionError("Git repository registry has an invalid structure.")
     }
+    return parsed
   } catch (error) {
     if (isFileNotFoundError(error)) return null
+    if (error instanceof SyntaxError) {
+      throw new RegistryCorruptionError("Git repository registry contains invalid JSON.", { cause: error })
+    }
     throw error
   }
 }
 
+function isRegistryFile(value: unknown): value is RegistryFile {
+  if (!value || typeof value !== "object") return false
+  const record = value as Record<string, unknown>
+  if (record.version !== 1 || !Array.isArray(record.repositories)) return false
+  return record.repositories.every((repository) => {
+    if (!repository || typeof repository !== "object") return false
+    const item = repository as Record<string, unknown>
+    return typeof item.id === "string" && item.id.trim().length > 0
+      && typeof item.name === "string" && item.name.trim().length > 0
+      && typeof item.localPath === "string" && item.localPath.trim().length > 0
+      && typeof item.addedAt === "string" && item.addedAt.trim().length > 0
+      && (item.lastOpenedAt === null || typeof item.lastOpenedAt === "string")
+  })
+}
+
 async function readRegistry(filePath: string, logger: Pick<StructuredLogger, "error" | "info">): Promise<RegistryFile> {
+  let primaryMissing = false
   try {
-    return await readRegistryFile(filePath) ?? { version: 1, repositories: [] }
+    const primary = await readRegistryFile(filePath)
+    if (primary) return primary
+    primaryMissing = true
   } catch (error) {
-    if (!(error instanceof SyntaxError)) throw error
+    if (!(error instanceof RegistryCorruptionError)) throw error
 
     const quarantinedPath = await copyToTimestampedBackup(filePath)
-    await rm(filePath, { force: true }).catch(() => undefined)
     logger.error("Git repository registry is malformed.", {
       quarantined: Boolean(quarantinedPath),
     })
+  }
 
-    try {
-      const backup = await readRegistryFile(registryBackupFilePath(filePath))
-      if (backup) {
-        logger.info("Recovered Git repository registry from backup.", {
-          repositoryCount: backup.repositories.length,
-        })
-        return backup
-      }
-    } catch (backupError) {
-      if (backupError instanceof SyntaxError) {
-        await copyToTimestampedBackup(registryBackupFilePath(filePath)).catch(() => null)
-        logger.error("Git repository registry backup is malformed.", {
-          errorName: backupError.name,
-        })
-      } else {
-        throw backupError
-      }
+  try {
+    const backup = await readRegistryFile(registryBackupFilePath(filePath))
+    if (backup) {
+      await writeJsonFileAtomic(filePath, backup)
+      logger.info("Recovered Git repository registry from backup.", {
+        repositoryCount: backup.repositories.length,
+      })
+      return backup
     }
+  } catch (backupError) {
+    if (backupError instanceof RegistryCorruptionError) {
+      await copyToTimestampedBackup(registryBackupFilePath(filePath)).catch(() => null)
+      logger.error("Git repository registry backup is malformed.", {
+        errorName: backupError.name,
+      })
+      throw new Error("Git 仓库列表及其备份均已损坏，请从隔离副本恢复。", { cause: backupError })
+    }
+    throw backupError
+  }
 
+  if (primaryMissing) {
     return { version: 1, repositories: [] }
   }
+
+  throw new Error("Git 仓库列表已损坏且没有可用备份，请从隔离副本恢复。")
 }
 
 async function writeRegistry(filePath: string, data: RegistryFile): Promise<void> {
   const previous = await readRegistryFile(filePath).catch((error) => {
-    if (error instanceof SyntaxError) return null
+    if (error instanceof RegistryCorruptionError) return null
     throw error
   })
   if (previous) {
@@ -131,7 +157,8 @@ export function createGitRepositoryRegistry(deps: RegistryDeps) {
       const operation = "git.repository.addLocal"
       const operationId = createGitOperationId()
       const startedAt = performance.now()
-      const localPath = normalizeRepositoryPath(input.localPath, { platform })
+      const selectedPath = normalizeRepositoryPath(input.localPath, { platform })
+      const localPath = normalizeRepositoryPath(await deps.resolveGitRoot(selectedPath), { platform })
       logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, {
         repoPath: localPath,
         nameLength: input.name.length,
@@ -210,54 +237,41 @@ export function createGitRepositoryRegistry(deps: RegistryDeps) {
       }
     },
 
-    async remove(input: SynapseGitRepositoryRemoveInput): Promise<void> {
+    async remove(repositoryId: string): Promise<void> {
       const operation = "git.repository.remove"
       const operationId = createGitOperationId()
       const startedAt = performance.now()
       logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, {
-        repositoryId: input.repositoryId,
-        mode: input.mode,
+        repositoryId,
       })
       try {
         await withRegistryMutation(async () => {
           const data = await readRegistry(filePath, deps.logger ?? noopLogger)
-          const repository = data.repositories.find((item) => item.id === input.repositoryId)
+          const repository = data.repositories.find((item) => item.id === repositoryId)
 
           if (!repository) {
             logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, {
-              repositoryId: input.repositoryId,
-              mode: input.mode,
+              repositoryId,
               found: false,
             })
             return
           }
 
-          if (input.mode === "trash-local") {
-            if (!deps.trashItem) {
-              throw new Error("移到废纸篓功能不可用。")
-            }
-            await deps.trashItem(repository.localPath)
-          }
-
           await writeRegistry(filePath, {
             version: 1,
-            repositories: data.repositories.filter((repository) => repository.id !== input.repositoryId),
+            repositories: data.repositories.filter((repository) => repository.id !== repositoryId),
           })
           logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, {
             ...repositoryLogMeta(repository),
-            mode: input.mode,
           })
         })
       } catch (error) {
         logGitOperationFailed(deps.logger ?? noopLogger, {
           operation,
           operationId,
-          repositoryId: input.repositoryId,
+          repositoryId,
           startedAt,
           error,
-          extra: {
-            mode: input.mode,
-          },
         })
         throw error
       }

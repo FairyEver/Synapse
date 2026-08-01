@@ -543,7 +543,6 @@ describe('DriveMarkdownRenderer', () => {
     useAuthStore.getState().auth.setUser({
       email: 'reader@example.com',
       handle: null,
-      role: 'user',
       sessionId: 'session-1',
     })
     renderMarkdown({

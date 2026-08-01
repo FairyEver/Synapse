@@ -16,6 +16,11 @@ type BranchDeps = {
   readonly logger?: Pick<StructuredLogger, "error" | "info" | "warn">
 }
 
+type BranchOperationOptions = {
+  readonly operationId?: string
+  readonly signal?: AbortSignal
+}
+
 function assertBranchName(name: string): string {
   const trimmed = name.trim()
   if (!trimmed) throw new Error("请输入分支名称。")
@@ -58,9 +63,9 @@ export function createGitBranchService(deps: BranchDeps) {
         }))
     },
 
-    async checkout(repository: SynapseGitRepository, branchName: string): Promise<void> {
+    async checkout(repository: SynapseGitRepository, branchName: string, options: BranchOperationOptions = {}): Promise<void> {
       const operation = "git.checkout"
-      const operationId = createGitOperationId()
+      const operationId = options.operationId ?? createGitOperationId()
       const startedAt = performance.now()
       const meta = { ...repositoryLogMeta(repository), branch: branchName }
       logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, meta)
@@ -69,6 +74,7 @@ export function createGitBranchService(deps: BranchDeps) {
         await deps.commandRunner.run({
           cwd: repository.localPath,
           args: ["checkout", assertBranchName(branchName)],
+          abortSignal: options.signal,
           operation,
           operationId,
           repoPath: repository.localPath,
@@ -91,9 +97,9 @@ export function createGitBranchService(deps: BranchDeps) {
       }
     },
 
-    async create(repository: SynapseGitRepository, branchName: string): Promise<void> {
+    async create(repository: SynapseGitRepository, branchName: string, options: BranchOperationOptions = {}): Promise<void> {
       const operation = "git.branch.create"
-      const operationId = createGitOperationId()
+      const operationId = options.operationId ?? createGitOperationId()
       const startedAt = performance.now()
       const meta = { ...repositoryLogMeta(repository), branch: branchName }
       logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, meta)
@@ -102,6 +108,7 @@ export function createGitBranchService(deps: BranchDeps) {
         await deps.commandRunner.run({
           cwd: repository.localPath,
           args: ["checkout", "-b", assertBranchName(branchName)],
+          abortSignal: options.signal,
           operation,
           operationId,
           repoPath: repository.localPath,

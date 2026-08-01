@@ -1,120 +1,40 @@
 import type { ExecutionContext } from "@nestjs/common"
-import { ForbiddenException, UnauthorizedException } from "@nestjs/common"
+import { UnauthorizedException } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
 import { UserAuthGuard } from "./user-auth.guard"
 
-function createContext(request: Record<string, unknown>): ExecutionContext {
-  return {
-    switchToHttp: () => ({
-      getRequest: () => request,
-    }),
-  } as unknown as ExecutionContext
+function context(request: Record<string, unknown>): ExecutionContext {
+  return { switchToHttp: () => ({ getRequest: () => request }) } as never
 }
 
 describe("UserAuthGuard", () => {
-  it("records audit logs when a bearer token cannot be verified", async () => {
-    const auth = { verifyAccessToken: vi.fn().mockRejectedValue(new UnauthorizedException("未登录或登录已过期。")) }
-    const dashboardAuth = { verifyDashboardSession: vi.fn() }
-    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
-    const guard = new UserAuthGuard(auth as never, dashboardAuth as never, auditLog as never)
-
-    await expect(guard.canActivate(createContext({
-      method: "GET",
-      path: "/api/auth/me",
-      ip: "203.0.113.31",
-      headers: { authorization: "Bearer invalid-token" },
-    }))).rejects.toThrow(UnauthorizedException)
-
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "unknown",
-      action: "user.auth.verify.failed",
-      targetType: "auth",
-      targetId: "unknown",
-      detail: {
-        method: "GET",
-        path: "/api/auth/me",
-        tokenPresent: true,
-      },
-      ipAddress: "203.0.113.31",
-    })
-  })
-
-  it("accepts bearer auth scheme case-insensitively", async () => {
+  it("keeps desktop bearer access-token authentication unchanged", async () => {
     const auth = { verifyAccessToken: vi.fn().mockResolvedValue({ userId: "user-1" }) }
-    const dashboardAuth = { verifyDashboardSession: vi.fn() }
-    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
-    const guard = new UserAuthGuard(auth as never, dashboardAuth as never, auditLog as never)
-    const request = {
-      method: "GET",
-      path: "/api/auth/me",
-      ip: "203.0.113.31",
-      headers: { authorization: "bearer access-token" },
-    }
+    const guard = new UserAuthGuard(auth as never)
+    const request = { headers: { authorization: "bearer access-token" } }
 
-    await expect(guard.canActivate(createContext(request))).resolves.toBe(true)
-
+    await expect(guard.canActivate(context(request))).resolves.toBe(true)
     expect(auth.verifyAccessToken).toHaveBeenCalledWith("access-token")
-    expect(request).toMatchObject({ user: { id: "user-1" } })
-    expect(auditLog.record).not.toHaveBeenCalled()
+    expect(request).toHaveProperty("user.id", "user-1")
   })
 
-  it("accepts dashboard user cookies for /api/auth/me", async () => {
-    const auth = { verifyAccessToken: vi.fn() }
-    const dashboardAuth = {
-      verifyDashboardSession: vi.fn().mockResolvedValue({
-        id: "user-1",
-        email: "user@example.com",
-        role: "user",
-      }),
-    }
-    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
-    const guard = new UserAuthGuard(auth as never, dashboardAuth as never, auditLog as never)
-    const request = {
-      method: "GET",
-      path: "/api/auth/me",
-      ip: "203.0.113.32",
-      headers: {},
-      cookies: { synapse_admin: "dashboard-cookie" },
-    }
+  it("accepts only the ordinary-user Web session cookie", async () => {
+    const auth = { verifyWebSession: vi.fn().mockResolvedValue({ userId: "user-1", sessionId: "session-1" }) }
+    const guard = new UserAuthGuard(auth as never)
+    const request = { headers: {}, cookies: { synapse_user_session: "user-token" } }
 
-    await expect(guard.canActivate(createContext(request))).resolves.toBe(true)
-
-    expect(dashboardAuth.verifyDashboardSession).toHaveBeenCalledWith("dashboard-cookie")
-    expect(request).toMatchObject({ user: { id: "user-1" } })
-    expect(auditLog.record).not.toHaveBeenCalled()
+    await expect(guard.canActivate(context(request))).resolves.toBe(true)
+    expect(auth.verifyWebSession).toHaveBeenCalledWith("user-token")
   })
 
-  it("rejects dashboard admin cookies for user auth routes as forbidden", async () => {
-    const auth = { verifyAccessToken: vi.fn() }
-    const dashboardAuth = {
-      verifyDashboardSession: vi.fn().mockResolvedValue({
-        id: "admin-1",
-        email: "admin@example.com",
-        role: "admin",
-      }),
-    }
-    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
-    const guard = new UserAuthGuard(auth as never, dashboardAuth as never, auditLog as never)
+  it("does not accept admin or legacy dashboard cookies", async () => {
+    const auth = { verifyWebSession: vi.fn() }
+    const guard = new UserAuthGuard(auth as never)
 
-    await expect(guard.canActivate(createContext({
-      method: "GET",
-      path: "/api/auth/me",
-      ip: "203.0.113.33",
+    await expect(guard.canActivate(context({
       headers: {},
-      cookies: { synapse_admin: "admin-cookie" },
-    }))).rejects.toThrow(ForbiddenException)
-
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "unknown",
-      action: "user.auth.forbidden",
-      targetType: "auth",
-      targetId: "unknown",
-      detail: {
-        method: "GET",
-        path: "/api/auth/me",
-        tokenPresent: true,
-      },
-      ipAddress: "203.0.113.33",
-    })
+      cookies: { synapse_admin_session: "admin", synapse_admin: "legacy" },
+    }))).rejects.toBeInstanceOf(UnauthorizedException)
+    expect(auth.verifyWebSession).not.toHaveBeenCalled()
   })
 })

@@ -19,15 +19,16 @@ import {
 } from "./content-history-service"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage, isNonFastForwardError } from "./git-error-utils"
-import { toRepositoryGitPaths } from "./git-paths"
 import { pendingPushesService } from "./pending-pushes-service"
-import { isGitRebaseInProgress, runGitCommand, type GitCommandResult } from "./git-command"
-import { assertNoPreexistingGitRebase } from "./git-rebase-guard"
+import { runGitCommand, type GitCommandResult } from "./git-command"
 import { withRepositoryCacheDatabase } from "./repository-cache-database"
-import { repositoryStore } from "./repository-store"
+import {
+  commitRepositoryPaths,
+  pullRepositoryWithSafeRebase,
+  runRepositoryGitExclusive,
+} from "./repository-git-mutation-service"
+import type { SynapseRepositoryLocalState } from "../../src/types/repository"
 
-const SYNAPSE_BOT_NAME = "Synapse Bot"
-const SYNAPSE_BOT_EMAIL = "bot@synapse.local"
 const ZERO_USER_ID = "00000000000000000000000000000000"
 const BLOBS_DIRECTORY_PATH = path.join("system", "blobs")
 const LAST_MAINTENANCE_AT_KEY = "last_maintenance_at"
@@ -305,95 +306,6 @@ function runMaintenanceGitCommand(
   })
 }
 
-async function ensureBotIdentity(gitRootPath: string): Promise<void> {
-  await runMaintenanceGitCommand(
-    gitRootPath,
-    ["config", "--local", "user.name", SYNAPSE_BOT_NAME],
-    "无法初始化 Synapse 提交身份。",
-  )
-  await runMaintenanceGitCommand(
-    gitRootPath,
-    ["config", "--local", "user.email", SYNAPSE_BOT_EMAIL],
-    "无法初始化 Synapse 提交身份。",
-  )
-}
-
-async function abortRebaseIfNeeded(localPath: string): Promise<void> {
-  try {
-    if (!(await isGitRebaseInProgress(localPath))) return
-
-    logger.warn("Rebase in progress detected during maintenance. Aborting.", { localPath })
-    await runMaintenanceGitCommand(
-      localPath,
-      ["rebase", "--abort"],
-      "无法中止 rebase，请手动检查仓库状态。",
-    )
-  } catch {
-    logger.error("Failed to abort rebase during maintenance recovery.", { localPath })
-  }
-}
-
-async function pullWithRebase(
-  repository: SynapseRepositoryConfig,
-  onProgress?: MaintenanceProgressListener,
-): Promise<void> {
-  onProgress?.("正在拉取最新内容...")
-  await assertNoPreexistingGitRebase(repository.localPath, (localPath) => {
-    logger.warn("Maintenance pull with rebase skipped because repository already has a rebase in progress.", { localPath })
-  })
-  try {
-    await runMaintenanceGitCommand(
-      repository.localPath,
-      ["pull", "--rebase", "-X", "theirs"],
-      "同步仓库失败，请检查网络或仓库状态后重试。",
-      (line) => {
-        onProgress?.(line)
-      },
-      {
-        timeoutMs: MAINTENANCE_REMOTE_TIMEOUT_MS,
-        timeoutMessage: "同步仓库超时，请检查网络后重试。",
-      },
-    )
-  } catch (error) {
-    await abortRebaseIfNeeded(repository.localPath)
-    throw error
-  }
-}
-
-async function stagePaths(gitRootPath: string, filePaths: string[]): Promise<void> {
-  const relativePaths = toRepositoryGitPaths(gitRootPath, filePaths, { unique: true })
-
-  if (relativePaths.length === 0) {
-    throw new Error("当前没有可提交的改动。")
-  }
-
-  await runMaintenanceGitCommand(
-    gitRootPath,
-    ["add", "--", ...relativePaths],
-    "暂存本地改动失败。",
-  )
-}
-
-async function commitChanges(
-  gitRootPath: string,
-  action: "compaction" | "gc",
-  count: number,
-): Promise<string> {
-  await runMaintenanceGitCommand(
-    gitRootPath,
-    ["commit", "-m", toCommitMessage(action, count)],
-    "提交整理结果失败。",
-  )
-
-  const headCommit = await runMaintenanceGitCommand(
-    gitRootPath,
-    ["rev-parse", "HEAD"],
-    "读取最新提交失败。",
-  )
-
-  return headCommit.stdout.trim()
-}
-
 async function pushRepository(
   repository: SynapseRepositoryConfig,
   onProgress?: MaintenanceProgressListener,
@@ -434,33 +346,37 @@ class RepositoryMaintenanceService {
     repository: SynapseRepositoryConfig,
     onProgress?: MaintenanceProgressListener,
   ): Promise<RepositoryMaintenanceResult> {
-    return this.runMaintenance(repository, {
-      compactionSkipThreshold: COMPACTION_KEEP_RECENT,
-      onProgress,
-      targets: null,
-    })
+    return runRepositoryGitExclusive(repository, "maintenance", (repositoryState) => (
+      this.runMaintenanceInExclusive(repository, repositoryState, {
+        compactionSkipThreshold: COMPACTION_KEEP_RECENT,
+        onProgress,
+        targets: null,
+      })
+    ))
   }
 
   async runScheduledMaintenanceIfDue(
     repository: SynapseRepositoryConfig,
   ): Promise<RepositoryMaintenanceResult | null> {
-    const lastMaintenanceAt = await readMaintenanceMetaValue(repository.uuid, LAST_MAINTENANCE_AT_KEY)
+    return runRepositoryGitExclusive(repository, "scheduled-maintenance", async (repositoryState) => {
+      const lastMaintenanceAt = await readMaintenanceMetaValue(repository.uuid, LAST_MAINTENANCE_AT_KEY)
 
-    if (lastMaintenanceAt) {
-      const lastMaintenanceDate = new Date(lastMaintenanceAt)
+      if (lastMaintenanceAt) {
+        const lastMaintenanceDate = new Date(lastMaintenanceAt)
 
-      if (
-        !Number.isNaN(lastMaintenanceDate.getTime())
-        && Date.now() - lastMaintenanceDate.getTime() < MANUAL_MAINTENANCE_INTERVAL_MS
-      ) {
-        return null
+        if (
+          !Number.isNaN(lastMaintenanceDate.getTime())
+          && Date.now() - lastMaintenanceDate.getTime() < MANUAL_MAINTENANCE_INTERVAL_MS
+        ) {
+          return null
+        }
       }
-    }
 
-    return this.runMaintenance(repository, {
-      compactionSkipThreshold: COMPACTION_SKIP_THRESHOLD,
-      onProgress: undefined,
-      targets: null,
+      return this.runMaintenanceInExclusive(repository, repositoryState, {
+        compactionSkipThreshold: COMPACTION_SKIP_THRESHOLD,
+        onProgress: undefined,
+        targets: null,
+      })
     })
   }
 
@@ -468,33 +384,46 @@ class RepositoryMaintenanceService {
     repository: SynapseRepositoryConfig,
     target: MaintenanceTarget,
   ): Promise<RepositoryMaintenanceResult | null> {
-    const historyVersions = await this.readHistoryVersions(
-      repository,
-      target.contentType,
-      target.contentId,
-    )
+    return runRepositoryGitExclusive(repository, "post-push-maintenance", async (repositoryState) => {
+      const historyVersions = await this.readHistoryVersions(
+        repository,
+        target.contentType,
+        target.contentId,
+      )
 
-    if (historyVersions.length <= COMPACTION_TRIGGER_THRESHOLD) {
-      return null
-    }
+      if (historyVersions.length <= COMPACTION_TRIGGER_THRESHOLD) {
+        return null
+      }
 
-    return this.runMaintenance(repository, {
-      compactionSkipThreshold: COMPACTION_SKIP_THRESHOLD,
-      onProgress: undefined,
-      targets: [target],
+      return this.runMaintenanceInExclusive(repository, repositoryState, {
+        compactionSkipThreshold: COMPACTION_SKIP_THRESHOLD,
+        onProgress: undefined,
+        targets: [target],
+      })
     })
   }
 
-  private async runMaintenance(
+  async runManualMaintenanceInExclusive(
     repository: SynapseRepositoryConfig,
+    repositoryState: SynapseRepositoryLocalState,
+    onProgress?: MaintenanceProgressListener,
+  ): Promise<RepositoryMaintenanceResult> {
+    return this.runMaintenanceInExclusive(repository, repositoryState, {
+      compactionSkipThreshold: COMPACTION_KEEP_RECENT,
+      onProgress,
+      targets: null,
+    })
+  }
+
+  private async runMaintenanceInExclusive(
+    repository: SynapseRepositoryConfig,
+    repositoryState: SynapseRepositoryLocalState,
     options: {
       compactionSkipThreshold: number
       onProgress?: MaintenanceProgressListener
       targets: MaintenanceTarget[] | null
     },
   ): Promise<RepositoryMaintenanceResult> {
-    const repositoryState = await repositoryStore.getRepositoryState(repository)
-
     if (repositoryState.status !== "ready") {
       throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
     }
@@ -503,8 +432,7 @@ class RepositoryMaintenanceService {
       throw new Error("当前目录不是 Git 仓库，无法整理历史。")
     }
 
-    await ensureBotIdentity(repositoryState.gitRootPath)
-    await pullWithRebase(repository, options.onProgress)
+    await pullRepositoryWithSafeRebase(repository, options.onProgress)
 
     const compactionResult = await this.runCompaction(
       repository,
@@ -522,12 +450,12 @@ class RepositoryMaintenanceService {
 
     if (compactionResult.compactedCount > 0) {
       options.onProgress?.("正在提交整理结果...")
-      await stagePaths(repositoryState.gitRootPath, compactionResult.gitPaths)
-      const commitHash = await commitChanges(
-        repositoryState.gitRootPath,
-        "compaction",
-        compactionResult.compactedCount,
-      )
+      const commitHash = await commitRepositoryPaths({
+        fallbackMessage: "提交整理结果失败。",
+        filePaths: compactionResult.gitPaths,
+        gitRootPath: repositoryState.gitRootPath,
+        message: toCommitMessage("compaction", compactionResult.compactedCount),
+      })
 
       commitQueue.push({
         action: "compaction",
@@ -541,12 +469,12 @@ class RepositoryMaintenanceService {
 
     if (attachmentsGcResult.deletedCount > 0) {
       options.onProgress?.("正在提交附件清理结果...")
-      await stagePaths(repositoryState.gitRootPath, attachmentsGcResult.gitPaths)
-      const commitHash = await commitChanges(
-        repositoryState.gitRootPath,
-        "gc",
-        attachmentsGcResult.deletedCount,
-      )
+      const commitHash = await commitRepositoryPaths({
+        fallbackMessage: "提交整理结果失败。",
+        filePaths: attachmentsGcResult.gitPaths,
+        gitRootPath: repositoryState.gitRootPath,
+        message: toCommitMessage("gc", attachmentsGcResult.deletedCount),
+      })
 
       commitQueue.push({
         action: "gc",
@@ -568,7 +496,7 @@ class RepositoryMaintenanceService {
 
         if (isNonFastForwardError(message)) {
           try {
-            await pullWithRebase(repository, options.onProgress)
+            await pullRepositoryWithSafeRebase(repository, options.onProgress)
             await pushRepository(repository, options.onProgress)
           } catch (retryError) {
             pushed = false

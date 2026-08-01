@@ -27,7 +27,7 @@ const PROVIDER_LINKS: Readonly<Record<SynapseGitProvider, SynapseGitProviderLink
   },
 }
 
-const SCP_LIKE_REMOTE_PATTERN = /^[^@\s]+@([^:\s]+):.+$/
+const SCP_LIKE_REMOTE_PATTERN = /^([^@\s]+)@([^:\s]+):.+$/
 
 function detectProvider(host: string | null): SynapseGitProvider {
   if (host === "github.com") return "github"
@@ -45,13 +45,17 @@ function buildDescriptor(
   host: string | null,
   protocol: SynapseGitRemoteDescriptor["protocol"],
   remoteKind: SynapseGitRemoteDescriptor["remoteKind"],
+  username: string | null = null,
+  port: number | null = null,
 ): SynapseGitRemoteDescriptor {
   return {
     host,
     normalizedUrl: remoteUrl,
+    port,
     protocol,
     provider: detectProvider(host),
     remoteKind,
+    username,
   }
 }
 
@@ -74,27 +78,41 @@ export function parseGitRemote(remoteUrl: string): SynapseGitRemoteDescriptor {
     return buildDescriptor(normalizedUrl, null, "file", "unknown")
   }
 
-  const scpLikeMatch = normalizedUrl.match(SCP_LIKE_REMOTE_PATTERN)
-  if (scpLikeMatch?.[1]) {
-    return buildDescriptor(normalizedUrl, normalizeHost(scpLikeMatch[1]), "ssh", "ssh")
-  }
-
   try {
     const url = new URL(normalizedUrl)
     const host = normalizeHost(url.hostname)
 
     if (url.protocol === "https:" || url.protocol === "http:") {
-      return buildDescriptor(normalizedUrl, host, "https", "https")
+      const protocol = url.protocol === "http:" ? "http" : "https"
+      return buildDescriptor(
+        normalizedUrl,
+        host,
+        protocol,
+        protocol,
+        url.username ? decodeURIComponent(url.username) : null,
+        url.port ? Number(url.port) : null,
+      )
     }
 
     if (url.protocol === "ssh:") {
-      return buildDescriptor(normalizedUrl, host, "ssh", "ssh")
+      return buildDescriptor(
+        normalizedUrl,
+        host,
+        "ssh",
+        "ssh",
+        url.username ? decodeURIComponent(url.username) : null,
+        url.port ? Number(url.port) : null,
+      )
     }
 
     if (url.protocol === "file:") {
       return buildDescriptor(normalizedUrl, null, "file", "unknown")
     }
   } catch {
+    const scpLikeMatch = normalizedUrl.match(SCP_LIKE_REMOTE_PATTERN)
+    if (scpLikeMatch?.[2]) {
+      return buildDescriptor(normalizedUrl, normalizeHost(scpLikeMatch[2]), "ssh", "ssh", scpLikeMatch[1] ?? null)
+    }
     return buildDescriptor(normalizedUrl, null, "unknown", "unknown")
   }
 

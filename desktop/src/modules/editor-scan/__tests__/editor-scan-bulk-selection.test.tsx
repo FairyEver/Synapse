@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   data: {
     global: [{
       editorId: "claude-code",
-      editorLabel: "ClaudeCode/Synapse",
+      editorLabel: "CC/Synapse",
       status: "detected",
       skills: [{
         name: "jenkins",

@@ -99,7 +99,6 @@ function failingDownloadResponse(): Response {
 
 const storedProfile: SynapseAccountProfile = {
   user: { id: "u1", email: "u@example.com", handle: "u1", status: "active" },
-  teams: [],
   syncedAt: "2026-05-28T00:00:00.000Z",
 }
 
@@ -1824,8 +1823,32 @@ describe("AccountService", () => {
       throw new Error("expected authenticated account state")
     }
     expect(state.profile.user.email).toBe("u@example.com")
+    expect(state.profile).not.toHaveProperty("teams")
     expect((await namespace.getSingleton())?.refreshToken).toBe("refresh-1")
+    expect((await namespace.getSingleton())?.lastProfile).not.toHaveProperty("teams")
     expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
+  })
+
+  it("removes legacy team data from the encrypted account cache", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: vi.fn().mockRejectedValue(new TypeError("network unavailable")) as typeof fetch,
+    })
+    const legacyProfile = {
+      ...storedProfile,
+      teams: [{ id: "team-1", name: "Legacy", membershipId: "member-1", membershipRole: "owner" }],
+    }
+    await namespace.setSingleton({
+      refreshToken: "refresh-old",
+      lastProfile: legacyProfile,
+    })
+
+    const state = await service.refreshFromStorage()
+
+    expect(state).toMatchObject({ status: "authenticated", connectivity: "offline" })
+    expect(state).toHaveProperty("profile")
+    if (!("profile" in state) || !state.profile) throw new Error("expected cached account profile")
+    expect(state.profile).not.toHaveProperty("teams")
+    expect((await namespace.getSingleton())?.lastProfile).not.toHaveProperty("teams")
   })
 
   it("ignores stale auth callbacks after the user is already authenticated", async () => {
@@ -1905,7 +1928,6 @@ describe("AccountService", () => {
       operation: "handleAuthCallback",
       status: "authenticated",
       userId: "u1",
-      teamCount: 0,
     })
     expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("secret-code")
     expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("secret-access")
@@ -2014,7 +2036,7 @@ describe("AccountService", () => {
         }
         if (String(url).endsWith("/auth/me")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
-          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
         }
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
@@ -2029,6 +2051,7 @@ describe("AccountService", () => {
     )
 
     expect(state.status).toBe("authenticated")
+    expect(state).not.toHaveProperty("profile.teams")
     expect(calls).toEqual([
       expectedApiUrl("/auth/desktop/token"),
       expectedApiUrl("/auth/refresh"),
@@ -3031,7 +3054,6 @@ describe("AccountService", () => {
       reason: "startup",
       status: "authenticated",
       userId: "u1",
-      teamCount: 0,
     })
     expect(accountLogger.info).toHaveBeenCalledWith("Desktop account logged out.", {
       operation: "logout",

@@ -57,7 +57,7 @@ describe("git failure view", () => {
     expect(canHandleGitFailureAction(failure({ category: "github-auth" }))).toBe(true)
     expect(canHandleGitFailureAction(failure({ primaryAction: "handle-ssh" }))).toBe(true)
     expect(canHandleGitFailureAction(failure({ category: "missing-identity", primaryAction: "set-identity" }))).toBe(true)
-    expect(canHandleGitFailureAction(failure({ category: "network", primaryAction: "retry" }))).toBe(false)
+    expect(canHandleGitFailureAction(failure({ category: "network", primaryAction: "retry" }))).toBe(true)
     expect(canHandleGitFailureAction(failure({ category: "path", primaryAction: "choose-directory" }))).toBe(false)
   })
 })

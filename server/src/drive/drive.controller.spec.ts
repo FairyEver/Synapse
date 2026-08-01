@@ -7,7 +7,7 @@ import { BadRequestException, type INestApplication, Logger, NotFoundException, 
 import { Test } from "@nestjs/testing"
 import type { DriveBrowserSnapshotDto, DriveItemDto } from "@synapse/shared"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { AdminAuthService } from "../admin-auth/admin-auth.service"
+import { UserAuthService } from "../auth/user-auth.service"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { DEFAULT_API_RATE_LIMIT_PER_MINUTE, DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "../common/rate-limits"
 import { DriveAnnotationService } from "./drive-annotation.service"
@@ -1275,19 +1275,14 @@ describe("DriveController", () => {
     })
 
     const dashboardAuth = {
-      verifyDashboardSession: vi.fn(async () => ({
-        id: "reader-1",
-        email: "reader@example.com",
-        handle: "reader",
-        role: "user" as const,
-      })),
+      verifyWebSession: vi.fn(async () => ({ userId: "reader-1", sessionId: "session-1" })),
     }
     const readModuleRef = await Test.createTestingModule({
       controllers: [DrivePublicController],
       providers: [
         { provide: DriveService, useValue: drive },
         { provide: DriveAnnotationService, useValue: annotations },
-        { provide: AdminAuthService, useValue: dashboardAuth },
+        { provide: UserAuthService, useValue: dashboardAuth },
         { provide: "DriveStoragePort", useValue: storage },
       ],
     })
@@ -1299,10 +1294,10 @@ describe("DriveController", () => {
     try {
       await request(readApp.getHttpServer())
         .get("/api/drive/browser/shares/shr_file/items/file-1/annotations")
-        .set("Cookie", `${cookieHeader}; synapse_admin=dashboard-cookie`)
+        .set("Cookie", `${cookieHeader}; synapse_user_session=dashboard-cookie`)
         .expect(200)
 
-      expect(dashboardAuth.verifyDashboardSession).toHaveBeenCalledWith("dashboard-cookie")
+      expect(dashboardAuth.verifyWebSession).toHaveBeenCalledWith("dashboard-cookie")
       expect(annotations.listShareAnnotations).toHaveBeenLastCalledWith({
         shareId: "shr_file",
         itemId: "file-1",

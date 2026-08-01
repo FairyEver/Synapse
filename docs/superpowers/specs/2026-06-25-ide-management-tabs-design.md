@@ -80,7 +80,7 @@ Header
 左侧
   Cursor
   Codex
-  ClaudeCode/Synapse
+  CC/Synapse
   Windsurf
   Antigravity
   Hermes
@@ -96,7 +96,7 @@ Header
 目录页左侧控制
   Cursor
   Codex
-  ClaudeCode/Synapse
+  CC/Synapse
 
 目录页右侧顶部
   Cursor

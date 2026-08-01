@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest"
 import { createGitCloneService, detectRemoteKind } from "../git-clone-service"
 
 describe("detectRemoteKind", () => {
-  it("detects https and ssh URLs", () => {
+  it("detects HTTP, HTTPS, and SSH URLs", () => {
+    expect(detectRemoteKind("http://git.example.com:8080/team/docs.git")).toBe("http")
     expect(detectRemoteKind("https://git.example.com/team/docs.git")).toBe("https")
     expect(detectRemoteKind("git@git.example.com:team/docs.git")).toBe("ssh")
     expect(detectRemoteKind("file:///tmp/repo")).toBe("unknown")
@@ -11,7 +12,7 @@ describe("detectRemoteKind", () => {
 })
 
 describe("git clone service", () => {
-  it("clones into the selected target and registers the repository", async () => {
+  it("clones into a repository directory below the selected parent", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
     const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const addLocal = vi.fn().mockResolvedValue({
@@ -30,8 +31,8 @@ describe("git clone service", () => {
 
     const result = await service.clone({
       remoteUrl: "https://user:secret@git.example.com/team/docs.git?token=raw-token",
-      targetPath: "/work/docs",
-      name: "docs",
+      parentDirectory: "/work",
+      directoryName: "docs",
     })
 
     const targetPath = path.resolve("/work/docs")
@@ -59,8 +60,22 @@ describe("git clone service", () => {
 
     await expect(service.clone({
       remoteUrl: "https://git.example.com/team/docs.git",
-      targetPath: "/work/docs",
-      name: "docs",
+      parentDirectory: "/work",
+      directoryName: "docs",
     })).rejects.toThrow("目标目录已存在。请选择空目录。")
+  })
+
+  it("rejects repository directory names that escape the selected parent", async () => {
+    const service = createGitCloneService({
+      commandRunner: { run: vi.fn() },
+      registry: { addLocal: vi.fn() },
+      pathExists: async () => false,
+    })
+
+    await expect(service.clone({
+      remoteUrl: "https://git.example.com/team/docs.git",
+      parentDirectory: "/work",
+      directoryName: "../outside",
+    })).rejects.toThrow("仓库目录名无效。")
   })
 })

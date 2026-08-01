@@ -5,7 +5,7 @@ import { Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { adminApi, type ProblemFeedbackRow } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { ServerDataTable } from '@/components/data-table'
+import { DataTableColumnHeader, ServerDataTable } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { RelativeTime } from '@/components/relative-time'
@@ -53,27 +53,39 @@ export default function ProblemFeedbackPage() {
   const columns = useMemo<ColumnDef<ProblemFeedbackRow>[]>(() => [
     {
       accessorKey: 'receivedAt',
-      header: '接收时间',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='接收时间' />
+      ),
       cell: ({ row }) => (
-        <RelativeTime value={row.original.receivedAt} mode='absolute' />
+        <RelativeTime
+          className='tabular-nums'
+          value={row.original.receivedAt}
+          mode='absolute'
+        />
       ),
       enableSorting: false,
       enableHiding: false,
+      meta: { className: 'w-44' },
     },
     {
       id: 'content',
-      header: '正文预览',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='正文预览' />
+      ),
       cell: ({ row }) => (
-        <span className='line-clamp-1 break-all'>
+        <span className='block truncate'>
           {getProblemFeedbackPreview(row.original.content)}
         </span>
       ),
       enableSorting: false,
       enableHiding: false,
+      meta: { className: 'max-w-0' },
     },
     {
       id: 'actions',
-      header: '操作',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='操作' />
+      ),
       cell: ({ row }) => {
         const preview = getProblemFeedbackPreview(row.original.content)
         return (
@@ -94,6 +106,11 @@ export default function ProblemFeedbackPage() {
       },
       enableSorting: false,
       enableHiding: false,
+      meta: {
+        className: 'w-20',
+        thClassName: 'text-right',
+        tdClassName: 'text-right',
+      },
     },
   ], [])
 

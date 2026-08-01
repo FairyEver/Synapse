@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process"
 import { access } from "node:fs/promises"
 import path from "node:path"
+import { StringDecoder } from "node:string_decoder"
 import type { ControlledProcessRunner } from "../runtime/process"
 import type { ActorIdentity } from "../runtime/security"
 
@@ -9,6 +10,8 @@ type GitCommandSource = "stderr" | "stdout"
 type GitCommandResult = {
   stderr: string
   stdout: string
+  stderrTruncated?: boolean
+  stdoutTruncated?: boolean
 }
 
 type GitCommandFailureResult = GitCommandResult & {
@@ -41,12 +44,16 @@ class GitCommandError extends Error {
 }
 
 type GitCommandOptions = {
+  acceptedExitCodes?: readonly number[]
+  abortSignal?: AbortSignal
   args: string[]
   cwd: string
   fallbackMessage: string
   formatFailureMessage?: (output: string, fallbackMessage: string) => string
   formatSpawnError?: (error: unknown) => string
   onLine?: (line: string, source: GitCommandSource) => void
+  maxBufferBytes?: number
+  outputOverflow?: "error" | "truncate"
   timeoutMessage?: string
   timeoutMs?: number
 }
@@ -107,24 +114,32 @@ function createLineProcessor(
 }
 
 function runGitCommand({
+  acceptedExitCodes = [0],
+  abortSignal,
   args,
   cwd,
   fallbackMessage,
   formatFailureMessage,
   formatSpawnError,
   onLine,
+  maxBufferBytes,
+  outputOverflow = "error",
   timeoutMessage,
   timeoutMs,
 }: GitCommandOptions): Promise<GitCommandResult> {
   const security = gitCommandSecurity
   if (security) {
     return runControlledGitCommand({
+      acceptedExitCodes,
+      abortSignal,
       args,
       cwd,
       fallbackMessage,
       formatFailureMessage,
       formatSpawnError,
       onLine,
+      maxBufferBytes,
+      outputOverflow,
       security,
       timeoutMessage,
       timeoutMs,
@@ -142,9 +157,8 @@ function runGitCommand({
       },
     })
 
-    let stdout = ""
-    let stderr = ""
-    let combinedOutput = ""
+    const stdoutBuffer = new GitOutputBuffer(maxBufferBytes, outputOverflow)
+    const stderrBuffer = new GitOutputBuffer(maxBufferBytes, outputOverflow)
     let settled = false
     const stdoutProcessor = createLineProcessor("stdout", onLine)
     const stderrProcessor = createLineProcessor("stderr", onLine)
@@ -154,28 +168,48 @@ function runGitCommand({
           childProcess.kill("SIGTERM")
           reject(new GitCommandError(timeoutMessage ?? fallbackMessage, {
             exitCode: null,
-            output: combinedOutput,
+            output: `${stderrBuffer.text()}${stdoutBuffer.text()}`,
             signal: "SIGTERM",
-            stderr,
-            stdout,
+            stderr: stderrBuffer.text(),
+            stdout: stdoutBuffer.text(),
             timedOut: true,
           }))
         }, timeoutMs)
       : null
+    const onAbort = () => childProcess.kill("SIGTERM")
+    if (abortSignal?.aborted) onAbort()
+    else abortSignal?.addEventListener("abort", onAbort, { once: true })
 
     childProcess.stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8")
-
-      stdout += text
-      combinedOutput += text
+      try {
+        stdoutBuffer.push(chunk)
+      } catch (error) {
+        if (settled) return
+        settled = true
+        if (timeout) clearTimeout(timeout)
+        abortSignal?.removeEventListener("abort", onAbort)
+        childProcess.kill("SIGTERM")
+        reject(error)
+        return
+      }
       stdoutProcessor.push(text)
     })
 
     childProcess.stderr.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8")
 
-      stderr += text
-      combinedOutput += text
+      try {
+        stderrBuffer.push(chunk)
+      } catch (error) {
+        if (settled) return
+        settled = true
+        if (timeout) clearTimeout(timeout)
+        abortSignal?.removeEventListener("abort", onAbort)
+        childProcess.kill("SIGTERM")
+        reject(error)
+        return
+      }
       stderrProcessor.push(text)
     })
 
@@ -188,6 +222,7 @@ function runGitCommand({
       if (timeout) {
         clearTimeout(timeout)
       }
+      abortSignal?.removeEventListener("abort", onAbort)
       reject(new Error((formatSpawnError ?? formatDefaultGitSpawnError)(error)))
     })
 
@@ -200,17 +235,23 @@ function runGitCommand({
       if (timeout) {
         clearTimeout(timeout)
       }
+      abortSignal?.removeEventListener("abort", onAbort)
       stdoutProcessor.flush()
       stderrProcessor.flush()
+      const stdout = stdoutBuffer.text()
+      const stderr = stderrBuffer.text()
 
-      if (code === 0) {
+      if (code !== null && acceptedExitCodes.includes(code)) {
         resolve({
           stderr,
+          stderrTruncated: stderrBuffer.truncated,
           stdout,
+          stdoutTruncated: stdoutBuffer.truncated,
         })
         return
       }
 
+      const combinedOutput = `${stderr}${stdout}`
       const message = formatFailureMessage
         ? formatFailureMessage(combinedOutput, fallbackMessage)
         : stderr.trim() || stdout.trim() || fallbackMessage
@@ -221,12 +262,16 @@ function runGitCommand({
 }
 
 async function runControlledGitCommand({
+  acceptedExitCodes = [0],
+  abortSignal,
   args,
   cwd,
   fallbackMessage,
   formatFailureMessage,
   formatSpawnError,
   onLine,
+  maxBufferBytes,
+  outputOverflow = "error",
   security,
   timeoutMessage,
   timeoutMs,
@@ -237,6 +282,7 @@ async function runControlledGitCommand({
       actor: security.actor ?? { kind: "system", id: "git-command" },
       command: "git",
       args,
+      abortSignal,
       cwd,
       env: {
         GIT_TERMINAL_PROMPT: "0",
@@ -245,7 +291,12 @@ async function runControlledGitCommand({
       },
       envAllowlist: ["GIT_TERMINAL_PROMPT", "LANG", "LC_ALL"],
       timeoutMs,
-      output: { stdout: "buffer", stderr: "buffer" },
+      output: {
+        stdout: "buffer",
+        stderr: "buffer",
+        ...(maxBufferBytes === undefined ? {} : { maxBufferBytes }),
+        overflow: outputOverflow,
+      },
       onStdoutLine: (line) => onLine?.(line, "stdout"),
       onStderrLine: (line) => onLine?.(line, "stderr"),
       metadata: {
@@ -265,8 +316,13 @@ async function runControlledGitCommand({
         timedOut: true,
       })
     }
-    if (result.exitCode === 0) {
-      return { stderr, stdout }
+    if (result.exitCode !== null && acceptedExitCodes.includes(result.exitCode)) {
+      return {
+        stderr,
+        stderrTruncated: result.stderrTruncated ?? false,
+        stdout,
+        stdoutTruncated: result.stdoutTruncated ?? false,
+      }
     }
     const combinedOutput = `${stdout}${stderr}`
     const message = formatFailureMessage
@@ -285,6 +341,40 @@ async function runControlledGitCommand({
       throw error
     }
     throw new Error((formatSpawnError ?? formatDefaultGitSpawnError)(error), { cause: error })
+  }
+}
+
+class GitOutputBuffer {
+  private readonly chunks: Buffer[] = []
+  private bytes = 0
+  truncated = false
+
+  constructor(
+    private readonly maxBytes: number | undefined,
+    private readonly overflow: "error" | "truncate",
+  ) {}
+
+  push(chunk: Buffer): void {
+    if (this.maxBytes === undefined) {
+      this.chunks.push(chunk)
+      this.bytes += chunk.byteLength
+      return
+    }
+    const remaining = Math.max(0, this.maxBytes - this.bytes)
+    if (chunk.byteLength > remaining && this.overflow === "error") {
+      throw new Error(`Git command output exceeded ${String(this.maxBytes)} bytes`)
+    }
+    if (remaining > 0) {
+      const accepted = chunk.byteLength > remaining ? chunk.subarray(0, remaining) : chunk
+      this.chunks.push(accepted)
+      this.bytes += accepted.byteLength
+    }
+    if (chunk.byteLength > remaining) this.truncated = true
+  }
+
+  text(): string {
+    const buffer = Buffer.concat(this.chunks)
+    return this.truncated ? new StringDecoder("utf8").write(buffer) : buffer.toString("utf8")
   }
 }
 

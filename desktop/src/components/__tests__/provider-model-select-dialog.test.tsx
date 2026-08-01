@@ -156,7 +156,7 @@ describe("ProviderModelSelectDialog", () => {
     bridge.agent.listProviders.mockResolvedValue([
       provider({
         id: "local-claude-code",
-        name: "ClaudeCode/Synapse",
+        name: "CC/Synapse",
         source: "local",
         active: true,
       }),
@@ -168,7 +168,7 @@ describe("ProviderModelSelectDialog", () => {
       await Promise.resolve()
     })
 
-    expect(document.body.textContent).toContain("ClaudeCode/Synapse")
+    expect(document.body.textContent).toContain("CC/Synapse")
     expect(document.body.textContent).toContain("Claude Code 默认")
     expect([...document.querySelectorAll("[data-tier]")]
       .map((el) => el.getAttribute("data-tier"))).toEqual(["default"])
@@ -184,7 +184,7 @@ describe("ProviderModelSelectDialog", () => {
     expect(props.onSelect).toHaveBeenCalledWith({
       providerId: "local-claude-code",
       modelTier: "default",
-      providerName: "ClaudeCode/Synapse",
+      providerName: "CC/Synapse",
       modelName: undefined,
     })
   })

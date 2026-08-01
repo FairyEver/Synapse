@@ -42,6 +42,7 @@ vi.mock("../git-command", () => ({
 
 vi.mock("../log-store", () => ({
   createMainLogger: () => ({
+    debug: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
@@ -174,7 +175,7 @@ describe("repositoryMaintenanceService", () => {
       .toThrow("当前仓库正在进行 rebase")
 
     expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
-      args: ["pull", "--rebase", "-X", "theirs"],
+      args: expect.arrayContaining(["-X"]),
     }))
     expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
       args: ["rebase", "--abort"],

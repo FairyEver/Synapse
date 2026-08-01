@@ -5,7 +5,7 @@ import type { SynapseAgentDisplayProfile } from "@/types/agent"
 import { AgentTimelineItem } from "../agent-timeline-item"
 
 const profile: SynapseAgentDisplayProfile = {
-  agentLabel: "ClaudeCode/Synapse",
+  agentLabel: "CC/Synapse",
   thinkingDefaultCollapsed: false,
   toolDefaultCollapsed: "auto",
   toolPreviewLines: 6,

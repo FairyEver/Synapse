@@ -5,7 +5,7 @@ import { PrismaService } from "../prisma/prisma.service"
 import { formatAuditError } from "./audit-error"
 import { parsePagination, toPrismaArgs, type PaginatedResponse } from "./pagination"
 
-const auditLogSortFields = ["createdAt", "adminEmail", "action", "targetType", "targetId"] as const
+const auditLogSortFields = ["createdAt", "actorType", "actorLabel", "action", "targetType", "targetId"] as const
 export const auditLogExportLimit = 50000
 const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/
 const auditRecordMaxAttempts = 2
@@ -17,8 +17,30 @@ export class AuditLogWriteError extends Error {
   }
 }
 
+export type AuditActorType = "user" | "platform_admin" | "system" | "unknown"
+
+export interface AuditActor {
+  readonly actorType: AuditActorType
+  readonly actorId?: string
+  readonly actorLabel: string
+  readonly adminSessionId?: string
+}
+
+export const auditActors = {
+  user: (id: string, label: string): AuditActor => ({ actorType: "user", actorId: id, actorLabel: label }),
+  platformAdmin: (sessionId: string): AuditActor => ({
+    actorType: "platform_admin",
+    actorLabel: "平台管理员",
+    adminSessionId: sessionId,
+  }),
+  system: (): AuditActor => ({ actorType: "system", actorLabel: "系统" }),
+  unknown: (label = "未知主体"): AuditActor => ({ actorType: "unknown", actorLabel: label }),
+} as const
+
 export interface AuditLogRecordInput {
-  readonly adminEmail: string
+  readonly actor?: AuditActor
+  /** @deprecated Pass a structured actor. Kept temporarily for unchanged user/system call sites. */
+  readonly adminEmail?: string
   readonly action: string
   readonly targetType: string
   readonly targetId: string
@@ -90,11 +112,12 @@ export class AuditLogService {
   }
 
   async record(input: AuditLogRecordInput): Promise<void> {
+    const actor = await this.resolveAuditActor(input, this.prisma)
     for (let attempt = 1; attempt <= auditRecordMaxAttempts; attempt += 1) {
       try {
         await this.prisma.auditLog.create({
           data: {
-            adminEmail: input.adminEmail,
+            ...actor,
             action: input.action,
             targetType: input.targetType,
             targetId: input.targetId,
@@ -110,7 +133,8 @@ export class AuditLogService {
           action: input.action,
           targetType: input.targetType,
           targetId: input.targetId,
-          adminEmail: input.adminEmail,
+          actorType: actor.actorType,
+          actorId: actor.actorId,
           attempt,
           maxAttempts: auditRecordMaxAttempts,
           recordFailureCount: this.recordFailureCount,
@@ -123,13 +147,14 @@ export class AuditLogService {
   }
 
   async recordWithClient(
-    client: Pick<Prisma.TransactionClient, "auditLog">,
+    client: Pick<Prisma.TransactionClient, "auditLog" | "user">,
     input: AuditLogRecordInput,
   ): Promise<void> {
+    const actor = await this.resolveAuditActor(input, client)
     try {
       await client.auditLog.create({
         data: {
-          adminEmail: input.adminEmail,
+          ...actor,
           action: input.action,
           targetType: input.targetType,
           targetId: input.targetId,
@@ -165,6 +190,27 @@ export class AuditLogService {
       orderBy: { createdAt: "desc" },
       take: limit + 1,
     })
+  }
+
+  private async resolveAuditActor(
+    input: AuditLogRecordInput,
+    client: Pick<Prisma.TransactionClient, "user">,
+  ): Promise<AuditActor> {
+    if (input.actor) return input.actor
+    if (input.adminEmail === "system") return auditActors.system()
+    if (input.adminEmail?.startsWith("platform_admin:")) {
+      return auditActors.platformAdmin(input.adminEmail.slice("platform_admin:".length))
+    }
+    if (!input.adminEmail || input.adminEmail === "unknown") return auditActors.unknown()
+    try {
+      const user = await client.user.findFirst({
+        where: { OR: [{ id: input.adminEmail }, { email: input.adminEmail }] },
+        select: { id: true, email: true },
+      })
+      return user ? auditActors.user(user.id, user.email) : auditActors.unknown(input.adminEmail)
+    } catch {
+      return auditActors.unknown(input.adminEmail)
+    }
   }
 }
 

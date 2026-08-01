@@ -28,11 +28,11 @@ describe('drive browser file routes', () => {
     expect(routeTree).not.toContain("parentRoute: typeof ShareShareIdRoute")
   })
 
-  it('guards authenticated drive routes as user-only pages', () => {
+  it('inherits authentication from the ordinary-user route tree', () => {
     for (const routePath of driveRoutePaths) {
       const routeSource = readFileSync(routePath, 'utf8')
-      expect(routeSource).toContain("import { requireDashboardUser }")
-      expect(routeSource).toContain("beforeLoad: requireDashboardUser")
+      expect(routeSource).not.toContain('requireDashboardUser')
+      expect(routeSource).not.toContain('beforeLoad:')
     }
   })
 

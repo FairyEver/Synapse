@@ -2196,8 +2196,8 @@ export class AccountService {
       headers: this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : undefined,
     })
     if (!response.ok) throw await createHttpError("GET", url, response, "账号信息同步失败。")
-    const payload = await response.json() as Omit<SynapseAccountProfile, "syncedAt">
-    return { ...payload, syncedAt: new Date().toISOString() }
+    const payload = await response.json() as { readonly user: SynapseAccountProfile["user"] }
+    return { user: payload.user, syncedAt: new Date().toISOString() }
   }
 
   private async getAuthenticatedJson<T>(url: string, errorMessage: string): Promise<T> {
@@ -2242,7 +2242,12 @@ export class AccountService {
 
   private async readPersisted(message: string): Promise<PersistedAccount | null> {
     try {
-      return await this.namespace.getSingleton()
+      const persisted = await this.namespace.getSingleton()
+      const sanitized = removeLegacyTeamProfileData(persisted)
+      if (sanitized !== persisted && sanitized) {
+        await this.namespace.setSingleton(sanitized)
+      }
+      return sanitized
     } catch (error) {
       logger.warn(message, { error })
       return null
@@ -2430,7 +2435,16 @@ function authenticatedLogMeta(
     ...(reason ? { reason } : {}),
     status: "authenticated",
     userId: profile.user.id,
-    teamCount: profile.teams.length,
+  }
+}
+
+function removeLegacyTeamProfileData(persisted: PersistedAccount | null): PersistedAccount | null {
+  if (!persisted?.lastProfile || !("teams" in persisted.lastProfile)) return persisted
+  const lastProfile = { ...persisted.lastProfile } as Record<string, unknown>
+  delete lastProfile.teams
+  return {
+    ...persisted,
+    lastProfile: lastProfile as SynapseAccountProfile,
   }
 }
 

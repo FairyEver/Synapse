@@ -1,10 +1,10 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
+import { CanActivate, ExecutionContext, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import type { Request } from "express"
 import { PinoLogger } from "nestjs-pino"
-import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { AuditLogService } from "../common/audit-log.service"
 import { recordAuthGuardFailure } from "../common/auth-guard-audit"
 import { UserAuthService } from "./user-auth.service"
+import { userSessionCookieName } from "./user-web-session"
 
 export interface AuthenticatedUserRequest extends Request {
   user?: { id: string }
@@ -14,7 +14,6 @@ export interface AuthenticatedUserRequest extends Request {
 export class UserAuthGuard implements CanActivate {
   constructor(
     private readonly auth: UserAuthService,
-    private readonly dashboardAuth: AdminAuthService,
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly logger?: PinoLogger,
   ) {}
@@ -30,9 +29,9 @@ export class UserAuthGuard implements CanActivate {
       return true
     }
 
-    const cookieToken = request.cookies?.synapse_admin
+    const cookieToken = request.cookies?.[userSessionCookieName]
     const session = typeof cookieToken === "string"
-      ? await this.dashboardAuth.verifyDashboardSession(cookieToken)
+      ? await this.auth.verifyWebSession(cookieToken)
       : null
     if (!session) {
       await recordAuthGuardFailure({
@@ -40,21 +39,11 @@ export class UserAuthGuard implements CanActivate {
         action: "user.auth.verify.failed",
         logger: this.logger,
         request,
-        token: cookieToken,
+        tokenPresent: typeof cookieToken === "string",
       })
       throw new UnauthorizedException("未登录或登录已过期。")
     }
-    if (session.role !== "user") {
-      await recordAuthGuardFailure({
-        auditLog: this.auditLog,
-        action: "user.auth.forbidden",
-        logger: this.logger,
-        request,
-        token: cookieToken,
-      })
-      throw new ForbiddenException("需要普通用户权限。")
-    }
-    request.user = { id: session.id }
+    request.user = { id: session.userId }
     return true
   }
 
@@ -67,7 +56,7 @@ export class UserAuthGuard implements CanActivate {
         action: "user.auth.verify.failed",
         logger: this.logger,
         request,
-        token,
+        tokenPresent: true,
       })
       throw error
     }

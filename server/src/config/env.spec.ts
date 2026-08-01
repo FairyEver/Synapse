@@ -14,9 +14,7 @@ describe("loadEnv", () => {
     const env = loadEnv({
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-      ADMIN_EMAIL: "admin@d2.com",
-      ADMIN_PASSWORD: "change-me-now!",
-      ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
       DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
       APP_PUBLIC_URL: "https://synapse.test",
@@ -30,7 +28,7 @@ describe("loadEnv", () => {
 
     expect(env.port).toBe(3000)
     expect(env.databasePoolSize).toBe(10)
-    expect(env.adminEmail).toBe("admin@d2.com")
+    expect(env.adminAccessSecret).toHaveLength(43)
     expect(env.appPublicUrl).toBe("https://synapse.test")
     expect(env.desktopUpdateIntentSecret).toBe(productionUpdateIntentSecret)
     expect(env.driveLocalRoot).toBe("/app/data/drive")
@@ -42,9 +40,7 @@ describe("loadEnv", () => {
     const env = loadEnv({
       NODE_ENV: "development",
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-      ADMIN_EMAIL: "admin@d2.com",
-      ADMIN_PASSWORD: "change-me-now!",
-      ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
     })
 
@@ -56,9 +52,7 @@ describe("loadEnv", () => {
       loadEnv({
         NODE_ENV: "production",
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-        ADMIN_EMAIL: "admin@d2.com",
-        ADMIN_PASSWORD: "change-me-now!",
-        ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
       }),
     ).toThrow("APP_PUBLIC_URL")
@@ -69,9 +63,7 @@ describe("loadEnv", () => {
       loadEnv({
         NODE_ENV: "production",
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-        ADMIN_EMAIL: "admin@d2.com",
-        ADMIN_PASSWORD: "change-me-now!",
-        ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
         APP_PUBLIC_URL: "https://synapse.test",
         SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
@@ -87,9 +79,7 @@ describe("loadEnv", () => {
     const productionEnv = {
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-      ADMIN_EMAIL: "admin@d2.com",
-      ADMIN_PASSWORD: "change-me-now!",
-      ADMIN_JWT_SECRET: "admin-secret-with-enough-length-32chars",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
       APP_PUBLIC_URL: "https://synapse.test",
       SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
@@ -101,7 +91,7 @@ describe("loadEnv", () => {
 
     expect(() => loadEnv({
       ...productionEnv,
-      DESKTOP_UPDATE_INTENT_SECRET: productionEnv.ADMIN_JWT_SECRET,
+      DESKTOP_UPDATE_INTENT_SECRET: productionEnv.ADMIN_ACCESS_SECRET,
     })).toThrow("DESKTOP_UPDATE_INTENT_SECRET")
     expect(() => loadEnv({
       ...productionEnv,
@@ -113,9 +103,7 @@ describe("loadEnv", () => {
     expect(() => loadEnv({
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-      ADMIN_EMAIL: "admin@d2.com",
-      ADMIN_PASSWORD: "change-me-now!",
-      ADMIN_JWT_SECRET: "admin-secret-with-enough-length-32chars",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
       DESKTOP_UPDATE_INTENT_SECRET: "short-update-secret",
       APP_PUBLIC_URL: "https://synapse.test",
@@ -132,9 +120,7 @@ describe("loadEnv", () => {
       loadEnv({
         NODE_ENV: "production",
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-        ADMIN_EMAIL: "admin@d2.com",
-        ADMIN_PASSWORD: "change-me-now!",
-        ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
         DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
         APP_PUBLIC_URL: "https://synapse.test/api/",
@@ -152,9 +138,7 @@ describe("loadEnv", () => {
       loadEnv({
         NODE_ENV: "production",
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-        ADMIN_EMAIL: "admin@d2.com",
-        ADMIN_PASSWORD: "change-me-now!",
-        ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
         DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
         APP_PUBLIC_URL: "https://synapse.test",
@@ -170,9 +154,7 @@ describe("loadEnv", () => {
     const env = loadEnv({
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-      ADMIN_EMAIL: "admin@d2.com",
-      ADMIN_PASSWORD: "change-me-now!",
-      ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
       DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
       APP_PUBLIC_URL: "https://synapse.test",
@@ -195,9 +177,7 @@ describe("loadEnv", () => {
       loadEnv({
         NODE_ENV: "production",
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-        ADMIN_EMAIL: "admin@d2.com",
-        ADMIN_PASSWORD: "change-me-now!",
-        ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
         DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
         APP_PUBLIC_URL: "https://synapse.test",
@@ -210,9 +190,7 @@ describe("loadEnv", () => {
     const env = loadEnv({
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-      ADMIN_EMAIL: "admin@d2.com",
-      ADMIN_PASSWORD: "change-me-now!",
-      ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
       DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
       APP_PUBLIC_URL: "https://synapse.test",
@@ -246,23 +224,25 @@ describe("loadEnv", () => {
     expect(() =>
       loadEnv({
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-        ADMIN_EMAIL: "admin@d2.com",
-        ADMIN_PASSWORD: "change-me-now!",
-        ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       }),
     ).toThrow("USER_ACCESS_JWT_SECRET")
   })
 
-  it("rejects reused admin jwt secret for user access tokens", () => {
+  it("rejects an admin access secret reused for user access tokens", () => {
     expect(() =>
       loadEnv({
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-        ADMIN_EMAIL: "admin@d2.com",
-        ADMIN_PASSWORD: "change-me-now!",
-        ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
-        USER_ACCESS_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
+        USER_ACCESS_JWT_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       }),
     ).toThrow("USER_ACCESS_JWT_SECRET")
+  })
+
+  it("rejects missing, short, or repetitive admin access secrets", () => {
+    expect(() => loadEnv({ ...baseEnv, ADMIN_ACCESS_SECRET: undefined })).toThrow("ADMIN_ACCESS_SECRET")
+    expect(() => loadEnv({ ...baseEnv, ADMIN_ACCESS_SECRET: "short" })).toThrow("ADMIN_ACCESS_SECRET")
+    expect(() => loadEnv({ ...baseEnv, ADMIN_ACCESS_SECRET: "a".repeat(43) })).toThrow("ADMIN_ACCESS_SECRET")
   })
 
   it("loads Drive and Backup COS settings independently", () => {
@@ -399,9 +379,7 @@ describe("loadEnv", () => {
 
 const baseEnv = {
   DATABASE_URL: "postgresql://synapse:secret@localhost:5432/synapse",
-  ADMIN_EMAIL: "admin@synapse.com",
-  ADMIN_PASSWORD: "admin-password-123",
-  ADMIN_JWT_SECRET: "a".repeat(32),
+  ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
   USER_ACCESS_JWT_SECRET: "b".repeat(32),
   APP_PUBLIC_URL: "http://localhost:3000",
 }

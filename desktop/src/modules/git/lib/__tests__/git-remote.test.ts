@@ -9,9 +9,23 @@ describe("parseGitRemote", () => {
     expect(parseGitRemote("https://github.com/FairyEver/Synapse.git")).toEqual({
       host: "github.com",
       normalizedUrl: "https://github.com/FairyEver/Synapse.git",
+      port: null,
       protocol: "https",
       provider: "github",
       remoteKind: "https",
+      username: null,
+    })
+  })
+
+  it("preserves HTTP protocol, username, and non-default port", () => {
+    expect(parseGitRemote("http://writer@git.company.com:8080/team/docs.git")).toEqual({
+      host: "git.company.com",
+      normalizedUrl: "http://writer@git.company.com:8080/team/docs.git",
+      port: 8080,
+      protocol: "http",
+      provider: "generic",
+      remoteKind: "http",
+      username: "writer",
     })
   })
 
@@ -19,9 +33,11 @@ describe("parseGitRemote", () => {
     expect(parseGitRemote("git@gitee.com:team/docs.git")).toEqual({
       host: "gitee.com",
       normalizedUrl: "git@gitee.com:team/docs.git",
+      port: null,
       protocol: "ssh",
       provider: "gitee",
       remoteKind: "ssh",
+      username: "git",
     })
   })
 
@@ -38,9 +54,11 @@ describe("parseGitRemote", () => {
     expect(parseGitRemote("")).toEqual({
       host: null,
       normalizedUrl: "",
+      port: null,
       protocol: "unknown",
       provider: "generic",
       remoteKind: "unknown",
+      username: null,
     })
     expect(parseGitRemote("/Users/me/repo")).toMatchObject({
       host: null,

@@ -16,6 +16,7 @@ describe("parseGitStatusPorcelainV2", () => {
 
     expect(snapshot.currentBranch).toBe("main")
     expect(snapshot.upstream).toBe("origin/main")
+    expect(snapshot.trackingStatus).toBe("tracked")
     expect(snapshot.ahead).toBe(2)
     expect(snapshot.behind).toBe(1)
     expect(snapshot.hasConflicts).toBe(true)
@@ -25,6 +26,11 @@ describe("parseGitStatusPorcelainV2", () => {
       { path: "docs/new.md", originalPath: null, status: "untracked", staged: false, conflicted: false },
       { path: "docs/conflict.md", originalPath: null, status: "conflicted", staged: false, conflicted: true },
     ])
+  })
+
+  it("distinguishes branches without upstream from detached HEAD", () => {
+    expect(parseGitStatusPorcelainV2("# branch.head feature\n").trackingStatus).toBe("untracked")
+    expect(parseGitStatusPorcelainV2("# branch.head (detached)\n").trackingStatus).toBe("detached")
   })
 
   it("parses renamed files", () => {

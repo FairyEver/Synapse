@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   userProfileService: {
     clearRepoProfiles: vi.fn(),
   },
+  commitRepositoryPaths: vi.fn(),
 }))
 
 const fsMocks = vi.hoisted(() => ({
@@ -56,6 +57,10 @@ vi.mock("../repository-store", () => ({
   repositoryStore: mocks.repositoryStore,
 }))
 
+vi.mock("../repository-git-mutation-service", () => ({
+  commitRepositoryPaths: mocks.commitRepositoryPaths,
+}))
+
 vi.mock("../user-profile-service", () => ({
   userProfileService: mocks.userProfileService,
 }))
@@ -86,6 +91,7 @@ describe("RepositoryStructureService", () => {
       repositoryUuid: repository.uuid,
       status: "ready",
     }))
+    mocks.commitRepositoryPaths.mockResolvedValue("commit-hash")
   })
 
   it("includes initialization preview entries when validating a non-Synapse directory", async () => {
@@ -195,7 +201,6 @@ describe("RepositoryStructureService", () => {
   })
 
   it("excludes initialization backups from git initialization commits", async () => {
-    const { runGitTextCommand } = await import("../git-command")
     const { repositoryStructureService } = await import("../repository-structure-service")
     const localPath = await makeTempRepositoryPath()
     await writeFile(path.join(localPath, "notes.md"), "# Notes", "utf8")
@@ -206,7 +211,6 @@ describe("RepositoryStructureService", () => {
       repositoryUuid: repository.uuid,
       status: "ready",
     }))
-    vi.mocked(runGitTextCommand).mockResolvedValue("commit-hash")
     const preview = await repositoryStructureService.checkInitializationPreview({
       contentDirs: {},
       localPath,
@@ -225,14 +229,15 @@ describe("RepositoryStructureService", () => {
       message: "初始化完成。",
     }))
 
-    expect(runGitTextCommand).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["add", "-A", "--", "."],
-      cwd: localPath,
+    expect(mocks.commitRepositoryPaths).toHaveBeenCalledWith(expect.objectContaining({
+      gitRootPath: localPath,
+      filePaths: expect.arrayContaining([
+        path.join(localPath, "notes.md"),
+        path.join(localPath, "rules", ".gitkeep"),
+      ]),
     }))
-    expect(runGitTextCommand).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["reset", "-q", "--", ".synapse-init-backup-*"],
-      cwd: localPath,
-    }))
+    expect(mocks.commitRepositoryPaths.mock.calls[0]?.[0].filePaths)
+      .not.toEqual(expect.arrayContaining([expect.stringContaining(".synapse-init-backup-")]))
   })
 
   it("restores backed up contents when initialization fails after scaffolding", async () => {

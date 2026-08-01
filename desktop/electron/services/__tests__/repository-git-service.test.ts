@@ -105,7 +105,7 @@ describe("repositoryGitService", () => {
       }))
 
     expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["pull", "--rebase", "-X", "theirs", "--progress"],
+      args: ["pull", "--rebase", "--progress"],
     }))
     expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
       args: ["push", "--progress"],
@@ -128,7 +128,7 @@ describe("repositoryGitService", () => {
       .toThrow("当前仓库正在进行 rebase")
 
     expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
-      args: ["pull", "--rebase", "-X", "theirs", "--progress"],
+      args: ["pull", "--rebase", "--progress"],
     }))
     expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
       args: ["rebase", "--abort"],

@@ -1,12 +1,20 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
+import { CanActivate, ExecutionContext, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import type { Request } from "express"
 import { PinoLogger } from "nestjs-pino"
 import { AuditLogService } from "../common/audit-log.service"
 import { recordAuthGuardFailure } from "../common/auth-guard-audit"
+import { adminSessionCookieName } from "./admin-auth.controller"
 import { AdminAuthService } from "./admin-auth.service"
+import { assertTrustedAdminOrigin } from "./admin-origin"
 
 export interface AdminRequest extends Request {
-  admin?: { id: string; email: string }
+  admin?: {
+    readonly sessionId: string
+    /** @deprecated Use sessionId for audit correlation. */
+    readonly id: string
+    /** @deprecated Encoded audit context; this is not an account email. */
+    readonly email: string
+  }
 }
 
 @Injectable()
@@ -19,29 +27,27 @@ export class AdminAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AdminRequest>()
-    const token = request.cookies?.synapse_admin
-    const session = typeof token === "string" ? await this.auth.verifyDashboardSession(token) : null
-    if (!session) {
+    assertTrustedAdminOrigin(request)
+    const token = request.cookies?.[adminSessionCookieName]
+    const verification = typeof token === "string"
+      ? await this.auth.verifySession(token)
+      : { status: "invalid" as const }
+    if (verification.status !== "active") {
+      await this.auth.recordRejectedSession(verification, request.ip ?? "")
       await recordAuthGuardFailure({
         auditLog: this.auditLog,
         action: "admin.auth.verify.failed",
         logger: this.logger,
         request,
-        token,
+        tokenPresent: typeof token === "string",
       })
-      throw new UnauthorizedException("未登录或登录已过期。")
+      throw new UnauthorizedException("管理会话无效或已过期。")
     }
-    if (session.role !== "admin") {
-      await recordAuthGuardFailure({
-        auditLog: this.auditLog,
-        action: "admin.auth.forbidden",
-        logger: this.logger,
-        request,
-        token,
-      })
-      throw new ForbiddenException("需要管理员权限。")
+    request.admin = {
+      sessionId: verification.session.sessionId,
+      id: verification.session.sessionId,
+      email: `platform_admin:${verification.session.sessionId}`,
     }
-    request.admin = { id: session.id, email: session.email }
     return true
   }
 }

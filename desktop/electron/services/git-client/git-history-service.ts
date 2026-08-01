@@ -11,6 +11,7 @@ const FIELD = "%x1f"
 const RECORD = "%x1e"
 const RECORD_SEPARATOR = String.fromCharCode(0x1e)
 const PRETTY = `%H${FIELD}%h${FIELD}%s${FIELD}%an${FIELD}%ae${FIELD}%cI${RECORD}`
+const PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 
 function parseCommitRecord(record: string): SynapseGitCommitSummary | null {
   const [hash, shortHash, subject, authorName, authorEmail, committedAt] = record.split("\x1f")
@@ -104,6 +105,8 @@ export function createGitHistoryService(deps: {
           args: ["show", "--name-status", `--pretty=format:${PRETTY}`, "--date=iso-strict", "--no-renames", hash],
           operation,
           operationId,
+          maxBufferBytes: PREVIEW_MAX_BYTES,
+          outputOverflow: "truncate",
           repoPath: repository.localPath,
           repositoryId: repository.id,
         })
@@ -116,6 +119,8 @@ export function createGitHistoryService(deps: {
           args: ["show", "--format=", "--patch", hash],
           operation,
           operationId,
+          maxBufferBytes: PREVIEW_MAX_BYTES,
+          outputOverflow: "truncate",
           repoPath: repository.localPath,
           repositoryId: repository.id,
         })
@@ -123,6 +128,9 @@ export function createGitHistoryService(deps: {
           ...summary,
           files: parseNameStatus(fileLines),
           diff: diffResult.stdout,
+          filesTruncated: summaryResult.stdoutTruncated ?? false,
+          diffTruncated: diffResult.stdoutTruncated ?? false,
+          truncated: Boolean(summaryResult.stdoutTruncated || diffResult.stdoutTruncated),
         }
       } catch (error) {
         logGitOperationFailed(deps.logger ?? noopLogger, {

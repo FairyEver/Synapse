@@ -27,10 +27,9 @@ import {
   isInitializationBackupEntry,
 } from "./repository-initialization-safety"
 import { repositoryStore } from "./repository-store"
+import { commitRepositoryPaths } from "./repository-git-mutation-service"
 import { userProfileService } from "./user-profile-service"
 
-const SYNAPSE_BOT_NAME = "Synapse Bot"
-const SYNAPSE_BOT_EMAIL = "bot@synapse.local"
 const logger = createMainLogger("service.repository-structure")
 
 function isGitDirectory(entry: Dirent): boolean {
@@ -56,51 +55,6 @@ function runStructureGitCommand(
     fallbackMessage,
     formatFailureMessage: formatGitFailureMessage,
   })
-}
-
-async function ensureBotIdentity(gitRootPath: string): Promise<void> {
-  await runStructureGitCommand(
-    gitRootPath,
-    ["config", "--local", "user.name", SYNAPSE_BOT_NAME],
-    "无法初始化 Synapse 提交身份。",
-  )
-  await runStructureGitCommand(
-    gitRootPath,
-    ["config", "--local", "user.email", SYNAPSE_BOT_EMAIL],
-    "无法初始化 Synapse 提交身份。",
-  )
-}
-
-async function stageRepositoryScope(
-  gitRootPath: string,
-  repository: SynapseRepositoryConfig,
-): Promise<void> {
-  const relativePath = path.relative(gitRootPath, repository.localPath) || "."
-  const normalizedRelativePath = relativePath.split(path.sep).join("/")
-  const backupPathspec = normalizedRelativePath === "."
-    ? ".synapse-init-backup-*"
-    : `${normalizedRelativePath}/.synapse-init-backup-*`
-
-  await runStructureGitCommand(
-    gitRootPath,
-    ["add", "-A", "--", normalizedRelativePath],
-    "暂存仓库结构改动失败。",
-  )
-  await runStructureGitCommand(
-    gitRootPath,
-    ["reset", "-q", "--", backupPathspec],
-    "排除初始化备份目录失败。",
-  )
-}
-
-async function commitInitialization(gitRootPath: string): Promise<string> {
-  await runStructureGitCommand(
-    gitRootPath,
-    ["commit", "-m", "[synapse] initialize repository structure"],
-    "提交仓库结构改动失败。",
-  )
-
-  return runStructureGitCommand(gitRootPath, ["rev-parse", "HEAD"], "读取最新提交失败。")
 }
 
 async function pushRepository(repository: SynapseRepositoryConfig): Promise<void> {
@@ -472,10 +426,18 @@ class RepositoryStructureService {
 
       if (repositoryState.isGitRepository) {
         const gitRootPath = repositoryState.gitRootPath ?? repository.localPath
-
-        await ensureBotIdentity(gitRootPath)
-        await stageRepositoryScope(gitRootPath, repository)
-        const commitHash = await commitInitialization(gitRootPath)
+        const initializedPaths = [
+          ...getNonGitEntries(entries).map((entry) => path.join(repository.localPath, entry.name)),
+          ...getRepositorySkeletonDirectories(repository).map((directoryName) => (
+            path.join(repository.localPath, directoryName, ".gitkeep")
+          )),
+        ]
+        const commitHash = await commitRepositoryPaths({
+          fallbackMessage: "提交仓库结构改动失败。",
+          filePaths: initializedPaths,
+          gitRootPath,
+          message: "[synapse] initialize repository structure",
+        })
 
         try {
           await pushRepository(repository)

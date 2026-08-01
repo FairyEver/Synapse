@@ -13,7 +13,7 @@ describe("createCopySource", () => {
       fileCount: 3,
       synapseContentId: null,
       editorId: "claude-code",
-      editorLabel: "ClaudeCode/Synapse",
+      editorLabel: "CC/Synapse",
       scope: "global",
       trash: { mode: "path" },
     }
@@ -70,7 +70,7 @@ describe("createCopySource", () => {
       fileCount: 2,
       synapseContentId: null,
       editorId: "claude-code",
-      editorLabel: "ClaudeCode/Synapse",
+      editorLabel: "CC/Synapse",
       scope: "global",
       trash: { mode: "path" },
     }

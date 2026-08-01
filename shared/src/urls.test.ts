@@ -9,7 +9,6 @@ import {
   buildDesktopDashboardLoginUrl,
   buildLiveDesktopSocketUrl,
   buildPasswordResetUrl,
-  buildTeamInviteUrl,
   buildWebhookUrl,
   maskWebhookUrl,
   normalizePublicAppUrl,
@@ -47,10 +46,6 @@ describe("shared URL helpers", () => {
   })
 
   it("builds user-facing URLs with encoded tokens", () => {
-    expect(buildTeamInviteUrl({
-      publicAppUrl: "https://synapse.test/",
-      token: "plain token",
-    })).toBe("https://synapse.test/console/team-invite?token=plain+token")
     expect(buildPasswordResetUrl({
       publicAppUrl: "https://synapse.test/",
       token: "reset token",

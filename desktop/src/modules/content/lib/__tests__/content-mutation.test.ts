@@ -18,6 +18,7 @@ const savedResult: SynapseContentMutationResult = {
   modifiedAt: "2026-04-28T00:00:00.000Z",
   pushed: false,
   pendingPushCount: 1,
+  syncStatus: "pending",
   message: "已保存",
 }
 

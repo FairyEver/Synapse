@@ -9,9 +9,6 @@ import { UserAuthService, type UserMeResponse } from "./user-auth.service"
 
 function createPrismaMock() {
   const tx = {
-    adminUser: {
-      findUnique: vi.fn().mockResolvedValue(null),
-    },
     user: {
       findUnique: vi.fn().mockResolvedValue(null),
       findUniqueOrThrow: vi.fn(),
@@ -45,9 +42,6 @@ function createPrismaMock() {
   return {
     $transaction: vi.fn((callback) => callback(tx)),
     __tx: tx,
-    adminUser: {
-      findUnique: vi.fn().mockResolvedValue(null),
-    },
     user: {
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
@@ -626,11 +620,7 @@ describe("UserAuthService", () => {
       password: "StrongPassword123!",
     }, "203.0.113.25")).resolves.toEqual({ ok: true })
 
-    expect(prisma.__tx.$executeRaw).toHaveBeenCalledTimes(1)
-    expect(prisma.__tx.adminUser.findUnique).toHaveBeenCalledWith({
-      where: { email: "u@example.com" },
-      select: { id: true },
-    })
+    expect(prisma.__tx.$executeRaw).not.toHaveBeenCalled()
     expect(prisma.__tx.user.findUnique).toHaveBeenCalledWith({
       where: { email: "u@example.com" },
       select: { id: true },
@@ -733,9 +723,9 @@ describe("UserAuthService", () => {
     })).rejects.toThrow("用户名已被使用。")
   })
 
-  it("rejects admin emails during registration and records duplicate email audits", async () => {
+  it("allows a former administrator email to register as an ordinary user", async () => {
     const prisma = createPrismaMock()
-    prisma.__tx.adminUser.findUnique.mockResolvedValue({ id: "admin-1" })
+    prisma.__tx.user.create.mockResolvedValue({ id: "user-1", email: "admin@example.com", status: "active" })
     const auditLog = { record: vi.fn() }
     const service = createService(prisma, auditLog)
 
@@ -743,20 +733,17 @@ describe("UserAuthService", () => {
       email: "Admin@example.com",
       handle: "admin-user",
       password: "StrongPassword123!",
-    }, "203.0.113.26"))
-      .rejects
-      .toThrow("邮箱已注册。")
+    }, "203.0.113.26")).resolves.toEqual({ ok: true })
 
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@example.com",
-      action: "user.register.failure",
+      action: "user.register.success",
       targetType: "user",
-      targetId: "unknown",
-      detail: { reason: "duplicate_email" },
+      targetId: "user-1",
       ipAddress: "203.0.113.26",
     })
     expect(auditLog.record).toHaveBeenCalledTimes(1)
-    expect(prisma.__tx.user.create).not.toHaveBeenCalled()
+    expect(prisma.__tx.user.create).toHaveBeenCalled()
     expect(prisma.__tx.userSession.create).not.toHaveBeenCalled()
   })
 
@@ -774,10 +761,6 @@ describe("UserAuthService", () => {
       .rejects
       .toThrow("邮箱已注册。")
 
-    expect(prisma.__tx.adminUser.findUnique).toHaveBeenCalledWith({
-      where: { email: "user@example.com" },
-      select: { id: true },
-    })
     expect(prisma.__tx.user.findUnique).toHaveBeenCalledWith({
       where: { email: "user@example.com" },
       select: { id: true },
@@ -1421,44 +1404,19 @@ describe("UserAuthService", () => {
     })
   })
 
-  it("returns the current user and team membership shape without roles or permissions", async () => {
+  it("returns the current user with an empty compatibility teams field", async () => {
     const prisma = createPrismaMock()
     prisma.user.findUniqueOrThrow.mockResolvedValue({
       id: "user-1",
       email: "u@example.com",
       status: "active",
       handle: "ada",
-      memberships: [
-        {
-          id: "membership-1",
-          role: "owner",
-          team: { id: "team-1", name: "Team One" },
-        },
-        {
-          id: "membership-2",
-          role: "member",
-          team: { id: "team-2", name: "Team Two" },
-        },
-      ],
     })
     const service = createService(prisma)
 
     const expected: UserMeResponse = {
       user: { id: "user-1", email: "u@example.com", status: "active", handle: "ada" },
-      teams: [
-        {
-          id: "team-1",
-          name: "Team One",
-          membershipId: "membership-1",
-          membershipRole: "owner",
-        },
-        {
-          id: "team-2",
-          name: "Team Two",
-          membershipId: "membership-2",
-          membershipRole: "member",
-        },
-      ],
+      teams: [],
     }
 
     await expect(service.getMe("user-1")).resolves.toEqual(expected)
@@ -1470,14 +1428,6 @@ describe("UserAuthService", () => {
         email: true,
         status: true,
         handle: true,
-        memberships: {
-          select: {
-            id: true,
-            role: true,
-            team: { select: { id: true, name: true } },
-          },
-          orderBy: { createdAt: "asc" },
-        },
       },
     })
   })
@@ -1496,7 +1446,6 @@ describe("UserAuthService", () => {
       email: "u@example.com",
       status: "active",
       handle: "new-name",
-      memberships: [],
     })
     const auditLog = { record: vi.fn() }
     const service = createService(prisma, auditLog)
@@ -1530,14 +1479,6 @@ describe("UserAuthService", () => {
         email: true,
         status: true,
         handle: true,
-        memberships: {
-          select: {
-            id: true,
-            role: true,
-            team: { select: { id: true, name: true } },
-          },
-          orderBy: { createdAt: "asc" },
-        },
       },
     })
     expect(auditLog.record).toHaveBeenCalledWith({
@@ -1635,7 +1576,6 @@ describe("UserAuthService", () => {
       email: "u@example.com",
       status: "active",
       handle: "grace-hopper",
-      memberships: [],
     })
     const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable token=secret-value")) }
     const service = createService(prisma, auditLog)

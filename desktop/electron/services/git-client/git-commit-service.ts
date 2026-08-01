@@ -17,15 +17,21 @@ type CommitDeps = {
   readonly now?: () => Date
 }
 
+type CommitOptions = {
+  readonly operationId?: string
+  readonly signal?: AbortSignal
+}
+
 export function createGitCommitService(deps: CommitDeps) {
   const now = deps.now ?? (() => new Date())
   return {
     async commit(
       repository: SynapseGitRepository,
       input: { readonly message: string; readonly paths: readonly string[] },
+      options: CommitOptions = {},
     ): Promise<SynapseGitOperationResult> {
       const operation = "git.commit"
-      const operationId = createGitOperationId()
+      const operationId = options.operationId ?? createGitOperationId()
       const startedAt = performance.now()
       const message = input.message.trim()
       const meta = {
@@ -49,7 +55,8 @@ export function createGitCommitService(deps: CommitDeps) {
         }
         await deps.commandRunner.run({
           cwd: repository.localPath,
-          args: ["add", "--", ...input.paths],
+          args: ["--literal-pathspecs", "add", "--", ...input.paths],
+          abortSignal: options.signal,
           operation,
           operationId,
           repoPath: repository.localPath,
@@ -57,7 +64,8 @@ export function createGitCommitService(deps: CommitDeps) {
         })
         await deps.commandRunner.run({
           cwd: repository.localPath,
-          args: ["commit", "-m", message, "--", ...input.paths],
+          args: ["--literal-pathspecs", "commit", "--only", "-m", message, "--", ...input.paths],
+          abortSignal: options.signal,
           operation,
           operationId,
           repoPath: repository.localPath,

@@ -8,7 +8,6 @@ import {
 import type { Request } from "express"
 import { PinoLogger } from "nestjs-pino"
 import { catchError, from, mergeMap, Observable, throwError } from "rxjs"
-import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import type { AdminRequest } from "../admin-auth/admin-auth.guard"
 import { formatAuditError } from "./audit-error"
 import { AuditLogService } from "./audit-log.service"
@@ -16,8 +15,6 @@ import { AuditLogService } from "./audit-log.service"
 const SENSITIVE_BODY_KEY_PATTERN = /authorization|bearer|cookie|password|token|secret|credential|api[-_]?key|access[-_]?key/i
 const REDACTED_VALUE = "[REDACTED]"
 const USER_STATUS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/status$/
-const TEAM_ROLE_PERMISSIONS_PATH_PATTERN = /^\/api\/admin\/teams\/[^/]+\/access-roles\/[^/]+\/permissions$/
-const UNAUTHENTICATED_ADMIN_EMAIL = "unauthenticated"
 const ADMIN_WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
 const PROBLEM_FEEDBACK_ADMIN_PATH_PATTERN =
   /^\/api\/admin\/problem-feedback(?:\/[^/]+)?$/u
@@ -33,7 +30,6 @@ const noAudit: AuditPolicy = { success: false, failure: false }
 export class AuditLogInterceptor implements NestInterceptor {
   constructor(
     private readonly auditLog: AuditLogService,
-    private readonly auth: AdminAuthService,
     @Optional() private readonly logger?: PinoLogger,
   ) {}
 
@@ -42,7 +38,8 @@ export class AuditLogInterceptor implements NestInterceptor {
       Request & { cookies?: Record<string, string> } & Pick<AdminRequest, "admin">
     >()
 
-    const policy = resolveAuditPolicy(request.method, request.path, Boolean(request.admin?.email))
+    const adminSessionId = request.admin?.sessionId ?? request.admin?.id
+    const policy = resolveAuditPolicy(request.method, request.path, Boolean(adminSessionId))
     if (!policy.success && !policy.failure) {
       return next.handle()
     }
@@ -63,7 +60,7 @@ export class AuditLogInterceptor implements NestInterceptor {
       const auditAction = error ? `${action}.failed` : action
       try {
         await this.auditLog.record({
-          adminEmail: request.admin?.email ?? UNAUTHENTICATED_ADMIN_EMAIL,
+          adminEmail: request.admin?.email ?? "unauthenticated",
           action: auditAction,
           targetType,
           targetId,
@@ -137,11 +134,7 @@ function shouldAuditAdminSuccessFallback(method: string, path: string): boolean 
 }
 
 function hasControllerManagedAdminSuccessAudit(method: string, path: string): boolean {
-  if (method === "POST" && path === "/api/admin/invitations") return true
-  if (method === "DELETE" && path === "/api/admin/invitations") return true
-  if (method === "DELETE" && path.startsWith("/api/admin/invitations/")) return true
   if (method === "PATCH" && USER_STATUS_PATH_PATTERN.test(path)) return true
-  if (method === "PUT" && TEAM_ROLE_PERMISSIONS_PATH_PATTERN.test(path)) return true
   return method === "DELETE" && path === "/api/admin/logs/cleanup"
 }
 
@@ -173,17 +166,8 @@ function resolveKnownAdminAuditTarget(
   query: Record<string, unknown>,
   responseBody: unknown,
 ): { action: string; targetType: string; targetId: string } | null {
-  if (method === "DELETE" && path === "/api/admin/invitations") {
-    return { action: "admin.invitation.delete_many", targetType: "invitation", targetId: readId(responseBody) }
-  }
-  if (method === "DELETE" && path.startsWith("/api/admin/invitations/")) {
-    return { action: "admin.invitation.delete", targetType: "invitation", targetId: params.id ?? readId(responseBody) }
-  }
   if (method === "PATCH" && USER_STATUS_PATH_PATTERN.test(path)) {
     return { action: "admin.user.status_update", targetType: "user", targetId: params.id ?? readId(responseBody) }
-  }
-  if (method === "PUT" && TEAM_ROLE_PERMISSIONS_PATH_PATTERN.test(path)) {
-    return { action: "admin.team_role_permissions.update", targetType: "team_access_role", targetId: params.roleId ?? readId(responseBody) }
   }
   if (method === "GET" && path === "/api/admin/backup/list") {
     return { action: "backup.list", targetType: "backup", targetId: "list" }

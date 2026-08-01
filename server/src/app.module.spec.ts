@@ -22,6 +22,13 @@ describe("AppModule", () => {
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([UpdateIntentModule]))
   })
 
+  it("does not assemble retired team or invitation modules", () => {
+    const moduleNames = importsOf(AppModule).map(moduleType => (moduleType as { name?: string }).name)
+
+    expect(moduleNames).not.toContain("TeamsModule")
+    expect(moduleNames).not.toContain("InvitationsModule")
+  })
+
   it("compiles the application dependency graph", async () => {
     await withServerEnv(async () => {
       const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
@@ -33,17 +40,13 @@ describe("AppModule", () => {
 async function withServerEnv(callback: () => Promise<void>): Promise<void> {
   const previous = {
     DATABASE_URL: process.env.DATABASE_URL,
-    ADMIN_EMAIL: process.env.ADMIN_EMAIL,
-    ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
-    ADMIN_JWT_SECRET: process.env.ADMIN_JWT_SECRET,
+    ADMIN_ACCESS_SECRET: process.env.ADMIN_ACCESS_SECRET,
     USER_ACCESS_JWT_SECRET: process.env.USER_ACCESS_JWT_SECRET,
     DESKTOP_UPDATE_INTENT_SECRET: process.env.DESKTOP_UPDATE_INTENT_SECRET,
     PORT: process.env.PORT,
   }
   process.env.DATABASE_URL = "postgresql://synapse:synapse@localhost:5433/synapse"
-  process.env.ADMIN_EMAIL = "admin@example.com"
-  process.env.ADMIN_PASSWORD = "password-password"
-  process.env.ADMIN_JWT_SECRET = "admin-secret-admin-secret-admin-secret"
+  process.env.ADMIN_ACCESS_SECRET = "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A"
   process.env.USER_ACCESS_JWT_SECRET = "user-secret-user-secret-user-secret"
   process.env.DESKTOP_UPDATE_INTENT_SECRET = "update-intent-secret-update-intent-secret-update-intent-secret-64"
   process.env.PORT = "3001"

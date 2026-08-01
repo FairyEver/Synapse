@@ -45,7 +45,7 @@ const httpRequestRendererAction: RendererActionDefinition<HttpRequestActionConfi
 const agentRendererAction: RendererActionDefinition<AgentActionConfig> = {
   manifest: agentActionManifest,
   summarizeConfig: (config) => {
-    const agentLabel = config.agentType === "claude-code" ? "ClaudeCode/Synapse" : "Codex"
+    const agentLabel = config.agentType === "claude-code" ? "CC/Synapse" : "Codex"
     return `${agentLabel} · ${config.mode}`
   },
   ConfigForm: AgentConfigForm,

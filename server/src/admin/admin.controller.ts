@@ -6,10 +6,9 @@ import { AuditLogService, auditLogExportLimit } from "../common/audit-log.servic
 import { toCsv } from "../common/csv-export"
 import { parsePagination } from "../common/pagination"
 import { badRequestFromZodError } from "../common/zod-validation"
-import { resolvePublicAppUrl } from "../invitations/invitation-url"
 import { LiveDeviceService } from "../live/live-device.service"
 import { WebhookService } from "../webhooks/webhook.service"
-import { AdminService, maxBulkInvitationDeleteIds } from "./admin.service"
+import { AdminService } from "./admin.service"
 
 const userStatusSchema = z.object({
   status: z.enum(["active", "disabled"]),
@@ -19,17 +18,7 @@ const userAdminNoteSchema = z.object({
   adminNote: z.string().max(500, "最多 500 个字符").nullable(),
 }).strict()
 
-const bulkInvitationDeleteSchema = z.object({
-  ids: z.array(z.string().min(1)).min(1).max(maxBulkInvitationDeleteIds, `最多选择 ${maxBulkInvitationDeleteIds} 项`),
-}).strict()
-
-const createInvitationSchema = z.object({
-  teamId: z.string().trim().min(1),
-}).strict()
-
 const userSortFields = ["createdAt", "updatedAt", "email", "handle", "status"] as const
-const teamSortFields = ["createdAt", "updatedAt", "name"] as const
-const invitationSortFields = ["createdAt", "expiresAt", "usedAt", "type"] as const
 const deviceSortFields = ["lastSeenAt", "firstSeenAt", "deviceName", "platform", "appVersion"] as const
 const webhookDeliverySortFields = ["receivedAt", "status", "method"] as const
 const skillRepositorySortFields = ["createdAt", "updatedAt", "title", "name"] as const
@@ -78,19 +67,6 @@ export class AdminController {
     return result
   }
 
-  @Get("/invitations")
-  async listInvitations(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
-    const pagination = parsePagination(query, { allowedSortFields: invitationSortFields })
-    const result = await this.admin.listInvitations(pagination)
-    await this.recordAdminRead(request, {
-      action: "admin.invitations.list",
-      targetType: "invitation",
-      targetId: "list",
-      detail: { page: pagination.page, pageSize: pagination.pageSize },
-    })
-    return result
-  }
-
   @Get("/webhook-deliveries")
   async listWebhookDeliveries(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
     const pagination = parsePagination(query, { allowedSortFields: webhookDeliverySortFields })
@@ -110,33 +86,6 @@ export class AdminController {
       detail: { page: pagination.page, pageSize: pagination.pageSize, filters },
     })
     return result
-  }
-
-  @Post("/invitations")
-  createInvitation(@Body() body: unknown, @Req() request: AdminRequest) {
-    const result = createInvitationSchema.safeParse(body)
-    if (!result.success) throw badRequestFromZodError(result.error, "邀请创建请求无效。")
-    return this.admin.createInvitation(
-      result.data,
-      request.admin!,
-      resolvePublicAppUrl({
-        configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
-        request,
-      }),
-      request.ip,
-    )
-  }
-
-  @Delete("/invitations")
-  deleteInvitations(@Body() body: unknown, @Req() request?: AdminRequest) {
-    const result = bulkInvitationDeleteSchema.safeParse(body)
-    if (!result.success) throw badRequestFromZodError(result.error, "邀请 ID 无效。")
-    return this.admin.deleteInvitations(result.data.ids, request?.admin?.email, request?.ip)
-  }
-
-  @Delete("/invitations/:id")
-  deleteInvitation(@Param("id") id: string, @Req() request?: AdminRequest) {
-    return this.admin.deleteInvitation(id, request?.admin?.email, request?.ip)
   }
 
   @Get("/users")
@@ -207,20 +156,6 @@ export class AdminController {
     return this.admin.setSkillRepositoryRemoved(id, false, request?.admin?.email, request?.ip)
   }
 
-  @Get("/teams")
-  async listTeams(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
-    const pagination = parsePagination(query, { allowedSortFields: teamSortFields })
-    const search = typeof query.search === "string" ? query.search.trim() : ""
-    const result = await this.admin.listTeams(pagination, search ? { search } : undefined)
-    await this.recordAdminRead(request, {
-      action: "admin.teams.list",
-      targetType: "team",
-      targetId: "list",
-      detail: { page: pagination.page, pageSize: pagination.pageSize, search: search || undefined },
-    })
-    return result
-  }
-
   @Get("/audit-logs/export")
   async exportAuditLogs(
     @Query() query: Record<string, unknown>,
@@ -237,7 +172,7 @@ export class AdminController {
       throw new BadRequestException(`导出记录超过 ${auditLogExportLimit} 条，请缩小时间范围。`)
     }
     const csv = toCsv(data as Record<string, unknown>[], [
-      "id", "adminEmail", "action", "targetType", "targetId", "detail", "ipAddress", "createdAt",
+      "id", "actorType", "actorId", "actorLabel", "adminSessionId", "action", "targetType", "targetId", "detail", "ipAddress", "createdAt",
     ])
     response.setHeader("Content-Type", "text/csv; charset=utf-8")
     response.setHeader("Content-Disposition", "attachment; filename=audit-logs.csv")

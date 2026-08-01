@@ -102,7 +102,7 @@ describe("useGitAccess", () => {
     })
 
     expect(bridge.git.checkAccess).toHaveBeenCalledWith({
-      hosts: [{ host: "github.com", protocol: "https", provider: "github" }],
+      hosts: [{ host: "github.com", port: null, protocol: "https", provider: "github" }],
     })
   })
 
@@ -146,11 +146,13 @@ function accessState(host?: Pick<SynapseGitAccessState["hosts"][number], "host" 
   return {
     checkedAt: "2026-06-20T00:00:00.000Z",
     credentialHelper: {
+      helpers: [{ classification: "safe", source: "global", value: "osxkeychain" }],
+      management: "synapse-supported",
       helper: "osxkeychain",
       safe: true,
       source: "global",
     },
-    hosts: host ? [{ ...host, lastFailure: null }] : [],
+    hosts: host ? [{ ...host, lastFailure: null, port: null }] : [],
     providerLinks: {
       github: { credentialHelpUrl: null, sshKeysUrl: null, tokenUrl: null },
       gitee: { credentialHelpUrl: null, sshKeysUrl: null, tokenUrl: null },

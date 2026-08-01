@@ -7,17 +7,17 @@ import {
 } from './auth-redirect-search'
 
 describe('auth redirect search', () => {
-  it('keeps team invitation redirects for auth links', () => {
-    const redirectTo = normalizeAuthRedirect('/team-invite?token=invite_123')
+  it('keeps internal redirects for auth links', () => {
+    const redirectTo = normalizeAuthRedirect('/settings')
 
-    expect(redirectTo).toBe('/team-invite?token=invite_123')
+    expect(redirectTo).toBe('/settings')
     expect(buildAuthRedirectSearch(redirectTo)).toEqual({
-      redirect: '/team-invite?token=invite_123',
+      redirect: '/settings',
     })
   })
 
   it('omits unsafe redirects from auth links', () => {
-    const redirectTo = normalizeAuthRedirect('https://example.com/team-invite?token=invite_123')
+    const redirectTo = normalizeAuthRedirect('javascript:alert(1)')
 
     expect(redirectTo).toBeUndefined()
     expect(buildAuthRedirectSearch(redirectTo)).toEqual({})
@@ -27,10 +27,10 @@ describe('auth redirect search', () => {
     expect(
       appendAuthRedirectToUrl(
         'https://app.example.com/console/reset-password?token=reset_123',
-        '/team-invite?token=invite_123'
+        '/settings'
       )
     ).toBe(
-      'https://app.example.com/console/reset-password?token=reset_123&redirect=%2Fteam-invite%3Ftoken%3Dinvite_123'
+      'https://app.example.com/console/reset-password?token=reset_123&redirect=%2Fsettings'
     )
   })
 })

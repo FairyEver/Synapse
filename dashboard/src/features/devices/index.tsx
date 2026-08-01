@@ -84,6 +84,7 @@ export default function DevicesPage() {
           </div>
         ),
         enableSorting: false,
+        meta: { className: 'max-w-0 w-1/3' },
       },
       {
         accessorKey: 'deviceName',
@@ -91,6 +92,7 @@ export default function DevicesPage() {
           <DataTableColumnHeader column={column} title='设备' />
         ),
         cell: ({ row }) => <DeviceName device={row.original} />,
+        meta: { className: 'max-w-0 w-1/5' },
       },
       {
         accessorKey: 'status',
@@ -103,32 +105,41 @@ export default function DevicesPage() {
           </Badge>
         ),
         enableSorting: false,
+        meta: { className: 'w-20' },
       },
       {
         accessorKey: 'platform',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='平台' />
         ),
+        meta: { className: 'w-28' },
       },
       {
         accessorKey: 'appVersion',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='版本' />
         ),
+        meta: { className: 'w-24' },
       },
       {
         accessorKey: 'lastSeenAt',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='最近在线' />
         ),
-        cell: ({ row }) => <RelativeTime value={row.original.lastSeenAt} />,
+        cell: ({ row }) => (
+          <RelativeTime className='tabular-nums' value={row.original.lastSeenAt} />
+        ),
+        meta: { className: 'w-32' },
       },
       {
         accessorKey: 'firstSeenAt',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='首次连接' />
         ),
-        cell: ({ row }) => <RelativeTime value={row.original.firstSeenAt} />,
+        cell: ({ row }) => (
+          <RelativeTime className='tabular-nums' value={row.original.firstSeenAt} />
+        ),
+        meta: { className: 'w-32' },
       },
     ],
     []
@@ -140,23 +151,21 @@ export default function DevicesPage() {
         <h1 className='text-lg font-semibold'>设备</h1>
       </Header>
       <Main>
-        {isLoading ? (
-          <div className='text-muted-foreground'>加载中...</div>
-        ) : (
-          <ServerDataTable
-            columns={columns}
-            data={devices}
-            page={page}
-            pageSize={pageSize}
-            total={data?.total ?? 0}
-            error={isError ? error : null}
-            onRetry={() => void refetch()}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            sorting={sorting}
-            onSortingChange={setSorting}
-          />
-        )}
+        <ServerDataTable
+          columns={columns}
+          data={devices}
+          page={page}
+          pageSize={pageSize}
+          total={data?.total ?? 0}
+          error={isError ? error : null}
+          isLoading={isLoading}
+          loadingRowCount={Math.min(pageSize, DEFAULT_DASHBOARD_PAGE_SIZE)}
+          onRetry={() => void refetch()}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          sorting={sorting}
+          onSortingChange={setSorting}
+        />
       </Main>
     </>
   )

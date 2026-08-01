@@ -114,7 +114,7 @@ function runtimeStatus(model: string): SynapseAgentRuntimeStatus {
   return {
     agents: [{
       id: "claude-code",
-      label: "ClaudeCode/Synapse",
+      label: "CC/Synapse",
       ready: true,
       cli: {
         required: false,

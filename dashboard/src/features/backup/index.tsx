@@ -11,6 +11,7 @@ import {
 } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { LongText } from '@/components/long-text'
 import { RelativeTime } from '@/components/relative-time'
 import { Button } from '@/components/ui/button'
 import { downloadBackupWithFeedback } from './backup-download'
@@ -61,17 +62,21 @@ export default function BackupPage() {
         <DataTableColumnHeader column={column} title='文件名' />
       ),
       cell: ({ row }) => (
-        <span className='font-medium'>{row.original.filename}</span>
+        <LongText className='font-medium'>{row.original.filename}</LongText>
       ),
       enableSorting: false,
+      meta: { className: 'max-w-0' },
     },
     {
       accessorKey: 'size',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='大小' />
       ),
-      cell: ({ row }) => formatSize(row.original.size),
+      cell: ({ row }) => (
+        <span className='tabular-nums'>{formatSize(row.original.size)}</span>
+      ),
       meta: {
+        className: 'w-28',
         thClassName: 'text-right',
         tdClassName: 'text-right',
       },
@@ -82,8 +87,11 @@ export default function BackupPage() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='创建时间' />
       ),
-      cell: ({ row }) => <RelativeTime value={row.original.createdAt} />,
+      cell: ({ row }) => (
+        <RelativeTime className='tabular-nums' value={row.original.createdAt} />
+      ),
       enableSorting: false,
+      meta: { className: 'w-40' },
     },
     {
       id: 'actions',
@@ -112,6 +120,7 @@ export default function BackupPage() {
         </div>
       ),
       meta: {
+        className: 'w-24',
         thClassName: 'text-right',
         tdClassName: 'text-right',
       },
@@ -134,23 +143,21 @@ export default function BackupPage() {
         <h1 className='text-lg font-semibold'>备份管理</h1>
       </Header>
       <Main>
-        {isLoading ? (
-          <div className='text-muted-foreground'>加载中...</div>
-        ) : (
-          <ServerDataTable
-            columns={columns}
-            data={backups}
-            page={1}
-            pageSize={Math.max(backups.length, 1)}
-            total={backups.length}
-            toolbar={toolbar}
-            error={tableError}
-            onRetry={() => void refetch()}
-            onPageChange={noop}
-            onPageSizeChange={noop}
-            showPagination={false}
-          />
-        )}
+        <ServerDataTable
+          columns={columns}
+          data={backups}
+          page={1}
+          pageSize={Math.max(backups.length, 1)}
+          total={backups.length}
+          toolbar={toolbar}
+          error={tableError}
+          isLoading={isLoading}
+          loadingRowCount={3}
+          onRetry={() => void refetch()}
+          onPageChange={noop}
+          onPageSizeChange={noop}
+          showPagination={false}
+        />
         <ConfirmDialog
           open={Boolean(deleteTarget)}
           onOpenChange={(open) => {

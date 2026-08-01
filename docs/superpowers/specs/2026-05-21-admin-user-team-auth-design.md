@@ -1,5 +1,7 @@
 # Admin User Team Auth Design
 
+> Retired on 2026-07-31. Teams, memberships and team invitations were removed from the product and database; this document is retained only as a historical decision record.
+>
 > Partially superseded on 2026-05-25 by `docs/superpowers/specs/2026-05-25-personal-module-permissions-design.md`.
 > Keep the administrator, normal user, session, team, and team invitation foundation. Replace administrator-issued user signup invitations and team-based permission design with open registration and personal `module.*` permissions.
 

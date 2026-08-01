@@ -2,13 +2,13 @@
 
 Synapse 后端服务，包含 API 和 Admin 管理后台。
 
-## 账号与团队
+## 账号与管理
 
-- 首次启动时，服务会用 `ADMIN_EMAIL` 和 `ADMIN_PASSWORD` 创建唯一平台管理员；已有管理员时不会覆盖。
-- 管理员通过 Admin 后台创建一次性注册邀请。
+- 普通用户是系统中唯一的账号身份；原管理员邮箱可注册普通用户，但不会获得管理权限。
+- 平台管理员通过服务端 `ADMIN_ACCESS_SECRET` 解锁独立的 `/admin` 管理界面，不对应账号，也不能登录桌面客户端。
 - 普通账号通过 `/api/auth/register` 注册，通过 `/api/auth/login` 登录。
 - 普通账号会获得 access token 和 refresh token。
-- 普通账号可以创建一个团队，或通过一次性团队邀请加入一个团队。
+- 系统不提供团队、成员关系或团队邀请能力。
 
 ## 技术栈
 
@@ -127,19 +127,17 @@ POSTGRES_DB=synapse
 POSTGRES_PASSWORD=粘贴随机生成的数据库密码
 DATABASE_URL=postgresql://synapse:同一个数据库密码@postgres:5432/synapse
 
-# 管理员账号（密码至少 12 位）
-ADMIN_EMAIL=你的邮箱@example.com
-ADMIN_PASSWORD=设一个至少12位的密码
+# 管理访问密钥（执行 `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='` 生成）
+ADMIN_ACCESS_SECRET=粘贴独立生成的Base64URL随机值
 
-# JWT 密钥（分别执行一次第四步，为管理员和用户令牌生成不同的 hex 字符）
-ADMIN_JWT_SECRET=粘贴第四步生成的那串hex字符
-USER_ACCESS_JWT_SECRET=再次生成并粘贴另一串hex字符
-# 桌面更新凭证密钥（再次生成独立的随机 hex 字符，不得复用上面两个 JWT 密钥）
+# 用户 JWT 和桌面更新凭证密钥必须分别独立生成
+USER_ACCESS_JWT_SECRET=粘贴独立生成的随机值
+# 桌面更新凭证密钥（不得复用管理访问密钥或用户 JWT 密钥）
 DESKTOP_UPDATE_INTENT_SECRET=第三次生成并粘贴的hex字符
 USER_ACCESS_TOKEN_MINUTES=15
 USER_REFRESH_TOKEN_DAYS=30
 
-# 外部访问地址（用于生成团队邀请、密码重置和 Webhook 公开链接，填写用户访问的站点根地址，不带 /api）
+# 外部访问地址（用于生成密码重置和 Webhook 公开链接，填写用户访问的站点根地址，不带 /api）
 APP_PUBLIC_URL=https://yourdomain.com
 
 # API 在容器内部监听 3001，由容器内 Nginx 统一从 3000 对外暴露
@@ -161,17 +159,17 @@ BACKUP_COS_REGION=备份桶地域，如 ap-beijing
 ```
 
 常见配置错误（启动时会报 "服务端环境变量无效"）：
-- `ADMIN_PASSWORD` 少于 12 位
-- `ADMIN_JWT_SECRET` 少于 32 位（必须用 `openssl rand -hex 32` 生成的 64 字符）
-- `USER_ACCESS_JWT_SECRET` 少于 32 位，或和 `ADMIN_JWT_SECRET` 相同
-- `DESKTOP_UPDATE_INTENT_SECRET` 少于 43 位，或与任一 JWT 密钥相同
-- `ADMIN_EMAIL` 不是合法邮箱格式
+- `ADMIN_ACCESS_SECRET` 缺失、不是至少 43 个 Base64URL 字符的高熵随机值，或包含明显重复字符
+- `USER_ACCESS_JWT_SECRET` 少于 32 位，或和 `ADMIN_ACCESS_SECRET` 相同
+- `DESKTOP_UPDATE_INTENT_SECRET` 少于 43 位，或与管理访问密钥、用户 JWT 密钥相同
 - `APP_PUBLIC_URL` 不是用户可访问的站点根地址，或误填成了 `/api` 地址
 - `PORT` 不应和对外 Nginx 端口混用，默认保持 `3001`
 
 ---
 
 ### 第六步：构建并启动
+
+从旧版本升级前，必须先生成数据库备份并实际验证可以恢复。迁移失败时停止切换；如需回滚旧版本，必须同时恢复迁移前数据库和旧 ENV，不能只回滚镜像。迁移会删除旧管理员账号与旧管理员认证数据，并永久删除团队、成员关系、团队邀请及其明确归属的审计历史；普通用户、会话、权限、Drive 等其他业务数据及无关审计记录保留。既有灾备包和服务器日志不会被主动销毁。
 
 ```bash
 cd /www/wwwroot/synapse/server
@@ -267,9 +265,10 @@ curl http://127.0.0.1:3000/healthz
 
 然后浏览器访问：
 - API：`https://api.yourdomain.com/healthz`
-- 管理后台：`https://api.yourdomain.com/console`
+- 普通用户后台：`https://api.yourdomain.com/console`
+- 管理界面：`https://api.yourdomain.com/admin`
 
-用 `.env` 中的 `ADMIN_EMAIL` 和 `ADMIN_PASSWORD` 登录。登录后可创建普通账号注册邀请。
+在管理界面输入服务端 `.env` 中配置的 `ADMIN_ACCESS_SECRET`。管理密钥不会被浏览器记住，也不能在系统内查看或修改。
 
 ## 桌面更新凭证
 
@@ -462,7 +461,7 @@ docker compose --env-file .env up -d server
 
 - 完整 dump 包含 schema 和数据，适合恢复到确定状态。
 - 覆盖生产前必须保留一份当前生产备份。
-- 不要只清空部分表导入生产；当前服务涉及管理员、用户、团队、邀请、会话、权限、审计和备份记录等多张关联表。
+- 不要只清空部分表导入生产；当前服务涉及管理员、用户、会话、权限、审计和备份记录等多张关联表。
 - 密码类字段是 bcrypt 哈希，同步后可以直接使用原密码登录。
 
 ---

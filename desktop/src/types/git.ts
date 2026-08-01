@@ -1,6 +1,6 @@
-export type SynapseGitRemoteKind = "https" | "ssh" | "unknown"
+export type SynapseGitRemoteKind = "http" | "https" | "ssh" | "unknown"
 
-export type SynapseGitProtocol = "https" | "ssh" | "file" | "unknown"
+export type SynapseGitProtocol = "http" | "https" | "ssh" | "file" | "unknown"
 export type SynapseGitProvider = "github" | "gitee" | "gitlab" | "generic"
 export type SynapseGitProviderLinks = {
   readonly credentialHelpUrl: string | null
@@ -10,9 +10,11 @@ export type SynapseGitProviderLinks = {
 export type SynapseGitRemoteDescriptor = {
   readonly host: string | null
   readonly normalizedUrl: string
+  readonly port: number | null
   readonly protocol: SynapseGitProtocol
   readonly provider: SynapseGitProvider
   readonly remoteKind: SynapseGitRemoteKind
+  readonly username: string | null
 }
 export type SynapseGitFailureCategory =
   | "git-missing"
@@ -47,11 +49,19 @@ export type SynapseGitUserFacingFailure = {
   readonly detail: string | null
   readonly host: string | null
   readonly message: string
+  readonly port?: number | null
   readonly primaryAction: SynapseGitFailurePrimaryAction
   readonly protocol: SynapseGitProtocol
   readonly title: string
 }
 export type SynapseGitCredentialHelperState = {
+  readonly helpers: readonly {
+    readonly classification: "safe" | "plaintext" | "custom"
+    readonly source: string | null
+    readonly value: string
+  }[]
+  readonly management: "unconfigured" | "synapse-supported" | "insecure" | "external"
+  /** Compatibility summary for existing callers. */
   readonly helper: string | null
   readonly safe: boolean
   readonly source: string | null
@@ -59,6 +69,7 @@ export type SynapseGitCredentialHelperState = {
 export type SynapseGitAccessHostState = {
   readonly host: string
   readonly lastFailure: SynapseGitUserFacingFailure | null
+  readonly port: number | null
   readonly protocol: SynapseGitProtocol
   readonly provider: SynapseGitProvider
 }
@@ -78,12 +89,14 @@ export type SynapseGitAccessState = {
 export type SynapseGitSaveHttpsCredentialInput = {
   readonly host: string
   readonly password: string
-  readonly protocol: "https"
+  readonly port?: number | null
+  readonly protocol: "http" | "https"
   readonly username: string
 }
 export type SynapseGitClearHttpsCredentialInput = {
   readonly host: string
-  readonly protocol: "https"
+  readonly port?: number | null
+  readonly protocol: "http" | "https"
   readonly username?: string | null
 }
 export type SynapseGitGenerateSshKeyInput = {
@@ -91,7 +104,9 @@ export type SynapseGitGenerateSshKeyInput = {
 }
 export type SynapseGitTestSshConnectionInput = {
   readonly host: string
+  readonly port?: number | null
   readonly provider?: SynapseGitProvider
+  readonly username?: string | null
 }
 export type SynapseGitSshTestResult = {
   readonly detail: string | null
@@ -99,12 +114,12 @@ export type SynapseGitSshTestResult = {
   readonly ok: boolean
   readonly title: string
 }
-
-export type SynapseGitRepositoryRemoveMode = "keep-local" | "trash-local"
-
-export type SynapseGitRepositoryRemoveInput = {
-  readonly repositoryId: string
-  readonly mode: SynapseGitRepositoryRemoveMode
+export type SynapseGitSshHostKeyCandidate = {
+  readonly changed: boolean
+  readonly fingerprints: readonly string[]
+  readonly host: string
+  readonly port: number
+  readonly trusted: boolean
 }
 
 export type SynapseGitRepository = {
@@ -138,10 +153,17 @@ export type SynapseGitRepositorySnapshot = {
   readonly isGitRepository: boolean
   readonly currentBranch: string | null
   readonly upstream: string | null
+  readonly trackingStatus: "tracked" | "untracked" | "detached"
   readonly ahead: number
   readonly behind: number
   readonly hasConflicts: boolean
   readonly changes: readonly SynapseGitFileChange[]
+}
+
+export type SynapseGitPushTarget = {
+  readonly name: string
+  readonly url: string
+  readonly preferred: boolean
 }
 
 export type SynapseGitRepositorySummary = {
@@ -159,6 +181,7 @@ export type SynapseGitDiffResult = {
   readonly path: string
   readonly originalPath: string | null
   readonly binary: boolean
+  readonly truncated: boolean
   readonly text: string
 }
 
@@ -179,6 +202,9 @@ export type SynapseGitCommitSummary = {
 export type SynapseGitCommitDetail = SynapseGitCommitSummary & {
   readonly files: readonly SynapseGitFileChange[]
   readonly diff: string
+  readonly filesTruncated: boolean
+  readonly diffTruncated: boolean
+  readonly truncated: boolean
 }
 
 export type SynapseGitEnvironmentState = {
@@ -215,6 +241,14 @@ export type SynapseGitSshPublicKey = {
 export type SynapseGitOperationResult = {
   readonly completedAt: string
   readonly message: string
+}
+
+export type SynapseGitOperationState = {
+  readonly operationId: string
+  readonly operation: string
+  readonly repositoryId: string | null
+  readonly status: "queued" | "running" | "completed" | "failed" | "cancelled"
+  readonly queuePosition: number
 }
 
 export type SynapseGitErrorCategory =

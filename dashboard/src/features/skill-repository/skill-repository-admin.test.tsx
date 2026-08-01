@@ -45,6 +45,7 @@ vi.mock('@/components/layout/main', () => ({
 }))
 
 vi.mock('@/components/data-table', () => ({
+  DEFAULT_DASHBOARD_PAGE_SIZE: 10,
   DataTableColumnHeader: ({ title }: { title: string }) => <span>{title}</span>,
   ServerDataTable: ({
     columns,
@@ -95,7 +96,7 @@ describe('SkillRepositoryAdminPage', () => {
     mockedAdminApi.listSkillRepositories.mockResolvedValue({
       data: [repositoryRow()],
       page: 1,
-      pageSize: 20,
+      pageSize: 10,
       total: 1,
     })
 
@@ -104,7 +105,7 @@ describe('SkillRepositoryAdminPage', () => {
     await waitForText('Deploy Helper')
     expect(mockedAdminApi.listSkillRepositories).toHaveBeenCalledWith({
       page: 1,
-      pageSize: 20,
+      pageSize: 10,
       status: 'active',
       query: undefined,
       sortBy: 'updatedAt',
@@ -117,7 +118,7 @@ describe('SkillRepositoryAdminPage', () => {
     mockedAdminApi.listSkillRepositories.mockResolvedValue({
       data: [repositoryRow()],
       page: 1,
-      pageSize: 20,
+      pageSize: 10,
       total: 1,
     })
     mockedAdminApi.setSkillRepositoryRemoved.mockResolvedValue(repositoryRow({ status: 'removed' }))
@@ -137,7 +138,7 @@ describe('SkillRepositoryAdminPage', () => {
     mockedAdminApi.listSkillRepositories.mockResolvedValue({
       data: [repositoryRow({ status: 'removed' })],
       page: 1,
-      pageSize: 20,
+      pageSize: 10,
       total: 1,
     })
     mockedAdminApi.restoreSkillRepository.mockResolvedValue(repositoryRow())

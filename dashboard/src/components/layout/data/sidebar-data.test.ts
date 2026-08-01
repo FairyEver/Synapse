@@ -24,7 +24,6 @@ describe('getSidebarData', () => {
     const data = getSidebarData({
       email: 'user@example.com',
       handle: 'ada',
-      role: 'user',
       sessionId: 'session-1',
     })
 
@@ -47,27 +46,13 @@ describe('getSidebarData', () => {
     expect(collectUrls(data)).not.toContain('/me')
   })
 
-  it('does not expose normal-user profile entry to admins', () => {
-    const data = getSidebarData({
-      email: 'admin@example.com',
-      handle: null,
-      role: 'admin',
-      sessionId: 'session-1',
-    })
+  it('does not expose system administration in the ordinary-user sidebar', () => {
+    const urls = collectUrls(getSidebarData(null))
 
-    expect(data.user.profileUrl).toBeUndefined()
-    expect(data.user.name).toBe('admin@example.com')
-    expect(data.appTitle.name).toBe('Synapse')
-    expect(data.appTitle.logo).toBe(Logo)
-    expect(collectUrls(data)).toContain('/skill-repositories/admin')
-    expect(collectUrls(data)).toContain('/devices')
-    expect(collectUrls(data)).toContain('/admin-drive')
-    expect(collectUrls(data)).toContain('/webhook-deliveries')
-    expect(collectTitles(data)).toContain('云盘管理')
-    expect(collectTitles(data)).toContain('Skill 仓库')
-    expect(collectUrls(data)).not.toContain('/drive')
-    expect(collectUrls(data)).not.toContain('/my-devices')
-    expect(collectUrls(data)).not.toContain('/webhooks')
-    expect(collectUrls(data)).not.toContain('/me')
+    expect(urls).not.toContain('/users')
+    expect(urls).not.toContain('/devices')
+    expect(urls).not.toContain('/admin-drive')
+    expect(urls).not.toContain('/system')
+    expect(urls).not.toContain('/audit-logs')
   })
 })

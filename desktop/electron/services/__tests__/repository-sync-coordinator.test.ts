@@ -19,6 +19,7 @@ const serviceMocks = vi.hoisted(() => ({
   contentSubmissionService: {
     flushPendingPushes: vi.fn(),
     flushPendingPushesInExclusive: vi.fn(),
+    readUnpushedCommitCount: vi.fn(),
     runRepositoryGitExclusive: vi.fn(),
   },
   pendingPushesService: {
@@ -29,9 +30,11 @@ const serviceMocks = vi.hoisted(() => ({
   },
   repositoryGitService: {
     syncRepository: vi.fn(),
+    syncRepositoryInExclusive: vi.fn(),
   },
   repositoryMaintenanceService: {
     runManualMaintenance: vi.fn(),
+    runManualMaintenanceInExclusive: vi.fn(),
   },
   repositoryStore: {
     getRepositoryState: vi.fn(),
@@ -185,10 +188,23 @@ describe("RepositorySyncCoordinator", () => {
     vi.setSystemTime(new Date("2026-05-02T10:00:00.000Z"))
     vi.resetAllMocks()
     serviceMocks.contentSubmissionService.runRepositoryGitExclusive.mockImplementation(
-      async (_repositoryUuid: string, callback: () => Promise<unknown>) => callback(),
+      async (_repository: SynapseRepositoryConfig, _operation: string, callback: (state: typeof repositoryState) => Promise<unknown>) => callback(repositoryState),
     )
+    serviceMocks.contentSubmissionService.readUnpushedCommitCount.mockResolvedValue(0)
     serviceMocks.contentSubmissionService.flushPendingPushesInExclusive.mockImplementation(
-      async (...args: unknown[]) => serviceMocks.contentSubmissionService.flushPendingPushes(...args),
+      async (targetRepository: SynapseRepositoryConfig, _state: typeof repositoryState, onProgress: unknown, options: unknown) => (
+        serviceMocks.contentSubmissionService.flushPendingPushes(targetRepository, onProgress, options)
+      ),
+    )
+    serviceMocks.repositoryGitService.syncRepositoryInExclusive.mockImplementation(
+      async (targetRepository: SynapseRepositoryConfig, _state: typeof repositoryState, onProgress: unknown) => (
+        serviceMocks.repositoryGitService.syncRepository(targetRepository, onProgress)
+      ),
+    )
+    serviceMocks.repositoryMaintenanceService.runManualMaintenanceInExclusive.mockImplementation(
+      async (targetRepository: SynapseRepositoryConfig, _state: typeof repositoryState, onProgress: unknown) => (
+        serviceMocks.repositoryMaintenanceService.runManualMaintenance(targetRepository, onProgress)
+      ),
     )
   })
 
@@ -216,6 +232,21 @@ describe("RepositorySyncCoordinator", () => {
       },
       timestamp: "2026-05-02T10:00:00.000Z",
     }))
+  })
+
+  it("reports local ahead commits as pending when the pending database has no rows", async () => {
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(emptyPendingState)
+    serviceMocks.contentSubmissionService.readUnpushedCommitCount.mockResolvedValue(2)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.refreshSnapshot(repository)).resolves.toMatchObject({
+      status: "pending",
+      pendingCount: 2,
+      pendingItems: [],
+      message: "2 个本地提交等待同步",
+      primaryAction: "retry",
+    })
   })
 
   it("marks network push failures as offline retry-wait snapshots", async () => {

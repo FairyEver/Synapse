@@ -1,28 +1,24 @@
-import { Body, Controller, Get, Logger, Optional, Post, Req, Res, UnauthorizedException, UseGuards } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Post, Req, Res, UnauthorizedException } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
-import type { Response } from "express"
+import type { Request, Response } from "express"
 import { z } from "zod"
-import { hashToken } from "../auth/token"
-import { AuditLogService } from "../common/audit-log.service"
-import { formatAuditError } from "../common/audit-error"
 import { badRequestFromZodError } from "../common/zod-validation"
-import { AdminAuthGuard, type AdminRequest } from "./admin-auth.guard"
-import { AdminAuthService } from "./admin-auth.service"
+import { AdminAuthService, adminSessionMaxAgeMs } from "./admin-auth.service"
+import { assertTrustedAdminOrigin } from "./admin-origin"
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+const accessSchema = z.object({
+  accessSecret: z.string().min(1).max(4096),
 }).strict()
 
-const adminCookieName = "synapse_admin"
-const dashboardSessionMaxAgeMs = 30 * 24 * 60 * 60 * 1000
+export const adminSessionCookieName = "synapse_admin_session"
+const legacyDashboardCookieName = "synapse_admin"
 
 function adminCookieOptions() {
   return {
     httpOnly: true,
-    maxAge: dashboardSessionMaxAgeMs,
-    path: "/",
-    sameSite: "lax" as const,
+    maxAge: adminSessionMaxAgeMs,
+    path: "/api/admin",
+    sameSite: "strict" as const,
     secure: process.env.NODE_ENV === "production",
   }
 }
@@ -30,88 +26,81 @@ function adminCookieOptions() {
 function adminCookieClearOptions() {
   return {
     httpOnly: true,
-    path: "/",
-    sameSite: "lax" as const,
+    path: "/api/admin",
+    sameSite: "strict" as const,
     secure: process.env.NODE_ENV === "production",
   }
 }
 
-@Controller(["/api/console", "/api/dashboard"])
+function clearLegacyDashboardCookie(response: Response): void {
+  response.clearCookie(legacyDashboardCookieName, {
+    httpOnly: true,
+    path: "/",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  })
+}
+
+@Controller("/api/admin")
 export class AdminAuthController {
-  private readonly logger = new Logger(AdminAuthController.name)
-
-  constructor(
-    private readonly auth: AdminAuthService,
-    @Optional() private readonly auditLog?: AuditLogService,
-  ) {}
+  constructor(private readonly auth: AdminAuthService) {}
 
   @Throttle({ default: { ttl: 60000, limit: 5 } })
-  @Post("/login")
-  async login(@Body() body: unknown, @Req() request: AdminRequest, @Res({ passthrough: true }) response: Response) {
-    const result = loginSchema.safeParse(body)
-    if (!result.success) {
-      throw badRequestFromZodError(result.error, "登录请求无效。")
-    }
-    const credentials = result.data
-    const session = await this.auth.login(credentials.email, credentials.password, request.ip)
-    response.cookie(adminCookieName, session.token, adminCookieOptions())
+  @Post("/session")
+  async createSession(
+    @Body() body: unknown,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    assertTrustedAdminOrigin(request)
+    const result = accessSchema.safeParse(body)
+    if (!result.success) throw badRequestFromZodError(result.error, "密钥无效。")
+    const created = await this.auth.createSession(result.data.accessSecret, request.ip ?? "")
+    if (!created) throw new UnauthorizedException("密钥无效。")
+    response.cookie(adminSessionCookieName, created.token, adminCookieOptions())
+    clearLegacyDashboardCookie(response)
     return {
-      email: session.email,
-      handle: session.handle,
-      role: session.role,
-      sessionId: hashToken(session.token),
-    }
-  }
-
-  @Throttle({ default: { ttl: 60000, limit: 5 } })
-  @Post("/logout")
-  async logout(@Res({ passthrough: true }) response: Response, @Req() request: AdminRequest) {
-    const token = request.cookies?.[adminCookieName]
-    const session = typeof token === "string" ? await this.auth.verifyDashboardSession(token) : null
-    if (session) {
-      await this.recordLogoutAuditSafely({
-        adminEmail: session.email,
-        action: session.role === "admin" ? "admin.logout" : "user.dashboard_logout",
-        targetType: session.role === "admin" ? "admin" : "user",
-        targetId: session.id,
-        ipAddress: request.ip ?? "system",
-      })
-    }
-    try {
-      if (typeof token === "string") {
-        await this.auth.revokeDashboardSession(token)
-      }
-    } finally {
-      response.clearCookie(adminCookieName, adminCookieClearOptions())
-    }
-    return { ok: true }
-  }
-
-  private async recordLogoutAuditSafely(input: Parameters<AuditLogService["record"]>[0]): Promise<void> {
-    try {
-      await this.auditLog?.record(input)
-    } catch (error) {
-      this.logger.warn({
-        action: input.action,
-        targetType: input.targetType,
-        targetId: input.targetId,
-        error: formatAuditError(error),
-      }, "Failed to record dashboard logout audit log")
+      actorLabel: "平台管理员",
+      sessionId: created.session.sessionId,
+      expiresAt: created.session.expiresAt,
     }
   }
 
   @Get("/session")
-  async getSession(@Req() request: AdminRequest) {
-    const token = request.cookies?.[adminCookieName]
-    const session = typeof token === "string" ? await this.auth.verifyDashboardSession(token) : null
-    if (!session) {
-      throw new UnauthorizedException("未登录或登录已过期。")
+  async getSession(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    clearLegacyDashboardCookie(response)
+    const token = request.cookies?.[adminSessionCookieName]
+    const verification = typeof token === "string"
+      ? await this.auth.verifySession(token)
+      : { status: "invalid" as const }
+    if (verification.status !== "active") {
+      response.clearCookie(adminSessionCookieName, adminCookieClearOptions())
+      await this.auth.recordRejectedSession(verification, request.ip ?? "")
+      throw new UnauthorizedException("管理会话无效或已过期。")
     }
     return {
-      email: session.email,
-      handle: session.handle,
-      role: session.role,
-      sessionId: hashToken(token),
+      actorLabel: "平台管理员",
+      sessionId: verification.session.sessionId,
+      expiresAt: verification.session.expiresAt,
     }
+  }
+
+  @Delete("/session")
+  async deleteSession(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    assertTrustedAdminOrigin(request)
+    const token = request.cookies?.[adminSessionCookieName]
+    try {
+      if (typeof token === "string") await this.auth.revokeSession(token, request.ip ?? "")
+    } finally {
+      response.clearCookie(adminSessionCookieName, adminCookieClearOptions())
+      clearLegacyDashboardCookie(response)
+    }
+    return { ok: true }
   }
 }

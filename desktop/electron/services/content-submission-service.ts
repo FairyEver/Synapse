@@ -17,23 +17,24 @@ import type {
   SynapseUpdateSkillPayload,
 } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
+import type { SynapseRepositoryLocalState } from "../../src/types/repository"
 import { contentHistoryService } from "./content-history-service"
 import { contentIndexService } from "./content-index-service"
 import { contentWriteService, type ContentWriteResult } from "./content-write-service"
 import { configStore } from "./config-store"
-import { isGitRebaseInProgress, runGitCommand, type GitCommandResult } from "./git-command"
-import { assertNoPreexistingGitRebase } from "./git-rebase-guard"
+import { runGitCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage, isNonFastForwardError } from "./git-error-utils"
-import { toRepositoryGitPaths } from "./git-paths"
-import { repositoryLockManager } from "./repository-lock-manager"
 import { pendingPushesService } from "./pending-pushes-service"
 import { repositoryMaintenanceService } from "./repository-maintenance-service"
-import { repositoryStore } from "./repository-store"
+import {
+  commitRepositoryPaths,
+  pullRepositoryWithSafeRebase,
+  readUnpushedCommitCount,
+  runRepositoryGitExclusive,
+} from "./repository-git-mutation-service"
 import { userIdentityService } from "./user-identity-service"
 
-const SYNAPSE_BOT_NAME = "Synapse Bot"
-const SYNAPSE_BOT_EMAIL = "bot@synapse.local"
 const logger = createMainLogger("service.content-submit")
 const GIT_REMOTE_OPERATION_TIMEOUT_MS = 60_000
 
@@ -82,117 +83,12 @@ function createDeferredMutationMessage(): string {
   return "已保存。"
 }
 
+function createRecoveryMutationMessage(): string {
+  return "已保存到本地，等待同步状态恢复。"
+}
+
 function createLocalMutationMessage(): string {
   return "本地目录已更新。"
-}
-
-function runRepositoryGitCommand(
-  cwd: string,
-  args: string[],
-  fallbackMessage: string,
-  onOutput?: (line: string) => void,
-  options: {
-    timeoutMessage?: string
-    timeoutMs?: number
-  } = {},
-): Promise<GitCommandResult> {
-  return runGitCommand({
-    args,
-    cwd,
-    fallbackMessage,
-    formatFailureMessage: formatGitFailureMessage,
-    onLine: (line) => {
-      onOutput?.(line)
-    },
-    timeoutMessage: options.timeoutMessage,
-    timeoutMs: options.timeoutMs,
-  })
-}
-
-async function ensureBotIdentity(gitRootPath: string): Promise<void> {
-  await runRepositoryGitCommand(
-    gitRootPath,
-    ["config", "--local", "user.name", SYNAPSE_BOT_NAME],
-    "无法初始化 Synapse 提交身份。",
-  )
-  await runRepositoryGitCommand(
-    gitRootPath,
-    ["config", "--local", "user.email", SYNAPSE_BOT_EMAIL],
-    "无法初始化 Synapse 提交身份。",
-  )
-}
-
-async function abortRebaseIfNeeded(localPath: string): Promise<void> {
-  if (!(await isGitRebaseInProgress(localPath))) {
-    return
-  }
-
-  logger.warn("Rebase in progress detected. Aborting rebase to recover repository state.", { localPath })
-  await runRepositoryGitCommand(
-    localPath,
-    ["rebase", "--abort"],
-    "无法中止 rebase，请手动检查仓库状态。",
-  )
-}
-
-async function pullWithRebase(
-  repository: SynapseRepositoryConfig,
-  onProgress?: PushProgressListener,
-): Promise<void> {
-  onProgress?.("正在拉取最新内容...")
-  await assertNoPreexistingGitRebase(repository.localPath, (localPath) => {
-    logger.warn("Pull with rebase skipped because repository already has a rebase in progress.", { localPath })
-  })
-
-  try {
-    await runGitCommand({
-      args: ["pull", "--rebase", "-X", "theirs"],
-      cwd: repository.localPath,
-      fallbackMessage: "同步仓库失败，请检查网络或仓库状态后重试。",
-      onLine: (line) => {
-        onProgress?.(line)
-      },
-      timeoutMessage: "同步仓库超时，请检查网络后重试。",
-      timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
-    })
-  } catch (error) {
-    await abortRebaseIfNeeded(repository.localPath)
-    throw error
-  }
-}
-
-async function stagePaths(gitRootPath: string, filePaths: string[]): Promise<void> {
-  const relativePaths = toRepositoryGitPaths(gitRootPath, filePaths, { unique: true })
-
-  if (relativePaths.length === 0) {
-    throw new Error("当前没有可提交的改动。")
-  }
-
-  await runRepositoryGitCommand(
-    gitRootPath,
-    ["add", "--", ...relativePaths],
-    "暂存本地改动失败。",
-  )
-}
-
-async function commitChanges(
-  gitRootPath: string,
-  action: "create" | "update" | "delete" | "restore" | "purge",
-  result: ContentWriteResult,
-): Promise<string> {
-  await runRepositoryGitCommand(
-    gitRootPath,
-    ["commit", "-m", toCommitMessage(action, result)],
-    "提交内容失败。",
-  )
-
-  const headCommit = await runRepositoryGitCommand(
-    gitRootPath,
-    ["rev-parse", "HEAD"],
-    "读取最新提交失败。",
-  )
-
-  return headCommit.stdout.trim()
 }
 
 async function pushRepository(
@@ -210,16 +106,6 @@ async function pushRepository(
     timeoutMessage: "同步变更超时，请检查网络后重试。",
     timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
   })
-}
-
-async function readReadyRepositoryState(repository: SynapseRepositoryConfig) {
-  const repositoryState = await repositoryStore.getRepositoryState(repository)
-
-  if (repositoryState.status !== "ready") {
-    throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
-  }
-
-  return repositoryState
 }
 
 async function syncIndexAfterGitMutation(
@@ -252,10 +138,11 @@ class ContentSubmissionService {
   async createContent(request: SynapseCreateContentRequest): Promise<SynapseContentMutationResult> {
     const repository = await this.resolveActiveRepository()
     const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
-    const writeResult = await contentWriteService.createContent(request, identity)
-
-    return this.commitAndMaybePush("create", writeResult, {
-      deferPush: true,
+    return this.runRepositoryGitExclusive(repository, "content.create", async (repositoryState) => {
+      const writeResult = await contentWriteService.createContent(request, identity)
+      return this.commitAndMaybePushInExclusive(repository, repositoryState, "create", writeResult, {
+        deferPush: true,
+      })
     })
   }
 
@@ -276,12 +163,15 @@ class ContentSubmissionService {
   async updateContent(request: SynapseUpdateContentRequest): Promise<SynapseContentMutationResult> {
     const repository = await this.resolveActiveRepository()
     const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
-
-    return this.updateContentWithConflictCheck(
-      request.contentType,
-      request.payload as SynapseUpdateRulePayload | SynapseUpdateSkillPayload,
-      identity,
-    )
+    return this.runRepositoryGitExclusive(repository, "content.update", (repositoryState) => (
+      this.updateContentWithConflictCheck(
+        repository,
+        repositoryState,
+        request.contentType,
+        request.payload as SynapseUpdateRulePayload | SynapseUpdateSkillPayload,
+        identity,
+      )
+    ))
   }
 
   async updateRule(payload: SynapseUpdateRulePayload): Promise<SynapseContentMutationResult> {
@@ -301,19 +191,37 @@ class ContentSubmissionService {
   async deleteContent(payload: SynapseDeleteContentPayload): Promise<SynapseContentMutationResult> {
     const repository = await this.resolveActiveRepository()
     const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
-    return this.deleteWithConflictCheck(payload, identity)
+    return this.runRepositoryGitExclusive(repository, "content.delete", (repositoryState) => (
+      this.deleteWithConflictCheck(repository, repositoryState, payload, identity)
+    ))
   }
 
   async restoreContent(payload: SynapseRestoreContentPayload): Promise<SynapseContentMutationResult> {
     const repository = await this.resolveActiveRepository()
     const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
-    return this.restoreWithConflictCheck(payload, identity)
+    return this.runRepositoryGitExclusive(repository, "content.restore", (repositoryState) => (
+      this.restoreWithConflictCheck(repository, repositoryState, payload, identity)
+    ))
   }
 
   async purgeContent(payload: SynapsePurgeContentPayload): Promise<SynapseContentMutationResult> {
     const repository = await this.resolveActiveRepository()
     const identity = await userIdentityService.requireReadyRepoProfile(repository.uuid)
-    return this.purgeAndCommit(payload, identity)
+    return this.runRepositoryGitExclusive(repository, "content.purge", (repositoryState) => (
+      this.purgeAndCommit(repository, repositoryState, payload, identity)
+    ))
+  }
+
+  runRepositoryGitExclusive<T>(
+    repository: SynapseRepositoryConfig,
+    operation: string,
+    task: (state: SynapseRepositoryLocalState) => Promise<T>,
+  ): Promise<T> {
+    return runRepositoryGitExclusive(repository, operation, task)
+  }
+
+  readUnpushedCommitCount(repository: SynapseRepositoryConfig): Promise<number> {
+    return readUnpushedCommitCount(repository)
   }
 
   async readPendingPushState(repository: SynapseRepositoryConfig) {
@@ -323,28 +231,27 @@ class ContentSubmissionService {
   async flushPendingPushes(
     repository: SynapseRepositoryConfig,
     onProgress?: PushProgressListener,
-    options?: { skipLock?: boolean; recordFailure?: boolean },
+    options?: { recordFailure?: boolean },
   ): Promise<void> {
-    const repositoryState = await repositoryStore.getRepositoryState(repository)
+    return this.runRepositoryGitExclusive(repository, "push", (repositoryState) => (
+      this.flushPendingPushesInExclusive(repository, repositoryState, onProgress, options)
+    ))
+  }
 
-    if (repositoryState.status !== "ready") {
-      throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
-    }
-
-    if (!repositoryState.isGitRepository) {
-      return
-    }
+  async flushPendingPushesInExclusive(
+    repository: SynapseRepositoryConfig,
+    repositoryState: SynapseRepositoryLocalState,
+    onProgress?: PushProgressListener,
+    options?: { recordFailure?: boolean },
+  ): Promise<void> {
+    if (!repositoryState.isGitRepository) return
 
     const pendingState = await pendingPushesService.readState(repository, { limit: null })
     const attemptedPendingPushIds = pendingState.items.map((item) => item.id)
+    const unpushedCommitCount = await readUnpushedCommitCount(repository, repositoryState)
 
-    if (pendingState.count === 0) {
-      return
-    }
+    if (pendingState.count === 0 && unpushedCommitCount === 0) return
 
-    const release = options?.skipLock
-      ? () => {}
-      : await repositoryLockManager.acquire(repository.uuid, "push")
     try {
       const tPush = Date.now()
       logger.info("flushPendingPushes: pushRepository starting.", { repositoryUuid: repository.uuid })
@@ -359,7 +266,7 @@ class ContentSubmissionService {
       const message = error instanceof Error ? error.message : "推送到仓库失败。"
 
       if (isNonFastForwardError(message)) {
-        await pullWithRebase(repository, onProgress)
+        await pullRepositoryWithSafeRebase(repository, onProgress)
         const tRetryPush = Date.now()
         await pushRepository(repository, onProgress)
         logger.info("flushPendingPushes: retry pushRepository done.", { durationMs: Date.now() - tRetryPush, repositoryUuid: repository.uuid })
@@ -375,21 +282,18 @@ class ContentSubmissionService {
         await pendingPushesService.markFailure(repository, message, attemptedPendingPushIds)
       }
       throw error
-    } finally {
-      release()
     }
   }
 
   private async updateContentWithConflictCheck(
+    repositoryConfig: SynapseRepositoryConfig,
+    repositoryState: SynapseRepositoryLocalState,
     contentType: SynapseContentType,
     payload: SynapseUpdateRulePayload | SynapseUpdateSkillPayload,
     identity: Awaited<ReturnType<typeof userIdentityService.requireReadyRepoProfile>>,
   ): Promise<SynapseContentMutationResult> {
-    const repositoryConfig = await this.resolveActiveRepository()
-    const repositoryState = await readReadyRepositoryState(repositoryConfig)
-
     if (repositoryState.isGitRepository) {
-      await pullWithRebase(repositoryConfig)
+      await pullRepositoryWithSafeRebase(repositoryConfig)
     }
 
     await contentIndexService.syncIndex(repositoryConfig)
@@ -425,20 +329,19 @@ class ContentSubmissionService {
       identity,
     )
 
-    return this.commitAndMaybePush("update", writeResult, {
+    return this.commitAndMaybePushInExclusive(repositoryConfig, repositoryState, "update", writeResult, {
       deferPush: true,
     })
   }
 
   private async deleteWithConflictCheck(
+    repository: SynapseRepositoryConfig,
+    repositoryState: SynapseRepositoryLocalState,
     payload: SynapseDeleteContentPayload,
     identity: Awaited<ReturnType<typeof userIdentityService.requireReadyRepoProfile>>,
   ): Promise<SynapseContentMutationResult> {
-    const repository = await this.resolveActiveRepository()
-    const repositoryState = await readReadyRepositoryState(repository)
-
     if (repositoryState.isGitRepository) {
-      await pullWithRebase(repository)
+      await pullRepositoryWithSafeRebase(repository)
     }
 
     await contentIndexService.syncIndex(repository)
@@ -468,18 +371,17 @@ class ContentSubmissionService {
 
     const writeResult = await contentWriteService.deleteContent(payload.type, payload.id, identity)
 
-    return this.commitAndMaybePush("delete", writeResult)
+    return this.commitAndMaybePushInExclusive(repository, repositoryState, "delete", writeResult)
   }
 
   private async restoreWithConflictCheck(
+    repository: SynapseRepositoryConfig,
+    repositoryState: SynapseRepositoryLocalState,
     payload: SynapseRestoreContentPayload,
     identity: Awaited<ReturnType<typeof userIdentityService.requireReadyRepoProfile>>,
   ): Promise<SynapseContentMutationResult> {
-    const repository = await this.resolveActiveRepository()
-    const repositoryState = await readReadyRepositoryState(repository)
-
     if (repositoryState.isGitRepository) {
-      await pullWithRebase(repository)
+      await pullRepositoryWithSafeRebase(repository)
     }
 
     await contentIndexService.syncIndex(repository)
@@ -509,20 +411,19 @@ class ContentSubmissionService {
 
     const writeResult = await contentWriteService.restoreContent(payload.type, payload.id, identity)
 
-    return this.commitAndMaybePush("restore", writeResult, {
+    return this.commitAndMaybePushInExclusive(repository, repositoryState, "restore", writeResult, {
       deferPush: true,
     })
   }
 
   private async purgeAndCommit(
+    repository: SynapseRepositoryConfig,
+    repositoryState: SynapseRepositoryLocalState,
     payload: SynapsePurgeContentPayload,
     identity: Awaited<ReturnType<typeof userIdentityService.requireReadyRepoProfile>>,
   ): Promise<SynapseContentMutationResult> {
-    const repository = await this.resolveActiveRepository()
-    const repositoryState = await readReadyRepositoryState(repository)
-
     if (repositoryState.isGitRepository) {
-      await pullWithRebase(repository)
+      await pullRepositoryWithSafeRebase(repository)
     }
 
     await contentIndexService.syncIndex(repository)
@@ -552,19 +453,18 @@ class ContentSubmissionService {
 
     const writeResult = await contentWriteService.purgeContent(payload.type, payload.id, identity)
 
-    return this.commitAndMaybePush("purge", writeResult)
+    return this.commitAndMaybePushInExclusive(repository, repositoryState, "purge", writeResult)
   }
 
-  private async commitAndMaybePush(
+  private async commitAndMaybePushInExclusive(
+    repository: SynapseRepositoryConfig,
+    repositoryState: SynapseRepositoryLocalState,
     action: "create" | "update" | "delete" | "restore" | "purge",
     writeResult: ContentWriteResult,
     options: {
       deferPush?: boolean
     } = {},
   ): Promise<SynapseContentMutationResult> {
-    const repository = await this.resolveActiveRepository()
-    const repositoryState = await readReadyRepositoryState(repository)
-
     if (!repositoryState.isGitRepository || !repositoryState.gitRootPath) {
       await contentIndexService.syncIndex(repository)
 
@@ -577,24 +477,18 @@ class ContentSubmissionService {
         modifiedAt: writeResult.modifiedAt,
         pushed: false,
         pendingPushCount: 0,
+        syncStatus: "local-only",
         message: createLocalMutationMessage(),
       }
     }
 
-    const tBotId = Date.now()
-    await ensureBotIdentity(repositoryState.gitRootPath ?? repository.localPath)
-    logger.info("commitAndMaybePush: ensureBotIdentity done.", { durationMs: Date.now() - tBotId, action, repositoryUuid: repository.uuid })
-
-    const tStage = Date.now()
-    await stagePaths(repositoryState.gitRootPath ?? repository.localPath, writeResult.gitPaths)
-    logger.info("commitAndMaybePush: stagePaths done.", { durationMs: Date.now() - tStage, action, repositoryUuid: repository.uuid })
-
     const tCommit = Date.now()
-    const commitHash = await commitChanges(
-      repositoryState.gitRootPath ?? repository.localPath,
-      action,
-      writeResult,
-    )
+    const commitHash = await commitRepositoryPaths({
+      fallbackMessage: "提交内容失败。",
+      filePaths: writeResult.gitPaths,
+      gitRootPath: repositoryState.gitRootPath,
+      message: toCommitMessage(action, writeResult),
+    })
     logger.info("commitAndMaybePush: commitChanges done.", { durationMs: Date.now() - tCommit, commitHash, action, repositoryUuid: repository.uuid })
 
     await syncIndexAfterGitMutation(repository, {
@@ -604,40 +498,73 @@ class ContentSubmissionService {
     })
 
     if (options.deferPush) {
-      const tEnqueue = Date.now()
-      const pendingPushState = await pendingPushesService.enqueue(repository, {
-        action,
-        commitHash,
-        targetId: writeResult.id,
-        title: writeResult.title,
-      })
-      logger.info("commitAndMaybePush: enqueue done.", { durationMs: Date.now() - tEnqueue, pendingCount: pendingPushState.count, repositoryUuid: repository.uuid })
+      try {
+        const tEnqueue = Date.now()
+        const pendingPushState = await pendingPushesService.enqueue(repository, {
+          action,
+          commitHash,
+          targetId: writeResult.id,
+          title: writeResult.title,
+        })
+        logger.info("commitAndMaybePush: enqueue done.", { durationMs: Date.now() - tEnqueue, pendingCount: pendingPushState.count, repositoryUuid: repository.uuid })
 
-      return {
-        id: writeResult.id,
-        type: writeResult.type,
-        status: "saved",
-        title: writeResult.title,
-        latestHistoryDirname: writeResult.latestHistoryDirname,
-        modifiedAt: writeResult.modifiedAt,
-        pushed: false,
-        pendingPushCount: pendingPushState.count,
-        message: createDeferredMutationMessage(),
+        return {
+          id: writeResult.id,
+          type: writeResult.type,
+          status: "saved",
+          title: writeResult.title,
+          latestHistoryDirname: writeResult.latestHistoryDirname,
+          modifiedAt: writeResult.modifiedAt,
+          pushed: false,
+          pendingPushCount: pendingPushState.count,
+          syncStatus: "pending",
+          message: createDeferredMutationMessage(),
+        }
+      } catch (error) {
+        const unpushedCommitCount = await readUnpushedCommitCount(repository, repositoryState)
+        logger.warn("Pending push registration failed after content commit.", {
+          action,
+          error,
+          repositoryUuid: repository.uuid,
+        })
+        return {
+          id: writeResult.id,
+          type: writeResult.type,
+          status: "saved",
+          title: writeResult.title,
+          latestHistoryDirname: writeResult.latestHistoryDirname,
+          modifiedAt: writeResult.modifiedAt,
+          pushed: false,
+          pendingPushCount: Math.max(1, unpushedCommitCount),
+          syncStatus: "recovery-needed",
+          message: createRecoveryMutationMessage(),
+        }
       }
     }
 
     // Optimistic enqueue: record pending push before attempting push so that
     // if the process is killed between commit and push completion, the record
     // survives and can be retried on next launch.
-    const optimisticState = await pendingPushesService.enqueue(repository, {
-      action,
-      commitHash,
-      targetId: writeResult.id,
-      title: writeResult.title,
-    })
-    const optimisticIds = optimisticState.items
-      .filter((item) => item.commitHash === commitHash && item.targetId === writeResult.id)
-      .map((item) => item.id)
+    let pendingRegistrationFailed = false
+    let optimisticIds: number[] = []
+    try {
+      const optimisticState = await pendingPushesService.enqueue(repository, {
+        action,
+        commitHash,
+        targetId: writeResult.id,
+        title: writeResult.title,
+      })
+      optimisticIds = optimisticState.items
+        .filter((item) => item.commitHash === commitHash && item.targetId === writeResult.id)
+        .map((item) => item.id)
+    } catch (error) {
+      pendingRegistrationFailed = true
+      logger.warn("Pending push registration failed before immediate push.", {
+        action,
+        error,
+        repositoryUuid: repository.uuid,
+      })
+    }
 
     let pushed = true
 
@@ -649,7 +576,7 @@ class ContentSubmissionService {
 
       if (isNonFastForwardError(message)) {
         try {
-          await pullWithRebase(repository)
+          await pullRepositoryWithSafeRebase(repository)
           await pushRepository(repository)
           await pendingPushesService.clear(repository, optimisticIds)
         } catch (retryError) {
@@ -678,7 +605,8 @@ class ContentSubmissionService {
       metadata: { action },
     })
 
-    const pendingPushState = await pendingPushesService.readState(repository)
+    const pendingPushState = await pendingPushesService.readState(repository).catch(() => ({ count: 0, items: [] }))
+    const unpushedCommitCount = pushed ? 0 : await readUnpushedCommitCount(repository, repositoryState)
 
     if (pushed) {
       void repositoryMaintenanceService.maybeRunAfterPush(repository, {
@@ -701,8 +629,11 @@ class ContentSubmissionService {
       latestHistoryDirname: writeResult.latestHistoryDirname,
       modifiedAt: writeResult.modifiedAt,
       pushed,
-      pendingPushCount: pendingPushState.count,
-      message: createMutationMessage(pushed, pendingPushState.count),
+      pendingPushCount: Math.max(pendingPushState.count, unpushedCommitCount),
+      syncStatus: pushed ? "synced" : pendingRegistrationFailed ? "recovery-needed" : "pending",
+      message: pushed
+        ? createMutationMessage(true, 0)
+        : pendingRegistrationFailed ? createRecoveryMutationMessage() : createMutationMessage(false, pendingPushState.count),
     }
   }
 

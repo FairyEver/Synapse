@@ -37,12 +37,16 @@ const mocks = vi.hoisted(() => ({
     markFailure: vi.fn(),
     readState: vi.fn(),
   },
+  repositoryLockManager: {
+    acquire: vi.fn(),
+  },
   isGitRebaseInProgress: vi.fn(),
   runGitCommand: vi.fn(),
   userIdentityService: {
     requireReadyRepoProfile: vi.fn(),
   },
   logger: {
+    debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
   },
@@ -81,6 +85,10 @@ vi.mock("../repository-maintenance-service", () => ({
   repositoryMaintenanceService: {
     maybeRunAfterPush: vi.fn(),
   },
+}))
+
+vi.mock("../repository-lock-manager", () => ({
+  repositoryLockManager: mocks.repositoryLockManager,
 }))
 
 vi.mock("../repository-store", () => ({
@@ -137,6 +145,7 @@ describe("contentSubmissionService", () => {
     })
     mocks.pendingPushesService.markFailure.mockResolvedValue(undefined)
     mocks.pendingPushesService.readState.mockResolvedValue({ count: 0, items: [] })
+    mocks.repositoryLockManager.acquire.mockResolvedValue(vi.fn())
     mocks.isGitRebaseInProgress.mockResolvedValue(false)
   })
 
@@ -153,7 +162,7 @@ describe("contentSubmissionService", () => {
     } as never)
 
     expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["pull", "--rebase", "-X", "theirs"],
+      args: ["pull", "--rebase"],
       cwd: "/repo",
     }))
     expect(mocks.contentIndexService.syncIndex).toHaveBeenCalledWith(mocks.repository)
@@ -193,7 +202,7 @@ describe("contentSubmissionService", () => {
       .toThrow("当前仓库正在进行 rebase")
 
     expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
-      args: ["pull", "--rebase", "-X", "theirs"],
+      args: ["pull", "--rebase"],
     }))
     expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
       args: ["rebase", "--abort"],
@@ -217,7 +226,7 @@ describe("contentSubmissionService", () => {
     })
 
     expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["pull", "--rebase", "-X", "theirs"],
+      args: ["pull", "--rebase"],
       cwd: "/repo",
     }))
     expect(mocks.contentIndexService.syncIndex).toHaveBeenCalledWith(mocks.repository)
@@ -436,6 +445,43 @@ describe("contentSubmissionService", () => {
     })
   })
 
+  it("holds the real Git-root lock through write, commit, and pending registration", async () => {
+    const release = vi.fn()
+    mocks.repositoryLockManager.acquire.mockResolvedValueOnce(release)
+    const { contentSubmissionService } = await import("../content-submission-service")
+
+    await contentSubmissionService.createContent({
+      contentType: "rule",
+      payload: { title: "Rule", body: "content" },
+    } as never)
+
+    expect(mocks.repositoryLockManager.acquire).toHaveBeenCalledWith("/repo", "content.create")
+    expect(mocks.repositoryLockManager.acquire.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.contentWriteService.createContent.mock.invocationCallOrder[0])
+    expect(mocks.contentWriteService.createContent.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.pendingPushesService.enqueue.mock.invocationCallOrder[0])
+    expect(release).toHaveBeenCalledTimes(1)
+  })
+
+  it("returns recovery-needed when pending registration fails after commit", async () => {
+    mocks.pendingPushesService.enqueue.mockRejectedValueOnce(new Error("pending database unavailable"))
+    mocks.runGitCommand.mockImplementation(async (input: { args: string[] }) => ({
+      stdout: input.args[0] === "rev-list" ? "2\n" : input.args[0] === "rev-parse" ? "commit-1\n" : "",
+      stderr: "",
+    }))
+    const { contentSubmissionService } = await import("../content-submission-service")
+
+    await expect(contentSubmissionService.createContent({
+      contentType: "rule",
+      payload: { title: "Rule", body: "content" },
+    } as never)).resolves.toMatchObject({
+      status: "saved",
+      syncStatus: "recovery-needed",
+      pendingPushCount: 2,
+      pushed: false,
+    })
+  })
+
   it("does not fail pending push flush when syncIndex fails after push records are cleared", async () => {
     const { contentSubmissionService } = await import("../content-submission-service")
     const syncError = new Error("index database locked")
@@ -452,7 +498,7 @@ describe("contentSubmissionService", () => {
     })
     mocks.contentIndexService.syncIndex.mockRejectedValueOnce(syncError)
 
-    await expect(contentSubmissionService.flushPendingPushes(mocks.repository, undefined, { skipLock: true }))
+    await expect(contentSubmissionService.flushPendingPushes(mocks.repository))
       .resolves
       .toBeUndefined()
 

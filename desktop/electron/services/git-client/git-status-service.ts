@@ -1,6 +1,7 @@
 import path from "node:path"
 import type {
   SynapseGitDiffResult,
+  SynapseGitFileChange,
   SynapseGitRepository,
   SynapseGitRepositorySnapshot,
   SynapseGitRepositorySummary,
@@ -33,6 +34,7 @@ type StatusDeps = {
 }
 
 const LIST_SUMMARY_CONCURRENCY_LIMIT = 4
+const PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 
 function createGitStateDiagnosticsReader(
   commandRunner: Pick<GitClientCommandRunner, "run">,
@@ -116,6 +118,7 @@ export function createGitStatusService(deps: StatusDeps) {
           isGitRepository: false,
           currentBranch: null,
           upstream: null,
+          trackingStatus: "detached",
           ahead: 0,
           behind: 0,
           hasConflicts: false,
@@ -159,6 +162,7 @@ export function createGitStatusService(deps: StatusDeps) {
             isGitRepository: false,
             currentBranch: null,
             upstream: null,
+            trackingStatus: "detached",
             ahead: 0,
             behind: 0,
             hasConflicts: false,
@@ -203,29 +207,34 @@ export function createGitStatusService(deps: StatusDeps) {
 
     async getDiff(
       repository: SynapseGitRepository,
-      input: { readonly path: string; readonly originalPath?: string | null; readonly staged: boolean },
+      input: { readonly path: string; readonly originalPath?: string | null; readonly status: SynapseGitFileChange["status"] },
     ): Promise<SynapseGitDiffResult> {
       const operation = "git.diff"
       const operationId = createGitOperationId()
       const startedAt = performance.now()
       try {
         assertRepositoryPath(repository.localPath, input.path)
-        const args = input.staged
-          ? ["diff", "--staged", "--", input.path]
-          : ["diff", "--", input.path]
+        const isNewFile = input.status === "untracked" || input.status === "added"
+        const args = isNewFile
+          ? ["diff", "--no-index", "--no-ext-diff", "--", "/dev/null", input.path]
+          : ["diff", "HEAD", "--", ...(input.originalPath ? [input.originalPath] : []), input.path]
         const result = await deps.commandRunner.run({
           cwd: repository.localPath,
           args,
           operation,
           operationId,
+          maxBufferBytes: PREVIEW_MAX_BYTES,
+          outputOverflow: "truncate",
           repoPath: repository.localPath,
           repositoryId: repository.id,
+          ...(isNewFile ? { acceptedExitCodes: [0, 1] } : {}),
         })
         const text = result.stdout
         return {
           path: input.path,
           originalPath: input.originalPath ?? null,
           binary: /^Binary files /m.test(text),
+          truncated: result.stdoutTruncated ?? false,
           text,
         }
       } catch (error) {
@@ -238,7 +247,7 @@ export function createGitStatusService(deps: StatusDeps) {
           error,
           extra: {
             ...repositoryLogMeta(repository),
-            staged: input.staged,
+            status: input.status,
             pathSample: input.path,
           },
         })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import config, {
   isDriveBrowserSpaPath,
+  isRetiredTeamRoutePath,
   resolveDesktopUpdateDevHtmlPath,
   resolveDashboardDevSpaFallback,
   resolveLegacyDashboardDevRedirect,
@@ -98,16 +99,36 @@ describe("dashboard Vite dev proxy", () => {
   it("redirects legacy dashboard page routes to console paths in dev", () => {
     expect(resolveLegacyDashboardDevRedirect("/dashboard")).toBe("/console/")
     expect(resolveLegacyDashboardDevRedirect("/dashboard/")).toBe("/console/")
-    expect(resolveLegacyDashboardDevRedirect("/dashboard/auth/desktop")).toBe("/console/auth/desktop")
-    expect(resolveLegacyDashboardDevRedirect("/dashboard/users")).toBe("/console/users")
+    expect(resolveLegacyDashboardDevRedirect("/dashboard/users")).toBe("/admin/users")
+    expect(resolveLegacyDashboardDevRedirect("/console/users")).toBe("/admin/users")
+    expect(resolveLegacyDashboardDevRedirect("/dashboard/teams")).toBeNull()
+    expect(resolveLegacyDashboardDevRedirect("/dashboard/invitations")).toBeNull()
+    expect(resolveLegacyDashboardDevRedirect("/dashboard/auth/desktop")).toBeNull()
+    expect(resolveLegacyDashboardDevRedirect("/dashboard/unknown")).toBeNull()
     expect(resolveLegacyDashboardDevRedirect("/api/dashboard/session")).toBeNull()
     expect(resolveLegacyDashboardDevRedirect("/console/auth/desktop")).toBeNull()
+  })
+
+  it("returns 404 for retired team and invitation pages in dev", () => {
+    for (const path of [
+      "/team-invite",
+      "/console/team-invite",
+      "/dashboard/team-invite",
+      "/admin/teams",
+      "/admin/invitations",
+      "/console/teams",
+      "/dashboard/invitations/legacy",
+    ]) {
+      expect(isRetiredTeamRoutePath(path)).toBe(true)
+    }
+    expect(isRetiredTeamRoutePath("/admin/users")).toBe(false)
+    expect(isRetiredTeamRoutePath("/console/settings")).toBe(false)
   })
 
   it("keeps drive direct response routes out of the dashboard app fallback", () => {
     expect(resolveDashboardDevSpaFallback("/drive")).toBe("/console/")
     expect(resolveDashboardDevSpaFallback("/drive/")).toBe("/console/")
-    expect(resolveDashboardDevSpaFallback("/console/drive")).toBe("/console/")
+    expect(resolveDashboardDevSpaFallback("/console/drive")).toBe("/index.html")
     expect(resolveDashboardDevSpaFallback("/share/share-id")).toBe("/console/")
     expect(resolveDashboardDevSpaFallback("/drive/items/file-id")).toBe("/console/")
     expect(resolveDashboardDevSpaFallback("/share/share-id/items/file-id/download")).toBeNull()

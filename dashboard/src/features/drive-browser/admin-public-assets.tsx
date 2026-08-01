@@ -14,15 +14,16 @@ import {
   ServerDataTable,
   getServerTableSortQuery,
 } from '@/components/data-table'
+import { LongText } from '@/components/long-text'
 import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameHeader,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
@@ -73,14 +74,20 @@ export function AdminPublicAssets() {
             <div className='truncate text-sm text-muted-foreground'>{row.original.assetId}</div>
           </div>
         ),
+        meta: { className: 'max-w-0 w-1/3' },
       },
       {
         id: 'owner',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='用户' />
         ),
-        cell: ({ row }) => row.original.owner.email ?? row.original.owner.userId,
+        cell: ({ row }) => (
+          <LongText>
+            {row.original.owner.email ?? row.original.owner.userId}
+          </LongText>
+        ),
         enableSorting: false,
+        meta: { className: 'max-w-0 w-1/4' },
       },
       {
         accessorKey: 'lifecycleStatus',
@@ -92,6 +99,7 @@ export function AdminPublicAssets() {
             {driveLifecycleLabel(row.original.lifecycleStatus)}
           </Badge>
         ),
+        meta: { className: 'w-24' },
       },
       {
         accessorKey: 'size',
@@ -102,6 +110,7 @@ export function AdminPublicAssets() {
           <div className='text-right tabular-nums'>{formatDriveBytes(row.original.size)}</div>
         ),
         meta: {
+          className: 'w-24',
           thClassName: 'text-right',
           tdClassName: 'text-right',
         },
@@ -118,6 +127,7 @@ export function AdminPublicAssets() {
         ),
         enableSorting: false,
         meta: {
+          className: 'w-32',
           thClassName: 'text-right',
           tdClassName: 'text-right',
         },
@@ -127,7 +137,10 @@ export function AdminPublicAssets() {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='创建时间' />
         ),
-        cell: ({ row }) => <RelativeTime value={row.original.createdAt} />,
+        cell: ({ row }) => (
+          <RelativeTime className='tabular-nums' value={row.original.createdAt} />
+        ),
+        meta: { className: 'w-32' },
       },
       {
         id: 'actions',
@@ -136,21 +149,21 @@ export function AdminPublicAssets() {
             <Button
               type='button'
               variant='ghost'
-              className='h-8 px-2'
+              size='sm'
               onClick={() => setSelectedAsset(row.original)}
             >
               <Eye />
               详情
             </Button>
             {canOpenPublicAsset(row.original) ? (
-              <Button asChild variant='ghost' className='h-8 px-2'>
+              <Button asChild variant='ghost' size='sm'>
                 <a href={row.original.url} target='_blank' rel='noreferrer'>
                   <Download />
                   打开
                 </a>
               </Button>
             ) : (
-              <Button type='button' variant='ghost' className='h-8 px-2' disabled>
+              <Button type='button' variant='ghost' size='sm' disabled>
                 <Download />
                 打开
               </Button>
@@ -158,7 +171,9 @@ export function AdminPublicAssets() {
           </div>
         ),
         enableSorting: false,
+        enableHiding: false,
         meta: {
+          className: 'w-36',
           thClassName: 'text-right',
           tdClassName: 'text-right',
         },
@@ -186,7 +201,7 @@ export function AdminPublicAssets() {
         toolbar={
           <div className='flex flex-wrap items-center gap-2'>
             <Input
-              placeholder='搜索'
+              placeholder='按名称筛选...'
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value)
@@ -252,50 +267,59 @@ export function AdminPublicAssetDetailsDialog({
 
   return (
     <Dialog open={Boolean(asset)} onOpenChange={onOpenChange}>
-      <DialogContent className='max-w-5xl'>
-        <DialogHeader>
-          <DialogTitle>公开素材</DialogTitle>
-          <DialogDescription className='sr-only'>
-            查看公开素材详情、访问日志和历史版本。
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        className='gap-0 overflow-hidden p-0 sm:max-w-5xl'
+        showCloseButton={false}
+      >
         {asset ? (
           <Tabs defaultValue='detail' className='min-h-0'>
-            <TabsList>
-              <TabsTrigger value='detail'>详情</TabsTrigger>
-              <TabsTrigger value='logs'>访问日志</TabsTrigger>
-              <TabsTrigger value='revisions'>历史版本</TabsTrigger>
-            </TabsList>
-            <TabsContent value='detail'>
-              <PublicAssetDetailTable asset={asset} />
-            </TabsContent>
-            <TabsContent value='logs'>
-              <AccessLogTable
-                data={accessLogs.data?.data ?? []}
-                error={accessLogs.isError ? accessLogs.error : null}
-                isLoading={accessLogs.isLoading}
-                onRetry={() => void accessLogs.refetch()}
-                page={accessLogPage}
-                pageSize={accessLogPageSize}
-                total={accessLogs.data?.total ?? 0}
-                onPageChange={setAccessLogPage}
-                onPageSizeChange={setAccessLogPageSize}
+            <DialogFrame>
+              <DialogFrameHeader
+                title='公开素材'
+                description='查看公开素材详情、访问日志和历史版本。'
+                descriptionClassName='sr-only'
+                center={(
+                  <TabsList>
+                    <TabsTrigger value='detail'>详情</TabsTrigger>
+                    <TabsTrigger value='logs'>访问日志</TabsTrigger>
+                    <TabsTrigger value='revisions'>历史版本</TabsTrigger>
+                  </TabsList>
+                )}
+                bordered
               />
-            </TabsContent>
-            <TabsContent value='revisions'>
-              <RevisionTable
-                assetId={asset.assetId}
-                data={revisions.data?.data ?? []}
-                error={revisions.isError ? revisions.error : null}
-                isLoading={revisions.isLoading}
-                onRetry={() => void revisions.refetch()}
-                page={revisionPage}
-                pageSize={revisionPageSize}
-                total={revisions.data?.total ?? 0}
-                onPageChange={setRevisionPage}
-                onPageSizeChange={setRevisionPageSize}
-              />
-            </TabsContent>
+              <DialogFrameBody className='px-6 py-4'>
+                <TabsContent value='detail'>
+                  <PublicAssetDetailTable asset={asset} />
+                </TabsContent>
+                <TabsContent value='logs'>
+                  <AccessLogTable
+                    data={accessLogs.data?.data ?? []}
+                    error={accessLogs.isError ? accessLogs.error : null}
+                    isLoading={accessLogs.isLoading}
+                    onRetry={() => void accessLogs.refetch()}
+                    page={accessLogPage}
+                    pageSize={accessLogPageSize}
+                    total={accessLogs.data?.total ?? 0}
+                    onPageChange={setAccessLogPage}
+                    onPageSizeChange={setAccessLogPageSize}
+                  />
+                </TabsContent>
+                <TabsContent value='revisions'>
+                  <RevisionTable
+                    assetId={asset.assetId}
+                    data={revisions.data?.data ?? []}
+                    error={revisions.isError ? revisions.error : null}
+                    isLoading={revisions.isLoading}
+                    onRetry={() => void revisions.refetch()}
+                    page={revisionPage}
+                    pageSize={revisionPageSize}
+                    total={revisions.data?.total ?? 0}
+                    onPageChange={setRevisionPage}
+                    onPageSizeChange={setRevisionPageSize}
+                  />
+                </TabsContent>
+              </DialogFrameBody>
+            </DialogFrame>
           </Tabs>
         ) : null}
       </DialogContent>
@@ -398,7 +422,10 @@ function RevisionTable({
     () => [
       {
         accessorKey: 'name',
-        header: '名称',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title='名称' />
+        ),
+        enableSorting: false,
         enableHiding: false,
         cell: ({ row }) => (
           <div className='min-w-0'>
@@ -406,32 +433,46 @@ function RevisionTable({
             <div className='truncate text-sm text-muted-foreground'>{row.original.id}</div>
           </div>
         ),
+        meta: { className: 'max-w-0' },
       },
       {
         accessorKey: 'size',
-        header: '大小',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title='大小' />
+        ),
+        enableSorting: false,
         enableHiding: false,
         cell: ({ row }) => (
           <div className='text-right tabular-nums'>{formatDriveBytes(row.original.size)}</div>
         ),
         meta: {
+          className: 'w-28',
           thClassName: 'text-right',
           tdClassName: 'text-right',
         },
       },
       {
         accessorKey: 'replacedAt',
-        header: '替换时间',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title='替换时间' />
+        ),
+        enableSorting: false,
         enableHiding: false,
-        cell: ({ row }) => <RelativeTime value={row.original.replacedAt} />,
+        cell: ({ row }) => (
+          <RelativeTime className='tabular-nums' value={row.original.replacedAt} />
+        ),
+        meta: { className: 'w-40' },
       },
       {
         id: 'actions',
-        header: '操作',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title='操作' />
+        ),
+        enableSorting: false,
         enableHiding: false,
         cell: ({ row }) => (
           <div className='flex justify-end'>
-            <Button asChild variant='ghost' className='h-8 px-2'>
+            <Button asChild variant='ghost' size='sm'>
               <a href={adminApi.downloadDrivePublicAssetRevisionUrl(assetId, row.original.id)}>
                 <Download />
                 下载
@@ -440,6 +481,7 @@ function RevisionTable({
           </div>
         ),
         meta: {
+          className: 'w-28',
           thClassName: 'text-right',
           tdClassName: 'text-right',
         },
@@ -470,52 +512,80 @@ function RevisionTable({
 const accessLogColumns: ColumnDef<AdminDrivePublicAssetAccessLogRow>[] = [
   {
     accessorKey: 'method',
-    header: '方法',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='方法' />
+    ),
+    enableSorting: false,
     enableHiding: false,
+    meta: { className: 'w-20' },
   },
   {
     accessorKey: 'statusCode',
-    header: '状态',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='状态' />
+    ),
+    enableSorting: false,
     enableHiding: false,
     cell: ({ row }) => (
       <div className='text-right tabular-nums'>{row.original.statusCode}</div>
     ),
     meta: {
+      className: 'w-20',
       thClassName: 'text-right',
       tdClassName: 'text-right',
     },
   },
   {
     accessorKey: 'bytes',
-    header: '字节',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='字节' />
+    ),
+    enableSorting: false,
     enableHiding: false,
     cell: ({ row }) => (
       <div className='text-right tabular-nums'>{formatDriveBytes(row.original.bytes)}</div>
     ),
     meta: {
+      className: 'w-28',
       thClassName: 'text-right',
       tdClassName: 'text-right',
     },
   },
   {
     accessorKey: 'ip',
-    header: 'IP',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='IP' />
+    ),
+    enableSorting: false,
     enableHiding: false,
     cell: ({ row }) => row.original.ip ?? '-',
+    meta: { className: 'w-36' },
   },
   {
     accessorKey: 'referer',
-    header: '来源',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='来源' />
+    ),
+    enableSorting: false,
     enableHiding: false,
     cell: ({ row }) => (
-      <div className='max-w-64 truncate'>{row.original.referer ?? '-'}</div>
+      <div className='truncate'>{row.original.referer ?? '-'}</div>
     ),
+    meta: { className: 'max-w-0' },
   },
   {
     accessorKey: 'accessedAt',
-    header: '时间',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='时间' />
+    ),
+    enableSorting: false,
     enableHiding: false,
-    cell: ({ row }) => formatDriveBrowserDate(row.original.accessedAt),
+    cell: ({ row }) => (
+      <span className='tabular-nums'>
+        {formatDriveBrowserDate(row.original.accessedAt)}
+      </span>
+    ),
+    meta: { className: 'w-44' },
   },
 ]
 

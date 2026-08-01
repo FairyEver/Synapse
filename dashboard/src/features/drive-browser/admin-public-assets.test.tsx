@@ -87,7 +87,7 @@ describe('AdminPublicAssets', () => {
       sortOrder: 'desc',
     })
 
-    await changeInput('搜索', ' owner@example.com ')
+    await changeInput('按名称筛选...', ' owner@example.com ')
     await waitForDebounce()
     await waitFor(() => {
       expect(mockedAdminApi.listDrivePublicAssets).toHaveBeenLastCalledWith({

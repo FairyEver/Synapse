@@ -3,6 +3,7 @@ import {
   type ChildProcessWithoutNullStreams,
   type SpawnOptionsWithoutStdio,
 } from "node:child_process"
+import { StringDecoder } from "node:string_decoder"
 
 import type {
   ActorIdentity,
@@ -13,7 +14,6 @@ import type {
 } from "../security"
 import {
   computePath,
-  dedupePath,
   resolveCachedLoginShellPath,
   resolveExecutableInPath,
   splitPath,
@@ -68,6 +68,7 @@ export interface ControlledProcessOutputOptions {
   readonly stdout?: ControlledProcessOutputMode
   readonly stderr?: ControlledProcessOutputMode
   readonly maxBufferBytes?: number
+  readonly overflow?: "error" | "truncate"
 }
 
 export type ControlledProcessLineHandler = (line: string) => void
@@ -111,6 +112,8 @@ export interface ControlledProcessResult {
   readonly signal: NodeJS.Signals | null
   readonly stdout?: string
   readonly stderr?: string
+  readonly stderrTruncated?: boolean
+  readonly stdoutTruncated?: boolean
   readonly timedOut: boolean
   readonly durationMs: number
   readonly error?: string
@@ -329,8 +332,9 @@ export class ControlledProcessRunner {
       throw error
     }
 
-    const stdoutCollector = new OutputCollector(output.stdout ?? "buffer", maxBufferBytes)
-    const stderrCollector = new OutputCollector(output.stderr ?? "buffer", maxBufferBytes)
+    const overflow = output.overflow ?? "error"
+    const stdoutCollector = new OutputCollector(output.stdout ?? "buffer", maxBufferBytes, overflow)
+    const stderrCollector = new OutputCollector(output.stderr ?? "buffer", maxBufferBytes, overflow)
     const terminator = createProcessTerminator(child, { processGroup: launch.processGroup })
     let timedOut = false
     let outputError: Error | null = null
@@ -415,6 +419,8 @@ export class ControlledProcessRunner {
       signal: closed.signal,
       stdout,
       stderr,
+      stdoutTruncated: stdoutCollector.truncated(),
+      stderrTruncated: stderrCollector.truncated(),
       timedOut,
       durationMs,
       error,
@@ -512,10 +518,12 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
     this.stdoutCollector = new OutputCollector(
       deps.output.stdout ?? "buffer",
       deps.maxBufferBytes,
+      deps.output.overflow ?? "error",
     )
     this.stderrCollector = new OutputCollector(
       deps.output.stderr ?? "buffer",
       deps.maxBufferBytes,
+      deps.output.overflow ?? "error",
     )
     this.terminator = createProcessTerminator(this.child, { processGroup: deps.launch.processGroup })
     this.stdoutLines = new LineEmitter(deps.request.onStdoutLine, (error) => {
@@ -641,6 +649,8 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
       signal: closed.signal,
       stdout,
       stderr,
+      stdoutTruncated: this.stdoutCollector.truncated(),
+      stderrTruncated: this.stderrCollector.truncated(),
       timedOut: this.timedOut,
       durationMs,
       error: errorMessage(this.outputError) ?? errorMessage(this.spawnError),
@@ -652,6 +662,8 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
       signal: closed.signal,
       stdout,
       stderr,
+      stdoutTruncated: this.stdoutCollector.truncated(),
+      stderrTruncated: this.stderrCollector.truncated(),
       timedOut: this.timedOut,
       durationMs,
       error,
@@ -686,28 +698,46 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
 class OutputCollector {
   private readonly mode: ControlledProcessOutputMode
   private readonly maxBufferBytes: number
+  private readonly overflow: "error" | "truncate"
   private readonly chunks: Buffer[] = []
   private bytes = 0
+  private wasTruncated = false
 
-  constructor(mode: ControlledProcessOutputMode, maxBufferBytes: number) {
+  constructor(
+    mode: ControlledProcessOutputMode,
+    maxBufferBytes: number,
+    overflow: "error" | "truncate",
+  ) {
     this.mode = mode
     this.maxBufferBytes = maxBufferBytes
+    this.overflow = overflow
   }
 
   push(chunk: Buffer): void {
     if (this.mode === "ignore") return
-    this.bytes += chunk.byteLength
-    if (this.bytes > this.maxBufferBytes) {
+    const remaining = Math.max(0, this.maxBufferBytes - this.bytes)
+    if (chunk.byteLength > remaining && this.overflow === "error") {
       throw new ControlledProcessOutputError(
         `Process output exceeded ${this.maxBufferBytes} bytes`,
       )
     }
-    this.chunks.push(chunk)
+    if (remaining > 0) {
+      const accepted = chunk.byteLength > remaining ? chunk.subarray(0, remaining) : chunk
+      this.chunks.push(accepted)
+      this.bytes += accepted.byteLength
+    }
+    if (chunk.byteLength > remaining) this.wasTruncated = true
   }
 
   text(): string | undefined {
     if (this.mode === "ignore") return undefined
-    return Buffer.concat(this.chunks).toString("utf8")
+    const buffer = Buffer.concat(this.chunks)
+    if (!this.wasTruncated) return buffer.toString("utf8")
+    return new StringDecoder("utf8").write(buffer)
+  }
+
+  truncated(): boolean {
+    return this.wasTruncated
   }
 }
 

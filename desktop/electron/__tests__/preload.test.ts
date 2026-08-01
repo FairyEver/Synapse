@@ -442,9 +442,9 @@ describe("preload bridge", () => {
     let caught: unknown
     try {
       await bridge.git.cloneRepository({
-        name: "docs",
+        directoryName: "docs",
+        parentDirectory: "/work",
         remoteUrl: "https://github.com/acme/docs.git",
-        targetPath: "/work/docs",
       })
     } catch (error) {
       caught = error
@@ -1390,9 +1390,9 @@ describe("preload bridge", () => {
     })
 
     await expect(bridge.git.cloneRepository({
-      name: "docs",
+      directoryName: "docs",
+      parentDirectory: "/work",
       remoteUrl: "https://writer:raw-password@git.example.com/team/docs.git?token=raw-token",
-      targetPath: "/work/docs",
     })).rejects.toThrow("clone unavailable")
 
     const logCall = electronMock.ipcRenderer.invoke.mock.calls.find(([channel]) =>

@@ -324,9 +324,7 @@ async function streamToText(stream: NodeJS.ReadableStream): Promise<string> {
 describe("shouldUseCosDriveStorage", () => {
   const baseEnv = {
     DATABASE_URL: "postgresql://synapse:secret@localhost:5432/synapse",
-    ADMIN_EMAIL: "admin@synapse.com",
-    ADMIN_PASSWORD: "admin-password-123",
-    ADMIN_JWT_SECRET: "a".repeat(32),
+    ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
     USER_ACCESS_JWT_SECRET: "b".repeat(32),
     APP_PUBLIC_URL: "http://localhost:3000",
   }
@@ -391,9 +389,7 @@ describe("CosDriveStorage", () => {
 
 function stubServerEnv(overrides: NodeJS.ProcessEnv = {}): void {
   vi.stubEnv("DATABASE_URL", "postgresql://synapse:secret@localhost:5432/synapse")
-  vi.stubEnv("ADMIN_EMAIL", "admin@synapse.com")
-  vi.stubEnv("ADMIN_PASSWORD", "admin-password-123")
-  vi.stubEnv("ADMIN_JWT_SECRET", "a".repeat(32))
+  vi.stubEnv("ADMIN_ACCESS_SECRET", "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A")
   vi.stubEnv("USER_ACCESS_JWT_SECRET", "b".repeat(32))
   for (const [key, value] of Object.entries(overrides)) {
     if (value !== undefined) vi.stubEnv(key, value)

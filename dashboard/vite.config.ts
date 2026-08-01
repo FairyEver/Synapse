@@ -13,14 +13,30 @@ export function isDriveBrowserSpaPath(pathname: string) {
   return /^\/share\/[^/]+\/items\/[^/]+$/u.test(pathname)
 }
 
+export function isRetiredTeamRoutePath(pathname: string) {
+  const normalized = pathname.replace(/\/$/u, '') || '/'
+  if (normalized === '/team-invite') return true
+  if (/^\/(?:console|dashboard)\/team-invite$/u.test(normalized)) return true
+  return /^\/(?:admin|console|dashboard)\/(?:teams|invitations)(?:\/.*)?$/u.test(normalized)
+}
+
 export function resolveLegacyDashboardDevRedirect(pathname: string) {
-  if (pathname === '/dashboard') return '/console/'
-  if (pathname === '/dashboard/') return '/console/'
-  if (pathname.startsWith('/dashboard/')) return `/console/${pathname.slice('/dashboard/'.length)}`
-  return null
+  const normalized = pathname.replace(/\/$/u, '') || '/'
+  const adminPaths = new Set([
+    'system', 'users', 'devices', 'audit-logs',
+    'problem-feedback', 'backup', 'admin-drive', 'logs', 'webhook-deliveries',
+  ])
+  if (normalized === '/dashboard') return '/console/'
+  const dashboardPath = normalized.startsWith('/dashboard/') ? normalized.slice('/dashboard/'.length) : null
+  const consolePath = normalized.startsWith('/console/') ? normalized.slice('/console/'.length) : null
+  const legacyPath = dashboardPath ?? consolePath
+  if (!legacyPath || !adminPaths.has(legacyPath)) return null
+  return `/admin/${legacyPath === 'admin-drive' ? 'drive' : legacyPath}`
 }
 
 export function resolveDashboardDevSpaFallback(pathname: string) {
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) return '/admin.html'
+  if (pathname === '/console' || pathname.startsWith('/console/')) return '/index.html'
   if (isDriveBrowserSpaPath(pathname)) return '/console/'
   return null
 }
@@ -41,6 +57,11 @@ function driveBrowserHistoryFallback(): Plugin {
         }
 
         const parsedUrl = new URL(request.url ?? '/', 'http://localhost')
+        if (isRetiredTeamRoutePath(parsedUrl.pathname)) {
+          response.statusCode = 404
+          response.end()
+          return
+        }
         const desktopUpdateHtmlPath = resolveDesktopUpdateDevHtmlPath(parsedUrl.pathname, parsedUrl.search)
         if (desktopUpdateHtmlPath === 'reject') {
           response.statusCode = 404
@@ -72,7 +93,7 @@ function driveBrowserHistoryFallback(): Plugin {
 }
 
 export default defineConfig({
-  base: '/console/',
+  base: './',
   plugins: [
     driveBrowserHistoryFallback(),
     tanstackRouter({
@@ -122,6 +143,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         dashboard: path.resolve(__dirname, 'index.html'),
+        admin: path.resolve(__dirname, 'admin.html'),
         desktopUpdate: path.resolve(__dirname, 'desktop-update.html'),
       },
     },

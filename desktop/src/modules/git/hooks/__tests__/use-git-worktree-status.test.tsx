@@ -57,6 +57,7 @@ function emptySnapshot(): SynapseGitRepositorySnapshot {
     isGitRepository: true,
     currentBranch: "main",
     upstream: null,
+    trackingStatus: "untracked",
     ahead: 0,
     behind: 0,
     hasConflicts: false,
@@ -79,6 +80,7 @@ function diffForPath(path: string): SynapseGitDiffResult {
     path,
     originalPath: null,
     binary: false,
+    truncated: false,
     text: `diff for ${path}`,
   }
 }

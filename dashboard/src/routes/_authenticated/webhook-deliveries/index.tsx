@@ -16,6 +16,6 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/_authenticated/webhook-deliveries/')({
-  component: WebhookDeliveriesPage,
+  component: () => <WebhookDeliveriesPage mode='user' search={Route.useSearch()} />,
   validateSearch: searchSchema,
 })

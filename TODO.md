@@ -99,7 +99,7 @@ Synapse 的数据能力从旧命名 `Data Store` / `data-store` / `synapse-data`
 
 - 可以优先把内部变量、测试描述、脚本描述、文档中的当前语义改为 `console`。
 - 可以评估把 `dashboard/` 包目录和 `@synapse/dashboard` 包名改为 Console，但必须同步更新 pnpm workspace、根脚本、Dockerfile、nginx、部署脚本、CI、测试和文档。
-- `/dashboard` 和 `/api/dashboard` 暂时保留为 legacy redirect / alias，避免破坏旧链接、旧邀请链接、书签、旧版本客户端或已有集成。
+- `/dashboard` 和 `/api/dashboard` 暂时保留为 legacy redirect / alias，避免破坏旧书签、旧版本客户端或已有集成；已删除的团队邀请链接不兼容。
 
 ### 风险
 

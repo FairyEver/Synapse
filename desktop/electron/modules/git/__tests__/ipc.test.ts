@@ -35,11 +35,10 @@ describe("gitIpcModule", () => {
     expect(gitIpcModule.methods.getSnapshot.request.safeParse({ repositoryId: "repo-1", args: ["status"] }).success).toBe(false)
   })
 
-  it("accepts only supported repository removal modes", () => {
-    expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "keep-local" }).success).toBe(true)
-    expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "trash-local" }).success).toBe(true)
-    expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "delete-local" }).success).toBe(false)
-    expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "keep-local", extra: true }).success).toBe(false)
+  it("accepts only a repository id for removal", () => {
+    expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1" }).success).toBe(true)
+    expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "keep-local" }).success).toBe(false)
+    expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "trash-local" }).success).toBe(false)
   })
 
   it("rejects unsafe access payloads", () => {
@@ -113,15 +112,17 @@ describe("gitIpcModule", () => {
       list: vi.fn().mockResolvedValue([repository]),
     }
     const statusService = {
-      listSummaries: vi.fn().mockResolvedValue([{ repository, snapshot: null, error: "not ready" }]),
+      getSnapshot: vi.fn().mockRejectedValue(new Error("not ready")),
     }
+    const coordinator = { read: vi.fn(async (_key: string, task: () => Promise<unknown>) => task()) }
 
     const result = await gitIpcModule.methods.listRepositorySummaries.handler(createContext({
       "git.repository-registry": registry,
       "git.status-service": statusService,
+      "git.operation-coordinator": coordinator,
     }), undefined)
 
-    expect(statusService.listSummaries).toHaveBeenCalledWith([repository])
+    expect(statusService.getSnapshot).toHaveBeenCalledWith(repository)
     expect(result).toEqual([{ repository, snapshot: null, error: "not ready" }])
   })
 
@@ -150,10 +151,10 @@ describe("gitIpcModule", () => {
 
     await gitIpcModule.methods.removeRepository.handler(
       createContext({ "git.repository-registry": registry }),
-      { repositoryId: "repo-1", mode: "trash-local" },
+      { repositoryId: "repo-1" },
     )
 
-    expect(registry.remove).toHaveBeenCalledWith({ repositoryId: "repo-1", mode: "trash-local" })
+    expect(registry.remove).toHaveBeenCalledWith("repo-1")
   })
 
   it("routes access calls through git access service", async () => {

@@ -43,7 +43,7 @@ export function useGitWorktreeStatus(repository: SynapseGitRepository) {
         repositoryId: repository.id,
         path: file.path,
         originalPath: file.originalPath,
-        staged: file.staged,
+        status: file.status,
       })
       if (diffRequestIdRef.current === requestId) {
         setDiff(nextDiff)

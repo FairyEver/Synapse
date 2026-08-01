@@ -19,6 +19,7 @@ export type EventDomain =
   | "system"     // handshake / lifecycle
   | "install-status"
   | "workflow"
+  | "git"
   | "cheat-code"
 
 export interface EventScope {

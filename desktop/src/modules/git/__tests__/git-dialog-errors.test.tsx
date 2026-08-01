@@ -75,7 +75,7 @@ describe("GitModule dialogs", () => {
 
     await click(findButton("克隆仓库"))
     await changeInput("仓库地址", "https://git.example.com/team/docs.git")
-    await changeInput("保存到", "/work/docs")
+    await changeInput("父目录", "/work")
     await click(findDialogButton("开始克隆"))
 
     expect(findDialogText()).toContain("目标目录已存在。")

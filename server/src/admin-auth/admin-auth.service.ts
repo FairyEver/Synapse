@@ -1,215 +1,163 @@
-import { Injectable, Logger, Optional, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common"
-import { JwtService } from "@nestjs/jwt"
+import { Inject, Injectable, Logger, Optional, ServiceUnavailableException } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
-import { hashToken } from "../auth/token"
-import { verifyPassword } from "../auth/password"
-import { AuditLogService } from "../common/audit-log.service"
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto"
+import { AuditLogService, auditActors } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
 
-interface AdminJwtPayload {
-  readonly sub: string
-  readonly email: string
-  readonly type?: "admin" | "user"
-  readonly iat?: number
-  readonly exp?: number
+export const adminAuthOptionsToken = Symbol("adminAuthOptions")
+export const adminSessionMaxAgeMs = 8 * 60 * 60 * 1000
+const adminSessionRetentionMs = 7 * 24 * 60 * 60 * 1000
+
+export interface AdminAuthOptions {
+  readonly accessSecret: string
 }
 
-export type DashboardRole = "admin" | "user"
-
-export interface DashboardSession {
-  readonly id: string
-  readonly email: string
-  readonly handle: string | null
-  readonly role: DashboardRole
+export interface AdminSessionIdentity {
+  readonly sessionId: string
+  readonly expiresAt: Date
 }
 
-const dashboardSessionMaxAgeMs = 30 * 24 * 60 * 60 * 1000
-const dashboardJwtExpiresIn = "30d"
-
-function tokenIssuedBeforePasswordChange(payload: { readonly iat?: number }, passwordChangedAt?: Date | null): boolean {
-  if (!passwordChangedAt) return false
-  if (!payload.iat) return true
-  return payload.iat <= Math.floor(passwordChangedAt.getTime() / 1000)
-}
-
-function isExpectedDashboardSessionFailure(error: unknown): boolean {
-  if (!(error instanceof Error)) return false
-  return error.name === "JsonWebTokenError" ||
-    error.name === "TokenExpiredError" ||
-    error.name === "NotBeforeError"
-}
-
-function safeDashboardAuthErrorDetail(error: unknown): { readonly errorName?: string; readonly errorCode?: string } {
-  if (error === undefined) return {}
-  const errorCode = typeof error === "object"
-    && error !== null
-    && "code" in error
-    && typeof error.code === "string"
-    ? error.code
-    : undefined
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    ...(errorCode ? { errorCode } : {}),
-  }
-}
+export type AdminSessionVerification =
+  | { readonly status: "active"; readonly session: AdminSessionIdentity }
+  | { readonly status: "expired" | "revoked"; readonly sessionId: string }
+  | { readonly status: "invalid" }
 
 @Injectable()
 export class AdminAuthService {
   private readonly logger = new Logger(AdminAuthService.name)
 
   constructor(
-    private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
+    @Inject(adminAuthOptionsToken) private readonly options: AdminAuthOptions,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
-  async getEmail(): Promise<string> {
-    const admin = await this.prisma.adminUser.findFirst({ orderBy: { createdAt: "asc" } })
-    return admin?.email ?? ""
-  }
-
-  async login(email: string, password: string, ipAddress = "system"): Promise<{ email: string; handle: string | null; token: string; role: DashboardRole }> {
-    const normalizedEmail = email.trim().toLowerCase()
-    const matchedAdmin = await this.prisma.adminUser.findUnique({ where: { email: normalizedEmail } })
-    const passwordMatches = matchedAdmin ? await verifyPassword(password, matchedAdmin.passwordHash) : false
-    if (matchedAdmin && matchedAdmin.status === "active" && passwordMatches) {
-      const token = this.signDashboardToken({ sub: matchedAdmin.id, email: matchedAdmin.email, type: "admin" })
-      await this.auditLog?.record({
-        adminEmail: matchedAdmin.email,
-        action: "admin.login.success",
-        targetType: "admin",
-        targetId: matchedAdmin.id,
+  async createSession(
+    suppliedSecret: string,
+    ipAddress: string,
+  ): Promise<{ readonly token: string; readonly session: AdminSessionIdentity } | null> {
+    if (!constantTimeSecretEquals(suppliedSecret, this.options.accessSecret)) {
+      await this.recordAuditSafely({
+        actor: auditActors.unknown(),
+        action: "admin.session.unlock_failed",
+        targetType: "admin_session",
+        targetId: "unknown",
         ipAddress,
       })
-      return { email: matchedAdmin.email, handle: null, token, role: "admin" }
-    }
-    if (matchedAdmin) {
-      const adminLoginFailureAction = matchedAdmin.status === "active"
-        ? "admin.login.failure"
-        : "dashboard.login.disabled"
-      await this.auditLog?.record({
-        adminEmail: matchedAdmin.email,
-        action: adminLoginFailureAction,
-        targetType: "admin",
-        targetId: matchedAdmin.id,
-        ipAddress,
-      })
-      throw new UnauthorizedException("邮箱或密码错误。")
+      return null
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
-      select: {
-        id: true,
-        email: true,
-        passwordHash: true,
-        status: true,
-        handle: true,
+    const token = randomBytes(32).toString("base64url")
+    const expiresAt = new Date(Date.now() + adminSessionMaxAgeMs)
+    const record = await this.prisma.adminSession.create({
+      data: {
+        id: randomUUID(),
+        tokenHash: this.hashSessionToken(token),
+        ipAddress,
+        expiresAt,
+        lastUsedAt: new Date(),
       },
+      select: { id: true, expiresAt: true },
     })
-    const userPasswordMatches = user ? await verifyPassword(password, user.passwordHash) : false
-    if (user && user.status === "active" && userPasswordMatches) {
-      const token = this.signDashboardToken({ sub: user.id, email: user.email, type: "user" })
-      await this.auditLog?.record({
-        adminEmail: user.email,
-        action: "user.dashboard_login.success",
-        targetType: "user",
-        targetId: user.id,
-        ipAddress,
-      })
-      return {
-        email: user.email,
-        handle: user.handle,
-        token,
-        role: "user",
-      }
-    }
-    if (user && user.status !== "active" && userPasswordMatches) {
-      await this.auditLog?.record({
-        adminEmail: user.email,
-        action: "user.dashboard_login.disabled",
-        targetType: "user",
-        targetId: user.id,
-        ipAddress,
-      })
-      throw new UnauthorizedException("邮箱或密码错误。")
-    }
-
-    await this.auditLog?.record({
-      adminEmail: normalizedEmail,
-      action: "dashboard.login.failure",
-      targetType: "account",
-      targetId: user?.id ?? "unknown",
+    const session = { sessionId: record.id, expiresAt: record.expiresAt }
+    await this.recordAuditSafely({
+      actor: auditActors.platformAdmin(session.sessionId),
+      action: "admin.session.unlocked",
+      targetType: "admin_session",
+      targetId: session.sessionId,
       ipAddress,
     })
-    throw new UnauthorizedException("邮箱或密码错误。")
+    return { token, session }
   }
 
-  async verifyDashboardSession(token: string): Promise<DashboardSession | null> {
+  async verifySession(token: string): Promise<AdminSessionVerification> {
     try {
-      const payload = this.jwt.verify<AdminJwtPayload>(token)
-      const revoked = await this.prisma.dashboardRevokedToken.findUnique({
-        where: { tokenHash: hashToken(token) },
-        select: { id: true },
+      const record = await this.prisma.adminSession.findUnique({
+        where: { tokenHash: this.hashSessionToken(token) },
+        select: { id: true, expiresAt: true, revokedAt: true },
       })
-      if (revoked) return null
-      if (payload.type === "user") {
-        const user = await this.prisma.user.findUnique({
-          where: { id: payload.sub },
-          select: {
-            id: true,
-            email: true,
-            status: true,
-            handle: true,
-            passwordChangedAt: true,
-          },
-        })
-        if (
-          !user ||
-          user.status !== "active" ||
-          user.email !== payload.email ||
-          tokenIssuedBeforePasswordChange(payload, user.passwordChangedAt)
-        ) return null
-        return {
-          id: user.id,
-          email: user.email,
-          handle: user.handle,
-          role: "user",
-        }
+      if (!record) return { status: "invalid" }
+      if (record.revokedAt) return { status: "revoked", sessionId: record.id }
+      if (record.expiresAt.getTime() <= Date.now()) return { status: "expired", sessionId: record.id }
+      await this.prisma.adminSession.update({
+        where: { id: record.id },
+        data: { lastUsedAt: new Date() },
+      })
+      return {
+        status: "active",
+        session: { sessionId: record.id, expiresAt: record.expiresAt },
       }
-      const admin = await this.prisma.adminUser.findUnique({ where: { id: payload.sub } })
-      if (!admin || admin.status !== "active" || admin.email !== payload.email) return null
-      return { id: admin.id, email: admin.email, handle: null, role: "admin" }
-    } catch (error) {
-      if (isExpectedDashboardSessionFailure(error)) return null
-      this.logger.warn(safeDashboardAuthErrorDetail(error), "Dashboard session verification failed")
+    } catch {
       throw new ServiceUnavailableException("认证服务暂时不可用，请稍后重试。")
     }
   }
 
-  async revokeDashboardSession(token: string): Promise<void> {
-    let payload: AdminJwtPayload
-    try {
-      payload = this.jwt.verify<AdminJwtPayload>(token)
-    } catch {
-      return
-    }
-    const expiresAt = payload.exp ? new Date(payload.exp * 1000) : new Date(Date.now() + dashboardSessionMaxAgeMs)
-    await this.prisma.dashboardRevokedToken.upsert({
-      where: { tokenHash: hashToken(token) },
-      update: { expiresAt, revokedAt: new Date() },
-      create: { tokenHash: hashToken(token), expiresAt },
+  async revokeSession(token: string, ipAddress: string): Promise<AdminSessionIdentity | null> {
+    const verification = await this.verifySession(token)
+    if (verification.status !== "active") return null
+    await this.prisma.adminSession.update({
+      where: { id: verification.session.sessionId },
+      data: { revokedAt: new Date() },
+    })
+    await this.recordAuditSafely({
+      actor: auditActors.platformAdmin(verification.session.sessionId),
+      action: "admin.session.logged_out",
+      targetType: "admin_session",
+      targetId: verification.session.sessionId,
+      ipAddress,
+    })
+    return verification.session
+  }
+
+  async recordRejectedSession(
+    verification: Exclude<AdminSessionVerification, { readonly status: "active" }>,
+    ipAddress: string,
+  ): Promise<void> {
+    if (verification.status === "invalid") return
+    await this.recordAuditSafely({
+      actor: auditActors.unknown(),
+      action: verification.status === "expired"
+        ? "admin.session.expired_access"
+        : "admin.session.revoked_access",
+      targetType: "admin_session",
+      targetId: verification.sessionId,
+      ipAddress,
     })
   }
 
   @Cron("0 4 * * *")
-  async cleanupExpiredRevokedDashboardTokens(): Promise<void> {
-    await this.prisma.dashboardRevokedToken.deleteMany({
-      where: { expiresAt: { lt: new Date() } },
+  async cleanupExpiredSessions(): Promise<void> {
+    const cutoff = new Date(Date.now() - adminSessionRetentionMs)
+    await this.prisma.adminSession.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lt: cutoff } },
+          { revokedAt: { lt: cutoff } },
+        ],
+      },
     })
   }
 
-  private signDashboardToken(payload: Omit<AdminJwtPayload, "exp">): string {
-    return this.jwt.sign(payload, { expiresIn: dashboardJwtExpiresIn })
+  private hashSessionToken(token: string): string {
+    return createHmac("sha256", this.options.accessSecret).update(token).digest("hex")
   }
+
+  private async recordAuditSafely(input: Parameters<AuditLogService["record"]>[0]): Promise<void> {
+    try {
+      await this.auditLog?.record(input)
+    } catch (error) {
+      this.logger.warn({
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      }, "Failed to record administrator session audit log")
+    }
+  }
+}
+
+function constantTimeSecretEquals(supplied: string, configured: string): boolean {
+  const suppliedDigest = createHash("sha256").update(supplied).digest()
+  const configuredDigest = createHash("sha256").update(configured).digest()
+  return timingSafeEqual(suppliedDigest, configuredDigest)
 }

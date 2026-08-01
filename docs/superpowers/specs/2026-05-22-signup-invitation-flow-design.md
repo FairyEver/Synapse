@@ -1,5 +1,7 @@
 # Signup Invitation Flow Design
 
+> Retired on 2026-07-31. Team invitations and their public links were removed from the product and database; this document is retained only as a historical decision record.
+>
 > Superseded on 2026-05-25 by `docs/superpowers/specs/2026-05-25-personal-module-permissions-design.md`.
 > Normal user registration is now open registration. User signup invitations are no longer part of the product flow.
 

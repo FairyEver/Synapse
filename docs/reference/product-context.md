@@ -6,7 +6,7 @@ product
 
 ## Users
 
-Synapse serves developers, AI power users, and small teams who manage reusable AI editor capabilities across local projects and team repositories. They are usually working inside a desktop workflow, switching between content management, editor installation, Agent sessions, workflow automation, diagnostics, and usage review.
+Synapse serves developers and AI power users who manage reusable AI editor capabilities across local projects and content repositories. They are usually working inside a desktop workflow, switching between content management, editor installation, Agent sessions, workflow automation, diagnostics, and usage review.
 
 ## Product Purpose
 

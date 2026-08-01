@@ -9,7 +9,6 @@ async function importAuthStore() {
 const sampleUser: AuthUser = {
   email: 'user@example.com',
   handle: 'user',
-  role: 'user',
   sessionId: 'session-1',
 }
 

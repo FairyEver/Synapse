@@ -17,7 +17,7 @@ import {
 // Source of truth: document/不同编辑器存储规则.md (official-doc review, 2026-04-18).
 const claudeCodeAdapter: EditorAdapter = {
   id: "claude-code",
-  label: "ClaudeCode/Synapse",
+  label: "CC/Synapse",
   order: 30,
   supportsGlobal: true,
   supportsProject: true,
@@ -43,7 +43,7 @@ const claudeCodeAdapter: EditorAdapter = {
       return createUnavailableTarget({
         adapter: claudeCodeAdapter,
         contentType,
-        message: "未检测到 ClaudeCode/Synapse 的用户目录，暂时不能解析全局安装位置。",
+        message: "未检测到 CC/Synapse 的用户目录，暂时不能解析全局安装位置。",
         scope: "global",
       })
     }
@@ -110,7 +110,7 @@ const claudeCodeAdapter: EditorAdapter = {
       return createUnavailableTarget({
         adapter: claudeCodeAdapter,
         contentType,
-        message: "项目路径不存在，无法解析 ClaudeCode/Synapse 的项目安装位置。",
+        message: "项目路径不存在，无法解析 CC/Synapse 的项目安装位置。",
         scope: "project",
       })
     }

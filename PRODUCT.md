@@ -6,11 +6,11 @@ product
 
 ## Users
 
-Synapse serves developers, AI power users, small teams, ordinary account users, and administrators who manage AI editor capabilities, cloud drive files, account resources, and operational surfaces across desktop and dashboard workflows. They work across content management, editor installation, Agent sessions, workflow automation, scheduler tasks, diagnostics, usage review, cloud collaboration, and admin management.
+Synapse serves developers, AI power users, ordinary account users, and administrators who manage AI editor capabilities, cloud drive files, account resources, and operational surfaces across desktop and dashboard workflows. They work across content management, editor installation, Agent sessions, workflow automation, scheduler tasks, diagnostics, usage review, cloud collaboration, and admin management.
 
 ## Product Purpose
 
-Synapse is a cross-editor AI capability management tool. It helps users organize Rule, Skill, and Prompt resources, install them into editors such as Claude Code, Codex, Cursor, and Windsurf, run and inspect Agent workflows, manage local data and scheduled tasks, collaborate through cloud-backed resources, and keep the surrounding developer setup observable. The dashboard gives administrators scoped ways to inspect and operate account, team, device, invitation, audit, content, and storage surfaces without exposing unnecessary private data. Success means users can understand current state quickly, act without hunting through editor-specific folders, and trust Synapse with local project, runtime, collaboration, and administrative operations.
+Synapse is a cross-editor AI capability management tool. It helps users organize Rule, Skill, and Prompt resources, install them into editors such as Claude Code, Codex, Cursor, and Windsurf, run and inspect Agent workflows, manage local data and scheduled tasks, collaborate through cloud-backed resources, and keep the surrounding developer setup observable. The dashboard gives administrators scoped ways to inspect and operate accounts, devices, audit records, content, and storage surfaces without exposing unnecessary private data. Success means users can understand current state quickly, act without hunting through editor-specific folders, and trust Synapse with local project, runtime, collaboration, and administrative operations.
 
 ## Brand Personality
 

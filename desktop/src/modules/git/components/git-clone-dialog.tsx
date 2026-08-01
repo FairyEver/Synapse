@@ -10,15 +10,15 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getSynapseBridge } from "@/lib/electron-bridge"
-import type { SynapseGitEnvironmentState, SynapseGitRemoteKind } from "@/types/git"
+import type { SynapseGitEnvironmentState, SynapseGitOperationState, SynapseGitRemoteKind } from "@/types/git"
 import type { GitOperationFailure } from "../hooks/use-git-operations"
 import { canHandleGitFailureAction, getGitFailureActionLabel } from "../lib/git-failure-view"
 import { CopySshPublicKeyButton } from "./git-environment-panel"
 
 type CloneInput = {
   readonly remoteUrl: string
-  readonly targetPath: string
-  readonly name: string
+  readonly parentDirectory: string
+  readonly directoryName: string
 }
 
 type AddLocalInput = {
@@ -29,10 +29,12 @@ type AddLocalInput = {
 type GitCloneDialogProps = {
   readonly open: boolean
   readonly busy: boolean
+  readonly phase?: SynapseGitOperationState["status"] | null
   readonly environment: SynapseGitEnvironmentState | null
   readonly onOpenChange: (open: boolean) => void
   readonly onSubmit: (input: CloneInput) => Promise<string | { readonly error: string; readonly failure?: GitOperationFailure | null } | null>
   readonly onFailureAction?: (input: { readonly cloneInput: CloneInput; readonly failure: GitOperationFailure }) => void
+  readonly onCancel?: () => void
 }
 
 type GitAddLocalDialogProps = {
@@ -48,14 +50,22 @@ function basename(input: string): string {
   return name.replace(/\.git$/i, "") || "Git 仓库"
 }
 
+function joinDisplayPath(parentDirectory: string, directoryName: string): string {
+  const parent = parentDirectory.trim().replace(/[\\/]+$/, "")
+  const separator = parent.includes("\\") && !parent.includes("/") ? "\\" : "/"
+  return parent && directoryName ? `${parent}${separator}${directoryName}` : ""
+}
+
 function detectRemoteKind(remoteUrl: string): SynapseGitRemoteKind {
   const value = remoteUrl.trim()
+  if (/^http:\/\//i.test(value)) return "http"
   if (/^https:\/\//i.test(value)) return "https"
   if (/^(ssh:\/\/|[^@\s]+@[^:\s]+:.+)/i.test(value)) return "ssh"
   return "unknown"
 }
 
 function remoteKindLabel(kind: SynapseGitRemoteKind): string {
+  if (kind === "http") return "HTTP"
   if (kind === "https") return "HTTPS"
   if (kind === "ssh") return "SSH"
   return "无法识别"
@@ -86,7 +96,7 @@ function inferCloneAccessFailure(error: string, remoteUrl: string): GitOperation
       title: "SSH 访问失败",
     }
   }
-  if (kind === "https" && /authentication failed|could not read username|invalid username or password|access denied|terminal prompts disabled|认证失败/i.test(error)) {
+  if ((kind === "http" || kind === "https") && /authentication failed|could not read username|invalid username or password|access denied|terminal prompts disabled|认证失败/i.test(error)) {
     const github = host === "github.com"
     return {
       category: github ? "github-auth" : "https-auth",
@@ -95,26 +105,33 @@ function inferCloneAccessFailure(error: string, remoteUrl: string): GitOperation
       host,
       message: github ? "请登录 GitHub 后重试。" : `${host ?? "仓库"} 需要登录。`,
       primaryAction: github ? "handle-github-auth" : "login-host",
-      protocol: "https",
+      protocol: kind,
       title: github ? "GitHub 需要登录" : "认证失败",
     }
   }
   return null
 }
 
-export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit, onFailureAction }: GitCloneDialogProps) {
+export function GitCloneDialog({ open, busy, phase, environment, onOpenChange, onSubmit, onFailureAction, onCancel }: GitCloneDialogProps) {
   const [remoteUrl, setRemoteUrl] = useState("")
-  const [targetPath, setTargetPath] = useState("")
+  const [parentDirectory, setParentDirectory] = useState("")
+  const [directoryName, setDirectoryName] = useState("")
+  const [directoryNameTouched, setDirectoryNameTouched] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [failure, setFailure] = useState<GitOperationFailure | null>(null)
-  const name = useMemo(() => basename(targetPath || remoteUrl), [remoteUrl, targetPath])
+  const finalPath = useMemo(
+    () => joinDisplayPath(parentDirectory, directoryName),
+    [directoryName, parentDirectory],
+  )
   const remoteKind = useMemo(() => detectRemoteKind(remoteUrl), [remoteUrl])
   const failureActionLabel = canHandleGitFailureAction(failure) ? getGitFailureActionLabel(failure) : null
 
   useEffect(() => {
     if (!open) {
       setRemoteUrl("")
-      setTargetPath("")
+      setParentDirectory("")
+      setDirectoryName("")
+      setDirectoryNameTouched(false)
       setError(null)
       setFailure(null)
     }
@@ -128,11 +145,19 @@ export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit
       setError("请输入仓库地址。")
       return
     }
-    if (!targetPath.trim()) {
+    if (!parentDirectory.trim()) {
       setError("请输入保存位置。")
       return
     }
-    const cloneInput = { remoteUrl: remoteUrl.trim(), targetPath: targetPath.trim(), name }
+    if (!directoryName.trim()) {
+      setError("请输入仓库目录名。")
+      return
+    }
+    const cloneInput = {
+      remoteUrl: remoteUrl.trim(),
+      parentDirectory: parentDirectory.trim(),
+      directoryName: directoryName.trim(),
+    }
     const submitError = await onSubmit(cloneInput)
     if (!submitError) return
     if (typeof submitError === "string") {
@@ -151,7 +176,7 @@ export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit
       const selectedPath = await getSynapseBridge()?.settings.repository?.chooseDirectory()
 
       if (selectedPath) {
-        setTargetPath(selectedPath)
+        setParentDirectory(selectedPath)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "选择目录失败。")
@@ -170,7 +195,11 @@ export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit
             <Input
               id="git-clone-remote-url"
               value={remoteUrl}
-              onChange={(event) => setRemoteUrl(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value
+                setRemoteUrl(value)
+                if (!directoryNameTouched) setDirectoryName(basename(value))
+              }}
               autoComplete="off"
             />
             {remoteUrl.trim() ? (
@@ -187,18 +216,31 @@ export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit
             ) : null}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="git-clone-target-path">保存到</Label>
+            <Label htmlFor="git-clone-parent-directory">父目录</Label>
             <div className="flex gap-2">
               <Input
-                id="git-clone-target-path"
-                value={targetPath}
-                onChange={(event) => setTargetPath(event.target.value)}
+                id="git-clone-parent-directory"
+                value={parentDirectory}
+                onChange={(event) => setParentDirectory(event.target.value)}
                 autoComplete="off"
               />
               <Button type="button" variant="outline" disabled={busy} onClick={() => void chooseTargetPath()}>
                 选择文件夹
               </Button>
             </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="git-clone-directory-name">仓库目录名</Label>
+            <Input
+              id="git-clone-directory-name"
+              value={directoryName}
+              onChange={(event) => {
+                setDirectoryNameTouched(true)
+                setDirectoryName(event.target.value)
+              }}
+              autoComplete="off"
+            />
+            {finalPath ? <p className="break-all text-xs text-muted-foreground">{finalPath}</p> : null}
           </div>
           {error ? (
             <div className="flex flex-col gap-2">
@@ -210,7 +252,11 @@ export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit
                   size="sm"
                   className="self-start"
                   onClick={() => onFailureAction?.({
-                    cloneInput: { remoteUrl: remoteUrl.trim(), targetPath: targetPath.trim(), name },
+                    cloneInput: {
+                      remoteUrl: remoteUrl.trim(),
+                      parentDirectory: parentDirectory.trim(),
+                      directoryName: directoryName.trim(),
+                    },
                     failure,
                   })}
                 >
@@ -220,11 +266,11 @@ export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit
             </div>
           ) : null}
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
-              取消
+            <Button type="button" variant="outline" onClick={() => busy ? onCancel?.() : onOpenChange(false)}>
+              {busy ? "取消克隆" : "取消"}
             </Button>
             <Button type="submit" disabled={busy}>
-              {busy ? "克隆中" : "开始克隆"}
+              {busy ? (phase === "queued" ? "等待中" : "克隆中") : "开始克隆"}
             </Button>
           </DialogFooter>
         </form>

@@ -13,6 +13,7 @@ import type {
 
 type GitAccessHostInput = {
   readonly host: string
+  readonly port?: number | null
   readonly protocol: SynapseGitProtocol
   readonly provider: SynapseGitProvider
 }
@@ -59,8 +60,13 @@ export function useGitAccess() {
     options: GitAccessMutationOptions,
   ): readonly GitAccessHostInput[] => {
     if (options.hosts) return options.hosts
-    const currentHost = access?.hosts.find((host) => host.host === input.host && host.protocol === "https")
-    return [{ host: input.host, protocol: "https", provider: currentHost?.provider ?? "generic" }]
+    const port = input.port ?? null
+    const currentHost = access?.hosts.find((host) => (
+      host.host === input.host
+      && host.port === port
+      && host.protocol === input.protocol
+    ))
+    return [{ host: input.host, port, protocol: input.protocol, provider: currentHost?.provider ?? "generic" }]
   }, [access?.hosts])
 
   const configureCredentialHelper = useCallback(async (

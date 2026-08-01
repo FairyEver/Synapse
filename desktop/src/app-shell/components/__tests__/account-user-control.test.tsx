@@ -17,7 +17,6 @@ function createAuthenticatedState(): Extract<SynapseAccountState, { status: "aut
         status: "active",
         handle: "ada",
       },
-      teams: [],
       syncedAt: "2026-06-01T00:00:00.000Z",
     },
   }
@@ -42,7 +41,6 @@ const accountState = vi.hoisted((): { current: SynapseAccountState } => ({
         status: "active",
         handle: "ada",
       },
-      teams: [],
       syncedAt: "2026-06-01T00:00:00.000Z",
     },
   },
@@ -149,7 +147,6 @@ describe("AccountUserControl", () => {
           status: "active",
           handle: "",
         },
-        teams: [],
         syncedAt: "2026-06-01T00:00:00.000Z",
       },
     }

@@ -1,10 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { DriveConsoleItemPage } from '@/features/drive-console/drive-console-page'
 import { navigateDriveBrowserUrl } from '@/features/drive-browser/shared/drive-navigation'
-import { requireDashboardUser } from '@/lib/dashboard-route-guards'
 
 export const Route = createFileRoute('/_authenticated/drive/items/$browserItemId')({
-  beforeLoad: requireDashboardUser,
   validateSearch: validateDriveBrowserSearch,
   component: RouteComponent,
 })

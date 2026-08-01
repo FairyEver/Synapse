@@ -11,6 +11,10 @@ import { runGitTextCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage } from "./git-error-utils"
 import { pendingPushesService } from "./pending-pushes-service"
+import {
+  commitRepositoryPaths,
+  pullRepositoryWithSafeRebase,
+} from "./repository-git-mutation-service"
 import { repositoryStore } from "./repository-store"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import {
@@ -20,8 +24,6 @@ import {
 } from "./user-profile-cache"
 
 const USER_PROFILE_SCHEMA_VERSION = 1 as const
-const SYNAPSE_BOT_NAME = "Synapse Bot"
-const SYNAPSE_BOT_EMAIL = "bot@synapse.local"
 import { isFileNotFoundError } from "./fs-utils"
 
 const logger = createMainLogger("service.user-profile")
@@ -55,57 +57,18 @@ function runProfileGitCommand(
   })
 }
 
-async function ensureBotIdentity(gitRootPath: string): Promise<void> {
-  await runProfileGitCommand(
-    gitRootPath,
-    ["config", "--local", "user.name", SYNAPSE_BOT_NAME],
-    "无法初始化 Synapse 提交身份。",
-  )
-  await runProfileGitCommand(
-    gitRootPath,
-    ["config", "--local", "user.email", SYNAPSE_BOT_EMAIL],
-    "无法初始化 Synapse 提交身份。",
-  )
-}
-
-async function pullWithRebase(repository: SynapseRepositoryConfig): Promise<void> {
-  await runProfileGitCommand(
-    repository.localPath,
-    ["pull", "--rebase"],
-    "同步仓库失败，请检查网络或仓库状态后重试。",
-  )
-}
-
-async function stageProfilePath(
-  gitRootPath: string,
-  repository: SynapseRepositoryConfig,
-  userId: string,
-): Promise<void> {
-  const relativePath = path.relative(
-    gitRootPath,
-    resolveUserProfilePath(repository.localPath, userId),
-  )
-  const normalizedRelativePath = relativePath.split(path.sep).join("/")
-
-  await runProfileGitCommand(
-    gitRootPath,
-    ["add", "--", normalizedRelativePath],
-    "暂存用户资料失败。",
-  )
-}
-
 async function commitProfileChange(
   gitRootPath: string,
+  profilePath: string,
   userId: string,
   action: "join" | "rename",
 ): Promise<string> {
-  await runProfileGitCommand(
+  return commitRepositoryPaths({
+    fallbackMessage: "提交用户资料失败。",
+    filePaths: [profilePath],
     gitRootPath,
-    ["commit", "-m", `[synapse] user ${userId.slice(0, 8)} ${action}`],
-    "提交用户资料失败。",
-  )
-
-  return runProfileGitCommand(gitRootPath, ["rev-parse", "HEAD"], "读取最新提交失败。")
+    message: `[synapse] user ${userId.slice(0, 8)} ${action}`,
+  })
 }
 
 async function pushRepository(repository: SynapseRepositoryConfig): Promise<void> {
@@ -282,11 +245,9 @@ class UserProfileService {
 
     if (repositoryState.isGitRepository) {
       if (existingProfile) {
-        await pullWithRebase(repository)
+        await pullRepositoryWithSafeRebase(repository)
         rollbackProfile = await readProfileFile(repository, userId)
       }
-
-      await ensureBotIdentity(repositoryState.gitRootPath ?? repository.localPath)
     }
 
     const profile = createUserProfile(userId, nextDisplayName)
@@ -309,8 +270,7 @@ class UserProfileService {
 
       let commitHash: string
       try {
-        await stageProfilePath(gitRootPath, repository, userId)
-        commitHash = await commitProfileChange(gitRootPath, userId, action)
+        commitHash = await commitProfileChange(gitRootPath, profilePath, userId, action)
       } catch (error) {
         await restoreProfileFile(profilePath, rollbackProfile).catch((rollbackError: unknown) => {
           logger.warn("Failed to roll back profile after git commit failure.", {

@@ -139,17 +139,17 @@ describe("UserAuthController", () => {
     expect(auth.resetPassword).not.toHaveBeenCalled()
   })
 
-  it("rejects register requests with invitation tokens", () => {
+  it("rejects unknown register request fields", () => {
     const auth = {
       register: vi.fn(),
     }
     const controller = new UserAuthController(auth as unknown as UserAuthService)
 
     expect(() => controller.register({
-      inviteToken: "invite-token",
       email: "user@example.com",
       handle: "liyang",
       password: "password",
+      unexpected: true,
     }, { ip: "203.0.113.21" } as never))
       .toThrow(BadRequestException)
     expect(auth.register).not.toHaveBeenCalled()

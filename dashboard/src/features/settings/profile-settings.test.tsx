@@ -114,7 +114,6 @@ function renderProfileSettings() {
   useAuthStore.getState().auth.setUser({
     email: 'u@example.test',
     handle: 'liyang',
-    role: 'user',
     sessionId: 'session-1',
   })
 

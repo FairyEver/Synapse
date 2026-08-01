@@ -7,43 +7,29 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum AdminStatus {
-  active
-  disabled
-}
-
 enum UserStatus {
   active
   disabled
 }
 
-enum TeamRole {
-  owner
-  member
+enum AuditActorType {
+  user
+  platform_admin
+  system
+  unknown
 }
 
-enum InvitationType {
-  team_join
-}
-
-model AdminUser {
-  id                       String                 @id @default(cuid())
-  email                    String                 @unique
-  passwordHash             String
-  status                   AdminStatus            @default(active)
-  invitations              Invitation[]
-  grantedModulePermissions UserModulePermission[]
-  createdAt                DateTime               @default(now())
-  updatedAt                DateTime               @updatedAt
-}
-
-model DashboardRevokedToken {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique
-  expiresAt DateTime
-  revokedAt DateTime @default(now())
+model AdminSession {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  ipAddress  String
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
 
   @@index([expiresAt])
+  @@index([revokedAt])
 }
 
 model User {
@@ -54,13 +40,9 @@ model User {
   passwordHash                 String
   passwordChangedAt            DateTime?
   status                       UserStatus                    @default(active)
-  memberships                  TeamMembership[]
-  createdTeams                 Team[]                        @relation("TeamCreator")
   sessions                     UserSession[]
   desktopLoginCodes            DesktopLoginCode[]
   passwordResetTokens          UserPasswordResetToken[]
-  acceptedInvitations          Invitation[]                  @relation("AcceptedInvitations")
-  createdInvitations           Invitation[]                  @relation("UserCreatedInvitations")
   modulePermissions            UserModulePermission[]
   webhooks                     UserWebhook[]
   devices                      UserDevice[]
@@ -119,65 +101,16 @@ model AgentPersonaPreference {
   @@index([userId, updatedAt])
 }
 
-model Team {
-  id              String           @id @default(cuid())
-  name            String
-  createdByUserId String           @unique
-  createdByUser   User             @relation("TeamCreator", fields: [createdByUserId], references: [id])
-  memberships     TeamMembership[]
-  invitations     Invitation[]
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-}
-
-model TeamMembership {
-  id        String   @id @default(cuid())
-  teamId    String
-  team      Team     @relation(fields: [teamId], references: [id])
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
-  role      TeamRole
-  createdAt DateTime @default(now())
-
-  @@unique([teamId, userId])
-  @@index([teamId])
-}
-
-model Invitation {
-  id               String         @id @default(cuid())
-  type             InvitationType
-  tokenHash        String         @unique
-  inviteUrl        String?
-  expiresAt        DateTime
-  usedAt           DateTime?
-  createdByAdminId String?
-  createdByAdmin   AdminUser?     @relation(fields: [createdByAdminId], references: [id])
-  createdByUserId  String?
-  createdByUser    User?          @relation("UserCreatedInvitations", fields: [createdByUserId], references: [id])
-  teamId           String?
-  team             Team?          @relation(fields: [teamId], references: [id])
-  acceptedByUserId String?
-  acceptedByUser   User?          @relation("AcceptedInvitations", fields: [acceptedByUserId], references: [id])
-  createdAt        DateTime       @default(now())
-
-  @@index([type, createdAt])
-  @@index([expiresAt])
-  @@index([teamId])
-}
-
 model UserModulePermission {
-  id               String     @id @default(cuid())
-  userId           String
-  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  permissionKey    String
-  grantedByAdminId String?
-  grantedByAdmin   AdminUser? @relation(fields: [grantedByAdminId], references: [id])
-  grantedAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissionKey String
+  grantedAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@unique([userId, permissionKey])
   @@index([permissionKey])
-  @@index([grantedByAdminId])
 }
 
 model UserSession {
@@ -687,18 +620,23 @@ model PublicAssetRevision {
 }
 
 model AuditLog {
-  id         String   @id @default(cuid())
-  adminEmail String
-  action     String
-  targetType String
-  targetId   String
-  detail     Json?
-  ipAddress  String
-  createdAt  DateTime @default(now())
+  id             String         @id @default(cuid())
+  actorType      AuditActorType
+  actorId        String?
+  actorLabel     String
+  adminSessionId String?
+  action         String
+  targetType     String
+  targetId       String
+  detail         Json?
+  ipAddress      String
+  createdAt      DateTime       @default(now())
 
   @@index([action, createdAt])
   @@index([targetType, targetId])
   @@index([createdAt])
+  @@index([actorType, createdAt])
+  @@index([adminSessionId, createdAt])
 }
 
 model ProblemFeedback {

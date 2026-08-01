@@ -12,6 +12,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   DataTableColumnHeader,
+  DEFAULT_DASHBOARD_PAGE_SIZE,
   ServerDataTable,
   getServerTableSortQuery,
 } from '@/components/data-table'
@@ -40,7 +41,9 @@ export default function SkillRepositoryAdminPage({
 }: SkillRepositoryAdminPageProps) {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(readPositiveNumber(search.page, 1))
-  const [pageSize, setPageSize] = useState(readPositiveNumber(search.pageSize, 20))
+  const [pageSize, setPageSize] = useState(
+    readPositiveNumber(search.pageSize, DEFAULT_DASHBOARD_PAGE_SIZE)
+  )
   const [status, setStatus] = useState<SkillRepositoryStatus>(
     search.status === 'active' || search.status === 'removed'
       ? search.status
@@ -94,14 +97,18 @@ export default function SkillRepositoryAdminPage({
             <div className='truncate text-muted-foreground'>{row.original.name}</div>
           </div>
         ),
+        meta: { className: 'max-w-0 w-1/3' },
       },
       {
         id: 'owner',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='作者' />
         ),
-        cell: ({ row }) => getOwnerLabel(row.original.owner),
+        cell: ({ row }) => (
+          <div className='truncate'>{getOwnerLabel(row.original.owner)}</div>
+        ),
         enableSorting: false,
+        meta: { className: 'max-w-0 w-1/4' },
       },
       {
         accessorKey: 'visibility',
@@ -113,6 +120,7 @@ export default function SkillRepositoryAdminPage({
             {row.original.visibility === 'public' ? '公开' : '私有'}
           </Badge>
         ),
+        meta: { className: 'w-24' },
       },
       {
         accessorKey: 'status',
@@ -124,13 +132,17 @@ export default function SkillRepositoryAdminPage({
             {row.original.status === 'removed' ? '已移除' : '正常'}
           </Badge>
         ),
+        meta: { className: 'w-24' },
       },
       {
         accessorKey: 'updatedAt',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='更新时间' />
         ),
-        cell: ({ row }) => <RelativeTime value={row.original.updatedAt} />,
+        cell: ({ row }) => (
+          <RelativeTime className='tabular-nums' value={row.original.updatedAt} />
+        ),
+        meta: { className: 'w-32' },
       },
       {
         id: 'actions',
@@ -168,6 +180,7 @@ export default function SkillRepositoryAdminPage({
           </div>
         ),
         meta: {
+          className: 'w-40',
           thClassName: 'text-right',
           tdClassName: 'text-right',
         },
@@ -200,7 +213,7 @@ export default function SkillRepositoryAdminPage({
           toolbar={
             <div className='flex flex-wrap items-center gap-2'>
               <Input
-                placeholder='搜索'
+                placeholder='按仓库筛选...'
                 value={query}
                 onChange={(event) => {
                   setQuery(event.target.value)

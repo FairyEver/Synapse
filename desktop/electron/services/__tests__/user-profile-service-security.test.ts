@@ -11,7 +11,9 @@ import {
 
 const mocks = vi.hoisted(() => ({
   configLoad: vi.fn(),
+  commitRepositoryPaths: vi.fn(),
   getRepositoryState: vi.fn(),
+  pullRepositoryWithSafeRebase: vi.fn(),
   runGitTextCommand: vi.fn(),
   writeFileError: null as Error | null,
 }))
@@ -54,6 +56,11 @@ vi.mock("../repository-store", () => ({
 
 vi.mock("../git-command", () => ({
   runGitTextCommand: mocks.runGitTextCommand,
+}))
+
+vi.mock("../repository-git-mutation-service", () => ({
+  commitRepositoryPaths: mocks.commitRepositoryPaths,
+  pullRepositoryWithSafeRebase: mocks.pullRepositoryWithSafeRebase,
 }))
 
 import { userProfileService } from "../user-profile-service"
@@ -116,6 +123,8 @@ describe("UserProfileService security", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.writeFileError = null
+    mocks.commitRepositoryPaths.mockResolvedValue("commit-hash")
+    mocks.pullRepositoryWithSafeRebase.mockResolvedValue(undefined)
     mocks.runGitTextCommand.mockResolvedValue("")
     userProfileCache.clearAll()
   })
@@ -237,12 +246,7 @@ describe("UserProfileService security", () => {
       updatedAt: "2026-06-01T00:00:00.000Z",
     }, null, 2)}\n`, "utf8")
     mockRepository(repository, root)
-    mocks.runGitTextCommand.mockImplementation(async (input: { args: string[] }) => {
-      if (input.args[0] === "commit") {
-        throw new Error("commit rejected")
-      }
-      return ""
-    })
+    mocks.commitRepositoryPaths.mockRejectedValueOnce(new Error("commit rejected"))
 
     await expect(userProfileService.updateDisplayName(
       repository.uuid,
@@ -272,20 +276,15 @@ describe("UserProfileService security", () => {
       updatedAt: "2026-06-01T00:00:00.000Z",
     }, null, 2)}\n`, "utf8")
     mockRepository(repository, root)
-    mocks.runGitTextCommand.mockImplementation(async (input: { args: string[] }) => {
-      if (input.args[0] === "pull") {
-        await writeFile(profilePath, `${JSON.stringify({
-          schemaVersion: 1,
-          userId: testUserId,
-          displayName: "Remote Name",
-          updatedAt: "2026-06-02T00:00:00.000Z",
-        }, null, 2)}\n`, "utf8")
-      }
-      if (input.args[0] === "commit") {
-        throw new Error("commit rejected")
-      }
-      return ""
+    mocks.pullRepositoryWithSafeRebase.mockImplementationOnce(async () => {
+      await writeFile(profilePath, `${JSON.stringify({
+        schemaVersion: 1,
+        userId: testUserId,
+        displayName: "Remote Name",
+        updatedAt: "2026-06-02T00:00:00.000Z",
+      }, null, 2)}\n`, "utf8")
     })
+    mocks.commitRepositoryPaths.mockRejectedValueOnce(new Error("commit rejected"))
 
     await expect(userProfileService.updateDisplayName(
       repository.uuid,

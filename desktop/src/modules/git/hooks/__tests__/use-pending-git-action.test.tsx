@@ -48,9 +48,9 @@ describe("usePendingGitAction", () => {
       protocol: "https",
       provider: "github",
       input: {
-        name: "docs",
+        directoryName: "docs",
+        parentDirectory: "/work",
         remoteUrl: "https://github.com/acme/docs.git",
-        targetPath: "/work/docs",
       },
     }
 

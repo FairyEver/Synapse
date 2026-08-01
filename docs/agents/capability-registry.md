@@ -1,0 +1,101 @@
+# 能力注册清单
+
+本文件记录 Synapse 当前运行时代码的真实产品表面。声明文件、目录名、测试夹具或计划文档不能单独作为“已注册”的证据。
+
+## 注册表面与权威入口
+
+| 注册表面 | 决定内容 | 权威入口 |
+|---|---|---|
+| System App | 应用身份、独立窗口、启动器入口、条件可见性 | `desktop/src/modules/apps/types.ts`、`definitions.ts`、`registry.ts`、`visibility.ts`、`components/system-app-content.tsx` |
+| Dock | 默认固定、用户可固定、条件显示 | 各 App 的 `app-definition.ts` 中 `dock` 元数据、`desktop/src/modules/apps/dock.ts` |
+| Workflow Node | 节点类型、Renderer manifest、Main executor | `desktop/workflow-nodes/register.renderer.ts`、`register.main.ts` |
+| Automation Action | 动作类型、Renderer 配置、Main executor | `desktop/src/action-runtime/builtin-actions.ts`、`desktop/electron/action-runtime/builtin-actions.ts` |
+| MCP Capability / Tool | capability catalog、`tools/list`、tool 到 action 映射 | `desktop/synapse-capabilities/shared/registry.ts` 及各 domain registry |
+| Deep Link | `synapse://app/<app-id>/<action>` | `desktop/app-capabilities/manifest-registry.ts`、`desktop/electron/bootstrap/app-deep-link.ts` |
+
+## `desktop/app-capabilities` 产品表面
+
+“应用页=否”表示不存在 System App 身份、启动器、Dock 或独立应用窗口。数字为注册数量，`—` 表示没有该表面。
+
+| 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
+|---|---:|---:|---:|---:|---:|---:|
+| Agent Personas | 是 | 否 | — | — | — | — |
+| Clipboard | 否 | 否 | 2 | — | — | — |
+| Document Template | 否 | 否 | 1 | — | 1 | — |
+| File Opener | 否 | 否 | 1 | — | 1 | `open` |
+| HTML Generator | 否 | 否 | 2 | — | 2 | — |
+| JavaScript Run | 否 | 否 | 1 | 1 | — | — |
+| JSON Repair | 否 | 否 | 1 | — | 1 | — |
+| Node.js Run | 否 | 否 | 1 | 1 | — | — |
+| Problem Feedback | 否 | 否 | — | — | 1 | — |
+| Quick Input | 是 | 否 | — | — | — | — |
+| Rule Installer | 否 | 否 | — | — | — | — |
+| Secrets | 是 | 否 | — | — | 6 | — |
+| Skill Installer | 否 | 否 | — | — | — | — |
+| Skill Uninstaller | 否 | 否 | — | — | — | — |
+| Sound Notifier | 否 | 否 | — | — | 1 | — |
+| Synapse Skill | 是 | 否 | — | — | — | — |
+| System Notifier | 否 | 否 | 1 | — | 1 | — |
+| Terminal | 是 | 是 | — | — | 41 | — |
+| Text Extractor | 否 | 否 | 1 | — | 2 | — |
+| Text File Writer | 否 | 否 | 1 | — | 1 | — |
+| Script Runtime | 否 | 否 | — | — | — | — |
+| Screenshot | 否 | 否 | — | — | — | — |
+
+固定例外：
+
+- JavaScript Run、Node.js Run 是能力包，不是隐藏的 System App；它们只注册 Workflow Node 和 Automation Action。它们的 capability ID 进入 catalog，但不映射为 MCP tool。
+- Script Runtime 是两者共用的内部执行基础设施，不注册用户产品表面。
+- Screenshot 当前是空目录占位。
+- Workflow/Automation 的 `discovery: "visible" | "hidden"` 只控制创建选择器；`hidden` 不注销类型，已有配置仍可加载和执行。
+- System App 的 `visibility` 控制启动器和 Dock 条件入口。未注册 System App 的能力包不得进入 `SYSTEM_APP_IDS`、definitions/registry、内容宿主或应用窗口 IPC。
+
+## 普通业务模块 System App
+
+| System App | 应用页 | 默认 Dock | 关联 MCP domain |
+|---|---:|---:|---|
+| Agent | 是 | 是 | — |
+| Workflow | 条件显示 | 条件显示 | `workflow` |
+| Drive | 是 | 是 | `drive` |
+| Automation | 是 | 是 | `automation` |
+| Launcher | 自身即应用页 | 是且不可移除 | — |
+| Settings | 是 | 是 | `repository` |
+| Resource Repository | 是 | 否 | `content`、`skill_repository` |
+| Git | 是 | 否 | — |
+| Database | 是 | 否 | `database` |
+| Editor Scan | 是 | 否 | — |
+| Usage Monitor | 是 | 否 | — |
+| Model Price | 是 | 否 | `model_price` |
+
+默认 Dock 从 app definition 的 `dock.pinnedByDefault` 与 `dock.order` 派生，顺序为：`agent`、`drive`、`automation`、`workflow`、`terminal`、`settings`、`launcher`。Workflow 由统一 System App `visibility` 与 `workflowEntryVisible` 控制。
+
+Git 仍是普通 System App，不新增 MCP domain。其 clone、仓库注册、提交、同步、SSH 主机密钥、操作状态与取消能力只通过窄类型化 Git IPC bridge 暴露；这不改变上表的 capability 或 MCP 数量。
+
+## MCP capability domain
+
+| Domain | Capability 数 | MCP Tool 数 |
+|---|---:|---:|
+| `app` | 62 | 58 |
+| `database` | 30 | 30 |
+| `model_price` | 11 | 11 |
+| `repository` | 1 | 1 |
+| `skill_repository` | 9 | 9 |
+| `automation` | 14 | 14 |
+| `workflow` | 19 | 19 |
+| `content` | 16 | 16 |
+| `drive` | 48 | 48 |
+| 合计 | 210 | 206 |
+
+`app` domain 中不映射 MCP tool 的四个 capability 固定为：
+
+- `app.javascript.script.execute`
+- `app.nodejs.script.execute`
+- `app.clipboard.text.write`
+- `app.clipboard.text.read`
+
+## 同步硬规则
+
+- 新增、删除、重命名或改变任意 System App、默认 Dock、Workflow Node、Automation Action、MCP capability/tool、Deep Link 或 `desktop/app-capabilities/<id>` 能力包时，同一次改动必须更新本文件的表格、数量、例外和默认 Dock 顺序。
+- 修改启动器可见性、Workflow 条件入口、`systemApp`、`discovery`、`openable`、`pinnableToDock`、`defaultDock` 或任何改变产品表面的过滤逻辑时，也必须同步。
+- 即使改动不在 `desktop/app-capabilities/`，只要影响普通 System App 或 MCP domain，就必须更新本文件。
+- 只修改能力内部实现且注册表面不变时可以不改数字，但必须主动核对本清单仍与运行时装配一致。

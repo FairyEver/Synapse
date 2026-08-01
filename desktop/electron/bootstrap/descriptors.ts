@@ -27,7 +27,7 @@ import { app, clipboard, Notification, safeStorage, shell } from "electron"
 import os from "node:os"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
-import { readFile, statfs } from "node:fs/promises"
+import { readFile, realpath, stat, statfs } from "node:fs/promises"
 
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
@@ -207,6 +207,7 @@ import { createGitCloneService, type GitCloneService } from "../services/git-cli
 import { createGitCommitService, type GitCommitService } from "../services/git-client/git-commit-service"
 import { createGitEnvironmentService, type GitEnvironmentService } from "../services/git-client/git-environment-service"
 import { createGitHistoryService, type GitHistoryService } from "../services/git-client/git-history-service"
+import { createGitOperationCoordinator, type GitOperationCoordinator } from "../services/git-client/git-operation-coordinator"
 import { createGitRepositoryRegistry, type GitRepositoryRegistry } from "../services/git-client/git-repository-registry"
 import { createGitStateDiagnosticsReader, createGitStatusService, type GitStatusService } from "../services/git-client/git-status-service"
 import { createGitSyncService, type GitSyncService } from "../services/git-client/git-sync-service"
@@ -1534,12 +1535,7 @@ export const repoMaintenanceDescriptor: ServiceDescriptor<typeof repositoryMaint
         const config = await configStore.load()
         for (const repository of config.repositories) {
           try {
-            const release = await repositoryLockManager.acquire(repository.uuid, "scheduled-maintenance")
-            try {
-              await repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository)
-            } finally {
-              release()
-            }
+            await repositoryMaintenanceService.runScheduledMaintenanceIfDue(repository)
           } catch (error) {
             ctx.logger.warn("Scheduled repository maintenance failed.", {
               error,
@@ -2171,14 +2167,63 @@ export const gitCommandRunnerDescriptor: ServiceDescriptor<GitClientCommandRunne
   },
 }
 
+export const gitOperationCoordinatorDescriptor: ServiceDescriptor<GitOperationCoordinator> = {
+  id: "git.operation-coordinator",
+  criticality: "degraded",
+  dependsOn: ["core.event-bus"],
+  create(ctx) {
+    const eventBus = ctx.registry.get<EventBus>("core.event-bus")
+    return createGitOperationCoordinator({
+      acquireLock: (key, operation) => repositoryLockManager.acquire(key, operation),
+      onStateChanged: (state) => eventBus.emit({
+        domain: "git",
+        type: "operation.changed",
+        payload: {
+          operationId: state.operationId,
+          operation: state.operation,
+          repositoryId: state.repositoryId,
+          status: state.status,
+          queuePosition: state.queuePosition,
+        },
+        timestamp: new Date().toISOString(),
+        ...(state.repositoryId ? { scope: { repositoryId: state.repositoryId } } : {}),
+      }),
+    })
+  },
+}
+
 export const gitRepositoryRegistryDescriptor: ServiceDescriptor<GitRepositoryRegistry> = {
   id: "git.repository-registry",
   criticality: "degraded",
+  dependsOn: ["git.command-runner"],
   create(ctx) {
+    const commandRunner = ctx.registry.get<GitClientCommandRunner>("git.command-runner")
     return createGitRepositoryRegistry({
       logger: ctx.logger.child("git.registry"),
       userDataPath: app.getPath("userData"),
-      trashItem: (targetPath) => shell.trashItem(targetPath),
+      resolveGitRoot: async (localPath) => {
+        let selectedPath: string
+        try {
+          selectedPath = await realpath(localPath)
+          if (!(await stat(selectedPath)).isDirectory()) throw new Error("not-directory")
+        } catch {
+          throw new Error("所选目录不可访问。")
+        }
+        try {
+          const result = await commandRunner.run({
+            args: ["rev-parse", "--show-toplevel"],
+            cwd: selectedPath,
+            fallbackMessage: "所选目录不是 Git 仓库。",
+            operation: "git.repository.resolveRoot",
+            repoPath: selectedPath,
+          })
+          const rootPath = result.stdout.trim()
+          if (!rootPath) throw new Error("missing-root")
+          return await realpath(rootPath)
+        } catch {
+          throw new Error("所选目录不是 Git 仓库。")
+        }
+      },
     })
   },
 }

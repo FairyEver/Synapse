@@ -104,7 +104,7 @@ describe("ProviderService", () => {
     expect(resolveProviderPackageTargetId("packy", new Set(["deepseek"]))).toBe("packy")
   })
 
-  it("exposes local ClaudeCode/Synapse as the default read-only provider", async () => {
+  it("exposes local CC/Synapse as the default read-only provider", async () => {
     const { service } = makeProviderService({
       localClaudeSettingsPath: "/Users/test/.claude/settings.json",
       readTextFile: async () => JSON.stringify({
@@ -120,7 +120,7 @@ describe("ProviderService", () => {
     await expect(service.listProviders()).resolves.toEqual([
       expect.objectContaining({
         id: LOCAL_CLAUDE_CODE_PROVIDER_ID,
-        name: "ClaudeCode/Synapse",
+        name: "CC/Synapse",
         source: "local",
         readonly: true,
         active: true,
@@ -237,7 +237,7 @@ describe("ProviderService", () => {
     await expect(service.getActiveProvider()).resolves.toMatchObject({ id: "anthropic" })
   })
 
-  it("rejects mutating the built-in local ClaudeCode/Synapse provider", async () => {
+  it("rejects mutating the built-in local CC/Synapse provider", async () => {
     const { service } = makeProviderService()
 
     await expect(service.createProvider({

@@ -1,6 +1,5 @@
 import { Link, Outlet, useLocation, type LinkProps } from '@tanstack/react-router'
 import { UserCog, type LucideIcon } from 'lucide-react'
-import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
 import { buttonVariants } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -22,8 +21,7 @@ const userSettingsNavItems: SettingsNavItem[] = [
 ]
 
 export default function SettingsPage() {
-  const role = useAuthStore((state) => state.auth.user?.role)
-  const navItems = role === 'user' ? userSettingsNavItems : []
+  const navItems = userSettingsNavItems
 
   return (
     <>

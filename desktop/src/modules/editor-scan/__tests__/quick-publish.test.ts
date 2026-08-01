@@ -212,9 +212,9 @@ describe("quick publish payload builders", () => {
     })).toBe("来自 Codex · 项目 Rule")
 
     expect(formatQuickPublishSourceLabel({
-      editorLabel: "ClaudeCode/Synapse",
+      editorLabel: "CC/Synapse",
       scope: "global",
       type: "skill",
-    })).toBe("来自 ClaudeCode/Synapse · 全局 Skill")
+    })).toBe("来自 CC/Synapse · 全局 Skill")
   })
 })

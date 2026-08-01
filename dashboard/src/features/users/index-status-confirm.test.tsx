@@ -62,7 +62,6 @@ describe('UsersPage status confirmation', () => {
         handle: 'ada',
         adminNote: null,
         status: 'active',
-        memberships: [],
         createdAt: '2026-06-14T00:00:00.000Z',
         updatedAt: '2026-06-14T00:00:00.000Z',
       }],
@@ -76,7 +75,6 @@ describe('UsersPage status confirmation', () => {
       handle: 'ada',
       adminNote: null,
       status: 'disabled',
-      memberships: [],
       createdAt: '2026-06-14T00:00:00.000Z',
       updatedAt: '2026-06-14T00:00:00.000Z',
     })
@@ -108,7 +106,6 @@ describe('UsersPage status confirmation', () => {
         handle: 'ada',
         adminNote: '付费客户',
         status: 'active',
-        memberships: [],
         createdAt: '2026-06-14T00:00:00.000Z',
         updatedAt: '2026-06-14T00:00:00.000Z',
       }],
@@ -122,7 +119,6 @@ describe('UsersPage status confirmation', () => {
       handle: 'ada',
       adminNote: '内部测试账号',
       status: 'active',
-      memberships: [],
       createdAt: '2026-06-14T00:00:00.000Z',
       updatedAt: '2026-06-14T00:00:00.000Z',
     })

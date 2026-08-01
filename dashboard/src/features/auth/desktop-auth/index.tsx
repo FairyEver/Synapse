@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate } from '@tanstack/react-router'
 import { Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
 import {
   DESKTOP_CLIENT_ID,
   DESKTOP_PKCE_CHALLENGE_METHOD,
@@ -92,9 +91,7 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
     status: 'idle',
   })
   const [retryKey, setRetryKey] = useState(0)
-  const [isSwitchingAccount, setIsSwitchingAccount] = useState(false)
   const issuedKeyRef = useRef('')
-  const unsupportedAccountRef = useRef('')
   const protocolFallbackCleanupRef = useRef<(() => void) | null>(null)
   const input = useMemo(() => validateDesktopAuthSearch(search), [search])
   const invalidCallbackUrl = useMemo(
@@ -149,7 +146,6 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
 
   useEffect(() => {
     if (!input || !auth.isAuthenticated || !auth.user) return
-    if (auth.user.role !== 'user') return
 
     const issueKey = `${auth.user.sessionId}:${input.state}:${input.codeChallenge}:${retryKey}`
     if (issuedKeyRef.current === issueKey) return
@@ -184,32 +180,6 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
     window.location.href = invalidCallbackUrl
   }, [input, invalidCallbackUrl])
 
-  useEffect(() => {
-    if (!input || !auth.isAuthenticated || !auth.user) return
-    if (auth.user.role === 'user') return
-    const callbackUrl = buildDesktopAuthErrorCallbackUrl(
-      input.state,
-      'unsupported_account'
-    )
-    const marker = `${auth.user.sessionId}:${callbackUrl}`
-    if (unsupportedAccountRef.current === marker) return
-    unsupportedAccountRef.current = marker
-    window.location.href = callbackUrl
-  }, [auth.isAuthenticated, auth.user, input])
-
-  async function switchAccount() {
-    setIsSwitchingAccount(true)
-    try {
-      await dashboardApi.logout()
-      auth.reset()
-      await navigate({ to: '/sign-in', search: { redirect }, replace: true })
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '切换失败'
-      toast.error(message)
-      setIsSwitchingAccount(false)
-    }
-  }
-
   if (!input) {
     return (
       <AuthLayout>
@@ -222,22 +192,6 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
 
   if (!auth.isAuthenticated) {
     return <Navigate to='/sign-in' search={{ redirect }} replace />
-  }
-
-  if (auth.user?.role !== 'user') {
-    return (
-      <AuthLayout>
-        <DesktopAuthCard title='账号不支持'>
-          <div className='flex flex-col gap-4'>
-            <p className='text-sm text-muted-foreground'>请切换账号后继续登录。</p>
-            <Button disabled={isSwitchingAccount} onClick={switchAccount}>
-              {isSwitchingAccount ? <Loader2 className='animate-spin' /> : null}
-              切换账号
-            </Button>
-          </div>
-        </DesktopAuthCard>
-      </AuthLayout>
-    )
   }
 
   return (

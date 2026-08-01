@@ -32,7 +32,7 @@ import type { AutomationChangedEvent } from "../src/types/automation"
 import type { WorkflowEvent } from "../src/types/workflow"
 import type { SynapseCheatCodeStateChangedEvent } from "../src/types/cheat-code"
 import type { SynapseKnowledgeBaseStorageMigrationProgress } from "../src/types/knowledge-base"
-import type { SynapseGitUserFacingFailure } from "../src/types/git"
+import type { SynapseGitOperationState, SynapseGitUserFacingFailure } from "../src/types/git"
 import type {
   SynapseTerminalDataEvent,
   SynapseTerminalDomainChangedEvent,
@@ -583,12 +583,16 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS.git.generateSshKey)(input),
     testSshConnection: (input) =>
       invoke(IPC_CHANNELS.git.testSshConnection)(input),
+    scanSshHostKey: (input) =>
+      invoke(IPC_CHANNELS.git.scanSshHostKey)(input),
+    trustSshHostKey: (input) =>
+      invoke(IPC_CHANNELS.git.trustSshHostKey)(input),
     listRepositories: invoke(IPC_CHANNELS.git.listRepositories),
     listRepositorySummaries: invoke(IPC_CHANNELS.git.listRepositorySummaries),
     addLocalRepository: (input) =>
       invoke(IPC_CHANNELS.git.addLocalRepository)(input),
-    removeRepository: (input) =>
-      invoke(IPC_CHANNELS.git.removeRepository)(input),
+    removeRepository: (repositoryId) =>
+      invoke(IPC_CHANNELS.git.removeRepository)({ repositoryId }),
     cloneRepository: (input) =>
       invoke(IPC_CHANNELS.git.cloneRepository)(input),
     getSnapshot: (repositoryId) =>
@@ -597,20 +601,29 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS.git.getDiff)(input),
     commit: (input) =>
       invoke(IPC_CHANNELS.git.commit)(input),
-    fetch: (repositoryId) =>
-      invoke(IPC_CHANNELS.git.fetch)({ repositoryId }),
-    pull: (repositoryId) =>
-      invoke(IPC_CHANNELS.git.pull)({ repositoryId }),
-    push: (repositoryId) =>
-      invoke(IPC_CHANNELS.git.push)({ repositoryId }),
-    sync: (repositoryId) =>
-      invoke(IPC_CHANNELS.git.sync)({ repositoryId }),
+    fetch: (repositoryId, operationId) =>
+      invoke(IPC_CHANNELS.git.fetch)({ repositoryId, operationId }),
+    pull: (repositoryId, operationId) =>
+      invoke(IPC_CHANNELS.git.pull)({ repositoryId, operationId }),
+    push: (repositoryId, remoteName, operationId) =>
+      invoke(IPC_CHANNELS.git.push)({ repositoryId, remoteName, operationId }),
+    listPushTargets: (repositoryId) =>
+      invoke(IPC_CHANNELS.git.listPushTargets)({ repositoryId }),
+    sync: (repositoryId, operationId) =>
+      invoke(IPC_CHANNELS.git.sync)({ repositoryId, operationId }),
     listBranches: (repositoryId) =>
       invoke(IPC_CHANNELS.git.listBranches)({ repositoryId }),
-    checkoutBranch: (repositoryId, branchName) =>
-      invoke(IPC_CHANNELS.git.checkoutBranch)({ branchName, repositoryId }),
-    createBranch: (repositoryId, branchName) =>
-      invoke(IPC_CHANNELS.git.createBranch)({ branchName, repositoryId }),
+    checkoutBranch: (repositoryId, branchName, operationId) =>
+      invoke(IPC_CHANNELS.git.checkoutBranch)({ branchName, operationId, repositoryId }),
+    createBranch: (repositoryId, branchName, operationId) =>
+      invoke(IPC_CHANNELS.git.createBranch)({ branchName, operationId, repositoryId }),
+    cancelOperation: (operationId) =>
+      invoke(IPC_CHANNELS.git.cancelOperation)({ operationId }),
+    onOperationChanged: createDomainEventPayloadSubscription<SynapseGitOperationState>(
+      subscribe,
+      "git",
+      "operation.changed",
+    ),
     listHistory: (input) =>
       invoke(IPC_CHANNELS.git.listHistory)(input),
     getCommit: (repositoryId, hash) =>

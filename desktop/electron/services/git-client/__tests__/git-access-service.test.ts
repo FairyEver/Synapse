@@ -26,7 +26,7 @@ function createSecurity(result: { readonly allowed: true } | { readonly allowed:
 describe("git access service", () => {
   it("checks credential helper, hosts, provider links, and SSH public key state", async () => {
     const publicKeyPath = path.join("/Users/writer", ".ssh", "id_ed25519.pub")
-    const run = vi.fn().mockResolvedValue({ stdout: "osxkeychain\n", stderr: "" })
+    const run = vi.fn().mockResolvedValue({ stdout: "file:/Users/writer/.gitconfig\tosxkeychain\n", stderr: "" })
     const service = createService({
       commandRunner: { run },
       pathExists: async (filePath) => filePath === publicKeyPath,
@@ -43,7 +43,7 @@ describe("git access service", () => {
       credentialHelper: {
         helper: "osxkeychain",
         safe: true,
-        source: "global",
+        source: "file:/Users/writer/.gitconfig",
       },
       hosts: [
         { host: "github.com", protocol: "https", provider: "github", lastFailure: null },
@@ -64,7 +64,7 @@ describe("git access service", () => {
     })
     expect(run).toHaveBeenCalledWith(expect.objectContaining({
       cwd: "/Users/writer",
-      args: ["config", "--global", "--get-all", "credential.helper"],
+      args: ["config", "--show-origin", "--get-all", "credential.helper"],
       logFailure: false,
       operation: "git.access.check",
     }))
@@ -92,29 +92,19 @@ describe("git access service", () => {
     })
   })
 
-  it("replaces existing credential helpers before configuring a safe helper", async () => {
+  it("does not replace an existing safe credential helper", async () => {
     const run = vi.fn()
       .mockResolvedValueOnce({ stdout: "osxkeychain\n", stderr: "" })
       .mockResolvedValue({ stdout: "", stderr: "" })
     const service = createService({ commandRunner: { run } })
 
-    await service.configureCredentialHelper({ helper: "manager-core" })
+    await expect(service.configureCredentialHelper({ helper: "manager-core" }))
+      .rejects.toThrow("当前安全凭据助手已配置")
 
-    expect(run).toHaveBeenNthCalledWith(1, expect.objectContaining({
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
       cwd: "/Users/writer",
-      args: ["config", "--global", "--get-all", "credential.helper"],
-      logFailure: false,
-      operation: "git.access.configureCredentialHelper",
-    }))
-    expect(run).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      cwd: "/Users/writer",
-      args: ["config", "--global", "--unset-all", "credential.helper"],
-      logFailure: false,
-      operation: "git.access.configureCredentialHelper",
-    }))
-    expect(run).toHaveBeenNthCalledWith(3, expect.objectContaining({
-      cwd: "/Users/writer",
-      args: ["config", "--global", "--add", "credential.helper", "manager-core"],
+      args: ["config", "--show-origin", "--get-all", "credential.helper"],
       logFailure: false,
       operation: "git.access.configureCredentialHelper",
     }))
@@ -130,7 +120,7 @@ describe("git access service", () => {
 
     expect(run).toHaveBeenCalledTimes(2)
     expect(run).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      args: ["config", "--global", "--get-all", "credential.helper"],
+      args: ["config", "--show-origin", "--get-all", "credential.helper"],
     }))
     expect(run).toHaveBeenLastCalledWith(expect.objectContaining({
       args: ["config", "--global", "--add", "credential.helper", "manager"],
@@ -151,33 +141,33 @@ describe("git access service", () => {
 
     expect(run).toHaveBeenCalledTimes(2)
     expect(run).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      args: ["config", "--global", "--get-all", "credential.helper"],
+      args: ["config", "--show-origin", "--get-all", "credential.helper"],
     }))
     expect(run).toHaveBeenLastCalledWith(expect.objectContaining({
       args: ["config", "--global", "--add", "credential.helper", "manager"],
     }))
   })
 
-  it("blocks helper configuration when old credential helper cleanup fails", async () => {
+  it("replaces a unique plaintext helper without unsetting the helper chain", async () => {
     const run = vi.fn()
-      .mockResolvedValueOnce({ stdout: "osxkeychain\n", stderr: "" })
-      .mockRejectedValueOnce(new Error("could not lock config file Permission denied"))
+      .mockResolvedValueOnce({ stdout: "file:/Users/writer/.gitconfig\tstore\n", stderr: "" })
       .mockResolvedValueOnce({ stdout: "", stderr: "" })
     const service = createService({ commandRunner: { run } })
 
-    await expect(service.configureCredentialHelper({ helper: "manager" })).rejects.toThrow("无法清理旧的凭证保存配置。")
+    await service.configureCredentialHelper({ helper: "manager" })
     expect(run).toHaveBeenCalledTimes(2)
+    expect(run).toHaveBeenLastCalledWith(expect.objectContaining({
+      args: ["config", "--global", "--replace-all", "credential.helper", "manager"],
+    }))
   })
 
-  it("blocks helper configuration when old credential helper cleanup reports invalid config", async () => {
+  it("does not modify custom or multi-helper chains", async () => {
     const run = vi.fn()
-      .mockResolvedValueOnce({ stdout: "osxkeychain\n", stderr: "" })
-      .mockRejectedValueOnce(new Error("fatal: invalid key: credential.helper"))
-      .mockResolvedValueOnce({ stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "file:/etc/gitconfig\tcustom-helper\nfile:/Users/writer/.gitconfig\tosxkeychain\n", stderr: "" })
     const service = createService({ commandRunner: { run } })
 
-    await expect(service.configureCredentialHelper({ helper: "manager" })).rejects.toThrow("无法清理旧的凭证保存配置。")
-    expect(run).toHaveBeenCalledTimes(2)
+    await expect(service.configureCredentialHelper({ helper: "manager" })).rejects.toThrow("由外部 Git 配置管理")
+    expect(run).toHaveBeenCalledTimes(1)
   })
 
   it.each([
@@ -193,14 +183,11 @@ describe("git access service", () => {
     expect(run).toHaveBeenCalledTimes(1)
   })
 
-  it("restores old credential helpers when adding the new helper fails", async () => {
+  it("restores a plaintext helper when replacing it fails", async () => {
     const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const run = vi.fn()
-      .mockResolvedValueOnce({ stdout: "osxkeychain\nmanager\n", stderr: "" })
-      .mockResolvedValueOnce({ stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "file:/Users/writer/.gitconfig\tstore\n", stderr: "" })
       .mockRejectedValueOnce(new Error("could not lock config file Permission denied"))
-      .mockResolvedValueOnce({ stdout: "", stderr: "" })
-      .mockResolvedValueOnce({ stdout: "", stderr: "" })
       .mockResolvedValueOnce({ stdout: "", stderr: "" })
     const service = createService({ commandRunner: { run }, logger })
 
@@ -208,26 +195,17 @@ describe("git access service", () => {
       .rejects.toThrow("无法配置新的凭证保存方式，已恢复旧配置。")
 
     expect(run).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      args: ["config", "--global", "--get-all", "credential.helper"],
+      args: ["config", "--show-origin", "--get-all", "credential.helper"],
     }))
     expect(run).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      args: ["config", "--global", "--unset-all", "credential.helper"],
+      args: ["config", "--global", "--replace-all", "credential.helper", "manager-core"],
     }))
     expect(run).toHaveBeenNthCalledWith(3, expect.objectContaining({
-      args: ["config", "--global", "--add", "credential.helper", "manager-core"],
-    }))
-    expect(run).toHaveBeenNthCalledWith(4, expect.objectContaining({
-      args: ["config", "--global", "--unset-all", "credential.helper"],
-    }))
-    expect(run).toHaveBeenNthCalledWith(5, expect.objectContaining({
-      args: ["config", "--global", "--add", "credential.helper", "osxkeychain"],
-    }))
-    expect(run).toHaveBeenNthCalledWith(6, expect.objectContaining({
-      args: ["config", "--global", "--add", "credential.helper", "manager"],
+      args: ["config", "--global", "--replace-all", "credential.helper", "store"],
     }))
     expect(logger.warn).toHaveBeenCalledWith(
-      "Restored previous Git credential helpers after configuration failure.",
-      { previousHelperCount: 2 },
+      "Restored previous Git credential helper after configuration failure.",
+      { previousHelperClassification: "plaintext" },
     )
   })
 
@@ -387,6 +365,62 @@ describe("git access service", () => {
     })
   })
 
+  it("keeps HTTP protocol and non-default ports in credential approve and reject", async () => {
+    const runGitCredential = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const service = createService({ runGitCredential })
+
+    await service.saveHttpsCredential({
+      host: "git.company.com",
+      password: "test-password-value",
+      port: 8080,
+      protocol: "http",
+      username: "writer",
+    })
+    await service.clearHttpsCredential({
+      host: "git.company.com",
+      port: 8080,
+      protocol: "http",
+      username: "writer",
+    })
+
+    expect(runGitCredential).toHaveBeenNthCalledWith(1, {
+      action: "approve",
+      cwd: "/Users/writer",
+      stdin: "protocol=http\nhost=git.company.com:8080\nusername=writer\npassword=test-password-value\n\n",
+    })
+    expect(runGitCredential).toHaveBeenNthCalledWith(2, {
+      action: "reject",
+      cwd: "/Users/writer",
+      stdin: "protocol=http\nhost=git.company.com:8080\nusername=writer\n\n",
+    })
+  })
+
+  it("formats IPv6 hosts consistently for credential approve and reject", async () => {
+    const runGitCredential = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const service = createService({ runGitCredential })
+
+    await service.saveHttpsCredential({
+      host: "2001:db8::1",
+      password: "test-password-value",
+      port: 8443,
+      protocol: "https",
+      username: "writer",
+    })
+    await service.clearHttpsCredential({
+      host: "2001:db8::1",
+      port: 8443,
+      protocol: "https",
+      username: "writer",
+    })
+
+    expect(runGitCredential).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      stdin: "protocol=https\nhost=[2001:db8::1]:8443\nusername=writer\npassword=test-password-value\n\n",
+    }))
+    expect(runGitCredential).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      stdin: "protocol=https\nhost=[2001:db8::1]:8443\nusername=writer\n\n",
+    }))
+  })
+
   it("does not clear HTTPS credentials without a safe credential helper", async () => {
     const runGitCredential = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
     const service = createService({
@@ -544,6 +578,83 @@ describe("git access service", () => {
     })
   })
 
+  it("scans an unknown SSH host on its configured port and returns SHA-256 fingerprints", async () => {
+    const runProcess = vi.fn().mockResolvedValue({
+      stdout: "[git.example.com]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
+      stderr: "",
+    })
+    const service = createService({ runProcess })
+
+    const candidate = await service.scanSshHostKey({ host: "git.example.com", port: 2222, username: "deploy" })
+
+    expect(candidate).toMatchObject({ host: "git.example.com", port: 2222, changed: false, trusted: false })
+    expect(candidate.fingerprints[0]).toMatch(/^SHA256:/)
+    expect(runProcess).toHaveBeenCalledWith(expect.objectContaining({
+      command: "ssh-keyscan",
+      args: ["-T", "10", "-p", "2222", "git.example.com"],
+    }))
+  })
+
+  it("atomically appends a confirmed SSH host key", async () => {
+    const keyLine = "git.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    const runProcess = vi.fn().mockResolvedValue({ stdout: `${keyLine}\n`, stderr: "" })
+    const writeFile = vi.fn().mockResolvedValue(undefined)
+    const renameFile = vi.fn().mockResolvedValue(undefined)
+    const service = createService({ runProcess, writeFile, renameFile, ensureDirectory: vi.fn().mockResolvedValue(undefined) })
+    const candidate = await service.scanSshHostKey({ host: "git.example.com" })
+
+    await service.trustSshHostKey({ host: candidate.host, port: candidate.port, fingerprints: candidate.fingerprints })
+
+    expect(writeFile).toHaveBeenCalledWith(expect.stringContaining("known_hosts.synapse-"), `${keyLine}\n`, "utf8")
+    expect(renameFile).toHaveBeenCalledWith(expect.stringContaining("known_hosts.synapse-"), "/Users/writer/.ssh/known_hosts")
+  })
+
+  it("refuses to trust a changed SSH host key", async () => {
+    const knownHostsPath = "/Users/writer/.ssh/known_hosts"
+    const runProcess = vi.fn().mockImplementation(async ({ command }: { readonly command: string }) => ({
+      stdout: command === "ssh-keygen"
+        ? "git.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\n"
+        : "git.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
+      stderr: "",
+    }))
+    const writeFile = vi.fn()
+    const service = createService({
+      runProcess,
+      writeFile,
+      pathExists: async (filePath) => filePath === knownHostsPath,
+      readFile: async () => "git.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\n",
+    })
+    const candidate = await service.scanSshHostKey({ host: "git.example.com" })
+
+    expect(candidate.changed).toBe(true)
+    await expect(service.trustSshHostKey({ host: candidate.host, fingerprints: candidate.fingerprints }))
+      .rejects.toThrow("请人工核验")
+    expect(writeFile).not.toHaveBeenCalled()
+  })
+
+  it("detects a changed SSH host key stored under a hashed known_hosts entry", async () => {
+    const knownHostsPath = "/Users/writer/.ssh/known_hosts"
+    const runProcess = vi.fn().mockImplementation(async ({ command }: { readonly command: string }) => ({
+      stdout: command === "ssh-keygen"
+        ? "|1|salt|hash ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\n"
+        : "git.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
+      stderr: "",
+    }))
+    const service = createService({
+      runProcess,
+      pathExists: async (filePath) => filePath === knownHostsPath,
+    })
+
+    await expect(service.scanSshHostKey({ host: "git.example.com" })).resolves.toMatchObject({
+      changed: true,
+      trusted: false,
+    })
+    expect(runProcess).toHaveBeenCalledWith(expect.objectContaining({
+      command: "ssh-keygen",
+      args: ["-F", "git.example.com", "-f", knownHostsPath],
+    }))
+  })
+
   it("checks permission and audits SSH connection tests", async () => {
     const security = createSecurity()
     const runSshTest = vi.fn().mockResolvedValue({
@@ -585,7 +696,7 @@ describe("git access service", () => {
     })
     expect(runProcess).toHaveBeenCalledWith(expect.objectContaining({
       command: "ssh",
-      args: ["-T", "git@github.com"],
+      args: ["-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "git@github.com"],
       cwd: "/Users/writer",
       timeoutMs: 15_000,
     }))

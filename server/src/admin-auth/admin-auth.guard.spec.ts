@@ -1,72 +1,36 @@
-import type { ExecutionContext } from "@nestjs/common"
 import { ForbiddenException, UnauthorizedException } from "@nestjs/common"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { AdminAuthGuard } from "./admin-auth.guard"
 
-function createContext(request: Record<string, unknown>): ExecutionContext {
-  return {
-    switchToHttp: () => ({
-      getRequest: () => request,
-    }),
-  } as unknown as ExecutionContext
+function contextFor(request: unknown) {
+  return { switchToHttp: () => ({ getRequest: () => request }) } as never
 }
 
 describe("AdminAuthGuard", () => {
-  it("records audit logs when an admin cookie cannot be verified", async () => {
-    const auth = { verifyDashboardSession: vi.fn().mockResolvedValue(null) }
-    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
-    const guard = new AdminAuthGuard(auth as never, auditLog as never)
+  afterEach(() => vi.unstubAllEnvs())
 
-    await expect(guard.canActivate(createContext({
-      method: "GET",
-      path: "/api/admin/system",
-      ip: "203.0.113.30",
-      cookies: { synapse_admin: "invalid-token" },
-    }))).rejects.toThrow(UnauthorizedException)
+  it("accepts only an active admin session cookie", async () => {
+    const auth = { verifySession: vi.fn().mockResolvedValue({ status: "active", session: { sessionId: "session-1" } }) }
+    const guard = new AdminAuthGuard(auth as never)
+    const request = { method: "GET", cookies: { synapse_admin_session: "token" }, ip: "127.0.0.1" }
 
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "unknown",
-      action: "admin.auth.verify.failed",
-      targetType: "auth",
-      targetId: "unknown",
-      detail: {
-        method: "GET",
-        path: "/api/admin/system",
-        tokenPresent: true,
-      },
-      ipAddress: "203.0.113.30",
-    })
+    await expect(guard.canActivate(contextFor(request))).resolves.toBe(true)
+    expect(request).toHaveProperty("admin.sessionId", "session-1")
   })
 
-  it("records dashboard user cookies as forbidden admin access", async () => {
-    const auth = {
-      verifyDashboardSession: vi.fn().mockResolvedValue({
-        id: "user-1",
-        email: "user@example.com",
-        role: "user",
-      }),
-    }
-    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
-    const guard = new AdminAuthGuard(auth as never, auditLog as never)
+  it("rejects ordinary-user and legacy cookies", async () => {
+    const auth = { recordRejectedSession: vi.fn() }
+    const guard = new AdminAuthGuard(auth as never)
+    const request = { method: "GET", cookies: { synapse_user_session: "user", synapse_admin: "legacy" }, ip: "127.0.0.1" }
 
-    await expect(guard.canActivate(createContext({
-      method: "GET",
-      path: "/api/admin/system",
-      ip: "203.0.113.30",
-      cookies: { synapse_admin: "user-token" },
-    }))).rejects.toThrow(ForbiddenException)
+    await expect(guard.canActivate(contextFor(request))).rejects.toBeInstanceOf(UnauthorizedException)
+  })
 
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "unknown",
-      action: "admin.auth.forbidden",
-      targetType: "auth",
-      targetId: "unknown",
-      detail: {
-        method: "GET",
-        path: "/api/admin/system",
-        tokenPresent: true,
-      },
-      ipAddress: "203.0.113.30",
-    })
+  it("rejects write requests without the configured trusted origin", async () => {
+    vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test")
+    const guard = new AdminAuthGuard({} as never)
+    const request = { method: "POST", get: () => undefined }
+
+    await expect(guard.canActivate(contextFor(request))).rejects.toBeInstanceOf(ForbiddenException)
   })
 })

@@ -14,6 +14,7 @@ type CreateGitUserFacingFailureOptions = {
 
 type GitRemoteInfo = {
   readonly host: string | null
+  readonly port: number | null
   readonly protocol: SynapseGitProtocol
 }
 
@@ -101,7 +102,7 @@ const PRIMARY_ACTIONS: Readonly<Record<SynapseGitFailureCategory, SynapseGitFail
   path: "choose-directory",
   dirty: "open-workbench",
   conflict: "open-workbench",
-  "non-fast-forward": "retry",
+  "non-fast-forward": "open-workbench",
   timeout: "retry",
   "not-git-repository": "open-workbench",
   unknown: "copy-diagnostics",
@@ -130,23 +131,31 @@ function parseRemote(value: string | null | undefined): GitRemoteInfo | null {
 
   const scpLikeMatch = remote.match(/^[A-Za-z0-9._-]+@([A-Za-z0-9.-]+):.+/)
   if (scpLikeMatch?.[1]) {
-    return { host: normalizeHost(scpLikeMatch[1]), protocol: "ssh" }
+    return { host: normalizeHost(scpLikeMatch[1]), port: null, protocol: "ssh" }
   }
 
   if (remote.startsWith("/")) {
-    return { host: null, protocol: "file" }
+    return { host: null, port: null, protocol: "file" }
   }
 
   try {
     const url = new URL(remote)
     if (url.protocol === "https:" || url.protocol === "http:") {
-      return { host: normalizeHost(url.hostname), protocol: "https" }
+      return {
+        host: normalizeHost(url.hostname),
+        port: url.port ? Number(url.port) : null,
+        protocol: url.protocol === "http:" ? "http" : "https",
+      }
     }
     if (url.protocol === "ssh:") {
-      return { host: normalizeHost(url.hostname), protocol: "ssh" }
+      return {
+        host: normalizeHost(url.hostname),
+        port: url.port ? Number(url.port) : null,
+        protocol: "ssh",
+      }
     }
     if (url.protocol === "file:") {
-      return { host: null, protocol: "file" }
+      return { host: null, port: null, protocol: "file" }
     }
   } catch {
     return null
@@ -167,7 +176,7 @@ function findRemoteInOutput(output: string): string | null {
 }
 
 function resolveRemoteInfo(output: string, remoteUrl: string | null | undefined): GitRemoteInfo {
-  return parseRemote(remoteUrl) ?? parseRemote(findRemoteInOutput(output)) ?? { host: null, protocol: "unknown" }
+  return parseRemote(remoteUrl) ?? parseRemote(findRemoteInOutput(output)) ?? { host: null, port: null, protocol: "unknown" }
 }
 
 function classifyGitFailure(output: string, remote: GitRemoteInfo): SynapseGitFailureCategory {
@@ -181,7 +190,7 @@ function classifyGitFailure(output: string, remote: GitRemoteInfo): SynapseGitFa
   if (/\bCONFLICT\b|merge conflict|fix conflicts|unmerged files/i.test(output)) return "conflict"
   if (/repository not found|remote not found|not found|does not appear to be a git repository|repository .* not exist/i.test(output)) return "repository-not-found"
   if (/publickey|could not read from remote repository|permission denied \(publickey\)|ssh: connect/i.test(output)) return "ssh-auth"
-  if (remote.protocol === "https" && /(?:returned error|http.*status|status code)[: ]+(?:401|403)\b|\b(?:401|403)\b.*(?:unauthorized|forbidden)/i.test(output)) {
+  if ((remote.protocol === "http" || remote.protocol === "https") && /(?:returned error|http.*status|status code)[: ]+(?:401|403)\b|\b(?:401|403)\b.*(?:unauthorized|forbidden)/i.test(output)) {
     return remote.host === "github.com" ? "github-auth" : "https-auth"
   }
   if (/authentication failed|could not read username|invalid username or password|access denied|terminal prompts disabled|认证失败/i.test(output)) {
@@ -224,6 +233,7 @@ export function createGitUserFacingFailure(
     detail: sanitizeDetail(outputText, options.remoteUrl),
     host: remote.host,
     message: buildMessage(category, remote.host, options.fallbackMessage),
+    port: remote.port,
     primaryAction: PRIMARY_ACTIONS[category],
     protocol: remote.protocol,
     title: FAILURE_COPY[category].title,

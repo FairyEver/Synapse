@@ -4,15 +4,19 @@ import { createGitOperationId, gitErrorMeta, summarizeGitArgs } from "./git-logg
 import { createGitUserFacingFailure, sanitizeGitUserFacingFailureText } from "./git-user-facing-failure"
 
 type GitClientRunInput = {
+  readonly acceptedExitCodes?: readonly number[]
+  readonly abortSignal?: AbortSignal
   readonly cwd: string
   readonly args: readonly string[]
   readonly fallbackMessage?: string
   readonly logFailure?: boolean
+  readonly maxBufferBytes?: number
   readonly operation?: string
   readonly operationId?: string
   readonly repoPath?: string
   readonly repositoryId?: string
   readonly remoteUrl?: string | null
+  readonly outputOverflow?: "error" | "truncate"
   readonly timeoutMs?: number
 }
 
@@ -117,9 +121,13 @@ export function createGitClientCommandRunner(deps: {
       const operationId = input.operationId ?? createGitOperationId()
       try {
         return await command({
+          acceptedExitCodes: input.acceptedExitCodes,
+          abortSignal: input.abortSignal,
           args: [...input.args],
           cwd: input.cwd,
           fallbackMessage: input.fallbackMessage ?? "Git 操作失败。",
+          maxBufferBytes: input.maxBufferBytes,
+          outputOverflow: input.outputOverflow,
           timeoutMessage: "Git 操作超时。",
           timeoutMs: input.timeoutMs ?? 60_000,
         })

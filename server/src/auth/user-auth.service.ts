@@ -10,7 +10,7 @@ import {
 } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { Cron } from "@nestjs/schedule"
-import { Prisma, type TeamMembership, type TeamRole, type User } from "@prisma/client"
+import { Prisma, type User } from "@prisma/client"
 import {
   DESKTOP_CLIENT_ID,
   DESKTOP_PKCE_CHALLENGE_METHOD,
@@ -18,7 +18,7 @@ import {
   buildPasswordResetUrl as buildSharedPasswordResetUrl,
   normalizeUserHandle,
 } from "@synapse/shared"
-import { AuditLogService } from "../common/audit-log.service"
+import { AuditLogService, auditActors } from "../common/audit-log.service"
 import { hashPassword, verifyPassword } from "./password"
 import { createOpaqueToken, hashToken } from "./token"
 import { PrismaService } from "../prisma/prisma.service"
@@ -36,22 +36,23 @@ export interface UserTokenPair {
   readonly refreshToken: string
 }
 
+export interface UserWebSession {
+  readonly token: string
+  readonly sessionId: string
+  readonly expiresAt: Date
+  readonly user: Pick<User, "id" | "email" | "handle">
+}
+
 type RefreshFailureCode = "refresh_invalid" | "refresh_expired" | "refresh_revoked" | "account_disabled"
 
 export interface UserRegistrationResult {
   readonly ok: true
 }
 
-export interface UserMeTeam {
-  readonly id: string
-  readonly name: string
-  readonly membershipId: TeamMembership["id"]
-  readonly membershipRole: TeamRole
-}
-
 export interface UserMeResponse {
   readonly user: Pick<User, "id" | "email" | "status" | "handle">
-  readonly teams: readonly UserMeTeam[]
+  /** @deprecated Team support has been removed. Kept empty for one compatibility release. */
+  readonly teams: readonly []
 }
 
 export interface PasswordResetRequestResult {
@@ -161,11 +162,6 @@ function toUserMeResponse(user: {
   readonly email: string
   readonly status: User["status"]
   readonly handle: string
-  readonly memberships: ReadonlyArray<{
-    readonly id: string
-    readonly role: TeamRole
-    readonly team: { readonly id: string; readonly name: string }
-  }>
 }): UserMeResponse {
   return {
     user: {
@@ -174,12 +170,7 @@ function toUserMeResponse(user: {
       status: user.status,
       handle: user.handle,
     },
-    teams: user.memberships.map((membership) => ({
-      id: membership.team.id,
-      name: membership.team.name,
-      membershipId: membership.id,
-      membershipRole: membership.role,
-    })),
+    teams: [],
   }
 }
 
@@ -199,12 +190,6 @@ export class UserAuthService {
     const handle = normalizeProfileHandle(input.handle)
     try {
       const result = await this.prisma.$transaction(async (tx) => {
-        await this.lockAdminEmailsForRegistration(tx)
-        const existingAdmin = await tx.adminUser.findUnique({
-          where: { email },
-          select: { id: true },
-        })
-        if (existingAdmin) return { registered: false as const }
         const existingUser = await tx.user.findUnique({
           where: { email },
           select: { id: true },
@@ -398,37 +383,7 @@ export class UserAuthService {
   }
 
   async login(input: { email: string; password: string }, ipAddress = "system"): Promise<UserTokenPair> {
-    const email = input.email.trim().toLowerCase()
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        email: true,
-        passwordHash: true,
-        status: true,
-      },
-    })
-    const passwordMatches = user ? await verifyPassword(input.password, user.passwordHash) : false
-    if (!user || !passwordMatches) {
-      await this.auditLog?.record({
-        adminEmail: email,
-        action: "user.login.failure",
-        targetType: "user",
-        targetId: user?.id ?? "unknown",
-        ipAddress,
-      })
-      throw new UnauthorizedException("邮箱或密码错误。")
-    }
-    if (user.status !== "active") {
-      await this.auditLog?.record({
-        adminEmail: email,
-        action: "user.login.disabled",
-        targetType: "user",
-        targetId: user.id,
-        ipAddress,
-      })
-      throw new UnauthorizedException("邮箱或密码错误。")
-    }
+    const user = await this.authenticateCredentials(input, ipAddress)
     const tokens = await this.issueTokenPair(user)
     await this.recordUserAuthSuccessAuditSafely({
       adminEmail: user.email,
@@ -437,6 +392,70 @@ export class UserAuthService {
       ipAddress,
     })
     return tokens
+  }
+
+  async loginWeb(input: { email: string; password: string }, ipAddress = "system"): Promise<UserWebSession> {
+    const user = await this.authenticateCredentials(input, ipAddress)
+    const session = await this.issueWebSession(user)
+    await this.recordUserAuthSuccessAuditSafely({
+      adminEmail: user.email,
+      action: "user.web_login.success",
+      targetId: user.id,
+      ipAddress,
+    })
+    return { ...session, user: { id: user.id, email: user.email, handle: user.handle } }
+  }
+
+  async verifyWebSession(token: string): Promise<{ readonly userId: string; readonly sessionId: string } | null> {
+    const now = new Date()
+    const record = await this.prisma.userSessionRefreshToken.findUnique({
+      where: { refreshTokenHash: hashToken(token) },
+      select: {
+        replacedAt: true,
+        revokedAt: true,
+        expiresAt: true,
+        session: {
+          select: {
+            id: true,
+            revokedAt: true,
+            expiresAt: true,
+            user: { select: { id: true, status: true } },
+          },
+        },
+      },
+    })
+    if (
+      !record || record.replacedAt || record.revokedAt || record.expiresAt <= now ||
+      record.session.revokedAt || record.session.expiresAt <= now || record.session.user.status !== "active"
+    ) return null
+    await this.prisma.userSession.update({
+      where: { id: record.session.id },
+      data: { lastUsedAt: now },
+    })
+    return { userId: record.session.user.id, sessionId: record.session.id }
+  }
+
+  async logoutWeb(token: string, ipAddress = "system"): Promise<void> {
+    const record = await this.prisma.userSessionRefreshToken.findUnique({
+      where: { refreshTokenHash: hashToken(token) },
+      select: { sessionId: true, session: { select: { user: { select: { id: true, email: true } } } } },
+    })
+    if (!record) return
+    const now = new Date()
+    await this.prisma.$transaction([
+      this.prisma.userSession.updateMany({ where: { id: record.sessionId }, data: { revokedAt: now } }),
+      this.prisma.userSessionRefreshToken.updateMany({
+        where: { sessionId: record.sessionId, revokedAt: null },
+        data: { revokedAt: now },
+      }),
+    ])
+    await this.auditLog?.record({
+      actor: auditActors.user(record.session.user.id, record.session.user.email),
+      action: "user.web_logout",
+      targetType: "user_session",
+      targetId: record.sessionId,
+      ipAddress,
+    })
   }
 
   async authorizeDesktopLogin(input: {
@@ -711,14 +730,6 @@ export class UserAuthService {
         email: true,
         status: true,
         handle: true,
-        memberships: {
-          select: {
-            id: true,
-            role: true,
-            team: { select: { id: true, name: true } },
-          },
-          orderBy: { createdAt: "asc" },
-        },
       },
     })
 
@@ -784,14 +795,6 @@ export class UserAuthService {
             email: true,
             status: true,
             handle: true,
-            memberships: {
-              select: {
-                id: true,
-                role: true,
-                team: { select: { id: true, name: true } },
-              },
-              orderBy: { createdAt: "asc" },
-            },
           },
         })
       } catch (error) {
@@ -847,10 +850,6 @@ export class UserAuthService {
       { sub: user.id, email: user.email } satisfies UserJwtPayload,
       { expiresIn: `${this.options.accessMinutes}m` },
     )
-  }
-
-  private async lockAdminEmailsForRegistration(tx: Prisma.TransactionClient): Promise<void> {
-    await tx.$executeRaw`LOCK TABLE "AdminUser" IN SHARE MODE`
   }
 
   private async recordUserAudit(input: {
@@ -1008,6 +1007,51 @@ export class UserAuthService {
       },
     })
     return { accessToken: this.signAccessToken(user), refreshToken }
+  }
+
+  private async issueWebSession(
+    user: Pick<User, "id" | "email">,
+  ): Promise<Omit<UserWebSession, "user">> {
+    const token = createOpaqueToken()
+    const expiresAt = addDays(new Date(), this.options.refreshDays)
+    const session = await this.prisma.userSession.create({
+      data: {
+        userId: user.id,
+        refreshTokenHash: hashToken(token),
+        expiresAt,
+      },
+    })
+    await this.prisma.userSessionRefreshToken.create({
+      data: {
+        sessionId: session.id,
+        refreshTokenHash: hashToken(token),
+        expiresAt,
+      },
+    })
+    return { token, sessionId: session.id, expiresAt }
+  }
+
+  private async authenticateCredentials(
+    input: { email: string; password: string },
+    ipAddress: string,
+  ): Promise<Pick<User, "id" | "email" | "handle">> {
+    const email = input.email.trim().toLowerCase()
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, handle: true, passwordHash: true, status: true },
+    })
+    const passwordMatches = user ? await verifyPassword(input.password, user.passwordHash) : false
+    if (!user || !passwordMatches || user.status !== "active") {
+      await this.auditLog?.record({
+        adminEmail: email,
+        action: user?.status !== "active" && passwordMatches ? "user.login.disabled" : "user.login.failure",
+        targetType: "user",
+        targetId: user?.id ?? "unknown",
+        ipAddress,
+      })
+      throw new UnauthorizedException("邮箱或密码错误。")
+    }
+    return user
   }
 }
 

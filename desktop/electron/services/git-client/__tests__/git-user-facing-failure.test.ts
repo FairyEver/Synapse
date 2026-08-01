@@ -18,6 +18,21 @@ describe("createGitUserFacingFailure", () => {
     })
   })
 
+  it("preserves HTTP when classifying authentication failures", () => {
+    const failure = createGitUserFacingFailure("fatal: Authentication failed for http://git.company.com:8080/team/repo.git", {
+      fallbackMessage: "Git 操作失败。",
+      remoteUrl: "http://git.company.com:8080/team/repo.git",
+    })
+
+    expect(failure).toMatchObject({
+      category: "https-auth",
+      host: "git.company.com",
+      port: 8080,
+      primaryAction: "login-host",
+      protocol: "http",
+    })
+  })
+
   it("classifies GitHub HTTPS authentication failures as GitHub auth", () => {
     const failure = createGitUserFacingFailure("remote: Invalid username or password.\nfatal: Authentication failed for 'https://github.com/team/repo.git/'", {
       fallbackMessage: "Git 操作失败。",
@@ -112,7 +127,7 @@ describe("createGitUserFacingFailure", () => {
     ["repository-not-found", "remote: Repository not found.\nfatal: repository 'https://github.com/team/repo.git/' not found", "login-host", "仓库不存在或无权限"],
     ["not-git-repository", "fatal: not a git repository (or any of the parent directories): .git", "open-workbench", "不是 Git 仓库"],
     ["dirty", "error: Your local changes to the following files would be overwritten by checkout", "open-workbench", "本地有未提交改动"],
-    ["non-fast-forward", "! [rejected] main -> main (non-fast-forward)", "retry", "需要先拉取远程更新"],
+    ["non-fast-forward", "! [rejected] main -> main (non-fast-forward)", "open-workbench", "需要先拉取远程更新"],
     ["conflict", "CONFLICT (content): Merge conflict in README.md", "open-workbench", "需要处理冲突"],
     ["path", "fatal: cannot change to '/missing/repo': No such file or directory", "choose-directory", "本地路径不可用"],
     ["unknown", "fatal: unexpected git failure code 99", "copy-diagnostics", "Git 操作失败"],

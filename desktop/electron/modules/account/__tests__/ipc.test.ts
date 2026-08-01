@@ -166,7 +166,6 @@ describe("accountIpcModule", () => {
           connectivity: "online",
           profile: {
             user: { id: "u1", email: "u@example.com", handle: "ada", status: "active" },
-            teams: [],
             syncedAt: "2026-05-28T00:00:00.000Z",
           },
         },
@@ -1295,7 +1294,6 @@ describe("accountIpcModule", () => {
           retry: { attempt: 1, nextRetryAt: "2026-06-06T00:00:10.000Z" },
           profile: {
             user: { id: "u1", email: "u@example.com", handle: "ada", status: "active" },
-            teams: [],
             syncedAt: "2026-06-06T00:00:00.000Z",
           },
         },

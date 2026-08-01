@@ -10,6 +10,7 @@ import { GitAddLocalDialog, GitCloneDialog } from "./components/git-clone-dialog
 import { GitEnvironmentPanel } from "./components/git-environment-panel"
 import { GitInstallPanel } from "./components/git-install-panel"
 import { GitRepositoryList } from "./components/git-repository-list"
+import { useGitPushRemoteSelection } from "./components/git-push-remote-dialog"
 import { GitWorkbench } from "./components/git-workbench"
 import type { GitOperationFailure } from "./hooks/use-git-operations"
 import { useGitAccess } from "./hooks/use-git-access"
@@ -28,17 +29,17 @@ const GIT_APP_TABS: readonly { readonly id: GitAppViewId; readonly label: string
   { id: "access", label: "访问" },
 ]
 
-function isAccessProtocol(protocol: string): protocol is "https" | "ssh" {
-  return protocol === "https" || protocol === "ssh"
+function isAccessProtocol(protocol: string): protocol is "http" | "https" | "ssh" {
+  return protocol === "http" || protocol === "https" || protocol === "ssh"
 }
 
-function providerFromHost(host: string, protocol: "https" | "ssh"): SynapseGitProvider {
-  const remote = protocol === "ssh" ? `git@${host}:owner/repo.git` : `https://${host}/owner/repo.git`
+function providerFromHost(host: string, protocol: "http" | "https" | "ssh"): SynapseGitProvider {
+  const remote = protocol === "ssh" ? `git@${host}:owner/repo.git` : `${protocol}://${host}/owner/repo.git`
   return parseGitRemote(remote).provider
 }
 
 function buildClonePendingAction(
-  input: { readonly name: string; readonly remoteUrl: string; readonly targetPath: string },
+  input: { readonly directoryName: string; readonly parentDirectory: string; readonly remoteUrl: string },
   failure: GitOperationFailure,
 ): PendingGitAction | null {
   if (!shouldRouteFailureToAccess(failure)) return null
@@ -51,6 +52,8 @@ function buildClonePendingAction(
     host,
     protocol,
     provider: descriptor.provider !== "generic" ? descriptor.provider : providerFromHost(host, protocol),
+    port: descriptor.port,
+    username: descriptor.username,
     input,
   }
 }
@@ -65,6 +68,7 @@ function buildRepositoryPendingAction(failure: GitOperationFailure): PendingGitA
     type: operation as PendingGitRepositoryOperation,
     repositoryId: failure.repositoryId,
     host: failure.host,
+    port: failure.port ?? null,
     protocol: failure.protocol,
     provider: providerFromHost(failure.host, failure.protocol),
   }
@@ -74,6 +78,7 @@ function pendingActionHosts(pendingAction: PendingGitAction | null) {
   if (!pendingAction) return []
   return [{
     host: pendingAction.host,
+    port: pendingAction.port ?? null,
     protocol: pendingAction.protocol,
     provider: pendingAction.provider,
   }]
@@ -91,6 +96,7 @@ export function GitModule() {
   const retryPendingBusyRef = useRef(false)
   const repositoriesState = useGitRepositories()
   const operations = useGitOperations(repositoriesState.refresh)
+  const pushRemoteSelection = useGitPushRemoteSelection()
   const access = useGitAccess()
   const {
     pendingAction,
@@ -151,7 +157,7 @@ export function GitModule() {
 
   const updatePendingActionFromFailure = useCallback((
     failure: GitOperationFailure,
-    fallbackInput?: { readonly name: string; readonly remoteUrl: string; readonly targetPath: string },
+    fallbackInput?: { readonly directoryName: string; readonly parentDirectory: string; readonly remoteUrl: string },
   ) => {
     const pending = fallbackInput ? buildClonePendingAction(fallbackInput, failure) : buildRepositoryPendingAction(failure)
     if (pending) {
@@ -216,11 +222,15 @@ export function GitModule() {
     }
   }, [clearPendingAction, operations, pendingAction, routeFailure, updatePendingActionFromFailure])
 
-  const handleCloneFailure = useCallback((input: { readonly cloneInput: { readonly name: string; readonly remoteUrl: string; readonly targetPath: string }; readonly failure: GitOperationFailure }) => {
+  const handleCloneFailure = useCallback((input: { readonly cloneInput: { readonly directoryName: string; readonly parentDirectory: string; readonly remoteUrl: string }; readonly failure: GitOperationFailure }) => {
+    if (input.failure.primaryAction === "retry" && (input.failure.category === "network" || input.failure.category === "timeout")) {
+      void operations.retry()
+      return
+    }
     setCloneOpen(false)
     updatePendingActionFromFailure(input.failure, input.cloneInput)
     routeFailure(input.failure)
-  }, [routeFailure, updatePendingActionFromFailure])
+  }, [operations, routeFailure, updatePendingActionFromFailure])
 
   const handleWorkbenchOperationFailure = useCallback((failure: GitOperationFailure | null) => {
     if (failure) {
@@ -229,6 +239,23 @@ export function GitModule() {
     }
     clearPendingAction()
   }, [clearPendingAction, updatePendingActionFromFailure])
+
+  const handlePush = useCallback(async (
+    repositoryId: string,
+    trackingStatus: "tracked" | "untracked" | "detached",
+  ) => {
+    const remoteName = await pushRemoteSelection.choose(repositoryId, trackingStatus)
+    if (remoteName === null) return
+    await operations.push(repositoryId, remoteName)
+  }, [operations, pushRemoteSelection])
+
+  const handleFailureAction = useCallback((failure: GitOperationFailure) => {
+    if (failure.primaryAction === "retry" && (failure.category === "network" || failure.category === "timeout")) {
+      void operations.retry()
+      return
+    }
+    routeFailure(failure)
+  }, [operations, routeFailure])
 
   return (
     <>
@@ -265,6 +292,7 @@ export function GitModule() {
                 onBack={() => setSelectedRepository(null)}
                 onOperationFailure={handleWorkbenchOperationFailure}
                 onHandleFailure={routeFailure}
+                onSelectPushRemote={pushRemoteSelection.choose}
               />
             ) : (
               <GitRepositoryList
@@ -275,10 +303,11 @@ export function GitModule() {
                 busy={operations.busy}
                 onOpenRepository={setSelectedRepository}
                 onPull={(repositoryId) => void operations.pull(repositoryId)}
-                onPush={(repositoryId) => void operations.push(repositoryId)}
+                onPush={(repositoryId, trackingStatus) => void handlePush(repositoryId, trackingStatus)}
                 onSync={(repositoryId) => void operations.sync(repositoryId)}
+                onCancel={(repositoryId) => void operations.cancelRepository(repositoryId)}
                 onRemoveRepository={(input) => operations.removeRepository(input)}
-                onHandleFailure={routeFailure}
+                onHandleFailure={handleFailureAction}
               />
             )}
           </TabsContent>
@@ -325,6 +354,7 @@ export function GitModule() {
       <GitCloneDialog
         open={cloneOpen}
         busy={operations.busy.global === "clone"}
+        phase={operations.busy.globalPhase ?? null}
         environment={environment}
         onOpenChange={setCloneOpen}
         onSubmit={async (input) => {
@@ -336,6 +366,7 @@ export function GitModule() {
           return { error: result.error, failure: result.failure }
         }}
         onFailureAction={handleCloneFailure}
+        onCancel={() => void operations.cancelGlobal()}
       />
       <GitAddLocalDialog
         open={addLocalOpen}
@@ -350,6 +381,7 @@ export function GitModule() {
           return result.error
         }}
       />
+      {pushRemoteSelection.dialog}
     </>
   )
 }
