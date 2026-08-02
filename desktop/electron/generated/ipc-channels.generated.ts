@@ -289,6 +289,12 @@ export const IPC_CHANNELS = {
   "apps": {
     "openSystemApp": "synapse:app:apps:system_app:open",
   },
+  "mcp": {
+    "serverGet": "synapse:app:mcp:server:get",
+    "registrationList": "synapse:app:mcp:registration:list",
+    "registrationOpenSettings": "synapse:app:mcp:registration:open_settings",
+    "registrationRegister": "synapse:app:mcp:registration:register",
+  },
   "documentTemplate": {
     "chooseTemplateFile": "synapse:app:document_template:template:choose",
     "chooseJsonFile": "synapse:app:document_template:json:choose",
@@ -516,11 +522,6 @@ export const IPC_CHANNELS = {
     "databaseTableExport": "synapse:app:database:table:export",
     "databaseTableImportInspect": "synapse:app:database:table_import:inspect",
     "databaseTableImport": "synapse:app:database:table:import",
-    "databaseMcpHttpStatusGet": "synapse:app:database:mcp_http_status:get",
-    "databaseMcpStatusGet": "synapse:app:database:mcp_status:get",
-    "databaseMcpServersGet": "synapse:app:database:mcp_servers:get",
-    "databaseMcpSettingsOpen": "synapse:app:database:mcp_settings:open",
-    "databaseMcpRegister": "synapse:app:database:mcp:register",
     "databaseChanged": "synapse:app:database:operation:changed",
     "databaseFolderList": "synapse:app:database:folder:list",
     "databaseFolderCreate": "synapse:app:database:folder:create",

@@ -46,20 +46,30 @@ export function createGitBranchService(deps: BranchDeps) {
     async list(repository: SynapseGitRepository): Promise<SynapseGitBranch[]> {
       const operation = "git.branch.list"
       const operationId = createGitOperationId()
-      const result = await deps.commandRunner.run({
+      const currentResult = await deps.commandRunner.run({
         cwd: repository.localPath,
-        args: ["branch", "--list"],
+        args: ["symbolic-ref", "--quiet", "--short", "HEAD"],
+        acceptedExitCodes: [0, 1],
         operation,
         operationId,
         repoPath: repository.localPath,
         repositoryId: repository.id,
       })
-      return result.stdout.split(/\r?\n/)
-        .map((line) => line.trimEnd())
+      const branchesResult = await deps.commandRunner.run({
+        cwd: repository.localPath,
+        args: ["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+        operation,
+        operationId,
+        repoPath: repository.localPath,
+        repositoryId: repository.id,
+      })
+      const currentBranch = currentResult.stdout.trim()
+      return branchesResult.stdout.split(/\r?\n/)
+        .map((line) => line.trim())
         .filter(Boolean)
-        .map((line) => ({
-          name: line.replace(/^\*\s*/, "").trim(),
-          current: line.trimStart().startsWith("* "),
+        .map((name) => ({
+          name,
+          current: name === currentBranch,
         }))
     },
 

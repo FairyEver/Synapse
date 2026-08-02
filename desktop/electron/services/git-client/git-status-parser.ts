@@ -151,6 +151,7 @@ export function parseGitStatusPorcelainV2(stdout: string): SynapseGitStatusParse
   let behind = 0
   let currentBranch: string | null = null
   let upstream: string | null = null
+  let hasAheadBehind = false
   let hasConflicts = false
 
   for (const line of stdout.split(/\r?\n/)) {
@@ -165,6 +166,7 @@ export function parseGitStatusPorcelainV2(stdout: string): SynapseGitStatusParse
       continue
     }
     if (line.startsWith("# branch.ab ")) {
+      hasAheadBehind = true
       const parsed = parseAheadBehind(line)
       ahead = parsed.ahead
       behind = parsed.behind
@@ -191,7 +193,11 @@ export function parseGitStatusPorcelainV2(stdout: string): SynapseGitStatusParse
     ...result,
     currentBranch,
     upstream,
-    trackingStatus: currentBranch === null ? "detached" : upstream ? "tracked" : "untracked",
+    trackingStatus: currentBranch === null
+      ? "detached"
+      : upstream
+        ? hasAheadBehind ? "tracked" : "gone"
+        : "untracked",
     ahead,
     behind,
     hasConflicts,

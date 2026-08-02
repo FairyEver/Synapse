@@ -1,5 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Empty,
   EmptyHeader,
@@ -39,20 +40,35 @@ export function GitHistoryTab({ history }: GitHistoryTabProps) {
               </EmptyHeader>
             </Empty>
           ) : (
-            history.commits.map((commit) => (
-              <button
-                key={commit.hash}
-                type="button"
-                data-active={history.selectedCommit?.hash === commit.hash ? "true" : undefined}
-                className="grid w-full gap-1.5 px-4 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
-                onClick={() => void history.loadCommit(commit.hash)}
-              >
-                <span className="truncate text-sm font-medium">{commit.subject}</span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {commit.shortHash} · {commit.authorName} · <RelativeTime value={commit.committedAt} fallback={commit.committedAt} />
-                </span>
-              </button>
-            ))
+            <>
+              {history.commits.map((commit) => (
+                <button
+                  key={commit.hash}
+                  type="button"
+                  data-active={history.selectedCommit?.hash === commit.hash ? "true" : undefined}
+                  className="grid w-full gap-1.5 px-4 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
+                  onClick={() => void history.loadCommit(commit.hash)}
+                >
+                  <span className="truncate text-sm font-medium">{commit.subject || "无提交说明"}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {commit.shortHash} · {commit.authorName} · <RelativeTime value={commit.committedAt} fallback={commit.committedAt} />
+                  </span>
+                </button>
+              ))}
+              {history.hasMore ? (
+                <div className="flex justify-center p-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={history.loadingMore}
+                    onClick={() => void history.loadMore()}
+                  >
+                    {history.loadingMore ? "加载中" : "加载更多"}
+                  </Button>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </ScrollArea>
@@ -73,7 +89,7 @@ export function GitHistoryTab({ history }: GitHistoryTabProps) {
           ) : history.selectedCommit ? (
             <>
               <div className="grid min-w-0 gap-1">
-                <div className="truncate text-base font-semibold">{history.selectedCommit.subject}</div>
+                <div className="truncate text-base font-semibold">{history.selectedCommit.subject || "无提交说明"}</div>
                 <div className="truncate text-sm text-muted-foreground">
                   {history.selectedCommit.shortHash} · {history.selectedCommit.authorName} · <RelativeTime value={history.selectedCommit.committedAt} fallback={history.selectedCommit.committedAt} />
                 </div>

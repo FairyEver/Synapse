@@ -102,7 +102,7 @@ jobs:
         run: pnpm --filter @synapse/desktop run check:hard-constraints
 
   desktop-windows:
-    name: Desktop Windows typecheck + package
+    name: Desktop Windows typecheck + Git tests + package
     runs-on: windows-2022
     steps:
       - name: Checkout repository
@@ -128,6 +128,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Typecheck
         run: pnpm --filter @synapse/desktop run typecheck
+      - name: Run Git unit and integration tests
+        run: pnpm --filter @synapse/desktop exec vitest run electron/services/git-client electron/modules/git src/modules/git
       - name: Build desktop
         run: pnpm --filter @synapse/desktop run build
       - name: Package Windows installer

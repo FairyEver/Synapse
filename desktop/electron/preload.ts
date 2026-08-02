@@ -78,6 +78,7 @@ const HTTP_CHANNELS = {
 } as const
 
 const DATABASE_CHANNELS = IPC_CHANNELS.database
+const MCP_CHANNELS = IPC_CHANNELS.mcp
 
 type RawSubscribe = (channel: string) => (listener: (payload: unknown) => void) => Unsubscribe
 
@@ -1045,11 +1046,6 @@ const synapseBridge: SynapseBridge = {
         "database.changed",
       ),
     },
-    mcpHttpStatus: { get: invoke(DATABASE_CHANNELS.databaseMcpHttpStatusGet) },
-    mcpStatus: { get: invoke(DATABASE_CHANNELS.databaseMcpStatusGet) },
-    mcpServers: { get: invoke(DATABASE_CHANNELS.databaseMcpServersGet) },
-    mcpSettings: { open: (target) => invoke(DATABASE_CHANNELS.databaseMcpSettingsOpen)(target) },
-    mcp: { register: (target) => invoke(DATABASE_CHANNELS.databaseMcpRegister)(target) },
     folder: {
       list: invoke(DATABASE_CHANNELS.databaseFolderList),
       create: (params) => invoke(DATABASE_CHANNELS.databaseFolderCreate)(params),
@@ -1058,6 +1054,16 @@ const synapseBridge: SynapseBridge = {
       moveTable: (params) => invoke(DATABASE_CHANNELS.databaseFolderMoveTable)(params),
       reorder: (params) => invoke(DATABASE_CHANNELS.databaseFolderReorder)(params),
       reorderFolders: (params) => invoke(DATABASE_CHANNELS.databaseFolderReorderFolders)(params),
+    },
+  },
+  mcp: {
+    server: {
+      get: invoke(MCP_CHANNELS.serverGet),
+    },
+    registration: {
+      list: invoke(MCP_CHANNELS.registrationList),
+      openSettings: (target) => invoke(MCP_CHANNELS.registrationOpenSettings)(target),
+      register: (target) => invoke(MCP_CHANNELS.registrationRegister)(target),
     },
   },
   automation: {

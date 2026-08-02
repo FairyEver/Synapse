@@ -19,11 +19,8 @@ import type {
   SynapseKnowledgeBaseStorageDiagnostics,
   SynapseDiagnosticsReport,
 } from "../../src/types/diagnostics"
-import type {
-  DatabaseMcpHttpStatus,
-  DatabaseMcpServerInfo,
-  DatabaseStatus,
-} from "../../src/types/database"
+import type { DatabaseStatus } from "../../src/types/database"
+import type { McpRegistrationInfo, McpServerStatus } from "../../src/types/mcp"
 import type { SynapseOpsDiagnostics } from "../../src/types/bridge"
 import type { DataRepository } from "../runtime/data-repo"
 import type { SecretItemEntryV1 } from "../runtime/data-repo/schemas/secrets"
@@ -166,8 +163,8 @@ type DiagnosticsServiceDeps = {
     resolve: ServiceResolver,
     request?: { projectId?: string },
   ) => Promise<SynapseOpsDiagnostics>
-  getMcpHttpStatus: () => DatabaseMcpHttpStatus
-  getMcpServers: () => MaybePromise<DatabaseMcpServerInfo[]>
+  getMcpHttpStatus: () => McpServerStatus
+  getMcpServers: () => MaybePromise<McpRegistrationInfo[]>
   probeMcpHttp: (url: string) => Promise<McpHttpProbeResult>
   permissionGuard: PermissionGuard
   auditSink: AuditSink

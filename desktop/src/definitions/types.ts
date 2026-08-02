@@ -1,7 +1,7 @@
 import type { ComponentType } from "react"
 import type { SynapseContentMeta } from "../types/content"
 import type { SynapseContentType } from "../types/content"
-import type { DatabaseMcpTarget } from "../types/database"
+import type { McpTarget } from "../types/mcp"
 import type { SynapseAgentDisplayProfile } from "../types/agent"
 import type {
   SynapseEditorInstallFormValues,
@@ -19,7 +19,7 @@ export type SynapseEditorDefinition = {
 }
 
 export type SynapseMcpDefinition = {
-  target: DatabaseMcpTarget
+  target: McpTarget
   label: string
   order: number
   settingsPathSegments: readonly string[]

@@ -1,4 +1,4 @@
-import type { SynapseGitOperationResult, SynapseGitRepository } from "../../../src/types/git"
+import type { SynapseGitOperationResult, SynapseGitRepository, SynapseGitRepositorySnapshot } from "../../../src/types/git"
 import type { StructuredLogger } from "../../runtime/logging"
 import type { GitClientCommandRunner } from "./git-command-runner"
 import { assertRepositoryPath } from "./git-path-utils"
@@ -13,6 +13,7 @@ import {
 
 type CommitDeps = {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
+  readonly getSnapshot: (repository: SynapseGitRepository) => Promise<Pick<SynapseGitRepositorySnapshot, "changes">>
   readonly logger?: Pick<StructuredLogger, "error" | "info" | "warn">
   readonly now?: () => Date
 }
@@ -52,6 +53,14 @@ export function createGitCommitService(deps: CommitDeps) {
       try {
         for (const filePath of input.paths) {
           assertRepositoryPath(repository.localPath, filePath)
+        }
+        const snapshot = await deps.getSnapshot(repository)
+        const currentPaths = new Set(snapshot.changes.flatMap((change) => (
+          change.originalPath ? [change.path, change.originalPath] : [change.path]
+        )))
+        if (input.paths.some((filePath) => !currentPaths.has(filePath))) {
+          logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "stale-selection", meta)
+          throw new Error("所选文件已发生变化，请刷新后重新确认。")
         }
         await deps.commandRunner.run({
           cwd: repository.localPath,

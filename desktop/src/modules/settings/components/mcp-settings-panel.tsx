@@ -14,20 +14,16 @@ import {
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { mcpDefinitions } from "@/definitions/generated/renderer-registry"
-import {
-  databaseMcpServersGet,
-  databaseMcpHttpStatusGet,
-  databaseMcpSettingsOpen,
-  databaseMcpRegister,
-} from "@/modules/database/hooks/use-database"
 import { StatusPill } from "@/modules/settings/components/status-pill"
-import type {
-  DatabaseMcpHttpStatus,
-  DatabaseMcpServerInfo,
-  DatabaseMcpTarget,
-} from "@/types/database"
+import type { McpRegistrationInfo, McpServerStatus, McpTarget } from "@/types/mcp"
+import {
+  mcpRegistrationOpenSettings,
+  mcpRegistrationRegister,
+  mcpRegistrationsList,
+  mcpServerGet,
+} from "../hooks/use-mcp"
 
-const logger = createRendererLogger("settings.mcp")
+const logger = createRendererLogger("mcp")
 
 const MCP_SERVER_META = mcpDefinitions.map((definition) => ({
   id: definition.target,
@@ -37,93 +33,93 @@ const MCP_SERVER_META = mcpDefinitions.map((definition) => ({
 
 function McpSettingsPanel() {
   const { promise, notify } = useAppNotifications()
-  const [mcpServersByTarget, setMcpServersByTarget] = useState<
-    Partial<Record<DatabaseMcpTarget, DatabaseMcpServerInfo>>
+  const [registrationsByTarget, setRegistrationsByTarget] = useState<
+    Partial<Record<McpTarget, McpRegistrationInfo>>
   >({})
-  const [mcpHttpStatus, setMcpHttpStatus] = useState<DatabaseMcpHttpStatus | null>(null)
-  const [mcpHttpStatusLoading, setMcpHttpStatusLoading] = useState(true)
-  const [mcpHttpStatusError, setMcpHttpStatusError] = useState<string | null>(null)
-  const [mcpServersLoading, setMcpServersLoading] = useState(true)
+  const [serverStatus, setServerStatus] = useState<McpServerStatus | null>(null)
+  const [serverStatusLoading, setServerStatusLoading] = useState(true)
+  const [serverStatusError, setServerStatusError] = useState<string | null>(null)
+  const [registrationsLoading, setRegistrationsLoading] = useState(true)
 
-  const refreshMcpHttpStatus = useCallback(async () => {
-    setMcpHttpStatusLoading(true)
-    setMcpHttpStatusError(null)
+  const refreshServerStatus = useCallback(async () => {
+    setServerStatusLoading(true)
+    setServerStatusError(null)
     try {
-      const status = await databaseMcpHttpStatusGet()
-      setMcpHttpStatus(status)
+      const status = await mcpServerGet()
+      setServerStatus(status)
     } catch (error) {
       logger.error("Failed to load MCP HTTP status.", error)
-      setMcpHttpStatus(null)
-      setMcpHttpStatusError("状态读取失败")
+      setServerStatus(null)
+      setServerStatusError("状态读取失败")
     } finally {
-      setMcpHttpStatusLoading(false)
+      setServerStatusLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    void refreshMcpHttpStatus()
-  }, [refreshMcpHttpStatus])
+    void refreshServerStatus()
+  }, [refreshServerStatus])
 
-  const mcpHttpStatusLabel = mcpHttpStatusError
+  const serverStatusLabel = serverStatusError
     ? "状态读取失败"
-    : mcpHttpStatusLoading
+    : serverStatusLoading
       ? "检测中"
-      : mcpHttpStatus?.running
+      : serverStatus?.running
         ? "运行中"
         : "未启动"
 
-  const refreshMcpServers = useCallback(async () => {
-    setMcpServersLoading(true)
+  const refreshRegistrations = useCallback(async () => {
+    setRegistrationsLoading(true)
     try {
-      const result = await databaseMcpServersGet()
-      setMcpServersByTarget(
-        result.reduce<Partial<Record<DatabaseMcpTarget, DatabaseMcpServerInfo>>>((servers, server) => {
-          servers[server.target] = server
-          return servers
+      const result = await mcpRegistrationsList()
+      setRegistrationsByTarget(
+        result.reduce<Partial<Record<McpTarget, McpRegistrationInfo>>>((registrations, registration) => {
+          registrations[registration.target] = registration
+          return registrations
         }, {}),
       )
       return result
     } finally {
-      setMcpServersLoading(false)
+      setRegistrationsLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    void refreshMcpServers().catch((error) => {
-      logger.error("Failed to load MCP status.", error)
-      setMcpServersByTarget({})
-      setMcpServersLoading(false)
+    void refreshRegistrations().catch((error) => {
+      logger.error("Failed to load MCP registrations.", error)
+      setRegistrationsByTarget({})
+      setRegistrationsLoading(false)
     })
-  }, [refreshMcpServers])
+  }, [refreshRegistrations])
 
-  const handleRegisterMCP = useCallback(
-    async (target: DatabaseMcpTarget) => {
+  const handleRegisterMcp = useCallback(
+    async (target: McpTarget) => {
       try {
         await promise(
           async () => {
-            const result = await databaseMcpRegister(target)
+            const result = await mcpRegistrationRegister(target)
             if (!result.success) throw new Error(result.error ?? "注册失败")
-            await refreshMcpServers()
+            await refreshRegistrations()
             logger.info("MCP registered.", { target })
           },
           {
             loading: "正在注册 MCP...",
-            success: `MCP Server 已注册到 ${MCP_SERVER_META.find((m) => m.id === target)?.label ?? target}`,
+            success: `MCP Server 已注册到 ${MCP_SERVER_META.find((item) => item.id === target)?.label ?? target}`,
           },
         )
       } catch {
         // promise() re-throws on error — catch to prevent unhandled rejection.
       }
     },
-    [promise, refreshMcpServers],
+    [promise, refreshRegistrations],
   )
 
-  const handleOpenMCPSettings = useCallback(
-    async (target: DatabaseMcpTarget) => {
+  const handleOpenSettings = useCallback(
+    async (target: McpTarget) => {
       try {
         await promise(
           async () => {
-            const result = await databaseMcpSettingsOpen(target)
+            const result = await mcpRegistrationOpenSettings(target)
             if (!result.success) throw new Error(result.error ?? "打开失败")
             logger.info("MCP settings opened.", { target })
           },
@@ -140,8 +136,8 @@ function McpSettingsPanel() {
     [promise],
   )
 
-  const mcpServers = MCP_SERVER_META.map((server) => {
-    const state = mcpServersByTarget[server.id]
+  const registrations = MCP_SERVER_META.map((server) => {
+    const state = registrationsByTarget[server.id]
     return {
       ...server,
       registered: Boolean(state?.registered),
@@ -150,16 +146,16 @@ function McpSettingsPanel() {
       readError: state?.readError,
     }
   })
-  const mcpRegisterDisabled = !mcpHttpStatus?.running || !mcpHttpStatus?.url
+  const registrationDisabled = !serverStatus?.running || !serverStatus?.url
 
   const handleCopyMcpUrl = useCallback(async () => {
-    if (!mcpHttpStatus?.url) return
+    if (!serverStatus?.url) return
     try {
-      await navigator.clipboard.writeText(mcpHttpStatus.url)
+      await navigator.clipboard.writeText(serverStatus.url)
     } catch {
       notify({ message: "复制失败", tone: "destructive" })
     }
-  }, [mcpHttpStatus])
+  }, [notify, serverStatus])
 
   return (
     <Card>
@@ -167,26 +163,26 @@ function McpSettingsPanel() {
         <CardTitle>MCP Server</CardTitle>
         <CardAction>
           <StatusPill
-            active={Boolean(mcpHttpStatus?.running)}
-            activeLabel={mcpHttpStatusLabel}
-            inactiveLabel={mcpHttpStatusLabel}
-            variant={mcpHttpStatusError || mcpHttpStatusLoading ? "warning" : "default"}
+            active={Boolean(serverStatus?.running)}
+            activeLabel={serverStatusLabel}
+            inactiveLabel={serverStatusLabel}
+            variant={serverStatusError || serverStatusLoading ? "warning" : "default"}
           />
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        {mcpHttpStatusError ? (
+        {serverStatusError ? (
           <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
-            <span>{mcpHttpStatusError}</span>
-            <Button variant="outline" size="sm" onClick={() => void refreshMcpHttpStatus()}>
+            <span>{serverStatusError}</span>
+            <Button variant="outline" size="sm" onClick={() => void refreshServerStatus()}>
               重试
             </Button>
           </div>
         ) : null}
-        {mcpHttpStatus?.url ? (
+        {serverStatus?.url ? (
           <div className="flex items-center gap-2">
             <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
-              {mcpHttpStatus.url}
+              {serverStatus.url}
             </code>
             <Button variant="outline" size="sm" onClick={handleCopyMcpUrl}>
               <Copy data-icon="inline-start" />
@@ -195,8 +191,8 @@ function McpSettingsPanel() {
           </div>
         ) : null}
         <Separator />
-        {mcpServersLoading ? <Skeleton className="h-10 w-full" /> : null}
-        {mcpServers.map((server) => (
+        {registrationsLoading ? <Skeleton className="h-10 w-full" /> : null}
+        {registrations.map((server) => (
           <div
             key={server.id}
             className="flex items-center justify-between gap-2"
@@ -208,7 +204,7 @@ function McpSettingsPanel() {
                 className="size-5 shrink-0 clip-path-[inset(6%)]"
               />
               <span className="truncate text-sm">{server.label}</span>
-              {mcpServersLoading ? (
+              {registrationsLoading ? (
                 <span className="text-xs text-muted-foreground">检测中...</span>
               ) : server.readError ? (
                 <StatusPill active={false} activeLabel="" inactiveLabel="配置读取失败" variant="warning" />
@@ -225,15 +221,15 @@ function McpSettingsPanel() {
                 variant="outline"
                 size="sm"
                 disabled={!server.settingsFileExists}
-                onClick={() => handleOpenMCPSettings(server.id)}
+                onClick={() => handleOpenSettings(server.id)}
               >
                 打开文件
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                disabled={Boolean(server.readError) || mcpRegisterDisabled}
-                onClick={() => handleRegisterMCP(server.id)}
+                disabled={Boolean(server.readError) || registrationDisabled}
+                onClick={() => handleRegisterMcp(server.id)}
               >
                 {server.registered ? "重新注册" : "注册"}
               </Button>

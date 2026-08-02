@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitDiffResult, SynapseGitFileChange, SynapseGitRepository, SynapseGitRepositorySnapshot } from "@/types/git"
 
+const WORKTREE_REFRESH_INTERVAL_MS = 5_000
+
+type GitWorktreeRefreshOptions = {
+  readonly background?: boolean
+}
+
 export function gitCommitPathsForSelection(
   changes: readonly SynapseGitFileChange[],
   selectedPaths: readonly string[],
@@ -18,7 +24,11 @@ export function gitCommitPathsForSelection(
   return Array.from(new Set(commitPaths))
 }
 
-export function useGitWorktreeStatus(repository: SynapseGitRepository) {
+export function useGitWorktreeStatus(
+  repository: SynapseGitRepository,
+  options: { readonly autoRefreshEnabled?: boolean } = {},
+) {
+  const autoRefreshEnabled = options.autoRefreshEnabled ?? true
   const [snapshot, setSnapshot] = useState<SynapseGitRepositorySnapshot | null>(null)
   const [selectedFile, setSelectedFile] = useState<SynapseGitFileChange | null>(null)
   const [diff, setDiff] = useState<SynapseGitDiffResult | null>(null)
@@ -27,17 +37,28 @@ export function useGitWorktreeStatus(repository: SynapseGitRepository) {
   const [diffLoading, setDiffLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const diffRequestIdRef = useRef(0)
+  const snapshotRequestIdRef = useRef(0)
+  const hasLoadedRef = useRef(false)
+  const selectedFileRef = useRef<SynapseGitFileChange | null>(null)
+  const refreshInFlightRef = useRef(false)
 
-  const loadDiff = useCallback(async (file: SynapseGitFileChange | null) => {
+  useEffect(() => {
+    selectedFileRef.current = selectedFile
+  }, [selectedFile])
+
+  const loadDiff = useCallback(async (
+    file: SynapseGitFileChange | null,
+    loadOptions: { readonly background?: boolean } = {},
+  ) => {
     const requestId = diffRequestIdRef.current + 1
     diffRequestIdRef.current = requestId
     setSelectedFile(file)
-    setDiff(null)
+    if (!loadOptions.background) setDiff(null)
     if (!file) {
       setDiffLoading(false)
       return
     }
-    setDiffLoading(true)
+    if (!loadOptions.background) setDiffLoading(true)
     try {
       const nextDiff = await requireSynapseBridge().git.getDiff({
         repositoryId: repository.id,
@@ -59,26 +80,80 @@ export function useGitWorktreeStatus(repository: SynapseGitRepository) {
     }
   }, [repository.id])
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const refresh = useCallback(async (refreshOptions: GitWorktreeRefreshOptions = {}) => {
+    if (refreshInFlightRef.current) return null
+    refreshInFlightRef.current = true
+    const requestId = ++snapshotRequestIdRef.current
+    if (!refreshOptions.background) setLoading(true)
     try {
       const next = await requireSynapseBridge().git.getSnapshot(repository.id)
+      if (snapshotRequestIdRef.current !== requestId) return null
+      const wasLoaded = hasLoadedRef.current
+      const currentSelectedFile = selectedFileRef.current
       setSnapshot(next)
-      setSelectedPaths(next.changes.map((change) => change.path))
-      await loadDiff(next.changes[0] ?? null)
+      setError(null)
+      setSelectedPaths((current) => (
+        wasLoaded
+          ? current.filter((selectedPath) => next.changes.some((change) => change.path === selectedPath))
+          : next.changes.map((change) => change.path)
+      ))
+      const nextSelectedFile = currentSelectedFile
+        ? next.changes.find((change) => change.path === currentSelectedFile.path) ?? next.changes[0] ?? null
+        : next.changes[0] ?? null
+      hasLoadedRef.current = true
+      const canPreserveDiff = Boolean(
+        refreshOptions.background
+        && currentSelectedFile
+        && nextSelectedFile
+        && currentSelectedFile.path === nextSelectedFile.path
+        && currentSelectedFile.originalPath === nextSelectedFile.originalPath
+        && currentSelectedFile.status === nextSelectedFile.status,
+      )
+      await loadDiff(nextSelectedFile, { background: canPreserveDiff })
       return next
     } catch (err) {
-      setError(err instanceof Error ? err.message : "读取仓库状态失败。")
+      if (snapshotRequestIdRef.current === requestId) {
+        setError(err instanceof Error ? err.message : "读取仓库状态失败。")
+      }
       return null
     } finally {
-      setLoading(false)
+      if (snapshotRequestIdRef.current === requestId) {
+        if (!refreshOptions.background) setLoading(false)
+        refreshInFlightRef.current = false
+      }
     }
   }, [loadDiff, repository.id])
 
   useEffect(() => {
+    snapshotRequestIdRef.current += 1
+    diffRequestIdRef.current += 1
+    refreshInFlightRef.current = false
+    hasLoadedRef.current = false
+    selectedFileRef.current = null
+    setSnapshot(null)
+    setSelectedFile(null)
+    setDiff(null)
+    setSelectedPaths([])
+    setLoading(true)
+    setDiffLoading(false)
+    setError(null)
     void refresh()
-  }, [refresh])
+  }, [refresh, repository.id])
+
+  useEffect(() => {
+    if (!autoRefreshEnabled) return
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refresh({ background: true })
+    }
+    window.addEventListener("focus", refreshWhenVisible)
+    document.addEventListener("visibilitychange", refreshWhenVisible)
+    const interval = window.setInterval(refreshWhenVisible, WORKTREE_REFRESH_INTERVAL_MS)
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible)
+      document.removeEventListener("visibilitychange", refreshWhenVisible)
+      window.clearInterval(interval)
+    }
+  }, [autoRefreshEnabled, refresh])
 
   const togglePath = useCallback((path: string) => {
     setSelectedPaths((current) => (

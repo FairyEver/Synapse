@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { FolderGit2, Plus } from "lucide-react"
+import { FolderGit2, Plus, RefreshCw } from "lucide-react"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
-import type { SynapseGitEnvironmentState, SynapseGitProvider, SynapseGitRepository } from "@/types/git"
+import type { SynapseGitEnvironmentState, SynapseGitProvider, SynapseGitRepository, SynapseGitRepositorySnapshot } from "@/types/git"
 import { GitAccessPanel } from "./components/git-access-panel"
 import { GitAddLocalDialog, GitCloneDialog } from "./components/git-clone-dialog"
 import { GitEnvironmentPanel } from "./components/git-environment-panel"
@@ -242,7 +242,7 @@ export function GitModule() {
 
   const handlePush = useCallback(async (
     repositoryId: string,
-    trackingStatus: "tracked" | "untracked" | "detached",
+    trackingStatus: SynapseGitRepositorySnapshot["trackingStatus"],
   ) => {
     const remoteName = await pushRemoteSelection.choose(repositoryId, trackingStatus)
     if (remoteName === null) return
@@ -265,6 +265,15 @@ export function GitModule() {
         onValueChange={setView}
         actions={view === "repositories" && !selectedRepository ? (
           <>
+            <SystemAppTopBarActionButton
+              type="button"
+              iconOnly
+              aria-label="刷新仓库列表"
+              onClick={() => void repositoriesState.refresh()}
+              disabled={repositoriesState.loading || operations.busy.global !== null}
+            >
+              <RefreshCw />
+            </SystemAppTopBarActionButton>
             <SystemAppTopBarActionButton
               type="button"
               onClick={() => setAddLocalOpen(true)}

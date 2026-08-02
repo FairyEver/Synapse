@@ -1,10 +1,6 @@
 import type {
   DatabaseChangeEvent,
   DatabaseFolder,
-  DatabaseMcpHttpStatus,
-  DatabaseMcpServerInfo,
-  DatabaseMcpStatus,
-  DatabaseMcpTarget,
   DatabaseOverview,
   Column,
   DatabaseQueryParams,
@@ -15,6 +11,7 @@ import type {
   DatabaseTableSchema,
   DatabaseWhereClause,
 } from "./database"
+import type { McpRegistrationInfo, McpServerStatus, McpTarget } from "./mcp"
 import type {
   AgentReferenceActionInput,
   AgentReferenceActionResult,
@@ -1563,11 +1560,6 @@ export type SynapseBridge = {
       import: () => Promise<{ success: boolean }>
       onChanged: (listener: (event: DatabaseChangeEvent) => void) => () => void
     }
-    mcpHttpStatus: { get: () => Promise<DatabaseMcpHttpStatus> }
-    mcpStatus: { get: () => Promise<DatabaseMcpStatus> }
-    mcpServers: { get: () => Promise<DatabaseMcpServerInfo[]> }
-    mcpSettings: { open: (target: DatabaseMcpTarget) => Promise<{ success: boolean; error?: string }> }
-    mcp: { register: (target: DatabaseMcpTarget) => Promise<{ success: boolean; error?: string }> }
     folder: {
       list: () => Promise<DatabaseFolder[]>
       create: (params: { name: string }) => Promise<{ id: number }>
@@ -1576,6 +1568,16 @@ export type SynapseBridge = {
       moveTable: (params: { tableName: string; folderId: number | null }) => Promise<void>
       reorder: (params: { folderId: number; tableNames: string[] }) => Promise<void>
       reorderFolders: (params: { folderIds: number[] }) => Promise<void>
+    }
+  }
+  mcp: {
+    server: {
+      get: () => Promise<McpServerStatus>
+    }
+    registration: {
+      list: () => Promise<McpRegistrationInfo[]>
+      openSettings: (target: McpTarget) => Promise<{ success: boolean; error?: string }>
+      register: (target: McpTarget) => Promise<{ success: boolean; error?: string }>
     }
   }
   automation: {

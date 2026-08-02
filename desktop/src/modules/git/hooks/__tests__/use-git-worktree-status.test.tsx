@@ -154,4 +154,51 @@ describe("useGitWorktreeStatus", () => {
     expect(statuses.at(-1)!.selectedFile?.path).toBe("docs/b.md")
     expect(statuses.at(-1)!.diff?.path).toBe("docs/b.md")
   })
+
+  it("preserves valid selections and leaves newly discovered files unselected on refresh", async () => {
+    const first = { ...emptySnapshot(), changes: [fileChange("docs/a.md"), fileChange("docs/b.md")] }
+    const next = { ...emptySnapshot(), changes: [fileChange("docs/a.md"), fileChange("docs/c.md")] }
+    bridge.git.getSnapshot.mockResolvedValueOnce(first).mockResolvedValueOnce(next)
+    bridge.git.getDiff.mockImplementation(({ path }: { readonly path: string }) => Promise.resolve(diffForPath(path)))
+    const statuses: Array<ReturnType<typeof useGitWorktreeStatus>> = []
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookHarness onStatus={(status) => statuses.push(status)} />)
+    })
+    await act(async () => {
+      statuses.at(-1)!.togglePath("docs/b.md")
+    })
+    await act(async () => {
+      await statuses.at(-1)!.refresh({ background: true })
+    })
+
+    expect(statuses.at(-1)!.selectedPaths).toEqual(["docs/a.md"])
+    expect(statuses.at(-1)!.selectedFile?.path).toBe("docs/a.md")
+    expect(statuses.at(-1)!.diff?.path).toBe("docs/a.md")
+    expect(statuses.at(-1)!.loading).toBe(false)
+  })
+
+  it("refreshes when the window regains focus", async () => {
+    bridge.git.getDiff.mockResolvedValue(diffForPath("docs/a.md"))
+    const statuses: Array<ReturnType<typeof useGitWorktreeStatus>> = []
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(<HookHarness onStatus={(status) => statuses.push(status)} />)
+    })
+    expect(bridge.git.getSnapshot).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"))
+      await Promise.resolve()
+    })
+
+    expect(bridge.git.getSnapshot).toHaveBeenCalledTimes(2)
+  })
 })

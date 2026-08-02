@@ -70,6 +70,22 @@ describe("git access service", () => {
     }))
   })
 
+  it("uses an RSA public key when Ed25519 is unavailable", async () => {
+    const publicKeyPath = path.join("/Users/writer", ".ssh", "id_rsa.pub")
+    const service = createService({
+      pathExists: async (filePath) => filePath === publicKeyPath,
+      readFile: async () => "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA writer@example.com\n",
+    })
+
+    await expect(service.check()).resolves.toMatchObject({
+      ssh: {
+        available: true,
+        publicKeyPath,
+        publicKeyType: "ssh-rsa",
+      },
+    })
+  })
+
   it("marks credential helper unsafe when any configured helper is unsafe", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "store\nosxkeychain\n", stderr: "" })
     const service = createService({ commandRunner: { run } })

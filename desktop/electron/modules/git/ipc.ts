@@ -223,7 +223,7 @@ const cloneRepositorySchema = z.object({
 
 const cloneResultSchema = z.object({
   repository: repositorySchema,
-  remoteKind: z.enum(["https", "ssh", "unknown"]),
+  remoteKind: z.enum(["http", "https", "ssh", "unknown"]),
 })
 
 const repositoryIdSchema = z.object({
@@ -243,7 +243,7 @@ const snapshotSchema = z.object({
   isGitRepository: z.boolean(),
   currentBranch: z.string().nullable(),
   upstream: z.string().nullable(),
-  trackingStatus: z.enum(["tracked", "untracked", "detached"]),
+  trackingStatus: z.enum(["tracked", "untracked", "detached", "gone"]),
   ahead: z.number(),
   behind: z.number(),
   hasConflicts: z.boolean(),
@@ -341,7 +341,7 @@ const historyListRequestSchema = repositoryIdSchema.extend({
 }).strict()
 
 const commitDetailRequestSchema = repositoryIdSchema.extend({
-  hash: z.string(),
+  hash: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i),
 }).strict()
 
 type ConfigureIdentityRequest = z.infer<typeof configureIdentitySchema>
@@ -499,18 +499,11 @@ export const gitIpcModule: IpcModule = {
       handler: async (ctx) => {
         const registry = ctx.resolve<GitRepositoryRegistry>("git.repository-registry")
         const statusService = ctx.resolve<GitStatusService>("git.status-service")
-        return Promise.all((await registry.list()).map(async (repository) => {
-          try {
-            const snapshot = await runRepositoryRead(ctx, repository, () => statusService.getSnapshot(repository))
-            return { repository, snapshot, error: null }
-          } catch (error) {
-            return {
-              repository,
-              snapshot: null,
-              error: error instanceof Error ? error.message : "读取仓库状态失败。",
-            }
-          }
-        }))
+        const repositories = await registry.list()
+        return statusService.listSummaries(
+          repositories,
+          (repository) => runRepositoryRead(ctx, repository, () => statusService.getSnapshot(repository)),
+        )
       },
     },
     addLocalRepository: {

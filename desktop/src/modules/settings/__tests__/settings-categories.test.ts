@@ -10,6 +10,7 @@ describe("settingsCategories", () => {
       "account",
       "general",
       "dock",
+      "mcp",
       "repositories",
       "projects",
       "claude-code",
@@ -24,7 +25,6 @@ describe("settingsCategories", () => {
 
     expect(ids).not.toContain("services")
     expect(ids).not.toContain("database")
-    expect(ids).not.toContain("mcp")
     expect(ids).not.toContain("tools")
     expect(ids).not.toContain("quick-inputs")
     expect(ids).not.toContain("variables")
@@ -43,6 +43,7 @@ describe("settingsCategories", () => {
     expect(labels.get("account")).toBe("账号")
     expect(labels.get("general")).toBe("基础设置")
     expect(labels.get("dock")).toBe("Dock 栏")
+    expect(labels.get("mcp")).toBe("MCP")
     expect(labels.get("repositories")).toBe("资源仓库")
     expect(labels.get("projects")).toBe("项目和知识库")
     expect(labels.get("tools")).toBeUndefined()

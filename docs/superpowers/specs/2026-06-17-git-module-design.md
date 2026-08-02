@@ -159,6 +159,8 @@ SSH 是高级路径。Synapse 可以检测 `ssh` 是否可用、是否存在常�
 
 同一真实 Git 根目录的修改操作使用可见 FIFO 队列；Git System App 与内容仓库共用同一仓库锁。读取等待当前修改完成。clone、fetch、pull、push、sync 支持 operation ID 和取消，取消后重新读取真实状态。
 
+工作台可见时每 5 秒后台刷新，并在窗口重新聚焦时立即刷新；仓库列表只在窗口聚焦或用户手动操作时刷新，避免仓库较多时持续启动 Git 进程。后台刷新保留仍有效的文件选择和提交说明，新发现文件默认不选中。提交前重新读取状态并核对所选路径、状态和重命名映射，变化后要求用户重新确认。
+
 没有 Git 时显示安装引导。安装引导按平台给出短操作，并提供重新检测入口。应用不内置 Git，也不在第一期自动下载安装器。
 
 ## 仓库工作台
@@ -222,7 +224,11 @@ SSH 是高级路径。Synapse 可以检测 `ssh` 是否可用、是否存在常�
 ├─ 检查工作区
 │  ├─ 有未提交改动：停止，提示先提交
 │  └─ 工作区干净：继续
+├─ 检查上游
+│  ├─ 上游已删除：停止，提示重新推送或调整 upstream
+│  └─ 本地与上游分叉：停止，提示使用外部 Git 工具处理
 ├─ fetch
+├─ 重新检查上游和分叉状态
 ├─ 如果 behind > 0：pull --ff-only
 ├─ 如果 ahead > 0：push
 └─ 刷新状态
@@ -375,7 +381,7 @@ type GitRepositorySnapshot = {
 }
 ```
 
-历史按当前分支分页加载。
+历史按当前分支每页 40 条分页加载，只有存在下一页时显示“加载更多”。空提交说明是合法历史记录，界面显示“无提交说明”。
 
 仓库、分支、历史列表或提交选择变化都会使旧详情请求失效。只有最新请求代次可以更新详情、错误与 loading，避免较慢的旧响应覆盖当前选择。
 
@@ -399,7 +405,7 @@ type GitCommitSummary = {
 所有 Git 操作都通过结构化服务 API 进入主进程。服务内部使用参数数组执行系统 Git，不拼接 shell 字符串。
 
 ```text
-git status --porcelain=v2 --branch
+git status --porcelain=v2 --branch --untracked-files=all
 git diff -- <path>
 git diff --staged -- <path>
 git add -- <paths>
@@ -408,11 +414,12 @@ git commit -m <message>
 git fetch --prune
 git pull --ff-only
 git push
-git branch --list
+git symbolic-ref --quiet --short HEAD
+git for-each-ref --format=%(refname:short) refs/heads
 git checkout <branch>
 git checkout -b <branch>
 git log --date=iso-strict --pretty=...
-git show --name-status --format=...
+git show --name-status -z --find-renames --format=...
 ```
 
 Renderer 不允许传任意 Git 参数。IPC 方法只表达业务动作，例如：

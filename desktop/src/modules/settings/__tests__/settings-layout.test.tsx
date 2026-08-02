@@ -89,6 +89,10 @@ vi.mock("@/modules/settings/components/app-reset-panel", () => ({
   AppResetPanel: () => <div>重置应用</div>,
 }))
 
+vi.mock("@/modules/settings/components/mcp-settings-panel", () => ({
+  McpSettingsPanel: () => <div>MCP 注册面板</div>,
+}))
+
 import { SettingsModule } from "@/modules/settings"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -159,6 +163,20 @@ describe("SettingsModule layout", () => {
 
     expect(container.textContent).toContain("Dock 栏")
     expect(container.textContent).toContain("已固定")
+  })
+
+  it("opens the MCP registration panel from the settings sidebar", async () => {
+    const container = await renderSettingsModule()
+    const mcpButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === "MCP")
+
+    expect(mcpButton).toBeDefined()
+    await act(async () => {
+      mcpButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain("MCP 注册面板")
   })
 })
 

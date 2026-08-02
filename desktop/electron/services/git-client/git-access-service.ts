@@ -17,6 +17,7 @@ import type {
 import type { StructuredLogger } from "../../runtime/logging"
 import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import type { GitClientCommandRunner } from "./git-command-runner"
+import { findCommonSshPublicKey, parseSshPublicKeyDetails } from "./git-ssh-public-key"
 
 type Platform = NodeJS.Platform
 type ProcessRunResult = {
@@ -292,47 +293,14 @@ function parseScannedHostKeys(output: string): Array<{ readonly fingerprint: str
   }).filter((entry): entry is { readonly fingerprint: string; readonly line: string } => entry !== null)
 }
 
-function parsePublicKey(content: string): {
-  readonly comment: string | null
-  readonly fingerprint: string | null
-  readonly type: string | null
-} {
-  const fields = content.trim().split(/\s+/)
-  const type = fields[0] || null
-  const encodedKey = fields[1] || null
-  const comment = fields.slice(2).join(" ") || null
-  let fingerprint: string | null = null
-  if (encodedKey) {
-    try {
-      fingerprint = `SHA256:${createHash("sha256")
-        .update(Buffer.from(encodedKey, "base64"))
-        .digest("base64")
-        .replace(/=+$/u, "")}`
-    } catch {
-      fingerprint = null
-    }
-  }
-  return { comment, fingerprint, type }
-}
-
 async function readSshState(deps: Pick<GitAccessDeps, "homeDir" | "pathExists" | "readFile">): Promise<SynapseGitAccessState["ssh"]> {
-  const publicKeyPath = getEd25519PublicKeyPath(deps.homeDir)
   try {
-    if (!(await deps.pathExists(publicKeyPath))) {
-      return {
-        available: false,
-        publicKeyComment: null,
-        publicKeyFingerprint: null,
-        publicKeyPath: null,
-        publicKeyType: null,
-      }
-    }
-    const parsed = parsePublicKey(await deps.readFile(publicKeyPath))
+    const parsed = parseSshPublicKeyDetails(await findCommonSshPublicKey(deps))
     return {
-      available: true,
+      available: parsed.path !== null,
       publicKeyComment: parsed.comment,
       publicKeyFingerprint: parsed.fingerprint,
-      publicKeyPath,
+      publicKeyPath: parsed.path,
       publicKeyType: parsed.type,
     }
   } catch {

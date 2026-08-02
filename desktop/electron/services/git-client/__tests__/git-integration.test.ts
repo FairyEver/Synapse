@@ -7,7 +7,9 @@ import { afterEach, describe, expect, it } from "vitest"
 import type { SynapseGitRepository } from "../../../../src/types/git"
 import { createGitCloneService } from "../git-clone-service"
 import { createGitClientCommandRunner } from "../git-command-runner"
+import { createGitBranchService } from "../git-branch-service"
 import { createGitCommitService } from "../git-commit-service"
+import { createGitHistoryService } from "../git-history-service"
 import { createGitStatusService } from "../git-status-service"
 import { createGitSyncService } from "../git-sync-service"
 
@@ -81,7 +83,7 @@ describe("Git client real repository integration", () => {
     await writeFile(filePath, "working-tree\n", "utf8")
     const runner = createGitClientCommandRunner()
     const status = createGitStatusService({ commandRunner: runner, pathExists })
-    const commit = createGitCommitService({ commandRunner: runner })
+    const commit = createGitCommitService({ commandRunner: runner, getSnapshot: status.getSnapshot })
 
     const diff = await status.getDiff(repository, { path: "notes.txt", status: "modified" })
     await commit.commit(repository, { message: "complete file", paths: ["notes.txt"] })
@@ -121,5 +123,77 @@ describe("Git client real repository integration", () => {
 
     await expect(git(repository.localPath, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"))
       .resolves.toBe("company/main\n")
+  })
+
+  it("lists every nested untracked file even when repository config hides them", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    await mkdir(path.join(repository.localPath, "docs"))
+    await writeFile(path.join(repository.localPath, "docs", "a.md"), "a\n", "utf8")
+    await writeFile(path.join(repository.localPath, "docs", "b.md"), "b\n", "utf8")
+    await git(repository.localPath, "config", "status.showUntrackedFiles", "no")
+    const status = createGitStatusService({ commandRunner: createGitClientCommandRunner(), pathExists })
+
+    const snapshot = await status.getSnapshot(repository)
+
+    expect(snapshot.changes.map((change) => change.path)).toEqual(["docs/a.md", "docs/b.md"])
+  })
+
+  it("reports a deleted upstream branch instead of synchronized", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    const remotePath = path.join(root, "remote.git")
+    await git(root, "init", "--bare", remotePath)
+    await writeFile(path.join(repository.localPath, "README.md"), "docs\n", "utf8")
+    await git(repository.localPath, "add", "README.md")
+    await git(repository.localPath, "commit", "-m", "initial")
+    await git(repository.localPath, "remote", "add", "origin", remotePath)
+    await git(repository.localPath, "push", "--set-upstream", "origin", "main")
+    await git(remotePath, "update-ref", "-d", "refs/heads/main")
+    await git(repository.localPath, "fetch", "--prune")
+    const status = createGitStatusService({ commandRunner: createGitClientCommandRunner(), pathExists })
+
+    await expect(status.getSnapshot(repository)).resolves.toMatchObject({
+      upstream: "origin/main",
+      trackingStatus: "gone",
+      ahead: 0,
+      behind: 0,
+    })
+  })
+
+  it("lists worktree branches without Git decoration prefixes", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    await writeFile(path.join(repository.localPath, "README.md"), "docs\n", "utf8")
+    await git(repository.localPath, "add", "README.md")
+    await git(repository.localPath, "commit", "-m", "initial")
+    await git(repository.localPath, "worktree", "add", "-b", "secondary", path.join(root, "secondary"))
+    const branches = createGitBranchService({
+      commandRunner: createGitClientCommandRunner(),
+      getSnapshot: async () => ({ changes: [] }),
+    })
+
+    await expect(branches.list(repository)).resolves.toEqual([
+      { name: "main", current: true },
+      { name: "secondary", current: false },
+    ])
+  })
+
+  it("reads empty subjects, unicode paths, and renames from commit history", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    await writeFile(path.join(repository.localPath, "旧 名称.md"), "内容\n", "utf8")
+    await git(repository.localPath, "add", "旧 名称.md")
+    await git(repository.localPath, "commit", "-m", "initial")
+    await git(repository.localPath, "mv", "旧 名称.md", "新 名称.md")
+    await git(repository.localPath, "commit", "--allow-empty-message", "-m", "")
+    const history = createGitHistoryService({ commandRunner: createGitClientCommandRunner() })
+
+    const commits = await history.list(repository, { limit: 40, offset: 0 })
+    expect(commits[0]?.subject).toBe("")
+    const detail = await history.getCommit(repository, commits[0]!.hash)
+    expect(detail.files).toEqual([
+      { path: "新 名称.md", originalPath: "旧 名称.md", status: "renamed", staged: false, conflicted: false },
+    ])
   })
 })

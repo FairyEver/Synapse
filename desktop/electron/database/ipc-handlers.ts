@@ -3,13 +3,10 @@ import path from "node:path"
 import { DATABASE_IPC_CHANNELS } from "./channels"
 import { databaseService } from "./service"
 import { getHttpPort } from "./http-server"
-import { getMcpServers, getMcpStatus, openMcpSettings, registerMcp } from "./mcp-installer"
-import { getMcpServerPort, isMcpServerRunning, getMcpServerUrl } from "./mcp-server"
 import { sanitizeDatabaseLogPath } from "./logging"
 import { notifyDatabaseChange } from "./dispatcher"
 import { handleValidatedIpc } from "../ipc/validated-ipc"
 import { createMainLogger } from "../services/log-store"
-import type { DatabaseMcpTarget } from "../../src/types/database"
 import type {
   Column,
   DatabaseQueryParams,
@@ -85,15 +82,6 @@ function recordAudit(
     outcome,
     metadata: { filePath, ...(error ? { error } : {}) },
   })
-}
-
-function mcpRegistrationSecurity(event: IpcMainInvokeEvent, source: string) {
-  return {
-    actor: actorIdentityForIpc(event),
-    source,
-    permissionGuard,
-    auditSink,
-  }
 }
 
 function getOwnerWindow(event: IpcMainInvokeEvent): BrowserWindow | undefined {
@@ -418,30 +406,6 @@ function registerDatabaseHandlers(): void {
       recordAudit(event, "import", sourcePath, "failed", error instanceof Error ? error.message : String(error))
       throw error
     }
-  })
-
-  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseMcpHttpStatusGet, async () => {
-    return {
-      running: isMcpServerRunning(),
-      port: getMcpServerPort(),
-      url: getMcpServerUrl(),
-    }
-  })
-
-  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseMcpStatusGet, async () => {
-    return getMcpStatus()
-  })
-
-  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseMcpServersGet, async () => {
-    return getMcpServers()
-  })
-
-  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseMcpSettingsOpen, async (_event, target: DatabaseMcpTarget) => {
-    return openMcpSettings(target)
-  })
-
-  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseMcpRegister, async (event, target: DatabaseMcpTarget) => {
-    return registerMcp(target, getMcpServerPort(), mcpRegistrationSecurity(event, "database.mcp.register"))
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderList, async () => {

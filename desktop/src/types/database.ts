@@ -106,26 +106,6 @@ type DatabaseTableImportInspection = {
   sourceDigest: string
 }
 
-type DatabaseMcpStatus = Record<string, boolean>
-
-type DatabaseMcpTarget = string & { readonly __brand?: "DatabaseMcpTarget" }
-
-type DatabaseMcpServerInfo = {
-  target: DatabaseMcpTarget
-  settingsPath: string
-  settingsFileExists: boolean
-  registered: boolean
-  mode: "http" | "stdio" | null
-  url: string | null
-  readError?: string
-}
-
-type DatabaseMcpHttpStatus = {
-  running: boolean
-  port: number
-  url: string
-}
-
 type DatabaseChangeEvent = {
   action: string
   table?: string
@@ -134,10 +114,6 @@ type DatabaseChangeEvent = {
 export type {
   DatabaseChangeEvent,
   DatabaseFolder,
-  DatabaseMcpHttpStatus,
-  DatabaseMcpServerInfo,
-  DatabaseMcpStatus,
-  DatabaseMcpTarget,
   Column,
   ColumnKind,
   DatabaseOrderBy,

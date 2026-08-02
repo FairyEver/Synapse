@@ -32,6 +32,7 @@ describe("appsIpcModule", () => {
 
   it("validates app ids and opens a valid app", async () => {
     expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "database" }).success).toBe(true)
+    expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "mcp" }).success).toBe(false)
     for (const removedAppId of [
       "document-template",
       "text-extractor",

@@ -10,10 +10,6 @@ import {
 } from "@/modules/database/utils"
 import type {
   Column,
-  DatabaseMcpHttpStatus,
-  DatabaseMcpServerInfo,
-  DatabaseMcpStatus,
-  DatabaseMcpTarget,
   DatabaseStatus,
   DatabaseTableImportInspection,
   DatabaseTableInfo,
@@ -239,26 +235,6 @@ async function databaseTableImport(input: { sourcePath: string; sourceDigest: st
   return requireSynapseBridge().database.table.import(input)
 }
 
-async function databaseMcpHttpStatusGet(): Promise<DatabaseMcpHttpStatus> {
-  return requireSynapseBridge().database.mcpHttpStatus.get()
-}
-
-async function databaseMcpStatusGet(): Promise<DatabaseMcpStatus> {
-  return requireSynapseBridge().database.mcpStatus.get()
-}
-
-async function databaseMcpServersGet(): Promise<DatabaseMcpServerInfo[]> {
-  return requireSynapseBridge().database.mcpServers.get()
-}
-
-async function databaseMcpSettingsOpen(target: DatabaseMcpTarget): Promise<{ success: boolean; error?: string }> {
-  return requireSynapseBridge().database.mcpSettings.open(target)
-}
-
-async function databaseMcpRegister(target: DatabaseMcpTarget): Promise<{ success: boolean; error?: string }> {
-  return requireSynapseBridge().database.mcp.register(target)
-}
-
 export {
   databaseColumnCreate,
   databaseTableCreate,
@@ -267,15 +243,10 @@ export {
   databaseExport,
   databaseTableExport,
   databaseChoiceUsageGet,
-  databaseMcpServersGet,
-  databaseMcpHttpStatusGet,
-  databaseMcpStatusGet,
   databaseImport,
   databaseTableImport,
   databaseTableImportInspect,
   databaseRowCreate,
-  databaseMcpSettingsOpen,
-  databaseMcpRegister,
   databaseTableUpdate,
   databaseColumnUpdate,
   databaseChoiceUpdate,

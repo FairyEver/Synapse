@@ -4,7 +4,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { SynapseGitCommitDetail, SynapseGitRepository } from "@/types/git"
+import type { SynapseGitCommitDetail, SynapseGitCommitSummary, SynapseGitRepository } from "@/types/git"
 import { useGitHistory } from "../use-git-history"
 
 const bridge = vi.hoisted(() => ({
@@ -104,5 +104,45 @@ describe("useGitHistory", () => {
 
     expect(statuses.at(-1)!.selectedCommit?.hash).toBe("new")
     expect(statuses.at(-1)!.detailLoading).toBe(false)
+  })
+
+  it("loads history in pages without duplicating the boundary commit", async () => {
+    const commits = Array.from({ length: 45 }, (_, index): SynapseGitCommitSummary => ({
+      hash: String(index).padStart(40, "0"),
+      shortHash: String(index),
+      subject: index === 0 ? "" : `commit ${index}`,
+      authorName: "User",
+      authorEmail: "user@example.com",
+      committedAt: "2026-07-31T00:00:00.000Z",
+    }))
+    bridge.git.listHistory
+      .mockResolvedValueOnce(commits.slice(0, 41))
+      .mockResolvedValueOnce(commits.slice(40))
+
+    await act(async () => {
+      root.render(<HookHarness onStatus={(status) => statuses.push(status)} />)
+    })
+    await act(async () => {
+      await statuses.at(-1)!.refresh()
+    })
+
+    expect(statuses.at(-1)!.commits).toHaveLength(40)
+    expect(statuses.at(-1)!.hasMore).toBe(true)
+    await act(async () => {
+      await statuses.at(-1)!.loadMore()
+    })
+    expect(statuses.at(-1)!.commits).toHaveLength(45)
+    expect(new Set(statuses.at(-1)!.commits.map((commit) => commit.hash)).size).toBe(45)
+    expect(statuses.at(-1)!.hasMore).toBe(false)
+    expect(bridge.git.listHistory).toHaveBeenNthCalledWith(1, {
+      repositoryId: "repo-1",
+      limit: 41,
+      offset: 0,
+    })
+    expect(bridge.git.listHistory).toHaveBeenNthCalledWith(2, {
+      repositoryId: "repo-1",
+      limit: 41,
+      offset: 40,
+    })
   })
 })

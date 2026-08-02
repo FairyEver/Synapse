@@ -40,7 +40,7 @@ export type SynapseSystemAppNamespace =
   | "model_price"
 export type ResourceRepositoryViewId = "skill" | "rule" | "prompt"
 export type UsageMonitorViewId = "cc" | "codex"
-export type DatabaseAppViewId = "tables" | "status" | "management" | "mcp"
+export type DatabaseAppViewId = "tables" | "status" | "management"
 export type SynapseSystemAppDefaultView = ResourceRepositoryViewId | UsageMonitorViewId
 export type SynapseSystemAppDockVisibility = "always" | "workflow-entry-enabled"
 

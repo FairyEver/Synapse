@@ -104,7 +104,7 @@ describe("GitWorkbench", () => {
   })
 
   it("commits both old and new paths for selected renames", async () => {
-    bridge.git.getSnapshot.mockResolvedValueOnce({
+    bridge.git.getSnapshot.mockResolvedValue({
       repositoryId: "repo-1",
       pathExists: true,
       isGitRepository: true,
@@ -149,7 +149,7 @@ describe("GitWorkbench", () => {
     await click(findButton("历史"))
     expect(bridge.git.listHistory).toHaveBeenCalledWith({
       repositoryId: "repo-1",
-      limit: 40,
+      limit: 41,
       offset: 0,
     })
     expect(document.body.textContent).toContain("更新文档")
@@ -172,21 +172,21 @@ describe("GitWorkbench", () => {
   })
 
   it("shows loading labels while running toolbar actions", async () => {
-    const pendingSync = deferred()
-    bridge.git.getSnapshot.mockResolvedValue(gitSnapshot({ changes: [], ahead: 1, behind: 1 }))
-    bridge.git.sync.mockReturnValue(pendingSync.promise)
+    const pendingPull = deferred()
+    bridge.git.getSnapshot.mockResolvedValue(gitSnapshot({ changes: [], ahead: 0, behind: 1 }))
+    bridge.git.pull.mockReturnValue(pendingPull.promise)
     await renderWorkbench(roots)
 
     await act(async () => {
-      findButton("同步").click()
+      findButton("拉取远程更新").click()
       await flush()
     })
 
     expect(findButton("等待中").textContent).toContain("等待中")
 
-    pendingSync.resolve({ completedAt: "now", message: "已同步。" })
+    pendingPull.resolve({ completedAt: "now", message: "已拉取。" })
     await act(async () => {
-      await pendingSync.promise
+      await pendingPull.promise
       await flush()
     })
   })
@@ -300,10 +300,10 @@ describe("GitWorkbench", () => {
     bridge.git.getSnapshot.mockResolvedValue(gitSnapshot({ changes: [], ahead: 1, behind: 1 }))
     bridge.git.listBranches.mockResolvedValue([{ name: "main", current: true }])
     bridge.git.listHistory.mockResolvedValue([])
-    bridge.git.sync.mockResolvedValue({ completedAt: "now", message: "已同步仓库。" })
     await renderWorkbench(roots)
-    await click(findButton("同步"))
-    expect(bridge.git.sync).toHaveBeenCalledWith("repo-1", expect.any(String))
+    expect(document.body.textContent).toContain("本地分支与上游分支已分叉")
+    expect(findButton("处理分叉").hasAttribute("disabled")).toBe(true)
+    expect(bridge.git.sync).not.toHaveBeenCalled()
   })
 
   it("uses shared empty states for empty worktree panes without an inline submit panel", () => {
@@ -362,7 +362,10 @@ describe("GitWorkbench", () => {
         detailLoading: false,
         error: null,
         hasLoaded: true,
+        hasMore: false,
+        loadingMore: false,
         refresh: vi.fn(async () => undefined),
+        loadMore: vi.fn(async () => undefined),
         loadCommit: vi.fn(async () => undefined),
       }}
     />)
@@ -397,7 +400,10 @@ describe("GitWorkbench", () => {
         detailLoading: false,
         error: null,
         hasLoaded: true,
+        hasMore: false,
+        loadingMore: false,
         refresh: vi.fn(async () => undefined),
+        loadMore: vi.fn(async () => undefined),
         loadCommit: vi.fn(async () => undefined),
       }}
     />)
@@ -528,7 +534,10 @@ describe("GitWorkbench", () => {
         detailLoading: false,
         error: null,
         hasLoaded: true,
+        hasMore: false,
+        loadingMore: false,
         refresh: vi.fn(async () => undefined),
+        loadMore: vi.fn(async () => undefined),
         loadCommit: vi.fn(async () => undefined),
       }}
     />)
@@ -540,11 +549,16 @@ describe("GitWorkbench", () => {
   })
 
   it("keeps commit handoff on remaining local changes", async () => {
+    const current = gitSnapshot({
+      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+    })
     const status = createStatus({
-      refresh: vi.fn(async () => gitSnapshot({
+      refresh: vi.fn()
+        .mockResolvedValueOnce(current)
+        .mockResolvedValueOnce(gitSnapshot({
         ahead: 1,
         changes: [{ path: "docs/b.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
-      })),
+        })),
     })
 
     await renderChangesTab(roots, status)
@@ -556,8 +570,13 @@ describe("GitWorkbench", () => {
   })
 
   it("offers push only when commit leaves no local changes and has local commits", async () => {
+    const current = gitSnapshot({
+      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+    })
     const status = createStatus({
-      refresh: vi.fn(async () => gitSnapshot({ changes: [], ahead: 1, behind: 0 })),
+      refresh: vi.fn()
+        .mockResolvedValueOnce(current)
+        .mockResolvedValueOnce(gitSnapshot({ changes: [], ahead: 1, behind: 0 })),
     })
 
     await renderChangesTab(roots, status)
@@ -583,6 +602,21 @@ describe("GitWorkbench", () => {
 
     expect(document.body.textContent).toContain("发生冲突")
     expect(findButton("提交选中文件").hasAttribute("disabled")).toBe(true)
+  })
+
+  it("requires reconfirmation when selected files change before commit", async () => {
+    const status = createStatus({
+      refresh: vi.fn(async () => gitSnapshot({
+        changes: [{ path: "docs/a.md", originalPath: null, status: "deleted", staged: false, conflicted: false }],
+      })),
+    })
+
+    await renderChangesTab(roots, status)
+    await changeTextarea("提交说明", "更新文档")
+    await click(findButton("提交选中文件"))
+
+    expect(bridge.git.commit).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("所选文件已发生变化")
   })
 })
 
@@ -613,7 +647,9 @@ function createStatus(overrides: Partial<ReturnType<typeof useGitWorktreeStatus>
     loading: false,
     diffLoading: false,
     error: null,
-    refresh: vi.fn(async () => gitSnapshot({ changes: [], ahead: 1 })),
+    refresh: vi.fn(async () => gitSnapshot({
+      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+    })),
     loadDiff: vi.fn(async () => undefined),
     togglePath: vi.fn(),
     selectAll: vi.fn(),

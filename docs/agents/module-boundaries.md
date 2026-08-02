@@ -46,6 +46,12 @@
 - Sound Notifier 是声音能力包，不是 System App。
 - System Notifier 的完整权威规格是 `docs/superpowers/specs/2026-07-23-system-notifier-v1-design.md`。修改前必须完整阅读，不得以本摘要代替。
 
+## MCP
+
+- 系统设置的 MCP 分类是全局 MCP Server 状态、URL 和外部客户端注册信息的唯一 UI 入口；MCP 不注册为 System App，Database 不得重复承载该视图。
+- Renderer 只通过顶层 `window.synapse.mcp` bridge 访问 MCP 专属 IPC；不得在 `database` bridge 中恢复兼容别名。
+- MCP 设置分类只管理产品入口与客户端注册，不新增 MCP capability/tool，也不改变 loopback HTTP transport、端口、自动注册、ActionRouter 或运行生命周期。底层服务继续聚合全部已注册 capability domain。
+
 ## Drive
 
 - `公开素材`使用稳定、匿名、不过期 `/files/<assetId>`。允许 JPG/JPEG/PNG/WebP/GIF/AVIF/ICO 和 PDF/DOCX/XLSX/PPTX/TXT/MD/CSV；禁止 SVG、主动网页内容、压缩包、可执行、旧 Office 和宏格式。

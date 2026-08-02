@@ -33,6 +33,7 @@ import { knowledgeBaseIpcModule } from "../modules/knowledge-base/ipc"
 import { accountIpcModule } from "../modules/account/ipc"
 import { driveSyncIpcModule } from "../modules/drive-sync/ipc"
 import { liveIpcModule } from "../modules/live/ipc"
+import { mcpIpcModule } from "../modules/mcp/ipc"
 import { documentTemplateIpcModule } from "../../app-capabilities/document-template/main/ipc"
 import { textExtractorIpcModule } from "../../app-capabilities/text-extractor/main/ipc"
 import { fileOpenerIpcModule } from "../../app-capabilities/file-opener/main/ipc"
@@ -82,6 +83,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(accountIpcModule, ctx)
   registry.register(driveSyncIpcModule, ctx)
   registry.register(liveIpcModule, ctx)
+  registry.register(mcpIpcModule, ctx)
   registry.register(documentTemplateIpcModule, ctx)
   registry.register(textExtractorIpcModule, ctx)
   registry.register(fileOpenerIpcModule, ctx)
@@ -130,6 +132,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   accountIpcModule,
   driveSyncIpcModule,
   liveIpcModule,
+  mcpIpcModule,
   documentTemplateIpcModule,
   textExtractorIpcModule,
   fileOpenerIpcModule,

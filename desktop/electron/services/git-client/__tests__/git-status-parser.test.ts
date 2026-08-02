@@ -33,6 +33,18 @@ describe("parseGitStatusPorcelainV2", () => {
     expect(parseGitStatusPorcelainV2("# branch.head (detached)\n").trackingStatus).toBe("detached")
   })
 
+  it("reports an upstream that no longer exists", () => {
+    const snapshot = parseGitStatusPorcelainV2([
+      "# branch.head main",
+      "# branch.upstream origin/main",
+    ].join("\n"))
+
+    expect(snapshot.trackingStatus).toBe("gone")
+    expect(snapshot.upstream).toBe("origin/main")
+    expect(snapshot.ahead).toBe(0)
+    expect(snapshot.behind).toBe(0)
+  })
+
   it("parses renamed files", () => {
     const snapshot = parseGitStatusPorcelainV2(
       "2 R. N... 100644 100644 100644 abc abc R100 docs/new-name.md\t docs/old-name.md",

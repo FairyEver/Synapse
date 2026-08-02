@@ -71,6 +71,8 @@
 
 Git 仍是普通 System App，不新增 MCP domain。其 clone、仓库注册、提交、同步、SSH 主机密钥、操作状态与取消能力只通过窄类型化 Git IPC bridge 暴露；这不改变上表的 capability 或 MCP 数量。
 
+MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统设置中的 MCP 分类是全局 MCP Server 与外部客户端注册信息的唯一 UI 入口；它聚合当前全部已注册 domain，但不新增 capability 或 MCP tool。
+
 ## MCP capability domain
 
 | Domain | Capability 数 | MCP Tool 数 |

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { ArrowLeft, Info, MoreHorizontal } from "lucide-react"
+import { ArrowLeft, Info, MoreHorizontal, RefreshCw } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -53,13 +53,19 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   const [branchRefreshKey, setBranchRefreshKey] = useState(0)
   const [commitDialogOpen, setCommitDialogOpen] = useState(false)
   const activeOperationIdRef = useRef<string | null>(null)
+  const observedBranchRef = useRef<string | null | undefined>(undefined)
   const retryActionRef = useRef<(() => void) | null>(null)
-  const status = useGitWorktreeStatus(repository)
+  const status = useGitWorktreeStatus(repository, { autoRefreshEnabled: busy === null })
   const history = useGitHistory(repository, { enabled: view === "history" })
   const currentBranch = status.snapshot?.currentBranch ?? null
   const actionPlan = getGitActionPlan(status.snapshot, status.error)
   const recommendedAction = actionPlan.primaryAction
   const changes = status.snapshot?.changes ?? []
+  const syncBoundaryBlocked = status.snapshot?.trackingStatus === "gone"
+    || Boolean(status.snapshot && status.snapshot.ahead > 0 && status.snapshot.behind > 0)
+  const syncBoundaryPlan = syncBoundaryBlocked && status.snapshot
+    ? getGitActionPlan({ ...status.snapshot, changes: [] })
+    : null
   const repositoryDisplayPath = formatRepositoryDisplayPath(repository.localPath)
 
   useEffect(() => {
@@ -69,6 +75,15 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
       if (state.operationId === activeOperationIdRef.current) setOperationPhase(state.status)
     })
   }, [])
+
+  useEffect(() => {
+    if (!status.snapshot) return
+    const previousBranch = observedBranchRef.current
+    observedBranchRef.current = currentBranch
+    if (previousBranch === undefined || previousBranch === currentBranch) return
+    setBranchRefreshKey((value) => value + 1)
+    if (history.hasLoaded) void history.refresh()
+  }, [currentBranch, history.hasLoaded, history.refresh, status.snapshot])
 
   const refreshAll = async () => {
     await status.refresh()
@@ -99,6 +114,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
         setOperationFailure(null)
         return
       }
+      await refreshAll()
       const failure = readOperationFailure(err, undefined, repository.id, kind)
       setOperationError(err instanceof Error ? err.message : "操作失败。")
       setOperationFailure(failure)
@@ -226,19 +242,19 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  disabled={!canRunGitOperation}
+                  disabled={!canRunGitOperation || syncBoundaryBlocked}
                   onSelect={() => void run("pull", (operationId) => requireSynapseBridge().git.pull(repository.id, operationId))}
                 >
                   拉取
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  disabled={!canRunGitOperation}
+                  disabled={!canRunGitOperation || Boolean(status.snapshot && status.snapshot.ahead > 0 && status.snapshot.behind > 0)}
                   onSelect={() => void runPush()}
                 >
                   推送
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  disabled={!canRunGitOperation}
+                  disabled={!canRunGitOperation || syncBoundaryBlocked}
                   onSelect={() => void run("sync", (operationId) => requireSynapseBridge().git.sync(repository.id, operationId))}
                 >
                   同步
@@ -247,8 +263,18 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
             </DropdownMenu>
             <Button
               type="button"
+              variant="outline"
+              size="icon-sm"
+              disabled={busy !== null}
+              aria-label="刷新仓库状态"
+              onClick={() => void refreshAll()}
+            >
+              <RefreshCw />
+            </Button>
+            <Button
+              type="button"
               size="sm"
-              disabled={busy !== null || recommendedAction === "none"}
+              disabled={busy !== null || recommendedAction === "none" || (syncBoundaryBlocked && changes.length === 0)}
               onClick={runRecommendedAction}
             >
               {recommendedLabel}
@@ -295,6 +321,14 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
                 ) : null}
               </div>
             </AlertDescription>
+          </Alert>
+        </div>
+      ) : null}
+      {!operationError && syncBoundaryBlocked ? (
+        <div className="shrink-0 px-4 py-3">
+          <Alert>
+            <AlertTitle>{syncBoundaryPlan?.blockerText}</AlertTitle>
+            <AlertDescription>{syncBoundaryPlan?.recoveryText}</AlertDescription>
           </Alert>
         </div>
       ) : null}

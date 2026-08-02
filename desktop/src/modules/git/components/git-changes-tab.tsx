@@ -73,10 +73,24 @@ export function GitChangesTab({
     setError(null)
     setCommitNotice(null)
     try {
+      const selectedPaths = [...status.selectedPaths]
+      const selectedChanges = changes.filter((change) => selectedPaths.includes(change.path))
+      const confirmedSnapshot = await status.refresh({ background: true })
+      if (!confirmedSnapshot) throw new Error("无法确认当前改动，请刷新后重试。")
+      const confirmedChanges = new Map(confirmedSnapshot.changes.map((change) => [change.path, change]))
+      const selectionChanged = selectedChanges.some((change) => {
+        const confirmed = confirmedChanges.get(change.path)
+        return !confirmed
+          || confirmed.originalPath !== change.originalPath
+          || confirmed.status !== change.status
+      })
+      if (selectionChanged) {
+        throw new Error("所选文件已发生变化，请确认最新改动后重试。")
+      }
       await requireSynapseBridge().git.commit({
         repositoryId: repository.id,
         message: message.trim(),
-        paths: gitCommitPathsForSelection(changes, status.selectedPaths),
+        paths: gitCommitPathsForSelection(confirmedSnapshot.changes, selectedPaths),
       })
       setMessage("")
       const nextSnapshot = await status.refresh()

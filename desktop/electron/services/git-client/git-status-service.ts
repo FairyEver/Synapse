@@ -1,4 +1,5 @@
 import path from "node:path"
+import { devNull } from "node:os"
 import type {
   SynapseGitDiffResult,
   SynapseGitFileChange,
@@ -132,7 +133,7 @@ export function createGitStatusService(deps: StatusDeps) {
       try {
         const result = await deps.commandRunner.run({
           cwd: repository.localPath,
-          args: ["status", "--porcelain=v2", "--branch"],
+          args: ["status", "--porcelain=v2", "--branch", "--untracked-files=all"],
           logFailure: false,
           operation,
           operationId,
@@ -182,12 +183,15 @@ export function createGitStatusService(deps: StatusDeps) {
       }
     },
 
-    async listSummaries(repositories: readonly SynapseGitRepository[]): Promise<SynapseGitRepositorySummary[]> {
+    async listSummaries(
+      repositories: readonly SynapseGitRepository[],
+      readSnapshot?: (repository: SynapseGitRepository) => Promise<SynapseGitRepositorySnapshot>,
+    ): Promise<SynapseGitRepositorySummary[]> {
       return mapWithConcurrency(repositories, LIST_SUMMARY_CONCURRENCY_LIMIT, async (repository) => {
         try {
           return {
             repository,
-            snapshot: await this.getSnapshot(repository),
+            snapshot: await (readSnapshot ? readSnapshot(repository) : this.getSnapshot(repository)),
             error: null,
           }
         } catch (error) {
@@ -216,7 +220,7 @@ export function createGitStatusService(deps: StatusDeps) {
         assertRepositoryPath(repository.localPath, input.path)
         const isNewFile = input.status === "untracked" || input.status === "added"
         const args = isNewFile
-          ? ["diff", "--no-index", "--no-ext-diff", "--", "/dev/null", input.path]
+          ? ["diff", "--no-index", "--no-ext-diff", "--", devNull, input.path]
           : ["diff", "HEAD", "--", ...(input.originalPath ? [input.originalPath] : []), input.path]
         const result = await deps.commandRunner.run({
           cwd: repository.localPath,

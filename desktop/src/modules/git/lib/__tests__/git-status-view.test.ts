@@ -31,4 +31,32 @@ describe("Git status view", () => {
       primaryAction: "open",
     })
   })
+
+  it("opens the workbench instead of syncing a diverged branch", () => {
+    expect(getGitActionPlan({
+      ...snapshot,
+      upstream: "origin/feature",
+      trackingStatus: "tracked",
+      ahead: 2,
+      behind: 1,
+    })).toMatchObject({
+      statusText: "分支已分叉",
+      primaryAction: "open",
+      primaryLabel: "处理分叉",
+      blockerText: "本地分支与上游分支已分叉",
+    })
+  })
+
+  it("opens the workbench when the upstream branch no longer exists", () => {
+    expect(getGitActionPlan({
+      ...snapshot,
+      upstream: "origin/feature",
+      trackingStatus: "gone",
+    })).toMatchObject({
+      statusText: "上游分支不存在",
+      primaryAction: "open",
+      primaryLabel: "处理上游",
+      blockerText: "上游分支不存在",
+    })
+  })
 })

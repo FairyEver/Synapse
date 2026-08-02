@@ -35,6 +35,7 @@ import { ProjectListEditor } from "@/modules/settings/components/project-list-ed
 import { KnowledgeBaseStoragePanel } from "@/modules/settings/components/knowledge-base-storage-panel"
 import { TroubleshootingPanel } from "@/modules/settings/components/troubleshooting-panel"
 import { DockPanel } from "@/modules/settings/components/dock-panel"
+import { McpSettingsPanel } from "@/modules/settings/components/mcp-settings-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
 import type { SynapseRepositoryConfig } from "@/types/config"
@@ -301,6 +302,8 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
         {isReady && activeCategory === "dock" ? (
           <DockPanel workflowEntryVisible={workflowEntryVisible} />
         ) : null}
+
+        {isReady && activeCategory === "mcp" ? <McpSettingsPanel /> : null}
 
         {isReady && activeCategory === "repositories" ? (
           <RepositoryListEditor onSave={handleSaveRepositories} />

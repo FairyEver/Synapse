@@ -121,6 +121,7 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
         setLastFailure(null)
         return { ok: false, error: message, failure: null }
       }
+      await onCompleted()
       const failure = readOperationFailure(err, label)
       setError(message)
       setLastFailure(failure)
@@ -170,6 +171,7 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
         setLastFailure(null)
         return { ok: false, error: message, failure: null }
       }
+      await onCompleted()
       const failure = readOperationFailure(err, undefined, repositoryId, operation)
       setLastFailure(failure)
       setError(message)

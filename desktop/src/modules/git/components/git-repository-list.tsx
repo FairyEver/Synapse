@@ -23,7 +23,7 @@ import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { SynapseGitRepository, SynapseGitRepositorySummary } from "@/types/git"
+import type { SynapseGitRepository, SynapseGitRepositorySnapshot, SynapseGitRepositorySummary } from "@/types/git"
 import type { GitOperationBusyState, GitOperationFailure, GitRepositoryOperation } from "../hooks/use-git-operations"
 import { canHandleGitFailureAction, getGitFailureActionLabel } from "../lib/git-failure-view"
 import {
@@ -41,7 +41,7 @@ type GitRepositoryListProps = {
   readonly busy: GitOperationBusyState
   readonly onOpenRepository: (repository: SynapseGitRepository) => void
   readonly onPull: (repositoryId: string) => void
-  readonly onPush: (repositoryId: string, trackingStatus: "tracked" | "untracked" | "detached") => void
+  readonly onPush: (repositoryId: string, trackingStatus: SynapseGitRepositorySnapshot["trackingStatus"]) => void
   readonly onSync: (repositoryId: string) => void
   readonly onCancel: (repositoryId: string) => void
   readonly onRemoveRepository: (repositoryId: string) => Promise<boolean>
@@ -235,6 +235,9 @@ export function GitRepositoryList({
                       const changeCount = getGitChangeCount(snapshot)
                       const branch = snapshot?.currentBranch ?? "无分支"
                       const isClean = !needsGitAttention(snapshot, summary.error)
+                      const integrationBlocked = snapshot?.trackingStatus === "gone"
+                        || Boolean(snapshot && snapshot.ahead > 0 && snapshot.behind > 0)
+                      const pushBlocked = Boolean(snapshot && snapshot.ahead > 0 && snapshot.behind > 0)
                       const runningOperation = busy.repositories[repository.id]
                       const rowFailure = failure?.repositoryId === repository.id ? failure : null
                       const runPrimaryAction = () => {
@@ -336,15 +339,15 @@ export function GitRepositoryList({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
-                            <DropdownMenuItem onSelect={() => onPull(repository.id)}>
+                            <DropdownMenuItem disabled={integrationBlocked} onSelect={() => onPull(repository.id)}>
                               <Download data-icon="inline-start" />
                               拉取
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => onPush(repository.id, snapshot?.trackingStatus ?? "detached")}>
+                            <DropdownMenuItem disabled={pushBlocked} onSelect={() => onPush(repository.id, snapshot?.trackingStatus ?? "detached")}>
                               <Upload data-icon="inline-start" />
                               推送
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => onSync(repository.id)}>
+                            <DropdownMenuItem disabled={integrationBlocked} onSelect={() => onSync(repository.id)}>
                               <RefreshCw data-icon="inline-start" />
                               同步
                             </DropdownMenuItem>

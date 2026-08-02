@@ -46,7 +46,6 @@ import {
   useDatabaseTables,
 } from "./hooks/use-database"
 import { DatabaseManagementCard, DatabaseServiceStatusCard } from "@/modules/settings/components/database-settings-panel"
-import { McpSettingsPanel } from "@/modules/settings/components/mcp-settings-panel"
 import type { Column, ColumnKind, DatabaseWhereGroup } from "@/types/database"
 import type { DatabaseTableImportInspection } from "@/types/database"
 import type { DatabaseAppViewId } from "@/modules/apps/types"
@@ -57,7 +56,6 @@ const DATABASE_APP_TABS: readonly { readonly id: DatabaseAppViewId; readonly lab
   { id: "tables", label: "数据表" },
   { id: "status", label: "服务状态" },
   { id: "management", label: "管理" },
-  { id: "mcp", label: "MCP" },
 ]
 
 function getStoredDisplayMode(): DisplayMode {
@@ -626,14 +624,6 @@ function DatabaseManagementView() {
   )
 }
 
-function DatabaseMcpView() {
-  return (
-    <DatabaseSettingsTabContent>
-      <McpSettingsPanel />
-    </DatabaseSettingsTabContent>
-  )
-}
-
 function DatabaseModule() {
   const [view, setView] = useState<DatabaseAppViewId>("tables")
 
@@ -648,9 +638,6 @@ function DatabaseModule() {
         </TabsContent>
         <TabsContent value="management" className="m-0 h-full data-[state=inactive]:hidden">
           <DatabaseManagementView />
-        </TabsContent>
-        <TabsContent value="mcp" className="m-0 h-full data-[state=inactive]:hidden">
-          <DatabaseMcpView />
         </TabsContent>
       </Tabs>
     </SystemAppWindowShell>

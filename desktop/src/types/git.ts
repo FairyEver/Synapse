@@ -153,7 +153,7 @@ export type SynapseGitRepositorySnapshot = {
   readonly isGitRepository: boolean
   readonly currentBranch: string | null
   readonly upstream: string | null
-  readonly trackingStatus: "tracked" | "untracked" | "detached"
+  readonly trackingStatus: "tracked" | "untracked" | "detached" | "gone"
   readonly ahead: number
   readonly behind: number
   readonly hasConflicts: boolean

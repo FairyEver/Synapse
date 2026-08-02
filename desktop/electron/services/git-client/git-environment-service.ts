@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process"
-import path from "node:path"
-import { createHash } from "node:crypto"
 import type { SynapseGitEnvironmentState, SynapseGitSshPublicKey } from "../../../src/types/git"
 import type { ShellEnvironmentSnapshot } from "../../runtime/process"
 import type { StructuredLogger } from "../../runtime/logging"
@@ -12,6 +10,12 @@ import {
   logGitOperationStarted,
   logGitOperationSucceeded,
 } from "./git-logging"
+import {
+  emptySshPublicKeyDetails,
+  findCommonSshPublicKey,
+  parseSshPublicKeyDetails,
+  type GitSshPublicKeyDetails,
+} from "./git-ssh-public-key"
 
 type Platform = NodeJS.Platform
 
@@ -130,80 +134,15 @@ async function readConfigSource(
   }
 }
 
-async function findCommonSshPublicKey(
-  homeDir: string,
-  pathExists: (filePath: string) => Promise<boolean>,
-  readFile: (filePath: string) => Promise<string>,
-): Promise<SynapseGitSshPublicKey | null> {
-  const sshDir = path.join(homeDir, ".ssh")
-  const candidates = [
-    path.join(sshDir, "id_ed25519.pub"),
-    path.join(sshDir, "id_rsa.pub"),
-  ]
-
-  for (const filePath of candidates) {
-    if (await pathExists(filePath)) {
-      const content = (await readFile(filePath)).trim()
-      return content ? { path: filePath, content } : null
-    }
-  }
-
-  return null
-}
-
-type SshPublicKeyDetails = {
-  readonly path: string | null
-  readonly type: string | null
-  readonly comment: string | null
-  readonly fingerprint: string | null
-}
-
-function getEmptySshPublicKeyDetails(): SshPublicKeyDetails {
-  return {
-    path: null,
-    type: null,
-    comment: null,
-    fingerprint: null,
-  }
-}
-
-function parseSshPublicKeyDetails(key: SynapseGitSshPublicKey | null): SshPublicKeyDetails {
-  if (!key) return getEmptySshPublicKeyDetails()
-  const fields = key.content.trim().split(/\s+/)
-  const type = fields[0] || null
-  const encodedKey = fields[1] || null
-  const comment = fields.slice(2).join(" ") || null
-  let fingerprint: string | null = null
-
-  if (encodedKey) {
-    try {
-      const digest = createHash("sha256")
-        .update(Buffer.from(encodedKey, "base64"))
-        .digest("base64")
-        .replace(/=+$/u, "")
-      fingerprint = `SHA256:${digest}`
-    } catch {
-      fingerprint = null
-    }
-  }
-
-  return {
-    path: key.path,
-    type,
-    comment,
-    fingerprint,
-  }
-}
-
 export function createGitEnvironmentService(deps: EnvironmentDeps) {
   const now = deps.now ?? (() => new Date())
   const runSshVersion = deps.runSshVersion ?? (() => runDefaultSshVersion(deps))
 
-  async function getPublicKeyDetails(): Promise<SshPublicKeyDetails> {
+  async function getPublicKeyDetails(): Promise<GitSshPublicKeyDetails> {
     try {
-      return parseSshPublicKeyDetails(await findCommonSshPublicKey(deps.homeDir, deps.pathExists, deps.readFile))
+      return parseSshPublicKeyDetails(await findCommonSshPublicKey(deps))
     } catch {
-      return getEmptySshPublicKeyDetails()
+      return emptySshPublicKeyDetails()
     }
   }
 
@@ -375,7 +314,7 @@ export function createGitEnvironmentService(deps: EnvironmentDeps) {
     },
 
     async getSshPublicKey(): Promise<SynapseGitSshPublicKey | null> {
-      const key = await findCommonSshPublicKey(deps.homeDir, deps.pathExists, deps.readFile)
+      const key = await findCommonSshPublicKey(deps)
       deps.logger?.info("Git SSH public key lookup completed.", {
         operation: "git.environment.getSshPublicKey",
         operationId: createGitOperationId(),

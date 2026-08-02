@@ -15,7 +15,7 @@ const PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 
 function parseCommitRecord(record: string): SynapseGitCommitSummary | null {
   const [hash, shortHash, subject, authorName, authorEmail, committedAt] = record.split("\x1f")
-  if (!hash || !shortHash || !subject || !authorName || !authorEmail || !committedAt) return null
+  if (!hash || !shortHash || subject === undefined || !authorName || !authorEmail || !committedAt) return null
   return { hash, shortHash, subject, authorName, authorEmail, committedAt }
 }
 
@@ -27,21 +27,32 @@ function statusFromNameStatus(code: string): SynapseGitFileChange["status"] {
   return "unknown"
 }
 
-function parseNameStatus(lines: readonly string[]): SynapseGitFileChange[] {
-  return lines.filter(Boolean).map((line) => {
-    const parts = line.split("\t")
-    const code = parts[0] ?? ""
-    const path = parts[1] ?? ""
-    const originalPath = code.startsWith("R") ? path : null
-    const nextPath = code.startsWith("R") ? (parts[2] ?? path) : path
-    return {
+function parseNameStatus(tokens: readonly string[]): SynapseGitFileChange[] {
+  const changes: SynapseGitFileChange[] = []
+  for (let index = 0; index < tokens.length;) {
+    const code = tokens[index++] ?? ""
+    if (!code) continue
+    const originalPath = tokens[index++] ?? ""
+    if (!originalPath) break
+    const renamed = code.startsWith("R")
+    const nextPath = renamed ? (tokens[index++] ?? "") : originalPath
+    if (!nextPath) break
+    changes.push({
       path: nextPath,
-      originalPath,
+      originalPath: renamed ? originalPath : null,
       status: statusFromNameStatus(code),
       staged: false,
       conflicted: false,
-    }
-  })
+    })
+  }
+  return changes
+}
+
+function assertCommitHash(hash: string): string {
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(hash)) {
+    throw new Error("提交标识不合法。")
+  }
+  return hash
 }
 
 export function createGitHistoryService(deps: {
@@ -100,9 +111,10 @@ export function createGitHistoryService(deps: {
       const operationId = createGitOperationId()
       const startedAt = performance.now()
       try {
+        const commitHash = assertCommitHash(hash)
         const summaryResult = await deps.commandRunner.run({
           cwd: repository.localPath,
-          args: ["show", "--name-status", `--pretty=format:${PRETTY}`, "--date=iso-strict", "--no-renames", hash],
+          args: ["show", "--name-status", "-z", "--find-renames", `--pretty=format:${PRETTY}`, "--date=iso-strict", commitHash],
           operation,
           operationId,
           maxBufferBytes: PREVIEW_MAX_BYTES,
@@ -110,13 +122,13 @@ export function createGitHistoryService(deps: {
           repoPath: repository.localPath,
           repositoryId: repository.id,
         })
-        const [firstLine = "", ...fileLines] = summaryResult.stdout.split(/\r?\n/)
-        const summaryLine = firstLine.endsWith(RECORD_SEPARATOR) ? firstLine.slice(0, -1) : firstLine
-        const summary = parseCommitRecord(summaryLine)
+        const summaryEnd = summaryResult.stdout.indexOf(RECORD_SEPARATOR)
+        const summary = parseCommitRecord(summaryEnd >= 0 ? summaryResult.stdout.slice(0, summaryEnd) : "")
         if (!summary) throw new Error("找不到提交记录。")
+        const nameStatus = summaryResult.stdout.slice(summaryEnd + 1).replace(/^[\r\n\0]+/, "")
         const diffResult = await deps.commandRunner.run({
           cwd: repository.localPath,
-          args: ["show", "--format=", "--patch", hash],
+          args: ["show", "--format=", "--patch", commitHash],
           operation,
           operationId,
           maxBufferBytes: PREVIEW_MAX_BYTES,
@@ -126,7 +138,7 @@ export function createGitHistoryService(deps: {
         })
         return {
           ...summary,
-          files: parseNameStatus(fileLines),
+          files: parseNameStatus(nameStatus.split("\0")),
           diff: diffResult.stdout,
           filesTruncated: summaryResult.stdoutTruncated ?? false,
           diffTruncated: diffResult.stdoutTruncated ?? false,

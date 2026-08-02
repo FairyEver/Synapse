@@ -2297,10 +2297,12 @@ export const gitStatusServiceDescriptor: ServiceDescriptor<GitStatusService> = {
 export const gitCommitServiceDescriptor: ServiceDescriptor<GitCommitService> = {
   id: "git.commit-service",
   criticality: "degraded",
-  dependsOn: ["git.command-runner"],
+  dependsOn: ["git.command-runner", "git.status-service"],
   create(ctx) {
+    const statusService = ctx.registry.get<GitStatusService>("git.status-service")
     return createGitCommitService({
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
+      getSnapshot: (repository) => statusService.getSnapshot(repository),
       logger: ctx.logger.child("git.commit"),
     })
   },

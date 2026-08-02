@@ -35,6 +35,24 @@ describe("gitIpcModule", () => {
     expect(gitIpcModule.methods.getSnapshot.request.safeParse({ repositoryId: "repo-1", args: ["status"] }).success).toBe(false)
   })
 
+  it("accepts HTTP clone results and rejects option-like commit hashes", () => {
+    const cloneResponse = gitIpcModule.methods.cloneRepository.response
+    expect(cloneResponse).toBeDefined()
+    expect(cloneResponse?.safeParse({
+      repository: { id: "repo-1", name: "Docs", localPath: "/repo", addedAt: "now", lastOpenedAt: null },
+      remoteKind: "http",
+    }).success).toBe(true)
+
+    expect(gitIpcModule.methods.getCommit.request.safeParse({
+      repositoryId: "repo-1",
+      hash: "--output=/tmp/synapse-owned",
+    }).success).toBe(false)
+    expect(gitIpcModule.methods.getCommit.request.safeParse({
+      repositoryId: "repo-1",
+      hash: "a".repeat(40),
+    }).success).toBe(true)
+  })
+
   it("accepts only a repository id for removal", () => {
     expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1" }).success).toBe(true)
     expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "keep-local" }).success).toBe(false)
@@ -112,7 +130,7 @@ describe("gitIpcModule", () => {
       list: vi.fn().mockResolvedValue([repository]),
     }
     const statusService = {
-      getSnapshot: vi.fn().mockRejectedValue(new Error("not ready")),
+      listSummaries: vi.fn().mockResolvedValue([{ repository, snapshot: null, error: "not ready" }]),
     }
     const coordinator = { read: vi.fn(async (_key: string, task: () => Promise<unknown>) => task()) }
 
@@ -122,7 +140,7 @@ describe("gitIpcModule", () => {
       "git.operation-coordinator": coordinator,
     }), undefined)
 
-    expect(statusService.getSnapshot).toHaveBeenCalledWith(repository)
+    expect(statusService.listSummaries).toHaveBeenCalledWith([repository], expect.any(Function))
     expect(result).toEqual([{ repository, snapshot: null, error: "not ready" }])
   })
 

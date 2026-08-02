@@ -123,6 +123,40 @@ describe("preload bridge", () => {
     expect(listener).toHaveBeenCalledWith({ table: "notes" })
   })
 
+  it("maps the MCP bridge to dedicated channels without database aliases", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.mcp.server.get()
+    await bridge.mcp.registration.list()
+    await bridge.mcp.registration.openSettings("codex")
+    await bridge.mcp.registration.register("codex")
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      1,
+      "synapse:app:mcp:server:get",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      2,
+      "synapse:app:mcp:registration:list",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      3,
+      "synapse:app:mcp:registration:open_settings",
+      "codex",
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      4,
+      "synapse:app:mcp:registration:register",
+      "codex",
+    )
+    expect(bridge.database).not.toHaveProperty("mcp")
+    expect(bridge.database).not.toHaveProperty("mcpHttpStatus")
+    expect(bridge.database).not.toHaveProperty("mcpServers")
+    expect(bridge.database).not.toHaveProperty("mcpSettings")
+  })
+
   it("subscribes automation change listeners to the EventBus domain channel", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()

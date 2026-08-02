@@ -5,6 +5,7 @@ import {
   FolderOpen,
   Info,
   CircleUserRound,
+  Network,
   PanelBottom,
   Settings2,
   Shield,
@@ -33,6 +34,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: PanelBottom,
     label: "Dock 栏",
     description: "固定应用和顺序。",
+  },
+  {
+    id: "mcp",
+    icon: Network,
+    label: "MCP",
+    description: "服务状态和客户端注册。",
   },
   {
     id: "repositories",

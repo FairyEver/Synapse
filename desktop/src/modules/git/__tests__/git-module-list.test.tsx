@@ -787,6 +787,7 @@ describe("GitModule repository list", () => {
 
     expect(document.body.textContent).toContain("网络不可用")
     expect(countButtons("重试")).toBe(1)
+    expect(bridge.git.listRepositorySummaries).toHaveBeenCalledTimes(2)
 
     await click(findButton("进入"))
     await click(findButton("拉取远程更新"))
@@ -931,28 +932,26 @@ describe("GitModule repository list", () => {
     })
   })
 
-  it("keeps repository sync loading scoped to the clicked repository", async () => {
-    const sync = deferred<void>()
+  it("keeps repository pull loading scoped to the clicked repository", async () => {
+    const pull = deferred<void>()
     bridge.git.listRepositorySummaries.mockResolvedValue([
-      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }, { ahead: 1, behind: 1 }),
-      summary({ id: "repo-2", name: "App", localPath: "/work/app", addedAt: "now", lastOpenedAt: null }, { ahead: 1, behind: 1 }),
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }, { ahead: 0, behind: 1 }),
+      summary({ id: "repo-2", name: "App", localPath: "/work/app", addedAt: "now", lastOpenedAt: null }, { ahead: 0, behind: 1 }),
     ])
-    bridge.git.sync.mockReturnValue(sync.promise)
+    bridge.git.pull.mockReturnValue(pull.promise)
     await renderGitModule(roots)
 
-    const syncButtons = exactButtonsByLabel("同步")
-    expect(syncButtons).toHaveLength(2)
+    const pullButtons = exactButtonsByLabel("拉取远程更新")
+    expect(pullButtons).toHaveLength(2)
     expect(countButtons("进入")).toBe(2)
 
-    await click(syncButtons[0])
+    await click(pullButtons[0])
 
-    expect(bridge.git.sync).toHaveBeenCalledWith("repo-1", expect.any(String))
-    expect(syncButtons[0].disabled).toBe(true)
-    expect(syncButtons[0].querySelector(".animate-spin")).not.toBeNull()
-    expect(syncButtons[1].disabled).toBe(false)
-    expect(syncButtons[1].querySelector(".animate-spin")).toBeNull()
+    expect(bridge.git.pull).toHaveBeenCalledWith("repo-1", expect.any(String))
+    expect(pullButtons[0].disabled).toBe(true)
+    expect(pullButtons[1].disabled).toBe(false)
 
-    sync.resolve()
+    pull.resolve()
     await act(async () => flush())
   })
 
@@ -972,7 +971,7 @@ describe("GitModule repository list", () => {
     expect(countButtons("提交改动")).toBe(1)
     expect(countButtons("拉取远程更新")).toBe(1)
     expect(countButtons("推送本地提交")).toBe(1)
-    expect(exactButtonsByLabel("同步")).toHaveLength(1)
+    expect(countButtons("处理分叉")).toBe(1)
     expect(countButtons("查看状态")).toBe(1)
   })
 

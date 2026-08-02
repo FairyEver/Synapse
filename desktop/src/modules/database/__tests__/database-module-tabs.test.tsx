@@ -12,8 +12,6 @@ import { DatabaseModule } from "../index"
 
 const mocks = vi.hoisted(() => ({
   useDatabaseStatus: vi.fn(),
-  databaseMcpHttpStatusGet: vi.fn(),
-  databaseMcpServersGet: vi.fn(),
 }))
 
 vi.mock("@/components/sidebar-content-layout", async () => {
@@ -91,10 +89,6 @@ vi.mock("../hooks/use-database", () => ({
   databaseColumnUpdate: vi.fn(),
   databaseExport: vi.fn(),
   databaseImport: vi.fn(),
-  databaseMcpHttpStatusGet: mocks.databaseMcpHttpStatusGet,
-  databaseMcpRegister: vi.fn(),
-  databaseMcpServersGet: mocks.databaseMcpServersGet,
-  databaseMcpSettingsOpen: vi.fn(),
   databaseRowCreate: vi.fn(),
   databaseRowDelete: vi.fn(),
   databaseRowUpdate: vi.fn(),
@@ -151,12 +145,6 @@ beforeEach(() => {
       tableCount: 1,
     },
   })
-  mocks.databaseMcpHttpStatusGet.mockResolvedValue({
-    running: true,
-    port: 57321,
-    url: "http://127.0.0.1:57321/mcp",
-  })
-  mocks.databaseMcpServersGet.mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -169,14 +157,13 @@ afterEach(() => {
 })
 
 describe("DatabaseModule app tabs", () => {
-  it("defaults to tables and switches to status, management, and MCP", async () => {
+  it("defaults to tables and switches to status and management", async () => {
     await renderDatabase()
 
     expect([...document.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual([
       "数据表",
       "服务状态",
       "管理",
-      "MCP",
     ])
     expect(document.body.textContent).toContain("数据表内容")
 
@@ -187,10 +174,7 @@ describe("DatabaseModule app tabs", () => {
     await clickTab("管理")
     expect(document.body.textContent).toContain("导出数据库")
     expect(document.body.textContent).toContain("数据库目录")
-
-    await clickTab("MCP")
-    await flush()
-    expect(document.body.textContent).toContain("MCP Server")
+    expect(document.body.textContent).not.toContain("MCP Server")
   })
 })
 
@@ -216,13 +200,6 @@ async function clickTab(label: string): Promise<void> {
     tab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }))
     tab.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }))
     tab.click()
-    await Promise.resolve()
-  })
-}
-
-async function flush(): Promise<void> {
-  await act(async () => {
-    await Promise.resolve()
     await Promise.resolve()
   })
 }

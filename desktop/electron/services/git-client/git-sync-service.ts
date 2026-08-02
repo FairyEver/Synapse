@@ -86,6 +86,7 @@ export function createGitSyncService(deps: SyncDeps) {
 
     async pull(repository: SynapseGitRepository, options: SyncOperationOptions = {}): Promise<SynapseGitOperationResult> {
       return runRemoteOperation("git.pull", repository, options, async (operationId) => {
+        assertAutomaticIntegrationAllowed(await deps.getSnapshot(repository))
         await deps.commandRunner.run({
           cwd: repository.localPath,
           args: ["pull", "--ff-only"],
@@ -148,6 +149,7 @@ export function createGitSyncService(deps: SyncDeps) {
         }
         if (before.trackingStatus === "detached") throw new Error("请先切换到本地分支。")
         if (before.trackingStatus === "untracked") throw new Error("请先执行首次推送并选择远端。")
+        assertAutomaticIntegrationAllowed(before)
 
         await deps.commandRunner.run({
           cwd: repository.localPath,
@@ -160,6 +162,7 @@ export function createGitSyncService(deps: SyncDeps) {
           timeoutMs: 120_000,
         })
         const afterFetch = await deps.getSnapshot(repository)
+        assertAutomaticIntegrationAllowed(afterFetch)
         if (afterFetch.behind > 0) {
           await deps.commandRunner.run({
             cwd: repository.localPath,
@@ -289,6 +292,17 @@ function summarizeSyncSnapshot(snapshot: Pick<SynapseGitRepositorySnapshot, "cha
     hasConflicts: snapshot.changes.some((change) => change.conflicted),
     ...snapshot,
   })
+}
+
+function assertAutomaticIntegrationAllowed(
+  snapshot: Pick<SynapseGitRepositorySnapshot, "ahead" | "behind" | "trackingStatus">,
+): void {
+  if (snapshot.trackingStatus === "gone") {
+    throw new Error("上游分支不存在，请重新推送或调整上游后重试。")
+  }
+  if (snapshot.ahead > 0 && snapshot.behind > 0) {
+    throw new Error("本地分支与上游分支已分叉，请使用外部 Git 工具处理后重试。")
+  }
 }
 
 const noopLogger = {

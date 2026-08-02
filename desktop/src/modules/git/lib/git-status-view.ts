@@ -76,6 +76,26 @@ export function getGitActionPlan(snapshot: SynapseGitRepositorySnapshot | null, 
     }
   }
 
+  if (snapshot.trackingStatus === "gone") {
+    return {
+      statusText: "上游分支不存在",
+      primaryAction: "open",
+      primaryLabel: "处理上游",
+      blockerText: "上游分支不存在",
+      recoveryText: "重新推送当前分支，或使用外部 Git 工具调整上游。",
+    }
+  }
+
+  if (snapshot.ahead > 0 && snapshot.behind > 0) {
+    return {
+      statusText: "分支已分叉",
+      primaryAction: "open",
+      primaryLabel: "处理分叉",
+      blockerText: "本地分支与上游分支已分叉",
+      recoveryText: "使用外部 Git 工具合并或变基后再同步。",
+    }
+  }
+
   if (snapshot.trackingStatus === "untracked") {
     return {
       statusText: "未设置上游",
@@ -83,16 +103,6 @@ export function getGitActionPlan(snapshot: SynapseGitRepositorySnapshot | null, 
       primaryLabel: "首次推送",
       blockerText: null,
       recoveryText: "选择远端并设置上游分支。",
-    }
-  }
-
-  if (snapshot.ahead > 0 && snapshot.behind > 0) {
-    return {
-      statusText: `↑${snapshot.ahead} ↓${snapshot.behind}`,
-      primaryAction: "sync",
-      primaryLabel: "同步",
-      blockerText: null,
-      recoveryText: "先拉取远程更新，再推送本地提交。",
     }
   }
 
