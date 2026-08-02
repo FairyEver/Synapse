@@ -130,6 +130,8 @@ Retry:
 - Recoverable failures schedule `nextRetryAt` with capped backoff.
 - Manual retry bypasses `nextRetryAt`.
 - App launch, network recovery, and repository switch may trigger recovery checks.
+- Repository-level attempt state is persisted independently from pending content rows. Actual ahead commits can therefore restore failure classification and automatic retry after restart even when pending metadata is absent.
+- Once both the pending queue and actual ahead count are empty, the coordinator clears stale repository-level failure state.
 
 ## Operation Policy
 
@@ -220,6 +222,8 @@ Keep the existing fields:
 - `last_error`
 
 The migration must preserve existing pending rows.
+
+Store one additional `repository_sync_attempt` row in each repository cache database. It is the authoritative source for the latest attempt time, safe failure category/message, retry count, and next retry time. It must not create synthetic `pending_pushes` rows; pending rows remain content-level display metadata, while Git ahead state remains authoritative for whether work is unpushed.
 
 ## Implementation Slices
 

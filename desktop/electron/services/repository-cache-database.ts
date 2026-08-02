@@ -12,6 +12,7 @@ function getRepositoryCacheDatabasePath(repositoryUuid: string): string {
 
 type RepositoryCacheSchemaOptions = {
   includePendingPushes?: boolean
+  includeRepositorySyncAttempt?: boolean
 }
 
 async function withRepositoryCacheDatabase<T>(
@@ -150,6 +151,19 @@ function ensureRepositoryCacheSchema(
         }
       }
     }
+  }
+
+  if (options.includeRepositorySyncAttempt) {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS repository_sync_attempt (
+        singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+        last_attempt_at TEXT,
+        last_error TEXT,
+        last_error_category TEXT,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        next_retry_at TEXT
+      );
+    `)
   }
 }
 

@@ -5,6 +5,7 @@ import type {
   SynapseRepositoryOperationKind,
   SynapseRepositoryOperationResult,
   SynapseRepositoryProgressEvent,
+  SynapseRepositorySyncAttemptState,
   SynapseRepositorySyncSnapshot,
   SynapseRepositorySyncSnapshotUpdatedEvent,
 } from "../../src/types/repository"
@@ -17,6 +18,7 @@ import { pendingPushesService } from "./pending-pushes-service"
 import { repositoryGitService } from "./repository-git-service"
 import { repositoryMaintenanceService } from "./repository-maintenance-service"
 import { repositoryStore } from "./repository-store"
+import { repositorySyncAttemptService } from "./repository-sync-attempt-service"
 
 const logger = createMainLogger("service.repository-sync")
 const MAX_RETRY_DELAY_MS = 5 * 60 * 1000
@@ -94,11 +96,20 @@ class RepositorySyncCoordinator {
   }
 
   async refreshSnapshot(repository: SynapseRepositoryConfig): Promise<SynapseRepositorySyncSnapshot> {
-    const [pending, unpushedCommitCount] = await Promise.all([
+    const [pending, unpushedCommitCount, syncAttempt] = await Promise.all([
       pendingPushesService.readState(repository),
       contentSubmissionService.readUnpushedCommitCount(repository),
+      repositorySyncAttemptService.read(repository.uuid),
     ])
-    const snapshot = this.createSnapshotFromPending(repository.uuid, pending, unpushedCommitCount)
+    if (pending.count === 0 && unpushedCommitCount === 0 && this.hasRecordedSyncAttempt(syncAttempt)) {
+      await repositorySyncAttemptService.clear(repository.uuid)
+    }
+    const snapshot = this.createSnapshotFromPending(
+      repository.uuid,
+      pending,
+      unpushedCommitCount,
+      syncAttempt,
+    )
 
     this.emitSnapshot(snapshot)
     this.syncRetryTimerFromSnapshot(repository, snapshot)
@@ -393,52 +404,61 @@ class RepositorySyncCoordinator {
     repositoryUuid: string,
     pending: SynapsePendingPushState,
     unpushedCommitCount = 0,
+    syncAttempt?: SynapseRepositorySyncAttemptState,
   ): SynapseRepositorySyncSnapshot {
     if (pending.count === 0 && unpushedCommitCount === 0) {
       return createEmptySnapshot(repositoryUuid)
     }
 
-    if (pending.count === 0) {
-      return {
-        ...createEmptySnapshot(repositoryUuid),
-        status: "pending",
-        pendingCount: unpushedCommitCount,
-        message: `${unpushedCommitCount} 个本地提交等待同步`,
-        canRetryNow: true,
-        primaryAction: "retry",
-      }
-    }
-
     const firstError = pending.firstErrorItem
       ?? pending.items.find((item) => item.lastErrorCategory || item.lastError)
-    const retryCount = pending.retryCount
-      ?? pending.items.reduce((total, item) => total + item.retryCount, 0)
-    const nextRetryAt = pending.nextRetryAt
+    const retryCount = syncAttempt?.retryCount
+      || pending.retryCount
+      || pending.items.reduce((total, item) => total + item.retryCount, 0)
+    const nextRetryAt = syncAttempt?.nextRetryAt
+      ?? pending.nextRetryAt
       ?? pending.items
         .map((item) => item.nextRetryAt)
         .filter((value): value is string => Boolean(value))
         .sort()[0] ?? null
-    const failureCategory = firstError?.lastErrorCategory ?? null
+    const failureCategory = syncAttempt?.lastErrorCategory ?? firstError?.lastErrorCategory ?? null
     const failureSnapshotState = failureCategory
       ? this.getPersistedFailureSnapshotState(failureCategory)
       : null
+    const pendingCount = Math.max(pending.count, unpushedCommitCount)
+    const defaultMessage = pending.count === 0
+      ? `${unpushedCommitCount} 个本地提交等待同步`
+      : `${pending.count} 条变更等待同步`
 
     return {
       repositoryUuid,
       status: failureSnapshotState?.status ?? "pending",
       operation: null,
       phase: failureSnapshotState?.phase ?? (nextRetryAt ? "retry-wait" : "completed"),
-      pendingCount: Math.max(pending.count, unpushedCommitCount),
+      pendingCount,
       pendingItems: pending.items,
-      message: firstError?.lastError ?? `${pending.count} 条变更等待同步`,
+      message: syncAttempt?.lastError ?? firstError?.lastError ?? defaultMessage,
       detail: failureCategory ? undefined : firstError?.title ?? undefined,
       failureCategory,
-      lastAttemptAt: pending.lastAttemptAt ?? pending.items.find((item) => item.lastAttemptAt)?.lastAttemptAt ?? null,
+      lastAttemptAt: syncAttempt?.lastAttemptAt
+        ?? pending.lastAttemptAt
+        ?? pending.items.find((item) => item.lastAttemptAt)?.lastAttemptAt
+        ?? null,
       nextRetryAt,
       retryCount,
       canRetryNow: true,
       primaryAction: failureSnapshotState?.primaryAction ?? "retry",
     }
+  }
+
+  private hasRecordedSyncAttempt(syncAttempt: SynapseRepositorySyncAttemptState): boolean {
+    return Boolean(
+      syncAttempt.lastAttemptAt
+      || syncAttempt.lastError
+      || syncAttempt.lastErrorCategory
+      || syncAttempt.nextRetryAt
+      || syncAttempt.retryCount > 0,
+    )
   }
 
   private createRefreshFailureSnapshot(
@@ -507,8 +527,10 @@ class RepositorySyncCoordinator {
       repositoryState?: Awaited<ReturnType<typeof repositoryStore.getRepositoryState>>
     } = {},
   ): Promise<boolean> {
-    const pending = await pendingPushesService.readState(repository, { limit: null })
-    const unpushedCommitCount = await contentSubmissionService.readUnpushedCommitCount(repository)
+    const [pending, unpushedCommitCount] = await Promise.all([
+      pendingPushesService.readState(repository, { limit: null }),
+      contentSubmissionService.readUnpushedCommitCount(repository),
+    ])
 
     if (pending.count === 0 && unpushedCommitCount === 0) {
       this.emitSnapshot(createEmptySnapshot(repository.uuid))
@@ -517,7 +539,12 @@ class RepositorySyncCoordinator {
 
     const attemptedIds = pending.items.map((item) => item.id)
     const attemptedAt = this.now().toISOString()
-    const nextRetryCount = Math.max(1, ...pending.items.map((item) => item.retryCount + 1))
+    const syncAttempt = await repositorySyncAttemptService.markAttempt(repository.uuid, attemptedAt)
+    const nextRetryCount = Math.max(
+      syncAttempt.retryCount + 1,
+      1,
+      ...pending.items.map((item) => item.retryCount + 1),
+    )
 
     if (attemptedIds.length > 0) {
       await pendingPushesService.markAttempt(repository, attemptedAt, attemptedIds)
@@ -578,11 +605,13 @@ class RepositorySyncCoordinator {
 
       return remaining.count > 0
     } catch (error) {
-      if (attemptedIds.length > 0) {
-        await this.handlePushFailure(repository, attemptedIds, nextRetryCount, error)
-      } else {
-        await this.handleOperationFailure(repository, "push", error)
-      }
+      await this.handlePushFailure(
+        repository,
+        attemptedIds,
+        nextRetryCount,
+        unpushedCommitCount,
+        error,
+      )
       throw error
     }
   }
@@ -597,16 +626,29 @@ class RepositorySyncCoordinator {
     repository: SynapseRepositoryConfig,
     attemptedIds: number[],
     nextRetryCount: number,
+    unpushedCommitCount: number,
     error: unknown,
   ): Promise<void> {
     const fallback = error instanceof Error ? error.message : "推送到仓库失败。"
     const failure = classifyGitFailure(fallback, "推送到仓库失败。")
     const nextRetryAt = failure.recoverable ? this.calculateNextRetryAt(nextRetryCount) : null
-    const retryState = await pendingPushesService.markFailure(repository, failure.message, attemptedIds, {
+    const retryState = attemptedIds.length > 0
+      ? await pendingPushesService.markFailure(repository, failure.message, attemptedIds, {
+          category: failure.category,
+          nextRetryAt,
+        })
+      : await pendingPushesService.readState(repository)
+    const syncAttempt = await repositorySyncAttemptService.markFailure(repository.uuid, {
       category: failure.category,
+      lastError: failure.message,
       nextRetryAt,
     })
-    const snapshot = this.createSnapshotFromPending(repository.uuid, retryState)
+    const snapshot = this.createSnapshotFromPending(
+      repository.uuid,
+      retryState,
+      unpushedCommitCount,
+      syncAttempt,
+    )
 
     this.emitSnapshot({
       ...snapshot,

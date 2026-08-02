@@ -6,6 +6,7 @@ import type {
   SynapsePendingPushEntry,
   SynapsePendingPushState,
   SynapseRepositoryOperationResult,
+  SynapseRepositorySyncAttemptState,
 } from "../../../src/types/repository"
 import { RepositorySyncCoordinator } from "../repository-sync-coordinator"
 
@@ -35,6 +36,12 @@ const serviceMocks = vi.hoisted(() => ({
   repositoryMaintenanceService: {
     runManualMaintenance: vi.fn(),
     runManualMaintenanceInExclusive: vi.fn(),
+  },
+  repositorySyncAttemptService: {
+    clear: vi.fn(),
+    markAttempt: vi.fn(),
+    markFailure: vi.fn(),
+    read: vi.fn(),
   },
   repositoryStore: {
     getRepositoryState: vi.fn(),
@@ -74,6 +81,10 @@ vi.mock("../repository-maintenance-service", () => ({
   repositoryMaintenanceService: serviceMocks.repositoryMaintenanceService,
 }))
 
+vi.mock("../repository-sync-attempt-service", () => ({
+  repositorySyncAttemptService: serviceMocks.repositorySyncAttemptService,
+}))
+
 vi.mock("../repository-lock-manager", () => ({
   repositoryLockManager: {
     acquire: vi.fn(async () => vi.fn()),
@@ -101,6 +112,14 @@ const secondRepository: SynapseRepositoryConfig = {
 const emptyPendingState: SynapsePendingPushState = {
   count: 0,
   items: [],
+}
+
+const emptySyncAttemptState: SynapseRepositorySyncAttemptState = {
+  lastAttemptAt: null,
+  lastError: null,
+  lastErrorCategory: null,
+  nextRetryAt: null,
+  retryCount: 0,
 }
 
 const repositoryState = {
@@ -191,6 +210,14 @@ describe("RepositorySyncCoordinator", () => {
       async (_repository: SynapseRepositoryConfig, _operation: string, callback: (state: typeof repositoryState) => Promise<unknown>) => callback(repositoryState),
     )
     serviceMocks.contentSubmissionService.readUnpushedCommitCount.mockResolvedValue(0)
+    serviceMocks.repositorySyncAttemptService.read.mockResolvedValue(emptySyncAttemptState)
+    serviceMocks.repositorySyncAttemptService.clear.mockResolvedValue(emptySyncAttemptState)
+    serviceMocks.repositorySyncAttemptService.markAttempt.mockImplementation(
+      async (_repositoryUuid: string, attemptedAt: string) => ({
+        ...emptySyncAttemptState,
+        lastAttemptAt: attemptedAt,
+      }),
+    )
     serviceMocks.contentSubmissionService.flushPendingPushesInExclusive.mockImplementation(
       async (targetRepository: SynapseRepositoryConfig, _state: typeof repositoryState, onProgress: unknown, options: unknown) => (
         serviceMocks.contentSubmissionService.flushPendingPushes(targetRepository, onProgress, options)
@@ -247,6 +274,134 @@ describe("RepositorySyncCoordinator", () => {
       message: "2 个本地提交等待同步",
       primaryAction: "retry",
     })
+  })
+
+  it("hydrates a persisted repository-level push failure without pending rows", async () => {
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(emptyPendingState)
+    serviceMocks.contentSubmissionService.readUnpushedCommitCount.mockResolvedValue(2)
+    serviceMocks.repositorySyncAttemptService.read.mockResolvedValue({
+      lastAttemptAt: "2026-05-02T09:59:00.000Z",
+      lastError: "网络不可用，稍后自动重试。",
+      lastErrorCategory: "network",
+      nextRetryAt: "2026-05-02T10:01:00.000Z",
+      retryCount: 2,
+    })
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.refreshSnapshot(repository)).resolves.toMatchObject({
+      status: "offline",
+      phase: "retry-wait",
+      pendingCount: 2,
+      pendingItems: [],
+      message: "网络不可用，稍后自动重试。",
+      failureCategory: "network",
+      lastAttemptAt: "2026-05-02T09:59:00.000Z",
+      nextRetryAt: "2026-05-02T10:01:00.000Z",
+      retryCount: 2,
+      primaryAction: "retry",
+    })
+  })
+
+  it("rearms a persisted retry without pending rows after restart", async () => {
+    const failedState: SynapseRepositorySyncAttemptState = {
+      lastAttemptAt: "2026-05-02T09:59:00.000Z",
+      lastError: "网络不可用，稍后自动重试。",
+      lastErrorCategory: "network",
+      nextRetryAt: "2026-05-02T10:01:00.000Z",
+      retryCount: 2,
+    }
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(emptyPendingState)
+    serviceMocks.contentSubmissionService.readUnpushedCommitCount
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(1)
+      .mockResolvedValue(0)
+    serviceMocks.repositorySyncAttemptService.read.mockResolvedValue(failedState)
+    serviceMocks.repositorySyncAttemptService.markAttempt.mockResolvedValue({
+      ...failedState,
+      lastAttemptAt: "2026-05-02T10:01:00.000Z",
+    })
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockResolvedValue(undefined)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await coordinator.refreshSnapshot(repository)
+    await vi.advanceTimersByTimeAsync(59_999)
+    expect(serviceMocks.contentSubmissionService.flushPendingPushes).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+    await vi.waitFor(() => {
+      expect(serviceMocks.contentSubmissionService.flushPendingPushes).toHaveBeenCalledTimes(1)
+    })
+    await vi.waitFor(() => {
+      expect(serviceMocks.repositorySyncAttemptService.clear).toHaveBeenCalledWith("repo-1")
+    })
+  })
+
+  it("persists push failures when ahead commits have no pending rows", async () => {
+    const attemptedState: SynapseRepositorySyncAttemptState = {
+      ...emptySyncAttemptState,
+      lastAttemptAt: "2026-05-02T10:00:00.000Z",
+    }
+    const failedState: SynapseRepositorySyncAttemptState = {
+      ...attemptedState,
+      lastError: "网络不可用，稍后自动重试。",
+      lastErrorCategory: "network",
+      nextRetryAt: "2026-05-02T10:00:30.000Z",
+      retryCount: 1,
+    }
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(emptyPendingState)
+    serviceMocks.contentSubmissionService.readUnpushedCommitCount.mockResolvedValue(1)
+    serviceMocks.repositorySyncAttemptService.read.mockResolvedValue(failedState)
+    serviceMocks.repositorySyncAttemptService.markAttempt.mockResolvedValue(attemptedState)
+    serviceMocks.repositorySyncAttemptService.markFailure.mockResolvedValue(failedState)
+    serviceMocks.contentSubmissionService.flushPendingPushes.mockRejectedValue(
+      new Error("fatal: unable to access: Could not resolve host: github.com"),
+    )
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.requestPush(repository, "manual")).rejects.toThrow("Could not resolve host")
+
+    expect(serviceMocks.pendingPushesService.markFailure).not.toHaveBeenCalled()
+    expect(serviceMocks.repositorySyncAttemptService.markAttempt).toHaveBeenCalledWith(
+      "repo-1",
+      "2026-05-02T10:00:00.000Z",
+    )
+    expect(serviceMocks.repositorySyncAttemptService.markFailure).toHaveBeenCalledWith(
+      "repo-1",
+      {
+        category: "network",
+        lastError: "网络不可用，稍后自动重试。",
+        nextRetryAt: "2026-05-02T10:00:30.000Z",
+      },
+    )
+    expect(lastSnapshotFrom(eventBus)).toMatchObject({
+      status: "offline",
+      phase: "retry-wait",
+      pendingCount: 1,
+      failureCategory: "network",
+      retryCount: 1,
+    })
+  })
+
+  it("clears stale repository-level failures after confirming no unpushed commits", async () => {
+    serviceMocks.pendingPushesService.readState.mockResolvedValue(emptyPendingState)
+    serviceMocks.repositorySyncAttemptService.read.mockResolvedValue({
+      lastAttemptAt: "2026-05-02T09:59:00.000Z",
+      lastError: "网络不可用，稍后自动重试。",
+      lastErrorCategory: "network",
+      nextRetryAt: "2026-05-02T10:01:00.000Z",
+      retryCount: 2,
+    })
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    await expect(coordinator.refreshSnapshot(repository)).resolves.toMatchObject({
+      status: "synced",
+      pendingCount: 0,
+    })
+    expect(serviceMocks.repositorySyncAttemptService.clear).toHaveBeenCalledWith("repo-1")
   })
 
   it("marks network push failures as offline retry-wait snapshots", async () => {

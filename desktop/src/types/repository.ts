@@ -162,6 +162,14 @@ export type SynapsePendingPushState = {
   retryCount?: number
 }
 
+export type SynapseRepositorySyncAttemptState = {
+  lastAttemptAt: string | null
+  lastError: string | null
+  lastErrorCategory: SynapseRepositorySyncFailureCategory | null
+  nextRetryAt: string | null
+  retryCount: number
+}
+
 export type SynapsePendingPushUpdatedEvent = {
   repositoryUuid: string
   pendingPushes: SynapsePendingPushState
