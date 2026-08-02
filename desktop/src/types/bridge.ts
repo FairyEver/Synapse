@@ -459,6 +459,7 @@ import type {
 import type {
   SynapseGitAccessState,
   SynapseGitBranch,
+  SynapseGitChangeSelection,
   SynapseGitClearHttpsCredentialInput,
   SynapseGitCommitDetail,
   SynapseGitCommitSummary,
@@ -1185,10 +1186,14 @@ export type SynapseBridge = {
       repositoryId: string
       path: string
     }) => Promise<SynapseGitDiffResult>
+    prepareChangeSelection: (input: {
+      repositoryId: string
+      paths: string[]
+    }) => Promise<SynapseGitChangeSelection>
     commit: (input: {
       repositoryId: string
       message: string
-      paths: string[]
+      selectionId: string
       operationId?: string
     }) => Promise<SynapseGitOperationResult>
     fetch: (repositoryId: string, operationId?: string) => Promise<SynapseGitOperationResult>

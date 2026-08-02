@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
+import { access, chmod, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
@@ -8,6 +8,7 @@ import type { SynapseGitRepository } from "../../../../src/types/git"
 import { createGitCloneService } from "../git-clone-service"
 import { createGitClientCommandRunner } from "../git-command-runner"
 import { createGitBranchService } from "../git-branch-service"
+import { createGitChangeSelectionService } from "../git-change-selection-service"
 import { createGitCommitService } from "../git-commit-service"
 import { createGitHistoryService } from "../git-history-service"
 import { createGitStatusService } from "../git-status-service"
@@ -83,13 +84,99 @@ describe("Git client real repository integration", () => {
     await writeFile(filePath, "working-tree\n", "utf8")
     const runner = createGitClientCommandRunner()
     const status = createGitStatusService({ commandRunner: runner, pathExists })
-    const commit = createGitCommitService({ commandRunner: runner, getSnapshot: status.getSnapshot })
+    const selections = createGitChangeSelectionService({ commandRunner: runner, getSnapshot: status.getSnapshot })
+    const commit = createGitCommitService({ commandRunner: runner, selections })
 
     const diff = await status.getDiff(repository, { path: "notes.txt" })
-    await commit.commit(repository, { message: "complete file", paths: ["notes.txt"] })
+    const selection = await selections.prepare(repository, ["notes.txt"])
+    await commit.commit(repository, { message: "complete file", selectionId: selection.selectionId })
 
     expect(diff.text).toContain("+working-tree")
     await expect(git(repository.localPath, "show", "HEAD:notes.txt")).resolves.toBe("working-tree\n")
+  })
+
+  it("creates the first commit through an empty temporary index", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    await writeFile(path.join(repository.localPath, "README.md"), "first\n", "utf8")
+    const runner = createGitClientCommandRunner()
+    const status = createGitStatusService({ commandRunner: runner, pathExists })
+    const selections = createGitChangeSelectionService({ commandRunner: runner, getSnapshot: status.getSnapshot })
+    const commit = createGitCommitService({ commandRunner: runner, selections })
+    const selection = await selections.prepare(repository, ["README.md"])
+
+    await commit.commit(repository, { message: "first", selectionId: selection.selectionId })
+
+    await expect(git(repository.localPath, "show", "HEAD:README.md")).resolves.toBe("first\n")
+  })
+
+  it("rejects a commit when a selected file changes after preparation", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    const filePath = path.join(repository.localPath, "notes.txt")
+    await writeFile(filePath, "base\n", "utf8")
+    await git(repository.localPath, "add", "notes.txt")
+    await git(repository.localPath, "commit", "-m", "base")
+    await writeFile(filePath, "reviewed\n", "utf8")
+    const runner = createGitClientCommandRunner()
+    const status = createGitStatusService({ commandRunner: runner, pathExists })
+    const selections = createGitChangeSelectionService({ commandRunner: runner, getSnapshot: status.getSnapshot })
+    const commit = createGitCommitService({ commandRunner: runner, selections })
+    const selection = await selections.prepare(repository, ["notes.txt"])
+
+    await writeFile(filePath, "changed-after-review\n", "utf8")
+
+    await expect(commit.commit(repository, { message: "must fail", selectionId: selection.selectionId }))
+      .rejects.toThrow("重新审阅")
+    await expect(git(repository.localPath, "show", "HEAD:notes.txt")).resolves.toBe("base\n")
+  })
+
+  it("commits only the prepared paths and preserves unrelated staged changes", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    await writeFile(path.join(repository.localPath, "selected.txt"), "base selected\n", "utf8")
+    await writeFile(path.join(repository.localPath, "staged.txt"), "base staged\n", "utf8")
+    await git(repository.localPath, "add", "selected.txt", "staged.txt")
+    await git(repository.localPath, "commit", "-m", "base")
+    await writeFile(path.join(repository.localPath, "selected.txt"), "selected update\n", "utf8")
+    await writeFile(path.join(repository.localPath, "staged.txt"), "staged update\n", "utf8")
+    await git(repository.localPath, "add", "staged.txt")
+    const runner = createGitClientCommandRunner()
+    const status = createGitStatusService({ commandRunner: runner, pathExists })
+    const selections = createGitChangeSelectionService({ commandRunner: runner, getSnapshot: status.getSnapshot })
+    const commit = createGitCommitService({ commandRunner: runner, selections })
+    const selection = await selections.prepare(repository, ["selected.txt"])
+
+    await commit.commit(repository, { message: "selected only", selectionId: selection.selectionId })
+
+    await expect(git(repository.localPath, "show", "HEAD:selected.txt")).resolves.toBe("selected update\n")
+    await expect(git(repository.localPath, "show", "HEAD:staged.txt")).resolves.toBe("base staged\n")
+    await expect(git(repository.localPath, "diff", "--cached", "--name-only")).resolves.toBe("staged.txt\n")
+  })
+
+  it("does not change the real index when the commit hook rejects the transaction", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    await writeFile(path.join(repository.localPath, "selected.txt"), "base selected\n", "utf8")
+    await writeFile(path.join(repository.localPath, "staged.txt"), "base staged\n", "utf8")
+    await git(repository.localPath, "add", "selected.txt", "staged.txt")
+    await git(repository.localPath, "commit", "-m", "base")
+    await writeFile(path.join(repository.localPath, "selected.txt"), "selected update\n", "utf8")
+    await writeFile(path.join(repository.localPath, "staged.txt"), "staged update\n", "utf8")
+    await git(repository.localPath, "add", "staged.txt")
+    const hookPath = path.join(repository.localPath, ".git", "hooks", "pre-commit")
+    await writeFile(hookPath, "#!/bin/sh\nexit 1\n", "utf8")
+    await chmod(hookPath, 0o755)
+    const runner = createGitClientCommandRunner()
+    const status = createGitStatusService({ commandRunner: runner, pathExists })
+    const selections = createGitChangeSelectionService({ commandRunner: runner, getSnapshot: status.getSnapshot })
+    const commit = createGitCommitService({ commandRunner: runner, selections })
+    const selection = await selections.prepare(repository, ["selected.txt"])
+
+    await expect(commit.commit(repository, { message: "rejected", selectionId: selection.selectionId })).rejects.toThrow()
+
+    await expect(git(repository.localPath, "log", "-1", "--pretty=%s")).resolves.toBe("base\n")
+    await expect(git(repository.localPath, "diff", "--cached", "--name-only")).resolves.toBe("staged.txt\n")
   })
 
   it("renders an untracked file as a /dev/null-to-file diff", async () => {

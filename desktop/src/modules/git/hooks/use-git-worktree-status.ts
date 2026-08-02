@@ -8,22 +8,6 @@ type GitWorktreeRefreshOptions = {
   readonly background?: boolean
 }
 
-export function gitCommitPathsForSelection(
-  changes: readonly SynapseGitFileChange[],
-  selectedPaths: readonly string[],
-): string[] {
-  const selected = new Set(selectedPaths)
-  const commitPaths: string[] = []
-  for (const change of changes) {
-    if (!selected.has(change.path)) continue
-    if (change.originalPath && change.originalPath !== change.path) {
-      commitPaths.push(change.originalPath)
-    }
-    commitPaths.push(change.path)
-  }
-  return Array.from(new Set(commitPaths))
-}
-
 export function useGitWorktreeStatus(
   repository: SynapseGitRepository,
   options: { readonly autoRefreshEnabled?: boolean } = {},

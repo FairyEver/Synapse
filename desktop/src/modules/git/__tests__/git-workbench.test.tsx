@@ -18,6 +18,7 @@ const bridge = vi.hoisted(() => ({
   git: {
     getSnapshot: vi.fn(),
     getDiff: vi.fn(),
+    prepareChangeSelection: vi.fn(),
     commit: vi.fn(),
     listBranches: vi.fn(),
     checkoutBranch: vi.fn(),
@@ -55,6 +56,12 @@ describe("GitWorkbench", () => {
       changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
     })
     bridge.git.getDiff.mockResolvedValue({ path: "docs/a.md", originalPath: null, binary: false, truncated: false, text: "+hello" })
+    bridge.git.prepareChangeSelection.mockResolvedValue({
+      selectionId: "selection-1",
+      repositoryId: "repo-1",
+      expiresAt: "2026-06-17T10:15:00.000Z",
+      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+    })
     bridge.git.listBranches.mockResolvedValue([{ name: "main", current: true }, { name: "docs", current: false }])
     bridge.git.listHistory.mockResolvedValue([
       { hash: "abc", shortHash: "abc123", subject: "更新文档", authorName: "张三", authorEmail: "zhang@example.com", committedAt: "2026-06-17T10:00:00+08:00" },
@@ -101,7 +108,7 @@ describe("GitWorkbench", () => {
     expect(bridge.git.commit).toHaveBeenCalledWith({
       repositoryId: "repo-1",
       message: "更新文档",
-      paths: ["docs/a.md"],
+      selectionId: "selection-1",
     })
   })
 
@@ -131,6 +138,18 @@ describe("GitWorkbench", () => {
       binary: false,
       text: "+renamed",
     })
+    bridge.git.prepareChangeSelection.mockResolvedValueOnce({
+      selectionId: "rename-selection",
+      repositoryId: "repo-1",
+      expiresAt: "2026-06-17T10:15:00.000Z",
+      changes: [{
+        path: "docs/new-name.md",
+        originalPath: "docs/old-name.md",
+        status: "renamed",
+        staged: false,
+        conflicted: false,
+      }],
+    })
     await renderWorkbench(roots)
 
     await click(findButton("提交改动"))
@@ -140,7 +159,7 @@ describe("GitWorkbench", () => {
     expect(bridge.git.commit).toHaveBeenCalledWith({
       repositoryId: "repo-1",
       message: "重命名文档",
-      paths: ["docs/old-name.md", "docs/new-name.md"],
+      selectionId: "rename-selection",
     })
   })
 
@@ -571,12 +590,8 @@ describe("GitWorkbench", () => {
   })
 
   it("keeps commit handoff on remaining local changes", async () => {
-    const current = gitSnapshot({
-      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
-    })
     const status = createStatus({
       refresh: vi.fn()
-        .mockResolvedValueOnce(current)
         .mockResolvedValueOnce(gitSnapshot({
         ahead: 1,
         changes: [{ path: "docs/b.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
@@ -592,12 +607,8 @@ describe("GitWorkbench", () => {
   })
 
   it("offers push only when commit leaves no local changes and has local commits", async () => {
-    const current = gitSnapshot({
-      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
-    })
     const status = createStatus({
       refresh: vi.fn()
-        .mockResolvedValueOnce(current)
         .mockResolvedValueOnce(gitSnapshot({ changes: [], ahead: 1, behind: 0 })),
     })
 
@@ -627,17 +638,14 @@ describe("GitWorkbench", () => {
   })
 
   it("requires reconfirmation when selected files change before commit", async () => {
-    const status = createStatus({
-      refresh: vi.fn(async () => gitSnapshot({
-        changes: [{ path: "docs/a.md", originalPath: null, status: "deleted", staged: false, conflicted: false }],
-      })),
-    })
+    bridge.git.commit.mockRejectedValueOnce(new Error("所选文件已发生变化，请重新审阅后再提交。"))
+    const status = createStatus()
 
     await renderChangesTab(roots, status)
     await changeTextarea("提交说明", "更新文档")
     await click(findButton("提交选中文件"))
 
-    expect(bridge.git.commit).not.toHaveBeenCalled()
+    expect(bridge.git.commit).toHaveBeenCalledWith(expect.objectContaining({ selectionId: "selection-1" }))
     expect(document.body.textContent).toContain("所选文件已发生变化")
   })
 })

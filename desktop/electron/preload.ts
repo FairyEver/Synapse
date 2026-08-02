@@ -600,6 +600,8 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS.git.getSnapshot)({ repositoryId }),
     getDiff: (input) =>
       invoke(IPC_CHANNELS.git.getDiff)(input),
+    prepareChangeSelection: (input) =>
+      invoke(IPC_CHANNELS.git.prepareChangeSelection)(input),
     commit: (input) =>
       invoke(IPC_CHANNELS.git.commit)(input),
     fetch: (repositoryId, operationId) =>

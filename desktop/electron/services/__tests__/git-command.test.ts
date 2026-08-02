@@ -71,6 +71,32 @@ describe("git-command helpers", () => {
     }))
   })
 
+  it("passes only the dedicated temporary index variable to controlled Git commands", async () => {
+    const run = vi.fn(async () => ({
+      durationMs: 1,
+      exitCode: 0,
+      signal: null,
+      stdout: "",
+      stderr: "",
+      timedOut: false,
+    }))
+    configureGitCommandSecurity({ processRunner: { run } })
+
+    await runGitCommand({
+      args: ["read-tree", "HEAD"],
+      cwd: "/repo",
+      fallbackMessage: "read tree failed",
+      gitIndexFile: "/repo/.git/synapse-index-test/index",
+    })
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      env: expect.objectContaining({
+        GIT_INDEX_FILE: "/repo/.git/synapse-index-test/index",
+      }),
+      envAllowlist: ["GIT_INDEX_FILE", "GIT_TERMINAL_PROMPT", "LANG", "LC_ALL"],
+    }))
+  })
+
   it("detects rebase state in a Git worktree", async () => {
     const root = await createTempDir()
     const repoPath = path.join(root, "repo")

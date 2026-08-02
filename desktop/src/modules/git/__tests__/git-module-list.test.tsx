@@ -27,6 +27,7 @@ const bridge = vi.hoisted(() => ({
     removeRepository: vi.fn(),
     getSnapshot: vi.fn(),
     getDiff: vi.fn(),
+    prepareChangeSelection: vi.fn(),
     commit: vi.fn(),
     listBranches: vi.fn(),
     checkoutBranch: vi.fn(),
@@ -224,6 +225,12 @@ describe("GitModule repository list", () => {
     })
     bridge.git.getDiff.mockResolvedValue({ path: "docs/a.md", originalPath: null, binary: false, text: "" })
     bridge.git.commit.mockResolvedValue({ completedAt: "now", message: "已提交。" })
+    bridge.git.prepareChangeSelection.mockResolvedValue({
+      selectionId: "selection-1",
+      repositoryId: "repo-1",
+      expiresAt: "2026-06-17T10:15:00.000Z",
+      changes: [],
+    })
     bridge.git.listBranches.mockResolvedValue([{ name: "main", current: true }])
     bridge.git.checkoutBranch.mockResolvedValue(undefined)
     bridge.git.createBranch.mockResolvedValue(undefined)

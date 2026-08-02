@@ -19,6 +19,7 @@ describe("gitIpcModule", () => {
     expect(gitIpcModule.methods.listRepositories.operationId).toBe("app.git.repositories.list")
     expect(gitIpcModule.methods.listRepositorySummaries.operationId).toBe("app.git.repositories.list_summaries")
     expect(gitIpcModule.methods.getSnapshot.operationId).toBe("app.git.status.get_snapshot")
+    expect(gitIpcModule.methods.prepareChangeSelection.operationId).toBe("app.git.changes.prepare")
     expect(gitIpcModule.methods.commit.operationId).toBe("app.git.commit.create")
   })
 
@@ -33,6 +34,23 @@ describe("gitIpcModule", () => {
 
   it("rejects arbitrary git command payloads", () => {
     expect(gitIpcModule.methods.getSnapshot.request.safeParse({ repositoryId: "repo-1", args: ["status"] }).success).toBe(false)
+  })
+
+  it("accepts prepared selections and rejects renderer-owned commit paths", () => {
+    expect(gitIpcModule.methods.prepareChangeSelection.request.safeParse({
+      repositoryId: "repo-1",
+      paths: ["docs/a.md"],
+    }).success).toBe(true)
+    expect(gitIpcModule.methods.commit.request.safeParse({
+      repositoryId: "repo-1",
+      message: "update",
+      selectionId: "selection-1",
+    }).success).toBe(true)
+    expect(gitIpcModule.methods.commit.request.safeParse({
+      repositoryId: "repo-1",
+      message: "update",
+      paths: ["docs/a.md"],
+    }).success).toBe(false)
   })
 
   it("accepts HTTP clone results and rejects option-like commit hashes", () => {

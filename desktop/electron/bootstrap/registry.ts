@@ -76,6 +76,7 @@ import {
   coreWorkflowWindowManagerDescriptor,
   gitAccessServiceDescriptor,
   gitBranchServiceDescriptor,
+  gitChangeSelectionServiceDescriptor,
   gitCloneServiceDescriptor,
   gitCommandRunnerDescriptor,
   gitCommitServiceDescriptor,
@@ -168,6 +169,7 @@ export function buildServiceRegistry(
   registry.register(gitEnvironmentServiceDescriptor)
   registry.register(gitCloneServiceDescriptor)
   registry.register(gitStatusServiceDescriptor)
+  registry.register(gitChangeSelectionServiceDescriptor)
   registry.register(gitCommitServiceDescriptor)
   registry.register(gitSyncServiceDescriptor)
   registry.register(gitBranchServiceDescriptor)

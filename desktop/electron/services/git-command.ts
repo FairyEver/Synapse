@@ -49,6 +49,7 @@ type GitCommandOptions = {
   args: string[]
   cwd: string
   fallbackMessage: string
+  gitIndexFile?: string
   formatFailureMessage?: (output: string, fallbackMessage: string) => string
   formatSpawnError?: (error: unknown) => string
   onLine?: (line: string, source: GitCommandSource) => void
@@ -121,6 +122,7 @@ function runGitCommand({
   args,
   cwd,
   fallbackMessage,
+  gitIndexFile,
   formatFailureMessage,
   formatSpawnError,
   onLine,
@@ -137,11 +139,14 @@ function runGitCommand({
       acceptedExitCodes,
       abortSignal,
       args,
+      captureStdout,
       cwd,
       fallbackMessage,
+      gitIndexFile,
       formatFailureMessage,
       formatSpawnError,
       onLine,
+      onStdoutChunk,
       maxBufferBytes,
       outputOverflow,
       security,
@@ -156,6 +161,7 @@ function runGitCommand({
       env: {
         ...process.env,
         GIT_TERMINAL_PROMPT: "0",
+        ...(gitIndexFile ? { GIT_INDEX_FILE: gitIndexFile } : {}),
         LANG: "C",
         LC_ALL: "C",
       },
@@ -272,6 +278,7 @@ async function runControlledGitCommand({
   args,
   cwd,
   fallbackMessage,
+  gitIndexFile,
   formatFailureMessage,
   formatSpawnError,
   onLine,
@@ -293,10 +300,11 @@ async function runControlledGitCommand({
       cwd,
       env: {
         GIT_TERMINAL_PROMPT: "0",
+        ...(gitIndexFile ? { GIT_INDEX_FILE: gitIndexFile } : {}),
         LANG: "C",
         LC_ALL: "C",
       },
-      envAllowlist: ["GIT_TERMINAL_PROMPT", "LANG", "LC_ALL"],
+      envAllowlist: ["GIT_INDEX_FILE", "GIT_TERMINAL_PROMPT", "LANG", "LC_ALL"],
       timeoutMs,
       output: {
         stdout: captureStdout ? "buffer" : "ignore",

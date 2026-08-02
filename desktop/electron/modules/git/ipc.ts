@@ -2,6 +2,7 @@ import { z } from "zod"
 import path from "node:path"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { GitBranchService } from "../../services/git-client/git-branch-service"
+import type { GitChangeSelectionService } from "../../services/git-client/git-change-selection-service"
 import type { GitCloneService } from "../../services/git-client/git-clone-service"
 import type { GitCommitService } from "../../services/git-client/git-commit-service"
 import type { GitAccessService } from "../../services/git-client/git-access-service"
@@ -270,9 +271,20 @@ const diffResultSchema = z.object({
   text: z.string(),
 })
 
+const prepareChangeSelectionRequestSchema = repositoryIdSchema.extend({
+  paths: z.array(z.string()).min(1).max(10_000),
+}).strict()
+
+const changeSelectionSchema = z.object({
+  selectionId: z.string(),
+  repositoryId: z.string(),
+  expiresAt: z.string(),
+  changes: z.array(fileChangeSchema),
+})
+
 const commitRequestSchema = repositoryIdSchema.extend({
   message: z.string(),
-  paths: z.array(z.string()),
+  selectionId: z.string().min(1),
   operationId: z.string().min(1).optional(),
 }).strict()
 
@@ -352,6 +364,7 @@ type RepositoryOperationRequest = z.infer<typeof repositoryOperationSchema>
 type PushRequest = z.infer<typeof pushRequestSchema>
 type RemoveRepositoryRequest = z.infer<typeof removeRepositorySchema>
 type DiffRequest = z.infer<typeof diffRequestSchema>
+type PrepareChangeSelectionRequest = z.infer<typeof prepareChangeSelectionRequestSchema>
 type CommitRequest = z.infer<typeof commitRequestSchema>
 type BranchRequest = z.infer<typeof branchRequestSchema>
 type HistoryListRequest = z.infer<typeof historyListRequestSchema>
@@ -553,6 +566,18 @@ export const gitIpcModule: IpcModule = {
       handler: async (ctx, input: DiffRequest) => {
         const repository = await resolveRepository(ctx, input.repositoryId)
         return runRepositoryRead(ctx, repository, () => ctx.resolve<GitStatusService>("git.status-service").getDiff(repository, input))
+      },
+    },
+    prepareChangeSelection: {
+      operationId: "app.git.changes.prepare",
+      kind: "invoke",
+      request: prepareChangeSelectionRequestSchema,
+      response: changeSelectionSchema,
+      handler: async (ctx, input: PrepareChangeSelectionRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryRead(ctx, repository, () => (
+          ctx.resolve<GitChangeSelectionService>("git.change-selection-service").prepare(repository, input.paths)
+        ))
       },
     },
     commit: {

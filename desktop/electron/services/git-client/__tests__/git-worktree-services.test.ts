@@ -220,22 +220,34 @@ describe("git worktree services", () => {
   it("commits selected files", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
     const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const cleanup = vi.fn().mockResolvedValue(undefined)
+    const selections = {
+      invalidate: vi.fn(),
+      validate: vi.fn().mockResolvedValue({
+        head: "abc123",
+        paths: ["docs/a.md"],
+      }),
+    }
     const service = createGitCommitService({
       commandRunner: { run },
-      getSnapshot: vi.fn().mockResolvedValue({
-        changes: [{ path: "docs/a.md", originalPath: null }],
-      }),
+      createTemporaryIndex: async () => ({ path: "/tmp/synapse-index", cleanup }),
       logger,
       now: () => new Date("2026-06-17T10:00:00.000Z"),
+      selections,
     })
 
-    await expect(service.commit(repository, { message: "更新文档", paths: ["docs/a.md"] })).resolves.toEqual({
+    await expect(service.commit(repository, { message: "更新文档", selectionId: "selection-1" })).resolves.toEqual({
       completedAt: "2026-06-17T10:00:00.000Z",
       message: "已提交选中文件。",
     })
 
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["--literal-pathspecs", "add", "--", "docs/a.md"] }))
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["--literal-pathspecs", "commit", "--only", "-m", "更新文档", "--", "docs/a.md"] }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", gitIndexFile: "/tmp/synapse-index", args: ["read-tree", "abc123"] }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", gitIndexFile: "/tmp/synapse-index", args: ["--literal-pathspecs", "add", "--all", "--", "docs/a.md"] }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", gitIndexFile: "/tmp/synapse-index", args: ["commit", "-m", "更新文档"] }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["--literal-pathspecs", "reset", "--mixed", "HEAD", "--", "docs/a.md"] }))
+    expect(selections.validate).toHaveBeenCalledTimes(2)
+    expect(selections.invalidate).toHaveBeenCalledWith("selection-1")
+    expect(cleanup).toHaveBeenCalledOnce()
     const started = logger.info.mock.calls.find((call) => call[0] === "Git operation started.")?.[1] as { operationId?: string } | undefined
     const completed = logger.info.mock.calls.find((call) => call[0] === "Git operation completed.")?.[1] as { operationId?: string } | undefined
     expect(started?.operationId).toEqual(expect.any(String))
@@ -243,16 +255,17 @@ describe("git worktree services", () => {
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("更新文档")
   })
 
-  it("rejects a stale commit selection before staging files", async () => {
+  it("rejects a stale commit selection before creating a temporary index", async () => {
     const run = vi.fn()
     const service = createGitCommitService({
       commandRunner: { run },
-      getSnapshot: vi.fn().mockResolvedValue({
-        changes: [{ path: "docs/current.md", originalPath: null }],
-      }),
+      selections: {
+        invalidate: vi.fn(),
+        validate: vi.fn().mockRejectedValue(new Error("所选文件已发生变化，请重新审阅后再提交。")),
+      },
     })
 
-    await expect(service.commit(repository, { message: "更新文档", paths: ["docs/stale.md"] }))
+    await expect(service.commit(repository, { message: "更新文档", selectionId: "stale-selection" }))
       .rejects.toThrow("所选文件已发生变化")
     expect(run).not.toHaveBeenCalled()
   })

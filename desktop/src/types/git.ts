@@ -187,6 +187,13 @@ export type SynapseGitDiffResult = {
   readonly text: string
 }
 
+export type SynapseGitChangeSelection = {
+  readonly selectionId: string
+  readonly repositoryId: string
+  readonly expiresAt: string
+  readonly changes: readonly SynapseGitFileChange[]
+}
+
 export type SynapseGitBranch = {
   readonly name: string
   readonly current: boolean

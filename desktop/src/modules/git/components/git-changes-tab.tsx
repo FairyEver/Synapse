@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,7 +21,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitFileChange, SynapseGitRepository } from "@/types/git"
-import { gitCommitPathsForSelection } from "../hooks/use-git-worktree-status"
 import type { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 import { getGitActionPlan } from "../lib/git-status-view"
 
@@ -61,37 +60,60 @@ export function GitChangesTab({
 }: GitChangesTabProps) {
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
+  const [preparing, setPreparing] = useState(false)
+  const [preparedSelectionId, setPreparedSelectionId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [commitNotice, setCommitNotice] = useState<CommitNotice | null>(null)
   const changes = status.snapshot?.changes ?? []
   const actionPlan = getGitActionPlan(status.snapshot, status.error)
   const hasConflicts = Boolean(status.snapshot?.hasConflicts)
-  const commitDisabled = busy || hasConflicts || status.selectedPaths.length === 0 || !message.trim()
+  const selectedPathsKey = JSON.stringify(status.selectedPaths)
+  const commitDisabled = busy || preparing || !preparedSelectionId || hasConflicts || status.selectedPaths.length === 0 || !message.trim()
+
+  useEffect(() => {
+    if (!commitDialogOpen) {
+      setPreparedSelectionId(null)
+      setPreparing(false)
+      return
+    }
+    if (hasConflicts || selectedPathsKey === "[]") {
+      setPreparedSelectionId(null)
+      setPreparing(false)
+      return
+    }
+
+    let active = true
+    const selectedPaths = JSON.parse(selectedPathsKey) as string[]
+    setPreparing(true)
+    setPreparedSelectionId(null)
+    setError(null)
+    void requireSynapseBridge().git.prepareChangeSelection({
+      repositoryId: repository.id,
+      paths: selectedPaths,
+    }).then((selection) => {
+      if (active) setPreparedSelectionId(selection.selectionId)
+    }).catch((err: unknown) => {
+      if (active) setError(err instanceof Error ? err.message : "无法确认所选改动。")
+    }).finally(() => {
+      if (active) setPreparing(false)
+    })
+    return () => {
+      active = false
+    }
+  }, [commitDialogOpen, hasConflicts, repository.id, selectedPathsKey])
 
   const commit = async () => {
     setBusy(true)
     setError(null)
     setCommitNotice(null)
     try {
-      const selectedPaths = [...status.selectedPaths]
-      const selectedChanges = changes.filter((change) => selectedPaths.includes(change.path))
-      const confirmedSnapshot = await status.refresh({ background: true })
-      if (!confirmedSnapshot) throw new Error("无法确认当前改动，请刷新后重试。")
-      const confirmedChanges = new Map(confirmedSnapshot.changes.map((change) => [change.path, change]))
-      const selectionChanged = selectedChanges.some((change) => {
-        const confirmed = confirmedChanges.get(change.path)
-        return !confirmed
-          || confirmed.originalPath !== change.originalPath
-          || confirmed.status !== change.status
-      })
-      if (selectionChanged) {
-        throw new Error("所选文件已发生变化，请确认最新改动后重试。")
-      }
+      if (!preparedSelectionId) throw new Error("请重新审阅所选改动后再提交。")
       await requireSynapseBridge().git.commit({
         repositoryId: repository.id,
         message: message.trim(),
-        paths: gitCommitPathsForSelection(confirmedSnapshot.changes, selectedPaths),
+        selectionId: preparedSelectionId,
       })
+      setPreparedSelectionId(null)
       setMessage("")
       const nextSnapshot = await status.refresh()
       await onCommitted?.()
@@ -105,7 +127,9 @@ export function GitChangesTab({
       }
       setCommitNotice({ text: "已提交。", canPush: false })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "提交失败。")
+      const nextError = err instanceof Error ? err.message : "提交失败。"
+      if (nextError.includes("重新审阅") || nextError.includes("已过期")) setPreparedSelectionId(null)
+      setError(nextError)
     } finally {
       setBusy(false)
     }
@@ -117,6 +141,7 @@ export function GitChangesTab({
       setError(null)
       setCommitNotice(null)
     }
+    if (!open) setPreparedSelectionId(null)
     onCommitDialogOpenChange(open)
   }
 
@@ -273,7 +298,7 @@ export function GitChangesTab({
               取消
             </Button>
             <Button type="button" disabled={commitDisabled} onClick={() => void commit()}>
-              {busy ? "提交中" : "提交选中文件"}
+              {preparing ? "准备中" : busy ? "提交中" : "提交选中文件"}
             </Button>
           </DialogFooter>
         </DialogContent>

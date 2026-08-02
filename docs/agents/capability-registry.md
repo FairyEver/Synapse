@@ -69,7 +69,7 @@
 
 默认 Dock 从 app definition 的 `dock.pinnedByDefault` 与 `dock.order` 派生，顺序为：`agent`、`drive`、`automation`、`workflow`、`terminal`、`settings`、`launcher`。Workflow 由统一 System App `visibility` 与 `workflowEntryVisible` 控制。
 
-Git 仍是普通 System App，不新增 MCP domain。其 clone、仓库注册、状态与差异预览、提交、同步、SSH 主机密钥、操作状态与取消能力只通过窄类型化 Git IPC bridge 暴露；这不改变上表的 capability 或 MCP 数量。
+Git 仍是普通 System App，不新增 MCP domain。其 clone、仓库注册、状态与差异预览、主进程选择令牌与精确提交、同步、SSH 主机密钥、操作状态与取消能力只通过窄类型化 Git IPC bridge 暴露；这不改变上表的 capability 或 MCP 数量。
 
 MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统设置中的 MCP 分类是全局 MCP Server 与外部客户端注册信息的唯一 UI 入口；它聚合当前全部已注册 domain，但不新增 capability 或 MCP tool。
 

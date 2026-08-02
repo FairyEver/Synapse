@@ -204,6 +204,7 @@ import { createGitAccessService, type GitAccessService } from "../services/git-c
 import { createGitBranchService, type GitBranchService } from "../services/git-client/git-branch-service"
 import { createGitClientCommandRunner, type GitClientCommandRunner } from "../services/git-client/git-command-runner"
 import { createGitCloneService, type GitCloneService } from "../services/git-client/git-clone-service"
+import { createGitChangeSelectionService, type GitChangeSelectionService } from "../services/git-client/git-change-selection-service"
 import { createGitCommitService, type GitCommitService } from "../services/git-client/git-commit-service"
 import { createGitEnvironmentService, type GitEnvironmentService } from "../services/git-client/git-environment-service"
 import { createGitHistoryService, type GitHistoryService } from "../services/git-client/git-history-service"
@@ -2294,16 +2295,28 @@ export const gitStatusServiceDescriptor: ServiceDescriptor<GitStatusService> = {
   },
 }
 
-export const gitCommitServiceDescriptor: ServiceDescriptor<GitCommitService> = {
-  id: "git.commit-service",
+export const gitChangeSelectionServiceDescriptor: ServiceDescriptor<GitChangeSelectionService> = {
+  id: "git.change-selection-service",
   criticality: "degraded",
   dependsOn: ["git.command-runner", "git.status-service"],
   create(ctx) {
     const statusService = ctx.registry.get<GitStatusService>("git.status-service")
-    return createGitCommitService({
+    return createGitChangeSelectionService({
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
       getSnapshot: (repository) => statusService.getSnapshot(repository),
+    })
+  },
+}
+
+export const gitCommitServiceDescriptor: ServiceDescriptor<GitCommitService> = {
+  id: "git.commit-service",
+  criticality: "degraded",
+  dependsOn: ["git.command-runner", "git.change-selection-service"],
+  create(ctx) {
+    return createGitCommitService({
+      commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
       logger: ctx.logger.child("git.commit"),
+      selections: ctx.registry.get<GitChangeSelectionService>("git.change-selection-service"),
     })
   },
 }
