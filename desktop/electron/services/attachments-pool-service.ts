@@ -82,6 +82,9 @@ class AttachmentsPoolService {
   async writeAttachments(
     repositoryRootPath: string,
     files: AttachmentWriteInput[],
+    options: {
+      readonly beforeCreate?: (targetPath: string) => Promise<void>
+    } = {},
   ): Promise<{
     createdPaths: string[]
     records: SynapseContentAttachmentRecord[]
@@ -114,6 +117,7 @@ class AttachmentsPoolService {
       const targetPath = createAttachmentPoolPath(repositoryRootPath, reference.sha256)
 
       if (!(await pathExists(targetPath))) {
+        await options.beforeCreate?.(targetPath)
         await mkdir(path.dirname(targetPath), { recursive: true })
         await writeFile(targetPath, Buffer.from(file.bytes))
         createdPaths.push(targetPath)

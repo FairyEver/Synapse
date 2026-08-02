@@ -1,3 +1,5 @@
+import { mkdtemp, rm } from "node:fs/promises"
+import path from "node:path"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type { SynapseRepositoryLocalState } from "../../src/types/repository"
 import { isGitRebaseInProgress, runGitCommand, type GitCommandResult } from "./git-command"
@@ -16,11 +18,22 @@ const logger = createMainLogger("service.repository-git-mutation")
 
 type GitProgressListener = (statusText: string) => void
 
+class RepositoryCommitCreatedError extends Error {
+  readonly commitHash: string
+
+  constructor(commitHash: string, options?: ErrorOptions) {
+    super("提交已创建，但无法校正内容文件的暂存状态，请在 Git 工具中检查暂存区。", options)
+    this.name = "RepositoryCommitCreatedError"
+    this.commitHash = commitHash
+  }
+}
+
 function runRepositoryGitCommand(
   cwd: string,
   args: string[],
   fallbackMessage: string,
   options: {
+    gitIndexFile?: string
     onProgress?: GitProgressListener
     timeoutMessage?: string
     timeoutMs?: number
@@ -31,6 +44,7 @@ function runRepositoryGitCommand(
     cwd,
     fallbackMessage,
     formatFailureMessage: formatGitFailureMessage,
+    gitIndexFile: options.gitIndexFile,
     onLine: options.onProgress,
     timeoutMessage: options.timeoutMessage ?? fallbackMessage,
     timeoutMs: options.timeoutMs ?? GIT_LOCAL_OPERATION_TIMEOUT_MS,
@@ -147,35 +161,73 @@ async function commitRepositoryPaths(input: {
     throw new Error("当前没有可提交的改动。")
   }
 
-  await runRepositoryGitCommand(
+  const indexResult = await runRepositoryGitCommand(
     input.gitRootPath,
-    ["--literal-pathspecs", "add", "--", ...relativePaths],
-    "暂存本地改动失败。",
+    ["rev-parse", "--git-path", "index"],
+    "无法准备安全提交事务。",
   )
+  const indexPath = path.isAbsolute(indexResult.stdout.trim())
+    ? indexResult.stdout.trim()
+    : path.resolve(input.gitRootPath, indexResult.stdout.trim())
+  const temporaryIndexDirectory = await mkdtemp(path.join(path.dirname(indexPath), "synapse-index-"))
+  const temporaryIndexPath = path.join(temporaryIndexDirectory, "index")
 
-  const identityArgs = await readCommitIdentityArgs(input.gitRootPath)
-  await runRepositoryGitCommand(
-    input.gitRootPath,
-    [
-      ...identityArgs,
-      "--literal-pathspecs",
-      "commit",
-      "--only",
-      "-m",
-      input.message,
-      "--",
-      ...relativePaths,
-    ],
-    input.fallbackMessage,
-  )
+  try {
+    const head = await runRepositoryGitCommand(
+      input.gitRootPath,
+      ["rev-parse", "HEAD"],
+      "无法读取当前提交。",
+    )
+    await runRepositoryGitCommand(
+      input.gitRootPath,
+      ["read-tree", head.stdout.trim()],
+      "无法准备安全提交事务。",
+      { gitIndexFile: temporaryIndexPath },
+    )
+    await runRepositoryGitCommand(
+      input.gitRootPath,
+      ["--literal-pathspecs", "add", "--all", "--", ...relativePaths],
+      "暂存本地改动失败。",
+      { gitIndexFile: temporaryIndexPath },
+    )
 
-  const headCommit = await runRepositoryGitCommand(
-    input.gitRootPath,
-    ["rev-parse", "HEAD"],
-    "读取最新提交失败。",
-  )
+    const identityArgs = await readCommitIdentityArgs(input.gitRootPath)
+    await runRepositoryGitCommand(
+      input.gitRootPath,
+      [
+        ...identityArgs,
+        "commit",
+        "-m",
+        input.message,
+      ],
+      input.fallbackMessage,
+      { gitIndexFile: temporaryIndexPath },
+    )
 
-  return headCommit.stdout.trim()
+    const headCommit = await runRepositoryGitCommand(
+      input.gitRootPath,
+      ["rev-parse", "HEAD"],
+      "读取最新提交失败。",
+    )
+    try {
+      await runRepositoryGitCommand(
+        input.gitRootPath,
+        ["--literal-pathspecs", "reset", "--mixed", "HEAD", "--", ...relativePaths],
+        "提交已创建，但无法校正内容文件的暂存状态，请在 Git 工具中检查暂存区。",
+      )
+    } catch (error) {
+      throw new RepositoryCommitCreatedError(headCommit.stdout.trim(), { cause: error })
+    }
+
+    return headCommit.stdout.trim()
+  } finally {
+    await rm(temporaryIndexDirectory, { recursive: true, force: true }).catch((error) => {
+      logger.warn("Failed to clean temporary Git index.", {
+        error,
+        gitRootPath: input.gitRootPath,
+      })
+    })
+  }
 }
 
 async function readUnpushedCommitCount(
@@ -216,6 +268,7 @@ async function readUnpushedCommitCount(
 }
 
 export {
+  RepositoryCommitCreatedError,
   commitRepositoryPaths,
   pullRepositoryWithSafeRebase,
   readReadyRepositoryState,

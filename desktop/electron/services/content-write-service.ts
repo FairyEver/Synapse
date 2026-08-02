@@ -27,6 +27,11 @@ import type {
 } from "../../src/types/content"
 import { attachmentsPoolService } from "./attachments-pool-service"
 import {
+  ContentRecoveryNeededError,
+  contentWriteTransactionService,
+  type ContentWriteTransaction,
+} from "./content-write-transaction-service"
+import {
   CONTENT_ATTACHMENTS_FILE_NAME,
   CONTENT_MAIN_FILE_NAME,
   CONTENT_META_FILE_NAME,
@@ -49,6 +54,7 @@ type SynapseContentAuthor = {
 }
 
 type ActiveRepositoryWriteContext = {
+  gitRootPath: string | null
   repositoryRootPath: string
   identity: SynapseContentAuthor
   repository: SynapseRepositoryConfig
@@ -60,6 +66,7 @@ type ContentWriteResult = {
   latestHistoryDirname: string
   modifiedAt: string
   title: string
+  transaction: ContentWriteTransaction
   type: SynapseContentType
 }
 
@@ -187,9 +194,11 @@ async function stageHistoryDirectory(
   snapshot: SynapseContentSnapshotRecord,
   mainContent: string,
   attachments: SynapseContentAttachmentRecord[],
+  transaction?: ContentWriteTransaction,
 ): Promise<string> {
   const historyRootPath = path.join(contentDirectoryPath, HISTORY_DIRECTORY_NAME)
   const tempDirectoryPath = await createTemporaryDirectory(historyRootPath, ".synapse-history-")
+  await transaction?.recordCreatedPath(tempDirectoryPath)
 
   try {
     const tempHistoryPath = path.join(tempDirectoryPath, historyDirname)
@@ -247,6 +256,7 @@ async function getActiveRepositoryWriteContext(
   }
 
   return {
+    gitRootPath: repositoryState.isGitRepository ? repositoryState.gitRootPath : null,
     repositoryRootPath: repositoryState.gitRootPath ?? repository.localPath,
     identity,
     repository,
@@ -258,6 +268,7 @@ async function resolveAttachmentRecords(
   contentType: SynapseContentType,
   payload: ContentCreatePayload | ContentUpdatePayload,
   baseline: SynapseContentDetail | null,
+  transaction: ContentWriteTransaction,
 ): Promise<{
   attachments: SynapseContentAttachmentRecord[]
   createdPaths: string[]
@@ -296,6 +307,9 @@ async function resolveAttachmentRecords(
         }
       })
       .filter((file): file is { originalName: string; size: number; bytes: Uint8Array } => file !== null),
+    {
+      beforeCreate: (targetPath) => transaction.recordCreatedPath(targetPath),
+    },
   )
 
   for (const file of normalizedFiles) {
@@ -329,6 +343,24 @@ async function resolveAttachmentRecords(
     attachments: nextAttachments,
     createdPaths: written.createdPaths,
   }
+}
+
+async function beginContentWriteTransaction(
+  context: ActiveRepositoryWriteContext,
+): Promise<ContentWriteTransaction> {
+  if (!context.gitRootPath) {
+    return contentWriteTransactionService.createLocalTransaction()
+  }
+  return contentWriteTransactionService.begin(context.repository.uuid, context.gitRootPath)
+}
+
+async function rollbackWriteFailure(transaction: ContentWriteTransaction, error: unknown): Promise<never> {
+  try {
+    await transaction.rollback()
+  } catch (rollbackError) {
+    throw new ContentRecoveryNeededError(undefined, { cause: rollbackError })
+  }
+  throw error
 }
 
 class ContentWriteService {
@@ -414,6 +446,7 @@ class ContentWriteService {
       throw new Error(`找不到对应的 ${getContentTypeDefinition(contentType).singularLabel} 内容。`)
     }
 
+    const transaction = await beginContentWriteTransaction(context)
     const modifiedAt = new Date().toISOString()
     const historyDirname = buildHistoryDirname(identity.userId, new Date(modifiedAt))
     const contentDirectoryPath = resolveContentDirectoryPath(context.repository, contentType, contentId)
@@ -435,13 +468,20 @@ class ContentWriteService {
       true,
     )
 
-    const historyPath = await stageHistoryDirectory(
-      contentDirectoryPath,
-      historyDirname,
-      snapshot,
-      baseline.content,
-      baseline.attachments,
-    )
+    const historyPath = path.join(contentDirectoryPath, HISTORY_DIRECTORY_NAME, historyDirname)
+    try {
+      await transaction.recordCreatedPath(historyPath)
+      await stageHistoryDirectory(
+        contentDirectoryPath,
+        historyDirname,
+        snapshot,
+        baseline.content,
+        baseline.attachments,
+        transaction,
+      )
+    } catch (error) {
+      return rollbackWriteFailure(transaction, error)
+    }
 
     logger.info("Wrote delete snapshot.", {
       contentId,
@@ -456,6 +496,7 @@ class ContentWriteService {
       latestHistoryDirname: historyDirname,
       modifiedAt,
       title: baseline.title,
+      transaction,
       type: contentType,
     }
   }
@@ -476,6 +517,7 @@ class ContentWriteService {
       throw new Error(`找不到对应的 ${getContentTypeDefinition(contentType).singularLabel} 内容。`)
     }
 
+    const transaction = await beginContentWriteTransaction(context)
     const modifiedAt = new Date().toISOString()
     const historyDirname = buildHistoryDirname(identity.userId, new Date(modifiedAt))
     const contentDirectoryPath = resolveContentDirectoryPath(context.repository, contentType, contentId)
@@ -497,13 +539,20 @@ class ContentWriteService {
       false,
     )
 
-    const historyPath = await stageHistoryDirectory(
-      contentDirectoryPath,
-      historyDirname,
-      snapshot,
-      baseline.content,
-      baseline.attachments,
-    )
+    const historyPath = path.join(contentDirectoryPath, HISTORY_DIRECTORY_NAME, historyDirname)
+    try {
+      await transaction.recordCreatedPath(historyPath)
+      await stageHistoryDirectory(
+        contentDirectoryPath,
+        historyDirname,
+        snapshot,
+        baseline.content,
+        baseline.attachments,
+        transaction,
+      )
+    } catch (error) {
+      return rollbackWriteFailure(transaction, error)
+    }
 
     logger.info("Wrote restore snapshot.", {
       contentId,
@@ -518,6 +567,7 @@ class ContentWriteService {
       latestHistoryDirname: historyDirname,
       modifiedAt,
       title: baseline.title,
+      transaction,
       type: contentType,
     }
   }
@@ -541,6 +591,7 @@ class ContentWriteService {
       throw new Error(`只能永久删除已删除的 ${getContentTypeDefinition(contentType).singularLabel} 内容。`)
     }
 
+    const transaction = await beginContentWriteTransaction(context)
     const contentDirectoryPath = resolveContentDirectoryPath(context.repository, contentType, contentId)
     logger.info("Purging content directory.", {
       contentId,
@@ -548,7 +599,11 @@ class ContentWriteService {
       contentDirectoryPath: path.basename(contentDirectoryPath),
       repositoryUuid: context.repository.uuid,
     })
-    await rm(contentDirectoryPath, { recursive: true, force: true })
+    try {
+      await transaction.moveDirectoryToRecovery(contentDirectoryPath)
+    } catch (error) {
+      return rollbackWriteFailure(transaction, error)
+    }
     logger.info("Content directory purged.", { contentId, contentType, contentDirectoryPath: path.basename(contentDirectoryPath) })
 
     return {
@@ -557,6 +612,7 @@ class ContentWriteService {
       latestHistoryDirname: baseline.latestHistoryDirname,
       modifiedAt: new Date().toISOString(),
       title: baseline.title,
+      transaction,
       type: contentType,
     }
   }
@@ -586,11 +642,15 @@ class ContentWriteService {
     const createdAt = new Date().toISOString()
     const historyDirname = buildHistoryDirname(identity.userId, new Date(createdAt))
     const contentRootPath = resolveContentRootPath(context.repository, contentType)
-    const tempDirectoryPath = await createTemporaryDirectory(contentRootPath, ".synapse-content-")
     const targetDirectoryPath = resolveContentDirectoryPath(context.repository, contentType, contentId)
-    const attachmentsResult = await resolveAttachmentRecords(context, contentType, payload, null)
+    const transaction = await beginContentWriteTransaction(context)
+    let tempDirectoryPath: string | null = null
+    let attachmentsResult: Awaited<ReturnType<typeof resolveAttachmentRecords>>
 
     try {
+      tempDirectoryPath = await createTemporaryDirectory(contentRootPath, ".synapse-content-")
+      await transaction.recordCreatedPath(tempDirectoryPath)
+      attachmentsResult = await resolveAttachmentRecords(context, contentType, payload, null, transaction)
       await writeJsonFile(
         path.join(tempDirectoryPath, CONTENT_META_FILE_NAME),
         createMetaRecord(contentId, contentType, identity, createdAt),
@@ -612,10 +672,11 @@ class ContentWriteService {
         await writeIconImageFile(tempDirectoryPath, payload.iconImageBytes)
       }
 
+      await transaction.recordCreatedPath(targetDirectoryPath)
       await rename(tempDirectoryPath, targetDirectoryPath)
     } catch (error) {
-      await rm(tempDirectoryPath, { recursive: true, force: true })
-      throw error
+      if (tempDirectoryPath) await rm(tempDirectoryPath, { recursive: true, force: true })
+      return rollbackWriteFailure(transaction, error)
     }
 
     const extraGitPaths = payload.iconImageBytes
@@ -635,6 +696,7 @@ class ContentWriteService {
       latestHistoryDirname: historyDirname,
       modifiedAt: createdAt,
       title: payload.title.trim(),
+      transaction,
       type: contentType,
     }
   }
@@ -661,44 +723,54 @@ class ContentWriteService {
     const historyDirname = buildHistoryDirname(identity.userId, new Date(modifiedAt))
     const contentDirectoryPath = resolveContentDirectoryPath(context.repository, contentType, contentId)
     const snapshot = createSnapshotRecord(payload, identity, modifiedAt, deleted)
-    const attachmentsResult = await resolveAttachmentRecords(context, contentType, payload, baseline)
+    const transaction = await beginContentWriteTransaction(context)
+    let attachmentsResult: Awaited<ReturnType<typeof resolveAttachmentRecords>>
+    try {
+      attachmentsResult = await resolveAttachmentRecords(context, contentType, payload, baseline, transaction)
+    } catch (error) {
+      return rollbackWriteFailure(transaction, error)
+    }
     const stagedIconPath = payload.iconImageBytes
       ? path.join(contentDirectoryPath, `.synapse-icon-${randomUUID()}.tmp`)
       : null
 
     try {
       if (payload.iconImageBytes && stagedIconPath) {
+        await transaction.recordCreatedPath(stagedIconPath)
         await writeFile(stagedIconPath, payload.iconImageBytes)
       }
     } catch (error) {
       if (stagedIconPath) await rm(stagedIconPath, { force: true })
-      throw error
+      return rollbackWriteFailure(transaction, error)
     }
 
     let historyPath: string
     try {
+      historyPath = path.join(contentDirectoryPath, HISTORY_DIRECTORY_NAME, historyDirname)
+      await transaction.recordCreatedPath(historyPath)
       historyPath = await stageHistoryDirectory(
         contentDirectoryPath,
         historyDirname,
         snapshot,
         payload.content.trim(),
         attachmentsResult.attachments,
+        transaction,
       )
     } catch (error) {
       if (stagedIconPath) await rm(stagedIconPath, { force: true })
-      throw error
+      return rollbackWriteFailure(transaction, error)
     }
 
     if (stagedIconPath) {
       try {
-        await rename(stagedIconPath, path.join(contentDirectoryPath, ICON_IMAGE_FILE_NAME))
+        await transaction.replaceFile(path.join(contentDirectoryPath, ICON_IMAGE_FILE_NAME), stagedIconPath)
       } catch (error) {
         logger.warn("Icon rename failed after history committed.", {
           contentId,
           error: error instanceof Error ? error.message : String(error),
         })
         await rm(stagedIconPath, { force: true }).catch(() => {})
-        throw new Error("图标图片保存失败，内容已写入但未完成图标替换，请重试保存。", { cause: error })
+        return rollbackWriteFailure(transaction, new Error("图标图片保存失败，请重试保存。", { cause: error }))
       }
     }
 
@@ -719,6 +791,7 @@ class ContentWriteService {
       latestHistoryDirname: historyDirname,
       modifiedAt,
       title: payload.title.trim(),
+      transaction,
       type: contentType,
     }
   }

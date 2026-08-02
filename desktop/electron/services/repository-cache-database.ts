@@ -11,6 +11,7 @@ function getRepositoryCacheDatabasePath(repositoryUuid: string): string {
 }
 
 type RepositoryCacheSchemaOptions = {
+  includeContentWriteTransactions?: boolean
   includePendingPushes?: boolean
   includeRepositorySyncAttempt?: boolean
 }
@@ -162,6 +163,22 @@ function ensureRepositoryCacheSchema(
         last_error_category TEXT,
         retry_count INTEGER NOT NULL DEFAULT 0,
         next_retry_at TEXT
+      );
+    `)
+  }
+
+  if (options.includeContentWriteTransactions) {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS content_write_transactions (
+        transaction_id TEXT PRIMARY KEY,
+        phase TEXT NOT NULL,
+        git_root_path TEXT NOT NULL,
+        recovery_root_path TEXT NOT NULL,
+        head_before TEXT NOT NULL,
+        commit_hash TEXT,
+        actions_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       );
     `)
   }

@@ -99,6 +99,19 @@ vi.mock("../user-identity-service", () => ({
   userIdentityService: mocks.userIdentityService,
 }))
 
+function createWriteTransactionMock() {
+  return {
+    id: "transaction-1",
+    finalize: vi.fn(),
+    markCommitted: vi.fn(),
+    markCommitting: vi.fn(),
+    moveDirectoryToRecovery: vi.fn(),
+    recordCreatedPath: vi.fn(),
+    replaceFile: vi.fn(),
+    rollback: vi.fn(),
+  }
+}
+
 describe("contentSubmissionService", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -111,10 +124,14 @@ describe("contentSubmissionService", () => {
       isGitRepository: true,
       gitRootPath: "/repo",
     })
-    mocks.runGitCommand.mockResolvedValue({
-      stdout: "",
+    mocks.runGitCommand.mockImplementation(async (input: { args: string[] }) => ({
+      stdout: input.args[0] === "rev-parse" && input.args[1] === "--git-path"
+        ? "/tmp/synapse-content-test-index\n"
+        : input.args[0] === "rev-parse"
+          ? "commit-1\n"
+          : "",
       stderr: "",
-    })
+    }))
     mocks.userIdentityService.requireReadyRepoProfile.mockResolvedValue(mocks.identity)
     mocks.contentIndexService.syncIndex.mockResolvedValue(undefined)
     mocks.contentWriteService.createContent.mockResolvedValue({
@@ -124,6 +141,7 @@ describe("contentSubmissionService", () => {
       latestHistoryDirname: "history-1",
       modifiedAt: "2026-05-20T12:00:00.000Z",
       gitPaths: ["/repo/rules/rule-1.md"],
+      transaction: createWriteTransactionMock(),
     })
     mocks.contentHistoryService.readCurrentDetail.mockResolvedValue({
       createdBy: "user-1",
@@ -343,6 +361,7 @@ describe("contentSubmissionService", () => {
       latestHistoryDirname: "history-2",
       modifiedAt: "2026-05-20T12:01:00.000Z",
       title: "Skill",
+      transaction: createWriteTransactionMock(),
       type: "skill",
     })
 
@@ -405,6 +424,7 @@ describe("contentSubmissionService", () => {
       latestHistoryDirname: "history-2",
       modifiedAt: "2026-05-20T12:01:00.000Z",
       title: "Skill",
+      transaction: createWriteTransactionMock(),
       type: "skill",
     })
 
@@ -445,6 +465,144 @@ describe("contentSubmissionService", () => {
     })
   })
 
+  it.each([
+    ["createContent", "createContent", { contentType: "rule", payload: { title: "Rule" } }],
+    ["updateContent", "updateContent", { contentType: "rule", payload: { id: "rule-1", title: "Rule", baseHistoryDirname: "history-1" } }],
+    ["deleteContent", "deleteContent", { id: "rule-1", type: "rule", baseHistoryDirname: "history-1" }],
+    ["restoreContent", "restoreContent", { id: "rule-1", type: "rule", baseHistoryDirname: "history-1" }],
+    ["purgeContent", "purgeContent", { id: "rule-1", type: "rule", baseHistoryDirname: "history-1" }],
+  ] as const)("rolls back %s when the Git commit fails", async (serviceMethod, writerMethod, request) => {
+    const transaction = {
+      id: "transaction-1",
+      finalize: vi.fn(),
+      markCommitted: vi.fn(),
+      markCommitting: vi.fn(),
+      moveDirectoryToRecovery: vi.fn(),
+      recordCreatedPath: vi.fn(),
+      replaceFile: vi.fn(),
+      rollback: vi.fn(),
+    }
+    mocks.contentHistoryService.readCurrentDetail.mockResolvedValue({
+      createdBy: "user-1",
+      deleted: serviceMethod === "restoreContent" || serviceMethod === "purgeContent",
+      latestHistoryDirname: "history-1",
+      modifiedAt: "2026-05-20T12:00:00.000Z",
+      modifiedByDisplayName: "User",
+    })
+    mocks.contentWriteService[writerMethod].mockReset().mockResolvedValue({
+      id: "rule-1",
+      type: "rule",
+      title: "Rule",
+      latestHistoryDirname: "history-2",
+      modifiedAt: "2026-05-20T12:01:00.000Z",
+      gitPaths: ["/repo/rules/rule-1"],
+      transaction,
+    })
+    mocks.runGitCommand.mockImplementation(async (input: { args: string[] }) => {
+      if (input.args.includes("commit")) throw new Error("pre-commit rejected")
+      return {
+        stdout: input.args[0] === "rev-parse" && input.args[1] === "--git-path"
+          ? "/tmp/synapse-content-test-index\n"
+          : input.args[0] === "rev-parse"
+            ? "commit-1\n"
+            : "",
+        stderr: "",
+      }
+    })
+    const { contentSubmissionService } = await import("../content-submission-service")
+
+    await expect(contentSubmissionService[serviceMethod](request as never)).rejects.toThrow("pre-commit rejected")
+
+    expect(transaction.markCommitting).toHaveBeenCalledTimes(1)
+    expect(transaction.rollback).toHaveBeenCalledTimes(1)
+    expect(transaction.markCommitted).not.toHaveBeenCalled()
+    expect(transaction.finalize).not.toHaveBeenCalled()
+  })
+
+  it("returns an explicit recovery-needed error when automatic rollback fails", async () => {
+    const transaction = {
+      id: "transaction-1",
+      finalize: vi.fn(),
+      markCommitted: vi.fn(),
+      markCommitting: vi.fn(),
+      moveDirectoryToRecovery: vi.fn(),
+      recordCreatedPath: vi.fn(),
+      replaceFile: vi.fn(),
+      rollback: vi.fn().mockRejectedValue(new Error("recovery material locked")),
+    }
+    mocks.contentWriteService.createContent.mockResolvedValueOnce({
+      id: "rule-1",
+      type: "rule",
+      title: "Rule",
+      latestHistoryDirname: "history-2",
+      modifiedAt: "2026-05-20T12:01:00.000Z",
+      gitPaths: ["/repo/rules/rule-1"],
+      transaction,
+    })
+    mocks.runGitCommand.mockImplementation(async (input: { args: string[] }) => {
+      if (input.args.includes("commit")) throw new Error("pre-commit rejected")
+      return {
+        stdout: input.args[0] === "rev-parse" && input.args[1] === "--git-path"
+          ? "/tmp/synapse-content-test-index\n"
+          : input.args[0] === "rev-parse"
+            ? "commit-1\n"
+            : "",
+        stderr: "",
+      }
+    })
+    const { contentSubmissionService } = await import("../content-submission-service")
+
+    await expect(contentSubmissionService.createContent({
+      contentType: "rule",
+      payload: { title: "Rule" },
+    } as never)).rejects.toThrow("下次启动时继续恢复")
+
+    expect(transaction.rollback).toHaveBeenCalledTimes(1)
+  })
+
+  it("finalizes recovery state instead of rolling back after Git has already created the commit", async () => {
+    const transaction = {
+      id: "transaction-1",
+      finalize: vi.fn(),
+      markCommitted: vi.fn(),
+      markCommitting: vi.fn(),
+      moveDirectoryToRecovery: vi.fn(),
+      recordCreatedPath: vi.fn(),
+      replaceFile: vi.fn(),
+      rollback: vi.fn(),
+    }
+    mocks.contentWriteService.createContent.mockResolvedValueOnce({
+      id: "rule-1",
+      type: "rule",
+      title: "Rule",
+      latestHistoryDirname: "history-2",
+      modifiedAt: "2026-05-20T12:01:00.000Z",
+      gitPaths: ["/repo/rules/rule-1"],
+      transaction,
+    })
+    mocks.runGitCommand.mockImplementation(async (input: { args: string[] }) => {
+      if (input.args.includes("reset")) throw new Error("index locked")
+      return {
+        stdout: input.args[0] === "rev-parse" && input.args[1] === "--git-path"
+          ? "/tmp/synapse-content-test-index\n"
+          : input.args[0] === "rev-parse"
+            ? "commit-created\n"
+            : "",
+        stderr: "",
+      }
+    })
+    const { contentSubmissionService } = await import("../content-submission-service")
+
+    await expect(contentSubmissionService.createContent({
+      contentType: "rule",
+      payload: { title: "Rule" },
+    } as never)).rejects.toThrow("提交已创建")
+
+    expect(transaction.markCommitted).toHaveBeenCalledWith("commit-created")
+    expect(transaction.finalize).toHaveBeenCalledTimes(1)
+    expect(transaction.rollback).not.toHaveBeenCalled()
+  })
+
   it("holds the real Git-root lock through write, commit, and pending registration", async () => {
     const release = vi.fn()
     mocks.repositoryLockManager.acquire.mockResolvedValueOnce(release)
@@ -466,7 +624,13 @@ describe("contentSubmissionService", () => {
   it("returns recovery-needed when pending registration fails after commit", async () => {
     mocks.pendingPushesService.enqueue.mockRejectedValueOnce(new Error("pending database unavailable"))
     mocks.runGitCommand.mockImplementation(async (input: { args: string[] }) => ({
-      stdout: input.args[0] === "rev-list" ? "2\n" : input.args[0] === "rev-parse" ? "commit-1\n" : "",
+      stdout: input.args[0] === "rev-list"
+        ? "2\n"
+        : input.args[0] === "rev-parse" && input.args[1] === "--git-path"
+          ? "/tmp/synapse-content-test-index\n"
+          : input.args[0] === "rev-parse"
+            ? "commit-1\n"
+            : "",
       stderr: "",
     }))
     const { contentSubmissionService } = await import("../content-submission-service")

@@ -92,6 +92,29 @@ describe("repository git mutation service", () => {
     expect(await git(root, ["status", "--porcelain"])).toBe("")
   })
 
+  it("does not alter the real index when a commit hook rejects the transaction", async () => {
+    const root = await createTempRoot("synapse-git-hook-failure-")
+    await initRepository(root, true)
+    await writeFile(path.join(root, "target.md"), "target-1\n", "utf8")
+    await writeFile(path.join(root, "unrelated.md"), "unrelated-1\n", "utf8")
+    await git(root, ["add", "--", "unrelated.md"])
+    const hookPath = path.join(root, ".git", "hooks", "pre-commit")
+    await writeFile(hookPath, "#!/bin/sh\nexit 1\n", { encoding: "utf8", mode: 0o755 })
+    const indexBefore = await git(root, ["diff", "--cached", "--name-only"])
+    const headBefore = await git(root, ["rev-parse", "HEAD"])
+
+    await expect(commitRepositoryPaths({
+      fallbackMessage: "commit failed",
+      filePaths: [path.join(root, "target.md")],
+      gitRootPath: root,
+      message: "must fail",
+    })).rejects.toThrow()
+
+    expect(await git(root, ["rev-parse", "HEAD"])).toBe(headBefore)
+    expect(await git(root, ["diff", "--cached", "--name-only"])).toBe(indexBefore)
+    expect(await git(root, ["diff", "--name-only"])).toBe("target.md")
+  })
+
   it("uses a command-only Bot identity when Git identity is missing", async () => {
     const root = await createTempRoot("synapse-git-identity-")
     const previousGlobalConfig = process.env.GIT_CONFIG_GLOBAL

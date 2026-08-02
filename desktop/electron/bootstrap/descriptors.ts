@@ -181,6 +181,7 @@ import { AutomationIngressService } from "../services/automation-ingress"
 import { DiagnosticsService } from "../services/diagnostics-service"
 import { contentService } from "../services/content-service"
 import { contentSubmissionService } from "../services/content-submission-service"
+import { contentWriteTransactionService } from "../services/content-write-transaction-service"
 import { prepareContentIconImageBytes } from "../services/content-icon-image-service"
 import { readSkillDraftFromDirectory } from "../services/content-skill-source-service"
 import { getUsageAnalysisDb } from "../services/usage-analysis"
@@ -1489,6 +1490,17 @@ export const repoWatchDescriptor: ServiceDescriptor<typeof repositoryStore> = {
 
     for (const repository of config.repositories) {
       repositoryStore.watchRepository(repository)
+      try {
+        const state = await repositoryStore.getRepositoryState(repository)
+        if (state.isGitRepository && state.gitRootPath) {
+          await contentWriteTransactionService.recover(repository.uuid, state.gitRootPath)
+        }
+      } catch (error) {
+        ctx.logger.warn("Content transaction startup recovery failed.", {
+          error,
+          repositoryUuid: repository.uuid,
+        })
+      }
     }
 
     repositoryStore.onRepositoryDisappeared((repositoryUuid) => {

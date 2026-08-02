@@ -141,6 +141,9 @@ Normal content operations:
 - If local write and commit succeed, return saved.
 - Push failure records pending state and sync snapshot. It does not turn the save into a failure.
 - Automatic commits normalize repository-relative paths and use literal pathspecs plus path-limited commits. They never consume unrelated entries already present in the user's index.
+- Content mutations are durable transactions rather than standalone writes. The writer records rollback actions before applying content/history/blob/icon changes, the committer builds the commit through a temporary index, and the transaction is finalized only after Git advances successfully.
+- Recovery journals live in the per-repository cache database; file recovery material lives under Git's private `synapse/content-transactions` path and never appears as a worktree change. Create/update/delete/restore rollback removes newly created history and blobs and restores replaced icons; purge moves the content directory into recovery storage until commit succeeds.
+- Commit failure triggers rollback before an error is returned. If rollback cannot complete, the operation reports recovery-needed instead of saved and keeps its journal/materials. Startup and the next content mutation resume journals: an uncommitted transaction rolls back, while a transaction whose owned paths are confirmed in the post-attempt HEAD completes cleanup.
 - Existing repository/global identity is used only when both `user.name` and `user.email` are configured. Otherwise a complete Synapse Bot identity is supplied to that commit command only; repository configuration is never rewritten.
 - If the commit succeeds but pending metadata cannot be recorded, return `recovery-needed`: the content is locally saved, and reload recovers pending state from Git ahead/local-only commits.
 

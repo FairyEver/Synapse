@@ -21,6 +21,7 @@ import type { SynapseRepositoryLocalState } from "../../src/types/repository"
 import { contentHistoryService } from "./content-history-service"
 import { contentIndexService } from "./content-index-service"
 import { contentWriteService, type ContentWriteResult } from "./content-write-service"
+import { ContentRecoveryNeededError } from "./content-write-transaction-service"
 import { configStore } from "./config-store"
 import { runGitCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
@@ -31,6 +32,7 @@ import {
   commitRepositoryPaths,
   pullRepositoryWithSafeRebase,
   readUnpushedCommitCount,
+  RepositoryCommitCreatedError,
   runRepositoryGitExclusive,
 } from "./repository-git-mutation-service"
 import { userIdentityService } from "./user-identity-service"
@@ -465,8 +467,10 @@ class ContentSubmissionService {
       deferPush?: boolean
     } = {},
   ): Promise<SynapseContentMutationResult> {
+    const transaction = writeResult.transaction
     if (!repositoryState.isGitRepository || !repositoryState.gitRootPath) {
       await contentIndexService.syncIndex(repository)
+      await transaction.finalize()
 
       return {
         id: writeResult.id,
@@ -483,12 +487,41 @@ class ContentSubmissionService {
     }
 
     const tCommit = Date.now()
-    const commitHash = await commitRepositoryPaths({
-      fallbackMessage: "提交内容失败。",
-      filePaths: writeResult.gitPaths,
-      gitRootPath: repositoryState.gitRootPath,
-      message: toCommitMessage(action, writeResult),
-    })
+    let commitHash: string
+    try {
+      await transaction.markCommitting()
+      commitHash = await commitRepositoryPaths({
+        fallbackMessage: "提交内容失败。",
+        filePaths: writeResult.gitPaths,
+        gitRootPath: repositoryState.gitRootPath,
+        message: toCommitMessage(action, writeResult),
+      })
+    } catch (error) {
+      if (error instanceof RepositoryCommitCreatedError) {
+        try {
+          await transaction.markCommitted(error.commitHash)
+          await transaction.finalize()
+        } catch (recoveryError) {
+          throw new ContentRecoveryNeededError(undefined, { cause: recoveryError })
+        }
+        throw error
+      }
+      try {
+        await transaction.rollback()
+      } catch (rollbackError) {
+        throw new ContentRecoveryNeededError(undefined, { cause: rollbackError })
+      }
+      throw error
+    }
+    try {
+      await transaction.markCommitted(commitHash)
+      await transaction.finalize()
+    } catch (error) {
+      throw new ContentRecoveryNeededError(
+        "内容已经提交，但恢复事务尚未完成清理；Synapse 将在下次启动时继续处理。",
+        { cause: error },
+      )
+    }
     logger.info("commitAndMaybePush: commitChanges done.", { durationMs: Date.now() - tCommit, commitHash, action, repositoryUuid: repository.uuid })
 
     await syncIndexAfterGitMutation(repository, {
