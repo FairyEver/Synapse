@@ -53,7 +53,8 @@ export function createGitOperationCoordinator(deps: {
       status,
       queuePosition,
     }
-    states.set(entry.operationId, state)
+    if (status === "queued" || status === "running") states.set(entry.operationId, state)
+    else states.delete(entry.operationId)
     deps.onStateChanged?.(state)
   }
 

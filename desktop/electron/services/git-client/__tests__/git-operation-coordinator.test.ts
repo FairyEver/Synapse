@@ -101,6 +101,8 @@ describe("GitOperationCoordinator", () => {
     expect(coordinator.cancel("op-running")).toBe(true)
     await firstGate.promise
     await expect(running).rejects.toBeInstanceOf(GitOperationCancelledError)
+    expect(coordinator.getState("op-queued")).toBeNull()
+    expect(coordinator.getState("op-running")).toBeNull()
   })
 
   it("uses the shared repository lock for mutations and reads", async () => {
@@ -119,5 +121,41 @@ describe("GitOperationCoordinator", () => {
     expect(acquireLock).toHaveBeenNthCalledWith(1, "/repo", "commit")
     expect(acquireLock).toHaveBeenNthCalledWith(2, "/repo", "read")
     expect(release).toHaveBeenCalledTimes(2)
+  })
+
+  it("emits terminal states without retaining completed operation records", async () => {
+    const onStateChanged = vi.fn()
+    const coordinator = createGitOperationCoordinator({ onStateChanged })
+
+    for (let index = 0; index < 200; index += 1) {
+      const operationId = `op-${index}`
+      if (index % 2 === 0) {
+        await coordinator.run({
+          key: "/repo",
+          operationId,
+          operation: "fetch",
+          task: async () => undefined,
+        })
+      } else {
+        await expect(coordinator.run({
+          key: "/repo",
+          operationId,
+          operation: "push",
+          task: async () => { throw new Error("failed") },
+        })).rejects.toThrow("failed")
+      }
+      expect(coordinator.getState(operationId)).toBeNull()
+    }
+
+    expect(onStateChanged).toHaveBeenCalledWith(expect.objectContaining({ status: "completed" }))
+    expect(onStateChanged).toHaveBeenCalledWith(expect.objectContaining({ status: "failed" }))
+    await expect(coordinator.waitForIdle("/repo")).resolves.toBeUndefined()
+    await expect(coordinator.run({
+      key: "/repo",
+      operationId: "op-0",
+      operation: "fetch",
+      task: async () => undefined,
+    })).resolves.toBeUndefined()
+    expect(coordinator.getState("op-0")).toBeNull()
   })
 })
