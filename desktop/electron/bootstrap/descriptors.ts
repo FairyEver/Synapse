@@ -218,7 +218,7 @@ import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
 import { createEventBus } from "../runtime/event-bus/bus"
 import { WindowBroadcaster } from "../runtime/event-bus/broadcaster"
-import type { DataRepository } from "../runtime/data-repo"
+import type { DataRepository, GitCloneJournalEntryV1 } from "../runtime/data-repo"
 import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { ActorIdentity, PermissionGuard, AuditSink } from "../runtime/security"
 import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, webhookShellExecPolicy, systemAutomationPolicy, systemMcpAutoRegisterPolicy } from "../runtime/security"
@@ -2269,14 +2269,18 @@ export const gitEnvironmentServiceDescriptor: ServiceDescriptor<GitEnvironmentSe
 export const gitCloneServiceDescriptor: ServiceDescriptor<GitCloneService> = {
   id: "git.clone-service",
   criticality: "degraded",
-  dependsOn: ["git.command-runner", "git.repository-registry"],
+  dependsOn: ["git.command-runner", "git.repository-registry", "core.data-repository"],
   create(ctx) {
     return createGitCloneService({
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
+      journal: ctx.registry.get<DataRepository>("core.data-repository").namespace<GitCloneJournalEntryV1>("git.clone-journal"),
       logger: ctx.logger.child("git.clone"),
       registry: ctx.registry.get<GitRepositoryRegistry>("git.repository-registry"),
       pathExists,
     })
+  },
+  async start(service) {
+    await service.recoverAbandonedClones()
   },
 }
 

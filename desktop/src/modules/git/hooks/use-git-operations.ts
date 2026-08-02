@@ -198,7 +198,10 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
     error,
     lastFailure,
     cloneRepository: (input: CloneRepositoryInput) =>
-      runGlobal("clone", (operationId) => requireSynapseBridge().git.cloneRepository({ ...input, operationId })),
+      runGlobal("clone", async (operationId) => {
+        const result = await requireSynapseBridge().git.cloneRepository({ ...input, operationId })
+        if (result.status === "registration-failed") throw new Error(result.message)
+      }),
     addLocalRepository: (input: AddLocalRepositoryInput) =>
       runGlobal("add-local", () => requireSynapseBridge().git.addLocalRepository(input)),
     sync: (repositoryId: string) =>

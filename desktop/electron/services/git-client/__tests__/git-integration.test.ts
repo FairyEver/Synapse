@@ -1,10 +1,12 @@
 import { execFile } from "node:child_process"
+import { randomBytes } from "node:crypto"
 import { access, chmod, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 import { afterEach, describe, expect, it } from "vitest"
 import type { SynapseGitRepository } from "../../../../src/types/git"
+import type { GitCloneJournalEntryV1 } from "../../../runtime/data-repo"
 import { createGitCloneService } from "../git-clone-service"
 import { createGitClientCommandRunner } from "../git-command-runner"
 import { createGitBranchService } from "../git-branch-service"
@@ -45,6 +47,25 @@ async function initializeRepository(localPath: string): Promise<SynapseGitReposi
   return { id: "repo-1", name: "repo", localPath, addedAt: new Date(0).toISOString(), lastOpenedAt: null }
 }
 
+function createCloneJournal() {
+  const entries = new Map<string, GitCloneJournalEntryV1>()
+  return {
+    get: async (id: string) => entries.get(id) ?? null,
+    list: async () => [...entries.values()],
+    remove: async (id: string) => { entries.delete(id) },
+    upsert: async (entry: GitCloneJournalEntryV1) => { entries.set(entry.id, entry) },
+  }
+}
+
+async function waitForCondition(predicate: () => Promise<boolean>, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await predicate()) return
+    await new Promise((resolve) => setTimeout(resolve, 2))
+  }
+  throw new Error("Timed out waiting for Git integration condition.")
+}
+
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })))
 })
@@ -59,6 +80,7 @@ describe("Git client real repository integration", () => {
     const runner = createGitClientCommandRunner()
     const service = createGitCloneService({
       commandRunner: runner,
+      journal: createCloneJournal(),
       pathExists,
       registry: {
         addLocal: async ({ name, localPath }) => ({ id: "clone-1", name, localPath, addedAt: new Date(0).toISOString(), lastOpenedAt: null }),
@@ -67,10 +89,55 @@ describe("Git client real repository integration", () => {
 
     const result = await service.clone({ remoteUrl: remotePath, parentDirectory, directoryName: "docs" })
 
+    expect(result.status).toBe("registered")
+    if (!result.repository) throw new Error("Clone registration failed in integration test.")
     expect(result.repository.localPath).toBe(path.join(parentDirectory, "docs"))
     await expect(git(result.repository.localPath, "rev-parse", "--show-toplevel"))
       .resolves.toContain(path.join(parentDirectory, "docs"))
   })
+
+  it("cleans a partially written temporary clone after the real Git process is cancelled", async () => {
+    const root = await createRoot()
+    const source = await initializeRepository(path.join(root, "source"))
+    await writeFile(path.join(source.localPath, "payload.bin"), randomBytes(64 * 1024 * 1024))
+    await git(source.localPath, "add", "payload.bin")
+    await git(source.localPath, "commit", "-m", "payload")
+    const remotePath = path.join(root, "remote.git")
+    await git(root, "clone", "--bare", source.localPath, remotePath)
+    const parentDirectory = path.join(root, "clones")
+    await mkdir(parentDirectory)
+    const entries = new Map<string, GitCloneJournalEntryV1>()
+    const journal = {
+      get: async (id: string) => entries.get(id) ?? null,
+      list: async () => [...entries.values()],
+      remove: async (id: string) => { entries.delete(id) },
+      upsert: async (entry: GitCloneJournalEntryV1) => { entries.set(entry.id, entry) },
+    }
+    const service = createGitCloneService({
+      commandRunner: createGitClientCommandRunner(),
+      journal,
+      pathExists,
+      registry: { addLocal: async () => { throw new Error("cancelled clone must not register") } },
+    })
+    const controller = new AbortController()
+    const cloning = service.clone({
+      remoteUrl: `file://${remotePath}`,
+      parentDirectory,
+      directoryName: "docs",
+    }, { signal: controller.signal })
+    const rejectedClone = expect(cloning).rejects.toThrow()
+
+    await waitForCondition(async () => {
+      const entry = [...entries.values()][0]
+      return Boolean(entry && await pathExists(path.join(entry.tempPath, "repository", ".git", "objects")))
+    })
+    controller.abort()
+
+    await rejectedClone
+    expect(await pathExists(path.join(parentDirectory, "docs"))).toBe(false)
+    expect(entries.size).toBe(0)
+    await expect((await import("node:fs/promises")).readdir(parentDirectory)).resolves.toEqual([])
+  }, 20_000)
 
   it("previews and commits the complete selected file despite mixed index state", async () => {
     const root = await createRoot()

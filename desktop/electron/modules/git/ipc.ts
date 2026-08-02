@@ -222,10 +222,22 @@ const cloneRepositorySchema = z.object({
   operationId: z.string().min(1).optional(),
 }).strict()
 
-const cloneResultSchema = z.object({
-  repository: repositorySchema,
-  remoteKind: z.enum(["http", "https", "ssh", "unknown"]),
-})
+const cloneResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("registered"),
+    repository: repositorySchema,
+    localPath: z.string(),
+    remoteKind: z.enum(["http", "https", "ssh", "unknown"]),
+    message: z.null(),
+  }),
+  z.object({
+    status: z.literal("registration-failed"),
+    repository: z.null(),
+    localPath: z.string(),
+    remoteKind: z.enum(["http", "https", "ssh", "unknown"]),
+    message: z.string(),
+  }),
+])
 
 const repositoryIdSchema = z.object({
   repositoryId: z.string(),

@@ -21,6 +21,7 @@ import {
   driveSyncConflictsSchema,
   driveSyncOperationsSchema,
   driveSyncStateSchema,
+  gitCloneJournalSchema,
   opsDiagnosticsSchema,
   outboxSchema,
   projectsSchema,
@@ -86,6 +87,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "drive.sync.conflicts",
         "drive.sync.operations",
         "drive.sync.state",
+        "git.clone-journal",
         "ops.diagnostics",
         "outbox",
         "projects",
@@ -129,6 +131,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(auditSchema.backend).toBe("jsonl")
     expect(outboxSchema.backend).toBe("sqlite")
     expect(repoPendingPushesSchema.backend).toBe("sqlite")
+    expect(gitCloneJournalSchema.backend).toBe("sqlite")
     expect(repoRepositoriesSchema.backend).toBe("json")
     expect(automationItemsSchema.backend).toBe("json")
     expect(automationRunsSchema.backend).toBe("json")

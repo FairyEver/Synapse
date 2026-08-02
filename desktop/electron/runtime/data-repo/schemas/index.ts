@@ -45,6 +45,10 @@ export {
   type DriveSyncStateEntryV1,
 } from "./drive-sync"
 export {
+  gitCloneJournalSchema,
+  type GitCloneJournalEntryV1,
+} from "./git-clone-journal"
+export {
   repoPendingPushesSchema,
   type RepoPendingPushV1,
 } from "./repo-pending-pushes"
@@ -181,6 +185,7 @@ import { workflowShareStateSchema } from "./workflow-share-state"
 import { cheatCodeStatesSchema } from "./cheat-code-states"
 import { coreIdentitySchema } from "./core-identity"
 import { driveSyncBaselineSchema, driveSyncBindingsSchema, driveSyncConflictsSchema, driveSyncOperationsSchema, driveSyncStateSchema } from "./drive-sync"
+import { gitCloneJournalSchema } from "./git-clone-journal"
 import { repoPendingPushesSchema } from "./repo-pending-pushes"
 import { repoRepositoriesSchema } from "./repo-repositories"
 import { quickInputItemsSchema, quickInputSettingsSchema } from "./quick-input"
@@ -238,6 +243,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   driveSyncOperationsSchema,
   driveSyncConflictsSchema,
   driveSyncStateSchema,
+  gitCloneJournalSchema,
   repoRepositoriesSchema,
   repoPendingPushesSchema,
   cheatCodeStatesSchema,

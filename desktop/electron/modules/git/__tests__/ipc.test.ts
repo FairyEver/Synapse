@@ -57,8 +57,11 @@ describe("gitIpcModule", () => {
     const cloneResponse = gitIpcModule.methods.cloneRepository.response
     expect(cloneResponse).toBeDefined()
     expect(cloneResponse?.safeParse({
+      status: "registered",
       repository: { id: "repo-1", name: "Docs", localPath: "/repo", addedAt: "now", lastOpenedAt: null },
+      localPath: "/repo",
       remoteKind: "http",
+      message: null,
     }).success).toBe(true)
 
     expect(gitIpcModule.methods.getCommit.request.safeParse({

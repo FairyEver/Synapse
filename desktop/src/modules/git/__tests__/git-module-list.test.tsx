@@ -855,8 +855,11 @@ describe("GitModule repository list", () => {
 
   it("opens clone dialog and submits clone request", async () => {
     bridge.git.cloneRepository.mockResolvedValue({
+      status: "registered",
       repository: { id: "repo-1", name: "docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
+      localPath: "/work/docs",
       remoteKind: "https",
+      message: null,
     })
     await renderGitModule(roots)
 
@@ -870,6 +873,25 @@ describe("GitModule repository list", () => {
       parentDirectory: "/work",
       directoryName: "docs",
     }))
+  })
+
+  it("keeps the clone dialog open when the complete repository needs manual registration", async () => {
+    bridge.git.cloneRepository.mockResolvedValue({
+      status: "registration-failed",
+      repository: null,
+      localPath: "/work/docs",
+      remoteKind: "https",
+      message: "仓库已完整克隆到 /work/docs，但未能加入列表。请使用“添加本地仓库”选择该目录。",
+    })
+    await renderGitModule(roots)
+
+    await click(findButton("克隆仓库"))
+    await changeInput("仓库地址", "https://git.example.com/team/docs.git")
+    await changeInput("父目录", "/work")
+    await click(findButton("开始克隆"))
+
+    expect(document.body.textContent).toContain("仓库已完整克隆到 /work/docs")
+    expect(findButton("开始克隆")).toBeTruthy()
   })
 
   it("configures missing Git identity after confirmation", async () => {
@@ -909,8 +931,11 @@ describe("GitModule repository list", () => {
   it("uses native folder selection for clone target path", async () => {
     bridge.settings.repository.chooseDirectory.mockResolvedValue("/work")
     bridge.git.cloneRepository.mockResolvedValue({
+      status: "registered",
       repository: { id: "repo-1", name: "docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
+      localPath: "/work/docs",
       remoteKind: "https",
+      message: null,
     })
     await renderGitModule(roots)
 

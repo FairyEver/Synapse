@@ -460,6 +460,7 @@ import type {
   SynapseGitAccessState,
   SynapseGitBranch,
   SynapseGitChangeSelection,
+  SynapseGitCloneResult,
   SynapseGitClearHttpsCredentialInput,
   SynapseGitCommitDetail,
   SynapseGitCommitSummary,
@@ -471,7 +472,6 @@ import type {
   SynapseGitProvider,
   SynapseGitProtocol,
   SynapseGitPushTarget,
-  SynapseGitRemoteKind,
   SynapseGitRepository,
   SynapseGitRepositorySummary,
   SynapseGitRepositorySnapshot,
@@ -1180,7 +1180,7 @@ export type SynapseBridge = {
       parentDirectory: string
       directoryName: string
       operationId?: string
-    }) => Promise<{ repository: SynapseGitRepository; remoteKind: SynapseGitRemoteKind }>
+    }) => Promise<SynapseGitCloneResult>
     getSnapshot: (repositoryId: string) => Promise<SynapseGitRepositorySnapshot>
     getDiff: (input: {
       repositoryId: string

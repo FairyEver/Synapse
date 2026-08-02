@@ -130,6 +130,22 @@ export type SynapseGitRepository = {
   readonly lastOpenedAt: string | null
 }
 
+export type SynapseGitCloneResult =
+  | {
+    readonly status: "registered"
+    readonly repository: SynapseGitRepository
+    readonly localPath: string
+    readonly remoteKind: SynapseGitRemoteKind
+    readonly message: null
+  }
+  | {
+    readonly status: "registration-failed"
+    readonly repository: null
+    readonly localPath: string
+    readonly remoteKind: SynapseGitRemoteKind
+    readonly message: string
+  }
+
 export type SynapseGitFileStatus =
   | "added"
   | "modified"
