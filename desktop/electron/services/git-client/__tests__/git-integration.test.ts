@@ -85,7 +85,7 @@ describe("Git client real repository integration", () => {
     const status = createGitStatusService({ commandRunner: runner, pathExists })
     const commit = createGitCommitService({ commandRunner: runner, getSnapshot: status.getSnapshot })
 
-    const diff = await status.getDiff(repository, { path: "notes.txt", status: "modified" })
+    const diff = await status.getDiff(repository, { path: "notes.txt" })
     await commit.commit(repository, { message: "complete file", paths: ["notes.txt"] })
 
     expect(diff.text).toContain("+working-tree")
@@ -99,11 +99,23 @@ describe("Git client real repository integration", () => {
     const runner = createGitClientCommandRunner()
     const status = createGitStatusService({ commandRunner: runner, pathExists })
 
-    const diff = await status.getDiff(repository, { path: "new.txt", status: "untracked" })
+    const diff = await status.getDiff(repository, { path: "new.txt" })
 
     expect(diff.binary).toBe(false)
     expect(diff.text).toContain("--- /dev/null")
     expect(diff.text).toContain("+new content")
+  })
+
+  it("does not expose unchanged repository files through the diff API", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    await writeFile(path.join(repository.localPath, ".env"), "SECRET=private\n", "utf8")
+    await git(repository.localPath, "add", ".env")
+    await git(repository.localPath, "commit", "-m", "tracked secret")
+    const status = createGitStatusService({ commandRunner: createGitClientCommandRunner(), pathExists })
+
+    await expect(status.getDiff(repository, { path: ".env" }))
+      .rejects.toThrow("当前改动")
   })
 
   it("sets upstream on the first push to the explicitly selected remote", async () => {

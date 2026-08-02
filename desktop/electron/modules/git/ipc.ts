@@ -260,8 +260,6 @@ const repositorySummarySchema = z.object({
 
 const diffRequestSchema = repositoryIdSchema.extend({
   path: z.string(),
-  originalPath: z.string().nullable().optional(),
-  status: z.enum(["added", "modified", "deleted", "renamed", "untracked", "conflicted", "unknown"]),
 }).strict()
 
 const diffResultSchema = z.object({

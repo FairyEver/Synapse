@@ -2,7 +2,6 @@ import path from "node:path"
 import { devNull } from "node:os"
 import type {
   SynapseGitDiffResult,
-  SynapseGitFileChange,
   SynapseGitRepository,
   SynapseGitRepositorySnapshot,
   SynapseGitRepositorySummary,
@@ -224,17 +223,22 @@ export function createGitStatusService(deps: StatusDeps) {
 
     async getDiff(
       repository: SynapseGitRepository,
-      input: { readonly path: string; readonly originalPath?: string | null; readonly status: SynapseGitFileChange["status"] },
+      input: { readonly path: string },
     ): Promise<SynapseGitDiffResult> {
       const operation = "git.diff"
       const operationId = createGitOperationId()
       const startedAt = performance.now()
       try {
         assertRepositoryPath(repository.localPath, input.path)
-        const isNewFile = input.status === "untracked" || input.status === "added"
+        const snapshot = await this.getSnapshot(repository)
+        const change = snapshot.changes.find((candidate) => candidate.path === input.path)
+        if (!change) {
+          throw new Error("该文件不是当前改动，请刷新后重试。")
+        }
+        const isNewFile = change.status === "untracked" || change.status === "added"
         const args = isNewFile
           ? ["diff", "--no-index", "--no-ext-diff", "--", devNull, input.path]
-          : ["diff", "HEAD", "--", ...(input.originalPath ? [input.originalPath] : []), input.path]
+          : ["diff", "HEAD", "--", ...(change.originalPath ? [change.originalPath] : []), change.path]
         const result = await deps.commandRunner.run({
           cwd: repository.localPath,
           args,
@@ -249,7 +253,7 @@ export function createGitStatusService(deps: StatusDeps) {
         const text = result.stdout
         return {
           path: input.path,
-          originalPath: input.originalPath ?? null,
+          originalPath: change.originalPath,
           binary: /^Binary files /m.test(text),
           truncated: result.stdoutTruncated ?? false,
           text,
@@ -264,7 +268,7 @@ export function createGitStatusService(deps: StatusDeps) {
           error,
           extra: {
             ...repositoryLogMeta(repository),
-            status: input.status,
+            status: "main-process-validated",
             pathSample: input.path,
           },
         })

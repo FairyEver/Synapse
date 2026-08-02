@@ -147,6 +147,10 @@ describe("useGitWorktreeStatus", () => {
     })
     expect(statuses.at(-1)!.selectedFile?.path).toBe("docs/b.md")
     expect(statuses.at(-1)!.diff?.path).toBe("docs/b.md")
+    expect(bridge.git.getDiff).toHaveBeenLastCalledWith({
+      repositoryId: "repo-1",
+      path: "docs/b.md",
+    })
 
     slowDiff.resolve(diffForPath("docs/a.md"))
     await act(async () => {

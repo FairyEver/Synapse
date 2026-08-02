@@ -464,7 +464,6 @@ import type {
   SynapseGitCommitSummary,
   SynapseGitDiffResult,
   SynapseGitEnvironmentState,
-  SynapseGitFileStatus,
   SynapseGitGenerateSshKeyInput,
   SynapseGitOperationResult,
   SynapseGitOperationState,
@@ -1185,8 +1184,6 @@ export type SynapseBridge = {
     getDiff: (input: {
       repositoryId: string
       path: string
-      originalPath?: string | null
-      status: SynapseGitFileStatus
     }) => Promise<SynapseGitDiffResult>
     commit: (input: {
       repositoryId: string

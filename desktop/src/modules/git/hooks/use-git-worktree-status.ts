@@ -63,8 +63,6 @@ export function useGitWorktreeStatus(
       const nextDiff = await requireSynapseBridge().git.getDiff({
         repositoryId: repository.id,
         path: file.path,
-        originalPath: file.originalPath,
-        status: file.status,
       })
       if (diffRequestIdRef.current === requestId) {
         setDiff(nextDiff)

@@ -14,6 +14,14 @@ const repository = {
   lastOpenedAt: null,
 }
 
+function statusAndDiffRunner(changeLine: string, diffText: string) {
+  return vi.fn(async (input: { readonly args: readonly string[] }) => (
+    input.args[0] === "status"
+      ? { stdout: `# branch.head main\n${changeLine}\n`, stderr: "" }
+      : { stdout: diffText, stderr: "", stdoutTruncated: false }
+  ))
+}
+
 describe("git worktree services", () => {
   it("reads status snapshot", async () => {
     const output = Buffer.from([
@@ -140,10 +148,10 @@ describe("git worktree services", () => {
 
   it("loads text diff and marks binary diff", async () => {
     const textService = createGitStatusService({
-      commandRunner: { run: vi.fn().mockResolvedValue({ stdout: "diff --git a/docs/a.md b/docs/a.md\n+hello\n", stderr: "" }) },
+      commandRunner: { run: statusAndDiffRunner("1 .M N... 100644 100644 100644 abc abc docs/a.md", "diff --git a/docs/a.md b/docs/a.md\n+hello\n") },
       pathExists: async () => true,
     })
-    await expect(textService.getDiff(repository, { path: "docs/a.md", status: "modified" })).resolves.toEqual({
+    await expect(textService.getDiff(repository, { path: "docs/a.md" })).resolves.toEqual({
       path: "docs/a.md",
       originalPath: null,
       binary: false,
@@ -152,17 +160,17 @@ describe("git worktree services", () => {
     })
 
     const binaryService = createGitStatusService({
-      commandRunner: { run: vi.fn().mockResolvedValue({ stdout: "Binary files a/logo.png and b/logo.png differ\n", stderr: "" }) },
+      commandRunner: { run: statusAndDiffRunner("1 .M N... 100644 100644 100644 abc abc logo.png", "Binary files a/logo.png and b/logo.png differ\n") },
       pathExists: async () => true,
     })
-    await expect(binaryService.getDiff(repository, { path: "logo.png", status: "modified" })).resolves.toMatchObject({ binary: true })
+    await expect(binaryService.getDiff(repository, { path: "logo.png" })).resolves.toMatchObject({ binary: true })
   })
 
   it("shows the complete working-tree diff for tracked files", async () => {
-    const run = vi.fn().mockResolvedValue({ stdout: "diff", stderr: "", stdoutTruncated: false })
+    const run = statusAndDiffRunner("1 .M N... 100644 100644 100644 abc abc docs/a.md", "diff")
     const service = createGitStatusService({ commandRunner: { run }, pathExists: async () => true })
 
-    await service.getDiff(repository, { path: "docs/a.md", status: "modified" })
+    await service.getDiff(repository, { path: "docs/a.md" })
 
     expect(run).toHaveBeenCalledWith(expect.objectContaining({
       args: ["diff", "HEAD", "--", "docs/a.md"],
@@ -170,15 +178,43 @@ describe("git worktree services", () => {
   })
 
   it("shows untracked files as additions", async () => {
-    const run = vi.fn().mockResolvedValue({ stdout: "diff", stderr: "", stdoutTruncated: false })
+    const run = statusAndDiffRunner("? docs/new.md", "diff")
     const service = createGitStatusService({ commandRunner: { run }, pathExists: async () => true })
 
-    await service.getDiff(repository, { path: "docs/new.md", status: "untracked" })
+    await service.getDiff(repository, { path: "docs/new.md" })
 
     expect(run).toHaveBeenCalledWith(expect.objectContaining({
       args: ["diff", "--no-index", "--no-ext-diff", "--", devNull, "docs/new.md"],
       acceptedExitCodes: [0, 1],
     }))
+  })
+
+  it("derives diff metadata from the current main-process snapshot", async () => {
+    const run = vi.fn()
+      .mockResolvedValueOnce({
+        stdout: "# branch.head main\n2 R. N... 100644 100644 100644 abc abc R100 docs/new.md\tdocs/old.md\n",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({ stdout: "diff", stderr: "", stdoutTruncated: false })
+    const service = createGitStatusService({ commandRunner: { run }, pathExists: async () => true })
+
+    await service.getDiff(repository, { path: "docs/new.md" })
+
+    expect(run).toHaveBeenLastCalledWith(expect.objectContaining({
+      args: ["diff", "HEAD", "--", "docs/old.md", "docs/new.md"],
+    }))
+  })
+
+  it("rejects diff paths that are not current worktree changes", async () => {
+    const run = vi.fn().mockResolvedValue({
+      stdout: "# branch.head main\n? docs/current.md\n",
+      stderr: "",
+    })
+    const service = createGitStatusService({ commandRunner: { run }, pathExists: async () => true })
+
+    await expect(service.getDiff(repository, { path: ".env" }))
+      .rejects.toThrow("当前改动")
+    expect(run).toHaveBeenCalledTimes(1)
   })
 
   it("commits selected files", async () => {
