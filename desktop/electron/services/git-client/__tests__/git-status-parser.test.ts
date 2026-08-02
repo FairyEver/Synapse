@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parseGitStatusPorcelainV2 } from "../git-status-parser"
+import { createGitStatusPorcelainV2Parser, parseGitStatusPorcelainV2 } from "../git-status-parser"
 
 describe("parseGitStatusPorcelainV2", () => {
   it("parses branch, ahead behind, and common file states", () => {
@@ -67,5 +67,39 @@ describe("parseGitStatusPorcelainV2", () => {
       { path: "docs/line\nname.txt", originalPath: null, status: "untracked", staged: false, conflicted: false },
       { path: "docs/新 name.md", originalPath: "docs/old name.md", status: "renamed", staged: true, conflicted: false },
     ])
+  })
+
+  it("streams NUL-delimited status without retaining every change", () => {
+    const parser = createGitStatusPorcelainV2Parser({ maxChanges: 2 })
+    const output = Buffer.from([
+      "# branch.head main",
+      "# branch.upstream origin/main",
+      "# branch.ab +2 -1",
+      "1 .M N... 100644 100644 100644 abc abc docs/line\nname.md",
+      "2 R. N... 100644 100644 100644 abc abc R100 docs/new name.md",
+      "docs/old name.md",
+      "? docs/third.md",
+      "u UU N... 100644 100644 100644 100644 a b c d docs/conflict.md",
+      "",
+    ].join("\0"), "utf8")
+
+    parser.push(output.subarray(0, 37))
+    parser.push(output.subarray(37, 113))
+    parser.push(output.subarray(113))
+
+    expect(parser.finish()).toEqual({
+      currentBranch: "main",
+      upstream: "origin/main",
+      trackingStatus: "tracked",
+      ahead: 2,
+      behind: 1,
+      hasConflicts: true,
+      changeCount: 4,
+      changesTruncated: true,
+      changes: [
+        { path: "docs/line\nname.md", originalPath: null, status: "modified", staged: false, conflicted: false },
+        { path: "docs/new name.md", originalPath: "docs/old name.md", status: "renamed", staged: true, conflicted: false },
+      ],
+    })
   })
 })

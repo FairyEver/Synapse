@@ -52,6 +52,8 @@ type GitCommandOptions = {
   formatFailureMessage?: (output: string, fallbackMessage: string) => string
   formatSpawnError?: (error: unknown) => string
   onLine?: (line: string, source: GitCommandSource) => void
+  onStdoutChunk?: (chunk: Uint8Array) => void
+  captureStdout?: boolean
   maxBufferBytes?: number
   outputOverflow?: "error" | "truncate"
   timeoutMessage?: string
@@ -122,6 +124,8 @@ function runGitCommand({
   formatFailureMessage,
   formatSpawnError,
   onLine,
+  onStdoutChunk,
+  captureStdout = true,
   maxBufferBytes,
   outputOverflow = "error",
   timeoutMessage,
@@ -183,7 +187,8 @@ function runGitCommand({
     childProcess.stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8")
       try {
-        stdoutBuffer.push(chunk)
+        if (captureStdout) stdoutBuffer.push(chunk)
+        onStdoutChunk?.(chunk)
       } catch (error) {
         if (settled) return
         settled = true
@@ -270,6 +275,8 @@ async function runControlledGitCommand({
   formatFailureMessage,
   formatSpawnError,
   onLine,
+  onStdoutChunk,
+  captureStdout = true,
   maxBufferBytes,
   outputOverflow = "error",
   security,
@@ -292,12 +299,13 @@ async function runControlledGitCommand({
       envAllowlist: ["GIT_TERMINAL_PROMPT", "LANG", "LC_ALL"],
       timeoutMs,
       output: {
-        stdout: "buffer",
+        stdout: captureStdout ? "buffer" : "ignore",
         stderr: "buffer",
         ...(maxBufferBytes === undefined ? {} : { maxBufferBytes }),
         overflow: outputOverflow,
       },
       onStdoutLine: (line) => onLine?.(line, "stdout"),
+      onStdoutChunk,
       onStderrLine: (line) => onLine?.(line, "stderr"),
       metadata: {
         source: "git-command",

@@ -8,6 +8,7 @@ type GitClientRunInput = {
   readonly abortSignal?: AbortSignal
   readonly cwd: string
   readonly args: readonly string[]
+  readonly captureStdout?: boolean
   readonly fallbackMessage?: string
   readonly logFailure?: boolean
   readonly maxBufferBytes?: number
@@ -17,6 +18,7 @@ type GitClientRunInput = {
   readonly repositoryId?: string
   readonly remoteUrl?: string | null
   readonly outputOverflow?: "error" | "truncate"
+  readonly onStdoutChunk?: (chunk: Uint8Array) => void
   readonly timeoutMs?: number
 }
 
@@ -124,10 +126,12 @@ export function createGitClientCommandRunner(deps: {
           acceptedExitCodes: input.acceptedExitCodes,
           abortSignal: input.abortSignal,
           args: [...input.args],
+          captureStdout: input.captureStdout,
           cwd: input.cwd,
           fallbackMessage: input.fallbackMessage ?? "Git 操作失败。",
           maxBufferBytes: input.maxBufferBytes,
           outputOverflow: input.outputOverflow,
+          onStdoutChunk: input.onStdoutChunk,
           timeoutMessage: "Git 操作超时。",
           timeoutMs: input.timeoutMs ?? 60_000,
         })

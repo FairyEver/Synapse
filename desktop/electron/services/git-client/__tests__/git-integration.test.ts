@@ -139,6 +139,21 @@ describe("Git client real repository integration", () => {
     expect(snapshot.changes.map((change) => change.path)).toEqual(["docs/a.md", "docs/b.md"])
   })
 
+  it("preserves newlines and surrounding spaces in status paths", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    const specialPath = " docs/line\nname.md "
+    await mkdir(path.dirname(path.join(repository.localPath, specialPath)), { recursive: true })
+    await writeFile(path.join(repository.localPath, specialPath), "content\n", "utf8")
+    const status = createGitStatusService({ commandRunner: createGitClientCommandRunner(), pathExists })
+
+    const snapshot = await status.getSnapshot(repository)
+
+    expect(snapshot.changeCount).toBe(1)
+    expect(snapshot.changesTruncated).toBe(false)
+    expect(snapshot.changes[0]?.path).toBe(specialPath)
+  })
+
   it("reports a deleted upstream branch instead of synchronized", async () => {
     const root = await createRoot()
     const repository = await initializeRepository(path.join(root, "repo"))
@@ -170,7 +185,7 @@ describe("Git client real repository integration", () => {
     await git(repository.localPath, "worktree", "add", "-b", "secondary", path.join(root, "secondary"))
     const branches = createGitBranchService({
       commandRunner: createGitClientCommandRunner(),
-      getSnapshot: async () => ({ changes: [] }),
+      getSnapshot: async () => ({ changeCount: 0, changes: [] }),
     })
 
     await expect(branches.list(repository)).resolves.toEqual([

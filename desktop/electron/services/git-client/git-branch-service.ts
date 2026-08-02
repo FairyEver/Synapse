@@ -12,7 +12,7 @@ import {
 
 type BranchDeps = {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
-  readonly getSnapshot: (repository: SynapseGitRepository) => Promise<Pick<SynapseGitRepositorySnapshot, "changes">>
+  readonly getSnapshot: (repository: SynapseGitRepository) => Promise<Pick<SynapseGitRepositorySnapshot, "changeCount" | "changes">>
   readonly logger?: Pick<StructuredLogger, "error" | "info" | "warn">
 }
 
@@ -33,10 +33,11 @@ function assertBranchName(name: string): string {
 export function createGitBranchService(deps: BranchDeps) {
   async function assertClean(repository: SynapseGitRepository, operation: string, operationId: string): Promise<void> {
     const snapshot = await deps.getSnapshot(repository)
-    if (snapshot.changes.length > 0) {
+    const changeCount = snapshot.changeCount ?? snapshot.changes.length
+    if (changeCount > 0) {
       logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "working-tree-dirty", {
         ...repositoryLogMeta(repository),
-        changeCount: snapshot.changes.length,
+        changeCount,
       })
       throw new Error("请先提交本地改动。")
     }

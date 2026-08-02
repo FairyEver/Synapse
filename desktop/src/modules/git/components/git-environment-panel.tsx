@@ -170,7 +170,7 @@ export function buildGitDiagnosticsText(
         `上游=${snapshot?.upstream ?? "无"}`,
         `ahead=${snapshot?.ahead ?? 0}`,
         `behind=${snapshot?.behind ?? 0}`,
-        `改动=${snapshot?.changes.length ?? 0}`,
+        `改动=${snapshot?.changeCount ?? 0}`,
         `状态=${actionPlan.statusText}`,
         summary.error ? `错误=${summary.error}` : null,
       ].filter(Boolean).join(" | "))
@@ -301,7 +301,7 @@ function RepositoryDiagnosticsTable({ summaries }: { readonly summaries: readonl
             </div>
             <div className="flex min-w-0 flex-wrap gap-2 text-xs text-muted-foreground md:justify-end">
               <Badge variant="outline">↑{snapshot?.ahead ?? 0} ↓{snapshot?.behind ?? 0}</Badge>
-              <Badge variant="outline">{snapshot?.changes.length ?? 0} 个改动</Badge>
+              <Badge variant="outline">{snapshot?.changeCount ?? 0} 个改动</Badge>
             </div>
           </div>
         )

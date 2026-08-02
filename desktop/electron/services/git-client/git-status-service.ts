@@ -18,7 +18,7 @@ import {
   summarizeChanges,
   summarizeSnapshot,
 } from "./git-logging"
-import { parseGitStatusPorcelainV2 } from "./git-status-parser"
+import { createGitStatusPorcelainV2Parser, parseGitStatusPorcelainV2 } from "./git-status-parser"
 
 type GitRepositoryStateDiagnostics = {
   readonly cherryPickInProgress: boolean
@@ -36,6 +36,7 @@ type StatusDeps = {
 
 const LIST_SUMMARY_CONCURRENCY_LIMIT = 4
 const PREVIEW_MAX_BYTES = 2 * 1024 * 1024
+const MAX_VISIBLE_STATUS_CHANGES = 10_000
 
 function createGitStateDiagnosticsReader(
   commandRunner: Pick<GitClientCommandRunner, "run">,
@@ -123,6 +124,8 @@ export function createGitStatusService(deps: StatusDeps) {
           ahead: 0,
           behind: 0,
           hasConflicts: false,
+          changeCount: 0,
+          changesTruncated: false,
           changes: [],
         }
       }
@@ -131,16 +134,23 @@ export function createGitStatusService(deps: StatusDeps) {
       const operationId = createGitOperationId()
       const startedAt = performance.now()
       try {
+        const parser = createGitStatusPorcelainV2Parser({ maxChanges: MAX_VISIBLE_STATUS_CHANGES })
+        let sawStatusChunk = false
         const result = await deps.commandRunner.run({
           cwd: repository.localPath,
-          args: ["status", "--porcelain=v2", "--branch", "--untracked-files=all"],
+          args: ["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"],
+          captureStdout: false,
           logFailure: false,
+          onStdoutChunk: (chunk) => {
+            sawStatusChunk = true
+            parser.push(chunk)
+          },
           operation,
           operationId,
           repoPath: repository.localPath,
           repositoryId: repository.id,
         })
-        const parsed = parseGitStatusPorcelainV2(result.stdout)
+        const parsed = sawStatusChunk ? parser.finish() : parseGitStatusPorcelainV2(result.stdout)
         const snapshot = {
           repositoryId: repository.id,
           pathExists: true,
@@ -148,7 +158,8 @@ export function createGitStatusService(deps: StatusDeps) {
           ...parsed,
         }
         const diagnostics = await readStateDiagnosticsForLog(deps, repository, operation, operationId)
-        logStatusAnomalies(deps, lastAnomalyFingerprints, repository, operation, operationId, snapshot, diagnostics, result.stdout)
+        const branchHeadSeen = sawStatusChunk ? parser.sawBranchHead : result.stdout.includes("# branch.head ")
+        logStatusAnomalies(deps, lastAnomalyFingerprints, repository, operation, operationId, snapshot, diagnostics, branchHeadSeen)
         return snapshot
       } catch (error) {
         if (isNotGitRepository(error)) {
@@ -167,6 +178,8 @@ export function createGitStatusService(deps: StatusDeps) {
             ahead: 0,
             behind: 0,
             hasConflicts: false,
+            changeCount: 0,
+            changesTruncated: false,
             changes: [],
           }
         }
@@ -319,9 +332,9 @@ function logStatusAnomalies(
   operationId: string,
   snapshot: SynapseGitRepositorySnapshot,
   diagnostics: GitRepositoryStateDiagnostics | null,
-  stdout: string,
+  branchHeadSeen: boolean,
 ): void {
-  const anomalies = collectStatusAnomalies(snapshot, diagnostics, stdout)
+  const anomalies = collectStatusAnomalies(snapshot, diagnostics, branchHeadSeen)
   if (anomalies.length === 0) {
     lastAnomalyFingerprints.delete(repository.id)
     return
@@ -349,12 +362,12 @@ function logStatusAnomalies(
 function collectStatusAnomalies(
   snapshot: SynapseGitRepositorySnapshot,
   diagnostics: GitRepositoryStateDiagnostics | null,
-  stdout: string,
+  branchHeadSeen: boolean,
 ): string[] {
   const anomalies: string[] = []
-  if (!stdout.includes("# branch.head ")) {
+  if (!branchHeadSeen) {
     anomalies.push("head-missing")
-  } else if (stdout.includes("# branch.head (detached)")) {
+  } else if (snapshot.currentBranch === null) {
     anomalies.push("detached-head")
   }
   if (snapshot.currentBranch && !snapshot.upstream) anomalies.push("upstream-missing")

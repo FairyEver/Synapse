@@ -15,7 +15,7 @@ import {
 
 type SyncDeps = {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
-  readonly getSnapshot: (repository: SynapseGitRepository) => Promise<Pick<SynapseGitRepositorySnapshot, "changes" | "ahead" | "behind" | "currentBranch" | "trackingStatus">>
+  readonly getSnapshot: (repository: SynapseGitRepository) => Promise<Pick<SynapseGitRepositorySnapshot, "changeCount" | "changes" | "ahead" | "behind" | "currentBranch" | "trackingStatus">>
   readonly logger?: Pick<StructuredLogger, "error" | "info" | "warn">
   readonly now?: () => Date
 }
@@ -143,7 +143,7 @@ export function createGitSyncService(deps: SyncDeps) {
           ...baseMeta,
           before: summarizeSyncSnapshot(before),
         }
-        if (before.changes.length > 0) {
+        if ((before.changeCount ?? before.changes.length) > 0) {
           logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "working-tree-dirty", beforeMeta)
           throw new Error("请先提交本地改动。")
         }
@@ -285,7 +285,7 @@ export function createGitSyncService(deps: SyncDeps) {
   }
 }
 
-function summarizeSyncSnapshot(snapshot: Pick<SynapseGitRepositorySnapshot, "changes" | "ahead" | "behind">): Record<string, unknown> {
+function summarizeSyncSnapshot(snapshot: Pick<SynapseGitRepositorySnapshot, "changeCount" | "changes" | "ahead" | "behind">): Record<string, unknown> {
   return summarizeSnapshot({
     currentBranch: null,
     upstream: null,

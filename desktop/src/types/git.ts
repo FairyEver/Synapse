@@ -157,6 +157,8 @@ export type SynapseGitRepositorySnapshot = {
   readonly ahead: number
   readonly behind: number
   readonly hasConflicts: boolean
+  readonly changeCount: number
+  readonly changesTruncated: boolean
   readonly changes: readonly SynapseGitFileChange[]
 }
 

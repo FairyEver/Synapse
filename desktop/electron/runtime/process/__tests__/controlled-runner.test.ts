@@ -566,6 +566,26 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
     ])
   })
 
+  it("streams raw stdout chunks while output buffering is disabled", async () => {
+    const guard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const runner = createControlledProcessRunner({ permissionGuard: guard, auditSink })
+    const chunks: Uint8Array[] = []
+
+    const result = await runner.run({
+      actor: { kind: "user", id: "status-test" },
+      action: "shell.exec",
+      command: process.execPath,
+      args: ["-e", "process.stdout.write(Buffer.from([97, 0, 98, 0]))"],
+      output: { stdout: "ignore" },
+      onStdoutChunk: (chunk) => chunks.push(Uint8Array.from(chunk)),
+    })
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toBeUndefined()
+    expect(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))).toEqual(Buffer.from([97, 0, 98, 0]))
+  })
+
   it("starts a controlled long-running session with stdin writes and audit", async () => {
     const guard = createPermissionGuard()
     const auditSink = new InMemoryAuditSink()

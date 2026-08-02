@@ -11,7 +11,7 @@ export type GitActionPlan = {
 }
 
 export function getGitChangeCount(snapshot: SynapseGitRepositorySnapshot | null): number {
-  return snapshot?.changes.length ?? 0
+  return snapshot?.changeCount ?? 0
 }
 
 export function getGitActionPlan(snapshot: SynapseGitRepositorySnapshot | null, error: string | null = null): GitActionPlan {
@@ -150,7 +150,7 @@ export function needsGitAttention(snapshot: SynapseGitRepositorySnapshot | null,
       || !snapshot.isGitRepository
       || snapshot.hasConflicts
       || snapshot.trackingStatus !== "tracked"
-      || snapshot.changes.length > 0
+      || snapshot.changeCount > 0
       || snapshot.ahead > 0
       || snapshot.behind > 0,
   )

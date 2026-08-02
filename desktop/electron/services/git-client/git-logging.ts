@@ -231,15 +231,17 @@ function summarizeChanges(changes: readonly Pick<SynapseGitFileChange, "status" 
   }
 }
 
-function summarizeSnapshot(snapshot: Pick<SynapseGitRepositorySnapshot, "currentBranch" | "upstream" | "ahead" | "behind" | "hasConflicts" | "changes">): Record<string, unknown> {
+function summarizeSnapshot(snapshot: Pick<SynapseGitRepositorySnapshot, "currentBranch" | "upstream" | "ahead" | "behind" | "hasConflicts" | "changeCount" | "changes">): Record<string, unknown> {
+  const changeCount = snapshot.changeCount ?? snapshot.changes.length
   return {
     branch: snapshot.currentBranch,
     upstream: snapshot.upstream,
     ahead: snapshot.ahead,
     behind: snapshot.behind,
     hasConflicts: snapshot.hasConflicts,
-    isDirty: snapshot.changes.length > 0,
+    isDirty: changeCount > 0,
     ...summarizeChanges(snapshot.changes),
+    changeCount,
   }
 }
 

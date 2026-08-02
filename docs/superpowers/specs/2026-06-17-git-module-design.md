@@ -377,9 +377,13 @@ type GitRepositorySnapshot = {
   ahead: number
   behind: number
   hasConflicts: boolean
+  changeCount: number
+  changesTruncated: boolean
   changes: GitFileChange[]
 }
 ```
+
+状态命令使用 NUL 分隔的 porcelain v2 流式解析。主进程始终解析完整状态以得到准确的 `changeCount` 和冲突状态，Renderer 最多接收前 10,000 项；超出时通过 `changesTruncated` 明确提示，不得把工作区误判为空或把输出上限显示为命令失败。
 
 历史按当前分支每页 40 条分页加载，只有存在下一页时显示“加载更多”。空提交说明是合法历史记录，界面显示“无提交说明”。
 
@@ -405,7 +409,7 @@ type GitCommitSummary = {
 所有 Git 操作都通过结构化服务 API 进入主进程。服务内部使用参数数组执行系统 Git，不拼接 shell 字符串。
 
 ```text
-git status --porcelain=v2 --branch --untracked-files=all
+git status --porcelain=v2 -z --branch --untracked-files=all
 git diff -- <path>
 git diff --staged -- <path>
 git add -- <paths>

@@ -95,8 +95,8 @@ export function GitChangesTab({
       setMessage("")
       const nextSnapshot = await status.refresh()
       await onCommitted?.()
-      if (nextSnapshot && nextSnapshot.changes.length > 0) {
-        setCommitNotice({ text: `还有 ${nextSnapshot.changes.length} 个改动。`, canPush: false })
+      if (nextSnapshot && nextSnapshot.changeCount > 0) {
+        setCommitNotice({ text: `还有 ${nextSnapshot.changeCount} 个改动。`, canPush: false })
         return
       }
       if (nextSnapshot && nextSnapshot.ahead > 0) {
@@ -125,6 +125,14 @@ export function GitChangesTab({
       <div className="grid min-h-0 min-w-0 gap-0 bg-background md:grid-cols-[minmax(260px,360px)_minmax(0,1fr)]">
         <ScrollArea className="min-h-0 min-w-0 border-b md:border-r md:border-b-0">
           <div className="min-h-full divide-y divide-border">
+            {status.snapshot?.changesTruncated ? (
+              <Alert className="rounded-none border-x-0 border-t-0">
+                <AlertTitle>改动较多</AlertTitle>
+                <AlertDescription>
+                  仅展示前 10,000 项，共 {status.snapshot.changeCount} 项。
+                </AlertDescription>
+              </Alert>
+            ) : null}
             {status.loading ? (
               <GitListSkeleton />
             ) : changes.length === 0 ? (

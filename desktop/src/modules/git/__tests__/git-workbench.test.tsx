@@ -50,6 +50,8 @@ describe("GitWorkbench", () => {
       ahead: 1,
       behind: 0,
       hasConflicts: false,
+      changeCount: 1,
+      changesTruncated: false,
       changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
     })
     bridge.git.getDiff.mockResolvedValue({ path: "docs/a.md", originalPath: null, binary: false, truncated: false, text: "+hello" })
@@ -113,6 +115,8 @@ describe("GitWorkbench", () => {
       ahead: 0,
       behind: 0,
       hasConflicts: false,
+      changeCount: 1,
+      changesTruncated: false,
       changes: [{
         path: "docs/new-name.md",
         originalPath: "docs/old-name.md",
@@ -318,6 +322,8 @@ describe("GitWorkbench", () => {
         ahead: 0,
         behind: 0,
         hasConflicts: false,
+        changeCount: 0,
+        changesTruncated: false,
         changes: [],
       },
       selectedFile: null,
@@ -351,6 +357,20 @@ describe("GitWorkbench", () => {
     expect(container.textContent).toContain("暂无改动")
     expect(container.textContent).toContain("选择文件查看差异")
     expect(submit).toBeUndefined()
+  })
+
+  it("shows an explicit notice when only part of a large worktree is visible", async () => {
+    const status = createStatus({
+      snapshot: gitSnapshot({
+        changeCount: 10_001,
+        changesTruncated: true,
+        changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+      }),
+    })
+
+    await renderChangesTab(roots, status)
+
+    expect(document.body.textContent).toContain("仅展示前 10,000 项，共 10001 项。")
   })
 
   it("uses shared empty states for empty history panes", () => {
@@ -445,6 +465,8 @@ describe("GitWorkbench", () => {
         ahead: 0,
         behind: 0,
         hasConflicts: false,
+        changeCount: 1,
+        changesTruncated: false,
         changes: [{ path: longPath, originalPath: null, status: "modified", staged: false, conflicted: false }],
       },
       selectedFile: { path: longPath, originalPath: null, status: "modified", staged: false, conflicted: false },
@@ -621,6 +643,12 @@ describe("GitWorkbench", () => {
 })
 
 function gitSnapshot(overrides: Partial<SynapseGitRepositorySnapshot> = {}): SynapseGitRepositorySnapshot {
+  const changes = overrides.changes ?? []
+  const {
+    changeCount = changes.length,
+    changesTruncated = false,
+    ...snapshotOverrides
+  } = overrides
   return {
     repositoryId: "repo-1",
     pathExists: true,
@@ -632,7 +660,9 @@ function gitSnapshot(overrides: Partial<SynapseGitRepositorySnapshot> = {}): Syn
     behind: 0,
     hasConflicts: false,
     changes: [],
-    ...overrides,
+    ...snapshotOverrides,
+    changeCount,
+    changesTruncated,
   }
 }
 

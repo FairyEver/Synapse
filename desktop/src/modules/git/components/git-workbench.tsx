@@ -64,7 +64,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   const syncBoundaryBlocked = status.snapshot?.trackingStatus === "gone"
     || Boolean(status.snapshot && status.snapshot.ahead > 0 && status.snapshot.behind > 0)
   const syncBoundaryPlan = syncBoundaryBlocked && status.snapshot
-    ? getGitActionPlan({ ...status.snapshot, changes: [] })
+    ? getGitActionPlan({ ...status.snapshot, changeCount: 0, changes: [] })
     : null
   const repositoryDisplayPath = formatRepositoryDisplayPath(repository.localPath)
 
@@ -150,7 +150,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
       return
     }
     setView("changes")
-    if (changes.length > 0) {
+    if ((status.snapshot?.changeCount ?? 0) > 0) {
       setCommitDialogOpen(true)
     }
   }

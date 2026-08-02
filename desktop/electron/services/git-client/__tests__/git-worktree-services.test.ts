@@ -16,9 +16,17 @@ const repository = {
 
 describe("git worktree services", () => {
   it("reads status snapshot", async () => {
-    const run = vi.fn().mockResolvedValue({
-      stdout: "# branch.head main\n# branch.upstream origin/main\n# branch.ab +1 -0\n1 .M N... 100644 100644 100644 abc abc docs/a.md\n",
-      stderr: "",
+    const output = Buffer.from([
+      "# branch.head main",
+      "# branch.upstream origin/main",
+      "# branch.ab +1 -0",
+      "1 .M N... 100644 100644 100644 abc abc docs/a.md",
+      "",
+    ].join("\0"))
+    const run = vi.fn(async (input: { onStdoutChunk?: (chunk: Uint8Array) => void }) => {
+      input.onStdoutChunk?.(output.subarray(0, 31))
+      input.onStdoutChunk?.(output.subarray(31))
+      return { stdout: "", stderr: "" }
     })
     const logger = { error: vi.fn(), warn: vi.fn() }
     const service = createGitStatusService({ commandRunner: { run }, logger, pathExists: async () => true })
@@ -30,10 +38,14 @@ describe("git worktree services", () => {
       currentBranch: "main",
       ahead: 1,
       behind: 0,
+      changeCount: 1,
+      changesTruncated: false,
     })
     expect(logger.warn).not.toHaveBeenCalledWith("Git repository state anomaly detected.", expect.anything())
     expect(run).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["status", "--porcelain=v2", "--branch", "--untracked-files=all"],
+      args: ["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"],
+      captureStdout: false,
+      onStdoutChunk: expect.any(Function),
     }))
   })
 

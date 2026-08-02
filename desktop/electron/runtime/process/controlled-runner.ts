@@ -72,6 +72,7 @@ export interface ControlledProcessOutputOptions {
 }
 
 export type ControlledProcessLineHandler = (line: string) => void
+export type ControlledProcessChunkHandler = (chunk: Uint8Array) => void
 
 export interface ControlledProcessRunRequest {
   readonly actor: ActorIdentity
@@ -87,6 +88,7 @@ export interface ControlledProcessRunRequest {
   readonly abortSignal?: AbortSignal
   readonly output?: ControlledProcessOutputOptions
   readonly onStdoutLine?: ControlledProcessLineHandler
+  readonly onStdoutChunk?: ControlledProcessChunkHandler
   readonly onStderrLine?: ControlledProcessLineHandler
   readonly pathStrategy?: PathStrategy
   readonly isolation?: ControlledProcessIsolationOptions
@@ -356,6 +358,7 @@ export class ControlledProcessRunner {
     child.stdout.on("data", (chunk: Buffer) => {
       try {
         stdoutCollector.push(chunk)
+        request.onStdoutChunk?.(chunk)
         stdoutLines.push(chunk)
       } catch (error) {
         killForOutputFailure(error as Error)
@@ -536,7 +539,7 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
     })
 
     this.child.stdout.on("data", (chunk: Buffer) => {
-      this.pushOutput(this.stdoutCollector, this.stdoutLines, chunk)
+      this.pushOutput(this.stdoutCollector, this.stdoutLines, chunk, deps.request.onStdoutChunk)
     })
     this.child.stderr.on("data", (chunk: Buffer) => {
       this.pushOutput(this.stderrCollector, this.stderrLines, chunk)
@@ -620,9 +623,11 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
     collector: OutputCollector,
     lineEmitter: LineEmitter,
     chunk: Buffer,
+    chunkHandler?: ControlledProcessChunkHandler,
   ): void {
     try {
       collector.push(chunk)
+      chunkHandler?.(chunk)
       lineEmitter.push(chunk)
     } catch (error) {
       this.outputError = error as Error
@@ -834,6 +839,7 @@ function buildPermissionContext(
     },
     stdinBytes: stdinBytes(request.stdin),
     stream: {
+      stdoutChunk: request.onStdoutChunk !== undefined,
       stdoutLine: request.onStdoutLine !== undefined,
       stderrLine: request.onStderrLine !== undefined,
     },

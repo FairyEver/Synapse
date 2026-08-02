@@ -247,6 +247,8 @@ const snapshotSchema = z.object({
   ahead: z.number(),
   behind: z.number(),
   hasConflicts: z.boolean(),
+  changeCount: z.number().int().nonnegative(),
+  changesTruncated: z.boolean(),
   changes: z.array(fileChangeSchema),
 })
 

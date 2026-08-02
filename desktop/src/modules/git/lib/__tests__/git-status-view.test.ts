@@ -12,6 +12,8 @@ const snapshot: SynapseGitRepositorySnapshot = {
   ahead: 0,
   behind: 0,
   hasConflicts: false,
+  changeCount: 0,
+  changesTruncated: false,
   changes: [],
 }
 

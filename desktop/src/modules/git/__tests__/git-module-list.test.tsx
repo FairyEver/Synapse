@@ -69,6 +69,8 @@ type RepositorySnapshot = {
   readonly ahead: number
   readonly behind: number
   readonly hasConflicts: boolean
+  readonly changeCount: number
+  readonly changesTruncated: boolean
   readonly changes: readonly {
     readonly path: string
     readonly originalPath: string | null
@@ -82,6 +84,12 @@ function summary(
   repository: Repository,
   snapshot: Partial<RepositorySnapshot> = {},
 ) {
+  const changes = snapshot.changes ?? []
+  const {
+    changeCount = changes.length,
+    changesTruncated = false,
+    ...snapshotOverrides
+  } = snapshot
   return {
     repository,
     snapshot: {
@@ -94,7 +102,9 @@ function summary(
       behind: 0,
       hasConflicts: false,
       changes: [],
-      ...snapshot,
+      ...snapshotOverrides,
+      changeCount,
+      changesTruncated,
     },
     error: null,
   }
@@ -208,6 +218,8 @@ describe("GitModule repository list", () => {
       ahead: 0,
       behind: 0,
       hasConflicts: false,
+      changeCount: 0,
+      changesTruncated: false,
       changes: [],
     })
     bridge.git.getDiff.mockResolvedValue({ path: "docs/a.md", originalPath: null, binary: false, text: "" })
