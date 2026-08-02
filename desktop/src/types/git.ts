@@ -215,6 +215,28 @@ export type SynapseGitBranch = {
   readonly current: boolean
 }
 
+export type SynapseGitRemoteBranch = {
+  readonly name: string
+  readonly fullName: string
+}
+
+export type SynapseGitRemoteBranchGroup = {
+  readonly remoteName: string
+  readonly branches: readonly SynapseGitRemoteBranch[]
+}
+
+export type SynapseGitCheckoutRemoteBranchInput = {
+  readonly remoteName: string
+  readonly branchName: string
+  readonly localBranchName: string
+}
+
+export type SynapseGitCheckoutRemoteBranchResult = {
+  readonly created: boolean
+  readonly localBranchName: string
+  readonly remoteBranchName: string
+}
+
 export type SynapseGitCommitSummary = {
   readonly hash: string
   readonly shortHash: string

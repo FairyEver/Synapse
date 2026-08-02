@@ -360,6 +360,47 @@ describe("Git client real repository integration", () => {
     ])
   })
 
+  it("lists cached branches from multiple remotes and creates a tracking checkout", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    await writeFile(path.join(repository.localPath, "README.md"), "base\n", "utf8")
+    await git(repository.localPath, "add", "README.md")
+    await git(repository.localPath, "commit", "-m", "base")
+    const originPath = path.join(root, "origin.git")
+    const upstreamPath = path.join(root, "upstream.git")
+    await git(root, "clone", "--bare", repository.localPath, originPath)
+    await git(root, "clone", "--bare", repository.localPath, upstreamPath)
+    await git(repository.localPath, "remote", "add", "origin", originPath)
+    await git(repository.localPath, "remote", "add", "upstream", upstreamPath)
+    await git(repository.localPath, "push", "origin", "HEAD:refs/heads/docs/topic")
+    const runner = createGitClientCommandRunner()
+    const status = createGitStatusService({ commandRunner: runner, pathExists })
+    const branches = createGitBranchService({ commandRunner: runner, getSnapshot: status.getSnapshot })
+
+    await branches.fetchRemote(repository)
+
+    await expect(branches.listRemote(repository)).resolves.toEqual([
+      {
+        remoteName: "origin",
+        branches: [
+          { name: "docs/topic", fullName: "origin/docs/topic" },
+          { name: "main", fullName: "origin/main" },
+        ],
+      },
+      {
+        remoteName: "upstream",
+        branches: [{ name: "main", fullName: "upstream/main" }],
+      },
+    ])
+    await expect(branches.checkoutRemote(repository, {
+      remoteName: "origin",
+      branchName: "docs/topic",
+      localBranchName: "docs/topic",
+    })).resolves.toMatchObject({ created: true, localBranchName: "docs/topic" })
+    await expect(git(repository.localPath, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"))
+      .resolves.toBe("origin/docs/topic\n")
+  })
+
   it("reads empty subjects, unicode paths, and renames from commit history", async () => {
     const root = await createRoot()
     const repository = await initializeRepository(path.join(root, "repo"))

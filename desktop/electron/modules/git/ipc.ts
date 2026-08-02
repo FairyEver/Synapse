@@ -326,6 +326,29 @@ const branchRequestSchema = repositoryIdSchema.extend({
   operationId: z.string().min(1).optional(),
 }).strict()
 
+const remoteBranchSchema = z.object({
+  name: z.string(),
+  fullName: z.string(),
+})
+
+const remoteBranchGroupSchema = z.object({
+  remoteName: z.string(),
+  branches: z.array(remoteBranchSchema),
+})
+
+const checkoutRemoteBranchRequestSchema = repositoryIdSchema.extend({
+  remoteName: z.string().min(1),
+  branchName: z.string().min(1),
+  localBranchName: z.string().min(1),
+  operationId: z.string().min(1).optional(),
+}).strict()
+
+const checkoutRemoteBranchResultSchema = z.object({
+  created: z.boolean(),
+  localBranchName: z.string(),
+  remoteBranchName: z.string(),
+})
+
 const cancelOperationSchema = z.object({ operationId: z.string().min(1) }).strict()
 
 const operationStatePayloadSchema = z.object({
@@ -379,6 +402,7 @@ type DiffRequest = z.infer<typeof diffRequestSchema>
 type PrepareChangeSelectionRequest = z.infer<typeof prepareChangeSelectionRequestSchema>
 type CommitRequest = z.infer<typeof commitRequestSchema>
 type BranchRequest = z.infer<typeof branchRequestSchema>
+type CheckoutRemoteBranchRequest = z.infer<typeof checkoutRemoteBranchRequestSchema>
 type HistoryListRequest = z.infer<typeof historyListRequestSchema>
 type CommitDetailRequest = z.infer<typeof commitDetailRequestSchema>
 type CheckAccessRequest = z.infer<typeof checkAccessSchema>
@@ -693,6 +717,40 @@ export const gitIpcModule: IpcModule = {
         const repository = await resolveRepository(ctx, input.repositoryId)
         return runRepositoryOperation(ctx, repository, input, "create-branch", (signal, operationId) => (
           ctx.resolve<GitBranchService>("git.branch-service").create(repository, input.branchName, { operationId, signal })
+        ))
+      },
+    },
+    listRemoteBranches: {
+      operationId: "app.git.branches.list_remote",
+      kind: "invoke",
+      request: repositoryIdSchema,
+      response: z.array(remoteBranchGroupSchema),
+      handler: async (ctx, input: RepositoryIdRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryRead(ctx, repository, () => ctx.resolve<GitBranchService>("git.branch-service").listRemote(repository))
+      },
+    },
+    fetchRemoteBranches: {
+      operationId: "app.git.branches.fetch_remote",
+      kind: "invoke",
+      request: repositoryOperationSchema,
+      response: z.void(),
+      handler: async (ctx, input: RepositoryOperationRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryOperation(ctx, repository, input, "fetch-remote-branches", (signal, operationId) => (
+          ctx.resolve<GitBranchService>("git.branch-service").fetchRemote(repository, { operationId, signal })
+        ))
+      },
+    },
+    checkoutRemoteBranch: {
+      operationId: "app.git.branches.checkout_remote",
+      kind: "invoke",
+      request: checkoutRemoteBranchRequestSchema,
+      response: checkoutRemoteBranchResultSchema,
+      handler: async (ctx, input: CheckoutRemoteBranchRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryOperation(ctx, repository, input, "checkout-remote", (signal, operationId) => (
+          ctx.resolve<GitBranchService>("git.branch-service").checkoutRemote(repository, input, { operationId, signal })
         ))
       },
     },

@@ -459,6 +459,8 @@ import type {
 import type {
   SynapseGitAccessState,
   SynapseGitBranch,
+  SynapseGitCheckoutRemoteBranchInput,
+  SynapseGitCheckoutRemoteBranchResult,
   SynapseGitChangeSelection,
   SynapseGitCloneResult,
   SynapseGitClearHttpsCredentialInput,
@@ -472,6 +474,7 @@ import type {
   SynapseGitProvider,
   SynapseGitProtocol,
   SynapseGitPushTarget,
+  SynapseGitRemoteBranchGroup,
   SynapseGitRepository,
   SynapseGitRepositorySummary,
   SynapseGitRepositorySnapshot,
@@ -1204,6 +1207,13 @@ export type SynapseBridge = {
     listBranches: (repositoryId: string) => Promise<SynapseGitBranch[]>
     checkoutBranch: (repositoryId: string, branchName: string, operationId?: string) => Promise<void>
     createBranch: (repositoryId: string, branchName: string, operationId?: string) => Promise<void>
+    listRemoteBranches: (repositoryId: string) => Promise<SynapseGitRemoteBranchGroup[]>
+    fetchRemoteBranches: (repositoryId: string, operationId?: string) => Promise<void>
+    checkoutRemoteBranch: (
+      repositoryId: string,
+      input: SynapseGitCheckoutRemoteBranchInput,
+      operationId?: string,
+    ) => Promise<SynapseGitCheckoutRemoteBranchResult>
     cancelOperation: (operationId: string) => Promise<boolean>
     onOperationChanged: (listener: (state: SynapseGitOperationState) => void) => () => void
     listHistory: (input: {

@@ -30,6 +30,10 @@ const bridge = vi.hoisted(() => ({
     prepareChangeSelection: vi.fn(),
     commit: vi.fn(),
     listBranches: vi.fn(),
+    listRemoteBranches: vi.fn(),
+    fetchRemoteBranches: vi.fn(),
+    checkoutRemoteBranch: vi.fn(),
+    cancelOperation: vi.fn(),
     checkoutBranch: vi.fn(),
     createBranch: vi.fn(),
     listHistory: vi.fn(),
@@ -232,6 +236,14 @@ describe("GitModule repository list", () => {
       changes: [],
     })
     bridge.git.listBranches.mockResolvedValue([{ name: "main", current: true }])
+    bridge.git.listRemoteBranches.mockResolvedValue([])
+    bridge.git.fetchRemoteBranches.mockResolvedValue(undefined)
+    bridge.git.checkoutRemoteBranch.mockResolvedValue({
+      created: true,
+      localBranchName: "topic",
+      remoteBranchName: "origin/topic",
+    })
+    bridge.git.cancelOperation.mockResolvedValue(true)
     bridge.git.checkoutBranch.mockResolvedValue(undefined)
     bridge.git.createBranch.mockResolvedValue(undefined)
     bridge.git.listHistory.mockResolvedValue([])

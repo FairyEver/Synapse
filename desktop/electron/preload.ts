@@ -620,6 +620,12 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS.git.checkoutBranch)({ branchName, operationId, repositoryId }),
     createBranch: (repositoryId, branchName, operationId) =>
       invoke(IPC_CHANNELS.git.createBranch)({ branchName, operationId, repositoryId }),
+    listRemoteBranches: (repositoryId) =>
+      invoke(IPC_CHANNELS.git.listRemoteBranches)({ repositoryId }),
+    fetchRemoteBranches: (repositoryId, operationId) =>
+      invoke(IPC_CHANNELS.git.fetchRemoteBranches)({ repositoryId, operationId }),
+    checkoutRemoteBranch: (repositoryId, input, operationId) =>
+      invoke(IPC_CHANNELS.git.checkoutRemoteBranch)({ ...input, operationId, repositoryId }),
     cancelOperation: (operationId) =>
       invoke(IPC_CHANNELS.git.cancelOperation)({ operationId }),
     onOperationChanged: createDomainEventPayloadSubscription<SynapseGitOperationState>(

@@ -21,6 +21,27 @@ describe("gitIpcModule", () => {
     expect(gitIpcModule.methods.getSnapshot.operationId).toBe("app.git.status.get_snapshot")
     expect(gitIpcModule.methods.prepareChangeSelection.operationId).toBe("app.git.changes.prepare")
     expect(gitIpcModule.methods.commit.operationId).toBe("app.git.commit.create")
+    expect(gitIpcModule.methods.fetchRemoteBranches.operationId).toBe("app.git.branches.fetch_remote")
+    expect(gitIpcModule.methods.checkoutRemoteBranch.operationId).toBe("app.git.branches.checkout_remote")
+  })
+
+  it("validates remote branch checkout inputs and response metadata", () => {
+    expect(gitIpcModule.methods.checkoutRemoteBranch.request.safeParse({
+      repositoryId: "repo-1",
+      remoteName: "origin",
+      branchName: "docs/topic",
+      localBranchName: "docs/topic",
+    }).success).toBe(true)
+    expect(gitIpcModule.methods.checkoutRemoteBranch.request.safeParse({
+      repositoryId: "repo-1",
+      remoteName: "origin",
+      branchName: "docs/topic",
+    }).success).toBe(false)
+    expect(gitIpcModule.methods.checkoutRemoteBranch.response?.safeParse({
+      created: true,
+      localBranchName: "docs/topic",
+      remoteBranchName: "origin/docs/topic",
+    }).success).toBe(true)
   })
 
   it("declares access channels", () => {

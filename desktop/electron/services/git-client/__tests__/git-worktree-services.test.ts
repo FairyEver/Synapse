@@ -458,11 +458,12 @@ describe("git worktree services", () => {
   })
 
   it("lists and switches local branches", async () => {
-    const run = vi.fn()
-      .mockResolvedValueOnce({ stdout: "main\n", stderr: "" })
-      .mockResolvedValueOnce({ stdout: "main\ndocs-update\n", stderr: "" })
-      .mockResolvedValueOnce({ stdout: "", stderr: "" })
-      .mockResolvedValueOnce({ stdout: "", stderr: "" })
+    const run = vi.fn(async (input: { args: string[] }) => {
+      if (input.args[0] === "symbolic-ref") return { stdout: "main\n", stderr: "" }
+      if (input.args[0] === "for-each-ref") return { stdout: "main\ndocs-update\n", stderr: "" }
+      if (input.args[0] === "check-ref-format") return { stdout: `${input.args.at(-1)}\n`, stderr: "" }
+      return { stdout: "", stderr: "" }
+    })
     const service = createGitBranchService({ commandRunner: { run }, getSnapshot: vi.fn().mockResolvedValue({ changes: [] }) })
 
     await expect(service.list(repository)).resolves.toEqual([
@@ -474,13 +475,177 @@ describe("git worktree services", () => {
 
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["checkout", "docs-update"] }))
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["checkout", "-b", "new-docs"] }))
-    expect(run).toHaveBeenNthCalledWith(1, expect.objectContaining({
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
       args: ["symbolic-ref", "--quiet", "--short", "HEAD"],
       acceptedExitCodes: [0, 1],
     }))
-    expect(run).toHaveBeenNthCalledWith(2, expect.objectContaining({
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
       args: ["for-each-ref", "--format=%(refname:short)", "refs/heads"],
     }))
+  })
+
+  it("groups cached remote branches and excludes remote HEAD symbolic refs", async () => {
+    const run = vi.fn().mockResolvedValue({
+      stdout: [
+        "origin/HEAD\u0000refs/remotes/origin/main",
+        "origin/main\u0000",
+        "origin/docs/topic\u0000",
+        "upstream/main\u0000",
+      ].join("\n"),
+      stderr: "",
+    })
+    const service = createGitBranchService({ commandRunner: { run }, getSnapshot: vi.fn() })
+
+    await expect(service.listRemote(repository)).resolves.toEqual([
+      {
+        remoteName: "origin",
+        branches: [
+          { name: "docs/topic", fullName: "origin/docs/topic" },
+          { name: "main", fullName: "origin/main" },
+        ],
+      },
+      {
+        remoteName: "upstream",
+        branches: [{ name: "main", fullName: "upstream/main" }],
+      },
+    ])
+  })
+
+  it("fetches all remote branch caches only on explicit request", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const service = createGitBranchService({ commandRunner: { run }, getSnapshot: vi.fn() })
+    const controller = new AbortController()
+
+    await service.fetchRemote(repository, { operationId: "fetch-remote-1", signal: controller.signal })
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["fetch", "--all", "--prune"],
+      abortSignal: controller.signal,
+      operationId: "fetch-remote-1",
+    }))
+  })
+
+  it("creates a tracking branch when checking out a cached remote branch", async () => {
+    const run = vi.fn(async (input: { args: string[] }) => {
+      const args = input.args
+      if (args[0] === "remote") return { stdout: "origin\nupstream\n", stderr: "" }
+      if (args[0] === "check-ref-format") return { stdout: `${args.at(-1)}\n`, stderr: "" }
+      if (args[0] === "rev-parse" && args.includes("refs/remotes/origin/docs/topic")) return { stdout: "abc\n", stderr: "" }
+      if (args[0] === "rev-parse") return { stdout: "", stderr: "" }
+      if (args[0] === "worktree") return { stdout: "", stderr: "" }
+      return { stdout: "", stderr: "" }
+    })
+    const service = createGitBranchService({
+      commandRunner: { run },
+      getSnapshot: vi.fn().mockResolvedValue({ changeCount: 0, changes: [] }),
+    })
+
+    await expect(service.checkoutRemote(repository, {
+      remoteName: "origin",
+      branchName: "docs/topic",
+      localBranchName: "docs/topic",
+    })).resolves.toEqual({
+      created: true,
+      localBranchName: "docs/topic",
+      remoteBranchName: "origin/docs/topic",
+    })
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["checkout", "-b", "docs/topic", "--track", "origin/docs/topic"],
+    }))
+  })
+
+  it("switches an existing local branch when it already tracks the selected remote branch", async () => {
+    const run = vi.fn(async (input: { args: string[] }) => {
+      const args = input.args
+      if (args[0] === "remote") return { stdout: "origin\n", stderr: "" }
+      if (args[0] === "check-ref-format") return { stdout: `${args.at(-1)}\n`, stderr: "" }
+      if (args[0] === "rev-parse") return { stdout: "abc\n", stderr: "" }
+      if (args[0] === "for-each-ref") return { stdout: "origin/docs/topic\n", stderr: "" }
+      if (args[0] === "symbolic-ref") return { stdout: "docs/topic\n", stderr: "" }
+      if (args[0] === "worktree") return { stdout: "worktree /repo\nHEAD abc\nbranch refs/heads/docs/topic\n", stderr: "" }
+      return { stdout: "", stderr: "" }
+    })
+    const service = createGitBranchService({
+      commandRunner: { run },
+      getSnapshot: vi.fn().mockResolvedValue({ changeCount: 0, changes: [] }),
+    })
+
+    await expect(service.checkoutRemote(repository, {
+      remoteName: "origin",
+      branchName: "docs/topic",
+      localBranchName: "docs/topic",
+    })).resolves.toEqual({
+      created: false,
+      localBranchName: "docs/topic",
+      remoteBranchName: "origin/docs/topic",
+    })
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ args: ["checkout", "docs/topic"] }))
+  })
+
+  it("uses Git native validation for remote and local branch names", async () => {
+    const run = vi.fn(async (input: { args: string[] }) => (
+      input.args[0] === "check-ref-format"
+        ? { stdout: "", stderr: "fatal: invalid branch name" }
+        : { stdout: "", stderr: "" }
+    ))
+    const service = createGitBranchService({
+      commandRunner: { run },
+      getSnapshot: vi.fn().mockResolvedValue({ changeCount: 0, changes: [] }),
+    })
+
+    await expect(service.checkoutRemote(repository, {
+      remoteName: "origin",
+      branchName: "bad..name",
+      localBranchName: "topic",
+    })).rejects.toThrow("分支名称不合法")
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["check-ref-format", "--branch", "bad..name"],
+      acceptedExitCodes: [0, 1],
+    }))
+  })
+
+  it("requires another local name when an existing branch tracks a different upstream", async () => {
+    const run = vi.fn(async (input: { args: string[] }) => {
+      const args = input.args
+      if (args[0] === "remote") return { stdout: "origin\n", stderr: "" }
+      if (args[0] === "check-ref-format") return { stdout: `${args.at(-1)}\n`, stderr: "" }
+      if (args[0] === "rev-parse") return { stdout: "abc\n", stderr: "" }
+      if (args[0] === "for-each-ref") return { stdout: "upstream/docs/topic\n", stderr: "" }
+      if (args[0] === "worktree") return { stdout: "", stderr: "" }
+      return { stdout: "", stderr: "" }
+    })
+    const service = createGitBranchService({
+      commandRunner: { run },
+      getSnapshot: vi.fn().mockResolvedValue({ changeCount: 0, changes: [] }),
+    })
+
+    await expect(service.checkoutRemote(repository, {
+      remoteName: "origin",
+      branchName: "docs/topic",
+      localBranchName: "docs/topic",
+    })).rejects.toThrow("其他本地名称")
+  })
+
+  it("blocks checkout when the local tracking branch is used by another worktree", async () => {
+    const run = vi.fn(async (input: { args: string[] }) => {
+      const args = input.args
+      if (args[0] === "remote") return { stdout: "origin\n", stderr: "" }
+      if (args[0] === "check-ref-format") return { stdout: `${args.at(-1)}\n`, stderr: "" }
+      if (args[0] === "rev-parse") return { stdout: "abc\n", stderr: "" }
+      if (args[0] === "for-each-ref") return { stdout: "origin/main\n", stderr: "" }
+      if (args[0] === "worktree") return { stdout: "worktree /tmp/other\nHEAD abc\nbranch refs/heads/main\n", stderr: "" }
+      return { stdout: "", stderr: "" }
+    })
+    const service = createGitBranchService({
+      commandRunner: { run },
+      getSnapshot: vi.fn().mockResolvedValue({ changeCount: 0, changes: [] }),
+    })
+
+    await expect(service.checkoutRemote(repository, {
+      remoteName: "origin",
+      branchName: "main",
+      localBranchName: "main",
+    })).rejects.toThrow("其他 Worktree")
   })
 
   it("reads current branch history and commit details", async () => {

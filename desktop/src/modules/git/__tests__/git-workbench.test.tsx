@@ -13,6 +13,11 @@ import type { SynapseGitRepositorySnapshot } from "@/types/git"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+HTMLElement.prototype.scrollIntoView = vi.fn()
+HTMLElement.prototype.hasPointerCapture = vi.fn(() => false)
+HTMLElement.prototype.setPointerCapture = vi.fn()
+HTMLElement.prototype.releasePointerCapture = vi.fn()
+
 const repository = { id: "repo-1", name: "Docs", localPath: "/repo", addedAt: "now", lastOpenedAt: null }
 const bridge = vi.hoisted(() => ({
   git: {
@@ -21,6 +26,10 @@ const bridge = vi.hoisted(() => ({
     prepareChangeSelection: vi.fn(),
     commit: vi.fn(),
     listBranches: vi.fn(),
+    listRemoteBranches: vi.fn(),
+    fetchRemoteBranches: vi.fn(),
+    checkoutRemoteBranch: vi.fn(),
+    cancelOperation: vi.fn(),
     checkoutBranch: vi.fn(),
     createBranch: vi.fn(),
     listHistory: vi.fn(),
@@ -63,6 +72,14 @@ describe("GitWorkbench", () => {
       changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
     })
     bridge.git.listBranches.mockResolvedValue([{ name: "main", current: true }, { name: "docs", current: false }])
+    bridge.git.listRemoteBranches.mockResolvedValue([])
+    bridge.git.fetchRemoteBranches.mockResolvedValue(undefined)
+    bridge.git.checkoutRemoteBranch.mockResolvedValue({
+      created: true,
+      localBranchName: "topic",
+      remoteBranchName: "origin/topic",
+    })
+    bridge.git.cancelOperation.mockResolvedValue(true)
     bridge.git.listHistory.mockResolvedValue([
       { hash: "abc", shortHash: "abc123", subject: "更新文档", authorName: "张三", authorEmail: "zhang@example.com", committedAt: "2026-06-17T10:00:00+08:00" },
     ])
@@ -283,6 +300,75 @@ describe("GitWorkbench", () => {
     expect(findButton("新建分支")).toBeTruthy()
     expect(findButtonByLabel("仓库详情")).toBeTruthy()
     expect(document.querySelector('button[aria-label="更多 Git 操作"]')).toBeTruthy()
+  })
+
+  it("loads cached remote branches and refreshes them only on explicit request", async () => {
+    bridge.git.listRemoteBranches
+      .mockResolvedValueOnce([{
+        remoteName: "origin",
+        branches: [{ name: "topic", fullName: "origin/topic" }],
+      }])
+      .mockResolvedValueOnce([{
+        remoteName: "origin",
+        branches: [{ name: "topic", fullName: "origin/topic" }, { name: "release", fullName: "origin/release" }],
+      }])
+
+    await renderWorkbench(roots)
+
+    expect(bridge.git.listRemoteBranches).toHaveBeenCalledWith("repo-1")
+    expect(bridge.git.fetchRemoteBranches).not.toHaveBeenCalled()
+
+    await click(findButton("获取远程分支"))
+
+    expect(bridge.git.fetchRemoteBranches).toHaveBeenCalledWith("repo-1", expect.any(String))
+    expect(bridge.git.listRemoteBranches).toHaveBeenCalledTimes(3)
+  })
+
+  it("cancels an in-flight remote branch fetch by operation id", async () => {
+    const pendingFetch = deferred<void>()
+    bridge.git.fetchRemoteBranches.mockReturnValueOnce(pendingFetch.promise)
+    await renderWorkbench(roots)
+
+    await click(findButton("获取远程分支"))
+    const operationId = bridge.git.fetchRemoteBranches.mock.calls[0]?.[1]
+    expect(operationId).toEqual(expect.any(String))
+
+    await click(findButton("取消获取"))
+    expect(bridge.git.cancelOperation).toHaveBeenCalledWith(operationId)
+
+    pendingFetch.resolve()
+    await act(async () => {
+      await pendingFetch.promise
+      await flush()
+    })
+  })
+
+  it("checks out a cached remote branch with an editable local name and keeps errors visible", async () => {
+    bridge.git.listRemoteBranches.mockResolvedValue([{
+      remoteName: "upstream",
+      branches: [{ name: "docs/topic", fullName: "upstream/docs/topic" }],
+    }])
+    bridge.git.checkoutRemoteBranch.mockRejectedValueOnce(
+      new Error("同名本地分支未跟踪该远程分支，请填写其他本地名称。"),
+    )
+    await renderWorkbench(roots)
+
+    await click(findButtonByLabel("分支"))
+    const remoteOption = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find((option) => option.textContent?.trim() === "docs/topic")
+    expect(remoteOption).toBeTruthy()
+    await click(remoteOption!)
+
+    expect(findDialog().textContent).toContain("检出远程分支")
+    await changeInput("本地分支名称", "local/docs-topic")
+    await click(findButton("检出"))
+
+    expect(bridge.git.checkoutRemoteBranch).toHaveBeenCalledWith("repo-1", {
+      remoteName: "upstream",
+      branchName: "docs/topic",
+      localBranchName: "local/docs-topic",
+    })
+    expect(findDialog().textContent).toContain("同名本地分支未跟踪该远程分支")
   })
 
   it("uses the action bar without syncing dirty worktrees", async () => {
@@ -754,6 +840,20 @@ async function changeTextarea(label: string, value: string): Promise<void> {
     const descriptor = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")
     descriptor?.set?.call(textarea, value)
     textarea.dispatchEvent(new Event("input", { bubbles: true }))
+    await flush()
+  })
+}
+
+async function changeInput(label: string, value: string): Promise<void> {
+  const labelElement = Array.from(document.querySelectorAll("label"))
+    .find((item) => item.textContent === label)
+  const id = labelElement?.getAttribute("for")
+  const input = id ? document.getElementById(id) : null
+  if (!(input instanceof HTMLInputElement)) throw new Error(`Missing input: ${label}`)
+  await act(async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")
+    descriptor?.set?.call(input, value)
+    input.dispatchEvent(new Event("input", { bubbles: true }))
     await flush()
   })
 }

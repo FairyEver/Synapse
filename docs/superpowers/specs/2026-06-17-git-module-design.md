@@ -17,7 +17,7 @@ Synapse 需要新增一个独立的 Git 模块，面向偏文科的文档编写�
 - 支持查看仓库工作区改动、文件 diff、当前分支、ahead/behind 状态。
 - 支持文件级勾选提交。
 - 提供同步、拉取、推送三个操作，其中同步是默认常用操作。
-- 支持查看本地分支、切换本地分支、新建本地分支。
+- 支持查看本地分支和缓存的远程分支、切换或新建本地分支，并从远程分支创建 tracking 分支。
 - 支持查看当前分支的提交历史、提交详情和提交 diff。
 - 面向非研发用户提供短、直接、可操作的错误状态。
 
@@ -28,7 +28,7 @@ Synapse 需要新增一个独立的 Git 模块，面向偏文科的文档编写�
 - 不做分支树视图。
 - 不做可视化冲突解决。
 - 不做 stash、rebase、cherry-pick、tag、reset、clean、force push。
-- 不做远程分支管理界面。
+- 不做远程分支树、远程分支创建、删除、重命名或上游配置管理。
 - 不做 `.gitignore` 可视化管理，完全遵循标准 Git 忽略规则。
 - 不做子模块或 Git LFS 管理界面。
 - 不集成代码托管平台 API，不拉取公司仓库列表，仓库地址由用户自己粘贴。
@@ -253,19 +253,22 @@ SSH 是高级路径。Synapse 可以检测 `ssh` 是否可用、是否存在常�
 
 ## 分支
 
-分支能力只覆盖当前分支和本地分支。
+分支能力覆盖当前分支、本地分支，以及从本地缓存的远程引用创建 tracking 分支。
 
 ```text
 分支
 ├─ 显示当前分支
 ├─ 列出本地分支
+├─ 按远端分组列出缓存的远程分支，排除 remote/HEAD
+├─ 用户明确操作时执行可取消的 fetch --all --prune
 ├─ 切换本地分支
 ├─ 新建本地分支
+├─ 从远程分支创建同名或用户命名的本地 tracking 分支
 ├─ 如果工作区有未提交改动，切换前阻止并提示先提交
-└─ 不做分支树、不做远程分支管理、不做合并
+└─ 不做分支树、远程分支写操作或合并
 ```
 
-分支切换入口可以是顶部当前分支旁的按钮或下拉面板。
+分支切换入口位于顶部当前分支旁。打开列表只读取本地 `refs/remotes`，不得隐式访问网络；“获取远程分支”才执行 `git fetch --all --prune`。检出远程分支时，默认创建同名本地 tracking 分支；同名本地分支已跟踪该远端时直接切换，跟踪其它上游时要求用户填写其它本地名称。分支名使用 Git 原生校验，工作区不干净或目标分支已被其它 Worktree 占用时必须停止并给出可操作提示。
 
 ```text
 ┌──────────────────────────┐
@@ -275,7 +278,10 @@ SSH 是高级路径。Synapse 可以检测 `ssh` 是否可用、是否存在常�
 │ docs-update               │
 │ release/manual            │
 ├──────────────────────────┤
-│ [新建分支] [切换]         │
+│ origin                    │
+│   docs/topic              │
+├──────────────────────────┤
+│ [获取远程分支] [新建分支] │
 └──────────────────────────┘
 ```
 
@@ -334,6 +340,7 @@ desktop/src/modules/git/
 │  ├─ use-git-repositories.ts
 │  ├─ use-git-worktree-status.ts
 │  ├─ use-git-history.ts
+│  ├─ use-git-branches.ts
 │  └─ use-git-operations.ts
 └─ types.ts
 
@@ -423,8 +430,12 @@ git pull --ff-only
 git push
 git symbolic-ref --quiet --short HEAD
 git for-each-ref --format=%(refname:short) refs/heads
+git for-each-ref ... refs/remotes
+git fetch --all --prune
+git check-ref-format --branch <branch>
 git checkout <branch>
 git checkout -b <branch>
+git checkout -b <branch> --track <remote>/<branch>
 git log --date=iso-strict --pretty=...
 git show --name-status -z --find-renames --format=...
 ```
@@ -445,6 +456,9 @@ git.sync.sync
 git.branches.list
 git.branches.checkout
 git.branches.create
+git.branches.listRemote
+git.branches.fetchRemote
+git.branches.checkoutRemote
 git.history.list
 git.history.getCommit
 ```
