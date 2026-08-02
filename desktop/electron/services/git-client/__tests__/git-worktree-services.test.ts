@@ -458,7 +458,7 @@ describe("git worktree services", () => {
   })
 
   it("lists and switches local branches", async () => {
-    const run = vi.fn(async (input: { args: string[] }) => {
+    const run = vi.fn(async (input: { readonly args: readonly string[] }) => {
       if (input.args[0] === "symbolic-ref") return { stdout: "main\n", stderr: "" }
       if (input.args[0] === "for-each-ref") return { stdout: "main\ndocs-update\n", stderr: "" }
       if (input.args[0] === "check-ref-format") return { stdout: `${input.args.at(-1)}\n`, stderr: "" }
@@ -526,7 +526,7 @@ describe("git worktree services", () => {
   })
 
   it("creates a tracking branch when checking out a cached remote branch", async () => {
-    const run = vi.fn(async (input: { args: string[] }) => {
+    const run = vi.fn(async (input: { readonly args: readonly string[] }) => {
       const args = input.args
       if (args[0] === "remote") return { stdout: "origin\nupstream\n", stderr: "" }
       if (args[0] === "check-ref-format") return { stdout: `${args.at(-1)}\n`, stderr: "" }
@@ -555,7 +555,7 @@ describe("git worktree services", () => {
   })
 
   it("switches an existing local branch when it already tracks the selected remote branch", async () => {
-    const run = vi.fn(async (input: { args: string[] }) => {
+    const run = vi.fn(async (input: { readonly args: readonly string[] }) => {
       const args = input.args
       if (args[0] === "remote") return { stdout: "origin\n", stderr: "" }
       if (args[0] === "check-ref-format") return { stdout: `${args.at(-1)}\n`, stderr: "" }
@@ -583,7 +583,7 @@ describe("git worktree services", () => {
   })
 
   it("uses Git native validation for remote and local branch names", async () => {
-    const run = vi.fn(async (input: { args: string[] }) => (
+    const run = vi.fn(async (input: { readonly args: readonly string[] }) => (
       input.args[0] === "check-ref-format"
         ? { stdout: "", stderr: "fatal: invalid branch name" }
         : { stdout: "", stderr: "" }
@@ -605,7 +605,7 @@ describe("git worktree services", () => {
   })
 
   it("requires another local name when an existing branch tracks a different upstream", async () => {
-    const run = vi.fn(async (input: { args: string[] }) => {
+    const run = vi.fn(async (input: { readonly args: readonly string[] }) => {
       const args = input.args
       if (args[0] === "remote") return { stdout: "origin\n", stderr: "" }
       if (args[0] === "check-ref-format") return { stdout: `${args.at(-1)}\n`, stderr: "" }
@@ -627,7 +627,7 @@ describe("git worktree services", () => {
   })
 
   it("blocks checkout when the local tracking branch is used by another worktree", async () => {
-    const run = vi.fn(async (input: { args: string[] }) => {
+    const run = vi.fn(async (input: { readonly args: readonly string[] }) => {
       const args = input.args
       if (args[0] === "remote") return { stdout: "origin\n", stderr: "" }
       if (args[0] === "check-ref-format") return { stdout: `${args.at(-1)}\n`, stderr: "" }
