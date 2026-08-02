@@ -80,6 +80,7 @@ import {
   gitCloneServiceDescriptor,
   gitCommandRunnerDescriptor,
   gitCommitServiceDescriptor,
+  gitDiscardServiceDescriptor,
   gitEnvironmentServiceDescriptor,
   gitHistoryServiceDescriptor,
   gitOperationCoordinatorDescriptor,
@@ -171,6 +172,7 @@ export function buildServiceRegistry(
   registry.register(gitStatusServiceDescriptor)
   registry.register(gitChangeSelectionServiceDescriptor)
   registry.register(gitCommitServiceDescriptor)
+  registry.register(gitDiscardServiceDescriptor)
   registry.register(gitSyncServiceDescriptor)
   registry.register(gitBranchServiceDescriptor)
   registry.register(gitHistoryServiceDescriptor)

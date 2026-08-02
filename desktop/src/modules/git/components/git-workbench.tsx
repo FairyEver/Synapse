@@ -29,6 +29,7 @@ import { useGitHistory } from "../hooks/use-git-history"
 import { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 import { GitBranchSwitcher } from "./git-branch-switcher"
 import { GitChangesTab } from "./git-changes-tab"
+import { GitDiscardChangesDialog } from "./git-discard-changes-dialog"
 import { GitHistoryTab } from "./git-history-tab"
 import { canHandleGitFailureAction, getGitFailureActionLabel } from "../lib/git-failure-view"
 import { getGitActionPlan, getGitErrorAdvice } from "../lib/git-status-view"
@@ -52,6 +53,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   const [operationFailure, setOperationFailure] = useState<GitOperationFailure | null>(null)
   const [branchRefreshKey, setBranchRefreshKey] = useState(0)
   const [commitDialogOpen, setCommitDialogOpen] = useState(false)
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false)
   const activeOperationIdRef = useRef<string | null>(null)
   const observedBranchRef = useRef<string | null | undefined>(undefined)
   const retryActionRef = useRef<(() => void) | null>(null)
@@ -61,6 +63,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   const actionPlan = getGitActionPlan(status.snapshot, status.error)
   const recommendedAction = actionPlan.primaryAction
   const changes = status.snapshot?.changes ?? []
+  const selectedChanges = changes.filter((change) => status.selectedPaths.includes(change.path))
   const syncBoundaryBlocked = status.snapshot?.trackingStatus === "gone"
     || Boolean(status.snapshot && status.snapshot.ahead > 0 && status.snapshot.behind > 0)
   const syncBoundaryPlan = syncBoundaryBlocked && status.snapshot
@@ -225,6 +228,15 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
                 <Button type="button" variant="outline" size="sm" onClick={status.clearSelection}>
                   全不选
                 </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  disabled={busy !== null || selectedChanges.length === 0}
+                  onClick={() => setDiscardDialogOpen(true)}
+                >
+                  丢弃改动
+                </Button>
               </>
             ) : null}
             <GitBranchSwitcher
@@ -332,6 +344,15 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
           </Alert>
         </div>
       ) : null}
+      <GitDiscardChangesDialog
+        repository={repository}
+        selectedChanges={selectedChanges}
+        open={discardDialogOpen}
+        onOpenChange={setDiscardDialogOpen}
+        onDiscarded={async () => {
+          await status.refresh()
+        }}
+      />
       <Tabs value={view} onValueChange={setView} className="flex min-h-0 min-w-0 flex-1 flex-col gap-0">
         <div className="shrink-0 border-b bg-background px-4 py-2" data-git-workbench-tabs-header="true">
           <TabsList>

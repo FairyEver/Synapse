@@ -16,6 +16,7 @@ Synapse 需要新增一个独立的 Git 模块，面向偏文科的文档编写�
 - 支持添加已有本地 Git 仓库到模块列表。
 - 支持查看仓库工作区改动、文件 diff、当前分支、ahead/behind 状态。
 - 支持文件级勾选提交。
+- 支持强确认后按文件丢弃改动；新增和未跟踪文件只移入系统废纸篓。
 - 提供同步、拉取、推送三个操作，其中同步是默认常用操作。
 - 支持查看本地分支和缓存的远程分支、切换或新建本地分支，并从远程分支创建 tracking 分支。
 - 支持查看当前分支的提交历史、提交详情和提交 diff。
@@ -27,7 +28,7 @@ Synapse 需要新增一个独立的 Git 模块，面向偏文科的文档编写�
 - 不内置 Git runtime。
 - 不做分支树视图。
 - 不做可视化冲突解决。
-- 不做 stash、rebase、cherry-pick、tag、reset、clean、force push。
+- 不做 stash、rebase、cherry-pick、tag、仓库级 reset/clean、force push。
 - 不做远程分支树、远程分支创建、删除、重命名或上游配置管理。
 - 不做 `.gitignore` 可视化管理，完全遵循标准 Git 忽略规则。
 - 不做子模块或 Git LFS 管理界面。
@@ -210,6 +211,21 @@ SSH 是高级路径。Synapse 可以检测 `ssh` 是否可用、是否存在常�
 
 文本文件显示 diff。`.docx`、图片、PDF 等二进制文件显示文件变更状态，不展示文本 diff。提交失败时保留用户输入的提交说明和勾选状态。临时 index 不读取或覆盖用户已有的无关暂存内容；提交失败不得污染真实 index。
 
+按文件丢弃必须经过强确认，并列出操作数量和关键路径。Renderer 先为当前勾选文件准备仓库绑定的选择令牌，主进程在仓库 FIFO 内再次验证 HEAD、状态、重命名映射和内容指纹；Renderer 不得提交原始删除路径。
+
+```text
+丢弃选中文件
+├─ 主进程验证选择令牌两次，冲突或未知状态停止
+├─ 修改、删除文件同时恢复 index 与工作区到 HEAD
+├─ 重命名恢复旧路径，并将新路径移入系统废纸篓
+├─ 新增、未跟踪文件移入系统废纸篓
+├─ 只校正所选路径，保留未选中路径的暂存状态
+├─ 废纸篓失败时停止，不回退为永久删除
+└─ 刷新工作区状态
+```
+
+冲突文件不提供伪解决入口，继续要求用户在外部 Git 工具中处理。该能力不是仓库级 reset 或 clean，不接受任意 pathspec 或 Git 参数。
+
 ## 同步、拉取和推送
 
 工作台和仓库列表都提供同步、拉取、推送三个操作。同步是视觉上的主操作。
@@ -334,6 +350,7 @@ desktop/src/modules/git/
 │  ├─ git-clone-dialog.tsx
 │  ├─ git-workbench.tsx
 │  ├─ git-changes-tab.tsx
+│  ├─ git-discard-changes-dialog.tsx
 │  ├─ git-history-tab.tsx
 │  └─ git-branch-switcher.tsx
 ├─ hooks/
@@ -352,6 +369,7 @@ desktop/electron/services/git-client/
 ├─ git-command-runner.ts
 ├─ git-status-service.ts
 ├─ git-commit-service.ts
+├─ git-discard-service.ts
 ├─ git-sync-service.ts
 ├─ git-branch-service.ts
 └─ git-history-service.ts
@@ -424,6 +442,7 @@ git diff -- <path>
 git diff --staged -- <path>
 git add -- <paths>
 git reset -- <paths>
+git restore --source=HEAD --staged --worktree -- <paths>
 git commit -m <message>
 git fetch --prune
 git pull --ff-only
@@ -448,6 +467,8 @@ git.repositories.list
 git.repositories.addLocal
 git.repositories.clone
 git.status.getSnapshot
+git.changes.prepare
+git.changes.discard
 git.commit.create
 git.sync.fetch
 git.sync.pull

@@ -237,6 +237,13 @@ export type SynapseGitCheckoutRemoteBranchResult = {
   readonly remoteBranchName: string
 }
 
+export type SynapseGitDiscardChangesResult = {
+  readonly completedAt: string
+  readonly discardedCount: number
+  readonly restoredPaths: readonly string[]
+  readonly trashedPaths: readonly string[]
+}
+
 export type SynapseGitCommitSummary = {
   readonly hash: string
   readonly shortHash: string

@@ -426,6 +426,7 @@ export const IPC_CHANNELS = {
     "getSnapshot": "synapse:app:git:status:get_snapshot",
     "getDiff": "synapse:app:git:status:get_diff",
     "prepareChangeSelection": "synapse:app:git:changes:prepare",
+    "discardChanges": "synapse:app:git:changes:discard",
     "commit": "synapse:app:git:commit:create",
     "fetch": "synapse:app:git:sync:fetch",
     "pull": "synapse:app:git:sync:pull",

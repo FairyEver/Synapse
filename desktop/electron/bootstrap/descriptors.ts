@@ -207,6 +207,7 @@ import { createGitClientCommandRunner, type GitClientCommandRunner } from "../se
 import { createGitCloneService, type GitCloneService } from "../services/git-client/git-clone-service"
 import { createGitChangeSelectionService, type GitChangeSelectionService } from "../services/git-client/git-change-selection-service"
 import { createGitCommitService, type GitCommitService } from "../services/git-client/git-commit-service"
+import { createGitDiscardService, type GitDiscardService } from "../services/git-client/git-discard-service"
 import { createGitEnvironmentService, type GitEnvironmentService } from "../services/git-client/git-environment-service"
 import { createGitHistoryService, type GitHistoryService } from "../services/git-client/git-history-service"
 import { createGitOperationCoordinator, type GitOperationCoordinator } from "../services/git-client/git-operation-coordinator"
@@ -2333,6 +2334,23 @@ export const gitCommitServiceDescriptor: ServiceDescriptor<GitCommitService> = {
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
       logger: ctx.logger.child("git.commit"),
       selections: ctx.registry.get<GitChangeSelectionService>("git.change-selection-service"),
+    })
+  },
+}
+
+export const gitDiscardServiceDescriptor: ServiceDescriptor<GitDiscardService> = {
+  id: "git.discard-service",
+  criticality: "degraded",
+  dependsOn: ["git.command-runner", "git.change-selection-service", "core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    return createGitDiscardService({
+      actor: { kind: "user" },
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
+      logger: ctx.logger.child("git.discard"),
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      selections: ctx.registry.get<GitChangeSelectionService>("git.change-selection-service"),
+      trashItem: (targetPath) => shell.trashItem(targetPath),
     })
   },
 }

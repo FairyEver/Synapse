@@ -14,7 +14,7 @@ const DEFAULT_TTL_MS = 15 * 60 * 1_000
 const DEFAULT_MAX_SELECTIONS_PER_REPOSITORY = 32
 const FINGERPRINT_CONCURRENCY = 8
 
-type StoredSelection = {
+export type GitStoredChangeSelection = {
   readonly selectionId: string
   readonly repositoryId: string
   readonly repositoryPath: string
@@ -68,7 +68,7 @@ export function createGitChangeSelectionService(deps: SelectionDeps) {
   const now = deps.now ?? (() => new Date())
   const randomId = deps.randomId ?? randomUUID
   const ttlMs = deps.ttlMs ?? DEFAULT_TTL_MS
-  const selections = new Map<string, StoredSelection>()
+  const selections = new Map<string, GitStoredChangeSelection>()
 
   const readHead = async (repository: SynapseGitRepository): Promise<string | null> => {
     const result = await deps.commandRunner.run({
@@ -134,7 +134,7 @@ export function createGitChangeSelectionService(deps: SelectionDeps) {
       const changes = requestedPaths.map((filePath) => currentChanges.get(filePath))
       if (changes.some((change) => !change)) throw new Error("所选文件已发生变化，请重新审阅后再试。")
       const canonicalChanges = changes as SynapseGitFileChange[]
-      if (canonicalChanges.some((change) => change.conflicted)) throw new Error("冲突文件需要在外部处理后再提交。")
+      if (canonicalChanges.some((change) => change.conflicted)) throw new Error("冲突文件需要在外部处理后再继续。")
       if (canonicalChanges.some((change) => change.status === "unknown")) throw new Error("存在无法识别的 Git 改动，请在外部工具中检查后重试。")
 
       const paths = [...new Set(canonicalChanges.flatMap((change) => (
@@ -165,7 +165,7 @@ export function createGitChangeSelectionService(deps: SelectionDeps) {
       }
     },
 
-    async validate(repository: SynapseGitRepository, selectionId: string): Promise<StoredSelection> {
+    async validate(repository: SynapseGitRepository, selectionId: string): Promise<GitStoredChangeSelection> {
       prune()
       const selection = selections.get(selectionId)
       if (!selection) throw new Error("所选文件的确认已过期，请重新审阅后再试。")
@@ -186,12 +186,12 @@ export function createGitChangeSelectionService(deps: SelectionDeps) {
         return !current || !sameChange(change, current)
       })
       if (statusChanged || await readHead(repository) !== selection.head) {
-        return invalidateWithError(selectionId, "所选文件已发生变化，请重新审阅后再提交。")
+        return invalidateWithError(selectionId, "所选文件已发生变化，请重新审阅后再试。")
       }
 
       const fingerprints = await readFingerprints(repository, selection.paths)
       if (selection.paths.some((filePath) => fingerprints.get(filePath) !== selection.fingerprints.get(filePath))) {
-        return invalidateWithError(selectionId, "所选文件已发生变化，请重新审阅后再提交。")
+        return invalidateWithError(selectionId, "所选文件已发生变化，请重新审阅后再试。")
       }
       return selection
     },

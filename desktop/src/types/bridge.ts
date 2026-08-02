@@ -467,6 +467,7 @@ import type {
   SynapseGitCommitDetail,
   SynapseGitCommitSummary,
   SynapseGitDiffResult,
+  SynapseGitDiscardChangesResult,
   SynapseGitEnvironmentState,
   SynapseGitGenerateSshKeyInput,
   SynapseGitOperationResult,
@@ -1193,6 +1194,11 @@ export type SynapseBridge = {
       repositoryId: string
       paths: string[]
     }) => Promise<SynapseGitChangeSelection>
+    discardChanges: (input: {
+      repositoryId: string
+      selectionId: string
+      operationId?: string
+    }) => Promise<SynapseGitDiscardChangesResult>
     commit: (input: {
       repositoryId: string
       message: string

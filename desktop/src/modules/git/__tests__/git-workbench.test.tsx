@@ -24,6 +24,7 @@ const bridge = vi.hoisted(() => ({
     getSnapshot: vi.fn(),
     getDiff: vi.fn(),
     prepareChangeSelection: vi.fn(),
+    discardChanges: vi.fn(),
     commit: vi.fn(),
     listBranches: vi.fn(),
     listRemoteBranches: vi.fn(),
@@ -70,6 +71,12 @@ describe("GitWorkbench", () => {
       repositoryId: "repo-1",
       expiresAt: "2026-06-17T10:15:00.000Z",
       changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+    })
+    bridge.git.discardChanges.mockResolvedValue({
+      completedAt: "now",
+      discardedCount: 1,
+      restoredPaths: ["docs/a.md"],
+      trashedPaths: [],
     })
     bridge.git.listBranches.mockResolvedValue([{ name: "main", current: true }, { name: "docs", current: false }])
     bridge.git.listRemoteBranches.mockResolvedValue([])
@@ -178,6 +185,58 @@ describe("GitWorkbench", () => {
       message: "重命名文档",
       selectionId: "rename-selection",
     })
+  })
+
+  it("requires strong confirmation before discarding selected changes", async () => {
+    await renderWorkbench(roots)
+
+    await click(findButton("丢弃改动"))
+    const dialog = findAlertDialog()
+    expect(dialog.textContent).toContain("丢弃 1 个改动？")
+    expect(dialog.textContent).toContain("docs/a.md")
+    expect(dialog.textContent).toContain("系统废纸篓")
+    expect(bridge.git.discardChanges).not.toHaveBeenCalled()
+
+    const confirm = [...dialog.querySelectorAll<HTMLElement>("button")]
+      .find((button) => button.textContent?.trim() === "丢弃改动")
+    expect(confirm).toBeTruthy()
+    const snapshotCallsBeforeDiscard = bridge.git.getSnapshot.mock.calls.length
+    await click(confirm!)
+
+    expect(bridge.git.discardChanges).toHaveBeenCalledWith({
+      repositoryId: "repo-1",
+      selectionId: "selection-1",
+    })
+    expect(bridge.git.getSnapshot.mock.calls.length).toBeGreaterThan(snapshotCallsBeforeDiscard)
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
+  })
+
+  it("keeps discard errors visible and requires external conflict handling", async () => {
+    bridge.git.prepareChangeSelection.mockRejectedValueOnce(new Error("冲突文件需要在外部处理后再继续。"))
+    await renderWorkbench(roots)
+
+    await click(findButton("丢弃改动"))
+
+    const dialog = findAlertDialog()
+    expect(dialog.textContent).toContain("冲突文件需要在外部处理")
+    const confirm = [...dialog.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.trim() === "丢弃改动")
+    expect(confirm?.disabled).toBe(true)
+    expect(bridge.git.discardChanges).not.toHaveBeenCalled()
+  })
+
+  it("keeps a failed discard confirmation open with its error", async () => {
+    bridge.git.discardChanges.mockRejectedValueOnce(new Error("无法移入系统废纸篓；Synapse 不会永久删除该文件。"))
+    await renderWorkbench(roots)
+    await click(findButton("丢弃改动"))
+    const dialog = findAlertDialog()
+    const confirm = [...dialog.querySelectorAll<HTMLElement>("button")]
+      .find((button) => button.textContent?.trim() === "丢弃改动")
+    expect(confirm).toBeTruthy()
+
+    await click(confirm!)
+
+    expect(findAlertDialog().textContent).toContain("不会永久删除")
   })
 
   it("shows current branch history", async () => {
@@ -879,6 +938,12 @@ function findButtonByLabel(label: string): HTMLElement {
 function findDialog(): HTMLElement {
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
   if (!dialog) throw new Error("Dialog not found")
+  return dialog
+}
+
+function findAlertDialog(): HTMLElement {
+  const dialog = document.querySelector<HTMLElement>('[role="alertdialog"]')
+  if (!dialog) throw new Error("Alert dialog not found")
   return dialog
 }
 

@@ -5,6 +5,7 @@ import type { GitBranchService } from "../../services/git-client/git-branch-serv
 import type { GitChangeSelectionService } from "../../services/git-client/git-change-selection-service"
 import type { GitCloneService } from "../../services/git-client/git-clone-service"
 import type { GitCommitService } from "../../services/git-client/git-commit-service"
+import type { GitDiscardService } from "../../services/git-client/git-discard-service"
 import type { GitAccessService } from "../../services/git-client/git-access-service"
 import type { GitEnvironmentService } from "../../services/git-client/git-environment-service"
 import type { GitHistoryService } from "../../services/git-client/git-history-service"
@@ -300,6 +301,18 @@ const commitRequestSchema = repositoryIdSchema.extend({
   operationId: z.string().min(1).optional(),
 }).strict()
 
+const discardChangesRequestSchema = repositoryIdSchema.extend({
+  selectionId: z.string().min(1),
+  operationId: z.string().min(1).optional(),
+}).strict()
+
+const discardChangesResultSchema = z.object({
+  completedAt: z.string(),
+  discardedCount: z.number().int().nonnegative(),
+  restoredPaths: z.array(z.string()),
+  trashedPaths: z.array(z.string()),
+})
+
 const operationResultSchema = z.object({
   completedAt: z.string(),
   message: z.string(),
@@ -401,6 +414,7 @@ type RemoveRepositoryRequest = z.infer<typeof removeRepositorySchema>
 type DiffRequest = z.infer<typeof diffRequestSchema>
 type PrepareChangeSelectionRequest = z.infer<typeof prepareChangeSelectionRequestSchema>
 type CommitRequest = z.infer<typeof commitRequestSchema>
+type DiscardChangesRequest = z.infer<typeof discardChangesRequestSchema>
 type BranchRequest = z.infer<typeof branchRequestSchema>
 type CheckoutRemoteBranchRequest = z.infer<typeof checkoutRemoteBranchRequestSchema>
 type HistoryListRequest = z.infer<typeof historyListRequestSchema>
@@ -613,6 +627,18 @@ export const gitIpcModule: IpcModule = {
         const repository = await resolveRepository(ctx, input.repositoryId)
         return runRepositoryRead(ctx, repository, () => (
           ctx.resolve<GitChangeSelectionService>("git.change-selection-service").prepare(repository, input.paths)
+        ))
+      },
+    },
+    discardChanges: {
+      operationId: "app.git.changes.discard",
+      kind: "invoke",
+      request: discardChangesRequestSchema,
+      response: discardChangesResultSchema,
+      handler: async (ctx, input: DiscardChangesRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryOperation(ctx, repository, input, "discard-changes", (signal, operationId) => (
+          ctx.resolve<GitDiscardService>("git.discard-service").discard(repository, input, { operationId, signal })
         ))
       },
     },

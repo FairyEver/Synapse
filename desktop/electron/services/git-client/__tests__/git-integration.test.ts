@@ -12,6 +12,7 @@ import { createGitClientCommandRunner } from "../git-command-runner"
 import { createGitBranchService } from "../git-branch-service"
 import { createGitChangeSelectionService } from "../git-change-selection-service"
 import { createGitCommitService } from "../git-commit-service"
+import { createGitDiscardService } from "../git-discard-service"
 import { createGitHistoryService } from "../git-history-service"
 import { createGitStatusService } from "../git-status-service"
 import { createGitSyncService } from "../git-sync-service"
@@ -244,6 +245,137 @@ describe("Git client real repository integration", () => {
 
     await expect(git(repository.localPath, "log", "-1", "--pretty=%s")).resolves.toBe("base\n")
     await expect(git(repository.localPath, "diff", "--cached", "--name-only")).resolves.toBe("staged.txt\n")
+  })
+
+  it("discards selected mixed changes while preserving unrelated staged files", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    for (const fileName of ["modified.txt", "deleted.txt", "old-name.txt", "unrelated.txt"]) {
+      await writeFile(path.join(repository.localPath, fileName), `base ${fileName}\n`, "utf8")
+    }
+    await git(repository.localPath, "add", ".")
+    await git(repository.localPath, "commit", "-m", "base")
+    await writeFile(path.join(repository.localPath, "modified.txt"), "modified\n", "utf8")
+    await rm(path.join(repository.localPath, "deleted.txt"))
+    await git(repository.localPath, "mv", "old-name.txt", "new-name.txt")
+    await writeFile(path.join(repository.localPath, "added.txt"), "added\n", "utf8")
+    await git(repository.localPath, "add", "added.txt")
+    await writeFile(path.join(repository.localPath, "untracked.txt"), "untracked\n", "utf8")
+    await writeFile(path.join(repository.localPath, "unrelated.txt"), "unrelated staged\n", "utf8")
+    await git(repository.localPath, "add", "unrelated.txt")
+    const trashRoot = path.join(root, "trash")
+    await mkdir(trashRoot)
+    let trashIndex = 0
+    const runner = createGitClientCommandRunner()
+    const status = createGitStatusService({ commandRunner: runner, pathExists })
+    const selections = createGitChangeSelectionService({ commandRunner: runner, getSnapshot: status.getSnapshot })
+    const discard = createGitDiscardService({
+      commandRunner: runner,
+      selections,
+      trashItem: async (targetPath) => {
+        trashIndex += 1
+        await (await import("node:fs/promises")).rename(targetPath, path.join(trashRoot, `${trashIndex}-${path.basename(targetPath)}`))
+      },
+      actor: { kind: "user" },
+      auditSink: { record: () => undefined },
+      permissionGuard: { check: async () => ({ allowed: true }) },
+    })
+    const selection = await selections.prepare(repository, [
+      "modified.txt",
+      "deleted.txt",
+      "new-name.txt",
+      "added.txt",
+      "untracked.txt",
+    ])
+
+    await discard.discard(repository, { selectionId: selection.selectionId })
+
+    await expect((await import("node:fs/promises")).readFile(path.join(repository.localPath, "modified.txt"), "utf8"))
+      .resolves.toBe("base modified.txt\n")
+    await expect((await import("node:fs/promises")).readFile(path.join(repository.localPath, "deleted.txt"), "utf8"))
+      .resolves.toBe("base deleted.txt\n")
+    await expect((await import("node:fs/promises")).readFile(path.join(repository.localPath, "old-name.txt"), "utf8"))
+      .resolves.toBe("base old-name.txt\n")
+    await expect(pathExists(path.join(repository.localPath, "new-name.txt"))).resolves.toBe(false)
+    await expect(pathExists(path.join(repository.localPath, "added.txt"))).resolves.toBe(false)
+    await expect(pathExists(path.join(repository.localPath, "untracked.txt"))).resolves.toBe(false)
+    await expect(git(repository.localPath, "status", "--porcelain")).resolves.toBe("M  unrelated.txt\n")
+  })
+
+  it("keeps an untracked file when the system trash operation fails", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    const targetPath = path.join(repository.localPath, "untracked.txt")
+    await writeFile(targetPath, "keep me\n", "utf8")
+    const runner = createGitClientCommandRunner()
+    const status = createGitStatusService({ commandRunner: runner, pathExists })
+    const selections = createGitChangeSelectionService({ commandRunner: runner, getSnapshot: status.getSnapshot })
+    const selection = await selections.prepare(repository, ["untracked.txt"])
+    const discard = createGitDiscardService({
+      commandRunner: runner,
+      selections,
+      trashItem: async () => { throw new Error("trash unavailable") },
+      actor: { kind: "user" },
+      auditSink: { record: () => undefined },
+      permissionGuard: { check: async () => ({ allowed: true }) },
+    })
+
+    await expect(discard.discard(repository, { selectionId: selection.selectionId })).rejects.toThrow("不会永久删除")
+    await expect((await import("node:fs/promises")).readFile(targetPath, "utf8")).resolves.toBe("keep me\n")
+  })
+
+  it("discards a staged added file before the repository has a HEAD", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    const targetPath = path.join(repository.localPath, "first.txt")
+    const trashPath = path.join(root, "trashed-first.txt")
+    await writeFile(targetPath, "first\n", "utf8")
+    await git(repository.localPath, "add", "first.txt")
+    const runner = createGitClientCommandRunner()
+    const status = createGitStatusService({ commandRunner: runner, pathExists })
+    const selections = createGitChangeSelectionService({ commandRunner: runner, getSnapshot: status.getSnapshot })
+    const selection = await selections.prepare(repository, ["first.txt"])
+    const discard = createGitDiscardService({
+      commandRunner: runner,
+      selections,
+      trashItem: async (filePath) => (await import("node:fs/promises")).rename(filePath, trashPath),
+      actor: { kind: "user" },
+      auditSink: { record: () => undefined },
+      permissionGuard: { check: async () => ({ allowed: true }) },
+    })
+
+    await discard.discard(repository, { selectionId: selection.selectionId })
+
+    await expect(pathExists(targetPath)).resolves.toBe(false)
+    await expect(pathExists(trashPath)).resolves.toBe(true)
+    await expect(git(repository.localPath, "status", "--porcelain")).resolves.toBe("")
+  })
+
+  it("rejects discard when a selected tracked file changes after review", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    const targetPath = path.join(repository.localPath, "notes.txt")
+    await writeFile(targetPath, "base\n", "utf8")
+    await git(repository.localPath, "add", "notes.txt")
+    await git(repository.localPath, "commit", "-m", "base")
+    await writeFile(targetPath, "reviewed\n", "utf8")
+    const runner = createGitClientCommandRunner()
+    const status = createGitStatusService({ commandRunner: runner, pathExists })
+    const selections = createGitChangeSelectionService({ commandRunner: runner, getSnapshot: status.getSnapshot })
+    const selection = await selections.prepare(repository, ["notes.txt"])
+    const discard = createGitDiscardService({
+      commandRunner: runner,
+      selections,
+      trashItem: async () => undefined,
+      actor: { kind: "user" },
+      auditSink: { record: () => undefined },
+      permissionGuard: { check: async () => ({ allowed: true }) },
+    })
+    await writeFile(targetPath, "changed after review\n", "utf8")
+
+    await expect(discard.discard(repository, { selectionId: selection.selectionId })).rejects.toThrow("重新审阅")
+    await expect((await import("node:fs/promises")).readFile(targetPath, "utf8"))
+      .resolves.toBe("changed after review\n")
   })
 
   it("renders an untracked file as a /dev/null-to-file diff", async () => {

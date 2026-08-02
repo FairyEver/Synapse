@@ -20,9 +20,26 @@ describe("gitIpcModule", () => {
     expect(gitIpcModule.methods.listRepositorySummaries.operationId).toBe("app.git.repositories.list_summaries")
     expect(gitIpcModule.methods.getSnapshot.operationId).toBe("app.git.status.get_snapshot")
     expect(gitIpcModule.methods.prepareChangeSelection.operationId).toBe("app.git.changes.prepare")
+    expect(gitIpcModule.methods.discardChanges.operationId).toBe("app.git.changes.discard")
     expect(gitIpcModule.methods.commit.operationId).toBe("app.git.commit.create")
     expect(gitIpcModule.methods.fetchRemoteBranches.operationId).toBe("app.git.branches.fetch_remote")
     expect(gitIpcModule.methods.checkoutRemoteBranch.operationId).toBe("app.git.branches.checkout_remote")
+  })
+
+  it("accepts only repository-bound discard selection requests", () => {
+    expect(gitIpcModule.methods.discardChanges.request.safeParse({
+      repositoryId: "repo-1",
+      selectionId: "selection-1",
+    }).success).toBe(true)
+    expect(gitIpcModule.methods.discardChanges.request.safeParse({
+      repositoryId: "repo-1",
+      selectionId: "selection-1",
+      paths: [".env"],
+    }).success).toBe(false)
+    expect(gitIpcModule.methods.discardChanges.request.safeParse({
+      repositoryId: "repo-1",
+      selectionId: "",
+    }).success).toBe(false)
   })
 
   it("validates remote branch checkout inputs and response metadata", () => {
