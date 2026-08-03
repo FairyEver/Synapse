@@ -22,6 +22,16 @@ const bridge = vi.hoisted(() => ({
   },
 }))
 
+const projectActions = vi.hoisted(() => ({
+  addProject: vi.fn(),
+  isProjectPathConfigured: vi.fn(),
+  refreshProjects: vi.fn(),
+}))
+
+vi.mock("@/app-shell/use-project-actions", () => ({
+  useProjectActions: () => projectActions,
+}))
+
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => bridge,
   requireSynapseBridge: () => bridge,
