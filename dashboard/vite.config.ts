@@ -93,7 +93,7 @@ function driveBrowserHistoryFallback(): Plugin {
 }
 
 export default defineConfig({
-  base: './',
+  base: '/console/',
   plugins: [
     driveBrowserHistoryFallback(),
     tanstackRouter({

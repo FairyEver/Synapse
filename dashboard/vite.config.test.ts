@@ -8,6 +8,10 @@ import config, {
 } from "./vite.config"
 
 describe("dashboard Vite dev proxy", () => {
+  it("emits assets from the stable console prefix for nested production routes", () => {
+    expect(config.base).toBe("/console/")
+  })
+
   it("fails instead of opening another port when the dashboard port is occupied", () => {
     expect(config.server?.strictPort).toBe(true)
   })
