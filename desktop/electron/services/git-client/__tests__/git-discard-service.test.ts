@@ -1,3 +1,4 @@
+import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import type { SynapseGitWorkingTreeChange } from "../../../../src/types/git"
 import { createGitDiscardService } from "../git-discard-service"
@@ -61,9 +62,9 @@ describe("git discard service", () => {
 
     expect(fixture.selections.validate).toHaveBeenCalledTimes(2)
     expect(fixture.trashItem.mock.calls.map(([targetPath]) => targetPath)).toEqual([
-      "/repo/new-name.md",
-      "/repo/added.md",
-      "/repo/untracked.md",
+      path.resolve(repository.localPath, "new-name.md"),
+      path.resolve(repository.localPath, "added.md"),
+      path.resolve(repository.localPath, "untracked.md"),
     ])
     expect(fixture.run).toHaveBeenCalledWith(expect.objectContaining({
       args: ["--literal-pathspecs", "reset", "--mixed", "HEAD", "--", "new-name.md", "added.md"],

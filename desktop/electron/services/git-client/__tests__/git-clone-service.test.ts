@@ -126,7 +126,7 @@ describe("git clone service", () => {
     const targetPath = path.join(root, "docs")
     expect(run).toHaveBeenCalledWith(expect.objectContaining({
       cwd: root,
-      args: ["clone", "--progress", "https://git.example.com/team/docs.git", expect.stringMatching(/\.synapse-clone-.+\/repository$/)],
+      args: ["clone", "--progress", "https://git.example.com/team/docs.git", expect.stringMatching(/\.synapse-clone-.+[\\/]repository$/)],
       operation: "git.clone",
       operationId: expect.any(String),
       remoteUrl: "https://git.example.com/team/docs.git",

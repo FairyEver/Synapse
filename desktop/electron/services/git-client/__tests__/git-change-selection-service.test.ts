@@ -1,3 +1,4 @@
+import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import type { SynapseGitWorkingTreeChange } from "../../../../src/types/git"
 import { createGitChangeSelectionService } from "../git-change-selection-service"
@@ -41,8 +42,8 @@ describe("git change selection service", () => {
       expiresAt: "2026-06-17T10:15:00.000Z",
       changes: [change],
     })
-    expect(fingerprintPath).toHaveBeenCalledWith("/repo/docs/old.md")
-    expect(fingerprintPath).toHaveBeenCalledWith("/repo/docs/new.md")
+    expect(fingerprintPath).toHaveBeenCalledWith(path.resolve(repository.localPath, "docs/old.md"))
+    expect(fingerprintPath).toHaveBeenCalledWith(path.resolve(repository.localPath, "docs/new.md"))
   })
 
   it("invalidates a selection when content changes without a status change", async () => {

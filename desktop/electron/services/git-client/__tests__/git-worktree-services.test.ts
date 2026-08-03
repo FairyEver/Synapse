@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest"
-import { devNull } from "node:os"
 import { createGitBranchService } from "../git-branch-service"
 import { createGitCommitService } from "../git-commit-service"
 import { createGitHistoryService } from "../git-history-service"
@@ -215,7 +214,7 @@ describe("git worktree services", () => {
     await service.getDiff(repository, { path: "docs/new.md" })
 
     expect(run).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["diff", "--no-index", "--no-ext-diff", "--", devNull, "docs/new.md"],
+      args: ["diff", "--no-index", "--no-ext-diff", "--", "/dev/null", "docs/new.md"],
       acceptedExitCodes: [0, 1],
     }))
   })
@@ -541,6 +540,21 @@ describe("git worktree services", () => {
         remoteName: "upstream",
         branches: [{ name: "main", fullName: "upstream/main" }],
       },
+    ])
+  })
+
+  it("matches remote branches against the longest configured remote name", async () => {
+    const run = vi.fn(async (input: { readonly args: readonly string[] }) => ({
+      stdout: input.args[0] === "remote"
+        ? "team\nteam/upstream\n"
+        : "team/main\u0000\nteam/upstream/main\u0000",
+      stderr: "",
+    }))
+    const service = createGitBranchService({ commandRunner: { run }, getSnapshot: vi.fn() })
+
+    await expect(service.listRemote(repository)).resolves.toEqual([
+      { remoteName: "team", branches: [{ name: "main", fullName: "team/main" }] },
+      { remoteName: "team/upstream", branches: [{ name: "main", fullName: "team/upstream/main" }] },
     ])
   })
 

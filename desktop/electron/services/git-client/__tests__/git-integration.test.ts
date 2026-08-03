@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process"
 import { randomBytes } from "node:crypto"
-import { access, chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { access, chmod, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
@@ -45,6 +45,7 @@ async function initializeRepository(localPath: string): Promise<SynapseGitReposi
   await git(localPath, "init", "-b", "main")
   await git(localPath, "config", "user.name", "Synapse Test")
   await git(localPath, "config", "user.email", "synapse@example.com")
+  await git(localPath, "config", "core.autocrlf", "false")
   return { id: "repo-1", name: "repo", localPath, addedAt: new Date(0).toISOString(), lastOpenedAt: null }
 }
 
@@ -182,8 +183,9 @@ describe("Git client real repository integration", () => {
     expect(result.status).toBe("registered")
     if (!result.repository) throw new Error("Clone registration failed in integration test.")
     expect(result.repository.localPath).toBe(path.join(parentDirectory, "docs"))
-    await expect(git(result.repository.localPath, "rev-parse", "--show-toplevel"))
-      .resolves.toContain(path.join(parentDirectory, "docs"))
+    const topLevel = (await git(result.repository.localPath, "rev-parse", "--show-toplevel")).trim()
+    const normalizePath = (value: string) => process.platform === "win32" ? value.toLowerCase() : value
+    expect(normalizePath(await realpath(topLevel))).toBe(normalizePath(await realpath(result.repository.localPath)))
   })
 
   it("cleans a partially written temporary clone after the real Git process is cancelled", async () => {
@@ -713,7 +715,7 @@ describe("Git client real repository integration", () => {
     expect(snapshot.changes.map((change) => change.path)).toEqual(["docs/a.md", "docs/b.md"])
   })
 
-  it("preserves newlines and surrounding spaces in status paths", async () => {
+  it.skipIf(process.platform === "win32")("preserves newlines and surrounding spaces in status paths", async () => {
     const root = await createRoot()
     const repository = await initializeRepository(path.join(root, "repo"))
     const specialPath = " docs/line\nname.md "
@@ -809,7 +811,7 @@ describe("Git client real repository integration", () => {
       .resolves.toBe("origin/docs/topic\n")
   })
 
-  it("groups remote branches by the longest configured remote name", async () => {
+  it.skipIf(process.platform === "win32")("groups remote branches by the longest configured remote name", async () => {
     const root = await createRoot()
     const repository = await initializeRepository(path.join(root, "repo"))
     await writeFile(path.join(repository.localPath, "README.md"), "base\n", "utf8")

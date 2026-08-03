@@ -1,4 +1,3 @@
-import { devNull } from "node:os"
 import type {
   SynapseGitDiffResult,
   SynapseGitRepository,
@@ -41,6 +40,7 @@ const LIST_SUMMARY_CONCURRENCY_LIMIT = 4
 const STATUS_PROJECTION_CONCURRENCY_LIMIT = 4
 const PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 const MAX_VISIBLE_STATUS_CHANGES = 10_000
+const GIT_NULL_DEVICE = "/dev/null"
 
 function createGitStateDiagnosticsReader(
   commandRunner: Pick<GitClientCommandRunner, "run">,
@@ -280,7 +280,7 @@ export function createGitStatusService(deps: StatusDeps) {
           : await deps.commandRunner.run({
               cwd: repository.localPath,
               args: change.status === "untracked" || change.status === "added"
-                ? ["diff", "--no-index", "--no-ext-diff", "--", devNull, input.path]
+                ? ["diff", "--no-index", "--no-ext-diff", "--", GIT_NULL_DEVICE, input.path]
                 : ["diff", "HEAD", "--", ...projectionPaths],
               operation,
               operationId,

@@ -16,6 +16,10 @@ function createService(overrides: Partial<Parameters<typeof createGitAccessServi
   })
 }
 
+const homeDir = "/Users/writer"
+const userGitConfigPath = path.join(homeDir, ".gitconfig")
+const knownHostsPath = path.join(homeDir, ".ssh", "known_hosts")
+
 function createSecurity(result: { readonly allowed: true } | { readonly allowed: false; readonly reason: string; readonly policyId?: string } = { allowed: true }) {
   return {
     auditSink: { record: vi.fn() },
@@ -166,7 +170,7 @@ describe("git access service", () => {
 
   it("replaces a unique plaintext helper without unsetting the helper chain", async () => {
     const run = vi.fn()
-      .mockResolvedValueOnce({ stdout: "file:/Users/writer/.gitconfig\tstore\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: `file:${userGitConfigPath}\tstore\n`, stderr: "" })
       .mockResolvedValueOnce({ stdout: "", stderr: "" })
     const service = createService({ commandRunner: { run } })
 
@@ -202,7 +206,7 @@ describe("git access service", () => {
   it("restores a plaintext helper when replacing it fails", async () => {
     const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const run = vi.fn()
-      .mockResolvedValueOnce({ stdout: "file:/Users/writer/.gitconfig\tstore\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: `file:${userGitConfigPath}\tstore\n`, stderr: "" })
       .mockRejectedValueOnce(new Error("could not lock config file Permission denied"))
       .mockResolvedValueOnce({ stdout: "", stderr: "" })
     const service = createService({ commandRunner: { run }, logger })
@@ -622,7 +626,7 @@ describe("git access service", () => {
     await service.trustSshHostKey({ host: candidate.host, port: candidate.port, fingerprints: candidate.fingerprints })
 
     expect(writeFile).toHaveBeenCalledWith(expect.stringContaining("known_hosts.synapse-"), `${keyLine}\n`, "utf8")
-    expect(renameFile).toHaveBeenCalledWith(expect.stringContaining("known_hosts.synapse-"), "/Users/writer/.ssh/known_hosts")
+    expect(renameFile).toHaveBeenCalledWith(expect.stringContaining("known_hosts.synapse-"), knownHostsPath)
   })
 
   it("serializes concurrent known_hosts updates without losing either host", async () => {
@@ -675,7 +679,6 @@ describe("git access service", () => {
   })
 
   it("refuses to trust a changed SSH host key", async () => {
-    const knownHostsPath = "/Users/writer/.ssh/known_hosts"
     const runProcess = vi.fn().mockImplementation(async ({ command }: { readonly command: string }) => ({
       stdout: command === "ssh-keygen"
         ? "git.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\n"
@@ -698,7 +701,6 @@ describe("git access service", () => {
   })
 
   it("detects a changed SSH host key stored under a hashed known_hosts entry", async () => {
-    const knownHostsPath = "/Users/writer/.ssh/known_hosts"
     const runProcess = vi.fn().mockImplementation(async ({ command }: { readonly command: string }) => ({
       stdout: command === "ssh-keygen"
         ? "|1|salt|hash ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\n"
