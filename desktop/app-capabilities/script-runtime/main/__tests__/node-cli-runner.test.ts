@@ -290,12 +290,14 @@ describe("runNodeCliScript", () => {
 
   it.each([
     ["", "missing"],
-    [`process.stdout.write("{}{}")`, "multiple_json_values"],
-    [`process.stdout.write("not json")`, "invalid_json"],
-  ])("classifies invalid stdout results", async (source, reason) => {
+    ["{}{}", "multiple_json_values"],
+    ["not json", "invalid_json"],
+  ])("classifies invalid stdout results", async (stdout, reason) => {
     const cwd = await createRoot()
-    const outcome = await runNodeCliScript({
-      source,
+    const child = fakeChildProcess()
+    const spawnProcess = vi.fn(() => child)
+    const run = runNodeCliScript({
+      source: "",
       input: {},
       timeoutSeconds: 5,
       abortSignal: new AbortController().signal,
@@ -304,7 +306,14 @@ describe("runNodeCliScript", () => {
     }, {
       executablePath: process.execPath,
       baseEnv: process.env,
+      spawnProcess: spawnProcess as never,
     })
+    await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledOnce())
+    if (stdout) child.stdout?.emit("data", Buffer.from(stdout))
+    Object.assign(child, { exitCode: 0 })
+    child.emit("close", 0, null)
+
+    const outcome = await run
 
     expect(outcome).toMatchObject({
       status: "failed",
