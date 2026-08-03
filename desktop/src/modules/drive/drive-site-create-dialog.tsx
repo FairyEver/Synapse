@@ -39,9 +39,9 @@ const DRIVE_SITE_EXPIRES_OPTIONS: ReadonlyArray<{ readonly label: string; readon
   { label: "永久", value: "forever" },
 ]
 
-const DRIVE_SITE_BUNDLED_GUIDE_MARKDOWN = `## 打包站点发布设置
+const DRIVE_SITE_BUNDLED_GUIDE_MARKDOWN = `## 网页分享的打包设置
 
-适用于 Vite、Vue、React 等打包后生成 \`dist\` 的前端项目。Synapse 站点链接位于 \`/sites/site_xxx/\` 下，构建产物需要使用相对路径。
+适用于 Vite、Vue、React 等打包后生成 \`dist\` 的前端项目。Synapse 网页分享链接位于 \`/sites/site_xxx/\` 下，构建产物需要使用相对路径。
 
 ### Vite
 
@@ -59,18 +59,18 @@ export default defineConfig({
 
 ### 路由
 
-Vue Router 或 React Router 建议使用 hash 路由。history 路由刷新深层页面时，需要服务端回退到入口页，当前站点发布不会自动处理。
+Vue Router 或 React Router 建议使用 hash 路由。history 路由刷新深层页面时，需要服务端回退到入口页，当前网页分享不会自动处理。
 
 ### 上传
 
-上传 \`dist\` 里的内容，让 \`index.html\` 位于站点文件夹根目录。不要只上传外层 \`dist\` 文件夹。`
+上传 \`dist\` 里的内容，让 \`index.html\` 位于分享文件夹根目录。不要只上传外层 \`dist\` 文件夹。`
 
-const DRIVE_SITE_AGENT_PROMPT = `请帮我把这个前端项目调整为适合发布到 Synapse 网盘站点的静态打包产物：
+const DRIVE_SITE_AGENT_PROMPT = `请帮我把这个前端项目调整为适合通过 Synapse 网页分享访问的静态打包产物：
 
 1. 检查项目使用的构建工具和路由模式。
 2. 如果是 Vite 项目，在 vite.config 中设置 base: './'。
 3. 检查 index.html、favicon、public 资源和动态导入资源，确保打包后使用相对路径，不要生成 /assets 或 /favicon 这样的站点根路径引用。
-4. 如果使用 Vue Router 或 React Router，优先保持 hash 路由；如果必须使用 history 路由，请说明 Synapse 站点发布当前没有深层路径 fallback，刷新子路径可能 404。
+4. 如果使用 Vue Router 或 React Router，优先保持 hash 路由；如果必须使用 history 路由，请说明 Synapse 网页分享当前没有深层路径 fallback，刷新子路径可能 404。
 5. 运行 build。
 6. 检查 dist/index.html，确认不包含 src="/assets、href="/assets、href="/favicon 这类根路径引用。
 7. 告诉我应该上传 dist 里的内容，而不是只上传外层 dist 文件夹。`
@@ -106,7 +106,7 @@ function DriveSiteCreateDialog({
       })
       .catch((rawError) => {
         if (cancelled) return
-        setError(errorMessage(rawError, "站点预检失败"))
+        setError(errorMessage(rawError, "网页分享检查失败"))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -136,9 +136,9 @@ function DriveSiteCreateDialog({
       })
       setCreatedSite(site)
       onCreated(site)
-      toast("站点已发布")
+      toast("网页分享已创建")
     } catch (rawError) {
-      setError(errorMessage(rawError, "站点发布失败"))
+      setError(errorMessage(rawError, "网页分享创建失败"))
     } finally {
       setSubmitting(false)
     }
@@ -150,7 +150,7 @@ function DriveSiteCreateDialog({
         if (!submitting) onOpenChange(nextOpen)
       }}>
         <FormDialog
-          title="发布站点"
+          title="网页分享"
           description={folder ? <span className="block truncate">{folder.name}</span> : undefined}
           contentClassName="sm:max-w-lg"
           onSubmit={handleSubmit}
@@ -268,7 +268,7 @@ function DriveSiteSubmitButton({
   const button = (
     <Button type="submit" disabled={disabled || submitting}>
       {submitting ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
-      {submitting ? "发布中" : "发布"}
+      {submitting ? "创建中" : "创建分享"}
     </Button>
   )
   if (!submitting) return button
@@ -294,8 +294,8 @@ function DriveSiteBundledGuideBanner({ onOpen }: { readonly onOpen: () => void }
   return (
     <Alert>
       <Info className="size-4" aria-hidden="true" />
-      <AlertTitle>打包站点需要相对路径</AlertTitle>
-      <AlertDescription>发布前检查构建配置。</AlertDescription>
+      <AlertTitle>打包网页需要相对路径</AlertTitle>
+      <AlertDescription>分享前检查构建配置。</AlertDescription>
       <AlertAction>
         <Button type="button" size="sm" variant="outline" onClick={onOpen}>查看设置</Button>
       </AlertAction>
@@ -314,7 +314,7 @@ function DriveSiteBundledGuideDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent aria-describedby={undefined} className="max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-2xl" showCloseButton={false}>
         <DialogFrame className="max-h-[calc(100vh-2rem)]">
-          <DialogFrameHeader title="打包站点设置" />
+          <DialogFrameHeader title="打包网页设置" />
           <DialogFrameBody>
             <ScrollArea className="h-full min-h-0">
               <div className="px-5 py-4">
@@ -340,7 +340,7 @@ function DriveSiteCreatedContent({ site }: { readonly site: DriveSiteDto }) {
     <div className="grid gap-4">
       <div className="flex items-center gap-2 text-sm font-medium">
         <Check className="size-4 text-muted-foreground" aria-hidden="true" />
-        <span>站点已发布</span>
+        <span>网页分享已创建</span>
       </div>
       <div className="grid gap-2">
         <Label htmlFor="drive-site-created-url">访问链接</Label>
@@ -364,7 +364,7 @@ function DriveSiteCreatedContent({ site }: { readonly site: DriveSiteDto }) {
         </Button>
         <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void openExternal(site.urlWithPassword) }}>
           <ExternalLink data-icon="inline-start" />
-          打开站点
+          打开网页
         </Button>
       </div>
     </div>

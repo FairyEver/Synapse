@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { FolderGit2, Plus, RefreshCw } from "lucide-react"
+import { ProjectAddDialog } from "@/app-shell/components/project-add-dialog"
+import { createRendererLogger } from "@/app-shell/logging"
+import { useProjectActions } from "@/app-shell/use-project-actions"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
@@ -16,6 +19,7 @@ import { GitWorkbench } from "./components/git-workbench"
 import type { GitOperationFailure } from "./hooks/use-git-operations"
 import { useGitAccess } from "./hooks/use-git-access"
 import { useGitOperations } from "./hooks/use-git-operations"
+import { useGitRepositoryShellActions } from "./hooks/use-git-repository-shell-actions"
 import { usePendingGitAction, type PendingGitAction, type PendingGitRepositoryOperation } from "./hooks/use-pending-git-action"
 import { useGitRepositories } from "./hooks/use-git-repositories"
 import { shouldRouteFailureToAccess } from "./lib/git-failure-view"
@@ -29,6 +33,8 @@ const GIT_APP_TABS: readonly { readonly id: GitAppViewId; readonly label: string
   { id: "install", label: "安装 Git" },
   { id: "access", label: "访问" },
 ]
+
+const logger = createRendererLogger("git")
 
 function isAccessProtocol(protocol: string): protocol is "http" | "https" | "ssh" {
   return protocol === "http" || protocol === "https" || protocol === "ssh"
@@ -108,6 +114,7 @@ export function GitModule() {
   const [selectedRepository, setSelectedRepository] = useState<SynapseGitRepository | null>(null)
   const [cloneOpen, setCloneOpen] = useState(false)
   const [addLocalOpen, setAddLocalOpen] = useState(false)
+  const [projectTarget, setProjectTarget] = useState<SynapseGitRepository | null>(null)
   const [environment, setEnvironment] = useState<SynapseGitEnvironmentState | null>(null)
   const [environmentLoading, setEnvironmentLoading] = useState(false)
   const [environmentError, setEnvironmentError] = useState<string | null>(null)
@@ -115,6 +122,8 @@ export function GitModule() {
   const retryPendingBusyRef = useRef(false)
   const repositoriesState = useGitRepositories()
   const operations = useGitOperations(repositoriesState.refresh)
+  const repositoryShellActions = useGitRepositoryShellActions()
+  const projectActions = useProjectActions()
   const pushRemoteSelection = useGitPushRemoteSelection()
   const initialization = useGitRepositoryInitialization()
   const access = useGitAccess()
@@ -153,6 +162,22 @@ export function GitModule() {
       setView("install")
     }
   }, [environment])
+
+  useEffect(() => {
+    const refreshProjectsWhenVisible = () => {
+      if (document.visibilityState !== "visible") return
+      void projectActions.refreshProjects().catch((error) => {
+        logger.warn("Failed to refresh projects for Git repository actions.", { error })
+      })
+    }
+
+    window.addEventListener("focus", refreshProjectsWhenVisible)
+    document.addEventListener("visibilitychange", refreshProjectsWhenVisible)
+    return () => {
+      window.removeEventListener("focus", refreshProjectsWhenVisible)
+      document.removeEventListener("visibilitychange", refreshProjectsWhenVisible)
+    }
+  }, [projectActions.refreshProjects])
 
   useEffect(() => {
     if (view !== "access" && !pendingAction) return
@@ -366,6 +391,9 @@ export function GitModule() {
                 onSync={(repositoryId) => void operations.sync(repositoryId)}
                 onCancel={(repositoryId) => void operations.cancelRepository(repositoryId)}
                 onRemoveRepository={(input) => operations.removeRepository(input)}
+                onShowInFolder={(localPath) => void repositoryShellActions.showInFolder(localPath)}
+                onAddProject={setProjectTarget}
+                isProjectPathConfigured={projectActions.isProjectPathConfigured}
                 onHandleFailure={handleFailureAction}
               />
             )}
@@ -410,6 +438,17 @@ export function GitModule() {
           </TabsContent>
         </Tabs>
       </SystemAppWindowShell>
+      <ProjectAddDialog
+        open={projectTarget !== null}
+        initialValues={projectTarget ? {
+          name: projectTarget.name,
+          path: projectTarget.localPath,
+        } : null}
+        onOpenChange={(open) => {
+          if (!open) setProjectTarget(null)
+        }}
+        onAddProject={projectActions.addProject}
+      />
       <GitCloneDialog
         open={cloneOpen}
         busy={operations.busy.global === "clone"}

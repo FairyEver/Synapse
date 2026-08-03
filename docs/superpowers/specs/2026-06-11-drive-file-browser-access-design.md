@@ -17,6 +17,16 @@ The route model below was revised after this design:
 - `/files/*`, `/pages/*`, `/sites/*`, owner nested `rootItemId/items/:itemId`, and explicit `/zip` URLs are no longer canonical.
 - Page/site publication and DrivePublication snapshot semantics are removed; HTML rendering is a live Drive share/owner preview capability.
 
+## 2026-08-03 Markdown Relative Image Exception
+
+The normal file-share browser boundary remains the entry file itself, and folder shares remain limited to the shared root subtree. One narrow read exception exists for `.md` and `.markdown` previews:
+
+- `/share/:shareId/items/:itemId/download` may return a safe raster image for a single-file Markdown share only when the current entry version contains a static relative image reference that resolves to that exact Drive item.
+- This exception grants no child browser snapshot, annotation, edit, ZIP, history, rename, move, upload, or arbitrary sibling download capability.
+- Folder-share relative images still have to resolve inside the shared root subtree.
+- Share enablement, expiry, password/cookie, source lifecycle, current version, and current Drive tree are revalidated before image download; unauthorized and missing targets use the same not-found response.
+- The generated Markdown preview URL is a derived rendering result. Stored Markdown and historical versions are not rewritten.
+
 ## Goal
 
 重构 Synapse Drive 的文件承接页，让用户不需要先创建分享链接也能查看自己上传的文件。文件承接页统一负责文件夹浏览、文件预览和下载；分享访问复用同一套浏览器体验；发布网页和发布站点继续走独立的直出渲染链路。同时把 Web 管理入口从 `dashboard` 规范为 `console`，并把本次新增的 owner 文件访问路由命名为资源集合式路径。
@@ -98,6 +108,7 @@ The route model below was revised after this design:
 - owner preview 的权限必须由服务端校验登录用户和 Drive item 所属者。
 - share browser 的权限必须由服务端校验 shareId、启用状态、过期时间、密码或访问 cookie。
 - 下载接口必须和对应访问上下文使用同一套权限校验，不能成为绕过入口。
+- 单文件 Markdown 分享的相对图片下载只能使用上述“当前版本静态引用 + Drive 路径解析”专用校验，不能放宽通用 share browser 子项边界。
 - 文件浏览器 UI 不展示内部 item id、storage key、owner email、删除状态或其它管理元数据。
 - UI 使用现有 shadcn/Radix 基线和 token，不新增自定义颜色、渐变、卡片套卡片或营销文案。
 

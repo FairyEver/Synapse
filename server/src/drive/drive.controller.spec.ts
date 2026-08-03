@@ -459,6 +459,18 @@ describe("DriveController", () => {
     expect(storage.getObjectStream).not.toHaveBeenCalled()
   })
 
+  it("redirects a static site directory index path to a trailing slash and preserves its query", async () => {
+    sites.resolvePublicSite.mockResolvedValue({ status: "directory_redirect" })
+
+    const response = await request(app!.getHttpServer())
+      .get("/sites/site_public/guide?ref=shared")
+      .expect(302)
+
+    expect(response.headers.location).toBe("/sites/site_public/guide/?ref=shared")
+    expect(sites.resolvePublicSite).toHaveBeenCalledWith("site_public", { cookie: null, relativePath: "guide" })
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
   it("prevents shared caching for protected static site assets", async () => {
     sites.resolvePublicSite.mockResolvedValue({
       status: "ok",
@@ -2206,6 +2218,7 @@ function createBrowserSnapshot(): DriveBrowserSnapshotDto {
       truncated: false,
       imageUrl: null,
       visitUrl: null,
+      relativeImages: [],
     },
     edit: null,
     annotation: null,

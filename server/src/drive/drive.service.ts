@@ -7,6 +7,9 @@ import {
   type DriveBrowserAnnotationCapabilityDto,
   type DriveBrowserChildrenPageDto,
   type DriveBrowserSnapshotDto,
+  buildOwnerDriveDownloadUrl,
+  buildShareDriveDownloadUrl,
+  inferDrivePublicAssetMimeType,
   decodeUtf8Prefix,
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
@@ -58,6 +61,12 @@ import {
   type DrivePasswordMaterial,
 } from "./drive-access-protection"
 import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
+import {
+  extractDriveMarkdownRelativeImages,
+  isPlainDriveMarkdownName,
+  isSafeDriveMarkdownRasterName,
+  type DriveMarkdownRelativeImageReference,
+} from "./drive-markdown-relative-images"
 import {
   createDriveFileVersion,
   createDriveFileVersionId,
@@ -226,6 +235,11 @@ type DriveBrowserChildrenResult = {
   readonly page: DriveBrowserChildrenPageDto
 }
 
+type ResolvedDriveMarkdownRelativeImage = {
+  readonly reference: DriveMarkdownRelativeImageReference
+  readonly item: DriveItemRecordWithStorage | null
+}
+
 type DriveItemRecordWithStorage = DriveItemRecord & {
   readonly userId: string
   readonly storageKey: string | null
@@ -268,6 +282,8 @@ const DRIVE_ITEM_TREE_DEFAULT_LIMIT = 500
 const DRIVE_ITEM_TREE_MAX_LIMIT = 2000
 const DRIVE_REORGANIZATION_PLAN_TTL_MS = 5 * 60 * 1000
 const DRIVE_REORGANIZATION_AUDIT_MOVE_LIMIT = 100
+const DRIVE_MARKDOWN_IMAGE_PATH_MAX_SEGMENTS = 64
+const DRIVE_MARKDOWN_SHARE_CACHE_MAX_ENTRIES = 128
 
 function resolveShareAccessSettingsBase(
   existing: {
@@ -329,6 +345,7 @@ export class DriveService implements OnApplicationBootstrap {
   private readonly accessSecret = readUserAccessJwtSecret(process.env)
   private readonly logger = new Logger(DriveService.name)
   private readonly reorganizationPlans = new Map<string, DriveReorganizationPlan>()
+  private readonly markdownShareImageIds = new Map<string, ReadonlySet<string>>()
 
   constructor(
     private readonly prisma: PrismaService,
@@ -512,6 +529,13 @@ export class DriveService implements OnApplicationBootstrap {
       editorEmails: share.editorEmails,
     })) {
       throw new ForbiddenException("没有编辑权限。")
+    }
+    if (input.actorUserId !== share.ownerId && isPlainDriveMarkdownName(current.name)) {
+      await this.assertShareMarkdownRelativeImageEditAllowed({
+        share,
+        item: current,
+        nextMarkdown: input.body.text,
+      })
     }
     return this.commitTextFileChange({
       ownerId: share.ownerId,
@@ -1942,7 +1966,7 @@ export class DriveService implements OnApplicationBootstrap {
       stream: object.stream,
       fileName: current.name,
       size: object.size ?? current.size,
-      contentType: object.contentType ?? current.mimeType,
+      contentType: resolveDriveDownloadContentType(current.name, object.contentType, current.mimeType),
     }
   }
 
@@ -2053,6 +2077,18 @@ export class DriveService implements OnApplicationBootstrap {
       password: input.password,
       cookie: input.cookie ?? input.accessCookie,
     })
+    if (input.itemId && input.itemId !== share.item.id && share.type === "file") {
+      const current = await this.resolveShareMarkdownImageDownload(share, input.itemId)
+      const storageKey = this.requireActiveFileStorage(current)
+      const object = await this.storage.getObjectStream({ key: storageKey })
+      return {
+        kind: "file",
+        stream: object.stream,
+        fileName: current.name,
+        size: object.size ?? current.size,
+        contentType: inferDrivePublicAssetMimeType(current.name) ?? "application/octet-stream",
+      }
+    }
     const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
     if (current.type === DRIVE_ITEM_TYPE.folder) {
       return {
@@ -2068,7 +2104,7 @@ export class DriveService implements OnApplicationBootstrap {
       stream: object.stream,
       fileName: current.name,
       size: object.size ?? current.size,
-      contentType: object.contentType ?? current.mimeType,
+      contentType: resolveDriveDownloadContentType(current.name, object.contentType, current.mimeType),
     }
   }
 
@@ -2797,7 +2833,22 @@ export class DriveService implements OnApplicationBootstrap {
     if (shouldReadDriveBrowserTextPreview(kind)) {
       if (kind === "markdown") {
         const preview = await this.readTextPreview(storageKey)
-        const rendered = await renderDriveMarkdownFragment(preview.text)
+        const relativeImages = isPlainDriveMarkdownName(current.name)
+          ? await this.resolveDriveMarkdownRelativeImages(preview.text, current, route)
+          : []
+        const relativeImageUrls = new Map(relativeImages.map(({ reference, item: image }) => [
+          reference.src,
+          image ? appendDriveMarkdownUrlSuffix(
+            route.context === "owner"
+              ? buildOwnerDriveDownloadUrl(image.id)
+              : buildShareDriveDownloadUrl(route.shareId, image.id),
+            reference.suffix,
+          ) : null,
+        ]))
+        const rendered = await renderDriveMarkdownFragment(preview.text, {
+          relativeImageUrls,
+          allowStandaloneRawImages: isPlainDriveMarkdownName(current.name),
+        })
         return buildDriveBrowserPreview({
           item,
           route,
@@ -2805,6 +2856,15 @@ export class DriveService implements OnApplicationBootstrap {
           html: rendered.html,
           outline: rendered.outline,
           truncated: preview.truncated,
+          relativeImages: relativeImages.map(({ reference, item: image }) => ({
+            src: reference.src,
+            resolvedUrl: image ? appendDriveMarkdownUrlSuffix(
+              route.context === "owner"
+                ? buildOwnerDriveDownloadUrl(image.id)
+                : buildShareDriveDownloadUrl(route.shareId, image.id),
+              reference.suffix,
+            ) : null,
+          })),
         })
       }
 
@@ -2816,6 +2876,165 @@ export class DriveService implements OnApplicationBootstrap {
       return buildDriveBrowserPreview({ item, route, imageUrl })
     }
     return buildDriveBrowserPreview({ item, route })
+  }
+
+  private async resolveDriveMarkdownRelativeImages(
+    markdown: string,
+    markdownItem: DriveItemRecordWithStorage,
+    route?: DriveBrowserRouteContext,
+  ): Promise<ResolvedDriveMarkdownRelativeImage[]> {
+    const references = extractDriveMarkdownRelativeImages(markdown)
+    const shareRoot = route?.context === "share"
+      ? await this.findActiveDriveItem(markdownItem.userId, route.rootItemId)
+      : null
+    const shareFolderRootId = shareRoot?.type === DRIVE_ITEM_TYPE.folder ? shareRoot.id : null
+
+    return Promise.all(references.map(async (reference) => {
+      const resolved = await this.resolveDriveMarkdownRelativeImageItem(markdownItem, reference)
+      const item = resolved && (!shareFolderRootId || await this.isDescendantOf(resolved.id, shareFolderRootId))
+        ? resolved
+        : null
+      return { reference, item }
+    }))
+  }
+
+  private async resolveDriveMarkdownRelativeImageItem(
+    markdownItem: DriveItemRecordWithStorage,
+    reference: DriveMarkdownRelativeImageReference,
+  ): Promise<DriveItemRecordWithStorage | null> {
+    if (reference.segments.length === 0 || reference.segments.length > DRIVE_MARKDOWN_IMAGE_PATH_MAX_SEGMENTS) return null
+
+    let folderId = markdownItem.parentId
+    let target: DriveItemRecordWithStorage | null = null
+    for (let index = 0; index < reference.segments.length; index += 1) {
+      const segment = reference.segments[index]
+      const finalSegment = index === reference.segments.length - 1
+      if (segment === ".") {
+        target = null
+        continue
+      }
+      if (segment === "..") {
+        if (!folderId) return null
+        const folder = await this.findActiveDriveItem(markdownItem.userId, folderId)
+        if (!folder || folder.type !== DRIVE_ITEM_TYPE.folder) return null
+        folderId = folder.parentId
+        target = null
+        continue
+      }
+
+      const child = await this.findActiveDriveChildByName(markdownItem.userId, folderId, segment)
+      if (!child) return null
+      if (finalSegment) {
+        target = child
+        continue
+      }
+      if (child.type !== DRIVE_ITEM_TYPE.folder) return null
+      folderId = child.id
+      target = child
+    }
+
+    if (!target || target.type !== DRIVE_ITEM_TYPE.file || !isSafeDriveMarkdownRasterName(target.name)) return null
+    return target
+  }
+
+  private async findActiveDriveChildByName(
+    userId: string,
+    parentId: string | null,
+    normalizedName: string,
+  ): Promise<DriveItemRecordWithStorage | null> {
+    const activeChildrenWhere = {
+      userId,
+      parentId,
+      deletedAt: null,
+      storageStatus: DRIVE_STORAGE_STATUS.active,
+      lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+      publicAsset: null,
+    } as const
+    const directMatches = await this.prisma.driveItem.findMany({
+      where: { ...activeChildrenWhere, name: normalizedName },
+      include: driveItemWithShares,
+    }) as DriveItemRecordWithStorage[]
+    const exactDirectMatches = directMatches.filter((child) => child.name.normalize("NFC") === normalizedName)
+    if (exactDirectMatches.length === 1) return exactDirectMatches[0]
+    if (exactDirectMatches.length > 1) return null
+
+    const normalizedMatches = await this.prisma.driveItem.findMany({
+      where: activeChildrenWhere,
+      include: driveItemWithShares,
+    }) as DriveItemRecordWithStorage[]
+    const exactNormalizedMatches = normalizedMatches.filter((child) => child.name.normalize("NFC") === normalizedName)
+    return exactNormalizedMatches.length === 1 ? exactNormalizedMatches[0] : null
+  }
+
+  private async resolveShareMarkdownImageDownload(
+    share: DrivePublicShareValue,
+    itemId: string,
+  ): Promise<DriveItemRecordWithStorage> {
+    const markdownItem = await this.findActiveDriveItem(share.ownerId, share.item.id)
+    const imageItem = await this.findActiveDriveItem(share.ownerId, itemId)
+    if (
+      !markdownItem
+      || !isPlainDriveMarkdownName(markdownItem.name)
+      || !imageItem
+      || imageItem.type !== DRIVE_ITEM_TYPE.file
+      || !isSafeDriveMarkdownRasterName(imageItem.name)
+    ) {
+      throw new NotFoundException("文件未找到")
+    }
+
+    const versionId = await this.findCurrentDriveFileVersionId(markdownItem)
+    if (!versionId) throw new NotFoundException("文件未找到")
+    const latestChange = await this.prisma.driveChange.findFirst({
+      where: { userId: share.ownerId },
+      orderBy: { sequence: "desc" },
+      select: { sequence: true },
+    })
+    const cacheKey = `${share.shareId}:${versionId}:${latestChange?.sequence.toString() ?? "0"}`
+    let allowedIds = this.markdownShareImageIds.get(cacheKey)
+    if (!allowedIds) {
+      const storageKey = this.requireActiveFileStorage(markdownItem)
+      const preview = await this.readTextPreview(storageKey)
+      const resolved = await this.resolveDriveMarkdownRelativeImages(preview.text, markdownItem)
+      allowedIds = new Set(resolved.flatMap(({ item }) => item ? [item.id] : []))
+      this.rememberMarkdownShareImageIds(cacheKey, allowedIds)
+    }
+    if (!allowedIds.has(imageItem.id)) throw new NotFoundException("文件未找到")
+    return imageItem
+  }
+
+  private rememberMarkdownShareImageIds(cacheKey: string, itemIds: ReadonlySet<string>): void {
+    if (this.markdownShareImageIds.size >= DRIVE_MARKDOWN_SHARE_CACHE_MAX_ENTRIES) {
+      const oldestKey = this.markdownShareImageIds.keys().next().value
+      if (typeof oldestKey === "string") this.markdownShareImageIds.delete(oldestKey)
+    }
+    this.markdownShareImageIds.set(cacheKey, itemIds)
+  }
+
+  private async assertShareMarkdownRelativeImageEditAllowed(input: {
+    readonly share: DrivePublicShareValue
+    readonly item: DriveItemRecordWithStorage
+    readonly nextMarkdown: string
+  }): Promise<void> {
+    const storageKey = this.requireActiveFileStorage(input.item)
+    const currentMarkdown = await this.readInlineEditableTextFile(input.item, storageKey)
+    const currentSources = new Set(extractDriveMarkdownRelativeImages(currentMarkdown).map(({ src }) => src))
+    const nextReferences = extractDriveMarkdownRelativeImages(input.nextMarkdown)
+    const addedReferences = nextReferences.filter(({ src }) => !currentSources.has(src))
+    if (addedReferences.length === 0) return
+
+    const currentResolved = await this.resolveDriveMarkdownRelativeImages(currentMarkdown, input.item)
+    const currentItemIds = new Set(currentResolved.flatMap(({ item }) => item ? [item.id] : []))
+    const shareRoot = input.share.type === "folder"
+      ? await this.findActiveDriveItem(input.share.ownerId, input.share.item.id)
+      : null
+
+    for (const reference of addedReferences) {
+      const resolved = await this.resolveDriveMarkdownRelativeImageItem(input.item, reference)
+      const allowed = input.share.type === "file"
+        ? Boolean(resolved && currentItemIds.has(resolved.id))
+        : Boolean(resolved && shareRoot && await this.isDescendantOf(resolved.id, shareRoot.id))
+      if (!allowed) throw new ForbiddenException("不能通过编辑扩大分享文件的图片访问范围。")
+    }
   }
 
   private async readTextPreview(storageKey: string): Promise<{ readonly text: string; readonly truncated: boolean }> {
@@ -3927,6 +4146,23 @@ function createDriveShareUnlockRequiredException(): UnauthorizedException {
 
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+}
+
+function appendDriveMarkdownUrlSuffix(url: string, suffix: string): string {
+  return suffix ? `${url}${suffix}` : url
+}
+
+function resolveDriveDownloadContentType(
+  fileName: string,
+  objectContentType: string | null | undefined,
+  itemMimeType: string | null | undefined,
+): string | null | undefined {
+  const explicitContentType = [objectContentType, itemMimeType]
+    .find((contentType) => contentType && contentType !== "application/octet-stream")
+  return explicitContentType
+    ?? inferDrivePublicAssetMimeType(fileName)
+    ?? objectContentType
+    ?? itemMimeType
 }
 
 function readUserAccessJwtSecret(source: NodeJS.ProcessEnv): string {

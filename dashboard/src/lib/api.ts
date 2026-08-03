@@ -7,6 +7,7 @@ import type {
   DriveAnnotationReplyInput,
   DriveAnnotationThreadDto,
   DriveAccessSettingsInput,
+  DriveAccessSettingsUpdateInput,
   DriveBrowserPasswordRequiredDto,
   DriveBrowserSnapshotDto,
   DriveDocumentImageImportRequest,
@@ -852,7 +853,7 @@ export const driveApi = {
     request<DriveItemDto>(`${driveApiBasePath}/items/${encodeURIComponent(itemId)}/restore`, { method: 'POST' }),
   deleteTrashItem: (itemId: string) =>
     request<{ ok: true }>(`${driveApiBasePath}/trash/${encodeURIComponent(itemId)}`, { method: 'DELETE' }),
-  createShare: (itemId: string, settings: DriveAccessSettingsInput) =>
+  createShare: (itemId: string, settings: DriveAccessSettingsInput | DriveAccessSettingsUpdateInput) =>
     request<DriveShareDto>(`${driveApiBasePath}/items/${encodeURIComponent(itemId)}/share`, {
       method: 'POST',
       body: JSON.stringify(settings),

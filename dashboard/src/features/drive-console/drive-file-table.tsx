@@ -30,7 +30,6 @@ export function DriveFileTable({
   onOpenSystemView,
   onDelete,
   onMove,
-  onPublishSite,
   onRename,
   onShare,
   onNavigate = navigateDriveBrowserUrl,
@@ -41,7 +40,6 @@ export function DriveFileTable({
   readonly onOpenSystemView: (view: DriveConsoleSystemView) => void
   readonly onDelete: (item: DriveBrowserItemDto) => void
   readonly onMove: (item: DriveBrowserItemDto) => void
-  readonly onPublishSite: (item: DriveBrowserItemDto) => void
   readonly onRename: (item: DriveBrowserItemDto) => void
   readonly onShare: (item: DriveBrowserItemDto) => void
   readonly onNavigate?: DriveBrowserNavigate
@@ -91,7 +89,6 @@ export function DriveFileTable({
               item={item}
               onDelete={onDelete}
               onMove={onMove}
-              onPublishSite={onPublishSite}
               onRename={onRename}
               onShare={onShare}
               onNavigate={onNavigate}
@@ -123,7 +120,6 @@ function DriveFileRow({
   item,
   onDelete,
   onMove,
-  onPublishSite,
   onRename,
   onShare,
   onNavigate,
@@ -131,7 +127,6 @@ function DriveFileRow({
   readonly item: DriveBrowserItemDto
   readonly onDelete: (item: DriveBrowserItemDto) => void
   readonly onMove: (item: DriveBrowserItemDto) => void
-  readonly onPublishSite: (item: DriveBrowserItemDto) => void
   readonly onRename: (item: DriveBrowserItemDto) => void
   readonly onShare: (item: DriveBrowserItemDto) => void
   readonly onNavigate: DriveBrowserNavigate
@@ -189,11 +184,6 @@ function DriveFileRow({
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end' onClick={(event) => event.stopPropagation()}>
               <DropdownMenuGroup>
-                {item.type === 'folder' ? (
-                  <DropdownMenuItem onClick={() => onPublishSite(item)}>
-                    发布站点
-                  </DropdownMenuItem>
-                ) : null}
                 <DropdownMenuItem onClick={() => onRename(item)}>
                   重命名
                 </DropdownMenuItem>

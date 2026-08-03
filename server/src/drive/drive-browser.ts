@@ -115,6 +115,10 @@ export function buildDriveBrowserPreview(input: {
   readonly outline?: readonly DriveMarkdownOutlineItemDto[] | null
   readonly truncated?: boolean
   readonly imageUrl?: string | null
+  readonly relativeImages?: readonly {
+    readonly src: string
+    readonly resolvedUrl: string | null
+  }[]
 }): DriveBrowserPreviewDto {
   const kind = resolveDriveBrowserPreviewKind(input.item)
   const textPreview = isTextPreviewKind(kind)
@@ -128,6 +132,7 @@ export function buildDriveBrowserPreview(input: {
     visitUrl: kind === "html-source"
       ? buildRenderUrl(input.route, input.item.id)
       : null,
+    relativeImages: kind === "markdown" ? input.relativeImages ?? [] : [],
   }
 }
 

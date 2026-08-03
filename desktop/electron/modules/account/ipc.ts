@@ -596,8 +596,8 @@ const driveFileVersionDownloadSchema = driveFileVersionIdSchema.extend({ outputP
 const driveFileVersionPinSchema = driveFileVersionIdSchema.extend({ isPinned: z.boolean() })
 const drivePreviewUrlSchema = z.object({ url: z.string().url() })
 const driveAccessSettingsSchema = z.object({
-  passwordEnabled: z.boolean(),
-  expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]),
+  passwordEnabled: z.boolean().optional(),
+  expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]).optional(),
   accessMode: z.enum(["link_read", "link_edit", "specified_users_edit"]).optional(),
   editorEmails: z.array(z.string()).optional(),
 })

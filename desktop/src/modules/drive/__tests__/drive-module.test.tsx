@@ -305,7 +305,7 @@ describe("DriveModule", () => {
     expect(html).toContain("新建")
     expect(html).toContain('aria-label="刷新"')
     expect(html).toContain('aria-label="更多"')
-    expect(html).not.toContain("我的分享")
+    expect(html).not.toContain("分享管理")
     expect(html).not.toContain("站点")
     expect(html).not.toContain("本地同步")
     expect(html).not.toContain("已分享")
@@ -400,26 +400,27 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(queryButton("我的分享")).toBeNull()
+    expect(queryButton("分享管理")).toBeNull()
     expect(queryButton("已分享")).toBeNull()
     expect(queryButton("已发布")).toBeNull()
 
-    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()
 
-    expect(document.body.textContent).toContain("公开链接")
+    expect(document.body.textContent).toContain("分享管理")
     const dialogHeader = document.querySelector('[role="dialog"] [data-slot="dialog-frame-header"]')
     if (!dialogHeader) throw new Error("Public links dialog header not found")
     expect(Array.from(dialogHeader.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual([
       "文件",
       "文件夹",
+      "网页",
     ])
     expect(document.body.textContent).not.toContain("全部")
     expect(document.body.textContent).toContain("分享")
     expect(document.body.textContent).not.toContain("发布")
   })
 
-  it("shows publish site only for folder rows", async () => {
+  it("offers webpage sharing only from the folder share flow", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "folder-1", type: "folder", name: "原型" }),
       createDriveItem({ id: "file-1", type: "file", name: "index.html", mimeType: "text/html" }),
@@ -430,11 +431,16 @@ describe("DriveModule", () => {
 
     expect(rowButton("原型", "更多")).toBeTruthy()
     await openRowMenu("原型")
-    expect(document.body.textContent).toContain("发布站点")
+    expect(document.body.textContent).not.toContain("发布站点")
 
     await closeMenus()
-    await openRowMenu("index.html")
-    expect(document.body.textContent).not.toContain("发布站点")
+    await clickRowButtonText("原型", "分享")
+    expect(document.body.textContent).toContain("文件夹分享")
+    expect(document.body.textContent).toContain("网页分享")
+
+    await clickButtonText("取消")
+    await clickRowButtonText("index.html", "分享")
+    expect(document.body.textContent).not.toContain("网页分享")
   })
 
   it("publishes a protected site with generated password output", async () => {
@@ -452,14 +458,14 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await openRowMenu("原型")
-    await clickText("发布站点")
+    await clickRowButtonText("原型", "分享")
+    await clickTabText("网页分享")
 
     expect(document.querySelector<HTMLInputElement>("#drive-site-password")).toBeNull()
     expect(document.body.textContent).toContain("需要密码")
     expect(document.body.textContent).toContain("3 天")
 
-    await clickButtonText("发布")
+    await clickButtonText("创建分享")
 
     expect(mocks.createDriveSite).toHaveBeenCalledWith({
       sourceFolderItemId: "folder-1",
@@ -497,11 +503,11 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await openRowMenu("dist")
-    await clickText("发布站点")
-    await clickButtonText("发布")
+    await clickRowButtonText("dist", "分享")
+    await clickTabText("网页分享")
+    await clickButtonText("创建分享")
 
-    const submitButton = getButton("发布中")
+    const submitButton = getButton("创建中")
     expect(submitButton.disabled).toBe(true)
 
     await hoverElement(submitButton.parentElement ?? submitButton)
@@ -522,10 +528,10 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await openRowMenu("dist")
-    await clickText("发布站点")
+    await clickRowButtonText("dist", "分享")
+    await clickTabText("网页分享")
 
-    expect(document.body.textContent).toContain("打包站点需要相对路径")
+    expect(document.body.textContent).toContain("打包网页需要相对路径")
     expect(getButton("查看设置")).not.toBeNull()
 
     await clickButtonText("查看设置")
@@ -559,18 +565,20 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await openRowMenu("原型")
-    await clickText("发布站点")
+    await clickRowButtonText("原型", "分享")
+    await clickTabText("网页分享")
 
-    expect(document.body.textContent).not.toContain("打包站点需要相对路径")
+    expect(document.body.textContent).not.toContain("打包网页需要相对路径")
     expect(queryButton("查看设置")).toBeNull()
   })
 
-  it("opens the site management dialog from the Drive top bar", async () => {
+  it("copies and opens webpage shares from unified share management", async () => {
     mocks.listDriveSites.mockResolvedValue(createDriveSitePage([
       createDriveSite({
         name: "001",
         accessMode: "password",
+        passwordEnabled: true,
+        password: "SitePw1",
         expiresIn: "3d",
         expiresAt: "2026-06-26T06:04:00.000Z",
         totalBytes: "26522",
@@ -582,22 +590,37 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickDriveToolbarMenuItem("更多", "站点")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
+    await flushAct()
+    await clickTabText("网页")
     await flushAct()
 
     const dialog = document.querySelector('[role="dialog"]')
-    if (!dialog) throw new Error("Site management dialog not found")
-    expect(dialog.textContent).toContain("站点")
-    expect(dialog.className).toContain("w-[calc(100%-2rem)]")
+    if (!dialog) throw new Error("Share management dialog not found")
+    expect(dialog.textContent).toContain("分享管理")
     expect(mocks.listDriveSites).toHaveBeenCalledWith({ offset: 0, limit: 50 })
-    expect(tableColumnClasses(dialog)).toEqual(["w-80", "w-20", "w-20", "w-32", "w-32", "w-24", "w-32"])
+    expect(tableColumnClasses(dialog)).toEqual(["w-72", "w-auto", "w-44"])
+    expect(Array.from(dialog.querySelectorAll("thead th")).map((cell) => cell.textContent?.trim())).toEqual(["名称", "链接信息", "操作"])
     expect(dialog.textContent).toContain("001")
-    expect(dialog.textContent).toContain("https://synapse.d2.pub/sites/site_AZYoLz4O/")
+    expect(dialog.textContent).toContain("网页")
     expect(dialog.textContent).toContain("正常")
     expect(dialog.textContent).toContain("密码")
     expect(dialog.textContent).toContain("25.9 KB")
-    expect(queryButtonByLabel("复制 001")).not.toBeNull()
+    expect(queryButtonByLabel("访问设置 001")?.dataset.size).toBe("icon-sm")
+    expect(queryButtonByLabel("复制 001")?.dataset.size).toBe("icon-sm")
+    expect(queryButtonByLabel("复制 001 密码")?.dataset.size).toBe("icon-sm")
+    expect(queryButtonByLabel("打开 001")?.dataset.size).toBe("icon-sm")
+    expect(queryButtonByLabel("更多 001")?.dataset.size).toBe("icon-sm")
     expect(queryButtonByLabel("打开 001")).not.toBeNull()
+    expect(dialog.querySelector("thead th:last-child")?.className).toContain("sticky")
+    expect(dialog.querySelector("thead th:last-child")?.className).toContain("right-0")
+    expect(dialog.querySelector("tbody td:last-child")?.className).toContain("sticky")
+    expect(dialog.querySelector("tbody td:last-child")?.className).toContain("right-0")
+
+    await clickButtonByLabel("复制 001")
+
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.d2.pub/sites/site_AZYoLz4O/?password=SitePw1")
+    expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
   })
 
   it("preserves the current site expiration option when saving access settings", async () => {
@@ -614,10 +637,11 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickDriveToolbarMenuItem("更多", "站点")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()
-    await openRowMenu("001")
-    await clickText("访问设置")
+    await clickTabText("网页")
+    await flushAct()
+    await clickButtonByLabel("访问设置 001")
     await clickButtonText("保存")
 
     expect(mocks.updateDriveSiteAccess).toHaveBeenCalledWith({
@@ -651,7 +675,7 @@ describe("DriveModule", () => {
 
     await openDriveToolbarMenu("更多")
 
-    expect(menuItemTexts()).toEqual(["本地同步", "我的分享", "站点"])
+    expect(menuItemTexts()).toEqual(["本地同步", "分享管理"])
   })
 
   it("shows drive sync conflicts in the top toolbar", async () => {
@@ -2516,8 +2540,7 @@ describe("DriveModule", () => {
 
     await openDriveToolbarMenu("更多")
     expect(getMenuItem("本地同步").hasAttribute("data-disabled")).toBe(true)
-    expect(getMenuItem("我的分享").hasAttribute("data-disabled")).toBe(false)
-    expect(getMenuItem("站点").hasAttribute("data-disabled")).toBe(false)
+    expect(getMenuItem("分享管理").hasAttribute("data-disabled")).toBe(false)
 
     await act(async () => {
       upload.resolve({ completed: 1, failed: 0, skipped: 0 })
@@ -3065,7 +3088,7 @@ describe("DriveModule", () => {
 
     await clickButtonText("分享")
     expect(mocks.shareDriveItem).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain("分享设置")
+    expect(document.body.textContent).toContain("分享")
     expect(document.body.textContent).toContain("登录用户可编辑")
     expect(document.body.textContent).not.toContain("链接可编辑")
     expect(document.body.textContent).toContain("需要密码")
@@ -3073,7 +3096,7 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("3 天")
     expect(getDialogContent().className).toContain("sm:max-w-lg")
 
-    await clickButtonText("确定")
+    await clickButtonText("创建分享")
 
     expect(mocks.shareDriveItem).toHaveBeenCalledWith({
       itemId: "file-1",
@@ -3223,7 +3246,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     await clickButtonText("分享")
-    await clickButtonText("确定")
+    await clickButtonText("创建分享")
 
     expect(document.body.textContent).not.toContain("分享设置")
     expect(document.body.textContent).toContain("文件已分享")
@@ -3257,7 +3280,7 @@ describe("DriveModule", () => {
     await clickButtonText("分享")
     expect(mocks.shareDriveItem).not.toHaveBeenCalled()
 
-    await clickButtonText("确定")
+    await clickButtonText("创建分享")
 
     expect(mocks.shareDriveItem).toHaveBeenCalledWith({
       itemId: "folder-1",
@@ -3282,7 +3305,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     await clickButtonText("分享")
-    await clickButtonText("确定")
+    await clickButtonText("创建分享")
 
     expect(mocks.shareDriveItem).toHaveBeenCalledWith({
       itemId: "file-1",
@@ -3400,7 +3423,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()
 
     const dialogContent = document.querySelector('[data-slot="dialog-content"]')
@@ -3412,6 +3435,7 @@ describe("DriveModule", () => {
     expect(Array.from(dialogHeader.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual([
       "文件",
       "文件夹",
+      "网页",
     ])
     expect(document.body.textContent).not.toContain("全部")
     expect(document.body.textContent).toContain("report.txt")
@@ -3423,6 +3447,8 @@ describe("DriveModule", () => {
     expect(tabsHeader).toBeNull()
     expect(tableContainer()?.className).not.toContain("overflow-x-hidden")
     expect(tableColumnClasses(dialogContent)).toEqual(["w-72", "w-auto", "w-44"])
+    expect(dialogContent.querySelector("thead th:last-child")?.className).toContain("sticky")
+    expect(dialogContent.querySelector("tbody td:last-child")?.className).toContain("sticky")
   })
 
   it("filters public links by file and folder tabs", async () => {
@@ -3433,7 +3459,7 @@ describe("DriveModule", () => {
 
     await render(<DriveModule />)
     await flushAct()
-    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()
 
     const dialog = document.querySelector('[role="dialog"]')
@@ -3461,7 +3487,7 @@ describe("DriveModule", () => {
 
     await render(<DriveModule />)
     await flushAct()
-    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()
 
     expect(mocks.listDriveShares).toHaveBeenNthCalledWith(1, { offset: 0, limit: 20 })
@@ -3478,7 +3504,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()
 
     expect(mocks.listDriveShares).toHaveBeenCalledTimes(1)
@@ -3493,7 +3519,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()
 
     expect(document.body.textContent).toContain("report.txt")
@@ -3535,6 +3561,34 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
   })
 
+  it("updates share access without changing the current expiry by default", async () => {
+    mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
+      createDriveShare({
+        id: "share-row-1",
+        itemId: "file-1",
+        itemName: "report.txt",
+        itemType: "file",
+        expiresAt: "2026-07-30T00:00:00.000Z",
+      }),
+    ]))
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickDriveToolbarMenuItem("更多", "分享管理")
+    await flushAct()
+    await clickButtonByLabel("访问设置 report.txt")
+
+    expect(document.body.textContent).toContain("保持当前有效期")
+    await clickButtonText("保存")
+
+    expect(mocks.shareDriveItem).toHaveBeenCalledWith({
+      itemId: "file-1",
+      accessMode: "link_read",
+      editorEmails: [],
+    })
+    expect(mocks.toast).toHaveBeenCalledWith("访问设置已保存")
+  })
+
   it("ignores duplicate cancel-share clicks from the public links dialog", async () => {
     const disableShare = createDeferred<{ readonly ok: true }>()
     mocks.disableDriveShare.mockReturnValueOnce(disableShare.promise)
@@ -3544,7 +3598,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()
     const button = getButtonByLabel("取消分享 report.txt")
     await act(async () => {
@@ -3586,7 +3640,7 @@ describe("DriveModule", () => {
 
     expect(getTableRow("report.txt").textContent).toContain("分享：3天 · 密码 · 可阅读")
 
-    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()
     await clickButtonByLabel("取消分享 report.txt")
     await clickButtonText("关闭")
@@ -3600,7 +3654,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     mocks.listDriveShares.mockReturnValueOnce(shares.promise)
-    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
 
     expect(document.querySelector('[data-slot="skeleton"]')).not.toBeNull()
 
@@ -3617,7 +3671,7 @@ describe("DriveModule", () => {
       .mockResolvedValueOnce(createDrivePublicLinksPage([]))
 
     await clickButtonText("关闭")
-    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()
 
     expect(document.body.textContent).toContain("读取失败")
@@ -3644,11 +3698,11 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()
     await clickButtonText("加载更多")
     await clickButtonText("关闭")
-    await clickDriveToolbarMenuItem("更多", "我的分享")
+    await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()
 
     expect(document.body.textContent).toContain("second-round.txt")

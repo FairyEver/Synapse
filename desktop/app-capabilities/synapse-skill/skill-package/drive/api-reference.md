@@ -244,15 +244,15 @@ Input:
 
 - `shareId` required: Drive share record id, item `activeShareId`, or public share id such as `shr_...`.
 
-## Drive Site Tools
+## Drive Webpage Share Tools
 
-Use site tools for publishing a Drive folder as a read-only static website at `/sites/<siteId>/`. Site publishing copies the folder at publish or republish time. It does not create a `/share/...` link, does not grant Drive browse or edit access, and does not use `/files/<assetId>` public asset URLs.
+Use these compatibility-named site tools to create a Drive webpage share at `/sites/<siteId>/`. A webpage share copies the folder at publish or republish time. It does not create a `/share/...` link, does not grant Drive browse or edit access, and does not use `/files/<assetId>` public asset URLs.
 
 Use a site when the publishable artifact is a multi-file folder, build bundle, multi-page site, or HTML that requires local relative assets, or when the user explicitly asks to publish the whole folder as a website or site. A folder containing only `index.html` is valid in the explicit whole-folder case. Merely naming an upload destination folder or casually saying page, website, or site does not request whole-folder publishing; a standalone HTML file still defaults to a normal share.
 
 ### `app_drive_site_create`
 
-Publish a Drive folder as an independent static site.
+Create an independent static webpage share from a Drive folder.
 
 Input:
 
@@ -272,7 +272,7 @@ Output:
 
 ### `app_drive_site_list`
 
-List current user's published Drive sites.
+List the current user's Drive webpage shares.
 
 Input:
 

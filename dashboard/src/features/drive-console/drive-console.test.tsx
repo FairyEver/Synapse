@@ -117,8 +117,9 @@ describe('DriveConsolePage', () => {
     expect(document.body.textContent).toContain('上传文件')
     expect(document.body.textContent).toContain('上传文件夹')
     expect(document.body.textContent).toContain('新建文件夹')
-    expect(document.body.textContent).toContain('我的分享')
-    expect(document.body.textContent).toContain('站点')
+    expect(document.body.textContent).toContain('分享管理')
+    expect(document.body.textContent).not.toContain('我的分享')
+    expect(document.body.textContent).not.toContain('站点')
     expect(document.body.textContent).toContain('刷新')
     expect(document.body.textContent).toContain('公开素材')
     expect(document.body.textContent).toContain('回收站')
@@ -489,7 +490,7 @@ describe('DriveConsolePage', () => {
     expect(reload).toHaveBeenCalled()
   })
 
-  it('opens my shares from the toolbar', async () => {
+  it('opens share management from the toolbar', async () => {
     mockReadySnapshot(folderSnapshot())
     vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
     vi.mocked(driveApi.listShares).mockResolvedValue({
@@ -513,7 +514,7 @@ describe('DriveConsolePage', () => {
     })
     await render(<DriveConsolePage />)
 
-    await click(button('我的分享'))
+    await click(button('分享管理'))
     await act(async () => undefined)
 
     expect(driveApi.listShares).toHaveBeenCalledWith({ offset: 0, limit: 50 })
@@ -621,24 +622,29 @@ describe('DriveConsolePage', () => {
     expect(document.body.textContent).toContain('second.md')
   })
 
-  it('opens site management from the toolbar', async () => {
+  it('opens webpage management from the unified share dialog', async () => {
     mockReadySnapshot(folderSnapshot())
     vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.listShares).mockResolvedValue({
+      items: [],
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
     vi.mocked(driveApi.listSites).mockResolvedValue({
-      items: [{ id: 'db-1', siteId: 'site-1', name: 'Docs', status: 'active', accessMode: 'public', url: '/sites/site-1', urlWithPassword: '/sites/site-1', passwordEnabled: false, password: null, expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '文档', entryPath: 'index.html', fileCount: 1, totalBytes: '10', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: '2026-06-29T00:00:00.000Z' }],
+      items: [{ id: 'db-1', siteId: 'site-1', name: 'Docs', status: 'active', accessMode: 'public', url: '/sites/site-1', urlWithPassword: '/sites/site-1', passwordEnabled: false, password: null, expiresIn: 'forever', expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '文档', entryPath: 'index.html', fileCount: 1, totalBytes: '10', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: '2026-06-29T00:00:00.000Z' }],
       total: 1,
       page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
     })
     await render(<DriveConsolePage />)
 
-    await click(button('站点'))
+    await click(button('分享管理'))
+    await click(button('网页'))
     await act(async () => undefined)
 
     expect(driveApi.listSites).toHaveBeenCalledWith({ offset: 0, limit: 50 })
     expect(document.body.textContent).toContain('Docs')
   })
 
-  it('publishes a folder row as a site', async () => {
+  it('creates a webpage share from a folder share dialog', async () => {
     const snapshot = folderSnapshot()
     const reload = vi.fn(async () => snapshot)
     vi.mocked(useDriveBrowser).mockReturnValue({
@@ -661,20 +667,24 @@ describe('DriveConsolePage', () => {
       totalBytes: '10',
       includesJavaScript: false,
     })
-    vi.mocked(driveApi.createSite).mockResolvedValue({} as never)
+    vi.mocked(driveApi.createSite).mockResolvedValue({
+      password: 'secret',
+      url: '/sites/site-1',
+      urlWithPassword: '/sites/site-1?password=secret',
+    } as never)
     await render(<DriveConsolePage />)
 
-    await openMoreActions()
-    await click(menuItem('发布站点'))
+    await click(button('分享'))
+    await click(button('网页分享'))
     await act(async () => undefined)
-    await click(button('发布'))
+    await click(button('创建分享'))
 
     expect(driveApi.createSite).toHaveBeenCalledWith({
       sourceFolderItemId: 'folder-1',
       name: '文档',
       entryPath: 'index.html',
-      accessMode: 'public',
-      expiresIn: 'forever',
+      accessMode: 'password',
+      expiresIn: '3d',
     })
     expect(reload).toHaveBeenCalled()
   })

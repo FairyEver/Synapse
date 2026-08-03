@@ -256,6 +256,7 @@ function basePreview(): DriveBrowserPreviewDto {
     truncated: false,
     imageUrl: null,
     visitUrl: null,
+    relativeImages: [],
   }
 }
 

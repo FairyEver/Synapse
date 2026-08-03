@@ -416,6 +416,7 @@ function basePreview(): NonNullable<DriveBrowserSnapshotDto['preview']> {
     truncated: false,
     imageUrl: null,
     visitUrl: null,
+    relativeImages: [],
     html: '<p><strong>重点</strong> 内容</p>',
     outline: null,
   }

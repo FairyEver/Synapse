@@ -12,6 +12,7 @@ Synapse 云盘未来需要支持直接编辑 Markdown/MDX 文档。用户在编�
 
 - 当前依赖中存在 `@mdxeditor/editor`，版本为 `4.0.4`。
 - MDXEditor 官方 `imagePlugin` 支持 `imageUploadHandler(file)`，可处理图片上传并返回图片 URL。
+- MDXEditor `4.0.4` 同时支持 `imagePreviewHandler(imageSource)`，可以只转换编辑器展示地址而不改写节点中的 Markdown 来源。
 - MDXEditor 官方建议不要把 `markdown` 当强受控值反复回灌，保存时应通过 editor ref 获取内容，外部文件变化时再调用 `setMarkdown()`。
 - 现有公共素材模型 `PublicAsset` 归属于 `userId`，并和云盘容量 `DriveUsage` 关联。
 - 现有公共素材上传链路偏向本地路径上传，粘贴图片需要补充 `File` / `Blob` / `ArrayBuffer` 上传入口。
@@ -308,6 +309,22 @@ type DriveDocumentImageSourcesDto = {
 - `normalizeImageSrc` 只做 trim、实体解码、URL 标准化等稳定处理，不丢弃 query 参数。
 - 面板默认按处理优先级排序：已失效图片、外部图片、协作者素材、data/base64、相对路径、所有者素材。
 
+## 相对路径图片预览与分享
+
+相对路径图片读取与“图片转存”是两条独立链路。转存扫描继续使用 20 个来源的业务上限；预览解析最多处理当前 128 KiB Markdown 内容中的 256 个唯一相对图片来源，不创建公共素材，也不改写 Markdown。
+
+- 仅 `.md`、`.markdown` 启用；`.mdx` 和其它文件类型保持原行为。
+- 路径从 Markdown 的 `DriveItem.parentId` 开始，按现有父子目录树解析 `.`、`..` 和普通文件名；不得越过所有者 Drive 顶层。
+- 支持 Markdown inline image、reference image，以及独立且 `src` 带引号的静态 `<img>`。
+- 仅解析 PNG、JPEG、WebP、GIF、AVIF、ICO；SVG、HTML 和未知格式不产生读取 URL。
+- owner 预览生成 `/drive/items/<imageItemId>/download`；share 预览生成 `/share/<shareId>/items/<imageItemId>/download`。
+- 文件夹分享只允许共享根子树内的图片。单文件 Markdown 分享只允许当前版本实际引用且成功解析的图片，不开放兄弟文件浏览或通用下载权限。
+- 密码、过期、停用、入口删除和生命周期检查继续复用 DriveShare 读取校验；未引用、越界、缺失和不支持目标统一按未找到处理。
+- Dashboard Markdown 预览使用服务端转换后的 HTML；MDXEditor 通过 `imagePreviewHandler` 使用响应中的 `relativeImages` 映射，编辑和保存内容仍保留原始相对路径。
+- query 和 fragment 不参与 Drive 查找，解析成功后原样附加到生成 URL；以 `/` 开头的路径不支持。
+- 解析结果只做进程内派生缓存，以分享 ID、当前版本 ID 和所有者最新 DriveChange sequence 失效，不新增数据库表或存储副本。
+- 该能力不得扩展到 `.html`、`.htm` 或普通文件夹分享中的 HTML。独立 HTML 只保持单文件分享语义；需要相对 CSS、JavaScript、图片或页面跳转时，用户必须明确从文件夹创建“网页分享”。
+
 ## 转存设计
 
 转存只允许文档所有者操作。
@@ -582,7 +599,7 @@ type DriveDocumentImageInventory = {
 - 外部图片转存失败：失败行保留原链接，其它成功项正常替换。
 - 公共素材被删除：扫描显示失效，文档引用不自动删除。
 - 文档版本冲突：不创建素材，不改 Markdown，提示刷新。
-- 相对路径：第一版识别为不可转存。
+- 相对路径：不可转存；符合上节规则时可直接从 Drive 目录树预览和分享。
 - data/base64：第一版可识别，默认不开放转存。
 - SVG：第一版不支持上传或转存。
 - 删除公共素材前可以基于 inventory 做影响提示，但第一版不阻止删除。
@@ -653,6 +670,9 @@ MDXEditor 集成：
 - 单次 import sources 数量超过上限时被拒绝。
 - 外部 URL 下载超时不创建 asset。
 - 外部 URL 不是图片不创建 asset。
+- 单文件分享未引用的兄弟图片直接请求返回 404。
+- 文件夹分享中的 `..` 不能读取分享根外图片。
+- 图片移动、重命名、删除、恢复和 Markdown 版本回滚后，相对路径授权按当前目录树和当前版本重新计算。
 - SVG 不允许转存。
 - 超大图片不创建 asset。
 - 内网地址被拦截。

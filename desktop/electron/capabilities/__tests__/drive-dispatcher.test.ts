@@ -30,10 +30,10 @@ describe("createDriveCapabilityDispatcher", () => {
     const siteCreateTool = buildDriveTools().find((tool) => tool.name === "app_drive_site_create")
     const siteUpdateTool = buildDriveTools().find((tool) => tool.name === "app_drive_site_update_access")
     expect(siteCreateTool?.inputSchema.properties).toMatchObject({
-      password: { type: "string", description: expect.stringContaining("custom site password") },
+      password: { type: "string", description: expect.stringContaining("custom webpage-share password") },
     })
     expect(siteUpdateTool?.inputSchema.properties).toMatchObject({
-      password: { type: "string", description: expect.stringContaining("custom site password") },
+      password: { type: "string", description: expect.stringContaining("custom webpage-share password") },
     })
   })
 
@@ -975,7 +975,7 @@ describe("createDriveCapabilityDispatcher", () => {
 
   it("returns preview snapshots and text content without creating shares", async () => {
     const snapshot = drivePreviewSnapshot({
-      preview: { kind: "markdown", text: "# Note", html: "<h1>Note</h1>", outline: null, truncated: false, imageUrl: null, visitUrl: null },
+      preview: { kind: "markdown", text: "# Note", html: "<h1>Note</h1>", outline: null, truncated: false, imageUrl: null, visitUrl: null, relativeImages: [] },
     })
     const accountService = createAccountService({
       getDriveItemPreview: vi.fn(async () => snapshot),

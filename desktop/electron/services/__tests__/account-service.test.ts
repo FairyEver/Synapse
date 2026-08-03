@@ -1691,36 +1691,36 @@ describe("AccountService", () => {
     expect(getAuthenticatedJson).toHaveBeenNthCalledWith(
       1,
       expectedApiUrl("/drive/sites/preflight?sourceFolderItemId=folder-1"),
-      "站点预检失败。",
+      "网页分享检查失败。",
     )
     expect(getAuthenticatedJson).toHaveBeenNthCalledWith(
       2,
       expectedApiUrl("/drive/sites?offset=0&limit=50&search=%E5%8E%9F%E5%9E%8B&status=active"),
-      "站点列表加载失败。",
+      "网页分享列表加载失败。",
     )
     expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
       1,
       "POST",
       expectedApiUrl("/drive/sites"),
       { sourceFolderItemId: "folder-1", name: "产品原型", entryPath: null, accessMode: "public", expiresIn: "forever" },
-      "站点发布失败。",
+      "网页分享创建失败。",
     )
     expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
       2,
       "PATCH",
       expectedApiUrl("/drive/sites/site_abc/access"),
       { accessMode: "password", expiresIn: "7d" },
-      "站点访问设置保存失败。",
+      "网页分享访问设置保存失败。",
     )
-    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(3, "POST", expectedApiUrl("/drive/sites/site_abc/disable"), undefined, "停用站点失败。")
-    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(4, "POST", expectedApiUrl("/drive/sites/site_abc/enable"), undefined, "启用站点失败。")
-    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(5, "DELETE", expectedApiUrl("/drive/sites/site_abc"), undefined, "删除站点失败。")
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(3, "POST", expectedApiUrl("/drive/sites/site_abc/disable"), undefined, "停止网页分享失败。")
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(4, "POST", expectedApiUrl("/drive/sites/site_abc/enable"), undefined, "恢复网页分享失败。")
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(5, "DELETE", expectedApiUrl("/drive/sites/site_abc"), undefined, "删除网页分享失败。")
     expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
       6,
       "POST",
       expectedApiUrl("/drive/sites/site_abc/republish"),
       { entryPath: "index.html" },
-      "重新发布站点失败。",
+      "更新网页失败。",
     )
   })
 

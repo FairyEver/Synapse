@@ -9,11 +9,13 @@ import {
   KeyRound,
   LoaderCircle,
   RefreshCw,
+  Settings2,
   X,
 } from "lucide-react"
 import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveAccessSettingsInput,
+  type DriveAccessSettingsUpdateInput,
   type DriveBrowserChildrenPageDto,
   type DriveItemDto,
   type DriveItemListPageDto,
@@ -32,7 +34,7 @@ import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { FormDialog } from "@/components/form-dialog"
 import { DrivePublicAssetsView, type DrivePublicAssetsViewActionState, type DrivePublicAssetsViewHandle } from "./drive-public-assets-view"
 import { DriveSiteCreateDialog } from "./drive-site-create-dialog"
-import { DriveSitesDialog } from "./drive-sites-dialog"
+import { DriveSitesPanel } from "./drive-sites-dialog"
 import { DriveSyncDialog, type DriveSyncDialogState } from "./drive-sync-dialog"
 import { DriveTrashView, type DriveTrashViewActionState, type DriveTrashViewHandle } from "./drive-trash-view"
 import {
@@ -49,6 +51,7 @@ import {
 import {
   DRIVE_FILE_TABLE_COLUMNS,
   DRIVE_SHARE_TABLE_COLUMNS,
+  DRIVE_TABLE_STICKY_ACTION_COLUMN_CLASS,
   DriveTableColumns,
 } from "./drive-table-columns"
 import {
@@ -186,7 +189,7 @@ type DriveShareSuccessState = Pick<DriveItemDto, "name" | "type"> & {
 
 type DriveAccessExpiresInOption = DriveAccessSettingsInput["expiresIn"]
 type DriveShareAccessModeOption = DriveShareAccessMode
-type DrivePublicLinkFilter = DriveShareListItemDto["itemType"]
+type DrivePublicLinkFilter = DriveShareListItemDto["itemType"] | "web"
 type DriveActiveView = "files" | "public-assets" | "trash"
 
 type DriveStatusBadge = {
@@ -214,6 +217,7 @@ const DRIVE_SHARE_ACCESS_MODE_OPTIONS: ReadonlyArray<{ readonly label: string; r
 const DRIVE_PUBLIC_LINK_FILTERS: ReadonlyArray<{ readonly label: string; readonly value: DrivePublicLinkFilter }> = [
   { label: "文件", value: "file" },
   { label: "文件夹", value: "folder" },
+  { label: "网页", value: "web" },
 ]
 
 function createDefaultDriveAccessSettings(): DriveAccessSettingsInput {
@@ -311,7 +315,6 @@ function DriveModuleContent() {
   const [deleteTarget, setDeleteTarget] = useState<DriveItemDto | null>(null)
   const [publicLinksOpen, setPublicLinksOpen] = useState(false)
   const [siteCreateTarget, setSiteCreateTarget] = useState<DriveItemDto | null>(null)
-  const [sitesOpen, setSitesOpen] = useState(false)
   const [shareSuccess, setShareSuccess] = useState<DriveShareSuccessState | null>(null)
   const [accessSettingsTarget, setAccessSettingsTarget] = useState<DriveAccessSettingsTarget | null>(null)
   const {
@@ -900,7 +903,6 @@ function DriveModuleContent() {
         onUploadFolder={() => folderInputRef.current?.click()}
         onCreateFolder={handleCreateFolder}
         onOpenPublicLinks={() => setPublicLinksOpen(true)}
-        onOpenSites={() => setSitesOpen(true)}
         onOpenLocalSync={() => setSyncDialog({
           mode: "local",
           item: null,
@@ -1013,7 +1015,6 @@ function DriveModuleContent() {
         onDelete={handleDelete}
         onOpenItem={handlePreview}
         onShare={handleShare}
-        onPublishSite={setSiteCreateTarget}
         onOpenSyncBinding={(item, drivePathHint) => {
           const binding = syncSnapshot?.bindings.find((candidate) => candidate.driveItemId === item.id)
           setSyncDialog(binding
@@ -1137,9 +1138,8 @@ function DriveModuleContent() {
               onOpenChange={(open) => {
                 if (!open) setSiteCreateTarget(null)
               }}
-              onCreated={() => setSitesOpen(true)}
+              onCreated={() => undefined}
             />
-            <DriveSitesDialog open={sitesOpen} onOpenChange={setSitesOpen} />
             <DriveSyncDialog
               open={syncDialog !== null}
               state={syncDialog}
@@ -1161,6 +1161,10 @@ function DriveModuleContent() {
               submitting={submitting}
               onCancel={() => setAccessSettingsTarget(null)}
               onConfirm={handleAccessSettingsConfirm}
+              onOpenWebShare={(item) => {
+                setAccessSettingsTarget(null)
+                setSiteCreateTarget(item)
+              }}
             />
             <DriveShareSuccessDialog
               share={shareSuccess}
@@ -1605,7 +1609,6 @@ function DriveFileList({
   onDelete,
   onOpenItem,
   onShare,
-  onPublishSite,
   onOpenSyncBinding,
   onOpenShareDetails,
   onDisableShare,
@@ -1631,7 +1634,6 @@ function DriveFileList({
   readonly onDelete: (item: DriveItemDto, event: MouseEvent<HTMLElement>) => void
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
-  readonly onPublishSite: (item: DriveItemDto) => void
   readonly onOpenSyncBinding: (item: DriveItemDto, drivePathHint: string) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
@@ -1717,7 +1719,6 @@ function DriveFileList({
                   onDelete={onDelete}
                   onOpenItem={onOpenItem}
                   onShare={onShare}
-                  onPublishSite={onPublishSite}
                   onOpenSyncBinding={onOpenSyncBinding}
                   onOpenShareDetails={onOpenShareDetails}
                   onDisableShare={onDisableShare}
@@ -1965,7 +1966,6 @@ function DriveFileListRow({
   onDelete,
   onOpenItem,
   onShare,
-  onPublishSite,
   onOpenSyncBinding,
   onOpenShareDetails,
   onDisableShare,
@@ -1982,7 +1982,6 @@ function DriveFileListRow({
   readonly onDelete: (item: DriveItemDto, event: MouseEvent<HTMLElement>) => void
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
-  readonly onPublishSite: (item: DriveItemDto) => void
   readonly onOpenSyncBinding: (item: DriveItemDto, drivePathHint: string) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
@@ -2115,7 +2114,6 @@ function DriveFileListRow({
             hasSyncBinding={hasSyncBinding}
             onRename={onRename}
             onMove={onMove}
-            onPublishSite={onPublishSite}
             onOpenSyncBinding={() => onOpenSyncBinding(item, drivePath)}
           />
         </div>
@@ -2177,14 +2175,12 @@ function DriveItemMenu({
   item,
   onRename,
   onMove,
-  onPublishSite,
   onOpenSyncBinding,
 }: {
   readonly hasSyncBinding: boolean
   readonly item: DriveItemDto
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
-  readonly onPublishSite: (item: DriveItemDto) => void
   readonly onOpenSyncBinding: () => void
 }) {
   return (
@@ -2196,7 +2192,6 @@ function DriveItemMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
-          {item.type === "folder" ? <DropdownMenuItem onClick={() => onPublishSite(item)}>发布站点</DropdownMenuItem> : null}
           <DropdownMenuItem onClick={onOpenSyncBinding}>{hasSyncBinding ? "同步详情" : "同步"}</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onRename(item)}>重命名</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onMove(item)}>移动</DropdownMenuItem>
@@ -2216,11 +2211,13 @@ function DriveAccessSettingsDialog({
   submitting,
   onCancel,
   onConfirm,
+  onOpenWebShare,
 }: {
   readonly target: DriveAccessSettingsTarget | null
   readonly submitting: boolean
   readonly onCancel: () => void
   readonly onConfirm: (settings: DriveAccessSettingsInput) => Promise<void>
+  readonly onOpenWebShare: (item: DriveItemDto) => void
 }) {
   const [settings, setSettings] = useState<DriveAccessSettingsInput>(() => createDefaultDriveAccessSettings())
   const [editorEmailInput, setEditorEmailInput] = useState("")
@@ -2233,27 +2230,9 @@ function DriveAccessSettingsDialog({
     setError(null)
   }, [target])
 
-  const title = "分享设置"
+  const title = "分享"
   const accessMode = settings.accessMode ?? "link_read"
   const editorEmails = settings.editorEmails ?? []
-  const addEditorEmail = () => {
-    const email = normalizeDriveEditorEmailForUi(editorEmailInput)
-    if (!email) {
-      setError("邮箱无效")
-      return
-    }
-    if (editorEmails.includes(email)) {
-      setEditorEmailInput("")
-      setError(null)
-      return
-    }
-    setSettings((current) => ({
-      ...current,
-      editorEmails: [...(current.editorEmails ?? []), email],
-    }))
-    setEditorEmailInput("")
-    setError(null)
-  }
 
   return (
     <Dialog open={target !== null} onOpenChange={(open) => {
@@ -2279,125 +2258,187 @@ function DriveAccessSettingsDialog({
           footer={(
             <>
               <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>取消</Button>
-              <Button type="submit" disabled={submitting}>确定</Button>
+              <Button type="submit" disabled={submitting}>创建分享</Button>
             </>
           )}
         >
           <div className="grid gap-5">
-            <div className="grid gap-2.5">
-              <Label>权限</Label>
-              <ToggleGroup
-                type="single"
-                variant="outline"
-                size="sm"
-                className="w-full"
-                value={accessMode}
-                onValueChange={(value) => {
-                  if (!value) return
-                  setSettings((current) => ({
-                    ...current,
-                    accessMode: value as DriveShareAccessModeOption,
-                    editorEmails: value === "specified_users_edit" ? current.editorEmails ?? [] : [],
-                  }))
-                  setError(null)
-                }}
-              >
-                {DRIVE_SHARE_ACCESS_MODE_OPTIONS.map((option) => (
-                  <ToggleGroupItem
-                    key={option.value}
-                    className="h-8 flex-1"
-                    type="button"
-                    value={option.value}
-                  >
-                    {option.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </div>
-            {accessMode === "specified_users_edit" ? (
-              <div className="grid gap-2.5">
-                <Label htmlFor="drive-share-editor-email">可编辑用户</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="drive-share-editor-email"
-                    value={editorEmailInput}
-                    onChange={(event) => setEditorEmailInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter") return
-                      event.preventDefault()
-                      addEditorEmail()
-                    }}
-                  />
-                  <Button type="button" variant="outline" onClick={addEditorEmail}>添加</Button>
-                </div>
-                {editorEmails.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {editorEmails.map((email) => (
-                      <Badge key={email} variant="secondary" className="gap-1">
-                        <span>{email}</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="xs"
-                          className="h-5 px-1"
-                          aria-label={`移除 ${email}`}
-                          onClick={() => {
-                            setSettings((current) => ({
-                              ...current,
-                              editorEmails: (current.editorEmails ?? []).filter((item) => item !== email),
-                            }))
-                          }}
-                        >
-                          <X className="size-3" />
-                        </Button>
-                      </Badge>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
+            {target.item.type === "folder" ? (
+              <Tabs value="drive">
+                <TabsList>
+                  <TabsTrigger value="drive">文件夹分享</TabsTrigger>
+                  <TabsTrigger value="web" onClick={() => onOpenWebShare(target.item)}>网页分享</TabsTrigger>
+                </TabsList>
+              </Tabs>
             ) : null}
-            <label className="flex min-h-8 items-center justify-between gap-4" htmlFor="drive-access-password-enabled">
-              <span className="text-sm font-medium leading-none">需要密码</span>
-              <Switch
-                id="drive-access-password-enabled"
-                aria-label="需要密码"
-                checked={settings.passwordEnabled}
-                onCheckedChange={(checked) => setSettings((current) => ({ ...current, passwordEnabled: checked }))}
-              />
-            </label>
-            <div className="grid gap-2.5">
-              <Label>有效时长</Label>
-              <ToggleGroup
-                type="single"
-                variant="outline"
-                size="sm"
-                className="w-full"
-                value={settings.expiresIn}
-                onValueChange={(value) => {
-                  if (!value) return
-                  setSettings((current) => ({
-                    ...current,
-                    expiresIn: value as DriveAccessExpiresInOption,
-                  }))
-                }}
-              >
-                {DRIVE_ACCESS_EXPIRES_OPTIONS.map((option) => (
-                  <ToggleGroupItem
-                    key={option.value}
-                    className="h-8 flex-1"
-                    type="button"
-                    value={option.value}
-                  >
-                    {option.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </div>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            <DriveAccessSettingsFields
+              idPrefix="drive-share-create"
+              settings={settings}
+              editorEmailInput={editorEmailInput}
+              error={error}
+              onEditorEmailInputChange={setEditorEmailInput}
+              onErrorChange={setError}
+              onSettingsChange={setSettings}
+            />
           </div>
         </FormDialog>
       ) : null}
     </Dialog>
+  )
+}
+
+function DriveAccessSettingsFields({
+  idPrefix,
+  settings,
+  editorEmailInput,
+  error,
+  preserveExpiry = false,
+  onEditorEmailInputChange,
+  onErrorChange,
+  onExpiryChange,
+  onPasswordChange,
+  onSettingsChange,
+}: {
+  readonly idPrefix: string
+  readonly settings: DriveAccessSettingsInput
+  readonly editorEmailInput: string
+  readonly error: string | null
+  readonly preserveExpiry?: boolean
+  readonly onEditorEmailInputChange: (value: string) => void
+  readonly onErrorChange: (value: string | null) => void
+  readonly onExpiryChange?: () => void
+  readonly onPasswordChange?: () => void
+  readonly onSettingsChange: (settings: DriveAccessSettingsInput | ((current: DriveAccessSettingsInput) => DriveAccessSettingsInput)) => void
+}) {
+  const accessMode = settings.accessMode ?? "link_read"
+  const editorEmails = settings.editorEmails ?? []
+  const addEditorEmail = () => {
+    const email = normalizeDriveEditorEmailForUi(editorEmailInput)
+    if (!email) {
+      onErrorChange("邮箱无效")
+      return
+    }
+    if (editorEmails.includes(email)) {
+      onEditorEmailInputChange("")
+      onErrorChange(null)
+      return
+    }
+    onSettingsChange((current) => ({
+      ...current,
+      editorEmails: [...(current.editorEmails ?? []), email],
+    }))
+    onEditorEmailInputChange("")
+    onErrorChange(null)
+  }
+
+  return (
+    <>
+      <div className="grid gap-2.5">
+        <Label>权限</Label>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          className="w-full"
+          value={accessMode}
+          onValueChange={(value) => {
+            if (!value) return
+            onSettingsChange((current) => ({
+              ...current,
+              accessMode: value as DriveShareAccessModeOption,
+              editorEmails: value === "specified_users_edit" ? current.editorEmails ?? [] : [],
+            }))
+            onErrorChange(null)
+          }}
+        >
+          {DRIVE_SHARE_ACCESS_MODE_OPTIONS.map((option) => (
+            <ToggleGroupItem key={option.value} className="h-8 flex-1" type="button" value={option.value}>
+              {option.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+      {accessMode === "specified_users_edit" ? (
+        <div className="grid gap-2.5">
+          <Label htmlFor={`${idPrefix}-editor-email`}>可编辑用户</Label>
+          <div className="flex gap-2">
+            <Input
+              id={`${idPrefix}-editor-email`}
+              value={editorEmailInput}
+              onChange={(event) => onEditorEmailInputChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return
+                event.preventDefault()
+                addEditorEmail()
+              }}
+            />
+            <Button type="button" variant="outline" onClick={addEditorEmail}>添加</Button>
+          </div>
+          {editorEmails.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {editorEmails.map((email) => (
+                <Badge key={email} variant="secondary" className="gap-1">
+                  <span>{email}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className="h-5 px-1"
+                    aria-label={`移除 ${email}`}
+                    onClick={() => {
+                      onSettingsChange((current) => ({
+                        ...current,
+                        editorEmails: (current.editorEmails ?? []).filter((item) => item !== email),
+                      }))
+                    }}
+                  >
+                    <X className="size-3" />
+                  </Button>
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      <label className="flex min-h-8 items-center justify-between gap-4" htmlFor={`${idPrefix}-password-enabled`}>
+        <span className="text-sm font-medium leading-none">需要密码</span>
+        <Switch
+          id={`${idPrefix}-password-enabled`}
+          aria-label="需要密码"
+          checked={settings.passwordEnabled}
+          onCheckedChange={(checked) => {
+            onPasswordChange?.()
+            onSettingsChange((current) => ({ ...current, passwordEnabled: checked }))
+          }}
+        />
+      </label>
+      <div className="grid gap-2.5">
+        <Label>有效时长</Label>
+        {preserveExpiry ? <div className="text-sm text-muted-foreground">保持当前有效期</div> : null}
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          className="w-full"
+          value={preserveExpiry ? "" : settings.expiresIn}
+          onValueChange={(value) => {
+            if (!value) return
+            onExpiryChange?.()
+            onSettingsChange((current) => ({
+              ...current,
+              expiresIn: value as DriveAccessExpiresInOption,
+            }))
+          }}
+        >
+          {DRIVE_ACCESS_EXPIRES_OPTIONS.map((option) => (
+            <ToggleGroupItem key={option.value} className="h-8 flex-1" type="button" value={option.value}>
+              {option.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+    </>
   )
 }
 
@@ -2432,6 +2473,7 @@ function DrivePublicLinksDialog({
 }) {
   const [shareState, setShareState] = useState<DrivePublicLinksPageState<DriveShareListItemDto>>(() => createEmptyDrivePublicLinksPageState())
   const [shareFilter, setShareFilter] = useState<DrivePublicLinkFilter>("file")
+  const [accessTarget, setAccessTarget] = useState<DriveShareListItemDto | null>(null)
   const {
     busyIds: disablingShareIds,
     busyIdsRef: disablingShareIdsRef,
@@ -2487,6 +2529,7 @@ function DrivePublicLinksDialog({
     const nextOffset = shareState.page?.nextOffset
     if (
       !open
+      || shareFilter === "web"
       || !shareState.loaded
       || shareState.loading
       || shareState.loadingMore
@@ -2498,7 +2541,7 @@ function DrivePublicLinksDialog({
     ) return
 
     void loadShares({ offset: nextOffset, append: true, generation: shareLoadGenerationRef.current })
-  }, [loadShares, open, shareState.error, shareState.loaded, shareState.loading, shareState.loadingMore, shareState.page, visibleShares.length])
+  }, [loadShares, open, shareFilter, shareState.error, shareState.loaded, shareState.loading, shareState.loadingMore, shareState.page, visibleShares.length])
 
   const reloadAfterPublicLinkChange = useCallback(async () => {
     await loadShares()
@@ -2520,7 +2563,11 @@ function DrivePublicLinksDialog({
   }, [disablingShareIdsRef, reloadAfterPublicLinkChange, setDisablingShareId])
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      if (!nextOpen) setAccessTarget(null)
+      onOpenChange(nextOpen)
+    }}>
       <DialogContent
         aria-describedby={undefined}
         className="h-[36rem] max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-4xl"
@@ -2532,7 +2579,7 @@ function DrivePublicLinksDialog({
         >
           <DialogFrame className="max-h-[calc(100vh-2rem)]">
             <DialogFrameHeader
-              title="公开链接"
+              title="分享管理"
               data-testid="drive-public-links-dialog-header"
               center={(
                 <Tabs value={shareFilter} onValueChange={(value) => setShareFilter(value as DrivePublicLinkFilter)} className="min-w-0">
@@ -2547,21 +2594,26 @@ function DrivePublicLinksDialog({
             <DialogFrameBody>
               <ScrollArea className="h-full min-h-0">
                 <div className="px-5 py-4">
-                  <DrivePublicLinkList
-                    emptyTitle="暂无分享"
-                    error={shareState.error}
-                    loading={shareState.loading}
-                    loadingMore={shareState.loadingMore}
-                    page={shareState.page}
-                    shares={visibleShares}
-                    onLoadMore={async () => {
-                      if (shareState.page?.nextOffset === null || shareState.page?.nextOffset === undefined) return
-                      await loadShares({ offset: shareState.page.nextOffset, append: true, generation: shareLoadGenerationRef.current })
-                    }}
-                    onRetry={loadShares}
-                    onDisableShare={handleDisableShare}
-                    disablingShareIds={disablingShareIds}
-                  />
+                  {shareFilter === "web" ? (
+                    <DriveSitesPanel active={open} />
+                  ) : (
+                    <DrivePublicLinkList
+                      emptyTitle="暂无分享"
+                      error={shareState.error}
+                      loading={shareState.loading}
+                      loadingMore={shareState.loadingMore}
+                      page={shareState.page}
+                      shares={visibleShares}
+                      onLoadMore={async () => {
+                        if (shareState.page?.nextOffset === null || shareState.page?.nextOffset === undefined) return
+                        await loadShares({ offset: shareState.page.nextOffset, append: true, generation: shareLoadGenerationRef.current })
+                      }}
+                      onRetry={loadShares}
+                      onDisableShare={handleDisableShare}
+                      onAccessShare={setAccessTarget}
+                      disablingShareIds={disablingShareIds}
+                    />
+                  )}
                 </div>
               </ScrollArea>
             </DialogFrameBody>
@@ -2571,6 +2623,110 @@ function DrivePublicLinksDialog({
           </DialogFrame>
         </form>
       </DialogContent>
+    </Dialog>
+    <DriveManagedShareAccessDialog
+      target={accessTarget}
+      onCancel={() => setAccessTarget(null)}
+      onSaved={async () => {
+        setAccessTarget(null)
+        await reloadAfterPublicLinkChange()
+      }}
+    />
+    </>
+  )
+}
+
+function DriveManagedShareAccessDialog({
+  target,
+  onCancel,
+  onSaved,
+}: {
+  readonly target: DriveShareListItemDto | null
+  readonly onCancel: () => void
+  readonly onSaved: () => Promise<void>
+}) {
+  const [settings, setSettings] = useState<DriveAccessSettingsInput>(() => createDefaultDriveAccessSettings())
+  const [editorEmailInput, setEditorEmailInput] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [expiryChanged, setExpiryChanged] = useState(false)
+  const [passwordChanged, setPasswordChanged] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!target) return
+    setSettings({
+      passwordEnabled: target.passwordEnabled,
+      expiresIn: "3d",
+      accessMode: target.accessMode,
+      editorEmails: [...target.editorEmails],
+    })
+    setEditorEmailInput("")
+    setError(null)
+    setExpiryChanged(false)
+    setPasswordChanged(false)
+    setSubmitting(false)
+  }, [target])
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!target || submitting) return
+    const accessMode = settings.accessMode ?? "link_read"
+    const editorEmails = accessMode === "specified_users_edit" ? settings.editorEmails ?? [] : []
+    if (accessMode === "specified_users_edit" && editorEmails.length === 0) {
+      setError("请添加可编辑用户")
+      return
+    }
+    const update: DriveAccessSettingsUpdateInput = {
+      ...(passwordChanged ? { passwordEnabled: settings.passwordEnabled } : {}),
+      accessMode,
+      editorEmails,
+      ...(expiryChanged ? { expiresIn: settings.expiresIn } : {}),
+    }
+    setSubmitting(true)
+    try {
+      await requireSynapseBridge().drive.share.create({ itemId: target.itemId, ...update })
+      toast("访问设置已保存")
+      await onSaved()
+    } catch (rawError) {
+      toast(errorMessage(rawError, "访问设置保存失败"))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={target !== null} onOpenChange={(nextOpen) => {
+      if (!nextOpen && !submitting) onCancel()
+    }}>
+      {target ? (
+        <FormDialog
+          title="访问设置"
+          description={<span className="block truncate">{target.itemName}</span>}
+          contentClassName="sm:max-w-lg"
+          onSubmit={handleSubmit}
+          footer={(
+            <>
+              <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>取消</Button>
+              <Button type="submit" disabled={submitting}>保存</Button>
+            </>
+          )}
+        >
+          <div className="grid gap-5">
+            <DriveAccessSettingsFields
+              idPrefix="drive-share-manage"
+              settings={settings}
+              editorEmailInput={editorEmailInput}
+              error={error}
+              preserveExpiry={!expiryChanged}
+              onEditorEmailInputChange={setEditorEmailInput}
+              onErrorChange={setError}
+              onExpiryChange={() => setExpiryChanged(true)}
+              onPasswordChange={() => setPasswordChanged(true)}
+              onSettingsChange={setSettings}
+            />
+          </div>
+        </FormDialog>
+      ) : null}
     </Dialog>
   )
 }
@@ -2585,6 +2741,7 @@ function DrivePublicLinkList({
   onLoadMore,
   onRetry,
   onDisableShare,
+  onAccessShare,
   disablingShareIds,
 }: {
   readonly emptyTitle: string
@@ -2596,6 +2753,7 @@ function DrivePublicLinkList({
   readonly onLoadMore: () => Promise<void>
   readonly onRetry: () => Promise<void>
   readonly onDisableShare: (shareId: string) => void
+  readonly onAccessShare: (share: DriveShareListItemDto) => void
   readonly disablingShareIds: ReadonlySet<string>
 }) {
   if (loading) return <DrivePublicLinkTableSkeleton />
@@ -2611,6 +2769,7 @@ function DrivePublicLinkList({
         loading={false}
         onReload={onRetry}
         onDisableShare={onDisableShare}
+        onAccessShare={onAccessShare}
         disablingShareIds={disablingShareIds}
       />
       {page?.hasMore ? (
@@ -2631,7 +2790,7 @@ function DrivePublicLinkTableHeader() {
       <TableRow className="hover:bg-transparent">
         <TableHead>名称</TableHead>
         <TableHead>链接信息</TableHead>
-        <TableHead className="text-right">操作</TableHead>
+        <TableHead className={DRIVE_TABLE_STICKY_ACTION_COLUMN_CLASS}>操作</TableHead>
       </TableRow>
     </TableHeader>
   )
@@ -2640,15 +2799,26 @@ function DrivePublicLinkTableHeader() {
 function DriveShareActions({
   disablingShare,
   item,
+  onAccessShare,
   onDisableShare,
 }: {
   readonly disablingShare: boolean
   readonly item: DriveShareListItemDto
+  readonly onAccessShare: (share: DriveShareListItemDto) => void
   readonly onDisableShare: (shareId: string) => void
 }) {
   const password = item.password
   return (
     <div className="flex items-center justify-end gap-0.5">
+      {!item.sourceDeleted ? (
+        <DriveIconAction
+          label={`访问设置 ${item.itemName}`}
+          tooltip="访问设置"
+          onClick={() => onAccessShare(item)}
+        >
+          <Settings2 />
+        </DriveIconAction>
+      ) : null}
       {!item.sourceDeleted ? (
         <DriveIconAction
           label={`复制 ${item.itemName}`}
@@ -2785,7 +2955,7 @@ function DrivePublicLinkTableSkeleton() {
                 <Skeleton className="h-3 w-72 max-w-full" />
               </div>
             </TableCell>
-            <TableCell className="align-top"><Skeleton className="ml-auto h-7 w-28 max-w-full" /></TableCell>
+            <TableCell className={`${DRIVE_TABLE_STICKY_ACTION_COLUMN_CLASS} align-top`}><Skeleton className="ml-auto h-7 w-28 max-w-full" /></TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -2874,6 +3044,7 @@ function DriveShareList({
   items,
   loading,
   disablingShareIds,
+  onAccessShare,
   onDisableShare,
   onReload,
 }: {
@@ -2881,6 +3052,7 @@ function DriveShareList({
   readonly items: readonly DriveShareListItemDto[]
   readonly loading: boolean
   readonly disablingShareIds: ReadonlySet<string>
+  readonly onAccessShare: (share: DriveShareListItemDto) => void
   readonly onDisableShare: (shareId: string) => void
   readonly onReload: () => Promise<void>
 }) {
@@ -2920,10 +3092,11 @@ function DriveShareList({
                 </div>
               </div>
             </TableCell>
-            <TableCell className="align-top">
+            <TableCell className={`${DRIVE_TABLE_STICKY_ACTION_COLUMN_CLASS} align-top`}>
               <DriveShareActions
                 disablingShare={disablingShareIds.has(item.id)}
                 item={item}
+                onAccessShare={onAccessShare}
                 onDisableShare={onDisableShare}
               />
             </TableCell>

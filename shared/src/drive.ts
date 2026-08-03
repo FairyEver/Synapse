@@ -721,6 +721,10 @@ export interface DriveBrowserPreviewDto {
   readonly truncated: boolean
   readonly imageUrl: string | null
   readonly visitUrl: string | null
+  readonly relativeImages: readonly {
+    readonly src: string
+    readonly resolvedUrl: string | null
+  }[]
 }
 
 export interface DriveBrowserEditDto {

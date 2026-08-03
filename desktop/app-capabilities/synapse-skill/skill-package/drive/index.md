@@ -113,9 +113,9 @@ Use this flow when the user asks to upload or share a local Markdown document. T
 7. Pass only share settings the user explicitly requested, and apply them to every file share in this transaction unless the user scopes them to one artifact. When the user did not specify password enablement, expiry, access mode, or editor emails, omit `passwordEnabled`, `expiresIn`, `accessMode`, and `editorEmails` so the current Synapse version supplies its defaults. Do not hardcode those defaults in this skill. `app_drive_site_create` requires access settings; ask for its required values when the user did not provide them.
 8. Do not upload the final Markdown if any required upload, share, site publication, rewrite, or verification fails. Do not delete already-created assets or shares without explicit authorization; report the completed remote writes and the blocking failure.
 
-## HTML Publishing Route
+## HTML Sharing Route
 
-Choose the public route from both the final publishable artifact and the user's explicit intent. A standalone HTML file defaults to a Drive share; casual words such as "page", "website", or "site" do not by themselves request a folder-backed site.
+Choose the public route from both the final publishable artifact and the user's explicit intent. A standalone HTML file defaults to a Drive file share and never receives sibling relative-resource access. Casual words such as "page", "website", or "site" do not by themselves request a folder-backed webpage share.
 
 1. Inspect the generated files immediately before uploading.
 2. If the user explicitly asks to publish the whole folder or directory as a website or site, upload the local folder with `app_drive_folder_upload` when needed, then call `app_drive_site_create` for the Drive folder.
@@ -173,7 +173,7 @@ Updating either route does not live-reload pages already open in a visitor's bro
    - Pass `accessMode: "link_read"` for a new read-only link, `accessMode: "link_edit"` when logged-in link holders may edit supported text files, or `accessMode: "specified_users_edit"` with `editorEmails` when only specific logged-in users may edit.
    - Do not pass `editorEmails` for read-only or link-edit links. For `specified_users_edit`, provide one or more email addresses.
    - Use the `app_drive_share_create` result when the user needs the password for a specific share. `app_drive_share_list` lists existing shares without returning passwords.
-11. After applying **HTML Publishing Route**, call `app_drive_site_create` for a Drive folder containing a multi-file static website, build bundle, multi-page HTML prototype, or product prototype site, or when the user explicitly asks to publish the whole folder as a site. A folder containing only `index.html` is valid in the explicit whole-folder case. Sites use `/sites/<siteId>/`, copy the folder at publish time, and do not grant Drive browse or edit access.
+11. After applying **HTML Sharing Route**, call `app_drive_site_create` for a Drive folder containing a multi-file static website, build bundle, multi-page HTML prototype, or product prototype site, or when the user explicitly asks to publish the whole folder as a webpage share. A folder containing only `index.html` is valid in the explicit whole-folder case. Webpage shares use `/sites/<siteId>/`, copy the folder at publish time, and do not grant Drive browse or edit access.
    - Use `sourceFolderItemId`, `name`, `accessMode`, and `expiresIn`.
    - Set `entryPath` only when the homepage is not the default `index.html`.
    - Use `accessMode: "public"` for open sites or `accessMode: "password"` when the user asks for a password. Pass `password` only when the user provides a custom site password. Site MCP results never return passwords, so ask for a custom password when the user needs a known value.
@@ -221,16 +221,16 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "生成直链": call `app_drive_direct_link_upload`.
 - "生成外链": call `app_drive_direct_link_upload`.
 - "分享云盘文件": call `app_drive_share_create`.
-- "发布这个文件夹为站点": inspect the folder, then call `app_drive_site_create`; a folder containing only `index.html` is valid.
+- "将这个文件夹创建为网页分享": inspect the folder, then call `app_drive_site_create`; a folder containing only `index.html` is valid.
 - "把这个多页 HTML 原型发成网站": call `app_drive_site_create`.
-- "重新发布站点": call `app_drive_site_republish`.
+- "更新网页分享": call `app_drive_site_republish`.
 - "更新这个分享网页并同步云盘": overwrite the existing Drive item with `app_drive_file_upload`; keep the existing share and do not call `app_drive_share_create`.
-- "更新站点源文件并同步线上": update the remembered source folder, then call `app_drive_site_republish` with the existing site id.
-- "只更新站点的云盘文件": update the remembered source folder, then ask whether to republish.
-- "管理站点": call `app_drive_site_list`.
-- "停用站点": call `app_drive_site_disable`.
-- "启用站点": call `app_drive_site_enable`.
-- "删除站点": call `app_drive_site_delete`.
+- "更新网页分享的源文件并同步线上": update the remembered source folder, then call `app_drive_site_republish` with the existing site id.
+- "只更新网页分享的云盘文件": update the remembered source folder, then ask whether to update the webpage share.
+- "管理网页分享": call `app_drive_site_list`.
+- "停止网页分享": call `app_drive_site_disable`.
+- "恢复网页分享": call `app_drive_site_enable`.
+- "删除网页分享": call `app_drive_site_delete`.
 - "把这个目录传到云盘": apply **Upload Destination Selection**, then call `app_drive_folder_upload` so the Drive folder uses the local folder basename.
 - "打开/预览这个文件": call `app_drive_item_preview_get`.
 - "读取这个 Markdown": call `app_drive_file_content_read`.

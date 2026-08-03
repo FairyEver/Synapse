@@ -398,6 +398,8 @@ Quota failure copy:
 - Public read/render/download endpoints must not expose write-only metadata such as editor email lists.
 - Historical versions are not reachable through share URLs, even when the share is editable.
 - Local text download in the conflict dialog downloads the renderer's in-memory text only; it must not call a privileged Drive download endpoint.
+- A non-owner editing a single-file Markdown share cannot add a Drive-relative image target that the current version did not already authorize. A folder-share editor can add one only when it resolves inside the shared root subtree. This check runs before version creation; external image URLs remain allowed.
+- Markdown relative-image read access is derived from the current file version and Drive tree. It does not expand normal file-share browsing, annotation, ZIP, rename, move, upload, or history permissions.
 
 ## Data Model
 

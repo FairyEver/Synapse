@@ -2,6 +2,8 @@ import { useRef, useState } from "react"
 import { Folder } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
+import { ProjectAddDialog } from "@/app-shell/components/project-add-dialog"
+import type { ProjectAddInput, ProjectAddResult } from "@/app-shell/use-project-actions"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,7 +30,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { arePathsEqualForCompare } from "@/lib/path-compare"
-import { getProjectNameFromPath } from "@/lib/path-utils"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { SettingsSectionHeading } from "@/modules/settings/components/settings-section-heading"
@@ -46,6 +47,7 @@ const SAFE_KNOWLEDGE_BASE_CREATE_ERRORS = new Set([
 type ProjectListEditorProps = {
   projects: SynapseProjectConfig[]
   onSave: (projects: SynapseProjectConfig[]) => Promise<void>
+  onAddProject: (input: ProjectAddInput) => Promise<ProjectAddResult>
 }
 
 function isKnowledgeBaseProject(project: SynapseProjectConfig): boolean {
@@ -68,13 +70,9 @@ function formatKnowledgeBaseCreateError(error: unknown): string {
   return SAFE_KNOWLEDGE_BASE_CREATE_ERRORS.has(message) ? message : "创建知识库失败。"
 }
 
-function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
+function ProjectListEditor({ projects, onSave, onAddProject }: ProjectListEditorProps) {
   const platform = getRendererPlatform()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [draftName, setDraftName] = useState("")
-  const [draftPath, setDraftPath] = useState("")
-  const [formError, setFormError] = useState<string | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [editingProject, setEditingProject] = useState<SynapseProjectConfig | null>(null)
   const [editName, setEditName] = useState("")
   const [editPath, setEditPath] = useState("")
@@ -89,21 +87,6 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const isKnowledgeBaseCreateInFlightRef = useRef(false)
   const hasDirectoryPicker = Boolean(window.synapse?.settings.repository)
 
-  const resetForm = () => {
-    setDraftName("")
-    setDraftPath("")
-    setFormError(null)
-  }
-
-  const handleOpenChange = (open: boolean) => {
-    if (isSubmitting) return
-    if (open) logger.info("Add project dialog opened.")
-    setIsDialogOpen(open)
-    if (!open) {
-      resetForm()
-    }
-  }
-
   const resetKnowledgeBaseForm = () => {
     setKnowledgeBaseName("")
     setKnowledgeBaseError(null)
@@ -114,68 +97,6 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     setIsKnowledgeBaseDialogOpen(open)
     if (!open) {
       resetKnowledgeBaseForm()
-    }
-  }
-
-  const handleAddProject = async () => {
-    const nextName = draftName.trim()
-    const nextPath = draftPath.trim()
-
-    if (!nextName || !nextPath) {
-      setFormError("项目名称和项目路径都不能为空。")
-      return
-    }
-
-    if (projects.some((project) => arePathsEqualForCompare(project.path, nextPath, { platform }))) {
-      setFormError("这个项目路径已经存在了。")
-      return
-    }
-
-    setIsSubmitting(true)
-    setFormError(null)
-
-    try {
-      await onSave([
-        ...projects,
-        {
-          id: crypto.randomUUID(),
-          name: nextName,
-          path: nextPath,
-        },
-      ])
-      logger.info("Project added.", { name: nextName, path: nextPath })
-      setIsDialogOpen(false)
-      resetForm()
-    } catch (error) {
-      logger.error("Failed to add project.", { error, name: nextName, path: nextPath })
-      setFormError(error instanceof Error ? error.message : "添加失败。")
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  const handleChooseProjectPath = async () => {
-    const bridge = window.synapse?.settings.repository
-
-    if (!bridge) {
-      return
-    }
-
-    try {
-      logger.info("Opening native directory picker from project settings.")
-      const selectedPath = await bridge.chooseDirectory()
-
-      if (!selectedPath) {
-        logger.info("Project directory picker was dismissed without selecting a directory.")
-        return
-      }
-
-      setDraftPath(selectedPath)
-      setDraftName((currentName) => (currentName.trim() ? currentName : getProjectNameFromPath(selectedPath)))
-      setFormError(null)
-    } catch (error) {
-      logger.error("Failed to select project directory.", { error })
-      setFormError(error instanceof Error ? error.message : "选择目录失败。")
     }
   }
 
@@ -417,69 +338,12 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={isDialogOpen} onOpenChange={handleOpenChange}>
-        <DialogTrigger asChild>
-          <Button variant="outline">添加项目</Button>
-        </DialogTrigger>
-        <DialogContent className="sm:max-w-[480px]">
-          <DialogHeader>
-            <DialogTitle>添加项目</DialogTitle>
-            <DialogDescription className="sr-only">
-              输入项目名称和路径。
-            </DialogDescription>
-          </DialogHeader>
-          <FieldGroup className="gap-2">
-            <Field>
-              <Label htmlFor="dialog-project-name">项目名称</Label>
-              <Input
-                id="dialog-project-name"
-                value={draftName}
-                onChange={(event) => setDraftName(event.target.value)}
-                placeholder="我的项目"
-                disabled={isSubmitting}
-              />
-            </Field>
-            <Field>
-              <Label htmlFor="dialog-project-path">项目路径</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="dialog-project-path"
-                  value={draftPath}
-                  onChange={(event) => setDraftPath(event.target.value)}
-                  placeholder="/path/to/project"
-                  disabled={isSubmitting}
-                />
-                {hasDirectoryPicker ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void handleChooseProjectPath()}
-                    disabled={isSubmitting}
-                  >
-                    浏览
-                  </Button>
-                ) : null}
-              </div>
-            </Field>
-            <FieldError>{formError}</FieldError>
-          </FieldGroup>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
-              disabled={isSubmitting}
-            >
-              取消
-            </Button>
-            <Button
-              onClick={() => void handleAddProject()}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? "添加中..." : "添加"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ProjectAddDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        onAddProject={onAddProject}
+        trigger={<Button variant="outline">添加项目</Button>}
+      />
     </div>
   )
 

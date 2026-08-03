@@ -468,6 +468,7 @@ describe('toDriveBrowserQueryKey', () => {
         truncated: false,
         imageUrl: null,
         visitUrl: null,
+        relativeImages: [],
       },
       edit: {
         canEdit: true,

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { LoaderCircle } from "lucide-react"
 import { isAccountUiVisible } from "@/app-shell/account-ui-visibility"
 import { useAppConfig } from "@/app-shell/config"
+import { useProjectActions } from "@/app-shell/use-project-actions"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
   consumeRequestedSettingsCategory,
@@ -61,6 +62,7 @@ type SettingsModuleProps = {
 
 function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
   const { config, error, isReady, refreshConfig, updateConfig } = useAppConfig()
+  const projectActions = useProjectActions()
   const activeRepository = useActiveRepository()
   const { replaceRepositories } = useRepositoryActions()
   const { promise, warning } = useAppNotifications()
@@ -312,7 +314,11 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
         {isReady && activeCategory === "projects" ? (
           <>
             <KnowledgeBaseStoragePanel />
-            <ProjectListEditor projects={config.global.projects} onSave={handleSaveProjects} />
+            <ProjectListEditor
+              projects={config.global.projects}
+              onSave={handleSaveProjects}
+              onAddProject={projectActions.addProject}
+            />
           </>
         ) : null}
 

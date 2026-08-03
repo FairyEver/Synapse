@@ -21,6 +21,9 @@ import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-r
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let objectUrlIndex = 0
+const mdxEditorMockState = vi.hoisted(() => ({
+  imagePreviewHandler: null as ((imageSource: string) => Promise<string>) | null,
+}))
 
 function installObjectUrlMocks() {
   Object.defineProperty(URL, 'createObjectURL', {
@@ -152,9 +155,17 @@ vi.mock('@mdxeditor/editor', async () => {
       return React.createElement(React.Fragment, null, children)
     },
     headingsPlugin: () => ({ name: 'headingsPlugin' }),
-    imagePlugin: (input: { readonly imageUploadHandler: (file: File) => Promise<string> }) => {
+    imagePlugin: (input: {
+      readonly imageUploadHandler: (file: File) => Promise<string>
+      readonly imagePreviewHandler?: (imageSource: string) => Promise<string>
+    }) => {
       pluginCalls.add('imagePlugin')
-      return { name: 'imagePlugin', imageUploadHandler: input.imageUploadHandler }
+      mdxEditorMockState.imagePreviewHandler = input.imagePreviewHandler ?? null
+      return {
+        name: 'imagePlugin',
+        imageUploadHandler: input.imageUploadHandler,
+        imagePreviewHandler: input.imagePreviewHandler,
+      }
     },
     linkDialogPlugin: () => ({ name: 'linkDialogPlugin' }),
     linkPlugin: () => ({ name: 'linkPlugin' }),
@@ -648,6 +659,23 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).toContain('内容已截断')
   })
 
+  it('maps relative image previews without changing the editor markdown', async () => {
+    renderRenderer({
+      preview: {
+        ...basePreview(),
+        text: '![diagram](./images/diagram.png)',
+        relativeImages: [{
+          src: './images/diagram.png',
+          resolvedUrl: '/drive/items/image-1/download',
+        }],
+      },
+    })
+
+    expect(await mdxEditorMockState.imagePreviewHandler?.('./images/diagram.png')).toBe('/drive/items/image-1/download')
+    expect(await mdxEditorMockState.imagePreviewHandler?.('https://example.com/image.png')).toBe('https://example.com/image.png')
+    expect(editor().value).toBe('![diagram](./images/diagram.png)')
+  })
+
   it('shows recoverable source editing when mdx parsing fails', async () => {
     renderRenderer({ edit: editable() })
 
@@ -764,6 +792,7 @@ function basePreview(): DriveBrowserPreviewDto {
     truncated: false,
     imageUrl: null,
     visitUrl: null,
+    relativeImages: [],
   }
 }
 

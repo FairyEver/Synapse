@@ -151,7 +151,7 @@ import type {
   DriveDocumentImageImportRequest,
   DriveDocumentImageImportResult,
   DriveDocumentImageSourcesDto,
-  DriveAccessSettingsInput,
+  DriveAccessSettingsUpdateInput,
   DriveFileVersionDto,
   DriveFileVersionListInput,
   DriveFileVersionListPageDto,
@@ -1289,7 +1289,7 @@ export type SynapseBridge = {
       downloadFile: (input: DriveLinkDownloadFileInput) => Promise<DriveLinkDownloadFileDto>
     }
     share: {
-      create: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DriveShareDto>
+      create: (input: { itemId: string } & DriveAccessSettingsUpdateInput) => Promise<DriveShareDto>
       disable: (input: { shareId: string }) => Promise<{ ok: true }>
       get: (input: { shareId: string }) => Promise<DriveShareListItemDto>
       list: (input?: DrivePublicLinksPageInput) => Promise<DriveShareListPageDto>

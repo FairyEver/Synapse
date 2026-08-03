@@ -554,6 +554,27 @@ describe("DriveSiteService", () => {
       .resolves.toEqual({ status: "not_found" })
   })
 
+  it("redirects extensionless directory paths only when an index asset exists", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      sites: [createSiteRecord({ currentDeploymentId: "dep-1", siteId: "site_existing" })],
+      deployments: [createDeploymentRecord({ id: "dep-1", driveSiteId: "site-row-1" })],
+      assets: [
+        createAssetRecord({
+          deploymentId: "dep-1",
+          relativePath: "guide/index.html",
+          storageKey: "drive-sites/site_existing/dep-1/guide/index.html",
+        }),
+      ],
+    })
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    await expect(service.resolvePublicSite("site_existing", { cookie: null, relativePath: "guide" }))
+      .resolves.toEqual({ status: "directory_redirect" })
+    await expect(service.resolvePublicSite("site_existing", { cookie: null, relativePath: "missing" }))
+      .resolves.toEqual({ status: "not_found" })
+  })
+
   it("includes the exact asset when listing a concrete site file path", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma({

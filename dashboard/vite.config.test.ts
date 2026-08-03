@@ -27,7 +27,7 @@ describe("dashboard Vite dev proxy", () => {
   })
 
   it("serves the independent desktop update entry at the stable path in dev and build", () => {
-    expect(resolveDesktopUpdateDevHtmlPath("/desktop/update")).toBe("/desktop-update.html")
+    expect(resolveDesktopUpdateDevHtmlPath("/desktop/update")).toBe("/console/desktop-update.html")
     expect(resolveDesktopUpdateDevHtmlPath("/desktop/update", "?version=1.2.3")).toBe("reject")
     expect(resolveDesktopUpdateDevHtmlPath("/desktop/update", "?mode=install")).toBe("reject")
     expect(resolveDesktopUpdateDevHtmlPath("/desktop/update/")).toBeNull()
@@ -60,14 +60,17 @@ describe("dashboard Vite dev proxy", () => {
 
   it("keeps direct drive responses behind focused proxy rules", () => {
     const proxy = config.server?.proxy
+    const ownerDownloadPattern = "^/drive/items/[^/]+/(download|render)(?:\\?.*)?$"
+    const shareDownloadPattern = "^/share/[^/]+/(download|render)(?:\\?.*)?$"
+    const shareChildDownloadPattern = "^/share/[^/]+/items/[^/]+/(download|render)(?:\\?.*)?$"
     const ownerDownloadProxy = proxy && !Array.isArray(proxy)
-      ? proxy["^/drive/items/[^/]+/(download|render)$"]
+      ? proxy[ownerDownloadPattern]
       : undefined
     const shareDownloadProxy = proxy && !Array.isArray(proxy)
-      ? proxy["^/share/[^/]+/(download|render)$"]
+      ? proxy[shareDownloadPattern]
       : undefined
     const shareChildDownloadProxy = proxy && !Array.isArray(proxy)
-      ? proxy["^/share/[^/]+/items/[^/]+/(download|render)$"]
+      ? proxy[shareChildDownloadPattern]
       : undefined
 
     expect(ownerDownloadProxy).toEqual(expect.objectContaining({
@@ -83,6 +86,8 @@ describe("dashboard Vite dev proxy", () => {
       changeOrigin: true,
     }))
     expect(proxy && !Array.isArray(proxy) ? proxy["/share"] : undefined).toBeUndefined()
+    expect(new RegExp(ownerDownloadPattern).test("/drive/items/file-1/download?version=1")).toBe(true)
+    expect(new RegExp(shareChildDownloadPattern).test("/share/share-1/items/image-1/download?version=1")).toBe(true)
   })
 
   it("serves drive browser page routes through the dashboard app in dev", () => {
@@ -130,13 +135,23 @@ describe("dashboard Vite dev proxy", () => {
   })
 
   it("keeps drive direct response routes out of the dashboard app fallback", () => {
+    expect(resolveDashboardDevSpaFallback("/admin")).toBe("/console/admin.html")
+    expect(resolveDashboardDevSpaFallback("/admin/access")).toBe("/console/admin.html")
     expect(resolveDashboardDevSpaFallback("/drive")).toBe("/console/")
     expect(resolveDashboardDevSpaFallback("/drive/")).toBe("/console/")
-    expect(resolveDashboardDevSpaFallback("/console/drive")).toBe("/index.html")
+    expect(resolveDashboardDevSpaFallback("/console/")).toBe("/console/index.html")
+    expect(resolveDashboardDevSpaFallback("/console/drive")).toBe("/console/index.html")
     expect(resolveDashboardDevSpaFallback("/share/share-id")).toBe("/console/")
     expect(resolveDashboardDevSpaFallback("/drive/items/file-id")).toBe("/console/")
     expect(resolveDashboardDevSpaFallback("/share/share-id/items/file-id/download")).toBeNull()
     expect(resolveDashboardDevSpaFallback("/drive/items/file-id/render")).toBeNull()
+  })
+
+  it("keeps Vite modules and public assets out of the console SPA fallback", () => {
+    expect(resolveDashboardDevSpaFallback("/console/@vite/client")).toBeNull()
+    expect(resolveDashboardDevSpaFallback("/console/@react-refresh")).toBeNull()
+    expect(resolveDashboardDevSpaFallback("/console/src/main.tsx")).toBeNull()
+    expect(resolveDashboardDevSpaFallback("/console/synapse-logo.png")).toBeNull()
   })
 
   it("proxies published site routes while keeping retired page routes removed", () => {

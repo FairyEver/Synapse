@@ -64,6 +64,60 @@ describe("drive markdown renderer", () => {
     expect(html).toContain('<a href="https://example.com/guide">external</a>')
   })
 
+  it("renders resolved Markdown and standalone raw images without changing other relative links", async () => {
+    const result = await renderDriveMarkdownFragment([
+      "![diagram](./diagram.png)",
+      "",
+      "![missing](./missing.png)",
+      "",
+      '[ref]: ../assets/ref.png "Reference"',
+      "![reference][ref]",
+      "",
+      '<img src="images/raw.png" alt="Raw" width="320" height="180" loading="lazy" class="drop" srcset="drop">',
+      "",
+      "[local doc](../guide.md)",
+      "",
+      "![public](/files/asset_123)",
+    ].join("\n"), {
+      allowStandaloneRawImages: true,
+      relativeImageUrls: new Map([
+        ["./diagram.png", "/share/share_1/items/image_1/download"],
+        ["./missing.png", null],
+        ["../assets/ref.png", "/share/share_1/items/image_2/download"],
+        ["images/raw.png", "/share/share_1/items/image_3/download"],
+      ]),
+    })
+
+    expect(result.html).toContain('<img src="/share/share_1/items/image_1/download" alt="diagram">')
+    expect(result.html).toContain('<img alt="missing">')
+    expect(result.html).toContain('<img src="/share/share_1/items/image_2/download" alt="reference" title="Reference">')
+    expect(result.html).toContain('src="/share/share_1/items/image_3/download"')
+    expect(result.html).toContain('alt="Raw"')
+    expect(result.html).toContain('width="320"')
+    expect(result.html).toContain('height="180"')
+    expect(result.html).toContain('loading="lazy"')
+    expect(result.html).not.toContain("class=")
+    expect(result.html).not.toContain("srcset=")
+    expect(result.html).not.toContain("../guide.md")
+    expect(result.html).toContain('src="/files/asset_123"')
+  })
+
+  it("matches resolved image URLs after remark encodes Unicode path segments", async () => {
+    const result = await renderDriveMarkdownFragment([
+      "![unicode](./中文图片.png)",
+      "",
+      "![space](<./名称 含空格.png>)",
+    ].join("\n"), {
+      relativeImageUrls: new Map([
+        ["./中文图片.png", "/share/share_1/items/unicode/download"],
+        ["./名称 含空格.png", "/share/share_1/items/space/download"],
+      ]),
+    })
+
+    expect(result.html).toContain('src="/share/share_1/items/unicode/download"')
+    expect(result.html).toContain('src="/share/share_1/items/space/download"')
+  })
+
   it("extracts a nested heading outline and injects stable heading ids", async () => {
     const result = await renderDriveMarkdownFragment([
       "# Notes!",

@@ -5,6 +5,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ProjectListEditor } from "../components/project-list-editor"
+import type { ProjectAddInput, ProjectAddResult } from "@/app-shell/use-project-actions"
 import type { SynapseProjectConfig } from "@/types/config"
 import type {
   SynapseKnowledgeBaseCreateManagedPayload,
@@ -33,7 +34,7 @@ const rendererLogger = vi.hoisted(() => ({
   info: vi.fn(),
 }))
 
-const toast = vi.hoisted(() => vi.fn())
+const toast = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn() }))
 
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,
@@ -52,6 +53,7 @@ beforeEach(() => {
   rendererLogger.error.mockClear()
   rendererLogger.info.mockClear()
   toast.mockClear()
+  toast.success.mockClear()
   vi.stubGlobal("crypto", {
     ...globalThis.crypto,
     randomUUID: vi.fn(() => "new-project-id"),
@@ -100,15 +102,28 @@ function createSynapseBridgeMocks() {
   }
 }
 
-function renderEditor(projects: SynapseProjectConfig[], onSave = vi.fn().mockResolvedValue(undefined)) {
+function renderEditor(
+  projects: SynapseProjectConfig[],
+  onSave = vi.fn().mockResolvedValue(undefined),
+  onAddProject = vi.fn(async (input: ProjectAddInput): Promise<ProjectAddResult> => ({
+    status: "added",
+    project: { id: "new-project-id", ...input },
+  })),
+) {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
   roots.push(root)
   act(() => {
-    root.render(<ProjectListEditor projects={projects} onSave={onSave} />)
+    root.render(
+      <ProjectListEditor
+        projects={projects}
+        onSave={onSave}
+        onAddProject={onAddProject}
+      />,
+    )
   })
-  return { onSave }
+  return { onAddProject, onSave }
 }
 
 function buttonByText(text: string): HTMLButtonElement {
@@ -184,6 +199,117 @@ describe("ProjectListEditor knowledge base actions", () => {
     expect(document.body.textContent).toContain("位置")
     expect(document.body.textContent).toContain("/Users/example/projects/app")
     expect(document.body.textContent).not.toContain("synapse-kb://project-1")
+  })
+
+  it("adds a regular project through the shared project dialog", async () => {
+    const onAddProject = vi.fn(async (input: ProjectAddInput): Promise<ProjectAddResult> => ({
+      status: "added",
+      project: { id: "new-project-id", ...input },
+    }))
+    renderEditor([], undefined, onAddProject)
+
+    await act(async () => {
+      buttonByText("添加项目").click()
+    })
+    await act(async () => {
+      buttonByText("浏览").click()
+      await Promise.resolve()
+    })
+
+    expect(inputByLabel("项目名称").value).toBe("new-kb")
+    expect(inputByLabel("项目路径").value).toBe("/Users/example/new-kb")
+
+    await act(async () => {
+      buttonByText("添加").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(onAddProject).toHaveBeenCalledWith({
+      name: "new-kb",
+      path: "/Users/example/new-kb",
+    })
+    expect(toast.success).toHaveBeenCalledWith("项目已添加。")
+  })
+
+  it("keeps the shared project dialog open when the path becomes a duplicate", async () => {
+    const existingProject = { id: "project-existing", name: "Existing", path: "/Users/example/existing" }
+    const onAddProject = vi.fn(async (): Promise<ProjectAddResult> => ({
+      status: "existing",
+      project: existingProject,
+    }))
+    renderEditor([existingProject], undefined, onAddProject)
+
+    await act(async () => {
+      buttonByText("添加项目").click()
+    })
+    await act(async () => {
+      changeInput(inputByLabel("项目名称"), "Duplicate")
+      changeInput(inputByLabel("项目路径"), "/Users/example/existing")
+      buttonByText("添加").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("这个项目路径已经存在了。")
+    expect(inputByLabel("项目路径").value).toBe("/Users/example/existing")
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it("prevents duplicate shared project submissions while a save is pending", async () => {
+    const pendingAdd = deferred<ProjectAddResult>()
+    const onAddProject = vi.fn(() => pendingAdd.promise)
+    renderEditor([], undefined, onAddProject)
+
+    await act(async () => {
+      buttonByText("添加项目").click()
+    })
+    await act(async () => {
+      changeInput(inputByLabel("项目名称"), "Docs")
+      changeInput(inputByLabel("项目路径"), "/Users/example/docs")
+    })
+    const addButton = buttonByText("添加")
+
+    await act(async () => {
+      addButton.click()
+      addButton.click()
+      await Promise.resolve()
+    })
+
+    expect(onAddProject).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).toContain("添加中...")
+
+    await act(async () => {
+      pendingAdd.resolve({
+        status: "added",
+        project: { id: "project-new", name: "Docs", path: "/Users/example/docs" },
+      })
+      await pendingAdd.promise
+      await Promise.resolve()
+    })
+  })
+
+  it("shows shared project save failures without closing the dialog", async () => {
+    const onAddProject = vi.fn().mockRejectedValue(new Error("保存项目列表失败，请重试。"))
+    renderEditor([], undefined, onAddProject)
+
+    await act(async () => {
+      buttonByText("添加项目").click()
+    })
+    await act(async () => {
+      changeInput(inputByLabel("项目名称"), "Docs")
+      changeInput(inputByLabel("项目路径"), "/Users/example/docs")
+    })
+
+    await act(async () => {
+      buttonByText("添加").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("保存项目列表失败，请重试。")
+    expect(inputByLabel("项目名称").value).toBe("Docs")
+    expect(toast.success).not.toHaveBeenCalled()
   })
 
   it("shows a knowledge base badge and source manager action for knowledge base projects", async () => {

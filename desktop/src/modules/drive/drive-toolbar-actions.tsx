@@ -19,7 +19,6 @@ function DriveToolbarActions({
   onCreateFolder,
   onOpenLocalSync,
   onOpenPublicLinks,
-  onOpenSites,
   onOpenSyncStatus,
   onRefresh,
   onUploadFiles,
@@ -40,7 +39,6 @@ function DriveToolbarActions({
   readonly onCreateFolder: () => void
   readonly onOpenLocalSync: () => void
   readonly onOpenPublicLinks: () => void
-  readonly onOpenSites: () => void
   readonly onOpenSyncStatus: () => void
   readonly onRefresh: () => void
   readonly onUploadFiles: () => void
@@ -85,8 +83,7 @@ function DriveToolbarActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem disabled={uploadDisabled} onSelect={onOpenLocalSync}>本地同步</DropdownMenuItem>
-          <DropdownMenuItem disabled={publicLinksDisabled} onSelect={onOpenPublicLinks}>我的分享</DropdownMenuItem>
-          <DropdownMenuItem disabled={publicLinksDisabled} onSelect={onOpenSites}>站点</DropdownMenuItem>
+          <DropdownMenuItem disabled={publicLinksDisabled} onSelect={onOpenPublicLinks}>分享管理</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

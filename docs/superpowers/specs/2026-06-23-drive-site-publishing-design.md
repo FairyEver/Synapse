@@ -1,11 +1,11 @@
-# Drive Site Publishing Design
+# Drive Webpage Sharing Design
 
 Date: 2026-06-23
 Scope: `server/`, `desktop/`, `shared/`, `desktop/synapse-capabilities/`, `desktop/resources/templates/skills/synapse-skill/files/drive/`, `docs/`
 
 ## Goal
 
-Add Drive folder site publishing for static multi-page prototypes and small static sites.
+Add Drive folder webpage sharing for static multi-page prototypes and small static sites. `DriveSite` remains the internal model and `/sites/<siteId>/` remains the compatible public route.
 
 Users can choose a Drive folder and create a standalone published site from the folder's current contents. The published site keeps normal static-site relative path behavior, so multiple HTML files, CSS, JavaScript, images, fonts, and nested folders can reference each other with relative URLs.
 
@@ -13,11 +13,11 @@ Site creation is a one-way copy. After creation, the source Drive folder is only
 
 ## Confirmed Product Decisions
 
-- The first user-facing entry point is a folder row action: a Drive folder's more menu includes `发布站点`.
-- Files do not get a first-version `发布网页` action. This design is for folder-to-site publishing only.
-- Clicking `发布站点` opens a creation dialog that handles site name, entry page, access settings, expiry, preflight, and creation result.
-- Drive top bar includes a `站点` button. It opens site management in a large modal.
-- Site management is not attached to the source folder row. After creation, maintenance happens in the `站点` modal.
+- Drive rows expose one `分享` action. A folder's share dialog defaults to `文件夹分享` and also offers `网页分享`.
+- Files, including standalone HTML files, only use ordinary file sharing. They never implicitly publish their parent folder.
+- Switching a folder to `网页分享` runs site preflight and handles entry page, access settings, expiry, and creation result in the same dialog.
+- Drive top bar exposes one `分享管理` entry with `文件`、`文件夹`、`网页` tabs.
+- The user-facing concept is `网页分享`; `DriveSite` and site API/tool identifiers remain internal compatibility names.
 - Creating a site copies the selected folder's current file tree into an independent site deployment.
 - The source folder does not own the site after creation. The source may be edited or deleted without changing the published site.
 - A site may remember `sourceFolderItemId` and `sourceFolderName` for diagnostics and convenient republish, but public serving must not depend on the source folder.
@@ -29,7 +29,7 @@ Site creation is a one-way copy. After creation, the source Drive folder is only
 - If the folder contains no HTML file, site creation is blocked.
 - The first version supports HTML, CSS, JavaScript, images, fonts, and nested static assets.
 - Published sites are read-only. Public visitors cannot browse the Drive folder, download the original folder as a Drive object, edit files, comment, or receive Drive share permissions.
-- Site access settings support public access, password access, and expiry.
+- Webpage share access settings support public access, password access, and expiry. Dashboard creation defaults to password access for 3 days.
 - Site access settings are independent from Drive share settings. Creating or updating a site must not create or mutate a Drive share.
 - Cancelling publication disables public access but keeps the site record, access settings, current deployment, and history.
 - Deleting a site is a destructive management action and requires confirmation.
@@ -54,8 +54,8 @@ Site creation is a one-way copy. After creation, the source Drive folder is only
 
 The feature has two surfaces:
 
-1. Folder creation entry inside Drive.
-2. Central site management from the Drive top bar.
+1. The folder's unified share dialog.
+2. The `网页` tab in central share management.
 
 Drive folders are sources, not containers for site state. A created site is an independent resource:
 
@@ -83,11 +83,11 @@ This avoids mixing three different concepts:
 
 - Drive share: live access to Drive items.
 - Public asset: flat image direct links.
-- Site: static read-only website copied from a Drive folder.
+- Webpage share: static read-only website copied from a Drive folder and implemented by DriveSite.
 
-## Folder Creation Flow
+## Folder Webpage Share Flow
 
-The folder row's more menu shows `发布站点` for active Drive folders.
+The folder row's `分享` action opens the unified share dialog. The default mode is `文件夹分享`; the user must explicitly switch to `网页分享` before any site preflight or snapshot creation occurs.
 
 The creation dialog should be one dialog with clear sections, not a multi-page wizard:
 
@@ -116,9 +116,9 @@ The creation dialog should be one dialog with clear sections, not a multi-page w
    - Show `/sites/<siteId>/` URL.
    - Actions: copy link, open site, close.
 
-## Site Management Modal
+## Webpage Share Management
 
-The Drive top bar includes `站点`. Clicking it opens a large modal suitable for management work.
+The Drive top bar includes `分享管理`. Its `网页` tab lists DriveSite-backed webpage shares alongside the separate `文件` and `文件夹` tabs.
 
 Layout requirements:
 
@@ -496,12 +496,12 @@ Server tests:
 - Source folder deletion does not break an existing site.
 - Republish failure keeps the old deployment active.
 
-Desktop renderer tests:
+Dashboard tests:
 
-- Folder more menu exposes `发布站点`.
-- File rows do not expose `发布站点`.
-- Creation dialog handles entry selection, preflight states, and completion URL.
-- Top-bar `站点` opens a large management modal.
+- File and folder rows expose only `分享`; the old `发布站点` action is absent.
+- HTML files only expose ordinary file sharing.
+- Folder share creation handles the explicit webpage mode, entry selection, preflight states, protected three-day defaults, and completion URL.
+- Top-bar `分享管理` opens one dialog with `文件`、`文件夹`、`网页` tabs.
 - Long site names and long tables do not overflow.
 - Management actions call the bridge APIs with expected inputs.
 

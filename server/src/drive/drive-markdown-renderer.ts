@@ -1,10 +1,18 @@
 import type { DriveMarkdownOutlineItemDto } from "@synapse/shared"
+import {
+  parseDriveMarkdownRelativeImageSrc,
+  parseStandaloneDriveMarkdownRawImage,
+} from "./drive-markdown-relative-images"
 
 type MarkdownAstNode = {
   type?: string
   value?: unknown
+  url?: unknown
+  alt?: unknown
+  title?: unknown
   depth?: unknown
   data?: {
+    hName?: string
     hProperties?: Record<string, unknown>
   }
   children?: MarkdownAstNode[]
@@ -22,6 +30,11 @@ export type DriveMarkdownRenderResult = {
   readonly outline: readonly DriveMarkdownOutlineItemDto[]
 }
 
+export type DriveMarkdownRenderOptions = {
+  readonly relativeImageUrls?: ReadonlyMap<string, string | null>
+  readonly allowStandaloneRawImages?: boolean
+}
+
 type MutableDriveMarkdownOutlineItem = {
   id: string
   text: string
@@ -29,11 +42,14 @@ type MutableDriveMarkdownOutlineItem = {
   children: MutableDriveMarkdownOutlineItem[]
 }
 
-export async function renderDriveMarkdownFragment(markdown: string): Promise<DriveMarkdownRenderResult> {
-  return renderMarkdownBody(markdown)
+export async function renderDriveMarkdownFragment(
+  markdown: string,
+  options: DriveMarkdownRenderOptions = {},
+): Promise<DriveMarkdownRenderResult> {
+  return renderMarkdownBody(markdown, options)
 }
 
-async function renderMarkdownBody(markdown: string): Promise<DriveMarkdownRenderResult> {
+async function renderMarkdownBody(markdown: string, options: DriveMarkdownRenderOptions): Promise<DriveMarkdownRenderResult> {
   const outlineState: {
     readonly counts: Map<string, number>
     readonly items: MutableDriveMarkdownOutlineItem[]
@@ -63,10 +79,22 @@ async function renderMarkdownBody(markdown: string): Promise<DriveMarkdownRender
     .use(remarkParse)
     .use(remarkGfm)
     .use(() => createHeadingOutlinePlugin(outlineState))
+    .use(() => prepareStandaloneRawImagesPlugin(options.allowStandaloneRawImages === true))
     .use(escapeRawHtmlPlugin)
     .use(remarkRehype)
-    .use(stripRelativeResourceUrlsPlugin)
-    .use(rehypeSanitize, { ...defaultSchema, clobberPrefix: "" })
+    .use(() => resolveRelativeResourceUrlsPlugin(options.relativeImageUrls ?? new Map()))
+    .use(rehypeSanitize, {
+      ...defaultSchema,
+      clobberPrefix: "",
+      attributes: {
+        ...defaultSchema.attributes,
+        img: [...(defaultSchema.attributes?.img ?? []), "alt", "title", "width", "height", "loading"],
+      },
+      protocols: {
+        ...defaultSchema.protocols,
+        src: [...(defaultSchema.protocols?.src ?? []), "data", "blob"],
+      },
+    })
     .use(wrapTablesPlugin)
     .use(rehypeStringify)
     .process(markdown)
@@ -74,6 +102,35 @@ async function renderMarkdownBody(markdown: string): Promise<DriveMarkdownRender
     html: String(file),
     outline: outlineState.items,
   }
+}
+
+function prepareStandaloneRawImagesPlugin(enabled: boolean) {
+  return (tree: MarkdownAstNode) => {
+    if (enabled) visitRawImageAst(tree)
+  }
+}
+
+function visitRawImageAst(node: MarkdownAstNode): void {
+  if (node.type === "html" && typeof node.value === "string") {
+    const image = parseStandaloneDriveMarkdownRawImage(node.value)
+    if (image) {
+      node.type = "image"
+      node.url = image.src
+      node.alt = image.alt ?? ""
+      node.title = image.title ?? null
+      node.data = {
+        hName: "img",
+        hProperties: {
+          ...(image.width === undefined ? {} : { width: image.width }),
+          ...(image.height === undefined ? {} : { height: image.height }),
+          ...(image.loading === undefined ? {} : { loading: image.loading }),
+        },
+      }
+      delete node.value
+      return
+    }
+  }
+  for (const child of node.children ?? []) visitRawImageAst(child)
 }
 
 function createHeadingOutlinePlugin(state: {
@@ -173,9 +230,13 @@ function visitMarkdownAst(node: MarkdownAstNode): void {
   for (const child of node.children ?? []) visitMarkdownAst(child)
 }
 
-function stripRelativeResourceUrlsPlugin() {
+function resolveRelativeResourceUrlsPlugin(relativeImageUrls: ReadonlyMap<string, string | null>) {
+  const indexedImageUrls = new Map<string, string | null>()
+  for (const [src, resolvedUrl] of relativeImageUrls) {
+    indexedImageUrls.set(relativeImageLookupKey(src), resolvedUrl)
+  }
   return (tree: HtmlAstNode) => {
-    visitHtmlAst(tree)
+    visitHtmlAst(tree, indexedImageUrls)
   }
 }
 
@@ -206,18 +267,37 @@ function wrapTablesInHtmlAst(node: HtmlAstNode): void {
   })
 }
 
-function visitHtmlAst(node: HtmlAstNode): void {
+function visitHtmlAst(node: HtmlAstNode, relativeImageUrls: ReadonlyMap<string, string | null>): void {
   const properties = node.properties
   if (properties) {
     removeRelativeUrlProperty(properties, "href")
-    removeRelativeUrlProperty(properties, "src")
+    resolveRelativeImageProperty(properties, relativeImageUrls)
     removeRelativeUrlProperty(properties, "poster")
     removeRelativeUrlProperty(properties, "cite")
     if (typeof properties.srcSet === "string" || Array.isArray(properties.srcSet)) {
       delete properties.srcSet
     }
   }
-  for (const child of node.children ?? []) visitHtmlAst(child)
+  for (const child of node.children ?? []) visitHtmlAst(child, relativeImageUrls)
+}
+
+function resolveRelativeImageProperty(
+  properties: Record<string, unknown>,
+  relativeImageUrls: ReadonlyMap<string, string | null>,
+): void {
+  const value = properties.src
+  if (typeof value !== "string") return
+  const trimmed = value.trim()
+  if (trimmed.startsWith("/files/")) return
+  if (!isRelativeMarkdownUrl(trimmed)) return
+  const resolved = relativeImageUrls.get(relativeImageLookupKey(trimmed))
+  if (resolved) properties.src = resolved
+  else delete properties.src
+}
+
+function relativeImageLookupKey(src: string): string {
+  const parsed = parseDriveMarkdownRelativeImageSrc(src)
+  return parsed ? JSON.stringify([parsed.segments, parsed.suffix]) : src.trim()
 }
 
 function removeRelativeUrlProperty(properties: Record<string, unknown>, key: string): void {

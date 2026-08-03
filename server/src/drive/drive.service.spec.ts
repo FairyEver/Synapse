@@ -1,4 +1,4 @@
-import { BadRequestException, Logger, NotFoundException } from "@nestjs/common"
+import { BadRequestException, ForbiddenException, Logger, NotFoundException } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { Readable } from "node:stream"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
@@ -26,6 +26,30 @@ const storageMock: DriveStoragePort = {
   copyObject: vi.fn(async () => undefined),
   getObjectStream: vi.fn(async () => ({ stream: Readable.from(""), size: 0n, contentType: null })),
   deleteObject: vi.fn(async () => undefined),
+}
+
+type DriveTestObject = {
+  readonly body: string
+  readonly contentType: string
+}
+
+function createDriveObjectStorage(
+  objects: ReadonlyMap<string, DriveTestObject>,
+  overrides: Partial<DriveStoragePort> = {},
+): DriveStoragePort {
+  return {
+    ...storageMock,
+    ...overrides,
+    getObjectStream: vi.fn(async ({ key }) => {
+      const object = objects.get(key)
+      if (!object) throw new Error(`missing object: ${key}`)
+      return {
+        stream: Readable.from(object.body),
+        size: BigInt(Buffer.byteLength(object.body)),
+        contentType: object.contentType,
+      }
+    }),
+  }
 }
 
 function createDriveChangeLogMock(): Pick<DriveChangeLogService, "append"> & {
@@ -2244,6 +2268,37 @@ describe("DriveService", () => {
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
 
+  it("infers a safe image content type for folder uploads without MIME metadata", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      getObjectStream: vi.fn(async () => ({
+        stream: Readable.from("png"),
+        size: 3n,
+        contentType: "application/octet-stream",
+      })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "文档" })
+    const image = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "diagram.png",
+      mimeType: null,
+    })
+    const share = await service.createShare("user-1", folder.id, "https://synapse.test")
+
+    const ownerDownload = await service.openOwnerBrowserItemDownload({ userId: "user-1", itemId: image.id })
+    const shareDownload = await service.openShareBrowserItemDownload({
+      shareId: share.shareId,
+      itemId: image.id,
+      password: share.password ?? undefined,
+    })
+
+    expect(ownerDownload).toMatchObject({ kind: "file", contentType: "image/png" })
+    expect(shareDownload).toMatchObject({ kind: "file", contentType: "image/png" })
+  })
+
   it("uses authenticated owner download routes for image previews", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -2593,6 +2648,387 @@ describe("DriveService", () => {
       truncated: true,
       visitUrl: null,
     })
+  })
+
+  it("resolves owner Markdown images from the DriveItem directory tree", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareFolderUpload("user-1", {
+      parentId: null,
+      folderName: "导出文档",
+      files: [
+        { relativePath: "docs/readme.md", size: "11", mimeType: "text/markdown" },
+        { relativePath: "images/架构 图.png", size: "11", mimeType: "image/png" },
+      ],
+      publicAppUrl: "https://synapse.test",
+    })
+    for (const entry of prepared.entries) await service.completeUpload("user-1", entry.sessionId)
+    const markdown = prepared.entries.find(({ relativePath }) => relativePath === "docs/readme.md")!.item
+    const image = prepared.entries.find(({ relativePath }) => relativePath === "images/架构 图.png")!.item
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    objects.set(markdownRecord.storageKey, {
+      body: "![架构](../images/%E6%9E%B6%E6%9E%84%20%E5%9B%BE.png?version=1#preview)",
+      contentType: "text/markdown",
+    })
+
+    const snapshot = await service.getOwnerBrowserSnapshot({
+      userId: "user-1",
+      itemId: markdown.id,
+      surface: "standalone",
+    })
+
+    const resolvedUrl = `/drive/items/${image.id}/download?version=1#preview`
+    expect(snapshot.preview?.html).toContain(`src="${resolvedUrl}"`)
+    expect(snapshot.preview?.relativeImages).toEqual([{
+      src: "../images/%E6%9E%B6%E6%9E%84%20%E5%9B%BE.png?version=1#preview",
+      resolvedUrl,
+    }])
+    expect(snapshot.preview?.text).toContain("../images/%E6%9E%B6%E6%9E%84%20%E5%9B%BE.png?version=1#preview")
+  })
+
+  it("limits a single Markdown file share to its currently referenced images", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "导出文档" })
+    const markdown = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "readme.md",
+      mimeType: "text/markdown",
+    })
+    const referenced = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "referenced.png",
+      mimeType: "image/png",
+    })
+    const sibling = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "private.png",
+      mimeType: "image/png",
+    })
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    const referencedRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: referenced.id } })
+    objects.set(markdownRecord.storageKey, { body: "![ok](./referenced.png)", contentType: "text/markdown" })
+    objects.set(referencedRecord.storageKey, { body: "png", contentType: "image/png" })
+    const share = await service.createShare("user-1", markdown.id, "https://synapse.test")
+
+    const snapshot = await service.getShareBrowserSnapshot({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+    })
+    expect(snapshot.preview?.relativeImages).toEqual([{
+      src: "./referenced.png",
+      resolvedUrl: `/share/${share.shareId}/items/${referenced.id}/download`,
+    }])
+
+    const download = await service.openShareBrowserItemDownload({
+      shareId: share.shareId,
+      itemId: referenced.id,
+      password: share.password ?? undefined,
+    })
+    expect(download).toMatchObject({ kind: "file", fileName: "referenced.png" })
+    await expect(service.openShareBrowserItemDownload({
+      shareId: share.shareId,
+      itemId: sibling.id,
+      password: share.password ?? undefined,
+    })).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it("does not authorize sibling resources for a single HTML file share", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "网页" })
+    const html = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    const image = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "image.png",
+      mimeType: "image/png",
+    })
+    const htmlRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: html.id } })
+    objects.set(htmlRecord.storageKey, { body: '<img src="./image.png">', contentType: "text/html" })
+    const share = await service.createShare("user-1", html.id, "https://synapse.test")
+
+    const snapshot = await service.getShareBrowserSnapshot({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+    })
+    expect(snapshot.preview?.relativeImages).toEqual([])
+    const render = await service.resolveShareRenderAccess({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+    })
+    expect(render.status).toBe("ok")
+    if (render.status !== "ok") throw new Error("expected HTML render access")
+    const htmlBody = await streamToText(render.value.stream)
+    expect(htmlBody).toContain('src="./image.png"')
+    expect(htmlBody).not.toContain(`/items/${image.id}/download`)
+    await expect(service.openShareBrowserItemDownload({
+      shareId: share.shareId,
+      itemId: image.id,
+      password: share.password ?? undefined,
+    })).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it("does not rewrite relative resources in HTML inside a folder share", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "资料" })
+    const html = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    const htmlRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: html.id } })
+    objects.set(htmlRecord.storageKey, {
+      body: '<link rel="stylesheet" href="./style.css"><img src="./image.png"><script src="./app.js"></script>',
+      contentType: "text/html",
+    })
+    const share = await service.createShare("user-1", folder.id, "https://synapse.test")
+
+    const snapshot = await service.getShareBrowserSnapshot({
+      shareId: share.shareId,
+      itemId: html.id,
+      password: share.password ?? undefined,
+    })
+    expect(snapshot.preview?.relativeImages).toEqual([])
+    const render = await service.resolveShareRenderAccess({
+      shareId: share.shareId,
+      itemId: html.id,
+      password: share.password ?? undefined,
+    })
+    expect(render.status).toBe("ok")
+    if (render.status !== "ok") throw new Error("expected HTML render access")
+    const htmlBody = await streamToText(render.value.stream)
+    expect(htmlBody).toContain('href="./style.css"')
+    expect(htmlBody).toContain('src="./image.png"')
+    expect(htmlBody).toContain('src="./app.js"')
+  })
+
+  it("rebuilds single-file share image access after a Markdown version change", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects, {
+      putObject: vi.fn(async ({ key, body, contentType }) => {
+        objects.set(key, { body: body.toString("utf8"), contentType: contentType ?? "application/octet-stream" })
+      }),
+    })
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "资料" })
+    const markdown = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "readme.md",
+      mimeType: "text/markdown",
+    })
+    const oldImage = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "old.png",
+      mimeType: "image/png",
+    })
+    const nextImage = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "next.png",
+      mimeType: "image/png",
+    })
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    const oldImageRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: oldImage.id } })
+    const nextImageRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: nextImage.id } })
+    objects.set(markdownRecord.storageKey, { body: "![old](./old.png)", contentType: "text/markdown" })
+    objects.set(oldImageRecord.storageKey, { body: "old", contentType: "image/png" })
+    objects.set(nextImageRecord.storageKey, { body: "next", contentType: "image/png" })
+    const version = (await service.listFileVersions("user-1", markdown.id, { offset: 0, limit: 20 })).items[0]!
+    const share = await service.createShare("user-1", markdown.id, "https://synapse.test")
+
+    await expect(service.openShareBrowserItemDownload({
+      shareId: share.shareId,
+      itemId: oldImage.id,
+      password: share.password ?? undefined,
+    })).resolves.toMatchObject({ kind: "file", fileName: "old.png" })
+
+    await service.updateOwnerFileText("user-1", markdown.id, {
+      contentType: "text",
+      text: "![next](./next.png)",
+      baseVersionId: version.id,
+    })
+
+    await expect(service.openShareBrowserItemDownload({
+      shareId: share.shareId,
+      itemId: oldImage.id,
+      password: share.password ?? undefined,
+    })).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.openShareBrowserItemDownload({
+      shareId: share.shareId,
+      itemId: nextImage.id,
+      password: share.password ?? undefined,
+    })).resolves.toMatchObject({ kind: "file", fileName: "next.png" })
+  })
+
+  it("keeps folder-shared Markdown images inside the shared subtree", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const sharedFolder = await service.createFolder("user-1", { parentId: null, name: "公开资料" })
+    const markdown = await createCompletedUpload(service, "user-1", {
+      parentId: sharedFolder.id,
+      name: "readme.md",
+      mimeType: "text/markdown",
+    })
+    const inside = await createCompletedUpload(service, "user-1", {
+      parentId: sharedFolder.id,
+      name: "inside.png",
+      mimeType: "image/png",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "outside.png",
+      mimeType: "image/png",
+    })
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    objects.set(markdownRecord.storageKey, {
+      body: "![inside](./inside.png)\n\n![outside](../outside.png)",
+      contentType: "text/markdown",
+    })
+    const share = await service.createShare("user-1", sharedFolder.id, "https://synapse.test")
+
+    const snapshot = await service.getShareBrowserSnapshot({
+      shareId: share.shareId,
+      itemId: markdown.id,
+      password: share.password ?? undefined,
+    })
+
+    expect(snapshot.preview?.relativeImages).toEqual([
+      { src: "./inside.png", resolvedUrl: `/share/${share.shareId}/items/${inside.id}/download` },
+      { src: "../outside.png", resolvedUrl: null },
+    ])
+    expect(snapshot.preview?.html).toContain(`items/${inside.id}/download`)
+    expect(snapshot.preview?.html).toContain('<img alt="outside">')
+  })
+
+  it("rejects collaborator edits that expand a single-file share image scope", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects, {
+      putObject: vi.fn(async () => undefined),
+    })
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "owner@example.com", passwordHash: "hash" } })
+    await prisma.user.create({ data: { id: "editor-1", email: "editor@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "资料" })
+    const markdown = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "readme.md",
+      mimeType: "text/markdown",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "allowed.png",
+      mimeType: "image/png",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "private.png",
+      mimeType: "image/png",
+    })
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    objects.set(markdownRecord.storageKey, { body: "![allowed](./allowed.png)", contentType: "text/markdown" })
+    const version = (await service.listFileVersions("user-1", markdown.id, { offset: 0, limit: 20 })).items[0]!
+    const share = await service.createShare("user-1", markdown.id, "https://synapse.test", {
+      accessMode: "link_edit",
+      editorEmails: [],
+      expiresIn: "30d",
+      passwordEnabled: false,
+    })
+
+    await expect(service.updateShareFileText({
+      actorUserId: "editor-1",
+      shareId: share.shareId,
+      body: {
+        contentType: "text",
+        text: "![allowed](./allowed.png)\n\n![private](./private.png)",
+        baseVersionId: version.id,
+      },
+    })).rejects.toBeInstanceOf(ForbiddenException)
+    expect(storage.putObject).not.toHaveBeenCalled()
+    expect(await service.listFileVersions("user-1", markdown.id, { offset: 0, limit: 20 })).toHaveProperty("items.length", 1)
+  })
+
+  it("allows folder-share collaborators to add only subtree-relative images", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects, {
+      putObject: vi.fn(async ({ key, body, contentType }) => {
+        objects.set(key, { body: body.toString("utf8"), contentType: contentType ?? "application/octet-stream" })
+      }),
+    })
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "owner@example.com", passwordHash: "hash" } })
+    await prisma.user.create({ data: { id: "editor-1", email: "editor@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "共享资料" })
+    const markdown = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "readme.md",
+      mimeType: "text/markdown",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "inside.png",
+      mimeType: "image/png",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "outside.png",
+      mimeType: "image/png",
+    })
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    objects.set(markdownRecord.storageKey, { body: "# Notes", contentType: "text/markdown" })
+    const version = (await service.listFileVersions("user-1", markdown.id, { offset: 0, limit: 20 })).items[0]!
+    const share = await service.createShare("user-1", folder.id, "https://synapse.test", {
+      accessMode: "link_edit",
+      editorEmails: [],
+      expiresIn: "30d",
+      passwordEnabled: false,
+    })
+
+    const saved = await service.updateShareFileText({
+      actorUserId: "editor-1",
+      shareId: share.shareId,
+      itemId: markdown.id,
+      body: {
+        contentType: "text",
+        text: "![inside](./inside.png)\n\n![external](https://example.com/image.png)",
+        baseVersionId: version.id,
+      },
+    })
+    expect(saved.version.source).toBe("online_edit")
+
+    await expect(service.updateShareFileText({
+      actorUserId: "editor-1",
+      shareId: share.shareId,
+      itemId: markdown.id,
+      body: {
+        contentType: "text",
+        text: "![outside](../outside.png)",
+        baseVersionId: saved.version.id,
+      },
+    })).rejects.toBeInstanceOf(ForbiddenException)
+    expect(await service.listFileVersions("user-1", markdown.id, { offset: 0, limit: 20 })).toHaveProperty("items.length", 2)
   })
 
   it("rejects markdown direct render requests", async () => {
@@ -4009,6 +4445,14 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
         return change
       },
       findMany: async ({ where }: any = {}) => [...changes.values()].filter((change) => matchesWhere(change, where ?? {})),
+      findFirst: async ({ where, select, orderBy }: any = {}) => {
+        const change = orderRows(
+          [...changes.values()].filter((item) => matchesWhere(item, where ?? {})),
+          orderBy,
+        )[0]
+        if (!change) return null
+        return select ? selectFields(change, select) : change
+      },
       deleteMany: async ({ where }: any) => {
         let count = 0
         for (const [changeId, change] of changes) {
@@ -4196,6 +4640,12 @@ async function collectAsync<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   const result: T[] = []
   for await (const item of iterable) result.push(item)
   return result
+}
+
+async function streamToText(stream: NodeJS.ReadableStream): Promise<string> {
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  return Buffer.concat(chunks).toString("utf8")
 }
 
 function orderRows(rows: any[], orderBy: any): any[] {

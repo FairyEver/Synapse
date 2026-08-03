@@ -151,6 +151,7 @@ type DriveSiteFolderDelegate = {
 
 export type DriveResolvedSiteAccess =
   | { readonly status: "not_found" }
+  | { readonly status: "directory_redirect" }
   | { readonly status: "disabled" }
   | { readonly status: "expired" }
   | { readonly status: "password_required" }
@@ -423,7 +424,20 @@ export class DriveSiteService {
     const asset = await this.prisma.driveSiteAsset.findUnique({
       where: { deploymentId_relativePath: { deploymentId: deployment.id, relativePath } },
     })
-    if (!asset) return { status: "not_found" }
+    if (!asset) {
+      if (requestPath.kind === "asset" && !requestPath.directory) {
+        const directoryIndex = await this.prisma.driveSiteAsset.findUnique({
+          where: {
+            deploymentId_relativePath: {
+              deploymentId: deployment.id,
+              relativePath: normalizeDriveSiteRelativePath(`${relativePath}/index.html`),
+            },
+          },
+        })
+        if (directoryIndex) return { status: "directory_redirect" }
+      }
+      return { status: "not_found" }
+    }
     return { status: "ok", site, deployment, asset }
   }
 

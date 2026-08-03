@@ -1024,6 +1024,7 @@ function preview({
     truncated: false,
     imageUrl: null,
     visitUrl: null,
+    relativeImages: [],
   }
 }
 

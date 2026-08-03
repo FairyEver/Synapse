@@ -14,20 +14,22 @@ const loginSchema = z.object({
 const legacyDashboardCookieName = "synapse_admin"
 const userSessionMaxAgeMs = 30 * 24 * 60 * 60 * 1000
 
-function userCookieOptions() {
+type UserCookiePath = "/api" | "/drive"
+
+function userCookieOptions(path: UserCookiePath) {
   return {
     httpOnly: true,
     maxAge: userSessionMaxAgeMs,
-    path: "/api",
+    path,
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
   }
 }
 
-function userCookieClearOptions() {
+function userCookieClearOptions(path: UserCookiePath) {
   return {
     httpOnly: true,
-    path: "/api",
+    path,
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
   }
@@ -56,7 +58,8 @@ export class DashboardAuthController {
     const result = loginSchema.safeParse(body)
     if (!result.success) throw badRequestFromZodError(result.error, "登录请求无效。")
     const session = await this.auth.loginWeb(result.data, request.ip)
-    response.cookie(userSessionCookieName, session.token, userCookieOptions())
+    response.cookie(userSessionCookieName, session.token, userCookieOptions("/api"))
+    response.cookie(userSessionCookieName, session.token, userCookieOptions("/drive"))
     clearLegacyDashboardCookie(response)
     return {
       email: session.user.email,
@@ -74,10 +77,12 @@ export class DashboardAuthController {
     const token = request.cookies?.[userSessionCookieName]
     const session = typeof token === "string" ? await this.auth.verifyWebSession(token) : null
     if (!session) {
-      response.clearCookie(userSessionCookieName, userCookieClearOptions())
+      response.clearCookie(userSessionCookieName, userCookieClearOptions("/api"))
+      response.clearCookie(userSessionCookieName, userCookieClearOptions("/drive"))
       throw new UnauthorizedException("未登录或登录已过期。")
     }
     const me = await this.auth.getMe(session.userId)
+    response.cookie(userSessionCookieName, token, userCookieOptions("/drive"))
     return {
       email: me.user.email,
       handle: me.user.handle,
@@ -94,7 +99,8 @@ export class DashboardAuthController {
     try {
       if (typeof token === "string") await this.auth.logoutWeb(token, request.ip)
     } finally {
-      response.clearCookie(userSessionCookieName, userCookieClearOptions())
+      response.clearCookie(userSessionCookieName, userCookieClearOptions("/api"))
+      response.clearCookie(userSessionCookieName, userCookieClearOptions("/drive"))
       clearLegacyDashboardCookie(response)
     }
     return { ok: true }

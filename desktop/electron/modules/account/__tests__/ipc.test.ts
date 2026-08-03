@@ -1204,6 +1204,13 @@ describe("accountIpcModule", () => {
   it("validates drive share bridge schemas", () => {
     expect(accountIpcModule.methods.shareDriveItem.request?.parse({
       itemId: "share-1",
+      accessMode: "link_read",
+    })).toEqual({
+      itemId: "share-1",
+      accessMode: "link_read",
+    })
+    expect(accountIpcModule.methods.shareDriveItem.request?.parse({
+      itemId: "share-1",
       passwordEnabled: false,
       expiresIn: "3d",
       accessMode: "link_edit",

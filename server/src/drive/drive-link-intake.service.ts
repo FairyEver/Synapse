@@ -75,7 +75,7 @@ export type DriveLinkIntakeDeps = {
       readonly relativePath?: string
     }) => Promise<
       | { readonly status: "ok"; readonly asset: { readonly relativePath: string; readonly storageKey: string; readonly contentType: string | null } }
-      | { readonly status: "password_required" | "not_found" | "disabled" | "expired" | "deleted" }
+      | { readonly status: "password_required" | "not_found" | "disabled" | "expired" | "deleted" | "directory_redirect" }
     >
     readonly listPublicSiteAssets: (siteId: string, input: {
       readonly cookie: string | null

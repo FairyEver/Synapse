@@ -35,15 +35,20 @@ export function resolveLegacyDashboardDevRedirect(pathname: string) {
 }
 
 export function resolveDashboardDevSpaFallback(pathname: string) {
-  if (pathname === '/admin' || pathname.startsWith('/admin/')) return '/admin.html'
-  if (pathname === '/console' || pathname.startsWith('/console/')) return '/index.html'
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) return '/console/admin.html'
+  if (pathname === '/console' || pathname.startsWith('/console/')) {
+    const relativePath = pathname.slice('/console/'.length)
+    const leafName = relativePath.split('/').at(-1) ?? ''
+    if (relativePath.startsWith('@') || relativePath.startsWith('src/') || leafName.includes('.')) return null
+    return '/console/index.html'
+  }
   if (isDriveBrowserSpaPath(pathname)) return '/console/'
   return null
 }
 
 export function resolveDesktopUpdateDevHtmlPath(pathname: string, search = '') {
   if (pathname !== '/desktop/update') return null
-  return search === '' ? '/desktop-update.html' : 'reject'
+  return search === '' ? '/console/desktop-update.html' : 'reject'
 }
 
 function driveBrowserHistoryFallback(): Plugin {
@@ -125,15 +130,15 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
-      '^/drive/items/[^/]+/(download|render)$': {
+      '^/drive/items/[^/]+/(download|render)(?:\\?.*)?$': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
-      '^/share/[^/]+/(download|render)$': {
+      '^/share/[^/]+/(download|render)(?:\\?.*)?$': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
-      '^/share/[^/]+/items/[^/]+/(download|render)$': {
+      '^/share/[^/]+/items/[^/]+/(download|render)(?:\\?.*)?$': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },

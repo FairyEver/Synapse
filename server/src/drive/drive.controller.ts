@@ -1179,6 +1179,11 @@ export class DrivePublicController {
       cookie: readDriveAccessCookie(request, { kind: "site", publicId: siteId }) ?? null,
       relativePath,
     })
+    if (access.status === "directory_redirect") {
+      const url = new URL(request.originalUrl || request.url, "http://synapse.local")
+      response.redirect(302, `${url.pathname}/${url.search}`)
+      return
+    }
     if (access.status === "password_required") {
       if (isDriveSitePasswordPagePath(relativePath)) {
         setProtectedSiteDenialHeaders(response)
@@ -2131,6 +2136,7 @@ async function sendDriveFileDownload(response: Response, download: {
 }): Promise<void> {
   response.attachment(download.fileName)
   response.setHeader("Content-Type", download.contentType || "application/octet-stream")
+  response.setHeader("X-Content-Type-Options", "nosniff")
   if (download.size !== undefined) response.setHeader("Content-Length", download.size.toString())
   await pipeline(download.stream, response)
 }

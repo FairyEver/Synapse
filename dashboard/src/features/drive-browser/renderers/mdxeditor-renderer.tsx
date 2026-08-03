@@ -117,6 +117,14 @@ export function DriveMDXeditorRenderer({
     editContext,
     disabled: dirty,
   })
+  const relativeImagePreviewUrls = useMemo(
+    () => new Map((preview.relativeImages ?? []).map(({ src, resolvedUrl }) => [src, resolvedUrl])),
+    [preview.relativeImages],
+  )
+  const resolveImagePreview = useCallback(async (imageSource: string) => {
+    if (!relativeImagePreviewUrls.has(imageSource)) return imageSource
+    return relativeImagePreviewUrls.get(imageSource) ?? ''
+  }, [relativeImagePreviewUrls])
   const clearExternalMarkdownSync = useCallback(() => {
     applyingExternalMarkdownRef.current = false
     externalMarkdownTargetRef.current = null
@@ -258,13 +266,14 @@ export function DriveMDXeditorRenderer({
     linkDialogPlugin(),
     imagePlugin({
       imageUploadHandler: confirmPublicImageUpload,
+      imagePreviewHandler: resolveImagePreview,
     }),
     tablePlugin(),
     codeBlockPlugin(),
     codeMirrorPlugin(),
     diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: '' }),
     markdownShortcutPlugin(),
-  ], [canEdit, confirmPublicImageUpload, uploadingImage])
+  ], [canEdit, confirmPublicImageUpload, resolveImagePreview, uploadingImage])
 
   useEffect(() => {
     savedValueRef.current = initialText

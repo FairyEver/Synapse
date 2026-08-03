@@ -189,6 +189,7 @@ describe('DriveRendererShell', () => {
             truncated: false,
             imageUrl: null,
             visitUrl: null,
+            relativeImages: [],
           },
         })}
         selected={{ id: 'markdown', label: '预览', container: 'reading' }}
@@ -220,6 +221,7 @@ describe('DriveRendererShell', () => {
         truncated: false,
         imageUrl: null,
         visitUrl: null,
+        relativeImages: [],
       },
       annotation: { canComment: true, reason: null },
     })
@@ -280,6 +282,7 @@ function baseSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowse
       truncated: false,
       imageUrl: null,
       visitUrl: null,
+      relativeImages: [],
     },
     edit: {
       canEdit: true,

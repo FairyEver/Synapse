@@ -1,5 +1,5 @@
 import { useMemo, useState, type MouseEvent } from "react"
-import { Download, MoreHorizontal, RefreshCw, Trash2, Upload } from "lucide-react"
+import { Download, FolderOpen, FolderPlus, MoreHorizontal, RefreshCw, Trash2, Upload } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -46,6 +46,9 @@ type GitRepositoryListProps = {
   readonly onSync: (repositoryId: string) => void
   readonly onCancel: (repositoryId: string) => void
   readonly onRemoveRepository: (repositoryId: string) => Promise<boolean>
+  readonly onShowInFolder: (localPath: string) => void
+  readonly onAddProject: (repository: SynapseGitRepository) => void
+  readonly isProjectPathConfigured: (localPath: string) => boolean
   readonly onHandleFailure?: (failure: GitOperationFailure) => void
 }
 
@@ -94,6 +97,9 @@ export function GitRepositoryList({
   onSync,
   onCancel,
   onRemoveRepository,
+  onShowInFolder,
+  onAddProject,
+  isProjectPathConfigured,
   onHandleFailure,
 }: GitRepositoryListProps) {
   const globalActionDisabled = isGlobalBusy(busy)
@@ -345,7 +351,28 @@ export function GitRepositoryList({
                               <MoreHorizontal />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+                          <DropdownMenuContent
+                            align="end"
+                            className="min-w-44"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <DropdownMenuItem
+                              disabled={snapshot?.pathExists === false}
+                              onSelect={() => onShowInFolder(repository.localPath)}
+                            >
+                              <FolderOpen data-icon="inline-start" />
+                              在文件夹中显示
+                            </DropdownMenuItem>
+                            {!isProjectPathConfigured(repository.localPath) ? (
+                              <DropdownMenuItem
+                                disabled={snapshot?.pathExists === false}
+                                onSelect={() => onAddProject(repository)}
+                              >
+                                <FolderPlus data-icon="inline-start" />
+                                设为项目
+                              </DropdownMenuItem>
+                            ) : null}
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem disabled={integrationBlocked} onSelect={() => onPull(repository.id)}>
                               <Download data-icon="inline-start" />
                               拉取

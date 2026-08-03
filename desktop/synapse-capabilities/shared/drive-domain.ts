@@ -31,15 +31,15 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.link.download_file" as CapabilityId, title: "Download Drive link file", description: "Download one file or public asset from a Synapse Drive link to a local path or cache.", mutates: true },
   { id: "app.drive.folder_zip.create" as CapabilityId, title: "Create folder zip", description: "Download a Synapse Drive folder as a local zip file.", mutates: true },
   { id: "app.drive.share.list" as CapabilityId, title: "List shares", description: "List public Synapse Drive share links for the current user.", mutates: false },
-  { id: "app.drive.share.create" as CapabilityId, title: "Create share", description: "Create or reuse a public Synapse Drive share link. Standalone HTML defaults to this route unless the user explicitly asks to publish the whole folder as a site. Existing shares keep their settings unless access settings are supplied.", mutates: true },
+  { id: "app.drive.share.create" as CapabilityId, title: "Create share", description: "Create or reuse a public Synapse Drive share link. Standalone HTML defaults to this route and does not receive sibling relative-resource access unless the user explicitly asks to publish the whole folder as a webpage share. Existing shares keep their settings unless access settings are supplied.", mutates: true },
   { id: "app.drive.share.disable" as CapabilityId, title: "Disable share", description: "Disable a Synapse Drive share link.", mutates: true },
-  { id: "app.drive.site.create" as CapabilityId, title: "Create Drive site", description: "Publish a multi-file Drive folder, or a whole folder explicitly selected by the user, as an independent read-only static site at /sites/<siteId>/. A folder containing only index.html is valid.", mutates: true },
-  { id: "app.drive.site.list" as CapabilityId, title: "List Drive sites", description: "List current user's Drive-published static sites.", mutates: false },
-  { id: "app.drive.site.update_access" as CapabilityId, title: "Update Drive site access", description: "Update access mode and expiry settings for a Drive-published site without changing Drive shares.", mutates: true },
-  { id: "app.drive.site.disable" as CapabilityId, title: "Disable Drive site", description: "Disable public access to a Drive-published site while keeping its record and deployment.", mutates: true },
-  { id: "app.drive.site.enable" as CapabilityId, title: "Enable Drive site", description: "Restore public access to a disabled Drive-published site.", mutates: true },
-  { id: "app.drive.site.delete" as CapabilityId, title: "Delete Drive site", description: "Delete a Drive-published site and make its /sites/<siteId>/ URL inaccessible.", mutates: true, risk: "high" },
-  { id: "app.drive.site.republish" as CapabilityId, title: "Republish Drive site", description: "Copy the remembered source folder into a new site deployment and switch only after success.", mutates: true },
+  { id: "app.drive.site.create" as CapabilityId, title: "Create webpage share", description: "Create an independent read-only webpage share from a multi-file Drive folder, or a whole folder explicitly selected by the user, at /sites/<siteId>/. A folder containing only index.html is valid.", mutates: true },
+  { id: "app.drive.site.list" as CapabilityId, title: "List webpage shares", description: "List the current user's Drive webpage shares.", mutates: false },
+  { id: "app.drive.site.update_access" as CapabilityId, title: "Update webpage share access", description: "Update access mode and expiry settings for a Drive webpage share without changing Drive shares.", mutates: true },
+  { id: "app.drive.site.disable" as CapabilityId, title: "Disable webpage share", description: "Disable public access to a Drive webpage share while keeping its record and deployment.", mutates: true },
+  { id: "app.drive.site.enable" as CapabilityId, title: "Enable webpage share", description: "Restore public access to a disabled Drive webpage share.", mutates: true },
+  { id: "app.drive.site.delete" as CapabilityId, title: "Delete webpage share", description: "Delete a Drive webpage share and make its /sites/<siteId>/ URL inaccessible.", mutates: true, risk: "high" },
+  { id: "app.drive.site.republish" as CapabilityId, title: "Update webpage share", description: "Copy the remembered source folder into a new webpage deployment and switch only after success.", mutates: true },
   { id: "app.drive.usage.get" as CapabilityId, title: "Get usage", description: "Get Synapse Drive quota usage for the current user.", mutates: false },
   { id: "app.drive.stats.get" as CapabilityId, title: "Get stats", description: "Get Synapse Drive item counts and quota usage for the current user.", mutates: false },
   { id: "app.drive.item_tree.list" as CapabilityId, title: "List item tree", description: "List recursive Synapse Drive file and folder metadata without reading file contents.", mutates: false },
@@ -105,7 +105,7 @@ const accessSettingsProperties = {
   accessMode: { type: "string", enum: driveShareAccessModeValues, description: "Share permission. link_read lets link holders read; link_edit lets link holders edit supported text files only after signing in; specified_users_edit lets only listed emails edit." },
   editorEmails: { type: "array", items: { type: "string" }, description: "Editor email list for specified_users_edit. Leave empty for other access modes." },
 }
-const sitePasswordField = stringField("Optional custom site password. Used only when accessMode is password. MCP responses never return site passwords; pass a custom value when the user needs a known password.")
+const sitePasswordField = stringField("Optional custom webpage-share password. Used only when accessMode is password. MCP responses never return site passwords; pass a custom value when the user needs a known password.")
 
 export function buildDriveTools(): McpToolDefinition[] {
   return withPrimaryMcpTools([
@@ -391,7 +391,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_share_create",
-      description: "Create or reuse a public Synapse Drive share link and return the /share/... URL. Prefer this route for a standalone HTML file unless the user explicitly asks to publish the whole containing folder as a site; merely naming an upload destination folder or casually saying page, website, or site is not explicit folder-publishing intent. Existing shares keep their password, expiry, and access mode unless access settings are supplied. accessMode controls read/edit permission without changing the share link.",
+      description: "Create or reuse a public Synapse Drive share link and return the /share/... URL. Prefer this route for a standalone HTML file; it does not grant sibling relative-resource access. Use a webpage share only when the user explicitly asks to publish the whole containing folder; merely naming an upload destination folder or casually saying page, website, or site is not explicit folder-publishing intent. Existing shares keep their password, expiry, and access mode unless access settings are supplied. accessMode controls read/edit permission without changing the share link.",
       inputSchema: {
         type: "object",
         properties: {
@@ -414,23 +414,23 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_site_create",
-      description: "Publish a Drive folder as an independent static site at /sites/<siteId>/. Use this for a multi-file site or when the user explicitly asks to publish the whole folder as a site; a folder containing only index.html is valid. Do not infer whole-folder publishing from a standalone HTML upload, an upload destination folder, or casual words such as page, website, or site. The folder is copied at publish time; this does not create a Drive share or grant edit access.",
+      description: "Create an independent webpage share from a Drive folder at /sites/<siteId>/. Use this for a multi-file webpage or when the user explicitly asks to publish the whole folder; a folder containing only index.html is valid. Do not infer whole-folder publishing from a standalone HTML upload, an upload destination folder, or casual words such as page, website, or site. The folder is copied at publish time; this does not create a Drive share or grant edit access.",
       inputSchema: {
         type: "object",
         properties: {
-          sourceFolderItemId: stringField("Drive folder item id to copy into the site deployment."),
-          name: stringField("Site display name."),
+          sourceFolderItemId: stringField("Drive folder item id to copy into the webpage deployment."),
+          name: stringField("Webpage share display name."),
           entryPath: stringField("Optional HTML entry path inside the folder. Defaults to index.html when available."),
           accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a password." },
           password: sitePasswordField,
-          expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Site expiration. Use forever for no expiry." },
+          expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Webpage share expiration. Use forever for no expiry." },
         },
         required: ["sourceFolderItemId", "name", "accessMode", "expiresIn"],
       },
     },
     {
       name: "drive_site_list",
-      description: "List Drive-published static sites for the current user. Sites use /sites/<siteId>/ and are separate from /share links and /files public assets.",
+      description: "List Drive webpage shares for the current user. Webpage shares use /sites/<siteId>/ and are separate from /share links and /files public assets.",
       inputSchema: {
         type: "object",
         properties: {
@@ -442,21 +442,21 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_site_update_access",
-      description: "Update a Drive site access mode and expiry without republishing files or changing Drive shares.",
+      description: "Update a Drive webpage share access mode and expiry without republishing files or changing Drive shares.",
       inputSchema: {
         type: "object",
         properties: {
           siteId: stringField("Public site id from /sites/<siteId>/."),
           accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a password." },
           password: sitePasswordField,
-          expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Site expiration. Use forever for no expiry." },
+          expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Webpage share expiration. Use forever for no expiry." },
         },
         required: ["siteId", "accessMode", "expiresIn"],
       },
     },
     {
       name: "drive_site_disable",
-      description: "Disable public access to a Drive-published site while keeping its record and deployment.",
+      description: "Disable public access to a Drive webpage share while keeping its record and deployment.",
       inputSchema: {
         type: "object",
         properties: {
@@ -467,7 +467,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_site_enable",
-      description: "Restore public access to a disabled Drive-published site.",
+      description: "Restore public access to a disabled Drive webpage share.",
       inputSchema: {
         type: "object",
         properties: {
@@ -478,7 +478,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_site_delete",
-      description: "Delete a Drive-published site and make its /sites/<siteId>/ URL inaccessible.",
+      description: "Delete a Drive webpage share and make its /sites/<siteId>/ URL inaccessible.",
       inputSchema: {
         type: "object",
         properties: {
@@ -489,7 +489,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_site_republish",
-      description: "Republish a Drive site by copying the remembered source folder into a new deployment. The active deployment switches only after success.",
+      description: "Update a Drive webpage share by copying the remembered source folder into a new deployment. The active deployment switches only after success.",
       inputSchema: {
         type: "object",
         properties: {

@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
 import {
   buildConsoleDriveRootUrl,
-  type DriveAccessSettingsInput,
   type DriveBrowserItemDto,
   type DriveBrowserSnapshotDto,
   type DriveBrowserSurface,
@@ -30,7 +29,6 @@ import { DriveFileTable, type DriveConsoleSystemView } from './drive-file-table'
 import { DriveMoveDialog } from './drive-move-dialog'
 import { DrivePublicAssetsView } from './drive-public-assets-view'
 import { DriveSharesDialog, DriveShareSettingsDialog } from './drive-share-dialogs'
-import { DriveSiteCreateDialog, DriveSitesDialog } from './drive-sites-dialogs'
 import { DriveTrashView } from './drive-trash-view'
 import { pickDriveFolderForUpload, uploadDriveFiles, type DriveWebFolderUploadInput, type DriveWebUploadResult } from './drive-upload'
 import { useDriveConsole, type DriveConsoleState } from './use-drive-console'
@@ -119,8 +117,6 @@ function DriveConsoleContent({
   const [deleteTarget, setDeleteTarget] = useState<DriveBrowserItemDto | null>(null)
   const [shareTarget, setShareTarget] = useState<DriveBrowserItemDto | null>(null)
   const [sharesOpen, setSharesOpen] = useState(false)
-  const [siteFolder, setSiteFolder] = useState<DriveBrowserItemDto | null>(null)
-  const [sitesOpen, setSitesOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -179,20 +175,6 @@ function DriveConsoleContent({
       await refreshAfterMutation()
     } catch (error) {
       toast(errorMessage(error, '移动失败'))
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const createShare = async (settings: DriveAccessSettingsInput) => {
-    if (!shareTarget) return
-    setSubmitting(true)
-    try {
-      await driveApi.createShare(shareTarget.id, settings)
-      setShareTarget(null)
-      await refreshAfterMutation()
-    } catch (error) {
-      toast(errorMessage(error, '分享失败'))
     } finally {
       setSubmitting(false)
     }
@@ -272,8 +254,7 @@ function DriveConsoleContent({
           <Button type='button' variant='outline' size='sm' onClick={() => setNameDialog({ mode: 'create', item: null, value: '' })}>
             新建文件夹
           </Button>
-          <Button type='button' variant='outline' size='sm' onClick={() => setSharesOpen(true)}>我的分享</Button>
-          <Button type='button' variant='outline' size='sm' onClick={() => setSitesOpen(true)}>站点</Button>
+          <Button type='button' variant='outline' size='sm' onClick={() => setSharesOpen(true)}>分享管理</Button>
           <Button type='button' variant='outline' size='sm' onClick={() => { void state.refresh() }}>刷新</Button>
         </div>
       </div>
@@ -302,7 +283,6 @@ function DriveConsoleContent({
             onOpenSystemView={setActiveView}
             onDelete={setDeleteTarget}
             onMove={setMoveTarget}
-            onPublishSite={setSiteFolder}
             onRename={(item) => setNameDialog({ mode: 'rename', item, value: item.name })}
             onShare={setShareTarget}
             onNavigate={onNavigate}
@@ -360,28 +340,18 @@ function DriveConsoleContent({
         handleConfirm={() => { void deleteItem() }}
       />
       <DriveShareSettingsDialog
-        itemName={shareTarget?.name ?? ''}
+        item={shareTarget}
         open={shareTarget !== null}
-        submitting={submitting}
         onOpenChange={(open) => {
           if (!open) setShareTarget(null)
         }}
-        onConfirm={createShare}
+        onCreated={refreshAfterMutation}
       />
       <DriveSharesDialog
         open={sharesOpen}
         onOpenChange={setSharesOpen}
         onChanged={refreshAfterMutation}
       />
-      <DriveSiteCreateDialog
-        folder={siteFolder}
-        open={siteFolder !== null}
-        onOpenChange={(open) => {
-          if (!open) setSiteFolder(null)
-        }}
-        onCreated={refreshAfterMutation}
-      />
-      <DriveSitesDialog open={sitesOpen} onOpenChange={setSitesOpen} />
     </Tabs>
   )
 }

@@ -5,9 +5,10 @@ import type { ReactElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
+import type { DriveSiteDto } from '@synapse/shared'
 import { driveApi } from '@/lib/api'
 import { DrivePublicAssetsView } from './drive-public-assets-view'
-import { DriveSiteCreateDialog, DriveSitesDialog } from './drive-sites-dialogs'
+import { DriveWebSharesPanel } from './drive-sites-dialogs'
 import { DriveTrashView } from './drive-trash-view'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -234,73 +235,18 @@ describe('DrivePublicAssetsView', () => {
   })
 })
 
-describe('Drive site dialogs', () => {
-  it('creates a site from a folder', async () => {
-    vi.mocked(driveApi.preflightSite).mockResolvedValue({
-      sourceFolderItemId: 'folder-1',
-      sourceFolderName: '站点',
-      htmlFiles: ['index.html'],
-      defaultEntryPath: 'index.html',
-      fileCount: 1,
-      totalBytes: '10',
-      includesJavaScript: false,
-    })
-    vi.mocked(driveApi.createSite).mockResolvedValue({} as never)
-    render(<DriveSiteCreateDialog folder={{ id: 'folder-1', name: '站点' } as never} open onOpenChange={() => undefined} onCreated={async () => undefined} />)
-    await flush()
-
-    await click(textButton('发布'))
-    expect(driveApi.createSite).toHaveBeenCalledWith({
-      sourceFolderItemId: 'folder-1',
-      name: '站点',
-      entryPath: 'index.html',
-      accessMode: 'public',
-      expiresIn: 'forever',
-    })
-  })
-
-  it('creates a site with a selected non-default entry page', async () => {
-    vi.mocked(driveApi.preflightSite).mockResolvedValue({
-      sourceFolderItemId: 'folder-1',
-      sourceFolderName: '站点',
-      htmlFiles: ['home.html', 'docs/start.html'],
-      defaultEntryPath: null,
-      fileCount: 2,
-      totalBytes: '20',
-      includesJavaScript: false,
-    })
-    vi.mocked(driveApi.createSite).mockResolvedValue({} as never)
-    render(<DriveSiteCreateDialog folder={{ id: 'folder-1', name: '站点' } as never} open onOpenChange={() => undefined} onCreated={async () => undefined} />)
-    await flush()
-
-    expect(textButton('发布')).toHaveProperty('disabled', true)
-    await selectOption('docs/start.html')
-    await click(textButton('发布'))
-
-    expect(driveApi.createSite).toHaveBeenCalledWith({
-      sourceFolderItemId: 'folder-1',
-      name: '站点',
-      entryPath: 'docs/start.html',
-      accessMode: 'public',
-      expiresIn: 'forever',
-    })
-  })
-
-  it('lists sites and disables one', async () => {
-    vi.mocked(driveApi.listSites).mockResolvedValue({
-      items: [{ id: 'db-1', siteId: 'site-1', name: 'Docs', status: 'active', accessMode: 'public', url: '/sites/site-1', urlWithPassword: '/sites/site-1', passwordEnabled: false, password: null, expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '站点', entryPath: 'index.html', fileCount: 1, totalBytes: '10', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: '2026-06-29T00:00:00.000Z' }],
-      total: 1,
-      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
-    })
+describe('Drive webpage shares panel', () => {
+  it('updates access, stops, and deletes a webpage share', async () => {
+    vi.mocked(driveApi.listSites).mockResolvedValue(sitePage([site()]))
     vi.mocked(driveApi.disableSite).mockResolvedValue({} as never)
-    render(<DriveSitesDialog open onOpenChange={() => undefined} />)
+    render(<DriveWebSharesPanel active onCopyUrl={async () => undefined} onChanged={async () => undefined} />)
     await flush()
 
     expect(document.body.textContent).toContain('Docs')
-    await click(textButton('停用'))
+    await click(textButton('停止分享'))
     expect(driveApi.disableSite).toHaveBeenCalledWith('site-1')
     await click(textButton('访问设置'))
-    await click(textButton('保存访问'))
+    await click(textButton('保存'))
     expect(driveApi.updateSiteAccess).toHaveBeenCalledWith('site-1', {
       accessMode: 'public',
       expiresIn: 'forever',
@@ -312,19 +258,11 @@ describe('Drive site dialogs', () => {
     expect(driveApi.deleteSite).toHaveBeenCalledWith('site-1')
   })
 
-  it('loads more sites from the next page', async () => {
+  it('loads more webpage shares', async () => {
     vi.mocked(driveApi.listSites)
-      .mockResolvedValueOnce({
-        items: [{ id: 'db-1', siteId: 'site-1', name: 'Docs 1', status: 'active', accessMode: 'public', url: '/sites/site-1', urlWithPassword: '/sites/site-1', passwordEnabled: false, password: null, expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '站点', entryPath: 'index.html', fileCount: 1, totalBytes: '10', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: '2026-06-29T00:00:00.000Z' }],
-        total: 51,
-        page: { offset: 0, limit: 50, hasMore: true, nextOffset: 50 },
-      })
-      .mockResolvedValueOnce({
-        items: [{ id: 'db-51', siteId: 'site-51', name: 'Docs 51', status: 'active', accessMode: 'public', url: '/sites/site-51', urlWithPassword: '/sites/site-51', passwordEnabled: false, password: null, expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '站点', entryPath: 'index.html', fileCount: 1, totalBytes: '10', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: '2026-06-29T00:00:00.000Z' }],
-        total: 51,
-        page: { offset: 50, limit: 50, hasMore: false, nextOffset: null },
-      })
-    render(<DriveSitesDialog open onOpenChange={() => undefined} />)
+      .mockResolvedValueOnce(sitePage([site({ name: 'Docs 1' })], { hasMore: true, nextOffset: 50, total: 51 }))
+      .mockResolvedValueOnce(sitePage([site({ id: 'db-51', siteId: 'site-51', name: 'Docs 51' })], { offset: 50, total: 51 }))
+    render(<DriveWebSharesPanel active onCopyUrl={async () => undefined} onChanged={async () => undefined} />)
     await flush()
 
     expect(document.body.textContent).toContain('Docs 1')
@@ -333,71 +271,78 @@ describe('Drive site dialogs', () => {
 
     expect(driveApi.listSites).toHaveBeenLastCalledWith({ offset: 50, limit: 50 })
     expect(document.body.textContent).toContain('Docs 51')
-    expect(() => textButton('加载更多')).toThrow()
   })
 
-  it('does not offer enable for failed sites without a deployment', async () => {
-    vi.mocked(driveApi.listSites).mockResolvedValue({
-      items: [{ id: 'db-1', siteId: 'site-failed', name: 'Broken', status: 'failed', accessMode: 'public', url: '/sites/site-failed', urlWithPassword: '/sites/site-failed', passwordEnabled: false, password: null, expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '站点', entryPath: null, fileCount: 0, totalBytes: '0', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: null }],
-      total: 1,
-      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
-    })
-    render(<DriveSitesDialog open onOpenChange={() => undefined} />)
+  it('does not offer restore for failed webpage shares without a deployment', async () => {
+    vi.mocked(driveApi.listSites).mockResolvedValue(sitePage([site({ status: 'failed', entryPath: null })]))
+    render(<DriveWebSharesPanel active onCopyUrl={async () => undefined} onChanged={async () => undefined} />)
     await flush()
 
-    expect(document.body.textContent).toContain('Broken')
-    expect(() => textButton('启用')).toThrow()
-    await click(textButton('重发'))
+    expect(() => textButton('恢复分享')).toThrow()
+    await click(textButton('更新网页'))
     expect(driveApi.enableSite).not.toHaveBeenCalled()
-    expect(driveApi.republishSite).toHaveBeenCalledWith('site-failed', { entryPath: null })
+    expect(driveApi.republishSite).toHaveBeenCalledWith('site-1', { entryPath: null })
   })
 
-  it('shows password site links with access credentials', async () => {
-    vi.mocked(driveApi.listSites).mockResolvedValue({
-      items: [{ id: 'db-1', siteId: 'site-1', name: 'Docs', status: 'active', accessMode: 'password', url: '/sites/site-1', urlWithPassword: '/sites/site-1?password=SitePw1', passwordEnabled: true, password: 'SitePw1', expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '站点', entryPath: 'index.html', fileCount: 1, totalBytes: '10', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: '2026-06-29T00:00:00.000Z' }],
-      total: 1,
-      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
-    })
-
-    render(<DriveSitesDialog open onOpenChange={() => undefined} />)
+  it('shows password webpage links with access credentials', async () => {
+    vi.mocked(driveApi.listSites).mockResolvedValue(sitePage([site({
+      accessMode: 'password',
+      passwordEnabled: true,
+      password: 'SitePw1',
+      urlWithPassword: '/sites/site-1?password=SitePw1',
+    })]))
+    render(<DriveWebSharesPanel active onCopyUrl={async () => undefined} onChanged={async () => undefined} />)
     await flush()
 
-    const linkInput = document.querySelector('input')
-    expect(linkInput).toBeInstanceOf(HTMLInputElement)
-    expect((linkInput as HTMLInputElement | null)?.value).toBe('/sites/site-1?password=SitePw1')
-  })
-
-  it('does not reuse stale preflight when the target folder changes', async () => {
-    const pendingPreflight = new Promise<never>(() => undefined)
-    vi.mocked(driveApi.preflightSite)
-      .mockResolvedValueOnce({
-        sourceFolderItemId: 'folder-1',
-        sourceFolderName: '旧站点',
-        htmlFiles: ['index.html'],
-        defaultEntryPath: 'index.html',
-        fileCount: 1,
-        totalBytes: '10',
-        includesJavaScript: false,
-      })
-      .mockReturnValueOnce(pendingPreflight)
-    render(<DriveSiteCreateDialog folder={{ id: 'folder-1', name: '旧站点' } as never} open onOpenChange={() => undefined} onCreated={async () => undefined} />)
-    await flush()
-
-    rerender(<DriveSiteCreateDialog folder={{ id: 'folder-2', name: '新站点' } as never} open onOpenChange={() => undefined} onCreated={async () => undefined} />)
-    await click(textButton('发布'))
-
-    expect(driveApi.createSite).not.toHaveBeenCalled()
+    expect((document.querySelector('input') as HTMLInputElement | null)?.value).toBe('/sites/site-1?password=SitePw1')
   })
 })
+
+function site(overrides: Partial<DriveSiteDto> = {}): DriveSiteDto {
+  return {
+    id: 'db-1',
+    siteId: 'site-1',
+    name: 'Docs',
+    status: 'active',
+    accessMode: 'public',
+    url: '/sites/site-1',
+    urlWithPassword: '/sites/site-1',
+    passwordEnabled: false,
+    password: null,
+    expiresIn: 'forever',
+    expiresAt: null,
+    sourceFolderItemId: 'folder-1',
+    sourceFolderName: '网页',
+    entryPath: 'index.html',
+    fileCount: 1,
+    totalBytes: '10',
+    createdAt: '2026-06-29T00:00:00.000Z',
+    updatedAt: '2026-06-29T00:00:00.000Z',
+    lastPublishedAt: '2026-06-29T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function sitePage(
+  items: readonly DriveSiteDto[],
+  page: { readonly offset?: number; readonly hasMore?: boolean; readonly nextOffset?: number | null; readonly total?: number } = {},
+) {
+  return {
+    items,
+    total: page.total ?? items.length,
+    page: {
+      offset: page.offset ?? 0,
+      limit: 50,
+      hasMore: page.hasMore ?? false,
+      nextOffset: page.nextOffset ?? null,
+    },
+  }
+}
 
 function render(element: ReactElement) {
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
-  act(() => root?.render(element))
-}
-
-function rerender(element: ReactElement) {
   act(() => root?.render(element))
 }
 
@@ -420,32 +365,6 @@ function lastTextButton(text: string) {
 async function click(element: HTMLElement) {
   await act(async () => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-  })
-}
-
-async function selectOption(text: string) {
-  const elementPrototype = HTMLElement.prototype as HTMLElement['__proto__'] & {
-    hasPointerCapture?: () => boolean
-    setPointerCapture?: () => void
-    releasePointerCapture?: () => void
-    scrollIntoView?: () => void
-  }
-  elementPrototype.hasPointerCapture ??= () => false
-  elementPrototype.setPointerCapture ??= () => undefined
-  elementPrototype.releasePointerCapture ??= () => undefined
-  elementPrototype.scrollIntoView ??= () => undefined
-  const trigger = document.querySelector('button[role="combobox"]')
-  if (!(trigger instanceof HTMLElement)) throw new Error('missing select trigger')
-  await act(async () => {
-    trigger.focus()
-    trigger.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }))
-  })
-  await flush()
-  const option = Array.from(document.querySelectorAll('[role="option"]')).find((item) => item.textContent?.includes(text))
-  if (!(option instanceof HTMLElement)) throw new Error(`missing option ${text}`)
-  await act(async () => {
-    option.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, button: 0 }))
-    option.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
 }
 

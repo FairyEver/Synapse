@@ -1611,7 +1611,7 @@ export class AccountService {
     const query = new URLSearchParams({ sourceFolderItemId: input.sourceFolderItemId })
     return this.getAuthenticatedJson<DriveSitePreflightDto>(
       `${apiBaseUrl()}/drive/sites/preflight?${query}`,
-      "站点预检失败。",
+      "网页分享检查失败。",
     )
   }
 
@@ -1620,14 +1620,14 @@ export class AccountService {
       "POST",
       `${apiBaseUrl()}/drive/sites`,
       input,
-      "站点发布失败。",
+      "网页分享创建失败。",
     ))
   }
 
   async listDriveSites(input?: DriveSiteListInput): Promise<DriveSiteListPageDto> {
     const result = await this.getAuthenticatedJson<DriveSiteListPageDto>(
       `${apiBaseUrl()}/drive/sites${driveSiteListQuery(input)}`,
-      "站点列表加载失败。",
+      "网页分享列表加载失败。",
     )
     return {
       ...result,
@@ -1640,7 +1640,7 @@ export class AccountService {
       "PATCH",
       `${apiBaseUrl()}/drive/sites/${encodeURIComponent(input.siteId)}/access`,
       { accessMode: input.accessMode, ...(input.password === undefined ? {} : { password: input.password }), expiresIn: input.expiresIn },
-      "站点访问设置保存失败。",
+      "网页分享访问设置保存失败。",
     ))
   }
 
@@ -1649,7 +1649,7 @@ export class AccountService {
       "POST",
       `${apiBaseUrl()}/drive/sites/${encodeURIComponent(siteId)}/disable`,
       undefined,
-      "停用站点失败。",
+      "停止网页分享失败。",
     ))
   }
 
@@ -1658,7 +1658,7 @@ export class AccountService {
       "POST",
       `${apiBaseUrl()}/drive/sites/${encodeURIComponent(siteId)}/enable`,
       undefined,
-      "启用站点失败。",
+      "恢复网页分享失败。",
     ))
   }
 
@@ -1667,7 +1667,7 @@ export class AccountService {
       "DELETE",
       `${apiBaseUrl()}/drive/sites/${encodeURIComponent(siteId)}`,
       undefined,
-      "删除站点失败。",
+      "删除网页分享失败。",
     )
   }
 
@@ -1676,7 +1676,7 @@ export class AccountService {
       "POST",
       `${apiBaseUrl()}/drive/sites/${encodeURIComponent(input.siteId)}/republish`,
       { entryPath: input.entryPath },
-      "重新发布站点失败。",
+      "更新网页失败。",
     ))
   }
 

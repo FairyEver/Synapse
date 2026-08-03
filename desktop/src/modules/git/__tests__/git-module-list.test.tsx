@@ -9,6 +9,14 @@ import { GitModule } from "../index"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }))
+
+const projectActions = vi.hoisted(() => ({
+  addProject: vi.fn(),
+  isProjectPathConfigured: vi.fn(),
+  refreshProjects: vi.fn(),
+}))
+
 const bridge = vi.hoisted(() => ({
   git: {
     checkEnvironment: vi.fn(),
@@ -53,7 +61,14 @@ const bridge = vi.hoisted(() => ({
   },
   shell: {
     openExternal: vi.fn(),
+    showItemInFolder: vi.fn(),
   },
+}))
+
+vi.mock("sonner", () => ({ toast }))
+
+vi.mock("@/app-shell/use-project-actions", () => ({
+  useProjectActions: () => projectActions,
 }))
 
 vi.mock("@/lib/electron-bridge", () => ({
@@ -275,6 +290,15 @@ describe("GitModule repository list", () => {
     })
     bridge.settings.repository.chooseDirectory.mockResolvedValue(null)
     bridge.shell.openExternal.mockResolvedValue(undefined)
+    bridge.shell.showItemInFolder.mockResolvedValue(undefined)
+    projectActions.addProject.mockImplementation(async (input) => ({
+      status: "added",
+      project: { id: "project-1", ...input },
+    }))
+    projectActions.isProjectPathConfigured.mockReturnValue(false)
+    projectActions.refreshProjects.mockResolvedValue(undefined)
+    toast.error.mockReset()
+    toast.success.mockReset()
   })
 
   afterEach(async () => {
@@ -1202,10 +1226,100 @@ describe("GitModule repository list", () => {
 
     await click(findButtonByName("Docs 更多操作"))
 
+    expect(document.querySelector('[data-slot="dropdown-menu-content"]')?.className).toContain("min-w-44")
+    expect(findMenuItem("在文件夹中显示")).toBeTruthy()
+    expect(findMenuItem("设为项目")).toBeTruthy()
     expect(findMenuItem("拉取")).toBeTruthy()
     expect(findMenuItem("推送")).toBeTruthy()
     expect(findMenuItem("同步")).toBeTruthy()
     expect(findMenuItem("移除仓库")).toBeTruthy()
+  })
+
+  it("在系统文件管理器中显示仓库目录", async () => {
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }),
+    ])
+    await renderGitModule(roots)
+
+    await click(findButtonByName("Docs 更多操作"))
+    await click(findMenuItem("在文件夹中显示"))
+
+    expect(bridge.shell.showItemInFolder).toHaveBeenCalledWith("/work/docs")
+  })
+
+  it("显示仓库目录失败时给出提示", async () => {
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }),
+    ])
+    bridge.shell.showItemInFolder.mockRejectedValueOnce(new Error("permission denied"))
+    await renderGitModule(roots)
+
+    await click(findButtonByName("Docs 更多操作"))
+    await click(findMenuItem("在文件夹中显示"))
+
+    expect(toast.error).toHaveBeenCalledWith("无法在文件夹中显示仓库。")
+  })
+
+  it("opens the shared project dialog with repository values", async () => {
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }),
+    ])
+    await renderGitModule(roots)
+
+    await click(findButtonByName("Docs 更多操作"))
+    await click(findMenuItem("设为项目"))
+
+    expect(inputByLabel("项目名称").value).toBe("Docs")
+    expect(inputByLabel("项目路径").value).toBe("/work/docs")
+
+    await changeInput("项目名称", "Docs Project")
+    await click(findButton("添加"))
+
+    expect(projectActions.addProject).toHaveBeenCalledWith({
+      name: "Docs Project",
+      path: "/work/docs",
+    })
+    expect(toast.success).toHaveBeenCalledWith("项目已添加。")
+  })
+
+  it("hides the project action when the repository path is already configured", async () => {
+    projectActions.isProjectPathConfigured.mockImplementation((localPath) => localPath === "/work/docs")
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }),
+    ])
+    await renderGitModule(roots)
+
+    await click(findButtonByName("Docs 更多操作"))
+
+    expect(Array.from(document.querySelectorAll('[role="menuitem"]')).some((item) => (
+      item.textContent?.includes("设为项目")
+    ))).toBe(false)
+  })
+
+  it("disables the project action when the repository directory is unavailable", async () => {
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary(
+        { id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
+        { pathExists: false },
+      ),
+    ])
+    await renderGitModule(roots)
+
+    await click(findButtonByName("Docs 更多操作"))
+
+    expect(findMenuItem("设为项目").getAttribute("data-disabled")).not.toBeNull()
+  })
+
+  it("refreshes project state when the Git window regains focus", async () => {
+    await renderGitModule(roots)
+    projectActions.refreshProjects.mockClear()
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"))
+      await flush()
+    })
+
+    expect(projectActions.refreshProjects).toHaveBeenCalledTimes(1)
   })
 
   it("removes repository records without trashing local files by default", async () => {

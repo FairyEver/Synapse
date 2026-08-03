@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react"
-import { Copy, ExternalLink, LoaderCircle, MoreHorizontal, RefreshCw } from "lucide-react"
+import { Copy, ExternalLink, KeyRound, LoaderCircle, MoreHorizontal, RefreshCw, Settings2 } from "lucide-react"
 import { toast } from "sonner"
 import type { DriveAccessExpiresIn, DriveSiteDto } from "@synapse/shared"
 import { FormDialog } from "@/components/form-dialog"
@@ -16,14 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import {
-  Dialog,
-  DialogContent,
-  DialogFrame,
-  DialogFrameBody,
-  DialogFrameFooter,
-  DialogFrameHeader,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +25,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -41,11 +33,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
 import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import { DRIVE_SITE_TABLE_COLUMNS, DriveTableColumns } from "./drive-table-columns"
+import {
+  DRIVE_SHARE_TABLE_COLUMNS,
+  DRIVE_TABLE_STICKY_ACTION_COLUMN_CLASS,
+  DriveTableColumns,
+} from "./drive-table-columns"
 
-type DriveSitesDialogProps = {
-  readonly open: boolean
-  readonly onOpenChange: (open: boolean) => void
+type DriveSitesPanelProps = {
+  readonly active: boolean
 }
 
 type DriveSitesState = {
@@ -79,7 +74,7 @@ const DRIVE_SITE_EXPIRES_OPTIONS: ReadonlyArray<{ readonly label: string; readon
   { label: "永久", value: "forever" },
 ]
 
-function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
+function DriveSitesPanel({ active }: DriveSitesPanelProps) {
   const [state, setState] = useState<DriveSitesState>(() => createInitialState())
   const [busySiteId, setBusySiteId] = useState<string | null>(null)
   const [accessState, setAccessState] = useState<DriveSiteAccessState | null>(null)
@@ -105,7 +100,7 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
       }))
     } catch (rawError) {
       if (loadGenerationRef.current !== generation) return
-      const message = errorMessage(rawError, "站点列表加载失败")
+      const message = errorMessage(rawError, "网页分享列表加载失败")
       setState((current) => ({ ...current, loading: false, loadingMore: false, error: message }))
       toast(message)
     }
@@ -114,10 +109,10 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
   useEffect(() => {
     const generation = loadGenerationRef.current + 1
     loadGenerationRef.current = generation
-    if (!open) return
+    if (!active) return
     setState(createInitialState())
     void loadSites({ generation })
-  }, [loadSites, open])
+  }, [active, loadSites])
 
   const reloadSites = useCallback(async () => {
     await loadSites({ generation: loadGenerationRef.current })
@@ -128,14 +123,14 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
     try {
       if (action === "enable") {
         await requireSynapseBridge().drive.site.enable({ siteId: site.siteId })
-        toast("站点已启用")
+        toast("网页分享已恢复")
       } else {
         await requireSynapseBridge().drive.site.republish({ siteId: site.siteId, entryPath: site.entryPath })
-        toast("站点已重新发布")
+        toast("网页已更新")
       }
       await reloadSites()
     } catch (rawError) {
-      toast(errorMessage(rawError, action === "enable" ? "启用失败" : "重新发布失败"))
+      toast(errorMessage(rawError, action === "enable" ? "恢复分享失败" : "更新网页失败"))
     } finally {
       setBusySiteId(null)
     }
@@ -145,7 +140,7 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
     setBusySiteId(site.siteId)
     try {
       await requireSynapseBridge().drive.site.delete({ siteId: site.siteId })
-      toast("站点已删除")
+      toast("网页分享已删除")
       setConfirmState(null)
       await reloadSites()
     } catch (rawError) {
@@ -165,12 +160,12 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
     try {
       if (confirmState.action === "disable") {
         await requireSynapseBridge().drive.site.disable({ siteId: confirmState.site.siteId })
-        toast("站点已停用")
+        toast("网页分享已停止")
       }
       setConfirmState(null)
       await reloadSites()
     } catch (rawError) {
-      toast(errorMessage(rawError, confirmState.action === "disable" ? "停用失败" : "删除失败"))
+      toast(errorMessage(rawError, confirmState.action === "disable" ? "停止分享失败" : "删除失败"))
     } finally {
       setBusySiteId(null)
     }
@@ -185,38 +180,24 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
   }, [deleteSite])
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="max-h-[85vh] w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-5xl" showCloseButton={false}>
-        <DialogFrame className="max-h-[85vh]">
-          <DialogFrameHeader title="站点" />
-          <DialogFrameBody>
-            <ScrollArea className="h-full min-h-0">
-              <div className="px-5 py-4">
-                <DriveSiteTableContent
-                  busySiteId={busySiteId}
-                  error={state.error}
-                  loading={state.loading}
-                  loadingMore={state.loadingMore}
-                  page={state.page}
-                  sites={state.items}
-                  onAccess={setAccessState}
-                  onConfirm={handleConfirmStart}
-                  onEnable={(site) => { void mutateSite(site, "enable") }}
-                  onLoadMore={() => {
-                    if (!state.page?.hasMore || state.page.nextOffset === null) return
-                    void loadSites({ offset: state.page.nextOffset, append: true, generation: loadGenerationRef.current })
-                  }}
-                  onReload={reloadSites}
-                  onRepublish={(site) => { void mutateSite(site, "republish") }}
-                />
-              </div>
-            </ScrollArea>
-          </DialogFrameBody>
-          <DialogFrameFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
-          </DialogFrameFooter>
-        </DialogFrame>
-      </DialogContent>
+    <>
+      <DriveSiteTableContent
+        busySiteId={busySiteId}
+        error={state.error}
+        loading={state.loading}
+        loadingMore={state.loadingMore}
+        page={state.page}
+        sites={state.items}
+        onAccess={setAccessState}
+        onConfirm={handleConfirmStart}
+        onEnable={(site) => { void mutateSite(site, "enable") }}
+        onLoadMore={() => {
+          if (!state.page?.hasMore || state.page.nextOffset === null) return
+          void loadSites({ offset: state.page.nextOffset, append: true, generation: loadGenerationRef.current })
+        }}
+        onReload={reloadSites}
+        onRepublish={(site) => { void mutateSite(site, "republish") }}
+      />
       <DriveSiteAccessDialog
         accessState={accessState}
         busy={busySiteId !== null}
@@ -232,10 +213,10 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
       }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{confirmState?.action === "delete" ? "确认删除" : "确认停用"}</AlertDialogTitle>
+            <AlertDialogTitle>{confirmState?.action === "delete" ? "确认删除网页分享" : "确认停止分享"}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div>
-                <div>{confirmState?.action === "delete" ? "删除后站点链接将不可访问。" : "停用后站点链接将不可访问。"}</div>
+                <div>{confirmState?.action === "delete" ? "删除后网页链接将不可访问。" : "停止后网页链接将不可访问。"}</div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -246,12 +227,12 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
               disabled={busySiteId !== null}
               onClick={() => { void confirmMutation() }}
             >
-              {confirmState?.action === "delete" ? "删除" : "停用"}
+              {confirmState?.action === "delete" ? "删除" : "停止分享"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Dialog>
+    </>
   )
 }
 
@@ -287,7 +268,7 @@ function DriveSiteTableContent({
     return (
       <Empty className="min-h-48 border">
         <EmptyHeader>
-          <EmptyTitle>站点加载失败</EmptyTitle>
+          <EmptyTitle>网页分享加载失败</EmptyTitle>
           <EmptyDescription>{error}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
@@ -303,15 +284,15 @@ function DriveSiteTableContent({
     return (
       <Empty className="min-h-48 border">
         <EmptyHeader>
-          <EmptyTitle>暂无站点</EmptyTitle>
+          <EmptyTitle>暂无网页分享</EmptyTitle>
         </EmptyHeader>
       </Empty>
     )
   }
   return (
     <div className="grid gap-3">
-      <Table containerClassName="rounded-lg border" className="min-w-[960px] table-fixed">
-        <DriveTableColumns columns={DRIVE_SITE_TABLE_COLUMNS} />
+      <Table className="table-fixed">
+        <DriveTableColumns columns={DRIVE_SHARE_TABLE_COLUMNS} />
         <DriveSiteTableHeader />
         <TableBody>
           {sites.map((site) => (
@@ -343,13 +324,9 @@ function DriveSiteTableHeader() {
   return (
     <TableHeader>
       <TableRow className="hover:bg-transparent">
-        <TableHead>站点</TableHead>
-        <TableHead>状态</TableHead>
-        <TableHead>访问</TableHead>
-        <TableHead className="text-right">到期</TableHead>
-        <TableHead className="text-right">更新</TableHead>
-        <TableHead className="text-right">大小</TableHead>
-        <TableHead className="text-right" aria-label="操作" />
+        <TableHead>名称</TableHead>
+        <TableHead>链接信息</TableHead>
+        <TableHead className={DRIVE_TABLE_STICKY_ACTION_COLUMN_CLASS}>操作</TableHead>
       </TableRow>
     </TableHeader>
   )
@@ -370,53 +347,69 @@ function DriveSiteRow({
   readonly onEnable: (site: DriveSiteDto) => void
   readonly onRepublish: (site: DriveSiteDto) => void
 }) {
+  const password = site.password
   return (
     <TableRow>
-      <TableCell className="min-w-0">
+      <TableCell className="min-w-0 whitespace-normal align-top">
         <div className="grid gap-1">
           <div className="truncate font-medium" title={site.name}>{site.name}</div>
-          <div className="truncate text-xs text-muted-foreground" title={site.url}>{site.url}</div>
+          <div className="truncate text-xs text-muted-foreground" title={password ?? "无"}>
+            密码 {password ?? "无"}
+          </div>
         </div>
       </TableCell>
-      <TableCell><DriveSiteStatusBadge status={site.status} /></TableCell>
-      <TableCell>{site.accessMode === "password" ? "密码" : "公开"}</TableCell>
-      <TableCell className="truncate text-right text-muted-foreground tabular-nums">
-        <RelativeTime value={site.expiresAt} fallback="永久" />
+      <TableCell className="min-w-0 whitespace-normal align-top">
+        <div className="grid gap-1.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-1">
+            <Badge variant="outline">网页</Badge>
+            <Badge variant="outline">{site.accessMode === "password" ? "密码" : "公开"}</Badge>
+            <DriveSiteStatusBadge status={site.status} />
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
+            <span className="truncate">到期 <RelativeTime value={site.expiresAt} fallback="永久" /></span>
+            <span className="truncate">更新 <RelativeTime value={site.updatedAt} /></span>
+            <span className="truncate">大小 {formatBytes(site.totalBytes)}</span>
+          </div>
+        </div>
       </TableCell>
-      <TableCell className="truncate text-right text-muted-foreground tabular-nums">
-        <RelativeTime value={site.updatedAt} />
-      </TableCell>
-      <TableCell className="text-right text-muted-foreground tabular-nums">{formatBytes(site.totalBytes)}</TableCell>
-      <TableCell className="text-right">
+      <TableCell className={`${DRIVE_TABLE_STICKY_ACTION_COLUMN_CLASS} align-top`}>
         <div className="flex items-center justify-end gap-0.5">
-          {busy ? <LoaderCircle className="size-4 animate-spin text-muted-foreground" aria-hidden="true" /> : null}
+          <DriveSiteIconAction
+            label={`访问设置 ${site.name}`}
+            tooltip="访问设置"
+            onClick={() => onAccess({
+              site,
+              passwordEnabled: site.accessMode === "password",
+              expiresIn: site.expiresIn,
+            })}
+          >
+            <Settings2 />
+          </DriveSiteIconAction>
           <DriveSiteIconAction label={`复制 ${site.name}`} tooltip="复制链接" onClick={() => { void copyText(site.urlWithPassword, "链接已复制") }}>
             <Copy />
           </DriveSiteIconAction>
+          {password ? (
+            <DriveSiteIconAction label={`复制 ${site.name} 密码`} tooltip="复制密码" onClick={() => { void copyText(password, "密码已复制") }}>
+              <KeyRound />
+            </DriveSiteIconAction>
+          ) : null}
           <DriveSiteIconAction label={`打开 ${site.name}`} tooltip="打开" onClick={() => { void openExternal(site.urlWithPassword) }}>
             <ExternalLink />
           </DriveSiteIconAction>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button type="button" variant="ghost" size="icon-xs" disabled={busy} aria-label={`更多 ${site.name}`}>
-                <MoreHorizontal aria-hidden="true" />
+              <Button type="button" variant="ghost" size="icon-sm" disabled={busy} aria-label={`更多 ${site.name}`}>
+                {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <MoreHorizontal aria-hidden="true" />}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onAccess({
-                site,
-                passwordEnabled: site.accessMode === "password",
-                expiresIn: site.expiresIn,
-              })}>
-                访问设置
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onRepublish(site)}>重新发布</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onRepublish(site)}>更新网页</DropdownMenuItem>
               {site.status === "disabled" ? (
-                <DropdownMenuItem onClick={() => onEnable(site)}>启用</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onEnable(site)}>恢复分享</DropdownMenuItem>
               ) : (
-                <DropdownMenuItem onClick={() => onConfirm({ action: "disable", site })}>停用</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onConfirm({ action: "disable", site })}>停止分享</DropdownMenuItem>
               )}
-              <DropdownMenuItem variant="destructive" onClick={(event) => onConfirm({ action: "delete", site }, event)}>删除</DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onClick={(event) => onConfirm({ action: "delete", site }, event)}>删除网页分享</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -519,19 +512,25 @@ function DriveSiteAccessDialog({
 
 function DriveSiteTableSkeleton() {
   return (
-    <Table containerClassName="rounded-lg border" className="min-w-[960px] table-fixed">
-      <DriveTableColumns columns={DRIVE_SITE_TABLE_COLUMNS} />
+    <Table className="table-fixed">
+      <DriveTableColumns columns={DRIVE_SHARE_TABLE_COLUMNS} />
       <DriveSiteTableHeader />
       <TableBody>
         {DRIVE_SITE_SKELETON_ROWS.map((row) => (
           <TableRow key={row}>
-            <TableCell><Skeleton className="h-4 w-56 max-w-full" /></TableCell>
-            <TableCell><Skeleton className="h-5 w-14" /></TableCell>
-            <TableCell><Skeleton className="h-4 w-10" /></TableCell>
-            <TableCell><Skeleton className="ml-auto h-4 w-24" /></TableCell>
-            <TableCell><Skeleton className="ml-auto h-4 w-24" /></TableCell>
-            <TableCell><Skeleton className="ml-auto h-4 w-14" /></TableCell>
-            <TableCell><Skeleton className="ml-auto h-7 w-24" /></TableCell>
+            <TableCell className="whitespace-normal align-top">
+              <div className="grid gap-2">
+                <Skeleton className="h-4 w-56 max-w-full" />
+                <Skeleton className="h-3 w-24 max-w-full" />
+              </div>
+            </TableCell>
+            <TableCell className="whitespace-normal align-top">
+              <div className="grid gap-2">
+                <Skeleton className="h-5 w-56 max-w-full" />
+                <Skeleton className="h-3 w-72 max-w-full" />
+              </div>
+            </TableCell>
+            <TableCell className={`${DRIVE_TABLE_STICKY_ACTION_COLUMN_CLASS} align-top`}><Skeleton className="ml-auto h-7 w-28 max-w-full" /></TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -553,7 +552,7 @@ function DriveSiteIconAction({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button type="button" variant="ghost" size="icon-xs" aria-label={label} onClick={onClick}>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label={label} onClick={onClick}>
           {children}
         </Button>
       </TooltipTrigger>
@@ -565,9 +564,9 @@ function DriveSiteIconAction({
 function DriveSiteStatusBadge({ status }: { readonly status: DriveSiteDto["status"] }) {
   const label = ({
     active: "正常",
-    disabled: "停用",
+    disabled: "已停止",
     expired: "过期",
-    deleted: "删除",
+    deleted: "已删除",
     failed: "失败",
   } satisfies Record<DriveSiteDto["status"], string>)[status]
   return <Badge variant={status === "failed" ? "destructive" : status === "active" ? "secondary" : "outline"}>{label}</Badge>
@@ -598,4 +597,4 @@ async function openExternal(url: string): Promise<void> {
   })
 }
 
-export { DriveSitesDialog }
+export { DriveSitesPanel }
