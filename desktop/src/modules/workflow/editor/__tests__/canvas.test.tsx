@@ -272,6 +272,7 @@ describe("WorkflowCanvas", () => {
   })
 
   it("uses the persisted product direction for manual auto-layout", async () => {
+    const rafSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 1)
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -301,6 +302,7 @@ describe("WorkflowCanvas", () => {
       expect.any(Array),
       { layoutDirection: "vertical" },
     )
+    rafSpy.mockRestore()
   })
 
   it("resets the viewport when fit view is clicked on an empty canvas", async () => {
