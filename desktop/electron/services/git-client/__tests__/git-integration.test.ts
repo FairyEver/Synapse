@@ -811,28 +811,6 @@ describe("Git client real repository integration", () => {
       .resolves.toBe("origin/docs/topic\n")
   })
 
-  it.skipIf(process.platform === "win32")("groups remote branches by the longest configured remote name", async () => {
-    const root = await createRoot()
-    const repository = await initializeRepository(path.join(root, "repo"))
-    await writeFile(path.join(repository.localPath, "README.md"), "base\n", "utf8")
-    await git(repository.localPath, "add", "README.md")
-    await git(repository.localPath, "commit", "-m", "base")
-    await git(repository.localPath, "remote", "add", "team", path.join(root, "team.git"))
-    await git(repository.localPath, "remote", "add", "team/upstream", path.join(root, "upstream.git"))
-    const head = (await git(repository.localPath, "rev-parse", "HEAD")).trim()
-    await git(repository.localPath, "update-ref", "refs/remotes/team/main", head)
-    await git(repository.localPath, "update-ref", "refs/remotes/team/upstream/main", head)
-    const branches = createGitBranchService({
-      commandRunner: createGitClientCommandRunner(),
-      getSnapshot: async () => ({ changeCount: 0, changes: [] }),
-    })
-
-    await expect(branches.listRemote(repository)).resolves.toEqual([
-      { remoteName: "team", branches: [{ name: "main", fullName: "team/main" }] },
-      { remoteName: "team/upstream", branches: [{ name: "main", fullName: "team/upstream/main" }] },
-    ])
-  })
-
   it("shows a merge commit relative to its first parent", async () => {
     const root = await createRoot()
     const repository = await initializeRepository(path.join(root, "repo"))

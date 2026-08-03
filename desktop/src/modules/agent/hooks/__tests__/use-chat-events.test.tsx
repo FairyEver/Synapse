@@ -109,7 +109,7 @@ describe("useChatEvents", () => {
       await Promise.resolve()
     })
 
-    expect(loadTimeline).toHaveBeenCalledWith(event.payload)
+    expect(loadTimeline).toHaveBeenCalledWith(event.payload, "refresh-tail")
     expect(rendererLogger.error).toHaveBeenCalledWith(
       "Agent live timeline refresh failed.",
       expect.objectContaining({
