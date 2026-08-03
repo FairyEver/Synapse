@@ -164,6 +164,9 @@ describe("AgentConversationExportService", () => {
         projectId: "project-1",
         sessionKey: TEST_SESSION_KEY,
         conversationId: "conv-1",
+        total: 2,
+        startIndex: 0,
+        hasMore: false,
         entries: [
           {
             id: "tool-call",
@@ -591,6 +594,9 @@ describe("AgentConversationExportService", () => {
         projectId: "project-1",
         sessionKey: TEST_SESSION_KEY,
         conversationId: "conv-1",
+        total: 1,
+        startIndex: 0,
+        hasMore: false,
         entries: [{
           id: "tool-call",
           kind: "toolCall",

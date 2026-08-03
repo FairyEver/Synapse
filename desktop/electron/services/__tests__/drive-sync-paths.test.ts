@@ -4,6 +4,7 @@ import path from "node:path"
 import { describe, expect, it } from "vitest"
 import {
   assertInsideBindingRoot,
+  assertDriveSyncLocalRelativePathPortable,
   createDriveSyncDirectoryTarget,
   localPathCollisionKey,
   localPathsOverlap,
@@ -49,6 +50,14 @@ describe("drive sync path utilities", () => {
 
   it("creates stable case-insensitive collision keys", () => {
     expect(pathCollisionKey("Docs/Spec.md")).toBe("docs/spec.md")
+    expect(pathCollisionKey("Docs/Cafe\u0301.md")).toBe(pathCollisionKey("docs/Café.md"))
+  })
+
+  it("rejects Windows-incompatible sync paths before writing locally", () => {
+    for (const invalidPath of ["CON.txt", "nested/aux", "bad:name.md", "trailing. ", "control\u0001.txt"]) {
+      expect(() => assertDriveSyncLocalRelativePathPortable(invalidPath, "win32")).toThrow(invalidPath)
+    }
+    expect(() => assertDriveSyncLocalRelativePathPortable("nested/report.md", "win32")).not.toThrow()
   })
 
   it("detects local path collisions across case variants and descendants", () => {

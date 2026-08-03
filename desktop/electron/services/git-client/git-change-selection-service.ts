@@ -3,10 +3,11 @@ import { createReadStream } from "node:fs"
 import { lstat, readlink } from "node:fs/promises"
 import type {
   SynapseGitChangeSelection,
-  SynapseGitFileChange,
+  SynapseGitWorkingTreeChange,
   SynapseGitRepository,
   SynapseGitRepositorySnapshot,
 } from "../../../src/types/git"
+import { isSynapseGitChangeConflicted } from "../../../src/types/git"
 import type { GitClientCommandRunner } from "./git-command-runner"
 import { assertRepositoryPath, normalizeRepositoryPathForCompare } from "./git-path-utils"
 
@@ -20,7 +21,7 @@ export type GitStoredChangeSelection = {
   readonly repositoryPath: string
   readonly expiresAtMs: number
   readonly head: string | null
-  readonly changes: readonly SynapseGitFileChange[]
+  readonly changes: readonly SynapseGitWorkingTreeChange[]
   readonly paths: readonly string[]
   readonly fingerprints: ReadonlyMap<string, string>
 }
@@ -35,12 +36,12 @@ type SelectionDeps = {
   readonly ttlMs?: number
 }
 
-function sameChange(left: SynapseGitFileChange, right: SynapseGitFileChange): boolean {
+function sameChange(left: SynapseGitWorkingTreeChange, right: SynapseGitWorkingTreeChange): boolean {
   return left.path === right.path
     && left.originalPath === right.originalPath
     && left.status === right.status
-    && left.staged === right.staged
-    && left.conflicted === right.conflicted
+    && left.indexStatus === right.indexStatus
+    && left.worktreeStatus === right.worktreeStatus
 }
 
 async function defaultFingerprintPath(absolutePath: string): Promise<string> {
@@ -133,8 +134,8 @@ export function createGitChangeSelectionService(deps: SelectionDeps) {
       const currentChanges = new Map(snapshot.changes.map((change) => [change.path, change]))
       const changes = requestedPaths.map((filePath) => currentChanges.get(filePath))
       if (changes.some((change) => !change)) throw new Error("所选文件已发生变化，请重新审阅后再试。")
-      const canonicalChanges = changes as SynapseGitFileChange[]
-      if (canonicalChanges.some((change) => change.conflicted)) throw new Error("冲突文件需要在外部处理后再继续。")
+      const canonicalChanges = changes as SynapseGitWorkingTreeChange[]
+      if (canonicalChanges.some(isSynapseGitChangeConflicted)) throw new Error("冲突文件需要在外部处理后再继续。")
       if (canonicalChanges.some((change) => change.status === "unknown")) throw new Error("存在无法识别的 Git 改动，请在外部工具中检查后重试。")
 
       const paths = [...new Set(canonicalChanges.flatMap((change) => (

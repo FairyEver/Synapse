@@ -188,6 +188,7 @@ import type {
   DriveSyncBindingDto,
   DriveSyncConflictResolutionInput,
   DriveSyncCreateSafeBindingInput,
+  DriveSyncUpdateExcludeRulesInput,
   DriveSyncSnapshotDto,
   DriveUsageDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
@@ -1086,13 +1087,14 @@ export type SynapseBridge = {
       remoteExists: boolean
       directionHint?: "remote_to_local" | "local_to_remote" | "bind_existing" | null
       excludeRules?: readonly string[]
+      useDefaultExcludes?: boolean
       importGitignore?: boolean
     }) => Promise<DriveSyncBindingPreviewDto>
     createSafeBinding: (input: DriveSyncCreateSafeBindingInput) => Promise<DriveSyncBindingDto>
     removeBinding: (input: { id: string }) => Promise<void>
     pauseBinding: (input: { id: string }) => Promise<DriveSyncBindingDto>
     resumeBinding: (input: { id: string }) => Promise<DriveSyncBindingDto>
-    updateExcludeRules: (input: { id: string; user: readonly string[] }) => Promise<DriveSyncBindingDto>
+    updateExcludeRules: (input: DriveSyncUpdateExcludeRulesInput) => Promise<DriveSyncBindingDto>
     rescanBinding: (input: { id: string }) => Promise<void>
     pollRemoteChanges: (input?: { id?: string }) => Promise<void>
     resolveConflict: (input: DriveSyncConflictResolutionInput) => Promise<void>
@@ -1241,6 +1243,7 @@ export type SynapseBridge = {
   drive: {
     item: {
       list: (input?: DriveItemListInput) => Promise<DriveItemListPageDto>
+      get: (input: { itemId: string }) => Promise<DriveItemDto>
       previewUrl: (input: { itemId: string }) => Promise<{ url: string }>
       rename: (input: { itemId: string; name: string }) => Promise<DriveItemDto>
       move: (input: { itemId: string; parentId: string | null }) => Promise<DriveItemDto>
@@ -1633,7 +1636,7 @@ export type SynapseBridge = {
     ) => Promise<AgentConversationWindowReplaceResult>
     listDetachedConversationWindows: () => Promise<AgentDetachedConversation[]>
     getTimeline: (
-      args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number },
+      args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number; beforeIndex?: number },
     ) => Promise<SynapseAgentTimelineResult>
     exportConversationBundle: (
       args: { projectId: string; sessionKey?: string; conversationId: string },

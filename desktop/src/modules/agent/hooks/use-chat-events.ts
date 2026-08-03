@@ -203,7 +203,7 @@ function useChatEvents(
             domainEvent.payload.projectId,
             domainEvent.payload.conversationId,
           ) })
-          void loadTimeline(domainEvent.payload).catch((rawError: unknown) => {
+          void loadTimeline(domainEvent.payload, "refresh-tail").catch((rawError: unknown) => {
             logger.error("Agent live timeline refresh failed.", {
               projectId: domainEvent.payload.projectId,
               conversationId: domainEvent.payload.conversationId,

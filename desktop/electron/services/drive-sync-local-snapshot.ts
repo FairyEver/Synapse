@@ -53,6 +53,7 @@ export async function scanDriveSyncLocalTree(input: {
   readonly rules: DriveSyncExcludeRulesDto
   readonly hashFiles?: boolean
   readonly hashCache?: ReadonlyMap<string, DriveSyncLocalSnapshotHashCacheEntry>
+  readonly forceHashPaths?: ReadonlySet<string>
 }): Promise<readonly DriveSyncLocalSnapshotEntry[]> {
   return (await scanDriveSyncLocalTreeDetailed(input)).entries
 }
@@ -62,6 +63,7 @@ export async function scanDriveSyncLocalTreeDetailed(input: {
   readonly rules: DriveSyncExcludeRulesDto
   readonly hashFiles?: boolean
   readonly hashCache?: ReadonlyMap<string, DriveSyncLocalSnapshotHashCacheEntry>
+  readonly forceHashPaths?: ReadonlySet<string>
 }): Promise<DriveSyncLocalTreeSnapshot> {
   const rootPath = path.resolve(input.rootPath)
   const result: DriveSyncLocalSnapshotEntry[] = []
@@ -72,7 +74,7 @@ export async function scanDriveSyncLocalTreeDetailed(input: {
     for (const entry of entries) {
       const absolutePath = resolveBindingChildPath(rootPath, toDriveSyncRelativePath(rootPath, path.join(directoryPath, entry.name)))
       const relativePath = toDriveSyncRelativePath(rootPath, absolutePath)
-      const excluded = isDriveSyncExcluded(relativePath, input.rules)
+      const excluded = isDriveSyncExcluded(relativePath, input.rules, entry.isDirectory() ? "folder" : "file")
       if (excluded && (!entry.isDirectory() || !hasDriveSyncIncludedDescendant(relativePath, input.rules))) continue
       const stats = await lstat(absolutePath)
       if (stats.isSymbolicLink()) {
@@ -125,6 +127,7 @@ async function resolveDriveSyncFileHash(
   input: {
     readonly hashFiles?: boolean
     readonly hashCache?: ReadonlyMap<string, DriveSyncLocalSnapshotHashCacheEntry>
+    readonly forceHashPaths?: ReadonlySet<string>
   },
   absolutePath: string,
   relativePath: string,
@@ -132,7 +135,7 @@ async function resolveDriveSyncFileHash(
   mtimeMs: number,
 ): Promise<string | null> {
   if (!input.hashFiles) return null
-  const cached = input.hashCache?.get(relativePath)
+  const cached = input.forceHashPaths?.has(relativePath) ? undefined : input.hashCache?.get(relativePath)
   if (
     cached?.kind === "file"
     && cached.size === size

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, truncate, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir, rm, truncate, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -241,6 +241,78 @@ describe("AccountService", () => {
     })
     expect(service.completeDriveUpload).toHaveBeenCalledWith("session-file-1")
     expect(service.cancelDriveUpload).not.toHaveBeenCalled()
+  })
+
+  it("returns the completed Drive item for sync uploads", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-upload-"))
+    const filePath = path.join(dir, "report.txt")
+    await writeFile(filePath, "hello")
+    const fetch = vi.fn(async () => new Response(null, { status: 200 })) as unknown as typeof globalThis.fetch
+    const { service } = await createTestAccountService({ fetch })
+    vi.spyOn(service, "prepareDriveUpload").mockResolvedValue({
+      item: driveItem({ id: "prepared-file", name: "report.txt", size: "5" }),
+      sessionId: "session-sync-1",
+      upload: {
+        expiresAt: "2026-06-09T00:10:00.000Z",
+        headers: { "Content-Type": "text/plain" },
+        method: "PUT",
+        url: "https://upload.example.test/sync-1",
+      },
+    })
+    const completed = driveItem({ id: "real-file-id", name: "report.txt", size: "5" })
+    vi.spyOn(service, "completeDriveUpload").mockResolvedValue(completed)
+    vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+
+    await expect(service.uploadDriveSyncFile({
+      parentId: "folder-1",
+      path: filePath,
+      name: "report.txt",
+      expectedItemId: "existing-file",
+    })).resolves.toEqual(completed)
+
+    expect(service.prepareDriveUpload).toHaveBeenCalledWith({
+      parentId: "folder-1",
+      name: "report.txt",
+      size: "5",
+      mimeType: null,
+      expectedItemId: "existing-file",
+    })
+    expect(service.completeDriveUpload).toHaveBeenCalledWith("session-sync-1")
+    expect(service.cancelDriveUpload).not.toHaveBeenCalled()
+  })
+
+  it("cancels the server upload session when a sync upload is aborted", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-upload-abort-"))
+    const filePath = path.join(dir, "report.txt")
+    await writeFile(filePath, "hello")
+    const fetch = vi.fn(async (_url, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason ?? new DOMException("Aborted", "AbortError")), { once: true })
+    })) as unknown as typeof globalThis.fetch
+    const { service } = await createTestAccountService({ fetch })
+    vi.spyOn(service, "prepareDriveUpload").mockResolvedValue({
+      item: driveItem({ id: "prepared-file", name: "report.txt", size: "5" }),
+      sessionId: "session-sync-abort",
+      upload: {
+        expiresAt: "2026-06-09T00:10:00.000Z",
+        headers: { "Content-Type": "text/plain" },
+        method: "PUT",
+        url: "https://upload.example.test/sync-abort",
+      },
+    })
+    vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+    const controller = new AbortController()
+
+    const upload = service.uploadDriveSyncFile({
+      parentId: "folder-1",
+      path: filePath,
+      name: "report.txt",
+      signal: controller.signal,
+    })
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalled())
+    controller.abort()
+
+    await expect(upload).rejects.toThrow()
+    expect(service.cancelDriveUpload).toHaveBeenCalledWith("session-sync-abort")
   })
 
   it("reports local file upload progress", async () => {
@@ -1082,6 +1154,50 @@ describe("AccountService", () => {
     expect(service.cancelDriveUpload).toHaveBeenCalledWith("session-a")
     expect(service.cancelDriveUpload).toHaveBeenCalledWith("session-b")
     expect(service.deleteDriveItem).toHaveBeenCalledWith("folder-root")
+  })
+
+  it("cancels the active and queued folder upload sessions when aborted", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-folder-abort-"))
+    try {
+      const firstPath = path.join(dir, "a.md")
+      const secondPath = path.join(dir, "b.md")
+      await writeFile(firstPath, "alpha")
+      await writeFile(secondPath, "beta")
+      const fetch = vi.fn(async (_url, init) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason ?? new DOMException("Aborted", "AbortError")), { once: true })
+      })) as unknown as typeof globalThis.fetch
+      const { service } = await createTestAccountService({ fetch })
+      vi.spyOn(service, "prepareDriveFolderUpload").mockResolvedValue({
+        root: driveItem({ id: "folder-root", name: "项目A", type: "folder", size: "0" }),
+        rootCreated: true,
+        entries: [
+          preparedFolderEntry("a.md", "session-a", "https://upload.example.test/a"),
+          preparedFolderEntry("b.md", "session-b", "https://upload.example.test/b"),
+        ],
+      })
+      vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+      const controller = new AbortController()
+
+      const upload = service.uploadDriveLocalItems({
+        parentId: null,
+        items: [{
+          kind: "folder",
+          folderName: "项目A",
+          files: [
+            { path: firstPath, relativePath: "a.md", mimeType: "text/markdown" },
+            { path: secondPath, relativePath: "b.md", mimeType: "text/markdown" },
+          ],
+        }],
+      }, { signal: controller.signal })
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+      controller.abort()
+
+      await expect(upload).rejects.toThrow()
+      expect(service.cancelDriveUpload).toHaveBeenCalledWith("session-a")
+      expect(service.cancelDriveUpload).toHaveBeenCalledWith("session-b")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 
   it("skips non-canonical local drive folder relative paths before prepare", async () => {
@@ -3119,6 +3235,25 @@ describe("AccountService", () => {
     const state = await service.logout()
 
     expect(state).toEqual({ status: "unauthenticated" })
+    expect(await namespace.getSingleton()).toBeNull()
+  })
+
+  it("awaits identity-change listeners before clearing credentials", async () => {
+    const { namespace, service } = await createTestAccountService()
+    await service.startLogin()
+    let releaseListener!: () => void
+    const listenerFinished = new Promise<void>((resolve) => {
+      releaseListener = resolve
+    })
+    const listener = vi.fn(async () => listenerFinished)
+    service.onBeforeIdentityChange(listener)
+
+    const logout = service.logout()
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1))
+    expect((await namespace.getSingleton())?.activeAttempt).toBeTruthy()
+    releaseListener()
+
+    await expect(logout).resolves.toEqual({ status: "unauthenticated" })
     expect(await namespace.getSingleton()).toBeNull()
   })
 

@@ -76,6 +76,9 @@ beforeEach(() => {
         sessionKey: session.sessionKey,
         conversationId: session.id,
         entries: [],
+        total: 0,
+        startIndex: 0,
+        hasMore: false,
       })),
       cancelTurn: vi.fn(async () => ({ status: "cancelled" })),
       createSession: vi.fn(async () => ({
@@ -138,6 +141,319 @@ afterEach(() => {
 })
 
 describe("useAgentChat", () => {
+  it("loads the latest page once and prepends an older page without duplicates", async () => {
+    const bridge = (window as unknown as {
+      synapse: { agent: { getTimeline: ReturnType<typeof vi.fn> } }
+    }).synapse.agent
+    let failOlder = true
+    bridge.getTimeline.mockImplementation(async (request: { beforeIndex?: number }) => {
+      if (request.beforeIndex === 100) {
+        if (failOlder) throw new Error("older failed")
+        return {
+          projectId: session.projectId,
+          sessionKey: session.sessionKey,
+          conversationId: session.id,
+          entries: Array.from({ length: 100 }, (_, index) => timelineHistoryMessage(index)),
+          total: 102,
+          startIndex: 0,
+          hasMore: false,
+        }
+      }
+      return {
+        projectId: session.projectId,
+        sessionKey: session.sessionKey,
+        conversationId: session.id,
+        entries: [timelineHistoryMessage(100), timelineHistoryMessage(101)],
+        total: 102,
+        startIndex: 100,
+        hasMore: true,
+      }
+    })
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(<HookProbe onChange={(next) => { chat = next }} />)
+    })
+    await waitFor(() => chat?.timeline.length === 2)
+
+    await act(async () => {
+      await chat?.loadOlderTimeline()
+    })
+    expect(chat?.timelineHistoryError).toBe("历史加载失败")
+    failOlder = false
+    const olderCallsBeforeRetry = bridge.getTimeline.mock.calls.filter(([request]) => request.beforeIndex === 100).length
+    await act(async () => {
+      await Promise.all([chat?.loadOlderTimeline(), chat?.loadOlderTimeline()])
+    })
+
+    expect(chat?.timeline).toHaveLength(102)
+    expect(new Set(chat?.timeline.map((item) => item.id)).size).toBe(102)
+    expect(chat?.timeline[0]?.id).toBe(`${session.id}:history:0`)
+    expect(chat?.timeline.at(-1)?.id).toBe(`${session.id}:history:101`)
+    expect(chat?.timelineHasMore).toBe(false)
+    expect(bridge.getTimeline.mock.calls.filter(([request]) => request.beforeIndex === 100)).toHaveLength(olderCallsBeforeRetry + 1)
+    expect(chat?.timelineHistoryError).toBeNull()
+  })
+
+  it("keeps the loaded prefix and active phase when a persisted tail refresh follows compaction", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          getTimeline: ReturnType<typeof vi.fn>
+          onEvent: ReturnType<typeof vi.fn>
+          send: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    let latest = false
+    bridge.getTimeline.mockImplementation(async () => latest
+      ? {
+        projectId: session.projectId,
+        sessionKey: session.sessionKey,
+        conversationId: session.id,
+        entries: [
+          { ...timelineHistoryMessage(1), content: "persisted replacement" },
+          timelineHistoryMessage(2),
+          { ...timelineHistoryMessage(3), role: "user" as const, content: "persist me" },
+        ],
+        total: 4,
+        startIndex: 1,
+        hasMore: true,
+      }
+      : {
+        projectId: session.projectId,
+        sessionKey: session.sessionKey,
+        conversationId: session.id,
+        entries: [timelineHistoryMessage(0), timelineHistoryMessage(1), timelineHistoryMessage(2)],
+        total: 3,
+        startIndex: 0,
+        hasMore: false,
+      })
+    let emitAgentEvent: ((event: SynapseAgentDomainEvent) => void) | undefined
+    bridge.onEvent.mockImplementation((callback) => {
+      emitAgentEvent = callback
+      return () => {}
+    })
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(<HookProbe onChange={(next) => { chat = next }} />)
+    })
+    await waitFor(() => chat?.timeline.length === 3)
+
+    await act(async () => {
+      bridge.send.mockResolvedValueOnce({ queued: true })
+      await chat?.sendMessage("persist me")
+      emitAgentEvent?.({
+        domain: "agent",
+        type: "stream",
+        timestamp: "2026-08-03T00:00:59.000Z",
+        scope: { projectId: session.projectId, sessionId: session.id },
+        payload: {
+          projectId: session.projectId,
+          sessionKey: session.sessionKey,
+          platform: "local-renderer",
+          event: { type: "text", content: "persist me" },
+        },
+      })
+      emitAgentEvent?.({
+        domain: "agent",
+        type: "stream",
+        timestamp: "2026-08-03T00:01:00.000Z",
+        scope: { projectId: session.projectId, sessionId: session.id },
+        payload: {
+          projectId: session.projectId,
+          sessionKey: session.sessionKey,
+          platform: "local-renderer",
+          event: { type: "compactBoundary" },
+        },
+      })
+      emitAgentEvent?.({
+        domain: "agent",
+        type: "phase.update",
+        timestamp: "2026-08-03T00:01:01.000Z",
+        payload: {
+          projectId: session.projectId,
+          sessionKey: session.sessionKey,
+          conversationId: session.id,
+          runId: "run-refresh",
+          phase: "runtime_starting",
+          status: "in-progress",
+          startedAt: "2026-08-03T00:01:01.000Z",
+        },
+      })
+    })
+    expect(chat?.timeline.some((item) => item.kind === "sdkEvent" && item.sdkType === "compactBoundary")).toBe(true)
+    expect(chat?.timeline.some((item) => item.id.startsWith("local:"))).toBe(true)
+
+    latest = true
+    await act(async () => {
+      emitAgentEvent?.({
+        domain: "agent",
+        type: "conversationUpdated",
+        timestamp: "2026-08-03T00:01:02.000Z",
+        payload: {
+          projectId: session.projectId,
+          sessionKey: session.sessionKey,
+          conversationId: session.id,
+          platform: "local-renderer",
+        },
+      })
+    })
+    await waitFor(() => chat?.timeline.some((item) => item.id === `${session.id}:history:3`) === true)
+
+    expect(chat?.timeline.some((item) => item.id === `${session.id}:history:0`)).toBe(true)
+    expect(chat?.timeline).toContainEqual(expect.objectContaining({
+      id: `${session.id}:history:1`,
+      content: "persisted replacement",
+    }))
+    expect(chat?.timeline.filter((item) => item.kind === "phase" && item.runId === "run-refresh")).toHaveLength(1)
+    expect(chat?.timeline.some((item) => item.id.startsWith("local:"))).toBe(false)
+    expect(chat?.timeline.filter((item) => item.kind === "message" && item.content === "persist me")).toHaveLength(1)
+    expect(chat?.timeline.some((item) => item.kind === "sdkEvent" && item.sdkType === "compactBoundary")).toBe(false)
+    expect(chat?.timelineHasMore).toBe(false)
+  })
+
+  it("replaces pagination state when switching conversations", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          getTimeline: ReturnType<typeof vi.fn>
+          listSessions: ReturnType<typeof vi.fn>
+          switchSession: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.listSessions.mockResolvedValue([session, nextSession])
+    bridge.switchSession.mockResolvedValue({ ...nextSession, active: true })
+    bridge.getTimeline.mockImplementation(async (request: { conversationId?: string }) => {
+      const selectedId = request.conversationId ?? session.id
+      const selectedSession = selectedId === nextSession.id ? nextSession : session
+      return {
+        projectId: selectedSession.projectId,
+        sessionKey: selectedSession.sessionKey,
+        conversationId: selectedSession.id,
+        entries: [{
+          ...timelineHistoryMessage(0),
+          id: `${selectedSession.id}:history:0`,
+          content: selectedSession.id,
+        }],
+        total: selectedSession.id === nextSession.id ? 1 : 101,
+        startIndex: selectedSession.id === nextSession.id ? 0 : 100,
+        hasMore: selectedSession.id !== nextSession.id,
+      }
+    })
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(<HookProbe onChange={(next) => { chat = next }} />)
+    })
+    await waitFor(() => chat?.timeline[0]?.id === `${session.id}:history:0`)
+    expect(chat?.timelineHasMore).toBe(true)
+
+    await act(async () => {
+      await chat?.selectSession(nextSession)
+    })
+
+    expect(chat?.selectedConversationId).toBe(nextSession.id)
+    expect(chat?.timeline.map((item) => item.id)).toEqual([`${nextSession.id}:history:0`])
+    expect(chat?.timelineHasMore).toBe(false)
+  })
+
+  it("backfills missing pages before merging a live tail refresh", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          getTimeline: ReturnType<typeof vi.fn>
+          onEvent: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    let refreshStarted = false
+    bridge.getTimeline.mockImplementation(async (request: { beforeIndex?: number }) => {
+      if (!refreshStarted) {
+        return {
+          projectId: session.projectId,
+          sessionKey: session.sessionKey,
+          conversationId: session.id,
+          entries: Array.from({ length: 50 }, (_, offset) => timelineHistoryMessage(50 + offset)),
+          total: 100,
+          startIndex: 50,
+          hasMore: true,
+        }
+      }
+      if (request.beforeIndex === 200) {
+        return {
+          projectId: session.projectId,
+          sessionKey: session.sessionKey,
+          conversationId: session.id,
+          entries: Array.from({ length: 100 }, (_, offset) => timelineHistoryMessage(100 + offset)),
+          total: 250,
+          startIndex: 100,
+          hasMore: true,
+        }
+      }
+      return {
+        projectId: session.projectId,
+        sessionKey: session.sessionKey,
+        conversationId: session.id,
+        entries: Array.from({ length: 50 }, (_, offset) => timelineHistoryMessage(200 + offset)),
+        total: 250,
+        startIndex: 200,
+        hasMore: true,
+      }
+    })
+    let emitAgentEvent: ((event: SynapseAgentDomainEvent) => void) | undefined
+    bridge.onEvent.mockImplementation((callback) => {
+      emitAgentEvent = callback
+      return () => {}
+    })
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(<HookProbe onChange={(next) => { chat = next }} />)
+    })
+    await waitFor(() => chat?.timeline.length === 50)
+
+    refreshStarted = true
+    await act(async () => {
+      emitAgentEvent?.({
+        domain: "agent",
+        type: "conversationUpdated",
+        timestamp: "2026-08-03T00:02:00.000Z",
+        payload: {
+          projectId: session.projectId,
+          sessionKey: session.sessionKey,
+          conversationId: session.id,
+          platform: "local-renderer",
+        },
+      })
+    })
+    await waitFor(() => chat?.timeline.at(-1)?.id === `${session.id}:history:249`)
+
+    expect(chat?.timeline).toHaveLength(200)
+    expect(chat?.timeline.map((item) => item.id)).toEqual(
+      Array.from({ length: 200 }, (_, offset) => `${session.id}:history:${String(50 + offset)}`),
+    )
+    expect(bridge.getTimeline).toHaveBeenCalledWith(expect.objectContaining({ beforeIndex: 200 }))
+  })
+
   it("requests a bounded archived-session summary window outside configured projects", async () => {
     const bridge = (window as unknown as {
       synapse: {
@@ -568,6 +884,9 @@ describe("useAgentChat", () => {
       sessionKey: scheduledSession.sessionKey,
       conversationId: scheduledSession.id,
       entries: [],
+      total: 0,
+      startIndex: 0,
+      hasMore: false,
     })
     let emitAgentEvent: ((event: SynapseAgentDomainEvent) => void) | undefined
     bridge.onEvent.mockImplementation((callback) => {
@@ -864,6 +1183,9 @@ describe("useAgentChat", () => {
         content: "stale content",
         timestamp: "2026-05-13T00:03:00.000Z",
       }],
+      total: request.conversationId ? 0 : 1,
+      startIndex: 0,
+      hasMore: false,
     }))
 
     let chat: ReturnType<typeof useAgentChat> | undefined
@@ -919,6 +1241,9 @@ describe("useAgentChat", () => {
         content: "existing content",
         timestamp: "2026-05-13T00:03:00.000Z",
       }],
+      total: 1,
+      startIndex: 0,
+      hasMore: false,
     })
     bridge.deleteSession.mockImplementation(({ conversationId }: { conversationId: string }) =>
       new Promise<{ ok: true }>((resolve) => {
@@ -1860,6 +2185,16 @@ function cachedPersona() {
     version: 1,
     createdAt: "2026-07-01T00:00:00.000Z",
     updatedAt: "2026-07-01T00:00:00.000Z",
+  }
+}
+
+function timelineHistoryMessage(index: number) {
+  return {
+    id: `${session.id}:history:${String(index)}`,
+    kind: "message" as const,
+    role: index % 2 === 0 ? "user" as const : "assistant" as const,
+    content: `message ${String(index)}`,
+    timestamp: new Date(Date.UTC(2026, 7, 3, 0, 0, 0, index)).toISOString(),
   }
 }
 

@@ -748,6 +748,7 @@ export const coreDriveSyncDescriptor: ServiceDescriptor<DriveSyncService> = {
       accountService,
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      stagingRootPath: path.join(app.getPath("userData"), "drive-sync-staging"),
     })
   },
   async start(service) {
@@ -2328,9 +2329,10 @@ export const gitChangeSelectionServiceDescriptor: ServiceDescriptor<GitChangeSel
 export const gitCommitServiceDescriptor: ServiceDescriptor<GitCommitService> = {
   id: "git.commit-service",
   criticality: "degraded",
-  dependsOn: ["git.command-runner", "git.change-selection-service"],
+  dependsOn: ["git.command-runner", "git.change-selection-service", "git.status-service"],
   create(ctx) {
     return createGitCommitService({
+      assertWorktreeMutationAllowed: (repository) => ctx.registry.get<GitStatusService>("git.status-service").assertWorktreeMutationAllowed(repository),
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
       logger: ctx.logger.child("git.commit"),
       selections: ctx.registry.get<GitChangeSelectionService>("git.change-selection-service"),

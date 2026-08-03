@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   deleteDriveItem: vi.fn(),
   disableDriveShare: vi.fn(),
   filePathForDroppedFile: vi.fn(),
+  getDriveItem: vi.fn(),
   getDriveItemPreviewUrl: vi.fn(),
   getDriveShare: vi.fn(),
   getDriveSyncSnapshot: vi.fn(),
@@ -52,6 +53,7 @@ const mocks = vi.hoisted(() => ({
   listDriveShares: vi.fn(),
   moveDriveItem: vi.fn(),
   openExternal: vi.fn(),
+  showItemInFolder: vi.fn(),
   prepareDriveFolderUpload: vi.fn(),
   prepareDriveUpload: vi.fn(),
   preflightDriveSite: vi.fn(),
@@ -100,6 +102,7 @@ const accountActions = vi.hoisted(() => ({
 }))
 
 let driveUploadProgressListener: ((event: DriveLocalUploadProgressEvent) => void) | null = null
+let driveSyncChangedListener: ((snapshot: DriveSyncSnapshotDto) => void) | null = null
 
 vi.mock("sonner", () => ({
   toast: Object.assign(mocks.toast, { error: mocks.toastError }),
@@ -122,6 +125,7 @@ vi.mock("@/lib/electron-bridge", () => ({
     drive: {
       item: {
         list: mocks.listDriveItems,
+        get: mocks.getDriveItem,
         previewUrl: mocks.getDriveItemPreviewUrl,
         rename: mocks.renameDriveItem,
         move: mocks.moveDriveItem,
@@ -169,6 +173,7 @@ vi.mock("@/lib/electron-bridge", () => ({
     },
     shell: {
       openExternal: mocks.openExternal,
+      showItemInFolder: mocks.showItemInFolder,
     },
   }),
 }))
@@ -177,6 +182,7 @@ let roots: Root[] = []
 
 beforeEach(() => {
   driveUploadProgressListener = null
+  driveSyncChangedListener = null
   accountState.current = createAuthenticatedState()
   accountActions.startLogin.mockResolvedValue({ status: "authenticating", loginUrl: "https://example.com/login" })
   accountActions.refresh.mockResolvedValue(accountState.current)
@@ -190,6 +196,7 @@ beforeEach(() => {
   mocks.deleteDriveItem.mockResolvedValue({ ok: true })
   mocks.disableDriveShare.mockResolvedValue({ ok: true })
   mocks.filePathForDroppedFile.mockImplementation((file: File) => `/tmp/${file.name}`)
+  mocks.getDriveItem.mockImplementation(async ({ itemId }: { itemId: string }) => createDriveItem({ id: itemId }))
   mocks.getDriveItemPreviewUrl.mockResolvedValue({ url: "https://synapse.test/drive/items/file-1" })
   mocks.getDriveShare.mockResolvedValue(createDriveShare())
   mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot())
@@ -251,7 +258,12 @@ beforeEach(() => {
     }
   })
   mocks.uploadDrivePreparedFile.mockResolvedValue({ ok: true })
-  mocks.onDriveSyncChanged.mockReturnValue(() => undefined)
+  mocks.onDriveSyncChanged.mockImplementation((listener: (snapshot: DriveSyncSnapshotDto) => void) => {
+    driveSyncChangedListener = listener
+    return () => {
+      if (driveSyncChangedListener === listener) driveSyncChangedListener = null
+    }
+  })
   mocks.pauseDriveSyncBinding.mockResolvedValue(undefined)
   mocks.pollDriveSyncRemoteChanges.mockResolvedValue(undefined)
   mocks.previewDriveSyncBinding.mockResolvedValue({
@@ -749,6 +761,8 @@ describe("DriveModule", () => {
         bindings: [createDriveSyncBinding()],
         health: {
           status: "error",
+          connectivity: "online",
+          readOnly: false,
           lastError: "network unavailable",
           updatedAt: "2026-06-28T00:00:00.000Z",
         },
@@ -762,6 +776,19 @@ describe("DriveModule", () => {
     expect(button.dataset.variant).toBe("ghost")
     expect(button.querySelector<HTMLElement>("[data-slot='badge']")?.dataset.variant).toBe("outline")
     expect(button.textContent).toContain("1")
+  })
+
+  it("shows sync snapshot load failures instead of an empty binding state", async () => {
+    mocks.getDriveSyncSnapshot.mockRejectedValue(new Error("sync snapshot unavailable"))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：暂无同步绑定")
+
+    const dialogText = document.querySelector('[role="dialog"]')?.textContent ?? ""
+    expect(dialogText).toContain("sync snapshot unavailable")
+    expect(dialogText).not.toContain("暂无同步对象")
+    expect(getButton("重试")).toBeTruthy()
   })
 
   it("shows active bindings with open conflicts in the conflict tab", async () => {
@@ -807,6 +834,10 @@ describe("DriveModule", () => {
           relativePath: "spec.md",
           status: "succeeded",
           message: null,
+          attemptCount: 0,
+          nextRetryAt: null,
+          completedBytes: null,
+          totalBytes: null,
           updatedAt: "2026-06-28T00:00:00.000Z",
         }],
       },
@@ -826,6 +857,7 @@ describe("DriveModule", () => {
     if (!dialogHeader) throw new Error("Drive sync dialog header not found")
     expect(Array.from(dialogHeader.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual([
       "全部",
+      "初始化",
       "已启用",
       "有冲突",
       "已暂停",
@@ -873,6 +905,10 @@ describe("DriveModule", () => {
             relativePath: "docs-operation.md",
             status: "succeeded",
             message: null,
+            attemptCount: 0,
+            nextRetryAt: null,
+            completedBytes: null,
+            totalBytes: null,
             updatedAt: "2026-06-28T00:00:00.000Z",
           },
           {
@@ -882,6 +918,10 @@ describe("DriveModule", () => {
             relativePath: "notes-operation.md",
             status: "succeeded",
             message: null,
+            attemptCount: 0,
+            nextRetryAt: null,
+            completedBytes: null,
+            totalBytes: null,
             updatedAt: "2026-06-28T00:00:00.000Z",
           },
         ],
@@ -993,6 +1033,55 @@ describe("DriveModule", () => {
     expect(closeButton?.className).not.toContain("absolute")
   })
 
+  it("keeps offline sync status readable while disabling mutations", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1 },
+      {
+        bindings: [createDriveSyncBinding()],
+        health: {
+          status: "idle",
+          connectivity: "offline",
+          readOnly: true,
+          lastError: null,
+          updatedAt: "2026-06-28T00:00:00.000Z",
+        },
+      },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个绑定")
+
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("当前离线，仅显示同步状态；联网后会自动追平。")
+    expect(getButtonByLabel("查看同步详情 Docs").disabled).toBe(false)
+    await clickButtonByLabel("更多同步操作 Docs")
+    const fullCheck = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.trim() === "完整校验")
+    expect(fullCheck?.getAttribute("aria-disabled")).toBe("true")
+  })
+
+  it("opens a synchronized Drive folder inside the existing Drive view", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1 },
+      { bindings: [createDriveSyncBinding({ driveItemId: "drive-root", driveItemName: "Docs" })] },
+    ))
+    mocks.getDriveItem.mockResolvedValue(createDriveItem({ id: "drive-root", name: "Docs", type: "folder", parentId: null }))
+    mocks.listDriveItems.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      createDriveItem({ id: "spec", name: "spec.md", type: "file", parentId: "drive-root" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个绑定")
+    await clickButtonByLabel("查看同步详情 Docs")
+    await clickButtonText("打开云端位置")
+    await flushAct()
+
+    expect(mocks.getDriveItem).toHaveBeenCalledWith({ itemId: "drive-root" })
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: "drive-root" })
+    expect(document.body.textContent).toContain("spec.md")
+  })
+
   it("groups secondary drive sync actions behind a menu and confirms stopping sync", async () => {
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
       { activeBindingCount: 1 },
@@ -1006,10 +1095,10 @@ describe("DriveModule", () => {
     expect(getButtonByLabel("查看同步详情 Docs")).toBeTruthy()
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("云端 /Projects/Docs")
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("本地 /Users/me/Docs")
-    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("检查本地变更")
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("完整校验")
 
     await clickButtonByLabel("更多同步操作 Docs")
-    expect(document.body.textContent).toContain("检查本地变更")
+    expect(document.body.textContent).toContain("完整校验")
     expect(document.body.textContent).toContain("同步云端变更")
     expect(document.body.textContent).toContain("暂停同步")
     expect(document.body.textContent).toContain("停止同步")
@@ -1035,7 +1124,7 @@ describe("DriveModule", () => {
     await clickButtonByLabel("更多同步操作 Docs")
 
     const menuItems = Array.from(document.body.querySelectorAll<HTMLElement>("[role='menuitem']"))
-    const localSync = menuItems.find((item) => item.textContent?.trim() === "检查本地变更")
+    const localSync = menuItems.find((item) => item.textContent?.trim() === "完整校验")
     const remoteSync = menuItems.find((item) => item.textContent?.trim() === "同步云端变更")
 
     expect(localSync?.getAttribute("aria-disabled")).toBe("true")
@@ -1061,7 +1150,8 @@ describe("DriveModule", () => {
     await flushAct()
     await clickButtonByLabel("同步状态：1 个绑定")
     await clickButtonByLabel("更多同步操作 Docs")
-    await clickMenuItemText("检查本地变更")
+    await clickMenuItemText("完整校验")
+    await clickButtonText("开始校验")
 
     expect(mocks.rescanDriveSyncBinding).toHaveBeenCalledTimes(1)
     expect(getButtonByLabel("查看同步详情 Docs").disabled).toBe(true)
@@ -1094,7 +1184,8 @@ describe("DriveModule", () => {
     await flushAct()
     await clickButtonByLabel("同步状态：1 个绑定")
     await clickButtonByLabel("更多同步操作 Docs")
-    await clickMenuItemText("检查本地变更")
+    await clickMenuItemText("完整校验")
+    await clickButtonText("开始校验")
 
     expect(mocks.rescanDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
     expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(2)
@@ -1119,12 +1210,13 @@ describe("DriveModule", () => {
     await flushAct()
     await clickButtonByLabel("同步状态：1 个绑定")
     await clickButtonByLabel("更多同步操作 Docs")
-    await clickMenuItemText("检查本地变更")
+    await clickMenuItemText("完整校验")
+    await clickButtonText("开始校验")
 
     expect(mocks.rescanDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
     expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(2)
     expect(mocks.toast).toHaveBeenCalledWith("上传失败。")
-    expect(mocks.toast).not.toHaveBeenCalledWith("已检查本地变更")
+    expect(mocks.toast).not.toHaveBeenCalledWith("完整校验已完成")
     expect(getButtonByLabel("重试同步 Docs").textContent).toContain("重试同步")
   })
 
@@ -1161,7 +1253,7 @@ describe("DriveModule", () => {
     expect(getButtonByLabel("处理同步冲突 Docs").textContent).toContain("处理冲突")
   })
 
-  it("runs local and remote sync checks when retrying an error binding", async () => {
+  it("uses the unified catch-up flow when retrying an error binding", async () => {
     mocks.getDriveSyncSnapshot
       .mockResolvedValueOnce(createDriveSyncSnapshot(
         { errorCount: 1 },
@@ -1178,8 +1270,8 @@ describe("DriveModule", () => {
     await clickButtonByLabel("重试同步 Docs")
 
     expect(mocks.resumeDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
-    expect(mocks.rescanDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
-    expect(mocks.pollDriveSyncRemoteChanges).toHaveBeenCalledWith({ id: "binding-1" })
+    expect(mocks.rescanDriveSyncBinding).not.toHaveBeenCalled()
+    expect(mocks.pollDriveSyncRemoteChanges).not.toHaveBeenCalled()
     expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(2)
     expect(mocks.toast).toHaveBeenCalledWith("已重试同步")
   })
@@ -1317,6 +1409,43 @@ describe("DriveModule", () => {
     expect(dialog.textContent).not.toContain("排除规则")
   })
 
+  it("opens sync details from an already bound drive row", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", type: "file", name: "report.txt" }),
+    ])
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1 },
+      { bindings: [createDriveSyncBinding({ driveItemId: "file-1", driveItemName: "report.txt", localPath: "/Users/me/report.txt" })] },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await openRowMenu("report.txt")
+    await clickMenuItemText("同步详情")
+
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("/Users/me/report.txt")
+    await clickButtonText("打开本地位置")
+    expect(mocks.showItemInFolder).toHaveBeenCalledWith("/Users/me/report.txt")
+  })
+
+  it("prioritizes running and retrying sync status counts", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1, runningOperationCount: 2, retryWaitingOperationCount: 1 },
+      { bindings: [createDriveSyncBinding()] },
+    ))
+    await render(<DriveModule />)
+    await flushAct()
+    expect(getButtonByLabel("同步状态：2 个同步中")).toBeTruthy()
+
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1, retryWaitingOperationCount: 1 },
+      { bindings: [createDriveSyncBinding()], health: { status: "retrying", connectivity: "online", readOnly: false, lastError: "network", updatedAt: "2026-06-28T00:00:00.000Z" } },
+    ))
+    driveSyncChangedListener?.(await mocks.getDriveSyncSnapshot())
+    await flushAct()
+    expect(getButtonByLabel("同步状态：1 个等待重试")).toBeTruthy()
+  })
+
   it("selects local paths for bind-existing and remote download modes", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", type: "file", name: "report.txt" }),
@@ -1446,7 +1575,8 @@ describe("DriveModule", () => {
       localPath: "/Users/me/LocalDocs",
       remoteExists: false,
       directionHint: "local_to_remote",
-      importGitignore: true,
+      importGitignore: false,
+      useDefaultExcludes: true,
     }))
     expect(dialog.textContent).toContain("上传并同步")
 
@@ -1463,7 +1593,8 @@ describe("DriveModule", () => {
       targetParentId: null,
       localPath: "/Users/me/LocalDocs",
       direction: "local_to_remote",
-      importGitignore: true,
+      importGitignore: false,
+      useDefaultExcludes: true,
     }))
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(listCallsBeforeSubmit + 1)
     expect(mocks.getDriveUsage).toHaveBeenCalledTimes(usageCallsBeforeSubmit + 1)
@@ -1511,7 +1642,8 @@ describe("DriveModule", () => {
       targetParentId: "folder-projects",
       localPath: "/Users/me/LocalDocs",
       direction: "local_to_remote",
-      importGitignore: true,
+      importGitignore: false,
+      useDefaultExcludes: true,
     }))
   })
 
@@ -1532,8 +1664,58 @@ describe("DriveModule", () => {
       kind: "folder",
       localPath: "/Users/me/LocalDocs",
       excludeRules: ["build/**", ".tmp/"],
-      importGitignore: true,
+      importGitignore: false,
+      useDefaultExcludes: true,
     }))
+  })
+
+  it("keeps gitignore import off by default and previews detected rules when enabled", async () => {
+    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/LocalDocs")
+    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
+      status: "ready",
+      direction: "local_to_remote",
+      reason: null,
+      localPath: "/Users/me/LocalDocs",
+      localKind: "folder",
+      localEmpty: false,
+      forcedExcludeRules: [".git/"],
+      defaultExcludeRules: ["node_modules/"],
+      importedGitignoreRules: [],
+      detectedGitignoreRules: [],
+    }).mockResolvedValueOnce({
+      status: "ready",
+      direction: "local_to_remote",
+      reason: null,
+      localPath: "/Users/me/LocalDocs",
+      localKind: "folder",
+      localEmpty: false,
+      forcedExcludeRules: [".git/"],
+      defaultExcludeRules: ["node_modules/"],
+      importedGitignoreRules: ["dist/", "!dist/keep.txt"],
+      detectedGitignoreRules: ["dist/", "!dist/keep.txt"],
+    })
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickDriveToolbarMenuItem("更多", "本地同步")
+    await clickText("选择文件夹")
+
+    expect(mocks.previewDriveSyncBinding).toHaveBeenLastCalledWith(expect.objectContaining({
+      importGitignore: false,
+      useDefaultExcludes: true,
+    }))
+    const importLabel = Array.from(document.body.querySelectorAll<HTMLLabelElement>("label"))
+      .find((label) => label.textContent?.trim() === "导入 .gitignore")
+    if (!importLabel) throw new Error("Gitignore import control not found")
+    await act(async () => {
+      importLabel.click()
+      await flushPromises()
+    })
+
+    expect(mocks.previewDriveSyncBinding).toHaveBeenLastCalledWith(expect.objectContaining({ importGitignore: true }))
+    expect(document.body.textContent).toContain("将导入的 .gitignore 规则")
+    expect(document.querySelector<HTMLTextAreaElement>("#drive-sync-detected-gitignore")?.value)
+      .toBe("dist/\n!dist/keep.txt")
   })
 
   it("keeps the sync dialog open when initial safe create returns an error binding", async () => {
@@ -4196,6 +4378,7 @@ function createDriveSyncSnapshot(
   const nextSummary = {
     activeBindingCount: 0,
     runningOperationCount: 0,
+    retryWaitingOperationCount: 0,
     conflictCount: 0,
     errorCount: 0,
     ...summary,
@@ -4211,6 +4394,8 @@ function createDriveSyncSnapshot(
     operations: entries.operations ?? [],
     health: entries.health ?? {
       status: "idle",
+      connectivity: "online",
+      readOnly: false,
       lastError: null,
       updatedAt: "2026-06-28T00:00:00.000Z",
     },

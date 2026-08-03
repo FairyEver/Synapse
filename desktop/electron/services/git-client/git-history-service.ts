@@ -1,4 +1,4 @@
-import type { SynapseGitCommitDetail, SynapseGitCommitSummary, SynapseGitFileChange, SynapseGitRepository } from "../../../src/types/git"
+import type { SynapseGitCommitDetail, SynapseGitCommitFileChange, SynapseGitCommitSummary, SynapseGitRepository } from "../../../src/types/git"
 import type { StructuredLogger } from "../../runtime/logging"
 import type { GitClientCommandRunner } from "./git-command-runner"
 import {
@@ -9,8 +9,8 @@ import {
 
 const FIELD = "%x1f"
 const RECORD = "%x1e"
-const RECORD_SEPARATOR = String.fromCharCode(0x1e)
 const PRETTY = `%H${FIELD}%h${FIELD}%s${FIELD}%an${FIELD}%ae${FIELD}%cI${RECORD}`
+const DETAIL_PRETTY = `%H${FIELD}%h${FIELD}%s${FIELD}%an${FIELD}%ae${FIELD}%cI${FIELD}%P`
 const PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 
 function parseCommitRecord(record: string): SynapseGitCommitSummary | null {
@@ -19,7 +19,7 @@ function parseCommitRecord(record: string): SynapseGitCommitSummary | null {
   return { hash, shortHash, subject, authorName, authorEmail, committedAt }
 }
 
-function statusFromNameStatus(code: string): SynapseGitFileChange["status"] {
+function statusFromNameStatus(code: string): SynapseGitCommitFileChange["status"] {
   if (code.startsWith("A")) return "added"
   if (code.startsWith("M")) return "modified"
   if (code.startsWith("D")) return "deleted"
@@ -27,8 +27,8 @@ function statusFromNameStatus(code: string): SynapseGitFileChange["status"] {
   return "unknown"
 }
 
-function parseNameStatus(tokens: readonly string[]): SynapseGitFileChange[] {
-  const changes: SynapseGitFileChange[] = []
+function parseNameStatus(tokens: readonly string[]): SynapseGitCommitFileChange[] {
+  const changes: SynapseGitCommitFileChange[] = []
   for (let index = 0; index < tokens.length;) {
     const code = tokens[index++] ?? ""
     if (!code) continue
@@ -41,8 +41,6 @@ function parseNameStatus(tokens: readonly string[]): SynapseGitFileChange[] {
       path: nextPath,
       originalPath: renamed ? originalPath : null,
       status: statusFromNameStatus(code),
-      staged: false,
-      conflicted: false,
     })
   }
   return changes
@@ -55,6 +53,18 @@ function assertCommitHash(hash: string): string {
   return hash
 }
 
+function assertHistoryPagination(input: { readonly limit: number; readonly offset: number }): void {
+  if (
+    !Number.isSafeInteger(input.limit)
+    || input.limit < 1
+    || input.limit > 100
+    || !Number.isSafeInteger(input.offset)
+    || input.offset < 0
+  ) {
+    throw new Error("历史记录分页参数不合法。")
+  }
+}
+
 export function createGitHistoryService(deps: {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
   readonly logger?: Pick<StructuredLogger, "error">
@@ -64,6 +74,7 @@ export function createGitHistoryService(deps: {
       repository: SynapseGitRepository,
       input: { readonly limit: number; readonly offset: number },
     ): Promise<SynapseGitCommitSummary[]> {
+      assertHistoryPagination(input)
       const operation = "git.history.list"
       const operationId = createGitOperationId()
       const startedAt = performance.now()
@@ -112,9 +123,9 @@ export function createGitHistoryService(deps: {
       const startedAt = performance.now()
       try {
         const commitHash = assertCommitHash(hash)
-        const summaryResult = await deps.commandRunner.run({
+        const metadataResult = await deps.commandRunner.run({
           cwd: repository.localPath,
-          args: ["show", "--name-status", "-z", "--find-renames", `--pretty=format:${PRETTY}`, "--date=iso-strict", commitHash],
+          args: ["show", "-s", `--pretty=format:${DETAIL_PRETTY}`, "--date=iso-strict", commitHash],
           operation,
           operationId,
           maxBufferBytes: PREVIEW_MAX_BYTES,
@@ -122,13 +133,27 @@ export function createGitHistoryService(deps: {
           repoPath: repository.localPath,
           repositoryId: repository.id,
         })
-        const summaryEnd = summaryResult.stdout.indexOf(RECORD_SEPARATOR)
-        const summary = parseCommitRecord(summaryEnd >= 0 ? summaryResult.stdout.slice(0, summaryEnd) : "")
+        const metadataFields = metadataResult.stdout.split("\x1f")
+        const summary = parseCommitRecord(metadataFields.slice(0, 6).join("\x1f"))
         if (!summary) throw new Error("找不到提交记录。")
-        const nameStatus = summaryResult.stdout.slice(summaryEnd + 1).replace(/^[\r\n\0]+/, "")
+        const firstParent = (metadataFields[6] ?? "").trim().split(/\s+/).filter(Boolean)[0] ?? null
+        const filesResult = await deps.commandRunner.run({
+          cwd: repository.localPath,
+          args: firstParent
+            ? ["diff", "--name-status", "-z", "--find-renames", firstParent, commitHash]
+            : ["diff-tree", "--root", "--no-commit-id", "--name-status", "-z", "-r", "--find-renames", commitHash],
+          operation,
+          operationId,
+          maxBufferBytes: PREVIEW_MAX_BYTES,
+          outputOverflow: "truncate",
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
+        })
         const diffResult = await deps.commandRunner.run({
           cwd: repository.localPath,
-          args: ["show", "--format=", "--patch", commitHash],
+          args: firstParent
+            ? ["diff", "--patch", firstParent, commitHash]
+            : ["show", "--format=", "--patch", "--root", commitHash],
           operation,
           operationId,
           maxBufferBytes: PREVIEW_MAX_BYTES,
@@ -138,11 +163,11 @@ export function createGitHistoryService(deps: {
         })
         return {
           ...summary,
-          files: parseNameStatus(nameStatus.split("\0")),
+          files: parseNameStatus(filesResult.stdout.replace(/^[\r\n\0]+/, "").split("\0")),
           diff: diffResult.stdout,
-          filesTruncated: summaryResult.stdoutTruncated ?? false,
+          filesTruncated: filesResult.stdoutTruncated ?? false,
           diffTruncated: diffResult.stdoutTruncated ?? false,
-          truncated: Boolean(summaryResult.stdoutTruncated || diffResult.stdoutTruncated),
+          truncated: Boolean(filesResult.stdoutTruncated || diffResult.stdoutTruncated),
         }
       } catch (error) {
         logGitOperationFailed(deps.logger ?? noopLogger, {

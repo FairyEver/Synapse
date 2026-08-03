@@ -5,8 +5,10 @@ import type {
   SynapseRepositoryOperationResult,
   SynapseRepositoryProgressEvent,
 } from "../../src/types/repository"
-import { isGitRebaseInProgress, runGitCommand } from "./git-command"
-import { assertNoPreexistingGitRebase } from "./git-rebase-guard"
+import { runGitCommand } from "./git-command"
+import { assertNoPreexistingGitRebase, recoverOwnedRebase } from "./git-rebase-guard"
+import { assertGitWorktreeMutationAllowed } from "./git-operation-state"
+import { assertNoIgnoredPathCollisions } from "./git-working-tree-safety"
 import { createGitOperationId, gitErrorMeta, summarizeGitArgs } from "./git-client/git-logging"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage, isNonFastForwardError } from "./git-error-utils"
@@ -148,15 +150,18 @@ async function runRepositoryGitCommand(
   operation: SynapseRepositoryOperationKind,
   args: string[],
   options: {
+    captureStdout?: false
     cwd: string
+    onStdoutChunk?: (chunk: Uint8Array) => void
     onProgress: ProgressListener
     operationId: string
   },
-): Promise<void> {
+): ReturnType<typeof runGitCommand> {
   const startedAt = performance.now()
   try {
-    await runGitCommand({
+    return await runGitCommand({
       args,
+      captureStdout: options.captureStdout,
       cwd: options.cwd,
       fallbackMessage: "仓库同步失败。请检查网络、访问权限、远程配置或当前分支状态后重试。",
       formatFailureMessage: formatGitFailureMessage,
@@ -167,6 +172,7 @@ async function runRepositoryGitCommand(
           options.onProgress(progressEvent)
         }
       },
+      onStdoutChunk: options.onStdoutChunk,
       timeoutMessage: "仓库同步超时，请检查网络后重试。",
       timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
     })
@@ -192,20 +198,6 @@ async function getAheadCount(cwd: string): Promise<number> {
     formatFailureMessage: () => "",
   })
   return parseInt(result.stdout.trim(), 10) || 0
-}
-
-async function abortRebaseIfNeeded(localPath: string): Promise<void> {
-  if (!(await isGitRebaseInProgress(localPath))) {
-    return
-  }
-
-  logger.warn("Rebase in progress detected during sync. Aborting rebase.", { localPath })
-  await runGitCommand({
-    args: ["rebase", "--abort"],
-    cwd: localPath,
-    fallbackMessage: "无法中止 rebase。",
-    formatFailureMessage: formatGitFailureMessage,
-  })
 }
 
 class RepositoryGitService {
@@ -254,19 +246,28 @@ class RepositoryGitService {
         percent: 0,
       })
 
-      let pullSucceeded = false
-
+      const run = (args: readonly string[], streamOptions?: { readonly captureStdout: false; readonly onStdoutChunk: (chunk: Uint8Array) => void }) => runRepositoryGitCommand(repository.uuid, "sync", [...args], {
+        cwd: repository.localPath,
+        onProgress,
+        operationId,
+        ...streamOptions,
+      })
+      await assertGitWorktreeMutationAllowed({ localPath: repository.localPath, run })
+      await run(["fetch", "--prune", "--progress"])
+      const [origHeadResult, ontoResult] = await Promise.all([
+        run(["rev-parse", "HEAD"]),
+        run(["rev-parse", "@{u}"]),
+      ])
+      const expectedOrigHead = origHeadResult.stdout.trim()
+      const expectedOnto = ontoResult.stdout.trim()
+      await assertNoIgnoredPathCollisions({ run, target: expectedOnto })
       try {
-        await runRepositoryGitCommand(repository.uuid, "sync", [
-          "pull",
+        await run([
+          "merge",
           "--ff-only",
-          "--progress",
-        ], {
-          cwd: repository.localPath,
-          onProgress,
-          operationId,
-        })
-        pullSucceeded = true
+          "--no-overwrite-ignore",
+          expectedOnto,
+        ])
       } catch (pullError) {
         const message = gitFailureOutput(pullError)
 
@@ -274,7 +275,7 @@ class RepositoryGitService {
           throw pullError
         }
 
-        logger.info("Pull --ff-only failed due to diverged state. Attempting pull --rebase.", {
+        logger.info("Fast-forward merge failed due to diverged state. Attempting rebase.", {
           operation: "repository.sync",
           operationId,
           repositoryUuid: repository.uuid,
@@ -291,19 +292,42 @@ class RepositoryGitService {
         })
 
         try {
-          await runRepositoryGitCommand(repository.uuid, "sync", [
-            "pull",
-            "--rebase",
-            "--progress",
-          ], {
-            cwd: repository.localPath,
-            onProgress,
-            operationId,
-          })
+          await run(["rebase", expectedOnto])
         } catch (rebaseError) {
-          await abortRebaseIfNeeded(repository.localPath)
+          const recovery = await recoverOwnedRebase({
+            error: rebaseError,
+            expectedOnto,
+            expectedOrigHead,
+            localPath: repository.localPath,
+            run,
+          })
+          if (recovery === "not-owned" || recovery === "not-recoverable") {
+            throw new Error("同步失败，检测到无法确认归属的 rebase 状态；Synapse 未执行中止，请在 Git 工具中检查。", { cause: rebaseError })
+          }
           throw rebaseError
         }
+      }
+
+      let aheadCount = 0
+
+      try {
+        aheadCount = await getAheadCount(repository.localPath)
+      } catch (error) {
+        logger.warn("Failed to determine ahead count after pull.", {
+          operation: "repository.sync",
+          operationId,
+          repositoryUuid: repository.uuid,
+          error,
+        })
+      }
+
+      if (aheadCount > 0) {
+        logger.info("Local branch is ahead after pull. Pushing automatically.", {
+          operation: "repository.sync",
+          operationId,
+          repositoryUuid: repository.uuid,
+          aheadCount,
+        })
 
         onProgress({
           repositoryUuid: repository.uuid,
@@ -312,54 +336,7 @@ class RepositoryGitService {
           percent: null,
         })
 
-        await runRepositoryGitCommand(repository.uuid, "sync", [
-          "push",
-          "--progress",
-        ], {
-          cwd: repository.localPath,
-          onProgress,
-          operationId,
-        })
-      }
-
-      if (pullSucceeded) {
-        let aheadCount = 0
-
-        try {
-          aheadCount = await getAheadCount(repository.localPath)
-        } catch (error) {
-          logger.warn("Failed to determine ahead count after pull.", {
-            operation: "repository.sync",
-            operationId,
-            repositoryUuid: repository.uuid,
-            error,
-          })
-        }
-
-        if (aheadCount > 0) {
-          logger.info("Local branch is ahead after pull. Pushing automatically.", {
-            operation: "repository.sync",
-            operationId,
-            repositoryUuid: repository.uuid,
-            aheadCount,
-          })
-
-          onProgress({
-            repositoryUuid: repository.uuid,
-            operation: "sync",
-            statusText: "正在推送本地提交...",
-            percent: null,
-          })
-
-          await runRepositoryGitCommand(repository.uuid, "sync", [
-            "push",
-            "--progress",
-          ], {
-            cwd: repository.localPath,
-            onProgress,
-            operationId,
-          })
-        }
+        await run(["push", "--progress"])
       }
 
       const nextState = await repositoryStore.getRepositoryState(repository)

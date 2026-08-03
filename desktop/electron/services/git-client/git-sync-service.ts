@@ -1,6 +1,7 @@
 import type { SynapseGitOperationResult, SynapseGitPushTarget, SynapseGitRepository, SynapseGitRepositorySnapshot } from "../../../src/types/git"
 import type { StructuredLogger } from "../../runtime/logging"
 import type { GitClientCommandRunner } from "./git-command-runner"
+import { assertNoIgnoredPathCollisions } from "../git-working-tree-safety"
 import {
   createGitOperationId,
   gitErrorMeta,
@@ -30,6 +31,44 @@ export function createGitSyncService(deps: SyncDeps) {
 
   function result(message: string): SynapseGitOperationResult {
     return { completedAt: now().toISOString(), message }
+  }
+
+  async function assertIntegrationSafe(
+    repository: SynapseGitRepository,
+    operation: string,
+    operationId: string,
+  ): Promise<void> {
+    await assertNoIgnoredPathCollisions({
+      target: "@{u}",
+      run: (args, streamOptions) => deps.commandRunner.run({
+        args,
+        cwd: repository.localPath,
+        ...streamOptions,
+        operation,
+        operationId,
+        repoPath: repository.localPath,
+        repositoryId: repository.id,
+      }),
+    })
+  }
+
+  async function mergeUpstream(
+    repository: SynapseGitRepository,
+    operation: string,
+    operationId: string,
+    options: SyncOperationOptions,
+  ): Promise<void> {
+    await assertIntegrationSafe(repository, operation, operationId)
+    await deps.commandRunner.run({
+      cwd: repository.localPath,
+      args: ["merge", "--ff-only", "--no-overwrite-ignore", "@{u}"],
+      abortSignal: options.signal,
+      operation,
+      operationId,
+      repoPath: repository.localPath,
+      repositoryId: repository.id,
+      timeoutMs: 120_000,
+    })
   }
 
   async function listPushTargets(repository: SynapseGitRepository): Promise<SynapseGitPushTarget[]> {
@@ -89,7 +128,7 @@ export function createGitSyncService(deps: SyncDeps) {
         assertAutomaticIntegrationAllowed(await deps.getSnapshot(repository))
         await deps.commandRunner.run({
           cwd: repository.localPath,
-          args: ["pull", "--ff-only"],
+          args: ["fetch", "--prune"],
           abortSignal: options.signal,
           operation: "git.pull",
           operationId,
@@ -97,6 +136,11 @@ export function createGitSyncService(deps: SyncDeps) {
           repositoryId: repository.id,
           timeoutMs: 120_000,
         })
+        const afterFetch = await deps.getSnapshot(repository)
+        assertAutomaticIntegrationAllowed(afterFetch)
+        if (afterFetch.behind > 0) {
+          await mergeUpstream(repository, "git.pull", operationId, options)
+        }
         return result("已拉取远程更新。")
       })
     },
@@ -164,16 +208,7 @@ export function createGitSyncService(deps: SyncDeps) {
         const afterFetch = await deps.getSnapshot(repository)
         assertAutomaticIntegrationAllowed(afterFetch)
         if (afterFetch.behind > 0) {
-          await deps.commandRunner.run({
-            cwd: repository.localPath,
-            args: ["pull", "--ff-only"],
-            abortSignal: options.signal,
-            operation,
-            operationId,
-            repoPath: repository.localPath,
-            repositoryId: repository.id,
-            timeoutMs: 120_000,
-          })
+          await mergeUpstream(repository, operation, operationId, options)
         }
         const afterPull = afterFetch.behind > 0
           ? await deps.getSnapshot(repository)
@@ -289,7 +324,7 @@ function summarizeSyncSnapshot(snapshot: Pick<SynapseGitRepositorySnapshot, "cha
   return summarizeSnapshot({
     currentBranch: null,
     upstream: null,
-    hasConflicts: snapshot.changes.some((change) => change.conflicted),
+    hasConflicts: snapshot.changes.some((change) => change.status === "conflicted"),
     ...snapshot,
   })
 }

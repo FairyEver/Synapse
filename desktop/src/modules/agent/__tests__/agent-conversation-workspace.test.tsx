@@ -434,6 +434,9 @@ function createController(
 ): AgentConversationWorkspaceController {
   return {
     timeline: [],
+    timelineHasMore: false,
+    loadingOlder: false,
+    timelineHistoryError: null,
     pendingPermissions: [],
     sending: false,
     sendingConversationIds: new Set(),
@@ -446,6 +449,7 @@ function createController(
     cancelTurn: vi.fn(async () => undefined),
     forceKillTurn: vi.fn(async () => undefined),
     refresh: vi.fn(async () => undefined),
+    loadOlderTimeline: vi.fn(async () => undefined),
     personas: [],
     personasLoaded: true,
     ...overrides,

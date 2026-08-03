@@ -45,6 +45,24 @@ export function getGitActionPlan(snapshot: SynapseGitRepositorySnapshot | null, 
     }
   }
 
+  if (snapshot.repositoryOperationState !== "normal") {
+    const operationLabel = {
+      merge: "合并",
+      rebase: "rebase",
+      "cherry-pick": "cherry-pick",
+      revert: "revert",
+      bisect: "bisect",
+      unknown: "Git 操作",
+    }[snapshot.repositoryOperationState]
+    return {
+      statusText: snapshot.repositoryOperationState === "unknown" ? "状态待确认" : `正在${operationLabel}`,
+      primaryAction: "none",
+      primaryLabel: "暂不可操作",
+      blockerText: snapshot.repositoryOperationState === "unknown" ? "无法确认仓库操作状态" : `仓库正在进行${operationLabel}`,
+      recoveryText: "请在外部 Git 工具中完成或中止后刷新。",
+    }
+  }
+
   if (snapshot.hasConflicts) {
     return {
       statusText: "有冲突",
@@ -149,6 +167,7 @@ export function needsGitAttention(snapshot: SynapseGitRepositorySnapshot | null,
       || !snapshot?.pathExists
       || !snapshot.isGitRepository
       || snapshot.hasConflicts
+      || snapshot.repositoryOperationState !== "normal"
       || snapshot.trackingStatus !== "tracked"
       || snapshot.changeCount > 0
       || snapshot.ahead > 0

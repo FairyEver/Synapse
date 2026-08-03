@@ -82,6 +82,19 @@ describe("GitModule dialogs", () => {
     expect(findDialogText()).toContain("开始克隆")
   })
 
+  it("strips URL query text from the suggested directory and rejects the remote locally", async () => {
+    await renderGitModule(roots)
+
+    await click(findButton("克隆仓库"))
+    await changeInput("仓库地址", "https://git.example.com/team/docs.git?token=secret")
+
+    expect(findInput("仓库目录名").value).toBe("docs")
+    await changeInput("父目录", "/work")
+    await click(findDialogButton("开始克隆"))
+    expect(findDialogText()).toContain("查询参数")
+    expect(bridge.git.cloneRepository).not.toHaveBeenCalled()
+  })
+
   it("shows add-local submit failures inside the open dialog", async () => {
     bridge.settings.repository.chooseDirectory.mockResolvedValue("/work/docs")
 
@@ -138,17 +151,22 @@ async function click(element: HTMLElement) {
 }
 
 async function changeInput(label: string, value: string) {
-  const input = Array.from(document.querySelectorAll("input")).find((item) => {
-    const id = item.getAttribute("id")
-    return id ? document.querySelector(`label[for="${id}"]`)?.textContent === label : false
-  })
-  if (!input) throw new Error(`Input not found: ${label}`)
+  const input = findInput(label)
   const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
   await act(async () => {
     valueSetter?.call(input, value)
     input.dispatchEvent(new Event("input", { bubbles: true }))
     await flush()
   })
+}
+
+function findInput(label: string): HTMLInputElement {
+  const input = Array.from(document.querySelectorAll("input")).find((item) => {
+    const id = item.getAttribute("id")
+    return id ? document.querySelector(`label[for="${id}"]`)?.textContent === label : false
+  })
+  if (!input) throw new Error(`Input not found: ${label}`)
+  return input
 }
 
 function flush(): Promise<void> {

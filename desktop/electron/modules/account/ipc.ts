@@ -1041,6 +1041,13 @@ export const accountIpcModule: IpcModule = {
       response: drivePublicLinksPageSchema(driveItemSchema),
       handler: async (_ctx, input) => accountService.listDriveItemsPage(driveItemListInputSchema.parse(input) ?? {}),
     },
+    getDriveItem: {
+      kind: "invoke",
+      operationId: "app.drive.item.get",
+      request: driveItemIdSchema,
+      response: driveItemSchema,
+      handler: async (_ctx, input) => accountService.getDriveItem(driveItemIdSchema.parse(input).itemId),
+    },
     prepareDriveUpload: {
       kind: "invoke",
       operationId: "app.drive.upload.prepare",

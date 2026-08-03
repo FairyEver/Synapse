@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { SynapseGitDiffResult, SynapseGitFileChange, SynapseGitRepository, SynapseGitRepositorySnapshot } from "@/types/git"
+import type { SynapseGitDiffResult, SynapseGitRepository, SynapseGitRepositorySnapshot, SynapseGitWorkingTreeChange } from "@/types/git"
 
 const WORKTREE_REFRESH_INTERVAL_MS = 5_000
 
@@ -14,7 +14,7 @@ export function useGitWorktreeStatus(
 ) {
   const autoRefreshEnabled = options.autoRefreshEnabled ?? true
   const [snapshot, setSnapshot] = useState<SynapseGitRepositorySnapshot | null>(null)
-  const [selectedFile, setSelectedFile] = useState<SynapseGitFileChange | null>(null)
+  const [selectedFile, setSelectedFile] = useState<SynapseGitWorkingTreeChange | null>(null)
   const [diff, setDiff] = useState<SynapseGitDiffResult | null>(null)
   const [selectedPaths, setSelectedPaths] = useState<readonly string[]>([])
   const [loading, setLoading] = useState(true)
@@ -23,7 +23,7 @@ export function useGitWorktreeStatus(
   const diffRequestIdRef = useRef(0)
   const snapshotRequestIdRef = useRef(0)
   const hasLoadedRef = useRef(false)
-  const selectedFileRef = useRef<SynapseGitFileChange | null>(null)
+  const selectedFileRef = useRef<SynapseGitWorkingTreeChange | null>(null)
   const refreshInFlightRef = useRef(false)
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export function useGitWorktreeStatus(
   }, [selectedFile])
 
   const loadDiff = useCallback(async (
-    file: SynapseGitFileChange | null,
+    file: SynapseGitWorkingTreeChange | null,
     loadOptions: { readonly background?: boolean } = {},
   ) => {
     const requestId = diffRequestIdRef.current + 1

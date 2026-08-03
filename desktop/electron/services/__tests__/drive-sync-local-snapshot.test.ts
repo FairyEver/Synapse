@@ -79,7 +79,7 @@ describe("drive sync local snapshot", () => {
       rootPath: tempDir,
       rules: {
         ...createDefaultDriveSyncExcludeRules(),
-        importedGitignore: ["build/**", "!build/keep.txt"],
+        importedGitignore: ["!build/", "build/**", "!build/keep.txt"],
       },
       hashFiles: false,
     })

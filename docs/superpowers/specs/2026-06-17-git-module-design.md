@@ -150,7 +150,7 @@ desktop/src/modules/git/assets/icon.png
 └────────────────────────────────────────────────────────────┘
 ```
 
-HTTPS 是默认推荐路径。首次 clone 时认证交给系统 Git 和 Git Credential Manager 处理，Synapse 不保存账号密码、token 或 cookie。
+HTTPS 是默认推荐路径。首次 clone 时认证交给系统 Git 和 Git Credential Manager 处理，Synapse 不保存账号密码、token 或 cookie。主进程必须拒绝 HTTP/HTTPS/file URL 中的 userinfo、所有网络 URL 的 query 和 fragment，以及带密码的 SSH URL，避免凭据写入 `.git/config`；SSH 用户名、SCP 风格 SSH 地址和普通本地路径保持可用。Renderer 使用相同规则即时提示，但主进程校验始终是权威边界。默认目录名只从已移除 query、fragment 和末尾 `.git` 的 URL pathname 或 SCP path 推导。
 
 SSH 是高级路径。Synapse 可以检测 `ssh` 是否可用、是否存在常见 SSH key、生成 SSH key、复制公钥、测试连接。Synapse 不保存私钥，也不要求用户把私钥粘贴到应用里。
 
@@ -159,6 +159,8 @@ SSH 是高级路径。Synapse 可以检测 `ssh` 是否可用、是否存在常�
 工作台采用文件级提交语义：预览显示 `HEAD` 到当前工作树的完整文件变化，提交所选文件时包含该文件的全部变化。未跟踪文件使用 `/dev/null` 到文件的新增差异。差异和提交详情使用受控输出上限；提交文件列表与 diff 分别报告截断状态，截断只影响显示，不改变提交内容。
 
 同一真实 Git 根目录的修改操作使用可见 FIFO 队列；Git System App 与内容仓库共用同一仓库锁。读取等待当前修改完成。clone、fetch、pull、push、sync 支持 operation ID 和取消，取消后重新读取真实状态。Coordinator 只保留排队和运行中的操作；完成、失败和取消终态发出事件后立即释放内部记录。
+
+每次状态读取都探测仓库是否处于 merge、rebase、cherry-pick、revert 或 bisect；探测失败记为 `unknown`。上述进行中状态和 `unknown` 采用工作区只读边界：禁止提交、丢弃、分支检出、pull、sync、内容仓库自动提交和工作区同步；状态、差异、历史、刷新、fetch、push 和仅创建分支保持可用。权威检查必须位于同仓库 FIFO 队列内部，临时 index 提交还要在真正执行 `git commit` 前复检；失败不得改变 HEAD、真实 index 或 Git sequencer 文件。工作台只显示简短提示，要求用户在外部 Git 工具完成或中止操作后刷新。
 
 工作台可见时每 5 秒后台刷新，并在窗口重新聚焦时立即刷新；仓库列表只在窗口聚焦或用户手动操作时刷新，避免仓库较多时持续启动 Git 进程。后台刷新保留仍有效的文件选择和提交说明，新发现文件默认不选中。打开提交确认时由主进程为当前选择记录 HEAD、权威状态、重命名映射和内容指纹；提交在仓库 FIFO 内再次验证，任何变化都使短期选择令牌失效并要求重新审阅。
 
@@ -192,7 +194,7 @@ SSH 是高级路径。Synapse 可以检测 `ssh` 是否可用、是否存在常�
 
 ## 改动与提交
 
-改动 Tab 显示 Git 标准状态中的新增、修改、删除、重命名、未跟踪文件。`.gitignore` 已忽略的文件不显示；如果 `.gitignore` 文件本身被修改，则作为普通改动显示。
+改动 Tab 显示 Git 标准状态中的新增、修改、删除、重命名、替换和未跟踪文件。工作区条目同时保留 index 与 worktree 状态，但界面按逻辑路径只显示一项；预览和提交通过同一临时 index 投影得到最终 HEAD 差异，最终工作树与 HEAD 相同的组合状态不显示。`.gitignore` 已忽略的文件不显示；如果 `.gitignore` 文件本身被修改，则作为普通改动显示。
 
 提交采用文件级勾选，不支持行级或块级选择。
 
@@ -284,7 +286,7 @@ SSH 是高级路径。Synapse 可以检测 `ssh` 是否可用、是否存在常�
 └─ 不做分支树、远程分支写操作或合并
 ```
 
-分支切换入口位于顶部当前分支旁。打开列表只读取本地 `refs/remotes`，不得隐式访问网络；“获取远程分支”才执行 `git fetch --all --prune`。检出远程分支时，默认创建同名本地 tracking 分支；同名本地分支已跟踪该远端时直接切换，跟踪其它上游时要求用户填写其它本地名称。分支名使用 Git 原生校验，工作区不干净或目标分支已被其它 Worktree 占用时必须停止并给出可操作提示。
+分支切换入口位于顶部当前分支旁。打开列表只读取本地 `refs/remotes`，不得隐式访问网络；“获取远程分支”才执行 `git fetch --all --prune`。远端名称以 `git remote` 的真实结果按最长前缀匹配，允许名称包含 `/`。检出远程分支时，默认创建同名本地 tracking 分支；同名本地分支已跟踪该远端时直接切换，跟踪其它上游时要求用户填写其它本地名称。分支名使用 Git 原生校验，工作区不干净、目标分支已被其它 Worktree 占用，或目标 tree 会覆盖本地 ignored 文件时必须在修改工作区前停止并给出可操作提示。
 
 ```text
 ┌──────────────────────────┐
@@ -400,6 +402,7 @@ type GitRepositorySnapshot = {
   repositoryId: string
   pathExists: boolean
   isGitRepository: boolean
+  repositoryOperationState: "normal" | "merge" | "rebase" | "cherry-pick" | "revert" | "bisect" | "unknown"
   currentBranch: string | null
   upstream: string | null
   ahead: number
@@ -411,9 +414,11 @@ type GitRepositorySnapshot = {
 }
 ```
 
-状态命令使用 NUL 分隔的 porcelain v2 流式解析。主进程始终解析完整状态以得到准确的 `changeCount` 和冲突状态，Renderer 最多接收前 10,000 项；超出时通过 `changesTruncated` 明确提示，不得把工作区误判为空或把输出上限显示为命令失败。
+状态命令使用 NUL 分隔的 porcelain v2 流式解析。主进程始终解析完整状态以得到准确的 `changeCount` 和冲突状态，Renderer 最多接收前 10,000 项；超出时通过 `changesTruncated` 明确提示，不得把工作区误判为空或把输出上限显示为命令失败。需要临时 index 投影的双层状态使用固定并发上限 4，单文件失败使整次状态读取显式失败，不得静默删除变化。
 
-历史按当前分支每页 40 条分页加载，只有存在下一页时显示“加载更多”。空提交说明是合法历史记录，界面显示“无提交说明”。
+历史按当前分支每页 40 条分页加载，IPC 只接受 `limit` 1–100 的整数和非负安全整数 `offset`，只有存在下一页时显示“加载更多”。空提交说明是合法历史记录，界面显示“无提交说明”。merge commit 的文件列表和 patch 固定相对第一父提交生成；root commit 相对空树生成。
+
+拉取与同步必须显式执行 fetch 后再集成上游。checkout 和 fast-forward merge 使用 Git 原生的 ignored 覆盖保护，并在操作前比较本地 ignored 未跟踪路径与目标 tree；ignored 路径先流式读取，为空时不得扫描目标 tree，非空时只用 literal pathspec 分批查询对应路径及其父级，最多展示 20 个精确或父子碰撞项，不得读取整个目标 tree。发现碰撞时保持文件和 HEAD 不变。内容仓库需要 rebase 时记录操作前 HEAD 与 upstream OID，只有 rebase 的 `orig-head`、`onto` 和可恢复失败类型全部匹配本次操作时才允许自动 abort。
 
 仓库、分支、历史列表或提交选择变化都会使旧详情请求失效。只有最新请求代次可以更新详情、错误与 loading，避免较慢的旧响应覆盖当前选择。
 

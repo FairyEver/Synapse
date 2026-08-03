@@ -9,6 +9,7 @@ import type {
 } from "@synapse/shared"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import {
   AlertDialog,
@@ -37,6 +38,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { InputGroup, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -46,7 +48,7 @@ import { cn } from "@/lib/utils"
 
 type DriveSyncBindingMode = "bind_existing" | "remote_to_local" | "local_to_remote"
 type DriveSyncLocalKind = "file" | "folder"
-type DriveSyncObjectFilter = "all" | "active" | "conflict" | "paused" | "error"
+type DriveSyncObjectFilter = "all" | "initializing" | "active" | "conflict" | "paused" | "error"
 type DriveSyncStopTarget = Pick<DriveSyncBindingDto, "id" | "driveItemName"> | null
 
 const DRIVE_SYNC_OBJECT_FILTERS: ReadonlyArray<{
@@ -54,6 +56,7 @@ const DRIVE_SYNC_OBJECT_FILTERS: ReadonlyArray<{
   readonly label: string
 }> = [
   { value: "all", label: "全部" },
+  { value: "initializing", label: "初始化" },
   { value: "active", label: "已启用" },
   { value: "conflict", label: "有冲突" },
   { value: "paused", label: "已暂停" },
@@ -61,30 +64,39 @@ const DRIVE_SYNC_OBJECT_FILTERS: ReadonlyArray<{
 ]
 
 export type DriveSyncDialogState =
-  | { readonly mode: "status"; readonly item: null }
+  | { readonly mode: "status"; readonly item: null; readonly bindingId?: string }
   | { readonly mode: "bind"; readonly item: DriveItemDto; readonly drivePathHint: string | null }
   | { readonly mode: "local"; readonly item: null; readonly targetParentId: string | null; readonly drivePathHint: string | null }
 
 export function DriveSyncDialog({
   onDriveItemsChanged,
+  onOpenDriveItem,
   onOpenChange,
   onSnapshotChange,
   open,
   snapshot,
+  snapshotError = null,
+  snapshotLoading = false,
   state,
 }: {
   readonly onDriveItemsChanged?: () => void | Promise<void>
+  readonly onOpenDriveItem?: (binding: DriveSyncBindingDto) => void | Promise<void>
   readonly onOpenChange: (open: boolean) => void
   readonly onSnapshotChange: (snapshot: DriveSyncSnapshotDto) => void
   readonly open: boolean
   readonly snapshot: DriveSyncSnapshotDto | null
+  readonly snapshotError?: string | null
+  readonly snapshotLoading?: boolean
   readonly state: DriveSyncDialogState | null
 }) {
   const [localPath, setLocalPath] = useState("")
   const [bindingMode, setBindingMode] = useState<DriveSyncBindingMode>("bind_existing")
   const [localKind, setLocalKind] = useState<DriveSyncLocalKind>("folder")
   const [preview, setPreview] = useState<DriveSyncBindingPreviewDto | null>(null)
+  const [previewConfigKey, setPreviewConfigKey] = useState<string | null>(null)
   const [excludeText, setExcludeText] = useState("")
+  const [useDefaultExcludes, setUseDefaultExcludes] = useState(true)
+  const [importGitignore, setImportGitignore] = useState(false)
   const [statusFilter, setStatusFilter] = useState<DriveSyncObjectFilter>("all")
   const [busy, setBusy] = useState(false)
   const item = state?.mode === "bind" ? state.item : null
@@ -97,8 +109,15 @@ export function DriveSyncDialog({
   const bindingKind = item?.type ?? localKind
   const pathFieldCopy = isBindingDialog ? getDriveSyncBindingPathFieldCopy(bindingKind, effectiveBindingMode) : null
   const hasLocalPath = localPath.trim().length > 0
-  const currentPreview = preview?.localPath === localPath ? preview : null
-  const canSubmitBinding = hasLocalPath && !busy && currentPreview?.status !== "blocked"
+  const currentConfigKey = driveSyncPreviewConfigKey(localPath, effectiveBindingMode, excludeText, useDefaultExcludes, importGitignore)
+  const currentPreview = preview?.localPath === localPath && previewConfigKey === currentConfigKey ? preview : null
+  const canSubmitBinding = hasLocalPath
+    && !busy
+    && !snapshotLoading
+    && !snapshotError
+    && snapshot?.health.readOnly !== true
+    && currentPreview?.status === "ready"
+    && currentPreview.direction === effectiveBindingMode
 
   useEffect(() => {
     if (!open) {
@@ -106,7 +125,10 @@ export function DriveSyncDialog({
       setBindingMode("bind_existing")
       setLocalKind("folder")
       setPreview(null)
+      setPreviewConfigKey(null)
       setExcludeText("")
+      setUseDefaultExcludes(true)
+      setImportGitignore(false)
       setStatusFilter("all")
     }
   }, [open])
@@ -120,6 +142,7 @@ export function DriveSyncDialog({
     setBindingMode(nextMode)
     setLocalPath("")
     setPreview(null)
+    setPreviewConfigKey(null)
   }
 
   const selectLocalKind = (nextKind: DriveSyncLocalKind) => {
@@ -127,6 +150,7 @@ export function DriveSyncDialog({
     setLocalKind(nextKind)
     setLocalPath("")
     setPreview(null)
+    setPreviewConfigKey(null)
   }
 
   const chooseLocalPath = async () => {
@@ -143,6 +167,7 @@ export function DriveSyncDialog({
   const previewBinding = async (
     nextLocalPath = localPath,
     nextMode: DriveSyncBindingMode = effectiveBindingMode,
+    options: { readonly defaults?: boolean; readonly gitignore?: boolean } = {},
   ): Promise<DriveSyncBindingPreviewDto | null> => {
     if (!isBindingDialog || nextLocalPath.trim().length === 0) return null
     const currentPath = nextLocalPath
@@ -150,6 +175,9 @@ export function DriveSyncDialog({
     const bindingDrivePathHint = isLocalBinding
       ? joinDriveSyncPathHint(drivePathHint, driveItemName)
       : drivePathHint ?? item?.name ?? driveItemName
+    const nextUseDefaultExcludes = options.defaults ?? useDefaultExcludes
+    const nextImportGitignore = options.gitignore ?? importGitignore
+    const configKey = driveSyncPreviewConfigKey(currentPath, nextMode, excludeText, nextUseDefaultExcludes, nextImportGitignore)
     setBusy(true)
     try {
       const nextPreview = await requireSynapseBridge().driveSync.previewBinding({
@@ -161,9 +189,11 @@ export function DriveSyncDialog({
         remoteExists: nextMode !== "local_to_remote",
         directionHint: nextMode,
         excludeRules: bindingKind === "folder" ? parseExcludeText(excludeText) : [],
-        importGitignore: bindingKind === "folder",
+        useDefaultExcludes: bindingKind === "folder" ? nextUseDefaultExcludes : false,
+        importGitignore: bindingKind === "folder" ? nextImportGitignore : false,
       })
       setPreview(nextPreview)
+      setPreviewConfigKey(configKey)
       return nextPreview
     } catch (error) {
       toast(errorMessage(error, "校验失败"))
@@ -196,7 +226,8 @@ export function DriveSyncDialog({
         localPath: currentPath,
         direction: currentPreview.direction,
         excludeRules: bindingKind === "folder" ? parseExcludeText(excludeText) : [],
-        importGitignore: bindingKind === "folder",
+        useDefaultExcludes: bindingKind === "folder" ? useDefaultExcludes : false,
+        importGitignore: bindingKind === "folder" ? importGitignore : false,
       })
       await refreshSnapshot()
       if (binding.status === "error") {
@@ -279,17 +310,44 @@ export function DriveSyncDialog({
                             setPreview(null)
                           }}
                         />
-                        <InputGroupButton type="button" variant="outline" onClick={() => { void chooseLocalPath() }}>{pathFieldCopy?.chooseLabel}</InputGroupButton>
+                        <InputGroupButton type="button" variant="outline" disabled={busy || snapshotLoading || Boolean(snapshotError) || snapshot?.health.readOnly === true} onClick={() => { void chooseLocalPath() }}>{pathFieldCopy?.chooseLabel}</InputGroupButton>
                       </InputGroup>
                     </div>
                     {bindingKind === "folder" ? (
                       <details className="grid gap-2">
                         <summary className="cursor-default text-sm font-medium">高级设置</summary>
-                        <div className="mt-2 grid gap-2">
+                        <div className="mt-2 grid gap-3">
+                          <label className="flex items-center gap-2 text-sm">
+                            <Checkbox
+                              checked={useDefaultExcludes}
+                              onCheckedChange={(checked) => {
+                                const next = checked === true
+                                setUseDefaultExcludes(next)
+                                setPreview(null)
+                                setPreviewConfigKey(null)
+                                if (localPath) void previewBinding(localPath, effectiveBindingMode, { defaults: next })
+                              }}
+                            />
+                            使用推荐排除规则
+                          </label>
+                          <label className="flex items-center gap-2 text-sm">
+                            <Checkbox
+                              checked={importGitignore}
+                              onCheckedChange={(checked) => {
+                                const next = checked === true
+                                setImportGitignore(next)
+                                setPreview(null)
+                                setPreviewConfigKey(null)
+                                if (localPath) void previewBinding(localPath, effectiveBindingMode, { gitignore: next })
+                              }}
+                            />
+                            导入 .gitignore
+                          </label>
                           <Label htmlFor="drive-sync-excludes">排除规则（可选）</Label>
                           <Textarea id="drive-sync-excludes" value={excludeText} onChange={(event) => {
                             setExcludeText(event.target.value)
                             setPreview(null)
+                            setPreviewConfigKey(null)
                           }} />
                         </div>
                       </details>
@@ -300,10 +358,19 @@ export function DriveSyncDialog({
                         <span className="truncate text-muted-foreground">{drivePathHint ?? "根目录"}</span>
                       </div>
                     ) : null}
-                    {preview ? <DriveSyncPreview preview={preview} /> : null}
+                    {preview ? <DriveSyncPreview preview={preview} showDetectedGitignore={importGitignore} /> : null}
+                    <div className="text-sm text-muted-foreground">仅在 Synapse 运行期间同步。</div>
                   </div>
                 ) : (
-                  <DriveSyncStatusPanel filter={statusFilter} snapshot={snapshot} onSnapshotChange={onSnapshotChange} />
+                  <DriveSyncStatusPanel
+                    filter={statusFilter}
+                    initialSelectedBindingId={state?.mode === "status" ? state.bindingId ?? null : null}
+                    snapshot={snapshot}
+                    snapshotError={snapshotError}
+                    snapshotLoading={snapshotLoading}
+                    onSnapshotChange={onSnapshotChange}
+                    onOpenDriveItem={onOpenDriveItem}
+                  />
                 )}
               </div>
             </ScrollArea>
@@ -311,7 +378,7 @@ export function DriveSyncDialog({
           <DialogFrameFooter>
             {isBindingDialog ? (
               <>
-                <Button type="button" variant="outline" disabled={busy || !hasLocalPath} onClick={() => { void previewBinding() }}>校验</Button>
+                <Button type="button" variant="outline" disabled={busy || !hasLocalPath || snapshotLoading || Boolean(snapshotError) || snapshot?.health.readOnly === true} onClick={() => { void previewBinding() }}>校验</Button>
                 <Button type="button" disabled={!canSubmitBinding} onClick={() => { void createBinding() }}>{pathFieldCopy?.submitLabel}</Button>
               </>
             ) : (
@@ -361,7 +428,13 @@ function getDriveSyncLocalPlaceholderId(localPath: string): string {
   return `local:${localPath}`
 }
 
-function DriveSyncPreview({ preview }: { readonly preview: DriveSyncBindingPreviewDto }) {
+function DriveSyncPreview({
+  preview,
+  showDetectedGitignore,
+}: {
+  readonly preview: DriveSyncBindingPreviewDto
+  readonly showDetectedGitignore: boolean
+}) {
   return (
     <div className="rounded-lg border p-3 text-sm">
       <div className="flex items-center justify-between gap-3">
@@ -370,25 +443,42 @@ function DriveSyncPreview({ preview }: { readonly preview: DriveSyncBindingPrevi
       </div>
       {preview.reason ? <p className="mt-2 text-muted-foreground">{preview.reason}</p> : null}
       <div className="mt-2 text-muted-foreground">同步方向：{formatDirection(preview.direction)}</div>
+      {showDetectedGitignore && preview.detectedGitignoreRules.length > 0 ? (
+        <div className="mt-2 grid gap-1">
+          <Label htmlFor="drive-sync-detected-gitignore">将导入的 .gitignore 规则</Label>
+          <Textarea id="drive-sync-detected-gitignore" readOnly value={preview.detectedGitignoreRules.join("\n")} />
+        </div>
+      ) : null}
     </div>
   )
 }
 
 function DriveSyncStatusPanel({
   filter,
+  initialSelectedBindingId,
   onSnapshotChange,
+  onOpenDriveItem,
   snapshot,
+  snapshotError,
+  snapshotLoading,
 }: {
   readonly filter: DriveSyncObjectFilter
+  readonly initialSelectedBindingId: string | null
   readonly onSnapshotChange: (snapshot: DriveSyncSnapshotDto) => void
+  readonly onOpenDriveItem?: (binding: DriveSyncBindingDto) => void | Promise<void>
   readonly snapshot: DriveSyncSnapshotDto | null
+  readonly snapshotError: string | null
+  readonly snapshotLoading: boolean
 }) {
   const bindings = snapshot?.bindings ?? []
   const operations = snapshot?.operations ?? []
   const conflicts = snapshot?.conflicts ?? []
-  const [selectedBindingId, setSelectedBindingId] = useState<string | null>(null)
+  const readOnly = snapshot?.health.readOnly ?? false
+  const offline = snapshot?.health.connectivity === "offline"
+  const [selectedBindingId, setSelectedBindingId] = useState<string | null>(initialSelectedBindingId)
   const [stopTarget, setStopTarget] = useState<DriveSyncStopTarget>(null)
   const [pendingBindingActionIds, setPendingBindingActionIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [globalRetrying, setGlobalRetrying] = useState(false)
   const pendingBindingActionIdsRef = useRef<Set<string>>(new Set())
   const selectedBinding = bindings.find((binding) => binding.id === selectedBindingId) ?? null
   const conflictBindingIds = new Set(conflicts.map((conflict) => conflict.bindingId))
@@ -418,6 +508,10 @@ function DriveSyncStatusPanel({
   const isBindingActionPending = (bindingId: string) => pendingBindingActionIds.has(bindingId)
 
   const runBindingAction = async (bindingId: string, action: () => Promise<unknown>, success: string) => {
+    if (readOnly) {
+      toast(offline ? "联网后可管理同步。" : "登录后可管理同步。")
+      return
+    }
     if (pendingBindingActionIdsRef.current.has(bindingId)) {
       toast("同步操作正在执行，请稍后再试。")
       return
@@ -440,21 +534,79 @@ function DriveSyncStatusPanel({
     }
   }
 
+  const retryGlobalSync = async () => {
+    if (globalRetrying || readOnly) return
+    setGlobalRetrying(true)
+    try {
+      await requireSynapseBridge().driveSync.pollRemoteChanges({})
+      await refreshSnapshot()
+    } catch (error) {
+      toast(errorMessage(error, "重试失败"))
+    } finally {
+      setGlobalRetrying(false)
+    }
+  }
+
+  const retrySnapshotLoad = async () => {
+    if (globalRetrying) return
+    setGlobalRetrying(true)
+    try {
+      await refreshSnapshot()
+    } catch (error) {
+      toast(errorMessage(error, "加载同步状态失败"))
+    } finally {
+      setGlobalRetrying(false)
+    }
+  }
+
   useEffect(() => {
     if (selectedBindingId && !selectedBinding) setSelectedBindingId(null)
   }, [selectedBinding, selectedBindingId])
 
+  useEffect(() => {
+    setSelectedBindingId(initialSelectedBindingId)
+  }, [initialSelectedBindingId])
+
   return (
     <>
-      <DriveSyncBindingList
-        bindings={visibleBindings}
-        conflicts={conflicts}
-        onRequestStop={(binding) => setStopTarget({ id: binding.id, driveItemName: binding.driveItemName })}
-        operations={operations}
-        isBindingActionPending={isBindingActionPending}
-        onSelectBinding={(binding) => setSelectedBindingId(binding.id)}
-        runBindingAction={runBindingAction}
-      />
+      {snapshotLoading && !snapshot ? <DriveSyncEmptyState compact title="正在加载同步状态" /> : null}
+      {snapshotError ? (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm text-destructive">
+          <span>{snapshotError}</span>
+          <Button type="button" size="sm" variant="outline" disabled={globalRetrying} onClick={() => { void retrySnapshotLoad() }}>重试</Button>
+        </div>
+      ) : null}
+      {readOnly ? (
+        <div className="mb-3 rounded-lg border px-3 py-2 text-sm text-muted-foreground">
+          {offline ? "当前离线，仅显示同步状态；联网后会自动追平。" : "未登录，仅显示上次登录账号的同步状态。"}
+        </div>
+      ) : null}
+      {snapshot?.health.lastError ? (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm text-destructive">
+          <span>{snapshot.health.lastError}</span>
+          <Button type="button" size="sm" variant="outline" disabled={globalRetrying || readOnly} onClick={() => { void retryGlobalSync() }}>重试</Button>
+        </div>
+      ) : null}
+      {snapshot ? (
+        <div className="mb-3 flex flex-wrap gap-2" aria-label="同步汇总">
+          <Badge variant="secondary">启用 {snapshot.summary.activeBindingCount}</Badge>
+          <Badge variant="secondary">进行中 {snapshot.summary.runningOperationCount}</Badge>
+          <Badge variant={snapshot.summary.conflictCount > 0 ? "destructive" : "secondary"}>冲突 {snapshot.summary.conflictCount}</Badge>
+          <Badge variant={snapshot.summary.errorCount > 0 ? "destructive" : "secondary"}>错误 {snapshot.summary.errorCount}</Badge>
+        </div>
+      ) : null}
+      {snapshot ? (
+        <DriveSyncBindingList
+          bindings={visibleBindings}
+          conflicts={conflicts}
+          onRequestStop={(binding) => setStopTarget({ id: binding.id, driveItemName: binding.driveItemName })}
+          operations={operations}
+          isBindingActionPending={isBindingActionPending}
+          readOnly={readOnly}
+          onSelectBinding={(binding) => setSelectedBindingId(binding.id)}
+          runBindingAction={runBindingAction}
+        />
+      ) : !snapshotLoading && !snapshotError ? <DriveSyncEmptyState title="暂无同步对象" /> : null}
       <DriveSyncBindingDetailDialog
         binding={selectedBinding}
         conflicts={selectedBinding ? conflicts.filter((conflict) => conflict.bindingId === selectedBinding.id) : []}
@@ -464,6 +616,8 @@ function DriveSyncStatusPanel({
           if (!open) setSelectedBindingId(null)
         }}
         operations={selectedBinding ? operations.filter((operation) => operation.bindingId === selectedBinding.id) : []}
+        onOpenDriveItem={onOpenDriveItem}
+        readOnly={readOnly}
         runBindingAction={runBindingAction}
       />
       <AlertDialog open={stopTarget !== null} onOpenChange={(open) => {
@@ -507,6 +661,7 @@ function DriveSyncBindingList({
   onRequestStop,
   onSelectBinding,
   operations,
+  readOnly,
   runBindingAction,
 }: {
   readonly bindings: readonly DriveSyncBindingDto[]
@@ -515,6 +670,7 @@ function DriveSyncBindingList({
   readonly onRequestStop: (binding: DriveSyncBindingDto) => void
   readonly onSelectBinding: (binding: DriveSyncBindingDto) => void
   readonly operations: NonNullable<DriveSyncSnapshotDto["operations"]>
+  readonly readOnly: boolean
   readonly runBindingAction: (bindingId: string, action: () => Promise<unknown>, success: string) => Promise<void>
 }) {
   if (bindings.length === 0) {
@@ -554,6 +710,7 @@ function DriveSyncBindingList({
                 binding={binding}
                 conflictCount={conflictCount}
                 isPending={isBindingActionPending(binding.id)}
+                readOnly={readOnly}
                 onOpenDetails={() => onSelectBinding(binding)}
                 onRequestStop={() => onRequestStop(binding)}
                 runBindingAction={runBindingAction}
@@ -573,7 +730,9 @@ function DriveSyncBindingDetailDialog({
   isBindingActionPending,
   onRequestStop,
   onOpenChange,
+  onOpenDriveItem,
   operations,
+  readOnly,
   runBindingAction,
 }: {
   readonly binding: DriveSyncBindingDto | null
@@ -581,13 +740,19 @@ function DriveSyncBindingDetailDialog({
   readonly isBindingActionPending: (bindingId: string) => boolean
   readonly onRequestStop: (binding: DriveSyncBindingDto) => void
   readonly onOpenChange: (open: boolean) => void
+  readonly onOpenDriveItem?: (binding: DriveSyncBindingDto) => void | Promise<void>
   readonly operations: NonNullable<DriveSyncSnapshotDto["operations"]>
+  readonly readOnly: boolean
   readonly runBindingAction: (bindingId: string, action: () => Promise<unknown>, success: string) => Promise<void>
 }) {
-  const [excludeDraft, setExcludeDraft] = useState("")
+  const [defaultExcludeDraft, setDefaultExcludeDraft] = useState("")
+  const [importedExcludeDraft, setImportedExcludeDraft] = useState("")
+  const [userExcludeDraft, setUserExcludeDraft] = useState("")
 
   useEffect(() => {
-    setExcludeDraft(binding?.excludeRules.user.join("\n") ?? "")
+    setDefaultExcludeDraft(binding?.excludeRules.defaults.join("\n") ?? "")
+    setImportedExcludeDraft(binding?.excludeRules.importedGitignore.join("\n") ?? "")
+    setUserExcludeDraft(binding?.excludeRules.user.join("\n") ?? "")
   }, [binding])
 
   return (
@@ -605,6 +770,30 @@ function DriveSyncBindingDetailDialog({
               description={`云端 ${driveSyncRemotePath(binding)} · 本地 ${binding.localPath}`}
               actions={(
                 <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      void Promise.resolve(requireSynapseBridge().shell.showItemInFolder(binding.localPath))
+                        .catch((error) => toast(errorMessage(error, "无法打开本地位置")))
+                    }}
+                  >
+                    打开本地位置
+                  </Button>
+                  {onOpenDriveItem ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        void Promise.resolve(onOpenDriveItem(binding))
+                          .catch((error) => toast(errorMessage(error, "无法打开云端位置")))
+                      }}
+                    >
+                      打开云端位置
+                    </Button>
+                  ) : null}
                   <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>
                     {formatBindingStatus(binding.status)}
                   </Badge>
@@ -612,6 +801,7 @@ function DriveSyncBindingDetailDialog({
                     binding={binding}
                     conflictCount={conflicts.length}
                     isPending={isBindingActionPending(binding.id)}
+                    readOnly={readOnly}
                     onOpenDetails={() => undefined}
                     onRequestStop={() => onRequestStop(binding)}
                     runBindingAction={runBindingAction}
@@ -628,24 +818,48 @@ function DriveSyncBindingDetailDialog({
                 <div className="grid gap-4 px-5 py-4">
                   {binding.kind === "folder" ? (
                     <div className="grid gap-2">
-                      <Label htmlFor={`drive-sync-detail-excludes-${binding.id}`}>排除规则</Label>
+                      <div className="text-sm font-medium">排除规则</div>
+                      <Label htmlFor={`drive-sync-detail-forced-excludes-${binding.id}`}>强制规则</Label>
                       <Textarea
-                        id={`drive-sync-detail-excludes-${binding.id}`}
-                        value={excludeDraft}
-                        onChange={(event) => setExcludeDraft(event.target.value)}
+                        id={`drive-sync-detail-forced-excludes-${binding.id}`}
+                        readOnly
+                        value={binding.excludeRules.forced.join("\n")}
+                      />
+                      <Label htmlFor={`drive-sync-detail-default-excludes-${binding.id}`}>推荐规则</Label>
+                      <Textarea
+                        id={`drive-sync-detail-default-excludes-${binding.id}`}
+                        value={defaultExcludeDraft}
+                        readOnly={readOnly}
+                        onChange={(event) => setDefaultExcludeDraft(event.target.value)}
+                      />
+                      <Label htmlFor={`drive-sync-detail-imported-excludes-${binding.id}`}>已导入的 .gitignore 规则</Label>
+                      <Textarea
+                        id={`drive-sync-detail-imported-excludes-${binding.id}`}
+                        value={importedExcludeDraft}
+                        readOnly={readOnly}
+                        onChange={(event) => setImportedExcludeDraft(event.target.value)}
+                      />
+                      <Label htmlFor={`drive-sync-detail-user-excludes-${binding.id}`}>用户规则</Label>
+                      <Textarea
+                        id={`drive-sync-detail-user-excludes-${binding.id}`}
+                        value={userExcludeDraft}
+                        readOnly={readOnly}
+                        onChange={(event) => setUserExcludeDraft(event.target.value)}
                       />
                       <div className="flex justify-end">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={isBindingActionPending(binding.id)}
+                          disabled={readOnly || isBindingActionPending(binding.id)}
                           onClick={() => {
                             void runBindingAction(
                               binding.id,
                               () => requireSynapseBridge().driveSync.updateExcludeRules({
                                 id: binding.id,
-                                user: parseExcludeText(excludeDraft),
+                                defaults: parseExcludeText(defaultExcludeDraft),
+                                importedGitignore: parseExcludeText(importedExcludeDraft),
+                                user: parseExcludeText(userExcludeDraft),
                               }),
                               "已更新排除规则",
                             )
@@ -661,6 +875,7 @@ function DriveSyncBindingDetailDialog({
                     <DriveSyncConflictTable
                       conflicts={conflicts}
                       isBindingActionPending={isBindingActionPending}
+                      readOnly={readOnly}
                       runBindingAction={runBindingAction}
                     />
                   </div>
@@ -696,6 +911,7 @@ function DriveSyncBindingActions({
   binding,
   conflictCount,
   isPending,
+  readOnly,
   onOpenDetails,
   onRequestStop,
   runBindingAction,
@@ -705,22 +921,22 @@ function DriveSyncBindingActions({
   readonly binding: DriveSyncBindingDto
   readonly conflictCount: number
   readonly isPending: boolean
+  readonly readOnly: boolean
   readonly onOpenDetails: () => void
   readonly onRequestStop: () => void
   readonly runBindingAction: (bindingId: string, action: () => Promise<unknown>, success: string) => Promise<void>
   readonly showPrimary?: boolean
   readonly showStatus?: boolean
 }) {
+  const [rescanOpen, setRescanOpen] = useState(false)
   const canPause = binding.status === "active" || binding.status === "conflict"
   const primaryAction = getBindingPrimaryAction(binding, conflictCount)
-  const manualSyncDisabled = isPending || binding.status === "paused"
+  const manualSyncDisabled = readOnly || isPending || binding.status === "paused" || binding.status === "initializing"
   const runRetry = () => runBindingAction(
     binding.id,
     async () => {
       const { driveSync } = requireSynapseBridge()
       await driveSync.resumeBinding({ id: binding.id })
-      await driveSync.rescanBinding({ id: binding.id })
-      await driveSync.pollRemoteChanges({ id: binding.id })
     },
     "已重试同步",
   )
@@ -730,7 +946,8 @@ function DriveSyncBindingActions({
     "已继续同步",
   )
   return (
-    <div className="flex flex-wrap justify-end gap-1">
+    <>
+      <div className="flex flex-wrap justify-end gap-1">
       {showStatus ? (
         <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>{formatBindingStatus(binding.status)}</Badge>
       ) : null}
@@ -740,7 +957,7 @@ function DriveSyncBindingActions({
           variant={primaryAction.kind === "details" ? "outline" : "default"}
           size="sm"
           aria-label={`${primaryAction.ariaPrefix} ${binding.driveItemName}`}
-          disabled={isPending}
+          disabled={isPending || (readOnly && primaryAction.kind !== "details" && primaryAction.kind !== "conflicts")}
           onClick={() => {
             if (primaryAction.kind === "details" || primaryAction.kind === "conflicts") {
               onOpenDetails()
@@ -759,39 +976,65 @@ function DriveSyncBindingActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
-          <DropdownMenuItem disabled={manualSyncDisabled} onClick={() => { void runBindingAction(binding.id, () => requireSynapseBridge().driveSync.rescanBinding({ id: binding.id }), "已检查本地变更") }}>
-            检查本地变更
+          <DropdownMenuItem disabled={manualSyncDisabled} onClick={() => setRescanOpen(true)}>
+            完整校验
           </DropdownMenuItem>
           <DropdownMenuItem disabled={manualSyncDisabled} onClick={() => { void runBindingAction(binding.id, () => requireSynapseBridge().driveSync.pollRemoteChanges({ id: binding.id }), "已同步云端变更") }}>
             同步云端变更
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           {canPause ? (
-            <DropdownMenuItem disabled={isPending} onClick={() => { void runBindingAction(binding.id, () => requireSynapseBridge().driveSync.pauseBinding({ id: binding.id }), "已暂停同步") }}>
+            <DropdownMenuItem disabled={readOnly || isPending} onClick={() => { void runBindingAction(binding.id, () => requireSynapseBridge().driveSync.pauseBinding({ id: binding.id }), "已暂停同步") }}>
               暂停同步
             </DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem disabled={isPending} onClick={() => { void runResume() }}>
+          ) : binding.status === "paused" || binding.status === "error" ? (
+            <DropdownMenuItem disabled={readOnly || isPending} onClick={() => { void runResume() }}>
               继续同步
             </DropdownMenuItem>
-          )}
+          ) : null}
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" disabled={isPending} onClick={onRequestStop}>
+          <DropdownMenuItem variant="destructive" disabled={readOnly || isPending} onClick={onRequestStop}>
             停止同步
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+      </div>
+      <AlertDialog open={rescanOpen} onOpenChange={setRescanOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>完整校验 {binding.driveItemName}</AlertDialogTitle>
+            <AlertDialogDescription>将读取全部本地文件并下载云端文件进行内容校验。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={readOnly || isPending}
+              onClick={() => {
+                void runBindingAction(
+                  binding.id,
+                  () => requireSynapseBridge().driveSync.rescanBinding({ id: binding.id }),
+                  "完整校验已完成",
+                ).finally(() => setRescanOpen(false))
+              }}
+            >
+              开始校验
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 
 function DriveSyncConflictTable({
   conflicts,
   isBindingActionPending,
+  readOnly,
   runBindingAction,
 }: {
   readonly conflicts: NonNullable<DriveSyncSnapshotDto["conflicts"]>
   readonly isBindingActionPending: (bindingId: string) => boolean
+  readonly readOnly: boolean
   readonly runBindingAction: (bindingId: string, action: () => Promise<unknown>, success: string) => Promise<void>
 }) {
   if (conflicts.length === 0) {
@@ -808,7 +1051,7 @@ function DriveSyncConflictTable({
       </TableHeader>
       <TableBody>
         {conflicts.map((conflict) => {
-          const isPending = isBindingActionPending(conflict.bindingId)
+          const isPending = readOnly || isBindingActionPending(conflict.bindingId)
           const availableActions = new Set(conflict.availableActions)
           return (
             <TableRow key={conflict.id}>
@@ -871,6 +1114,18 @@ function DriveSyncOperationTable({ operations }: { readonly operations: NonNulla
             <TableCell>
               <div className="truncate">{operation.message ?? formatOperationStatus(operation.status)}</div>
               {operation.message ? <div className="truncate text-xs text-muted-foreground">{formatOperationStatus(operation.status)}</div> : null}
+              {operation.totalBytes !== null && operation.totalBytes > 0 ? (
+                <Progress
+                  className="mt-1"
+                  value={Math.min(100, ((operation.completedBytes ?? 0) / operation.totalBytes) * 100)}
+                  aria-label={`${operation.relativePath || "/"} 同步进度`}
+                />
+              ) : null}
+              {operation.status === "retry_wait" && operation.nextRetryAt ? (
+                <div className="truncate text-xs text-muted-foreground">
+                  第 {operation.attemptCount} 次重试 · {new Date(operation.nextRetryAt).toLocaleString()}
+                </div>
+              ) : null}
             </TableCell>
             <TableCell className="text-right tabular-nums">{new Date(operation.updatedAt).toLocaleString()}</TableCell>
           </TableRow>
@@ -890,18 +1145,25 @@ export function DriveSyncStatusButton({
   const summary = snapshot?.summary
   const conflictCount = countVisibleDriveSyncConflicts(snapshot)
   const hasHealthError = snapshot?.health.status === "error"
-  const errorCount = (summary?.errorCount ?? 0) + (hasHealthError ? 1 : 0)
+  const errorCount = Math.max(summary?.errorCount ?? 0, hasHealthError ? 1 : 0)
   const activeCount = summary?.activeBindingCount ?? 0
+  const runningCount = summary?.runningOperationCount ?? 0
+  const retryingCount = summary?.retryWaitingOperationCount ?? 0
+  const initializingCount = snapshot?.bindings.filter((binding) => binding.status === "initializing").length ?? 0
   const pausedCount = snapshot?.bindings.filter((binding) => binding.status === "paused").length ?? 0
   const badge = conflictCount > 0
     ? { label: String(conflictCount), variant: "destructive" as const, message: `${conflictCount} 个冲突` }
     : errorCount > 0
       ? { label: String(errorCount), variant: "outline" as const, message: `${errorCount} 个错误` }
-      : activeCount > 0
-        ? { label: String(activeCount), variant: "secondary" as const, message: `${activeCount} 个绑定` }
-        : pausedCount > 0
-          ? { label: String(pausedCount), variant: "secondary" as const, message: `${pausedCount} 个暂停` }
-          : null
+      : runningCount > 0 || initializingCount > 0
+        ? { label: String(runningCount + initializingCount), variant: "secondary" as const, message: `${runningCount + initializingCount} 个同步中` }
+        : retryingCount > 0 || snapshot?.health.status === "retrying"
+          ? { label: String(Math.max(1, retryingCount)), variant: "outline" as const, message: `${Math.max(1, retryingCount)} 个等待重试` }
+          : activeCount > 0
+            ? { label: String(activeCount), variant: "secondary" as const, message: `${activeCount} 个绑定` }
+            : pausedCount > 0
+              ? { label: String(pausedCount), variant: "secondary" as const, message: `${pausedCount} 个暂停` }
+              : null
   const message = badge?.message ?? "暂无同步绑定"
   return (
     <SystemAppTopBarActionButton
@@ -939,6 +1201,16 @@ function parseExcludeText(value: string): string[] {
   return value.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean)
 }
 
+function driveSyncPreviewConfigKey(
+  localPath: string,
+  direction: DriveSyncBindingMode,
+  excludeText: string,
+  useDefaultExcludes: boolean,
+  importGitignore: boolean,
+): string {
+  return JSON.stringify([localPath, direction, parseExcludeText(excludeText), useDefaultExcludes, importGitignore])
+}
+
 function joinDriveSyncPathHint(parentPath: string | null | undefined, name: string): string {
   const normalizedParent = parentPath?.trim()
   if (!normalizedParent || normalizedParent === "根目录" || normalizedParent === "/") return `/${name}`
@@ -953,6 +1225,7 @@ function formatDirection(direction: DriveSyncBindingPreviewDto["direction"]): st
 }
 
 function formatBindingStatus(status: DriveSyncBindingDto["status"]): string {
+  if (status === "initializing") return "初始化中"
   if (status === "active") return "已启用"
   if (status === "paused") return "已暂停"
   if (status === "conflict") return "有冲突"
@@ -988,6 +1261,9 @@ function getBindingIssueSummary(
     return conflictCount > 0 ? `${conflictCount} 个冲突需要处理` : "存在同步冲突"
   }
   if (binding.status === "paused") return "已暂停自动同步"
+  if (binding.status === "initializing") return "正在初始化同步内容"
+  const retrying = operations.find((operation) => operation.status === "retry_wait")
+  if (retrying) return retrying.message ?? "等待重试"
   return "同步关系正常"
 }
 

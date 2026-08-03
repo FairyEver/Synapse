@@ -53,6 +53,9 @@ function renderTimeline(overrides: Partial<ComponentProps<typeof AgentTimeline>>
       onOpenReference={vi.fn()}
       onRespondPermission={vi.fn()}
       viewportRef={createRef<HTMLDivElement>()}
+      loadingOlder={false}
+      historyError={null}
+      onRetryHistory={vi.fn()}
       {...overrides}
     />,
   )
@@ -65,6 +68,29 @@ function textFromMarkup(html: string): string {
 }
 
 describe("AgentTimeline", () => {
+  it("shows only the older-history loading and retry actions", () => {
+    expect(textFromMarkup(renderTimeline({
+      items: [{
+        id: "message-1",
+        kind: "message",
+        role: "assistant",
+        content: "hello",
+        timestamp: "2026-08-03T00:00:00.000Z",
+      }],
+      loadingOlder: true,
+    }))).toContain("加载中")
+    expect(textFromMarkup(renderTimeline({
+      items: [{
+        id: "message-1",
+        kind: "message",
+        role: "assistant",
+        content: "hello",
+        timestamp: "2026-08-03T00:00:00.000Z",
+      }],
+      historyError: "internal detail",
+    }))).toContain("重试加载")
+  })
+
   it("uses compact vertical spacing between timeline items", () => {
     const html = renderTimeline({
       items: [{

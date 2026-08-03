@@ -21,10 +21,13 @@ export interface DriveSyncLocalChange {
 export interface DriveSyncWatcherBindingScanInput {
   readonly binding: DriveSyncBindingEntryV1
   readonly baseline: readonly DriveSyncBaselineEntryV1[]
+  readonly forceFullHash?: boolean
+  readonly forceHashPaths?: ReadonlySet<string>
 }
 
 export interface DriveSyncWatcherDeps {
   readonly onChanges: (changes: readonly DriveSyncLocalChange[]) => void | Promise<void>
+  readonly onRescanRequested?: (bindingId: string) => void | Promise<void>
   readonly onError?: (input: {
     readonly bindingId: string
     readonly localPath: string
@@ -63,7 +66,7 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
   const selfWrites = new Map<string, number>()
 
   function reconcile(bindings: readonly DriveSyncBindingEntryV1[]): void {
-    const active = bindings.filter((binding) => binding.status === "active")
+    const active = bindings.filter((binding) => binding.status === "active" || binding.status === "conflict")
     const activeIds = new Set(active.map((binding) => binding.id))
 
     for (const bindingId of entries.keys()) {
@@ -102,7 +105,8 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
       rootPath: binding.localPath,
       rules: binding.excludeRules,
       hashFiles: true,
-      hashCache: localSnapshotHashCache(activeBaseline),
+      hashCache: input.forceFullHash ? undefined : localSnapshotHashCache(activeBaseline),
+      forceHashPaths: input.forceHashPaths,
     })
     const localByPath = new Map(localEntries.map((entry) => [entry.relativePath, entry] as const))
     const changes: DriveSyncLocalChange[] = []
@@ -183,12 +187,21 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     if (!entry) return
     const binding = entry.binding
     const relativePath = eventRelativePath(binding, filename)
-    if (relativePath === null) return
-    if (binding.kind === "folder" && isDriveSyncExcluded(relativePath, binding.excludeRules)) return
-    if (consumeSelfWrite(bindingId, relativePath)) return
-
+    if (relativePath === null) {
+      if (!filename) {
+        void Promise.resolve(deps.onRescanRequested?.(bindingId)).catch(() => undefined)
+      }
+      return
+    }
     const localPath = binding.kind === "file" ? binding.localPath : path.join(binding.localPath, relativePath)
     const local = inspectDriveSyncLocalPathSync(localPath)
+    if (binding.kind === "folder" && isDriveSyncExcluded(
+      relativePath,
+      binding.excludeRules,
+      local.kind === "file" || local.kind === "folder" ? local.kind : null,
+    )) return
+    if (consumeSelfWrite(bindingId, relativePath)) return
+
     const kind = local.kind === "missing"
       ? "deleted"
       : eventType === "rename"

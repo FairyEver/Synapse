@@ -9,12 +9,14 @@ import type {
   SynapseAgentPermissionScope,
   SynapseAgentSessionSummary,
   SynapseAgentTimelineItem,
+  SynapseAgentTimelineResult,
 } from "@/types/agent"
 import type { AgentConversationTarget } from "@/types/agent-conversation-window"
 import type { SynapseAgentBridgeAttachment } from "@/types/bridge"
 import { DEFAULT_LOCAL_SESSION_KEY, pendingPermissionKey } from "../utils"
 import {
   clearConversationUnread,
+  isSelectedConversation,
   shouldApplyTimelineSnapshot,
 } from "../live-sync"
 import type { AgentDraftAttachment } from "../attachments"
@@ -37,6 +39,8 @@ type SendMessageOptions = {
 
 type PermissionResponseTarget = Pick<SynapseAgentPendingPermission, "projectId" | "requestId">
 
+type TimelineLoadMode = "replace" | "refresh-tail"
+
 type ChatConnectionRefs = {
   readonly projectIdsRef: React.RefObject<string[]>
   readonly defaultProjectIdRef: React.RefObject<string | undefined>
@@ -54,7 +58,8 @@ type ChatConnectionResult = {
   readonly clearTimeline: () => void
   readonly getDefaultProjectId: () => string | undefined
   readonly setSelectedSession: (session: SynapseAgentSessionSummary | undefined) => void
-  readonly loadTimeline: (target: TimelineTarget) => Promise<void>
+  readonly loadTimeline: (target: TimelineTarget, mode?: TimelineLoadMode) => Promise<void>
+  readonly loadOlderTimeline: () => Promise<void>
   readonly loadArchivedSessions: () => Promise<void>
   readonly refreshPendingPermissions: () => Promise<void>
   readonly refreshProjectMeta: (projectId: string | undefined) => Promise<void>
@@ -102,6 +107,18 @@ function useChatConnection(
   } = refs
 
   const respondingPermissionKeysRef = useRef(new Set<string>())
+  const timelineLoadRequestIdRef = useRef(0)
+  const olderTimelineRequestRef = useRef<Promise<void> | null>(null)
+  const timelinePaginationRef = useRef({
+    startIndex: state.timelineStartIndex,
+    total: state.timelineTotal,
+    hasMore: state.timelineHasMore,
+  })
+  timelinePaginationRef.current = {
+    startIndex: state.timelineStartIndex,
+    total: state.timelineTotal,
+    hasMore: state.timelineHasMore,
+  }
 
   const replaceTimeline = useCallback((entries: SynapseAgentTimelineItem[]) => {
     timelineVersionRef.current += 1
@@ -116,8 +133,17 @@ function useChatConnection(
   }, [dispatch, timelineVersionRef])
 
   const clearTimeline = useCallback(() => {
-    replaceTimeline([])
-  }, [replaceTimeline])
+    timelineLoadRequestIdRef.current += 1
+    timelinePaginationRef.current = { startIndex: 0, total: 0, hasMore: false }
+    timelineVersionRef.current += 1
+    dispatch({
+      type: "SET_TIMELINE_PAGE",
+      timeline: [],
+      startIndex: 0,
+      total: 0,
+      hasMore: false,
+    })
+  }, [dispatch, timelineVersionRef])
 
   const getDefaultProjectId = useCallback(() => (
     selectedProjectIdRef.current
@@ -134,62 +160,130 @@ function useChatConnection(
     dispatch({ type: "SET_SELECTED_SESSION_KEY", selectedSessionKey: session?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY })
   }, [dispatch, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef])
 
-  const loadTimeline = useCallback(async (target: TimelineTarget) => {
+  const loadTimeline = useCallback(async (
+    target: TimelineTarget,
+    mode: TimelineLoadMode = "replace",
+  ) => {
     const bridge = requireSynapseBridge()
     const capturedVersion = timelineVersionRef.current
-    const result = await bridge.agent.getTimeline({
+    const requestId = timelineLoadRequestIdRef.current + 1
+    timelineLoadRequestIdRef.current = requestId
+    let result = await bridge.agent.getTimeline({
       projectId: target.projectId,
       sessionKey: target.sessionKey,
       conversationId: target.conversationId,
       limit: 100,
     })
-    if (!shouldApplyTimelineSnapshot(target, {
+    if (mode === "refresh-tail" && timelinePaginationRef.current.total > 0) {
+      result = await backfillTimelineGap(bridge.agent.getTimeline, target, result, timelinePaginationRef.current.total)
+    }
+    const selected = {
       projectId: selectedProjectIdRef.current,
       conversationId: selectedConversationIdRef.current,
       sessionKey: selectedSessionKeyRef.current,
-    }, {
-      capturedVersion,
-      currentVersion: timelineVersionRef.current,
-    })) {
+    }
+    const shouldApply = requestId === timelineLoadRequestIdRef.current
+      && (mode === "replace"
+        ? shouldApplyTimelineSnapshot(target, selected, {
+          capturedVersion,
+          currentVersion: timelineVersionRef.current,
+        })
+        : isSelectedConversation(target, selected))
+    if (!shouldApply) {
       return
     }
-    // Strip empty entries that may have been persisted during cancel/error
-    // paths (e.g. empty error records, empty assistant messages).
-    const dbEntries = result.entries.filter((entry) => {
-      if (entry.kind === "error") return Boolean(entry.message && entry.message.trim().length > 0)
-      if (entry.kind === "message" && entry.role !== "user") return entry.content.trim().length > 0
-      return true
-    })
-    // Phase items are renderer-only in Plan A (not persisted). When DB-backed
-    // entries replace the timeline, preserve in-flight phase rows AND anchor
-    // them right after the most recent user message — sorting by `timestamp`
-    // is unreliable because the backend stamps the user message at persist
-    // time (often AFTER the IPC handler has already emitted the early
-    // `submitted` / `received` events), which would float phase rows above
-    // the user bubble.
-    updateTimeline((current) => {
-      // Only preserve phase items that are still in-progress (belong to the
-      // active turn). Completed / failed / cancelled phase rows from previous
-      // turns must NOT survive a DB-backed timeline reload — otherwise they
-      // accumulate across turns and appear under the wrong user message.
-      const activePhaseItems = current.filter(
-        (item) => item.kind === "phase" && item.status === "in-progress",
-      )
-      if (activePhaseItems.length === 0) return [...dbEntries]
-      let lastUserIdx = -1
-      for (let i = dbEntries.length - 1; i >= 0; i--) {
-        const candidate = dbEntries[i]
-        if (candidate.kind === "message" && candidate.role === "user") {
-          lastUserIdx = i
-          break
-        }
+    const dbEntries = filterPersistedTimelineEntries(result.entries)
+    timelineVersionRef.current += 1
+    if (mode === "replace") {
+      timelinePaginationRef.current = {
+        startIndex: result.startIndex,
+        total: result.total,
+        hasMore: result.hasMore,
       }
-      if (lastUserIdx < 0) return [...dbEntries, ...activePhaseItems]
-      const out: SynapseAgentTimelineItem[] = [...dbEntries]
-      out.splice(lastUserIdx + 1, 0, ...activePhaseItems)
-      return out
+      dispatch({
+        type: "SET_TIMELINE_PAGE",
+        timeline: [...dbEntries],
+        startIndex: result.startIndex,
+        total: result.total,
+        hasMore: result.hasMore,
+      })
+      return
+    }
+    const currentStartIndex = timelinePaginationRef.current.startIndex
+    timelinePaginationRef.current = {
+      startIndex: currentStartIndex,
+      total: Math.max(timelinePaginationRef.current.total, result.total),
+      hasMore: currentStartIndex > 0,
+    }
+    dispatch({
+      type: "UPDATE_TIMELINE_PAGE",
+      updater: (current) => mergePersistedTimelineTail(current, dbEntries, result.startIndex),
+      total: result.total,
     })
-  }, [updateTimeline, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef, timelineVersionRef])
+  }, [
+    dispatch,
+    selectedConversationIdRef,
+    selectedProjectIdRef,
+    selectedSessionKeyRef,
+    timelineVersionRef,
+  ])
+
+  const loadOlderTimeline = useCallback((): Promise<void> => {
+    if (olderTimelineRequestRef.current) return olderTimelineRequestRef.current
+    const pagination = timelinePaginationRef.current
+    const projectId = selectedProjectIdRef.current
+    const conversationId = selectedConversationIdRef.current
+    const sessionKey = selectedSessionKeyRef.current
+    if (!pagination.hasMore || !projectId || !conversationId) return Promise.resolve()
+
+    const target = { projectId, conversationId, sessionKey }
+    dispatch({ type: "SET_LOADING_OLDER", loading: true })
+    dispatch({ type: "SET_TIMELINE_HISTORY_ERROR", error: null })
+    const request = requireSynapseBridge().agent.getTimeline({
+      ...target,
+      limit: 100,
+      beforeIndex: pagination.startIndex,
+    }).then((result) => {
+      if (!isSelectedConversation(target, {
+        projectId: selectedProjectIdRef.current,
+        conversationId: selectedConversationIdRef.current,
+        sessionKey: selectedSessionKeyRef.current,
+      })) return
+      const dbEntries = filterPersistedTimelineEntries(result.entries)
+      timelineVersionRef.current += 1
+      timelinePaginationRef.current = {
+        startIndex: result.startIndex,
+        total: Math.max(timelinePaginationRef.current.total, result.total),
+        hasMore: result.hasMore,
+      }
+      dispatch({
+        type: "UPDATE_TIMELINE_PAGE",
+        updater: (current) => prependTimelineEntries(current, dbEntries),
+        startIndex: result.startIndex,
+        total: result.total,
+      })
+    }).catch((rawError: unknown) => {
+      if (!isSelectedConversation(target, {
+        projectId: selectedProjectIdRef.current,
+        conversationId: selectedConversationIdRef.current,
+        sessionKey: selectedSessionKeyRef.current,
+      })) return
+      logger.warn("Agent older timeline load failed.", {
+        projectId,
+        conversationId,
+        beforeIndex: pagination.startIndex,
+        boundary: "renderer.agent.timeline.older",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
+      dispatch({ type: "SET_TIMELINE_HISTORY_ERROR", error: "历史加载失败" })
+    }).finally(() => {
+      olderTimelineRequestRef.current = null
+      dispatch({ type: "SET_LOADING_OLDER", loading: false })
+    })
+    olderTimelineRequestRef.current = request
+    return request
+  }, [dispatch, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef, timelineVersionRef])
 
   const loadSessionsForProjects = useCallback(async () => {
     const bridge = requireSynapseBridge()
@@ -396,6 +490,7 @@ function useChatConnection(
     loadArchivedSessions,
     loadSessionsForProjects,
     loadTimeline,
+    loadOlderTimeline,
     projectIdsRef,
     refreshPendingPermissionsForPageLoad,
     refreshProjectMeta,
@@ -924,6 +1019,7 @@ function useChatConnection(
     getDefaultProjectId,
     setSelectedSession,
     loadTimeline,
+    loadOlderTimeline,
     loadArchivedSessions,
     refreshPendingPermissions,
     refreshProjectMeta,
@@ -950,6 +1046,109 @@ export type {
   SendMessageOptions,
   SendMessageTarget,
   TimelineTarget,
+  TimelineLoadMode,
+}
+
+function filterPersistedTimelineEntries(
+  entries: readonly SynapseAgentTimelineItem[],
+): SynapseAgentTimelineItem[] {
+  return entries.filter((entry) => {
+    if (entry.kind === "error") return Boolean(entry.message && entry.message.trim().length > 0)
+    if (entry.kind === "message" && entry.role !== "user") return entry.content.trim().length > 0
+    return true
+  })
+}
+
+function mergePersistedTimelineTail(
+  current: readonly SynapseAgentTimelineItem[],
+  persisted: readonly SynapseAgentTimelineItem[],
+  startIndex: number,
+): SynapseAgentTimelineItem[] {
+  const prefix = current.filter((item) => {
+    const index = persistedHistoryIndex(item)
+    return index !== undefined && index < startIndex
+  })
+  return insertActivePhases(dedupeTimelineEntries([...prefix, ...persisted]), current)
+}
+
+function prependTimelineEntries(
+  current: readonly SynapseAgentTimelineItem[],
+  older: readonly SynapseAgentTimelineItem[],
+): SynapseAgentTimelineItem[] {
+  return dedupeTimelineEntries([...older, ...current])
+}
+
+function insertActivePhases(
+  persisted: SynapseAgentTimelineItem[],
+  current: readonly SynapseAgentTimelineItem[],
+): SynapseAgentTimelineItem[] {
+  const activePhases = current.filter(
+    (item) => item.kind === "phase" && item.status === "in-progress",
+  )
+  if (activePhases.length === 0) return persisted
+  let lastUserIndex = -1
+  for (let index = persisted.length - 1; index >= 0; index -= 1) {
+    const candidate = persisted[index]
+    if (candidate?.kind === "message" && candidate.role === "user") {
+      lastUserIndex = index
+      break
+    }
+  }
+  const insertionIndex = lastUserIndex < 0 ? persisted.length : lastUserIndex + 1
+  persisted.splice(insertionIndex, 0, ...activePhases)
+  return persisted
+}
+
+function dedupeTimelineEntries(
+  entries: readonly SynapseAgentTimelineItem[],
+): SynapseAgentTimelineItem[] {
+  const seen = new Set<string>()
+  return entries.filter((entry) => {
+    if (seen.has(entry.id)) return false
+    seen.add(entry.id)
+    return true
+  })
+}
+
+function persistedHistoryIndex(item: SynapseAgentTimelineItem): number | undefined {
+  const match = item.id.match(/:history:(\d+)$/)
+  if (!match?.[1]) return undefined
+  const index = Number(match[1])
+  return Number.isSafeInteger(index) ? index : undefined
+}
+
+async function backfillTimelineGap(
+  getTimeline: (args: {
+    projectId: string
+    sessionKey?: string
+    conversationId?: string
+    limit?: number
+    beforeIndex?: number
+  }) => Promise<SynapseAgentTimelineResult>,
+  target: TimelineTarget,
+  latest: SynapseAgentTimelineResult,
+  loadedEndIndex: number,
+): Promise<SynapseAgentTimelineResult> {
+  if (latest.startIndex <= loadedEndIndex) return latest
+  const pages = [latest]
+  let cursor = latest.startIndex
+  while (cursor > loadedEndIndex) {
+    const older = await getTimeline({ ...target, limit: 100, beforeIndex: cursor })
+    if (older.startIndex >= cursor) {
+      throw new Error("Timeline pagination did not advance")
+    }
+    pages.unshift(older)
+    cursor = older.startIndex
+    if (!older.hasMore) break
+  }
+  if (cursor > loadedEndIndex) {
+    throw new Error("Timeline pagination gap could not be filled")
+  }
+  return {
+    ...latest,
+    entries: dedupeTimelineEntries(pages.flatMap((page) => page.entries)),
+    startIndex: cursor,
+  }
 }
 
 function normalizeSessionProject(

@@ -11,7 +11,7 @@ describe("parseGitStatusPorcelainV2", () => {
       "1 .M N... 100644 100644 100644 abc abc docs/intro.md",
       "1 D. N... 100644 000000 000000 abc 000000 docs/old.md",
       "? docs/new.md",
-      "u UU N... 100644 100644 100644 100644 a b c d docs/conflict.md",
+      "u UU N... 100644 100644 100644 100644 a b c docs/conflict.md",
     ].join("\n"))
 
     expect(snapshot.currentBranch).toBe("main")
@@ -21,10 +21,10 @@ describe("parseGitStatusPorcelainV2", () => {
     expect(snapshot.behind).toBe(1)
     expect(snapshot.hasConflicts).toBe(true)
     expect(snapshot.changes).toEqual([
-      { path: "docs/intro.md", originalPath: null, status: "modified", staged: false, conflicted: false },
-      { path: "docs/old.md", originalPath: null, status: "deleted", staged: true, conflicted: false },
-      { path: "docs/new.md", originalPath: null, status: "untracked", staged: false, conflicted: false },
-      { path: "docs/conflict.md", originalPath: null, status: "conflicted", staged: false, conflicted: true },
+      { path: "docs/intro.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" },
+      { path: "docs/old.md", originalPath: null, status: "deleted", indexStatus: "deleted", worktreeStatus: "unchanged" },
+      { path: "docs/new.md", originalPath: null, status: "untracked", indexStatus: "unchanged", worktreeStatus: "untracked" },
+      { path: "docs/conflict.md", originalPath: null, status: "conflicted", indexStatus: "unmerged", worktreeStatus: "unmerged" },
     ])
   })
 
@@ -51,7 +51,20 @@ describe("parseGitStatusPorcelainV2", () => {
     )
 
     expect(snapshot.changes).toEqual([
-      { path: "docs/new-name.md", originalPath: "docs/old-name.md", status: "renamed", staged: true, conflicted: false },
+      { path: "docs/new-name.md", originalPath: "docs/old-name.md", status: "renamed", indexStatus: "renamed", worktreeStatus: "unchanged" },
+    ])
+  })
+
+  it("parses real unmerged records and type changes", () => {
+    const snapshot = parseGitStatusPorcelainV2([
+      "u UU N... 100644 100644 100644 100644 a b c docs/conflict with spaces.md",
+      "1 .T N... 100644 100644 120000 a b docs/link.md",
+    ].join("\n"))
+
+    expect(snapshot.hasConflicts).toBe(true)
+    expect(snapshot.changes).toEqual([
+      { path: "docs/conflict with spaces.md", originalPath: null, status: "conflicted", indexStatus: "unmerged", worktreeStatus: "unmerged" },
+      { path: "docs/link.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" },
     ])
   })
 
@@ -63,9 +76,9 @@ describe("parseGitStatusPorcelainV2", () => {
     ].join("\n"))
 
     expect(snapshot.changes).toEqual([
-      { path: "docs/中文 file.ts", originalPath: null, status: "modified", staged: false, conflicted: false },
-      { path: "docs/line\nname.txt", originalPath: null, status: "untracked", staged: false, conflicted: false },
-      { path: "docs/新 name.md", originalPath: "docs/old name.md", status: "renamed", staged: true, conflicted: false },
+      { path: "docs/中文 file.ts", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" },
+      { path: "docs/line\nname.txt", originalPath: null, status: "untracked", indexStatus: "unchanged", worktreeStatus: "untracked" },
+      { path: "docs/新 name.md", originalPath: "docs/old name.md", status: "renamed", indexStatus: "renamed", worktreeStatus: "unchanged" },
     ])
   })
 
@@ -79,7 +92,7 @@ describe("parseGitStatusPorcelainV2", () => {
       "2 R. N... 100644 100644 100644 abc abc R100 docs/new name.md",
       "docs/old name.md",
       "? docs/third.md",
-      "u UU N... 100644 100644 100644 100644 a b c d docs/conflict.md",
+      "u UU N... 100644 100644 100644 100644 a b c docs/conflict.md",
       "",
     ].join("\0"), "utf8")
 
@@ -97,8 +110,8 @@ describe("parseGitStatusPorcelainV2", () => {
       changeCount: 4,
       changesTruncated: true,
       changes: [
-        { path: "docs/line\nname.md", originalPath: null, status: "modified", staged: false, conflicted: false },
-        { path: "docs/new name.md", originalPath: "docs/old name.md", status: "renamed", staged: true, conflicted: false },
+        { path: "docs/line\nname.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" },
+        { path: "docs/new name.md", originalPath: "docs/old name.md", status: "renamed", indexStatus: "renamed", worktreeStatus: "unchanged" },
       ],
     })
   })

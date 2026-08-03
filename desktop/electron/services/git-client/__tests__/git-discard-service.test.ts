@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import type { SynapseGitFileChange } from "../../../../src/types/git"
+import type { SynapseGitWorkingTreeChange } from "../../../../src/types/git"
 import { createGitDiscardService } from "../git-discard-service"
 
 const repository = {
@@ -10,12 +10,12 @@ const repository = {
   lastOpenedAt: null,
 }
 
-const changes: SynapseGitFileChange[] = [
-  { path: "modified.md", originalPath: null, status: "modified", staged: true, conflicted: false },
-  { path: "deleted.md", originalPath: null, status: "deleted", staged: false, conflicted: false },
-  { path: "new-name.md", originalPath: "old-name.md", status: "renamed", staged: true, conflicted: false },
-  { path: "added.md", originalPath: null, status: "added", staged: true, conflicted: false },
-  { path: "untracked.md", originalPath: null, status: "untracked", staged: false, conflicted: false },
+const changes: SynapseGitWorkingTreeChange[] = [
+  { path: "modified.md", originalPath: null, status: "modified", indexStatus: "modified", worktreeStatus: "unchanged" },
+  { path: "deleted.md", originalPath: null, status: "deleted", indexStatus: "unchanged", worktreeStatus: "deleted" },
+  { path: "new-name.md", originalPath: "old-name.md", status: "renamed", indexStatus: "renamed", worktreeStatus: "unchanged" },
+  { path: "added.md", originalPath: null, status: "added", indexStatus: "added", worktreeStatus: "unchanged" },
+  { path: "untracked.md", originalPath: null, status: "untracked", indexStatus: "unchanged", worktreeStatus: "untracked" },
 ]
 
 function createFixture(overrides: { readonly trashItem?: (targetPath: string) => Promise<void> } = {}) {
@@ -112,7 +112,7 @@ describe("git discard service", () => {
     const fixture = createFixture()
     fixture.selections.validate.mockResolvedValue({
       ...(await fixture.selections.validate()),
-      changes: [{ path: "conflict.md", originalPath: null, status: "conflicted", staged: false, conflicted: true }],
+      changes: [{ path: "conflict.md", originalPath: null, status: "conflicted", indexStatus: "unmerged", worktreeStatus: "unmerged" }],
     })
     fixture.selections.validate.mockClear()
 

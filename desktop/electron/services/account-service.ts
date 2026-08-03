@@ -152,6 +152,8 @@ type AccountServiceDeps = {
 type DriveLocalUploadProgressReporter = {
   readonly taskId?: string
   readonly onProgress?: (event: DriveLocalUploadProgressEvent) => void
+  readonly onFolderPrepared?: (input: { readonly id: string; readonly created: boolean }) => void
+  readonly signal?: AbortSignal
 }
 
 type DriveLocalUploadItemProgressEvent = Exclude<DriveLocalUploadProgressEvent, { readonly type: "task-finished" }>
@@ -366,6 +368,7 @@ export class AccountService {
   private eventBus: EventBus | null = null
   private state: SynapseAccountState = { status: "unauthenticated" }
   private listeners = new Set<(state: SynapseAccountState) => void>()
+  private beforeIdentityChangeListeners = new Set<() => void | Promise<void>>()
   private authRevision = 0
   private storageMutationQueue: Promise<void> = Promise.resolve()
   private retryTimer: ReturnType<typeof setTimeout> | null = null
@@ -391,6 +394,13 @@ export class AccountService {
     this.listeners.add(listener)
     return () => {
       this.listeners.delete(listener)
+    }
+  }
+
+  onBeforeIdentityChange(listener: () => void | Promise<void>): () => void {
+    this.beforeIdentityChangeListeners.add(listener)
+    return () => {
+      this.beforeIdentityChangeListeners.delete(listener)
     }
   }
 
@@ -564,9 +574,14 @@ export class AccountService {
     }
   }
 
-  async downloadDriveFile(input: { readonly itemId: string; readonly outputPath: string }): Promise<{ readonly ok: true; readonly path: string }> {
-    const response = await this.fetchAuthenticated(currentOwnerDriveDownloadUrl(input.itemId), {}, "文件下载失败。")
-    await writeResponseBodyToFile(response, input.outputPath)
+  async downloadDriveFile(input: {
+    readonly itemId: string
+    readonly outputPath: string
+    readonly signal?: AbortSignal
+    readonly onProgress?: (completedBytes: number, totalBytes: number) => void
+  }): Promise<{ readonly ok: true; readonly path: string }> {
+    const response = await this.fetchAuthenticated(currentOwnerDriveDownloadUrl(input.itemId), { signal: input.signal }, "文件下载失败。")
+    await writeResponseBodyToFile(response, input.outputPath, { onProgress: input.onProgress })
     return { ok: true, path: input.outputPath }
   }
 
@@ -893,14 +908,14 @@ export class AccountService {
     size: string
     mimeType?: string | null
     expectedItemId?: string | null
-  }): Promise<DriveUploadPrepareResult> {
+  }, options: { readonly signal?: AbortSignal } = {}): Promise<DriveUploadPrepareResult> {
     return this.requestAuthenticatedJson<DriveUploadPrepareResult>("POST", `${apiBaseUrl()}/drive/uploads/prepare`, {
       parentId: input.parentId ?? null,
       name: input.name,
       size: input.size,
       mimeType: input.mimeType ?? null,
       ...(input.expectedItemId ? { expectedItemId: input.expectedItemId } : {}),
-    }, "上传准备失败。")
+    }, "上传准备失败。", options)
   }
 
   async prepareDriveFolderUpload(input: {
@@ -908,7 +923,7 @@ export class AccountService {
     folderName: string
     directories?: Array<{ relativePath: string }>
     files: Array<{ relativePath: string; size: string; mimeType?: string | null }>
-  }): Promise<DriveFolderUploadPrepareResult> {
+  }, options: { readonly signal?: AbortSignal } = {}): Promise<DriveFolderUploadPrepareResult> {
     return this.requestAuthenticatedJson<DriveFolderUploadPrepareResult>("POST", `${apiBaseUrl()}/drive/uploads/folder/prepare`, {
       parentId: input.parentId ?? null,
       folderName: input.folderName,
@@ -918,11 +933,11 @@ export class AccountService {
         size: file.size,
         mimeType: file.mimeType ?? null,
       })),
-    }, "文件夹上传准备失败。")
+    }, "文件夹上传准备失败。", options)
   }
 
-  async completeDriveUpload(sessionId: string): Promise<DriveItemDto> {
-    return this.requestAuthenticatedJson<DriveItemDto>("POST", `${apiBaseUrl()}/drive/uploads/${encodeURIComponent(sessionId)}/complete`, undefined, "上传确认失败。")
+  async completeDriveUpload(sessionId: string, options: { readonly signal?: AbortSignal } = {}): Promise<DriveItemDto> {
+    return this.requestAuthenticatedJson<DriveItemDto>("POST", `${apiBaseUrl()}/drive/uploads/${encodeURIComponent(sessionId)}/complete`, undefined, "上传确认失败。", options)
   }
 
   async uploadDrivePreparedFile(input: { method: "PUT"; url: string; headers: Record<string, string>; body: ArrayBuffer }): Promise<{ ok: true }> {
@@ -937,7 +952,11 @@ export class AccountService {
 
   async uploadDriveLocalItems(
     input: DriveLocalUploadRequest,
-    options: { readonly onProgress?: (event: DriveLocalUploadProgressEvent) => void } = {},
+    options: {
+      readonly onProgress?: (event: DriveLocalUploadProgressEvent) => void
+      readonly onFolderPrepared?: (input: { readonly id: string; readonly created: boolean }) => void
+      readonly signal?: AbortSignal
+    } = {},
   ): Promise<DriveLocalUploadResult> {
     let completed = 0
     let completedDirectories = 0
@@ -945,7 +964,12 @@ export class AccountService {
     let failedDirectories = 0
     let skipped = 0
     let firstError: string | undefined
-    const progress = { taskId: input.taskId, onProgress: options.onProgress }
+    const progress = {
+      taskId: input.taskId,
+      onProgress: options.onProgress,
+      onFolderPrepared: options.onFolderPrepared,
+      signal: options.signal,
+    }
 
     for (const [itemIndex, item] of input.items.entries()) {
       const result = item.kind === "file"
@@ -966,6 +990,44 @@ export class AccountService {
       ...(failedDirectories > 0 ? { failedDirectories } : {}),
       skipped,
       ...(firstError ? { message: firstError } : {}),
+    }
+  }
+
+  async uploadDriveSyncFile(input: {
+    readonly parentId: string | null
+    readonly path: string
+    readonly name: string
+    readonly expectedItemId?: string | null
+    readonly onProgress?: (completedBytes: number, totalBytes: number) => void
+    readonly signal?: AbortSignal
+  }): Promise<DriveItemDto> {
+    input.signal?.throwIfAborted()
+    const fileStat = await safeLocalFileStat(input.path)
+    if (!fileStat?.isFile()) throw new Error("本地文件不可读取。")
+    const uploadLimits = await getDriveUploadLimits()
+    if (fileStat.size > uploadLimits.maxFileBytes) {
+      throw new Error(driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel))
+    }
+    const prepareInput = {
+      parentId: input.parentId,
+      name: input.name,
+      size: String(fileStat.size),
+      mimeType: null,
+      expectedItemId: input.expectedItemId ?? null,
+    }
+    const prepared = input.signal
+      ? await this.prepareDriveUpload(prepareInput, { signal: input.signal })
+      : await this.prepareDriveUpload(prepareInput)
+    try {
+      await this.putPreparedUploadFromPath(prepared.upload, input.path, fileStat.size, {
+        onProgress: input.onProgress,
+        signal: input.signal,
+      })
+      input.signal?.throwIfAborted()
+      return await this.completeDriveUploadWithRetry(prepared.sessionId, input.signal)
+    } catch (error) {
+      await this.cancelPreparedDriveUpload(prepared.sessionId, "uploadDriveSyncFile")
+      throw error
     }
   }
 
@@ -1067,6 +1129,7 @@ export class AccountService {
     progress: DriveLocalUploadProgressReporter,
     itemKey: string,
   ): Promise<DriveLocalUploadResult> {
+    progress.signal?.throwIfAborted()
     const fileStat = await safeLocalFileStat(item.path)
     if (!fileStat?.isFile()) {
       logger.warn("Drive local upload skipped.", { operation: "uploadDriveLocalFile", reason: "not-file" })
@@ -1082,13 +1145,16 @@ export class AccountService {
 
     let prepared: DriveUploadPrepareResult
     try {
-      prepared = await this.prepareDriveUpload({
+      const prepareInput = {
         parentId,
         name: item.name,
         size: String(fileStat.size),
         mimeType: item.mimeType ?? null,
         expectedItemId: item.expectedItemId ?? null,
-      })
+      }
+      prepared = progress.signal
+        ? await this.prepareDriveUpload(prepareInput, { signal: progress.signal })
+        : await this.prepareDriveUpload(prepareInput)
     } catch (error) {
       const message = localUploadErrorMessage(error)
       emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
@@ -1098,15 +1164,17 @@ export class AccountService {
     try {
       emitDriveLocalUploadProgress(progress, { type: "item-started", itemKey })
       await this.putPreparedUploadFromPath(prepared.upload, item.path, fileStat.size, {
+        signal: progress.signal,
         onProgress: (uploadedBytes, totalBytes) => {
           emitDriveLocalUploadProgress(progress, { type: "item-progress", itemKey, uploadedBytes, totalBytes })
         },
       })
-      await this.completeDriveUploadWithRetry(prepared.sessionId)
+      await this.completeDriveUploadWithRetry(prepared.sessionId, progress.signal)
       emitDriveLocalUploadProgress(progress, { type: "item-completed", itemKey })
       return { completed: 1, failed: 0, skipped: 0 }
     } catch (error) {
       await this.cancelPreparedDriveUpload(prepared.sessionId, "uploadDriveLocalFile")
+      if (progress.signal?.aborted) throw error
       const message = localUploadErrorMessage(error)
       emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
       return { completed: 0, failed: 1, skipped: 0, message }
@@ -1119,6 +1187,7 @@ export class AccountService {
     progress: DriveLocalUploadProgressReporter,
     itemIndex: number,
   ): Promise<DriveLocalUploadResult> {
+    progress.signal?.throwIfAborted()
     const files: Array<{
       path: string
       relativePath: string
@@ -1215,7 +1284,7 @@ export class AccountService {
 
     let prepared: DriveFolderUploadPrepareResult
     try {
-      prepared = await this.prepareDriveFolderUpload({
+      const prepareInput = {
         parentId,
         folderName: item.folderName,
         ...(directories.length > 0 ? { directories } : {}),
@@ -1224,7 +1293,11 @@ export class AccountService {
           size: file.size,
           mimeType: file.mimeType,
         })),
-      })
+      }
+      prepared = progress.signal
+        ? await this.prepareDriveFolderUpload(prepareInput, { signal: progress.signal })
+        : await this.prepareDriveFolderUpload(prepareInput)
+      progress.onFolderPrepared?.({ id: prepared.root.id, created: prepared.rootCreated })
     } catch (error) {
       const message = localUploadErrorMessage(error)
       for (const file of files) {
@@ -1244,41 +1317,56 @@ export class AccountService {
     }
 
     const preparedByPath = new Map(prepared.entries.map((entry) => [entry.relativePath, entry]))
+    const settledSessionIds = new Set<string>()
     let completed = 0
     let failed = 0
     let firstError: string | undefined
 
-    for (const file of files) {
-      const itemKey = file.itemKey
-      const preparedEntry = preparedByPath.get(file.relativePath)
-      if (!preparedEntry) {
-        failed += 1
-        const message = localUploadErrorMessage()
-        firstError ??= message
-        emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
-        continue
-      }
+    try {
+      for (const file of files) {
+        progress.signal?.throwIfAborted()
+        const itemKey = file.itemKey
+        const preparedEntry = preparedByPath.get(file.relativePath)
+        if (!preparedEntry) {
+          failed += 1
+          const message = localUploadErrorMessage()
+          firstError ??= message
+          emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
+          continue
+        }
 
-      try {
-        emitDriveLocalUploadProgress(progress, { type: "item-started", itemKey })
-        await this.putPreparedUploadFromPath(preparedEntry.upload, file.path, file.sizeBytes, {
-          onProgress: (uploadedBytes, totalBytes) => {
-            emitDriveLocalUploadProgress(progress, { type: "item-progress", itemKey, uploadedBytes, totalBytes })
-          },
-        })
-        await this.completeDriveUploadWithRetry(preparedEntry.sessionId)
-        emitDriveLocalUploadProgress(progress, { type: "item-completed", itemKey })
-        completed += 1
-      } catch (error) {
-        failed += 1
-        const message = localUploadErrorMessage(error)
-        firstError ??= message
-        emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
-        await this.cancelPreparedDriveUpload(preparedEntry.sessionId, "uploadDriveLocalFolder")
+        try {
+          emitDriveLocalUploadProgress(progress, { type: "item-started", itemKey })
+          await this.putPreparedUploadFromPath(preparedEntry.upload, file.path, file.sizeBytes, {
+            signal: progress.signal,
+            onProgress: (uploadedBytes, totalBytes) => {
+              emitDriveLocalUploadProgress(progress, { type: "item-progress", itemKey, uploadedBytes, totalBytes })
+            },
+          })
+          await this.completeDriveUploadWithRetry(preparedEntry.sessionId, progress.signal)
+          settledSessionIds.add(preparedEntry.sessionId)
+          emitDriveLocalUploadProgress(progress, { type: "item-completed", itemKey })
+          completed += 1
+        } catch (error) {
+          if (progress.signal?.aborted) throw error
+          failed += 1
+          const message = localUploadErrorMessage(error)
+          firstError ??= message
+          emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
+          await this.cancelPreparedDriveUpload(preparedEntry.sessionId, "uploadDriveLocalFolder")
+          settledSessionIds.add(preparedEntry.sessionId)
+        }
       }
+    } catch (error) {
+      if (progress.signal?.aborted) {
+        await Promise.allSettled(prepared.entries
+          .filter((entry) => !settledSessionIds.has(entry.sessionId))
+          .map((entry) => this.cancelPreparedDriveUpload(entry.sessionId, "uploadDriveLocalFolder")))
+      }
+      throw error
     }
 
-    if (completed === 0 && failed > 0 && prepared.rootCreated) {
+    if (completed === 0 && failed > 0 && prepared.rootCreated && !progress.onFolderPrepared) {
       await this.cleanupFailedFolderUploadRoot(prepared.root.id, {
         failed,
         skipped,
@@ -1294,15 +1382,19 @@ export class AccountService {
     }
   }
 
-  private async completeDriveUploadWithRetry(sessionId: string): Promise<DriveItemDto> {
+  private async completeDriveUploadWithRetry(sessionId: string, signal?: AbortSignal): Promise<DriveItemDto> {
+    const complete = () => signal
+      ? this.completeDriveUpload(sessionId, { signal })
+      : this.completeDriveUpload(sessionId)
     try {
-      return await this.completeDriveUpload(sessionId)
+      return await complete()
     } catch (firstError) {
+      signal?.throwIfAborted()
       if (isAccountHttpError(firstError) && firstError.status === 429) {
-        await delay(firstError.retryAfterMs ?? DRIVE_UPLOAD_COMPLETE_RATE_LIMIT_RETRY_DELAY_MS)
+        await delay(firstError.retryAfterMs ?? DRIVE_UPLOAD_COMPLETE_RATE_LIMIT_RETRY_DELAY_MS, signal)
       }
       try {
-        return await this.completeDriveUpload(sessionId)
+        return await complete()
       } catch {
         throw firstError
       }
@@ -1330,7 +1422,7 @@ export class AccountService {
     upload: DriveUploadPrepareResult["upload"],
     filePath: string,
     sizeBytes: number,
-    options: { readonly onProgress?: (uploadedBytes: number, totalBytes: number) => void } = {},
+    options: { readonly onProgress?: (uploadedBytes: number, totalBytes: number) => void; readonly signal?: AbortSignal } = {},
   ): Promise<void> {
     const stream = createReadStream(filePath)
     const body = options.onProgress
@@ -1341,6 +1433,7 @@ export class AccountService {
       headers: withContentLengthHeader(upload.headers, sizeBytes),
       body: body as unknown as RequestInit["body"],
       duplex: "half",
+      signal: options.signal,
     }
 
     try {
@@ -1726,6 +1819,7 @@ export class AccountService {
   }
 
   async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {
+    await this.notifyBeforeIdentityChange()
     this.loginFallbackState = this.state
     this.cancelOfflineRetry()
     const baseUrl = apiBaseUrl()
@@ -2159,6 +2253,7 @@ export class AccountService {
 
   async logout(): Promise<SynapseAccountState> {
     const persisted = await this.readPersisted("Failed to read stored account before logout.")
+    await this.notifyBeforeIdentityChange()
     this.bumpAuthRevision()
     this.cancelOfflineRetry()
     this.loginFallbackState = null
@@ -2204,9 +2299,16 @@ export class AccountService {
     return this.requestAuthenticatedJson<T>("GET", url, undefined, errorMessage)
   }
 
-  private async requestAuthenticatedJson<T>(method: string, url: string, body: unknown, errorMessage: string): Promise<T> {
+  private async requestAuthenticatedJson<T>(
+    method: string,
+    url: string,
+    body: unknown,
+    errorMessage: string,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<T> {
     const response = await this.fetchAuthenticated(url, {
       method,
+      signal: options.signal,
       headers: {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
@@ -2422,6 +2524,24 @@ export class AccountService {
       payload: { state: nextState },
       timestamp: new Date().toISOString(),
     })
+  }
+
+  private async notifyBeforeIdentityChange(): Promise<void> {
+    if (this.beforeIdentityChangeListeners.size === 0) return
+    const listeners = Promise.allSettled([...this.beforeIdentityChangeListeners]
+      .map((listener) => Promise.resolve().then(listener)))
+    let timeout: ReturnType<typeof setTimeout> | null = null
+    try {
+      await Promise.race([
+        listeners,
+        new Promise<void>((resolve) => {
+          timeout = setTimeout(resolve, 5_000)
+          timeout.unref?.()
+        }),
+      ])
+    } finally {
+      if (timeout) clearTimeout(timeout)
+    }
   }
 }
 
@@ -2675,7 +2795,10 @@ function isDriveDownloadMaxBytesExceededError(error: unknown): error is DriveDow
 async function writeResponseBodyToFile(
   response: Response,
   outputPath: string,
-  options: { readonly maxBytes?: number } = {},
+  options: {
+    readonly maxBytes?: number
+    readonly onProgress?: (completedBytes: number, totalBytes: number) => void
+  } = {},
 ): Promise<void> {
   if (!response.body) throw new Error("下载响应为空。")
   const maxBytes = normalizeDownloadMaxBytes(options.maxBytes)
@@ -2688,11 +2811,10 @@ async function writeResponseBodyToFile(
   const tempPath = path.join(outputDir, `.${path.basename(outputPath)}.${process.pid}.${Date.now()}.${randomBytes(6).toString("hex")}.tmp`)
   try {
     const source = Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0])
-    if (maxBytes === undefined) {
-      await pipeline(source, createWriteStream(tempPath, { flags: "wx" }))
-    } else {
-      await pipeline(source, createDownloadMaxBytesTransform(maxBytes), createWriteStream(tempPath, { flags: "wx" }))
-    }
+    const transforms: Transform[] = []
+    if (maxBytes !== undefined) transforms.push(createDownloadMaxBytesTransform(maxBytes))
+    if (options.onProgress) transforms.push(createUploadProgressTransform(contentLength ?? 0, options.onProgress))
+    await pipeline(source, ...transforms, createWriteStream(tempPath, { flags: "wx" }))
     await rename(tempPath, outputPath)
   } catch (error) {
     await rm(tempPath, { force: true }).catch((cleanupError) => {
@@ -2765,7 +2887,7 @@ function createUploadProgressTransform(
 
     lastReportedBytes = uploadedBytes
     lastReportedAt = now
-    onProgress(uploadedBytes, totalBytes)
+    onProgress(uploadedBytes, Math.max(totalBytes, uploadedBytes))
   }
 
   return new Transform({
@@ -2820,8 +2942,19 @@ function driveMaxFileSizeMessage(label: string): string {
   return `文件超过 ${label} 限制。`
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(signal?.reason ?? new DOMException("Aborted", "AbortError"))
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener("abort", onAbort, { once: true })
+  })
 }
 
 function errorCode(error: unknown): string | undefined {

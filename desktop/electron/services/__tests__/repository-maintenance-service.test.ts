@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { SynapseRepositoryConfig } from "../../../src/types/config"
 
 const mocks = vi.hoisted(() => ({
+  assertGitWorktreeMutationAllowed: vi.fn(),
   contentIndexService: {
     syncIndex: vi.fn(),
   },
@@ -38,6 +39,10 @@ vi.mock("../content-index-service", () => ({
 vi.mock("../git-command", () => ({
   isGitRebaseInProgress: mocks.isGitRebaseInProgress,
   runGitCommand: mocks.runGitCommand,
+}))
+
+vi.mock("../git-operation-state", () => ({
+  assertGitWorktreeMutationAllowed: mocks.assertGitWorktreeMutationAllowed,
 }))
 
 vi.mock("../log-store", () => ({
@@ -86,6 +91,7 @@ function createCacheDatabaseMock() {
 describe("repositoryMaintenanceService", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.assertGitWorktreeMutationAllowed.mockResolvedValue(undefined)
     mocks.contentIndexService.syncIndex.mockResolvedValue(undefined)
     mocks.isGitRebaseInProgress.mockResolvedValue(false)
     mocks.pendingPushesService.clear.mockResolvedValue(undefined)
@@ -167,6 +173,7 @@ describe("repositoryMaintenanceService", () => {
       gitRootPath: root,
     })
     mocks.isGitRebaseInProgress.mockResolvedValueOnce(true)
+    mocks.assertGitWorktreeMutationAllowed.mockRejectedValueOnce(new Error("当前仓库正在进行 rebase，请先在外部 Git 工具中完成或中止该操作。"))
 
     const { repositoryMaintenanceService } = await import("../repository-maintenance-service")
 

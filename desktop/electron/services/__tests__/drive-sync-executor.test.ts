@@ -171,13 +171,7 @@ describe("drive sync executor", () => {
     const records: unknown[] = []
     await writeFile(path.join(tempDir, "local.md"), "local", "utf8")
     const accountService = createAccountService({
-      uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
-      listDriveItemTree: vi.fn(async () => ({
-        items: [
-          { id: "stale-local", name: "local.md", type: "file", path: "Docs/local.md", depth: 1 },
-          { id: "remote-local", name: "local.md", type: "file", path: "Archive/local.md", depth: 1 },
-        ],
-      })),
+      uploadDriveSyncFile: vi.fn(async () => driveItem({ id: "remote-local", name: "local.md" })),
     })
 
     await executeDriveSyncOperation({
@@ -194,7 +188,7 @@ describe("drive sync executor", () => {
       trashLocalPath: vi.fn(),
     })
 
-    expect(accountService.uploadDriveLocalItems).toHaveBeenCalled()
+    expect(accountService.uploadDriveSyncFile).toHaveBeenCalled()
     await expect(namespace.list()).resolves.toMatchObject([
       { relativePath: "local.md", remoteItemId: "remote-local", kind: "file" },
     ])
@@ -221,7 +215,7 @@ describe("drive sync executor", () => {
         createdAt: "2026-06-28T00:00:00.000Z",
         updatedAt: "2026-06-28T00:00:00.000Z",
       })),
-      uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
+      uploadDriveSyncFile: vi.fn(async () => driveItem({ id: "remote-bound", parentId: "remote-parent", name: "bound.md" })),
     })
 
     await executeDriveSyncOperation({
@@ -239,10 +233,16 @@ describe("drive sync executor", () => {
     })
 
     expect(accountService.getDriveItem).toHaveBeenCalledWith("remote-bound")
-    expect(accountService.uploadDriveLocalItems).toHaveBeenCalledWith({
+    expect(accountService.uploadDriveSyncFile).toHaveBeenCalledWith({
       parentId: "remote-parent",
-      items: [{ kind: "file", path: localPath, name: "bound.md", expectedItemId: "remote-bound" }],
+      path: expect.any(String),
+      name: "bound.md",
+      expectedItemId: "remote-bound",
+      onProgress: expect.any(Function),
     })
+    expect(accountService.uploadDriveSyncFile.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+      path: expect.not.stringMatching(localPath),
+    }))
     await expect(namespace.list()).resolves.toContainEqual(
       expect.objectContaining({ relativePath: "", remoteItemId: "remote-bound", kind: "file" }),
     )
@@ -291,10 +291,7 @@ describe("drive sync executor", () => {
       deletedAt: null,
     })
     const accountService = createAccountService({
-      uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
-      listDriveItemTree: vi.fn(async () => ({
-        items: [{ id: "remote-local", name: "local.md", type: "file", path: "Docs/Folder/local.md", depth: 1 }],
-      })),
+      uploadDriveSyncFile: vi.fn(async () => driveItem({ id: "remote-local", parentId: "remote-folder", name: "local.md" })),
     })
 
     await executeDriveSyncOperation({
@@ -311,10 +308,34 @@ describe("drive sync executor", () => {
       trashLocalPath: vi.fn(),
     })
 
-    expect(accountService.uploadDriveLocalItems).toHaveBeenCalledWith(expect.objectContaining({ parentId: "remote-folder" }))
+    expect(accountService.uploadDriveSyncFile).toHaveBeenCalledWith(expect.objectContaining({ parentId: "remote-folder" }))
     await expect(namespace.list()).resolves.toContainEqual(
       expect.objectContaining({ relativePath: "Folder/local.md", remoteItemId: "remote-local", kind: "file" }),
     )
+  })
+
+  it("does not upload a file replaced by a symbolic link", async () => {
+    const outsideDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-upload-outside-"))
+    try {
+      const outsidePath = path.join(outsideDir, "secret.md")
+      const localPath = path.join(tempDir, "linked.md")
+      await writeFile(outsidePath, "secret", "utf8")
+      await symlink(outsidePath, localPath, "file")
+      const accountService = createAccountService()
+
+      await expect(executeDriveSyncOperation({
+        binding: binding({ localPath: tempDir }),
+        operation: operation({ kind: "upload", relativePath: "linked.md", driveItemId: null, localPath }),
+        baselineStore: createDriveSyncBaselineStore({ baseline: createMemoryNamespace<DriveSyncBaselineEntryV1>(), now: fixedNow }),
+        accountService,
+        recordOperation: async () => ({ id: "operation-1" }),
+        trashLocalPath: vi.fn(),
+      })).rejects.toThrow()
+
+      expect(accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+    } finally {
+      await rm(outsideDir, { recursive: true, force: true })
+    }
   })
 
   it("moves local entries for remote rename or move changes", async () => {
@@ -445,6 +466,47 @@ describe("drive sync executor", () => {
     await expect(namespace.list()).resolves.toEqual([
       expect.objectContaining({ relativePath: "new.md", remoteItemId: "remote-old", kind: "file", deletedAt: null }),
     ])
+  })
+
+  it("persists the successful move mutation before a rename failure", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })
+    await writeFile(path.join(tempDir, "new.md"), "local", "utf8")
+    await store.upsert({
+      bindingId: "binding-1",
+      relativePath: "old.md",
+      kind: "file",
+      remoteItemId: "remote-old",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: 5,
+      localMtimeMs: 1,
+      localHash: "sha256:old",
+      deletedAt: null,
+    })
+    const accountService = createAccountService({
+      renameDriveItem: vi.fn(async () => { throw new Error("rename failed") }),
+    })
+    const mutations: string[] = []
+
+    await expect(executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "move_remote",
+        relativePath: "new.md",
+        driveItemId: "remote-old",
+        localPath: path.join(tempDir, "new.md"),
+      }),
+      baselineStore: store,
+      accountService,
+      recordOperation: async () => ({ id: "operation-1" }),
+      trashLocalPath: vi.fn(),
+      onRemoteMutation: async (type) => { mutations.push(type) },
+    })).rejects.toThrow("rename failed")
+
+    expect(mutations).toEqual(["moved"])
+    expect(accountService.moveDriveItem).toHaveBeenCalledWith("remote-old", "drive-root")
+    await expect(namespace.list()).resolves.toContainEqual(expect.objectContaining({ relativePath: "old.md" }))
   })
 
   it("rejects remote moves with cloud-invalid names before moving the remote item", async () => {
@@ -827,6 +889,8 @@ function createAccountService(overrides: Record<string, unknown> = {}) {
     downloadDriveFile: vi.fn(async () => ({ ok: true as const, path: "" })),
     downloadDriveFolderZip: vi.fn(async () => ({ ok: true as const, path: "" })),
     uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
+    uploadDriveSyncFile: vi.fn(async (input: { parentId: string | null; name: string; expectedItemId?: string | null }) =>
+      driveItem({ id: input.expectedItemId ?? "remote-upload", parentId: input.parentId, name: input.name })),
     createDriveFolder: vi.fn(async () => ({ id: "folder-1", name: "Folder", type: "folder" })),
     renameDriveItem: vi.fn(),
     moveDriveItem: vi.fn(),
@@ -835,6 +899,21 @@ function createAccountService(overrides: Record<string, unknown> = {}) {
     listDriveItemTree: vi.fn(async () => ({ items: [] })),
     ensureDriveFolderPath: vi.fn(),
     ...overrides,
+  }
+}
+
+function driveItem(input: { id: string; name: string; parentId?: string | null }) {
+  return {
+    id: input.id,
+    parentId: input.parentId ?? null,
+    type: "file" as const,
+    name: input.name,
+    size: "5",
+    mimeType: "text/markdown",
+    storageStatus: "active" as const,
+    shared: false,
+    createdAt: "2026-06-28T00:00:00.000Z",
+    updatedAt: "2026-06-28T00:00:00.000Z",
   }
 }
 

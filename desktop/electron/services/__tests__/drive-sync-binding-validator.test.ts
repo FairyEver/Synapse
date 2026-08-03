@@ -270,7 +270,8 @@ describe("drive sync binding validator", () => {
     })).resolves.toMatchObject({
       status: "ready",
       direction: "local_to_remote",
-      importedGitignoreRules: ["secrets/**", "*.tmp"],
+      importedGitignoreRules: ["secrets/", "*.tmp"],
+      detectedGitignoreRules: ["secrets/", "*.tmp"],
     })
   })
 })

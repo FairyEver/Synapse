@@ -884,7 +884,12 @@ describe("preload bridge", () => {
     })
     await bridge.driveSync.pauseBinding({ id: "binding-1" })
     await bridge.driveSync.resumeBinding({ id: "binding-1" })
-    await bridge.driveSync.updateExcludeRules({ id: "binding-1", user: ["dist/**"] })
+    await bridge.driveSync.updateExcludeRules({
+      id: "binding-1",
+      defaults: ["node_modules/"],
+      importedGitignore: ["dist/"],
+      user: ["private/"],
+    })
     await bridge.driveSync.rescanBinding({ id: "binding-1" })
     await bridge.driveSync.pollRemoteChanges({ id: "binding-1" })
     await bridge.driveSync.resolveConflict({ conflictId: "conflict-1", action: "keep_local" })
@@ -902,7 +907,12 @@ describe("preload bridge", () => {
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:bindings:pause", { id: "binding-1" })
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:bindings:resume", { id: "binding-1" })
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:bindings:exclude_rules:update", { id: "binding-1", user: ["dist/**"] })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:bindings:exclude_rules:update", {
+      id: "binding-1",
+      defaults: ["node_modules/"],
+      importedGitignore: ["dist/"],
+      user: ["private/"],
+    })
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:bindings:rescan", { id: "binding-1" })
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:remote:poll", { id: "binding-1" })
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive_sync:conflicts:resolve", { conflictId: "conflict-1", action: "keep_local" })

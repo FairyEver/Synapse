@@ -20,6 +20,7 @@ import {
   type DriveShareAccessMode,
   type DriveShareDto,
   type DriveShareListItemDto,
+  type DriveSyncBindingDto,
   type DriveSyncSnapshotDto,
   type DriveUsageDto,
 } from "@synapse/shared"
@@ -328,6 +329,8 @@ function DriveModuleContent() {
   const [uploadPanelOpen, setUploadPanelOpen] = useState(false)
   const [uploadRetrying, setUploadRetrying] = useState(false)
   const [syncSnapshot, setSyncSnapshot] = useState<DriveSyncSnapshotDto | null>(null)
+  const [syncSnapshotError, setSyncSnapshotError] = useState<string | null>(null)
+  const [syncSnapshotLoading, setSyncSnapshotLoading] = useState(true)
   const [syncDialog, setSyncDialog] = useState<DriveSyncDialogState | null>(null)
   const [publicAssetActionState, setPublicAssetActionState] = useState<DrivePublicAssetsViewActionState>({ loading: true, uploading: false })
   const [trashActionState, setTrashActionState] = useState<DriveTrashViewActionState>({ loading: true })
@@ -447,13 +450,21 @@ function DriveModuleContent() {
     let disposed = false
     void bridge.driveSync.getSnapshot()
       .then((snapshot) => {
-        if (!disposed) setSyncSnapshot(snapshot)
+        if (!disposed) {
+          setSyncSnapshot(snapshot)
+          setSyncSnapshotError(null)
+        }
       })
-      .catch(() => {
-        if (!disposed) setSyncSnapshot(null)
+      .catch((error) => {
+        if (!disposed) setSyncSnapshotError(errorMessage(error, "同步状态加载失败"))
+      })
+      .finally(() => {
+        if (!disposed) setSyncSnapshotLoading(false)
       })
     const unsubscribe = bridge.driveSync.onChanged((snapshot) => {
       setSyncSnapshot(snapshot)
+      setSyncSnapshotError(null)
+      setSyncSnapshotLoading(false)
     })
     return () => {
       disposed = true
@@ -500,6 +511,45 @@ function DriveModuleContent() {
       }
     }
   }, [openingFolderId])
+
+  const openSyncDriveItem = useCallback(async (binding: DriveSyncBindingDto) => {
+    const requestId = ++driveItemsLoadRequestIdRef.current
+    setSyncDialog(null)
+    setActiveView("files")
+    setLoading(true)
+    setLoadMoreItemsError(null)
+    setError(null)
+    try {
+      const bridge = requireSynapseBridge()
+      const target = await bridge.drive.item.get({ itemId: binding.driveItemId })
+      const chain: DriveItemDto[] = [target]
+      const seen = new Set([target.id])
+      let parentId = target.parentId
+      while (parentId) {
+        if (seen.has(parentId) || chain.length >= 100) throw new Error("云端目录层级无效。")
+        seen.add(parentId)
+        const parent = await bridge.drive.item.get({ itemId: parentId })
+        chain.push(parent)
+        parentId = parent.parentId
+      }
+      const folderChain = (target.type === "folder" ? chain : chain.slice(1)).reverse()
+      const nextParentId = target.type === "folder" ? target.id : target.parentId
+      const nextPage = normalizeDriveItemsPage(await bridge.drive.item.list({ parentId: nextParentId }))
+      if (driveItemsLoadRequestIdRef.current !== requestId) return
+      setItems([...nextPage.items])
+      setItemsPage(nextPage.page)
+      currentParentIdRef.current = nextParentId
+      prefetchedParentIdRef.current = nextParentId
+      setPath([
+        { id: null, name: "根目录" },
+        ...folderChain.map((item) => ({ id: item.id, name: item.name })),
+      ])
+    } catch (rawError) {
+      if (driveItemsLoadRequestIdRef.current === requestId) setError(driveLoadError(rawError))
+    } finally {
+      if (driveItemsLoadRequestIdRef.current === requestId) setLoading(false)
+    }
+  }, [])
 
   const openSystemEntry = useCallback((entry: DriveSystemEntry) => {
     if (entry.id === DRIVE_PUBLIC_ASSETS_ENTRY_ID) {
@@ -964,13 +1014,19 @@ function DriveModuleContent() {
         onOpenItem={handlePreview}
         onShare={handleShare}
         onPublishSite={setSiteCreateTarget}
-        onOpenSyncBinding={(item, drivePathHint) => setSyncDialog({ mode: "bind", item, drivePathHint })}
+        onOpenSyncBinding={(item, drivePathHint) => {
+          const binding = syncSnapshot?.bindings.find((candidate) => candidate.driveItemId === item.id)
+          setSyncDialog(binding
+            ? { mode: "status", item: null, bindingId: binding.id }
+            : { mode: "bind", item, drivePathHint })
+        }}
         onOpenShareDetails={handleOpenShareDetails}
         onDisableShare={handleDisableShare}
         disablingShareIds={disablingShareIds}
         deletingItemIds={deletingItemIds}
         onUploadDroppedFiles={handleDroppedFiles}
         uploadDisabled={uploadActionsDisabled}
+        syncBindings={syncSnapshot?.bindings ?? []}
       />
     )
   })()
@@ -1088,11 +1144,17 @@ function DriveModuleContent() {
               open={syncDialog !== null}
               state={syncDialog}
               snapshot={syncSnapshot}
+              snapshotError={syncSnapshotError}
+              snapshotLoading={syncSnapshotLoading}
               onDriveItemsChanged={refreshDriveView}
+              onOpenDriveItem={openSyncDriveItem}
               onOpenChange={(open) => {
                 if (!open) setSyncDialog(null)
               }}
-              onSnapshotChange={setSyncSnapshot}
+              onSnapshotChange={(nextSnapshot) => {
+                setSyncSnapshot(nextSnapshot)
+                setSyncSnapshotError(null)
+              }}
             />
             <DriveAccessSettingsDialog
               target={accessSettingsTarget}
@@ -1550,6 +1612,7 @@ function DriveFileList({
   disablingShareIds,
   deletingItemIds,
   onUploadDroppedFiles,
+  syncBindings,
   uploadDisabled,
 }: {
   readonly items: readonly DriveItemDto[]
@@ -1575,11 +1638,13 @@ function DriveFileList({
   readonly disablingShareIds: ReadonlySet<string>
   readonly deletingItemIds: ReadonlySet<string>
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
+  readonly syncBindings: DriveSyncSnapshotDto["bindings"]
   readonly uploadDisabled: boolean
 }) {
   const [dragDepth, setDragDepth] = useState(0)
   const currentFolderName = path.at(-1)?.name ?? "根目录"
   const dragActive = dragDepth > 0 && !uploadDisabled
+  const syncBindingIds = new Set(syncBindings.map((binding) => binding.driveItemId))
 
   const handleDragEnter = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     if (!hasExternalDraggedFiles(event.dataTransfer)) return
@@ -1658,6 +1723,7 @@ function DriveFileList({
                   onDisableShare={onDisableShare}
                   disablingShare={item.activeShareId ? disablingShareIds.has(item.activeShareId) : false}
                   deleting={deletingItemIds.has(item.id)}
+                  hasSyncBinding={syncBindingIds.has(item.id)}
                 />
               ))}
             </TableBody>
@@ -1905,6 +1971,7 @@ function DriveFileListRow({
   onDisableShare,
   disablingShare,
   deleting,
+  hasSyncBinding,
 }: {
   readonly drivePath: string
   readonly item: DriveItemDto
@@ -1921,6 +1988,7 @@ function DriveFileListRow({
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly disablingShare: boolean
   readonly deleting: boolean
+  readonly hasSyncBinding: boolean
 }) {
   const isFolder = item.type === "folder"
   const statusBadges = getDriveStatusBadges(item)
@@ -2044,6 +2112,7 @@ function DriveFileListRow({
           </Button>
           <DriveItemMenu
             item={item}
+            hasSyncBinding={hasSyncBinding}
             onRename={onRename}
             onMove={onMove}
             onPublishSite={onPublishSite}
@@ -2104,12 +2173,14 @@ function DriveItemNameContextMenu({
 }
 
 function DriveItemMenu({
+  hasSyncBinding,
   item,
   onRename,
   onMove,
   onPublishSite,
   onOpenSyncBinding,
 }: {
+  readonly hasSyncBinding: boolean
   readonly item: DriveItemDto
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
@@ -2126,7 +2197,7 @@ function DriveItemMenu({
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
           {item.type === "folder" ? <DropdownMenuItem onClick={() => onPublishSite(item)}>发布站点</DropdownMenuItem> : null}
-          <DropdownMenuItem onClick={onOpenSyncBinding}>同步</DropdownMenuItem>
+          <DropdownMenuItem onClick={onOpenSyncBinding}>{hasSyncBinding ? "同步详情" : "同步"}</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onRename(item)}>重命名</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onMove(item)}>移动</DropdownMenuItem>
         </DropdownMenuGroup>

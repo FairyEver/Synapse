@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import type { SynapseGitFileChange, SynapseGitRepository, SynapseGitRepositorySnapshot } from "../../../src/types/git"
+import type { SynapseGitRepository, SynapseGitRepositorySnapshot, SynapseGitWorkingTreeChange } from "../../../src/types/git"
 import type { StructuredLogger } from "../../runtime/logging"
 import { errorLogMeta } from "../error-sanitize"
 import { sanitizeGitDiagnosticText } from "./git-sanitize"
@@ -212,14 +212,14 @@ function logGitOperationFailed(
   })
 }
 
-function summarizeChanges(changes: readonly Pick<SynapseGitFileChange, "status" | "conflicted" | "path">[]): Record<string, unknown> {
+function summarizeChanges(changes: readonly Pick<SynapseGitWorkingTreeChange, "status" | "path">[]): Record<string, unknown> {
   const byStatus: Record<string, number> = {}
   let conflictedCount = 0
   const samples: string[] = []
 
   for (const change of changes) {
     byStatus[change.status] = (byStatus[change.status] ?? 0) + 1
-    if (change.conflicted) conflictedCount += 1
+    if (change.status === "conflicted") conflictedCount += 1
     if (samples.length < MAX_PATH_SAMPLES) samples.push(change.path)
   }
 

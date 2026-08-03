@@ -11,6 +11,7 @@ const snapshot: SynapseGitRepositorySnapshot = {
   trackingStatus: "untracked",
   ahead: 0,
   behind: 0,
+  repositoryOperationState: "normal",
   hasConflicts: false,
   changeCount: 0,
   changesTruncated: false,

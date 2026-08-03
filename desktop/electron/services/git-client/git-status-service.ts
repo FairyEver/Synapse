@@ -1,4 +1,3 @@
-import path from "node:path"
 import { devNull } from "node:os"
 import type {
   SynapseGitDiffResult,
@@ -7,6 +6,11 @@ import type {
   SynapseGitRepositorySummary,
 } from "../../../src/types/git"
 import type { StructuredLogger } from "../../runtime/logging"
+import {
+  OPERATION_STATE_MESSAGE,
+  readGitRepositoryOperationDiagnostics,
+  type GitRepositoryOperationDiagnostics,
+} from "../git-operation-state"
 import type { GitClientCommandRunner } from "./git-command-runner"
 import { assertRepositoryPath } from "./git-path-utils"
 import {
@@ -18,22 +22,23 @@ import {
   summarizeSnapshot,
 } from "./git-logging"
 import { createGitStatusPorcelainV2Parser, parseGitStatusPorcelainV2 } from "./git-status-parser"
-
-type GitRepositoryStateDiagnostics = {
-  readonly cherryPickInProgress: boolean
-  readonly indexLockExists: boolean
-  readonly mergeInProgress: boolean
-  readonly rebaseInProgress: boolean
-}
+import { withGitChangeProjection } from "./git-change-projection"
 
 type StatusDeps = {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
   readonly logger?: Pick<StructuredLogger, "error" | "warn">
   readonly pathExists: (filePath: string) => Promise<boolean>
-  readonly readStateDiagnostics?: (repository: SynapseGitRepository) => Promise<GitRepositoryStateDiagnostics>
+  readonly refineTwoLayerChange?: (input: {
+    readonly operation: string
+    readonly operationId: string
+    readonly paths: readonly string[]
+    readonly repository: SynapseGitRepository
+  }) => Promise<boolean>
+  readonly readStateDiagnostics?: (repository: SynapseGitRepository) => Promise<GitRepositoryOperationDiagnostics>
 }
 
 const LIST_SUMMARY_CONCURRENCY_LIMIT = 4
+const STATUS_PROJECTION_CONCURRENCY_LIMIT = 4
 const PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 const MAX_VISIBLE_STATUS_CHANGES = 10_000
 
@@ -41,65 +46,20 @@ function createGitStateDiagnosticsReader(
   commandRunner: Pick<GitClientCommandRunner, "run">,
   pathExists: (filePath: string) => Promise<boolean>,
 ) {
-  return async (repository: SynapseGitRepository): Promise<GitRepositoryStateDiagnostics> => {
-    const result = await commandRunner.run({
-      cwd: repository.localPath,
-      args: [
-        "rev-parse",
-        "--git-path",
-        "index.lock",
-        "--git-path",
-        "MERGE_HEAD",
-        "--git-path",
-        "rebase-merge",
-        "--git-path",
-        "rebase-apply",
-        "--git-path",
-        "CHERRY_PICK_HEAD",
-      ],
-      logFailure: false,
-      operation: "git.status.diagnostics",
-      repoPath: repository.localPath,
-      repositoryId: repository.id,
+  return async (repository: SynapseGitRepository): Promise<GitRepositoryOperationDiagnostics> => {
+    return readGitRepositoryOperationDiagnostics({
+      localPath: repository.localPath,
+      pathExists,
+      run: (args) => commandRunner.run({
+        cwd: repository.localPath,
+        args,
+        logFailure: false,
+        operation: "git.status.diagnostics",
+        repoPath: repository.localPath,
+        repositoryId: repository.id,
+      }),
     })
-    const [
-      indexLockPath = "",
-      mergeHeadPath = "",
-      rebaseMergePath = "",
-      rebaseApplyPath = "",
-      cherryPickHeadPath = "",
-    ] = result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-
-    const [
-      indexLockExists,
-      mergeInProgress,
-      rebaseMergeExists,
-      rebaseApplyExists,
-      cherryPickInProgress,
-    ] = await Promise.all([
-      gitPathExists(repository.localPath, indexLockPath, pathExists),
-      gitPathExists(repository.localPath, mergeHeadPath, pathExists),
-      gitPathExists(repository.localPath, rebaseMergePath, pathExists),
-      gitPathExists(repository.localPath, rebaseApplyPath, pathExists),
-      gitPathExists(repository.localPath, cherryPickHeadPath, pathExists),
-    ])
-
-    return {
-      cherryPickInProgress,
-      indexLockExists,
-      mergeInProgress,
-      rebaseInProgress: rebaseMergeExists || rebaseApplyExists,
-    }
   }
-}
-
-function gitPathExists(
-  repositoryPath: string,
-  gitPath: string,
-  pathExists: (filePath: string) => Promise<boolean>,
-): Promise<boolean> {
-  if (!gitPath) return Promise.resolve(false)
-  return pathExists(path.isAbsolute(gitPath) ? gitPath : path.join(repositoryPath, gitPath))
 }
 
 function isNotGitRepository(error: unknown): boolean {
@@ -109,7 +69,65 @@ function isNotGitRepository(error: unknown): boolean {
 export function createGitStatusService(deps: StatusDeps) {
   const lastAnomalyFingerprints = new Map<string, string>()
 
+  async function omitIneffectiveTwoLayerChanges(
+    repository: SynapseGitRepository,
+    parsed: ReturnType<typeof parseGitStatusPorcelainV2>,
+    operation: string,
+    operationId: string,
+  ): Promise<ReturnType<typeof parseGitStatusPorcelainV2>> {
+    const keep = await mapWithConcurrency(parsed.changes, STATUS_PROJECTION_CONCURRENCY_LIMIT, async (change) => {
+      if (change.indexStatus === "added" && change.worktreeStatus === "deleted") return false
+      if (
+        change.status === "conflicted"
+        || change.indexStatus === "unchanged"
+        || change.worktreeStatus === "unchanged"
+      ) return true
+      const paths = change.originalPath ? [change.originalPath, change.path] : [change.path]
+      if (deps.refineTwoLayerChange) return deps.refineTwoLayerChange({ operation, operationId, paths, repository })
+      return withGitChangeProjection({
+        commandRunner: deps.commandRunner,
+        operation,
+        operationId,
+        paths,
+        repository,
+      }, async ({ baseTree, gitIndexFile }) => {
+        const result = await deps.commandRunner.run({
+          args: ["diff", "--cached", "--name-only", baseTree, "--", ...paths],
+          cwd: repository.localPath,
+          gitIndexFile,
+          operation,
+          operationId,
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
+        })
+        return Boolean(result.stdout.trim())
+      })
+    })
+    const changes = parsed.changes.filter((_, index) => keep[index])
+    const removedCount = parsed.changes.length - changes.length
+    if (removedCount === 0) return parsed
+    return {
+      ...parsed,
+      changeCount: Math.max(0, parsed.changeCount - removedCount),
+      changes,
+      changesTruncated: parsed.changeCount - removedCount > changes.length,
+    }
+  }
+
   return {
+    async assertWorktreeMutationAllowed(repository: SynapseGitRepository): Promise<void> {
+      if (!deps.readStateDiagnostics) throw new Error(OPERATION_STATE_MESSAGE.unknown)
+      let diagnostics: GitRepositoryOperationDiagnostics
+      try {
+        diagnostics = await deps.readStateDiagnostics(repository)
+      } catch (error) {
+        throw new Error(OPERATION_STATE_MESSAGE.unknown, { cause: error })
+      }
+      if (diagnostics.operationState !== "normal") {
+        throw new Error(OPERATION_STATE_MESSAGE[diagnostics.operationState])
+      }
+    },
+
     async getSnapshot(repository: SynapseGitRepository): Promise<SynapseGitRepositorySnapshot> {
       if (!(await deps.pathExists(repository.localPath))) {
         deps.logger?.warn("Git repository path missing.", repositoryLogMeta(repository))
@@ -122,6 +140,7 @@ export function createGitStatusService(deps: StatusDeps) {
           trackingStatus: "detached",
           ahead: 0,
           behind: 0,
+          repositoryOperationState: "normal",
           hasConflicts: false,
           changeCount: 0,
           changesTruncated: false,
@@ -149,14 +168,16 @@ export function createGitStatusService(deps: StatusDeps) {
           repoPath: repository.localPath,
           repositoryId: repository.id,
         })
-        const parsed = sawStatusChunk ? parser.finish() : parseGitStatusPorcelainV2(result.stdout)
-        const snapshot = {
+        const rawParsed = sawStatusChunk ? parser.finish() : parseGitStatusPorcelainV2(result.stdout)
+        const parsed = await omitIneffectiveTwoLayerChanges(repository, rawParsed, operation, operationId)
+        const diagnostics = await readStateDiagnosticsForLog(deps, repository, operation, operationId)
+        const snapshot: SynapseGitRepositorySnapshot = {
           repositoryId: repository.id,
           pathExists: true,
           isGitRepository: true,
+          repositoryOperationState: diagnostics.operationState,
           ...parsed,
         }
-        const diagnostics = await readStateDiagnosticsForLog(deps, repository, operation, operationId)
         const branchHeadSeen = sawStatusChunk ? parser.sawBranchHead : result.stdout.includes("# branch.head ")
         logStatusAnomalies(deps, lastAnomalyFingerprints, repository, operation, operationId, snapshot, diagnostics, branchHeadSeen)
         return snapshot
@@ -176,6 +197,7 @@ export function createGitStatusService(deps: StatusDeps) {
             trackingStatus: "detached",
             ahead: 0,
             behind: 0,
+            repositoryOperationState: "normal",
             hasConflicts: false,
             changeCount: 0,
             changesTruncated: false,
@@ -235,21 +257,39 @@ export function createGitStatusService(deps: StatusDeps) {
         if (!change) {
           throw new Error("该文件不是当前改动，请刷新后重试。")
         }
-        const isNewFile = change.status === "untracked" || change.status === "added"
-        const args = isNewFile
-          ? ["diff", "--no-index", "--no-ext-diff", "--", devNull, input.path]
-          : ["diff", "HEAD", "--", ...(change.originalPath ? [change.originalPath] : []), change.path]
-        const result = await deps.commandRunner.run({
-          cwd: repository.localPath,
-          args,
-          operation,
-          operationId,
-          maxBufferBytes: PREVIEW_MAX_BYTES,
-          outputOverflow: "truncate",
-          repoPath: repository.localPath,
-          repositoryId: repository.id,
-          ...(isNewFile ? { acceptedExitCodes: [0, 1] } : {}),
-        })
+        const projectionPaths = change.originalPath ? [change.originalPath, change.path] : [change.path]
+        const hasTwoLayerChange = change.indexStatus !== "unchanged" && change.worktreeStatus !== "unchanged"
+        const result = change.status === "replaced" || hasTwoLayerChange
+          ? await withGitChangeProjection({
+              commandRunner: deps.commandRunner,
+              operation,
+              operationId,
+              paths: projectionPaths,
+              repository,
+            }, ({ baseTree, gitIndexFile }) => deps.commandRunner.run({
+              cwd: repository.localPath,
+              args: ["diff", "--cached", "--no-ext-diff", baseTree, "--", ...projectionPaths],
+              gitIndexFile,
+              operation,
+              operationId,
+              maxBufferBytes: PREVIEW_MAX_BYTES,
+              outputOverflow: "truncate",
+              repoPath: repository.localPath,
+              repositoryId: repository.id,
+            }))
+          : await deps.commandRunner.run({
+              cwd: repository.localPath,
+              args: change.status === "untracked" || change.status === "added"
+                ? ["diff", "--no-index", "--no-ext-diff", "--", devNull, input.path]
+                : ["diff", "HEAD", "--", ...projectionPaths],
+              operation,
+              operationId,
+              maxBufferBytes: PREVIEW_MAX_BYTES,
+              outputOverflow: "truncate",
+              repoPath: repository.localPath,
+              repositoryId: repository.id,
+              ...((change.status === "untracked" || change.status === "added") ? { acceptedExitCodes: [0, 1] } : {}),
+            })
         const text = result.stdout
         return {
           path: input.path,
@@ -313,8 +353,8 @@ async function readStateDiagnosticsForLog(
   repository: SynapseGitRepository,
   operation: string,
   operationId: string,
-): Promise<GitRepositoryStateDiagnostics | null> {
-  if (!deps.readStateDiagnostics) return null
+): Promise<GitRepositoryOperationDiagnostics> {
+  if (!deps.readStateDiagnostics) return { indexLockExists: false, operationState: "normal" }
   try {
     return await deps.readStateDiagnostics(repository)
   } catch (error) {
@@ -324,7 +364,7 @@ async function readStateDiagnosticsForLog(
       operationId,
       ...gitErrorMeta(error),
     })
-    return null
+    return { indexLockExists: false, operationState: "unknown" }
   }
 }
 
@@ -335,7 +375,7 @@ function logStatusAnomalies(
   operation: string,
   operationId: string,
   snapshot: SynapseGitRepositorySnapshot,
-  diagnostics: GitRepositoryStateDiagnostics | null,
+  diagnostics: GitRepositoryOperationDiagnostics,
   branchHeadSeen: boolean,
 ): void {
   const anomalies = collectStatusAnomalies(snapshot, diagnostics, branchHeadSeen)
@@ -348,7 +388,7 @@ function logStatusAnomalies(
     anomalies,
     branch: snapshot.currentBranch,
     upstream: snapshot.upstream,
-    conflictedCount: snapshot.changes.filter((change) => change.conflicted).length,
+    conflictedCount: snapshot.changes.filter((change) => change.status === "conflicted").length,
   })
   if (lastAnomalyFingerprints.get(repository.id) === fingerprint) return
   lastAnomalyFingerprints.set(repository.id, fingerprint)
@@ -359,13 +399,13 @@ function logStatusAnomalies(
     operationId,
     anomalies,
     ...summarizeSnapshot(snapshot),
-    ...(diagnostics ? { diagnostics } : {}),
+    diagnostics,
   })
 }
 
 function collectStatusAnomalies(
   snapshot: SynapseGitRepositorySnapshot,
-  diagnostics: GitRepositoryStateDiagnostics | null,
+  diagnostics: GitRepositoryOperationDiagnostics,
   branchHeadSeen: boolean,
 ): string[] {
   const anomalies: string[] = []
@@ -376,10 +416,8 @@ function collectStatusAnomalies(
   }
   if (snapshot.currentBranch && !snapshot.upstream) anomalies.push("upstream-missing")
   if (snapshot.hasConflicts) anomalies.push("conflicts")
-  if (diagnostics?.indexLockExists) anomalies.push("index-lock")
-  if (diagnostics?.mergeInProgress) anomalies.push("merge-in-progress")
-  if (diagnostics?.rebaseInProgress) anomalies.push("rebase-in-progress")
-  if (diagnostics?.cherryPickInProgress) anomalies.push("cherry-pick-in-progress")
+  if (diagnostics.indexLockExists) anomalies.push("index-lock")
+  if (diagnostics.operationState !== "normal") anomalies.push(`${diagnostics.operationState}-in-progress`)
   return anomalies
 }
 

@@ -68,6 +68,7 @@ export const DRIVE_CHANGE_TYPES = [
 ] as const
 export type DriveChangeType = typeof DRIVE_CHANGE_TYPES[number]
 export const DRIVE_SYNC_BINDING_STATUSES = [
+  "initializing",
   "active",
   "paused",
   "conflict",
@@ -101,7 +102,7 @@ export const DRIVE_SYNC_BINDING_PREVIEW_STATUSES = ["ready", "blocked", "warning
 export type DriveSyncBindingPreviewStatus = typeof DRIVE_SYNC_BINDING_PREVIEW_STATUSES[number]
 export const DRIVE_SYNC_CONFLICT_RESOLUTIONS = ["keep_local", "keep_remote", "keep_both", "confirm_delete", "skip"] as const
 export type DriveSyncConflictResolutionAction = typeof DRIVE_SYNC_CONFLICT_RESOLUTIONS[number]
-export const DRIVE_SYNC_HEALTH_STATUSES = ["idle", "syncing", "paused", "error"] as const
+export const DRIVE_SYNC_HEALTH_STATUSES = ["idle", "syncing", "retrying", "paused", "error"] as const
 export type DriveSyncHealth = typeof DRIVE_SYNC_HEALTH_STATUSES[number]
 export type DriveDocumentImageSourceKind =
   | "owner_asset"
@@ -247,6 +248,10 @@ export interface DriveSyncOperationDto {
   readonly relativePath: string
   readonly status: DriveSyncOperationStatus
   readonly message: string | null
+  readonly attemptCount: number
+  readonly nextRetryAt: string | null
+  readonly completedBytes: number | null
+  readonly totalBytes: number | null
   readonly updatedAt: string
 }
 
@@ -256,12 +261,15 @@ export interface DriveSyncSnapshotDto {
   readonly operations: readonly DriveSyncOperationDto[]
   readonly health: {
     readonly status: DriveSyncHealth
+    readonly connectivity: "online" | "offline"
+    readonly readOnly: boolean
     readonly lastError: string | null
     readonly updatedAt: string
   }
   readonly summary: {
     readonly activeBindingCount: number
     readonly runningOperationCount: number
+    readonly retryWaitingOperationCount: number
     readonly conflictCount: number
     readonly errorCount: number
   }
@@ -277,6 +285,7 @@ export interface DriveSyncBindingPreviewDto {
   readonly forcedExcludeRules: readonly string[]
   readonly defaultExcludeRules: readonly string[]
   readonly importedGitignoreRules: readonly string[]
+  readonly detectedGitignoreRules: readonly string[]
 }
 
 export interface DriveSyncCreateSafeBindingInput {
@@ -288,7 +297,15 @@ export interface DriveSyncCreateSafeBindingInput {
   readonly localPath: string
   readonly direction: DriveSyncInitialDirection
   readonly excludeRules?: readonly string[]
+  readonly useDefaultExcludes?: boolean
   readonly importGitignore?: boolean
+}
+
+export interface DriveSyncUpdateExcludeRulesInput {
+  readonly id: string
+  readonly defaults: readonly string[]
+  readonly importedGitignore: readonly string[]
+  readonly user: readonly string[]
 }
 
 export interface DriveSyncExcludeRulesDto {

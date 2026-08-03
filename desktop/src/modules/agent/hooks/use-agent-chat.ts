@@ -27,6 +27,9 @@ type UseAgentChatState = {
   sessions: SynapseAgentSessionSummary[]
   archivedSessions: SynapseAgentSessionSummary[]
   timeline: SynapseAgentTimelineItem[]
+  timelineHasMore: boolean
+  loadingOlder: boolean
+  timelineHistoryError: string | null
   pendingPermissions: SynapseAgentPendingPermission[]
   status: SynapseAgentStatus | null
   providers: SynapseAgentProviderState | null
@@ -56,6 +59,7 @@ type UseAgentChatState = {
   deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   refresh: () => Promise<void>
+  loadOlderTimeline: () => Promise<void>
   refreshPersonas: () => Promise<void>
   sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
   setPermissionMode: (mode: SynapseAgentPermissionMode, target?: AgentConversationTarget) => Promise<void>
@@ -79,6 +83,9 @@ function useAgentChat(
     sessions,
     archivedSessions,
     timeline,
+    timelineHasMore,
+    loadingOlder,
+    timelineHistoryError,
     pendingPermissions,
     status,
     providers,
@@ -149,6 +156,9 @@ function useAgentChat(
     sessions,
     archivedSessions,
     timeline,
+    timelineHasMore,
+    loadingOlder,
+    timelineHistoryError,
     pendingPermissions,
     status,
     providers,
@@ -171,6 +181,7 @@ function useAgentChat(
     deleteSession: connection.deleteSession,
     renameSession: connection.renameSession,
     refresh: connection.refresh,
+    loadOlderTimeline: connection.loadOlderTimeline,
     refreshPersonas: connection.refreshPersonas,
     sendMessage: connection.sendMessage,
     setPermissionMode: connection.setPermissionMode,

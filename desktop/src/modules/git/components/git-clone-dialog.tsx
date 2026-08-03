@@ -45,9 +45,42 @@ type GitAddLocalDialogProps = {
 }
 
 function basename(input: string): string {
-  const normalized = input.trim().replace(/[\\/]+$/, "")
+  const value = input.trim()
+  let pathname = value
+  try {
+    pathname = new URL(value).pathname
+  } catch {
+    const scpMatch = value.match(/^[^@\s]+@[^:\s]+:(.+)$/u)
+    if (scpMatch?.[1]) pathname = scpMatch[1]
+  }
+  const normalized = pathname.replace(/[\\/]+$/, "")
   const name = normalized.split(/[\\/]/).filter(Boolean).pop() ?? ""
-  return name.replace(/\.git$/i, "") || "Git 仓库"
+  let decodedName = name
+  try {
+    decodedName = decodeURIComponent(name)
+  } catch {
+    // Keep the encoded path segment when it is not valid percent encoding.
+  }
+  return decodedName.replace(/\.git$/i, "") || "Git 仓库"
+}
+
+function validateRemoteUrl(remoteUrl: string): string | null {
+  const value = remoteUrl.trim()
+  if (!value) return "请输入仓库地址。"
+  if (/\p{Cc}/u.test(value)) return "仓库地址包含无效字符。"
+  try {
+    const url = new URL(value)
+    const protocol = url.protocol.toLowerCase()
+    if (url.password || (url.username && protocol !== "ssh:")) {
+      return "仓库地址不能包含账号、密码或访问令牌，请使用凭据管理或 SSH Key。"
+    }
+    if (url.search || url.hash) return "仓库地址不能包含查询参数或片段。"
+  } catch {
+    if (/^[^@\s]+@[^:\s]+:.+/u.test(value) && /[?#]/u.test(value)) {
+      return "SSH 仓库地址不能包含查询参数或片段。"
+    }
+  }
+  return null
 }
 
 function joinDisplayPath(parentDirectory: string, directoryName: string): string {
@@ -141,8 +174,9 @@ export function GitCloneDialog({ open, busy, phase, environment, onOpenChange, o
     event.preventDefault()
     setError(null)
     setFailure(null)
-    if (!remoteUrl.trim()) {
-      setError("请输入仓库地址。")
+    const remoteUrlError = validateRemoteUrl(remoteUrl)
+    if (remoteUrlError) {
+      setError(remoteUrlError)
       return
     }
     if (!parentDirectory.trim()) {

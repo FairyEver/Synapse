@@ -68,6 +68,9 @@ describe("agent IPC event schema", () => {
       projectId: "project-1",
       sessionKey: "local:renderer",
       conversationId: "conversation-1",
+      total: 1,
+      startIndex: 0,
+      hasMore: false,
       entries: [{
         id: "question-1",
         kind: "permissionRequest",

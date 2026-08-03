@@ -60,17 +60,18 @@ describe("GitWorkbench", () => {
       upstream: "origin/main",
       ahead: 1,
       behind: 0,
+      repositoryOperationState: "normal",
       hasConflicts: false,
       changeCount: 1,
       changesTruncated: false,
-      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" }],
     })
     bridge.git.getDiff.mockResolvedValue({ path: "docs/a.md", originalPath: null, binary: false, truncated: false, text: "+hello" })
     bridge.git.prepareChangeSelection.mockResolvedValue({
       selectionId: "selection-1",
       repositoryId: "repo-1",
       expiresAt: "2026-06-17T10:15:00.000Z",
-      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" }],
     })
     bridge.git.discardChanges.mockResolvedValue({
       completedAt: "now",
@@ -97,7 +98,7 @@ describe("GitWorkbench", () => {
       authorName: "张三",
       authorEmail: "zhang@example.com",
       committedAt: "2026-06-17T10:00:00+08:00",
-      files: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+      files: [{ path: "docs/a.md", originalPath: null, status: "modified" }],
       diff: "+hello",
       filesTruncated: false,
       diffTruncated: false,
@@ -145,6 +146,7 @@ describe("GitWorkbench", () => {
       upstream: "origin/main",
       ahead: 0,
       behind: 0,
+      repositoryOperationState: "normal",
       hasConflicts: false,
       changeCount: 1,
       changesTruncated: false,
@@ -152,8 +154,8 @@ describe("GitWorkbench", () => {
         path: "docs/new-name.md",
         originalPath: "docs/old-name.md",
         status: "renamed",
-        staged: false,
-        conflicted: false,
+        indexStatus: "renamed",
+        worktreeStatus: "unchanged",
       }],
     })
     bridge.git.getDiff.mockResolvedValueOnce({
@@ -170,8 +172,8 @@ describe("GitWorkbench", () => {
         path: "docs/new-name.md",
         originalPath: "docs/old-name.md",
         status: "renamed",
-        staged: false,
-        conflicted: false,
+        indexStatus: "renamed",
+        worktreeStatus: "unchanged",
       }],
     })
     await renderWorkbench(roots)
@@ -308,8 +310,8 @@ describe("GitWorkbench", () => {
         path: `docs/${index}.md`,
         originalPath: null,
         status: "modified" as const,
-        staged: false,
-        conflicted: false,
+        indexStatus: "unchanged" as const,
+        worktreeStatus: "modified" as const,
       })),
     }))
     bridge.git.listBranches.mockResolvedValue([{ name: longBranch, current: true }])
@@ -485,6 +487,7 @@ describe("GitWorkbench", () => {
         trackingStatus: "tracked",
         ahead: 0,
         behind: 0,
+        repositoryOperationState: "normal",
         hasConflicts: false,
         changeCount: 0,
         changesTruncated: false,
@@ -528,7 +531,7 @@ describe("GitWorkbench", () => {
       snapshot: gitSnapshot({
         changeCount: 10_001,
         changesTruncated: true,
-        changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+        changes: [{ path: "docs/a.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" }],
       }),
     })
 
@@ -574,7 +577,7 @@ describe("GitWorkbench", () => {
           authorName: "wangl",
           authorEmail: "wangl@example.com",
           committedAt: "2026-06-15T16:21:42+08:00",
-          files: [{ path: longPath, originalPath: null, status: "modified", staged: false, conflicted: false }],
+          files: [{ path: longPath, originalPath: null, status: "modified" }],
           diff: longDiffLine,
           filesTruncated: false,
           diffTruncated: false,
@@ -628,12 +631,13 @@ describe("GitWorkbench", () => {
           trackingStatus: "tracked",
         ahead: 0,
         behind: 0,
+        repositoryOperationState: "normal",
         hasConflicts: false,
         changeCount: 1,
         changesTruncated: false,
-        changes: [{ path: longPath, originalPath: null, status: "modified", staged: false, conflicted: false }],
+      changes: [{ path: longPath, originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" }],
       },
-      selectedFile: { path: longPath, originalPath: null, status: "modified", staged: false, conflicted: false },
+      selectedFile: { path: longPath, originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" },
       diff: { path: longPath, originalPath: null, binary: false, truncated: false, text: longDiffLine },
       selectedPaths: [longPath],
       loading: false,
@@ -739,7 +743,7 @@ describe("GitWorkbench", () => {
       refresh: vi.fn()
         .mockResolvedValueOnce(gitSnapshot({
         ahead: 1,
-        changes: [{ path: "docs/b.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+        changes: [{ path: "docs/b.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" }],
         })),
     })
 
@@ -769,9 +773,9 @@ describe("GitWorkbench", () => {
     const status = createStatus({
       snapshot: gitSnapshot({
         hasConflicts: true,
-        changes: [{ path: "docs/conflict.md", originalPath: null, status: "conflicted", staged: false, conflicted: true }],
+        changes: [{ path: "docs/conflict.md", originalPath: null, status: "conflicted", indexStatus: "unmerged", worktreeStatus: "unmerged" }],
       }),
-      selectedFile: { path: "docs/conflict.md", originalPath: null, status: "conflicted", staged: false, conflicted: true },
+      selectedFile: { path: "docs/conflict.md", originalPath: null, status: "conflicted", indexStatus: "unmerged", worktreeStatus: "unmerged" },
       selectedPaths: ["docs/conflict.md"],
     })
 
@@ -780,6 +784,23 @@ describe("GitWorkbench", () => {
 
     expect(document.body.textContent).toContain("发生冲突")
     expect(findButton("提交选中文件").hasAttribute("disabled")).toBe(true)
+  })
+
+  it("keeps worktree mutations disabled while an external Git operation is in progress", async () => {
+    const status = createStatus({
+      snapshot: gitSnapshot({
+        repositoryOperationState: "merge",
+        changes: [{ path: "docs/a.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" }],
+      }),
+    })
+
+    await renderChangesTab(roots, status)
+    await changeTextarea("提交说明", "更新文档")
+
+    expect(document.body.textContent).toContain("仓库正在进行合并")
+    expect(document.body.textContent).toContain("外部 Git 工具")
+    expect(findButton("提交选中文件").hasAttribute("disabled")).toBe(true)
+    expect(bridge.git.prepareChangeSelection).not.toHaveBeenCalled()
   })
 
   it("requires reconfirmation when selected files change before commit", async () => {
@@ -811,6 +832,7 @@ function gitSnapshot(overrides: Partial<SynapseGitRepositorySnapshot> = {}): Syn
     trackingStatus: "tracked",
     ahead: 0,
     behind: 0,
+    repositoryOperationState: "normal",
     hasConflicts: false,
     changes: [],
     ...snapshotOverrides,
@@ -822,16 +844,16 @@ function gitSnapshot(overrides: Partial<SynapseGitRepositorySnapshot> = {}): Syn
 function createStatus(overrides: Partial<ReturnType<typeof useGitWorktreeStatus>> = {}): ReturnType<typeof useGitWorktreeStatus> {
   return {
     snapshot: gitSnapshot({
-      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" }],
     }),
-    selectedFile: { path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false },
+    selectedFile: { path: "docs/a.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" },
     diff: { path: "docs/a.md", originalPath: null, binary: false, truncated: false, text: "+hello" },
     selectedPaths: ["docs/a.md"],
     loading: false,
     diffLoading: false,
     error: null,
     refresh: vi.fn(async () => gitSnapshot({
-      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+      changes: [{ path: "docs/a.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" }],
     })),
     loadDiff: vi.fn(async () => undefined),
     togglePath: vi.fn(),

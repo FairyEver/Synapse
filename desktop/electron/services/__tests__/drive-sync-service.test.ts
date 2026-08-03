@@ -19,7 +19,9 @@ import type { DriveSyncWatchFactory } from "../drive-sync-watcher"
 
 describe("DriveSyncService", () => {
   it("creates bindings and exposes a sync snapshot", async () => {
-    const harness = createHarness()
+    const harness = createHarness({
+      watch: () => ({ close: vi.fn(), on: vi.fn() }) as unknown as ReturnType<DriveSyncWatchFactory>,
+    })
     const service = createDriveSyncService(harness.deps)
 
     const binding = await service.createBinding({
@@ -53,6 +55,331 @@ describe("DriveSyncService", () => {
         errorCount: 0,
       },
     })
+  })
+
+  it("isolates bindings and health snapshots by account", async () => {
+    let ownerUserId: string | null = "user-1"
+    const harness = createHarness({
+      accountService: {
+        getState: () => ownerUserId === null
+          ? { status: "anonymous" as const, connectivity: "offline" as const }
+          : ({
+              status: "authenticated" as const,
+              connectivity: "online" as const,
+              profile: {
+                user: { id: ownerUserId, email: `${ownerUserId}@example.com`, handle: ownerUserId, status: "active" as const },
+                syncedAt: "2026-06-28T00:00:00.000Z",
+              },
+            }),
+      },
+    })
+    const service = createDriveSyncService(harness.deps)
+    const first = await service.createBinding({
+      driveItemId: "drive-user-1",
+      driveItemName: "User 1",
+      kind: "folder",
+      localPath: os.tmpdir(),
+      deferWatcher: true,
+    })
+    await service.setHealth({ health: "error", lastError: "user one error" })
+
+    ownerUserId = "user-2"
+    await expect(service.getSnapshot()).resolves.toMatchObject({
+      bindings: [],
+      health: { status: "idle", lastError: null },
+    })
+    const second = await service.createBinding({
+      driveItemId: "drive-user-2",
+      driveItemName: "User 2",
+      kind: "folder",
+      localPath: os.tmpdir(),
+      deferWatcher: true,
+    })
+    await service.setHealth({ health: "retrying", lastError: "user two retry" })
+    await expect(service.getSnapshot()).resolves.toMatchObject({ bindings: [{ id: second.id }] })
+
+    ownerUserId = "user-1"
+    await expect(service.getSnapshot()).resolves.toMatchObject({
+      bindings: [{ id: first.id }],
+      health: { status: "error", lastError: "user one error" },
+    })
+
+    ownerUserId = null
+    await expect(service.getSnapshot()).resolves.toMatchObject({
+      bindings: [{ id: second.id }],
+      health: { status: "retrying", readOnly: true, lastError: "user two retry" },
+    })
+  })
+
+  it("rejects new bindings while logged out or offline", async () => {
+    let accountState: "logged_out" | "offline" = "logged_out"
+    const harness = createHarness({
+      accountService: {
+        getState: () => accountState === "logged_out"
+          ? { status: "anonymous" as const, connectivity: "offline" as const }
+          : {
+              status: "authenticated" as const,
+              connectivity: "offline" as const,
+              profile: {
+                user: { id: "user-1", email: "user-1@example.com", handle: "user-1", status: "active" as const },
+                syncedAt: "2026-06-28T00:00:00.000Z",
+              },
+            },
+      },
+    })
+    const service = createDriveSyncService(harness.deps)
+
+    await expect(service.createBinding({
+      driveItemId: "drive-1",
+      driveItemName: "Docs",
+      kind: "folder",
+      localPath: os.tmpdir(),
+      deferWatcher: true,
+    })).rejects.toThrow("请先登录")
+
+    accountState = "offline"
+    await expect(service.createBinding({
+      driveItemId: "drive-1",
+      driveItemName: "Docs",
+      kind: "folder",
+      localPath: os.tmpdir(),
+      deferWatcher: true,
+    })).rejects.toThrow("离线状态")
+    await expect(harness.bindings.list()).resolves.toEqual([])
+  })
+
+  it("clears v1 sync metadata without touching local or remote content", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-migration-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "keep", "utf8")
+      const harness = createHarness()
+      await harness.bindings.upsert({
+        id: "legacy-binding",
+        schemaVersion: 1,
+        driveItemId: "legacy-remote",
+        driveItemName: "spec.md",
+        kind: "file",
+        drivePathHint: null,
+        localPath,
+        status: "active",
+        remoteCursor: "1",
+        lastSyncedAt: null,
+        lastError: null,
+        excludeRules: { forced: [], defaults: [], importedGitignore: [], user: [] },
+        createdAt: "2026-06-28T00:00:00.000Z",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+      })
+      await harness.state.setSingleton({
+        schemaVersion: 1,
+        health: "error",
+        lastCursor: "1",
+        lastStartedAt: null,
+        lastStoppedAt: null,
+        lastError: "legacy",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+      })
+
+      const service = createDriveSyncService(harness.deps)
+      await expect(service.getSnapshot()).resolves.toMatchObject({ bindings: [], conflicts: [], operations: [] })
+      await expect(readFile(localPath, "utf8")).resolves.toBe("keep")
+      expect(harness.deps.accountService.downloadDriveFile).not.toHaveBeenCalled()
+      expect(harness.deps.accountService.uploadDriveLocalItems).not.toHaveBeenCalled()
+      expect(harness.deps.accountService.deleteDriveItem).not.toHaveBeenCalled()
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("recovers an uploaded root file and commits its real remote id after restart", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-recovery-"))
+    const stagingRootPath = path.join(tempDir, "staging")
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      const snapshotPath = path.join(stagingRootPath, "binding-1", "upload-1", "content")
+      await mkdir(path.dirname(snapshotPath), { recursive: true })
+      await writeFile(localPath, "uploaded", "utf8")
+      await writeFile(snapshotPath, "uploaded", "utf8")
+      const snapshotHash = await hashDriveSyncFile(snapshotPath)
+      const snapshotStats = await lstat(snapshotPath)
+      const harness = createHarness({
+        stagingRootPath,
+        accountService: {
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "uploaded", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "local-placeholder",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        initialDirection: "local_to_remote",
+        initialStatus: "initializing",
+        deferWatcher: true,
+      })
+      await harness.operations.upsert({
+        id: "upload-1",
+        schemaVersion: 2,
+        bindingId: binding.id,
+        kind: "upload",
+        status: "running",
+        driveItemId: "remote-real",
+        relativePath: "",
+        localPath,
+        remotePathHint: null,
+        message: "正在确认上传结果。",
+        createdAt: "2026-06-28T00:00:00.000Z",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+        startedAt: "2026-06-28T00:00:00.000Z",
+        completedAt: null,
+        attemptCount: 0,
+        nextRetryAt: null,
+        completedBytes: snapshotStats.size,
+        totalBytes: snapshotStats.size,
+        remoteItemKind: "file",
+        source: "initialization",
+        snapshotPath,
+        snapshotHash,
+        snapshotSize: snapshotStats.size,
+        snapshotMtimeMs: snapshotStats.mtimeMs,
+      })
+
+      await service.startLocalWatcher()
+
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        status: "active",
+        driveItemId: "remote-real",
+      })
+      await expect(harness.baseline.get(`${binding.id}:`)).resolves.toMatchObject({
+        remoteItemId: "remote-real",
+        localHash: snapshotHash,
+      })
+      await expect(harness.operations.get("upload-1")).resolves.toMatchObject({ status: "succeeded" })
+      await expect(lstat(snapshotPath)).rejects.toThrow()
+      await service.stopLocalWatcher()
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("recovers a completed upload response loss by path and snapshot hash", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-response-loss-"))
+    const stagingRootPath = path.join(tempDir, "staging")
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      const snapshotPath = path.join(stagingRootPath, "drive-sync-binding-1", "upload-1", "content")
+      await mkdir(path.dirname(snapshotPath), { recursive: true })
+      await writeFile(localPath, "uploaded", "utf8")
+      await writeFile(snapshotPath, "uploaded", "utf8")
+      const snapshotHash = await hashDriveSyncFile(snapshotPath)
+      const snapshotStats = await lstat(snapshotPath)
+      const harness = createHarness({
+        stagingRootPath,
+        accountService: {
+          listDriveItemTree: vi.fn(async () => ({
+            items: [{ id: "remote-recovered", parentId: "remote-parent", name: "spec.md", type: "file", path: "spec.md", size: "8", depth: 0 }],
+            nextOffset: null,
+          })),
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "uploaded", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "local-placeholder",
+        remoteParentId: "remote-parent",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        deferWatcher: true,
+      })
+      await harness.operations.upsert({
+        id: "upload-1",
+        schemaVersion: 2,
+        bindingId: binding.id,
+        kind: "upload",
+        status: "running",
+        driveItemId: null,
+        relativePath: "",
+        localPath,
+        remotePathHint: null,
+        message: "等待确认上传结果。",
+        createdAt: "2026-06-28T00:00:00.000Z",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+        startedAt: "2026-06-28T00:00:00.000Z",
+        completedAt: null,
+        snapshotPath,
+        snapshotHash,
+        snapshotSize: snapshotStats.size,
+        snapshotMtimeMs: snapshotStats.mtimeMs,
+        completedBytes: snapshotStats.size,
+        totalBytes: snapshotStats.size,
+      })
+
+      await service.startLocalWatcher()
+
+      await expect(harness.operations.get("upload-1")).resolves.toMatchObject({ status: "succeeded", driveItemId: "remote-recovered" })
+      await expect(harness.baseline.get(`${binding.id}:`)).resolves.toMatchObject({ remoteItemId: "remote-recovered", localHash: snapshotHash })
+      expect(harness.deps.accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+      await expect(lstat(snapshotPath)).rejects.toThrow()
+      await service.stopLocalWatcher()
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("fully reconciles a migrated initialization before marking it active", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-migrated-initialization-"))
+    try {
+      const listDriveChanges = vi.fn(async ({ cursor }: { readonly cursor?: string | null } = {}) => ({
+        items: [],
+        nextCursor: cursor === "latest" ? "40" : cursor ?? "40",
+        hasMore: false,
+        resyncRequired: false,
+      }))
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges,
+          listDriveItemTree: vi.fn(async () => ({
+            items: [{ id: "remote-cloud", name: "cloud.md", type: "file", path: "/Docs/cloud.md", size: "6" }],
+            nextOffset: null,
+          })),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        initialDirection: "remote_to_local",
+        initialStatus: "initializing",
+        initialPhase: "reconcile",
+        deferWatcher: true,
+      })
+
+      await service.startLocalWatcher()
+
+      await expect(readFile(path.join(tempDir, "cloud.md"), "utf8")).resolves.toBe("remote")
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        status: "active",
+        initialPhase: null,
+        initialCursor: null,
+        remoteCursor: "40",
+      })
+      expect(listDriveChanges).toHaveBeenCalledWith({ cursor: "latest", limit: 1 })
+      expect(listDriveChanges).toHaveBeenCalledWith(expect.objectContaining({ cursor: "40", rootItemId: "drive-root" }))
+      await service.stopLocalWatcher()
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
   })
 
   it("starts local watchers for active bindings on service startup", async () => {
@@ -93,10 +420,14 @@ describe("DriveSyncService", () => {
     try {
       const localPath = path.join(tempDir, "local.md")
       await writeFile(localPath, "before", "utf8")
-      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const uploadDriveSyncFile = vi.fn(async () => mockDriveItem("remote-local"))
       const harness = createHarness({
         accountService: {
-          uploadDriveLocalItems,
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "same", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+          uploadDriveSyncFile,
           listDriveItemTree: vi.fn(async () => ({
             items: [{ id: "remote-local", name: "local.md", type: "file", path: "Docs/local.md", depth: 1 }],
           })),
@@ -131,7 +462,7 @@ describe("DriveSyncService", () => {
 
       await service.startLocalWatcher()
 
-      expect(uploadDriveLocalItems).toHaveBeenCalled()
+      expect(uploadDriveSyncFile).toHaveBeenCalled()
       await expect(harness.operations.list()).resolves.toContainEqual(
         expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded", relativePath: "local.md" }),
       )
@@ -245,7 +576,7 @@ describe("DriveSyncService", () => {
       driveItemName: "产品文档",
       kind: "folder",
       drivePathHint: "/产品文档",
-      localPath: "/Users/me/docs",
+      localPath: os.tmpdir(),
       deferWatcher: true,
     })
 
@@ -675,7 +1006,9 @@ describe("DriveSyncService", () => {
   })
 
   it("records operations, conflicts, and health for snapshots", async () => {
-    const harness = createHarness()
+    const harness = createHarness({
+      watch: () => ({ close: vi.fn(), on: vi.fn() }) as unknown as ReturnType<DriveSyncWatchFactory>,
+    })
     const service = createDriveSyncService(harness.deps)
     const binding = await service.createBinding({
       driveItemId: "drive-item-1",
@@ -915,8 +1248,8 @@ describe("DriveSyncService", () => {
       expect.objectContaining({
         id: first.id,
         relativePath: "spec.md",
-        localSnapshot: { mtimeMs: 2000 },
-        remoteSnapshot: { sequence: "44" },
+        localSnapshot: expect.objectContaining({ exists: true, mtimeMs: 2000 }),
+        remoteSnapshot: expect.objectContaining({ exists: true, sequence: "44" }),
         status: "open",
       }),
     ])
@@ -1212,10 +1545,15 @@ describe("DriveSyncService", () => {
     try {
       const localPath = path.join(tempDir, "spec.md")
       await writeFile(localPath, "old", "utf8")
-      const uploadDriveLocalItems = vi.fn(async (_input: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[0]) => ({ completed: 1, failed: 0, skipped: 0 }))
+      const uploadDriveSyncFile = vi.fn(async (input: Parameters<DriveSyncAccountService["uploadDriveSyncFile"]>[0]) =>
+        mockDriveItem(input.expectedItemId ?? "drive-item-1"))
       const harness = createHarness({
         accountService: {
-          uploadDriveLocalItems,
+          uploadDriveSyncFile,
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "old", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
           listDriveItemTree: vi.fn(async () => ({
             items: [{ id: "drive-item-1", name: "spec.md", type: "file", path: "spec.md", depth: 0, size: "3", mimeType: "text/markdown" }],
           })),
@@ -1231,9 +1569,9 @@ describe("DriveSyncService", () => {
       })
 
       await writeFile(localPath, "new", "utf8")
-      uploadDriveLocalItems.mockRejectedValueOnce(new Error("目标不是文件夹。"))
+      uploadDriveSyncFile.mockRejectedValueOnce(new Error("目标不是文件夹。"))
 
-      await expect(service.rescanBinding(binding.id)).resolves.toBeUndefined()
+      await expect(service.rescanBinding(binding.id)).rejects.toThrow("目标不是文件夹。")
       await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
         status: "error",
         lastError: "目标不是文件夹。",
@@ -1252,13 +1590,11 @@ describe("DriveSyncService", () => {
       const localPath = path.join(tempDir, "spec.md")
       await writeFile(localPath, "spec", "utf8")
       let uploadedPath: string | null = null
-      const uploadDriveLocalItems = vi.fn(async (input: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[0]) => {
-        const item = input.items[0]
-        if (!item || item.kind !== "file") throw new Error("expected file upload")
-        uploadedPath = item.path
-        expect(item.path).not.toBe(localPath)
-        await expect(readFile(item.path, "utf8")).resolves.toBe("spec")
-        return { completed: 1, failed: 0, skipped: 0 }
+      const uploadDriveSyncFile = vi.fn(async (input: Parameters<DriveSyncAccountService["uploadDriveSyncFile"]>[0]) => {
+        uploadedPath = input.path
+        expect(input.path).not.toBe(localPath)
+        await expect(readFile(input.path, "utf8")).resolves.toBe("spec")
+        return mockDriveItem("uploaded-spec")
       })
       const listDriveItemTree = vi.fn(async ({ parentId }: { readonly parentId?: string | null }) => ({
         items: parentId === "folder-1"
@@ -1267,7 +1603,7 @@ describe("DriveSyncService", () => {
       }))
       const harness = createHarness({
         accountService: {
-          uploadDriveLocalItems,
+          uploadDriveSyncFile,
           listDriveItemTree,
         },
       })
@@ -1283,11 +1619,12 @@ describe("DriveSyncService", () => {
         direction: "local_to_remote",
       })
 
-      expect(uploadDriveLocalItems).toHaveBeenCalledWith({
+      expect(uploadDriveSyncFile).toHaveBeenCalledWith(expect.objectContaining({
         parentId: "folder-1",
-        items: [{ kind: "file", path: uploadedPath, name: "spec.md" }],
-      })
-      expect(listDriveItemTree).toHaveBeenCalledWith({ parentId: "folder-1", offset: 0, limit: 200 })
+        path: uploadedPath,
+        name: "spec.md",
+      }))
+      expect(listDriveItemTree).not.toHaveBeenCalled()
       expect(binding).toMatchObject({ driveItemId: "uploaded-spec" })
       await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ drivePathHint: "/Docs/spec.md" })
       expect(uploadedPath).not.toBeNull()
@@ -1326,7 +1663,7 @@ describe("DriveSyncService", () => {
       await writeFile(localPath, "local spec", "utf8")
       const harness = createHarness({
         accountService: {
-          uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
+          uploadDriveSyncFile: vi.fn(async () => mockDriveItem("created-item-1")),
           listDriveItemTree: vi.fn(async () => ({
             items: [
               { id: "nested-item-1", name: "spec.md", type: "file", path: "Archive/spec.md", depth: 1, size: "10", mimeType: "text/markdown" },
@@ -1346,7 +1683,7 @@ describe("DriveSyncService", () => {
       })
 
       expect(binding).toMatchObject({ status: "active" })
-      expect(harness.deps.accountService.uploadDriveLocalItems).toHaveBeenCalled()
+      expect(harness.deps.accountService.uploadDriveSyncFile).toHaveBeenCalled()
       await expect(harness.baseline.list()).resolves.toMatchObject([
         { bindingId: binding.id, relativePath: "", remoteItemId: "created-item-1", kind: "file" },
       ])
@@ -1365,6 +1702,10 @@ describe("DriveSyncService", () => {
       await writeFile(localPath, "same", "utf8")
       const harness = createHarness({
         accountService: {
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "same", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
           getDriveItem: vi.fn(async () => ({
             id: "drive-item-1",
             parentId: null,
@@ -1391,7 +1732,7 @@ describe("DriveSyncService", () => {
 
       expect(binding).toMatchObject({ status: "active", driveItemId: "drive-item-1" })
       expect(harness.deps.accountService.uploadDriveLocalItems).not.toHaveBeenCalled()
-      expect(harness.deps.accountService.downloadDriveFile).not.toHaveBeenCalled()
+      expect(harness.deps.accountService.downloadDriveFile).toHaveBeenCalledTimes(1)
       await expect(harness.baseline.list()).resolves.toMatchObject([
         { bindingId: binding.id, relativePath: "", remoteItemId: "drive-item-1", kind: "file" },
       ])
@@ -1407,6 +1748,10 @@ describe("DriveSyncService", () => {
       await writeFile(localPath, "local", "utf8")
       const harness = createHarness({
         accountService: {
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "same", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
           getDriveItem: vi.fn(async () => ({
             id: "drive-item-1",
             parentId: null,
@@ -1437,6 +1782,36 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("rejects bind-existing files with the same size but different content", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "same", "utf8")
+      const harness = createHarness({
+        accountService: {
+          getDriveItem: vi.fn(async () => ({ ...mockDriveItem("drive-item-1"), size: "4" })),
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "diff", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      await expect(service.createSafeBinding({
+        driveItemId: "drive-item-1",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        direction: "bind_existing",
+      })).rejects.toThrow("内容不一致")
+      await expect(harness.bindings.list()).resolves.toEqual([])
+      await expect(harness.baseline.list()).resolves.toEqual([])
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("binds existing local and remote folders when their trees match", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
@@ -1444,6 +1819,10 @@ describe("DriveSyncService", () => {
       await writeFile(path.join(tempDir, "notes", "spec.md"), "same", "utf8")
       const harness = createHarness({
         accountService: {
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "same", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
           getDriveItem: vi.fn(async () => ({
             id: "remote-docs",
             parentId: null,
@@ -1485,7 +1864,7 @@ describe("DriveSyncService", () => {
         expect.objectContaining({ bindingId: binding.id, relativePath: "notes/spec.md", remoteItemId: "remote-spec", kind: "file" }),
       ]))
       expect(harness.deps.accountService.uploadDriveLocalItems).not.toHaveBeenCalled()
-      expect(harness.deps.accountService.downloadDriveFile).not.toHaveBeenCalled()
+      expect(harness.deps.accountService.downloadDriveFile).toHaveBeenCalledTimes(1)
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -1498,6 +1877,10 @@ describe("DriveSyncService", () => {
       await writeFile(path.join(tempDir, "notes", "spec.md"), "same", "utf8")
       const harness = createHarness({
         accountService: {
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "same", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
           getDriveItem: vi.fn(async () => ({
             id: "remote-docs",
             parentId: null,
@@ -1721,7 +2104,7 @@ describe("DriveSyncService", () => {
       })
 
       expect(binding).toMatchObject({ status: "active", driveItemId: "remote-docs" })
-      expect(binding.excludeRules.defaults).toEqual(expect.arrayContaining(["node_modules/**", "dist/**", "*.log"]))
+      expect(binding.excludeRules.defaults).toEqual(expect.arrayContaining(["node_modules/", "dist/", "*.log"]))
       const uploadInput = uploadDriveLocalItems.mock.calls[0]?.[0]
       const uploadedFolder = uploadInput?.items[0]
       expect(uploadedFolder?.kind).toBe("folder")
@@ -1740,7 +2123,7 @@ describe("DriveSyncService", () => {
         "node_modules/pkg/index.js",
         "secrets/token.txt",
       ]))
-      expect(binding.excludeRules.importedGitignore).toEqual(["secrets/**", "*.tmp"])
+      expect(binding.excludeRules.importedGitignore).toEqual(["secrets/", "*.tmp"])
       await expect(harness.baseline.list()).resolves.toEqual(expect.arrayContaining([
         expect.objectContaining({ relativePath: "", remoteItemId: "remote-docs", kind: "folder" }),
         expect.objectContaining({ relativePath: ".gitignore", remoteItemId: "remote-gitignore", kind: "file" }),
@@ -1800,10 +2183,10 @@ describe("DriveSyncService", () => {
         direction: "local_to_remote",
       })
 
-      expect(uploadDriveLocalItems).toHaveBeenCalledWith({
+      expect(uploadDriveLocalItems).toHaveBeenCalledWith(expect.objectContaining({
         parentId: null,
         items: [expect.objectContaining({ kind: "folder", folderName: " Report " })],
-      })
+      }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
       expect(binding).toMatchObject({ localPath, driveItemName: " Report ", driveItemId: "remote-report" })
     } finally {
       await rm(tempDir, { recursive: true, force: true })
@@ -2150,12 +2533,7 @@ describe("DriveSyncService", () => {
       await writeFile(localPath, "local", "utf8")
       const harness = createHarness({
         accountService: {
-          uploadDriveLocalItems: vi.fn(async () => ({
-            completed: 0,
-            failed: 1,
-            skipped: 0,
-            message: "quota exceeded",
-          })),
+          uploadDriveSyncFile: vi.fn(async () => { throw new Error("quota exceeded") }),
         },
       })
       const service = createDriveSyncService(harness.deps)
@@ -2169,16 +2547,74 @@ describe("DriveSyncService", () => {
       })).rejects.toThrow("quota exceeded")
 
       await expect(harness.bindings.list()).resolves.toEqual([])
-      await expect(harness.operations.list()).resolves.toMatchObject([
-        {
-          bindingId: "drive-sync-binding-1",
-          kind: "upload",
-          status: "error",
-          driveItemId: null,
-          localPath,
-          message: "quota exceeded",
+      await expect(harness.operations.list()).resolves.toEqual([])
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("moves a partially uploaded initialization folder to Drive trash", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-partial-folder-"))
+    try {
+      await writeFile(path.join(tempDir, "spec.md"), "local", "utf8")
+      const uploadDriveLocalItems = vi.fn(async (
+        _input: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[0],
+        options: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[1],
+      ) => {
+        options?.onFolderPrepared?.({ id: "partial-root", created: true })
+        throw new Error("child failed")
+      })
+      const harness = createHarness({ accountService: { uploadDriveLocalItems } })
+      const service = createDriveSyncService(harness.deps)
+
+      await expect(service.createSafeBinding({
+        driveItemId: `local:${tempDir}`,
+        driveItemName: path.basename(tempDir),
+        kind: "folder",
+        localPath: tempDir,
+        direction: "local_to_remote",
+      })).rejects.toThrow("child failed")
+
+      expect(harness.deps.accountService.deleteDriveItem).toHaveBeenCalledWith("partial-root")
+      await expect(harness.bindings.list()).resolves.toEqual([])
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps the real remote root when partial initialization cleanup fails", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-partial-folder-"))
+    try {
+      await writeFile(path.join(tempDir, "spec.md"), "local", "utf8")
+      const uploadDriveLocalItems = vi.fn(async (
+        _input: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[0],
+        options: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[1],
+      ) => {
+        options?.onFolderPrepared?.({ id: "partial-root", created: true })
+        return { completed: 1, failed: 1, skipped: 0, message: "child failed" }
+      })
+      const harness = createHarness({
+        accountService: {
+          uploadDriveLocalItems,
+          deleteDriveItem: vi.fn(async () => { throw new Error("cleanup unavailable") }),
         },
-      ])
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      const binding = await service.createSafeBinding({
+        driveItemId: `local:${tempDir}`,
+        driveItemName: path.basename(tempDir),
+        kind: "folder",
+        localPath: tempDir,
+        direction: "local_to_remote",
+      })
+
+      expect(binding).toMatchObject({
+        driveItemId: "partial-root",
+        status: "error",
+        lastError: expect.stringContaining("已保留同步绑定"),
+      })
+      await expect(harness.bindings.list()).resolves.toHaveLength(1)
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -2191,18 +2627,16 @@ describe("DriveSyncService", () => {
       await writeFile(localPath, "uploaded bytes", "utf8")
       const uploadedHash = await hashDriveSyncFile(localPath)
       let uploadedPath: string | null = null
-      const uploadDriveLocalItems = vi.fn(async (input: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[0]) => {
-        const item = input.items[0]
-        if (!item || item.kind !== "file") throw new Error("expected file upload")
-        uploadedPath = item.path
-        expect(item.path).not.toBe(localPath)
-        await expect(readFile(item.path, "utf8")).resolves.toBe("uploaded bytes")
+      const uploadDriveSyncFile = vi.fn(async (input: Parameters<DriveSyncAccountService["uploadDriveSyncFile"]>[0]) => {
+        uploadedPath = input.path
+        expect(input.path).not.toBe(localPath)
+        await expect(readFile(input.path, "utf8")).resolves.toBe("uploaded bytes")
         await writeFile(localPath, "edited during upload", "utf8")
-        return { completed: 1, failed: 0, skipped: 0 }
+        return mockDriveItem("remote-file-1")
       })
       const harness = createHarness({
         accountService: {
-          uploadDriveLocalItems,
+          uploadDriveSyncFile,
           listDriveItemTree: vi.fn(async () => ({
             items: [{ id: "remote-file-1", name: "spec.md", type: "file", path: "spec.md", depth: 0 }],
             nextOffset: null,
@@ -2220,8 +2654,8 @@ describe("DriveSyncService", () => {
       })
 
       expect(binding).toMatchObject({ status: "active", driveItemId: "remote-file-1" })
-      expect(uploadDriveLocalItems).toHaveBeenCalledWith(expect.objectContaining({
-        items: [expect.objectContaining({ kind: "file", name: "spec.md", path: uploadedPath })],
+      expect(uploadDriveSyncFile).toHaveBeenCalledWith(expect.objectContaining({
+        name: "spec.md", path: uploadedPath,
       }))
       await expect(readFile(localPath, "utf8")).resolves.toBe("edited during upload")
       await expect(harness.baseline.list()).resolves.toContainEqual(expect.objectContaining({
@@ -2248,7 +2682,7 @@ describe("DriveSyncService", () => {
       await writeFile(localPath, "local", "utf8")
       const harness = createHarness({
         accountService: {
-          uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
+          uploadDriveSyncFile: vi.fn(async () => mockDriveItem("remote-file-1")),
           listDriveItemTree: vi.fn(async () => ({
             items: [{ id: "remote-file-1", name: "spec.md", type: "file", path: "spec.md", depth: 0 }],
             nextOffset: null,
@@ -2370,10 +2804,8 @@ describe("DriveSyncService", () => {
       await writeFile(path.join(tempDir, "local.md"), "local", "utf8")
       const harness = createHarness({
         accountService: {
-          uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
-          listDriveItemTree: vi.fn(async () => ({
-            items: [{ id: "remote-local", name: "local.md", type: "file", path: "Docs/local.md", depth: 1 }],
-          })),
+          uploadDriveSyncFile: vi.fn(async () => mockDriveItem("remote-local")),
+          listDriveItemTree: vi.fn(async () => ({ items: [] })),
         },
       })
       const service = createDriveSyncService(harness.deps)
@@ -2385,12 +2817,12 @@ describe("DriveSyncService", () => {
         localPath: tempDir,
       })
 
-      await service.rescanBinding(binding.id)
+      await expect(service.rescanBinding(binding.id)).resolves.toBeUndefined()
 
-      expect(harness.deps.accountService.uploadDriveLocalItems).toHaveBeenCalled()
-      await expect(harness.baseline.list()).resolves.toMatchObject([
-        { bindingId: binding.id, relativePath: "local.md", remoteItemId: "remote-local" },
-      ])
+      expect(harness.deps.accountService.uploadDriveSyncFile).toHaveBeenCalled()
+      await expect(harness.baseline.list()).resolves.toEqual(expect.arrayContaining([
+        expect.objectContaining({ bindingId: binding.id, relativePath: "local.md", remoteItemId: "remote-local" }),
+      ]))
       await expect(harness.operations.list()).resolves.toContainEqual(
         expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded" }),
       )
@@ -2471,7 +2903,7 @@ describe("DriveSyncService", () => {
         return { close: vi.fn(), on: vi.fn() } as unknown as ReturnType<DriveSyncWatchFactory>
       }
       const createDriveFolder = vi.fn(async () => ({ id: "remote-project", name: "Project", type: "folder" }))
-      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const uploadDriveSyncFile = vi.fn(async () => mockDriveItem("remote-spec"))
       const listDriveItemTree = vi.fn(async () => ({
         items: [{ id: "remote-spec", name: "spec.md", type: "file", path: "Docs/Project/spec.md", depth: 1 }],
       }))
@@ -2479,7 +2911,7 @@ describe("DriveSyncService", () => {
         watch,
         accountService: {
           createDriveFolder,
-          uploadDriveLocalItems,
+          uploadDriveSyncFile,
           listDriveItemTree,
         },
       })
@@ -2498,16 +2930,16 @@ describe("DriveSyncService", () => {
 
       await waitForExpect(async () => {
         expect(createDriveFolder).toHaveBeenCalledWith({ parentId: "drive-root", name: "Project" })
-        expect(uploadDriveLocalItems).toHaveBeenCalledWith(expect.objectContaining({ parentId: "remote-project" }))
+        expect(uploadDriveSyncFile).toHaveBeenCalledWith(expect.objectContaining({ parentId: "remote-project" }))
         await expect(harness.baseline.list()).resolves.toEqual(expect.arrayContaining([
           expect.objectContaining({ bindingId: binding.id, relativePath: "Project", remoteItemId: "remote-project", kind: "folder" }),
           expect.objectContaining({ bindingId: binding.id, relativePath: "Project/spec.md", remoteItemId: "remote-spec", kind: "file" }),
         ]))
+        await expect(harness.operations.list()).resolves.toEqual(expect.arrayContaining([
+          expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded", relativePath: "Project" }),
+          expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded", relativePath: "Project/spec.md" }),
+        ]))
       }, 1000)
-      await expect(harness.operations.list()).resolves.toEqual(expect.arrayContaining([
-        expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded", relativePath: "Project" }),
-        expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded", relativePath: "Project/spec.md" }),
-      ]))
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -2572,7 +3004,83 @@ describe("DriveSyncService", () => {
     }
   })
 
-  it("keeps missing folder roots in error when checking local changes", async () => {
+  it("keeps transient upload failures retryable without terminating the binding", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    const stagingRootPath = path.join(tempDir, "staging")
+    try {
+      await writeFile(path.join(tempDir, "spec.md"), "local", "utf8")
+      const transient = Object.assign(new Error("rate limited"), { status: 429 })
+      const harness = createHarness({
+        stagingRootPath,
+        accountService: {
+          uploadDriveSyncFile: vi.fn(async () => { throw transient }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        deferWatcher: true,
+      })
+
+      await expect(service.rescanBinding(binding.id)).rejects.toThrow("rate limited")
+
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ status: "active", lastError: null })
+      const retryOperation = (await harness.operations.list()).find((operation) => operation.relativePath === "spec.md")
+      expect(retryOperation).toEqual(expect.objectContaining({
+        bindingId: binding.id,
+        relativePath: "spec.md",
+        status: "retry_wait",
+        attemptCount: 1,
+        nextRetryAt: expect.any(String),
+        snapshotPath: expect.any(String),
+        snapshotHash: expect.any(String),
+      }))
+      await expect(lstat(retryOperation!.snapshotPath!)).resolves.toMatchObject({ size: 5 })
+      await expect(service.getSnapshot()).resolves.toMatchObject({
+        health: { status: "retrying", lastError: "rate limited" },
+        summary: { retryWaitingOperationCount: 1, errorCount: 0 },
+      })
+      await service.stopLocalWatcher()
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("runs a full reconciliation when an exclude rule re-includes content", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-rules-"))
+    try {
+      await writeFile(path.join(tempDir, "draft.tmp"), "local", "utf8")
+      const harness = createHarness()
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        excludeRules: ["*.tmp"],
+        deferWatcher: true,
+      })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+
+      await service.updateExcludeRules({ id: binding.id, defaults: [], importedGitignore: [], user: [] })
+
+      expect(harness.deps.accountService.uploadDriveSyncFile).toHaveBeenCalledWith(expect.objectContaining({ name: "draft.tmp" }))
+      await expect(harness.baseline.list()).resolves.toContainEqual(expect.objectContaining({
+        bindingId: binding.id,
+        relativePath: "draft.tmp",
+        remoteItemId: "remote-upload",
+      }))
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("creates a root deletion conflict when a local folder root is missing", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       const localPath = path.join(tempDir, "missing-folder")
@@ -2588,20 +3096,23 @@ describe("DriveSyncService", () => {
       })
       await seedFolderRootBaseline(harness, binding.id, "drive-root")
 
-      await expect(service.rescanBinding(binding.id)).rejects.toThrow("本地路径不存在。")
+      await expect(service.rescanBinding(binding.id)).rejects.toThrow("同步根对象缺失")
 
       expect(harness.deps.accountService.uploadDriveLocalItems).not.toHaveBeenCalled()
       expect(harness.deps.accountService.deleteDriveItem).not.toHaveBeenCalled()
-      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
-        status: "error",
-        lastError: "本地路径不存在。",
-      })
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ status: "conflict" })
+      await expect(harness.conflicts.list()).resolves.toContainEqual(expect.objectContaining({
+        bindingId: binding.id,
+        relativePath: "",
+        type: "delete_vs_modify",
+        status: "open",
+      }))
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
   })
 
-  it("keeps missing file roots in error when checking local changes", async () => {
+  it("creates a root deletion conflict when a local file root is missing", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       const localPath = path.join(tempDir, "missing.md")
@@ -2616,14 +3127,11 @@ describe("DriveSyncService", () => {
       })
       await seedFileRootBaseline(harness, binding.id, "remote-file")
 
-      await expect(service.rescanBinding(binding.id)).rejects.toThrow("本地路径不存在。")
+      await expect(service.rescanBinding(binding.id)).rejects.toThrow("同步根对象缺失")
 
       expect(harness.deps.accountService.deleteDriveItem).not.toHaveBeenCalled()
       expect(harness.deps.accountService.uploadDriveLocalItems).not.toHaveBeenCalled()
-      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
-        status: "error",
-        lastError: "本地路径不存在。",
-      })
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ status: "conflict" })
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -2680,7 +3188,7 @@ describe("DriveSyncService", () => {
     }
   })
 
-  it("rejects concurrent sync actions for the same binding", async () => {
+  it("serializes concurrent sync actions for the same binding", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       const changes = createDeferred<DriveChangeListPageDto>()
@@ -2701,18 +3209,81 @@ describe("DriveSyncService", () => {
         expect(listDriveChanges).toHaveBeenCalledTimes(1)
       })
 
-      await expect(service.rescanBinding(binding.id)).rejects.toThrow("同步操作正在执行，请稍后再试。")
+      const rescan = service.rescanBinding(binding.id)
+      await Promise.resolve()
+      expect(listDriveChanges).toHaveBeenCalledTimes(1)
 
       changes.resolve({ items: [], nextCursor: "41", hasMore: false, resyncRequired: false })
-      await expect(firstPoll).resolves.toBeUndefined()
+      await expect(Promise.all([firstPoll, rescan])).resolves.toEqual([undefined, undefined])
       await expect(service.pollRemoteChanges(binding.id)).resolves.toBeUndefined()
-      expect(listDriveChanges).toHaveBeenCalledTimes(2)
+      expect(listDriveChanges).toHaveBeenCalledTimes(4)
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
   })
 
-  it("blocks sync actions while a safe binding is still initializing", async () => {
+  it("cancels an active download before pausing and leaves it retryable", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      const downloadStarted = createDeferred<void>()
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges: vi.fn(async () => ({
+            items: [{
+              id: "change-1",
+              sequence: "43",
+              itemId: "remote-spec",
+              parentId: "drive-root",
+              type: "created",
+              versionId: null,
+              etag: null,
+              name: "spec.md",
+              pathHint: "/Docs/spec.md",
+              actor: "web",
+              occurredAt: "2026-06-28T00:00:00.000Z",
+            }],
+            nextCursor: "43",
+            hasMore: false,
+            resyncRequired: false,
+          })),
+          downloadDriveFile: vi.fn(async ({ signal }: { readonly signal?: AbortSignal }) => {
+            downloadStarted.resolve()
+            return new Promise<never>((_resolve, reject) => {
+              signal?.addEventListener("abort", () => reject(signal.reason), { once: true })
+            })
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        remoteCursor: "41",
+      })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+
+      const polling = service.pollRemoteChanges(binding.id)
+      await downloadStarted.promise
+      const paused = service.pauseBinding(binding.id)
+
+      await expect(polling).rejects.toMatchObject({ name: "DriveSyncWorkCancelledError" })
+      await expect(paused).resolves.toMatchObject({ status: "paused" })
+      await expect(harness.operations.list()).resolves.toContainEqual(expect.objectContaining({
+        bindingId: binding.id,
+        kind: "download",
+        status: "retry_wait",
+      }))
+      await expect(lstat(localPath)).rejects.toMatchObject({ code: "ENOENT" })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("queues sync actions while a safe binding is still initializing", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       const localPath = path.join(tempDir, "spec.md")
@@ -2741,27 +3312,28 @@ describe("DriveSyncService", () => {
       })
       const [binding] = await harness.bindings.list()
       expect(binding).toBeDefined()
-      await expect(service.rescanBinding(binding!.id)).rejects.toThrow("同步操作正在执行，请稍后再试。")
+      const rescan = service.rescanBinding(binding!.id)
       expect(harness.deps.accountService.listDriveChanges).toHaveBeenCalledTimes(1)
       expect(harness.deps.accountService.listDriveChanges).toHaveBeenCalledWith({ cursor: "latest", limit: 1 })
 
       download.resolve({ ok: true, path: localPath })
       await expect(creating).resolves.toMatchObject({ status: "active" })
+      await expect(rescan).resolves.toBeUndefined()
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
   })
 
-  it("keeps the remote cursor and marks the binding as error when resync is required", async () => {
+  it("performs a full reconciliation when the remote cursor requires resync", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       const harness = createHarness({
         accountService: {
-          listDriveChanges: vi.fn(async () => ({
+          listDriveChanges: vi.fn(async ({ cursor }: { cursor?: string | null }) => ({
             items: [],
             nextCursor: "50",
             hasMore: false,
-            resyncRequired: true,
+            resyncRequired: cursor === "41",
           })),
         },
       })
@@ -2775,19 +3347,19 @@ describe("DriveSyncService", () => {
         remoteCursor: "41",
       })
 
-      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("远端变更记录已过期")
+      await expect(service.pollRemoteChanges(binding.id)).resolves.toBeUndefined()
 
       await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
-        remoteCursor: "41",
-        status: "error",
-        lastError: "远端变更记录已过期，需要重新建立同步绑定后再同步。",
+        remoteCursor: "50",
+        status: "active",
+        lastError: null,
       })
       await expect(harness.operations.list()).resolves.toContainEqual(
         expect.objectContaining({
           bindingId: binding.id,
           kind: "resync",
-          status: "error",
-          message: "远端变更记录已过期，需要重新建立同步绑定后再同步。",
+          status: "succeeded",
+          message: null,
         }),
       )
     } finally {
@@ -3341,7 +3913,7 @@ describe("DriveSyncService", () => {
       const harness = createHarness({
         accountService: {
           listDriveChanges: vi.fn()
-            .mockRejectedValueOnce(new Error("server unavailable"))
+            .mockRejectedValueOnce(Object.assign(new Error("server unavailable"), { code: "ECONNRESET" }))
             .mockResolvedValueOnce({ items: [], nextCursor: "43", hasMore: false, resyncRequired: false }),
         },
       })
@@ -3369,7 +3941,7 @@ describe("DriveSyncService", () => {
     }
   })
 
-  it("keeps missing folder roots in error when syncing remote changes", async () => {
+  it("creates a conflict for missing local folder roots before syncing remote changes", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       const localPath = path.join(tempDir, "missing-folder")
@@ -3411,21 +3983,18 @@ describe("DriveSyncService", () => {
       })
       await seedFolderRootBaseline(harness, binding.id, "drive-root")
 
-      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("本地路径不存在。")
+      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("同步根对象缺失")
 
       expect(harness.deps.accountService.listDriveChanges).not.toHaveBeenCalled()
       expect(harness.deps.accountService.downloadDriveFile).not.toHaveBeenCalled()
       await expect(readFile(path.join(localPath, "spec.md"), "utf8")).rejects.toThrow()
-      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
-        status: "error",
-        lastError: "本地路径不存在。",
-      })
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ status: "conflict" })
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
   })
 
-  it("keeps missing file roots in error when syncing remote changes", async () => {
+  it("creates a conflict for missing local file roots before syncing remote changes", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       const localPath = path.join(tempDir, "missing.md")
@@ -3450,20 +4019,17 @@ describe("DriveSyncService", () => {
       })
       await seedFileRootBaseline(harness, binding.id, "remote-file")
 
-      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("本地路径不存在。")
+      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("同步根对象缺失")
 
       expect(harness.deps.accountService.listDriveChanges).not.toHaveBeenCalled()
       expect(harness.deps.accountService.deleteDriveItem).not.toHaveBeenCalled()
-      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
-        status: "error",
-        lastError: "本地路径不存在。",
-      })
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ status: "conflict" })
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
   })
 
-  it("keeps missing folder roots in error when retrying sync", async () => {
+  it("keeps a missing folder root in conflict when retrying sync", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       const localPath = path.join(tempDir, "missing-folder")
@@ -3480,11 +4046,59 @@ describe("DriveSyncService", () => {
       await seedFolderRootBaseline(harness, binding.id, "drive-root")
       await service.updateBindingStatus(binding.id, "error", "旧错误")
 
-      await expect(service.resumeBinding(binding.id)).rejects.toThrow("本地路径不存在。")
+      await expect(service.resumeBinding(binding.id)).resolves.toMatchObject({ status: "conflict" })
 
       await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
-        status: "error",
-        lastError: "本地路径不存在。",
+        status: "conflict",
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("uploads changes made while a binding was paused before reporting it synced", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-resume-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "before", "utf8")
+      const harness = createHarness()
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        deferWatcher: true,
+      })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+      const beforeStats = await lstat(localPath)
+      await harness.baseline.upsert({
+        id: `${binding.id}:spec.md`,
+        schemaVersion: 1,
+        bindingId: binding.id,
+        relativePath: "spec.md",
+        kind: "file",
+        remoteItemId: "remote-spec",
+        remoteVersionId: null,
+        remoteEtag: null,
+        localSize: beforeStats.size,
+        localMtimeMs: beforeStats.mtimeMs,
+        localHash: await hashDriveSyncFile(localPath),
+        lastSyncedAt: "2026-06-28T00:00:00.000Z",
+        deletedAt: null,
+      })
+      await service.pauseBinding(binding.id)
+      await writeFile(localPath, "changed while paused", "utf8")
+
+      await expect(service.resumeBinding(binding.id)).resolves.toMatchObject({ status: "active" })
+
+      expect(harness.deps.accountService.uploadDriveSyncFile).toHaveBeenCalledWith(expect.objectContaining({
+        expectedItemId: "remote-spec",
+        name: "spec.md",
+      }))
+      await expect(harness.baseline.get(`${binding.id}:spec.md`)).resolves.toMatchObject({
+        localHash: await hashDriveSyncFile(localPath),
       })
     } finally {
       await rm(tempDir, { recursive: true, force: true })
@@ -3527,7 +4141,7 @@ describe("DriveSyncService", () => {
     }
   })
 
-  it("keeps missing file roots in error when retrying sync", async () => {
+  it("keeps a missing file root in conflict when retrying sync", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       const localPath = path.join(tempDir, "missing.md")
@@ -3543,18 +4157,17 @@ describe("DriveSyncService", () => {
       await seedFileRootBaseline(harness, binding.id, "remote-file")
       await service.updateBindingStatus(binding.id, "error", "旧错误")
 
-      await expect(service.resumeBinding(binding.id)).rejects.toThrow("本地路径不存在。")
+      await expect(service.resumeBinding(binding.id)).resolves.toMatchObject({ status: "conflict" })
 
       await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
-        status: "error",
-        lastError: "本地路径不存在。",
+        status: "conflict",
       })
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
   })
 
-  it("keeps folder bindings in error when the remote root is missing", async () => {
+  it("creates a conflict when the remote folder root is missing", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       const notFound = Object.assign(new Error("NOT_FOUND"), { status: 404 })
@@ -3582,19 +4195,16 @@ describe("DriveSyncService", () => {
       })
       await seedFolderRootBaseline(harness, binding.id, "drive-root")
 
-      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("云端同步根目录不存在。")
+      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("同步根对象缺失")
 
       expect(harness.deps.accountService.listDriveChanges).not.toHaveBeenCalled()
-      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
-        status: "error",
-        lastError: "云端同步根目录不存在。",
-      })
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ status: "conflict" })
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
   })
 
-  it("detects deleted remote root files even when the change cursor has no new records", async () => {
+  it("requires confirmation when a remote root file is missing", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       const localPath = path.join(tempDir, "spec.md")
@@ -3623,20 +4233,16 @@ describe("DriveSyncService", () => {
       })
       await seedFileBaseline(harness, binding.id, localPath, "remote-file")
 
-      await service.pollRemoteChanges(binding.id)
+      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("同步根对象缺失")
 
-      await expect(readFile(localPath, "utf8")).rejects.toThrow()
-      const trashEntries = await readdir(path.join(tempDir, ".synapse-sync-trash"))
-      expect(trashEntries.some((entry) => entry.endsWith("-spec.md"))).toBe(true)
-      await expect(harness.baseline.get(`${binding.id}:`)).resolves.toMatchObject({
+      await expect(readFile(localPath, "utf8")).resolves.toBe("same")
+      await expect(harness.conflicts.list()).resolves.toContainEqual(expect.objectContaining({
         bindingId: binding.id,
         relativePath: "",
-        remoteItemId: "remote-file",
-        deletedAt: "2026-06-28T00:00:00.000Z",
-      })
-      await expect(harness.operations.list()).resolves.toContainEqual(
-        expect.objectContaining({ bindingId: binding.id, kind: "delete_local", status: "succeeded", relativePath: "" }),
-      )
+        type: "delete_vs_modify",
+        status: "open",
+      }))
+      expect(harness.deps.accountService.deleteDriveItem).not.toHaveBeenCalled()
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -3672,7 +4278,7 @@ describe("DriveSyncService", () => {
       await seedFileBaseline(harness, binding.id, localPath, "remote-file")
       await writeFile(localPath, "local after baseline", "utf8")
 
-      await service.pollRemoteChanges(binding.id)
+      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("同步根对象缺失")
 
       await expect(readFile(localPath, "utf8")).resolves.toBe("local after baseline")
       await expect(harness.conflicts.list()).resolves.toContainEqual(
@@ -3813,29 +4419,38 @@ describe("DriveSyncService", () => {
     try {
       const localPath = path.join(tempDir, "spec.md")
       await writeFile(localPath, "first", "utf8")
+      let changePollCount = 0
       const harness = createHarness({
         accountService: {
-          listDriveItemTree: vi.fn(async () => ({
-            items: [{ id: "remote-spec", name: "spec.md", type: "file", path: "Docs/spec.md", depth: 1 }],
-          })),
-          listDriveChanges: vi.fn(async () => ({
-            items: [{
+          uploadDriveSyncFile: vi.fn(async () => mockDriveItem("remote-spec")),
+          listDriveItemTree: vi.fn(async () => ({ items: [] })),
+          listDriveChanges: vi.fn(async () => {
+            changePollCount += 1
+            if (changePollCount === 1) {
+              return { items: [], nextCursor: "41", hasMore: false, resyncRequired: false }
+            }
+            if (changePollCount > 2) {
+              return { items: [], nextCursor: "43", hasMore: false, resyncRequired: false }
+            }
+            return {
+              items: [{
               id: "change-1",
               sequence: "43",
               itemId: "remote-spec",
               parentId: "drive-root",
-              type: "content_updated",
+              type: "created",
               versionId: null,
               etag: null,
               name: "spec.md",
               pathHint: "/Docs/spec.md",
               actor: "user",
               occurredAt: "2026-06-28T00:00:00.000Z",
-            }],
-            nextCursor: "43",
-            hasMore: false,
-            resyncRequired: false,
-          })),
+              }],
+              nextCursor: "43",
+              hasMore: false,
+              resyncRequired: false,
+            }
+          }),
         },
       })
       const service = createDriveSyncService(harness.deps)
@@ -3977,6 +4592,54 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("finishes initialization after its last conflict is resolved", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-initial-conflict-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "local", "utf8")
+      const harness = createHarness({
+        accountService: {
+          downloadDriveFile: vi.fn(async ({ outputPath }: { readonly outputPath: string }) => {
+            await writeFile(outputPath, "remote", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-file",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        initialDirection: "remote_to_local",
+        initialStatus: "initializing",
+        initialPhase: "replay",
+        initialCursor: "40",
+        deferWatcher: true,
+      })
+      const conflict = await service.recordConflict({
+        bindingId: binding.id,
+        driveItemId: "remote-file",
+        relativePath: "",
+        localPath,
+        remotePathHint: "/spec.md",
+        type: "both_modified",
+      })
+
+      await service.resolveConflict({ conflictId: conflict.id, action: "keep_remote" })
+
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        status: "active",
+        initialPhase: null,
+        initialCursor: null,
+        remoteCursor: null,
+      })
+      await expect(readFile(localPath, "utf8")).resolves.toBe("remote")
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("resolves keep-both conflicts without overwriting existing local copies", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
@@ -3984,9 +4647,11 @@ describe("DriveSyncService", () => {
       await writeFile(localPath, "local", "utf8")
       await writeFile(path.join(tempDir, "spec.local.md"), "existing copy", "utf8")
       const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const uploadDriveSyncFile = vi.fn(async () => ({ ...mockDriveItem("remote-copy"), id: "remote-copy" }))
       const harness = createHarness({
         accountService: {
           uploadDriveLocalItems,
+          uploadDriveSyncFile,
           downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
             await writeFile(outputPath, "remote", "utf8")
             return { ok: true as const, path: outputPath }
@@ -4015,7 +4680,7 @@ describe("DriveSyncService", () => {
       await expect(readFile(path.join(tempDir, "spec.local.md"), "utf8")).resolves.toBe("existing copy")
       await expect(readFile(path.join(tempDir, "spec.local-2.md"), "utf8")).resolves.toBe("local")
       await expect(readFile(localPath, "utf8")).resolves.toBe("remote")
-      expect(uploadDriveLocalItems).toHaveBeenCalled()
+      expect(uploadDriveSyncFile).toHaveBeenCalled()
       await expect(harness.operations.list()).resolves.toContainEqual(
         expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded", relativePath: "spec.local-2.md" }),
       )
@@ -4230,7 +4895,7 @@ describe("DriveSyncService", () => {
     }
   })
 
-  it("does not suppress the next local change after local write permission is denied", async () => {
+  it("keeps a conflicted path blocked after local write permission is denied", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       const localPath = path.join(tempDir, "spec.md")
@@ -4299,9 +4964,10 @@ describe("DriveSyncService", () => {
       await writeFile(localPath, "user edit", "utf8")
       emitRawEvent(rawEvent, "change", "spec.md")
 
-      await waitForExpect(() => {
-        expect(uploadDriveLocalItems).toHaveBeenCalled()
+      await waitForExpect(async () => {
+        await expect(harness.conflicts.get(conflict.id)).resolves.toMatchObject({ status: "open" })
       }, 1000)
+      expect(uploadDriveLocalItems).not.toHaveBeenCalled()
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -4335,11 +5001,111 @@ describe("DriveSyncService", () => {
 
       await service.resolveConflict({ conflictId: conflict.id, action: "keep_local" })
 
-      expect(harness.deps.accountService.uploadDriveLocalItems).toHaveBeenCalled()
+      expect(harness.deps.accountService.uploadDriveSyncFile).toHaveBeenCalled()
       await expect(harness.conflicts.get(conflict.id)).resolves.toMatchObject({ status: "resolved", resolution: "keep_local" })
       await expect(harness.operations.list()).resolves.toContainEqual(
         expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded" }),
       )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("refreshes a conflict instead of applying a stale same-type local snapshot", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-conflict-refresh-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "before", "utf8")
+      const previousHash = await hashDriveSyncFile(localPath)
+      const harness = createHarness()
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        deferWatcher: true,
+      })
+      const conflict = await service.recordConflict({
+        bindingId: binding.id,
+        driveItemId: "remote-spec",
+        relativePath: "spec.md",
+        localPath,
+        remotePathHint: "/Docs/spec.md",
+        type: "both_modified",
+        localSnapshot: { kind: "file", hash: previousHash },
+        remoteSnapshot: { kind: "file" },
+      })
+      await writeFile(localPath, "changed again", "utf8")
+
+      await expect(service.resolveConflict({ conflictId: conflict.id, action: "keep_local" }))
+        .rejects.toThrow("冲突内容已变化，请重新确认处理方式。")
+
+      expect(harness.deps.accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+      await expect(harness.conflicts.get(conflict.id)).resolves.toMatchObject({
+        status: "open",
+        localSnapshot: expect.objectContaining({ hash: await hashDriveSyncFile(localPath) }),
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("recreates a missing remote folder from the complete included local subtree", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      await mkdir(path.join(tempDir, "nested"), { recursive: true })
+      await mkdir(path.join(tempDir, "dist"), { recursive: true })
+      await writeFile(path.join(tempDir, "keep.md"), "keep", "utf8")
+      await writeFile(path.join(tempDir, "nested", "child.md"), "child", "utf8")
+      await writeFile(path.join(tempDir, "dist", "excluded.js"), "excluded", "utf8")
+      const notFound = Object.assign(new Error("NOT_FOUND"), { status: 404 })
+      const createDriveFolder = vi.fn(async ({ name }: { name: string }) => ({
+        id: name === path.basename(tempDir) ? "remote-root-new" : `remote-${name}`,
+        name,
+        type: "folder",
+      }))
+      const uploadDriveSyncFile = vi.fn(async (input: Parameters<DriveSyncAccountService["uploadDriveSyncFile"]>[0]) => ({
+        ...mockDriveItem(`remote-${input.name}`),
+        parentId: input.parentId,
+        name: input.name,
+      }))
+      const harness = createHarness({
+        accountService: {
+          getDriveItem: vi.fn(async () => { throw notFound }),
+          createDriveFolder,
+          uploadDriveSyncFile,
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-root-old",
+        remoteParentId: "remote-parent",
+        driveItemName: path.basename(tempDir),
+        kind: "folder",
+        localPath: tempDir,
+      })
+      await seedFolderRootBaseline(harness, binding.id, "remote-root-old")
+      const conflict = await service.recordConflict({
+        bindingId: binding.id,
+        driveItemId: "remote-root-old",
+        relativePath: "",
+        localPath: tempDir,
+        type: "delete_vs_modify",
+        localSnapshot: { exists: true },
+        remoteSnapshot: null,
+      })
+
+      await service.resolveConflict({ conflictId: conflict.id, action: "keep_local" })
+
+      expect(createDriveFolder).toHaveBeenCalledWith({ parentId: "remote-parent", name: path.basename(tempDir) })
+      expect(createDriveFolder).toHaveBeenCalledWith({ parentId: "remote-root-new", name: "nested" })
+      expect(uploadDriveSyncFile).toHaveBeenCalledWith(expect.objectContaining({ parentId: "remote-root-new", name: "keep.md" }))
+      expect(uploadDriveSyncFile).toHaveBeenCalledWith(expect.objectContaining({ parentId: "remote-nested", name: "child.md" }))
+      expect(uploadDriveSyncFile).not.toHaveBeenCalledWith(expect.objectContaining({ name: "excluded.js" }))
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ driveItemId: "remote-root-new", status: "active" })
+      await expect(harness.conflicts.get(conflict.id)).resolves.toMatchObject({ status: "resolved", resolution: "keep_local" })
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -4459,6 +5225,7 @@ function createHarness(overrides: {
   readonly accountService?: Record<string, unknown>
   readonly auditSink?: AuditSink
   readonly permissionGuard?: PermissionGuard
+  readonly stagingRootPath?: string
   readonly watch?: DriveSyncWatchFactory
 } = {}) {
   const bindings = createMemoryNamespace<DriveSyncBindingEntryV1>()
@@ -4466,11 +5233,24 @@ function createHarness(overrides: {
   const operations = createMemoryNamespace<DriveSyncOperationEntryV1>()
   const conflicts = createMemoryNamespace<DriveSyncConflictEntryV1>()
   const state = createMemoryNamespace<DriveSyncStateEntryV1>()
+  const remoteContents = new Map<string, Buffer>()
   const accountService = {
     getDriveItem: vi.fn(async (itemId: string) => mockDriveItem(itemId)),
-    downloadDriveFile: vi.fn(async () => ({ ok: true as const, path: "" })),
+    downloadDriveFile: vi.fn(async ({ itemId, outputPath }: { itemId: string; outputPath: string }) => {
+      await writeFile(outputPath, remoteContents.get(itemId) ?? Buffer.from("remote"))
+      return { ok: true as const, path: outputPath }
+    }),
     downloadDriveFolderZip: vi.fn(async () => ({ ok: true as const, path: "" })),
     uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
+    uploadDriveSyncFile: vi.fn(async (input: { parentId: string | null; path: string; name: string; expectedItemId?: string | null }) => {
+      const itemId = input.expectedItemId ?? "remote-upload"
+      remoteContents.set(itemId, await readFile(input.path))
+      return {
+        ...mockDriveItem(itemId),
+        parentId: input.parentId,
+        name: input.name,
+      }
+    }),
     createDriveFolder: vi.fn(async () => ({ id: "folder-1", name: "Folder", type: "folder" })),
     renameDriveItem: vi.fn(),
     moveDriveItem: vi.fn(),
@@ -4498,6 +5278,7 @@ function createHarness(overrides: {
       permissionGuard: overrides.permissionGuard,
       now: () => new Date("2026-06-28T00:00:00.000Z"),
       createId: (prefix: string) => `${prefix}-${++idCounter}`,
+      stagingRootPath: overrides.stagingRootPath,
       watch: overrides.watch,
     },
   }
@@ -4536,7 +5317,7 @@ function createMemoryNamespace<T extends Record<string, unknown>>() {
 
 function mockDriveItem(itemId: string) {
   const lower = itemId.toLowerCase()
-  const type: "file" | "folder" = lower.includes("folder") || lower.includes("docs") ? "folder" : "file"
+  const type: "file" | "folder" = lower.includes("folder") || lower.includes("docs") || lower.includes("root") ? "folder" : "file"
   return {
     id: itemId,
     parentId: null,

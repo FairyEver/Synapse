@@ -115,6 +115,25 @@ describe("repository git mutation service", () => {
     expect(await git(root, ["diff", "--name-only"])).toBe("target.md")
   })
 
+  it("blocks content commits while an external merge is in progress", async () => {
+    const root = await createTempRoot("synapse-git-merge-state-")
+    await initRepository(root, true)
+    await writeFile(path.join(root, "target.md"), "target-1\n", "utf8")
+    const headBefore = await git(root, ["rev-parse", "HEAD"])
+    const mergeHeadPath = path.join(root, ".git", "MERGE_HEAD")
+    await writeFile(mergeHeadPath, `${headBefore}\n`, "utf8")
+
+    await expect(commitRepositoryPaths({
+      fallbackMessage: "commit failed",
+      filePaths: [path.join(root, "target.md")],
+      gitRootPath: root,
+      message: "must not finalize merge",
+    })).rejects.toThrow("正在进行合并")
+
+    expect(await git(root, ["rev-parse", "HEAD"])).toBe(headBefore)
+    await expect(readFile(mergeHeadPath, "utf8")).resolves.toBe(`${headBefore}\n`)
+  })
+
   it("uses a command-only Bot identity when Git identity is missing", async () => {
     const root = await createTempRoot("synapse-git-identity-")
     const previousGlobalConfig = process.env.GIT_CONFIG_GLOBAL
@@ -198,5 +217,38 @@ describe("repository git mutation service", () => {
     expect(await readFile(path.join(local, "shared.md"), "utf8")).toBe("local\n")
     expect(await git(local, ["status", "--porcelain"])).toBe("")
     expect(await git(local, ["log", "-1", "--format=%s"])).toBe("local")
+  })
+
+  it("blocks content sync before an ignored file would be overwritten", async () => {
+    const root = await createTempRoot("synapse-git-ignored-")
+    const remote = path.join(root, "remote.git")
+    const local = path.join(root, "local")
+    const peer = path.join(root, "peer")
+    await execFileAsync("git", ["init", "--bare", "-q", remote])
+    await execFileAsync("git", ["clone", "-q", remote, local])
+    await git(local, ["config", "user.name", "Local"])
+    await git(local, ["config", "user.email", "local@example.com"])
+    await writeFile(path.join(local, ".gitignore"), "private.txt\n", "utf8")
+    await git(local, ["add", ".gitignore"])
+    await git(local, ["commit", "-qm", "ignore private file"])
+    await git(local, ["push", "-q", "-u", "origin", "HEAD"])
+    await execFileAsync("git", ["clone", "-q", remote, peer])
+    await git(peer, ["config", "user.name", "Peer"])
+    await git(peer, ["config", "user.email", "peer@example.com"])
+    await writeFile(path.join(peer, "private.txt"), "tracked\n", "utf8")
+    await git(peer, ["add", "-f", "private.txt"])
+    await git(peer, ["commit", "-qm", "track private file"])
+    await git(peer, ["push", "-q"])
+    await writeFile(path.join(local, "private.txt"), "local secret\n", "utf8")
+    const repository: SynapseRepositoryConfig = {
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: local,
+      contentDirs: {},
+    }
+
+    await expect(pullRepositoryWithSafeRebase(repository)).rejects.toThrow("private.txt")
+    expect(await readFile(path.join(local, "private.txt"), "utf8")).toBe("local secret\n")
+    expect(await git(local, ["log", "-1", "--format=%s"])).toBe("ignore private file")
   })
 })

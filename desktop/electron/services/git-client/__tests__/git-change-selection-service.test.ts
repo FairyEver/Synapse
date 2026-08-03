@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import type { SynapseGitFileChange } from "../../../../src/types/git"
+import type { SynapseGitWorkingTreeChange } from "../../../../src/types/git"
 import { createGitChangeSelectionService } from "../git-change-selection-service"
 
 const repository = {
@@ -10,17 +10,17 @@ const repository = {
   lastOpenedAt: null,
 }
 
-const modifiedChange: SynapseGitFileChange = {
+const modifiedChange: SynapseGitWorkingTreeChange = {
   path: "docs/a.md",
   originalPath: null,
   status: "modified",
-  staged: false,
-  conflicted: false,
+  indexStatus: "unchanged",
+  worktreeStatus: "modified",
 }
 
 describe("git change selection service", () => {
   it("binds a selection to canonical status and both rename paths", async () => {
-    const change: SynapseGitFileChange = {
+    const change: SynapseGitWorkingTreeChange = {
       ...modifiedChange,
       path: "docs/new.md",
       originalPath: "docs/old.md",

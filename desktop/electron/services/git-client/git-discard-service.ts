@@ -1,8 +1,9 @@
 import type {
   SynapseGitDiscardChangesResult,
-  SynapseGitFileChange,
+  SynapseGitWorkingTreeChange,
   SynapseGitRepository,
 } from "../../../src/types/git"
+import { isSynapseGitChangeConflicted } from "../../../src/types/git"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/logging"
 import type { GitChangeSelectionService } from "./git-change-selection-service"
@@ -36,7 +37,7 @@ function uniquePaths(paths: readonly (string | null)[]): string[] {
   return [...new Set(paths.filter((value): value is string => Boolean(value)))]
 }
 
-function pathsForDiscard(changes: readonly SynapseGitFileChange[]) {
+function pathsForDiscard(changes: readonly SynapseGitWorkingTreeChange[]) {
   return {
     resetPaths: uniquePaths(changes.map((change) => (
       change.status === "added" || change.status === "renamed" ? change.path : null
@@ -44,12 +45,12 @@ function pathsForDiscard(changes: readonly SynapseGitFileChange[]) {
     restorePaths: uniquePaths(changes.map((change) => (
       change.status === "renamed"
         ? change.originalPath
-        : change.status === "modified" || change.status === "deleted"
+        : change.status === "modified" || change.status === "deleted" || change.status === "replaced"
           ? change.path
           : null
     ))),
     trashPaths: uniquePaths(changes.map((change) => (
-      change.status === "added" || change.status === "untracked" || change.status === "renamed"
+      change.status === "added" || change.status === "untracked" || change.status === "renamed" || change.status === "replaced"
         ? change.path
         : null
     ))),
@@ -100,7 +101,7 @@ export function createGitDiscardService(deps: DiscardDeps) {
         await deps.selections.validate(repository, input.selectionId)
         selectionValidated = true
         const selection = await deps.selections.validate(repository, input.selectionId)
-        if (selection.changes.some((change) => change.conflicted || change.status === "conflicted")) {
+        if (selection.changes.some(isSynapseGitChangeConflicted)) {
           throw new Error("冲突文件需要在外部处理，不能在 Synapse 中丢弃。")
         }
         if (selection.changes.some((change) => change.status === "unknown")) {

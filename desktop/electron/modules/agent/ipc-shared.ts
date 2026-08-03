@@ -59,6 +59,7 @@ export const timelineRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
   conversationId: z.string().optional(),
   limit: z.number().int().positive().max(200).optional(),
+  beforeIndex: z.number().int().nonnegative().optional(),
 })
 
 export const permissionModeSchema = z.enum([
@@ -489,15 +490,69 @@ export async function resolveTimelineSession(
     ?? null
 }
 
-export function historyEntries(
+export interface ConversationHistoryPage {
+  readonly entries: ReturnType<typeof historyEntry>[]
+  readonly total: number
+  readonly startIndex: number
+  readonly hasMore: boolean
+}
+
+export class InvalidConversationHistoryBoundaryError extends Error {
+  constructor(beforeIndex: number) {
+    super(`Invalid conversation history boundary: ${String(beforeIndex)}`)
+    this.name = "InvalidConversationHistoryBoundaryError"
+  }
+}
+
+export function historyPage(
   session: ConversationEntryV1,
-  limit?: number,
-) {
-  const start = typeof limit === "number"
-    ? Math.max(0, session.history.length - limit)
-    : 0
-  return session.history.slice(start).map((entry, index) =>
-    historyEntry(session.id, entry, start + index, session.agentType))
+  request: Pick<z.infer<typeof timelineRequestSchema>, "limit" | "beforeIndex"> = {},
+): ConversationHistoryPage {
+  const total = session.history.length
+  if (total === 0) {
+    return { entries: [], total: 0, startIndex: 0, hasMore: false }
+  }
+
+  const paged = request.limit !== undefined || request.beforeIndex !== undefined
+  const endIndex = request.beforeIndex ?? total
+  assertHistoryPageBoundary(session, endIndex)
+
+  if (!paged) {
+    return {
+      entries: session.history.map((entry, index) =>
+        historyEntry(session.id, entry, index, session.agentType)),
+      total,
+      startIndex: 0,
+      hasMore: false,
+    }
+  }
+
+  if (endIndex === 0) {
+    return { entries: [], total, startIndex: 0, hasMore: false }
+  }
+
+  const nominalStart = Math.max(0, endIndex - (request.limit ?? 100))
+  let startIndex = nominalStart
+  while (startIndex > 0 && session.history[startIndex]?.role !== "user") {
+    startIndex -= 1
+  }
+  if (session.history[startIndex]?.role !== "user") startIndex = 0
+
+  return {
+    entries: session.history.slice(startIndex, endIndex).map((entry, index) =>
+      historyEntry(session.id, entry, startIndex + index, session.agentType)),
+    total,
+    startIndex,
+    hasMore: startIndex > 0,
+  }
+}
+
+function assertHistoryPageBoundary(session: ConversationEntryV1, beforeIndex: number): void {
+  const total = session.history.length
+  if (beforeIndex === 0 || beforeIndex === total) return
+  if (beforeIndex > total || session.history[beforeIndex]?.role !== "user") {
+    throw new InvalidConversationHistoryBoundaryError(beforeIndex)
+  }
 }
 
 export function historyEntry(

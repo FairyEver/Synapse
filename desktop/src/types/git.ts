@@ -151,16 +151,55 @@ export type SynapseGitFileStatus =
   | "modified"
   | "deleted"
   | "renamed"
+  | "replaced"
   | "untracked"
   | "conflicted"
   | "unknown"
 
-export type SynapseGitFileChange = {
+export type SynapseGitFileLayerStatus =
+  | "unchanged"
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed"
+  | "copied"
+  | "unmerged"
+  | "untracked"
+  | "unknown"
+
+export type SynapseGitWorkingTreeChange = {
   readonly path: string
   readonly originalPath: string | null
   readonly status: SynapseGitFileStatus
-  readonly staged: boolean
-  readonly conflicted: boolean
+  readonly indexStatus: SynapseGitFileLayerStatus
+  readonly worktreeStatus: SynapseGitFileLayerStatus
+}
+
+export function isSynapseGitChangeConflicted(change: SynapseGitWorkingTreeChange): boolean {
+  return change.status === "conflicted"
+    || change.indexStatus === "unmerged"
+    || change.worktreeStatus === "unmerged"
+}
+
+export function isSynapseGitChangeStaged(change: SynapseGitWorkingTreeChange): boolean {
+  return change.indexStatus !== "unchanged"
+}
+
+export type SynapseGitCommitFileStatus = "added" | "modified" | "deleted" | "renamed" | "unknown"
+
+export type SynapseGitRepositoryOperationState =
+  | "normal"
+  | "merge"
+  | "rebase"
+  | "cherry-pick"
+  | "revert"
+  | "bisect"
+  | "unknown"
+
+export type SynapseGitCommitFileChange = {
+  readonly path: string
+  readonly originalPath: string | null
+  readonly status: SynapseGitCommitFileStatus
 }
 
 export type SynapseGitRepositorySnapshot = {
@@ -172,10 +211,11 @@ export type SynapseGitRepositorySnapshot = {
   readonly trackingStatus: "tracked" | "untracked" | "detached" | "gone"
   readonly ahead: number
   readonly behind: number
+  readonly repositoryOperationState: SynapseGitRepositoryOperationState
   readonly hasConflicts: boolean
   readonly changeCount: number
   readonly changesTruncated: boolean
-  readonly changes: readonly SynapseGitFileChange[]
+  readonly changes: readonly SynapseGitWorkingTreeChange[]
 }
 
 export type SynapseGitPushTarget = {
@@ -192,7 +232,7 @@ export type SynapseGitRepositorySummary = {
 
 export type SynapseGitStatusParseResult = Omit<
   SynapseGitRepositorySnapshot,
-  "repositoryId" | "pathExists" | "isGitRepository"
+  "repositoryId" | "pathExists" | "isGitRepository" | "repositoryOperationState"
 >
 
 export type SynapseGitDiffResult = {
@@ -207,7 +247,7 @@ export type SynapseGitChangeSelection = {
   readonly selectionId: string
   readonly repositoryId: string
   readonly expiresAt: string
-  readonly changes: readonly SynapseGitFileChange[]
+  readonly changes: readonly SynapseGitWorkingTreeChange[]
 }
 
 export type SynapseGitBranch = {
@@ -254,7 +294,7 @@ export type SynapseGitCommitSummary = {
 }
 
 export type SynapseGitCommitDetail = SynapseGitCommitSummary & {
-  readonly files: readonly SynapseGitFileChange[]
+  readonly files: readonly SynapseGitCommitFileChange[]
   readonly diff: string
   readonly filesTruncated: boolean
   readonly diffTruncated: boolean

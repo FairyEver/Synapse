@@ -30,7 +30,7 @@ export function createDriveSyncBaselineStore(deps: {
   async function upsert(input: DriveSyncBaselineUpsertInput): Promise<DriveSyncBaselineEntryV1> {
     const entry: DriveSyncBaselineEntryV1 = {
       id: baselineId(input.bindingId, input.relativePath),
-      schemaVersion: 1,
+      schemaVersion: 2,
       bindingId: input.bindingId,
       relativePath: input.relativePath,
       kind: input.kind,

@@ -76,6 +76,9 @@ export type AgentConversationTarget = ImportedAgentConversationTarget
 
 export type AgentConversationWorkspaceController = {
   readonly timeline: readonly SynapseAgentTimelineItem[]
+  readonly timelineHasMore: boolean
+  readonly loadingOlder: boolean
+  readonly timelineHistoryError: string | null
   readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
   readonly sending: boolean
   readonly sendingConversationIds: ReadonlySet<string>
@@ -108,6 +111,7 @@ export type AgentConversationWorkspaceController = {
   readonly cancelTurn: (target?: AgentConversationTarget) => Promise<void>
   readonly forceKillTurn: (target?: AgentConversationTarget) => Promise<void>
   readonly refresh: () => Promise<void>
+  readonly loadOlderTimeline: () => Promise<void>
   readonly personas: readonly SynapseAgentPersona[]
   readonly personasLoaded: boolean
 }
@@ -179,6 +183,10 @@ function AgentConversationWorkspace({
       chat.sending,
     ],
     latestEntryId: latestEntry?.id,
+    hasOlderEntries: chat.timelineHasMore,
+    loadingOlderEntries: chat.loadingOlder,
+    historyLoadBlocked: Boolean(chat.timelineHistoryError),
+    onLoadOlder: chat.loadOlderTimeline,
   })
   const showJumpToBottom = !stick.isPinned && stick.hasUnread
   const showIdleJumpToBottom = !stick.isPinned && !stick.hasUnread && !chat.sending
@@ -682,6 +690,9 @@ function AgentConversationWorkspace({
         onRespondPermission={(requestId, behavior, updatedInput, message, scope) =>
           chat.respondPermission({ projectId: target.projectId, requestId }, behavior, updatedInput, message, scope)}
         viewportRef={stick.viewportRef}
+        loadingOlder={chat.loadingOlder}
+        historyError={chat.timelineHistoryError}
+        onRetryHistory={() => void chat.loadOlderTimeline()}
       />
 
       <AgentComposer

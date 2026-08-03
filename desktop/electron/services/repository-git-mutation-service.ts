@@ -2,10 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises"
 import path from "node:path"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type { SynapseRepositoryLocalState } from "../../src/types/repository"
-import { isGitRebaseInProgress, runGitCommand, type GitCommandResult } from "./git-command"
+import { runGitCommand, type GitCommandResult } from "./git-command"
 import { formatGitFailureMessage } from "./git-error-utils"
 import { toRepositoryGitPaths } from "./git-paths"
-import { assertNoPreexistingGitRebase } from "./git-rebase-guard"
+import { assertNoPreexistingGitRebase, recoverOwnedRebase } from "./git-rebase-guard"
+import { assertGitWorktreeMutationAllowed } from "./git-operation-state"
+import { assertNoIgnoredPathCollisions } from "./git-working-tree-safety"
 import { createMainLogger } from "./log-store"
 import { repositoryLockManager } from "./repository-lock-manager"
 import { repositoryStore } from "./repository-store"
@@ -33,7 +35,9 @@ function runRepositoryGitCommand(
   args: string[],
   fallbackMessage: string,
   options: {
+    captureStdout?: false
     gitIndexFile?: string
+    onStdoutChunk?: (chunk: Uint8Array) => void
     onProgress?: GitProgressListener
     timeoutMessage?: string
     timeoutMs?: number
@@ -43,9 +47,11 @@ function runRepositoryGitCommand(
     args,
     cwd,
     fallbackMessage,
+    captureStdout: options.captureStdout,
     formatFailureMessage: formatGitFailureMessage,
     gitIndexFile: options.gitIndexFile,
     onLine: options.onProgress,
+    onStdoutChunk: options.onStdoutChunk,
     timeoutMessage: options.timeoutMessage ?? fallbackMessage,
     timeoutMs: options.timeoutMs ?? GIT_LOCAL_OPERATION_TIMEOUT_MS,
   })
@@ -82,39 +88,56 @@ async function runRepositoryGitExclusive<T>(
   }
 }
 
-async function abortStartedRebase(localPath: string): Promise<void> {
-  if (!(await isGitRebaseInProgress(localPath))) return
-
-  logger.warn("Aborting rebase started by Synapse after a conflict.", { localPath })
-  await runRepositoryGitCommand(
-    localPath,
-    ["rebase", "--abort"],
-    "无法中止 rebase，请手动检查仓库状态。",
-  )
-}
-
 async function pullRepositoryWithSafeRebase(
   repository: SynapseRepositoryConfig,
   onProgress?: GitProgressListener,
 ): Promise<void> {
   onProgress?.("正在拉取最新内容...")
+  await assertGitWorktreeMutationAllowed({
+    localPath: repository.localPath,
+    run: (args) => runRepositoryGitCommand(repository.localPath, [...args], "无法确认仓库 Git 操作状态。"),
+  })
   await assertNoPreexistingGitRebase(repository.localPath, (localPath) => {
     logger.warn("Synapse pull skipped because the repository already has a rebase in progress.", { localPath })
   })
 
+  const remoteOptions = {
+    onProgress,
+    timeoutMessage: "同步仓库超时，请检查网络后重试。",
+    timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
+  }
+  await runRepositoryGitCommand(
+    repository.localPath,
+    ["fetch", "--prune"],
+    "同步仓库失败，请检查网络或仓库状态后重试。",
+    remoteOptions,
+  )
+  const run = (args: readonly string[], streamOptions?: { readonly captureStdout: false; readonly onStdoutChunk: (chunk: Uint8Array) => void }) => runRepositoryGitCommand(
+    repository.localPath,
+    [...args],
+    "同步仓库失败，请检查网络或仓库状态后重试。",
+    { ...remoteOptions, ...streamOptions },
+  )
+  const [origHeadResult, ontoResult] = await Promise.all([
+    run(["rev-parse", "HEAD"]),
+    run(["rev-parse", "@{u}"]),
+  ])
+  const expectedOrigHead = origHeadResult.stdout.trim()
+  const expectedOnto = ontoResult.stdout.trim()
+  await assertNoIgnoredPathCollisions({ run, target: expectedOnto })
   try {
-    await runRepositoryGitCommand(
-      repository.localPath,
-      ["pull", "--rebase"],
-      "同步仓库失败，请检查网络或仓库状态后重试。",
-      {
-        onProgress,
-        timeoutMessage: "同步仓库超时，请检查网络后重试。",
-        timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
-      },
-    )
+    await run(["rebase", expectedOnto])
   } catch (error) {
-    await abortStartedRebase(repository.localPath)
+    const recovery = await recoverOwnedRebase({
+      error,
+      expectedOnto,
+      expectedOrigHead,
+      localPath: repository.localPath,
+      run,
+    })
+    if (recovery === "not-owned" || recovery === "not-recoverable") {
+      throw new Error("同步失败，检测到无法确认归属的 rebase 状态；Synapse 未执行中止，请在 Git 工具中检查。", { cause: error })
+    }
     throw error
   }
 }
@@ -161,6 +184,13 @@ async function commitRepositoryPaths(input: {
     throw new Error("当前没有可提交的改动。")
   }
 
+  const runStateProbe = (args: readonly string[]) => runRepositoryGitCommand(
+    input.gitRootPath,
+    [...args],
+    "无法确认仓库 Git 操作状态。",
+  )
+  await assertGitWorktreeMutationAllowed({ localPath: input.gitRootPath, run: runStateProbe })
+
   const indexResult = await runRepositoryGitCommand(
     input.gitRootPath,
     ["rev-parse", "--git-path", "index"],
@@ -192,6 +222,7 @@ async function commitRepositoryPaths(input: {
     )
 
     const identityArgs = await readCommitIdentityArgs(input.gitRootPath)
+    await assertGitWorktreeMutationAllowed({ localPath: input.gitRootPath, run: runStateProbe })
     await runRepositoryGitCommand(
       input.gitRootPath,
       [

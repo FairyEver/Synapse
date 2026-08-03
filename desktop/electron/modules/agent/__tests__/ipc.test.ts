@@ -33,6 +33,7 @@ import { defaultKnowledgeBaseUserDataPath } from "../../../services/knowledge-ba
 import { PROVIDER_SERVICE_ID } from "../../../services/provider"
 import { agentIpcModule } from "../ipc"
 import { configStore } from "../../../services/config-store"
+import { createConversationHistory183 } from "./fixtures/conversation-history-183"
 
 vi.mock("../../../services/agent-runtime/binary-detect-service", () => ({
   whichBin: vi.fn().mockResolvedValue(null),
@@ -1503,12 +1504,161 @@ describe("agentIpcModule", () => {
     const result = await harness.invoke("synapse:app:agent:operation:get_timeline", {
       projectId: "project-1",
       conversationId: "conv-1",
-    }) as { readonly entries: readonly { readonly content: string }[] }
+    }) as {
+      readonly entries: readonly { readonly content: string }[]
+      readonly total: number
+      readonly startIndex: number
+      readonly hasMore: boolean
+    }
 
     expect(result.entries).toHaveLength(101)
+    expect(result).toEqual(expect.objectContaining({
+      total: 101,
+      startIndex: 0,
+      hasMore: false,
+    }))
     expect(result.entries[0]).toEqual(expect.objectContaining({
       content: "message 1",
     }))
+  })
+
+  it("pages 183 history records at complete user turn boundaries", async () => {
+    const history = createConversationHistory183()
+    const getSession = vi.fn().mockResolvedValue({
+      projectId: "project-1",
+      id: "conv-183",
+      sessionKey: "local:renderer",
+      active: true,
+      history,
+      createdAt: "2026-08-03T00:00:00.000Z",
+      updatedAt: "2026-08-03T00:00:01.000Z",
+    })
+    const harness = createHarness({ agent: { getSession } })
+
+    const latest = await harness.invoke("synapse:app:agent:operation:get_timeline", {
+      projectId: "project-1",
+      conversationId: "conv-183",
+      limit: 100,
+    }) as {
+      readonly entries: readonly { readonly id: string; readonly kind: string }[]
+      readonly total: number
+      readonly startIndex: number
+      readonly hasMore: boolean
+    }
+
+    expect(latest).toEqual(expect.objectContaining({
+      total: 183,
+      startIndex: 3,
+      hasMore: true,
+    }))
+    expect(latest.entries).toHaveLength(180)
+    expect(latest.entries.find((entry) => entry.id.endsWith(":history:82"))?.kind).toBe("toolCall")
+    expect(latest.entries.find((entry) => entry.id.endsWith(":history:83"))?.kind).toBe("toolResult")
+
+    const older = await harness.invoke("synapse:app:agent:operation:get_timeline", {
+      projectId: "project-1",
+      conversationId: "conv-183",
+      limit: 100,
+      beforeIndex: latest.startIndex,
+    }) as {
+      readonly entries: readonly { readonly id: string }[]
+      readonly total: number
+      readonly startIndex: number
+      readonly hasMore: boolean
+    }
+
+    expect(older).toEqual(expect.objectContaining({
+      total: 183,
+      startIndex: 0,
+      hasMore: false,
+    }))
+    expect(older.entries.map((entry) => entry.id)).toEqual([
+      "conv-183:history:0",
+      "conv-183:history:1",
+      "conv-183:history:2",
+    ])
+  })
+
+  it("allows a single user turn to exceed the requested page size", async () => {
+    const history = Array.from({ length: 125 }, (_, index) => ({
+      role: index === 0 ? "user" as const : "assistant" as const,
+      content: `entry ${String(index)}`,
+      timestamp: new Date(Date.UTC(2026, 7, 3, 0, 0, 0, index)).toISOString(),
+      ...(index === 0 ? {} : { metadata: { agentEventType: "thinking" } }),
+    }))
+    const harness = createHarness({
+      agent: {
+        getSession: vi.fn().mockResolvedValue({
+          projectId: "project-1",
+          id: "conv-long-turn",
+          sessionKey: "local:renderer",
+          active: true,
+          history,
+          createdAt: "2026-08-03T00:00:00.000Z",
+          updatedAt: "2026-08-03T00:00:01.000Z",
+        }),
+      },
+    })
+
+    const result = await harness.invoke("synapse:app:agent:operation:get_timeline", {
+      projectId: "project-1",
+      conversationId: "conv-long-turn",
+      limit: 100,
+    }) as { readonly entries: readonly unknown[]; readonly startIndex: number; readonly hasMore: boolean }
+
+    expect(result.entries).toHaveLength(125)
+    expect(result.startIndex).toBe(0)
+    expect(result.hasMore).toBe(false)
+  })
+
+  it("returns empty pagination metadata for an empty conversation", async () => {
+    const harness = createHarness({
+      agent: {
+        getSession: vi.fn().mockResolvedValue({
+          projectId: "project-1",
+          id: "conv-empty",
+          sessionKey: "local:renderer",
+          active: true,
+          history: [],
+          createdAt: "2026-08-03T00:00:00.000Z",
+          updatedAt: "2026-08-03T00:00:01.000Z",
+        }),
+      },
+    })
+
+    await expect(harness.invoke("synapse:app:agent:operation:get_timeline", {
+      projectId: "project-1",
+      conversationId: "conv-empty",
+      limit: 100,
+    })).resolves.toEqual(expect.objectContaining({
+      entries: [],
+      total: 0,
+      startIndex: 0,
+      hasMore: false,
+    }))
+  })
+
+  it("rejects a beforeIndex that splits a persisted turn", async () => {
+    const harness = createHarness({
+      agent: {
+        getSession: vi.fn().mockResolvedValue({
+          projectId: "project-1",
+          id: "conv-183",
+          sessionKey: "local:renderer",
+          active: true,
+          history: createConversationHistory183(),
+          createdAt: "2026-08-03T00:00:00.000Z",
+          updatedAt: "2026-08-03T00:00:01.000Z",
+        }),
+      },
+    })
+
+    await expect(harness.invoke("synapse:app:agent:operation:get_timeline", {
+      projectId: "project-1",
+      conversationId: "conv-183",
+      limit: 100,
+      beforeIndex: 83,
+    })).rejects.toThrow("Invalid conversation history boundary: 83")
   })
 
   it("logs timeline runtime fallback with sanitized correlation context", async () => {

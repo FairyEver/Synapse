@@ -1,4 +1,5 @@
 import type { DriveSyncExcludeRulesDto } from "@synapse/shared" with { "resolution-mode": "import" }
+import ignore from "ignore"
 
 export const DRIVE_SYNC_FORCED_EXCLUDES = [
   ".git/**",
@@ -10,13 +11,13 @@ export const DRIVE_SYNC_FORCED_EXCLUDES = [
   "**/.synapse-drive-sync-*.tmp",
 ] as const
 export const DRIVE_SYNC_DEFAULT_EXCLUDES = [
-  "node_modules/**",
-  "vendor/**",
-  "dist/**",
-  "build/**",
-  "coverage/**",
-  ".cache/**",
-  ".tmp/**",
+  "node_modules/",
+  "vendor/",
+  "dist/",
+  "build/",
+  "coverage/",
+  ".cache/",
+  ".tmp/",
   ".DS_Store",
   "*.log",
 ] as const
@@ -36,7 +37,11 @@ export function createDefaultDriveSyncExcludeRules(): DriveSyncExcludeRulesDto {
   }
 }
 
-export function isDriveSyncExcluded(relativePath: string, rules: DriveSyncExcludeRulesDto): boolean {
+export function isDriveSyncExcluded(
+  relativePath: string,
+  rules: DriveSyncExcludeRulesDto,
+  kind?: "file" | "folder" | null,
+): boolean {
   const normalized = normalizeRelativePath(relativePath)
   if (normalized === "") return false
   if ([
@@ -46,17 +51,16 @@ export function isDriveSyncExcluded(relativePath: string, rules: DriveSyncExclud
     return true
   }
 
-  let excluded = false
-  for (const rawRule of [
+  const editableRules = [
     ...rules.defaults,
     ...rules.importedGitignore,
     ...rules.user,
-  ]) {
-    const rule = parseDriveSyncExcludeRule(rawRule)
-    if (!rule || !matchesParsedRule(normalized, rule)) continue
-    excluded = !rule.negated
-  }
-  return excluded
+  ]
+  if (editableRules.length === 0) return false
+  const matcher = ignore().add(editableRules)
+  if (kind === "file") return matcher.ignores(normalized)
+  if (kind === "folder") return matcher.ignores(`${normalized}/`)
+  return matcher.ignores(normalized) || matcher.ignores(`${normalized}/`)
 }
 
 export function hasDriveSyncIncludedDescendant(relativePath: string, rules: DriveSyncExcludeRulesDto): boolean {
@@ -72,18 +76,17 @@ export function hasDriveSyncIncludedDescendant(relativePath: string, rules: Driv
     ...rules.defaults,
     ...rules.importedGitignore,
     ...rules.user,
-  ].some((rawRule) => {
-    const rule = parseDriveSyncExcludeRule(rawRule)
-    return rule?.negated === true && couldMatchDescendant(normalized, rule)
-  })
+  ].some((rawRule) => isNegatedRule(rawRule))
 }
 
 export function parseGitignoreForDriveSync(content: string): readonly string[] {
   return content
     .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith("#") && line !== "!")
-    .map((line) => line.endsWith("/") ? `${line}**` : line)
+    .filter((line) => line.trim().length > 0 && !line.startsWith("#") && line !== "!")
+}
+
+function isNegatedRule(rawRule: string): boolean {
+  return rawRule.startsWith("!") && !rawRule.startsWith("\\!") && rawRule.length > 1
 }
 
 function matchesRule(relativePath: string, rawRule: string): boolean {
@@ -120,13 +123,6 @@ function parseDriveSyncExcludeRule(rawRule: string): ParsedDriveSyncExcludeRule 
   const pattern = normalizeRelativePath(normalizedRaw)
   if (!pattern) return null
   return { pattern, negated, rootAnchored }
-}
-
-function couldMatchDescendant(directory: string, rule: ParsedDriveSyncExcludeRule): boolean {
-  if (matchesParsedRule(directory, rule)) return true
-  if (rule.pattern.includes("*")) return true
-  if (!rule.rootAnchored && !rule.pattern.includes("/")) return true
-  return rule.pattern.startsWith(`${directory}/`)
 }
 
 function matchesRootDirectoryRule(relativePath: string, directory: string): boolean {

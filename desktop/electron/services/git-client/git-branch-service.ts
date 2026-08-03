@@ -8,6 +8,7 @@ import type {
 } from "../../../src/types/git"
 import type { StructuredLogger } from "../../runtime/logging"
 import type { GitClientCommandRunner } from "./git-command-runner"
+import { assertNoIgnoredPathCollisions } from "../git-working-tree-safety"
 import {
   createGitOperationId,
   logGitOperationBlocked,
@@ -67,6 +68,26 @@ export function createGitBranchService(deps: BranchDeps) {
     }
   }
 
+  async function assertCheckoutSafe(
+    repository: SynapseGitRepository,
+    target: string,
+    operation: string,
+    operationId: string,
+  ): Promise<void> {
+    await assertNoIgnoredPathCollisions({
+      target,
+      run: (args, streamOptions) => deps.commandRunner.run({
+        cwd: repository.localPath,
+        args,
+        ...streamOptions,
+        operation,
+        operationId,
+        repoPath: repository.localPath,
+        repositoryId: repository.id,
+      }),
+    })
+  }
+
   return {
     async list(repository: SynapseGitRepository): Promise<SynapseGitBranch[]> {
       const operation = "git.branch.list"
@@ -106,9 +127,11 @@ export function createGitBranchService(deps: BranchDeps) {
       logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, meta)
       try {
         await assertClean(repository, operation, operationId)
+        const validatedBranchName = await validateBranchName(repository, branchName, operation, operationId)
+        await assertCheckoutSafe(repository, validatedBranchName, operation, operationId)
         await deps.commandRunner.run({
           cwd: repository.localPath,
-          args: ["checkout", await validateBranchName(repository, branchName, operation, operationId)],
+          args: ["checkout", "--no-overwrite-ignore", validatedBranchName],
           abortSignal: options.signal,
           operation,
           operationId,
@@ -169,22 +192,36 @@ export function createGitBranchService(deps: BranchDeps) {
     async listRemote(repository: SynapseGitRepository): Promise<SynapseGitRemoteBranchGroup[]> {
       const operation = "git.branch.list-remote"
       const operationId = createGitOperationId()
-      const result = await deps.commandRunner.run({
-        cwd: repository.localPath,
-        args: ["for-each-ref", "--format=%(refname:strip=2)%00%(symref)", "refs/remotes"],
-        operation,
-        operationId,
-        repoPath: repository.localPath,
-        repositoryId: repository.id,
-      })
+      const [remotesResult, result] = await Promise.all([
+        deps.commandRunner.run({
+          cwd: repository.localPath,
+          args: ["remote"],
+          operation,
+          operationId,
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
+        }),
+        deps.commandRunner.run({
+          cwd: repository.localPath,
+          args: ["for-each-ref", "--format=%(refname:strip=2)%00%(symref)", "refs/remotes"],
+          operation,
+          operationId,
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
+        }),
+      ])
+      const remoteNames = remotesResult.stdout.split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .sort((left, right) => right.length - left.length)
       const groups = new Map<string, Array<{ name: string; fullName: string }>>()
       for (const line of result.stdout.split(/\r?\n/)) {
         const [fullName = "", symbolicTarget = ""] = line.split("\0")
         if (!fullName || symbolicTarget || fullName.endsWith("/HEAD")) continue
-        const separator = fullName.indexOf("/")
-        if (separator <= 0 || separator === fullName.length - 1) continue
-        const remoteName = fullName.slice(0, separator)
-        const name = fullName.slice(separator + 1)
+        const remoteName = remoteNames.find((candidate) => fullName.startsWith(`${candidate}/`))
+        if (!remoteName) continue
+        const name = fullName.slice(remoteName.length + 1)
+        if (!name) continue
         const branches = groups.get(remoteName) ?? []
         branches.push({ name, fullName })
         groups.set(remoteName, branches)
@@ -319,11 +356,18 @@ export function createGitBranchService(deps: BranchDeps) {
           }
         }
 
+        await assertCheckoutSafe(
+          repository,
+          localExists ? localBranchName : remoteBranchName,
+          operation,
+          operationId,
+        )
+
         await deps.commandRunner.run({
           cwd: repository.localPath,
           args: localExists
-            ? ["checkout", localBranchName]
-            : ["checkout", "-b", localBranchName, "--track", remoteBranchName],
+            ? ["checkout", "--no-overwrite-ignore", localBranchName]
+            : ["checkout", "--no-overwrite-ignore", "-b", localBranchName, "--track", remoteBranchName],
           abortSignal: options.signal,
           operation,
           operationId,

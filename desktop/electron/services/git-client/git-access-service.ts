@@ -129,6 +129,8 @@ const ACCESS_ENV_ALLOWLIST = [
 const FIRST_CONTROL_CHAR_CODE = 0
 const LAST_CONTROL_CHAR_CODE = 31
 const DELETE_CONTROL_CHAR_CODE = 127
+const MAX_ACCESS_PROCESS_OUTPUT_BYTES = 1024 * 1024
+const ACCESS_PROCESS_TERMINATION_GRACE_MS = 1_000
 
 function normalizeHost(host: string): string {
   return host.trim().toLowerCase()
@@ -452,12 +454,31 @@ function runProcess(input: ProcessRunInput, options: { readonly effectivePath?: 
         effectivePath: options.effectivePath,
         platform: options.platform,
       }),
+      detached: options.platform !== "win32",
       windowsHide: true,
     })
-    let stdout = ""
-    let stderr = ""
+    const stdoutChunks: Buffer[] = []
+    const stderrChunks: Buffer[] = []
+    let stdoutBytes = 0
+    let stderrBytes = 0
     let settled = false
     let killTimeout: NodeJS.Timeout | null = null
+    let timeout: NodeJS.Timeout
+    const output = () => ({
+      stdout: Buffer.concat(stdoutChunks, stdoutBytes).toString("utf8"),
+      stderr: Buffer.concat(stderrChunks, stderrBytes).toString("utf8"),
+    })
+    function terminate(signal: NodeJS.Signals): void {
+      if (options.platform !== "win32" && typeof childProcess.pid === "number") {
+        try {
+          process.kill(-childProcess.pid, signal)
+          return
+        } catch {
+          // Fall back to the direct child when the process group is already gone.
+        }
+      }
+      childProcess.kill(signal)
+    }
     function settle(callback: () => void): void {
       if (settled) return
       settled = true
@@ -465,22 +486,37 @@ function runProcess(input: ProcessRunInput, options: { readonly effectivePath?: 
       if (killTimeout) clearTimeout(killTimeout)
       callback()
     }
-    const timeout = setTimeout(() => {
+    function rejectAndTerminate(message: string): void {
       if (settled) return
       settled = true
       clearTimeout(timeout)
-      childProcess.kill("SIGTERM")
+      terminate("SIGTERM")
       killTimeout = setTimeout(() => {
-        childProcess.kill("SIGKILL")
-      }, 1_000)
-      reject(createProcessError(`${input.command} timed out.`, { stderr, stdout }))
+        terminate("SIGKILL")
+      }, ACCESS_PROCESS_TERMINATION_GRACE_MS)
+      reject(createProcessError(message, output()))
+    }
+    timeout = setTimeout(() => {
+      rejectAndTerminate(`${input.command} timed out.`)
     }, input.timeoutMs ?? 30_000)
 
     childProcess.stdout?.on("data", (chunk) => {
-      stdout += String(chunk)
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      if (stdoutBytes + buffer.length > MAX_ACCESS_PROCESS_OUTPUT_BYTES) {
+        rejectAndTerminate(`${input.command} produced too much output.`)
+        return
+      }
+      stdoutChunks.push(buffer)
+      stdoutBytes += buffer.length
     })
     childProcess.stderr?.on("data", (chunk) => {
-      stderr += String(chunk)
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      if (stderrBytes + buffer.length > MAX_ACCESS_PROCESS_OUTPUT_BYTES) {
+        rejectAndTerminate(`${input.command} produced too much error output.`)
+        return
+      }
+      stderrChunks.push(buffer)
+      stderrBytes += buffer.length
     })
     childProcess.on("error", (error) => {
       if (settled && killTimeout) {
@@ -495,6 +531,7 @@ function runProcess(input: ProcessRunInput, options: { readonly effectivePath?: 
         return
       }
       settle(() => {
+        const { stderr, stdout } = output()
         if (code === 0) {
           resolve({ stderr, stdout })
           return
@@ -592,6 +629,13 @@ export function createGitAccessService(deps: GitAccessDeps) {
   const runGitCredential = deps.runGitCredential ?? ((input) => runDefaultGitCredential(input, processRunner))
   const runSshKeygen = deps.runSshKeygen ?? ((input) => runDefaultSshKeygen(input, processRunner))
   const runSshTest = deps.runSshTest ?? ((input) => runDefaultSshTest(input, processRunner))
+  let knownHostsMutationQueue: Promise<void> = Promise.resolve()
+
+  function withKnownHostsMutation<T>(task: () => Promise<T>): Promise<T> {
+    const result = knownHostsMutationQueue.catch(() => undefined).then(task)
+    knownHostsMutationQueue = result.then(() => undefined, () => undefined)
+    return result
+  }
 
   async function scanSshHostKey(hostInput: string, portInput?: number | null): Promise<{
     readonly candidate: SynapseGitSshHostKeyCandidate
@@ -990,7 +1034,7 @@ export function createGitAccessService(deps: GitAccessDeps) {
           resource: knownHostsPath,
           metadata: { host, port, operation: "git.access.trustSshHostKey" },
         },
-      ], async () => {
+      ], () => withKnownHostsMutation(async () => {
         const scanned = await scanSshHostKey(host, port)
         if (scanned.candidate.changed) {
           throw new Error("SSH 主机密钥与 known_hosts 中的记录不一致，请人工核验。")
@@ -1006,9 +1050,10 @@ export function createGitAccessService(deps: GitAccessDeps) {
         const temporaryPath = `${knownHostsPath}.synapse-${String(process.pid)}-${String(Date.now())}`
         await writePublicKey(temporaryPath, next, "utf8")
         await renameFile(temporaryPath, knownHostsPath)
-      })
+      }))
     },
   }
 }
 
 export type GitAccessService = ReturnType<typeof createGitAccessService>
+export { runProcess }

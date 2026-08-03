@@ -34,7 +34,8 @@ import {
   sessionSummarySchema,
   resolveProjectAgent,
   resolveTimelineSession,
-  historyEntries,
+  historyPage,
+  InvalidConversationHistoryBoundaryError,
   assertKnowledgeBaseStorageMigrationInactive,
 } from "./ipc-shared"
 
@@ -294,6 +295,9 @@ const timelineResultSchema = z.object({
   sessionKey: z.string(),
   conversationId: z.string().optional(),
   entries: z.array(timelineItemSchema),
+  total: z.number().int().nonnegative(),
+  startIndex: z.number().int().nonnegative(),
+  hasMore: z.boolean(),
 })
 
 const pendingPermissionSchema = z.object({
@@ -340,18 +344,23 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       try {
         const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
         const session = await resolveTimelineSession(agent, request)
+        const page = session
+          ? historyPage(session, request)
+          : { entries: [], total: 0, startIndex: 0, hasMore: false }
         return {
           projectId: request.projectId,
           sessionKey: request.sessionKey ?? session?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY,
           conversationId: session?.id,
-          entries: session ? historyEntries(session, request.limit) : [],
+          ...page,
         }
       } catch (rawError) {
+        if (rawError instanceof InvalidConversationHistoryBoundaryError) throw rawError
         logger.warn("Agent timeline runtime lookup failed; trying repository fallback.", {
           projectId: request.projectId,
           sessionKey: request.sessionKey ? REDACTED : undefined,
           hasConversationId: Boolean(request.conversationId),
           limit: request.limit,
+          beforeIndex: request.beforeIndex,
           boundary: "agent.timeline.runtime",
           ...timelineLookupErrorMeta(rawError),
         })
@@ -365,13 +374,17 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
             sessionKey: request.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY,
             conversationId: request.conversationId,
             entries: [],
+            total: 0,
+            startIndex: 0,
+            hasMore: false,
           }
         }
+        const page = historyPage(session, request)
         return {
           projectId: request.projectId,
           sessionKey: session.sessionKey,
           conversationId: session.id,
-          entries: historyEntries(session, request.limit),
+          ...page,
         }
       }
     },
@@ -406,11 +419,14 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
         getTimeline: async () => {
           const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
           const session = await resolveTimelineSession(agent, request)
+          const page = session
+            ? historyPage(session)
+            : { entries: [], total: 0, startIndex: 0, hasMore: false }
           return {
             projectId: request.projectId,
             sessionKey: request.sessionKey ?? session?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY,
             conversationId: session?.id,
-            entries: session ? historyEntries(session) : [],
+            ...page,
           }
         },
         getLiveState: async () => {

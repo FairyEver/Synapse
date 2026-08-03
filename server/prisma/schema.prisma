@@ -324,6 +324,13 @@ model DriveChange {
   @@index([userId, sequence])
   @@index([itemId, sequence])
   @@index([userId, itemId, sequence])
+  @@index([occurredAt])
+}
+
+model DriveChangeRetentionState {
+  id                    String   @id
+  purgedThroughSequence BigInt   @default(0)
+  updatedAt             DateTime @updatedAt
 }
 
 model DriveShare {

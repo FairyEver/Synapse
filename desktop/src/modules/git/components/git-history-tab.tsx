@@ -9,20 +9,18 @@ import {
 import { RelativeTime } from "@/components/relative-time"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { SynapseGitFileChange } from "@/types/git"
+import type { SynapseGitCommitFileChange } from "@/types/git"
 import type { useGitHistory } from "../hooks/use-git-history"
 
 type GitHistoryTabProps = {
   readonly history: ReturnType<typeof useGitHistory>
 }
 
-const statusLabels: Record<SynapseGitFileChange["status"], string> = {
+const statusLabels: Record<SynapseGitCommitFileChange["status"], string> = {
   added: "新增",
   modified: "修改",
   deleted: "删除",
   renamed: "重命名",
-  untracked: "未跟踪",
-  conflicted: "冲突",
   unknown: "未知",
 }
 

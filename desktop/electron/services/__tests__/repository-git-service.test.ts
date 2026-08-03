@@ -16,11 +16,16 @@ const mocks = vi.hoisted(() => ({
   },
   runGitCommand: vi.fn(),
   isGitRebaseInProgress: vi.fn(),
+  assertGitWorktreeMutationAllowed: vi.fn(),
 }))
 
 vi.mock("../git-command", () => ({
   isGitRebaseInProgress: mocks.isGitRebaseInProgress,
   runGitCommand: mocks.runGitCommand,
+}))
+
+vi.mock("../git-operation-state", () => ({
+  assertGitWorktreeMutationAllowed: mocks.assertGitWorktreeMutationAllowed,
 }))
 
 vi.mock("../log-store", () => ({
@@ -53,12 +58,14 @@ describe("repositoryGitService", () => {
     vi.clearAllMocks()
     mocks.repositoryLockManager.acquire.mockResolvedValue(vi.fn())
     mocks.repositoryStore.getRepositoryState.mockResolvedValue(readyGitState)
+    mocks.assertGitWorktreeMutationAllowed.mockResolvedValue(undefined)
   })
 
   it("keeps sync successful when ahead count fails after a successful pull", async () => {
     const aheadError = new Error("fatal: no upstream configured")
     mocks.runGitCommand.mockImplementation(async (input: { args: string[] }) => {
-      if (input.args[0] === "pull") return { stdout: "", stderr: "" }
+      if (input.args[0] === "fetch" || input.args[0] === "merge" || input.args[0] === "ls-files" || input.args[0] === "ls-tree") return { stdout: "", stderr: "" }
+      if (input.args[0] === "rev-parse") return { stdout: input.args[1] === "HEAD" ? "local-head\n" : "remote-head\n", stderr: "" }
       if (input.args[0] === "rev-list") throw aheadError
       throw new Error(`unexpected git command: ${input.args.join(" ")}`)
     })
@@ -91,8 +98,11 @@ describe("repositoryGitService", () => {
       { output: "fatal: Not possible to fast-forward, aborting." },
     )
     mocks.runGitCommand.mockImplementation(async (input: { args: string[] }) => {
-      if (input.args[0] === "pull" && input.args.includes("--ff-only")) throw formattedDivergedError
-      if (input.args[0] === "pull" && input.args.includes("--rebase")) return { stdout: "", stderr: "" }
+      if (input.args[0] === "fetch" || input.args[0] === "ls-files" || input.args[0] === "ls-tree") return { stdout: "", stderr: "" }
+      if (input.args[0] === "rev-parse") return { stdout: input.args[1] === "HEAD" ? "local-head\n" : "remote-head\n", stderr: "" }
+      if (input.args[0] === "merge") throw formattedDivergedError
+      if (input.args[0] === "rebase") return { stdout: "", stderr: "" }
+      if (input.args[0] === "rev-list") return { stdout: "1\n", stderr: "" }
       if (input.args[0] === "push") return { stdout: "", stderr: "" }
       throw new Error(`unexpected git command: ${input.args.join(" ")}`)
     })
@@ -105,7 +115,7 @@ describe("repositoryGitService", () => {
       }))
 
     expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["pull", "--rebase", "--progress"],
+      args: ["rebase", "remote-head"],
     }))
     expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
       args: ["push", "--progress"],
@@ -119,7 +129,9 @@ describe("repositoryGitService", () => {
     )
     mocks.isGitRebaseInProgress.mockResolvedValueOnce(true)
     mocks.runGitCommand.mockImplementation(async (input: { args: string[] }) => {
-      if (input.args[0] === "pull" && input.args.includes("--ff-only")) throw formattedDivergedError
+      if (input.args[0] === "fetch" || input.args[0] === "ls-files" || input.args[0] === "ls-tree") return { stdout: "", stderr: "" }
+      if (input.args[0] === "rev-parse") return { stdout: input.args[1] === "HEAD" ? "local-head\n" : "remote-head\n", stderr: "" }
+      if (input.args[0] === "merge") throw formattedDivergedError
       throw new Error(`unexpected git command: ${input.args.join(" ")}`)
     })
 
@@ -128,7 +140,7 @@ describe("repositoryGitService", () => {
       .toThrow("当前仓库正在进行 rebase")
 
     expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
-      args: ["pull", "--rebase", "--progress"],
+      args: ["rebase", "remote-head"],
     }))
     expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
       args: ["rebase", "--abort"],
@@ -152,7 +164,7 @@ describe("repositoryGitService", () => {
       operation: "repository.sync",
       operationId: expect.any(String),
       repositoryUuid: "repo-1",
-      gitArgs: ["pull", "--ff-only", "--progress"],
+      gitArgs: ["fetch", "--prune", "--progress"],
       exitCode: 128,
       stderrPreview: expect.stringContaining("[redacted]"),
     }))

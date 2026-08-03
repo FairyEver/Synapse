@@ -70,7 +70,11 @@ export function planDriveSyncLocalChanges(input: {
 
   for (const change of input.changes) {
     if (consumedMovePaths.has(change.relativePath)) continue
-    if (isDriveSyncExcluded(change.relativePath, input.binding.excludeRules)) continue
+    if (isDriveSyncExcluded(
+      change.relativePath,
+      input.binding.excludeRules,
+      change.localKind === "file" || change.localKind === "folder" ? change.localKind : baselineByPath.get(change.relativePath)?.kind,
+    )) continue
     if (input.binding.kind === "folder" && change.relativePath === "") continue
     const baseline = baselineByPath.get(change.relativePath)
     if (baseline && change.kind !== "deleted" && baseline.kind === "folder" && change.localKind === "folder") continue
@@ -124,12 +128,20 @@ function detectLocalMoveOperations(input: {
   const activeBaseline = input.baseline.filter((entry) => entry.deletedAt === null)
   const changesByPath = new Map(input.changes.map((change) => [change.relativePath, change] as const))
   const deletedChanges = input.changes.filter((change) =>
-    change.kind === "deleted" && !isDriveSyncExcluded(change.relativePath, input.binding.excludeRules),
+    change.kind === "deleted" && !isDriveSyncExcluded(
+      change.relativePath,
+      input.binding.excludeRules,
+      input.baselineByPath.get(change.relativePath)?.kind,
+    ),
   )
   const createdChanges = input.changes.filter((change) =>
     change.kind === "created"
     && !input.baselineByPath.has(change.relativePath)
-    && !isDriveSyncExcluded(change.relativePath, input.binding.excludeRules),
+    && !isDriveSyncExcluded(
+      change.relativePath,
+      input.binding.excludeRules,
+      change.localKind === "file" || change.localKind === "folder" ? change.localKind : null,
+    ),
   )
   const usedDeleted = new Set<string>()
   const usedCreated = new Set<string>()
@@ -292,7 +304,7 @@ export function planDriveSyncRemoteChanges(input: {
       ? (hasCurrentPathHint ? currentRelativePath : previousRelativePath) ?? (isRemoteMoveOutsideRoot ? baseline.relativePath : null)
       : baseline?.relativePath ?? currentRelativePath
     if (relativePath === null) continue
-    if (isDriveSyncExcluded(relativePath, input.binding.excludeRules)) continue
+    if (isDriveSyncExcluded(relativePath, input.binding.excludeRules, change.itemKind ?? baseline?.kind)) continue
     if (isDescendantOfAnyRoot(relativePath, recursiveDownloadFolderRoots)) continue
     if (input.shouldIgnoreChange?.(change, relativePath, baseline)) continue
     const localPath = path.join(input.binding.localPath, relativePath)
@@ -375,7 +387,7 @@ function recursiveDownloadFolderRelativePaths(
   for (const change of changes) {
     if ((change.type !== "created" && change.type !== "restored") || change.itemKind !== "folder") continue
     const relativePath = remoteRelativePath(binding, currentPathChange(change))
-    if (relativePath === null || isDriveSyncExcluded(relativePath, binding.excludeRules)) continue
+    if (relativePath === null || isDriveSyncExcluded(relativePath, binding.excludeRules, "folder")) continue
     roots.add(relativePath)
   }
   return roots

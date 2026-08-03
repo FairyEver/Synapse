@@ -64,6 +64,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   const recommendedAction = actionPlan.primaryAction
   const changes = status.snapshot?.changes ?? []
   const selectedChanges = changes.filter((change) => status.selectedPaths.includes(change.path))
+  const worktreeMutationBlocked = Boolean(status.snapshot && status.snapshot.repositoryOperationState !== "normal")
   const syncBoundaryBlocked = status.snapshot?.trackingStatus === "gone"
     || Boolean(status.snapshot && status.snapshot.ahead > 0 && status.snapshot.behind > 0)
   const syncBoundaryPlan = syncBoundaryBlocked && status.snapshot
@@ -195,7 +196,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
           <GitBranchSwitcher
             repository={repository}
             currentBranch={currentBranch}
-            disabled={busy !== null}
+            disabled={busy !== null || worktreeMutationBlocked}
             mode="select"
             selectWidth="compact"
             refreshKey={branchRefreshKey}
@@ -232,7 +233,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
                   type="button"
                   variant="destructive"
                   size="sm"
-                  disabled={busy !== null || selectedChanges.length === 0}
+                  disabled={busy !== null || worktreeMutationBlocked || selectedChanges.length === 0}
                   onClick={() => setDiscardDialogOpen(true)}
                 >
                   丢弃改动
@@ -254,7 +255,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  disabled={!canRunGitOperation || syncBoundaryBlocked}
+                  disabled={!canRunGitOperation || worktreeMutationBlocked || syncBoundaryBlocked}
                   onSelect={() => void run("pull", (operationId) => requireSynapseBridge().git.pull(repository.id, operationId))}
                 >
                   拉取
@@ -266,7 +267,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
                   推送
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  disabled={!canRunGitOperation || syncBoundaryBlocked}
+                  disabled={!canRunGitOperation || worktreeMutationBlocked || syncBoundaryBlocked}
                   onSelect={() => void run("sync", (operationId) => requireSynapseBridge().git.sync(repository.id, operationId))}
                 >
                   同步
@@ -336,7 +337,15 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
           </Alert>
         </div>
       ) : null}
-      {!operationError && syncBoundaryBlocked ? (
+      {!operationError && worktreeMutationBlocked ? (
+        <div className="shrink-0 px-4 py-3">
+          <Alert>
+            <AlertTitle>{actionPlan.blockerText}</AlertTitle>
+            <AlertDescription>{actionPlan.recoveryText}</AlertDescription>
+          </Alert>
+        </div>
+      ) : null}
+      {!operationError && !worktreeMutationBlocked && syncBoundaryBlocked ? (
         <div className="shrink-0 px-4 py-3">
           <Alert>
             <AlertTitle>{syncBoundaryPlan?.blockerText}</AlertTitle>

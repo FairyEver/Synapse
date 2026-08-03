@@ -1,9 +1,18 @@
 import { describe, expect, it, vi } from "vitest"
 import { DriveChangeLogService } from "./drive-change-log"
 
+function retentionState(purgedThroughSequence = 0n) {
+  return {
+    driveChangeRetentionState: {
+      findUnique: vi.fn(async () => ({ purgedThroughSequence })),
+    },
+  }
+}
+
 describe("DriveChangeLogService", () => {
   it("appends a scoped Drive change record without storage secrets", async () => {
     const prisma = {
+      ...retentionState(),
       driveItem: {
         findMany: vi.fn(async () => [
           { id: "item-1", parentId: "folder-1", type: "file", name: "report.md" },
@@ -60,6 +69,7 @@ describe("DriveChangeLogService", () => {
 
   it("lists changes after a cursor with next cursor metadata", async () => {
     const prisma = {
+      ...retentionState(),
       driveItem: {
         findMany: vi.fn(async ({ where }) => {
           const ids = new Set(where.id.in)
@@ -114,6 +124,7 @@ describe("DriveChangeLogService", () => {
 
   it("lists changes with scoped root filters", async () => {
     const prisma = {
+      ...retentionState(),
       driveItem: {
         findMany: vi.fn(async () => []),
       },
@@ -181,6 +192,7 @@ describe("DriveChangeLogService", () => {
       { id: "remote-report", parentId: "nested", type: "file", name: "report.md" },
     ]
     const prisma = {
+      ...retentionState(),
       driveItem: {
         findMany: vi.fn(async ({ where }) => {
           if (where.parentId?.in) {
@@ -245,6 +257,7 @@ describe("DriveChangeLogService", () => {
     ]
     let scopedFolderQueries = 0
     const prisma = {
+      ...retentionState(),
       driveItem: {
         findMany: vi.fn(async ({ where }) => {
           if (where.parentId?.in) {
@@ -297,6 +310,7 @@ describe("DriveChangeLogService", () => {
 
   it("returns the current cursor without replaying historical changes", async () => {
     const prisma = {
+      ...retentionState(),
       driveItem: {
         findMany: vi.fn(),
       },
@@ -320,5 +334,72 @@ describe("DriveChangeLogService", () => {
     })
     expect(prisma.driveChange.findMany).not.toHaveBeenCalled()
     expect(prisma.driveItem.findMany).not.toHaveBeenCalled()
+  })
+
+  it("requires a resync when an explicit cursor is at the retention watermark", async () => {
+    const prisma = {
+      ...retentionState(42n),
+      driveItem: { findMany: vi.fn() },
+      driveChange: {
+        findFirst: vi.fn(async () => ({ sequence: 80n })),
+        findMany: vi.fn(),
+      },
+    }
+    const service = new DriveChangeLogService(prisma as never)
+
+    await expect(service.list("user-1", { cursor: "42", limit: 10 })).resolves.toEqual({
+      items: [],
+      nextCursor: "80",
+      hasMore: false,
+      resyncRequired: true,
+    })
+    expect(prisma.driveChange.findMany).not.toHaveBeenCalled()
+  })
+
+  it("lets a new client without a cursor read the retained change range", async () => {
+    const prisma = {
+      ...retentionState(42n),
+      driveItem: { findMany: vi.fn(async () => []) },
+      driveChange: { findMany: vi.fn(async () => []) },
+    }
+    const service = new DriveChangeLogService(prisma as never)
+
+    await expect(service.list("user-1", { limit: 10 })).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+      resyncRequired: false,
+    })
+    expect(prisma.driveChange.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ userId: "user-1", sequence: { gt: 0n } }),
+    }))
+  })
+
+  it("advances the retention watermark in the same transaction as cleanup", async () => {
+    const client = {
+      driveChange: {
+        findFirst: vi.fn(async () => ({ sequence: 50n })),
+        deleteMany: vi.fn(async () => ({ count: 12 })),
+      },
+      driveChangeRetentionState: {
+        findUnique: vi.fn(async () => ({ purgedThroughSequence: 40n })),
+        upsert: vi.fn(async () => undefined),
+      },
+    }
+    const prisma = {
+      $transaction: vi.fn(async (action) => action(client)),
+    }
+    const service = new DriveChangeLogService(prisma as never)
+
+    await expect(service.cleanupExpiredChanges(new Date("2026-08-02T00:00:00.000Z"))).resolves.toEqual({
+      deleted: 12,
+      purgedThroughSequence: "50",
+    })
+    expect(client.driveChange.deleteMany).toHaveBeenCalledWith({
+      where: { occurredAt: { lt: new Date("2026-05-04T00:00:00.000Z") } },
+    })
+    expect(client.driveChangeRetentionState.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      update: { purgedThroughSequence: 50n },
+    }))
   })
 })

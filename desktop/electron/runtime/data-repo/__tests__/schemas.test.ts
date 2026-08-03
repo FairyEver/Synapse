@@ -160,6 +160,124 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(driveSyncStateSchema.backend).toBe("json")
   })
 
+  it("migrates drive sync metadata through the resumable binding v3 model", async () => {
+    expect(driveSyncBindingsSchema.currentVersion).toBe(3)
+    expect(driveSyncBaselineSchema.currentVersion).toBe(2)
+    expect(driveSyncOperationsSchema.currentVersion).toBe(2)
+    expect(driveSyncConflictsSchema.currentVersion).toBe(2)
+    expect(driveSyncStateSchema.currentVersion).toBe(2)
+
+    await expect(runMigrations({
+      namespace: driveSyncBindingsSchema.name,
+      currentVersion: 1,
+      targetVersion: 2,
+      migrations: driveSyncBindingsSchema.migrations,
+      data: [{ schemaVersion: 1, id: "legacy-binding" }],
+    })).resolves.toEqual([])
+    await expect(runMigrations({
+      namespace: driveSyncBindingsSchema.name,
+      currentVersion: 2,
+      targetVersion: 3,
+      migrations: driveSyncBindingsSchema.migrations,
+      data: [{
+        id: "binding-2",
+        schemaVersion: 2,
+        ownerUserId: "user-1",
+        status: "initializing",
+      }],
+    })).resolves.toEqual([expect.objectContaining({
+      id: "binding-2",
+      schemaVersion: 3,
+      ownerUserId: "user-1",
+      status: "initializing",
+      initialPhase: "reconcile",
+      initialCursor: null,
+    })])
+    await expect(runMigrations({
+      namespace: driveSyncStateSchema.name,
+      currentVersion: 1,
+      targetVersion: 2,
+      migrations: driveSyncStateSchema.migrations,
+      data: { schemaVersion: 1, health: "error", lastError: "legacy" },
+    })).resolves.toMatchObject({
+      schemaVersion: 2,
+      ownerUserId: null,
+      health: "idle",
+      lastError: null,
+      healthByOwner: {},
+    })
+  })
+
+  it("validates complete drive sync v3 ownership, recovery, retry, snapshot, and health fields", () => {
+    expect(driveSyncBindingsSchema.validate({
+      id: "binding-2",
+      schemaVersion: 3,
+      ownerUserId: "user-1",
+      initialDirection: "bind_existing",
+      initialPhase: "reconcile",
+      initialCursor: "40",
+      driveItemId: "drive-item-1",
+      remoteParentId: null,
+      driveItemName: "spec.md",
+      kind: "file",
+      drivePathHint: "/spec.md",
+      localPath: "/Users/me/spec.md",
+      status: "initializing",
+      remoteCursor: null,
+      lastSyncedAt: null,
+      lastError: null,
+      excludeRules: { forced: [], defaults: [], importedGitignore: [], user: [] },
+      createdAt: "2026-06-28T00:00:00.000Z",
+      updatedAt: "2026-06-28T00:00:00.000Z",
+    })).toBe(true)
+    expect(driveSyncOperationsSchema.validate({
+      id: "operation-2",
+      schemaVersion: 2,
+      bindingId: "binding-2",
+      kind: "upload",
+      status: "retry_wait",
+      driveItemId: "drive-item-1",
+      relativePath: "",
+      localPath: "/Users/me/spec.md",
+      remotePathHint: "/spec.md",
+      message: "retry",
+      createdAt: "2026-06-28T00:00:00.000Z",
+      updatedAt: "2026-06-28T00:00:00.000Z",
+      startedAt: "2026-06-28T00:00:00.000Z",
+      completedAt: null,
+      attemptCount: 2,
+      nextRetryAt: "2026-06-28T00:01:00.000Z",
+      completedBytes: 2,
+      totalBytes: 4,
+      remoteItemKind: "file",
+      source: "local",
+      snapshotPath: "/tmp/snapshot",
+      snapshotHash: "abc",
+      snapshotSize: 4,
+      snapshotMtimeMs: 1,
+    })).toBe(true)
+    expect(driveSyncStateSchema.validate({
+      schemaVersion: 2,
+      ownerUserId: "user-1",
+      health: "retrying",
+      lastCursor: null,
+      lastStartedAt: null,
+      lastStoppedAt: null,
+      lastError: "retry",
+      updatedAt: "2026-06-28T00:00:00.000Z",
+      healthByOwner: {
+        "user-1": {
+          health: "retrying",
+          lastCursor: null,
+          lastStartedAt: null,
+          lastStoppedAt: null,
+          lastError: "retry",
+          updatedAt: "2026-06-28T00:00:00.000Z",
+        },
+      },
+    })).toBe(true)
+  })
+
   it("encrypted flag is set only on secret-bearing namespaces", () => {
     for (const schema of allSchemas) {
       const expected = schema.name === "secrets"

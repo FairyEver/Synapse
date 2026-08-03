@@ -27,7 +27,7 @@ function SettingsCategorySidebar({
             data-track="settings-category-select"
             trackValue={category.id}
             onClick={() => onCategoryChange(category.id)}
-            className="h-8 px-4"
+            className="h-8 px-4 font-normal"
           >
             {category.label}
           </ModuleSidebarItem>

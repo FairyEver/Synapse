@@ -8,6 +8,7 @@ vi.mock("electron", () => ({
 }))
 
 import { dialog } from "electron"
+import { createInMemoryHarness } from "../../../runtime/ipc"
 import { driveSyncIpcModule } from "../ipc"
 
 describe("driveSyncIpcModule", () => {
@@ -53,12 +54,14 @@ describe("driveSyncIpcModule", () => {
       operations: [],
       health: {
         status: "error",
+        readOnly: false,
         lastError: "network unavailable",
         updatedAt: "2026-06-28T00:00:00.000Z",
       },
       summary: {
         activeBindingCount: 0,
         runningOperationCount: 0,
+        retryWaitingOperationCount: 0,
         conflictCount: 0,
         errorCount: 1,
       },
@@ -80,6 +83,51 @@ describe("driveSyncIpcModule", () => {
     expect(service.getSnapshot).toHaveBeenCalled()
   })
 
+  it("preserves status, retry, and progress fields through the real IPC registry", async () => {
+    const snapshot = {
+      bindings: [],
+      conflicts: [],
+      operations: [{
+        id: "operation-1",
+        bindingId: "binding-1",
+        kind: "resync",
+        relativePath: "",
+        status: "retry_wait",
+        message: "等待网络恢复",
+        attemptCount: 3,
+        nextRetryAt: "2026-06-28T00:01:00.000Z",
+        completedBytes: 4,
+        totalBytes: 10,
+        updatedAt: "2026-06-28T00:00:00.000Z",
+      }],
+      health: {
+        status: "retrying",
+        readOnly: true,
+        lastError: "offline",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+      },
+      summary: {
+        activeBindingCount: 0,
+        runningOperationCount: 0,
+        retryWaitingOperationCount: 1,
+        conflictCount: 0,
+        errorCount: 0,
+      },
+    }
+    const service = { events: { on: vi.fn() }, getSnapshot: vi.fn(async () => snapshot) }
+    const harness = createInMemoryHarness()
+    harness.registry.register(driveSyncIpcModule, {
+      moduleId: "driveSync",
+      resolve: ((id: string) => {
+        if (id === "core.drive-sync") return service
+        if (id === "core.window-manager") return { broadcast: vi.fn() }
+        throw new Error(id)
+      }) as never,
+    })
+
+    await expect(harness.invoke("synapse:app:drive_sync:snapshot:get", undefined)).resolves.toEqual(snapshot)
+  })
+
   it("dispatches binding management methods through the core service", async () => {
     const service = {
       events: { on: vi.fn() },
@@ -93,6 +141,7 @@ describe("driveSyncIpcModule", () => {
         forcedExcludeRules: [".git/**", ".git"],
         defaultExcludeRules: [],
         importedGitignoreRules: [],
+        detectedGitignoreRules: [],
       })),
       createSafeBinding: vi.fn(async () => ({
         id: "binding-1",
@@ -171,7 +220,12 @@ describe("driveSyncIpcModule", () => {
     })
     await driveSyncIpcModule.methods.pauseBinding.handler(ctx as never, { id: "binding-1" })
     await driveSyncIpcModule.methods.resumeBinding.handler(ctx as never, { id: "binding-1" })
-    await driveSyncIpcModule.methods.updateExcludeRules.handler(ctx as never, { id: "binding-1", user: ["dist/**"] })
+    await driveSyncIpcModule.methods.updateExcludeRules.handler(ctx as never, {
+      id: "binding-1",
+      defaults: ["node_modules/"],
+      importedGitignore: ["dist/"],
+      user: ["private/"],
+    })
     await driveSyncIpcModule.methods.rescanBinding.handler(ctx as never, { id: "binding-1" })
     await driveSyncIpcModule.methods.pollRemoteChanges.handler(ctx as never, { id: "binding-1" })
     await driveSyncIpcModule.methods.resolveConflict.handler(ctx as never, { conflictId: "conflict-1", action: "keep_local" })
@@ -180,7 +234,12 @@ describe("driveSyncIpcModule", () => {
     expect(service.createSafeBinding).toHaveBeenCalled()
     expect(service.pauseBinding).toHaveBeenCalledWith("binding-1")
     expect(service.resumeBinding).toHaveBeenCalledWith("binding-1")
-    expect(service.updateExcludeRules).toHaveBeenCalledWith({ id: "binding-1", user: ["dist/**"] })
+    expect(service.updateExcludeRules).toHaveBeenCalledWith({
+      id: "binding-1",
+      defaults: ["node_modules/"],
+      importedGitignore: ["dist/"],
+      user: ["private/"],
+    })
     expect(service.rescanBinding).toHaveBeenCalledWith("binding-1")
     expect(service.pollRemoteChanges).toHaveBeenCalledWith("binding-1")
     expect(service.resolveConflict).toHaveBeenCalledWith({ conflictId: "conflict-1", action: "keep_local" })

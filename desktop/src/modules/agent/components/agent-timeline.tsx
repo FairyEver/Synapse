@@ -1,4 +1,5 @@
 import { useState, type Ref } from "react"
+import { Button } from "@/components/ui/button"
 import type {
   SynapseAgentDisplayProfile,
   SynapseAgentPendingPermission,
@@ -27,6 +28,9 @@ function AgentTimeline({
   referenceActions,
   onRespondPermission,
   viewportRef,
+  loadingOlder,
+  historyError,
+  onRetryHistory,
 }: {
   readonly items: readonly SynapseAgentTimelineItem[]
   readonly profile: SynapseAgentDisplayProfile
@@ -43,6 +47,9 @@ function AgentTimeline({
     scope?: SynapseAgentPermissionScope,
   ) => void | Promise<void>
   readonly viewportRef: Ref<HTMLDivElement>
+  readonly loadingOlder: boolean
+  readonly historyError: string | null
+  readonly onRetryHistory: () => void
 }) {
   // Drives 1s re-renders for any in-progress phase row's elapsed timer.
   useActivePhaseTicker(items)
@@ -65,6 +72,15 @@ function AgentTimeline({
           </div>
         ) : (
           <div data-allow-select="true" className="mx-auto flex min-w-0 max-w-4xl flex-col gap-2 px-4 pb-34 pt-4">
+            {loadingOlder ? (
+              <p className="py-2 text-center text-sm text-muted-foreground">加载中</p>
+            ) : historyError ? (
+              <div className="flex justify-center py-1">
+                <Button type="button" variant="ghost" size="sm" onClick={onRetryHistory}>
+                  重试加载
+                </Button>
+              </div>
+            ) : null}
             {displayNodes.map((node) => {
               if (node.kind === "processGroup") {
                 const defaultOpen = displayNodes.length === 1 || defaultProcessGroupOpen(node, { sending })

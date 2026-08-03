@@ -7,7 +7,7 @@ Scope: `server/`, `desktop/`, `shared/`, `docs/`
 
 Add Drive file and folder sync between a user's own Synapse Drive items and local filesystem paths. A user can bind a Drive file to a local file, or a Drive folder to a local folder, then keep both sides synchronized while Synapse is running.
 
-The first version should feel like an automatic sync client, but it must avoid unsafe overwrite behavior. Normal additions, edits, moves, renames, and deletes sync automatically. Ambiguous conflicts pause and require an explicit user choice.
+The first version should feel like an automatic sync client, but it must avoid unsafe overwrite behavior. Normal additions, edits, moves, renames, and deletes sync automatically. Ambiguous conflicts pause only the affected paths and require an explicit user choice.
 
 ## Confirmed Product Decisions
 
@@ -15,14 +15,14 @@ The first version should feel like an automatic sync client, but it must avoid u
 - The first version supports only the user's own Drive files and folders.
 - Shared items owned by other users are out of scope, even when the current user has edit permission.
 - Sync runs while Synapse is running. When Synapse exits, sync pauses. On the next launch, Synapse catches up using remote changes and a local scan.
-- Initial binding allows only one side to already contain content.
+- Initial binding allows one side to contain content, or both sides when their included path/type trees and SHA-256 file hashes are exactly equal.
 - A Drive file can bind to a local file path only when the local file does not already exist.
 - A local file can bind to a new Drive file target only when the Drive target does not already exist.
 - A Drive folder can bind to a new or empty local folder.
 - A local folder can bind to a new Drive folder target.
 - Existing non-empty content on both sides is not merged during initial binding.
 - Deletes propagate automatically, but they go to a recoverable trash location instead of being permanently deleted.
-- Conflicts pause and require user resolution.
+- Conflicts pause the affected path and descendants while unrelated paths continue syncing.
 - Move and rename are first-class sync operations, not merely delete plus create.
 - `.git/` is always excluded and cannot be enabled by users.
 - Git commands are never run by Drive sync. Syncing a Git repository root affects only worktree files.
@@ -52,11 +52,13 @@ Drive item
        │
        v
 SyncBinding
+  ├─ ownerUserId
   ├─ driveItemId
   ├─ localPath
   ├─ kind: file | folder
   ├─ status
   ├─ remoteCursor
+  ├─ initialPhase / initialCursor
   ├─ baselineSnapshot
   ├─ excludeRules
   └─ lastSyncState
@@ -64,6 +66,7 @@ SyncBinding
 
 Binding status values:
 
+- `initializing`: validating or transferring initial content before the baseline is complete.
 - `active`: watching and syncing.
 - `paused`: user or auth/path state paused the binding.
 - `conflict`: at least one path requires user resolution.
@@ -73,6 +76,8 @@ Binding status values:
 Running work is reported separately from the binding lifecycle, for example as operation status or aggregate progress. An `active` binding can have zero or more `pending`, `running`, `retry_wait`, `conflict`, or `error` operations.
 
 Canceling a binding only stops synchronization. It does not delete local files or Drive items.
+
+Bindings, baselines, operations, conflicts, retry work, and health are scoped to `ownerUserId`. Logout stops watchers, polling, and retries. An account switch restores only the new account's bindings. While logged out, the last account's bindings and local state remain visible but read-only. Offline state retains metadata without network work; reconnection pulls remote changes before scanning local changes.
 
 ## Initial Binding Rules
 
@@ -98,19 +103,27 @@ Local folder exists + Drive target does not exist
   -> upload folder tree
   -> create Drive folder and baseline
   -> start sync
+
+Both sides already exist
+  -> compare included path/type manifests
+  -> download remote files with at most two concurrent downloads
+  -> compare SHA-256 hashes and recheck both trees
+  -> create baseline only when unchanged and exactly equal
 ```
 
 Rejected cases:
 
 ```text
-Local file exists + Drive file exists
-Local folder has content + Drive folder has content
+Local file exists + Drive file exists with different content
+Local folder has content + Drive folder has different included content
 Local file selected for Drive folder
 Local folder selected for Drive file
 Path outside the selected binding root during initialization
 ```
 
 For folder initialization, exclude rules apply before upload, download, and baseline creation.
+
+Initialization persists a remote cursor before transfer and advances through `transfer`, `reconcile`, and `replay`. A binding becomes `active` only after content transfer, baseline creation, and cursor replay all succeed. Restart recovery uses these fields rather than the presence of a root baseline. Local-to-remote recovery may adopt an already uploaded item only when exactly one candidate under the selected parent has the expected name, type, and complete content hash; ambiguous candidates become conflicts.
 
 ## Exclude Rules
 
@@ -136,9 +149,9 @@ SyncBinding.excludeRules
   └─ userRules
 ```
 
-Forced rules cannot be disabled. Default rules can be removed or edited.
+Forced rules cannot be disabled. Recommended default rules are enabled for new bindings and can be removed or edited. Existing bindings retain their stored choices when the schema changes.
 
-When creating a folder binding, Synapse checks the binding root for `.gitignore`. If present, the binding flow offers to import the rules into `importedGitignore`. Imported rules become ordinary binding rules. Future `.gitignore` edits do not automatically alter sync behavior.
+When creating a folder binding, Synapse checks the binding root for `.gitignore`. Import is disabled by default. If enabled, the preview shows the original ordered rules before copying them into `importedGitignore`. Rules use standard gitignore matching, including negation, escaping, directory patterns, and wildcards. Future `.gitignore` edits do not automatically alter sync behavior.
 
 Excluded paths are outside the sync tree:
 
@@ -147,6 +160,8 @@ Excluded paths are outside the sync tree:
 - Their deletion is not propagated.
 - They do not enter conflict records.
 - They are not included in baseline snapshots.
+
+Rule updates are serialized with sync work. Newly excluded paths are removed only from the baseline; neither side is deleted. Re-included paths go through a full three-way validation before automatic transfer.
 
 ## Architecture
 
@@ -212,7 +227,7 @@ Change log requirements:
 - Content changes include enough version or etag information for baseline comparison.
 - Storage implementation details are never exposed.
 
-The change log does not need to keep data forever. It must either retain enough history for normal desktop catch-up or report that a full remote rescan is required.
+The server retains change records for 90 days. A daily 02:30 cleanup deletes expired records and advances a global `purgedThroughSequence` watermark in the same transaction. An explicit non-empty cursor at or below that watermark returns `resyncRequired: true`; a client without a cursor can still read the retained range.
 
 ## Desktop Sync Service
 
@@ -258,6 +273,8 @@ app.drive-sync.settings       json
 
 All records include `schemaVersion`.
 
+Drive sync schema v2 requires an owner on every binding and stores complete retry/recovery parameters on operations. Schema v3 adds `initialPhase` and `initialCursor`; v2 bindings, baselines, operations, conflicts, files, and stored exclude choices migrate in place. The older v1-to-v2 migration clears unsupported metadata and staging only. Neither migration reads, modifies, uploads, trashes, or deletes a bound local or Drive item.
+
 Baseline entries should store enough identity to avoid relying only on timestamps:
 
 ```ts
@@ -276,7 +293,7 @@ type BaselineEntry = {
 }
 ```
 
-Hashing can be lazy. Size and mtime can be used as a quick check, but destructive decisions and conflict resolution should compute content hashes when needed.
+Size and mtime can be used as a quick change detector. Watcher events force a hash refresh for affected paths. Startup, manual scans, recovery, full reconciliation, destructive decisions, conflict resolution, and interrupted-upload recovery use uncached SHA-256 content hashes. Remote overwrites and deletes re-hash the local target immediately before mutation and create a conflict if it changed.
 
 ## Change Planning
 
@@ -339,6 +356,8 @@ If local trashing fails, do not permanently delete. Put the binding or path into
 
 If Drive trashing fails because of auth, quota, permission, or network state, keep the local deletion event pending only when safe. Otherwise pause the path and show the failure in the status center.
 
+A missing binding root is never treated as an ordinary automatic delete. It creates a root `delete_vs_modify` conflict. Keeping the existing side rebuilds the missing side. Confirming deletion moves the remaining side to trash and then removes the binding. Inaccessible paths, unmounted disks, and permission failures are errors rather than deletion evidence.
+
 ## Conflict Model
 
 Conflict types:
@@ -375,12 +394,18 @@ Resolution actions:
 - `keep_both`: create a conflict copy for one side, bring both files into the sync tree, and update baseline.
 - `confirm_delete`: propagate the delete after explicit user confirmation.
 
+For a folder `keep_local`, the executor mirrors the complete non-excluded local subtree: it recreates a missing remote root, creates missing directories, updates files, and trashes remote-only included entries. Excluded entries are neither read nor changed. The root id and full subtree baseline are replaced only after every remote mutation succeeds.
+
 While a conflict exists:
 
 - Pause the conflicted path and descendants.
 - Continue syncing unrelated paths in the same binding when safe.
 - Do not auto-overwrite either side.
 - Do not log raw conflict file content.
+
+Before a remote move or rename, the executor reads the item's current parent and name and sends only the mutations that are still necessary. Echo suppression records and consumes the actual emitted move and rename events separately.
+
+Conflict sides are persisted in one canonical shape: `exists`, `itemKind`, `pathHint`, `size`, `hash`, and remote `versionId`/`etag` when available. A compatibility reader accepts older `change`, `baseline`, `local`, `operation`, and direct `kind` records. Summaries, available actions, folder handling, and resolution all use that reader. Immediately before applying a resolution, Synapse rereads both sides and refreshes the conflict if identity, type, existence, or known content metadata changed.
 
 ## Sync Operations And Retry
 
@@ -396,12 +421,35 @@ pending -> running -> succeeded
 
 Rules:
 
-- Same binding and same relative path run serially.
+- Watcher flushes, remote polls, manual scans, conflict resolutions, and retries share one FIFO queue per binding. A binding runs serially; different bindings can run concurrently.
+- Duplicate pending events for the same path are coalesced when safe.
 - Different bindings can run concurrently with a global limit.
 - Large transfers expose progress and should not block unrelated small operations.
-- Network and temporary server failures can retry with backoff.
+- Uploads use immutable staging snapshots under `userData`. Source size, mtime, and hash are checked before and after copying; upload length and baseline data come from the snapshot.
+- Temporary network errors, HTTP 408/425/429/5xx, and EBUSY/EMFILE/ENFILE retry indefinitely while online and unpaused, using exponential backoff with ±20% jitter from 1 second to 5 minutes.
 - Auth, missing local path, type mismatch, permission, quota, and unrecoverable local filesystem errors require user action.
 - All running operations must settle into a final visible state.
+- Startup changes inherited `running` work to `retry_wait`. A completed upload without a baseline is verified against the staged hash before the baseline is committed; an unverifiable result becomes a conflict or terminal error.
+- Retryable and interrupted uploads retain their immutable staging snapshot. Recovery first looks up an already-created Drive item by durable id or exact parent/name/path, downloads it, and verifies the staged hash before deciding whether another upload is necessary.
+- Operations persist each completed remote move, rename, or trash mutation immediately. Retry rereads the Drive item and skips substeps already reflected remotely.
+- Pause, stop, logout, and account replacement abort the active request, invalidate queued work, and then run their lifecycle change exclusively. Interrupted transfers become `retry_wait`; stopping a binding waits for the current indivisible filesystem step to settle, then clears its operations, conflicts, baselines, and staging so no later side effect can start.
+- Upload, download, folder transfer, and HTTP calls receive an `AbortSignal`. Aborted uploads cancel their server session, and temporary downloads are removed. Credential replacement waits up to five seconds for pre-identity-change listeners before continuing.
+
+## Full Reconciliation
+
+Initialization recovery, expired cursors, manual complete scans, and anomalous legacy initialization use the same three-way reconciliation:
+
+```text
+uncached local SHA-256 tree + downloaded remote SHA-256 tree + baseline
+  -> identify moves by durable remote item id
+  -> transfer one-sided additions and safe one-sided changes
+  -> preserve equal two-sided additions as a new baseline
+  -> create conflicts for ambiguous changes and delete-vs-modify cases
+```
+
+The scan records the current cursor before enumerating either tree, downloads remote files into an isolated verification directory with concurrency two, removes that directory afterward, then replays changes from the recorded cursor. A second `resyncRequired` during the same reconciliation is surfaced as an error instead of recursively scanning forever.
+
+Each downloaded verification file is hashed and removed inside its worker before the next file is retained, so verification disk usage is bounded by download concurrency rather than the entire remote tree. Startup, reconnection, resume, periodic polling, watcher rescan requests, and retry use the same catch-up sequence: validate roots, scan local changes, pull remote changes while protecting those paths, apply safe remote work and cursor progress, then scan and upload remaining local changes.
 
 ## UI Entry Points
 
@@ -437,10 +485,12 @@ Drive 同步
   ├─ running operation count
   ├─ conflict count
   ├─ error count
-  └─ actions: open local, open Drive, settings, pause, retry
+  └─ actions: open local, open Drive, settings, pause, retry, complete scan
 ```
 
-The UI should use existing shadcn/Radix components and Tailwind tokens. It should avoid explanatory marketing copy. Show state, next action, and necessary labels only.
+The UI should use existing shadcn/Radix components and Tailwind tokens. It should avoid explanatory marketing copy. Show initialization, running progress, retry count and next attempt, offline read-only state, conflicts, and terminal errors distinctly. An initializing binding must not be described as healthy or offer resume.
+
+`DriveSyncSnapshotDto.health.connectivity` is always `online` or `offline`; offline and logged-out snapshots are read-only. Snapshot load failures remain distinct from an empty binding list. The status center can resolve a binding's Drive ancestry through the read-only `drive.item.get` bridge and open that folder in the existing Drive view without navigating to an external page.
 
 ## Permission, Audit, And Safety
 
@@ -457,11 +507,13 @@ Runtime safeguards:
 
 - Local writes are confined to the binding root.
 - Path traversal and symlink escapes are rejected.
+- Collision checks normalize Unicode to NFC before case folding. Windows rejects reserved device names, invalid/control characters, and trailing spaces or periods before any local write.
+- Upload snapshots verify every path component before and after opening, use `O_NOFOLLOW` for the final file, copy from one open file handle, and compare device/inode plus size, mtime, and hash before upload.
 - Temporary transfer files are excluded from sync.
 - Local deletes use system trash or a Synapse local trash area.
 - Drive deletes use Drive trash.
 - Conflict resolution requires an explicit user action.
-- Account logout, item loss, permission changes, quota failures, or missing local roots pause the binding or mark it as error.
+- Account logout stops execution without changing another account's state. Permission changes, quota failures, or inaccessible local roots pause the binding or mark it as error.
 - Baseline and conflict records are retained until the user removes the binding or resolves conflicts.
 
 ## Git Repository Behavior
@@ -496,8 +548,8 @@ Initial binding:
 - Local file to new Drive target.
 - Drive folder to empty local folder.
 - Local folder to new Drive target.
-- Reject two-sided existing files.
-- Reject two-sided non-empty folders.
+- Accept two-sided existing files only when SHA-256 content matches; reject same-size mismatches and changes during validation.
+- Accept two-sided non-empty folders only when included path/type trees and file hashes match; reject differences and changes during validation.
 - Apply exclude rules during initialization.
 
 Conflict:
@@ -528,9 +580,12 @@ Recovery:
 
 - Local changes made while Synapse was closed are detected on restart.
 - Remote changes made while Synapse was closed are pulled by cursor.
-- Cursor expiration falls back to remote rescan.
+- Cursor expiration falls back to full local/remote/baseline reconciliation, followed by cursor replay.
 - Network failure retries and eventually settles into visible state.
 - Missing local root pauses safely.
+- Missing watcher filenames and the 30-second poll request a full binding scan, so watcher loss eventually converges.
+- Partial folder initialization trashes a newly-created remote root; if trashing fails, the binding retains the real root id and a visible recovery error.
+- Upload completion response loss is recovered by remote identity/path plus staged hash without creating a duplicate.
 
 ## Implementation Phases
 
@@ -569,6 +624,5 @@ Phase 4: hardening
 ## Open Implementation Notes
 
 - The final local trash implementation can use the operating system trash when available, with a Synapse local trash fallback for unsupported or failing cases.
-- The Drive change log retention window should be chosen with server storage cost in mind. The client must handle cursor expiration with a full rescan.
 - Folder move detection should start conservative. If identity proof is weak, surface confirmation instead of guessing.
 - Shared-item sync should be treated as a later design because it changes ownership, delete propagation, permission expiry, and multi-user conflict behavior.

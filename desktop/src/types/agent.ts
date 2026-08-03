@@ -572,6 +572,9 @@ export interface SynapseAgentTimelineResult {
   readonly sessionKey: string
   readonly conversationId?: string
   readonly entries: SynapseAgentTimelineItem[]
+  readonly total: number
+  readonly startIndex: number
+  readonly hasMore: boolean
 }
 
 export interface SynapseAgentConversationExportResult {

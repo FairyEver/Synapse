@@ -132,13 +132,15 @@ describe("drive sync watcher", () => {
     ]])
   })
 
-  it("ignores folder watcher events without a filename", async () => {
+  it("requests a folder rescan when a watcher event has no filename", async () => {
     const changes: Array<readonly DriveSyncLocalChange[]> = []
+    const onRescanRequested = vi.fn()
     const fakeWatch = createFakeWatch()
     const watcher = createDriveSyncWatcher({
       debounceMs: 1,
       watch: fakeWatch.watch,
       onChanges: (batch) => { changes.push(batch) },
+      onRescanRequested,
     })
     watcher.reconcile([binding({ localPath: tempDir })])
 
@@ -146,10 +148,12 @@ describe("drive sync watcher", () => {
     await vi.runAllTimersAsync()
 
     expect(changes).toEqual([])
+    expect(onRescanRequested).toHaveBeenCalledWith("binding-1")
   })
 
-  it("ignores single-file watcher events without a filename", async () => {
+  it("requests a single-file rescan when a watcher event has no filename", async () => {
     const changes: Array<readonly DriveSyncLocalChange[]> = []
+    const onRescanRequested = vi.fn()
     const fakeWatch = createFakeWatch()
     const filePath = path.join(tempDir, "tracked.md")
     await writeFile(filePath, "tracked", "utf8")
@@ -157,6 +161,7 @@ describe("drive sync watcher", () => {
       debounceMs: 1,
       watch: fakeWatch.watch,
       onChanges: (batch) => { changes.push(batch) },
+      onRescanRequested,
     })
     watcher.reconcile([binding({ localPath: filePath, kind: "file" })])
 
@@ -164,6 +169,7 @@ describe("drive sync watcher", () => {
     await vi.runAllTimersAsync()
 
     expect(changes).toEqual([])
+    expect(onRescanRequested).toHaveBeenCalledWith("binding-1")
   })
 
   it("maps single-file watcher events for the tracked filename to the binding root", async () => {

@@ -50,6 +50,29 @@ export function detectRemoteKind(remoteUrl: string): SynapseGitRemoteKind {
   return "unknown"
 }
 
+export function validateCloneRemoteUrl(remoteUrl: string): void {
+  if (!remoteUrl) throw new Error("请输入仓库地址。")
+  if (/\p{Cc}/u.test(remoteUrl)) throw new Error("仓库地址包含无效字符。")
+
+  let url: URL
+  try {
+    url = new URL(remoteUrl)
+  } catch {
+    if (/^[^@\s]+@[^:\s]+:.+/u.test(remoteUrl) && /[?#]/u.test(remoteUrl)) {
+      throw new Error("SSH 仓库地址不能包含查询参数或片段。")
+    }
+    return
+  }
+
+  const protocol = url.protocol.toLowerCase()
+  if (url.password || (url.username && protocol !== "ssh:")) {
+    throw new Error("仓库地址不能包含账号、密码或访问令牌，请使用凭据管理或 SSH Key。")
+  }
+  if (url.search || url.hash) {
+    throw new Error("仓库地址不能包含查询参数或片段。")
+  }
+}
+
 export function createGitCloneService(deps: CloneDeps) {
   const now = deps.now ?? (() => new Date())
   const randomId = deps.randomId ?? randomUUID
@@ -114,6 +137,7 @@ export function createGitCloneService(deps: CloneDeps) {
       const operationId = options.operationId ?? createGitOperationId()
       const startedAt = performance.now()
       const remoteUrl = input.remoteUrl.trim()
+      validateCloneRemoteUrl(remoteUrl)
       const parentDirectory = path.resolve(input.parentDirectory)
       const directoryName = input.directoryName.trim()
       if (!directoryName || directoryName === "." || directoryName === ".." || path.basename(directoryName) !== directoryName) {
@@ -127,10 +151,6 @@ export function createGitCloneService(deps: CloneDeps) {
         targetPath,
         nameLength: directoryName.length,
       })
-      if (!remoteUrl) {
-        logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "missing-remote-url", { targetPath })
-        throw new Error("请输入仓库地址。")
-      }
       if (await deps.pathExists(targetPath)) {
         logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "target-exists", { targetPath })
         throw new Error("目标目录已存在。请选择空目录。")

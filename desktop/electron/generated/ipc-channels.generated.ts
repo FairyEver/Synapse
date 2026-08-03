@@ -15,6 +15,7 @@ export const IPC_CHANNELS = {
     "logout": "synapse:app:account:operation:logout",
     "listWebhooks": "synapse:app:account:webhooks:list",
     "listDriveItems": "synapse:app:drive:item:list",
+    "getDriveItem": "synapse:app:drive:item:get",
     "prepareDriveUpload": "synapse:app:drive:upload:prepare",
     "prepareDriveFolderUpload": "synapse:app:drive:upload:folder:prepare",
     "completeDriveUpload": "synapse:app:drive:upload:complete",

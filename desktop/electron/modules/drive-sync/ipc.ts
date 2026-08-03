@@ -1,21 +1,27 @@
 import { dialog } from "electron"
 import path from "node:path"
 import { z } from "zod"
+import {
+  DRIVE_SYNC_BINDING_PREVIEW_STATUSES,
+  DRIVE_SYNC_BINDING_STATUSES,
+  DRIVE_SYNC_CONFLICT_RESOLUTIONS,
+  DRIVE_SYNC_HEALTH_STATUSES,
+  DRIVE_SYNC_INITIAL_DIRECTIONS,
+  DRIVE_SYNC_OPERATION_KINDS,
+  DRIVE_SYNC_OPERATION_STATUSES,
+} from "@synapse/shared/drive-sync-constants"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { WindowManager } from "../../runtime/window"
 import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 import type { DriveSyncService } from "../../services/drive-sync-service"
 
 const driveItemKindSchema = z.enum(["file", "folder"])
-const driveSyncInitialDirectionSchema = z.enum(["remote_to_local", "local_to_remote", "bind_existing"])
-const driveSyncBindingPreviewStatusSchema = z.enum(["ready", "blocked", "warning"])
-const driveSyncConflictResolutionSchema = z.enum(["keep_local", "keep_remote", "keep_both", "confirm_delete", "skip"])
-const driveSyncBindingStatuses = ["active", "paused", "conflict", "error", "removed"] as const
-const driveSyncOperationStatuses = ["pending", "running", "succeeded", "retry_wait", "conflict", "error"] as const
-const driveSyncOperationKinds = ["download", "upload", "delete_local", "delete_remote", "move_local", "move_remote", "scan", "resync"] as const
-const bindingStatusSchema = z.enum(driveSyncBindingStatuses)
-const operationStatusSchema = z.enum(driveSyncOperationStatuses)
-const operationKindSchema = z.enum(driveSyncOperationKinds)
+const driveSyncInitialDirectionSchema = z.enum(DRIVE_SYNC_INITIAL_DIRECTIONS)
+const driveSyncBindingPreviewStatusSchema = z.enum(DRIVE_SYNC_BINDING_PREVIEW_STATUSES)
+const driveSyncConflictResolutionSchema = z.enum(DRIVE_SYNC_CONFLICT_RESOLUTIONS)
+const bindingStatusSchema = z.enum(DRIVE_SYNC_BINDING_STATUSES)
+const operationStatusSchema = z.enum(DRIVE_SYNC_OPERATION_STATUSES)
+const operationKindSchema = z.enum(DRIVE_SYNC_OPERATION_KINDS)
 const driveSyncExcludeRulesSchema = z.object({
   forced: z.array(z.string()),
   defaults: z.array(z.string()),
@@ -57,6 +63,10 @@ const driveSyncOperationSchema = z.object({
   relativePath: z.string(),
   status: operationStatusSchema,
   message: z.string().nullable(),
+  attemptCount: z.number().int().nonnegative(),
+  nextRetryAt: z.string().min(1).nullable(),
+  completedBytes: z.number().nonnegative().nullable(),
+  totalBytes: z.number().nonnegative().nullable(),
   updatedAt: z.string().min(1),
 })
 
@@ -65,13 +75,15 @@ const driveSyncSnapshotSchema = z.object({
   conflicts: z.array(driveSyncConflictSchema),
   operations: z.array(driveSyncOperationSchema),
   health: z.object({
-    status: z.enum(["idle", "syncing", "paused", "error"]),
+    status: z.enum(DRIVE_SYNC_HEALTH_STATUSES),
+    readOnly: z.boolean(),
     lastError: z.string().nullable(),
     updatedAt: z.string().min(1),
   }),
   summary: z.object({
     activeBindingCount: z.number().int().nonnegative(),
     runningOperationCount: z.number().int().nonnegative(),
+    retryWaitingOperationCount: z.number().int().nonnegative(),
     conflictCount: z.number().int().nonnegative(),
     errorCount: z.number().int().nonnegative(),
   }),
@@ -87,6 +99,7 @@ const driveSyncBindingPreviewSchema = z.object({
   forcedExcludeRules: z.array(z.string()),
   defaultExcludeRules: z.array(z.string()),
   importedGitignoreRules: z.array(z.string()),
+  detectedGitignoreRules: z.array(z.string()),
 })
 
 const driveSyncPreviewBindingInputSchema = z.object({
@@ -98,6 +111,7 @@ const driveSyncPreviewBindingInputSchema = z.object({
   remoteExists: z.boolean(),
   directionHint: driveSyncInitialDirectionSchema.nullable().optional(),
   excludeRules: z.array(z.string()).optional(),
+  useDefaultExcludes: z.boolean().optional(),
   importGitignore: z.boolean().optional(),
 })
 
@@ -110,6 +124,7 @@ const driveSyncCreateSafeBindingInputSchema = z.object({
   localPath: z.string().min(1),
   direction: driveSyncInitialDirectionSchema,
   excludeRules: z.array(z.string()).optional(),
+  useDefaultExcludes: z.boolean().optional(),
   importGitignore: z.boolean().optional(),
 })
 
@@ -120,6 +135,8 @@ const driveSyncOptionalBindingIdInputSchema = driveSyncBindingIdInputSchema.part
 
 const driveSyncUpdateExcludeRulesInputSchema = z.object({
   id: z.string().min(1),
+  defaults: z.array(z.string()),
+  importedGitignore: z.array(z.string()),
   user: z.array(z.string()),
 })
 

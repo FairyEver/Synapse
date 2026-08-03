@@ -3,7 +3,7 @@ import { access, mkdir, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { GitCloneJournalEntryV1 } from "../../../runtime/data-repo"
-import { createGitCloneService, detectRemoteKind } from "../git-clone-service"
+import { createGitCloneService, detectRemoteKind, validateCloneRemoteUrl } from "../git-clone-service"
 
 const roots: string[] = []
 
@@ -45,6 +45,29 @@ describe("detectRemoteKind", () => {
     expect(detectRemoteKind("https://git.example.com/team/docs.git")).toBe("https")
     expect(detectRemoteKind("git@git.example.com:team/docs.git")).toBe("ssh")
     expect(detectRemoteKind("file:///tmp/repo")).toBe("unknown")
+  })
+})
+
+describe("validateCloneRemoteUrl", () => {
+  it.each([
+    "https://user@git.example.com/team/docs.git",
+    "https://user:secret@git.example.com/team/docs.git",
+    "https://git.example.com/team/docs.git?token=secret",
+    "https://git.example.com/team/docs.git#secret",
+    "ssh://git:secret@git.example.com/team/docs.git",
+    "git@git.example.com:team/docs.git?token=secret",
+  ])("rejects credential-bearing or ambiguous network URL %s", (remoteUrl) => {
+    expect(() => validateCloneRemoteUrl(remoteUrl)).toThrow()
+  })
+
+  it.each([
+    "https://git.example.com/team/docs.git",
+    "ssh://git@git.example.com/team/docs.git",
+    "git@git.example.com:team/docs.git",
+    "file:///tmp/docs.git",
+    "/tmp/docs.git",
+  ])("accepts safe remote %s", (remoteUrl) => {
+    expect(() => validateCloneRemoteUrl(remoteUrl)).not.toThrow()
   })
 })
 
@@ -95,7 +118,7 @@ describe("git clone service", () => {
     })
 
     const result = await service.clone({
-      remoteUrl: "https://user:secret@git.example.com/team/docs.git?token=raw-token",
+      remoteUrl: "https://git.example.com/team/docs.git",
       parentDirectory: root,
       directoryName: "docs",
     })
@@ -103,17 +126,34 @@ describe("git clone service", () => {
     const targetPath = path.join(root, "docs")
     expect(run).toHaveBeenCalledWith(expect.objectContaining({
       cwd: root,
-      args: ["clone", "--progress", "https://user:secret@git.example.com/team/docs.git?token=raw-token", expect.stringMatching(/\.synapse-clone-.+\/repository$/)],
+      args: ["clone", "--progress", "https://git.example.com/team/docs.git", expect.stringMatching(/\.synapse-clone-.+\/repository$/)],
       operation: "git.clone",
       operationId: expect.any(String),
-      remoteUrl: "https://user:secret@git.example.com/team/docs.git?token=raw-token",
+      remoteUrl: "https://git.example.com/team/docs.git",
       timeoutMs: 300000,
     }))
     expect(result).toMatchObject({ status: "registered", localPath: targetPath, repository: { id: "repo-1" } })
-    const serialized = JSON.stringify(logger.info.mock.calls)
-    expect(serialized).not.toContain("secret")
-    expect(serialized).not.toContain("raw-token")
-    expect(serialized).not.toContain("user:secret")
+  })
+
+  it("rejects unsafe remote URLs before creating clone state", async () => {
+    const root = await createRoot()
+    const run = vi.fn()
+    const { entries, journal } = createJournal()
+    const service = createGitCloneService({
+      commandRunner: { run },
+      journal,
+      registry: { addLocal: vi.fn() },
+      pathExists: exists,
+    })
+
+    await expect(service.clone({
+      remoteUrl: "https://token@git.example.com/team/docs.git",
+      parentDirectory: root,
+      directoryName: "docs",
+    })).rejects.toThrow("访问令牌")
+    expect(run).not.toHaveBeenCalled()
+    expect(entries.size).toBe(0)
+    await expect((await import("node:fs/promises")).readdir(root)).resolves.toEqual([])
   })
 
   it("keeps a complete clone when repository registration fails", async () => {

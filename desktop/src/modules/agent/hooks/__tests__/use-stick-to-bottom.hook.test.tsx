@@ -616,6 +616,74 @@ describe("useStickToBottom", () => {
     expect(scrollTo).not.toHaveBeenCalled()
   })
 
+  it("loads once near the top and preserves the visual anchor after prepend", async () => {
+    let resolveOlder: (() => void) | undefined
+    const onLoadOlder = vi.fn(() => new Promise<void>((resolve) => {
+      resolveOlder = resolve
+    }))
+    const { controls, rerender, scrollTo } = await renderStickHarness({
+      signal: "latest-page",
+      latestEntryId: "assistant-latest",
+      hasOlderEntries: true,
+      onLoadOlder,
+      viewportMetrics: { scrollTop: 40, scrollHeight: 2000, clientHeight: 600 },
+    })
+    const viewport = document.querySelector<HTMLDivElement>("[data-testid='viewport']")
+    setScrollMetrics(viewport, { scrollTop: 40, scrollHeight: 2000, clientHeight: 600 })
+    await act(async () => {
+      viewport?.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -120 }))
+      viewport?.dispatchEvent(new Event("scroll", { bubbles: true }))
+      viewport?.dispatchEvent(new Event("scroll", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(onLoadOlder).toHaveBeenCalledTimes(1)
+    scrollTo.mockClear()
+    setScrollMetrics(viewport, { scrollTop: 40, scrollHeight: 2600, clientHeight: 600 })
+    await act(async () => {
+      rerender({
+        signal: "older-page-prepended",
+        latestEntryId: "assistant-latest",
+        hasOlderEntries: false,
+        onLoadOlder,
+      })
+      resolveOlder?.()
+      await Promise.resolve()
+    })
+
+    expect(viewport?.scrollTop).toBe(640)
+    expect(scrollTo).not.toHaveBeenCalled()
+    expect(controls.current?.hasUnread).toBe(false)
+    expect(controls.current?.isPinned).toBe(false)
+  })
+
+  it("loads another page when the timeline is not tall enough to scroll", async () => {
+    let resolveOlder: (() => void) | undefined
+    const onLoadOlder = vi.fn(() => new Promise<void>((resolve) => {
+      resolveOlder = resolve
+    }))
+    const { rerender } = await renderStickHarness({
+      signal: "short-page",
+      latestEntryId: "assistant-latest",
+      viewportMetrics: { scrollTop: 0, scrollHeight: 500, clientHeight: 600 },
+      hasOlderEntries: true,
+      onLoadOlder,
+    })
+    await act(async () => {
+      rerender({
+        signal: "complete-page",
+        latestEntryId: "assistant-latest",
+        viewportMetrics: { scrollTop: 0, scrollHeight: 500, clientHeight: 600 },
+        hasOlderEntries: false,
+        onLoadOlder,
+      })
+      resolveOlder?.()
+      await Promise.resolve()
+    })
+
+    expect(onLoadOlder).toHaveBeenCalledTimes(1)
+  })
+
 })
 
 type TestResizeObserver = {
@@ -629,14 +697,29 @@ function StickHarness({
   renderViewport = true,
   signal,
   viewportMetrics,
+  hasOlderEntries,
+  loadingOlderEntries,
+  historyLoadBlocked,
+  onLoadOlder,
 }: {
   readonly latestEntryId: string | undefined
   readonly onStick: (stick: UseStickToBottomReturn) => void
   readonly renderViewport?: boolean
   readonly signal: string
   readonly viewportMetrics?: ScrollMetrics
+  readonly hasOlderEntries?: boolean
+  readonly loadingOlderEntries?: boolean
+  readonly historyLoadBlocked?: boolean
+  readonly onLoadOlder?: () => Promise<void>
 }) {
-  const stick = useStickToBottom({ contentSignal: [signal, latestEntryId], latestEntryId })
+  const stick = useStickToBottom({
+    contentSignal: [signal, latestEntryId],
+    latestEntryId,
+    hasOlderEntries,
+    loadingOlderEntries,
+    historyLoadBlocked,
+    onLoadOlder,
+  })
   useEffect(() => {
     onStick(stick)
   }, [onStick, stick])
@@ -660,6 +743,10 @@ async function renderStickHarness(initialProps: {
   readonly renderViewport?: boolean
   readonly signal: string
   readonly viewportMetrics?: ScrollMetrics
+  readonly hasOlderEntries?: boolean
+  readonly loadingOlderEntries?: boolean
+  readonly historyLoadBlocked?: boolean
+  readonly onLoadOlder?: () => Promise<void>
 }) {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -684,6 +771,10 @@ async function renderStickHarness(initialProps: {
         latestEntryId={props.latestEntryId}
         renderViewport={props.renderViewport}
         viewportMetrics={props.viewportMetrics}
+        hasOlderEntries={props.hasOlderEntries}
+        loadingOlderEntries={props.loadingOlderEntries}
+        historyLoadBlocked={props.historyLoadBlocked}
+        onLoadOlder={props.onLoadOlder}
         onStick={(stick) => {
           controls.current = stick
         }}

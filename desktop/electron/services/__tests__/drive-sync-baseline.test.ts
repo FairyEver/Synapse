@@ -27,7 +27,7 @@ describe("DriveSyncBaselineStore", () => {
     await expect(store.listByBinding("binding-1")).resolves.toMatchObject([
       {
         id: "binding-1:docs/spec.md",
-        schemaVersion: 1,
+        schemaVersion: 2,
         bindingId: "binding-1",
         relativePath: "docs/spec.md",
         lastSyncedAt: "2026-06-28T00:00:00.000Z",

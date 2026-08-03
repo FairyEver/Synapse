@@ -1,6 +1,6 @@
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
-import { buildAccessProcessEnvironment, createGitAccessService } from "../git-access-service"
+import { buildAccessProcessEnvironment, createGitAccessService, runProcess } from "../git-access-service"
 
 function createService(overrides: Partial<Parameters<typeof createGitAccessService>[0]> = {}) {
   return createGitAccessService({
@@ -623,6 +623,55 @@ describe("git access service", () => {
 
     expect(writeFile).toHaveBeenCalledWith(expect.stringContaining("known_hosts.synapse-"), `${keyLine}\n`, "utf8")
     expect(renameFile).toHaveBeenCalledWith(expect.stringContaining("known_hosts.synapse-"), "/Users/writer/.ssh/known_hosts")
+  })
+
+  it("serializes concurrent known_hosts updates without losing either host", async () => {
+    const keys = {
+      "one.example.com": "one.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "two.example.com": "two.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    } as const
+    let knownHosts = ""
+    const temporaryFiles = new Map<string, string>()
+    const runProcess = vi.fn(async ({ command, args }: { readonly command: string; readonly args: readonly string[] }) => {
+      if (command === "ssh-keyscan") {
+        const host = args.at(-1) as keyof typeof keys
+        return { stdout: `${keys[host]}\n`, stderr: "" }
+      }
+      const token = args[args.indexOf("-F") + 1]
+      return {
+        stdout: knownHosts.split("\n").filter((line) => line.startsWith(`${token} `)).join("\n"),
+        stderr: "",
+      }
+    })
+    const service = createService({
+      ensureDirectory: vi.fn().mockResolvedValue(undefined),
+      pathExists: async (filePath) => filePath.endsWith("known_hosts") && knownHosts.length > 0,
+      readFile: async () => knownHosts,
+      renameFile: async (temporaryPath) => { knownHosts = temporaryFiles.get(temporaryPath) ?? "" },
+      runProcess,
+      writeFile: async (filePath, content) => { temporaryFiles.set(filePath, content) },
+    })
+    const [one, two] = await Promise.all([
+      service.scanSshHostKey({ host: "one.example.com" }),
+      service.scanSshHostKey({ host: "two.example.com" }),
+    ])
+
+    await Promise.all([
+      service.trustSshHostKey({ host: one.host, fingerprints: one.fingerprints }),
+      service.trustSshHostKey({ host: two.host, fingerprints: two.fingerprints }),
+    ])
+
+    expect(knownHosts).toContain(keys["one.example.com"])
+    expect(knownHosts).toContain(keys["two.example.com"])
+  })
+
+  it("terminates access subprocesses that exceed the output limit", async () => {
+    await expect(runProcess({
+      command: process.execPath,
+      args: ["-e", "process.stdout.write(Buffer.alloc(2 * 1024 * 1024, 97))"],
+      cwd: process.cwd(),
+      timeoutMs: 5_000,
+    }, { platform: process.platform })).rejects.toThrow("too much output")
   })
 
   it("refuses to trust a changed SSH host key", async () => {

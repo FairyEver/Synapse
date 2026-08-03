@@ -14,6 +14,11 @@ type ChatState = {
   sessions: SynapseAgentSessionSummary[]
   archivedSessions: SynapseAgentSessionSummary[]
   timeline: SynapseAgentTimelineItem[]
+  timelineStartIndex: number
+  timelineTotal: number
+  timelineHasMore: boolean
+  loadingOlder: boolean
+  timelineHistoryError: string | null
   pendingPermissions: SynapseAgentPendingPermission[]
   status: SynapseAgentStatus | null
   providers: SynapseAgentProviderState | null
@@ -37,7 +42,22 @@ type ChatAction =
   | { type: "SET_ARCHIVED_SESSIONS"; archivedSessions: SynapseAgentSessionSummary[] }
   | { type: "UPDATE_ARCHIVED_SESSIONS"; updater: (current: SynapseAgentSessionSummary[]) => SynapseAgentSessionSummary[] }
   | { type: "SET_TIMELINE"; timeline: SynapseAgentTimelineItem[] }
+  | {
+    type: "SET_TIMELINE_PAGE"
+    timeline: SynapseAgentTimelineItem[]
+    startIndex: number
+    total: number
+    hasMore: boolean
+  }
+  | {
+    type: "UPDATE_TIMELINE_PAGE"
+    updater: (current: SynapseAgentTimelineItem[]) => SynapseAgentTimelineItem[]
+    startIndex?: number
+    total: number
+  }
   | { type: "UPDATE_TIMELINE"; updater: (current: SynapseAgentTimelineItem[]) => SynapseAgentTimelineItem[] }
+  | { type: "SET_LOADING_OLDER"; loading: boolean }
+  | { type: "SET_TIMELINE_HISTORY_ERROR"; error: string | null }
   | { type: "SET_PENDING_PERMISSIONS"; pendingPermissions: SynapseAgentPendingPermission[] }
   | { type: "UPDATE_PENDING_PERMISSIONS"; updater: (current: SynapseAgentPendingPermission[]) => SynapseAgentPendingPermission[] }
   | { type: "SET_STATUS"; status: SynapseAgentStatus | null }
@@ -63,6 +83,11 @@ const initialChatState: ChatState = {
   sessions: [],
   archivedSessions: [],
   timeline: [],
+  timelineStartIndex: 0,
+  timelineTotal: 0,
+  timelineHasMore: false,
+  loadingOlder: false,
+  timelineHistoryError: null,
   pendingPermissions: [],
   status: null,
   providers: null,
@@ -96,6 +121,31 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         timeline: action.timeline,
         currentConversationModel: latestResultModel(action.timeline),
       }
+    case "SET_TIMELINE_PAGE":
+      return {
+        ...state,
+        timeline: action.timeline,
+        timelineStartIndex: action.startIndex,
+        timelineTotal: action.total,
+        timelineHasMore: action.hasMore,
+        loadingOlder: false,
+        timelineHistoryError: null,
+        currentConversationModel: latestResultModel(action.timeline),
+      }
+    case "UPDATE_TIMELINE_PAGE": {
+      const timeline = action.updater(state.timeline)
+      const startIndex = action.startIndex ?? state.timelineStartIndex
+      return {
+        ...state,
+        timeline,
+        timelineStartIndex: startIndex,
+        timelineTotal: Math.max(state.timelineTotal, action.total),
+        timelineHasMore: startIndex > 0,
+        loadingOlder: false,
+        timelineHistoryError: null,
+        currentConversationModel: latestResultModel(timeline),
+      }
+    }
     case "UPDATE_TIMELINE": {
       const timeline = action.updater(state.timeline)
       return {
@@ -128,6 +178,10 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, selectedSessionKey: action.selectedSessionKey }
     case "SET_LOADING":
       return { ...state, loading: action.loading }
+    case "SET_LOADING_OLDER":
+      return { ...state, loadingOlder: action.loading }
+    case "SET_TIMELINE_HISTORY_ERROR":
+      return { ...state, timelineHistoryError: action.error }
     case "ADD_SENDING_CONVERSATION": {
       const next = new Set(state.sendingConversationIds)
       next.add(action.conversationId)

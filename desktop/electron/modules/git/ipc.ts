@@ -30,9 +30,15 @@ const repositorySchema = z.object({
 const fileChangeSchema = z.object({
   path: z.string(),
   originalPath: z.string().nullable(),
-  status: z.enum(["added", "modified", "deleted", "renamed", "untracked", "conflicted", "unknown"]),
-  staged: z.boolean(),
-  conflicted: z.boolean(),
+  status: z.enum(["added", "modified", "deleted", "renamed", "replaced", "untracked", "conflicted", "unknown"]),
+  indexStatus: z.enum(["unchanged", "added", "modified", "deleted", "renamed", "copied", "unmerged", "untracked", "unknown"]),
+  worktreeStatus: z.enum(["unchanged", "added", "modified", "deleted", "renamed", "copied", "unmerged", "untracked", "unknown"]),
+})
+
+const commitFileChangeSchema = z.object({
+  path: z.string(),
+  originalPath: z.string().nullable(),
+  status: z.enum(["added", "modified", "deleted", "renamed", "unknown"]),
 })
 
 const environmentStateSchema = z.object({
@@ -260,6 +266,7 @@ const snapshotSchema = z.object({
   trackingStatus: z.enum(["tracked", "untracked", "detached", "gone"]),
   ahead: z.number(),
   behind: z.number(),
+  repositoryOperationState: z.enum(["normal", "merge", "rebase", "cherry-pick", "revert", "bisect", "unknown"]),
   hasConflicts: z.boolean(),
   changeCount: z.number().int().nonnegative(),
   changesTruncated: z.boolean(),
@@ -388,7 +395,7 @@ const commitSummarySchema = z.object({
 })
 
 const commitDetailSchema = commitSummarySchema.extend({
-  files: z.array(fileChangeSchema),
+  files: z.array(commitFileChangeSchema),
   diff: z.string(),
   filesTruncated: z.boolean(),
   diffTruncated: z.boolean(),
@@ -396,8 +403,8 @@ const commitDetailSchema = commitSummarySchema.extend({
 })
 
 const historyListRequestSchema = repositoryIdSchema.extend({
-  limit: z.number(),
-  offset: z.number(),
+  limit: z.number().int().min(1).max(100),
+  offset: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
 }).strict()
 
 const commitDetailRequestSchema = repositoryIdSchema.extend({
@@ -448,6 +455,7 @@ async function runRepositoryOperation<T>(
   input: { readonly operationId?: string },
   operation: string,
   task: (signal: AbortSignal, operationId: string) => Promise<T>,
+  options: { readonly requiresNormalWorktree?: boolean } = {},
 ): Promise<T> {
   const operationId = input.operationId ?? createGitOperationId()
   return ctx.resolve<GitOperationCoordinator>("git.operation-coordinator").run({
@@ -455,7 +463,12 @@ async function runRepositoryOperation<T>(
     operation,
     operationId,
     repositoryId: repository.id,
-    task: (signal) => task(signal, operationId),
+    task: async (signal) => {
+      if (options.requiresNormalWorktree) {
+        await ctx.resolve<GitStatusService>("git.status-service").assertWorktreeMutationAllowed(repository)
+      }
+      return task(signal, operationId)
+    },
   })
 }
 
@@ -639,7 +652,7 @@ export const gitIpcModule: IpcModule = {
         const repository = await resolveRepository(ctx, input.repositoryId)
         return runRepositoryOperation(ctx, repository, input, "discard-changes", (signal, operationId) => (
           ctx.resolve<GitDiscardService>("git.discard-service").discard(repository, input, { operationId, signal })
-        ))
+        ), { requiresNormalWorktree: true })
       },
     },
     commit: {
@@ -651,7 +664,7 @@ export const gitIpcModule: IpcModule = {
         const repository = await resolveRepository(ctx, input.repositoryId)
         return runRepositoryOperation(ctx, repository, input, "commit", (signal, operationId) => (
           ctx.resolve<GitCommitService>("git.commit-service").commit(repository, input, { operationId, signal })
-        ))
+        ), { requiresNormalWorktree: true })
       },
     },
     fetch: {
@@ -675,7 +688,7 @@ export const gitIpcModule: IpcModule = {
         const repository = await resolveRepository(ctx, input.repositoryId)
         return runRepositoryOperation(ctx, repository, input, "pull", (signal, operationId) => (
           ctx.resolve<GitSyncService>("git.sync-service").pull(repository, { operationId, signal })
-        ))
+        ), { requiresNormalWorktree: true })
       },
     },
     push: {
@@ -709,7 +722,7 @@ export const gitIpcModule: IpcModule = {
         const repository = await resolveRepository(ctx, input.repositoryId)
         return runRepositoryOperation(ctx, repository, input, "sync", (signal, operationId) => (
           ctx.resolve<GitSyncService>("git.sync-service").sync(repository, { operationId, signal })
-        ))
+        ), { requiresNormalWorktree: true })
       },
     },
     listBranches: {
@@ -731,7 +744,7 @@ export const gitIpcModule: IpcModule = {
         const repository = await resolveRepository(ctx, input.repositoryId)
         return runRepositoryOperation(ctx, repository, input, "checkout", (signal, operationId) => (
           ctx.resolve<GitBranchService>("git.branch-service").checkout(repository, input.branchName, { operationId, signal })
-        ))
+        ), { requiresNormalWorktree: true })
       },
     },
     createBranch: {
@@ -777,7 +790,7 @@ export const gitIpcModule: IpcModule = {
         const repository = await resolveRepository(ctx, input.repositoryId)
         return runRepositoryOperation(ctx, repository, input, "checkout-remote", (signal, operationId) => (
           ctx.resolve<GitBranchService>("git.branch-service").checkoutRemote(repository, input, { operationId, signal })
-        ))
+        ), { requiresNormalWorktree: true })
       },
     },
     listHistory: {

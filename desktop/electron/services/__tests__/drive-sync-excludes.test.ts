@@ -10,7 +10,7 @@ import {
 describe("drive sync exclude utilities", () => {
   it("defines forced and default exclude rules", () => {
     expect(DRIVE_SYNC_FORCED_EXCLUDES).toContain(".git/**")
-    expect(DRIVE_SYNC_DEFAULT_EXCLUDES).toContain("node_modules/**")
+    expect(DRIVE_SYNC_DEFAULT_EXCLUDES).toContain("node_modules/")
     expect(DRIVE_SYNC_DEFAULT_EXCLUDES).toContain("*.log")
   })
 
@@ -43,8 +43,8 @@ describe("drive sync exclude utilities", () => {
   it("applies imported gitignore and user rules without rereading .gitignore", () => {
     const rules = {
       ...createDefaultDriveSyncExcludeRules(),
-      importedGitignore: ["secrets/**", "**/*.pem", "docs/**/index.md"],
-      user: ["private/**", "foo/*/bar.md", ".tmp/", "cache/", "/root-only/"],
+      importedGitignore: ["secrets/", "*.pem", "docs/**/index.md"],
+      user: ["private/", "foo/*/bar.md", ".tmp/", "cache/", "/root-only/"],
     }
 
     expect(isDriveSyncExcluded("secrets/token.txt", rules)).toBe(true)
@@ -62,6 +62,8 @@ describe("drive sync exclude utilities", () => {
     expect(isDriveSyncExcluded("packages/app/.tmp/cache.db", rules)).toBe(true)
     expect(isDriveSyncExcluded("cache", rules)).toBe(true)
     expect(isDriveSyncExcluded("cache/data.bin", rules)).toBe(true)
+    expect(isDriveSyncExcluded("cache", rules, "file")).toBe(false)
+    expect(isDriveSyncExcluded("cache", rules, "folder")).toBe(true)
     expect(isDriveSyncExcluded("root-only/secret.txt", rules)).toBe(true)
     expect(isDriveSyncExcluded("packages/app/root-only/secret.txt", rules)).toBe(false)
     expect(isDriveSyncExcluded(".gitignore", rules)).toBe(false)
@@ -70,7 +72,7 @@ describe("drive sync exclude utilities", () => {
   it("applies user directory trailing slash negation rules in order", () => {
     const rules = {
       ...createDefaultDriveSyncExcludeRules(),
-      user: ["cache/", "!cache/keep/"],
+      user: ["cache/*", "!cache/keep", "!cache/keep/**"],
     }
 
     expect(isDriveSyncExcluded("cache/tmp.bin", rules)).toBe(true)
@@ -93,6 +95,7 @@ describe("drive sync exclude utilities", () => {
   it("applies imported gitignore negation rules in order", () => {
     const rules = {
       ...createDefaultDriveSyncExcludeRules(),
+      defaults: [],
       importedGitignore: ["build/**", "!build/keep.txt"],
     }
 
@@ -105,6 +108,6 @@ describe("drive sync exclude utilities", () => {
   })
 
   it("parses gitignore content into copied binding rules", () => {
-    expect(parseGitignoreForDriveSync("# comment\n\nsecrets/\n!important.md\n*.tmp\n")).toEqual(["secrets/**", "!important.md", "*.tmp"])
+    expect(parseGitignoreForDriveSync("# comment\n\nsecrets/\n!important.md\n*.tmp\n")).toEqual(["secrets/", "!important.md", "*.tmp"])
   })
 })

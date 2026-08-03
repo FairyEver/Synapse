@@ -20,7 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { SynapseGitFileChange, SynapseGitRepository } from "@/types/git"
+import type { SynapseGitRepository, SynapseGitWorkingTreeChange } from "@/types/git"
 import type { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 import { getGitActionPlan } from "../lib/git-status-view"
 
@@ -39,11 +39,12 @@ type CommitNotice = {
   readonly canPush: boolean
 }
 
-const statusLabels: Record<SynapseGitFileChange["status"], string> = {
+const statusLabels: Record<SynapseGitWorkingTreeChange["status"], string> = {
   added: "新增",
   modified: "修改",
   deleted: "删除",
   renamed: "重命名",
+  replaced: "替换",
   untracked: "未跟踪",
   conflicted: "冲突",
   unknown: "未知",
@@ -67,8 +68,9 @@ export function GitChangesTab({
   const changes = status.snapshot?.changes ?? []
   const actionPlan = getGitActionPlan(status.snapshot, status.error)
   const hasConflicts = Boolean(status.snapshot?.hasConflicts)
+  const worktreeMutationBlocked = Boolean(status.snapshot && status.snapshot.repositoryOperationState !== "normal")
   const selectedPathsKey = JSON.stringify(status.selectedPaths)
-  const commitDisabled = busy || preparing || !preparedSelectionId || hasConflicts || status.selectedPaths.length === 0 || !message.trim()
+  const commitDisabled = busy || preparing || !preparedSelectionId || hasConflicts || worktreeMutationBlocked || status.selectedPaths.length === 0 || !message.trim()
 
   useEffect(() => {
     if (!commitDialogOpen) {
@@ -76,7 +78,7 @@ export function GitChangesTab({
       setPreparing(false)
       return
     }
-    if (hasConflicts || selectedPathsKey === "[]") {
+    if (hasConflicts || worktreeMutationBlocked || selectedPathsKey === "[]") {
       setPreparedSelectionId(null)
       setPreparing(false)
       return
@@ -100,7 +102,7 @@ export function GitChangesTab({
     return () => {
       active = false
     }
-  }, [commitDialogOpen, hasConflicts, repository.id, selectedPathsKey])
+  }, [commitDialogOpen, hasConflicts, repository.id, selectedPathsKey, worktreeMutationBlocked])
 
   const commit = async () => {
     setBusy(true)
@@ -260,6 +262,12 @@ export function GitChangesTab({
               <Alert variant="destructive">
                 <AlertTitle>{actionPlan.blockerText ?? "发生冲突"}</AlertTitle>
                 <AlertDescription>{actionPlan.recoveryText ?? "处理冲突后再继续。"}</AlertDescription>
+              </Alert>
+            ) : null}
+            {worktreeMutationBlocked ? (
+              <Alert>
+                <AlertTitle>{actionPlan.blockerText}</AlertTitle>
+                <AlertDescription>{actionPlan.recoveryText}</AlertDescription>
               </Alert>
             ) : null}
             {commitNotice ? (

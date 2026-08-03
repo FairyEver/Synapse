@@ -59,7 +59,7 @@ describe("git worktree services", () => {
 
   it("logs status anomalies once per unchanged repository state", async () => {
     const run = vi.fn().mockResolvedValue({
-      stdout: "# branch.head main\n# branch.ab +0 -0\nu UU N... 100644 100644 100644 100644 a b c d docs/conflict.md\n",
+      stdout: "# branch.head main\n# branch.ab +0 -0\nu UU N... 100644 100644 100644 100644 a b c docs/conflict.md\n",
       stderr: "",
     })
     const logger = { error: vi.fn(), warn: vi.fn() }
@@ -68,10 +68,8 @@ describe("git worktree services", () => {
       logger,
       pathExists: async () => true,
       readStateDiagnostics: async () => ({
-        cherryPickInProgress: false,
         indexLockExists: true,
-        mergeInProgress: true,
-        rebaseInProgress: false,
+        operationState: "merge",
       }),
     })
 
@@ -90,7 +88,7 @@ describe("git worktree services", () => {
       conflictedCount: 1,
       diagnostics: expect.objectContaining({
         indexLockExists: true,
-        mergeInProgress: true,
+        operationState: "merge",
       }),
     }))
   })
@@ -144,6 +142,39 @@ describe("git worktree services", () => {
     await expect(service.listSummaries(repositories)).resolves.toHaveLength(9)
 
     expect(maxActive).toBeLessThanOrEqual(4)
+  })
+
+  it("limits concurrent two-layer change projections", async () => {
+    const output = Buffer.from([
+      "# branch.head main",
+      ...Array.from({ length: 1_000 }, (_, index) => (
+        `1 MM N... 100644 100644 100644 a b docs/file-${index}.md`
+      )),
+      "",
+    ].join("\0"))
+    let active = 0
+    let peak = 0
+    const refineTwoLayerChange = vi.fn(async () => {
+      active += 1
+      peak = Math.max(peak, active)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      active -= 1
+      return true
+    })
+    const service = createGitStatusService({
+      commandRunner: {
+        run: vi.fn(async (input: { readonly onStdoutChunk?: (chunk: Uint8Array) => void }) => {
+          input.onStdoutChunk?.(output)
+          return { stdout: "", stderr: "" }
+        }),
+      },
+      pathExists: async () => true,
+      refineTwoLayerChange,
+    })
+
+    await expect(service.getSnapshot(repository)).resolves.toMatchObject({ changeCount: 1_000 })
+    expect(refineTwoLayerChange).toHaveBeenCalledTimes(1_000)
+    expect(peak).toBe(4)
   })
 
   it("loads text diff and marks binary diff", async () => {
@@ -282,7 +313,7 @@ describe("git worktree services", () => {
     await service.sync(repository)
 
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["fetch", "--prune"], timeoutMs: 120000 }))
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["pull", "--ff-only"], timeoutMs: 120000 }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["merge", "--ff-only", "--no-overwrite-ignore", "@{u}"], timeoutMs: 120000 }))
     expect(run).not.toHaveBeenCalledWith(expect.objectContaining({ args: ["push"] }))
     const started = logger.info.mock.calls.find((call) => call[0] === "Git operation started.")?.[1] as { operationId?: string } | undefined
     const completed = logger.info.mock.calls.find((call) => call[0] === "Git operation completed.")?.[1] as { operationId?: string } | undefined
@@ -347,7 +378,7 @@ describe("git worktree services", () => {
     await service.sync(repository)
 
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["fetch", "--prune"], timeoutMs: 120000 }))
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["pull", "--ff-only"], timeoutMs: 120000 }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["merge", "--ff-only", "--no-overwrite-ignore", "@{u}"], timeoutMs: 120000 }))
     expect(run).not.toHaveBeenCalledWith(expect.objectContaining({ args: ["push"] }))
   })
 
@@ -355,7 +386,7 @@ describe("git worktree services", () => {
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
     const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const getSnapshot = vi.fn().mockResolvedValue({
-      changes: [{ path: "docs/a.md", status: "modified", conflicted: false }],
+      changes: [{ path: "docs/a.md", status: "modified" }],
       behind: 0,
       ahead: 1,
     })
@@ -473,7 +504,7 @@ describe("git worktree services", () => {
     await service.checkout(repository, "docs-update")
     await service.create(repository, "new-docs")
 
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["checkout", "docs-update"] }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["checkout", "--no-overwrite-ignore", "docs-update"] }))
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["checkout", "-b", "new-docs"] }))
     expect(run).toHaveBeenCalledWith(expect.objectContaining({
       args: ["symbolic-ref", "--quiet", "--short", "HEAD"],
@@ -485,15 +516,17 @@ describe("git worktree services", () => {
   })
 
   it("groups cached remote branches and excludes remote HEAD symbolic refs", async () => {
-    const run = vi.fn().mockResolvedValue({
-      stdout: [
-        "origin/HEAD\u0000refs/remotes/origin/main",
-        "origin/main\u0000",
-        "origin/docs/topic\u0000",
-        "upstream/main\u0000",
-      ].join("\n"),
+    const run = vi.fn(async (input: { readonly args: readonly string[] }) => ({
+      stdout: input.args[0] === "remote"
+        ? "origin\nupstream\n"
+        : [
+            "origin/HEAD\u0000refs/remotes/origin/main",
+            "origin/main\u0000",
+            "origin/docs/topic\u0000",
+            "upstream/main\u0000",
+          ].join("\n"),
       stderr: "",
-    })
+    }))
     const service = createGitBranchService({ commandRunner: { run }, getSnapshot: vi.fn() })
 
     await expect(service.listRemote(repository)).resolves.toEqual([
@@ -550,7 +583,7 @@ describe("git worktree services", () => {
       remoteBranchName: "origin/docs/topic",
     })
     expect(run).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["checkout", "-b", "docs/topic", "--track", "origin/docs/topic"],
+      args: ["checkout", "--no-overwrite-ignore", "-b", "docs/topic", "--track", "origin/docs/topic"],
     }))
   })
 
@@ -579,7 +612,7 @@ describe("git worktree services", () => {
       localBranchName: "docs/topic",
       remoteBranchName: "origin/docs/topic",
     })
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ args: ["checkout", "docs/topic"] }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ args: ["checkout", "--no-overwrite-ignore", "docs/topic"] }))
   })
 
   it("uses Git native validation for remote and local branch names", async () => {
@@ -652,7 +685,8 @@ describe("git worktree services", () => {
     const hash = "a".repeat(40)
     const run = vi.fn()
       .mockResolvedValueOnce({ stdout: `${hash}\x1fa1b2c3d\x1f\x1f张三\x1fzhang@example.com\x1f2026-06-17T10:00:00+08:00\x1e`, stderr: "" })
-      .mockResolvedValueOnce({ stdout: `${hash}\x1fa1b2c3d\x1f更新文档\x1f张三\x1fzhang@example.com\x1f2026-06-17T10:00:00+08:00\x1e\0R100\0docs/旧 名称.md\0docs/新 名称.md\0M\0docs/中文.md\0`, stderr: "" })
+      .mockResolvedValueOnce({ stdout: `${hash}\x1fa1b2c3d\x1f更新文档\x1f张三\x1fzhang@example.com\x1f2026-06-17T10:00:00+08:00\x1f${"b".repeat(40)}`, stderr: "" })
+      .mockResolvedValueOnce({ stdout: `R100\0docs/旧 名称.md\0docs/新 名称.md\0M\0docs/中文.md\0`, stderr: "" })
       .mockResolvedValueOnce({ stdout: "diff --git a/docs/a.md b/docs/a.md\n+hello\n", stderr: "" })
     const service = createGitHistoryService({ commandRunner: { run } })
 
@@ -662,24 +696,24 @@ describe("git worktree services", () => {
       shortHash: "a1b2c3d",
       subject: "更新文档",
       files: [
-        { path: "docs/新 名称.md", originalPath: "docs/旧 名称.md", status: "renamed", staged: false, conflicted: false },
-        { path: "docs/中文.md", originalPath: null, status: "modified", staged: false, conflicted: false },
+        { path: "docs/新 名称.md", originalPath: "docs/旧 名称.md", status: "renamed" },
+        { path: "docs/中文.md", originalPath: null, status: "modified" },
       ],
       diff: "diff --git a/docs/a.md b/docs/a.md\n+hello\n",
       filesTruncated: false,
       diffTruncated: false,
       truncated: false,
     })
-    expect(run).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      maxBufferBytes: 2 * 1024 * 1024,
-      outputOverflow: "truncate",
-    }))
     expect(run).toHaveBeenNthCalledWith(3, expect.objectContaining({
       maxBufferBytes: 2 * 1024 * 1024,
       outputOverflow: "truncate",
     }))
-    expect(run).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      args: ["show", "--name-status", "-z", "--find-renames", expect.any(String), "--date=iso-strict", hash],
+    expect(run).toHaveBeenNthCalledWith(4, expect.objectContaining({
+      maxBufferBytes: 2 * 1024 * 1024,
+      outputOverflow: "truncate",
+    }))
+    expect(run).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      args: ["diff", "--name-status", "-z", "--find-renames", "b".repeat(40), hash],
     }))
   })
 
@@ -688,6 +722,62 @@ describe("git worktree services", () => {
     const service = createGitHistoryService({ commandRunner: { run } })
 
     await expect(service.getCommit(repository, "--output=/tmp/synapse-owned")).rejects.toThrow("提交标识不合法")
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it("reads a root commit against the empty tree and keeps truncation flags independent", async () => {
+    const hash = "a".repeat(40)
+    const run = vi.fn()
+      .mockResolvedValueOnce({
+        stdout: `${hash}\x1fa1b2c3d\x1finitial\x1f张三\x1fzhang@example.com\x1f2026-06-17T10:00:00+08:00\x1f`,
+        stderr: "",
+      })
+      .mockResolvedValueOnce({ stdout: "A\0README.md\0", stderr: "", stdoutTruncated: true })
+      .mockResolvedValueOnce({ stdout: "diff --git a/README.md b/README.md\n+hello\n", stderr: "", stdoutTruncated: false })
+    const service = createGitHistoryService({ commandRunner: { run } })
+
+    await expect(service.getCommit(repository, hash)).resolves.toMatchObject({
+      files: [{ path: "README.md", originalPath: null, status: "added" }],
+      filesTruncated: true,
+      diffTruncated: false,
+      truncated: true,
+    })
+    expect(run).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      args: ["diff-tree", "--root", "--no-commit-id", "--name-status", "-z", "-r", "--find-renames", hash],
+    }))
+    expect(run).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      args: ["show", "--format=", "--patch", "--root", hash],
+    }))
+  })
+
+  it("accepts the history pagination boundaries", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const service = createGitHistoryService({ commandRunner: { run } })
+
+    await expect(service.list(repository, { limit: 1, offset: Number.MAX_SAFE_INTEGER })).resolves.toEqual([])
+    await expect(service.list(repository, { limit: 100, offset: 0 })).resolves.toEqual([])
+    expect(run).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      args: expect.arrayContaining(["--max-count", "1", "--skip", String(Number.MAX_SAFE_INTEGER)]),
+    }))
+    expect(run).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      args: expect.arrayContaining(["--max-count", "100", "--skip", "0"]),
+    }))
+  })
+
+  it("rejects unsafe history pagination before invoking Git", async () => {
+    const run = vi.fn()
+    const service = createGitHistoryService({ commandRunner: { run } })
+
+    for (const input of [
+      { limit: 0, offset: 0 },
+      { limit: 101, offset: 0 },
+      { limit: 1.5, offset: 0 },
+      { limit: 20, offset: -1 },
+      { limit: 20, offset: 0.5 },
+      { limit: 20, offset: Number.MAX_SAFE_INTEGER + 1 },
+    ]) {
+      await expect(service.list(repository, input)).rejects.toThrow("分页参数不合法")
+    }
     expect(run).not.toHaveBeenCalled()
   })
 })

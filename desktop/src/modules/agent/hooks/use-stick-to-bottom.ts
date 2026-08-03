@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import type { SynapseAgentTimelineItem } from "@/types/agent"
 
 export const PINNED_THRESHOLD_PX = 80
+export const HISTORY_LOAD_THRESHOLD_PX = 80
 const PROGRAMMATIC_SCROLL_GUARD_MS = 600
 
 export function computeIsPinned(metrics: {
@@ -99,6 +100,10 @@ export type UseStickToBottomReturn = {
 export function useStickToBottom(input: {
   contentSignal: ReadonlyArray<unknown>
   latestEntryId: string | undefined
+  hasOlderEntries?: boolean
+  loadingOlderEntries?: boolean
+  historyLoadBlocked?: boolean
+  onLoadOlder?: () => Promise<void>
 }): UseStickToBottomReturn {
   const { contentSignal, latestEntryId } = input
 
@@ -111,6 +116,21 @@ export function useStickToBottom(input: {
   const lastTouchYRef = useRef<number | null>(null)
   const lastScrollTopRef = useRef(0)
   const instantNextScrollRef = useRef(false)
+  const olderLoadInFlightRef = useRef(false)
+  const suppressNextContentChangeRef = useRef(false)
+  const loadOlderAtCurrentAnchorRef = useRef<() => void>(() => {})
+  const historyInputRef = useRef({
+    hasOlderEntries: input.hasOlderEntries ?? false,
+    loadingOlderEntries: input.loadingOlderEntries ?? false,
+    historyLoadBlocked: input.historyLoadBlocked ?? false,
+    onLoadOlder: input.onLoadOlder,
+  })
+  historyInputRef.current = {
+    hasOlderEntries: input.hasOlderEntries ?? false,
+    loadingOlderEntries: input.loadingOlderEntries ?? false,
+    historyLoadBlocked: input.historyLoadBlocked ?? false,
+    onLoadOlder: input.onLoadOlder,
+  }
 
   const [isPinned, setIsPinned] = useState(true)
   const [hasUnread, setHasUnread] = useState(false)
@@ -166,6 +186,43 @@ export function useStickToBottom(input: {
     setHasUnread(false)
     performScrollToBottom({ behavior: "auto" })
   }, [performScrollToBottom])
+
+  const loadOlderAtCurrentAnchor = useCallback(() => {
+    const viewport = viewportRef.current
+    const historyInput = historyInputRef.current
+    if (
+      !viewport
+      || olderLoadInFlightRef.current
+      || historyInput.loadingOlderEntries
+      || historyInput.historyLoadBlocked
+      || !historyInput.hasOlderEntries
+      || !historyInput.onLoadOlder
+    ) return
+
+    olderLoadInFlightRef.current = true
+    suppressNextContentChangeRef.current = true
+    const previousScrollHeight = viewport.scrollHeight
+    const previousScrollTop = viewport.scrollTop
+    void historyInput.onLoadOlder().catch(() => undefined).finally(() => {
+      window.requestAnimationFrame(() => {
+        const restore = () => {
+          const nextScrollTop = previousScrollTop + viewport.scrollHeight - previousScrollHeight
+          viewport.scrollTop = Math.max(0, nextScrollTop)
+          lastScrollTopRef.current = viewport.scrollTop
+        }
+        restore()
+        window.requestAnimationFrame(() => {
+          restore()
+          suppressNextContentChangeRef.current = false
+          olderLoadInFlightRef.current = false
+          if (viewport.clientHeight > 0 && viewport.scrollHeight <= viewport.clientHeight) {
+            window.requestAnimationFrame(() => loadOlderAtCurrentAnchorRef.current())
+          }
+        })
+      })
+    })
+  }, [])
+  loadOlderAtCurrentAnchorRef.current = loadOlderAtCurrentAnchor
 
   // Subscribe to viewport scroll.
   useEffect(() => {
@@ -223,6 +280,9 @@ export function useStickToBottom(input: {
       if (frame !== null) return
       frame = window.requestAnimationFrame(() => {
         frame = null
+        if (viewport.scrollTop <= HISTORY_LOAD_THRESHOLD_PX) {
+          loadOlderAtCurrentAnchor()
+        }
         const now = Date.now()
         const previousScrollTop = lastScrollTopRef.current
         const scrollingUp = viewport.scrollTop < previousScrollTop
@@ -281,7 +341,30 @@ export function useStickToBottom(input: {
       viewport.removeEventListener("scroll", onScroll)
       if (frame !== null) window.cancelAnimationFrame(frame)
     }
-  }, [pauseFollowing, viewportNode])
+  }, [loadOlderAtCurrentAnchor, pauseFollowing, viewportNode])
+
+  useEffect(() => {
+    const viewport = viewportNode
+    if (
+      !viewport
+      || !input.hasOlderEntries
+      || input.loadingOlderEntries
+      || input.historyLoadBlocked
+    ) return undefined
+    const frame = window.requestAnimationFrame(() => {
+      if (viewport.clientHeight > 0 && viewport.scrollHeight <= viewport.clientHeight) {
+        loadOlderAtCurrentAnchor()
+      }
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [
+    input.hasOlderEntries,
+    input.historyLoadBlocked,
+    input.loadingOlderEntries,
+    loadOlderAtCurrentAnchor,
+    viewportNode,
+    ...contentSignal,
+  ])
 
   useEffect(() => {
     const viewport = viewportNode
@@ -315,6 +398,8 @@ export function useStickToBottom(input: {
     const previousId = previousLatestIdRef.current
     previousLatestIdRef.current = latestEntryId
     const newEntryArrived = isLatestEntryNew({ previousId, latestId: latestEntryId })
+
+    if (suppressNextContentChangeRef.current) return undefined
 
     if (autoFollowRef.current) {
       const handle = window.requestAnimationFrame(() => {

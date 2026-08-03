@@ -74,15 +74,16 @@ type RepositorySnapshot = {
   readonly upstream: string | null
   readonly ahead: number
   readonly behind: number
+  readonly repositoryOperationState: "normal" | "merge" | "rebase" | "cherry-pick" | "revert" | "bisect" | "unknown"
   readonly hasConflicts: boolean
   readonly changeCount: number
   readonly changesTruncated: boolean
   readonly changes: readonly {
     readonly path: string
     readonly originalPath: string | null
-    readonly status: "added" | "modified" | "deleted" | "renamed" | "untracked" | "conflicted" | "unknown"
-    readonly staged: boolean
-    readonly conflicted: boolean
+    readonly status: "added" | "modified" | "deleted" | "renamed" | "replaced" | "untracked" | "conflicted" | "unknown"
+    readonly indexStatus: "unchanged" | "added" | "modified" | "deleted" | "renamed" | "copied" | "unmerged" | "untracked" | "unknown"
+    readonly worktreeStatus: "unchanged" | "added" | "modified" | "deleted" | "renamed" | "copied" | "unmerged" | "untracked" | "unknown"
   }[]
 }
 
@@ -106,6 +107,7 @@ function summary(
       upstream: "origin/main",
       ahead: 0,
       behind: 0,
+      repositoryOperationState: "normal",
       hasConflicts: false,
       changes: [],
       ...snapshotOverrides,
@@ -223,6 +225,7 @@ describe("GitModule repository list", () => {
       upstream: "origin/main",
       ahead: 0,
       behind: 0,
+      repositoryOperationState: "normal",
       hasConflicts: false,
       changeCount: 0,
       changesTruncated: false,
@@ -837,7 +840,7 @@ describe("GitModule repository list", () => {
   it("shows environment diagnostics and repository issues", async () => {
     bridge.git.listRepositorySummaries.mockResolvedValue([
       summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }, {
-        changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+        changes: [{ path: "docs/a.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" }],
       }),
       summary({ id: "repo-2", name: "Missing", localPath: "/work/missing", addedAt: "now", lastOpenedAt: null }, { pathExists: false }),
     ])
@@ -1021,7 +1024,7 @@ describe("GitModule repository list", () => {
   it("shows one primary next action for common repository states", async () => {
     bridge.git.listRepositorySummaries.mockResolvedValue([
       summary({ id: "repo-1", name: "Dirty", localPath: "/work/dirty", addedAt: "now", lastOpenedAt: null }, {
-        changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+        changes: [{ path: "docs/a.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" }],
       }),
       summary({ id: "repo-2", name: "Behind", localPath: "/work/behind", addedAt: "now", lastOpenedAt: null }, { behind: 2 }),
       summary({ id: "repo-3", name: "Ahead", localPath: "/work/ahead", addedAt: "now", lastOpenedAt: null }, { ahead: 1 }),

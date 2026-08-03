@@ -84,7 +84,25 @@ export async function writeDriveSyncFileTarget(
 }
 
 export function pathCollisionKey(relativePath: string): string {
-  return toPosixPath(relativePath).toLowerCase()
+  return toPosixPath(relativePath).normalize("NFC").toLowerCase()
+}
+
+export function assertDriveSyncLocalRelativePathPortable(
+  relativePath: string,
+  platform: NodeJS.Platform = process.platform,
+): void {
+  assertSafeRelativePath(relativePath)
+  if (platform !== "win32") return
+  for (const segment of relativePath.split("/").filter(Boolean)) {
+    const stem = segment.split(".")[0]?.toUpperCase() ?? ""
+    if (
+      /[<>:"|?*\u0000-\u001F]/u.test(segment)
+      || /[ .]$/u.test(segment)
+      || /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/u.test(stem)
+    ) {
+      throw new Error(`云盘路径无法在 Windows 本地创建：${relativePath}`)
+    }
+  }
 }
 
 export function localPathCollisionKey(localPath: string): string {
@@ -145,7 +163,7 @@ function toPosixPath(value: string): string {
   return value.split(path.sep).join("/")
 }
 
-async function assertNoSymlinkPathComponents(rootPath: string, targetPath: string): Promise<void> {
+export async function assertNoSymlinkPathComponents(rootPath: string, targetPath: string): Promise<void> {
   const root = normalizeLocalPath(rootPath)
   const target = assertInsideBindingRoot(root, targetPath)
   await assertNotExistingSymlink(root)

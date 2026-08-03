@@ -11,11 +11,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { SynapseGitFileChange, SynapseGitRepository } from "@/types/git"
+import type { SynapseGitRepository, SynapseGitWorkingTreeChange } from "@/types/git"
 
 type GitDiscardChangesDialogProps = {
   readonly repository: SynapseGitRepository
-  readonly selectedChanges: readonly SynapseGitFileChange[]
+  readonly selectedChanges: readonly SynapseGitWorkingTreeChange[]
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
   readonly onDiscarded: () => void | Promise<void>

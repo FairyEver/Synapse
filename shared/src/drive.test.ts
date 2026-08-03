@@ -403,6 +403,7 @@ describe("drive URL helpers", () => {
 
   it("exports stable Drive sync status values", () => {
     expect(DRIVE_SYNC_BINDING_STATUSES).toEqual([
+      "initializing",
       "active",
       "paused",
       "conflict",

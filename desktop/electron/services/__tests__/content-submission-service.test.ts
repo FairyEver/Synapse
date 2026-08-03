@@ -41,6 +41,7 @@ const mocks = vi.hoisted(() => ({
     acquire: vi.fn(),
   },
   isGitRebaseInProgress: vi.fn(),
+  assertGitWorktreeMutationAllowed: vi.fn(),
   runGitCommand: vi.fn(),
   userIdentityService: {
     requireReadyRepoProfile: vi.fn(),
@@ -71,6 +72,10 @@ vi.mock("../config-store", () => ({
 vi.mock("../git-command", () => ({
   isGitRebaseInProgress: mocks.isGitRebaseInProgress,
   runGitCommand: mocks.runGitCommand,
+}))
+
+vi.mock("../git-operation-state", () => ({
+  assertGitWorktreeMutationAllowed: mocks.assertGitWorktreeMutationAllowed,
 }))
 
 vi.mock("../log-store", () => ({
@@ -165,9 +170,10 @@ describe("contentSubmissionService", () => {
     mocks.pendingPushesService.readState.mockResolvedValue({ count: 0, items: [] })
     mocks.repositoryLockManager.acquire.mockResolvedValue(vi.fn())
     mocks.isGitRebaseInProgress.mockResolvedValue(false)
+    mocks.assertGitWorktreeMutationAllowed.mockResolvedValue(undefined)
   })
 
-  it("pulls and syncs before update conflict detection", async () => {
+  it("fetches and safely rebases before update conflict detection", async () => {
     const { contentSubmissionService } = await import("../content-submission-service")
 
     const result = await contentSubmissionService.updateContent({
@@ -180,7 +186,11 @@ describe("contentSubmissionService", () => {
     } as never)
 
     expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["pull", "--rebase"],
+      args: ["fetch", "--prune"],
+      cwd: "/repo",
+    }))
+    expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["rebase", "commit-1"],
       cwd: "/repo",
     }))
     expect(mocks.contentIndexService.syncIndex).toHaveBeenCalledWith(mocks.repository)
@@ -220,14 +230,14 @@ describe("contentSubmissionService", () => {
       .toThrow("当前仓库正在进行 rebase")
 
     expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
-      args: ["pull", "--rebase"],
+      args: ["fetch", "--prune"],
     }))
     expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
       args: ["rebase", "--abort"],
     }))
   })
 
-  it("pulls and syncs before purge conflict detection", async () => {
+  it("fetches and safely rebases before purge conflict detection", async () => {
     const { contentSubmissionService } = await import("../content-submission-service")
     mocks.contentHistoryService.readCurrentDetail.mockResolvedValueOnce({
       createdBy: "user-1",
@@ -244,7 +254,11 @@ describe("contentSubmissionService", () => {
     })
 
     expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["pull", "--rebase"],
+      args: ["fetch", "--prune"],
+      cwd: "/repo",
+    }))
+    expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["rebase", "commit-1"],
       cwd: "/repo",
     }))
     expect(mocks.contentIndexService.syncIndex).toHaveBeenCalledWith(mocks.repository)

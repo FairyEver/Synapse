@@ -1,5 +1,6 @@
 import type {
-  SynapseGitFileChange,
+  SynapseGitWorkingTreeChange,
+  SynapseGitFileLayerStatus,
   SynapseGitFileStatus,
   SynapseGitStatusParseResult,
 } from "../../../src/types/git"
@@ -20,7 +21,9 @@ type StatusAccumulator = {
   ahead: number
   behind: number
   changeCount: number
-  changes: SynapseGitFileChange[]
+  changes: SynapseGitWorkingTreeChange[]
+  changeIndexes: Map<string, number>
+  seenPaths: Set<string>
   branchHeadSeen: boolean
   currentBranch: string | null
   hasAheadBehind: boolean
@@ -34,6 +37,8 @@ function createAccumulator(): StatusAccumulator {
     behind: 0,
     changeCount: 0,
     changes: [],
+    changeIndexes: new Map(),
+    seenPaths: new Set(),
     branchHeadSeen: false,
     currentBranch: null,
     hasAheadBehind: false,
@@ -102,16 +107,28 @@ function parseAheadBehind(line: string): Pick<SynapseGitStatusParseResult, "ahea
   }
 }
 
+function layerStatusFromCode(code: string): SynapseGitFileLayerStatus {
+  if (code === ".") return "unchanged"
+  if (code === "A") return "added"
+  if (code === "M" || code === "T") return "modified"
+  if (code === "D") return "deleted"
+  if (code === "R") return "renamed"
+  if (code === "C") return "copied"
+  if (code === "U") return "unmerged"
+  if (code === "?") return "untracked"
+  return "unknown"
+}
+
 function statusFromCodes(indexCode: string, worktreeCode: string): SynapseGitFileStatus {
   if (indexCode === "U" || worktreeCode === "U" || (indexCode === "A" && worktreeCode === "A")) return "conflicted"
   if (indexCode === "R") return "renamed"
   if (indexCode === "A") return "added"
   if (indexCode === "D" || worktreeCode === "D") return "deleted"
-  if (indexCode === "M" || worktreeCode === "M") return "modified"
+  if (indexCode === "M" || worktreeCode === "M" || indexCode === "T" || worktreeCode === "T") return "modified"
   return "unknown"
 }
 
-function parseOrdinaryChange(line: string, decodePath: (value: string) => string = decodeGitPath): SynapseGitFileChange | null {
+function parseOrdinaryChange(line: string, decodePath: (value: string) => string = decodeGitPath): SynapseGitWorkingTreeChange | null {
   const fields = line.split(" ")
   if (fields.length < 9) return null
   const xy = fields[1] ?? ".."
@@ -124,12 +141,12 @@ function parseOrdinaryChange(line: string, decodePath: (value: string) => string
     path: filePath,
     originalPath: null,
     status,
-    staged: indexCode !== "." && status !== "conflicted",
-    conflicted: status === "conflicted",
+    indexStatus: layerStatusFromCode(indexCode),
+    worktreeStatus: layerStatusFromCode(worktreeCode),
   }
 }
 
-function parseRenamedChange(line: string): SynapseGitFileChange | null {
+function parseRenamedChange(line: string): SynapseGitWorkingTreeChange | null {
   const tabIndex = line.indexOf("\t")
   const beforeTab = tabIndex >= 0 ? line.slice(0, tabIndex) : line
   const originalPath = tabIndex >= 0 ? decodeGitPath(line.slice(tabIndex + 1)) : null
@@ -142,12 +159,12 @@ function parseRenamedChange(line: string): SynapseGitFileChange | null {
     path,
     originalPath,
     status: "renamed",
-    staged: xy[0] !== ".",
-    conflicted: false,
+    indexStatus: layerStatusFromCode(xy[0] ?? "."),
+    worktreeStatus: layerStatusFromCode(xy[1] ?? "."),
   }
 }
 
-function parseNulRenamedChange(record: string, originalPath: string): SynapseGitFileChange | null {
+function parseNulRenamedChange(record: string, originalPath: string): SynapseGitWorkingTreeChange | null {
   const fields = record.split(" ")
   if (fields.length < 10) return null
   const xy = fields[1] ?? ".."
@@ -157,40 +174,66 @@ function parseNulRenamedChange(record: string, originalPath: string): SynapseGit
     path: filePath,
     originalPath,
     status: "renamed",
-    staged: xy[0] !== ".",
-    conflicted: false,
+    indexStatus: layerStatusFromCode(xy[0] ?? "."),
+    worktreeStatus: layerStatusFromCode(xy[1] ?? "."),
   }
 }
 
-function parseUntrackedChange(line: string): SynapseGitFileChange | null {
+function parseUntrackedChange(line: string): SynapseGitWorkingTreeChange | null {
   const path = decodeGitPath(line.slice(2))
   if (!path) return null
   return {
     path,
     originalPath: null,
     status: "untracked",
-    staged: false,
-    conflicted: false,
+    indexStatus: "unchanged",
+    worktreeStatus: "untracked",
   }
 }
 
-function parseConflictChange(line: string, decodePath: (value: string) => string = decodeGitPath): SynapseGitFileChange | null {
+function parseConflictChange(line: string, decodePath: (value: string) => string = decodeGitPath): SynapseGitWorkingTreeChange | null {
   const fields = line.split(" ")
-  const filePath = decodePath(fields.slice(11).join(" "))
+  const filePath = decodePath(fields.slice(10).join(" "))
   if (!filePath) return null
   return {
     path: filePath,
     originalPath: null,
     status: "conflicted",
-    staged: false,
-    conflicted: true,
+    indexStatus: "unmerged",
+    worktreeStatus: "unmerged",
   }
 }
 
-function appendChange(accumulator: StatusAccumulator, change: SynapseGitFileChange, maxChanges: number): void {
+function mergeChange(left: SynapseGitWorkingTreeChange, right: SynapseGitWorkingTreeChange): SynapseGitWorkingTreeChange {
+  const indexStatus = left.indexStatus !== "unchanged" ? left.indexStatus : right.indexStatus
+  const worktreeStatus = right.worktreeStatus !== "unchanged" ? right.worktreeStatus : left.worktreeStatus
+  const replaced = indexStatus === "deleted" && worktreeStatus === "untracked"
+  const conflicted = left.status === "conflicted" || right.status === "conflicted"
+  return {
+    path: left.path,
+    originalPath: left.originalPath ?? right.originalPath,
+    status: conflicted ? "conflicted" : replaced ? "replaced" : left.status,
+    indexStatus,
+    worktreeStatus,
+  }
+}
+
+function appendChange(accumulator: StatusAccumulator, change: SynapseGitWorkingTreeChange, maxChanges: number): void {
+  const existingIndex = accumulator.changeIndexes.get(change.path)
+  if (existingIndex !== undefined) {
+    const existing = accumulator.changes[existingIndex]
+    if (existing) accumulator.changes[existingIndex] = mergeChange(existing, change)
+    accumulator.hasConflicts = accumulator.hasConflicts || change.status === "conflicted"
+    return
+  }
+  if (accumulator.seenPaths.has(change.path)) return
+  accumulator.seenPaths.add(change.path)
   accumulator.changeCount += 1
-  accumulator.hasConflicts = accumulator.hasConflicts || change.conflicted
-  if (accumulator.changes.length < maxChanges) accumulator.changes.push(change)
+  accumulator.hasConflicts = accumulator.hasConflicts || change.status === "conflicted"
+  if (accumulator.changes.length < maxChanges) {
+    accumulator.changeIndexes.set(change.path, accumulator.changes.length)
+    accumulator.changes.push(change)
+  }
 }
 
 function applyHeader(accumulator: StatusAccumulator, record: string): boolean {
@@ -259,8 +302,8 @@ export function createGitStatusPorcelainV2Parser(options: { readonly maxChanges?
             path: record.slice(2),
             originalPath: null,
             status: "untracked" as const,
-            staged: false,
-            conflicted: false,
+            indexStatus: "unchanged" as const,
+            worktreeStatus: "untracked" as const,
           }
         : record.startsWith("u ")
           ? parseConflictChange(record, (value) => value)

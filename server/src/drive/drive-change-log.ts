@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common"
+import { Injectable, Logger } from "@nestjs/common"
+import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
 import type {
   DriveChangeDto,
@@ -12,6 +13,8 @@ import { DRIVE_ITEM_LIFECYCLE_STATUS, DRIVE_ITEM_TYPE } from "./drive.constants"
 
 type DriveChangePrisma = PrismaService | Prisma.TransactionClient
 const SCOPED_FOLDER_CACHE_TTL_MS = 30_000
+const DRIVE_CHANGE_RETENTION_DAYS = 90
+const DRIVE_CHANGE_RETENTION_STATE_ID = "global"
 
 export type DriveChangeAppendInput = {
   readonly userId: string
@@ -29,6 +32,7 @@ export type DriveChangeAppendInput = {
 
 @Injectable()
 export class DriveChangeLogService {
+  private readonly logger = new Logger(DriveChangeLogService.name)
   private readonly scopedFolderCache = new Map<string, { readonly expiresAt: number; readonly folderIds: string[] }>()
 
   constructor(private readonly prisma: PrismaService) {}
@@ -60,6 +64,10 @@ export class DriveChangeLogService {
     if (input.cursor === "latest") return this.currentCursor(userId)
     const limit = Math.max(1, Math.min(Math.floor(input.limit ?? 100), 500))
     const cursor = parseCursor(input.cursor)
+    if (hasExplicitCursor(input.cursor) && cursor <= await this.purgedThroughSequence()) {
+      const current = await this.currentCursor(userId)
+      return { ...current, resyncRequired: true }
+    }
     const scopeWhere = await driveChangeScopeWhere(this.prisma, userId, input, (rootItemId) => this.resolveScopedFolderIdsCached(userId, rootItemId))
     const rows = await this.prisma.driveChange.findMany({
       where: { userId, sequence: { gt: cursor }, ...scopeWhere },
@@ -80,6 +88,43 @@ export class DriveChangeLogService {
     }
   }
 
+  @Cron("30 2 * * *")
+  async scheduledRetentionCleanup(): Promise<void> {
+    try {
+      await this.cleanupExpiredChanges()
+    } catch (error) {
+      this.logger.warn({
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+      }, "Drive change retention cleanup failed")
+    }
+  }
+
+  async cleanupExpiredChanges(now = new Date()): Promise<{ readonly deleted: number; readonly purgedThroughSequence: string }> {
+    const cutoff = new Date(now.getTime() - DRIVE_CHANGE_RETENTION_DAYS * 24 * 60 * 60 * 1_000)
+    return this.prisma.$transaction(async (client) => {
+      const latestExpired = await client.driveChange.findFirst({
+        where: { occurredAt: { lt: cutoff } },
+        orderBy: { sequence: "desc" },
+        select: { sequence: true },
+      })
+      const existing = await client.driveChangeRetentionState.findUnique({
+        where: { id: DRIVE_CHANGE_RETENTION_STATE_ID },
+        select: { purgedThroughSequence: true },
+      })
+      const watermark = latestExpired && latestExpired.sequence > (existing?.purgedThroughSequence ?? 0n)
+        ? latestExpired.sequence
+        : existing?.purgedThroughSequence ?? 0n
+      const deleted = await client.driveChange.deleteMany({ where: { occurredAt: { lt: cutoff } } })
+      await client.driveChangeRetentionState.upsert({
+        where: { id: DRIVE_CHANGE_RETENTION_STATE_ID },
+        create: { id: DRIVE_CHANGE_RETENTION_STATE_ID, purgedThroughSequence: watermark },
+        update: { purgedThroughSequence: watermark },
+      })
+      return { deleted: deleted.count, purgedThroughSequence: watermark.toString() }
+    })
+  }
+
   private async currentCursor(userId: string): Promise<DriveChangeListPageDto> {
     const latest = await this.prisma.driveChange.findFirst({
       where: { userId },
@@ -92,6 +137,14 @@ export class DriveChangeLogService {
       hasMore: false,
       resyncRequired: false,
     }
+  }
+
+  private async purgedThroughSequence(): Promise<bigint> {
+    const state = await this.prisma.driveChangeRetentionState.findUnique({
+      where: { id: DRIVE_CHANGE_RETENTION_STATE_ID },
+      select: { purgedThroughSequence: true },
+    })
+    return state?.purgedThroughSequence ?? 0n
   }
 
   private async resolveScopedFolderIdsCached(userId: string, rootItemId: string): Promise<string[]> {
@@ -118,6 +171,10 @@ function parseCursor(cursor: string | null | undefined): bigint {
   if (!cursor) return 0n
   if (!/^\d+$/u.test(cursor)) return 0n
   return BigInt(cursor)
+}
+
+function hasExplicitCursor(cursor: string | null | undefined): boolean {
+  return typeof cursor === "string" && cursor.length > 0
 }
 
 async function driveChangeScopeWhere(

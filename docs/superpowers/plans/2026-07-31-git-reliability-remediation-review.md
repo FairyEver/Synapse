@@ -51,3 +51,15 @@ Git 定向测试覆盖路径语义、仓库边界拒绝、tracking、首次推�
 | 29 | 创建、更新、删除、恢复先永久写入历史/附件/图标，永久删除直接移除目录；随后 Git commit 失败时没有回滚，真实 index 也会被预先暂存污染 | 严重数据一致性缺陷 | 内容写入改为 journal 驱动的可恢复事务，恢复材料位于 Git 私有目录；五类操作分别撤销新产物、恢复旧图标或移回永久删除目录。内容提交改用临时 index，失败自动回滚且不触碰真实 index；回滚失败显式进入 recovery-needed，启动和下一次写入继续恢复。五类文件语义、真实 hook 拒绝、预暂存隔离和 commit 后崩溃窗口测试通过 |
 | 30 | 旧设计只能操作本地分支，协作分支尚未创建本地 tracking 分支时，用户必须退出 Synapse 借助外部 Git 工具 | 日常能力缺口，非既有缺陷 | 默认仅读取并按远端分组显示缓存的 `refs/remotes`，显式操作才执行可取消的 `fetch --all --prune`；检出时使用 Git 原生分支名校验，处理既有 tracking 分支、同名冲突、脏工作区和 Worktree 占用。多远端真实仓库、同名冲突、已有 tracking、Worktree 占用、取消与 Renderer 错误保留测试通过 |
 | 31 | 工作台没有按文件丢弃入口，误改文件、新增文件或重命名只能退出 Synapse 借助外部 Git 工具恢复 | 日常能力缺口，非既有缺陷 | 强确认界面从主进程选择令牌取得权威路径；跟踪文件按路径同时恢复 index 与工作区，重命名恢复旧路径，新路径、新增和未跟踪文件只移入系统废纸篓。权限在变更前检查，废纸篓失败绝不永久删除，冲突继续外部处理。真实混合状态、预暂存隔离、外部改写、废纸篓失败及 Renderer 错误保留测试通过 |
+| 32 | checkout、pull 和 sync 的干净判断看不到 ignored 文件，目标分支跟踪同一路径时 Git 会静默覆盖本地内容 | 严重数据完整性缺陷 | checkout、System Git 与内容同步共用目标 tree 碰撞检查，精确及父子路径冲突均在变更 HEAD 前阻止；checkout/merge 同时启用 Git 原生 no-overwrite-ignore 保护。真实本地分支、远端快进和内容同步仓库确认原文件字节不变 |
+| 33 | staged deletion 后创建同名未跟踪文件会产生两个同路径条目，预览取删除记录而临时 index 提交替换内容 | 严重数据语义缺陷 | 工作区状态改为 index/worktree 双层模型，同路径记录合并为唯一 `replaced`；歧义状态通过临时 index 投影，预览和提交复用相同构建过程，丢弃时先移入废纸篓再恢复 HEAD。真实提交与丢弃测试通过 |
+| 34 | merge commit 使用默认 `git show` 得不到文件列表和 patch | 明确历史缺陷 | 提交元数据先读取父列表，merge 固定相对第一父提交、root 相对空树生成文件列表与 patch，并分别保留 2 MiB 截断状态 |
+| 35 | 远端分支按第一个 `/` 切分，名称本身包含 `/` 时会分入错误远端 | 明确兼容性缺陷 | 先读取真实 remote 名，按最长前缀匹配缓存 ref；真实 `team` 与 `team/upstream` 重叠远端测试通过 |
+| 36 | history IPC 接受负数、小数和无上限 limit，Git 对负 max-count 可能退化为读取全部历史 | 边界稳定性缺陷 | IPC 与 service 双层拒绝非法分页；limit 限 1–100，offset 限非负安全整数 |
+| 37 | rebase 命令失败后只要检测到 rebase 目录就 abort，窄竞态下可能中止外部客户端刚启动的操作 | 低概率严重并发缺陷 | 内容同步改为显式 fetch/merge/rebase；仅在失败类型可恢复且 `orig-head`、`onto` 均匹配本次捕获 OID 时自动 abort，归属不明时保留现场并提示人工检查 |
+| 38 | 外部 merge、rebase、cherry-pick、revert 或 bisect 进行中时，选择无关文件提交可能意外完成 sequencer 操作；其它工作区修改也可能破坏现场 | 严重数据一致性缺陷 | 新增共享操作状态探测并采用失败关闭策略；主进程在仓库 FIFO 内拦截提交、丢弃、检出、pull、sync 和内容仓库写操作，临时 index 在 commit 前再次检查。真实 merge 仓库确认 HEAD、MERGE_HEAD、冲突文件和真实 index 不变 |
+| 39 | porcelain v2 冲突记录从错误字段开始截取路径，且 `T` 类型变化未进入可操作状态 | 明确解析缺陷 | 按 Git 真实三阶段冲突格式读取 index 10 的路径；文件与符号链接互换统一映射为 modified。真实冲突输出、空格路径和普通文件转符号链接提交测试通过 |
+| 40 | 克隆 URL 可携带 userinfo、密码、query 或 fragment，敏感信息可能永久写入 `.git/config` | 凭据安全缺陷 | 主进程权威拒绝 HTTP/HTTPS/file userinfo、SSH 密码及网络 URL query/fragment，Renderer 镜像校验；保留 SSH 用户名、SCP 地址和本地路径，目录名只从安全 path 推导 |
+| 41 | 凭据与 SSH 探测子进程没有独立输出上限，超时只结束父进程；并发信任主机可能互相覆盖 known_hosts | 资源与并发安全缺陷 | stdout/stderr 各限 1 MiB，超限立即终止；POSIX 进程组先 TERM 后 KILL；known_hosts 更新进入服务内队列后重新读取并原子替换。无限输出和双主机并发测试通过 |
+| 42 | ignored 覆盖检查先读取完整目标 tree，大仓库即使没有 ignored 文件也可能超过默认输出上限 | 明确大型仓库稳定性缺陷 | ignored 路径流式读取，为空直接返回；非空时构建路径及父级集合，用 literal pathspec 分批流式查询目标 tree，并只保留 20 个展示项。超过 1 MiB 的目标 tree 测试确认空 ignored 时不调用 ls-tree |
+| 43 | 双层 Git 状态通过无界 Promise.all 投影，大量替换或混合状态会同时创建过多临时 index 和子进程 | 资源耗尽风险 | 复用并发映射器并固定上限 4；1,000 个双层变化验证峰值并发、顺序、数量和截断语义，单项失败继续显式失败 |

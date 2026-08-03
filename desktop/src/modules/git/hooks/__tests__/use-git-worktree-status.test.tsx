@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type {
   SynapseGitDiffResult,
-  SynapseGitFileChange,
+  SynapseGitWorkingTreeChange,
   SynapseGitRepository,
   SynapseGitRepositorySnapshot,
 } from "@/types/git"
@@ -60,6 +60,7 @@ function emptySnapshot(): SynapseGitRepositorySnapshot {
     trackingStatus: "untracked",
     ahead: 0,
     behind: 0,
+    repositoryOperationState: "normal",
     hasConflicts: false,
     changeCount: 0,
     changesTruncated: false,
@@ -67,13 +68,13 @@ function emptySnapshot(): SynapseGitRepositorySnapshot {
   }
 }
 
-function fileChange(path: string): SynapseGitFileChange {
+function fileChange(path: string): SynapseGitWorkingTreeChange {
   return {
     path,
     originalPath: null,
     status: "modified",
-    staged: false,
-    conflicted: false,
+    indexStatus: "unchanged",
+    worktreeStatus: "modified",
   }
 }
 
