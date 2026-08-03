@@ -423,6 +423,176 @@ describe("git worktree services", () => {
     }))
   })
 
+  it("plans an empty remote as an initial commit push", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const getSnapshot = vi.fn().mockResolvedValue({
+      changes: [],
+      changeCount: 0,
+      behind: 0,
+      ahead: 0,
+      currentBranch: "main",
+      hasCommits: false,
+      trackingStatus: "untracked",
+    })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot })
+
+    await expect(service.inspectInitialization(repository, "origin")).resolves.toEqual({
+      kind: "create-and-push",
+      branchName: "main",
+      remoteName: "origin",
+    })
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["ls-remote", "--symref", "origin", "HEAD", "refs/heads/*"],
+    }))
+  })
+
+  it("prefers the advertised remote HEAD when initializing", async () => {
+    const run = vi.fn().mockResolvedValue({
+      stdout: "ref: refs/heads/docs\tHEAD\nabc\tHEAD\nabc\trefs/heads/docs\ndef\trefs/heads/main\n",
+      stderr: "",
+    })
+    const getSnapshot = vi.fn().mockResolvedValue({
+      changes: [],
+      changeCount: 0,
+      behind: 0,
+      ahead: 0,
+      currentBranch: "main",
+      hasCommits: false,
+      trackingStatus: "untracked",
+    })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot })
+
+    await expect(service.inspectInitialization(repository, "origin")).resolves.toEqual({
+      kind: "track-remote",
+      branchName: "docs",
+      remoteName: "origin",
+    })
+  })
+
+  it("uses a sole remote branch and rejects ambiguous remote branches", async () => {
+    const getSnapshot = vi.fn().mockResolvedValue({
+      changes: [],
+      changeCount: 0,
+      behind: 0,
+      ahead: 0,
+      currentBranch: "main",
+      hasCommits: false,
+      trackingStatus: "untracked",
+    })
+    const run = vi.fn()
+      .mockResolvedValueOnce({ stdout: "abc\trefs/heads/docs\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "abc\trefs/heads/docs\ndef\trefs/heads/main\n", stderr: "" })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot })
+
+    await expect(service.inspectInitialization(repository, "origin")).resolves.toMatchObject({
+      kind: "track-remote",
+      branchName: "docs",
+    })
+    await expect(service.inspectInitialization(repository, "origin")).rejects.toThrow("远端默认分支不明确")
+  })
+
+  it("creates one empty commit and pushes it during initialization", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const getSnapshot = vi.fn().mockResolvedValue({
+      changes: [],
+      changeCount: 0,
+      behind: 0,
+      ahead: 0,
+      currentBranch: "main",
+      hasCommits: false,
+      trackingStatus: "untracked",
+    })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot })
+
+    await service.initialize(repository, {
+      branchName: "main",
+      kind: "create-and-push",
+      message: "Initial commit",
+      remoteName: "origin",
+    })
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ args: ["commit", "--allow-empty", "-m", "Initial commit"] }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ args: ["push", "--set-upstream", "origin", "main"] }))
+  })
+
+  it("rechecks local and remote state before changing an uninitialized repository", async () => {
+    const cleanSnapshot = {
+      changes: [],
+      changeCount: 0,
+      behind: 0,
+      ahead: 0,
+      currentBranch: "main",
+      hasCommits: false,
+      trackingStatus: "untracked" as const,
+    }
+    const getSnapshot = vi.fn()
+      .mockResolvedValueOnce(cleanSnapshot)
+      .mockResolvedValueOnce({
+        ...cleanSnapshot,
+        changes: [{ path: "README.md", status: "untracked" }],
+        changeCount: 1,
+      })
+    const run = vi.fn()
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot })
+
+    await expect(service.initialize(repository, {
+      branchName: "main",
+      kind: "create-and-push",
+      message: "Initial commit",
+      remoteName: "origin",
+    })).rejects.toThrow("请先提交本地改动")
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it("does not create another commit when retrying after the initial push failed", async () => {
+    let hasCommits = false
+    let pushAttempts = 0
+    const getSnapshot = vi.fn().mockImplementation(async () => ({
+      changes: [],
+      changeCount: 0,
+      behind: 0,
+      ahead: 0,
+      currentBranch: "main",
+      hasCommits,
+      trackingStatus: "untracked" as const,
+    }))
+    const run = vi.fn().mockImplementation(async (input: { args: string[] }) => {
+      if (input.args[0] === "commit") hasCommits = true
+      if (input.args[0] === "push" && pushAttempts++ === 0) throw new Error("network unavailable")
+      return { stdout: "", stderr: "" }
+    })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot })
+    const input = {
+      branchName: "main",
+      kind: "create-and-push" as const,
+      message: "Initial commit",
+      remoteName: "origin",
+    }
+
+    await expect(service.initialize(repository, input)).rejects.toThrow("network unavailable")
+    await expect(service.initialize(repository, input)).resolves.toMatchObject({ message: "已推送初始提交。" })
+
+    expect(run.mock.calls.filter(([call]) => call.args[0] === "commit")).toHaveLength(1)
+    expect(run.mock.calls.filter(([call]) => call.args[0] === "push")).toHaveLength(2)
+  })
+
+  it("rejects ordinary push before the first commit", async () => {
+    const run = vi.fn()
+    const getSnapshot = vi.fn().mockResolvedValue({
+      changes: [],
+      changeCount: 0,
+      behind: 0,
+      ahead: 0,
+      currentBranch: "main",
+      hasCommits: false,
+      trackingStatus: "untracked",
+    })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot })
+
+    await expect(service.push(repository, "origin")).rejects.toThrow("仓库尚无提交")
+    expect(run).not.toHaveBeenCalled()
+  })
+
   it("lists push targets and marks the Git-configured default", async () => {
     const run = vi.fn()
       .mockResolvedValueOnce({ stdout: "origin\nbackup\n", stderr: "" })

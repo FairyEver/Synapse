@@ -86,6 +86,7 @@ function retryLabel(pendingAction: PendingGitAction | null): string {
   if (pendingAction.type === "clone") return "重试克隆"
   if (pendingAction.type === "pull") return "重试拉取"
   if (pendingAction.type === "push") return "重试推送"
+  if (pendingAction.type === "initialize") return "继续初始化"
   return "重试同步"
 }
 

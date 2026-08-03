@@ -476,6 +476,7 @@ import type {
   SynapseGitProvider,
   SynapseGitProtocol,
   SynapseGitPushTarget,
+  SynapseGitInitializationPlan,
   SynapseGitRemoteBranchGroup,
   SynapseGitRepository,
   SynapseGitRepositorySummary,
@@ -1210,6 +1211,19 @@ export type SynapseBridge = {
     fetch: (repositoryId: string, operationId?: string) => Promise<SynapseGitOperationResult>
     pull: (repositoryId: string, operationId?: string) => Promise<SynapseGitOperationResult>
     push: (repositoryId: string, remoteName?: string, operationId?: string) => Promise<SynapseGitOperationResult>
+    inspectInitialization: (input: {
+      repositoryId: string
+      remoteName?: string
+      operationId?: string
+    }) => Promise<SynapseGitInitializationPlan>
+    initializeRepository: (input: {
+      repositoryId: string
+      branchName: string
+      kind: SynapseGitInitializationPlan["kind"]
+      message?: string
+      remoteName: string
+      operationId?: string
+    }) => Promise<SynapseGitOperationResult>
     listPushTargets: (repositoryId: string) => Promise<SynapseGitPushTarget[]>
     sync: (repositoryId: string, operationId?: string) => Promise<SynapseGitOperationResult>
     listBranches: (repositoryId: string) => Promise<SynapseGitBranch[]>

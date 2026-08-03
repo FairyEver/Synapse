@@ -1,4 +1,10 @@
-import type { SynapseGitOperationResult, SynapseGitPushTarget, SynapseGitRepository, SynapseGitRepositorySnapshot } from "../../../src/types/git"
+import type {
+  SynapseGitInitializationPlan,
+  SynapseGitOperationResult,
+  SynapseGitPushTarget,
+  SynapseGitRepository,
+  SynapseGitRepositorySnapshot,
+} from "../../../src/types/git"
 import type { StructuredLogger } from "../../runtime/logging"
 import type { GitClientCommandRunner } from "./git-command-runner"
 import { assertNoIgnoredPathCollisions } from "../git-working-tree-safety"
@@ -16,7 +22,7 @@ import {
 
 type SyncDeps = {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
-  readonly getSnapshot: (repository: SynapseGitRepository) => Promise<Pick<SynapseGitRepositorySnapshot, "changeCount" | "changes" | "ahead" | "behind" | "currentBranch" | "trackingStatus">>
+  readonly getSnapshot: (repository: SynapseGitRepository) => Promise<Pick<SynapseGitRepositorySnapshot, "changeCount" | "changes" | "ahead" | "behind" | "currentBranch" | "hasCommits" | "trackingStatus">>
   readonly logger?: Pick<StructuredLogger, "error" | "info" | "warn">
   readonly now?: () => Date
 }
@@ -24,6 +30,13 @@ type SyncDeps = {
 type SyncOperationOptions = {
   readonly operationId?: string
   readonly signal?: AbortSignal
+}
+
+type InitializeRepositoryInput = {
+  readonly branchName: string
+  readonly kind: SynapseGitInitializationPlan["kind"]
+  readonly message?: string
+  readonly remoteName: string
 }
 
 export function createGitSyncService(deps: SyncDeps) {
@@ -104,8 +117,144 @@ export function createGitSyncService(deps: SyncDeps) {
     return targets.map((target) => ({ ...target, preferred: target.name === preferredName }))
   }
 
+  async function inspectInitialization(
+    repository: SynapseGitRepository,
+    remoteName?: string,
+    options: SyncOperationOptions = {},
+  ): Promise<SynapseGitInitializationPlan> {
+    const operation = "git.inspectInitialization"
+    const operationId = options.operationId ?? createGitOperationId()
+    const snapshot = await deps.getSnapshot(repository)
+    assertInitializationAllowed(snapshot)
+    const selectedName = await resolvePushTargetName(repository, remoteName)
+    const remote = await deps.commandRunner.run({
+      args: ["ls-remote", "--symref", selectedName, "HEAD", "refs/heads/*"],
+      abortSignal: options.signal,
+      cwd: repository.localPath,
+      operation,
+      operationId,
+      repoPath: repository.localPath,
+      repositoryId: repository.id,
+      timeoutMs: 120_000,
+    })
+    const remoteBranch = resolveRemoteBranch(remote.stdout)
+    return remoteBranch
+      ? { kind: "track-remote", branchName: remoteBranch, remoteName: selectedName }
+      : { kind: "create-and-push", branchName: snapshot.currentBranch!, remoteName: selectedName }
+  }
+
+  async function pushCurrentBranch(
+    repository: SynapseGitRepository,
+    remoteName: string,
+    branchName: string,
+    operation: string,
+    operationId: string,
+    options: SyncOperationOptions,
+  ): Promise<void> {
+    await deps.commandRunner.run({
+      args: ["push", "--set-upstream", remoteName, branchName],
+      abortSignal: options.signal,
+      cwd: repository.localPath,
+      operation,
+      operationId,
+      repoPath: repository.localPath,
+      repositoryId: repository.id,
+      timeoutMs: 120_000,
+    })
+  }
+
   return {
+    inspectInitialization,
     listPushTargets,
+
+    async initialize(
+      repository: SynapseGitRepository,
+      input: InitializeRepositoryInput,
+      options: SyncOperationOptions = {},
+    ): Promise<SynapseGitOperationResult> {
+      return runRemoteOperation("git.initialize", repository, options, async (operationId) => {
+        const snapshot = await deps.getSnapshot(repository)
+        if (snapshot.hasCommits !== false) {
+          if (snapshot.trackingStatus === "tracked") return result("仓库已连接远端。")
+          if (!snapshot.currentBranch || snapshot.trackingStatus === "detached") throw new Error("请先切换到本地分支。")
+          await pushCurrentBranch(repository, input.remoteName, snapshot.currentBranch, "git.initialize", operationId, options)
+          return result("已推送初始提交。")
+        }
+
+        const currentPlan = await inspectInitialization(repository, input.remoteName, { ...options, operationId })
+        if (currentPlan.kind !== input.kind || currentPlan.branchName !== input.branchName) {
+          throw new Error("远端状态已变化，请重新检查后继续。")
+        }
+
+        if (currentPlan.kind === "create-and-push") {
+          const message = input.message?.trim()
+          if (!message) throw new Error("请输入提交说明。")
+          await deps.commandRunner.run({
+            args: ["commit", "--allow-empty", "-m", message],
+            abortSignal: options.signal,
+            cwd: repository.localPath,
+            operation: "git.initialize",
+            operationId,
+            repoPath: repository.localPath,
+            repositoryId: repository.id,
+          })
+          await pushCurrentBranch(repository, input.remoteName, currentPlan.branchName, "git.initialize", operationId, options)
+          return result("已初始化并推送仓库。")
+        }
+
+        await deps.commandRunner.run({
+          args: ["check-ref-format", "--branch", currentPlan.branchName],
+          abortSignal: options.signal,
+          cwd: repository.localPath,
+          operation: "git.initialize",
+          operationId,
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
+        })
+        await deps.commandRunner.run({
+          args: ["fetch", "--prune", input.remoteName],
+          abortSignal: options.signal,
+          cwd: repository.localPath,
+          operation: "git.initialize",
+          operationId,
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
+          timeoutMs: 120_000,
+        })
+        await assertNoIgnoredPathCollisions({
+          target: `${input.remoteName}/${currentPlan.branchName}`,
+          run: (args, streamOptions) => deps.commandRunner.run({
+            args,
+            cwd: repository.localPath,
+            ...streamOptions,
+            operation: "git.initialize",
+            operationId,
+            repoPath: repository.localPath,
+            repositoryId: repository.id,
+          }),
+        })
+        const localBranch = await deps.commandRunner.run({
+          acceptedExitCodes: [0, 1],
+          args: ["rev-parse", "--verify", "--quiet", `refs/heads/${currentPlan.branchName}`],
+          cwd: repository.localPath,
+          operation: "git.initialize",
+          operationId,
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
+        })
+        if (localBranch.stdout.trim()) throw new Error("本地已有同名分支，请进入仓库选择分支。")
+        await deps.commandRunner.run({
+          args: ["checkout", "--track", "-b", currentPlan.branchName, `${input.remoteName}/${currentPlan.branchName}`],
+          abortSignal: options.signal,
+          cwd: repository.localPath,
+          operation: "git.initialize",
+          operationId,
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
+        })
+        return result("已获取远端内容。")
+      })
+    },
 
     async fetch(repository: SynapseGitRepository, options: SyncOperationOptions = {}): Promise<SynapseGitOperationResult> {
       return runRemoteOperation("git.fetch", repository, options, async (operationId) => {
@@ -148,6 +297,7 @@ export function createGitSyncService(deps: SyncDeps) {
     async push(repository: SynapseGitRepository, remoteName?: string, options: SyncOperationOptions = {}): Promise<SynapseGitOperationResult> {
       return runRemoteOperation("git.push", repository, options, async (operationId) => {
         const snapshot = await deps.getSnapshot(repository)
+        if (snapshot.hasCommits === false) throw new Error("仓库尚无提交，请先初始化仓库。")
         let args = ["push"]
         if (snapshot.trackingStatus === "detached") {
           throw new Error("请先切换到本地分支。")
@@ -268,8 +418,17 @@ export function createGitSyncService(deps: SyncDeps) {
     return result.stdout.trim() || null
   }
 
+  async function resolvePushTargetName(repository: SynapseGitRepository, remoteName?: string): Promise<string> {
+    if (remoteName) return remoteName
+    const targets = await listPushTargets(repository)
+    if (targets.length === 1) return targets[0]!.name
+    const preferred = targets.find((target) => target.preferred)
+    if (preferred) return preferred.name
+    throw new Error(targets.length === 0 ? "仓库没有可推送的远端。" : "请选择推送远端。")
+  }
+
   async function runRemoteOperation(
-    operation: "git.fetch" | "git.pull" | "git.push",
+    operation: "git.fetch" | "git.initialize" | "git.pull" | "git.push",
     repository: SynapseGitRepository,
     options: SyncOperationOptions,
     action: (operationId: string) => Promise<SynapseGitOperationResult>,
@@ -338,6 +497,34 @@ function assertAutomaticIntegrationAllowed(
   if (snapshot.ahead > 0 && snapshot.behind > 0) {
     throw new Error("本地分支与上游分支已分叉，请使用外部 Git 工具处理后重试。")
   }
+}
+
+function assertInitializationAllowed(
+  snapshot: Pick<SynapseGitRepositorySnapshot, "changeCount" | "changes" | "currentBranch" | "hasCommits" | "trackingStatus">,
+): void {
+  if (snapshot.hasCommits !== false) throw new Error("仓库已有提交，无需初始化。")
+  if (!snapshot.currentBranch || snapshot.trackingStatus === "detached") throw new Error("请先切换到本地分支。")
+  if ((snapshot.changeCount ?? snapshot.changes.length) > 0) throw new Error("请先提交本地改动。")
+}
+
+function resolveRemoteBranch(output: string): string | null {
+  let defaultBranch: string | null = null
+  const branches = new Set<string>()
+  for (const line of output.split(/\r?\n/)) {
+    const [value, refName] = line.split("\t")
+    if (refName === "HEAD" && value?.startsWith("ref: refs/heads/")) {
+      defaultBranch = value.slice("ref: refs/heads/".length).trim() || null
+      continue
+    }
+    if (refName?.startsWith("refs/heads/")) {
+      const branchName = refName.slice("refs/heads/".length).trim()
+      if (branchName) branches.add(branchName)
+    }
+  }
+  if (defaultBranch && branches.has(defaultBranch)) return defaultBranch
+  if (branches.size === 0) return null
+  if (branches.size === 1) return [...branches][0] ?? null
+  throw new Error("远端默认分支不明确，请进入仓库选择远端分支。")
 }
 
 const noopLogger = {

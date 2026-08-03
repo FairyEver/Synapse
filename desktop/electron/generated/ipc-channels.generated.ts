@@ -432,6 +432,8 @@ export const IPC_CHANNELS = {
     "fetch": "synapse:app:git:sync:fetch",
     "pull": "synapse:app:git:sync:pull",
     "push": "synapse:app:git:sync:push",
+    "inspectInitialization": "synapse:app:git:sync:inspect_initialization",
+    "initializeRepository": "synapse:app:git:sync:initialize",
     "listPushTargets": "synapse:app:git:sync:list_push_targets",
     "sync": "synapse:app:git:sync:sync",
     "listBranches": "synapse:app:git:branches:list",

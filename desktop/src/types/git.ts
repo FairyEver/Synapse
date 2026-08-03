@@ -207,6 +207,7 @@ export type SynapseGitRepositorySnapshot = {
   readonly pathExists: boolean
   readonly isGitRepository: boolean
   readonly currentBranch: string | null
+  readonly hasCommits: boolean
   readonly upstream: string | null
   readonly trackingStatus: "tracked" | "untracked" | "detached" | "gone"
   readonly ahead: number
@@ -217,6 +218,18 @@ export type SynapseGitRepositorySnapshot = {
   readonly changesTruncated: boolean
   readonly changes: readonly SynapseGitWorkingTreeChange[]
 }
+
+export type SynapseGitInitializationPlan =
+  | {
+      readonly kind: "create-and-push"
+      readonly branchName: string
+      readonly remoteName: string
+    }
+  | {
+      readonly kind: "track-remote"
+      readonly branchName: string
+      readonly remoteName: string
+    }
 
 export type SynapseGitPushTarget = {
   readonly name: string

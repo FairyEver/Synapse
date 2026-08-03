@@ -22,6 +22,8 @@ describe("gitIpcModule", () => {
     expect(gitIpcModule.methods.prepareChangeSelection.operationId).toBe("app.git.changes.prepare")
     expect(gitIpcModule.methods.discardChanges.operationId).toBe("app.git.changes.discard")
     expect(gitIpcModule.methods.commit.operationId).toBe("app.git.commit.create")
+    expect(gitIpcModule.methods.inspectInitialization.operationId).toBe("app.git.sync.inspect_initialization")
+    expect(gitIpcModule.methods.initializeRepository.operationId).toBe("app.git.sync.initialize")
     expect(gitIpcModule.methods.fetchRemoteBranches.operationId).toBe("app.git.branches.fetch_remote")
     expect(gitIpcModule.methods.checkoutRemoteBranch.operationId).toBe("app.git.branches.checkout_remote")
   })
@@ -88,6 +90,26 @@ describe("gitIpcModule", () => {
       repositoryId: "repo-1",
       message: "update",
       paths: ["docs/a.md"],
+    }).success).toBe(false)
+  })
+
+  it("validates repository initialization requests", () => {
+    expect(gitIpcModule.methods.inspectInitialization.request.safeParse({
+      repositoryId: "repo-1",
+      remoteName: "origin",
+    }).success).toBe(true)
+    expect(gitIpcModule.methods.initializeRepository.request.safeParse({
+      repositoryId: "repo-1",
+      branchName: "main",
+      kind: "create-and-push",
+      message: "Initial commit",
+      remoteName: "origin",
+    }).success).toBe(true)
+    expect(gitIpcModule.methods.initializeRepository.request.safeParse({
+      repositoryId: "repo-1",
+      branchName: "main",
+      kind: "force-push",
+      remoteName: "origin",
     }).success).toBe(false)
   })
 

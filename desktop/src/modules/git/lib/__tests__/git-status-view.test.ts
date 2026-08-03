@@ -7,6 +7,7 @@ const snapshot: SynapseGitRepositorySnapshot = {
   pathExists: true,
   isGitRepository: true,
   currentBranch: "feature",
+  hasCommits: true,
   upstream: null,
   trackingStatus: "untracked",
   ahead: 0,
@@ -26,6 +27,14 @@ describe("Git status view", () => {
       primaryLabel: "首次推送",
     })
     expect(needsGitAttention(snapshot)).toBe(true)
+  })
+
+  it("offers initialization before the first commit exists", () => {
+    expect(getGitActionPlan({ ...snapshot, hasCommits: false })).toMatchObject({
+      statusText: "尚无提交",
+      primaryAction: "initialize",
+      primaryLabel: "初始化并推送",
+    })
   })
 
   it("does not offer push while HEAD is detached", () => {

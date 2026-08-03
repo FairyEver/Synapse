@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react"
-import type { SynapseGitProvider } from "@/types/git"
+import type { SynapseGitProvider, SynapseGitRepository } from "@/types/git"
 
 type PendingGitActionBase = {
   readonly host: string
@@ -25,7 +25,14 @@ export type PendingGitRepositoryAction = PendingGitActionBase & {
   readonly repositoryId: string
 }
 
-export type PendingGitAction = PendingGitCloneAction | PendingGitRepositoryAction
+export type PendingGitInitializationAction = PendingGitActionBase & {
+  readonly type: "initialize"
+  readonly repository: SynapseGitRepository
+  readonly input: { readonly message?: string; readonly remoteName: string }
+  readonly onCompleted: () => void | Promise<void>
+}
+
+export type PendingGitAction = PendingGitCloneAction | PendingGitRepositoryAction | PendingGitInitializationAction
 
 export function usePendingGitAction() {
   const [pendingAction, setPendingAction] = useState<PendingGitAction | null>(null)

@@ -1,6 +1,6 @@
 import type { SynapseGitRepositorySnapshot } from "@/types/git"
 
-export type GitRecommendedAction = "open" | "pull" | "push" | "sync" | "none"
+export type GitRecommendedAction = "initialize" | "open" | "pull" | "push" | "sync" | "none"
 
 export type GitActionPlan = {
   readonly statusText: string
@@ -91,6 +91,16 @@ export function getGitActionPlan(snapshot: SynapseGitRepositorySnapshot | null, 
       primaryLabel: "提交改动",
       blockerText: "有未提交改动",
       recoveryText: "选择文件并提交。",
+    }
+  }
+
+  if (snapshot.hasCommits === false) {
+    return {
+      statusText: "尚无提交",
+      primaryAction: "initialize",
+      primaryLabel: "初始化并推送",
+      blockerText: null,
+      recoveryText: "创建首个提交并连接远端。",
     }
   }
 

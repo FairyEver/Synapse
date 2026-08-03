@@ -262,6 +262,7 @@ const snapshotSchema = z.object({
   pathExists: z.boolean(),
   isGitRepository: z.boolean(),
   currentBranch: z.string().nullable(),
+  hasCommits: z.boolean(),
   upstream: z.string().nullable(),
   trackingStatus: z.enum(["tracked", "untracked", "detached", "gone"]),
   ahead: z.number(),
@@ -333,6 +334,32 @@ const pushTargetSchema = z.object({
 
 const pushRequestSchema = repositoryIdSchema.extend({
   remoteName: z.string().optional(),
+  operationId: z.string().min(1).optional(),
+}).strict()
+
+const inspectInitializationRequestSchema = repositoryIdSchema.extend({
+  remoteName: z.string().min(1).optional(),
+  operationId: z.string().min(1).optional(),
+}).strict()
+
+const initializationPlanSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("create-and-push"),
+    branchName: z.string().min(1),
+    remoteName: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal("track-remote"),
+    branchName: z.string().min(1),
+    remoteName: z.string().min(1),
+  }),
+])
+
+const initializeRepositoryRequestSchema = repositoryIdSchema.extend({
+  branchName: z.string().min(1),
+  kind: z.enum(["create-and-push", "track-remote"]),
+  message: z.string().optional(),
+  remoteName: z.string().min(1),
   operationId: z.string().min(1).optional(),
 }).strict()
 
@@ -417,6 +444,8 @@ type CloneRepositoryRequest = z.infer<typeof cloneRepositorySchema>
 type RepositoryIdRequest = z.infer<typeof repositoryIdSchema>
 type RepositoryOperationRequest = z.infer<typeof repositoryOperationSchema>
 type PushRequest = z.infer<typeof pushRequestSchema>
+type InspectInitializationRequest = z.infer<typeof inspectInitializationRequestSchema>
+type InitializeRepositoryRequest = z.infer<typeof initializeRepositoryRequestSchema>
 type RemoveRepositoryRequest = z.infer<typeof removeRepositorySchema>
 type DiffRequest = z.infer<typeof diffRequestSchema>
 type PrepareChangeSelectionRequest = z.infer<typeof prepareChangeSelectionRequestSchema>
@@ -701,6 +730,30 @@ export const gitIpcModule: IpcModule = {
         return runRepositoryOperation(ctx, repository, input, "push", (signal, operationId) => (
           ctx.resolve<GitSyncService>("git.sync-service").push(repository, input.remoteName, { operationId, signal })
         ))
+      },
+    },
+    inspectInitialization: {
+      operationId: "app.git.sync.inspect_initialization",
+      kind: "invoke",
+      request: inspectInitializationRequestSchema,
+      response: initializationPlanSchema,
+      handler: async (ctx, input: InspectInitializationRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryOperation(ctx, repository, input, "inspect-initialization", (signal, operationId) => (
+          ctx.resolve<GitSyncService>("git.sync-service").inspectInitialization(repository, input.remoteName, { operationId, signal })
+        ))
+      },
+    },
+    initializeRepository: {
+      operationId: "app.git.sync.initialize",
+      kind: "invoke",
+      request: initializeRepositoryRequestSchema,
+      response: operationResultSchema,
+      handler: async (ctx, input: InitializeRepositoryRequest) => {
+        const repository = await resolveRepository(ctx, input.repositoryId)
+        return runRepositoryOperation(ctx, repository, input, "initialize", (signal, operationId) => (
+          ctx.resolve<GitSyncService>("git.sync-service").initialize(repository, input, { operationId, signal })
+        ), { requiresNormalWorktree: true })
       },
     },
     listPushTargets: {

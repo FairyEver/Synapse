@@ -39,13 +39,14 @@ type GitWorkbenchProps = {
   readonly onBack: () => void
   readonly onOperationFailure?: (failure: GitOperationFailure | null) => void
   readonly onHandleFailure?: (failure: GitOperationFailure) => void
+  readonly onInitialize?: (repository: SynapseGitRepository, onCompleted: () => void | Promise<void>) => void
   readonly onSelectPushRemote?: (
     repositoryId: string,
     trackingStatus: SynapseGitRepositorySnapshot["trackingStatus"],
   ) => Promise<string | null | undefined>
 }
 
-export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleFailure, onSelectPushRemote }: GitWorkbenchProps) {
+export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleFailure, onInitialize, onSelectPushRemote }: GitWorkbenchProps) {
   const [view, setView] = useState("changes")
   const [busy, setBusy] = useState<"sync" | "pull" | "push" | null>(null)
   const [operationPhase, setOperationPhase] = useState<SynapseGitOperationState["status"] | null>(null)
@@ -67,6 +68,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   const worktreeMutationBlocked = Boolean(status.snapshot && status.snapshot.repositoryOperationState !== "normal")
   const syncBoundaryBlocked = status.snapshot?.trackingStatus === "gone"
     || Boolean(status.snapshot && status.snapshot.ahead > 0 && status.snapshot.behind > 0)
+  const remoteIntegrationBlocked = status.snapshot?.hasCommits === false || syncBoundaryBlocked
   const syncBoundaryPlan = syncBoundaryBlocked && status.snapshot
     ? getGitActionPlan({ ...status.snapshot, changeCount: 0, changes: [] })
     : null
@@ -134,6 +136,10 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   }
 
   const runPush = async () => {
+    if (status.snapshot?.hasCommits === false) {
+      onInitialize?.(repository, refreshAll)
+      return
+    }
     const trackingStatus = status.snapshot?.trackingStatus ?? "detached"
     const remoteName = await onSelectPushRemote?.(repository.id, trackingStatus)
     if (remoteName === null) return
@@ -141,6 +147,10 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   }
 
   const runRecommendedAction = () => {
+    if (recommendedAction === "initialize") {
+      onInitialize?.(repository, refreshAll)
+      return
+    }
     if (recommendedAction === "pull") {
       void run("pull", (operationId) => requireSynapseBridge().git.pull(repository.id, operationId))
       return
@@ -255,7 +265,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  disabled={!canRunGitOperation || worktreeMutationBlocked || syncBoundaryBlocked}
+                  disabled={!canRunGitOperation || worktreeMutationBlocked || remoteIntegrationBlocked}
                   onSelect={() => void run("pull", (operationId) => requireSynapseBridge().git.pull(repository.id, operationId))}
                 >
                   拉取
@@ -267,7 +277,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
                   推送
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  disabled={!canRunGitOperation || worktreeMutationBlocked || syncBoundaryBlocked}
+                  disabled={!canRunGitOperation || worktreeMutationBlocked || remoteIntegrationBlocked}
                   onSelect={() => void run("sync", (operationId) => requireSynapseBridge().git.sync(repository.id, operationId))}
                 >
                   同步

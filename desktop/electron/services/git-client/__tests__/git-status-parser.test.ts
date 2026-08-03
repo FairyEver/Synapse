@@ -15,6 +15,7 @@ describe("parseGitStatusPorcelainV2", () => {
     ].join("\n"))
 
     expect(snapshot.currentBranch).toBe("main")
+    expect(snapshot.hasCommits).toBe(true)
     expect(snapshot.upstream).toBe("origin/main")
     expect(snapshot.trackingStatus).toBe("tracked")
     expect(snapshot.ahead).toBe(2)
@@ -29,8 +30,22 @@ describe("parseGitStatusPorcelainV2", () => {
   })
 
   it("distinguishes branches without upstream from detached HEAD", () => {
-    expect(parseGitStatusPorcelainV2("# branch.head feature\n").trackingStatus).toBe("untracked")
-    expect(parseGitStatusPorcelainV2("# branch.head (detached)\n").trackingStatus).toBe("detached")
+    expect(parseGitStatusPorcelainV2("# branch.oid abc123\n# branch.head feature\n")).toMatchObject({
+      hasCommits: true,
+      trackingStatus: "untracked",
+    })
+    expect(parseGitStatusPorcelainV2("# branch.oid abc123\n# branch.head (detached)\n")).toMatchObject({
+      hasCommits: true,
+      trackingStatus: "detached",
+    })
+  })
+
+  it("recognizes an initial branch without commits", () => {
+    expect(parseGitStatusPorcelainV2("# branch.oid (initial)\n# branch.head main\n")).toMatchObject({
+      currentBranch: "main",
+      hasCommits: false,
+      trackingStatus: "untracked",
+    })
   })
 
   it("reports an upstream that no longer exists", () => {
@@ -102,6 +117,7 @@ describe("parseGitStatusPorcelainV2", () => {
 
     expect(parser.finish()).toEqual({
       currentBranch: "main",
+      hasCommits: false,
       upstream: "origin/main",
       trackingStatus: "tracked",
       ahead: 2,

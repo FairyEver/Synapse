@@ -56,6 +56,7 @@ function emptySnapshot(): SynapseGitRepositorySnapshot {
     pathExists: true,
     isGitRepository: true,
     currentBranch: "main",
+    hasCommits: true,
     upstream: null,
     trackingStatus: "untracked",
     ahead: 0,

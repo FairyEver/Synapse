@@ -30,6 +30,9 @@ const bridge = vi.hoisted(() => ({
     prepareChangeSelection: vi.fn(),
     discardChanges: vi.fn(),
     commit: vi.fn(),
+    inspectInitialization: vi.fn(),
+    initializeRepository: vi.fn(),
+    listPushTargets: vi.fn(),
     listBranches: vi.fn(),
     listRemoteBranches: vi.fn(),
     fetchRemoteBranches: vi.fn(),
@@ -71,7 +74,9 @@ type RepositorySnapshot = {
   readonly pathExists: boolean
   readonly isGitRepository: boolean
   readonly currentBranch: string | null
+  readonly hasCommits: boolean
   readonly upstream: string | null
+  readonly trackingStatus: "tracked" | "untracked" | "detached" | "gone"
   readonly ahead: number
   readonly behind: number
   readonly repositoryOperationState: "normal" | "merge" | "rebase" | "cherry-pick" | "revert" | "bisect" | "unknown"
@@ -104,7 +109,9 @@ function summary(
       pathExists: true,
       isGitRepository: true,
       currentBranch: "main",
+      hasCommits: true,
       upstream: "origin/main",
+      trackingStatus: "tracked",
       ahead: 0,
       behind: 0,
       repositoryOperationState: "normal",
@@ -233,6 +240,9 @@ describe("GitModule repository list", () => {
     })
     bridge.git.getDiff.mockResolvedValue({ path: "docs/a.md", originalPath: null, binary: false, text: "" })
     bridge.git.commit.mockResolvedValue({ completedAt: "now", message: "已提交。" })
+    bridge.git.listPushTargets.mockResolvedValue([{ name: "origin", url: "https://example.com/docs.git", preferred: true }])
+    bridge.git.inspectInitialization.mockResolvedValue({ kind: "create-and-push", branchName: "main", remoteName: "origin" })
+    bridge.git.initializeRepository.mockResolvedValue({ completedAt: "now", message: "已初始化并推送仓库。" })
     bridge.git.prepareChangeSelection.mockResolvedValue({
       selectionId: "selection-1",
       repositoryId: "repo-1",
@@ -1039,6 +1049,149 @@ describe("GitModule repository list", () => {
     expect(countButtons("推送本地提交")).toBe(1)
     expect(countButtons("处理分叉")).toBe(1)
     expect(countButtons("查看状态")).toBe(1)
+  })
+
+  it("initializes a repository without commits from the repository list", async () => {
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }, {
+        hasCommits: false,
+        trackingStatus: "untracked",
+        upstream: null,
+      }),
+    ])
+    await renderGitModule(roots)
+
+    expect(document.body.textContent).toContain("尚无提交")
+    await click(findButton("初始化并推送"))
+
+    expect(document.body.textContent).toContain("不会新增或修改文件")
+    expect(inputByLabel("提交说明").value).toBe("Initial commit")
+    const dialog = document.querySelector('[data-track="git-initialize-dialog"]')
+    const initializeButton = Array.from(dialog?.querySelectorAll("button") ?? [])
+      .find((button): button is HTMLButtonElement => button.textContent === "初始化并推送")
+    expect(initializeButton).toBeTruthy()
+    await click(initializeButton!)
+
+    expect(bridge.git.inspectInitialization).toHaveBeenCalledWith(expect.objectContaining({
+      repositoryId: "repo-1",
+      remoteName: "origin",
+    }))
+    expect(bridge.git.initializeRepository).toHaveBeenCalledWith(expect.objectContaining({
+      branchName: "main",
+      kind: "create-and-push",
+      message: "Initial commit",
+      remoteName: "origin",
+      repositoryId: "repo-1",
+    }))
+  })
+
+  it("offers to fetch an existing remote branch instead of creating a commit", async () => {
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }, {
+        hasCommits: false,
+        trackingStatus: "untracked",
+        upstream: null,
+      }),
+    ])
+    bridge.git.inspectInitialization.mockResolvedValue({ kind: "track-remote", branchName: "main", remoteName: "origin" })
+    await renderGitModule(roots)
+
+    await click(findButton("初始化并推送"))
+
+    expect(document.body.textContent).toContain("将获取并切换到 origin/main")
+    expect(findButton("获取远端内容")).toBeTruthy()
+  })
+
+  it("shows initialization inspection failures without exposing a Git command", async () => {
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }, {
+        hasCommits: false,
+        trackingStatus: "untracked",
+        upstream: null,
+      }),
+    ])
+    bridge.git.inspectInitialization.mockRejectedValue(new Error("远端默认分支不明确，请进入仓库选择远端分支。"))
+    await renderGitModule(roots)
+
+    await click(findButton("初始化并推送"))
+
+    expect(document.body.textContent).toContain("无法继续")
+    expect(document.body.textContent).toContain("远端默认分支不明确")
+  })
+
+  it("cancels an initialization operation from the dialog", async () => {
+    const initialization = deferred<{ completedAt: string; message: string }>()
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }, {
+        hasCommits: false,
+        trackingStatus: "untracked",
+        upstream: null,
+      }),
+    ])
+    bridge.git.initializeRepository.mockReturnValue(initialization.promise)
+    await renderGitModule(roots)
+
+    await click(findButton("初始化并推送"))
+    const dialog = document.querySelector('[data-track="git-initialize-dialog"]')
+    const initializeButton = Array.from(dialog?.querySelectorAll("button") ?? [])
+      .find((button): button is HTMLButtonElement => button.textContent === "初始化并推送")
+    await click(initializeButton!)
+    const operationId = bridge.git.initializeRepository.mock.calls[0]?.[0].operationId
+    await click(findButton("取消操作"))
+
+    expect(bridge.git.cancelOperation).toHaveBeenCalledWith(operationId)
+    const cancelled = new Error("操作已取消。")
+    cancelled.name = "GitOperationCancelledError"
+    initialization.reject(cancelled)
+    await act(async () => flush())
+    expect(document.querySelector('[data-track="git-initialize-dialog"]')).toBeNull()
+  })
+
+  it("preserves initialization inputs while resolving an access failure", async () => {
+    const authError = new Error("需要登录。") as Error & { userFacingFailure: unknown }
+    authError.userFacingFailure = {
+      category: "github-auth",
+      detail: "Authentication failed.",
+      host: "github.com",
+      message: "请处理 GitHub 访问。",
+      primaryAction: "handle-github-auth",
+      protocol: "https",
+      title: "GitHub 访问失败",
+    }
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }, {
+        hasCommits: false,
+        trackingStatus: "untracked",
+        upstream: null,
+      }),
+    ])
+    bridge.git.initializeRepository.mockRejectedValue(authError)
+    bridge.git.checkAccess.mockResolvedValue(gitAccess({
+      hosts: [{
+        host: "github.com",
+        lastFailure: authError.userFacingFailure,
+        protocol: "https",
+        provider: "github",
+      }],
+    }))
+    await renderGitModule(roots)
+
+    await click(findButton("初始化并推送"))
+    await changeInput("提交说明", "Bootstrap")
+    const dialog = document.querySelector('[data-track="git-initialize-dialog"]')
+    const initializeButton = Array.from(dialog?.querySelectorAll("button") ?? [])
+      .find((button): button is HTMLButtonElement => button.textContent === "初始化并推送")
+    await click(initializeButton!)
+    await click(findButton("处理 GitHub 访问"))
+
+    expect(findButton("继续初始化")).toBeTruthy()
+    await click(findButton("继续初始化"))
+
+    expect(inputByLabel("提交说明").value).toBe("Bootstrap")
+    expect(bridge.git.inspectInitialization).toHaveBeenLastCalledWith(expect.objectContaining({
+      remoteName: "origin",
+      repositoryId: "repo-1",
+    }))
   })
 
   it("keeps secondary repository operations in the more menu", async () => {

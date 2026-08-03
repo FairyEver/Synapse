@@ -701,6 +701,49 @@ describe("Git client real repository integration", () => {
       .resolves.toBe("company/main\n")
   })
 
+  it("initializes and pushes a repository without commits or files", async () => {
+    const root = await createRoot()
+    const repository = await initializeRepository(path.join(root, "repo"))
+    const remotePath = path.join(root, "remote.git")
+    await git(root, "init", "--bare", remotePath)
+    await git(repository.localPath, "remote", "add", "origin", remotePath)
+    const runner = createGitClientCommandRunner()
+    const status = createGitStatusService({ commandRunner: runner, pathExists })
+    const sync = createGitSyncService({ commandRunner: runner, getSnapshot: status.getSnapshot })
+    const plan = await sync.inspectInitialization(repository, "origin")
+
+    await sync.initialize(repository, { ...plan, message: "Initial commit" })
+
+    await expect(git(repository.localPath, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"))
+      .resolves.toBe("origin/main\n")
+    await expect(git(repository.localPath, "show", "--format=%s", "--no-patch", "HEAD"))
+      .resolves.toBe("Initial commit\n")
+  })
+
+  it("tracks the remote default branch when an empty local repository points to existing content", async () => {
+    const root = await createRoot()
+    const source = await initializeRepository(path.join(root, "source"))
+    const remotePath = path.join(root, "remote.git")
+    await git(root, "init", "--bare", remotePath)
+    await writeFile(path.join(source.localPath, "README.md"), "remote content\n", "utf8")
+    await git(source.localPath, "add", "README.md")
+    await git(source.localPath, "commit", "-m", "remote initial")
+    await git(source.localPath, "remote", "add", "origin", remotePath)
+    await git(source.localPath, "push", "-u", "origin", "main")
+
+    const repository = await initializeRepository(path.join(root, "repo"))
+    await git(repository.localPath, "remote", "add", "origin", remotePath)
+    const runner = createGitClientCommandRunner()
+    const status = createGitStatusService({ commandRunner: runner, pathExists })
+    const sync = createGitSyncService({ commandRunner: runner, getSnapshot: status.getSnapshot })
+    const plan = await sync.inspectInitialization(repository, "origin")
+
+    await expect(sync.initialize(repository, plan)).resolves.toMatchObject({ message: "已获取远端内容。" })
+    await expect(readFile(path.join(repository.localPath, "README.md"), "utf8")).resolves.toBe("remote content\n")
+    await expect(git(repository.localPath, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"))
+      .resolves.toBe("origin/main\n")
+  })
+
   it("lists every nested untracked file even when repository config hides them", async () => {
     const root = await createRoot()
     const repository = await initializeRepository(path.join(root, "repo"))

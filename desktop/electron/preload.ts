@@ -612,6 +612,10 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS.git.pull)({ repositoryId, operationId }),
     push: (repositoryId, remoteName, operationId) =>
       invoke(IPC_CHANNELS.git.push)({ repositoryId, remoteName, operationId }),
+    inspectInitialization: (input) =>
+      invoke(IPC_CHANNELS.git.inspectInitialization)(input),
+    initializeRepository: (input) =>
+      invoke(IPC_CHANNELS.git.initializeRepository)(input),
     listPushTargets: (repositoryId) =>
       invoke(IPC_CHANNELS.git.listPushTargets)({ repositoryId }),
     sync: (repositoryId, operationId) =>

@@ -259,10 +259,15 @@ SSH 是高级路径。Synapse 可以检测 `ssh` 是否可用、是否存在常�
 
 默认 push remote 严格按 Git 配置解析：`branch.<name>.pushRemote` → `remote.pushDefault` → `branch.<name>.remote` → `origin` → 唯一远端。存在多个远端且仍无法判定时必须要求用户选择，不得使用配置文件中的第一个远端。
 
+尚无提交的仓库不进入普通 push。工作区有改动时仍先提交；工作区为空时显示“尚无提交”和“初始化并推送”，由列表、工作台及更多菜单共用初始化弹窗。弹窗先检查所选远端：远端无分支时允许编辑首个提交说明，默认 `Initial commit`，创建不修改文件的空提交并设置上游后推送；远端已有提交时采用远端 HEAD，HEAD 不明确但只有一个分支时采用该分支，随后 fetch 并创建 tracking 本地分支。多个远端分支且无法确定默认分支时必须停止并要求用户进入仓库选择分支，禁止猜测、覆盖、force push 或自动合并。
+
+初始化检查和执行都在同一仓库 FIFO 内重新验证：当前分支有效、工作区为空且仍无提交。初始化支持 operation ID 和取消，并沿用认证、网络、身份与失败恢复流程。空提交创建成功但推送失败时保留该提交，刷新后按普通“首次推送”继续，不得重复创建空提交。
+
 状态文案控制在操作层面：
 
 ```text
 已同步
+尚无提交
 有本地提交待推送 ↑1
 有远程更新待拉取 ↓2
 有未提交改动 3
@@ -404,6 +409,7 @@ type GitRepositorySnapshot = {
   isGitRepository: boolean
   repositoryOperationState: "normal" | "merge" | "rebase" | "cherry-pick" | "revert" | "bisect" | "unknown"
   currentBranch: string | null
+  hasCommits: boolean
   upstream: string | null
   ahead: number
   behind: number
@@ -479,6 +485,8 @@ git.sync.fetch
 git.sync.pull
 git.sync.push
 git.sync.sync
+app.git.sync.inspect_initialization
+app.git.sync.initialize
 git.branches.list
 git.branches.checkout
 git.branches.create
@@ -589,6 +597,10 @@ Git 模块遵循现有 Synapse shadcn/Radix 基线。
 
 同步：
 
+- `branch.oid (initial)` 能识别为尚无提交，普通 HEAD、游离 HEAD 和缺失头信息不会误判。
+- 空远端可创建空提交、推送并建立上游；已有远端默认分支可自动 fetch 并创建 tracking 分支。
+- 远端 HEAD 不明确时只接受唯一分支回退；多分支歧义、状态变化和取消必须停止且不改动仓库。
+- 空提交已创建但推送失败后不重复提交，后续进入普通首次推送流程。
 - ahead、behind、dirty 状态识别正确。
 - 有未提交改动时同步停止。
 - `pull --ff-only` 遇到 non-fast-forward 时停止。

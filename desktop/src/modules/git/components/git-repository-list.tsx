@@ -40,6 +40,7 @@ type GitRepositoryListProps = {
   readonly failure?: GitOperationFailure | null
   readonly busy: GitOperationBusyState
   readonly onOpenRepository: (repository: SynapseGitRepository) => void
+  readonly onInitialize: (repository: SynapseGitRepository) => void
   readonly onPull: (repositoryId: string) => void
   readonly onPush: (repositoryId: string, trackingStatus: SynapseGitRepositorySnapshot["trackingStatus"]) => void
   readonly onSync: (repositoryId: string) => void
@@ -87,6 +88,7 @@ export function GitRepositoryList({
   failure,
   busy,
   onOpenRepository,
+  onInitialize,
   onPull,
   onPush,
   onSync,
@@ -235,7 +237,8 @@ export function GitRepositoryList({
                       const changeCount = getGitChangeCount(snapshot)
                       const branch = snapshot?.currentBranch ?? "无分支"
                       const isClean = !needsGitAttention(snapshot, summary.error)
-                      const integrationBlocked = snapshot?.trackingStatus === "gone"
+                      const integrationBlocked = snapshot?.hasCommits === false
+                        || snapshot?.trackingStatus === "gone"
                         || Boolean(snapshot && snapshot.ahead > 0 && snapshot.behind > 0)
                       const pushBlocked = Boolean(snapshot && snapshot.ahead > 0 && snapshot.behind > 0)
                       const runningOperation = busy.repositories[repository.id]
@@ -243,6 +246,10 @@ export function GitRepositoryList({
                       const runPrimaryAction = () => {
                         if (actionPlan.primaryAction === "pull") {
                           onPull(repository.id)
+                          return
+                        }
+                        if (actionPlan.primaryAction === "initialize") {
+                          onInitialize(repository)
                           return
                         }
                         if (actionPlan.primaryAction === "push") {
@@ -295,7 +302,7 @@ export function GitRepositoryList({
                           onClick={(event) => stopAction(event, runPrimaryAction)}
                         >
                           {actionPlan.primaryAction === "pull" ? <Download data-icon="inline-start" /> : null}
-                          {actionPlan.primaryAction === "push" ? <Upload data-icon="inline-start" /> : null}
+                          {actionPlan.primaryAction === "push" || actionPlan.primaryAction === "initialize" ? <Upload data-icon="inline-start" /> : null}
                           {actionPlan.primaryAction === "sync" ? (
                             <RefreshCw
                               data-icon="inline-start"
@@ -343,7 +350,12 @@ export function GitRepositoryList({
                               <Download data-icon="inline-start" />
                               拉取
                             </DropdownMenuItem>
-                            <DropdownMenuItem disabled={pushBlocked} onSelect={() => onPush(repository.id, snapshot?.trackingStatus ?? "detached")}>
+                            <DropdownMenuItem
+                              disabled={pushBlocked}
+                              onSelect={() => snapshot?.hasCommits === false
+                                ? onInitialize(repository)
+                                : onPush(repository.id, snapshot?.trackingStatus ?? "detached")}
+                            >
                               <Upload data-icon="inline-start" />
                               推送
                             </DropdownMenuItem>

@@ -1448,6 +1448,33 @@ describe("preload bridge", () => {
     expect(serializedLog).not.toContain("raw-token")
   })
 
+  it("maps Git repository initialization to the generated IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+    const inspectInput = { repositoryId: "repo-1", remoteName: "origin", operationId: "inspect-1" }
+    const initializeInput = {
+      repositoryId: "repo-1",
+      branchName: "main",
+      kind: "create-and-push" as const,
+      message: "Initial commit",
+      remoteName: "origin",
+      operationId: "initialize-1",
+    }
+
+    await bridge.git.inspectInitialization(inspectInput)
+    await bridge.git.initializeRepository(initializeInput)
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      1,
+      "synapse:app:git:sync:inspect_initialization",
+      inspectInput,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      2,
+      "synapse:app:git:sync:initialize",
+      initializeInput,
+    )
+  })
+
   it("redacts Agent message content when send IPC fails", async () => {
     const bridge = await loadPreloadBridge()
     const failure = new Error("send unavailable")

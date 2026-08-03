@@ -26,6 +26,9 @@ const bridge = vi.hoisted(() => ({
     prepareChangeSelection: vi.fn(),
     discardChanges: vi.fn(),
     commit: vi.fn(),
+    inspectInitialization: vi.fn(),
+    initializeRepository: vi.fn(),
+    listPushTargets: vi.fn(),
     listBranches: vi.fn(),
     listRemoteBranches: vi.fn(),
     fetchRemoteBranches: vi.fn(),
@@ -483,6 +486,7 @@ describe("GitWorkbench", () => {
         pathExists: true,
         isGitRepository: true,
         currentBranch: "main",
+        hasCommits: true,
         upstream: "origin/main",
         trackingStatus: "tracked",
         ahead: 0,
@@ -627,6 +631,7 @@ describe("GitWorkbench", () => {
         pathExists: true,
         isGitRepository: true,
           currentBranch: "main",
+          hasCommits: true,
           upstream: "origin/main",
           trackingStatus: "tracked",
         ahead: 0,
@@ -769,6 +774,22 @@ describe("GitWorkbench", () => {
     expect(findButton("推送")).toBeTruthy()
   })
 
+  it("routes a repository without commits to the initialization flow", async () => {
+    const onInitialize = vi.fn()
+    bridge.git.getSnapshot.mockResolvedValue(gitSnapshot({
+      hasCommits: false,
+      upstream: null,
+      trackingStatus: "untracked",
+      ahead: 0,
+      changes: [],
+    }))
+
+    await renderWorkbench(roots, repository, vi.fn(), onInitialize)
+    await click(findButton("初始化并推送"))
+
+    expect(onInitialize).toHaveBeenCalledWith(repository, expect.any(Function))
+  })
+
   it("blocks commits while conflicts are present", async () => {
     const status = createStatus({
       snapshot: gitSnapshot({
@@ -828,6 +849,7 @@ function gitSnapshot(overrides: Partial<SynapseGitRepositorySnapshot> = {}): Syn
     pathExists: true,
     isGitRepository: true,
     currentBranch: "main",
+    hasCommits: true,
     upstream: "origin/main",
     trackingStatus: "tracked",
     ahead: 0,
@@ -867,6 +889,7 @@ async function renderWorkbench(
   roots: Root[],
   targetRepository: typeof repository = repository,
   onBack = vi.fn(),
+  onInitialize = vi.fn(),
 ): Promise<void> {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -874,7 +897,7 @@ async function renderWorkbench(
   roots.push(root)
 
   await act(async () => {
-    root.render(<GitWorkbench repository={targetRepository} onBack={onBack} />)
+    root.render(<GitWorkbench repository={targetRepository} onBack={onBack} onInitialize={onInitialize} />)
     await flush()
     await flush()
   })

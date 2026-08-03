@@ -7,6 +7,7 @@ import type {
 
 const EMPTY_RESULT: SynapseGitStatusParseResult = {
   currentBranch: null,
+  hasCommits: false,
   upstream: null,
   trackingStatus: "detached",
   ahead: 0,
@@ -28,6 +29,7 @@ type StatusAccumulator = {
   currentBranch: string | null
   hasAheadBehind: boolean
   hasConflicts: boolean
+  hasCommits: boolean
   upstream: string | null
 }
 
@@ -43,6 +45,7 @@ function createAccumulator(): StatusAccumulator {
     currentBranch: null,
     hasAheadBehind: false,
     hasConflicts: false,
+    hasCommits: false,
     upstream: null,
   }
 }
@@ -237,6 +240,10 @@ function appendChange(accumulator: StatusAccumulator, change: SynapseGitWorkingT
 }
 
 function applyHeader(accumulator: StatusAccumulator, record: string): boolean {
+  if (record.startsWith("# branch.oid ")) {
+    accumulator.hasCommits = record.slice("# branch.oid ".length).trim() !== "(initial)"
+    return true
+  }
   if (record.startsWith("# branch.head ")) {
     accumulator.branchHeadSeen = true
     const value = record.slice("# branch.head ".length).trim()
@@ -261,6 +268,7 @@ function finishAccumulator(accumulator: StatusAccumulator): SynapseGitStatusPars
   return {
     ...EMPTY_RESULT,
     currentBranch: accumulator.currentBranch,
+    hasCommits: accumulator.hasCommits,
     upstream: accumulator.upstream,
     trackingStatus: accumulator.currentBranch === null
       ? "detached"

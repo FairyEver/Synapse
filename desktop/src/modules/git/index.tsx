@@ -9,6 +9,7 @@ import { GitAccessPanel } from "./components/git-access-panel"
 import { GitAddLocalDialog, GitCloneDialog } from "./components/git-clone-dialog"
 import { GitEnvironmentPanel } from "./components/git-environment-panel"
 import { GitInstallPanel } from "./components/git-install-panel"
+import { useGitRepositoryInitialization, type GitInitializationRetry } from "./components/git-initialize-dialog"
 import { GitRepositoryList } from "./components/git-repository-list"
 import { useGitPushRemoteSelection } from "./components/git-push-remote-dialog"
 import { GitWorkbench } from "./components/git-workbench"
@@ -74,6 +75,24 @@ function buildRepositoryPendingAction(failure: GitOperationFailure): PendingGitA
   }
 }
 
+function buildInitializationPendingAction(
+  failure: GitOperationFailure,
+  retry: GitInitializationRetry,
+): PendingGitAction | null {
+  if (!shouldRouteFailureToAccess(failure)) return null
+  if (!failure.host || !isAccessProtocol(failure.protocol)) return null
+  return {
+    type: "initialize",
+    host: failure.host,
+    port: failure.port ?? null,
+    protocol: failure.protocol,
+    provider: providerFromHost(failure.host, failure.protocol),
+    repository: retry.repository,
+    input: retry.input,
+    onCompleted: retry.onCompleted,
+  }
+}
+
 function pendingActionHosts(pendingAction: PendingGitAction | null) {
   if (!pendingAction) return []
   return [{
@@ -97,6 +116,7 @@ export function GitModule() {
   const repositoriesState = useGitRepositories()
   const operations = useGitOperations(repositoriesState.refresh)
   const pushRemoteSelection = useGitPushRemoteSelection()
+  const initialization = useGitRepositoryInitialization()
   const access = useGitAccess()
   const {
     pendingAction,
@@ -167,6 +187,13 @@ export function GitModule() {
     clearPendingAction()
   }, [clearPendingAction, setPendingAction])
 
+  const handleInitializationFailure = useCallback((failure: GitOperationFailure, retry: GitInitializationRetry) => {
+    const pending = buildInitializationPendingAction(failure, retry)
+    if (pending) setPendingAction(pending)
+    else clearPendingAction()
+    routeFailure(failure)
+  }, [clearPendingAction, routeFailure, setPendingAction])
+
   useEffect(() => {
     const failure = operations.lastFailure
     if (!failure) return
@@ -200,6 +227,19 @@ export function GitModule() {
         return
       }
 
+      if (pendingAction.type === "initialize") {
+        clearPendingAction()
+        setView("repositories")
+        await initialization.open({
+          repository: pendingAction.repository,
+          onCompleted: pendingAction.onCompleted,
+          onFailure: handleInitializationFailure,
+          preferredMessage: pendingAction.input.message,
+          preferredRemote: pendingAction.input.remoteName,
+        })
+        return
+      }
+
       const runRepositoryOperation: Record<PendingGitRepositoryOperation, (repositoryId: string) => ReturnType<typeof operations.pull>> = {
         pull: operations.pull,
         push: operations.push,
@@ -220,7 +260,7 @@ export function GitModule() {
       retryPendingBusyRef.current = false
       setRetryPendingBusy(false)
     }
-  }, [clearPendingAction, operations, pendingAction, routeFailure, updatePendingActionFromFailure])
+  }, [clearPendingAction, handleInitializationFailure, initialization, operations, pendingAction, routeFailure, updatePendingActionFromFailure])
 
   const handleCloneFailure = useCallback((input: { readonly cloneInput: { readonly directoryName: string; readonly parentDirectory: string; readonly remoteUrl: string }; readonly failure: GitOperationFailure }) => {
     if (input.failure.primaryAction === "retry" && (input.failure.category === "network" || input.failure.category === "timeout")) {
@@ -301,6 +341,9 @@ export function GitModule() {
                 onBack={() => setSelectedRepository(null)}
                 onOperationFailure={handleWorkbenchOperationFailure}
                 onHandleFailure={routeFailure}
+                onInitialize={(repository, onCompleted) => {
+                  void initialization.open({ repository, onCompleted, onFailure: handleInitializationFailure })
+                }}
                 onSelectPushRemote={pushRemoteSelection.choose}
               />
             ) : (
@@ -311,6 +354,13 @@ export function GitModule() {
                 failure={operations.lastFailure}
                 busy={operations.busy}
                 onOpenRepository={setSelectedRepository}
+                onInitialize={(repository) => {
+                  void initialization.open({
+                    repository,
+                    onCompleted: repositoriesState.refresh,
+                    onFailure: handleInitializationFailure,
+                  })
+                }}
                 onPull={(repositoryId) => void operations.pull(repositoryId)}
                 onPush={(repositoryId, trackingStatus) => void handlePush(repositoryId, trackingStatus)}
                 onSync={(repositoryId) => void operations.sync(repositoryId)}
@@ -391,6 +441,7 @@ export function GitModule() {
         }}
       />
       {pushRemoteSelection.dialog}
+      {initialization.dialog}
     </>
   )
 }
