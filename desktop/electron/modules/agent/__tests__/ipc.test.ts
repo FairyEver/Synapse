@@ -17,7 +17,7 @@ const electronMock = vi.hoisted(() => ({
     getPath: vi.fn(() => "/tmp/synapse-agent-ipc-test"),
   },
   BrowserWindow: {
-    getFocusedWindow: vi.fn(() => undefined),
+    getFocusedWindow: vi.fn<() => { id: number } | undefined>(() => undefined),
   },
   dialog: {
     showOpenDialog: vi.fn(),
@@ -35,6 +35,7 @@ import { PROVIDER_SERVICE_ID } from "../../../services/provider"
 import { agentIpcModule } from "../ipc"
 import { configStore } from "../../../services/config-store"
 import { createConversationHistory183 } from "./fixtures/conversation-history-183"
+import type { SynapseAgentAttachmentSelectionResult } from "../../../../src/types/bridge"
 
 vi.mock("../../../services/agent-runtime/binary-detect-service", () => ({
   whichBin: vi.fn().mockResolvedValue(null),
@@ -100,7 +101,7 @@ describe("agentIpcModule", () => {
       const result = await createHarness({}).invoke(
         "synapse:app:agent:operation:choose_attachments",
         { kind: "file" },
-      )
+      ) as SynapseAgentAttachmentSelectionResult
 
       expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith({
         title: "添加文件",
@@ -126,7 +127,10 @@ describe("agentIpcModule", () => {
           },
         ],
       })
-      expect(result.attachments[0]?.data).toBeInstanceOf(ArrayBuffer)
+      const imageAttachment = result.attachments[0]
+      expect(imageAttachment?.kind).toBe("image")
+      if (imageAttachment?.kind !== "image") throw new Error("Expected an image attachment")
+      expect(imageAttachment.data).toBeInstanceOf(ArrayBuffer)
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }
@@ -149,7 +153,7 @@ describe("agentIpcModule", () => {
       const result = await createHarness({}).invoke(
         "synapse:app:agent:operation:choose_attachments",
         { kind: "directory" },
-      )
+      ) as SynapseAgentAttachmentSelectionResult
 
       expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(focusedWindow, {
         title: "添加文件夹",
