@@ -155,6 +155,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "git.sync-service",
         "knowledge-base.service",
         "knowledge-base.storage-migration-service",
+        "knowledge-base.transfer-service",
         "provider",
         "repo.maintenance",
         "repo.pending-pushes",
@@ -253,6 +254,11 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("knowledge-base.storage-migration-service")?.dependsOn).toEqual([
       "core.event-bus",
       "core.project-containers",
+    ])
+    expect(byId.get("knowledge-base.transfer-service")?.dependsOn).toEqual([
+      "core.event-bus",
+      "core.project-containers",
+      "knowledge-base.storage-migration-service",
     ])
     expect(byId.get("core.window-manager")?.dependsOn).toEqual([])
     expect(byId.get("agent.conversation-window-service")?.dependsOn).toEqual(["core.window-manager"])
