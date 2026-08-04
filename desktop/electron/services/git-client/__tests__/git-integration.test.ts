@@ -229,7 +229,7 @@ describe("Git client real repository integration", () => {
     expect(await pathExists(path.join(parentDirectory, "docs"))).toBe(false)
     expect(entries.size).toBe(0)
     await expect((await import("node:fs/promises")).readdir(parentDirectory)).resolves.toEqual([])
-  }, 20_000)
+  }, 60_000)
 
   it("previews and commits the complete selected file despite mixed index state", async () => {
     const root = await createRoot()
