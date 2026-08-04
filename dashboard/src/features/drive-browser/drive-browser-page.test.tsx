@@ -79,6 +79,8 @@ describe('DriveBrowserPage', () => {
     const input = document.querySelector<HTMLInputElement>('#drive-share-password')
     const button = buttonWithText('打开分享')
     expect(document.querySelector('[aria-label="Synapse"]')).not.toBeNull()
+    expect(document.querySelector('main')?.className).toContain('min-h-screen')
+    expect(document.querySelector('main')?.className).toContain('supports-[height:100svh]:min-h-svh')
     expect(document.querySelector<HTMLImageElement>('[aria-label="Synapse"] img')?.src).toContain('synapse-logo.png')
     expect(document.body.textContent).toContain('此分享受密码保护')
     expect(document.querySelector('label[for="drive-share-password"]')?.textContent).toBe('访问密码')
@@ -351,6 +353,8 @@ describe('DriveBrowserPage', () => {
 
     renderPage(<DriveBrowserPage context='owner' surface='standalone' itemId='folder' onNavigate={onNavigate} />)
 
+    expect(document.querySelector('main')?.className).toContain('min-h-screen')
+    expect(document.querySelector('main')?.className).toContain('supports-[height:100svh]:min-h-svh')
     rowWithText('child.md')?.click()
     expect(onNavigate).toHaveBeenCalledWith('/drive/items/child')
 

@@ -549,7 +549,7 @@ describe('drive browser view model', () => {
     )
 
     expect(html).toContain('data-drive-code-renderer="true"')
-    expect(html).toContain('class="h-svh min-h-0 overflow-hidden bg-background"')
+    expect(html).toContain('class="h-screen supports-[height:100svh]:h-svh min-h-0 overflow-hidden bg-background"')
     expect(html).toContain('data-file-preview-layout="regular"')
     expect(html).toContain('class="min-w-0 flex h-full min-h-0 w-full flex-col overflow-hidden bg-background"')
     expect(html).toContain('data-drive-preview-header="true"')

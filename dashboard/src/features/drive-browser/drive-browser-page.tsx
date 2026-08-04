@@ -144,7 +144,7 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
   )
 
   if (!framed) return content
-  return <main className='flex min-h-svh bg-background p-4 md:p-6'>{content}</main>
+  return <main className='flex min-h-screen supports-[height:100svh]:min-h-svh bg-background p-4 md:p-6'>{content}</main>
 }
 
 export function DriveConsoleBrowserPage(props: Omit<Extract<DriveBrowserPageProps, { context: 'owner' }>, 'context' | 'surface'>) {
@@ -224,7 +224,7 @@ export function DriveSingleFileReaderView({
   readonly annotationContext?: DriveAnnotationContext
 }) {
   return (
-    <div className={embedded ? 'h-full min-h-0 overflow-hidden bg-background' : 'h-svh min-h-0 overflow-hidden bg-background'}>
+    <div className={embedded ? 'h-full min-h-0 overflow-hidden bg-background' : 'h-screen supports-[height:100svh]:h-svh min-h-0 overflow-hidden bg-background'}>
       <DriveRendererShell
         snapshot={snapshot}
         body
@@ -238,7 +238,7 @@ export function DriveSingleFileReaderView({
 
 function DriveShareEntryLayout({ children }: { readonly children: React.ReactNode }) {
   return (
-    <main className='flex min-h-svh w-full bg-muted/30 px-4 py-8 sm:px-6'>
+    <main className='flex min-h-screen supports-[height:100svh]:min-h-svh w-full bg-muted/30 px-4 py-8 sm:px-6'>
       <div className='mx-auto my-auto flex w-full max-w-sm flex-col gap-6'>
         <div className='flex items-center justify-center gap-2' aria-label='Synapse'>
           <Logo className='size-8' alt='' />
