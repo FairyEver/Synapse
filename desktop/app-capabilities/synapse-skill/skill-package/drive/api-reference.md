@@ -53,6 +53,8 @@ Limits:
 
 - The local preflight stops before upload when the folder contains more than 1,000 files, more than 1,000 subdirectories, or exceeds the supported folder depth.
 
+Uploading a folder preserves the layout needed by relative images in `.md` and `.markdown`. Cloud preview, online editing, and Markdown file shares can resolve supported raster images from that Drive tree without rewriting the Markdown or converting images to public assets.
+
 Output:
 
 - `root`: root Drive folder item.
@@ -107,6 +109,8 @@ Input:
 - `surface` optional: `standalone` or `console`.
 - `childrenOffset` optional: folder child pagination offset.
 - `childrenLimit` optional: folder child pagination page size.
+
+For `.md` and `.markdown`, `preview.relativeImages` contains each supported relative image source and its `resolvedUrl`. A non-null URL means the current Drive directory tree resolves that PNG, JPG/JPEG, WebP, GIF, AVIF, or ICO reference. The Markdown content and saved file keep the original relative source unchanged. Resolution covers the current 128 KiB Markdown preview and at most 256 unique relative image sources. This does not apply to `.mdx`, root-relative paths, SVG, or relative HTML resources.
 
 ### `app_drive_file_content_read`
 

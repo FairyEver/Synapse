@@ -85,9 +85,9 @@ Choose one Drive destination before uploading and reuse it for every ordinary Dr
    - Use the primary Markdown basename without its extension when the user identifies a primary Markdown or exactly one selected Markdown exists.
    - Otherwise, use the common local parent folder basename.
    - If there are multiple Markdown candidates with no primary one, or no meaningful common parent folder, ask one concise naming question before any remote write.
-   - Create or reuse that Drive folder, then pass its item id as `parentId` for every ordinary file upload.
-5. Keep the final Markdown, standalone HTML files, explicitly included attachments, and HTML dependency source folders inside the selected Drive destination. A site URL or share URL is a public identity for an item in that destination, not a replacement storage location.
-6. Referenced Markdown images are the only placement exception: `app_drive_direct_link_upload` stores public assets in the flat Public Assets collection, which cannot be nested in an ordinary Drive folder. Keep their returned URLs in the final Markdown.
+   - Create or reuse that Drive folder as the layout root. Upload directly contained files to it and recreate required subdirectories instead of flattening relative paths.
+5. Keep the Markdown, its referenced local images, standalone HTML files, explicitly included attachments, and HTML dependency source folders inside the selected Drive destination. A site URL or share URL is a public identity for an item in that destination, not a replacement storage location.
+6. For `.md` and `.markdown`, keep supported local image references unchanged and preserve the same relative layout between the Markdown and image files in Drive. Use `app_drive_direct_link_upload` only when the user explicitly asks for a public asset/direct link or asks to replace the Markdown references with public URLs.
 
 ## Local Markdown Publishing Flow
 
@@ -96,22 +96,26 @@ Use this flow when the user asks to upload or share a local Markdown document. T
 1. Preflight the source before any remote write.
    - Read the Markdown and inventory local image targets from Markdown image links, image reference definitions, and HTML `<img src>` elements. Inventory local `.html` targets from Markdown links.
    - Resolve local targets relative to the source Markdown directory. Leave `http:`, `https:`, `data:`, and fragment-only targets unchanged.
-   - Deduplicate references by resolved local path so each source file is uploaded once and its returned public URL is reused.
+   - Deduplicate references by resolved local path so each source file is uploaded once.
    - Stop and ask when a referenced file is missing. For local images, accept only PNG, JPG, JPEG, GIF, WebP, AVIF, and ICO; stop and ask how to handle SVG or another unsupported image format.
    - Ignore unrelated neighboring files. If the user explicitly includes an unreferenced HTML file or a whole directory, upload it as requested, but do not share that HTML merely because it is next to the Markdown.
-   - Derive the sibling output path by inserting `_final` before the source `.md` extension. If that path already exists, ask before overwriting it.
-2. Upload every supported referenced local image with `app_drive_direct_link_upload`. Replace every corresponding Markdown target with the returned `/files/<assetId>` URL. Do not upload Markdown images as ordinary Drive files or leave a local image path in the publishable copy.
+   - Native relative-image rendering applies only to `.md` and `.markdown`, not `.mdx`. It supports relative raster targets in inline images, reference images, and standalone quoted `<img src>` elements; it does not support root-relative paths, SVG, or relative HTML resources.
+2. For `.md` and `.markdown`, upload every supported referenced local image as an ordinary Drive file while preserving the same relative path from the Markdown file.
+   - Use the closest common local ancestor of the Markdown and its referenced images as the layout root, then mirror their paths below the selected Drive destination. If every image is below the Markdown's directory, that directory can be the layout root.
+   - When the user selected the complete source folder, prefer `app_drive_folder_upload` so the directory structure is preserved in one operation. Check `failures` before treating the Markdown upload as complete.
+   - Otherwise, use `app_drive_folder_path_ensure` to create or reuse only the required relative directories, then upload each referenced image with `app_drive_file_upload` to its matching parent folder. Upload dependencies before the Markdown when possible.
+   - Keep the original relative image targets unchanged. Do not create public assets, replace them with `/files/<assetId>` URLs, or create a `_final.md` copy solely for relative images.
 3. Inspect each referenced local HTML file without modifying it.
    - For standalone HTML, call `app_drive_file_upload`, then `app_drive_share_create`; use the returned `/share/...` URL in the Markdown.
    - For HTML with complete local relative dependencies, upload the dependency folder with `app_drive_folder_upload`, publish it with `app_drive_site_create`, and use the returned `/sites/...` URL in the Markdown.
    - If dependencies are missing or the route cannot be determined, ask one concise question before uploading the HTML or rewriting its link.
    - If the user explicitly says to upload the HTML as-is, upload the unchanged HTML file and share that file even when referenced local dependencies are missing. Do not silently bundle, rewrite, or repair the HTML; report that missing dependencies can affect rendering.
    - Never upload HTML as a public asset. A referenced HTML target must receive its own share or site URL even when the top-level request says only to upload the Markdown.
-4. After every referenced asset has a usable remote URL, create the preflighted `_final.md` sibling copy and preserve the source file.
-5. Rewrite only the inventoried targets in the final copy. Verify that no targeted local image or HTML reference remains, then upload the final copy with `app_drive_file_upload` while passing the original Markdown basename as `name`.
-6. If the user asked to share the Markdown, call `app_drive_share_create` for the uploaded Markdown item itself. Do not create a folder share as a shortcut, and keep every referenced HTML share or site independent.
+4. If local HTML links need remote URLs, derive a sibling path by inserting `_final` before the source extension, ask before overwriting an existing file, and rewrite only the inventoried HTML targets in that copy. Otherwise upload the original Markdown unchanged.
+5. Upload the chosen Markdown with `app_drive_file_upload` while passing the original Markdown basename as `name`, unless the unchanged file was already uploaded by `app_drive_folder_upload`. Within the native preview limits, use `app_drive_item_preview_get` to confirm each supported relative image has a non-null `resolvedUrl`; do not claim the upload is complete while a required image is unresolved.
+6. If the user asked to share the Markdown, call `app_drive_share_create` for the uploaded Markdown item itself. A single-file Markdown share can read only the relative images that its current content actually references. Do not create a folder share as a shortcut, and keep every referenced HTML share or site independent.
 7. Pass only share settings the user explicitly requested, and apply them to every file share in this transaction unless the user scopes them to one artifact. When the user did not specify password enablement, expiry, access mode, or editor emails, omit `passwordEnabled`, `expiresIn`, `accessMode`, and `editorEmails` so the current Synapse version supplies its defaults. Do not hardcode those defaults in this skill. `app_drive_site_create` requires access settings; ask for its required values when the user did not provide them.
-8. Do not upload the final Markdown if any required upload, share, site publication, rewrite, or verification fails. Do not delete already-created assets or shares without explicit authorization; report the completed remote writes and the blocking failure.
+8. Do not upload the Markdown when a required dependency upload, HTML share/site publication, rewrite, or verification fails. A folder upload may have completed some remote writes before reporting failures; do not delete them without explicit authorization, and report the completed writes and the blocking failure.
 
 ## HTML Sharing Route
 
@@ -210,7 +214,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 
 ## Common Requests
 
-- "用 Synapse Skill 把这个 Markdown 上传到云盘": apply **Local Markdown Publishing Flow**; publish referenced local images and HTML before uploading the final Markdown, but do not share the Markdown itself.
+- "用 Synapse Skill 把这个 Markdown 上传到云盘": apply **Local Markdown Publishing Flow**; preserve and upload supported relative images before the Markdown, publish referenced local HTML separately, but do not share the Markdown itself.
 - "用 Synapse Skill 把这个 Markdown 上传到云盘并分享": apply **Local Markdown Publishing Flow**, then share the uploaded Markdown item separately.
 - "把这几个文件上传到云盘": apply **Upload Destination Selection** and place every ordinary Drive item in the automatically named shared folder.
 - "上传这个文件并给我链接": call `app_drive_file_upload`, then `app_drive_share_create`.
