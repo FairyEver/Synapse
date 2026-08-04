@@ -10,7 +10,7 @@ type UseAgentProviderCatalogResult = {
   readonly providers: readonly SynapseAgentProvider[] | null
   readonly isLoading: boolean
   readonly hasError: boolean
-  readonly reload: () => Promise<void>
+  readonly reload: () => Promise<readonly SynapseAgentProvider[] | null>
 }
 
 function useAgentProviderCatalog(enabled: boolean): UseAgentProviderCatalogResult {
@@ -25,17 +25,19 @@ function useAgentProviderCatalog(enabled: boolean): UseAgentProviderCatalogResul
     setHasError(false)
     try {
       const nextProviders = await requireSynapseBridge().agent.listAllProviders()
-      if (requestId !== requestIdRef.current) return
+      if (requestId !== requestIdRef.current) return null
       setProviders(nextProviders)
+      return nextProviders
     } catch (rawError) {
       logger.warn("Agent session model list failed.", {
         boundary: "renderer.agent.session-create-model-list",
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessageLength(rawError),
       })
-      if (requestId !== requestIdRef.current) return
+      if (requestId !== requestIdRef.current) return null
       setProviders(null)
       setHasError(true)
+      return null
     } finally {
       if (requestId === requestIdRef.current) setIsLoading(false)
     }

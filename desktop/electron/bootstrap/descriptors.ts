@@ -126,6 +126,7 @@ import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
 import { CheatCodeStateService, CHEAT_CODE_STATE_SERVICE_ID } from "../services/cheat-code-state-service"
 import { KnowledgeBaseService } from "../services/knowledge-base"
+import { KnowledgeBaseTransferService } from "../services/knowledge-base/transfer-service"
 import {
   KnowledgeBaseStorageMigrationService,
   type KnowledgeBaseStorageMigrationState,
@@ -265,6 +266,7 @@ import "../../workflow-nodes/register.main"
 
 const knowledgeBaseMigrationLogger = createMainLogger("bootstrap.knowledge-base-storage-migration")
 const knowledgeBaseMigrationSubscriptions = new WeakMap<KnowledgeBaseStorageMigrationService, () => void>()
+const knowledgeBaseTransferSubscriptions = new WeakMap<KnowledgeBaseTransferService, () => void>()
 
 type ProcessEnvironmentService = {
   readonly nodeRuntimeBinPath?: string
@@ -782,6 +784,13 @@ export const coreKnowledgeBaseStorageMigrationDescriptor: ServiceDescriptor<Know
       journalPath: path.join(app.getPath("userData"), "knowledge-base-storage-migration.json"),
       sourceManager: knowledgeBaseSourceManagerWindowService,
       hasActiveKnowledgeBaseSession: async () => hasActiveKnowledgeBaseSession(ctx.registry.get<ProjectContainerRegistry>("core.project-containers")),
+      hasActiveTransfer: () => {
+        try {
+          return ctx.registry.get<KnowledgeBaseTransferService>("knowledge-base.transfer-service").isActive()
+        } catch {
+          return false
+        }
+      },
       getAvailableBytes: async (targetRoot) => {
         const stats = await statfs(targetRoot)
         return stats.bavail * stats.bsize
@@ -807,8 +816,49 @@ export const coreKnowledgeBaseStorageMigrationDescriptor: ServiceDescriptor<Know
   },
 }
 
-function hasActiveKnowledgeBaseSession(containers: ProjectContainerRegistry): boolean {
+export const coreKnowledgeBaseTransferDescriptor: ServiceDescriptor<KnowledgeBaseTransferService> = {
+  id: "knowledge-base.transfer-service",
+  criticality: "degraded",
+  dependsOn: ["core.event-bus", "core.project-containers", "knowledge-base.storage-migration-service"],
+  create(ctx) {
+    const containers = ctx.registry.get<ProjectContainerRegistry>("core.project-containers")
+    const migration = ctx.registry.get<KnowledgeBaseStorageMigrationService>("knowledge-base.storage-migration-service")
+    return new KnowledgeBaseTransferService({
+      userDataPath: app.getPath("userData"),
+      journalPath: path.join(app.getPath("userData"), "knowledge-base-import.json"),
+      loadConfig: () => configStore.load(),
+      updateConfig: (patch) => configStore.update(patch),
+      getAvailableBytes: async (targetRoot) => {
+        const stats = await statfs(targetRoot)
+        return stats.bavail * stats.bsize
+      },
+      hasActiveKnowledgeBaseSession: async (projectId) => hasActiveKnowledgeBaseSession(containers, projectId),
+      hasActiveSourceMutation: () => knowledgeBaseSourceManagerWindowService.hasActiveMutation(),
+      isStorageMigrationActive: () => migration.isActive(),
+    })
+  },
+  async start(instance, ctx) {
+    const eventBus = ctx.registry.get<EventBus>("core.event-bus")
+    const unsubscribe = instance.subscribe((progress) => {
+      eventBus.emit({
+        domain: "knowledge-base",
+        type: "knowledge-base.transferChanged",
+        payload: progress,
+        timestamp: new Date().toISOString(),
+      }, { backpressure: "coalesce", coalesceWindowMs: 16 })
+    })
+    knowledgeBaseTransferSubscriptions.set(instance, unsubscribe)
+    await instance.recoverIfNeeded()
+  },
+  stop(instance) {
+    knowledgeBaseTransferSubscriptions.get(instance)?.()
+    knowledgeBaseTransferSubscriptions.delete(instance)
+  },
+}
+
+function hasActiveKnowledgeBaseSession(containers: ProjectContainerRegistry, targetProjectId?: string): boolean {
   return containers.list().some(({ projectId }) => {
+    if (targetProjectId && projectId !== targetProjectId) return false
     try {
       const container = containers.peek(projectId)
       return container?.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID).hasActiveKnowledgeBaseSession() ?? false

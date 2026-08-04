@@ -482,7 +482,7 @@ describe("ConversationRouter", () => {
     ])
   })
 
-  it("does not persist high-frequency stream deltas to agent.events", async () => {
+  it("persists bounded stream diagnostics after the turn completes", async () => {
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
     const { router } = createRouter({
       agentEvents,
@@ -507,7 +507,56 @@ describe("ConversationRouter", () => {
 
     await router.send(baseMessage("hello"))
 
-    expect((await agentEvents.list()).map((entry) => entry.eventType)).toEqual(["result"])
+    const persisted = await agentEvents.list()
+    expect(persisted.map((entry) => entry.eventType)).toEqual(["streamDiagnostics", "result"])
+    expect(persisted[0]?.payload).toMatchObject({
+      type: "streamDiagnostics",
+      observedEventCount: 2,
+      capturedEventCount: 2,
+      truncated: false,
+      frames: [
+        expect.objectContaining({
+          sequence: 1,
+          payload: expect.objectContaining({ deltaType: "text_delta", text: "hel" }),
+        }),
+        expect.objectContaining({
+          sequence: 2,
+          payload: expect.objectContaining({ deltaType: "thinking_delta", thinking: "thinking" }),
+        }),
+      ],
+    })
+  })
+
+  it("marks stream diagnostics truncated at the per-turn event limit", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const streamEvents = Array.from({ length: 1_001 }, (_, index): AgentEvent => ({
+      type: "stream",
+      text: String(index % 10),
+      deltaType: "text_delta",
+      sdkSessionId: "sdk-1",
+      event: {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: String(index % 10) },
+      },
+    }))
+    const { router } = createRouter({
+      agentEvents,
+      session: new ScriptedSession([
+        ...streamEvents,
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    await router.send(baseMessage("hello"))
+
+    const diagnostic = (await agentEvents.list()).find((entry) => entry.eventType === "streamDiagnostics")
+    expect(diagnostic?.payload).toMatchObject({
+      observedEventCount: 1_001,
+      capturedEventCount: 1_000,
+      truncated: true,
+      limits: { maxEventsPerTurn: 1_000, maxBytesPerTurn: 524_288 },
+    })
   })
 
   it("persists streamed thinking as process history after the turn completes", async () => {
@@ -2188,7 +2237,14 @@ describe("ConversationRouter", () => {
         }),
       }),
     ])
-    expect(persisted.map((entry) => entry.eventType)).toEqual(["error"])
+    expect(persisted.map((entry) => entry.eventType)).toEqual(["streamDiagnostics", "error"])
+    expect(persisted[0]?.payload).toMatchObject({
+      type: "streamDiagnostics",
+      capturedEventCount: 1,
+      frames: [expect.objectContaining({
+        payload: expect.objectContaining({ text: "partial" }),
+      })],
+    })
     expect(saved?.history).toEqual([
       expect.objectContaining({ role: "user", content: "relay" }),
       expect.objectContaining({

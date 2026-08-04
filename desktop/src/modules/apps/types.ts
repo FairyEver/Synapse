@@ -81,8 +81,14 @@ export type SynapseSystemAppContentOpenRequest = {
   readonly [key: string]: unknown
 }
 
+export type SynapseSystemAppGitOpenRequest = {
+  readonly requestId: string
+  readonly repositoryId: string
+}
+
 export type SynapseSystemAppOpenOptions = {
   readonly contentOpenRequest?: SynapseSystemAppContentOpenRequest | null
+  readonly gitOpenRequest?: SynapseSystemAppGitOpenRequest | null
 }
 
 export function isSystemAppId(value: string): value is SynapseSystemAppId {

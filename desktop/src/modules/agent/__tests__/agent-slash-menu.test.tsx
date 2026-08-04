@@ -46,7 +46,7 @@ afterEach(() => {
 })
 
 describe("AgentSlashMenu", () => {
-  it("wraps long names and descriptions instead of truncating them", () => {
+  it("keeps names and descriptions on one compact line and truncates overflow", () => {
     const html = renderToStaticMarkup(
       <AgentSlashMenu
         candidates={[{
@@ -61,9 +61,19 @@ describe("AgentSlashMenu", () => {
       />,
     )
 
-    expect(html).toContain("whitespace-normal")
-    expect(html).toContain("break-words")
-    expect(html).not.toContain("truncate")
+    const container = document.createElement("div")
+    container.innerHTML = html
+    const viewport = container.querySelector<HTMLElement>('[data-slot="scroll-area-viewport"]')
+    const item = container.querySelector<HTMLElement>('[role="option"]')
+
+    expect(html).toContain("h-8")
+    expect(html).toContain("whitespace-nowrap")
+    expect(html).toContain("truncate")
+    expect(html).not.toContain("break-words")
+    expect(viewport?.className).toContain("overflow-x-hidden")
+    expect(viewport?.className).toContain("[&>div]:!block")
+    expect(viewport?.className).toContain("[&>div]:!max-w-full")
+    expect(item?.className).toContain("rounded-sm")
   })
 
   it("sets the scroll viewport height so the menu can scroll", () => {

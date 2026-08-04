@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type Ref } from "react"
+import { act, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type Ref, useRef } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -50,6 +50,50 @@ afterEach(() => {
 })
 
 describe("AgentComposer", () => {
+  it("focuses the textarea when the conversation focus key changes", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const renderComposer = (focusInputKey: string) => (
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        focusInputKey={focusInputKey}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />
+    )
+
+    await act(async () => {
+      root.render(renderComposer("project-1:conversation-1"))
+    })
+    await act(async () => {
+      await wait(0)
+    })
+    const textarea = container.querySelector("textarea")
+    expect(document.activeElement).toBe(textarea)
+
+    const outsideButton = document.createElement("button")
+    document.body.appendChild(outsideButton)
+    outsideButton.focus()
+    expect(document.activeElement).toBe(outsideButton)
+
+    await act(async () => {
+      root.render(renderComposer("project-1:conversation-2"))
+    })
+    await act(async () => {
+      await wait(0)
+    })
+    expect(document.activeElement).toBe(textarea)
+  })
+
   it("requires a new session when switching a non-bypass conversation to bypassPermissions", () => {
     expect(getPermissionModeCapability({
       currentMode: "default",
@@ -97,10 +141,72 @@ describe("AgentComposer", () => {
     expect(html).toContain("按需询问")
     expect(html).toContain("lucide-chevron-down")
     expect(html).toContain('aria-label="发送"')
+    expect(html).toContain('aria-label="添加附件"')
+    expect(html).toContain("lucide-plus")
     expect(html).toContain('placeholder="输入消息"')
     expect(html).toContain("你好")
     expect(html).not.toContain(">发送</button>")
     expect(html).not.toContain("lucide-shield-check")
+  })
+
+  it("opens the attachment menu from the leftmost toolbar action and adds selected folders", async () => {
+    const chooseAttachments = vi.fn(async () => ({
+      attachments: [{
+        kind: "path" as const,
+        sourceIndex: 0,
+        path: "/Users/liyang/Downloads/materials",
+        entryType: "directory" as const,
+        name: "materials",
+      }],
+      rejectedCount: 0,
+    }))
+    installShellBridge(undefined, { chooseAttachments })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          quickInputs={[quickInputItem("quick-1", "检查变更")]}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const toolbar = container.querySelector(".agent-composer-input-box__toolbar")
+    const leadingActions = toolbar?.querySelector('[role="group"][aria-label="输入工具"]')
+    const attachmentTrigger = toolbar?.querySelector<HTMLButtonElement>('button[aria-label="添加附件"]')
+    const quickInputTrigger = toolbar?.querySelector<HTMLButtonElement>('button[aria-label="快捷输入"]')
+    expect(leadingActions?.classList.contains("gap-0")).toBe(true)
+    expect(attachmentTrigger).toBeTruthy()
+    expect(quickInputTrigger).toBeTruthy()
+    expect(attachmentTrigger?.classList.contains("-mr-1")).toBe(false)
+    expect(attachmentTrigger!.compareDocumentPosition(quickInputTrigger!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    openAttachmentMenu(container)
+    const folderItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .find((item) => item.textContent?.includes("添加文件夹"))
+    expect(folderItem).toBeTruthy()
+    await act(async () => {
+      folderItem?.click()
+      await wait(20)
+    })
+
+    expect(chooseAttachments).toHaveBeenCalledWith({ kind: "directory" })
+    expect(container.textContent).toContain("materials")
+    expect(container.textContent).toContain("文件夹")
+    expect(container.querySelector("textarea")).toBe(document.activeElement)
   })
 
   it("does not render a persona selector in the composer", () => {
@@ -281,6 +387,68 @@ describe("AgentComposer", () => {
     expect(jumpIndex).toBeGreaterThan(-1)
     expect(inputBoxIndex).toBeGreaterThan(jumpIndex)
     expect(promptIndex).toBeGreaterThan(inputBoxIndex)
+  })
+
+  it("orders notice, pending messages, attachments, and editor as separate regions", async () => {
+    installShellBridge()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={true}
+          cancelPhase="idle"
+          showConversationRolloverPrompt
+          pendingMessages={[{
+            id: "pending-1",
+            target: {
+              projectId: "project-1",
+              conversationId: "conversation-1",
+              sessionKey: "local:renderer",
+            },
+            content: "待发送内容",
+            createdAt: "2026-08-04T08:00:00.000Z",
+            status: "queued",
+          }]}
+          onStartNewConversation={vi.fn()}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+          onRemovePendingMessage={vi.fn()}
+        />,
+      )
+    })
+
+    const file = withPath(
+      new File([new Uint8Array(1024)], "report.pdf", { type: "application/pdf" }),
+      "/Users/liyang/Desktop/report.pdf",
+    )
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(createDropEvent([file]))
+      await wait(0)
+    })
+
+    const inputBox = container.querySelector(".agent-composer-input-box")
+    const notice = inputBox?.querySelector(".agent-composer-input-box__notice")
+    const pending = inputBox?.querySelector(".agent-composer-input-box__pending")
+    const attachments = inputBox?.querySelector(".agent-composer-input-box__attachments")
+    const editor = inputBox?.querySelector(".agent-composer-input-box__editor")
+    expect(notice).toBeTruthy()
+    expect(pending).toBeTruthy()
+    expect(attachments).toBeTruthy()
+    expect(editor).toBeTruthy()
+    if (!notice || !pending || !attachments || !editor) throw new Error("Composer regions are missing")
+    expect(notice.compareDocumentPosition(pending) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(pending.compareDocumentPosition(attachments) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(attachments.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it("calls onStartNewConversation from the one-hour reminder link", async () => {
@@ -533,7 +701,8 @@ describe("AgentComposer", () => {
       await wait(0)
     })
 
-    expect(container.textContent).toContain("[Image #1]")
+    expect(container.textContent).toContain("screen.png")
+    expect(container.textContent).toContain("PNG · 3 B")
     expect(container.querySelector('button[aria-label^="删除附件"]')).toBeTruthy()
 
     await act(async () => {
@@ -541,10 +710,10 @@ describe("AgentComposer", () => {
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     })
 
-    expect(container.textContent).not.toContain("[Image #1]")
+    expect(container.textContent).not.toContain("screen.png")
   })
 
-  it("renders pasted non-image files as full path attachments", async () => {
+  it("renders pasted non-image files with names, metadata, and full path titles", async () => {
     const filePathForDroppedFile = installShellBridge((file) =>
       file.name === "课堂内容.md" ? "/Users/liyang/Desktop/课堂内容.md" : null)
     const container = document.createElement("div")
@@ -586,7 +755,9 @@ describe("AgentComposer", () => {
     })
 
     expect(filePathForDroppedFile).toHaveBeenCalledWith(file)
-    expect(container.textContent).toContain("/Users/liyang/Desktop/课堂内容.md")
+    expect(container.textContent).toContain("课堂内容.md")
+    expect(container.textContent).toContain("Markdown · 7 B")
+    expect(container.querySelector('[title="/Users/liyang/Desktop/课堂内容.md"]')).toBeTruthy()
     expect(container.textContent).not.toContain("课堂内容.md片段")
     expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(1)
   })
@@ -653,6 +824,76 @@ describe("AgentComposer", () => {
     ])
   })
 
+  it("uses main-process path metadata to distinguish copied folders from empty files", async () => {
+    const emptyPath = "/Users/liyang/Desktop/empty"
+    const folderPath = "/Users/liyang/Desktop/materials"
+    const resolveAttachmentPaths = vi.fn(async () => ({
+      attachments: [
+        {
+          kind: "path" as const,
+          sourceIndex: 0,
+          path: emptyPath,
+          entryType: "file" as const,
+          name: "empty",
+          size: 0,
+        },
+        {
+          kind: "path" as const,
+          sourceIndex: 1,
+          path: folderPath,
+          entryType: "directory" as const,
+          name: "materials",
+        },
+      ],
+      rejectedCount: 0,
+    }))
+    installShellBridge(
+      (file) => file.name === "empty" ? emptyPath : folderPath,
+      { resolveAttachmentPaths },
+    )
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    const emptyFile = new File([], "empty")
+    const folder = new File([], "materials")
+    await act(async () => {
+      textarea?.dispatchEvent(createPasteEvent({
+        items: [emptyFile, folder].map((file) => ({
+          kind: "file",
+          type: "",
+          getAsFile: () => file,
+        })),
+      }))
+      await wait(0)
+    })
+
+    expect(resolveAttachmentPaths).toHaveBeenCalledWith({ paths: [emptyPath, folderPath] })
+    expect(container.querySelector('[title="/Users/liyang/Desktop/empty"]')).toBeTruthy()
+    expect(container.querySelector('[title="/Users/liyang/Desktop/materials"]')).toBeTruthy()
+    expect(container.textContent).toContain("文件 · 0 B")
+    expect(container.textContent).toContain("文件夹")
+  })
+
   it("does not create pasted file attachments when the full path cannot be resolved", async () => {
     const filePathForDroppedFile = installShellBridge(() => null)
     const onSubmit = vi.fn((
@@ -698,7 +939,7 @@ describe("AgentComposer", () => {
     })
 
     expect(filePathForDroppedFile).toHaveBeenCalledWith(file)
-    expect(toast).toHaveBeenCalledWith("无法读取文件完整路径")
+    expect(toast).toHaveBeenCalledWith("无法添加附件")
     expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(0)
     expect(container.querySelector<HTMLTextAreaElement>("textarea")?.value).toBe("")
 
@@ -740,10 +981,117 @@ describe("AgentComposer", () => {
       await wait(0)
     })
 
-    expect(container.textContent).toContain("/Users/liyang/Desktop/brief.md")
-    expect(container.textContent).toContain("/Users/liyang/Downloads/materials")
+    expect(container.textContent).toContain("brief.md")
+    expect(container.textContent).toContain("Markdown · 7 B")
+    expect(container.textContent).toContain("materials")
+    expect(container.textContent).toContain("文件夹")
+    expect(container.querySelector('[title="/Users/liyang/Desktop/brief.md"]')).toBeTruthy()
+    expect(container.querySelector('[title="/Users/liyang/Downloads/materials"]')).toBeTruthy()
     expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(2)
     expect(filePathForDroppedFile).toHaveBeenCalledTimes(2)
+  })
+
+  it("accepts mixed file drops from the whole conversation workspace and shows drop feedback", async () => {
+    installShellBridge()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    function WorkspaceHarness() {
+      const dropTargetRef = useRef<HTMLDivElement>(null)
+      return (
+        <div ref={dropTargetRef} data-testid="conversation-workspace">
+          <div data-testid="timeline" />
+          <AgentComposer
+            dropTargetRef={dropTargetRef}
+            draft=""
+            disabled={false}
+            canSend={false}
+            sending={false}
+            cancelPhase="idle"
+            onDraftChange={vi.fn()}
+            onInputKeyDown={vi.fn()}
+            onSubmit={vi.fn()}
+            onCancelTurn={vi.fn()}
+            onForceKillTurn={vi.fn()}
+          />
+        </div>
+      )
+    }
+
+    await act(async () => {
+      root.render(<WorkspaceHarness />)
+    })
+
+    const timeline = container.querySelector<HTMLElement>('[data-testid="timeline"]')
+    const file = withPath(new File(["content"], "brief.md", { type: "text/markdown" }), "/Users/liyang/Desktop/brief.md")
+    const folder = withPath(new File([], "materials"), "/Users/liyang/Desktop/materials")
+    const dragOver = createFileDragEvent("dragover", [file, folder])
+    await act(async () => {
+      timeline?.dispatchEvent(dragOver)
+    })
+    expect(dragOver.defaultPrevented).toBe(true)
+    expect(container.querySelector(".agent-composer-input-box")?.getAttribute("data-drop-active")).toBe("true")
+
+    const drop = createDropEvent([file, folder])
+    await act(async () => {
+      timeline?.dispatchEvent(drop)
+      await wait(0)
+    })
+    expect(drop.defaultPrevented).toBe(true)
+    expect(container.textContent).toContain("brief.md")
+    expect(container.textContent).toContain("materials")
+    expect(container.querySelector(".agent-composer-input-box")?.hasAttribute("data-drop-active")).toBe(false)
+  })
+
+  it("does not intercept non-file or disabled workspace drops", async () => {
+    installShellBridge()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    function DisabledWorkspaceHarness() {
+      const dropTargetRef = useRef<HTMLDivElement>(null)
+      return (
+        <div ref={dropTargetRef} data-testid="conversation-workspace">
+          <div data-testid="timeline" />
+          <AgentComposer
+            dropTargetRef={dropTargetRef}
+            draft=""
+            disabled
+            canSend={false}
+            sending={false}
+            cancelPhase="idle"
+            onDraftChange={vi.fn()}
+            onInputKeyDown={vi.fn()}
+            onSubmit={vi.fn()}
+            onCancelTurn={vi.fn()}
+            onForceKillTurn={vi.fn()}
+          />
+        </div>
+      )
+    }
+
+    await act(async () => {
+      root.render(<DisabledWorkspaceHarness />)
+    })
+
+    const timeline = container.querySelector<HTMLElement>('[data-testid="timeline"]')
+    const textDrop = createFileDragEvent("drop", [], ["text/plain"])
+    const fileDrop = createDropEvent([
+      withPath(new File(["content"], "brief.md"), "/Users/liyang/Desktop/brief.md"),
+    ])
+    await act(async () => {
+      timeline?.dispatchEvent(textDrop)
+      timeline?.dispatchEvent(fileDrop)
+      await wait(0)
+    })
+
+    expect(textDrop.defaultPrevented).toBe(false)
+    expect(fileDrop.defaultPrevented).toBe(false)
+    expect(container.textContent).not.toContain("brief.md")
   })
 
   it("resolves dropped file paths through the bridge before legacy file path fallback", async () => {
@@ -781,8 +1129,9 @@ describe("AgentComposer", () => {
     })
 
     expect(filePathForDroppedFile).toHaveBeenCalledWith(file)
-    expect(container.textContent).toContain("/Users/liyang/Bridge/bridge.md")
-    expect(container.textContent).not.toContain("/legacy/bridge.md")
+    expect(container.textContent).toContain("bridge.md")
+    expect(container.querySelector('[title="/Users/liyang/Bridge/bridge.md"]')).toBeTruthy()
+    expect(container.querySelector('[title="/legacy/bridge.md"]')).toBeNull()
   })
 
   it("does not create dropped path attachments from unresolved file names", async () => {
@@ -819,7 +1168,7 @@ describe("AgentComposer", () => {
     })
 
     expect(filePathForDroppedFile).toHaveBeenCalledWith(file)
-    expect(toast).toHaveBeenCalledWith("无法读取文件完整路径")
+    expect(toast).toHaveBeenCalledWith("无法添加附件")
     expect(container.textContent).not.toContain("brief.md")
     expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(0)
   })
@@ -923,7 +1272,7 @@ describe("AgentComposer", () => {
       await wait(0)
     })
 
-    expect(container.textContent).toContain("[Image #1]")
+    expect(container.textContent).toContain("accepted.png")
     const sendButton = container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')
     expect(sendButton).toBeTruthy()
 
@@ -932,7 +1281,7 @@ describe("AgentComposer", () => {
     })
 
     expect(onSubmit).toHaveBeenCalledTimes(1)
-    expect(container.textContent).not.toContain("[Image #1]")
+    expect(container.textContent).not.toContain("accepted.png")
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')?.disabled).toBe(true)
   })
 
@@ -982,7 +1331,7 @@ describe("AgentComposer", () => {
     })
 
     expect(onSubmit).toHaveBeenCalledTimes(1)
-    expect(container.textContent).toContain("[Image #1]")
+    expect(container.textContent).toContain("rejected.png")
   })
 
   it("restores attachment rows when an accepted submit is restored", async () => {
@@ -1040,7 +1389,7 @@ describe("AgentComposer", () => {
     })
 
     expect(onSubmit).toHaveBeenCalledTimes(1)
-    expect(container.textContent).toContain("[Image #1]")
+    expect(container.textContent).toContain("restore.png")
     expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(1)
   })
 
@@ -1090,7 +1439,7 @@ describe("AgentComposer", () => {
       await wait(0)
     })
 
-    expect(container.textContent).toContain("[Image #1]")
+    expect(container.textContent).toContain("enter-accepted.png")
 
     await act(async () => {
       textarea!.dispatchEvent(new KeyboardEvent("keydown", {
@@ -1866,6 +2215,94 @@ describe("AgentComposer", () => {
     expect(html.indexOf("知识库")).toBeGreaterThan(html.indexOf("快捷输入"))
   })
 
+  it("renders Git actions after knowledge base actions only when a repository is available", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        quickInputs={[quickInputItem("quick-1", "常用输入")]}
+        knowledgeBaseActions={[{
+          label: "查询知识库",
+          action: "insert",
+          commandText: "/wiki query ",
+        }]}
+        gitRepositoryAvailable
+        onPrepareGitCommit={vi.fn()}
+        onRunGitRemote={vi.fn()}
+        onCancelGitOperation={vi.fn()}
+        onOpenGit={vi.fn()}
+        onKnowledgeBaseCommand={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    expect(html.indexOf("Git")).toBeGreaterThan(html.indexOf("知识库"))
+    expect(renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )).not.toContain('aria-label="Git"')
+  })
+
+  it("runs Git menu callbacks without submitting the Agent draft", async () => {
+    const onPrepareGitCommit = vi.fn()
+    const onSubmit = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft="用户草稿"
+          disabled={false}
+          canSend
+          sending={false}
+          cancelPhase="idle"
+          gitRepositoryAvailable
+          onPrepareGitCommit={onPrepareGitCommit}
+          onRunGitRemote={vi.fn()}
+          onCancelGitOperation={vi.fn()}
+          onOpenGit={vi.fn()}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    openGitMenu(container)
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .find((node) => node.textContent === "提交全部改动")
+    expect(item).toBeTruthy()
+    await act(async () => {
+      item?.click()
+    })
+
+    expect(onPrepareGitCommit).toHaveBeenCalledWith("commit")
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(container.querySelector<HTMLTextAreaElement>("textarea")?.value).toBe("用户草稿")
+  })
+
   it("direct sends a quick input without changing the current draft", async () => {
     const onDraftChange = vi.fn()
     const onDirectSend = vi.fn()
@@ -2398,8 +2835,26 @@ function openPermissionMenu(container: HTMLElement) {
   })
 }
 
+function openAttachmentMenu(container: HTMLElement) {
+  const trigger = container.querySelector('button[aria-label="添加附件"]')
+  expect(trigger).toBeTruthy()
+  act(() => {
+    trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+    trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  })
+}
+
 function openKnowledgeBaseMenu(container: HTMLElement) {
   const trigger = container.querySelector('button[aria-label="知识库"]')
+  expect(trigger).toBeTruthy()
+  act(() => {
+    trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+    trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  })
+}
+
+function openGitMenu(container: HTMLElement) {
+  const trigger = container.querySelector('button[aria-label="Git"]')
   expect(trigger).toBeTruthy()
   act(() => {
     trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
@@ -2484,11 +2939,21 @@ function createPasteEvent(input: {
 }
 
 function createDropEvent(files: readonly File[]): Event {
-  const event = new Event("drop", { bubbles: true, cancelable: true })
+  return createFileDragEvent("drop", files)
+}
+
+function createFileDragEvent(
+  type: "dragover" | "drop",
+  files: readonly File[],
+  types: readonly string[] = ["Files"],
+): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true })
   Object.defineProperty(event, "dataTransfer", {
     configurable: true,
     value: {
       files,
+      types,
+      dropEffect: "none",
     },
   })
   return event
@@ -2497,17 +2962,55 @@ function createDropEvent(files: readonly File[]): Event {
 function installShellBridge(
   filePathForDroppedFile: (file: File) => string | null = (file) =>
     (file as File & { readonly path?: string }).path ?? null,
+  options?: {
+    readonly chooseAttachments?: ReturnType<typeof vi.fn>
+    readonly resolveAttachmentPaths?: ReturnType<typeof vi.fn>
+  },
 ) {
-  const filePathForDroppedFileMock = vi.fn(filePathForDroppedFile)
+  const filesByPath = new Map<string, File>()
+  const filePathForDroppedFileMock = vi.fn((file: File) => {
+    const resolvedPath = filePathForDroppedFile(file)
+    if (resolvedPath) filesByPath.set(resolvedPath, file)
+    return resolvedPath
+  })
+  const resolveAttachmentPaths = options?.resolveAttachmentPaths ?? vi.fn(async ({ paths }: {
+    readonly paths: readonly string[]
+  }) => ({
+    attachments: paths.map((path, sourceIndex) => {
+      const file = filesByPath.get(path)
+      const directory = file?.size === 0 && !file.type
+      return {
+        kind: "path" as const,
+        sourceIndex,
+        path,
+        entryType: directory ? "directory" as const : "file" as const,
+        name: file?.name ?? path.split("/").at(-1) ?? path,
+        ...(directory ? {} : { size: file?.size ?? 0 }),
+      }
+    }),
+    rejectedCount: 0,
+  }))
+  const chooseAttachments = options?.chooseAttachments ?? vi.fn(async () => ({
+    attachments: [],
+    rejectedCount: 0,
+  }))
   ;(window as unknown as {
     synapse?: {
       shell: {
         filePathForDroppedFile: typeof filePathForDroppedFileMock
       }
+      agent: {
+        chooseAttachments: typeof chooseAttachments
+        resolveAttachmentPaths: typeof resolveAttachmentPaths
+      }
     }
   }).synapse = {
     shell: {
       filePathForDroppedFile: filePathForDroppedFileMock,
+    },
+    agent: {
+      chooseAttachments,
+      resolveAttachmentPaths,
     },
   }
   return filePathForDroppedFileMock

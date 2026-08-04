@@ -20,6 +20,7 @@ const electronMock = vi.hoisted(() => ({
     getFocusedWindow: vi.fn(() => undefined),
   },
   dialog: {
+    showOpenDialog: vi.fn(),
     showSaveDialog: vi.fn(),
   },
 }))
@@ -60,7 +61,9 @@ vi.mock("electron", () => electronMock)
 describe("agentIpcModule", () => {
   beforeEach(() => {
     logStoreMock.logger.warn.mockClear()
-    electronMock.BrowserWindow.getFocusedWindow.mockClear()
+    electronMock.BrowserWindow.getFocusedWindow.mockReset()
+    electronMock.BrowserWindow.getFocusedWindow.mockReturnValue(undefined)
+    electronMock.dialog.showOpenDialog.mockReset()
     electronMock.dialog.showSaveDialog.mockReset()
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{
@@ -80,6 +83,126 @@ describe("agentIpcModule", () => {
         defaultPermissionMode: "default",
       },
     } as never)
+  })
+
+  it("chooses multiple files and converts supported images into visual attachments", async () => {
+    const root = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), "synapse-agent-choose-files-"))
+    const imagePath = path.join(root, "screen.png")
+    const filePath = path.join(root, "brief.md")
+    await fs.writeFile(imagePath, Buffer.from([1, 2, 3]))
+    await fs.writeFile(filePath, "content")
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: [imagePath, filePath],
+    })
+
+    try {
+      const result = await createHarness({}).invoke(
+        "synapse:app:agent:operation:choose_attachments",
+        { kind: "file" },
+      )
+
+      expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith({
+        title: "添加文件",
+        properties: ["openFile", "multiSelections"],
+      })
+      expect(result).toMatchObject({
+        rejectedCount: 0,
+        attachments: [
+          {
+            kind: "image",
+            sourceIndex: 0,
+            mimeType: "image/png",
+            name: "screen.png",
+            size: 3,
+          },
+          {
+            kind: "path",
+            sourceIndex: 1,
+            path: filePath,
+            entryType: "file",
+            name: "brief.md",
+            size: 7,
+          },
+        ],
+      })
+      expect(result.attachments[0]?.data).toBeInstanceOf(ArrayBuffer)
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("chooses multiple folders and keeps the dialog attached to the focused window", async () => {
+    const root = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), "synapse-agent-choose-folders-"))
+    const first = path.join(root, "first")
+    const second = path.join(root, "second")
+    await fs.mkdir(first)
+    await fs.mkdir(second)
+    const focusedWindow = { id: 1 }
+    electronMock.BrowserWindow.getFocusedWindow.mockReturnValueOnce(focusedWindow)
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: [first, second],
+    })
+
+    try {
+      const result = await createHarness({}).invoke(
+        "synapse:app:agent:operation:choose_attachments",
+        { kind: "directory" },
+      )
+
+      expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(focusedWindow, {
+        title: "添加文件夹",
+        properties: ["openDirectory", "multiSelections"],
+      })
+      expect(result.attachments).toEqual([
+        expect.objectContaining({ sourceIndex: 0, path: first, entryType: "directory" }),
+        expect.objectContaining({ sourceIndex: 1, path: second, entryType: "directory" }),
+      ])
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("leaves attachment selection empty when the native picker is cancelled", async () => {
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({
+      canceled: true,
+      filePaths: [],
+    })
+
+    await expect(createHarness({}).invoke(
+      "synapse:app:agent:operation:choose_attachments",
+      { kind: "file" },
+    )).resolves.toEqual({ attachments: [], rejectedCount: 0 })
+  })
+
+  it("resolves path attachment types and rejects missing paths and symbolic links independently", async () => {
+    const root = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), "synapse-agent-resolve-paths-"))
+    const emptyFile = path.join(root, "empty")
+    const emptyImage = path.join(root, "empty.png")
+    const directory = path.join(root, "materials")
+    const link = path.join(root, "materials-link")
+    await fs.writeFile(emptyFile, "")
+    await fs.writeFile(emptyImage, "")
+    await fs.mkdir(directory)
+    await fs.symlink(directory, link, "dir")
+
+    try {
+      const result = await createHarness({}).invoke(
+        "synapse:app:agent:operation:resolve_attachment_paths",
+        { paths: [emptyFile, path.join(root, "missing"), directory, link, emptyImage] },
+      )
+
+      expect(result).toEqual({
+        attachments: [
+          expect.objectContaining({ sourceIndex: 0, path: emptyFile, entryType: "file", size: 0 }),
+          expect.objectContaining({ sourceIndex: 2, path: directory, entryType: "directory" }),
+        ],
+        rejectedCount: 3,
+      })
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
   })
 
   it("opens the project container and sends local renderer messages through AgentRuntime", async () => {

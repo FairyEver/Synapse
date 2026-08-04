@@ -19,9 +19,17 @@ import type {
 import { formatAgentTranscript } from "../../../src/lib/agent-transcript"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
 import { REDACTED, redactSensitiveValue } from "./redaction"
+import {
+  isStreamDiagnosticEntry,
+  MAX_EXPORTED_STREAM_DIAGNOSTIC_BYTES,
+  MAX_STREAM_DIAGNOSTIC_BYTES_PER_TURN,
+  MAX_STREAM_DIAGNOSTIC_EVENTS_PER_TURN,
+  type StreamDiagnosticFrame,
+} from "./stream-diagnostics"
 
 const EXPORT_SOURCE = "agent.exportConversationBundle"
 const MAX_EXPORT_FILE_NAME_SEGMENT_LENGTH = 80
+const STREAM_DIAGNOSTIC_EXPORT_METADATA_RESERVE_BYTES = 16 * 1024
 
 export interface AgentConversationExportRequest {
   readonly projectId: string
@@ -75,6 +83,18 @@ interface BundleManifest {
     readonly binaryIncluded: false
     readonly description: string
   }
+  readonly diagnostics: {
+    readonly rawHttpIncluded: false
+    readonly apiStreamEventsIncluded: true
+    readonly path: "sdk-stream-events.json"
+    readonly source: "Claude Agent SDK StreamEvent.event"
+    readonly description: string
+    readonly limits: {
+      readonly maxEventsPerTurn: number
+      readonly maxBytesPerTurn: number
+      readonly maxExportBytes: number
+    }
+  }
   readonly included: string[]
   readonly skipped: Array<{ path: string; reason: string }>
 }
@@ -102,6 +122,52 @@ interface AttachmentExportIndex {
   readonly messageCount: number
   readonly attachmentCount: number
   readonly messages: readonly AttachmentExportMessage[]
+}
+
+interface SdkStreamExportEvent {
+  readonly turnId: string
+  readonly sequence?: number
+  readonly createdAt: string
+  readonly payload: Record<string, unknown>
+}
+
+interface SdkStreamExport {
+  readonly schemaVersion: 1
+  readonly source: "Claude Agent SDK StreamEvent.event"
+  readonly rawHttpIncluded: false
+  readonly description: string
+  readonly runtime: {
+    readonly agentType: string
+    readonly platform: string
+    readonly providerId?: string
+    readonly sdkSessionId?: string
+    readonly agentSessionId?: string
+    readonly models: readonly string[]
+    readonly environment: {
+      readonly platform: NodeJS.Platform
+      readonly arch: string
+      readonly node?: string
+      readonly electron?: string
+      readonly chrome?: string
+    }
+  }
+  readonly capture: {
+    readonly observedEventCount: number
+    readonly capturedEventCount: number
+    readonly exportedEventCount: number
+    readonly droppedEventCount: number
+    readonly truncatedTurnCount: number
+    readonly exportTruncated: boolean
+    readonly capturedBytes: number
+    readonly diagnosticTurnCount: number
+    readonly streamOnlyTurnCount: number
+    readonly limits: {
+      readonly maxEventsPerTurn: number
+      readonly maxBytesPerTurn: number
+      readonly maxExportBytes: number
+    }
+  }
+  readonly events: readonly SdkStreamExportEvent[]
 }
 
 class AgentConversationExportService {
@@ -137,7 +203,7 @@ class AgentConversationExportService {
       await mkdir(packageRoot, { recursive: true })
 
       const timeline = await this.collectTimeline(request, conversation, skipped)
-      const agentEvents = await this.collectRows(
+      const persistedAgentEvents = await this.collectRows(
         "agent-events.json",
         () => this.deps.agentEvents.list({
           projectId: request.projectId,
@@ -145,6 +211,8 @@ class AgentConversationExportService {
         } as Partial<AgentEventEntryV1>),
         skipped,
       )
+      const sdkStreamEvents = buildSdkStreamExport(persistedAgentEvents, conversation)
+      const agentEvents = persistedAgentEvents.filter((entry) => !isStreamDiagnosticEntry(entry))
       const agentUsage = await this.collectRows(
         "agent-usage.json",
         () => this.deps.agentUsage.list({
@@ -170,6 +238,7 @@ class AgentConversationExportService {
         entries: timeline,
       }, included)
       await this.writeJson(packageRoot, "agent-events.json", agentEvents, included)
+      await this.writeCompactJson(packageRoot, "sdk-stream-events.json", sdkStreamEvents, included)
       await this.writeJson(packageRoot, "agent-usage.json", agentUsage, included)
       if (this.deps.agentArtifacts) {
         const agentArtifacts = await this.collectRows(
@@ -200,6 +269,18 @@ class AgentConversationExportService {
         attachments: {
           binaryIncluded: false,
           description: "User input attachment bytes are not exported. Agent output artifacts are listed in agent-artifacts.json and copied under artifacts/ when available.",
+        },
+        diagnostics: {
+          rawHttpIncluded: false,
+          apiStreamEventsIncluded: true,
+          path: "sdk-stream-events.json",
+          source: "Claude Agent SDK StreamEvent.event",
+          description: "Contains redacted raw API stream events exposed by the Claude Agent SDK. Wire-level HTTP headers and SSE text lines are not available at this boundary.",
+          limits: {
+            maxEventsPerTurn: MAX_STREAM_DIAGNOSTIC_EVENTS_PER_TURN,
+            maxBytesPerTurn: MAX_STREAM_DIAGNOSTIC_BYTES_PER_TURN,
+            maxExportBytes: MAX_EXPORTED_STREAM_DIAGNOSTIC_BYTES,
+          },
         },
         included,
         skipped,
@@ -298,6 +379,15 @@ class AgentConversationExportService {
     included?: string[],
   ): Promise<void> {
     await this.writeText(packageRoot, relativePath, `${JSON.stringify(sanitizeExportValue(value), null, 2)}\n`, included)
+  }
+
+  private async writeCompactJson(
+    packageRoot: string,
+    relativePath: string,
+    value: unknown,
+    included?: string[],
+  ): Promise<void> {
+    await this.writeText(packageRoot, relativePath, `${JSON.stringify(sanitizeExportValue(value))}\n`, included)
   }
 
   private async writeText(
@@ -410,6 +500,145 @@ class AgentConversationExportService {
       },
     })
   }
+}
+
+function buildSdkStreamExport(
+  rows: readonly AgentEventEntryV1[],
+  conversation: ConversationEntryV1,
+): SdkStreamExport {
+  const candidates: SdkStreamExportEvent[] = []
+  let observedEventCount = 0
+  let truncatedTurnCount = 0
+  const diagnosticTurnIds = new Set<string>()
+  const streamTurnIds = new Set<string>()
+
+  for (const row of rows) {
+    if (isStreamDiagnosticEntry(row)) {
+      diagnosticTurnIds.add(row.turnId)
+      observedEventCount += finiteNumber(row.payload.observedEventCount)
+      if (row.payload.truncated) truncatedTurnCount += 1
+      for (const frame of row.payload.frames) {
+        const normalized = normalizeStreamDiagnosticFrame(frame, row.turnId)
+        if (normalized) candidates.push(normalized)
+      }
+      continue
+    }
+    if (row.eventType !== "stream") continue
+    streamTurnIds.add(row.turnId)
+    observedEventCount += 1
+    candidates.push({
+      turnId: row.turnId,
+      sequence: eventSequence(row.id),
+      createdAt: row.createdAt,
+      payload: row.payload,
+    })
+  }
+
+  candidates.sort(compareSdkStreamEvents)
+  const selected: SdkStreamExportEvent[] = []
+  let capturedBytes = 0
+  let droppedEventCount = 0
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    const event = candidates[index]
+    if (!event) continue
+    const eventBytes = Buffer.byteLength(JSON.stringify(sanitizeExportValue(event)), "utf8") + 1
+    if (
+      capturedBytes + eventBytes
+      > MAX_EXPORTED_STREAM_DIAGNOSTIC_BYTES - STREAM_DIAGNOSTIC_EXPORT_METADATA_RESERVE_BYTES
+    ) {
+      droppedEventCount += 1
+      continue
+    }
+    capturedBytes += eventBytes
+    selected.push(event)
+  }
+  selected.reverse()
+
+  return {
+    schemaVersion: 1,
+    source: "Claude Agent SDK StreamEvent.event",
+    rawHttpIncluded: false,
+    description: "Events are sanitized SDK StreamEvent payloads, not wire-level HTTP responses or literal SSE lines. Correlate turnId, sequence, sdkSessionId, message id, and content block index with agent-events.json. streamOnlyTurnCount identifies turns whose historical deltas were not retained.",
+    runtime: {
+      agentType: conversation.agentType ?? "unknown",
+      platform: conversation.platform ?? "unknown",
+      providerId: conversation.providerId,
+      sdkSessionId: conversation.sdkSessionId,
+      agentSessionId: conversation.agentSessionId,
+      models: modelNames(rows),
+      environment: {
+        platform: process.platform,
+        arch: process.arch,
+        node: process.versions.node,
+        electron: process.versions.electron,
+        chrome: process.versions.chrome,
+      },
+    },
+    capture: {
+      observedEventCount,
+      capturedEventCount: candidates.length,
+      exportedEventCount: selected.length,
+      droppedEventCount,
+      truncatedTurnCount,
+      exportTruncated: droppedEventCount > 0,
+      capturedBytes,
+      diagnosticTurnCount: diagnosticTurnIds.size,
+      streamOnlyTurnCount: [...streamTurnIds].filter((turnId) => !diagnosticTurnIds.has(turnId)).length,
+      limits: {
+        maxEventsPerTurn: MAX_STREAM_DIAGNOSTIC_EVENTS_PER_TURN,
+        maxBytesPerTurn: MAX_STREAM_DIAGNOSTIC_BYTES_PER_TURN,
+        maxExportBytes: MAX_EXPORTED_STREAM_DIAGNOSTIC_BYTES,
+      },
+    },
+    events: selected,
+  }
+}
+
+function normalizeStreamDiagnosticFrame(
+  value: StreamDiagnosticFrame,
+  turnId: string,
+): SdkStreamExportEvent | null {
+  if (!value || typeof value !== "object") return null
+  if (!Number.isInteger(value.sequence) || value.sequence < 0) return null
+  if (typeof value.createdAt !== "string") return null
+  if (!isRecord(value.payload)) return null
+  return {
+    turnId,
+    sequence: value.sequence,
+    createdAt: value.createdAt,
+    payload: value.payload,
+  }
+}
+
+function compareSdkStreamEvents(left: SdkStreamExportEvent, right: SdkStreamExportEvent): number {
+  const byCreatedAt = left.createdAt.localeCompare(right.createdAt)
+  if (byCreatedAt !== 0) return byCreatedAt
+  const byTurn = left.turnId.localeCompare(right.turnId)
+  return byTurn === 0 ? (left.sequence ?? 0) - (right.sequence ?? 0) : byTurn
+}
+
+function eventSequence(id: string): number | undefined {
+  const value = Number(id.split(":").at(-1))
+  return Number.isInteger(value) && value >= 0 ? value : undefined
+}
+
+function modelNames(rows: readonly AgentEventEntryV1[]): string[] {
+  const names = new Set<string>()
+  for (const row of rows) {
+    const message = isRecord(row.payload.message) ? row.payload.message : undefined
+    const model = typeof message?.model === "string"
+      ? message.model
+      : typeof row.payload.model === "string"
+        ? row.payload.model
+        : undefined
+    if (model) names.add(model)
+    if (names.size >= 20) break
+  }
+  return [...names]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
 
 function buildSummary(input: {

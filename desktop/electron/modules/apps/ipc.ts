@@ -31,11 +31,25 @@ const contentOpenRequestSchema = z.discriminatedUnion("kind", [
   }).passthrough(),
 ])
 
+const gitOpenRequestSchema = z.object({
+  requestId: z.string().min(1),
+  repositoryId: z.string().min(1),
+}).strict()
+
 const openSystemAppRequestSchema = z.object({
   appId: systemAppIdSchema,
   options: z.object({
     contentOpenRequest: contentOpenRequestSchema.optional(),
+    gitOpenRequest: gitOpenRequestSchema.optional(),
   }).optional(),
+}).superRefine((request, context) => {
+  if (request.options?.gitOpenRequest && request.appId !== "git") {
+    context.addIssue({
+      code: "custom",
+      message: "Git open requests require the Git app.",
+      path: ["options", "gitOpenRequest"],
+    })
+  }
 })
 
 type OpenSystemAppRequest = z.infer<typeof openSystemAppRequestSchema>

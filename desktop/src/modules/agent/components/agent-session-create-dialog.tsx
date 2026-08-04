@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { LockKeyhole } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -61,6 +61,8 @@ function AgentSessionCreateDialog({
   const [personaId, setPersonaId] = useState<string | null>(null)
   const [manualSelection, setManualSelection] = useState<ProviderModelSelection | null>(defaultSelection ?? null)
   const [saving, setSaving] = useState(false)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const createdRef = useRef(false)
   const {
     providers,
     isLoading: providersLoading,
@@ -74,6 +76,7 @@ function AgentSessionCreateDialog({
     setPersonaId(null)
     setManualSelection(defaultSelection ?? null)
     setSaving(false)
+    createdRef.current = false
   }, [defaultSelection, initialName, open])
 
   useEffect(() => {
@@ -125,7 +128,10 @@ function AgentSessionCreateDialog({
         personaId,
         selection: effectiveSelection,
       })
-      if (created) onOpenChange(false)
+      if (created) {
+        createdRef.current = true
+        onOpenChange(false)
+      }
     } catch (rawError) {
       logger.warn("Agent session creation failed.", {
         boundary: "renderer.agent.session-create",
@@ -142,9 +148,24 @@ function AgentSessionCreateDialog({
     onOpenChange(nextOpen)
   }
 
+  const handleOpenAutoFocus = (event: Event) => {
+    event.preventDefault()
+    nameInputRef.current?.focus()
+    nameInputRef.current?.select()
+  }
+
+  const handleCloseAutoFocus = (event: Event) => {
+    if (createdRef.current) event.preventDefault()
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[calc(100vh-3rem)] sm:max-w-xl" aria-describedby={undefined}>
+      <DialogContent
+        className="max-h-[calc(100vh-3rem)] sm:max-w-xl"
+        aria-describedby={undefined}
+        onOpenAutoFocus={handleOpenAutoFocus}
+        onCloseAutoFocus={handleCloseAutoFocus}
+      >
         <DialogHeader>
           <DialogTitle>新建对话</DialogTitle>
         </DialogHeader>
@@ -154,12 +175,17 @@ function AgentSessionCreateDialog({
               <FieldLabel htmlFor="agent-session-name">名称</FieldLabel>
               <FieldContent>
                 <Input
+                  ref={nameInputRef}
                   id="agent-session-name"
                   aria-label="会话名称"
                   value={name}
                   disabled={saving}
-                  autoFocus
                   onChange={(event) => setName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" || event.nativeEvent.isComposing) return
+                    event.preventDefault()
+                    void handleCreate()
+                  }}
                 />
               </FieldContent>
             </Field>

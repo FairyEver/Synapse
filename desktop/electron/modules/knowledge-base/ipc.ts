@@ -5,6 +5,7 @@ import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime
 import { createMainLogger } from "../../services/log-store"
 import type { KnowledgeBaseService } from "../../services/knowledge-base"
 import type { KnowledgeBaseStorageMigrationService } from "../../services/knowledge-base/storage-migration-service"
+import type { KnowledgeBaseTransferService } from "../../services/knowledge-base/transfer-service"
 import { knowledgeBaseSourceManagerWindowService } from "../../services/knowledge-base/source-manager-window-service"
 import { createGuardedFetchUrl } from "../../services/source-acquisition/guarded-fetch-url"
 import { validateUrlSourceCandidate, type FetchUrl } from "../../services/source-acquisition/url-source"
@@ -39,6 +40,56 @@ const deleteManagedPayloadSchema = z.object({
 const deleteManagedResultSchema = z.object({
   projectId: z.string(),
   deleted: z.boolean(),
+})
+
+const importPreviewSchema = z.object({
+  token: z.string(),
+  folderName: z.string(),
+  suggestedName: z.string(),
+  fileCount: z.number().int().nonnegative(),
+  totalBytes: z.number().nonnegative(),
+  warnings: z.array(z.literal("legacy-export-metadata-missing")),
+})
+
+const importManagedPayloadSchema = z.object({
+  token: z.string().min(1),
+  name: z.string().min(1),
+  trusted: z.boolean(),
+})
+
+const managedProjectSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  path: z.string(),
+  capabilities: z.object({
+    knowledgeBase: z.object({
+      enabled: z.literal(true),
+      schemaVersion: z.literal(1),
+      templateVersion: z.string(),
+      managed: z.literal(true),
+      runtimeId: z.string(),
+    }),
+  }),
+})
+
+const importManagedResultSchema = z.object({ project: managedProjectSchema })
+
+const exportManagedPayloadSchema = z.object({ projectId: z.string().min(1) })
+
+const exportManagedResultSchema = z.object({
+  projectId: z.string(),
+  folderPath: z.string(),
+})
+
+const transferProgressSchema = z.object({
+  active: z.boolean(),
+  operation: z.enum(["idle", "import", "export"]),
+  phase: z.enum(["idle", "copying", "verifying", "registering", "completed", "failed", "cancelled"]),
+  cancellable: z.boolean(),
+  copiedBytes: z.number(),
+  totalBytes: z.number().nullable(),
+  message: z.string(),
+  errorMessage: z.string().optional(),
 })
 
 const rawEntrySchema = z.object({
@@ -233,6 +284,10 @@ function service(ctx: IpcHandlerContext): KnowledgeBaseService {
 
 function migrationService(ctx: IpcHandlerContext): KnowledgeBaseStorageMigrationService {
   return ctx.resolve<KnowledgeBaseStorageMigrationService>("knowledge-base.storage-migration-service")
+}
+
+function transferService(ctx: IpcHandlerContext): KnowledgeBaseTransferService {
+  return ctx.resolve<KnowledgeBaseTransferService>("knowledge-base.transfer-service")
 }
 
 function assertStorageMigrationInactive(ctx: IpcHandlerContext): void {
@@ -555,6 +610,77 @@ export const knowledgeBaseIpcModule: IpcModule = {
         },
       }),
     },
+    selectImportFolder: {
+      kind: "invoke",
+      operationId: "app.knowledge_base.operation.select_import_folder",
+      request: z.void(),
+      response: importPreviewSchema.nullable(),
+      handler: async (ctx) => {
+        assertStorageMigrationInactive(ctx)
+        const result = await showOpenDialog({ properties: ["openDirectory"] })
+        const sourcePath = result.filePaths[0]
+        if (result.canceled || !sourcePath) return null
+        return runGuardedKnowledgeBaseOperation({
+          ctx,
+          action: "fs.read.outside-userdata",
+          resource: sourcePath,
+          source: "knowledgeBase.selectImportFolder",
+          run: () => transferService(ctx).inspectImportFolder(sourcePath),
+        })
+      },
+    },
+    importManagedFolder: {
+      kind: "invoke",
+      operationId: "app.knowledge_base.operation.import_managed_folder",
+      request: importManagedPayloadSchema,
+      response: importManagedResultSchema,
+      handler: (ctx, request: { token: string; name: string; trusted: boolean }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "fs.write",
+        resource: `managed-knowledge-base-import:${request.token}`,
+        source: "knowledgeBase.importManagedFolder",
+        run: () => transferService(ctx).importManagedFolder(request),
+      }),
+    },
+    exportManagedFolder: {
+      kind: "invoke",
+      operationId: "app.knowledge_base.operation.export_managed_folder",
+      request: exportManagedPayloadSchema,
+      response: exportManagedResultSchema.nullable(),
+      handler: async (ctx, request: { projectId: string }) => {
+        assertStorageMigrationInactive(ctx)
+        const result = await showOpenDialog({ properties: ["openDirectory", "createDirectory"] })
+        const targetPath = result.filePaths[0]
+        if (result.canceled || !targetPath) return null
+        return runGuardedKnowledgeBaseOperation({
+          ctx,
+          action: "fs.read.outside-userdata",
+          resource: `managed-knowledge-base:${request.projectId}`,
+          source: "knowledgeBase.exportManagedFolder.read",
+          run: () => runGuardedKnowledgeBaseOperation({
+            ctx,
+            action: "fs.write.outside-userdata",
+            resource: targetPath,
+            source: "knowledgeBase.exportManagedFolder.write",
+            run: () => transferService(ctx).exportManagedFolder(request.projectId, targetPath),
+          }),
+        })
+      },
+    },
+    getTransferState: {
+      kind: "invoke",
+      operationId: "app.knowledge_base.operation.get_transfer_state",
+      request: z.void(),
+      response: transferProgressSchema,
+      handler: (ctx) => transferService(ctx).getState(),
+    },
+    cancelTransfer: {
+      kind: "invoke",
+      operationId: "app.knowledge_base.operation.cancel_transfer",
+      request: z.void(),
+      response: z.void(),
+      handler: (ctx) => transferService(ctx).cancel(),
+    },
     listRawDirectory: {
       kind: "invoke",
       operationId: "app.knowledge_base.operation.list_raw_directory",
@@ -837,6 +963,11 @@ export const knowledgeBaseIpcModule: IpcModule = {
       kind: "event",
       operationId: "app.knowledge_base.operation.storage_migration_changed",
       payload: storageMigrationProgressSchema,
+    },
+    transferChanged: {
+      kind: "event",
+      operationId: "app.knowledge_base.operation.transfer_changed",
+      payload: transferProgressSchema,
     },
   },
 }

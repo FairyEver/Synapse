@@ -1,14 +1,14 @@
 import {
   type ClipboardEvent,
-  type DragEvent,
   type FormEvent,
   type KeyboardEvent,
+  type RefObject,
   useMemo,
   useRef,
   useEffect,
   useState,
 } from "react"
-import { ArrowUp, ChevronDown, CornerDownRight, FileIcon, FolderIcon, ImageIcon, RotateCcw, Square, Trash2, X } from "lucide-react"
+import { ArrowUp, ChevronDown, CornerDownRight, RotateCcw, Square, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
@@ -24,6 +24,10 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { track } from "@/lib/ui-tracking"
+import type {
+  SynapseAgentAttachmentCandidate,
+  SynapseAgentAttachmentSelectionResult,
+} from "@/types/bridge"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
 import type { SynapseQuickInputItem } from "@/types/quick-input"
 import { insertTextAtComposerSelection } from "../composer-insert"
@@ -34,11 +38,12 @@ import {
   createImageAttachment,
   createPathAttachment,
   formatDraftAttachmentsForMessage,
-  nextImageLabel,
   type AgentDraftAttachment,
   type AgentDraftImageAttachment,
 } from "../attachments"
 import { AgentComposerInputBox } from "./agent-composer-input-box"
+import { AgentAttachmentMenu } from "./agent-attachment-menu"
+import { AgentComposerAttachmentStrip } from "./agent-composer-attachment-strip"
 import { AgentConversationRolloverPrompt } from "./agent-conversation-rollover-prompt"
 import {
   KnowledgeBaseActionMenu,
@@ -47,6 +52,8 @@ import {
 import { QuickInputMenu } from "./quick-input-menu"
 import { AgentPermissionModeMenu } from "./permission-mode-menu"
 import { AgentSlashMenu } from "./agent-slash-menu"
+import { AgentGitActionMenu } from "./agent-git-action-menu"
+import type { AgentGitAction } from "../hooks/use-project-git-actions"
 import {
   filterAgentSlashCandidates,
   findAgentSlashFragment,
@@ -96,6 +103,15 @@ function AgentComposer({
   onKnowledgeBaseCommand,
   onOpenKnowledgeBaseSourceManager,
   onQuickInputDirectSend,
+  gitRepositoryAvailable = false,
+  gitBusyAction = null,
+  gitPreparing = false,
+  onPrepareGitCommit,
+  onRunGitRemote,
+  onCancelGitOperation,
+  onOpenGit,
+  dropTargetRef,
+  focusInputKey,
 }: {
   readonly draft: string
   readonly disabled: boolean
@@ -133,6 +149,15 @@ function AgentComposer({
   readonly onKnowledgeBaseCommand?: (commandText: string) => void
   readonly onOpenKnowledgeBaseSourceManager?: () => void
   readonly onQuickInputDirectSend?: (content: string) => void
+  readonly gitRepositoryAvailable?: boolean
+  readonly gitBusyAction?: AgentGitAction | null
+  readonly gitPreparing?: boolean
+  readonly onPrepareGitCommit?: (action: "commit" | "commit-and-push") => void
+  readonly onRunGitRemote?: (action: "pull" | "push" | "sync") => void
+  readonly onCancelGitOperation?: () => void
+  readonly onOpenGit?: () => void
+  readonly dropTargetRef?: RefObject<HTMLElement | null>
+  readonly focusInputKey?: string
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -143,6 +168,8 @@ function AgentComposer({
   const [highlightedSlashIndex, setHighlightedSlashIndex] = useState(0)
   const [selectionStart, setSelectionStart] = useState(0)
   const [attachments, setAttachments] = useState<AgentDraftAttachment[]>([])
+  const [dropActive, setDropActive] = useState(false)
+  const [choosingAttachments, setChoosingAttachments] = useState(false)
   const activeSlashFragment = useMemo(
     () => findAgentSlashFragment(draft, selectionStart),
     [draft, selectionStart],
@@ -157,6 +184,12 @@ function AgentComposer({
   const visiblePendingMessages = pendingMessages.filter((message) => message.status !== "sending")
   const isNewSessionMode = pendingModeAction === "new-session"
   const attachmentAwareCanSend = canSend || attachments.length > 0
+
+  useEffect(() => {
+    if (!focusInputKey || disabled) return undefined
+    const timeoutId = window.setTimeout(() => textareaRef.current?.focus(), 0)
+    return () => window.clearTimeout(timeoutId)
+  }, [disabled, focusInputKey])
 
   const addAttachments = (next: readonly AgentDraftAttachment[]) => {
     if (next.length === 0) return
@@ -231,6 +264,67 @@ function AgentComposer({
       document.removeEventListener("pointerdown", handlePointerDown)
     }
   }, [slashMenuOpen])
+
+  useEffect(() => {
+    const target = dropTargetRef?.current ?? formRef.current
+    if (!target) return undefined
+
+    const attachFiles = (files: readonly File[]) => {
+      void draftAttachmentsFromFiles(files).then((result) => {
+        if (result.attachments.length > 0) {
+          setAttachments((current) => [...current, ...result.attachments])
+        }
+        showAttachmentRejections(result)
+      }).catch((error) => {
+        logger.warn("Agent attachment drop failed.", errorDiagnostic(error))
+        toast("添加附件失败")
+      })
+    }
+    const handleDragOver = (event: globalThis.DragEvent) => {
+      if (disabled || !hasFileTransfer(event.dataTransfer)) return
+      event.preventDefault()
+      event.dataTransfer!.dropEffect = "copy"
+      setDropActive(true)
+    }
+    const handleDragLeave = (event: globalThis.DragEvent) => {
+      const relatedTarget = event.relatedTarget
+      if (relatedTarget instanceof Node && target.contains(relatedTarget)) return
+      setDropActive(false)
+    }
+    const handleDrop = (event: globalThis.DragEvent) => {
+      if (disabled || !hasFileTransfer(event.dataTransfer)) return
+      const files = Array.from(event.dataTransfer?.files ?? [])
+      if (files.length === 0) return
+      event.preventDefault()
+      setDropActive(false)
+      attachFiles(files)
+    }
+
+    target.addEventListener("dragover", handleDragOver)
+    target.addEventListener("dragleave", handleDragLeave)
+    target.addEventListener("drop", handleDrop)
+    return () => {
+      target.removeEventListener("dragover", handleDragOver)
+      target.removeEventListener("dragleave", handleDragLeave)
+      target.removeEventListener("drop", handleDrop)
+    }
+  }, [disabled, dropTargetRef])
+
+  const chooseAttachments = async (kind: "file" | "directory") => {
+    if (choosingAttachments) return
+    setChoosingAttachments(true)
+    try {
+      const result = await requireSynapseBridge().agent.chooseAttachments({ kind })
+      addAttachments(result.attachments.map(draftAttachmentFromCandidate))
+      showAttachmentRejections(result)
+    } catch (error) {
+      logger.warn("Agent attachment selection failed.", errorDiagnostic(error))
+      toast("添加附件失败")
+    } finally {
+      setChoosingAttachments(false)
+      window.setTimeout(() => textareaRef.current?.focus(), 0)
+    }
+  }
 
   const handleSubmit = (event: FormEvent) => {
     track({
@@ -354,37 +448,17 @@ function AgentComposer({
 
     if (files.length > 0) {
       event.preventDefault()
-      const imageFiles = files.filter((file) => isSupportedImageMimeType(file.type))
-      if (imageFiles.length > 0) {
-        void addImageFiles(imageFiles, addAttachments).catch((error) => {
-          logger.warn("Agent attachment image read failed.", { error })
-        })
-      }
-      const { attachments: pathAttachments, unresolvedCount } = pathAttachmentsFromPastedFiles(
-        files.filter((file) => !isSupportedImageMimeType(file.type)),
-      )
-      addAttachments(pathAttachments)
-      if (unresolvedCount > 0) {
-        toast("无法读取文件完整路径")
-      }
+      void draftAttachmentsFromFiles(files).then((result) => {
+        addAttachments(result.attachments)
+        showAttachmentRejections(result)
+      }).catch((error) => {
+        logger.warn("Agent attachment paste failed.", errorDiagnostic(error))
+        toast("添加附件失败")
+      })
       return
     }
 
     return
-  }
-
-  const handleDrop = (event: DragEvent<HTMLFormElement>) => {
-    const files = Array.from(event.dataTransfer.files ?? [])
-    if (files.length === 0) return
-
-    event.preventDefault()
-    void addDroppedFiles(files, addAttachments).then((unresolvedCount) => {
-      if (unresolvedCount > 0) {
-        toast("无法读取文件完整路径")
-      }
-    }).catch((error) => {
-      logger.warn("Agent attachment drop failed.", { error })
-    })
   }
 
   return (
@@ -397,8 +471,6 @@ function AgentComposer({
         ref={formRef}
         className="agent-composer absolute inset-x-4 bottom-5 z-10 mx-auto max-w-2xl md:inset-x-20"
         data-track="agent-composer"
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={handleDrop}
         onSubmit={handleSubmit}
       >
         {showJumpToBottom ? (
@@ -428,6 +500,7 @@ function AgentComposer({
         ) : null}
         <AgentComposerInputBox
           multiline={multiline}
+          dropActive={dropActive}
           contextNotice={showConversationRolloverPrompt && onStartNewConversation ? (
             <AgentConversationRolloverPrompt
               onStartNewConversation={onStartNewConversation}
@@ -494,35 +567,10 @@ function AgentComposer({
             </ScrollArea>
           ) : null}
           attachments={attachments.length > 0 ? (
-            <div className="flex flex-col gap-1">
-              {attachments.map((attachment, index) => (
-                <div
-                  key={attachment.id}
-                  className="flex min-w-0 items-center gap-2 rounded-lg px-1 py-1 text-sm"
-                >
-                  {attachment.kind === "image" ? (
-                    <ImageIcon className="size-4 shrink-0 text-muted-foreground" />
-                  ) : attachment.entryType === "directory" ? (
-                    <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
-                  ) : (
-                    <FileIcon className="size-4 shrink-0 text-muted-foreground" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">
-                    {attachmentLabel(attachments, attachment, index)}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`删除附件 ${attachmentRemoveLabel(attachments, attachment, index)}`}
-                    data-track="agent-attachment-remove"
-                    onClick={() => removeAttachment(attachment.id)}
-                  >
-                    <X />
-                  </Button>
-                </div>
-              ))}
-            </div>
+            <AgentComposerAttachmentStrip
+              attachments={attachments}
+              onRemove={removeAttachment}
+            />
           ) : null}
           editor={(
             <Textarea
@@ -545,6 +593,10 @@ function AgentComposer({
           )}
           leadingActions={(
             <>
+              <AgentAttachmentMenu
+                disabled={disabled || choosingAttachments}
+                onChoose={(kind) => void chooseAttachments(kind)}
+              />
               <QuickInputMenu
                 quickInputs={quickInputs}
                 disabled={disabled}
@@ -557,6 +609,21 @@ function AgentComposer({
                 onInsert={insertKnowledgeBaseCommand}
                 onOpenSourceManager={onOpenKnowledgeBaseSourceManager}
               />
+              {gitRepositoryAvailable
+                && onPrepareGitCommit
+                && onRunGitRemote
+                && onCancelGitOperation
+                && onOpenGit ? (
+                  <AgentGitActionMenu
+                    busyAction={gitBusyAction}
+                    disabled={disabled}
+                    preparing={gitPreparing}
+                    onPrepareCommit={onPrepareGitCommit}
+                    onRunRemote={onRunGitRemote}
+                    onCancel={onCancelGitOperation}
+                    onOpenGit={onOpenGit}
+                  />
+                ) : null}
             </>
           )}
           trailingActions={(
@@ -659,61 +726,90 @@ function isSupportedImageMimeType(type: string): type is AgentDraftImageAttachme
   return SUPPORTED_IMAGE_MIME_TYPES.has(type as AgentDraftImageAttachment["mimeType"])
 }
 
-async function addImageFiles(
-  files: readonly File[],
-  addAttachments: (attachments: readonly AgentDraftAttachment[]) => void,
-) {
-  const images = await Promise.all(files.map(createImageAttachmentFromFile))
-  addAttachments(images)
+type DraftAttachmentResult = {
+  readonly attachments: readonly AgentDraftAttachment[]
+  readonly rejectedCount: number
 }
 
-async function addDroppedFiles(
-  files: readonly File[],
-  addAttachments: (attachments: readonly AgentDraftAttachment[]) => void,
-): Promise<number> {
-  const next: AgentDraftAttachment[] = []
-  let unresolvedCount = 0
-  for (const file of files) {
+async function draftAttachmentsFromFiles(files: readonly File[]): Promise<DraftAttachmentResult> {
+  const indexedAttachments: Array<{
+    readonly sourceIndex: number
+    readonly attachment: AgentDraftAttachment
+  }> = []
+  const pathSources: Array<{ readonly sourceIndex: number; readonly path: string }> = []
+  let rejectedCount = 0
+
+  for (const [sourceIndex, file] of files.entries()) {
     if (isSupportedImageMimeType(file.type)) {
-      next.push(await createImageAttachmentFromFile(file))
+      try {
+        indexedAttachments.push({
+          sourceIndex,
+          attachment: await createImageAttachmentFromFile(file),
+        })
+      } catch {
+        rejectedCount += 1
+      }
       continue
     }
     const path = droppedFilePath(file)
     if (!path || !isAbsolutePathLine(path)) {
-      unresolvedCount += 1
+      rejectedCount += 1
       continue
     }
-    next.push(createPathAttachment({
-      id: createDraftAttachmentId(),
-      path,
-      entryType: inferDroppedEntryType(file),
-      name: file.name || path,
-    }))
+    pathSources.push({ sourceIndex, path })
   }
-  addAttachments(next)
-  return unresolvedCount
+
+  if (pathSources.length > 0) {
+    const result = await requireSynapseBridge().agent.resolveAttachmentPaths({
+      paths: pathSources.map((item) => item.path),
+    })
+    rejectedCount += result.rejectedCount
+    for (const candidate of result.attachments) {
+      const source = pathSources[candidate.sourceIndex]
+      if (!source) {
+        rejectedCount += 1
+        continue
+      }
+      indexedAttachments.push({
+        sourceIndex: source.sourceIndex,
+        attachment: draftAttachmentFromCandidate(candidate),
+      })
+    }
+  }
+
+  indexedAttachments.sort((left, right) => left.sourceIndex - right.sourceIndex)
+  return {
+    attachments: indexedAttachments.map((item) => item.attachment),
+    rejectedCount,
+  }
 }
 
-function pathAttachmentsFromPastedFiles(files: readonly File[]): {
-  readonly attachments: readonly AgentDraftAttachment[]
-  readonly unresolvedCount: number
-} {
-  const attachments: AgentDraftAttachment[] = []
-  let unresolvedCount = 0
-  for (const file of files) {
-    const path = requireSynapseBridge().shell.filePathForDroppedFile(file)
-    if (!path || !isAbsolutePathLine(path)) {
-      unresolvedCount += 1
-      continue
-    }
-    attachments.push(createPathAttachment({
+function draftAttachmentFromCandidate(candidate: SynapseAgentAttachmentCandidate): AgentDraftAttachment {
+  if (candidate.kind === "image") {
+    return createImageAttachment({
       id: createDraftAttachmentId(),
-      path,
-      entryType: inferDroppedEntryType(file),
-      name: file.name || undefined,
-    }))
+      name: candidate.name,
+      mimeType: candidate.mimeType,
+      size: candidate.size,
+      bytes: candidate.data,
+    })
   }
-  return { attachments, unresolvedCount }
+  return createPathAttachment({
+    id: createDraftAttachmentId(),
+    path: candidate.path,
+    entryType: candidate.entryType,
+    name: candidate.name,
+    size: candidate.size,
+  })
+}
+
+function showAttachmentRejections(
+  result: Pick<SynapseAgentAttachmentSelectionResult, "rejectedCount"> & {
+    readonly attachments: readonly unknown[]
+  },
+): void {
+  if (result.rejectedCount === 0) return
+  toast(result.attachments.length > 0 ? "部分附件无法添加" : "无法添加附件")
 }
 
 async function createImageAttachmentFromFile(file: File): Promise<AgentDraftImageAttachment> {
@@ -734,10 +830,6 @@ function legacyFilePath(file: File): string | null {
   return (file as File & { readonly path?: string }).path || null
 }
 
-function inferDroppedEntryType(file: File): "file" | "directory" {
-  return file.size === 0 && !file.type ? "directory" : "file"
-}
-
 function isAbsolutePathLine(value: string): boolean {
   return (
     value.startsWith("/")
@@ -750,26 +842,15 @@ function isWindowsUncAbsolutePath(value: string): boolean {
   return /^\\\\[^\\/]+[\\/][^\\/]+(?:[\\/]|$)/.test(value)
 }
 
-function attachmentLabel(
-  attachments: readonly AgentDraftAttachment[],
-  attachment: AgentDraftAttachment,
-  index: number,
-): string {
-  if (attachment.kind === "path") return attachment.path
-  return nextImageLabel(imageIndexAt(attachments, index))
+function hasFileTransfer(dataTransfer: DataTransfer | null): boolean {
+  if (!dataTransfer) return false
+  return dataTransfer.files.length > 0 || Array.from(dataTransfer.types ?? []).includes("Files")
 }
 
-function attachmentRemoveLabel(
-  attachments: readonly AgentDraftAttachment[],
-  attachment: AgentDraftAttachment,
-  index: number,
-): string {
-  if (attachment.kind === "path") return attachment.name
-  return nextImageLabel(imageIndexAt(attachments, index))
-}
-
-function imageIndexAt(attachments: readonly AgentDraftAttachment[], index: number): number {
-  return attachments.slice(0, index + 1).filter((attachment) => attachment.kind === "image").length - 1
+function errorDiagnostic(error: unknown): Record<string, unknown> {
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+  }
 }
 
 function createDraftAttachmentId(): string {

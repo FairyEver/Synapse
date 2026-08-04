@@ -28,6 +28,17 @@ afterEach(async () => {
 })
 
 describe("KnowledgeBaseStorageMigrationService", () => {
+  it("blocks migration while a knowledge base import or export is active", async () => {
+    const harness = await migrationHarness({ activeTransfer: true })
+
+    await expect(harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })).rejects.toThrow("知识库导入或导出正在进行")
+
+    expect(harness.service.isActive()).toBe(false)
+  })
+
   it("copies all runtimes, switches config, and trashes the old directory", async () => {
     const harness = await migrationHarness()
     await harness.seedRuntime("kb-1")
@@ -525,6 +536,7 @@ type RuntimeSeedOptions = {
 }
 
 type MigrationHarnessOptions = {
+  activeTransfer?: boolean
   trashError?: Error
   pauseAfterFirstCopy?: boolean
   pauseAfterFirstStats?: boolean
@@ -595,6 +607,7 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
     journalPath,
     sourceManager,
     hasActiveKnowledgeBaseSession: async () => options.activeKnowledgeBaseSession === true,
+    hasActiveTransfer: () => options.activeTransfer === true,
     getAvailableBytes: async () => options.availableBytes === undefined ? 100_000_000_000 : options.availableBytes,
     afterCopyEntry: async (sourceEntryPath) => {
       if (options.corruptCopiedClaudeContent && sourceEntryPath.endsWith(path.join("kb-1", "CLAUDE.md"))) {

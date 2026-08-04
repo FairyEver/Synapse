@@ -51,6 +51,36 @@ describe("AgentConversationExportService", () => {
       },
       createdAt: "2026-06-08T08:00:01.000Z",
     })
+    await agentEvents.upsert({
+      id: "conv-1:turn-1:stream-diagnostics",
+      schemaVersion: 1,
+      projectId: "project-1",
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      eventType: "streamDiagnostics",
+      payload: {
+        type: "streamDiagnostics",
+        schemaVersion: 1,
+        source: "claude-agent-sdk-stream-event",
+        observedEventCount: 1,
+        capturedEventCount: 1,
+        capturedBytes: 120,
+        truncated: false,
+        limits: { maxEventsPerTurn: 1_000, maxBytesPerTurn: 524_288 },
+        frames: [{
+          sequence: 2,
+          createdAt: "2026-06-08T08:00:01.500Z",
+          payload: {
+            type: "stream",
+            deltaType: "text_delta",
+            text: "!",
+            event: { type: "content_block_delta", index: 2, delta: { type: "text_delta", text: "!" } },
+            apiKey: "sk-stream-secret",
+          },
+        }],
+      },
+      createdAt: "2026-06-08T08:00:01.600Z",
+    })
     await agentUsage.upsert({
       id: "usage-1",
       schemaVersion: 1,
@@ -78,7 +108,11 @@ describe("AgentConversationExportService", () => {
       const conversationText = await readPackageFile("conversation.json")
       const manifestText = await readPackageFile("manifest.json")
       const summaryText = await readPackageFile("summary.json")
-      const manifest = JSON.parse(manifestText) as { included: string[]; sessionKey?: string }
+      const manifest = JSON.parse(manifestText) as {
+        included: string[]
+        sessionKey?: string
+        diagnostics: { rawHttpIncluded: boolean; apiStreamEventsIncluded: boolean }
+      }
       const summary = JSON.parse(summaryText) as {
         sessionKey?: string
         toolCallCount: number
@@ -93,6 +127,18 @@ describe("AgentConversationExportService", () => {
         }>
       }
       const eventsText = await readPackageFile("agent-events.json")
+      const sdkStreamText = await readPackageFile("sdk-stream-events.json")
+      const sdkStream = JSON.parse(sdkStreamText) as {
+        rawHttpIncluded: boolean
+        capture: {
+          observedEventCount: number
+          exportedEventCount: number
+          exportTruncated: boolean
+          diagnosticTurnCount: number
+          streamOnlyTurnCount: number
+        }
+        events: Array<{ turnId: string; sequence: number; payload: Record<string, unknown> }>
+      }
       const timelineText = await readPackageFile("timeline.json")
       const transcript = await readPackageFile("transcript.md")
       const packageText = [
@@ -100,6 +146,7 @@ describe("AgentConversationExportService", () => {
         manifestText,
         summaryText,
         eventsText,
+        sdkStreamText,
         timelineText,
         transcript,
       ].join("\n")
@@ -109,6 +156,7 @@ describe("AgentConversationExportService", () => {
         "attachments.json",
         "timeline.json",
         "agent-events.json",
+        "sdk-stream-events.json",
         "agent-usage.json",
         "summary.json",
         "transcript.md",
@@ -121,6 +169,10 @@ describe("AgentConversationExportService", () => {
         usageSummary: { totalTokens: 14 },
       })
       expect(manifest.sessionKey).toBe("[redacted]")
+      expect(manifest.diagnostics).toMatchObject({
+        rawHttpIncluded: false,
+        apiStreamEventsIncluded: true,
+      })
       expect(conversationText).toContain("\"sessionKey\": \"[redacted]\"")
       expect(timelineText).toContain("\"sessionKey\": \"[redacted]\"")
       expect(packageText).not.toContain(TEST_SESSION_KEY)
@@ -141,7 +193,24 @@ describe("AgentConversationExportService", () => {
       expect(eventsText).toContain("toolu-read-1")
       expect(eventsText).toContain("/Users/liyang/project/file.ts")
       expect(eventsText).not.toContain("sk-secret")
+      expect(eventsText).not.toContain("streamDiagnostics")
       expect(eventsText).not.toContain("[key]")
+      expect(sdkStream).toMatchObject({
+        rawHttpIncluded: false,
+        capture: {
+          observedEventCount: 1,
+          exportedEventCount: 1,
+          exportTruncated: false,
+          diagnosticTurnCount: 1,
+          streamOnlyTurnCount: 0,
+        },
+        events: [{
+          turnId: "turn-1",
+          sequence: 2,
+          payload: expect.objectContaining({ deltaType: "text_delta", text: "!" }),
+        }],
+      })
+      expect(sdkStreamText).not.toContain("sk-stream-secret")
       expect(timelineText).toContain("toolu-read-1")
       expect(transcript).toContain("Read")
       expect(transcript).toContain("输出")
@@ -221,7 +290,7 @@ describe("AgentConversationExportService", () => {
     })).resolves.toEqual({
       success: true,
       filePath: outputPath,
-      fileCount: 8,
+      fileCount: 9,
     })
     expect(createZipArchive).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(auditEvents)).not.toContain(TEST_SESSION_KEY)

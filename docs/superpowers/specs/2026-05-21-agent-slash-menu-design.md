@@ -40,13 +40,10 @@ Typing `/` anywhere in the draft opens the menu. The typed slash fragment filter
 |        ^                                       |
 | +------------------------------------------+   |
 | | Skills                                   |   |
-| |  /review-code                            |   |
-| |    Review code changes                   |   |
+| |  /review-code  Review code changes       |   |
 | | Commands                                 |   |
-| |  /status                                 |   |
-| |    Show agent status                     |   |
-| |  /model                                  |   |
-| |    Switch model                          |   |
+| |  /status  Show agent status              |   |
+| |  /model  Switch model                    |   |
 | +------------------------------------------+   |
 |                                      [send]    |
 +------------------------------------------------+
@@ -132,6 +129,7 @@ Use the existing component baseline and token classes:
 
 - Prefer shadcn/Radix primitives already in `desktop/src/components/ui/`.
 - Use neutral token classes such as `bg-popover`, `text-popover-foreground`, `border-border`, `text-muted-foreground`, and `bg-muted`.
+- Keep each candidate on one compact line, place the description after the name, and truncate overflow with an ellipsis.
 - Keep class names short and layout-oriented.
 - Do not use hex, rgb, hsl, arbitrary color values, gradients, decorative shadows, or emoji.
 - Keep UI text to group labels, names, descriptions, and a short empty state if needed.

@@ -17,6 +17,7 @@ vi.mock("@/app-shell/logging", () => ({
 
 let root: Root | null = null
 let container: HTMLDivElement | null = null
+let reloadResult: readonly unknown[] | null | undefined
 
 beforeEach(() => {
   container = document.createElement("div")
@@ -28,6 +29,7 @@ afterEach(() => {
   if (root) act(() => root?.unmount())
   root = null
   container = null
+  reloadResult = undefined
   document.body.innerHTML = ""
   delete (window as unknown as { synapse?: unknown }).synapse
   vi.clearAllMocks()
@@ -75,6 +77,7 @@ describe("useAgentProviderCatalog", () => {
 
     expect(readState()).toEqual({ count: 1, error: false, loading: false })
     expect(listAllProviders).toHaveBeenCalledTimes(2)
+    expect(reloadResult).toHaveLength(1)
   })
 
   it("ignores a request that finishes after the hook is disabled", async () => {
@@ -102,7 +105,7 @@ function Driver({ enabled }: { readonly enabled: boolean }) {
       data-count={providers?.length ?? 0}
       data-error={hasError}
       data-loading={isLoading}
-      onClick={() => void reload()}
+      onClick={() => void reload().then((result) => { reloadResult = result })}
     >
       reload
     </button>

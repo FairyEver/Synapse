@@ -63,11 +63,13 @@ import type {
   SendMessageOptions,
 } from "../hooks/use-chat-connection"
 import { useAgentReferenceActions } from "../hooks/use-agent-reference-actions"
+import { useProjectGitActions } from "../hooks/use-project-git-actions"
 import { latestTimelineContentSignal, useStickToBottom } from "../hooks/use-stick-to-bottom"
 import { AgentComposer } from "./agent-composer"
 import { AgentSessionRenameDialog } from "./agent-session-rename-dialog"
 import { AgentSessionCreateDialog } from "./agent-session-create-dialog"
 import { AgentTimeline } from "./agent-timeline"
+import { AgentGitCommitDialog } from "./agent-git-commit-dialog"
 
 const logger = createRendererLogger("agent")
 const EMPTY_QUICK_INPUTS: readonly SynapseQuickInputItem[] = []
@@ -163,6 +165,7 @@ function AgentConversationWorkspace({
 }: AgentConversationWorkspaceProps) {
   const { config } = useAppConfig()
   const referenceActions = useAgentReferenceActions(target.projectId)
+  const projectGit = useProjectGitActions(project)
   const [draft, setDraft] = useState("")
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([])
   const [creatingConversation, setCreatingConversation] = useState(false)
@@ -173,6 +176,7 @@ function AgentConversationWorkspace({
   const [createInitialName, setCreateInitialName] = useState("")
   const pendingMessageIdRef = useRef(0)
   const pinnedSelectionKeyRef = useRef<string | null>(null)
+  const workspaceRef = useRef<HTMLDivElement>(null)
   const latestEntry = chat.timeline.at(-1)
   const stick = useStickToBottom({
     contentSignal: [
@@ -542,7 +546,11 @@ function AgentConversationWorkspace({
   }
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col gap-0 bg-background px-2 py-2.5">
+    <div
+      ref={workspaceRef}
+      className="relative flex h-full min-h-0 flex-col gap-0 bg-background px-2 py-2.5"
+      data-agent-conversation-workspace
+    >
       <TooltipProvider>
         <div className="flex items-center justify-between gap-2 px-0 py-0">
           <div className="flex min-w-0 items-center gap-2">
@@ -696,6 +704,8 @@ function AgentConversationWorkspace({
       />
 
       <AgentComposer
+        focusInputKey={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}
+        dropTargetRef={workspaceRef}
         draft={draft}
         disabled={!target.projectId || personaUnavailable}
         canSend={Boolean(draft.trim() && target.projectId && !personaUnavailable)}
@@ -717,6 +727,13 @@ function AgentConversationWorkspace({
         onOpenKnowledgeBaseSourceManager={canManageKnowledgeSources
           ? () => void handleOpenSourceManager()
           : undefined}
+        gitRepositoryAvailable={projectGit.repository !== null}
+        gitBusyAction={projectGit.busyAction}
+        gitPreparing={projectGit.preparingCommit}
+        onPrepareGitCommit={(action) => void projectGit.prepareCommit(action)}
+        onRunGitRemote={(action) => void projectGit.runRemoteAction(action)}
+        onCancelGitOperation={() => void projectGit.cancelOperation()}
+        onOpenGit={() => void projectGit.openGit()}
         onInputKeyDown={handleInputKeyDown}
         onSubmit={handleSubmit}
         onCancelTurn={() => void chat.cancelTurn(target)}
@@ -729,6 +746,17 @@ function AgentConversationWorkspace({
         pendingMessages={selectedPendingMessages}
         onRemovePendingMessage={handleRemovePendingMessage}
         onRetryPendingMessage={handleRetryPendingMessage}
+      />
+      <AgentGitCommitDialog
+        pending={projectGit.pendingCommit}
+        error={projectGit.commitError}
+        busy={projectGit.busyAction === "commit" || projectGit.busyAction === "commit-and-push"}
+        onOpenChange={(open) => {
+          if (!open) projectGit.dismissCommit()
+        }}
+        onConfirm={() => void projectGit.confirmCommit()}
+        onReprepare={() => void projectGit.reprepareCommit()}
+        onCancelOperation={() => void projectGit.cancelOperation()}
       />
       <AgentSessionCreateDialog
         open={createDialogOpen}

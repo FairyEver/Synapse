@@ -11,6 +11,7 @@ import { SystemAppWindowApp } from "../system-app-window-app"
 
 const mocks = vi.hoisted(() => ({
   openSystemApp: vi.fn(),
+  gitOpenRequestListener: null as null | ((request: { requestId: string; repositoryId: string }) => void),
 }))
 
 vi.mock("@/modules/agent", () => ({
@@ -38,7 +39,9 @@ vi.mock("@/modules/editor-scan", () => ({
 }))
 
 vi.mock("@/modules/git", () => ({
-  GitModule: () => <div>Git 窗口</div>,
+  GitModule: ({ openRequest }: { openRequest?: { repositoryId: string } | null }) => (
+    <div>Git 窗口 {openRequest?.repositoryId}</div>
+  ),
 }))
 
 vi.mock("@/modules/usage-analysis", () => ({
@@ -81,6 +84,12 @@ vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
     apps: {
       onContentOpenRequest: () => () => undefined,
+      onGitOpenRequest: (listener: (request: { requestId: string; repositoryId: string }) => void) => {
+        mocks.gitOpenRequestListener = listener
+        return () => {
+          mocks.gitOpenRequestListener = null
+        }
+      },
       openSystemApp: mocks.openSystemApp,
     },
   }),
@@ -93,6 +102,7 @@ describe("SystemAppWindowApp", () => {
     window.history.replaceState({}, "", "/")
     document.body.innerHTML = ""
     mocks.openSystemApp.mockReset()
+    mocks.gitOpenRequestListener = null
   })
 
   afterEach(() => {
@@ -125,6 +135,30 @@ describe("SystemAppWindowApp", () => {
     window.history.replaceState({}, "", "/?window=system-app&appId=secrets")
     await renderSystemAppWindow(roots)
     expect(document.body.textContent).toContain("密钥库窗口")
+  })
+
+  it("passes initial and subsequent Git repository open requests to the Git app", async () => {
+    const request = encodeURIComponent(JSON.stringify({
+      requestId: "request-1",
+      repositoryId: "repository-1",
+    }))
+    window.history.replaceState({}, "", `/?window=system-app&appId=git&gitOpenRequest=${request}`)
+    await renderSystemAppWindow(roots)
+    expect(document.body.textContent).toContain("Git 窗口 repository-1")
+
+    await act(async () => {
+      mocks.gitOpenRequestListener?.({ requestId: "request-2", repositoryId: "repository-2" })
+    })
+    expect(document.body.textContent).toContain("Git 窗口 repository-2")
+  })
+
+  it("ignores malformed initial Git repository open requests", async () => {
+    const request = encodeURIComponent(JSON.stringify({ requestId: "", repositoryId: "repository-1" }))
+    window.history.replaceState({}, "", `/?window=system-app&appId=git&gitOpenRequest=${request}`)
+    await renderSystemAppWindow(roots)
+
+    expect(document.body.textContent).toContain("Git 窗口")
+    expect(document.body.textContent).not.toContain("repository-1")
   })
 
   it("renders a short error for unknown app ids", async () => {

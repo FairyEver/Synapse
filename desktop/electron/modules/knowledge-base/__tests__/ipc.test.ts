@@ -276,6 +276,115 @@ describe("knowledgeBaseIpcModule", () => {
     expect(deleteManaged).not.toHaveBeenCalled()
   })
 
+  it("selects and preflights one import folder through guarded read permission", async () => {
+    const preview = {
+      token: "preview-token",
+      folderName: "kb-backup",
+      suggestedName: "恢复的知识库",
+      fileCount: 24,
+      totalBytes: 4096,
+      warnings: ["legacy-export-metadata-missing"],
+    }
+    const inspectImportFolder = vi.fn().mockResolvedValue(preview)
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: ["/tmp/kb-backup"],
+    })
+    const { harness, permissionGuard } = createHarness({
+      service: {},
+      transferService: { inspectImportFolder },
+    })
+
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:select_import_folder", undefined))
+      .resolves.toEqual(preview)
+
+    expect(inspectImportFolder).toHaveBeenCalledWith("/tmp/kb-backup")
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/kb-backup",
+      context: { source: "knowledgeBase.selectImportFolder" },
+    })
+  })
+
+  it("imports a preflighted folder through guarded managed storage permission", async () => {
+    const imported = {
+      project: {
+        id: "kb-imported",
+        name: "Recovered",
+        path: "synapse-kb://kb-imported",
+        capabilities: {
+          knowledgeBase: {
+            enabled: true,
+            schemaVersion: 1,
+            templateVersion: "legacy-import",
+            managed: true,
+            runtimeId: "kb-imported",
+          },
+        },
+      },
+    }
+    const importManagedFolder = vi.fn().mockResolvedValue(imported)
+    const { harness, permissionGuard } = createHarness({
+      service: {},
+      transferService: { importManagedFolder },
+    })
+
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:import_managed_folder", {
+      token: "preview-token",
+      name: "Recovered",
+      trusted: true,
+    })).resolves.toEqual(imported)
+
+    expect(importManagedFolder).toHaveBeenCalledWith({
+      token: "preview-token",
+      name: "Recovered",
+      trusted: true,
+    })
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base-import:preview-token",
+      context: { source: "knowledgeBase.importManagedFolder" },
+    })
+  })
+
+  it("exports one managed folder through guarded read and destination permissions", async () => {
+    const exportManagedFolder = vi.fn().mockResolvedValue({
+      projectId: "kb-1",
+      folderPath: "/tmp/export/Knowledge",
+    })
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: ["/tmp/export"],
+    })
+    const { harness, permissionGuard } = createHarness({
+      service: {},
+      transferService: { exportManagedFolder },
+    })
+
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:export_managed_folder", {
+      projectId: "kb-1",
+    })).resolves.toEqual({
+      projectId: "kb-1",
+      folderPath: "/tmp/export/Knowledge",
+    })
+
+    expect(exportManagedFolder).toHaveBeenCalledWith("kb-1", "/tmp/export")
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, {
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-1",
+      context: { source: "knowledgeBase.exportManagedFolder.read" },
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {
+      action: "fs.write.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/export",
+      context: { source: "knowledgeBase.exportManagedFolder.write" },
+    })
+  })
+
   it("adds a URL source through guarded network and write permissions", async () => {
     const addUrlSource = vi.fn().mockResolvedValue({
       projectId: "kb-1",
@@ -1197,6 +1306,7 @@ function createHarness(options: {
   migrationActive?: boolean
   permissions?: Awaited<ReturnType<PermissionGuard["check"]>>[]
   service: unknown
+  transferService?: Record<string, unknown>
 }) {
   const harness = createInMemoryHarness()
   const permissionGuard: PermissionGuard = {
@@ -1233,15 +1343,32 @@ function createHarness(options: {
     isActive: vi.fn(() => options.migrationActive ?? false),
     startMigration: vi.fn(),
   }
+  const transferService = {
+    cancel: vi.fn(),
+    exportManagedFolder: vi.fn(),
+    getState: vi.fn(() => ({
+      active: false,
+      operation: "idle",
+      phase: "idle",
+      cancellable: false,
+      copiedBytes: 0,
+      totalBytes: null,
+      message: "",
+    })),
+    importManagedFolder: vi.fn(),
+    inspectImportFolder: vi.fn(),
+    ...options.transferService,
+  }
   harness.registry.register(knowledgeBaseIpcModule, {
     moduleId: "knowledge-base",
     resolve: <T,>(serviceId: string): T => {
       if (serviceId === "knowledge-base.service") return options.service as T
       if (serviceId === "knowledge-base.storage-migration-service") return migrationService as T
+      if (serviceId === "knowledge-base.transfer-service") return transferService as T
       if (serviceId === "core.permission-guard") return permissionGuard as T
       if (serviceId === "core.audit-sink") return auditSink as T
       throw new Error(`Unknown service: ${serviceId}`)
     },
   })
-  return { auditSink, harness, migrationService, permissionGuard }
+  return { auditSink, harness, migrationService, permissionGuard, transferService }
 }

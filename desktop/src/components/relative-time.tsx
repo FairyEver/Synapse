@@ -9,6 +9,7 @@ type RelativeTimeProps = {
   readonly fallback?: string
   readonly className?: string
   readonly mode?: "relative" | "absolute"
+  readonly showTooltip?: boolean
 }
 
 function parseTimeValue(value: RelativeTimeProps["value"]): Date | null {
@@ -35,24 +36,30 @@ function RelativeTime({
   fallback = "-",
   className,
   mode = "relative",
+  showTooltip = true,
 }: RelativeTimeProps) {
   const date = parseTimeValue(value)
   if (!date) return <span className={className}>{fallback}</span>
 
   const exact = formatExactDateTime(date)
   const label = mode === "absolute" ? exact : formatRelativeDateTime(date)
+  const time = (
+    <time
+      dateTime={date.toISOString()}
+      aria-label={exact}
+      className={cn("whitespace-nowrap", className)}
+    >
+      {label}
+    </time>
+  )
+
+  if (!showTooltip) return time
 
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <time
-            dateTime={date.toISOString()}
-            aria-label={exact}
-            className={cn("whitespace-nowrap", className)}
-          >
-            {label}
-          </time>
+          {time}
         </TooltipTrigger>
         <TooltipContent>{exact}</TooltipContent>
       </Tooltip>

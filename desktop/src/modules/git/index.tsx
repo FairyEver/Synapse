@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { FolderGit2, Plus, RefreshCw } from "lucide-react"
+import { toast } from "sonner"
 import { ProjectAddDialog } from "@/app-shell/components/project-add-dialog"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useProjectActions } from "@/app-shell/use-project-actions"
@@ -8,6 +9,7 @@ import { getSynapseBridge } from "@/lib/electron-bridge"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import type { SynapseGitEnvironmentState, SynapseGitProvider, SynapseGitRepository, SynapseGitRepositorySnapshot } from "@/types/git"
+import type { SynapseSystemAppGitOpenRequest } from "@/modules/apps/types"
 import { GitAccessPanel } from "./components/git-access-panel"
 import { GitAddLocalDialog, GitCloneDialog } from "./components/git-clone-dialog"
 import { GitEnvironmentPanel } from "./components/git-environment-panel"
@@ -109,7 +111,13 @@ function pendingActionHosts(pendingAction: PendingGitAction | null) {
   }]
 }
 
-export function GitModule() {
+export function GitModule({
+  openRequest = null,
+  onOpenRequestConsumed,
+}: {
+  readonly openRequest?: SynapseSystemAppGitOpenRequest | null
+  readonly onOpenRequestConsumed?: (requestId: string) => void
+} = {}) {
   const [view, setView] = useState<GitAppViewId>("repositories")
   const [selectedRepository, setSelectedRepository] = useState<SynapseGitRepository | null>(null)
   const [cloneOpen, setCloneOpen] = useState(false)
@@ -132,6 +140,20 @@ export function GitModule() {
     setPendingAction,
     clearPendingAction,
   } = usePendingGitAction()
+
+  useEffect(() => {
+    if (!openRequest || repositoriesState.loading) return
+    const repository = repositoriesState.summaries.find((item) => (
+      item.repository.id === openRequest.repositoryId
+    ))?.repository
+    if (repository) {
+      setSelectedRepository(repository)
+      setView("repositories")
+    } else {
+      toast.error("Git 仓库不存在")
+    }
+    onOpenRequestConsumed?.(openRequest.requestId)
+  }, [onOpenRequestConsumed, openRequest, repositoriesState.loading, repositoriesState.summaries])
 
   const refreshEnvironment = useCallback(async () => {
     setEnvironmentLoading(true)

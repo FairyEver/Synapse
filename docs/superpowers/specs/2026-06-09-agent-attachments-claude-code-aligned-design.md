@@ -24,7 +24,7 @@ This design focuses on the renderer Agent conversation path backed by the Claude
 
 - Let users paste or select images in the Agent composer and send them directly to the Claude model.
 - Let users paste or select files and folders and send them as path context.
-- Match Claude Code's visible mental model: image chips use `[Image #N]`; file and folder entries show paths.
+- Preserve Claude Code's message model: images use `[Image #N]` in sent content and history, while draft attachments use compact file items in the composer.
 - Support multiple images, files, and folders in one user turn.
 - Preserve normal text prompts and quick-input behavior.
 - Keep attachments scoped to the current draft until the user sends or removes them.
@@ -39,7 +39,6 @@ This design focuses on the renderer Agent conversation path backed by the Claude
 - Do not convert files before sending.
 - Do not auto-ingest Knowledge Base raw sources.
 - Do not implement file preview, image crop, OCR, PDF page selection, or folder tree browsing in the composer.
-- Do not add choose-file, choose-folder, or choose-image buttons in the first iteration.
 - Do not add renderer-side directory scanning beyond what is needed to display selected folder paths.
 - Do not expose hidden implementation paths or secrets in logs, history, transcript export, or usage analysis.
 
@@ -80,36 +79,45 @@ This matches Claude Code's split without depending on undocumented CLI internals
 Composer attachment display:
 
 ```text
-[Image #1] [Image #2]
-/Users/liyang/Desktop/课堂内容.md
-/Users/liyang/Downloads/作业范文
+[ 课堂内容.md      ] [ 作业范文       ] [ screen.png     ]  [>]
+[ Markdown · 7 KB ] [ 文件夹         ] [ PNG · 120 KB   ]
 
 [ textarea 输入消息 ]
-[片段] [知识库动作]                         [权限模式] [发送]
+[+] [片段] [知识库动作]                     [权限模式] [发送]
 ```
 
-Image chips:
+Attachment strip:
 
-- label as `[Image #1]`, `[Image #2]`;
-- show a remove icon button;
-- optionally show a small thumbnail if it can be done with existing token styling and without a custom preview surface;
+- render one fixed-height horizontal row without wrapping or a visible scrollbar;
+- show overflow arrows only when more items exist in that direction;
+- show the original file name on the first line and format plus size on the second line;
+- show the remove icon button on item hover or keyboard focus;
+- do not show per-type icons or explanatory labels;
 - preserve insertion order.
 
-Path entries:
+Image items:
 
-- show absolute file or folder path, matching Claude Code's visible behavior;
-- mark folder entries with a folder icon and file entries with a file icon;
-- show a remove icon button;
+- use the original image file name when available, falling back to `[Image #N]`;
+- derive the visible format from the supported image MIME type and show the byte size;
+- continue using `[Image #N]` in sent content and conversation history.
+
+Path items:
+
+- show the file or folder name in the composer and retain the absolute path as the hover title;
+- show a friendly format plus byte size for files; folders show `文件夹` without size;
+- keep absolute paths unchanged in sent content, history, and SDK access handling;
 - do not add explanatory helper copy.
 
 Input methods:
 
+- select multiple files from the `+` attachment menu;
+- select multiple folders from the `+` attachment menu;
 - paste image from clipboard;
-- drag image into composer;
+- drag image into the conversation workspace;
 - paste file or folder paths from clipboard;
-- drag files or folders into composer.
+- drag files or folders into the conversation workspace.
 
-The first iteration intentionally has no explicit attachment picker button. Users add attachments only by paste or drag-and-drop, and remove them from the composer attachment row.
+The `+` button opens a two-item menu with `添加文件` and `添加文件夹`. Both native pickers allow multiple selections, and repeated selections accumulate in the current draft. Electron cannot present one native dialog as both a file and directory selector on Windows and Linux, so the two-item menu is consistent across platforms. The main process resolves selected, pasted, and dropped paths with `lstat`; Renderer does not infer directory type from file size or MIME metadata. Supported selected images remain direct model image content.
 
 Use existing shadcn/Radix components, lucide icons, and theme token classes. Do not add custom colors, gradients, glow, page-specific CSS, nested cards, or marketing copy.
 
@@ -235,7 +243,7 @@ The system does not need to persist image bytes for replay in this iteration unl
 
 Add focused tests for:
 
-- pasted image creates an image chip and sends an SDK `image` content block;
+- pasted image creates a compact composer item and sends an SDK `image` content block;
 - multiple images preserve order and numbering;
 - image block data is raw base64 without data URL prefix;
 - pasted file path is included in composed text and not converted to a content block;
@@ -246,7 +254,10 @@ Add focused tests for:
 - duplicate or nested external directories are collapsed;
 - text-only messages keep existing behavior;
 - attachment-only messages can be sent;
-- no choose-file or choose-image button is rendered in the composer;
+- attachment menu file and folder selections preserve order and accumulate in the draft;
+- cancelled native attachment selection leaves the draft unchanged;
+- copied and dropped folders are classified by main-process path metadata;
+- files and folders dropped anywhere in the conversation workspace reach the composer;
 - invalid image and missing path block send;
 - history and transcript show `[Image #N]` and paths but not base64;
 - permission and tool event redaction still preserves normal paths while hiding secrets.

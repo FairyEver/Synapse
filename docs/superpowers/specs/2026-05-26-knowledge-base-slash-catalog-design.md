@@ -24,7 +24,7 @@ Relevant files:
 
 - Show a complete Knowledge Base command group in the existing Agent `/` menu.
 - Use the group label `知识库`.
-- Render each Knowledge Base slash candidate with the command on the first line and a Chinese description on the second line.
+- Render each Knowledge Base slash candidate with the command followed by its Chinese description on one compact line.
 - Keep the bottom `知识库` quick menu as a curated subset.
 - Drive both surfaces from one Knowledge Base capability catalog.
 - Show Knowledge Base entries only for managed Knowledge Base projects.
@@ -89,7 +89,7 @@ Rules:
 
 - `name` is stored without the leading slash.
 - `slashText` defaults to `/${name}`.
-- `description` is a short Chinese user-facing description for the `/` menu second line.
+- `description` is a short Chinese user-facing description shown after the command in the `/` menu.
 - `quickAction` means the item appears in the bottom `知识库` menu.
 - Items without `quickAction` appear only in the `/` menu.
 
@@ -129,14 +129,11 @@ Extend the slash candidate model with a Knowledge Base kind:
 type AgentSlashCandidateKind = "quickInput" | "knowledgeBase" | "skill" | "command"
 ```
 
-The `/` menu should render Knowledge Base candidates like existing two-line skill candidates:
+The `/` menu should render Knowledge Base candidates on one compact line. Descriptions use the remaining width and truncate with an ellipsis when necessary:
 
 ```text
-/wiki-ingest
-汲取资料，整理 .raw 中的新内容
-
-/wiki-query
-查询知识库并基于已有页面回答
+/wiki-ingest  汲取资料，整理 .raw 中的新内容
+/wiki-query   查询知识库并基于已有页面回答
 ```
 
 Use the existing neutral menu surface and token classes. The change should only add the group and candidate data; it should not add custom colors, gradients, or a new visual system.
@@ -201,7 +198,7 @@ Utility tests:
 
 - Converts the full Knowledge Base catalog into `knowledgeBase` slash candidates.
 - Groups `知识库` after `片段` and before `Skills`.
-- Renders command names on the first line and Chinese descriptions on the second line.
+- Renders command names followed by Chinese descriptions on one line and truncates overflow.
 - Derives the bottom quick menu only from entries with `quickAction`.
 - Keeps `/` menu selection insert-only.
 - Does not return Knowledge Base candidates for ordinary projects.
@@ -244,7 +241,7 @@ Avoid changing:
 
 - The `/` menu gets a standalone `知识库` group.
 - The `知识库` group is complete.
-- Each item shows command first and Chinese description second.
+- Each item shows the command followed by its Chinese description on one compact line.
 - The bottom `知识库` menu remains curated.
 - Both surfaces come from one Knowledge Base capability catalog.
 - `/` menu selection inserts only and never sends.

@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react"
+import { act, type ComponentProps } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { AgentSessionSidebar } from "../components/agent-session-sidebar"
 import { AgentSidebarSessionRow } from "../components/agent-sidebar-session-row"
 import { DEFAULT_AGENT_WORKSPACE_PROJECT } from "@/lib/default-agent-workspace"
+import type { SynapseAgentProvider } from "@/types/bridge"
 import * as createSessionName from "../create-session-name"
 
 const rendererLogger = vi.hoisted(() => ({
@@ -18,17 +19,19 @@ const rendererLogger = vi.hoisted(() => ({
   warn: vi.fn(),
 }))
 
+const appConfig = vi.hoisted(() => ({
+  agent: {
+    defaultProviderModel: null as { providerId: string; modelTier: "default" | "haiku" | "sonnet" | "opus" } | null,
+  },
+}))
+
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,
 }))
 
 vi.mock("@/app-shell/config", () => ({
   useAppConfig: () => ({
-    config: {
-      agent: {
-        defaultProviderModel: null,
-      },
-    },
+    config: appConfig,
   }),
 }))
 
@@ -44,6 +47,7 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  appConfig.agent.defaultProviderModel = null
   vi.clearAllMocks()
   vi.restoreAllMocks()
 })
@@ -70,15 +74,25 @@ describe("AgentSessionSidebar", () => {
     )
 
     expect(html).toContain("本地对话")
-    expect(html).toContain("新建会话")
+    expect(html).toContain("新建对话")
+    expect(html).toContain("更多操作")
     expect(html).not.toContain("尚未配置项目")
     expect(html).not.toContain("添加项目后即可开始 Agent 对话")
 
     const wrapper = document.createElement("div")
     wrapper.innerHTML = html
-    const newSessionButton = wrapper.querySelector<HTMLButtonElement>("button[title='新建会话']")
-    expect(newSessionButton?.parentElement?.className).toContain("w-16")
-    expect(newSessionButton?.parentElement?.className).toContain("justify-end")
+    const newSessionButton = wrapper.querySelector<HTMLButtonElement>("button[aria-label='新建对话']")
+    const actions = newSessionButton?.closest("span")
+    expect(actions?.className).toBe("flex shrink-0")
+    const groupHeader = actions?.parentElement?.parentElement
+    expect(groupHeader?.className).toContain("h-8")
+    expect(groupHeader?.className).toContain("pl-2")
+    expect(groupHeader?.className).toContain("pr-0.5")
+    expect(newSessionButton?.className).toContain("size-7")
+    expect(newSessionButton?.dataset.variant).toBe("ghost")
+    const moreActionsButton = wrapper.querySelector<HTMLButtonElement>("button[aria-label='更多操作']")
+    expect(moreActionsButton?.className).toContain("size-7")
+    expect(moreActionsButton?.dataset.variant).toBe("ghost")
   })
 
   it("lets users edit the generated name before creating a session", async () => {
@@ -132,10 +146,7 @@ describe("AgentSessionSidebar", () => {
       )
     })
 
-    await act(async () => {
-      document.querySelector<HTMLButtonElement>("button[title='新建会话']")?.click()
-      await Promise.resolve()
-    })
+    await openCustomSessionDialog()
 
     const input = document.querySelector<HTMLInputElement>("input[aria-label='会话名称']")
     expect(input?.value).toBe("新对话 13:30")
@@ -160,6 +171,36 @@ describe("AgentSessionSidebar", () => {
       modelTier: "sonnet",
       modelName: "claude-sonnet-4-5",
     }, "需求复盘", null)
+  })
+
+  it("shows a configured project in the system file manager", async () => {
+    const showItemInFolder = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: { shell: { showItemInFolder } },
+    })
+    await renderCreationSidebar(vi.fn())
+
+    await openProjectActionMenu()
+    const showInFolderItem = [...document.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((item) => item.textContent === "在文件夹中显示")
+    expect(showInFolderItem).toBeDefined()
+
+    await act(async () => {
+      showInFolderItem?.click()
+      await Promise.resolve()
+    })
+
+    expect(showItemInFolder).toHaveBeenCalledWith("/tmp/test")
+  })
+
+  it("does not offer a folder action for the virtual local conversation workspace", async () => {
+    await renderCreationSidebar(vi.fn(), DEFAULT_AGENT_WORKSPACE_PROJECT)
+
+    await openProjectActionMenu()
+
+    expect([...document.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .some((item) => item.textContent === "在文件夹中显示")).toBe(false)
   })
 
   it("allows long session titles to truncate inside the sidebar", () => {
@@ -461,6 +502,84 @@ describe("AgentSessionSidebar", () => {
     expect(onDeleteOthers).toHaveBeenCalledWith(workflowKeep, [workflowKeep, workflowOther])
   })
 
+  it("clears only conversations in the current source and project", async () => {
+    const userProjectOne = {
+      projectId: "project-1",
+      id: "user-project-1",
+      sessionKey: "local:renderer",
+      platform: "local-renderer",
+      name: "User Project One",
+      active: false,
+      historyCount: 1,
+      createdAt: "2026-05-21T00:00:00.000Z",
+      updatedAt: "2026-05-21T00:01:00.000Z",
+    }
+    const workflowProjectOne = {
+      ...userProjectOne,
+      id: "workflow-project-1",
+      sessionKey: "workflow:run-1",
+      platform: "workflow",
+      name: "Workflow Project One",
+    }
+    const workflowProjectTwo = {
+      ...workflowProjectOne,
+      projectId: "project-2",
+      id: "workflow-project-2",
+      sessionKey: "workflow:run-2",
+      name: "Workflow Project Two",
+    }
+    const onDelete = vi.fn(async () => undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentSessionSidebar
+          sessions={[userProjectOne, workflowProjectOne, workflowProjectTwo]}
+          archivedSessions={[]}
+          projects={[
+            { id: "project-1", name: "Project One", path: "/tmp/project-one" },
+            { id: "project-2", name: "Project Two", path: "/tmp/project-two" },
+          ]}
+          selectedProjectId="project-1"
+          selectedConversationId="workflow-project-1"
+          sourceFilter="workflow"
+          unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
+          onCreateSession={vi.fn()}
+          onSourceFilterChange={vi.fn()}
+          onSelect={vi.fn()}
+          onDelete={onDelete}
+          onDeleteOthers={vi.fn()}
+          onRename={vi.fn()}
+        />,
+      )
+    })
+
+    await openProjectActionMenu(0)
+    const clearItem = [...document.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((item) => item.textContent === "清空对话")
+    await act(async () => {
+      clearItem?.click()
+      await Promise.resolve()
+    })
+    expect(document.body.textContent).toContain("将删除“工作流”中“Project One”下的 1 个对话")
+
+    await act(async () => {
+      [...document.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "清空对话")
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(onDelete).toHaveBeenCalledTimes(1)
+    expect(onDelete).toHaveBeenCalledWith(workflowProjectOne)
+    expect(onDelete).not.toHaveBeenCalledWith(userProjectOne)
+    expect(onDelete).not.toHaveBeenCalledWith(workflowProjectTwo)
+  })
+
   it("renders an unread marker for an inactive session", () => {
     const html = renderToStaticMarkup(
       <AgentSessionSidebar
@@ -595,19 +714,8 @@ describe("AgentSessionSidebar", () => {
     })
 
     await act(async () => {
-      document.querySelector<HTMLButtonElement>("button[title='新建会话']")?.click()
-    })
-
-    expect(onCreateSession).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain("OpenRouter")
-    expect(document.body.textContent).toContain("OpenRouter")
-
-    const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent === "创建对话")
-    expect(confirmButton).toBeDefined()
-
-    await act(async () => {
-      confirmButton?.click()
+      document.querySelector<HTMLButtonElement>("button[aria-label='新建对话']")?.click()
+      await Promise.resolve()
     })
 
     expect(onCreateSession).toHaveBeenCalledWith("project-1", {
@@ -616,9 +724,144 @@ describe("AgentSessionSidebar", () => {
       modelTier: "sonnet",
       modelName: "claude-sonnet-4-5",
     }, expect.any(String), null)
+    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
   })
 
-  it("shows the dialog even when only one provider is available", async () => {
+  it("prefers the configured default model for quick creation", async () => {
+    appConfig.agent.defaultProviderModel = { providerId: "anthropic", modelTier: "sonnet" }
+    const onCreateSession = vi.fn()
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listAllProviders: vi.fn().mockResolvedValue([
+            provider({ id: "anthropic", name: "Anthropic", active: false }),
+            provider({ id: "openrouter", name: "OpenRouter", active: true }),
+          ]),
+        },
+      },
+    })
+    await renderCreationSidebar(onCreateSession)
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>("button[aria-label='新建对话']")?.click()
+      await Promise.resolve()
+    })
+
+    expect(onCreateSession).toHaveBeenCalledWith("project-1", {
+      providerId: "anthropic",
+      providerName: "Anthropic",
+      modelTier: "sonnet",
+      modelName: "claude-sonnet-4-5",
+    }, expect.any(String), null)
+  })
+
+  it("falls back to the custom dialog with the same name when quick creation fails", async () => {
+    vi.spyOn(createSessionName, "formatCreateSessionName").mockReturnValue("新对话 14:20")
+    const onCreateSession = vi.fn().mockResolvedValue(false)
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listAllProviders: vi.fn().mockResolvedValue([provider()]),
+        },
+      },
+    })
+    await renderCreationSidebar(onCreateSession)
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>("button[aria-label='新建对话']")?.click()
+      await Promise.resolve()
+    })
+
+    expect(onCreateSession).toHaveBeenCalledTimes(1)
+    expect(document.querySelector<HTMLInputElement>("input[aria-label='会话名称']")?.value)
+      .toBe("新对话 14:20")
+    expect(document.querySelector('[data-slot="dialog-content"]')).not.toBeNull()
+  })
+
+  it("logs rejected quick creation without exposing the raw error", async () => {
+    const onCreateSession = vi.fn().mockRejectedValue(new Error("secret create failure"))
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listAllProviders: vi.fn().mockResolvedValue([provider()]),
+        },
+      },
+    })
+    await renderCreationSidebar(onCreateSession)
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>("button[aria-label='新建对话']")?.click()
+      await Promise.resolve()
+    })
+
+    expect(rendererLogger.warn).toHaveBeenCalledWith("Agent quick session creation failed.", {
+      boundary: "renderer.agent.session-quick-create",
+      projectId: "project-1",
+      errorName: "Error",
+      errorLength: "secret create failure".length,
+    })
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("secret create failure")
+    expect(document.querySelector('[data-slot="dialog-content"]')).not.toBeNull()
+  })
+
+  it("opens the custom dialog when no selectable model is available", async () => {
+    const onCreateSession = vi.fn()
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listAllProviders: vi.fn().mockResolvedValue([]),
+        },
+      },
+    })
+    await renderCreationSidebar(onCreateSession)
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>("button[aria-label='新建对话']")?.click()
+      await Promise.resolve()
+    })
+
+    expect(onCreateSession).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-slot="dialog-content"]')).not.toBeNull()
+    expect(document.body.textContent).toContain("暂无 Provider")
+  })
+
+  it("prevents duplicate quick creation while provider resolution is pending", async () => {
+    let finishLoad: ((providers: SynapseAgentProvider[]) => void) | undefined
+    const listAllProviders = vi.fn(() => new Promise<SynapseAgentProvider[]>((resolve) => {
+      finishLoad = resolve
+    }))
+    const onCreateSession = vi.fn()
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: { agent: { listAllProviders } },
+    })
+    await renderCreationSidebar(onCreateSession)
+
+    await act(async () => {
+      const button = document.querySelector<HTMLButtonElement>("button[aria-label='新建对话']")
+      button?.click()
+      button?.click()
+      await Promise.resolve()
+    })
+
+    expect(listAllProviders).toHaveBeenCalledTimes(1)
+    expect(document.querySelector<HTMLButtonElement>("button[aria-label='新建对话']")?.disabled).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>("button[aria-label='更多操作']")?.disabled).toBe(true)
+    expect(document.querySelector("button[aria-label='新建对话'] .animate-spin")).not.toBeNull()
+
+    await act(async () => {
+      finishLoad?.([provider()])
+      await Promise.resolve()
+    })
+
+    expect(onCreateSession).toHaveBeenCalledTimes(1)
+  })
+
+  it("opens the custom dialog even when only one provider is available", async () => {
     const onCreateSession = vi.fn()
     Object.defineProperty(window, "synapse", {
       configurable: true,
@@ -668,9 +911,7 @@ describe("AgentSessionSidebar", () => {
       )
     })
 
-    await act(async () => {
-      document.querySelector<HTMLButtonElement>("button[title='新建会话']")?.click()
-    })
+    await openCustomSessionDialog()
 
     expect(onCreateSession).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain("Anthropic")
@@ -743,9 +984,7 @@ describe("AgentSessionSidebar", () => {
       )
     })
 
-    await act(async () => {
-      document.querySelector<HTMLButtonElement>("button[title='新建会话']")?.click()
-    })
+    await openCustomSessionDialog()
 
     const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent === "创建对话")
@@ -805,7 +1044,7 @@ describe("AgentSessionSidebar", () => {
     })
 
     await act(async () => {
-      document.querySelector<HTMLButtonElement>("button[title='新建会话']")?.click()
+      document.querySelector<HTMLButtonElement>("button[aria-label='新建对话']")?.click()
       await Promise.resolve()
     })
 
@@ -883,9 +1122,7 @@ describe("AgentSessionSidebar", () => {
       )
     })
 
-    await act(async () => {
-      document.querySelectorAll<HTMLButtonElement>("button[title='新建会话']")[0]?.click()
-    })
+    await openCustomSessionDialog(0)
     expect(document.body.textContent).toContain("Anthropic")
 
     await act(async () => {
@@ -894,13 +1131,75 @@ describe("AgentSessionSidebar", () => {
         ?.click()
     })
 
-    await act(async () => {
-      document.querySelectorAll<HTMLButtonElement>("button[title='新建会话']")[1]?.click()
-      await Promise.resolve()
-    })
+    await openCustomSessionDialog(1)
 
     expect(document.body.textContent).toContain("读取 Provider 失败")
     expect(document.body.textContent).toContain("重试")
     expect(onCreateSession).not.toHaveBeenCalled()
   })
 })
+
+async function renderCreationSidebar(
+  onCreateSession: ComponentProps<typeof AgentSessionSidebar>["onCreateSession"],
+  project = { id: "project-1", name: "Test Project", path: "/tmp/test" },
+): Promise<void> {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+  await act(async () => {
+    root.render(
+      <AgentSessionSidebar
+        sessions={[]}
+        archivedSessions={[]}
+        projects={[project]}
+        selectedProjectId={project.id}
+        selectedConversationId={undefined}
+        sourceFilter="user"
+        unreadByConversationId={{}}
+        sendingConversationIds={new Set()}
+        onCreateSession={onCreateSession}
+        onSourceFilterChange={vi.fn()}
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+        onDeleteOthers={vi.fn()}
+        onRename={vi.fn()}
+      />,
+    )
+  })
+}
+
+function provider(overrides: Partial<SynapseAgentProvider> = {}): SynapseAgentProvider {
+  return {
+    id: "anthropic",
+    name: "Anthropic",
+    category: "official",
+    apiKeyField: "ANTHROPIC_API_KEY",
+    active: true,
+    model: "claude-sonnet-4-5",
+    sonnetModel: "claude-sonnet-4-5",
+    createdAt: "2026-05-13T00:00:00.000Z",
+    updatedAt: "2026-05-13T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
+async function openCustomSessionDialog(index = 0): Promise<void> {
+  await openProjectActionMenu(index)
+  const customItem = [...document.querySelectorAll<HTMLElement>("[role='menuitem']")]
+    .find((item) => item.textContent === "自定义对话")
+  expect(customItem).toBeDefined()
+  await act(async () => {
+    customItem?.click()
+    await Promise.resolve()
+  })
+}
+
+async function openProjectActionMenu(index = 0): Promise<void> {
+  await act(async () => {
+    const trigger = document.querySelectorAll<HTMLButtonElement>("button[aria-label='更多操作']")[index]
+    trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+    trigger?.click()
+    await Promise.resolve()
+  })
+}

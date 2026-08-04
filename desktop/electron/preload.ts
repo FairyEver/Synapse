@@ -31,7 +31,10 @@ import type { SynapseAppUpdateOpenRequest, SynapseAppUpdateState } from "../src/
 import type { AutomationChangedEvent } from "../src/types/automation"
 import type { WorkflowEvent } from "../src/types/workflow"
 import type { SynapseCheatCodeStateChangedEvent } from "../src/types/cheat-code"
-import type { SynapseKnowledgeBaseStorageMigrationProgress } from "../src/types/knowledge-base"
+import type {
+  SynapseKnowledgeBaseStorageMigrationProgress,
+  SynapseKnowledgeBaseTransferProgress,
+} from "../src/types/knowledge-base"
 import type { SynapseGitOperationState, SynapseGitUserFacingFailure } from "../src/types/git"
 import type {
   SynapseTerminalDataEvent,
@@ -69,6 +72,7 @@ const EVENT_CHANNELS = {
   },
   apps: {
     contentOpenRequest: "synapse:app:apps:operation:content_open_request",
+    gitOpenRequest: "synapse:app:apps:operation:git_open_request",
   },
 }
 
@@ -392,6 +396,10 @@ const synapseBridge: SynapseBridge = {
     onContentOpenRequest: createRawPayloadSubscription(
       subscribe,
       EVENT_CHANNELS.apps.contentOpenRequest,
+    ),
+    onGitOpenRequest: createRawPayloadSubscription(
+      subscribe,
+      EVENT_CHANNELS.apps.gitOpenRequest,
     ),
   },
   documentTemplate: {
@@ -895,6 +903,13 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["knowledge-base"].createManaged)(payload),
     deleteManaged: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].deleteManaged)(payload),
+    selectImportFolder: invoke(IPC_CHANNELS["knowledge-base"].selectImportFolder),
+    importManagedFolder: (payload) =>
+      invoke(IPC_CHANNELS["knowledge-base"].importManagedFolder)(payload),
+    exportManagedFolder: (payload) =>
+      invoke(IPC_CHANNELS["knowledge-base"].exportManagedFolder)(payload),
+    getTransferState: invoke(IPC_CHANNELS["knowledge-base"].getTransferState),
+    cancelTransfer: invoke(IPC_CHANNELS["knowledge-base"].cancelTransfer),
     listRawDirectory: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].listRawDirectory)(payload),
     uploadRawFiles: (payload) =>
@@ -929,6 +944,11 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       "knowledge-base",
       "knowledge-base.storageMigrationChanged",
+    ),
+    onTransferChanged: createDomainEventPayloadSubscription<SynapseKnowledgeBaseTransferProgress>(
+      subscribe,
+      "knowledge-base",
+      "knowledge-base.transferChanged",
     ),
     filePathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null,
   },
@@ -1125,6 +1145,8 @@ const synapseBridge: SynapseBridge = {
     deleteSession: (args) => invoke(IPC_CHANNELS.agent.deleteSession)(args),
     renameSession: (args) => invoke(IPC_CHANNELS.agent.renameSession)(args),
     send: (args) => invoke(IPC_CHANNELS.agent.send)(args),
+    chooseAttachments: (args) => invoke(IPC_CHANNELS.agent.chooseAttachments)(args),
+    resolveAttachmentPaths: (args) => invoke(IPC_CHANNELS.agent.resolveAttachmentPaths)(args),
     listPendingPermissions: (projectId) =>
       invoke(IPC_CHANNELS.agent.listPendingPermissions)({ projectId }),
     respondPermission: (args) => invoke(IPC_CHANNELS.agent.respondPermission)(args),

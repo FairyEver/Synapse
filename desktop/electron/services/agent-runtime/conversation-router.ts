@@ -75,6 +75,12 @@ import {
   outcomeToAgentEvent,
 } from "./turn-outcome"
 import type { AgentArtifactStore } from "./artifact-store"
+import {
+  MAX_STREAM_DIAGNOSTIC_BYTES_PER_TURN,
+  MAX_STREAM_DIAGNOSTIC_EVENTS_PER_TURN,
+  type StreamDiagnosticCapture,
+  type StreamDiagnosticChunkPayload,
+} from "./stream-diagnostics"
 
 export interface ConversationRouterDeps {
   readonly projectId: string
@@ -153,6 +159,7 @@ export class ConversationRouter {
     Extract<AgentCommandRouterResult, { kind: "nativeSlash" }>
   >()
   private readonly savedSdkSessions = new Map<string, string>()
+  private readonly streamDiagnostics = new Map<string, StreamDiagnosticCapture>()
 
   constructor(input: {
     readonly deps: ConversationRouterDeps
@@ -1813,8 +1820,14 @@ export class ConversationRouter {
     event: AgentEvent,
   ): Promise<void> {
     if (!this.deps.agentEvents) return
-    if (isAgentStreamDeltaEvent(event)) return
+    if (isAgentStreamDeltaEvent(event)) {
+      this.captureStreamDiagnostic(turnId, sequence, event)
+      return
+    }
     try {
+      if (isTerminalAgentEvent(event)) {
+        await this.flushStreamDiagnostics(conversationId, turnId)
+      }
       await this.deps.agentEvents.upsert({
         id: `${conversationId}:${turnId}:${sequence}`,
         schemaVersion: 1,
@@ -1834,7 +1847,66 @@ export class ConversationRouter {
         eventType: event.type,
         ...queuedTurnFailureMetadata(error),
       })
+    } finally {
+      if (isTerminalAgentEvent(event)) this.streamDiagnostics.delete(turnId)
     }
+  }
+
+  private captureStreamDiagnostic(turnId: string, sequence: number, event: AgentEvent): void {
+    const capture = this.streamDiagnostics.get(turnId) ?? {
+      frames: [],
+      capturedBytes: 0,
+      observedEventCount: 0,
+      truncated: false,
+    }
+    capture.observedEventCount += 1
+    if (capture.truncated) return
+
+    const payload = sanitizeEventPayload(event)
+    const createdAt = this.isoNow()
+    const frame = { sequence, createdAt, payload }
+    const frameBytes = Buffer.byteLength(JSON.stringify(frame), "utf8")
+    if (
+      capture.frames.length >= MAX_STREAM_DIAGNOSTIC_EVENTS_PER_TURN
+      || capture.capturedBytes + frameBytes > MAX_STREAM_DIAGNOSTIC_BYTES_PER_TURN
+    ) {
+      capture.truncated = true
+      this.streamDiagnostics.set(turnId, capture)
+      return
+    }
+
+    capture.frames.push(frame)
+    capture.capturedBytes += frameBytes
+    this.streamDiagnostics.set(turnId, capture)
+  }
+
+  private async flushStreamDiagnostics(conversationId: string, turnId: string): Promise<void> {
+    const capture = this.streamDiagnostics.get(turnId)
+    if (!capture || capture.observedEventCount === 0 || !this.deps.agentEvents) return
+    const payload: StreamDiagnosticChunkPayload = {
+      type: "streamDiagnostics",
+      schemaVersion: 1,
+      source: "claude-agent-sdk-stream-event",
+      frames: capture.frames,
+      observedEventCount: capture.observedEventCount,
+      capturedEventCount: capture.frames.length,
+      capturedBytes: capture.capturedBytes,
+      truncated: capture.truncated,
+      limits: {
+        maxEventsPerTurn: MAX_STREAM_DIAGNOSTIC_EVENTS_PER_TURN,
+        maxBytesPerTurn: MAX_STREAM_DIAGNOSTIC_BYTES_PER_TURN,
+      },
+    }
+    await this.deps.agentEvents.upsert({
+      id: `${conversationId}:${turnId}:stream-diagnostics`,
+      schemaVersion: 1,
+      projectId: this.deps.projectId,
+      conversationId,
+      turnId,
+      eventType: "streamDiagnostics",
+      payload,
+      createdAt: this.isoNow(),
+    })
   }
 
   private async persistFailureEvent(
@@ -2226,6 +2298,10 @@ function isAgentStreamDeltaEvent(event: AgentEvent): event is Extract<AgentEvent
   if (!isAgentStreamEvent(event)) return false
   if (event.deltaType?.endsWith("_delta")) return true
   return event.event.type === "content_block_delta"
+}
+
+function isTerminalAgentEvent(event: AgentEvent): boolean {
+  return event.type === "result" || event.type === "error"
 }
 
 function streamedThinkingDelta(event: AgentEvent): string {

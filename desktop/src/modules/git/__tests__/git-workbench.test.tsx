@@ -544,6 +544,39 @@ describe("GitWorkbench", () => {
     expect(document.body.textContent).toContain("仅展示前 10,000 项，共 10001 项。")
   })
 
+  it("renders worktree changes as single-line rows with status letters and truncated paths", () => {
+    const longPath = "docs/agents/rules/a-very-long-file-name-that-must-fit-the-sidebar.md"
+    const status = createStatus({
+      snapshot: gitSnapshot({
+        changes: [{ path: longPath, originalPath: null, status: "untracked", indexStatus: "unchanged", worktreeStatus: "untracked" }],
+      }),
+    })
+    const html = renderToStaticMarkup(
+      <GitChangesTab
+        repository={repository}
+        status={status}
+        commitDialogOpen={false}
+        onCommitDialogOpenChange={vi.fn()}
+      />,
+    )
+    const container = document.createElement("div")
+    container.innerHTML = html
+
+    const row = container.querySelector('[role="button"]')
+    const indicator = row?.querySelector('[data-slot="tooltip-trigger"]')
+    const path = Array.from(row?.querySelectorAll("span") ?? [])
+      .find((element) => element.textContent === longPath)
+
+    expect(row?.className).toContain("grid-cols-[auto_auto_minmax(0,1fr)]")
+    expect(row?.className).toContain("py-1.5")
+    expect(indicator?.textContent).toBe("U")
+    expect(indicator?.getAttribute("aria-label")).toBe("未跟踪")
+    expect(indicator?.className).toContain("text-chart-2")
+    expect(path?.className).toContain("min-w-0")
+    expect(path?.className).toContain("truncate")
+    expect(path?.className).toContain("font-normal")
+  })
+
   it("uses shared empty states for empty history panes", () => {
     const html = renderToStaticMarkup(<GitHistoryTab
       history={{

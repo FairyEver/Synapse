@@ -62,6 +62,7 @@ import {
   coreHttpTestDescriptor,
   coreKnowledgeBaseDescriptor,
   coreKnowledgeBaseStorageMigrationDescriptor,
+  coreKnowledgeBaseTransferDescriptor,
   coreJsonRepairDescriptor,
   coreClipboardDescriptor,
   coreUpdateDescriptor,
@@ -155,6 +156,7 @@ export function buildServiceRegistry(
   registry.register(coreHttpTestDescriptor)
   registry.register(coreKnowledgeBaseDescriptor)
   registry.register(coreKnowledgeBaseStorageMigrationDescriptor)
+  registry.register(coreKnowledgeBaseTransferDescriptor)
   registry.register(coreWorkflowParamPresetServiceDescriptor)
   registry.register(coreWorkflowServiceDescriptor)
   registry.register(coreWorkflowPackageDescriptor)

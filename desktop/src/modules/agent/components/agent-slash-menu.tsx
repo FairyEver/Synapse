@@ -17,9 +17,9 @@ type AgentSlashMenuProps = {
 
 function AgentSlashCandidateIcon({ kind }: { readonly kind: AgentSlashCandidate["kind"] }) {
   if (kind === "knowledgeBase") {
-    return <BookOpen className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+    return <BookOpen className="size-4 shrink-0 text-muted-foreground" />
   }
-  return <Command className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+  return <Command className="size-4 shrink-0 text-muted-foreground" />
 }
 
 function AgentSlashMenu({
@@ -48,10 +48,13 @@ function AgentSlashMenu({
       {candidates.length === 0 ? (
         <div className="px-2 py-3 text-sm text-muted-foreground">No matches</div>
       ) : (
-        <ScrollArea className="h-auto max-h-72" viewportClassName="max-h-72">
-          <div className="flex flex-col gap-1">
+        <ScrollArea
+          className="h-auto min-w-0 max-w-full max-h-72"
+          viewportClassName="min-w-0 max-w-full max-h-72 overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"
+        >
+          <div className="flex min-w-0 max-w-full flex-col gap-1">
             {groups.map((group) => (
-              <div key={group.kind} className="flex flex-col gap-1">
+              <div key={group.kind} className="flex min-w-0 max-w-full flex-col gap-1">
                 <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
                   {group.label}
                 </div>
@@ -67,7 +70,7 @@ function AgentSlashMenu({
                       key={`${candidate.kind}:${candidate.name}`}
                       type="button"
                       className={cn(
-                        "flex w-full min-w-0 items-start gap-2 overflow-hidden rounded-sm px-2 py-1.5 text-left text-sm",
+                        "flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-sm px-2 text-left text-sm",
                         selected ? "bg-muted text-foreground" : "text-popover-foreground",
                       )}
                       role="option"
@@ -79,10 +82,10 @@ function AgentSlashMenu({
                       onClick={() => onSelect(candidate)}
                     >
                       <AgentSlashCandidateIcon kind={candidate.kind} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block whitespace-normal break-words font-medium">/{candidate.name}</span>
+                      <span className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden whitespace-nowrap">
+                        <span className="min-w-0 truncate font-medium">/{candidate.name}</span>
                         {candidate.description ? (
-                          <span className="block whitespace-normal break-words text-xs text-muted-foreground">
+                          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                             {candidate.description}
                           </span>
                         ) : null}

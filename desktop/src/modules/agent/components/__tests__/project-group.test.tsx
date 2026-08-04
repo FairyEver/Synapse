@@ -48,6 +48,7 @@ describe("ProjectGroup", () => {
       root.render(
         <ProjectGroup
           project={{ id: "project-1", name: "Project One", path: "/secret/project-one" }}
+          sourceLabel="用户对话"
           sessions={[{
             projectId: "project-1",
             id: "conversation-1",
@@ -62,7 +63,8 @@ describe("ProjectGroup", () => {
           selectedConversationId="conversation-1"
           unreadByConversationId={{}}
           sendingConversationIds={new Set()}
-          onCreateSession={vi.fn()}
+          onQuickCreateSession={vi.fn()}
+          onCustomizeSession={vi.fn()}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
           onDeleteOthers={vi.fn()}
@@ -93,6 +95,7 @@ describe("ProjectGroup", () => {
       root.render(
         <ProjectGroup
           project={{ id: "project-1", name: "Project One", path: "/secret/project-one" }}
+          sourceLabel="用户对话"
           sessions={[{
             projectId: "project-1",
             id: "conversation-1",
@@ -107,7 +110,8 @@ describe("ProjectGroup", () => {
           selectedConversationId="conversation-1"
           unreadByConversationId={{}}
           sendingConversationIds={new Set()}
-          onCreateSession={vi.fn()}
+          onQuickCreateSession={vi.fn()}
+          onCustomizeSession={vi.fn()}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
           onDeleteOthers={vi.fn()}
@@ -124,8 +128,10 @@ describe("ProjectGroup", () => {
     expect(document.body.textContent).not.toContain("重命名会话")
   })
 
-  it("tracks Agent project new-session clicks before provider selection", async () => {
-    const onCreateSession = vi.fn()
+  it("renders tracked actions for quick creation, custom creation, and showing the project folder", async () => {
+    const onQuickCreateSession = vi.fn()
+    const onCustomizeSession = vi.fn()
+    const onShowProjectInFolder = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -135,10 +141,13 @@ describe("ProjectGroup", () => {
       root.render(
         <ProjectGroup
           project={{ id: "project-1", name: "Project One", path: "/secret/project-one" }}
+          sourceLabel="用户对话"
           sessions={[]}
           unreadByConversationId={{}}
           sendingConversationIds={new Set()}
-          onCreateSession={onCreateSession}
+          onQuickCreateSession={onQuickCreateSession}
+          onCustomizeSession={onCustomizeSession}
+          onShowProjectInFolder={onShowProjectInFolder}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
           onDeleteOthers={vi.fn()}
@@ -148,14 +157,135 @@ describe("ProjectGroup", () => {
     })
 
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('[title="新建会话"]')?.click()
+      container.querySelector<HTMLButtonElement>('[aria-label="新建对话"]')?.click()
     })
 
-    expect(onCreateSession).toHaveBeenCalledTimes(1)
+    expect(onQuickCreateSession).toHaveBeenCalledTimes(1)
     expect(track).toHaveBeenCalledWith({
       component: "button",
       name: "agent-project-new-session",
       action: "click",
+    })
+
+    await act(async () => {
+      const trigger = container.querySelector<HTMLButtonElement>('[aria-label="更多操作"]')
+      trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      trigger?.click()
+      await Promise.resolve()
+    })
+    const customItem = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((item) => item.textContent === "自定义对话")
+    expect(customItem).toBeDefined()
+
+    await act(async () => {
+      customItem?.click()
+    })
+
+    expect(onCustomizeSession).toHaveBeenCalledTimes(1)
+    expect(track).toHaveBeenCalledWith({
+      component: "dropdown-menu-item",
+      name: "agent-project-custom-new-session",
+      action: "select",
+    })
+
+    await act(async () => {
+      const trigger = container.querySelector<HTMLButtonElement>('[aria-label="更多操作"]')
+      trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      trigger?.click()
+      await Promise.resolve()
+    })
+    const showInFolderItem = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((item) => item.textContent === "在文件夹中显示")
+    expect(showInFolderItem).toBeDefined()
+
+    await act(async () => {
+      showInFolderItem?.click()
+    })
+
+    expect(onShowProjectInFolder).toHaveBeenCalledTimes(1)
+    expect(track).toHaveBeenCalledWith({
+      component: "dropdown-menu-item",
+      name: "agent-project-show-in-folder",
+      action: "select",
+    })
+    expect(document.querySelector('[data-slot="dropdown-menu-separator"]')).toBeNull()
+  })
+
+  it("confirms before clearing every conversation supplied by the visible category", async () => {
+    const sessions = [{
+      projectId: "project-1",
+      id: "conversation-1",
+      sessionKey: "local:conversation-1",
+      name: "对话一",
+      active: true,
+      historyCount: 1,
+      createdAt: "2026-06-04T00:00:00.000Z",
+      updatedAt: "2026-06-04T00:01:00.000Z",
+    }, {
+      projectId: "project-1",
+      id: "conversation-2",
+      sessionKey: "local:conversation-2",
+      name: "对话二",
+      active: false,
+      historyCount: 1,
+      createdAt: "2026-06-04T00:02:00.000Z",
+      updatedAt: "2026-06-04T00:03:00.000Z",
+    }]
+    const onDelete = vi.fn(async () => undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <ProjectGroup
+          project={{ id: "project-1", name: "Project One", path: "/secret/project-one" }}
+          sourceLabel="用户对话"
+          sessions={sessions}
+          unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
+          onQuickCreateSession={vi.fn()}
+          onCustomizeSession={vi.fn()}
+          onSelect={vi.fn()}
+          onDelete={onDelete}
+          onDeleteOthers={vi.fn()}
+          onRename={vi.fn()}
+        />,
+      )
+    })
+
+    await act(async () => {
+      const trigger = container.querySelector<HTMLButtonElement>('[aria-label="更多操作"]')
+      trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      trigger?.click()
+      await Promise.resolve()
+    })
+    const clearItem = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((item) => item.textContent === "清空对话")
+    expect(clearItem?.getAttribute("data-variant")).toBe("destructive")
+
+    await act(async () => {
+      clearItem?.click()
+      await Promise.resolve()
+    })
+    expect(document.body.textContent).toContain("将删除“用户对话”中“Project One”下的 2 个对话")
+    expect(onDelete).not.toHaveBeenCalled()
+
+    await act(async () => {
+      [...document.body.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "清空对话")
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(onDelete).toHaveBeenCalledTimes(2)
+    expect(onDelete).toHaveBeenCalledWith(sessions[0])
+    expect(onDelete).toHaveBeenCalledWith(sessions[1])
+    expect(track).toHaveBeenCalledWith({
+      component: "dropdown-menu-item",
+      name: "agent-project-clear-sessions",
+      action: "select",
     })
   })
 })

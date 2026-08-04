@@ -72,6 +72,31 @@ describe("createSystemAppWindowService", () => {
     expect(filter?.({ id: window.webContents.id + 1 } as never)).toBe(false)
   })
 
+  it("opens and retargets a Git window to a repository", async () => {
+    const window = createWindowMock()
+    const createWindow = vi.fn(() => window as never)
+    const windowManager = createWindowManagerMock()
+    const service = createSystemAppWindowService({
+      createWindow,
+      baseUrl: () => "app://index.html",
+      windowManager,
+    })
+    const firstRequest = { requestId: "request-1", repositoryId: "repository-1" }
+    const secondRequest = { requestId: "request-2", repositoryId: "repository-2" }
+
+    await service.open("git", { gitOpenRequest: firstRequest })
+    await service.open("git", { gitOpenRequest: secondRequest })
+
+    expect(window.loadURL).toHaveBeenCalledWith(
+      expect.stringContaining("appId=git&gitOpenRequest="),
+    )
+    expect(windowManager.broadcast).toHaveBeenCalledWith(
+      "synapse:app:apps:operation:git_open_request",
+      secondRequest,
+      expect.any(Function),
+    )
+  })
+
   it("opens different windows for different app ids", async () => {
     const windows = [createWindowMock(), createWindowMock()]
     const createWindow = vi.fn(() => windows.shift() as never)

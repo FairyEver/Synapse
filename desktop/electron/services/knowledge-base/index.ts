@@ -2,6 +2,7 @@ export {
   KnowledgeBaseService,
   KNOWLEDGE_BASE_TEMPLATE_VERSION,
 } from "./knowledge-base-service"
+export { KnowledgeBaseTransferService } from "./transfer-service"
 export {
   DragonScaleAddressService,
 } from "./dragonscale/address-service"

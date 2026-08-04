@@ -28,7 +28,11 @@ import { AppLauncherGrid } from "./app-launcher-grid"
 import { AppSwitchTransition } from "./app-switch-transition"
 import { EmbeddedSystemAppShell } from "./embedded-system-app-shell"
 import { getSystemAppManifest, listLaunchableSystemApps } from "../registry"
-import type { SynapseSystemAppId, SynapseSystemAppOpenOptions } from "../types"
+import type {
+  SynapseSystemAppGitOpenRequest,
+  SynapseSystemAppId,
+  SynapseSystemAppOpenOptions,
+} from "../types"
 
 type AppsBridge = {
   readonly openSystemApp?: (targetAppId: SynapseSystemAppId, options?: SynapseSystemAppOpenOptions) => Promise<void>
@@ -43,6 +47,8 @@ type SystemAppContentProps = {
   readonly onContentOpenRequest?: (request: ContentOpenRequest) => void
   readonly pendingAgentSession?: OpenAgentSessionPayload | null
   readonly onPendingAgentSessionConsumed?: () => void
+  readonly gitOpenRequest?: SynapseSystemAppGitOpenRequest | null
+  readonly onGitOpenRequestConsumed?: (requestId: string) => void
 }
 
 function SystemAppContent({
@@ -54,6 +60,8 @@ function SystemAppContent({
   onContentOpenRequest,
   pendingAgentSession = null,
   onPendingAgentSessionConsumed,
+  gitOpenRequest = null,
+  onGitOpenRequestConsumed,
 }: SystemAppContentProps) {
   useEffect(() => {
     if (appId === "resource-repository" || !onContentOpenRequest) return undefined
@@ -96,7 +104,14 @@ function SystemAppContent({
   if (appId === "secrets") return <SecretsModule />
   if (appId === "quick-input") return <QuickInputModule />
   if (appId === "terminal") return <TerminalModule />
-  if (appId === "git") return <GitModule />
+  if (appId === "git") {
+    return (
+      <GitModule
+        openRequest={gitOpenRequest}
+        onOpenRequestConsumed={onGitOpenRequestConsumed}
+      />
+    )
+  }
   if (appId === "editor-scan") return <EditorScanModule />
   if (appId === "usage-monitor") return <UsageMonitorModule />
   if (appId === "model-price") return <ModelPriceModule />

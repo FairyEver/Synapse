@@ -318,6 +318,7 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
               projects={config.global.projects}
               onSave={handleSaveProjects}
               onAddProject={projectActions.addProject}
+              onRefresh={async () => { await refreshConfig() }}
             />
           </>
         ) : null}

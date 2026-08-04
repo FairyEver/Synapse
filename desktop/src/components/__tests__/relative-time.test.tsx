@@ -56,4 +56,16 @@ describe("RelativeTime", () => {
     const invalid = await renderRelativeTime(<RelativeTime value="bad-date" fallback="未知" />)
     expect(invalid.textContent).toBe("未知")
   })
+
+  it("can render exact date metadata without a tooltip trigger", async () => {
+    const container = await renderRelativeTime(
+      <RelativeTime value="2026-06-27T11:58:00.000Z" showTooltip={false} />
+    )
+
+    const time = container.querySelector("time")
+    expect(time?.getAttribute("aria-label")).toBe(
+      formatExactDateTime(new Date("2026-06-27T11:58:00.000Z")),
+    )
+    expect(time?.getAttribute("data-slot")).toBeNull()
+  })
 })

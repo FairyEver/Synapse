@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { Folder, FolderOpen, Plus } from "lucide-react"
+import { EllipsisVertical, Folder, FolderOpen, LoaderCircle, Plus } from "lucide-react"
 import { ModuleSidebarGroup } from "@/components/module-sidebar"
 import {
   ContextMenu,
@@ -8,6 +8,21 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import { SessionTrailing } from "./session-trailing"
 import { AgentSidebarSessionRow } from "./agent-sidebar-session-row"
@@ -17,14 +32,19 @@ import { conversationUnreadKey } from "../live-sync"
 
 type ProjectGroupProps = {
   project: { id: string; name: string; path: string }
+  sourceLabel: string
   sessions: SynapseAgentSessionSummary[]
   selectedProjectId?: string
   selectedConversationId?: string
   unreadByConversationId: Record<string, number>
   sendingConversationIds: ReadonlySet<string>
-  onCreateSession: () => void
+  createDisabled?: boolean
+  creating?: boolean
+  onQuickCreateSession: () => void
+  onCustomizeSession: () => void
+  onShowProjectInFolder?: () => void
   onSelect: (session: SynapseAgentSessionSummary) => void
-  onDelete: (session: SynapseAgentSessionSummary) => void
+  onDelete: (session: SynapseAgentSessionSummary) => void | Promise<void>
   onDeleteOthers: (
     session: SynapseAgentSessionSummary,
     groupSessions: readonly SynapseAgentSessionSummary[],
@@ -34,12 +54,17 @@ type ProjectGroupProps = {
 
 function ProjectGroup({
   project,
+  sourceLabel,
   sessions,
   selectedProjectId,
   selectedConversationId,
   unreadByConversationId,
   sendingConversationIds,
-  onCreateSession,
+  createDisabled = false,
+  creating = false,
+  onQuickCreateSession,
+  onCustomizeSession,
+  onShowProjectInFolder,
   onSelect,
   onDelete,
   onDeleteOthers,
@@ -48,6 +73,8 @@ function ProjectGroup({
   const isSelected = selectedProjectId === project.id
   const [open, setOpen] = useState(isSelected || sessions.length > 0)
   const [renameTarget, setRenameTarget] = useState<SynapseAgentSessionSummary | null>(null)
+  const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const [clearing, setClearing] = useState(false)
 
   const prevIsSelectedRef = useRef(isSelected)
   const prevSessionCountRef = useRef(sessions.length)
@@ -61,28 +88,81 @@ function ProjectGroup({
     setRenameTarget(session)
   }
 
+  async function handleClearSessions() {
+    if (clearing || sessions.length === 0) return
+    setClearing(true)
+    try {
+      await Promise.all(sessions.map((session) => onDelete(session)))
+      setClearDialogOpen(false)
+    } finally {
+      setClearing(false)
+    }
+  }
+
   return (
     <>
       <ModuleSidebarGroup
         open={open}
         onOpenChange={setOpen}
         data-track="agent-project-group"
+        headerClassName="pl-2 pr-0.5"
         title={project.name}
         openIcon={FolderOpen}
         closedIcon={Folder}
         actions={
-          <span className="flex w-16 shrink-0 justify-end">
+          <span className="flex shrink-0">
             <Button
               type="button"
               variant="ghost"
-              size="icon-xs"
+              size="icon-sm"
               data-track="agent-project-new-session"
-              title="新建会话"
-              onClick={() => onCreateSession()}
+              title="新建对话"
+              aria-label="新建对话"
+              disabled={createDisabled}
+              onClick={onQuickCreateSession}
             >
-              <Plus className="size-3.5" />
-              <span className="sr-only">新建会话</span>
+              {creating
+                ? <LoaderCircle className="size-3.5 animate-spin" />
+                : <Plus className="size-3.5" />}
             </Button>
+            <DropdownMenu data-track="agent-project-new-session-menu">
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  title="更多操作"
+                  aria-label="更多操作"
+                  disabled={createDisabled}
+                >
+                  <EllipsisVertical className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-max">
+                <DropdownMenuItem
+                  data-track="agent-project-custom-new-session"
+                  onSelect={onCustomizeSession}
+                >
+                  自定义对话
+                </DropdownMenuItem>
+                {onShowProjectInFolder ? (
+                  <DropdownMenuItem
+                    data-track="agent-project-show-in-folder"
+                    onSelect={onShowProjectInFolder}
+                  >
+                    在文件夹中显示
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={sessions.length === 0}
+                  data-track="agent-project-clear-sessions"
+                  onSelect={() => setClearDialogOpen(true)}
+                >
+                  清空对话
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </span>
         }
       >
@@ -104,7 +184,7 @@ function ProjectGroup({
                         unread={unread}
                         running={running}
                         canDelete
-                        onDelete={() => onDelete(session)}
+                        onDelete={() => void onDelete(session)}
                       />
                     }
                     trackValue={`${session.projectId}:${session.id}`}
@@ -121,7 +201,7 @@ function ProjectGroup({
                 </ContextMenuItem>
                 <ContextMenuItem
                   variant="destructive"
-                  onClick={() => onDelete(session)}
+                  onClick={() => void onDelete(session)}
                 >
                   删除
                 </ContextMenuItem>
@@ -143,6 +223,31 @@ function ProjectGroup({
         onOpenChange={(nextOpen) => { if (!nextOpen) setRenameTarget(null) }}
         onRename={onRename}
       />
+
+      <AlertDialog open={clearDialogOpen} onOpenChange={(nextOpen) => {
+        if (!clearing) setClearDialogOpen(nextOpen)
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>清空对话？</AlertDialogTitle>
+            <AlertDialogDescription>
+              将删除“{sourceLabel}”中“{project.name}”下的 {sessions.length} 个对话。此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={clearing}>取消</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={clearing}
+              data-track="agent-project-clear-sessions-confirm"
+              onClick={() => void handleClearSessions()}
+            >
+              {clearing ? "正在清空" : "清空对话"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

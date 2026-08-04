@@ -65,6 +65,7 @@ type KnowledgeBaseStorageMigrationDeps = {
     setMigrationBlocked: (blocked: boolean) => void
   }
   hasActiveKnowledgeBaseSession: () => Promise<boolean>
+  hasActiveTransfer?: () => boolean
   getAvailableBytes?: (targetRoot: string) => Promise<number | null>
   afterCopyEntry?: (entryPath: string) => Promise<void>
   afterStatsEntry?: (entryPath: string) => Promise<void>
@@ -161,6 +162,9 @@ export class KnowledgeBaseStorageMigrationService {
   async startMigration(payload: StartMigrationPayload): Promise<KnowledgeBaseStorageMigrationResult> {
     if (this.state.active) {
       throw new Error("知识库存储迁移正在进行。")
+    }
+    if (this.deps.hasActiveTransfer?.()) {
+      throw new Error("知识库导入或导出正在进行。")
     }
 
     this.cancelRequested = false

@@ -12,6 +12,12 @@ import type {
   SynapseKnowledgeBaseCreateManagedResult,
   SynapseKnowledgeBaseDeleteManagedPayload,
   SynapseKnowledgeBaseDeleteManagedResult,
+  SynapseKnowledgeBaseExportManagedPayload,
+  SynapseKnowledgeBaseExportManagedResult,
+  SynapseKnowledgeBaseImportManagedPayload,
+  SynapseKnowledgeBaseImportManagedResult,
+  SynapseKnowledgeBaseImportPreview,
+  SynapseKnowledgeBaseTransferProgress,
 } from "@/types/knowledge-base"
 
 const kbProject: SynapseProjectConfig = {
@@ -78,6 +84,15 @@ afterEach(() => {
 })
 
 function createSynapseBridgeMocks() {
+  const idleTransferState: SynapseKnowledgeBaseTransferProgress = {
+    active: false,
+    operation: "idle",
+    phase: "idle",
+    cancellable: false,
+    copiedBytes: 0,
+    totalBytes: null,
+    message: "",
+  }
   return {
     settings: {
       repository: {
@@ -95,6 +110,37 @@ function createSynapseBridgeMocks() {
         deleted: true,
       }),
       openSourceManager: vi.fn<(payload: { projectId: string; projectName: string }) => Promise<void>>().mockResolvedValue(undefined),
+      selectImportFolder: vi.fn<() => Promise<SynapseKnowledgeBaseImportPreview | null>>().mockResolvedValue({
+        token: "preview-token",
+        folderName: "6d525be2-2488-485f-8890-d5f497de5be7",
+        suggestedName: "恢复的知识库",
+        fileCount: 24,
+        totalBytes: 4096,
+        warnings: ["legacy-export-metadata-missing"],
+      }),
+      importManagedFolder: vi.fn<(payload: SynapseKnowledgeBaseImportManagedPayload) => Promise<SynapseKnowledgeBaseImportManagedResult>>().mockResolvedValue({
+        project: {
+          id: "imported-project-id",
+          name: "恢复的知识库",
+          path: "synapse-kb://imported-project-id",
+          capabilities: {
+            knowledgeBase: {
+              enabled: true,
+              schemaVersion: 1,
+              templateVersion: "legacy-import",
+              managed: true,
+              runtimeId: "imported-project-id",
+            },
+          },
+        },
+      }),
+      exportManagedFolder: vi.fn<(payload: SynapseKnowledgeBaseExportManagedPayload) => Promise<SynapseKnowledgeBaseExportManagedResult | null>>().mockResolvedValue({
+        projectId: "project-1",
+        folderPath: "/Users/example/export/Knowledge",
+      }),
+      getTransferState: vi.fn<() => Promise<SynapseKnowledgeBaseTransferProgress>>().mockResolvedValue(idleTransferState),
+      cancelTransfer: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      onTransferChanged: vi.fn<(listener: (progress: SynapseKnowledgeBaseTransferProgress) => void) => () => void>().mockReturnValue(() => undefined),
     },
     agent: {
       listSessions: vi.fn<(projectId: string) => Promise<unknown[]>>().mockResolvedValue([]),
@@ -109,6 +155,7 @@ function renderEditor(
     status: "added",
     project: { id: "new-project-id", ...input },
   })),
+  onRefresh = vi.fn().mockResolvedValue(undefined),
 ) {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -120,10 +167,11 @@ function renderEditor(
         projects={projects}
         onSave={onSave}
         onAddProject={onAddProject}
+        onRefresh={onRefresh}
       />,
     )
   })
-  return { onAddProject, onSave }
+  return { onAddProject, onRefresh, onSave }
 }
 
 function buttonByText(text: string): HTMLButtonElement {
@@ -131,6 +179,24 @@ function buttonByText(text: string): HTMLButtonElement {
     .find((item) => item.textContent === text)
   if (!button) throw new Error(`Button not found: ${text}`)
   return button
+}
+
+async function openNewKnowledgeBaseDialog(): Promise<void> {
+  await openKnowledgeBaseMenuItem("新建知识库")
+}
+
+async function openKnowledgeBaseMenuItem(label: string): Promise<void> {
+  await act(async () => {
+    buttonByText("知识库").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+    await Promise.resolve()
+  })
+  const menuItem = [...document.querySelectorAll<HTMLElement>("[role='menuitem']")]
+    .find((item) => item.textContent === label)
+  if (!menuItem) throw new Error(`Menu item not found: ${label}`)
+  await act(async () => {
+    menuItem.click()
+    await Promise.resolve()
+  })
 }
 
 function inputByLabel(labelText: string): HTMLInputElement {
@@ -180,7 +246,7 @@ describe("ProjectListEditor knowledge base actions", () => {
 
     expect(document.body.textContent).toContain("项目和知识库")
     expect(document.body.textContent).toContain("暂无项目")
-    expect(buttonByText("新建知识库")).toBeTruthy()
+    expect(buttonByText("知识库")).toBeTruthy()
     expect(buttonByText("添加项目")).toBeTruthy()
   })
 
@@ -349,13 +415,81 @@ describe("ProjectListEditor knowledge base actions", () => {
     })
   })
 
+  it("opens create and import in separate dialogs without sharing state", async () => {
+    renderEditor([])
+
+    await openKnowledgeBaseMenuItem("导入知识库")
+    expect(document.body.textContent).toContain("选择并校验知识库文件夹。")
+    expect(document.body.textContent).not.toContain("输入知识库名称。")
+
+    await act(async () => {
+      buttonByText("取消").click()
+      await Promise.resolve()
+    })
+    await openNewKnowledgeBaseDialog()
+
+    expect(document.body.textContent).toContain("输入知识库名称。")
+    expect(document.body.textContent).not.toContain("未找到导出信息")
+  })
+
+  it("imports a validated legacy knowledge base with a trusted-source confirmation", async () => {
+    const onRefresh = vi.fn().mockResolvedValue(undefined)
+    renderEditor([], undefined, undefined, onRefresh)
+
+    await openKnowledgeBaseMenuItem("导入知识库")
+    await act(async () => {
+      buttonByText("选择文件夹").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(inputByLabel("知识库名称").value).toBe("恢复的知识库")
+    expect(document.body.textContent).toContain("24 个文件")
+    expect(document.body.textContent).toContain("未找到导出信息，将按旧版知识库恢复。")
+
+    const trustedCheckbox = document.getElementById("knowledge-base-import-trusted")
+    if (!(trustedCheckbox instanceof HTMLButtonElement)) throw new Error("Trusted-source checkbox not found")
+    await act(async () => {
+      trustedCheckbox.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText("导入知识库").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.importManagedFolder).toHaveBeenCalledWith({
+        token: "preview-token",
+        name: "恢复的知识库",
+        trusted: true,
+      })
+      expect(onRefresh).toHaveBeenCalledTimes(1)
+      expect(toast).toHaveBeenCalledWith("已复制到 Synapse 知识库存储。原文件夹可自行保留或删除。")
+    })
+  })
+
+  it("exports a single managed knowledge base", async () => {
+    renderEditor([kbProject])
+
+    await act(async () => {
+      buttonByText("导出").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.exportManagedFolder).toHaveBeenCalledWith({ projectId: "project-1" })
+      expect(toast).toHaveBeenCalledWith("知识库已导出。")
+    })
+  })
+
   it("creates a managed knowledge base project with name only", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     renderEditor([], onSave)
 
-    await act(async () => {
-      buttonByText("新建知识库").click()
-    })
+    await openNewKnowledgeBaseDialog()
     expect(document.body.textContent).not.toContain("项目路径")
     expect(document.body.textContent).not.toContain("浏览")
     await act(async () => {
@@ -396,9 +530,7 @@ describe("ProjectListEditor knowledge base actions", () => {
     bridgeMocks.knowledgeBase.createManaged.mockReturnValue(pendingCreate.promise)
     renderEditor([], onSave)
 
-    await act(async () => {
-      buttonByText("新建知识库").click()
-    })
+    await openNewKnowledgeBaseDialog()
     await act(async () => {
       changeInput(inputByLabel("知识库名称"), "Knowledge")
     })
@@ -434,9 +566,7 @@ describe("ProjectListEditor knowledge base actions", () => {
     bridgeMocks.knowledgeBase.createManaged.mockRejectedValueOnce(new Error("EACCES: permission denied, mkdir '/Users/test/secret-path'"))
     renderEditor([], onSave)
 
-    await act(async () => {
-      buttonByText("新建知识库").click()
-    })
+    await openNewKnowledgeBaseDialog()
     await act(async () => {
       changeInput(inputByLabel("知识库名称"), "Knowledge")
     })
@@ -456,9 +586,7 @@ describe("ProjectListEditor knowledge base actions", () => {
     bridgeMocks.knowledgeBase.createManaged.mockRejectedValueOnce(new Error("知识库存储位置不可用。请在设置中重新检测。"))
     renderEditor([], onSave)
 
-    await act(async () => {
-      buttonByText("新建知识库").click()
-    })
+    await openNewKnowledgeBaseDialog()
     await act(async () => {
       changeInput(inputByLabel("知识库名称"), "Knowledge")
     })
@@ -477,9 +605,7 @@ describe("ProjectListEditor knowledge base actions", () => {
     const onSave = vi.fn().mockRejectedValue(new Error("config save failed"))
     renderEditor([], onSave)
 
-    await act(async () => {
-      buttonByText("新建知识库").click()
-    })
+    await openNewKnowledgeBaseDialog()
     await act(async () => {
       changeInput(inputByLabel("知识库名称"), "Knowledge")
     })
@@ -594,9 +720,7 @@ describe("ProjectListEditor knowledge base actions", () => {
   it("clears stale knowledge base dialog fields and errors after closing", async () => {
     renderEditor([])
 
-    await act(async () => {
-      buttonByText("新建知识库").click()
-    })
+    await openNewKnowledgeBaseDialog()
     await act(async () => {
       changeInput(inputByLabel("知识库名称"), "")
     })
@@ -608,9 +732,7 @@ describe("ProjectListEditor knowledge base actions", () => {
     await act(async () => {
       buttonByText("取消").click()
     })
-    await act(async () => {
-      buttonByText("新建知识库").click()
-    })
+    await openNewKnowledgeBaseDialog()
 
     expect(inputByLabel("知识库名称").value).toBe("")
     expect(document.body.textContent).not.toContain("知识库名称不能为空。")
@@ -621,9 +743,7 @@ describe("ProjectListEditor knowledge base actions", () => {
     bridgeMocks.knowledgeBase.createManaged.mockReturnValueOnce(pendingCreate.promise)
     renderEditor([])
 
-    await act(async () => {
-      buttonByText("新建知识库").click()
-    })
+    await openNewKnowledgeBaseDialog()
     await act(async () => {
       changeInput(inputByLabel("知识库名称"), "Knowledge")
     })

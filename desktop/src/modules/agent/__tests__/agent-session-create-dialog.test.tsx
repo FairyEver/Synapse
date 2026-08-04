@@ -78,6 +78,35 @@ afterEach(() => {
 })
 
 describe("AgentSessionCreateDialog", () => {
+  it("focuses and selects the generated name when opened", async () => {
+    await renderDialog({ onCreate: vi.fn(async () => true) })
+
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="会话名称"]')
+    expect(document.activeElement).toBe(input)
+    expect(input?.selectionStart).toBe(0)
+    expect(input?.selectionEnd).toBe("新对话 09:00".length)
+  })
+
+  it("creates the conversation when Enter is pressed in the name input", async () => {
+    const onCreate = vi.fn(async () => true)
+    await renderDialog({ onCreate })
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="会话名称"]')
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+      setter?.call(input, "需求复盘")
+      input?.dispatchEvent(new Event("input", { bubbles: true }))
+      input?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }))
+      await Promise.resolve()
+    })
+
+    expect(onCreate).toHaveBeenCalledWith({
+      name: "需求复盘",
+      personaId: null,
+      selection: DEFAULT_SELECTION,
+    })
+  })
+
   it("uses a compact two-column layout for the name and persona fields", async () => {
     await renderDialog({ onCreate: vi.fn(async () => true) })
 

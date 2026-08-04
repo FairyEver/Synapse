@@ -11,6 +11,17 @@
 - 迁移恢复状态必须持久化。切换前中断继续用旧位置；切换后验证新位置，失败回滚旧位置；新位置验证成功后即为权威位置，旧目录清理失败不得再回滚。
 - 自定义 root 不可访问时，创建、资料管理和 Agent 会话必须停止，只允许重新检测；不得在源恢复前更改位置或静默回退。
 
+## 整库导入与导出
+
+- 整库导入每次只接受一个完整 runtime 文件夹，不接受包含多个 runtime 的 `knowledge-bases/` 父目录，不合并、不覆盖已有知识库。
+- 新版导出包必须包含完整 runtime 和 `.synapse-knowledge-base.json`；元数据记录格式版本、原名称、模板版本、导出时间和逐文件 SHA-256。
+- 旧版目录可以没有导出元数据，但必须是已知 Synapse runtime，且至少包含 `.claude-plugin/plugin.json`、`skills/`、`commands/`、`CLAUDE.md`、`.raw/.manifest.json` 和 `wiki/index.md`。
+- 预检和复制必须拒绝符号链接/目录联接、路径越界、未知 runtime、结构缺失、元数据损坏或哈希不一致。
+- 导入使用主进程持有的短期预检令牌，生成新 UUID，先复制到当前全局 storage root 的临时目录，完整校验后原子放置并登记 `synapse-kb://<newId>`。源文件夹始终不修改。
+- 导入 journal 必须支持失败、取消和崩溃后清理；未完整数据不得登记，已登记数据不得因日志清理失败而误删。
+- 导出单个托管知识库时，目标库不得有运行中 Agent 会话或资料写操作。导入、导出与全局存储迁移互斥。
+- 整库导入/导出只处理 Knowledge Base runtime，不包含 Agent 对话、账号、身份或其它 Synapse 配置；不对导入内容自动升级模板或重写路径。
+
 ## Runtime 与 Agent
 
 - 托管 Knowledge Base 的 renderer Agent 必须把 backing directory 作为 Claude Code SDK local plugin 加载，并允许模板中已启用的 hooks。

@@ -24,6 +24,60 @@ export type SynapseKnowledgeBaseDeleteManagedResult = {
   deleted: boolean
 }
 
+export type SynapseKnowledgeBaseImportWarning = "legacy-export-metadata-missing"
+
+export type SynapseKnowledgeBaseImportPreview = {
+  token: string
+  folderName: string
+  suggestedName: string
+  fileCount: number
+  totalBytes: number
+  warnings: SynapseKnowledgeBaseImportWarning[]
+}
+
+export type SynapseKnowledgeBaseImportManagedPayload = {
+  token: string
+  name: string
+  trusted: boolean
+}
+
+export type SynapseKnowledgeBaseImportManagedResult = {
+  project: {
+    id: string
+    name: string
+    path: string
+    capabilities: {
+      knowledgeBase: {
+        enabled: true
+        schemaVersion: 1
+        templateVersion: string
+        managed: true
+        runtimeId: string
+      }
+    }
+  }
+}
+
+export type SynapseKnowledgeBaseExportManagedPayload = {
+  projectId: string
+}
+
+export type SynapseKnowledgeBaseExportManagedResult = {
+  projectId: string
+  folderPath: string
+}
+
+export type SynapseKnowledgeBaseTransferProgress = {
+  active: boolean
+  operation: "idle" | "import" | "export"
+  phase: "idle" | "copying" | "verifying" | "registering" | "completed" | "failed" | "cancelled"
+  cancellable: boolean
+  copiedBytes: number
+  totalBytes: number | null
+  message: string
+  errorMessage?: string
+}
+
 export type SynapseKnowledgeBaseOpenSourceManagerPayload = {
   projectId: string
   projectName: string

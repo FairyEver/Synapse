@@ -56,6 +56,7 @@ function SessionTrailing({
     <RelativeTime
       value={updatedAt}
       fallback=""
+      showTooltip={false}
       className="block min-w-0 max-w-full truncate text-xs text-muted-foreground"
     />
   ) : null

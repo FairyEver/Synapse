@@ -167,6 +167,11 @@ export const IPC_CHANNELS = {
   "knowledge-base": {
     "createManaged": "synapse:app:knowledge_base:operation:create_managed",
     "deleteManaged": "synapse:app:knowledge_base:operation:delete_managed",
+    "selectImportFolder": "synapse:app:knowledge_base:operation:select_import_folder",
+    "importManagedFolder": "synapse:app:knowledge_base:operation:import_managed_folder",
+    "exportManagedFolder": "synapse:app:knowledge_base:operation:export_managed_folder",
+    "getTransferState": "synapse:app:knowledge_base:operation:get_transfer_state",
+    "cancelTransfer": "synapse:app:knowledge_base:operation:cancel_transfer",
     "listRawDirectory": "synapse:app:knowledge_base:operation:list_raw_directory",
     "uploadRawFiles": "synapse:app:knowledge_base:operation:upload_raw_files",
     "uploadRawItems": "synapse:app:knowledge_base:operation:upload_raw_items",
@@ -185,6 +190,7 @@ export const IPC_CHANNELS = {
     "cancelStorageMigration": "synapse:app:knowledge_base:operation:cancel_storage_migration",
     "recheckStorage": "synapse:app:knowledge_base:operation:recheck_storage",
     "storageMigrationChanged": "synapse:app:knowledge_base:operation:storage_migration_changed",
+    "transferChanged": "synapse:app:knowledge_base:operation:transfer_changed",
   },
   "editor": {
     "getGlobalDirectories": "synapse:app:editor:operation:get_global_directories",
@@ -238,6 +244,8 @@ export const IPC_CHANNELS = {
     "renameSession": "synapse:app:agent:operation:rename_session",
     "getTimeline": "synapse:app:agent:operation:get_timeline",
     "exportConversationBundle": "synapse:app:agent:operation:export_conversation_bundle",
+    "chooseAttachments": "synapse:app:agent:operation:choose_attachments",
+    "resolveAttachmentPaths": "synapse:app:agent:operation:resolve_attachment_paths",
     "send": "synapse:app:agent:operation:send",
     "listPendingPermissions": "synapse:app:agent:operation:list_pending_permissions",
     "respondPermission": "synapse:app:agent:operation:respond_permission",

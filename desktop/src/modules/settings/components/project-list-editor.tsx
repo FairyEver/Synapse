@@ -1,5 +1,5 @@
-import { useRef, useState } from "react"
-import { Folder } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { ChevronDown, Folder } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { ProjectAddDialog } from "@/app-shell/components/project-add-dialog"
@@ -17,23 +17,31 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Field, FieldError, FieldGroup } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { arePathsEqualForCompare } from "@/lib/path-compare"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { SettingsSectionHeading } from "@/modules/settings/components/settings-section-heading"
+import { KnowledgeBaseImportDialog } from "@/modules/settings/components/knowledge-base-import-dialog"
 import type { SynapseProjectConfig } from "@/types/config"
+import type { SynapseKnowledgeBaseTransferProgress } from "@/types/knowledge-base"
 
 const logger = createRendererLogger("settings.projects")
 
@@ -48,6 +56,7 @@ type ProjectListEditorProps = {
   projects: SynapseProjectConfig[]
   onSave: (projects: SynapseProjectConfig[]) => Promise<void>
   onAddProject: (input: ProjectAddInput) => Promise<ProjectAddResult>
+  onRefresh: () => Promise<void>
 }
 
 function isKnowledgeBaseProject(project: SynapseProjectConfig): boolean {
@@ -70,7 +79,17 @@ function formatKnowledgeBaseCreateError(error: unknown): string {
   return SAFE_KNOWLEDGE_BASE_CREATE_ERRORS.has(message) ? message : "创建知识库失败。"
 }
 
-function ProjectListEditor({ projects, onSave, onAddProject }: ProjectListEditorProps) {
+const IDLE_TRANSFER_PROGRESS: SynapseKnowledgeBaseTransferProgress = {
+  active: false,
+  operation: "idle",
+  phase: "idle",
+  cancellable: false,
+  copiedBytes: 0,
+  totalBytes: null,
+  message: "",
+}
+
+function ProjectListEditor({ projects, onSave, onAddProject, onRefresh }: ProjectListEditorProps) {
   const platform = getRendererPlatform()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<SynapseProjectConfig | null>(null)
@@ -80,12 +99,25 @@ function ProjectListEditor({ projects, onSave, onAddProject }: ProjectListEditor
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ project: SynapseProjectConfig; sessionCount: number | null } | null>(null)
   const [isKnowledgeBaseDialogOpen, setIsKnowledgeBaseDialogOpen] = useState(false)
+  const [isKnowledgeBaseImportDialogOpen, setIsKnowledgeBaseImportDialogOpen] = useState(false)
   const [knowledgeBaseName, setKnowledgeBaseName] = useState("")
   const [knowledgeBaseError, setKnowledgeBaseError] = useState<string | null>(null)
   const [isCreatingKnowledgeBase, setIsCreatingKnowledgeBase] = useState(false)
   const [openingKnowledgeBaseProjectId, setOpeningKnowledgeBaseProjectId] = useState<string | null>(null)
+  const [exportingKnowledgeBaseProjectId, setExportingKnowledgeBaseProjectId] = useState<string | null>(null)
+  const [transferProgress, setTransferProgress] = useState(IDLE_TRANSFER_PROGRESS)
   const isKnowledgeBaseCreateInFlightRef = useRef(false)
   const hasDirectoryPicker = Boolean(window.synapse?.settings.repository)
+
+  useEffect(() => {
+    const bridge = window.synapse?.knowledgeBase
+    const unsubscribe = bridge?.onTransferChanged?.((progress) => {
+      if (progress.operation === "export" || progress.operation === "idle") {
+        setTransferProgress(progress)
+      }
+    })
+    return () => unsubscribe?.()
+  }, [])
 
   const resetKnowledgeBaseForm = () => {
     setKnowledgeBaseName("")
@@ -202,6 +234,20 @@ function ProjectListEditor({ projects, onSave, onAddProject }: ProjectListEditor
     }
   }
 
+  const handleExportKnowledgeBase = async (project: SynapseProjectConfig) => {
+    try {
+      setExportingKnowledgeBaseProjectId(project.id)
+      const result = await window.synapse?.knowledgeBase?.exportManagedFolder({ projectId: project.id })
+      if (result) toast("知识库已导出。")
+    } catch (error) {
+      logger.error("Failed to export managed knowledge base.", { projectId: project.id, error })
+      toast(error instanceof Error ? error.message : "导出知识库失败。")
+    } finally {
+      setExportingKnowledgeBaseProjectId(null)
+      setTransferProgress(IDLE_TRANSFER_PROGRESS)
+    }
+  }
+
   const handleEditProject = (project: SynapseProjectConfig) => {
     logger.info("Project edit dialog opened.", { projectId: project.id })
     setEditingProject(project)
@@ -305,10 +351,19 @@ function ProjectListEditor({ projects, onSave, onAddProject }: ProjectListEditor
 
   const actionButtons = (
     <div className="flex flex-wrap gap-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline">
+            知识库
+            <ChevronDown className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={() => setIsKnowledgeBaseDialogOpen(true)}>新建知识库</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setIsKnowledgeBaseImportDialogOpen(true)}>导入知识库</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Dialog open={isKnowledgeBaseDialogOpen} onOpenChange={handleKnowledgeBaseDialogOpenChange}>
-        <DialogTrigger asChild>
-          <Button variant="outline">新建知识库</Button>
-        </DialogTrigger>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>新建知识库</DialogTitle>
@@ -392,14 +447,24 @@ function ProjectListEditor({ projects, onSave, onAddProject }: ProjectListEditor
                     <TableCell className="px-4">
                       <div className="flex justify-end gap-1">
                         {knowledgeBaseProject ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={openingKnowledgeBaseProjectId === project.id}
-                            onClick={() => void handleOpenKnowledgeBaseSources(project)}
-                          >
-                            资料管理
-                          </Button>
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={openingKnowledgeBaseProjectId === project.id}
+                              onClick={() => void handleOpenKnowledgeBaseSources(project)}
+                            >
+                              资料管理
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={exportingKnowledgeBaseProjectId === project.id}
+                              onClick={() => void handleExportKnowledgeBase(project)}
+                            >
+                              导出
+                            </Button>
+                          </>
                         ) : null}
                         <Button
                           variant="ghost"
@@ -447,6 +512,35 @@ function ProjectListEditor({ projects, onSave, onAddProject }: ProjectListEditor
           {actionButtons}
         </div>
       </SettingsGroup>
+
+      <KnowledgeBaseImportDialog
+        open={isKnowledgeBaseImportDialogOpen}
+        onOpenChange={setIsKnowledgeBaseImportDialogOpen}
+        onImported={onRefresh}
+      />
+
+      <Dialog open={exportingKnowledgeBaseProjectId !== null && transferProgress.active && transferProgress.operation === "export"}>
+        <DialogContent showCloseButton={false} className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>导出知识库</DialogTitle>
+            <DialogDescription className="sr-only">正在导出知识库。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2" role="status" aria-live="polite">
+            <p className="text-sm">{transferProgress.message}</p>
+            <Progress value={transferProgress.totalBytes ? Math.min(100, Math.round((transferProgress.copiedBytes / transferProgress.totalBytes) * 100)) : 0} />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!transferProgress.cancellable}
+              onClick={() => void window.synapse?.knowledgeBase?.cancelTransfer()}
+            >
+              取消导出
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editingProject !== null} onOpenChange={(open) => { if (!open) handleEditDialogClose() }}>
         <DialogContent className="sm:max-w-[480px]">
@@ -530,7 +624,6 @@ function ProjectListEditor({ projects, onSave, onAddProject }: ProjectListEditor
               variant="destructive"
               onClick={() => {
                 if (!deleteTarget) return
-                const targetId = deleteTarget.project.id
                 const targetProject = deleteTarget.project
                 setDeleteTarget(null)
                 void handleRemoveProject(targetProject)

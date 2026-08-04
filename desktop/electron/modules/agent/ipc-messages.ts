@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
-import { lstat, opendir } from "node:fs/promises"
+import { lstat, opendir, readFile } from "node:fs/promises"
 import path from "node:path"
-import { BrowserWindow, dialog } from "electron"
+import { BrowserWindow, dialog, type OpenDialogOptions } from "electron"
 import { z } from "zod"
 
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
@@ -46,6 +46,7 @@ const MAX_AGENT_IMAGE_ATTACHMENT_TOTAL_BYTES = 20 * 1024 * 1024
 const MAX_AGENT_PATH_ATTACHMENTS = 20
 const MAX_AGENT_DIRECTORY_SCAN_DEPTH = 64
 const MAX_AGENT_DIRECTORY_SCAN_ENTRIES = 4_096
+const MAX_AGENT_ATTACHMENT_RESOLUTION_PATHS = 256
 const logger = createMainLogger("agent.ipc")
 const agentImageMimeTypeSchema = z.enum(["image/jpeg", "image/png", "image/gif", "image/webp"])
 const binaryAttachmentDataSchema = z.custom<ArrayBuffer | Uint8Array>(
@@ -55,6 +56,7 @@ const binaryAttachmentDataSchema = z.custom<ArrayBuffer | Uint8Array>(
 const attachmentPathSchema = z.string()
   .trim()
   .refine(isAbsoluteAttachmentPath, "path must be an absolute POSIX or Windows path")
+const attachmentSelectionKindSchema = z.enum(["file", "directory"])
 
 function clampClientSubmittedAt(clientIso: string | undefined, recvIso: string): string {
   if (!clientIso) return recvIso
@@ -102,6 +104,124 @@ function attachmentPathOps(value: string): typeof path.posix | typeof path.win32
   return (/^[A-Za-z]:[\\/]/.test(value) || /^([\\/])\1[^\\/]+[\\/][^\\/]+(?:[\\/]|$)/.test(value))
     ? path.win32
     : path.posix
+}
+
+const imageMimeTypeByExtension: Readonly<Record<string, z.infer<typeof agentImageMimeTypeSchema>>> = {
+  ".gif": "image/gif",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+}
+
+const attachmentCandidateSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("image"),
+    sourceIndex: z.number().int().nonnegative(),
+    mimeType: agentImageMimeTypeSchema,
+    data: binaryAttachmentDataSchema,
+    name: z.string(),
+    size: z.number().int().nonnegative(),
+  }),
+  z.object({
+    kind: z.literal("path"),
+    sourceIndex: z.number().int().nonnegative(),
+    path: attachmentPathSchema,
+    entryType: z.enum(["file", "directory"]),
+    name: z.string(),
+    size: z.number().int().nonnegative().optional(),
+  }),
+])
+
+const attachmentSelectionResultSchema = z.object({
+  attachments: z.array(attachmentCandidateSchema),
+  rejectedCount: z.number().int().nonnegative(),
+})
+
+const chooseAttachmentsRequestSchema = z.object({
+  kind: attachmentSelectionKindSchema,
+})
+
+const resolveAttachmentPathsRequestSchema = z.object({
+  paths: z.array(attachmentPathSchema).max(MAX_AGENT_ATTACHMENT_RESOLUTION_PATHS),
+})
+
+type AttachmentCandidate = z.infer<typeof attachmentCandidateSchema>
+type AttachmentSelectionResult = z.infer<typeof attachmentSelectionResultSchema>
+
+async function attachmentCandidatesFromPaths(
+  paths: readonly string[],
+): Promise<AttachmentSelectionResult> {
+  const attachments: AttachmentCandidate[] = []
+  let rejectedCount = 0
+  let imageCount = 0
+  let totalImageBytes = 0
+  let pathCount = 0
+
+  for (const [sourceIndex, rawPath] of paths.entries()) {
+    try {
+      const normalizedPath = normalizeAbsoluteAttachmentPath(rawPath)
+      const stat = await lstatAttachmentPath(normalizedPath)
+      if (!stat.isFile() && !stat.isDirectory()) {
+        rejectedCount += 1
+        continue
+      }
+      const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
+      const name = attachmentBasename(normalizedPath) || normalizedPath
+      const imageMimeType = stat.isFile()
+        ? imageMimeTypeByExtension[path.extname(normalizedPath).toLowerCase()]
+        : undefined
+      if (imageMimeType) {
+        if (
+          imageCount >= MAX_AGENT_IMAGE_ATTACHMENTS
+          || size <= 0
+          || size > MAX_AGENT_IMAGE_ATTACHMENT_BYTES
+          || totalImageBytes + size > MAX_AGENT_IMAGE_ATTACHMENT_TOTAL_BYTES
+        ) {
+          rejectedCount += 1
+          continue
+        }
+        const bytes = await readFile(normalizedPath)
+        if (
+          bytes.byteLength === 0
+          || bytes.byteLength > MAX_AGENT_IMAGE_ATTACHMENT_BYTES
+          || totalImageBytes + bytes.byteLength > MAX_AGENT_IMAGE_ATTACHMENT_TOTAL_BYTES
+        ) {
+          rejectedCount += 1
+          continue
+        }
+        const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+        attachments.push({
+          kind: "image",
+          sourceIndex,
+          mimeType: imageMimeType,
+          data,
+          name,
+          size: bytes.byteLength,
+        })
+        imageCount += 1
+        totalImageBytes += bytes.byteLength
+        continue
+      }
+      if (pathCount >= MAX_AGENT_PATH_ATTACHMENTS) {
+        rejectedCount += 1
+        continue
+      }
+      attachments.push({
+        kind: "path",
+        sourceIndex,
+        path: normalizedPath,
+        entryType: stat.isDirectory() ? "directory" : "file",
+        name,
+        ...(stat.isFile() ? { size } : {}),
+      })
+      pathCount += 1
+    } catch {
+      rejectedCount += 1
+    }
+  }
+
+  return { attachments, rejectedCount }
 }
 
 async function normalizeSendAttachments(
@@ -443,6 +563,36 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       })
       return service.exportBundle(request)
     },
+  },
+  chooseAttachments: {
+    kind: "invoke",
+    operationId: "app.agent.operation.choose_attachments",
+    request: chooseAttachmentsRequestSchema,
+    response: attachmentSelectionResultSchema,
+    handler: async (_ctx, request: z.infer<typeof chooseAttachmentsRequestSchema>) => {
+      const options: OpenDialogOptions = {
+        title: request.kind === "file" ? "添加文件" : "添加文件夹",
+        properties: request.kind === "file"
+          ? ["openFile", "multiSelections"]
+          : ["openDirectory", "multiSelections"],
+      }
+      const focusedWindow = BrowserWindow.getFocusedWindow()
+      const result = focusedWindow
+        ? await dialog.showOpenDialog(focusedWindow, options)
+        : await dialog.showOpenDialog(options)
+      if (result.canceled || result.filePaths.length === 0) {
+        return { attachments: [], rejectedCount: 0 }
+      }
+      return attachmentCandidatesFromPaths(result.filePaths)
+    },
+  },
+  resolveAttachmentPaths: {
+    kind: "invoke",
+    operationId: "app.agent.operation.resolve_attachment_paths",
+    request: resolveAttachmentPathsRequestSchema,
+    response: attachmentSelectionResultSchema,
+    handler: async (_ctx, request: z.infer<typeof resolveAttachmentPathsRequestSchema>) =>
+      attachmentCandidatesFromPaths(request.paths),
   },
   send: {
     kind: "invoke",

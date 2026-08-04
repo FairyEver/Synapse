@@ -871,6 +871,28 @@ describe("GitModule repository list", () => {
     expect(countButtons("重试")).toBe(1)
   })
 
+  it("opens a requested repository directly in the workbench", async () => {
+    const repository = {
+      id: "repo-requested",
+      name: "Requested",
+      localPath: "/work/requested",
+      addedAt: "2026-08-04T00:00:00.000Z",
+      lastOpenedAt: null,
+    }
+    bridge.git.listRepositorySummaries.mockResolvedValue([summary(repository)])
+    bridge.git.getSnapshot.mockResolvedValue(summary(repository).snapshot)
+    const onConsumed = vi.fn()
+
+    await renderGitModule(roots, {
+      openRequest: { requestId: "request-1", repositoryId: repository.id },
+      onOpenRequestConsumed: onConsumed,
+    })
+
+    expect(document.querySelector('[data-git-workbench-toolbar="true"]')).toBeTruthy()
+    expect(document.body.textContent).toContain("Requested")
+    expect(onConsumed).toHaveBeenCalledWith("request-1")
+  })
+
   it("shows environment diagnostics and repository issues", async () => {
     bridge.git.listRepositorySummaries.mockResolvedValue([
       summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }, {
@@ -1361,14 +1383,17 @@ describe("GitModule repository list", () => {
   })
 })
 
-async function renderGitModule(roots: Root[]): Promise<void> {
+async function renderGitModule(
+  roots: Root[],
+  props: Parameters<typeof GitModule>[0] = {},
+): Promise<void> {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
   roots.push(root)
 
   await act(async () => {
-    root.render(<GitModule />)
+    root.render(<GitModule {...props} />)
     await flush()
   })
 }

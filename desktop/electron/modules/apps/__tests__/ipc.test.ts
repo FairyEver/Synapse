@@ -77,6 +77,25 @@ describe("appsIpcModule", () => {
     })
   })
 
+  it("accepts Git open requests only for the Git app", async () => {
+    const gitOpenRequest = { requestId: "request-1", repositoryId: "repository-1" }
+    expect(appsIpcModule.methods.openSystemApp.request.safeParse({
+      appId: "git",
+      options: { gitOpenRequest },
+    }).success).toBe(true)
+    expect(appsIpcModule.methods.openSystemApp.request.safeParse({
+      appId: "database",
+      options: { gitOpenRequest },
+    }).success).toBe(false)
+
+    await appsIpcModule.methods.openSystemApp.handler(createContext({}), {
+      appId: "git",
+      options: { gitOpenRequest },
+    })
+
+    expect(systemAppWindowServiceMock.open).toHaveBeenCalledWith("git", { gitOpenRequest })
+  })
+
   it("rejects direct workflow windows while the workflow entry is hidden", async () => {
     cheatCodeStateServiceMock.getStates.mockResolvedValue({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: false })
 

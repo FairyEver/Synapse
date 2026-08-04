@@ -106,6 +106,7 @@ describe("SessionTrailing", () => {
     expect(html).toContain(
       `aria-label="${formatExactDateTime(new Date("2026-06-04T05:58:00.000Z"))}"`,
     )
+    expect(html).not.toContain("data-slot=\"tooltip-trigger\"")
     expect(html).not.toContain("animate-spin")
     expect(html).not.toContain("未读")
   })

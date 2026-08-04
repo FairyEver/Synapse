@@ -424,6 +424,11 @@ import type {
   SynapseKnowledgeBaseDeleteManagedPayload,
   SynapseKnowledgeBaseDeleteManagedResult,
   SynapseKnowledgeBaseExportRawEntriesPayload,
+  SynapseKnowledgeBaseExportManagedPayload,
+  SynapseKnowledgeBaseExportManagedResult,
+  SynapseKnowledgeBaseImportManagedPayload,
+  SynapseKnowledgeBaseImportManagedResult,
+  SynapseKnowledgeBaseImportPreview,
   SynapseKnowledgeBaseListRawDirectoryPayload,
   SynapseKnowledgeBaseListRawDirectoryResult,
   SynapseKnowledgeBaseMoveRawEntriesPayload,
@@ -437,6 +442,7 @@ import type {
   SynapseKnowledgeBaseStorageMigrationResult,
   SynapseKnowledgeBaseStorageStatus,
   SynapseKnowledgeBaseTrashRawEntriesPayload,
+  SynapseKnowledgeBaseTransferProgress,
   SynapseKnowledgeBaseUploadRawFilesPayload,
   SynapseKnowledgeBaseUploadRawItemsPayload,
   SynapseKnowledgeBaseUploadSourcesResult,
@@ -509,6 +515,7 @@ import type {
 } from "./workflow"
 import type {
   SynapseSystemAppContentOpenRequest,
+  SynapseSystemAppGitOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
 } from "../modules/apps/types"
@@ -760,6 +767,29 @@ export type SynapseAgentBridgeAttachment =
   | SynapseAgentBridgeImageAttachment
   | SynapseAgentBridgePathAttachment
 
+export type SynapseAgentAttachmentCandidate =
+  | {
+      readonly kind: "image"
+      readonly sourceIndex: number
+      readonly mimeType: SynapseAgentBridgeImageAttachment["mimeType"]
+      readonly data: ArrayBuffer
+      readonly name: string
+      readonly size: number
+    }
+  | {
+      readonly kind: "path"
+      readonly sourceIndex: number
+      readonly path: string
+      readonly entryType: "file" | "directory"
+      readonly name: string
+      readonly size?: number
+    }
+
+export type SynapseAgentAttachmentSelectionResult = {
+  readonly attachments: readonly SynapseAgentAttachmentCandidate[]
+  readonly rejectedCount: number
+}
+
 export type UsageAnalysisRangePreset = "today" | "7d" | "30d" | "90d" | "all"
 export type UsageAnalysisTimeBucketGranularity = "day" | "hour"
 
@@ -989,6 +1019,9 @@ export type SynapseBridge = {
     ) => Promise<void>
     onContentOpenRequest: (
       listener: (request: SynapseSystemAppContentOpenRequest) => void,
+    ) => () => void
+    onGitOpenRequest: (
+      listener: (request: SynapseSystemAppGitOpenRequest) => void,
     ) => () => void
   }
   documentTemplate: {
@@ -1457,6 +1490,15 @@ export type SynapseBridge = {
     deleteManaged: (
       payload: SynapseKnowledgeBaseDeleteManagedPayload,
     ) => Promise<SynapseKnowledgeBaseDeleteManagedResult>
+    selectImportFolder: () => Promise<SynapseKnowledgeBaseImportPreview | null>
+    importManagedFolder: (
+      payload: SynapseKnowledgeBaseImportManagedPayload,
+    ) => Promise<SynapseKnowledgeBaseImportManagedResult>
+    exportManagedFolder: (
+      payload: SynapseKnowledgeBaseExportManagedPayload,
+    ) => Promise<SynapseKnowledgeBaseExportManagedResult | null>
+    getTransferState: () => Promise<SynapseKnowledgeBaseTransferProgress>
+    cancelTransfer: () => Promise<void>
     listRawDirectory: (
       payload: SynapseKnowledgeBaseListRawDirectoryPayload,
     ) => Promise<SynapseKnowledgeBaseListRawDirectoryResult>
@@ -1500,6 +1542,9 @@ export type SynapseBridge = {
     recheckStorage: () => Promise<SynapseKnowledgeBaseStorageStatus>
     onStorageMigrationChanged: (
       listener: (payload: SynapseKnowledgeBaseStorageMigrationProgress) => void,
+    ) => () => void
+    onTransferChanged: (
+      listener: (payload: SynapseKnowledgeBaseTransferProgress) => void,
     ) => () => void
     filePathForDroppedFile: (file: File) => string | null
   }
@@ -1687,6 +1732,12 @@ export type SynapseBridge = {
         providerId?: string
       },
     ) => Promise<SynapseAgentSendResult>
+    chooseAttachments: (
+      args: { kind: "file" | "directory" },
+    ) => Promise<SynapseAgentAttachmentSelectionResult>
+    resolveAttachmentPaths: (
+      args: { paths: readonly string[] },
+    ) => Promise<SynapseAgentAttachmentSelectionResult>
     listPendingPermissions: (projectId: string) => Promise<SynapseAgentPendingPermission[]>
     respondPermission: (
       args: {

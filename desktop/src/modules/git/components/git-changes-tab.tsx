@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitRepository, SynapseGitWorkingTreeChange } from "@/types/git"
 import type { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
@@ -39,15 +40,19 @@ type CommitNotice = {
   readonly canPush: boolean
 }
 
-const statusLabels: Record<SynapseGitWorkingTreeChange["status"], string> = {
-  added: "新增",
-  modified: "修改",
-  deleted: "删除",
-  renamed: "重命名",
-  replaced: "替换",
-  untracked: "未跟踪",
-  conflicted: "冲突",
-  unknown: "未知",
+const statusIndicators: Record<SynapseGitWorkingTreeChange["status"], {
+  readonly label: string
+  readonly letter: string
+  readonly className: string
+}> = {
+  added: { label: "新增", letter: "A", className: "text-chart-3" },
+  modified: { label: "修改", letter: "M", className: "text-chart-1" },
+  deleted: { label: "删除", letter: "D", className: "text-destructive" },
+  renamed: { label: "重命名", letter: "R", className: "text-chart-5" },
+  replaced: { label: "替换", letter: "T", className: "text-foreground" },
+  untracked: { label: "未跟踪", letter: "U", className: "text-chart-2" },
+  conflicted: { label: "冲突", letter: "C", className: "text-destructive" },
+  unknown: { label: "未知", letter: "X", className: "text-muted-foreground" },
 }
 
 export function GitChangesTab({
@@ -169,36 +174,45 @@ export function GitChangesTab({
                 </EmptyHeader>
               </Empty>
             ) : (
-              changes.map((change) => {
-                const checked = status.selectedPaths.includes(change.path)
-                const active = status.selectedFile?.path === change.path
-                return (
-                  <div
-                    key={`${change.path}:${change.originalPath ?? ""}`}
-                    role="button"
-                    tabIndex={0}
-                    data-active={active ? "true" : undefined}
-                    className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-3 py-2.5 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
-                    onClick={() => void status.loadDiff(change)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void status.loadDiff(change)
-                    }}
-                  >
-                    <Checkbox
-                      aria-label={`选择 ${change.path}`}
-                      checked={checked}
-                      onClick={(event) => event.stopPropagation()}
-                      onCheckedChange={() => status.togglePath(change.path)}
-                    />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium">{change.path}</span>
-                      <span className="mt-1 block">
-                        <Badge variant="outline">{statusLabels[change.status]}</Badge>
-                      </span>
-                    </span>
-                  </div>
-                )
-              })
+              <TooltipProvider>
+                {changes.map((change) => {
+                  const checked = status.selectedPaths.includes(change.path)
+                  const active = status.selectedFile?.path === change.path
+                  const indicator = statusIndicators[change.status]
+                  return (
+                    <div
+                      key={`${change.path}:${change.originalPath ?? ""}`}
+                      role="button"
+                      tabIndex={0}
+                      data-active={active ? "true" : undefined}
+                      className="grid w-full grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 px-3 py-1.5 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
+                      onClick={() => void status.loadDiff(change)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") void status.loadDiff(change)
+                      }}
+                    >
+                      <Checkbox
+                        aria-label={`选择 ${change.path}`}
+                        checked={checked}
+                        onClick={(event) => event.stopPropagation()}
+                        onCheckedChange={() => status.togglePath(change.path)}
+                      />
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span
+                            aria-label={indicator.label}
+                            className={`inline-flex size-4 shrink-0 items-center justify-center text-sm font-bold ${indicator.className}`}
+                          >
+                            {indicator.letter}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">{indicator.label}</TooltipContent>
+                      </Tooltip>
+                      <span className="min-w-0 truncate text-sm font-normal">{change.path}</span>
+                    </div>
+                  )
+                })}
+              </TooltipProvider>
             )}
           </div>
         </ScrollArea>
@@ -217,7 +231,7 @@ export function GitChangesTab({
                     <div className="truncate text-sm font-medium">{status.diff.path}</div>
                     {status.selectedFile ? (
                       <div className="mt-1">
-                        <Badge variant="outline">{statusLabels[status.selectedFile.status]}</Badge>
+                        <Badge variant="outline">{statusIndicators[status.selectedFile.status].label}</Badge>
                       </div>
                     ) : null}
                   </div>
@@ -344,12 +358,10 @@ function GitListSkeleton() {
   return (
     <div className="grid gap-0 p-3">
       {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 py-2">
+        <div key={index} className="grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 py-1.5">
           <Skeleton className="size-4" />
-          <span className="grid min-w-0 gap-2">
-            <Skeleton className="h-4 w-full max-w-56" />
-            <Skeleton className="h-5 w-12" />
-          </span>
+          <Skeleton className="size-4" />
+          <Skeleton className="h-4 w-full max-w-56" />
         </div>
       ))}
     </div>

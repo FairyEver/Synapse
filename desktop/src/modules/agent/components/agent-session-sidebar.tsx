@@ -1,7 +1,9 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
 import {
   ModuleSidebar,
 } from "@/components/module-sidebar"
+import { pickInitialProviderModelSelection } from "@/components/provider-model-picker"
 import {
   Select,
   SelectContent,
@@ -17,12 +19,17 @@ import type { SynapseAgentPersona } from "@/types/agent-persona"
 import type { ProviderModelSelection } from "@/types/provider-model"
 import { AgentSessionCreateDialog } from "./agent-session-create-dialog"
 import { ProjectGroup } from "./project-group"
+import { useAgentProviderCatalog } from "../hooks/use-agent-provider-catalog"
+import { useAgentProjectShellActions } from "../hooks/use-agent-project-shell-actions"
 import {
   CONVERSATION_SOURCE_OPTIONS,
   filterSessionsBySource,
   type ConversationSourceFilter,
 } from "../conversation-source"
 import { formatCreateSessionName } from "../create-session-name"
+import { isDefaultAgentWorkspaceProjectId } from "@/lib/default-agent-workspace"
+
+const logger = createRendererLogger("agent")
 
 type ProjectOption = {
   id: string
@@ -48,7 +55,7 @@ type AgentSessionSidebarProps = {
   ) => boolean | void | Promise<boolean | void>
   onSourceFilterChange: (sourceFilter: ConversationSourceFilter) => void
   onSelect: (session: SynapseAgentSessionSummary) => void
-  onDelete: (session: SynapseAgentSessionSummary) => void
+  onDelete: (session: SynapseAgentSessionSummary) => void | Promise<void>
   onDeleteOthers: (
     session: SynapseAgentSessionSummary,
     groupSessions: readonly SynapseAgentSessionSummary[],
@@ -74,6 +81,10 @@ function AgentSessionSidebar({
   onRename,
 }: AgentSessionSidebarProps) {
   const { config } = useAppConfig()
+  const quickCreatePendingRef = useRef(false)
+  const [quickCreatingProjectId, setQuickCreatingProjectId] = useState<string | null>(null)
+  const { reload: loadProviders } = useAgentProviderCatalog(false)
+  const { showProjectInFolder } = useAgentProjectShellActions()
   const [createTarget, setCreateTarget] = useState<{
     readonly project: ProjectOption
     readonly initialName: string
@@ -81,6 +92,44 @@ function AgentSessionSidebar({
   const visibleSessions = filterSessionsBySource(sessions, sourceFilter)
   const visibleArchivedSessions = filterSessionsBySource(archivedSessions, sourceFilter)
   const sessionsByProject = groupSessionsByProject(visibleSessions)
+  const sourceLabel = CONVERSATION_SOURCE_OPTIONS.find((option) => option.value === sourceFilter)?.label
+    ?? "当前分类"
+
+  const openCreateDialog = (project: ProjectOption, initialName = formatCreateSessionName(new Date())) => {
+    setCreateTarget({ project, initialName })
+  }
+
+  const handleQuickCreate = async (project: ProjectOption) => {
+    if (quickCreatePendingRef.current) return
+    quickCreatePendingRef.current = true
+    setQuickCreatingProjectId(project.id)
+    const initialName = formatCreateSessionName(new Date())
+
+    try {
+      const providers = await loadProviders()
+      const selection = providers
+        ? pickInitialProviderModelSelection(providers, config.agent.defaultProviderModel)
+        : undefined
+      if (!selection) {
+        openCreateDialog(project, initialName)
+        return
+      }
+
+      const created = await onCreateSession(project.id, selection, initialName, null)
+      if (created === false) openCreateDialog(project, initialName)
+    } catch (rawError) {
+      logger.warn("Agent quick session creation failed.", {
+        boundary: "renderer.agent.session-quick-create",
+        projectId: project.id,
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessageLength(rawError),
+      })
+      openCreateDialog(project, initialName)
+    } finally {
+      quickCreatePendingRef.current = false
+      setQuickCreatingProjectId(null)
+    }
+  }
 
   return (
     <ModuleSidebar variant="bare">
@@ -115,15 +164,19 @@ function AgentSessionSidebar({
           <ProjectGroup
             key={project.id}
             project={project}
+            sourceLabel={sourceLabel}
             sessions={sessionsByProject.get(project.id) ?? []}
             selectedProjectId={selectedProjectId}
             selectedConversationId={selectedConversationId}
             unreadByConversationId={unreadByConversationId}
             sendingConversationIds={sendingConversationIds}
-            onCreateSession={() => setCreateTarget({
-              project,
-              initialName: formatCreateSessionName(new Date()),
-            })}
+            createDisabled={quickCreatingProjectId !== null}
+            creating={quickCreatingProjectId === project.id}
+            onQuickCreateSession={() => void handleQuickCreate(project)}
+            onCustomizeSession={() => openCreateDialog(project)}
+            onShowProjectInFolder={isDefaultAgentWorkspaceProjectId(project.id)
+              ? undefined
+              : () => void showProjectInFolder(project)}
             onSelect={onSelect}
             onDelete={onDelete}
             onDeleteOthers={onDeleteOthers}
@@ -138,7 +191,7 @@ function AgentSessionSidebar({
             unreadByConversationId={unreadByConversationId}
             sendingConversationIds={sendingConversationIds}
             onSelect={onSelect}
-            onDelete={onDelete}
+            onDelete={(session) => void onDelete(session)}
             onDeleteOthers={onDeleteOthers}
             onRename={onRename}
           />
@@ -172,6 +225,10 @@ function groupSessionsByProject(
     }
   }
   return map
+}
+
+function errorMessageLength(error: unknown): number {
+  return (error instanceof Error ? error.message : String(error)).length
 }
 
 export { AgentSessionSidebar, type ProjectOption }

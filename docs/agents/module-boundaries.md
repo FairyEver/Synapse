@@ -66,6 +66,7 @@
 - conversation 保存 persona ID 和创建时 snapshot，每轮使用当前可访问的最新配置；配置变化关闭并重建 live session。persona 不存在、无权访问或缓存缺失时不得降级普通对话：保留历史查看/复制/导出，禁用发送并引导新建。
 - slash menu 只插入，不立即发送，也不是通用命令面板。
 - Quick Input 是独立 System App。Agent 只消费其文本并默认直接发送；不得恢复“直接发送”开关或塞回 slash menu。
+- Agent 项目路径与 Git System App 已登记仓库根路径精确匹配时，可在 composer 复用窄类型化 Git IPC；该入口不得经过 Agent 消息、slash command、MCP 或任意 Git 命令，提交仍必须使用仓库绑定的选择令牌。
 - 其它 Knowledge Base 规则见 `docs/agents/knowledge-base.md`。
 
 ## Workflow 与 Automation
