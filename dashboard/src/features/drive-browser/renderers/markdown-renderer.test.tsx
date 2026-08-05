@@ -222,6 +222,21 @@ describe('DriveMarkdownRenderer', () => {
     expect(buttonWithText('保存')).not.toBeNull()
   })
 
+  it('wraps long inline markdown content inside the reader column', () => {
+    const path = 'erp-module-fm/erp-module-fm-biz/src/main/java/com/wdbc/erp/module/fm/service/sys/impl/PushMessageApiImpl.java'
+    renderMarkdown({
+      previewData: preview({
+        text: path,
+        html: `<p>文件路径：<code>${path}</code></p>`,
+      }),
+    })
+
+    const body = document.querySelector<HTMLElement>('[data-testid="markdown-body"]')
+    expect(body?.className.split(/\s+/u)).toContain('break-words')
+    expect(body?.querySelector('code')?.textContent).toBe(path)
+    expect(body?.className).toContain('[&_pre]:overflow-x-auto')
+  })
+
   it('keeps wide markdown tables scrollable inside the reader column', () => {
     renderMarkdown({
       previewData: preview({
