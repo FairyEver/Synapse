@@ -29,6 +29,14 @@ export type TerminalEmulatorSnapshot = {
   readonly scrollbackTruncated: boolean
 }
 
+type TerminalWithMouseEncoding = Terminal & {
+  readonly _core?: {
+    readonly coreMouseService?: {
+      readonly activeEncoding?: string
+    }
+  }
+}
+
 export function createTerminalCoreEmulator(input: {
   readonly cols: number
   readonly rows: number
@@ -138,7 +146,7 @@ export function createTerminalCoreEmulator(input: {
 
   async function captureSnapshot(maxBytes: number): Promise<TerminalEmulatorSnapshot> {
     await ready()
-    const fullSnapshot = serializer.serialize()
+    const fullSnapshot = serializeTerminalState(terminal, serializer)
     if (Buffer.byteLength(fullSnapshot, "utf8") <= maxBytes) {
       return {
         serialized: fullSnapshot,
@@ -153,7 +161,7 @@ export function createTerminalCoreEmulator(input: {
     let best: string | null = null
     while (lowerBound <= upperBound) {
       const scrollback = Math.floor((lowerBound + upperBound) / 2)
-      const candidate = serializer.serialize({ scrollback })
+      const candidate = serializeTerminalState(terminal, serializer, scrollback)
       if (Buffer.byteLength(candidate, "utf8") <= maxBytes) {
         best = candidate
         lowerBound = scrollback + 1
@@ -177,9 +185,23 @@ export function createTerminalCoreEmulator(input: {
     bracketedPasteEvidence,
     ready,
     captureSnapshot,
-    serialize: () => serializer.serialize(),
+    serialize: () => serializeTerminalState(terminal, serializer),
     dispose: () => terminal.dispose(),
     get throughOutputSeq(): number { return throughOutputSeq },
     get sizeRevision(): number { return sizeRevision },
   }
+}
+
+function serializeTerminalState(
+  terminal: Terminal,
+  serializer: SerializeAddon,
+  scrollback?: number,
+): string {
+  const serialized = scrollback === undefined
+    ? serializer.serialize()
+    : serializer.serialize({ scrollback })
+  // SerializeAddon restores mouse tracking, but omits the active coordinate encoding.
+  const mouseEncoding = (terminal as TerminalWithMouseEncoding)._core
+    ?.coreMouseService?.activeEncoding
+  return mouseEncoding === "SGR" ? `${serialized}\u001b[?1006h` : serialized
 }

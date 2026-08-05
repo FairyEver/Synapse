@@ -51,6 +51,24 @@ describe("TerminalCoreEmulator renderer snapshots", () => {
     }
   })
 
+  it("preserves SGR mouse reporting in renderer snapshots", async () => {
+    const emulator = createTerminalCoreEmulator({
+      cols: 80,
+      rows: 24,
+      sizeRevision: 1,
+    })
+    try {
+      await emulator.accept("\u001b[?1000h\u001b[?1006h", 1)
+
+      const snapshot = await emulator.captureSnapshot(1024 * 1024)
+
+      expect(snapshot.serialized).toContain("\u001b[?1000h")
+      expect(snapshot.serialized).toContain("\u001b[?1006h")
+    } finally {
+      emulator.dispose()
+    }
+  })
+
   it("trims the oldest scrollback to keep renderer snapshots bounded", async () => {
     const emulator = createTerminalCoreEmulator({
       cols: 80,

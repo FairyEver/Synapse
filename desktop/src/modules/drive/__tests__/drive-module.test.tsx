@@ -2209,6 +2209,21 @@ describe("DriveModule", () => {
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
   })
 
+  it("does not open a folder when copying its path from the name context menu", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", name: "dist", type: "folder" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openDriveNameContextMenu("dist")
+    await clickText("复制路径")
+
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("/dist")
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
+  })
+
   it("opens a file preview when clicking its name", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),

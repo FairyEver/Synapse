@@ -2155,7 +2155,10 @@ function DriveItemNameContextMenu({
       <ContextMenuTrigger asChild className="select-text">
         {children}
       </ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent
+        onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
         <ContextMenuItem onSelect={() => { void copyDriveText(item.name, "名称已复制") }}>
           复制名称
         </ContextMenuItem>
