@@ -77,6 +77,33 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("docker compose --env-file .env up -d --no-build server")
   })
 
+  it("keeps deployment migration checks generic for future schema and data migrations", () => {
+    const deployScript = readRepoFile("deploy.sh")
+
+    expect(deployScript).toContain("preflight_remote_migrations")
+    expect(deployScript).toContain("deploy_remote_migrations")
+    expect(deployScript).not.toContain("ANNOTATION_RESET_MIGRATION")
+    expect(deployScript).not.toContain("capture_drive_invariants")
+    expect(deployScript).not.toContain("capture_remote_drive_invariants")
+    expect(deployScript).not.toContain("Drive Markdown collaboration schema verification failed")
+  })
+
+  it("restores the previous service image when a stopped cutover fails", () => {
+    const deployScript = readRepoFile("deploy.sh")
+    const cutoverStart = deployScript.indexOf("run_cutover_steps()")
+    const recoveryStart = deployScript.indexOf("recover_previous_service_after_failure()")
+    const cutoverBody = deployScript.slice(cutoverStart, recoveryStart)
+
+    expect(cutoverStart).toBeGreaterThan(-1)
+    expect(recoveryStart).toBeGreaterThan(cutoverStart)
+    expect(cutoverBody.match(/\|\| return 1/gu)).toHaveLength(6)
+    expect(cutoverBody.indexOf("deploy_remote_migrations"))
+      .toBeLessThan(cutoverBody.indexOf("start_new_remote_server"))
+    expect(deployScript).toContain("if ! run_cutover_steps; then")
+    expect(deployScript.slice(recoveryStart)).toContain("rollback_remote_service")
+    expect(deployScript.slice(recoveryStart)).toContain("run_remote_health_check")
+  })
+
   it("verifies the final database backup before starting the new service", () => {
     const deployScript = readRepoFile("deploy.sh")
 

@@ -204,6 +204,72 @@ describe("mcp-installer", () => {
     })
   })
 
+  it("registers and detects WorkBuddy MCP in the user configuration", async () => {
+    const { getMcpServers, registerMcp } = await import("../mcp-installer")
+    const { security } = createSecurity({ allowed: true })
+    const settingsPath = path.join(state.home, ".workbuddy", "mcp.json")
+
+    const result = await registerMcp("workbuddy", 51234, security)
+
+    expect(result).toEqual({ success: true })
+    expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({
+      mcpServers: {
+        "synapse-mcp": {
+          type: "http",
+          url: "http://127.0.0.1:51234/mcp",
+        },
+      },
+    })
+    expect(getMcpServers().find((server) => server.target === "workbuddy")).toMatchObject({
+      target: "workbuddy",
+      settingsPath,
+      settingsFileExists: true,
+      registered: true,
+      mode: "http",
+      url: "http://127.0.0.1:51234/mcp",
+    })
+  })
+
+  it("preserves existing WorkBuddy MCP servers when registering Synapse", async () => {
+    const { registerMcp } = await import("../mcp-installer")
+    const { security } = createSecurity({ allowed: true })
+    const settingsPath = path.join(state.home, ".workbuddy", "mcp.json")
+    mkdirSync(path.dirname(settingsPath), { recursive: true })
+    writeFileSync(settingsPath, JSON.stringify({
+      mcpServers: {
+        existing: {
+          command: "node",
+          args: ["existing-server.js"],
+        },
+      },
+    }), "utf8")
+
+    const result = await registerMcp("workbuddy", 51234, security)
+
+    expect(result).toEqual({ success: true })
+    expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({
+      mcpServers: {
+        existing: {
+          command: "node",
+          args: ["existing-server.js"],
+        },
+        "synapse-mcp": {
+          type: "http",
+          url: "http://127.0.0.1:51234/mcp",
+        },
+      },
+    })
+  })
+
+  it("skips WorkBuddy automatic registration when its user directory is missing", async () => {
+    const { autoRegisterMcp } = await import("../mcp-installer")
+    const settingsPath = path.join(state.home, ".workbuddy", "mcp.json")
+
+    await autoRegisterMcp(51234)
+
+    expect(existsSync(settingsPath)).toBe(false)
+  })
+
   it("registers Codex MCP without static authorization headers", async () => {
     const { registerMcp } = await import("../mcp-installer")
     const { security } = createSecurity({ allowed: true })

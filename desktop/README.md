@@ -78,6 +78,7 @@ Synapse 把仓库里的 **规则（Rule）** 和 **技能（Skill）** 按各编
 | Codex | 全局 / 项目 | 规则、技能 |
 | Cursor | 全局（仅技能） / 项目 | 规则、技能 |
 | Windsurf | 全局 / 项目 | 规则、技能 |
+| WorkBuddy | 全局 / 项目 | 技能 |
 
 平台支持：macOS、Linux、Windows。
 
@@ -141,6 +142,17 @@ Windsurf 项目规则的 `trigger` 支持：
 | `manual` | 不自动注入，需要在 Cascade 输入框里手动 `@rule-name` |
 
 Windsurf 官方还支持目录中的 `AGENTS.md` / `agents.md`。这类文件不使用 frontmatter，根目录文件 always-on，子目录文件按位置自动作用域。Synapse 的规则安装入口暂不写 `AGENTS.md`，避免和 `.windsurf/rules/` 的显式触发模式混用。
+
+#### WorkBuddy
+
+| 类型 | 范围 | 目标路径 |
+| --- | --- | --- |
+| 规则 | 全局 / 项目 | 不支持 |
+| 技能 | 全局 | `~/.workbuddy/skills/{skillName}/` |
+| 技能 | 项目 | `{projectPath}/.workbuddy/skills/{skillName}/` |
+| MCP | 用户级 | `~/.workbuddy/mcp.json` |
+
+WorkBuddy 技能目录包含带 `name`、`description` YAML frontmatter 的 `SKILL.md` 和原相对路径附件。全局安装以 `~/.workbuddy` 用户目录是否存在为可用条件；项目安装只要求项目路径存在。WorkBuddy 官方也支持项目级 `.workbuddy/mcp.json`，但 Synapse 当前 MCP 设置只管理用户级客户端注册。
 
 ### 规则与技能的写入形式
 
@@ -346,6 +358,7 @@ export const installFormDefinition = {
 | Cursor | `~/.cursor/mcp.json` | JSON，写入 `mcpServers.synapse-mcp` |
 | Codex | `~/.codex/config.toml` | TOML，写入 `[mcp_servers.synapse-mcp]` |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` | JSON，写入 `mcpServers.synapse-mcp` |
+| WorkBuddy | `~/.workbuddy/mcp.json` | JSON，写入 `mcpServers.synapse-mcp` |
 
 写入规则：
 

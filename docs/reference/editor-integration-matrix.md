@@ -1,6 +1,6 @@
 # Editor Integration Matrix
 
-本文只整理当前 Synapse 支持的 3 个编辑器：Claude Code、Codex、Cursor。
+本文整理 Synapse 已完成路径核验的编辑器集成：Claude Code、Codex、Cursor、WorkBuddy。
 
 标记说明：
 
@@ -216,6 +216,46 @@ Cursor 官方文档当前的要求：
 - [Cursor rules](https://cursor.com/docs/rules)
 - [Cursor skills](https://cursor.com/docs/skills)
 
+## WorkBuddy
+
+### 全局
+
+#### Rule
+
+不支持。Synapse 当前不为 WorkBuddy 安装 Rule。
+
+#### Skill
+
+| 采用 | 方案 | 官方位置 / 发现方式 | 文件格式 | Synapse 当前写法 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| ✅ | 1 | `~/.workbuddy/skills/<skill-name>/SKILL.md` | `SKILL.md` + YAML frontmatter + 可选 scripts/references/assets | 写入 `~/.workbuddy/skills/<skill-name>/` | WorkBuddy 默认用户级 Skill 目录；Synapse 以 `~/.workbuddy` 是否存在判断全局安装位置是否可用 |
+
+#### MCP
+
+| 采用 | 方案 | 官方位置 / 发现方式 | 文件格式 | Synapse 当前写法 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| ✅ | 1 | `~/.workbuddy/mcp.json` | JSON，`mcpServers` | 增量写入 `mcpServers.synapse-mcp` 的本地 HTTP URL | 设置页 MCP 注册和自动注册使用用户级配置，保留其他 Server 与字段 |
+
+### 项目
+
+#### Rule
+
+不支持。Synapse 当前不为 WorkBuddy 安装 Rule。
+
+#### Skill
+
+| 采用 | 方案 | 官方位置 / 发现方式 | 文件格式 | Synapse 当前写法 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| ✅ | 1 | `{projectPath}/.workbuddy/skills/<skill-name>/SKILL.md` | `SKILL.md` + YAML frontmatter + 可选 scripts/references/assets | 写入项目根目录下的 `.workbuddy/skills/<skill-name>/` | 项目目录存在时即可安装、扫描和管理 |
+
+#### MCP
+
+| 采用 | 方案 | 官方位置 / 发现方式 | 文件格式 | Synapse 当前写法 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+|  | 1 | `{projectPath}/.workbuddy/mcp.json` | JSON，`mcpServers` | 未采用 | WorkBuddy 官方支持项目级配置；Synapse 当前 MCP 设置只管理用户级客户端注册 |
+
+WorkBuddy 的 `SKILL.md` 使用 YAML frontmatter，`name` 和 `description` 为必填字段；Synapse 的通用 Skill 写入格式满足该要求。Synapse 额外写入的 `.synapse.json` 仅用于安装归属和更新追踪，不影响 WorkBuddy 加载。
+
 ## 关于 `SKILL.md` frontmatter 的结论
 
 | 编辑器 | 官方文档口径 | Synapse 当前做法 | 结论 |
@@ -223,3 +263,4 @@ Cursor 官方文档当前的要求：
 | Claude Code | 文档把 `SKILL.md` 定义为 “YAML frontmatter + Markdown body”；字段参考页同时写了 “All fields are optional, but description is strongly recommended” | 始终写 `name` + `description` frontmatter | 这是安全超集。官方文档没有把“无 frontmatter 的纯 Markdown `SKILL.md`”写成明确支持格式 |
 | Codex | 官方明确写 `SKILL.md` 必须包含 `name` 和 `description` | 始终写 `name` + `description` frontmatter | 符合官方要求 |
 | Cursor | 官方明确写 `SKILL.md` 使用 YAML frontmatter；`name`、`description` 必填。目录名等于 `name` 是社区建议，非官方强制 | 始终写 `name` + `description` frontmatter，并让目录名跟随 `skillName` | Synapse 选择保持一致，属于防御性做法 |
+| WorkBuddy | `SKILL.md` 使用 YAML frontmatter，`name`、`description` 必填 | 始终写 `name` + `description` frontmatter，并保留附件相对路径 | 符合 WorkBuddy 的 Skill 包格式 |
