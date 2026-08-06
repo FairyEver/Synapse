@@ -7,7 +7,7 @@ description: Use when working in the Synapse repository and the user asks to rel
 
 ## Purpose
 
-Run the Synapse release loop: commit and push a version bump, watch GitHub Actions, fix failures, repeat until CI and Release pass, then report Tencent Cloud COS/CDN download links from the matching GitHub Release body, open the matching GitHub Release page, and send the configured Enterprise WeChat group a minimal one-click update notification.
+Run the Synapse release loop: commit and push a version bump, watch GitHub Actions, fix failures, repeat until CI and Release pass, then report Tencent Cloud COS/CDN download links from the matching GitHub Release body, open the matching GitHub Release page, and send the configured Enterprise WeChat group a versioned update notification with product notes and a one-click update entry.
 
 Use this skill only for release/publish commands in `/Users/liyang/Documents/code/github/Synapse`.
 
@@ -32,14 +32,18 @@ The current Release workflow no longer stores installer binaries as GitHub Relea
 
 ## Release Loop
 
-Track the current loop number, latest `EXPECTED_TAG`, `CI_RUN_ID`, `RELEASE_RUN_ID`, matching release body, CDN download links, and the most recent failure summary.
+Track the current loop number, latest `EXPECTED_TAG`, `CI_RUN_ID`, `RELEASE_RUN_ID`, matching release body, CDN download links, `NOTIFICATION_NOTES_FILE`, and the most recent failure summary.
 
 ### 0. Validate The Enterprise WeChat Destination
 
-Before changing the version or pushing commits, validate the configured destination and exact Markdown payload without sending a message:
+Before changing the version or pushing commits, validate the configured destination, pending release notes, and Markdown payload shape without sending a message. Use the current package version only as the preview title; the final notification uses `EXPECTED_TAG` after the version bump:
 
 ```bash
-node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-notification.mjs --check
+CURRENT_VERSION=$(node -p "require('/Users/liyang/Documents/code/github/Synapse/desktop/package.json').version")
+node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-notification.mjs \
+  --check \
+  --version "v${CURRENT_VERSION}" \
+  --notes-file /Users/liyang/Documents/code/github/Synapse/RELEASE_NOTES_PENDING.md
 ```
 
 If this check fails, report the configuration or helper error and stop before starting the release.
@@ -54,6 +58,8 @@ Before bumping the version, read `/Users/liyang/Documents/code/github/Synapse/RE
 - `技术调整`
 
 Keep the original pending notes content as the release-note input for this release attempt. If the file is missing, report that the pending release notes file is missing and stop before bumping the version. If the file exists but has no meaningful bullets, continue the release and state that no pending release notes were found.
+
+Set `NOTIFICATION_NOTES_FILE` to `/Users/liyang/Documents/code/github/Synapse/RELEASE_NOTES_PENDING.md`. When meaningful notes are archived successfully in section 9, replace it with the matching archive path.
 
 Do not modify, clear, reset, or archive `RELEASE_NOTES_PENDING.md` at this stage.
 
@@ -277,7 +283,8 @@ After `gh release edit` succeeds:
 
 1. Create `/Users/liyang/Documents/code/github/Synapse/docs/releases` if needed.
 2. Copy the consumed pending notes to `/Users/liyang/Documents/code/github/Synapse/docs/releases/$EXPECTED_TAG.md`.
-3. Reset `/Users/liyang/Documents/code/github/Synapse/RELEASE_NOTES_PENDING.md` to the empty template:
+3. Set `NOTIFICATION_NOTES_FILE` to `/Users/liyang/Documents/code/github/Synapse/docs/releases/$EXPECTED_TAG.md`.
+4. Reset `/Users/liyang/Documents/code/github/Synapse/RELEASE_NOTES_PENDING.md` to the empty template:
 
    ```markdown
    # Pending Release Notes
@@ -291,7 +298,7 @@ After `gh release edit` succeeds:
    ## 技术调整
    ```
 
-4. Commit and push only the archive/reset files with a skip-CI message:
+5. Commit and push only the archive/reset files with a skip-CI message:
 
    ```bash
    cd /Users/liyang/Documents/code/github/Synapse
@@ -333,25 +340,35 @@ If opening the browser fails or no opener command exists, keep the release succe
 
 ### 11. Send The Enterprise WeChat Update Notification
 
-Run this section only after all release success conditions in section 10 are satisfied. Read and follow `/Users/liyang/.agents/skills/wecom-notification/SKILL.md`, then use the bundled command, which delegates delivery to that Skill's helper and passes the configured webhook through stdin:
+Run this section only after all release success conditions in section 10 are satisfied. Read and follow `/Users/liyang/.agents/skills/wecom-notification/SKILL.md`, then use the bundled command with the final release version and recorded release notes source. The command delegates delivery to that Skill's helper and passes the configured webhook through stdin:
 
 ```bash
-node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-notification.mjs
+node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-notification.mjs \
+  --version "$EXPECTED_TAG" \
+  --notes-file "$NOTIFICATION_NOTES_FILE"
 ```
 
-The notification must use WeCom `markdown` and its complete body must remain exactly:
+The notification must use WeCom `markdown` and include:
 
 ```markdown
+## Synapse vX.Y.Z 更新内容（1/1）
+
+### 新增功能
+
+- ...
+
 [一键更新](https://synapse.d2.pub/desktop/update)
 ```
 
-Do not add a title, version, current-state text, GitHub repository or Release information, installer or metadata links, release notes, timestamps, mentions, or any other content.
+Include only non-empty sections from `新增功能`, `功能优化`, `问题修复`, and `技术调整`, preserving their order and bullet order. If no meaningful bullets exist, include `本次未记录更新内容。` instead of section headings.
 
-If delivery fails, do not rerun or roll back the successful release, do not change pending release notes again, and do not try another destination. Report that the release succeeded but the Enterprise WeChat notification failed, including status, `errcode`, and `errmsg` when available.
+Keep every message at or below 4096 UTF-8 bytes. The bundled command splits long notes across sequential messages, repeats the version title with `(current/total)`, and includes the one-click update entry only in the final message. It removes links from release-note text while preserving Markdown link labels, so the one-click update URL is the only URL in the Enterprise WeChat notification. Do not add GitHub repository or Release links, installer or metadata links, timestamps, mentions, or other content.
+
+If any message fails, the bundled command stops before sending later messages. Do not rerun or roll back the successful release, do not change pending release notes again, and do not try another destination. Report that the release succeeded but the Enterprise WeChat notification failed, including the failed message position plus status, `errcode`, and `errmsg` when available.
 
 ## Exit Conditions
 
-- Success: CI and Release both pass, the matching GitHub Release is found, Tencent Cloud COS/CDN download links are extracted from the Release body, pending release notes are either published while preserving CDN links and consumed or explicitly empty, the matching GitHub Release page was opened in the system default browser or its URL was reported, the Enterprise WeChat one-click update notification was delivered, and the final response includes version and download links.
+- Success: CI and Release both pass, the matching GitHub Release is found, Tencent Cloud COS/CDN download links are extracted from the Release body, pending release notes are either published while preserving CDN links and consumed or explicitly empty, the matching GitHub Release page was opened in the system default browser or its URL was reported, the Enterprise WeChat versioned update notification was delivered, and the final response includes version and download links.
 - Notification failure: keep the package release successful, stop after reporting the Enterprise WeChat delivery failure, and do not claim the complete release workflow succeeded.
 - Loop limit: after 10 loops, stop and report unresolved status plus the latest failure summary.
 - Commit failure: if `pnpm bump:commit:push` fails, report the command output and stop.
