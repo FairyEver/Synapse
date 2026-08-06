@@ -51,7 +51,7 @@ export type DriveBrowserPreviewKind = "image" | "text" | "html-source" | "markdo
 export type DriveBrowserEditKind = "text" | "replace" | "none"
 export type DriveBrowserEditUnavailableReason = "unsupported" | "truncated" | "login_required" | "permission_denied" | "quota"
 export type DriveBrowserAnnotationUnavailableReason = "login_required" | "permission_denied"
-export type DriveFileVersionSource = "upload" | "online_edit" | "restore"
+export type DriveFileVersionSource = "upload" | "online_edit" | "restore" | "collaboration"
 export type DriveItemLifecycleStatus = "active" | "trashed" | "hidden" | "legacy_missing"
 export type DriveTrashItemKind = "normal" | "public_asset"
 export type DrivePublicAssetContentKind = "image" | "document"
@@ -152,10 +152,18 @@ export interface DriveAccessSettingsInput {
 export type DriveAccessSettingsUpdateInput = Partial<DriveAccessSettingsInput>
 
 export const DRIVE_DEFAULT_ACCESS_SETTINGS: DriveAccessSettingsInput = {
-  passwordEnabled: true,
-  expiresIn: "3d",
+  passwordEnabled: false,
+  expiresIn: "forever",
   accessMode: "link_read",
   editorEmails: [],
+}
+
+export const DRIVE_DEFAULT_SITE_ACCESS_SETTINGS = {
+  accessMode: "public",
+  expiresIn: "forever",
+} as const satisfies {
+  readonly accessMode: DriveSiteAccessMode
+  readonly expiresIn: DriveAccessExpiresIn
 }
 
 export interface DriveItemDto {
@@ -286,6 +294,28 @@ export interface DriveSyncBindingPreviewDto {
   readonly defaultExcludeRules: readonly string[]
   readonly importedGitignoreRules: readonly string[]
   readonly detectedGitignoreRules: readonly string[]
+  readonly initialTransfer?: DriveSyncInitialTransferPreviewDto | null
+}
+
+export type DriveSyncInitialTransferAction =
+  | "upload_file"
+  | "download_file"
+  | "create_remote_folder"
+  | "create_local_folder"
+
+export interface DriveSyncInitialTransferPreviewEntryDto {
+  readonly action: DriveSyncInitialTransferAction
+  readonly relativePath: string
+  readonly size: string | null
+}
+
+export interface DriveSyncInitialTransferPreviewDto {
+  readonly totalEntries: number
+  readonly fileCount: number
+  readonly folderCount: number
+  readonly totalBytes: string
+  readonly entries: readonly DriveSyncInitialTransferPreviewEntryDto[]
+  readonly truncated: boolean
 }
 
 export interface DriveSyncCreateSafeBindingInput {
@@ -429,9 +459,9 @@ export interface DriveSiteCreateInput {
   readonly sourceFolderItemId: string
   readonly name: string
   readonly entryPath?: string | null
-  readonly accessMode: DriveSiteAccessMode
+  readonly accessMode?: DriveSiteAccessMode
   readonly password?: string | null
-  readonly expiresIn: DriveAccessExpiresIn
+  readonly expiresIn?: DriveAccessExpiresIn
 }
 
 export interface DriveSiteAccessUpdateInput {
@@ -725,6 +755,7 @@ export interface DriveBrowserPreviewDto {
     readonly src: string
     readonly resolvedUrl: string | null
   }[]
+  readonly markdownProjection?: DriveMarkdownProjectionDto | null
 }
 
 export interface DriveBrowserEditDto {
@@ -738,6 +769,22 @@ export interface DriveBrowserEditDto {
 export interface DriveBrowserAnnotationCapabilityDto {
   readonly canComment: boolean
   readonly reason: DriveBrowserAnnotationUnavailableReason | null
+}
+
+export type DriveCollaborationUnavailableReason =
+  | "disabled"
+  | "unsupported_file"
+  | "login_required"
+  | "permission_denied"
+
+export interface DriveBrowserCollaborationCapabilityDto {
+  readonly enabled: boolean
+  readonly canRead: boolean
+  readonly canWrite: boolean
+  readonly epoch: string | null
+  readonly checkpointVersionId: string | null
+  readonly websocketPath: "/api/drive/collaboration"
+  readonly reason: DriveCollaborationUnavailableReason | null
 }
 
 export interface DriveFileTextUpdateInput {
@@ -781,6 +828,7 @@ export interface DriveBrowserSnapshotDto {
   readonly preview: DriveBrowserPreviewDto | null
   readonly edit: DriveBrowserEditDto | null
   readonly annotation: DriveBrowserAnnotationCapabilityDto | null
+  readonly collaboration?: DriveBrowserCollaborationCapabilityDto | null
   readonly canDownload: boolean
   readonly canZip: boolean
 }
@@ -927,7 +975,55 @@ export interface DriveLinkDownloadFileDto {
 
 export type DriveAnnotationTargetKind = "textRange"
 export type DriveAnnotationAnchorStatus = "attached" | "shifted" | "orphaned"
+export type DriveAnnotationPositionStatus = "attached" | "source_deleted" | "ambiguous" | "orphaned" | "unavailable"
+export type DriveAnnotationQuoteStatus = "exact" | "modified" | "deleted"
 export const DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH = 1000
+
+export interface DriveAnnotationCrdtRangeSelector {
+  readonly epoch: string
+  readonly start: string
+  readonly end: string
+}
+
+export interface DriveAnnotationSemanticRangeSelector {
+  readonly blockId: string
+  readonly start: number
+  readonly end: number
+  readonly blockType?: string
+  readonly headingPath?: readonly string[]
+}
+
+export interface DriveAnnotationTextPositionSelector {
+  readonly start: number
+  readonly end: number
+}
+
+export interface DriveAnnotationTextQuoteSelector {
+  readonly exact: string
+  readonly prefix: string
+  readonly suffix: string
+}
+
+export interface DriveAnnotationSelectorsV2 {
+  readonly schemaVersion: 2
+  readonly crdt?: DriveAnnotationCrdtRangeSelector
+  readonly semantic?: DriveAnnotationSemanticRangeSelector
+  readonly position: DriveAnnotationTextPositionSelector
+  readonly renderedPosition?: DriveAnnotationTextPositionSelector
+  readonly quote: DriveAnnotationTextQuoteSelector
+}
+
+export interface DriveAnnotationAnchorDto {
+  readonly schemaVersion: 2
+  readonly baseVersionId: string | null
+  readonly selectors: DriveAnnotationSelectorsV2
+  readonly positionStatus: DriveAnnotationPositionStatus
+  readonly quoteStatus: DriveAnnotationQuoteStatus
+  readonly resolvedSourceRange: DriveAnnotationTextPositionSelector | null
+  readonly resolvedRenderedRange: DriveAnnotationTextPositionSelector | null
+  readonly confidence: number | null
+  readonly lastResolvedVersionId: string | null
+}
 
 export interface DriveAnnotationAuthorDto {
   readonly id: string
@@ -987,6 +1083,7 @@ export interface DriveAnnotationThreadDto {
   readonly targetKind: DriveAnnotationTargetKind
   readonly target: DriveAnnotationTargetDto
   readonly anchorStatus: DriveAnnotationAnchorStatus
+  readonly anchor: DriveAnnotationAnchorDto | null
   readonly author: DriveAnnotationAuthorDto
   readonly comments: readonly DriveAnnotationCommentDto[]
   readonly createdAt: string
@@ -998,9 +1095,95 @@ export interface DriveAnnotationThreadDto {
 
 export interface DriveAnnotationCreateInput {
   readonly baseVersionId?: string | null
+  readonly epoch?: string | null
+  readonly stateVector?: string | null
+  readonly selectors?: DriveAnnotationSelectorsV2
+  readonly idempotencyKey?: string
   readonly targetKind: DriveAnnotationTargetKind
   readonly target: DriveAnnotationTargetDto
   readonly body: string
+}
+
+export interface DriveAnnotationAnchorUpdateInput {
+  readonly baseVersionId: string
+  readonly epoch?: string | null
+  readonly stateVector?: string | null
+  readonly selectors: DriveAnnotationSelectorsV2
+  readonly idempotencyKey: string
+}
+
+export interface DriveMarkdownProjectionBlockDto {
+  readonly blockId: string
+  readonly type: string
+  readonly parentBlockId: string | null
+  readonly headingPath: readonly string[]
+  readonly sourceStart: number
+  readonly sourceEnd: number
+  readonly renderedStart: number
+  readonly renderedEnd: number
+  readonly textFingerprint: string
+}
+
+export interface DriveMarkdownProjectionSegmentDto {
+  readonly segmentId: string
+  readonly blockId: string
+  readonly sourceStart: number
+  readonly sourceEnd: number
+  readonly renderedStart: number
+  readonly renderedEnd: number
+  readonly mapping: "identity" | "markdown_syntax" | "generated"
+}
+
+export interface DriveMarkdownProjectionDto {
+  readonly schemaVersion: 1
+  readonly parserVersion: string
+  readonly sourceSha256: string
+  readonly blocks: readonly DriveMarkdownProjectionBlockDto[]
+  readonly segments: readonly DriveMarkdownProjectionSegmentDto[]
+}
+
+export const DRIVE_COLLABORATION_PROTOCOL_VERSION = 1
+
+export type DriveCollaborationJoinContext =
+  | { readonly kind: "owner"; readonly itemId: string }
+  | { readonly kind: "share"; readonly shareId: string; readonly itemId?: string }
+
+export interface DriveCollaborationJoinMessage {
+  readonly type: "join"
+  readonly protocolVersion: typeof DRIVE_COLLABORATION_PROTOCOL_VERSION
+  readonly clientId: string
+  readonly context: DriveCollaborationJoinContext
+  readonly epoch: string | null
+  readonly stateVector: string | null
+}
+
+export type DriveCollaborationControlMessage =
+  | {
+      readonly type: "joined"
+      readonly protocolVersion: typeof DRIVE_COLLABORATION_PROTOCOL_VERSION
+      readonly itemId: string
+      readonly epoch: string
+      readonly checkpointVersionId: string
+      readonly canWrite: boolean
+      readonly durableSequence: string
+    }
+  | { readonly type: "durable_ack"; readonly epoch: string; readonly sequence: string; readonly updateId: string }
+  | { readonly type: "checkpoint.changed"; readonly itemId: string; readonly epoch: string; readonly checkpointVersionId: string }
+  | { readonly type: "permission_changed"; readonly canWrite: boolean; readonly reason: string }
+  | { readonly type: "epoch_replaced"; readonly epoch: string; readonly checkpointVersionId: string }
+  | { readonly type: "annotation.changed"; readonly itemId: string }
+  | { readonly type: "preview.changed"; readonly itemId: string; readonly epoch: string; readonly stateVector: string; readonly html: string; readonly outline: readonly DriveMarkdownOutlineItemDto[]; readonly projection: DriveMarkdownProjectionDto }
+  | { readonly type: "error"; readonly code: string; readonly message: string }
+
+export interface DriveCollaborationCheckpointInput {
+  readonly epoch: string
+  readonly idempotencyKey: string
+}
+
+export interface DriveCollaborationCheckpointResultDto {
+  readonly created: boolean
+  readonly item: DriveItemDto | null
+  readonly version: DriveFileVersionDto | null
 }
 
 export interface DriveAnnotationReplyInput {

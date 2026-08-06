@@ -348,6 +348,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.html-generator",
       "core.html-generator-file",
       "provider",
+      "core.drive-sync",
     ])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([
       "core.process-environment",
@@ -392,6 +393,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.html-generator")).toBeLessThan(idx("core.html-generator-file"))
     expect(idx("core.text-file-writer")).toBeLessThan(idx("core.html-generator-file"))
     expect(idx("core.html-generator-file")).toBeLessThan(idx("core.database"))
+    expect(idx("core.drive-sync")).toBeLessThan(idx("core.database"))
     expect(idx("core.config")).toBeLessThan(idx("core.diagnostics"))
     expect(idx("core.config")).toBeLessThan(idx("repo.watch"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.project-containers"))

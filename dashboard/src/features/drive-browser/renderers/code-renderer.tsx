@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Editor from '@monaco-editor/react'
-import type { DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto } from '@synapse/shared'
+import Editor, { type OnMount } from '@monaco-editor/react'
+import type { DriveBrowserCollaborationCapabilityDto, DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto, DriveCollaborationJoinContext } from '@synapse/shared'
 import { Download, LogIn, RefreshCw, Save } from 'lucide-react'
 import {
   AlertDialog,
@@ -15,7 +15,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { getCodeEditorLanguage } from '@/lib/code-editor-language'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
-import { ApiError } from '@/lib/api'
+import { ApiError, driveBrowserApi } from '@/lib/api'
+import { useDriveCollaboration } from '../collaboration/use-drive-collaboration'
+import { createMonacoCollaborationBinding } from './monaco-collaboration-binding'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { useRegisterDriveRendererToolbarItems, useRegisterDriveRendererUnsavedState, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
@@ -24,11 +26,15 @@ export function DriveCodeRenderer({
   preview,
   edit,
   editContext,
+  collaboration,
+  collaborationContext,
 }: {
   readonly current: DriveBrowserItemDto
   readonly preview: DriveBrowserPreviewDto
   readonly edit?: DriveBrowserEditDto | null
   readonly editContext?: DriveRendererEditContext
+  readonly collaboration?: DriveBrowserCollaborationCapabilityDto | null
+  readonly collaborationContext?: DriveCollaborationJoinContext
 }) {
   const language = getCodeEditorLanguage(current.name)
   const initialText = preview.text ?? ''
@@ -39,7 +45,20 @@ export function DriveCodeRenderer({
   const [error, setError] = useState<string | null>(null)
   const [conflictOpen, setConflictOpen] = useState(false)
   const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
-  const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
+  const [bindingReady, setBindingReady] = useState(false)
+  const collaborationState = useDriveCollaboration({
+    itemId: current.id,
+    context: collaborationContext ?? { kind: 'owner', itemId: current.id },
+    capability: collaboration,
+    onEpochReloadRequired: editContext?.reload,
+  })
+  const collaborationEnabled = Boolean(collaboration?.enabled)
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
+  const bindingRef = useRef<{ destroy: () => void } | null>(null)
+  const bindingGenerationRef = useRef(0)
+  const canEdit = collaborationEnabled
+    ? Boolean(collaborationState.state?.canWrite)
+    : Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
   const loginUrl = buildLoginUrl()
 
@@ -53,7 +72,64 @@ export function DriveCodeRenderer({
     setReloadConfirmOpen(false)
   }, [current.id, edit?.currentVersionId, initialText])
 
+  const attachCollaborationBinding = useCallback(async (session: NonNullable<typeof collaborationState.session>, editor: Parameters<OnMount>[0]) => {
+    const model = editor.getModel()
+    if (!model || session.doc.isDestroyed) return
+    const generation = ++bindingGenerationRef.current
+    setBindingReady(false)
+    try {
+      const binding = await createMonacoCollaborationBinding(session.text, model, new Set([editor]), session.awareness)
+      if (generation !== bindingGenerationRef.current || session.doc.isDestroyed || editorRef.current !== editor) {
+        binding.destroy()
+        return
+      }
+      bindingRef.current?.destroy()
+      bindingRef.current = binding
+      setBindingReady(true)
+    } catch {
+      if (generation !== bindingGenerationRef.current) return
+      setBindingReady(false)
+      setError('协同编辑器加载失败。')
+    }
+  }, [])
+
+  useEffect(() => {
+    const session = collaborationState.session
+    const editor = editorRef.current
+    if (session && editor) void attachCollaborationBinding(session, editor)
+    return () => {
+      bindingGenerationRef.current += 1
+      bindingRef.current?.destroy()
+      bindingRef.current = null
+      setBindingReady(false)
+    }
+  }, [attachCollaborationBinding, collaborationState.session])
+
+  const handleEditorMount = useCallback<OnMount>((editor) => {
+    editorRef.current = editor
+    const session = collaborationState.session
+    if (session) void attachCollaborationBinding(session, editor)
+  }, [attachCollaborationBinding, collaborationState.session])
+
   const handleSave = useCallback(async () => {
+    if (collaborationEnabled && collaborationState.state?.canWrite && collaborationContext) {
+      setError(null)
+      try {
+        const input = {
+          epoch: collaborationState.state.epoch ?? '',
+          idempotencyKey: crypto.randomUUID(),
+        }
+        if (collaborationContext.kind === 'owner') {
+          await driveBrowserApi.checkpointOwner(current.id, input)
+        } else {
+          await driveBrowserApi.checkpointShare(collaborationContext.shareId, collaborationContext.itemId, input)
+        }
+        await editContext?.reload()
+      } catch (saveError) {
+        setError(saveError instanceof Error ? saveError.message : '保存版本失败。')
+      }
+      return
+    }
     if (!canEdit || !edit?.currentVersionId || !editContext) return
     setError(null)
     const submittedValue = valueRef.current
@@ -68,7 +144,7 @@ export function DriveCodeRenderer({
       }
       setError(saveError instanceof Error ? saveError.message : '保存失败。')
     }
-  }, [canEdit, edit?.currentVersionId, editContext])
+  }, [canEdit, collaborationContext, collaborationEnabled, collaborationState.state?.canWrite, collaborationState.state?.epoch, current.id, edit?.currentVersionId, editContext])
 
   const handleReload = useCallback(async () => {
     if (!editContext) return
@@ -100,7 +176,9 @@ export function DriveCodeRenderer({
     const items: DriveRendererToolbarItem[] = [{
       kind: 'status',
       id: 'code-edit-status',
-      label: dirty ? '未保存' : canEdit ? '已同步' : '只读',
+      label: collaborationEnabled
+        ? bindingReady ? collaborationStatusLabel(collaborationState.state?.status) : '正在同步'
+        : dirty ? '未保存' : canEdit ? '已同步' : '只读',
     }]
     if (loginRequired) {
       items.push({
@@ -112,7 +190,7 @@ export function DriveCodeRenderer({
         href: loginUrl,
       })
     }
-    if (canEdit) {
+    if (canEdit && !collaborationEnabled) {
       items.push(
         {
           kind: 'button',
@@ -136,9 +214,31 @@ export function DriveCodeRenderer({
         },
       )
     }
+    if (canEdit && collaborationEnabled) {
+      if ((collaborationState.state?.onlineCount ?? 0) > 0) {
+        items.push({
+          kind: 'status',
+          id: 'code-online-editors',
+          label: `${collaborationState.state?.onlineCount ?? 0} 人在线`,
+        })
+      }
+      items.push({
+        kind: 'button',
+        id: 'code-checkpoint',
+        label: '保存版本',
+        icon: Save,
+        compactPlacement: 'primary',
+        disabled: collaborationState.state?.status === 'connecting' || collaborationState.state?.status === 'syncing',
+        onClick: () => { void handleSave() },
+      })
+    }
     return items
   }, [
     canEdit,
+    bindingReady,
+    collaborationEnabled,
+    collaborationState.state?.onlineCount,
+    collaborationState.state?.status,
     dirty,
     editContext?.reloading,
     editContext?.savingText,
@@ -150,39 +250,58 @@ export function DriveCodeRenderer({
   ])
 
   useRegisterDriveRendererToolbarItems('code-editor', toolbarItems)
-  useRegisterDriveRendererUnsavedState('code-editor-unsaved', canEdit && dirty)
+  useRegisterDriveRendererUnsavedState(
+    'code-editor-unsaved',
+    canEdit && (collaborationEnabled ? !bindingReady || collaborationState.state?.status !== 'synced' : dirty)
+  )
+
+  const displayedError = error ?? collaborationState.state?.error
+  const downloadValue = collaborationState.session?.text.toString() ?? value
 
   return (
     <div
       data-drive-code-renderer='true'
+      data-drive-collaboration-bound={bindingReady ? 'true' : 'false'}
       data-drive-code-language={language}
       className='flex h-full min-h-0 w-full flex-col overflow-hidden'
     >
       <div className='min-h-0 flex-1'>
-        <Editor
-          height='100%'
-          language={language}
-          value={value}
-          onChange={(nextValue) => {
-            if (!canEdit) return
-            const nextText = nextValue ?? ''
-            valueRef.current = nextText
-            setValue(nextText)
-            setDirty(nextText !== savedValueRef.current)
-          }}
-          options={{
-            minimap: { enabled: false },
-            wordWrap: 'on',
-            scrollBeyondLastLine: false,
-            fontSize: 13,
-            tabSize: 2,
-            readOnly: !canEdit,
-            domReadOnly: !canEdit,
-          }}
-        />
+        {collaborationEnabled && !collaborationState.session ? null : (
+          <Editor
+            height='100%'
+            language={language}
+            value={collaborationEnabled ? undefined : value}
+            defaultValue={collaborationEnabled ? initialText : undefined}
+            onMount={handleEditorMount}
+            onChange={(nextValue) => {
+              if (!canEdit || collaborationEnabled) return
+              const nextText = nextValue ?? ''
+              valueRef.current = nextText
+              setValue(nextText)
+              setDirty(nextText !== savedValueRef.current)
+            }}
+            options={{
+              minimap: { enabled: false },
+              wordWrap: 'on',
+              scrollBeyondLastLine: false,
+              fontSize: 13,
+              tabSize: 2,
+              readOnly: !canEdit,
+              domReadOnly: !canEdit,
+            }}
+          />
+        )}
       </div>
-      {error ? (
-        <div className='border-t px-3 py-2 text-xs text-destructive'>{error}</div>
+      {displayedError ? (
+        <div className='flex items-center justify-between gap-3 border-t px-3 py-2 text-xs text-destructive'>
+          <span>{displayedError}</span>
+          {collaborationEnabled ? (
+            <Button type='button' size='sm' variant='outline' onClick={() => downloadLocalVersion(current.name, downloadValue)}>
+              <Download data-icon='inline-start' />
+              下载本地版本
+            </Button>
+          ) : null}
+        </div>
       ) : null}
       {preview.truncated ? (
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>内容已截断</div>
@@ -197,7 +316,7 @@ export function DriveCodeRenderer({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, value)}>
+            <Button type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, downloadValue)}>
               <Download data-icon='inline-start' />
               下载本地版本
             </Button>
@@ -215,7 +334,7 @@ export function DriveCodeRenderer({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, value)}>
+            <Button type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, downloadValue)}>
               <Download data-icon='inline-start' />
               下载本地版本
             </Button>
@@ -225,6 +344,14 @@ export function DriveCodeRenderer({
       </AlertDialog>
     </div>
   )
+}
+
+function collaborationStatusLabel(status: ReturnType<typeof useDriveCollaboration>['state'] extends infer T ? T extends { status: infer S } ? S : undefined : undefined): string {
+  if (status === 'connecting') return '正在连接'
+  if (status === 'syncing') return '正在同步'
+  if (status === 'synced') return '已同步'
+  if (status === 'failed') return '同步失败'
+  return '只读'
 }
 
 function buildLoginUrl(): string {

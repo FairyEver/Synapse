@@ -1,4 +1,10 @@
-import type { DriveMarkdownOutlineItemDto } from "@synapse/shared"
+import type { DriveMarkdownOutlineItemDto, DriveMarkdownProjectionDto } from "@synapse/shared"
+import {
+  annotateMarkdownProjectionTree,
+  buildDriveMarkdownProjection,
+  extractDriveMarkdownRenderedText,
+  type MarkdownProjectionNode,
+} from "./drive-markdown-projection"
 import {
   parseDriveMarkdownRelativeImageSrc,
   parseStandaloneDriveMarkdownRawImage,
@@ -16,6 +22,10 @@ type MarkdownAstNode = {
     hProperties?: Record<string, unknown>
   }
   children?: MarkdownAstNode[]
+  position?: {
+    start: { offset?: number }
+    end: { offset?: number }
+  }
 }
 
 type HtmlAstNode = {
@@ -28,11 +38,18 @@ type HtmlAstNode = {
 export type DriveMarkdownRenderResult = {
   readonly html: string
   readonly outline: readonly DriveMarkdownOutlineItemDto[]
+  readonly projection: DriveMarkdownProjectionDto
+  readonly renderedText: string
 }
 
 export type DriveMarkdownRenderOptions = {
   readonly relativeImageUrls?: ReadonlyMap<string, string | null>
   readonly allowStandaloneRawImages?: boolean
+  readonly previousProjection?: {
+    readonly source: string
+    readonly projection: DriveMarkdownProjectionDto
+  } | null
+  readonly projection?: DriveMarkdownProjectionDto | null
 }
 
 type MutableDriveMarkdownOutlineItem = {
@@ -75,7 +92,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
     import("rehype-stringify"),
   ])
 
-  const file = await unified()
+  const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(() => createHeadingOutlinePlugin(outlineState))
@@ -88,6 +105,11 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
       clobberPrefix: "",
       attributes: {
         ...defaultSchema.attributes,
+        "*": [
+          ...(defaultSchema.attributes?.["*"] ?? []),
+          "data-drive-markdown-block-id",
+          "data-drive-markdown-segment-id",
+        ],
         img: [...(defaultSchema.attributes?.img ?? []), "alt", "title", "width", "height", "loading"],
       },
       protocols: {
@@ -97,10 +119,16 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
     })
     .use(wrapTablesPlugin)
     .use(rehypeStringify)
-    .process(markdown)
+  const tree = processor.parse(markdown) as MarkdownAstNode & MarkdownProjectionNode
+  const renderedText = extractDriveMarkdownRenderedText(tree)
+  const projection = options.projection ?? buildDriveMarkdownProjection(markdown, tree, { previous: options.previousProjection })
+  annotateMarkdownProjectionTree(tree, projection, markdown)
+  const transformed = await processor.run(tree as never)
   return {
-    html: String(file),
+    html: String(processor.stringify(transformed)),
     outline: outlineState.items,
+    projection,
+    renderedText,
   }
 }
 

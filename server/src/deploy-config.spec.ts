@@ -148,6 +148,16 @@ describe("server deployment configuration", () => {
     expect(compose).not.toMatch(/\b(?:redis|valkey)\b/iu)
   })
 
+  it("proxies Drive collaboration as a bounded WebSocket endpoint", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+
+    expect(nginx).toContain("location = /api/drive/collaboration")
+    expect(nginx).toContain("proxy_set_header Upgrade $http_upgrade")
+    expect(nginx).toContain("proxy_set_header Connection $connection_upgrade")
+    expect(nginx).toContain("proxy_read_timeout 60s")
+    expect(nginx).toContain("proxy_buffering off")
+  })
+
   it("uses the configured postgres identity in compose", () => {
     const compose = readRepoFile("server/compose.yml")
     const envExample = readRepoFile("server/.env.example")
@@ -440,9 +450,9 @@ describe("server deployment configuration", () => {
   it("keeps drive browser pages inside the Vite SPA while proxying direct responses", () => {
     const viteConfig = readRepoFile("dashboard/vite.config.ts")
 
-    expect(viteConfig).toContain("'^/drive/items/[^/]+/(download|render)$'")
-    expect(viteConfig).toContain("'^/share/[^/]+/(download|render)$'")
-    expect(viteConfig).toContain("'^/share/[^/]+/items/[^/]+/(download|render)$'")
+    expect(viteConfig).toContain("'^/drive/items/[^/]+/(download|render)(?:\\\\?.*)?$'")
+    expect(viteConfig).toContain("'^/share/[^/]+/(download|render)(?:\\\\?.*)?$'")
+    expect(viteConfig).toContain("'^/share/[^/]+/items/[^/]+/(download|render)(?:\\\\?.*)?$'")
     expect(viteConfig).toContain("'/files':")
     expect(viteConfig).not.toContain("download|zip")
   })

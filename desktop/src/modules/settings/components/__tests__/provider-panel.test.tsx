@@ -1127,6 +1127,132 @@ describe("ProviderPanel dialog editor", () => {
     expect(deleteProvider).not.toHaveBeenCalled()
   })
 
+  it("deletes related Agent conversations from the provider deletion dialog", async () => {
+    const deleteSession = vi.fn().mockResolvedValue({ ok: true })
+    const scanProviderReferences = vi.fn()
+      .mockResolvedValueOnce({
+        providerId: "custom-provider",
+        references: [
+          { kind: "conversation", entityId: "conversation-1", entityName: "旧会话", projectId: "project-1", providerId: "custom-provider", modelTier: "" },
+        ],
+        workflowNodeCount: 0,
+        conversationCount: 1,
+        agentPersonaCount: 0,
+      })
+      .mockResolvedValueOnce({
+        providerId: "custom-provider",
+        references: [],
+        workflowNodeCount: 0,
+        conversationCount: 0,
+        agentPersonaCount: 0,
+      })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([customProvider()]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+          scanProviderReferences,
+          deleteSession,
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      buttonByText(document.body, "删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("删除后无法恢复")
+    await act(async () => {
+      buttonByText(document.body, "删除 1 个会话").click()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(deleteSession).toHaveBeenCalledWith({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+    })
+    expect(scanProviderReferences).toHaveBeenCalledTimes(2)
+    expect(toast).toHaveBeenCalledWith("已删除 1 个相关会话")
+    expect(document.body.textContent).toContain("该供应商未被任何内容引用，可以安全删除")
+    expect(buttonByText(document.body, "确认删除").disabled).toBe(false)
+  })
+
+  it("keeps failed conversation references visible after bulk deletion", async () => {
+    const deleteSession = vi.fn()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: false })
+    const remainingReference = {
+      kind: "conversation",
+      entityId: "conversation-2",
+      entityName: "保留会话",
+      projectId: "project-2",
+      providerId: "custom-provider",
+      modelTier: "",
+    }
+    const scanProviderReferences = vi.fn()
+      .mockResolvedValueOnce({
+        providerId: "custom-provider",
+        references: [
+          { ...remainingReference, entityId: "conversation-1", entityName: "已删会话", projectId: "project-1" },
+          remainingReference,
+        ],
+        workflowNodeCount: 0,
+        conversationCount: 2,
+        agentPersonaCount: 0,
+      })
+      .mockResolvedValueOnce({
+        providerId: "custom-provider",
+        references: [remainingReference],
+        workflowNodeCount: 0,
+        conversationCount: 1,
+        agentPersonaCount: 0,
+      })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([customProvider()]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+          scanProviderReferences,
+          deleteSession,
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      buttonByText(document.body, "删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText(document.body, "删除 2 个会话").click()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(toast).toHaveBeenCalledWith("已删除 1 个会话，1 个删除失败")
+    expect(rendererLogger.error).toHaveBeenCalledWith("Provider conversation reference deletion partially failed.", {
+      boundary: "settings.providers.delete-conversations",
+      providerId: "custom-provider",
+      deletedCount: 1,
+      failedCount: 1,
+    })
+    expect(document.body.textContent).toContain("Agent 会话 (1)")
+    expect(buttonByText(document.body, "删除 1 个会话").disabled).toBe(false)
+  })
+
   it("stops provider deletion when reference migration returns item errors", async () => {
     const sourceProvider = customProvider({ active: true })
     const targetProvider = customProvider({

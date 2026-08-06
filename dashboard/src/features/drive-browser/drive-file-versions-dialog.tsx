@@ -455,6 +455,7 @@ function driveVersionSourceLabel(source: DriveFileVersionSource) {
   const labels: Record<DriveFileVersionSource, string> = {
     upload: '上传',
     online_edit: '编辑',
+    collaboration: '协同编辑',
     restore: '恢复',
   }
   return labels[source]

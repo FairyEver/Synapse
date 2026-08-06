@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { Check, Copy, ExternalLink, Info, LoaderCircle } from "lucide-react"
 import { toast } from "sonner"
-import { DRIVE_DEFAULT_ACCESS_SETTINGS, type DriveAccessExpiresIn, type DriveItemDto, type DriveSiteDto, type DriveSitePreflightDto } from "@synapse/shared"
+import { DRIVE_DEFAULT_SITE_ACCESS_SETTINGS, type DriveAccessExpiresIn, type DriveItemDto, type DriveSiteDto, type DriveSitePreflightDto } from "@synapse/shared"
 import { FormDialog } from "@/components/form-dialog"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -375,8 +375,8 @@ function createInitialForm(folder: DriveItemDto | null, preflight: DriveSitePref
   return {
     name: folder?.name ?? "",
     entryPath: preflight?.defaultEntryPath ?? preflight?.htmlFiles[0] ?? "",
-    passwordEnabled: DRIVE_DEFAULT_ACCESS_SETTINGS.passwordEnabled,
-    expiresIn: DRIVE_DEFAULT_ACCESS_SETTINGS.expiresIn,
+    passwordEnabled: false,
+    expiresIn: DRIVE_DEFAULT_SITE_ACCESS_SETTINGS.expiresIn,
   }
 }
 

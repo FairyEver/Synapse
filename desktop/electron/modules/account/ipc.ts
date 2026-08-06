@@ -409,9 +409,9 @@ const driveSiteCreateSchema = z.object({
   sourceFolderItemId: z.string().min(1),
   name: z.string().min(1).max(255),
   entryPath: z.string().min(1).max(1024).nullable().optional(),
-  accessMode: z.enum(["public", "password"]),
+  accessMode: z.enum(["public", "password"]).optional(),
   password: z.string().min(1).max(256).nullable().optional(),
-  expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]),
+  expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]).optional(),
 }).strict()
 const driveSiteAccessUpdateSchema = driveSiteIdSchema.extend({
   accessMode: z.enum(["public", "password"]),

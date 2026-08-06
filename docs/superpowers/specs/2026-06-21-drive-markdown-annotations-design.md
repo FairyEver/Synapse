@@ -2,7 +2,7 @@
 
 ## Summary
 
-This design adds lightweight public discussion comments to cloud drive `.md` files in the Markdown Render view. Comments are stored outside the Markdown file, attached to rendered text ranges, and shown in a right-side comment rail. The first version deliberately avoids workflow status, realtime collaboration, cross-renderer controls, and non-Markdown file types.
+This design adds public discussion comments with conservative stable anchors to cloud drive `.md` files. Comments stay outside the Markdown source, Markdown Render owns the comment UI, and Monaco may edit the same source through realtime Yjs collaboration. Comment workflow status, cross-renderer controls, and non-Markdown comment targets remain out of scope.
 
 The implementation scope is intentionally small:
 
@@ -60,6 +60,9 @@ Important boundary:
 - Delete own comment.
 - File owner can delete any thread or comment.
 - Plain-text comments with preserved line breaks.
+- Four-layer Anchor V2 resolution and manual reassociation.
+- Realtime Markdown preview and comment invalidation from the collaboration room.
+- Yjs collaboration in Monaco when `DRIVE_COLLABORATION_ENABLED=true`.
 
 ### Out of Scope
 
@@ -67,7 +70,6 @@ Important boundary:
 - Insert-point comment UI.
 - Paragraph comment UI.
 - Comment status such as open, resolved, done, rejected, assigned.
-- Realtime refresh, SSE, WebSocket, or polling.
 - Persisted outline or comment rail preferences.
 - Markdown rendering inside comments.
 - Attachments, mentions, emoji reactions, tasks, and assignments.
@@ -137,7 +139,10 @@ Empty selections do not show the comment action.
 
 Comment rail:
 
-- Lists all non-deleted threads ordered by computed document position, then creation time for orphaned threads.
+- Lists every non-deleted thread for the document, regardless of the version where the thread was created.
+- Keeps attached threads aligned with their computed document position.
+- Shows orphaned threads in an expanded `未定位 N` section at the top, ordered by latest activity.
+- Shows the original selected quote and `原文已修改或删除` on orphaned threads.
 - Displays thread count in the header toggle.
 - Does not include filters because there is no product status.
 - Shows nested replies as a readable discussion stream, not an infinitely indented tree.
@@ -150,7 +155,7 @@ Rendered text markers:
 - Attached ranges receive a light inline marker.
 - Markers must not make the Markdown harder to read.
 - Orphaned threads do not render a body marker.
-- The comment rail still shows orphaned threads with "位置已变化".
+- Orphaned threads remain readable and writable in the unlocated section.
 
 ## Data Model
 
@@ -200,6 +205,8 @@ model DriveAnnotationComment {
 
 Existing `User` and `DriveItem` models need relation fields added when implementing.
 
+Annotation threads belong to `itemId`, not to a file version. `baseVersionId` records the version used to create the original text anchor and protects new-thread creation from stale previews. It must not filter thread visibility or block replies, edits, or deletes after the document changes.
+
 `anchorStatus` is system positioning state only:
 
 ```text
@@ -209,6 +216,10 @@ orphaned: the target could not be safely reattached
 ```
 
 There is no product status such as resolved.
+
+Anchor V2 is authoritative. `DriveAnnotationAnchor` is a one-to-one record owned by the thread and stores four selectors, current position/quote status, last resolved ranges, confidence, parser/version context, idempotency, and independent deletion metadata. The legacy `target` and `anchorStatus` fields remain a temporary compatibility projection; `shifted` is not a V2 product state.
+
+Rollout policy: the Anchor V2 migration intentionally deletes all pre-V2 annotation threads and their comments. V1 browser offsets use UTF-16 units and cannot be losslessly converted to the V2 Unicode code-point coordinate system, so the migration must not synthesize V2 anchors from legacy targets. `DriveItem`, `DriveShare`, `DriveFileVersion`, source objects, and share identifiers are not modified by this cleanup. Threads created after the migration write both the V2 anchor and the temporary legacy projection so an application rollback can still read newly created comments.
 
 ## Target Model
 
@@ -260,6 +271,19 @@ Although the model can represent collapsed ranges with `start === end`, the firs
 
 ## Anchor Resolution
 
+The V1 rendered-text algorithm below is retained only as the rollback projection for newly created comments. Pre-V2 comments are not migrated. Anchor V2 resolves in this fixed order:
+
+```text
+1. Same-Epoch Yjs relative start/end positions.
+2. Stable Markdown block id plus block-local rendered range.
+3. Bounded old-to-new source diff mapping.
+4. A unique exact quote.
+5. Prefix/suffix, heading ancestry, block type, and original-distance scoring.
+6. Ambiguous, deleted, unavailable, or orphaned when evidence is insufficient.
+```
+
+Offsets in Anchor V2 use Unicode code points. UI selection must end at grapheme boundaries. The service response is authoritative; the Renderer must not maintain a second quote-search implementation. Moving an attached range does not create a `shifted` state. Text edited inside a still-related range is `attached/modified`; fully deleted source is `source_deleted/deleted`. Manual reassociation preserves the original quote snapshot and audit history.
+
 The implementation should build a current rendered text model from the same sanitized Markdown render used by the preview:
 
 ```text
@@ -274,15 +298,11 @@ Markdown source
 Resolution order:
 
 ```text
-1. If baseVersionId has not changed, use stored range.
-2. If stored range still matches quote.exact, mark attached.
-3. Search near old range for quote.exact, mark shifted.
-4. Search full rendered text for quote.exact.
-   If multiple matches exist, score by prefix, suffix, and distance from old range.
-5. If exact quote is missing, use prefix and suffix to bracket a likely region.
-   Accept only if the candidate text is similar enough.
-6. Use blockHint to find a similar block, then search within that block.
-7. If no confident result exists, mark orphaned.
+1. If baseVersionId has not changed and the stored range matches quote.exact, mark attached.
+2. Search the current rendered text for the complete quote.exact.
+3. If there is one match, mark attached or shifted based on its position.
+4. If there are multiple matches, require prefix or suffix evidence and use distance only as a secondary score.
+5. If the complete quote is missing, only partially remains, or cannot be distinguished safely, mark orphaned.
 ```
 
 Safety principle:
@@ -295,7 +315,7 @@ Expected scenarios:
 
 - Inserting paragraphs before the selection should reattach via exact quote or context.
 - Splitting a paragraph should reattach via exact quote or context.
-- Small edits inside the selected text may reattach via prefix and suffix.
+- Edits that remove any part of the selected quote become orphaned instead of attaching to a guessed range.
 - Deleted selected text becomes orphaned.
 - Repeated identical text uses context and distance scoring.
 - Ambiguous repeated text becomes orphaned.
@@ -312,6 +332,8 @@ POST   /api/drive/browser/owner/items/:itemId/annotations/:threadId/comments
 PATCH  /api/drive/browser/owner/items/:itemId/annotations/comments/:commentId
 DELETE /api/drive/browser/owner/items/:itemId/annotations/comments/:commentId
 DELETE /api/drive/browser/owner/items/:itemId/annotations/:threadId
+PATCH  /api/drive/browser/owner/items/:itemId/annotations/:threadId/anchor
+POST   /api/drive/browser/owner/items/:itemId/collaboration/checkpoint
 ```
 
 Share routes:
@@ -330,7 +352,11 @@ POST   /api/drive/browser/shares/:shareId/items/:itemId/annotations/:threadId/co
 PATCH  /api/drive/browser/shares/:shareId/items/:itemId/annotations/comments/:commentId
 DELETE /api/drive/browser/shares/:shareId/items/:itemId/annotations/comments/:commentId
 DELETE /api/drive/browser/shares/:shareId/items/:itemId/annotations/:threadId
+PATCH  /api/drive/browser/shares/:shareId/items/:itemId/annotations/:threadId/anchor
+POST   /api/drive/browser/shares/:shareId/items/:itemId/collaboration/checkpoint
 ```
+
+The custom WebSocket endpoint is `/api/drive/collaboration`. Its first message is a versioned JSON join containing owner/share context, item identity, client identity, Epoch, and state vector; credentials remain in existing cookies and the server requires the exact configured public Origin. Binary messages carry Yjs sync/update/awareness. Control messages carry durable acknowledgement, permission changes, Epoch replacement, preview changes, and comment invalidation. Message payloads are capped at 256 KiB and awareness never carries email, document content, or comment content.
 
 The repeated owner/share route shape keeps API calls close to the existing drive browser access model. Internally, both resolve to the real `DriveItem.id`.
 
@@ -553,13 +579,14 @@ Server tests:
 - `.mdx`, `.markdown`, and non-Markdown files reject comment creation in first version.
 - Deleted comment without replies is omitted from response.
 - Deleted comment with visible replies returns a deleted placeholder.
+- Threads created on older versions remain visible and writable after later saves or restores.
 
 Anchor tests:
 
 - Insert content before selected text.
 - Split paragraph containing selected text.
 - Change Markdown emphasis syntax while rendered text stays the same.
-- Slightly edit selected text and recover through context.
+- Partially edit selected text and mark it orphaned.
 - Delete selected text and mark orphaned.
 - Repeat exact quote multiple times and use prefix/suffix to choose.
 - Repeat exact quote ambiguously and mark orphaned.
@@ -576,6 +603,7 @@ Frontend tests:
 - Creating a comment opens the comments rail.
 - Attached annotations render body markers.
 - Orphaned annotations do not render body markers and appear in the rail.
+- Orphaned annotations appear first with their original quote and remain actionable.
 - Comment bodies render as plain text with line breaks.
 - Replies render without unbounded indentation.
 

@@ -119,6 +119,7 @@ export function buildDriveBrowserPreview(input: {
     readonly src: string
     readonly resolvedUrl: string | null
   }[]
+  readonly markdownProjection?: DriveBrowserPreviewDto["markdownProjection"]
 }): DriveBrowserPreviewDto {
   const kind = resolveDriveBrowserPreviewKind(input.item)
   const textPreview = isTextPreviewKind(kind)
@@ -133,6 +134,7 @@ export function buildDriveBrowserPreview(input: {
       ? buildRenderUrl(input.route, input.item.id)
       : null,
     relativeImages: kind === "markdown" ? input.relativeImages ?? [] : [],
+    markdownProjection: kind === "markdown" ? input.markdownProjection ?? null : null,
   }
 }
 

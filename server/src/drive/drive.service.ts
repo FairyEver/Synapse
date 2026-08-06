@@ -46,6 +46,11 @@ import {
   type DriveTrashListPageDto,
   type DriveUploadPrepareResult,
   type DriveUsageDto,
+  type DriveMarkdownProjectionDto,
+  type DriveCollaborationJoinContext,
+  type DriveBrowserCollaborationCapabilityDto,
+  type DriveCollaborationCheckpointInput,
+  type DriveCollaborationCheckpointResultDto,
 } from "@synapse/shared"
 import { AuditLogService } from "../common/audit-log.service"
 import { formatAuditError } from "../common/audit-error"
@@ -61,6 +66,8 @@ import {
   type DrivePasswordMaterial,
 } from "./drive-access-protection"
 import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
+import { mapDriveMarkdownSourceRange } from "./drive-markdown-projection"
+import { DriveMarkdownProjectionService } from "./drive-markdown-projection.service"
 import {
   extractDriveMarkdownRelativeImages,
   isPlainDriveMarkdownName,
@@ -109,6 +116,7 @@ import {
 } from "./drive-browser"
 import { isCommentableMarkdownItem } from "./drive-annotation-target"
 import { DriveChangeLogService, type DriveChangeAppendInput } from "./drive-change-log"
+import { DriveCollaborationService, type DriveCollaborationAccess } from "./drive-collaboration.service"
 import { buildDriveBrowserEdit, DRIVE_INLINE_TEXT_EDIT_MAX_BYTES, isDriveTextEditablePreviewKind } from "./drive-editable-preview"
 import {
   canUserEditShare,
@@ -168,6 +176,14 @@ export type DriveShareAnnotationAccess = {
     readonly storageKey: string | null
   }
   readonly canComment: boolean
+}
+
+export type DriveAnnotationDocumentValue = {
+  readonly versionId: string
+  readonly epoch: string | null
+  readonly sourceText: string
+  readonly renderedText: string
+  readonly projection: DriveMarkdownProjectionDto
 }
 
 type DriveRenderedAssetValue = {
@@ -353,6 +369,8 @@ export class DriveService implements OnApplicationBootstrap {
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly lifecycle?: DriveLifecycleService,
     @Optional() private readonly changes?: DriveChangeLogService,
+    @Optional() private readonly projections?: DriveMarkdownProjectionService,
+    @Optional() private readonly collaboration?: DriveCollaborationService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -410,6 +428,7 @@ export class DriveService implements OnApplicationBootstrap {
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
     this.assertFileVersionNotCleanupPending(version)
     if (item.storageKey === version.storageKey) throw new BadRequestException("不能恢复当前版本。")
+    await this.collaboration?.prepareExternalChange(item.id)
     const nextVersionId = createDriveFileVersionId()
     const nextStorageKey = driveVersionStorageKey(item.id, nextVersionId)
     let copied = false
@@ -421,7 +440,14 @@ export class DriveService implements OnApplicationBootstrap {
         contentType: version.mimeType,
       })
       copied = true
-      const restored = await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
+        await lockDriveItemMutation(tx, item.id)
+        const currentItem = await tx.driveItem.findFirst({
+          where: { id: item.id, userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+          select: { id: true, userId: true, storageKey: true, size: true, mimeType: true, updatedAt: true },
+        })
+        if (!currentItem || currentItem.storageKey !== item.storageKey) throw new ConflictException("文件已有新内容。")
+        await ensureCurrentDriveFileVersion(tx, { item: currentItem })
         await reserveDriveUsageBytes(tx, userId, version.size)
         await createDriveFileVersion(tx, {
           id: nextVersionId,
@@ -460,21 +486,24 @@ export class DriveService implements OnApplicationBootstrap {
           name: restored.name,
           actor: userId,
         }, tx)
-        return restored
+        const collaborationEpoch = await this.collaboration?.replaceEpochInTransaction(tx, restored.id, nextVersionId)
+        return { restored, collaborationEpoch }
       })
       committed = true
+      if (result.collaborationEpoch) this.collaboration?.finalizeExternalChange(result.restored.id, result.collaborationEpoch, nextVersionId)
       await this.recordDriveAudit({
         userId,
         action: "drive.file_version.restore",
         targetType: "drive.fileVersion",
         targetId: version.id,
-        detail: { userId, itemId: item.id, versionId: version.id, restoredItemId: restored.id },
+        detail: { userId, itemId: item.id, versionId: version.id, restoredItemId: result.restored.id },
         ipAddress: auditContext.ipAddress,
       })
-      await this.cleanupFileVersionsAfterChange(userId, restored.id)
-      return toDriveItemDto(restored)
+      await this.cleanupFileVersionsAfterChange(userId, result.restored.id)
+      return toDriveItemDto(result.restored)
     } catch (error) {
       if (copied && !committed) await this.deleteTemporaryUploadObject(nextStorageKey)
+      if (!committed) this.collaboration?.resumeExternalChange(item.id)
       throw error
     }
   }
@@ -1061,6 +1090,8 @@ export class DriveService implements OnApplicationBootstrap {
       await this.failUploadSession(userId, session.id, session.itemId, session.reservedBytes, DRIVE_UPLOAD_STATUS.failed, new Date(), session.storageKey)
       throw new BadRequestException("上传文件校验失败。")
     }
+    const overwritesCurrentFile = isOverwriteUploadSession(session)
+    if (overwritesCurrentFile) await this.collaboration?.prepareExternalChange(session.itemId)
 
     const versionId = createDriveFileVersionId()
     const versionStorageKey = driveVersionStorageKey(session.itemId, versionId)
@@ -1071,12 +1102,14 @@ export class DriveService implements OnApplicationBootstrap {
         contentType: session.expectedMime ?? null,
       })
     } catch (error) {
+      this.collaboration?.resumeExternalChange(session.itemId)
       await this.failUploadSession(userId, session.id, session.itemId, session.reservedBytes, DRIVE_UPLOAD_STATUS.failed, new Date(), session.storageKey)
       throw error
     }
 
     let committed = false
     const result = await this.prisma.$transaction(async (tx) => {
+      await lockDriveItemMutation(tx, session.itemId)
       const isOverwrite = isOverwriteUploadSession(session)
       const transitioned = await tx.driveUploadSession.updateMany({
         where: { id: session.id, userId, status: DRIVE_UPLOAD_STATUS.pending },
@@ -1098,7 +1131,7 @@ export class DriveService implements OnApplicationBootstrap {
             },
             include: driveItemWithShares,
           })
-        return { item, completedNow: false }
+        return { item, completedNow: false, collaborationEpoch: undefined }
       }
       if (isOverwrite) await ensureCurrentDriveFileVersion(tx, { item: session.item })
       await updateDriveUsageAfterUploadCompletion(tx, userId, {
@@ -1137,14 +1170,23 @@ export class DriveService implements OnApplicationBootstrap {
         name: item.name,
         actor: userId,
       }, tx)
-      return { item, completedNow: true }
+      const collaborationEpoch = isOverwrite
+        ? await this.collaboration?.replaceEpochInTransaction(tx, item.id, versionId)
+        : undefined
+      return { item, completedNow: true, collaborationEpoch }
     }).then((transactionResult) => {
       committed = true
       return transactionResult
     }).catch(async (error) => {
       if (!committed) await this.deleteTemporaryUploadObject(versionStorageKey)
+      if (!committed) this.collaboration?.resumeExternalChange(session.itemId)
       throw error
     })
+    if (result.completedNow && overwritesCurrentFile) {
+      if (result.collaborationEpoch) this.collaboration?.finalizeExternalChange(result.item.id, result.collaborationEpoch, versionId)
+    } else if (overwritesCurrentFile) {
+      this.collaboration?.resumeExternalChange(session.itemId)
+    }
     if (!result.completedNow) {
       await this.deleteTemporaryUploadObject(versionStorageKey)
     }
@@ -1896,6 +1938,7 @@ export class DriveService implements OnApplicationBootstrap {
       ? await this.listActiveChildrenPage(root.userId, current.id, input.childrenPage)
       : emptyDriveBrowserChildrenPage(input.childrenPage)
     const preview = await this.buildBrowserPreview(current, route)
+    const currentVersionId = await this.findCurrentDriveFileVersionId(current)
 
     return {
       context: "owner",
@@ -1909,9 +1952,10 @@ export class DriveService implements OnApplicationBootstrap {
         canWrite: true,
         item: current,
         preview,
-        currentVersionId: await this.findCurrentDriveFileVersionId(current),
+        currentVersionId,
       }),
       annotation: buildDriveBrowserAnnotationCapability({ item: current, canComment: true }),
+      collaboration: await this.buildCollaborationCapability(current, currentVersionId, true),
       canDownload: current.type === DRIVE_ITEM_TYPE.file,
       canZip: current.type === DRIVE_ITEM_TYPE.folder,
     }
@@ -1942,6 +1986,7 @@ export class DriveService implements OnApplicationBootstrap {
       preview: null,
       edit: null,
       annotation: null,
+      collaboration: null,
       canDownload: false,
       canZip: false,
     }
@@ -2011,6 +2056,7 @@ export class DriveService implements OnApplicationBootstrap {
       : emptyDriveBrowserChildrenPage(input.childrenPage)
     const preview = await this.buildBrowserPreview(current, route)
     const shareWrite = await this.resolveShareWriteSnapshotState(share, input.actorUserId ?? null)
+    const currentVersionId = await this.findCurrentDriveFileVersionId(current)
 
     return {
       context: "share",
@@ -2024,14 +2070,20 @@ export class DriveService implements OnApplicationBootstrap {
         canWrite: shareWrite.canWrite,
         item: current,
         preview,
-        currentVersionId: await this.findCurrentDriveFileVersionId(current),
+        currentVersionId,
         unauthenticatedEditableShare: shareWrite.loginRequired,
       }),
       annotation: buildDriveBrowserAnnotationCapability({
         item: current,
-        canComment: shareWrite.canWrite,
-        reason: shareWrite.canWrite ? null : shareWrite.loginRequired ? "login_required" : "permission_denied",
+        canComment: Boolean(input.actorUserId),
+        reason: input.actorUserId ? null : "login_required",
       }),
+      collaboration: await this.buildCollaborationCapability(
+        current,
+        currentVersionId,
+        shareWrite.canWrite,
+        shareWrite.loginRequired ? "login_required" : "permission_denied",
+      ),
       canDownload: current.type === DRIVE_ITEM_TYPE.file,
       canZip: current.type === DRIVE_ITEM_TYPE.folder,
     }
@@ -2051,7 +2103,6 @@ export class DriveService implements OnApplicationBootstrap {
       cookie: input.cookie ?? input.accessCookie,
     })
     const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
-    const shareWrite = await this.resolveShareWriteSnapshotState(share, input.actorUserId ?? null)
     return {
       item: {
         id: current.id,
@@ -2061,8 +2112,141 @@ export class DriveService implements OnApplicationBootstrap {
         mimeType: current.mimeType,
         storageKey: current.storageKey,
       },
-      canComment: isCommentableMarkdownItem(current) && shareWrite.canWrite,
+      canComment: isCommentableMarkdownItem(current) && Boolean(input.actorUserId),
     }
+  }
+
+  async resolveCollaborationAccess(input: {
+    readonly context: DriveCollaborationJoinContext
+    readonly actorUserId: string | null
+    readonly shareCookie?: string
+  }): Promise<DriveCollaborationAccess> {
+    if (input.context.kind === "owner") {
+      if (!input.actorUserId) throw new UnauthorizedException("未登录或登录已过期。")
+      const item = await this.requireOwnedItem(input.actorUserId, input.context.itemId)
+      return {
+        itemId: item.id,
+        ownerId: item.userId,
+        itemName: item.name,
+        mimeType: item.mimeType,
+        canWrite: true,
+        userId: input.actorUserId,
+      }
+    }
+    const share = await this.resolvePublicShare({ shareId: input.context.shareId, cookie: input.shareCookie })
+    const { current } = await this.resolveShareBrowserCurrent(share, input.context.itemId)
+    const write = await this.resolveShareWriteSnapshotState(share, input.actorUserId)
+    return {
+      itemId: current.id,
+      ownerId: current.userId,
+      itemName: current.name,
+      mimeType: current.mimeType,
+      canWrite: write.canWrite,
+      userId: input.actorUserId,
+    }
+  }
+
+  async checkpointOwnerCollaboration(
+    userId: string,
+    itemId: string,
+    input: DriveCollaborationCheckpointInput,
+  ): Promise<DriveCollaborationCheckpointResultDto> {
+    await this.requireOwnedFile(userId, itemId)
+    return this.checkpointCollaboration(itemId, input)
+  }
+
+  async checkpointShareCollaboration(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly cookie?: string
+    readonly checkpoint: DriveCollaborationCheckpointInput
+  }): Promise<DriveCollaborationCheckpointResultDto> {
+    const access = await this.resolveCollaborationAccess({
+      context: { kind: "share", shareId: input.shareId, ...(input.itemId ? { itemId: input.itemId } : {}) },
+      actorUserId: input.actorUserId,
+      shareCookie: input.cookie,
+    })
+    if (!access.canWrite) throw new ForbiddenException("没有编辑权限。")
+    return this.checkpointCollaboration(access.itemId, input.checkpoint)
+  }
+
+  private async checkpointCollaboration(
+    itemId: string,
+    input: DriveCollaborationCheckpointInput,
+  ): Promise<DriveCollaborationCheckpointResultDto> {
+    if (!this.collaboration?.isEnabled()) throw new BadRequestException("实时协同未启用。")
+    const document = await this.prisma.driveCollaborationDocument.findUnique({ where: { itemId } })
+    if (!document || document.epoch !== input.epoch) throw new ConflictException("协同代际已变化。")
+    const result = await this.collaboration.checkpoint(itemId, `manual:${input.idempotencyKey}`)
+    return { created: Boolean(result), item: result?.item ?? null, version: result?.version ?? null }
+  }
+
+  async resolveAnnotationDocument(item: {
+    readonly id: string
+    readonly type: string
+    readonly name: string
+    readonly mimeType: string | null
+    readonly storageKey: string | null
+  }): Promise<DriveAnnotationDocumentValue> {
+    if (!isCommentableMarkdownItem(item) || item.type !== DRIVE_ITEM_TYPE.file || !item.storageKey) {
+      throw new BadRequestException("该文件暂不支持评论。")
+    }
+    const liveDocument = this.collaboration?.getLiveDocument(item.id) ?? null
+    const versionId = liveDocument?.checkpointVersionId ?? await this.findCurrentDriveFileVersionId(item)
+    if (!versionId) throw new NotFoundException("文件版本不存在。")
+    const sourcePreview = liveDocument ? null : await this.readTextPreview(item.storageKey)
+    if (sourcePreview?.truncated) throw new PayloadTooLargeException("文件内容过大。")
+    const sourceText = liveDocument?.sourceText ?? sourcePreview?.text ?? ""
+    const storedProjection = await this.projections?.load(versionId) ?? null
+    const rendered = await renderDriveMarkdownFragment(sourceText, liveDocument
+      ? {
+          projection: liveDocument.projectionSource === sourceText ? liveDocument.projection : null,
+          previousProjection: liveDocument.projectionSource === sourceText
+            ? null
+            : { source: liveDocument.projectionSource, projection: liveDocument.projection },
+        }
+      : {
+          projection: storedProjection,
+          previousProjection: storedProjection || !this.projections
+            ? null
+            : await this.projections.loadPrevious({ itemId: item.id, versionId }),
+        })
+    if (!storedProjection) {
+      await this.projections?.persist({ itemId: item.id, versionId, projection: rendered.projection })
+    }
+    const collaboration = await this.prisma.driveCollaborationDocument.findUnique({
+      where: { itemId: item.id },
+      select: { epoch: true },
+    })
+    return {
+      versionId,
+      epoch: liveDocument?.epoch ?? collaboration?.epoch ?? null,
+      sourceText,
+      renderedText: rendered.renderedText,
+      projection: rendered.projection,
+    }
+  }
+
+  resolveAnnotationCrdtRange(itemId: string, selector: import("@synapse/shared").DriveAnnotationCrdtRangeSelector) {
+    return this.collaboration?.resolveRelativeRange(itemId, selector) ?? null
+  }
+
+  async resolveAnnotationDiffRange(
+    itemId: string,
+    baseVersionId: string | null,
+    currentSource: string,
+    range: import("@synapse/shared").DriveAnnotationTextPositionSelector,
+  ) {
+    if (!baseVersionId) return null
+    const version = await this.prisma.driveFileVersion.findFirst({
+      where: { id: baseVersionId, itemId, deletedAt: null },
+      select: { storageKey: true },
+    })
+    if (!version) return null
+    const previous = await this.readTextPreview(version.storageKey)
+    if (previous.truncated) return null
+    return mapDriveMarkdownSourceRange(previous.text, currentSource, range)
   }
 
   async openShareBrowserItemDownload(input: {
@@ -2359,7 +2543,7 @@ export class DriveService implements OnApplicationBootstrap {
 
     let shares = 0
     for (const share of legacyShares) {
-      const material = await createDrivePasswordMaterial(normalizeDriveAccessSettings(DRIVE_DEFAULT_ACCESS_SETTINGS), this.accessSecret, now)
+      const material = await createDrivePasswordMaterial({ passwordEnabled: true, expiresIn: "3d" }, this.accessSecret, now)
       const result = await this.prisma.driveShare.updateMany({
         where: { id: share.id, enabled: true, passwordEnabled: false, passwordHash: null, accessSettingsAppliedAt: null },
         data: toDrivePasswordUpdateData(material, now),
@@ -2571,22 +2755,24 @@ export class DriveService implements OnApplicationBootstrap {
     const body = Buffer.from(input.input.text, "utf8")
     const bodySize = BigInt(body.byteLength)
     if (body.byteLength > DRIVE_INLINE_TEXT_EDIT_MAX_BYTES) throw new PayloadTooLargeException("文件内容过大。")
+    await this.collaboration?.prepareExternalChange(input.item.id)
     const currentVersionId = await this.findCurrentDriveFileVersionId(input.item)
     if (!currentVersionId || currentVersionId !== input.input.baseVersionId) {
+      this.collaboration?.resumeExternalChange(input.item.id)
       throw new ConflictException("文件已有新内容。")
     }
 
     const nextVersionId = createDriveFileVersionId()
     const nextStorageKey = driveVersionStorageKey(input.item.id, nextVersionId)
-    await this.storage.putObject({
-      key: nextStorageKey,
-      body,
-      contentType: input.item.mimeType,
-    })
-
     let committed = false
     try {
+      await this.storage.putObject({
+        key: nextStorageKey,
+        body,
+        contentType: input.item.mimeType,
+      })
       const result = await this.prisma.$transaction(async (tx) => {
+        await lockDriveItemMutation(tx, input.item.id)
         const currentItem = await tx.driveItem.findFirst({
           where: { id: input.item.id, userId: input.ownerId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
           include: driveItemWithShares,
@@ -2639,9 +2825,11 @@ export class DriveService implements OnApplicationBootstrap {
           name: item.name,
           actor: input.actorUserId,
         }, tx)
-        return { item, version }
+        const collaborationEpoch = await this.collaboration?.replaceEpochInTransaction(tx, item.id, version.id)
+        return { item, version, collaborationEpoch }
       })
       committed = true
+      if (result.collaborationEpoch) this.collaboration?.finalizeExternalChange(result.item.id, result.collaborationEpoch, result.version.id)
       await this.recordDriveAudit({
         userId: input.actorUserId,
         action: input.auditAction,
@@ -2665,6 +2853,7 @@ export class DriveService implements OnApplicationBootstrap {
       }
     } catch (error) {
       if (!committed) await this.deleteTemporaryUploadObject(nextStorageKey)
+      if (!committed) this.collaboration?.resumeExternalChange(input.item.id)
       if (isUniqueConstraintError(error)) throw new ConflictException("文件已有新内容。")
       throw error
     }
@@ -2675,6 +2864,28 @@ export class DriveService implements OnApplicationBootstrap {
     const previewKind = resolveDriveBrowserPreviewKind(toDriveBrowserSourceItem(item))
     if (!isDriveTextEditablePreviewKind(previewKind)) throw new BadRequestException("文件类型暂不支持编辑。")
     if (item.size > BigInt(DRIVE_INLINE_TEXT_EDIT_MAX_BYTES)) throw new PayloadTooLargeException("文件内容过大。")
+  }
+
+  private async buildCollaborationCapability(
+    item: { readonly id: string; readonly name: string; readonly type: string },
+    currentVersionId: string | null,
+    canWrite: boolean,
+    unavailableReason: DriveBrowserCollaborationCapabilityDto["reason"] = "permission_denied",
+  ): Promise<DriveBrowserCollaborationCapabilityDto | null> {
+    if (item.type !== DRIVE_ITEM_TYPE.file || !item.name.toLowerCase().endsWith(".md")) return null
+    const enabled = Boolean(this.collaboration?.isEnabled())
+    const document = enabled && currentVersionId
+      ? await this.collaboration!.ensureDocument(item.id, currentVersionId)
+      : null
+    return {
+      enabled,
+      canRead: enabled,
+      canWrite: enabled && canWrite,
+      epoch: document?.checkpointVersionId === currentVersionId ? document.epoch : null,
+      checkpointVersionId: currentVersionId,
+      websocketPath: "/api/drive/collaboration",
+      reason: enabled ? canWrite ? null : unavailableReason : "disabled",
+    }
   }
 
   private async resolveOwnedBrowserCurrent(input: {
@@ -2833,6 +3044,7 @@ export class DriveService implements OnApplicationBootstrap {
     if (shouldReadDriveBrowserTextPreview(kind)) {
       if (kind === "markdown") {
         const preview = await this.readTextPreview(storageKey)
+        const versionId = await this.findCurrentDriveFileVersionId(current)
         const relativeImages = isPlainDriveMarkdownName(current.name)
           ? await this.resolveDriveMarkdownRelativeImages(preview.text, current, route)
           : []
@@ -2848,13 +3060,20 @@ export class DriveService implements OnApplicationBootstrap {
         const rendered = await renderDriveMarkdownFragment(preview.text, {
           relativeImageUrls,
           allowStandaloneRawImages: isPlainDriveMarkdownName(current.name),
+          previousProjection: versionId && this.projections
+            ? await this.projections.loadPrevious({ itemId: current.id, versionId })
+            : null,
         })
+        if (versionId) {
+          await this.projections?.persist({ itemId: current.id, versionId, projection: rendered.projection })
+        }
         return buildDriveBrowserPreview({
           item,
           route,
           text: preview.text,
           html: rendered.html,
           outline: rendered.outline,
+          markdownProjection: rendered.projection,
           truncated: preview.truncated,
           relativeImages: relativeImages.map(({ reference, item: image }) => ({
             src: reference.src,
@@ -4146,6 +4365,11 @@ function createDriveShareUnlockRequiredException(): UnauthorizedException {
 
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+}
+
+async function lockDriveItemMutation(client: Prisma.TransactionClient, itemId: string): Promise<void> {
+  if (typeof client.$queryRaw !== "function") return
+  await client.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${itemId}, 0))::text AS "lock"`
 }
 
 function appendDriveMarkdownUrlSuffix(url: string, suffix: string): string {

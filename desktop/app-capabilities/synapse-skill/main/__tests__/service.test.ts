@@ -399,6 +399,36 @@ describe("SynapseSkillService", () => {
     expect(driveApiText).toContain("without rewriting the Markdown or converting images to public assets")
   })
 
+  it("documents persistent local Drive sync without confusing it with upload or site republish", async () => {
+    const [skillRoot, driveIndex, driveApiText] = await Promise.all([
+      readFile(path.join(systemPackageRoot, "SKILL.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "drive/index.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "drive/api-reference.md"), "utf8"),
+    ])
+
+    expect(skillRoot).toContain("persistent local file or folder sync")
+    expect(skillRoot).toContain("备份、镜像、挂载、绑定到云盘、持续同步")
+    expect(driveIndex).toContain("## One-Time Upload Versus Persistent Sync")
+    expect(driveIndex).toContain("These tools never create a sync binding")
+    expect(driveIndex).toContain("Never bind a temporary upload or Agent cache")
+    expect(driveIndex).toContain("process each path independently and sequentially")
+    expect(driveIndex).toContain("It is not a local filesystem sync request")
+    expect(driveIndex).toContain("Never guess a conflict resolution")
+    expect(driveIndex).toContain("只上传这一次，还是以后本地变化也持续同步")
+    expect(driveIndex).toContain("Use `app_drive_item_tree_list` with pagination")
+    expect(driveIndex).toContain("summarize `initialTransfer` before high-risk creation")
+    expect(driveIndex).toContain("Act directly only on one unambiguous match")
+    expect(driveIndex).toContain("apply the existing single-item tools sequentially")
+    expect(driveIndex).toContain("There is no in-place MCP operation")
+    expect(driveIndex).toContain("`confirm_delete` propagates the deletion")
+    expect(driveApiText).toContain("Always call this before creation")
+    expect(driveApiText).toContain("same-name Drive content is never overwritten or merged")
+    expect(driveApiText).toContain("Stops and removes the binding without deleting local or Drive content")
+    expect(driveApiText).toContain("must be an explicit user choice")
+    expect(driveApiText).toContain("`totalEntries`, `fileCount`, `folderCount`")
+    expect(driveApiText).toContain("only the first 200 records")
+  })
+
   it("routes current domains through installed Synapse Skill paths", async () => {
     const [
       skillRoot,

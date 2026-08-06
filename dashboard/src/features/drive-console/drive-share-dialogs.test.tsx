@@ -54,9 +54,9 @@ describe('DriveShareSettingsDialog', () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     vi.mocked(driveApi.createShare).mockResolvedValue({
-      password: 'abc',
+      password: null,
       url: 'https://example.com/share/shr_1',
-      urlWithPassword: 'https://example.com/share/shr_1?p=abc',
+      urlWithPassword: 'https://example.com/share/shr_1',
     } as never)
     const onCreated = vi.fn(async () => undefined)
     render(<DriveShareSettingsDialog open item={{ id: 'file-1', name: 'notes.md', type: 'file' }} onOpenChange={() => undefined} onCreated={onCreated} />)
@@ -64,19 +64,19 @@ describe('DriveShareSettingsDialog', () => {
     await click(textButton('创建分享'))
 
     expect(driveApi.createShare).toHaveBeenCalledWith('file-1', {
-      passwordEnabled: true,
-      expiresIn: '3d',
+      passwordEnabled: false,
+      expiresIn: 'forever',
       accessMode: 'link_read',
       editorEmails: [],
     })
     expect(onCreated).toHaveBeenCalled()
     expect(document.body.textContent).toContain('分享已创建')
-    expect((document.querySelector('input') as HTMLInputElement | null)?.value).toBe('https://example.com/share/shr_1?p=abc')
+    expect((document.querySelector('input') as HTMLInputElement | null)?.value).toBe('https://example.com/share/shr_1')
     await click(textButton('复制链接'))
-    expect(writeText).toHaveBeenCalledWith('https://example.com/share/shr_1?p=abc')
+    expect(writeText).toHaveBeenCalledWith('https://example.com/share/shr_1')
   })
 
-  it('offers webpage sharing only for folders and uses protected three-day defaults', async () => {
+  it('offers webpage sharing only for folders and uses public non-expiring defaults', async () => {
     vi.mocked(driveApi.preflightSite).mockResolvedValue({
       sourceFolderItemId: 'folder-1',
       sourceFolderName: '网页',
@@ -87,9 +87,9 @@ describe('DriveShareSettingsDialog', () => {
       includesJavaScript: true,
     })
     vi.mocked(driveApi.createSite).mockResolvedValue({
-      password: 'secret',
+      password: null,
       url: 'https://example.com/sites/site_1',
-      urlWithPassword: 'https://example.com/sites/site_1?password=secret',
+      urlWithPassword: 'https://example.com/sites/site_1',
     } as never)
     render(<DriveShareSettingsDialog open item={{ id: 'folder-1', name: '网页', type: 'folder' }} onOpenChange={() => undefined} onCreated={async () => undefined} />)
 
@@ -104,8 +104,8 @@ describe('DriveShareSettingsDialog', () => {
       sourceFolderItemId: 'folder-1',
       name: '网页',
       entryPath: 'index.html',
-      accessMode: 'password',
-      expiresIn: '3d',
+      accessMode: 'public',
+      expiresIn: 'forever',
     })
   })
 

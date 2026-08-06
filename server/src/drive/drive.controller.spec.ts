@@ -342,8 +342,6 @@ describe("DriveController", () => {
           sourceFolderItemId: "folder-1",
           name: "产品原型",
           entryPath: null,
-          accessMode: "public",
-          expiresIn: "forever",
         })
         .expect(201)
       expect((response.body as { readonly siteId?: string }).siteId).toBe("site_public")
@@ -351,8 +349,6 @@ describe("DriveController", () => {
         sourceFolderItemId: "folder-1",
         name: "产品原型",
         entryPath: null,
-        accessMode: "public",
-        expiresIn: "forever",
       }, expect.objectContaining({ ipAddress: expect.any(String) }))
     } finally {
       await userApp.close()

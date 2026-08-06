@@ -258,6 +258,35 @@ DriveSyncService
 
 The renderer does not access the sync store directly. Renderer entry points call IPC methods, and the main process owns local file access, permission checks, audit, and synchronization.
 
+## Agent And MCP Entry Points
+
+Synapse MCP exposes the existing desktop `DriveSyncService`; it does not implement a second sync engine. Public Drive sync capabilities cover snapshot, binding preview/create/pause/resume/remove, exclude-rule replacement, complete rescan, and explicit conflict resolution. Native path choosers, renderer events, and background polling are not public MCP tools.
+
+Agent-facing binding inputs use a stable absolute `localPath` plus an explicit initial direction. `local_to_remote` derives file/folder kind and default Drive name from the local path, and an omitted `targetParentId` means Drive root. `remote_to_local` and `bind_existing` require an owned `driveItemId` and derive remote metadata from that item.
+
+When an Agent receives only a Drive name or path, it resolves the owned item through the paginated Drive tree/list tools and asks the user to disambiguate multiple matches. Lifecycle requests similarly resolve a binding from the sync snapshot by binding id, normalized local path, or Drive metadata; ambiguous phrases such as “that project” never select an arbitrary binding.
+
+The intended Agent workflow is:
+
+```text
+ordinary upload wording
+  -> one-time file/folder upload
+
+explicit sync wording + stable local path
+  -> resolve requested Drive parent, defaulting to root
+  -> inspect same-name remote items
+  -> preview binding
+  -> create binding only when preflight is not blocked
+```
+
+Temporary attachment paths and Agent caches cannot become sync roots. Multiple independent local roots create independent bindings sequentially; successful bindings are not rolled back when a later input fails. A same-name remote item is never overwritten by local-to-remote initialization. Exact same-kind content may use `bind_existing`; differing content or type requires a different name/location or an explicit user reconciliation decision.
+
+A ready binding preview includes the initial transfer summary and at most 200 ordered file/folder entries. The complete count remains available when the list is truncated, so an Agent can explain the first upload/download before requesting high-risk creation approval without returning an unbounded payload. `bind_existing` returns an empty transfer plan because it validates existing content rather than transferring it.
+
+Batch lifecycle and conflict requests are an Agent orchestration over the existing single-binding tools: resolve the full set first, execute sequentially, keep prior successes, and summarize partial failures. Changing a binding root, Drive target, or direction is intentionally not an in-place mutation; the Agent must disclose the non-atomic stop-and-recreate workflow, preserve editable rules, and never claim a failed replacement was migrated successfully.
+
+Site republish language remains distinct from local Drive sync. Updating or synchronizing an existing published site uses its remembered source folder and republish flow unless the user explicitly requests a continuing relationship with a local filesystem path.
+
 ## Local Data
 
 Use DataRepository namespaces for local sync state.

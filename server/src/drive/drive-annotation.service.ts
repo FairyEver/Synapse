@@ -1,19 +1,24 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
 import type { Prisma } from "@prisma/client"
 import type {
+  DriveAnnotationAnchorDto,
+  DriveAnnotationAnchorUpdateInput,
   DriveAnnotationCommentDto,
   DriveAnnotationCommentUpdateInput,
   DriveAnnotationCreateInput,
   DriveAnnotationReplyInput,
   DriveAnnotationTargetDto,
   DriveAnnotationThreadDto,
+  DriveAnnotationSelectorsV2,
 } from "@synapse/shared"
+import { resolveDriveAnnotationAnchor } from "@synapse/shared"
 import { formatAuditError } from "../common/audit-error"
 import { AuditLogService } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
-import { isCommentableMarkdownItem } from "./drive-annotation-target"
+import { isCommentableMarkdownItem, toDriveAnnotationSelectorsV2 } from "./drive-annotation-target"
 import { DRIVE_ITEM_LIFECYCLE_STATUS, DRIVE_STORAGE_STATUS } from "./drive.constants"
 import { DriveService } from "./drive.service"
+import { LocalDriveCollaborationBus } from "./drive-collaboration-bus"
 
 type DriveAnnotationItem = {
   readonly id: string
@@ -45,6 +50,21 @@ type AnnotationThreadRecord = {
   readonly createdAt: Date
   readonly updatedAt: Date
   readonly comments: readonly AnnotationCommentRecord[]
+  readonly anchor?: AnnotationAnchorRecord | null
+}
+
+type AnnotationAnchorRecord = {
+  readonly schemaVersion: number
+  readonly baseVersionId: string | null
+  readonly selectors: unknown
+  readonly positionStatus: string
+  readonly quoteStatus: string
+  readonly lastResolvedVersionId: string | null
+  readonly resolvedSourceStart: number | null
+  readonly resolvedSourceEnd: number | null
+  readonly resolvedRenderedStart: number | null
+  readonly resolvedRenderedEnd: number | null
+  readonly confidence: number | null
 }
 
 type AnnotationCommentRecord = {
@@ -67,6 +87,7 @@ type AnnotationAuthorRecord = {
 }
 
 const annotationInclude = {
+  anchor: true,
   createdByUser: { select: { id: true, email: true, handle: true } },
   comments: {
     orderBy: { createdAt: "asc" as const },
@@ -82,23 +103,28 @@ export class DriveAnnotationService {
     private readonly prisma: PrismaService,
     private readonly drive: DriveService,
     @Optional() private readonly auditLog?: AuditLogService,
+    @Optional() private readonly collaborationBus?: LocalDriveCollaborationBus,
   ) {}
 
   async listOwnerAnnotations(userId: string, itemId: string): Promise<DriveAnnotationThreadDto[]> {
     const item = await this.requireOwnerItem(userId, itemId)
-    const currentVersionId = await this.findCurrentVersionId(item)
     const threads = await this.prisma.driveAnnotationThread.findMany({
-      where: { itemId, baseVersionId: currentVersionId, deletedAt: null },
+      where: { itemId, deletedAt: null },
       orderBy: { createdAt: "asc" },
       include: annotationInclude,
     })
-    return toVisibleThreadDtos(threads, userId, item.userId)
+    return toVisibleThreadDtos(await this.refreshThreadAnchors(item, threads), userId, item.userId)
   }
 
   async createOwnerAnnotation(userId: string, itemId: string, input: DriveAnnotationCreateInput, auditContext: DriveAuditContext = {}): Promise<DriveAnnotationThreadDto> {
     const item = await this.requireOwnerItem(userId, itemId)
     assertCommentableItem(item)
     const baseVersionId = await this.resolveAnnotationBaseVersionId(item, input.baseVersionId ?? null)
+    const anchor = await this.validateAnchorInput(item, input, baseVersionId)
+    const existing = input.idempotencyKey
+      ? await this.findThreadByIdempotencyKey(item.id, input.idempotencyKey)
+      : null
+    if (existing) return toThreadDto(existing, userId, item.userId)
     const thread = await this.prisma.driveAnnotationThread.create({
       data: {
         itemId,
@@ -107,6 +133,7 @@ export class DriveAnnotationService {
         target: input.target as unknown as Prisma.InputJsonValue,
         anchorStatus: "attached",
         createdByUserId: userId,
+        anchor: { create: buildAnchorCreateData(item.id, baseVersionId, anchor.selectors, anchor.resolution, input.idempotencyKey) },
         comments: { create: { body: input.body, createdByUserId: userId } },
       },
       include: annotationInclude,
@@ -126,12 +153,13 @@ export class DriveAnnotationService {
       },
       ipAddress: auditContext.ipAddress,
     })
+    this.notifyAnnotationChanged(item.id)
     return toThreadDto(thread, userId, item.userId)
   }
 
   async replyOwnerAnnotation(userId: string, itemId: string, threadId: string, input: DriveAnnotationReplyInput, auditContext: DriveAuditContext = {}): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireOwnerItem(userId, itemId)
-    const thread = await this.requireCurrentThread(item, threadId)
+    const thread = await this.requireThread(item.id, threadId)
     await this.requireParentComment(threadId, input.parentCommentId ?? null)
     const comment = await this.prisma.driveAnnotationComment.create({
       data: {
@@ -158,12 +186,13 @@ export class DriveAnnotationService {
       },
       ipAddress: auditContext.ipAddress,
     })
+    this.notifyAnnotationChanged(item.id)
     return toCommentDto(comment, userId, item.userId)
   }
 
   async updateOwnerComment(userId: string, itemId: string, commentId: string, input: DriveAnnotationCommentUpdateInput, auditContext: DriveAuditContext = {}): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireOwnerItem(userId, itemId)
-    const { comment, thread } = await this.requireCurrentComment(item, commentId)
+    const { comment, thread } = await this.requireCommentThread(item.id, commentId)
     if (comment.createdByUserId !== userId) throw new ForbiddenException("不能编辑他人的评论。")
     const updated = await this.prisma.driveAnnotationComment.update({
       where: { id: commentId },
@@ -185,13 +214,14 @@ export class DriveAnnotationService {
       },
       ipAddress: auditContext.ipAddress,
     })
+    this.notifyAnnotationChanged(item.id)
     return toCommentDto(updated, userId, item.userId)
   }
 
   async deleteOwnerComment(userId: string, itemId: string, commentId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
     const item = await this.requireOwnerItem(userId, itemId)
     if (item.userId !== userId) throw new ForbiddenException("不能删除该评论。")
-    const { comment, thread } = await this.requireCurrentComment(item, commentId)
+    const { comment, thread } = await this.requireCommentThread(item.id, commentId)
     await this.prisma.driveAnnotationComment.update({ where: { id: commentId }, data: { deletedAt: new Date() } })
     await this.recordAnnotationAudit({
       actorUserId: userId,
@@ -208,13 +238,14 @@ export class DriveAnnotationService {
       },
       ipAddress: auditContext.ipAddress,
     })
+    this.notifyAnnotationChanged(item.id)
     return { ok: true }
   }
 
   async deleteOwnerThread(userId: string, itemId: string, threadId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
     const item = await this.requireOwnerItem(userId, itemId)
     if (item.userId !== userId) throw new ForbiddenException("不能删除该评论。")
-    const thread = await this.requireCurrentThread(item, threadId)
+    const thread = await this.requireThread(item.id, threadId)
     await this.prisma.driveAnnotationThread.update({ where: { id: threadId }, data: { deletedAt: new Date() } })
     await this.recordAnnotationAudit({
       actorUserId: userId,
@@ -230,7 +261,31 @@ export class DriveAnnotationService {
       },
       ipAddress: auditContext.ipAddress,
     })
+    this.notifyAnnotationChanged(item.id)
     return { ok: true }
+  }
+
+  async updateOwnerAnchor(
+    userId: string,
+    itemId: string,
+    threadId: string,
+    input: DriveAnnotationAnchorUpdateInput,
+    auditContext: DriveAuditContext = {},
+  ): Promise<DriveAnnotationThreadDto> {
+    const item = await this.requireOwnerItem(userId, itemId)
+    const thread = await this.requireThread(item.id, threadId)
+    const validated = await this.validateSelectors(item, input.baseVersionId, input.selectors, input.epoch ?? null)
+    const updated = await this.replaceAnchor(thread, input, validated)
+    await this.recordAnnotationAudit({
+      actorUserId: userId,
+      action: "drive.annotation.anchor.reassociate",
+      targetType: "drive.annotationAnchor",
+      targetId: thread.id,
+      detail: { actorUserId: userId, ownerId: item.userId, itemId, threadId, baseVersionId: input.baseVersionId },
+      ipAddress: auditContext.ipAddress,
+    })
+    this.notifyAnnotationChanged(item.id)
+    return toThreadDto(updated, userId, item.userId)
   }
 
   async listShareAnnotations(input: {
@@ -240,13 +295,12 @@ export class DriveAnnotationService {
     readonly actorUserId?: string | null
   }): Promise<DriveAnnotationThreadDto[]> {
     const { item, canComment } = await this.resolveShareAnnotationAccess(input)
-    const currentVersionId = await this.findCurrentVersionId(item)
     const threads = await this.prisma.driveAnnotationThread.findMany({
-      where: { itemId: item.id, baseVersionId: currentVersionId, deletedAt: null },
+      where: { itemId: item.id, deletedAt: null },
       orderBy: { createdAt: "asc" },
       include: annotationInclude,
     })
-    return toVisibleThreadDtos(threads, input.actorUserId ?? null, item.userId, canComment, true)
+    return toVisibleThreadDtos(await this.refreshThreadAnchors(item, threads), input.actorUserId ?? null, item.userId, canComment, true)
   }
 
   async createShareAnnotation(input: {
@@ -260,6 +314,11 @@ export class DriveAnnotationService {
     const item = await this.requireCommentableShareItem(input)
     assertCommentableItem(item)
     const baseVersionId = await this.resolveAnnotationBaseVersionId(item, input.body.baseVersionId ?? null)
+    const anchor = await this.validateAnchorInput(item, input.body, baseVersionId)
+    const existing = input.body.idempotencyKey
+      ? await this.findThreadByIdempotencyKey(item.id, input.body.idempotencyKey)
+      : null
+    if (existing) return toThreadDto(existing, input.actorUserId, item.userId)
     const thread = await this.prisma.driveAnnotationThread.create({
       data: {
         itemId: item.id,
@@ -268,6 +327,7 @@ export class DriveAnnotationService {
         target: input.body.target as unknown as Prisma.InputJsonValue,
         anchorStatus: "attached",
         createdByUserId: input.actorUserId,
+        anchor: { create: buildAnchorCreateData(item.id, baseVersionId, anchor.selectors, anchor.resolution, input.body.idempotencyKey) },
         comments: { create: { body: input.body.body, createdByUserId: input.actorUserId } },
       },
       include: annotationInclude,
@@ -287,6 +347,7 @@ export class DriveAnnotationService {
       },
       ipAddress: input.auditContext?.ipAddress,
     })
+    this.notifyAnnotationChanged(item.id)
     return toThreadDto(thread, input.actorUserId, item.userId)
   }
 
@@ -300,7 +361,7 @@ export class DriveAnnotationService {
     readonly auditContext?: DriveAuditContext
   }): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireCommentableShareItem(input)
-    const thread = await this.requireCurrentThread(item, input.threadId)
+    const thread = await this.requireThread(item.id, input.threadId)
     await this.requireParentComment(input.threadId, input.body.parentCommentId ?? null)
     const comment = await this.prisma.driveAnnotationComment.create({
       data: {
@@ -327,6 +388,7 @@ export class DriveAnnotationService {
       },
       ipAddress: input.auditContext?.ipAddress,
     })
+    this.notifyAnnotationChanged(item.id)
     return toCommentDto(comment, input.actorUserId, item.userId)
   }
 
@@ -340,7 +402,7 @@ export class DriveAnnotationService {
     readonly auditContext?: DriveAuditContext
   }): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireCommentableShareItem(input)
-    const { comment, thread } = await this.requireCurrentComment(item, input.commentId)
+    const { comment, thread } = await this.requireCommentThread(item.id, input.commentId)
     if (comment.createdByUserId !== input.actorUserId) throw new ForbiddenException("不能编辑他人的评论。")
     const updated = await this.prisma.driveAnnotationComment.update({
       where: { id: input.commentId },
@@ -362,6 +424,7 @@ export class DriveAnnotationService {
       },
       ipAddress: input.auditContext?.ipAddress,
     })
+    this.notifyAnnotationChanged(item.id)
     return toCommentDto(updated, input.actorUserId, item.userId)
   }
 
@@ -374,7 +437,7 @@ export class DriveAnnotationService {
     readonly auditContext?: DriveAuditContext
   }): Promise<{ readonly ok: true }> {
     const item = await this.requireCommentableShareItem(input)
-    const { comment, thread } = await this.requireCurrentComment(item, input.commentId)
+    const { comment, thread } = await this.requireCommentThread(item.id, input.commentId)
     if (comment.createdByUserId !== input.actorUserId && item.userId !== input.actorUserId) throw new ForbiddenException("不能删除该评论。")
     await this.prisma.driveAnnotationComment.update({ where: { id: input.commentId }, data: { deletedAt: new Date() } })
     await this.recordShareAnnotationAudit({
@@ -392,6 +455,7 @@ export class DriveAnnotationService {
       },
       ipAddress: input.auditContext?.ipAddress,
     })
+    this.notifyAnnotationChanged(item.id)
     return { ok: true }
   }
 
@@ -404,7 +468,7 @@ export class DriveAnnotationService {
     readonly auditContext?: DriveAuditContext
   }): Promise<{ readonly ok: true }> {
     const item = await this.requireCommentableShareItem(input)
-    const thread = await this.requireCurrentThread(item, input.threadId)
+    const thread = await this.requireThread(item.id, input.threadId)
     if (!canDeleteThread(thread, visibleComments(thread.comments), input.actorUserId, item.userId)) {
       throw new ForbiddenException("不能删除该评论。")
     }
@@ -423,7 +487,37 @@ export class DriveAnnotationService {
       },
       ipAddress: input.auditContext?.ipAddress,
     })
+    this.notifyAnnotationChanged(item.id)
     return { ok: true }
+  }
+
+  async updateShareAnchor(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly itemId?: string
+    readonly cookie?: string | null
+    readonly threadId: string
+    readonly body: DriveAnnotationAnchorUpdateInput
+    readonly auditContext?: DriveAuditContext
+  }): Promise<DriveAnnotationThreadDto> {
+    const item = await this.requireCommentableShareItem(input)
+    const thread = await this.requireThread(item.id, input.threadId)
+    if (thread.createdByUserId !== input.actorUserId && item.userId !== input.actorUserId) {
+      throw new ForbiddenException("不能重新关联该评论。")
+    }
+    const validated = await this.validateSelectors(item, input.body.baseVersionId, input.body.selectors, input.body.epoch ?? null)
+    const updated = await this.replaceAnchor(thread, input.body, validated)
+    await this.recordShareAnnotationAudit({
+      actorUserId: input.actorUserId,
+      shareId: input.shareId,
+      action: "drive.share_annotation.anchor.reassociate",
+      targetType: "drive.annotationAnchor",
+      targetId: thread.id,
+      detail: { ownerId: item.userId, itemId: item.id, threadId: thread.id, baseVersionId: input.body.baseVersionId },
+      ipAddress: input.auditContext?.ipAddress,
+    })
+    this.notifyAnnotationChanged(item.id)
+    return toThreadDto(updated, input.actorUserId, item.userId, true, true)
   }
 
   private async requireOwnerItem(userId: string, itemId: string): Promise<DriveAnnotationItem> {
@@ -472,10 +566,168 @@ export class DriveAnnotationService {
     return thread
   }
 
-  private async requireCurrentThread(item: DriveAnnotationItem, threadId: string): Promise<AnnotationThreadRecord> {
-    const thread = await this.requireThread(item.id, threadId)
-    await this.assertThreadCurrentVersion(item, thread)
-    return thread
+  private notifyAnnotationChanged(itemId: string): void {
+    this.collaborationBus?.publish(itemId, { type: "annotation.changed", itemId })
+  }
+
+  private async findThreadByIdempotencyKey(itemId: string, idempotencyKey: string): Promise<AnnotationThreadRecord | null> {
+    return this.prisma.driveAnnotationThread.findFirst({
+      where: { itemId, deletedAt: null, anchor: { idempotencyKey } },
+      include: annotationInclude,
+    })
+  }
+
+  private async validateAnchorInput(item: DriveAnnotationItem, input: DriveAnnotationCreateInput, baseVersionId: string | null) {
+    if (!baseVersionId) throw staleAnnotationConflict()
+    const selectors = input.selectors ?? toDriveAnnotationSelectorsV2(input.target)
+    if (selectors.quote.exact !== input.target.quote.exact) throw new BadRequestException("评论位置无效。")
+    return this.validateSelectors(item, baseVersionId, selectors, input.epoch ?? null)
+  }
+
+  private async validateSelectors(
+    item: DriveAnnotationItem,
+    baseVersionId: string,
+    selectors: DriveAnnotationSelectorsV2,
+    epoch: string | null,
+  ) {
+    const resolver = (this.drive as DriveService & {
+      resolveAnnotationDocument?: DriveService["resolveAnnotationDocument"]
+    }).resolveAnnotationDocument
+    if (typeof resolver !== "function") {
+      return {
+        selectors,
+        resolution: {
+          positionStatus: "attached" as const,
+          quoteStatus: "exact" as const,
+          sourceRange: selectors.position,
+          renderedRange: selectors.renderedPosition ?? null,
+          confidence: 1,
+        },
+      }
+    }
+    const document = await resolver.call(this.drive, item)
+    if (document.versionId !== baseVersionId || (epoch && document.epoch && epoch !== document.epoch)) {
+      this.logger.warn({
+        currentEpoch: document.epoch,
+        currentVersionId: document.versionId,
+        itemId: item.id,
+        requestedEpoch: epoch,
+        requestedVersionId: baseVersionId,
+      }, "Drive annotation anchor revision validation failed")
+      throw staleAnnotationConflict()
+    }
+    if (selectors.renderedPosition && !hasGraphemeBoundaries(document.renderedText, selectors.renderedPosition)) {
+      throw new BadRequestException("评论位置无效。")
+    }
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors,
+      projection: document.projection,
+      sourceText: document.sourceText,
+      renderedText: document.renderedText,
+      crdtSourceRange: selectors.crdt
+        ? this.drive.resolveAnnotationCrdtRange(item.id, selectors.crdt)
+        : null,
+    })
+    if (resolution.positionStatus !== "attached" || resolution.quoteStatus !== "exact") {
+      this.logger.warn({
+        hasCrdtSelector: Boolean(selectors.crdt),
+        hasSemanticSelector: Boolean(selectors.semantic),
+        itemId: item.id,
+        positionStatus: resolution.positionStatus,
+        quoteStatus: resolution.quoteStatus,
+      }, "Drive annotation anchor position validation failed")
+      throw staleAnnotationConflict()
+    }
+    return { selectors, resolution }
+  }
+
+  private async replaceAnchor(
+    thread: AnnotationThreadRecord,
+    input: DriveAnnotationAnchorUpdateInput,
+    validated: Awaited<ReturnType<DriveAnnotationService["validateSelectors"]>>,
+  ): Promise<AnnotationThreadRecord> {
+    await this.prisma.$transaction([
+      this.prisma.driveAnnotationAnchor.upsert({
+        where: { threadId: thread.id },
+        create: { ...buildAnchorCreateData(thread.itemId, input.baseVersionId, validated.selectors, validated.resolution, input.idempotencyKey), threadId: thread.id },
+        update: {
+          baseVersionId: input.baseVersionId,
+          selectors: validated.selectors as unknown as Prisma.InputJsonValue,
+          positionStatus: validated.resolution.positionStatus,
+          quoteStatus: validated.resolution.quoteStatus,
+          lastResolvedVersionId: input.baseVersionId,
+          resolvedSourceStart: validated.resolution.sourceRange?.start ?? null,
+          resolvedSourceEnd: validated.resolution.sourceRange?.end ?? null,
+          resolvedRenderedStart: validated.resolution.renderedRange?.start ?? null,
+          resolvedRenderedEnd: validated.resolution.renderedRange?.end ?? null,
+          confidence: validated.resolution.confidence,
+          deletedAt: null,
+        },
+      }),
+      this.prisma.driveAnnotationThread.update({
+        where: { id: thread.id },
+        data: { baseVersionId: input.baseVersionId, anchorStatus: "attached" },
+      }),
+    ])
+    return this.requireThread(thread.itemId, thread.id)
+  }
+
+  private async refreshThreadAnchors(
+    item: DriveAnnotationItem,
+    threads: readonly AnnotationThreadRecord[],
+  ): Promise<AnnotationThreadRecord[]> {
+    const resolver = (this.drive as DriveService & {
+      resolveAnnotationDocument?: DriveService["resolveAnnotationDocument"]
+    }).resolveAnnotationDocument
+    if (typeof resolver !== "function" || threads.length === 0) return [...threads]
+    let document: Awaited<ReturnType<DriveService["resolveAnnotationDocument"]>>
+    try {
+      document = await resolver.call(this.drive, item)
+    } catch (error) {
+      this.logger.warn({
+        errorName: error instanceof Error ? error.name : typeof error,
+        itemId: item.id,
+      }, "Drive annotation anchor document resolution failed")
+      return threads.map((thread) => ({ ...thread, anchor: unavailableAnchorRecord(thread) }))
+    }
+    return Promise.all(threads.map(async (thread) => {
+      const selectors = parseAnchorSelectors(thread.anchor?.selectors) ?? toDriveAnnotationSelectorsV2(thread.target as DriveAnnotationTargetDto)
+      const target = thread.target as DriveAnnotationTargetDto
+      const hasReliableSourceRange = Boolean(selectors.crdt || selectors.semantic || target.source)
+      const diffSourceRange = thread.baseVersionId === document.versionId || !hasReliableSourceRange
+        ? null
+        : await this.drive.resolveAnnotationDiffRange(thread.itemId, thread.baseVersionId, document.sourceText, selectors.position)
+      const resolution = resolveDriveAnnotationAnchor({
+        selectors,
+        projection: document.projection,
+        sourceText: document.sourceText,
+        renderedText: document.renderedText,
+        crdtSourceRange: selectors.crdt
+          ? this.drive.resolveAnnotationCrdtRange(item.id, selectors.crdt)
+          : null,
+        diffSourceRange,
+      })
+      const anchor = await this.prisma.driveAnnotationAnchor.upsert({
+        where: { threadId: thread.id },
+        create: { ...buildAnchorCreateData(thread.itemId, thread.baseVersionId, selectors, resolution), threadId: thread.id },
+        update: {
+          selectors: selectors as unknown as Prisma.InputJsonValue,
+          positionStatus: resolution.positionStatus,
+          quoteStatus: resolution.quoteStatus,
+          lastResolvedVersionId: document.versionId,
+          resolvedSourceStart: resolution.sourceRange?.start ?? null,
+          resolvedSourceEnd: resolution.sourceRange?.end ?? null,
+          resolvedRenderedStart: resolution.renderedRange?.start ?? null,
+          resolvedRenderedEnd: resolution.renderedRange?.end ?? null,
+          confidence: resolution.confidence,
+        },
+      })
+      const legacyStatus = resolution.positionStatus === "attached" ? "attached" : "orphaned"
+      if (thread.anchorStatus !== legacyStatus) {
+        await this.prisma.driveAnnotationThread.update({ where: { id: thread.id }, data: { anchorStatus: legacyStatus } })
+      }
+      return { ...thread, anchorStatus: legacyStatus, anchor }
+    }))
   }
 
   private async requireParentComment(threadId: string, parentCommentId: string | null): Promise<void> {
@@ -495,9 +747,9 @@ export class DriveAnnotationService {
     return comment
   }
 
-  private async requireCurrentComment(item: DriveAnnotationItem, commentId: string) {
-    const comment = await this.requireComment(item.id, commentId)
-    const thread = await this.requireCurrentThread(item, comment.threadId)
+  private async requireCommentThread(itemId: string, commentId: string) {
+    const comment = await this.requireComment(itemId, commentId)
+    const thread = await this.requireThread(itemId, comment.threadId)
     return { comment, thread }
   }
 
@@ -520,11 +772,6 @@ export class DriveAnnotationService {
       throw new ConflictException("文件已有新内容。")
     }
     return currentVersionId
-  }
-
-  private async assertThreadCurrentVersion(item: DriveAnnotationItem, thread: AnnotationThreadRecord): Promise<void> {
-    const currentVersionId = await this.findCurrentVersionId(item)
-    if (thread.baseVersionId !== currentVersionId) throw new ConflictException("文件已有新内容。")
   }
 
   private async recordShareAnnotationAudit(input: {
@@ -627,13 +874,131 @@ function toThreadDto(
     baseVersionId: record.baseVersionId,
     targetKind: "textRange",
     target: record.target as DriveAnnotationTargetDto,
-    anchorStatus: record.anchorStatus === "shifted" || record.anchorStatus === "orphaned" ? record.anchorStatus : "attached",
+    anchorStatus: record.anchor?.positionStatus === "attached"
+      ? "attached"
+      : record.anchor
+        ? "orphaned"
+        : record.anchorStatus === "shifted" || record.anchorStatus === "orphaned" ? record.anchorStatus : "attached",
+    anchor: toAnchorDto(record),
     author: toAuthorDto(record.createdByUser, redactAuthorEmail),
     comments: comments.map((comment) => toCommentDto(comment, actorUserId, fileOwnerUserId, canWrite, redactAuthorEmail)),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     permissions: { canDelete: canDeleteThread(record, comments, actorUserId, fileOwnerUserId, canWrite) },
   }
+}
+
+function toAnchorDto(record: AnnotationThreadRecord): DriveAnnotationAnchorDto | null {
+  const selectors = parseAnchorSelectors(record.anchor?.selectors) ?? toDriveAnnotationSelectorsV2(record.target as DriveAnnotationTargetDto)
+  const anchor = record.anchor
+  if (!anchor) {
+    return {
+      schemaVersion: 2,
+      baseVersionId: record.baseVersionId,
+      selectors,
+      positionStatus: record.anchorStatus === "orphaned" ? "orphaned" : "attached",
+      quoteStatus: "exact",
+      resolvedSourceRange: null,
+      resolvedRenderedRange: record.anchorStatus === "orphaned" ? null : selectors.renderedPosition ?? null,
+      confidence: null,
+      lastResolvedVersionId: null,
+    }
+  }
+  return {
+    schemaVersion: 2,
+    baseVersionId: anchor.baseVersionId,
+    selectors,
+    positionStatus: normalizePositionStatus(anchor.positionStatus),
+    quoteStatus: normalizeQuoteStatus(anchor.quoteStatus),
+    resolvedSourceRange: anchor.resolvedSourceStart === null || anchor.resolvedSourceEnd === null
+      ? null
+      : { start: anchor.resolvedSourceStart, end: anchor.resolvedSourceEnd },
+    resolvedRenderedRange: anchor.resolvedRenderedStart === null || anchor.resolvedRenderedEnd === null
+      ? null
+      : { start: anchor.resolvedRenderedStart, end: anchor.resolvedRenderedEnd },
+    confidence: anchor.confidence,
+    lastResolvedVersionId: anchor.lastResolvedVersionId,
+  }
+}
+
+function buildAnchorCreateData(
+  itemId: string,
+  baseVersionId: string | null,
+  selectors: DriveAnnotationSelectorsV2,
+  resolution: {
+    readonly positionStatus: string
+    readonly quoteStatus: string
+    readonly sourceRange: { readonly start: number; readonly end: number } | null
+    readonly renderedRange: { readonly start: number; readonly end: number } | null
+    readonly confidence: number
+  },
+  idempotencyKey?: string,
+) {
+  return {
+    itemId,
+    schemaVersion: 2,
+    baseVersionId,
+    selectors: selectors as unknown as Prisma.InputJsonValue,
+    positionStatus: resolution.positionStatus,
+    quoteStatus: resolution.quoteStatus,
+    lastResolvedVersionId: baseVersionId,
+    resolvedSourceStart: resolution.sourceRange?.start ?? null,
+    resolvedSourceEnd: resolution.sourceRange?.end ?? null,
+    resolvedRenderedStart: resolution.renderedRange?.start ?? null,
+    resolvedRenderedEnd: resolution.renderedRange?.end ?? null,
+    confidence: resolution.confidence,
+    idempotencyKey: idempotencyKey ?? null,
+  }
+}
+
+function parseAnchorSelectors(value: unknown): DriveAnnotationSelectorsV2 | null {
+  if (!value || typeof value !== "object") return null
+  const selectors = value as Partial<DriveAnnotationSelectorsV2>
+  if (selectors.schemaVersion !== 2 || !selectors.position || !selectors.quote) return null
+  return selectors as DriveAnnotationSelectorsV2
+}
+
+function normalizePositionStatus(value: string): DriveAnnotationAnchorDto["positionStatus"] {
+  if (value === "source_deleted" || value === "ambiguous" || value === "orphaned" || value === "unavailable") return value
+  return "attached"
+}
+
+function normalizeQuoteStatus(value: string): DriveAnnotationAnchorDto["quoteStatus"] {
+  if (value === "modified" || value === "deleted") return value
+  return "exact"
+}
+
+function unavailableAnchorRecord(thread: AnnotationThreadRecord): AnnotationAnchorRecord {
+  return {
+    schemaVersion: 2,
+    baseVersionId: thread.baseVersionId,
+    selectors: thread.anchor?.selectors ?? toDriveAnnotationSelectorsV2(thread.target as DriveAnnotationTargetDto),
+    positionStatus: "unavailable",
+    quoteStatus: thread.anchor?.quoteStatus ?? "exact",
+    lastResolvedVersionId: thread.anchor?.lastResolvedVersionId ?? null,
+    resolvedSourceStart: null,
+    resolvedSourceEnd: null,
+    resolvedRenderedStart: null,
+    resolvedRenderedEnd: null,
+    confidence: 0,
+  }
+}
+
+function hasGraphemeBoundaries(value: string, range: { readonly start: number; readonly end: number }): boolean {
+  if (typeof Intl.Segmenter !== "function") return true
+  const points = Array.from(value)
+  if (range.start < 0 || range.end > points.length || range.end <= range.start) return false
+  const utf16Start = points.slice(0, range.start).join("").length
+  const utf16End = points.slice(0, range.end).join("").length
+  const boundaries = new Set<number>([0, value.length])
+  for (const segment of new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(value)) {
+    boundaries.add(segment.index)
+  }
+  return boundaries.has(utf16Start) && boundaries.has(utf16End)
+}
+
+function staleAnnotationConflict(): ConflictException {
+  return new ConflictException({ code: "DRIVE_ANNOTATION_STALE", message: "评论位置已失效，请重新选择。" })
 }
 
 function canDeleteThread(

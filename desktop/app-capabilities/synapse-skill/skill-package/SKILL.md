@@ -1,6 +1,6 @@
 ---
 name: synapse-skill
-description: Use when operating Synapse through MCP tools, submitting 问题反馈 to Synapse, or creating, developing, modifying, migrating, or improving an Agent Skill in the current or local directory. Trigger for requests such as 开发 Skill、新建 Skill、创建 Skill、修改现有 Skill、迁移 Skill, even when the user does not explicitly name Synapse Skill. Synapse domains include Database, Drive, local Markdown document upload or sharing with linked images and HTML, Workflow, Automation, Content, Skill Repository, model price rules, secrets, repositories, Terminal sessions, and app capabilities.
+description: Use when operating Synapse through MCP tools, submitting 问题反馈 to Synapse, or creating, developing, modifying, migrating, or improving an Agent Skill in the current or local directory. Trigger for requests such as 开发 Skill、新建 Skill、创建 Skill、修改现有 Skill、迁移 Skill, even when the user does not explicitly name Synapse Skill. Synapse domains include Database; Drive one-time upload versus persistent local file or folder sync, including 备份、镜像、挂载、绑定到云盘、持续同步 and keep synchronized requests; local Markdown document upload or sharing with linked images and HTML; Workflow, Automation, Content, Skill Repository, model price rules, secrets, repositories, Terminal sessions, and app capabilities.
 ---
 
 # Synapse Skill
@@ -15,7 +15,7 @@ First classify the user's intent, then read the matching domain file before usin
 
 - Creating, developing, modifying, migrating, or improving an Agent Skill in the current or local directory -> `skill-authoring/index.md`
 - Database, tables, rows, columns, choices, SQL, table folders, mutation logs -> `database/index.md`
-- Drive files, folders, upload, download, preview, local Markdown document publishing with linked images or HTML, HTML page sharing, static site publishing or republishing, public assets, trash, versions -> `drive/index.md`
+- Drive files, folders, one-time upload, persistent local file or folder sync, download, preview, local Markdown document publishing with linked images or HTML, HTML page sharing, static site publishing or republishing, public assets, trash, versions -> `drive/index.md`
 - Workflow definitions, nodes, edges, DAG validation, layout, variables, providers, workflow runs -> `workflow/index.md`
 - Automation items, schedules, cron/interval triggers, executors, enablement, manual runs, active runs, run history -> `automation/index.md`
 - Cloud Skill repositories, local Skill upload, cloud Skill repository update, repository management URL -> `skill-repository/index.md`
@@ -38,7 +38,7 @@ For scheduled-task, scheduler, cron, interval, enable/disable, run-history, or r
 
 ## Boundaries
 
-Use only the domain guidance that matches the current task. Do not apply Workflow rules to Automation items, Drive rules to local files, or Database SQL rules to Resource Repository resources.
+Use only the domain guidance that matches the current task. Do not apply Workflow rules to Automation items, Drive rules to local files unless the user asks for a Drive upload or sync operation, or Database SQL rules to Resource Repository resources.
 
 For local Skill file authoring, read `skill-authoring/index.md`. Do not also read `content/index.md` unless the user asks to publish or manage the Skill in Synapse. A request only to publish or manage an existing Skill in Synapse is a Content operation, not local Skill authoring.
 

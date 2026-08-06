@@ -25,3 +25,27 @@ export async function reserveDriveUsageBytes(client: DrivePrismaClient, userId: 
   `
   if (updated !== 1) throw new BadRequestException("云盘空间不足。")
 }
+
+export async function releaseDriveUsageReservation(client: DrivePrismaClient, userId: string, releasedBytes: bigint): Promise<void> {
+  if (releasedBytes <= 0n) return
+  await ensureDriveUsage(client, userId)
+  await client.driveUsage.update({
+    where: { userId },
+    data: { reservedBytes: { decrement: releasedBytes } },
+  })
+}
+
+export async function commitDriveUsageReservation(
+  client: DrivePrismaClient,
+  userId: string,
+  input: { readonly reservedBytes: bigint; readonly usedBytes: bigint },
+): Promise<void> {
+  await ensureDriveUsage(client, userId)
+  await client.driveUsage.update({
+    where: { userId },
+    data: {
+      ...(input.reservedBytes > 0n ? { reservedBytes: { decrement: input.reservedBytes } } : {}),
+      ...(input.usedBytes > 0n ? { usedBytes: { increment: input.usedBytes } } : {}),
+    },
+  })
+}

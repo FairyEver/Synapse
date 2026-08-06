@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   DRIVE_DEFAULT_QUOTA_BYTES,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
+  DRIVE_DEFAULT_SITE_ACCESS_SETTINGS,
   DRIVE_CHANGE_TYPES,
   DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
   DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES,
@@ -267,10 +268,14 @@ describe("drive URL helpers", () => {
 
   it("defines the default drive access settings", () => {
     expect(DRIVE_DEFAULT_ACCESS_SETTINGS).toEqual({
-      passwordEnabled: true,
-      expiresIn: "3d",
+      passwordEnabled: false,
+      expiresIn: "forever",
       accessMode: "link_read",
       editorEmails: [],
+    })
+    expect(DRIVE_DEFAULT_SITE_ACCESS_SETTINGS).toEqual({
+      accessMode: "public",
+      expiresIn: "forever",
     })
   })
 

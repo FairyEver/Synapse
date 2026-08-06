@@ -66,7 +66,7 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 | `variable` | 用户本机变量的查询、写入和删除 | `desktop/synapse-capabilities/shared/variable-domain.ts` |
 | `app.workflow` | DAG 工作流定义、节点/边原子操作、执行、布局 | `desktop/synapse-capabilities/shared/workflow-domain.ts` |
 | `app.resource_repository` | Rule、Skill、Prompt 的发布、查询、更新和删除 | `desktop/synapse-capabilities/shared/content-domain.ts` |
-| `app.drive` | 云盘文件、文件夹、分享链接和用量管理 | `desktop/synapse-capabilities/shared/drive-domain.ts` |
+| `app.drive` | 云盘文件、文件夹、本地同步、分享链接和用量管理 | `desktop/synapse-capabilities/shared/drive-domain.ts` |
 | `app` | 系统 App 提供的可复用能力，例如文档模板生成 | `desktop/synapse-capabilities/shared/app-domain.ts` |
 
 领域边界必须清晰。跨领域暴露通过 shared registry 和 action router 完成。
@@ -83,6 +83,7 @@ app.automation.item.list -> app_automation_item_list
 app.model_price.rule.list -> app_model_price_rule_list
 app.resource_repository.skill.create -> app_resource_repository_skill_create
 app.drive.file.upload -> app_drive_file_upload
+app.drive.sync.binding.create -> app_drive_sync_binding_create
 app.document_template.docx.generate -> app_document_template_docx_generate
 app.file_opener.file.open -> app_file_opener_file_open
 ```
@@ -130,7 +131,7 @@ Content MCP 的更新和删除只允许修改当前仓库身份创建的资源�
 
 ## Drive MCP
 
-Drive MCP 暴露云盘文件、文件夹、预览、下载、分享和整理能力。上传未指定 `parentId` 时默认进入用户云盘根目录；上传工具使用服务端准备的直传会话，结果不返回 COS 凭证、Authorization header 或预签名上传 URL。分享工具返回 `/share/...` 链接，可浏览、渲染预览 HTML 或下载文件和文件夹。删除云盘文件或文件夹会禁用对应分享链接，恢复文件不会重新启用旧链接。整理云盘时，Agent 应先用 `app_drive_stats_get` 和 `app_drive_item_tree_list` 获取元数据，再用 `app_drive_folder_path_ensure` 准备目录，最后通过 `app_drive_reorganization_preview` 生成计划并用 `app_drive_reorganization_apply` 按 `planId` 应用。Drive MCP 不提供批量读取文件内容 API；内容判断只能少量、逐个调用现有文本读取工具。
+Drive MCP 暴露云盘文件、文件夹、预览、下载、本地同步、分享和整理能力。普通上传未指定 `parentId` 时默认进入用户云盘根目录，并且只上传一次；明确要求持续同步、上传并同步或绑定到云盘时，Agent 应先调用 `app_drive_sync_binding_preview`，再调用 `app_drive_sync_binding_create`。同步预检返回首次传输汇总和最多 200 条文件/目录清单，完整数量不因清单截断而丢失。同步创建未指定 `targetParentId` 时同样使用云盘根目录，并且不会覆盖或合并同名远端内容。Agent 通过分页云盘树解析远端名称和路径，通过同步快照解析已有绑定，重名或模糊匹配必须由用户确认。多项生命周期和冲突请求复用单项工具逐项执行并汇总部分成功；改变绑定根路径、云盘目标或方向需要停止后重新创建。同步状态和完整生命周期由 `app_drive_sync_snapshot_get`、pause、resume、remove、exclude-rules update、rescan 和 conflict resolve 工具管理；客户端必须保持运行、登录且在线才能执行同步工作。上传工具使用服务端准备的直传会话，结果不返回 COS 凭证、Authorization header 或预签名上传 URL。分享工具返回 `/share/...` 链接，可浏览、渲染预览 HTML 或下载文件和文件夹。删除云盘文件或文件夹会禁用对应分享链接，恢复文件不会重新启用旧链接。整理云盘时，Agent 应先用 `app_drive_stats_get` 和 `app_drive_item_tree_list` 获取元数据，再用 `app_drive_folder_path_ensure` 准备目录，最后通过 `app_drive_reorganization_preview` 生成计划并用 `app_drive_reorganization_apply` 按 `planId` 应用。Drive MCP 不提供批量读取文件内容 API；内容判断只能少量、逐个调用现有文本读取工具。
 
 ## App MCP
 

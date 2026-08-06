@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   DriveAnnotationCommentUpdateInput,
   DriveAnnotationCreateInput,
+  DriveAnnotationAnchorUpdateInput,
   DriveAnnotationReplyInput,
   DriveAnnotationThreadDto,
 } from '@synapse/shared'
@@ -81,6 +82,16 @@ export function useDriveAnnotations(input: DriveAnnotationContext | null | undef
     },
     onSuccess: invalidate,
   })
+  const updateAnchorMutation = useMutation({
+    mutationFn: (variables: { readonly threadId: string } & DriveAnnotationAnchorUpdateInput) => {
+      if (!input) throw new Error('Drive annotation context is missing.')
+      const { threadId, ...body } = variables
+      return input.context === 'owner'
+        ? driveAnnotationApi.updateOwnerAnchor(input.itemId, threadId, body)
+        : driveAnnotationApi.updateShareAnchor(input.shareId, input.itemId, threadId, body)
+    },
+    onSuccess: invalidate,
+  })
 
   return {
     threads: query.data ?? [] satisfies readonly DriveAnnotationThreadDto[],
@@ -97,5 +108,7 @@ export function useDriveAnnotations(input: DriveAnnotationContext | null | undef
     deletingComment: deleteCommentMutation.isPending,
     deleteThread: deleteThreadMutation.mutateAsync,
     deletingThread: deleteThreadMutation.isPending,
+    updateAnchor: updateAnchorMutation.mutateAsync,
+    updatingAnchor: updateAnchorMutation.isPending,
   }
 }

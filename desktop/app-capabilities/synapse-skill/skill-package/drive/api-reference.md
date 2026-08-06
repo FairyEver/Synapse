@@ -30,7 +30,7 @@ Input:
 
 ### `app_drive_file_upload`
 
-Upload one local file to Drive. A same-name file in the target folder is overwritten while preserving its item id and share links.
+Upload one local file to Drive once. This does not create persistent sync. A same-name file in the target folder is overwritten while preserving its item id and share links.
 
 Input:
 
@@ -41,7 +41,7 @@ Input:
 
 ### `app_drive_folder_upload`
 
-Upload a local folder to Drive. Relative paths are preserved, including empty subdirectories. Same-name folders are merged and same-name files are overwritten.
+Upload a local folder to Drive once. This does not create persistent sync. Relative paths are preserved, including empty subdirectories. Same-name folders are merged and same-name files are overwritten.
 
 Input:
 
@@ -112,6 +112,8 @@ Input:
 
 For `.md` and `.markdown`, `preview.relativeImages` contains each supported relative image source and its `resolvedUrl`. A non-null URL means the current Drive directory tree resolves that PNG, JPG/JPEG, WebP, GIF, AVIF, or ICO reference. The Markdown content and saved file keep the original relative source unchanged. Resolution covers the current 128 KiB Markdown preview and at most 256 unique relative image sources. This does not apply to `.mdx`, root-relative paths, SVG, or relative HTML resources.
 
+For `.md`, the browser snapshot may also advertise browser-only realtime collaboration and include a Markdown projection used by the web comment UI. These fields do not create MCP collaboration, presence, comment, or anchor operations. MCP content changes remain explicit Drive versions and may replace the active browser collaboration Epoch.
+
 ### `app_drive_file_content_read`
 
 Read previewable small text content from a Drive file. Use download for binary, oversized, or non-previewable files.
@@ -138,6 +140,84 @@ Input:
 
 - `itemId` required: Drive folder item id.
 - `outputPath` required: absolute local `.zip` output path.
+
+## Local Sync Tools
+
+These tools create and manage a persistent relationship between an owned Drive item and a stable local path while the Synapse client is running. Ordinary file and folder upload tools do not create this relationship.
+
+### `app_drive_sync_snapshot_get`
+
+Input: none.
+
+Returns all current-account `bindings`, visible `operations`, open `conflicts`, `health`, and summary counts. Offline or logged-out snapshots are read-only.
+
+### `app_drive_sync_binding_preview`
+
+Validate a binding without creating it. Always call this before creation.
+
+Input:
+
+- `localPath` required: stable absolute local file or folder path. Never pass a temporary attachment or Agent cache path.
+- `direction` required: `local_to_remote`, `remote_to_local`, or `bind_existing`.
+- `driveItemId` required for `remote_to_local` and `bind_existing`; omit it for `local_to_remote`.
+- `targetParentId` optional for `local_to_remote`: target Drive folder id. Omit or pass `null` for Drive root.
+- `name` optional for `local_to_remote`: new Drive item name. Defaults to the local basename.
+- `excludeRules` optional: user rules for a folder binding.
+- `useDefaultExcludes` optional: defaults to `true`.
+- `importGitignore` optional: import the current root `.gitignore` once. Defaults to `false`.
+
+Output includes `status` (`ready`, `warning`, or `blocked`), selected `direction`, `reason`, local path facts, forced/default rules, and detected/imported `.gitignore` rules. Do not bypass `blocked`.
+
+A non-blocked preview also includes `initialTransfer`:
+
+- `totalEntries`, `fileCount`, `folderCount`, and decimal-string `totalBytes` summarize the first transfer.
+- `entries` contains up to 200 `{ action, relativePath, size }` records. `relativePath: "."` is the binding root. Actions are `upload_file`, `download_file`, `create_remote_folder`, or `create_local_folder`.
+- `truncated: true` means `totalEntries` is authoritative but `entries` is only the first 200 records.
+- `bind_existing` has an empty transfer summary because creation validates and records the existing equal content instead of transferring it.
+
+### `app_drive_sync_binding_create`
+
+Uses the same input as preview. It repeats the complete safety preflight before creating the binding. A blocked preflight returns `ok: false` with the preview in `data` and creates no binding.
+
+For `local_to_remote`, same-name Drive content is never overwritten or merged. Use `bind_existing` only when both sides already exist with the same type and exact content.
+
+Output is the created binding, including `id`, `driveItemId`, `driveItemName`, `kind`, `localPath`, `status`, exclude rules, timestamps, and error state.
+
+### `app_drive_sync_binding_pause`
+
+Input: `bindingId` required. Returns the paused binding.
+
+### `app_drive_sync_binding_resume`
+
+Input: `bindingId` required. Resumes and catches up the binding, then returns its current state.
+
+### `app_drive_sync_binding_remove`
+
+Input: `bindingId` required. Stops and removes the binding without deleting local or Drive content. Returns `{ removed: true }`.
+
+### `app_drive_sync_binding_exclude_rules_update`
+
+Input:
+
+- `bindingId` required: folder binding id.
+- `defaults` required: complete replacement list of enabled recommended rules; may be empty.
+- `importedGitignore` required: complete replacement list of imported rules; may be empty.
+- `user` required: complete replacement list of user rules; may be empty.
+
+Forced rules such as `.git/` cannot be removed. Returns the updated binding.
+
+### `app_drive_sync_binding_rescan`
+
+Input: `bindingId` required. Runs a complete catch-up scan and returns the refreshed binding.
+
+### `app_drive_sync_conflict_resolve`
+
+Input:
+
+- `conflictId` required: open conflict id from the snapshot.
+- `action` required: `keep_local`, `keep_remote`, `keep_both`, `confirm_delete`, or `skip`; it must be an explicit user choice and must appear in the conflict's `availableActions`.
+
+`keep_local` overwrites Drive, `keep_remote` overwrites local, `keep_both` is limited to supported file conflicts, `confirm_delete` propagates a recoverable delete, and `skip` leaves the conflict open. Returns `{ resolved: true }`; call the snapshot tool for refreshed state.
 
 ## Drive Link Intake Tools
 
@@ -235,7 +315,7 @@ Create or reuse a public Drive share link and return the `/share/...` URL. Exist
 Input:
 
 - `itemId` required: Drive file or folder item id.
-- `passwordEnabled` optional: `false` only when the user asks for a no-password link. Omit it to use the current Synapse version's default for a new share; existing shares keep their current setting when omitted.
+- `passwordEnabled` optional: `true` when the user asks for password protection. Omit it to use the current Synapse version's no-password default for a new share; existing shares keep their current setting when omitted.
 - `expiresIn` optional: `3d`, `7d`, `30d`, `1y`, or `forever`. Omit it to use the current Synapse version's default for a new share; existing shares keep their current expiry when omitted.
 - `accessMode` optional: `link_read`, `link_edit`, or `specified_users_edit`. Existing shares keep their current mode when omitted.
 - `editorEmails` optional: email list for `specified_users_edit`; leave empty for other modes.
@@ -263,9 +343,9 @@ Input:
 - `sourceFolderItemId` required: Drive folder item id to copy.
 - `name` required: site display name.
 - `entryPath` optional: HTML entry path inside the folder. Omit when the homepage is `index.html`.
-- `accessMode` required: `public` or `password`.
+- `accessMode` optional: `public` or `password`. Omit it to use `public` for a new webpage share.
 - `password` optional: custom site password. Use only with `accessMode: "password"`. MCP responses never return site passwords; ask for or pass a custom password when the user needs a known value.
-- `expiresIn` required: `3d`, `7d`, `30d`, `1y`, or `forever`.
+- `expiresIn` optional: `3d`, `7d`, `30d`, `1y`, or `forever`. Omit it to use `forever` for a new webpage share.
 
 Output:
 

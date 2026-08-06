@@ -404,8 +404,8 @@ describe('DriveConsolePage', () => {
     await click(button('创建分享'))
 
     expect(driveApi.createShare).toHaveBeenCalledWith('folder-1', {
-      passwordEnabled: true,
-      expiresIn: '3d',
+      passwordEnabled: false,
+      expiresIn: 'forever',
       accessMode: 'link_read',
       editorEmails: [],
     })
@@ -683,8 +683,8 @@ describe('DriveConsolePage', () => {
       sourceFolderItemId: 'folder-1',
       name: '文档',
       entryPath: 'index.html',
-      accessMode: 'password',
-      expiresIn: '3d',
+      accessMode: 'public',
+      expiresIn: 'forever',
     })
     expect(reload).toHaveBeenCalled()
   })

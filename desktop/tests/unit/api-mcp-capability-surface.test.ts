@@ -28,6 +28,17 @@ const RETIRED_MCP_PREFIXES = [
   ["app_resource_repository_", "content_"],
   ["app_drive_", "drive_"],
 ] as const
+const CURRENT_ONLY_MCP_TOOL_NAMES = new Set([
+  "app_drive_sync_snapshot_get",
+  "app_drive_sync_binding_preview",
+  "app_drive_sync_binding_create",
+  "app_drive_sync_binding_pause",
+  "app_drive_sync_binding_resume",
+  "app_drive_sync_binding_remove",
+  "app_drive_sync_binding_exclude_rules_update",
+  "app_drive_sync_binding_rescan",
+  "app_drive_sync_conflict_resolve",
+])
 
 function allCapabilityIds(): CapabilityId[] {
   return CAPABILITY_DOMAINS.flatMap((domain) => domain.capabilities.map((capability) => capability.id)).sort()
@@ -54,6 +65,7 @@ function conventionalPrimaryCapabilityIds(): CapabilityId[] {
 
 function retiredMcpToolNamePairs(): Array<readonly [retiredName: string, currentName: string]> {
   return buildAllMcpTools().flatMap(({ name }) => {
+    if (CURRENT_ONLY_MCP_TOOL_NAMES.has(name)) return []
     const prefixes = RETIRED_MCP_PREFIXES.find(([primaryPrefix]) => name.startsWith(primaryPrefix))
     return prefixes ? [[name.replace(prefixes[0], prefixes[1]), name] as const] : []
   })
@@ -97,7 +109,7 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(toolNames).toHaveLength(206)
+    expect(toolNames).toHaveLength(215)
     expect(toolNames.every((toolName) => toolName.startsWith("app_"))).toBe(true)
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })

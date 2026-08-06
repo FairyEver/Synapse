@@ -1,7 +1,12 @@
 import {
   DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH,
+  codePointCount,
+  sliceByCodePoints,
+  type DriveAnnotationSelectorsV2,
   type DriveAnnotationTextRangeTargetV1,
+  type DriveMarkdownProjectionDto,
 } from '@synapse/shared'
+import * as Y from 'yjs'
 
 const CONTEXT_LENGTH = 80
 
@@ -38,19 +43,94 @@ export function createMarkdownAnnotationTargetFromSelection(
   }
 }
 
-export function getMarkdownRenderedText(root: Node): string {
-  let text = ''
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      return isAnnotationMarkerText(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
-    },
-  })
-  let current = walker.nextNode()
-  while (current) {
-    text += current.textContent ?? ''
-    current = walker.nextNode()
+export function createMarkdownAnnotationAnchorFromSelection(input: {
+  readonly root: HTMLElement
+  readonly selection: Selection | null
+  readonly projection: DriveMarkdownProjectionDto | null | undefined
+  readonly epoch?: string | null
+  readonly yText?: Y.Text | null
+}): { readonly target: DriveAnnotationTextRangeTargetV1; readonly selectors: DriveAnnotationSelectorsV2 } | null {
+  const target = createMarkdownAnnotationTargetFromSelection(input.root, input.selection)
+  if (!target) return null
+  const renderedText = getMarkdownRenderedText(input.root)
+  const renderedPosition = {
+    start: codePointCount(renderedText.slice(0, target.range.start)),
+    end: codePointCount(renderedText.slice(0, target.range.end)),
   }
-  return text
+  if (!hasGraphemeBoundaries(renderedText, renderedPosition.start, renderedPosition.end)) return null
+  if (!input.projection) {
+    return {
+      target,
+      selectors: {
+        schemaVersion: 2,
+        position: renderedPosition,
+        renderedPosition,
+        quote: {
+          exact: target.quote.exact,
+          prefix: sliceByCodePoints(renderedText, Math.max(0, renderedPosition.start - CONTEXT_LENGTH), renderedPosition.start),
+          suffix: sliceByCodePoints(renderedText, renderedPosition.end, renderedPosition.end + CONTEXT_LENGTH),
+        },
+      },
+    }
+  }
+  const segments = input.projection.segments.filter((segment) =>
+    segment.renderedEnd > renderedPosition.start && segment.renderedStart < renderedPosition.end)
+  if (segments.length === 0) return null
+  const firstSegment = segments[0]
+  const lastSegment = segments[segments.length - 1]
+  const position = {
+    start: firstSegment.mapping === 'identity'
+      ? firstSegment.sourceStart + Math.max(0, renderedPosition.start - firstSegment.renderedStart)
+      : firstSegment.sourceStart,
+    end: lastSegment.mapping === 'identity'
+      ? lastSegment.sourceStart + Math.max(0, renderedPosition.end - lastSegment.renderedStart)
+      : lastSegment.sourceEnd,
+  }
+  const block = [...input.projection.blocks]
+    .filter((candidate) => candidate.renderedStart <= renderedPosition.start && candidate.renderedEnd >= renderedPosition.end)
+    .sort((left, right) => (left.renderedEnd - left.renderedStart) - (right.renderedEnd - right.renderedStart))[0]
+  const prefixStart = Math.max(0, renderedPosition.start - CONTEXT_LENGTH)
+  const quote = {
+    exact: target.quote.exact,
+    prefix: sliceByCodePoints(renderedText, prefixStart, renderedPosition.start),
+    suffix: sliceByCodePoints(renderedText, renderedPosition.end, renderedPosition.end + CONTEXT_LENGTH),
+  }
+  const crdt = input.yText?.doc && input.epoch
+    ? {
+        epoch: input.epoch,
+        start: encodeRelativePosition(Y.createRelativePositionFromTypeIndex(input.yText, codePointOffsetToUtf16(input.yText.toString(), position.start))),
+        end: encodeRelativePosition(Y.createRelativePositionFromTypeIndex(input.yText, codePointOffsetToUtf16(input.yText.toString(), position.end))),
+      }
+    : undefined
+  return {
+    target,
+    selectors: {
+      schemaVersion: 2,
+      ...(crdt ? { crdt } : {}),
+      ...(block ? {
+        semantic: {
+          blockId: block.blockId,
+          start: renderedPosition.start - block.renderedStart,
+          end: renderedPosition.end - block.renderedStart,
+          blockType: block.type,
+          headingPath: block.headingPath,
+        },
+      } : {}),
+      position,
+      renderedPosition,
+      quote,
+    },
+  }
+}
+
+export function getMarkdownRenderedText(root: Node): string {
+  if (root.nodeType === Node.TEXT_NODE) return isNonRenderedText(root) ? '' : (root.textContent ?? '')
+  if (root instanceof HTMLElement) {
+    if (root.closest('[data-drive-annotation-marker="true"]')) return ''
+    if (root.tagName === 'IMG') return root.getAttribute('alt') ?? ''
+    if (root.tagName === 'BR') return '\n'
+  }
+  return [...root.childNodes].map(getMarkdownRenderedText).join('')
 }
 
 function getRangeRenderedText(range: Range): string {
@@ -68,7 +148,36 @@ function rootContainsNode(root: HTMLElement, node: Node): boolean {
   return node === root || root.contains(node)
 }
 
-function isAnnotationMarkerText(node: Node): boolean {
+function isNonRenderedText(node: Node): boolean {
   const parent = node.parentElement
-  return Boolean(parent?.closest('[data-drive-annotation-marker="true"]'))
+  if (parent?.closest('[data-drive-annotation-marker="true"]')) return true
+  if (node.textContent?.trim() || parent?.closest('pre, code')) return false
+  return !parent?.closest('p, h1, h2, h3, h4, h5, h6, li, td, th, a, em, strong, del, s')
+}
+
+function hasGraphemeBoundaries(value: string, start: number, end: number): boolean {
+  const Segmenter = (Intl as typeof Intl & {
+    readonly Segmenter?: new (
+      locale?: string,
+      options?: { readonly granularity: 'grapheme' }
+    ) => { segment: (input: string) => Iterable<{ readonly index: number }> }
+  }).Segmenter
+  if (!Segmenter) return true
+  const boundaries = new Set<number>([0, codePointCount(value)])
+  const segmenter = new Segmenter(undefined, { granularity: 'grapheme' })
+  for (const segment of segmenter.segment(value)) {
+    boundaries.add(codePointCount(value.slice(0, segment.index)))
+  }
+  return boundaries.has(start) && boundaries.has(end)
+}
+
+function encodeRelativePosition(position: Y.RelativePosition): string {
+  const bytes = Y.encodeRelativePosition(position)
+  let binary = ''
+  for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index] ?? 0)
+  return btoa(binary)
+}
+
+function codePointOffsetToUtf16(value: string, offset: number): number {
+  return Array.from(value).slice(0, offset).join('').length
 }

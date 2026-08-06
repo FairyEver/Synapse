@@ -45,6 +45,15 @@ describe("Drive capability domain", () => {
       "app_drive_folder_path_ensure",
       "app_drive_reorganization_preview",
       "app_drive_reorganization_apply",
+      "app_drive_sync_snapshot_get",
+      "app_drive_sync_binding_preview",
+      "app_drive_sync_binding_create",
+      "app_drive_sync_binding_pause",
+      "app_drive_sync_binding_resume",
+      "app_drive_sync_binding_remove",
+      "app_drive_sync_binding_exclude_rules_update",
+      "app_drive_sync_binding_rescan",
+      "app_drive_sync_conflict_resolve",
       "app_drive_direct_link_upload",
       "app_drive_direct_link_list",
       "app_drive_direct_link_get",
@@ -60,6 +69,7 @@ describe("Drive capability domain", () => {
     expect(MCP_TOOL_ACTIONS.app_drive_file_upload).toBe("app.drive.file.upload")
     expect(MCP_TOOL_ACTIONS.app_drive_file_version_restore).toBe("app.drive.file_version.restore")
     expect(MCP_TOOL_ACTIONS.app_drive_reorganization_apply).toBe("app.drive.reorganization.apply")
+    expect(MCP_TOOL_ACTIONS.app_drive_sync_binding_create).toBe("app.drive.sync.binding.create")
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_direct_link_upload).toBe("app.drive.direct_link.upload")
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_direct_link_list).toBe("app.drive.direct_link.list")
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_direct_link_get).toBe("app.drive.direct_link.get")
@@ -80,6 +90,50 @@ describe("Drive capability domain", () => {
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_link_resolve).toBe("app.drive.link.resolve")
     expect(DRIVE_MCP_TOOL_ACTIONS).not.toHaveProperty("drive_item_list")
     expect(getActionDomainId("app.drive.item.list")).toBe("drive")
+  })
+
+  it("builds persistent Drive sync schemas and risk metadata", () => {
+    const tools = new Map(buildDriveTools().map((tool) => [tool.name, tool]))
+    const capabilities = new Map(DRIVE_DOMAIN.capabilities.map((capability) => [capability.id, capability]))
+
+    expect(tools.get("app_drive_sync_binding_preview")?.inputSchema).toMatchObject({
+      properties: {
+        localPath: { type: "string" },
+        direction: { enum: ["local_to_remote", "remote_to_local", "bind_existing"] },
+        driveItemId: { type: "string" },
+        targetParentId: { anyOf: [{ type: "string" }, { type: "null" }] },
+        excludeRules: { type: "array" },
+        useDefaultExcludes: { type: "boolean" },
+        importGitignore: { type: "boolean" },
+      },
+      required: ["localPath", "direction"],
+    })
+    expect(tools.get("app_drive_sync_binding_exclude_rules_update")?.inputSchema.required)
+      .toEqual(["bindingId", "defaults", "importedGitignore", "user"])
+    expect(tools.get("app_drive_file_upload")?.description).toContain("does not create persistent sync")
+    expect(tools.get("app_drive_folder_upload")?.description).toContain("does not create persistent sync")
+    expect(tools.get("app_drive_sync_binding_preview")?.description).toContain("initialTransfer")
+    expect(tools.get("app_drive_sync_binding_preview")?.description).toContain("up to 200")
+    expect(capabilities.get("app.drive.sync.snapshot.get")).toMatchObject({ mutates: false })
+    expect(capabilities.get("app.drive.sync.binding.preview")).toMatchObject({ mutates: false })
+    expect(capabilities.get("app.drive.sync.binding.create")).toMatchObject({ mutates: true, risk: "high" })
+    expect(capabilities.get("app.drive.sync.conflict.resolve")).toMatchObject({ mutates: true, risk: "high" })
+  })
+
+  it("documents public non-expiring Drive share defaults", () => {
+    const tools = new Map(buildDriveTools().map((tool) => [tool.name, tool]))
+    const shareCreate = tools.get("app_drive_share_create")
+    const siteCreate = tools.get("app_drive_site_create")
+
+    expect(shareCreate?.inputSchema.properties).toMatchObject({
+      passwordEnabled: { description: expect.stringContaining("Defaults to false") },
+      expiresIn: { description: expect.stringContaining("Defaults to forever") },
+    })
+    expect(siteCreate?.inputSchema.required).toEqual(["sourceFolderItemId", "name"])
+    expect(siteCreate?.inputSchema.properties).toMatchObject({
+      accessMode: { description: expect.stringContaining("Defaults to public") },
+      expiresIn: { description: expect.stringContaining("Defaults to forever") },
+    })
   })
 
   it("builds Drive link intake tool schemas and marks local writes", () => {

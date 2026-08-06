@@ -1,6 +1,6 @@
 # Synapse Drive MCP
 
-Use Synapse Drive MCP tools when the user wants to upload, open, preview, download, share, publish a static site, organize, delete, restore, or create Drive-backed public asset links in Synapse Drive.
+Use Synapse Drive MCP tools when the user wants to upload, keep a local file or folder synchronized, open, preview, download, share, publish a static site, organize, delete, restore, or create Drive-backed public asset links in Synapse Drive.
 
 ## Scope
 
@@ -44,6 +44,15 @@ Use these tools only for Synapse Drive:
 - `app_drive_folder_path_ensure`
 - `app_drive_reorganization_preview`
 - `app_drive_reorganization_apply`
+- `app_drive_sync_snapshot_get`
+- `app_drive_sync_binding_preview`
+- `app_drive_sync_binding_create`
+- `app_drive_sync_binding_pause`
+- `app_drive_sync_binding_resume`
+- `app_drive_sync_binding_remove`
+- `app_drive_sync_binding_exclude_rules_update`
+- `app_drive_sync_binding_rescan`
+- `app_drive_sync_conflict_resolve`
 - `app_drive_direct_link_upload`
 - `app_drive_direct_link_list`
 - `app_drive_direct_link_get`
@@ -56,6 +65,60 @@ Use these tools only for Synapse Drive:
 - `app_drive_item_restore`
 
 Do not use this skill for database records, Resource Repository resources, Automation schedules/items, workflow definitions, provider settings, or general local file editing unrelated to a Drive operation.
+
+Markdown realtime collaboration, presence, comments, comment anchors, and manual reassociation are browser UI capabilities. They do not have Drive MCP tools. MCP reads and writes continue to use the current versioned file APIs; never imply that an MCP content write joins a browser collaboration room.
+
+## One-Time Upload Versus Persistent Sync
+
+Choose the route from the user's actual intent before calling any write tool.
+
+- “Upload to Drive”, “send to Drive”, or equivalent wording without a continuing relationship means a one-time upload. Use `app_drive_file_upload` or `app_drive_folder_upload`. These tools never create a sync binding.
+- “Sync”, “keep synchronized”, “continuous sync”, “upload and sync”, “bind to Drive”, or equivalent wording about a local file, folder, or path means persistent local sync. Call `app_drive_sync_binding_preview`, then `app_drive_sync_binding_create`. Do not call an ordinary upload tool as a shortcut.
+- Judge continuity from the whole request, not one keyword. “以后改了云盘也更新”, “自动跟着变”, “镜像这个目录”, and “挂到云盘” express a continuing relationship and therefore mean sync. “备份”, “存到云盘”, “归档”, or “自动上传” alone can mean either one-time upload or continuing sync; ask one concise question: “只上传这一次，还是以后本地变化也持续同步？”
+- An explicit sync request already authorizes choosing the sync workflow; do not ask a redundant “upload or sync?” question. Normal MCP permission or high-risk approval still applies.
+- “Synchronize the live site”, “update the published site”, or equivalent wording about an existing `/sites/...` publication means update its Drive source and use `app_drive_site_republish`. It is not a local filesystem sync request unless the user explicitly identifies a local path and asks for a continuing Drive relationship.
+
+## Local File And Folder Sync Flow
+
+Use this flow for one or more local files, folders, or paths.
+
+1. Resolve each input to a stable absolute path.
+   - A normal path may be resolved against the Agent's workspace.
+   - A dragged or attached file is eligible only when the Agent can identify its original stable filesystem path.
+   - If the Agent receives only attachment bytes, an opaque reference, or a temporary/cache path, ask for the original local path. Never bind a temporary upload or Agent cache.
+2. Choose the Drive parent.
+   - When the user names a Drive folder path, call `app_drive_folder_path_ensure` first and use its item id as `targetParentId`.
+   - Otherwise omit `targetParentId` or pass `null` to use Drive root.
+   - For `local_to_remote`, omit `name` to use the local basename unless the user requests another Drive name.
+   - For `remote_to_local` or `bind_existing`, resolve the user's Drive name or path to an owned item id. Use `app_drive_item_tree_list` with pagination for a Drive-wide name/path lookup, or traverse the stated parent path with `app_drive_item_list`. Match the full path when one was given. If zero items match, report that; if multiple plausible items match, show the shortest distinguishing paths and ask which one instead of guessing.
+3. Check the selected Drive parent for an existing same-name item with `app_drive_item_list`, following pagination when needed.
+   - When no same-name item exists, call `app_drive_sync_binding_preview` with `direction: "local_to_remote"`, then create only if the preview is not blocked.
+   - When a same-name item of the same type exists, call preview with `direction: "bind_existing"` and its `driveItemId`. Create only when the local and remote content match exactly.
+   - When content differs or file/folder types conflict, do not overwrite or merge. Ask the user to choose another Drive name/location or explicitly reconcile the two sides.
+4. Always call `app_drive_sync_binding_preview` before `app_drive_sync_binding_create`. Creation repeats the full preflight; a blocked create result is authoritative and must not be bypassed. For a ready preview, summarize `initialTransfer` before high-risk creation: report file/folder counts and total bytes, mention when `truncated` means only the first 200 entries are shown, and provide the entry list when the user asks what will change.
+5. A folder creates one recursive binding for its included subtree. `.git/` and Synapse transfer files remain forcibly excluded. Recommended defaults are enabled unless explicitly changed. `importGitignore: true` copies the root `.gitignore` rules once; later `.gitignore` edits do not change the stored rules.
+6. For multiple unrelated inputs, process each path independently and sequentially. Keep successful bindings when a later path fails, do not roll them back, and report successes and failures together.
+7. After creation, report the local path, Drive item, binding id, and current status. Explain that syncing runs while the Synapse client is open, logged in, and online.
+
+Use `remote_to_local` only when the user selects an existing owned Drive item and a new safe local destination. Shared items owned by another user cannot be synchronized.
+
+## Sync Lifecycle And Conflicts
+
+- Call `app_drive_sync_snapshot_get` for binding status, current operations, health, and conflicts. Resolve phrases such as “这个项目”, “刚才那个同步”, a local path, or a Drive item name against the snapshot's binding id, normalized `localPath`, and Drive item metadata. Act directly only on one unambiguous match; otherwise ask the user to choose from the matching local and Drive paths.
+- Pause with `app_drive_sync_binding_pause`; resume and catch up with `app_drive_sync_binding_resume`.
+- Use `app_drive_sync_binding_rescan` for “sync now”, “check again”, or a complete manual catch-up.
+- `app_drive_sync_binding_remove` stops the relationship without deleting either side.
+- Replace editable folder rules with `app_drive_sync_binding_exclude_rules_update`; preserve any rule groups the user did not ask to change by copying them from the current binding snapshot.
+- Never guess a conflict resolution. Use `app_drive_sync_conflict_resolve` only after the user explicitly selects an available action:
+  - `keep_local` overwrites the Drive side with the local state.
+  - `keep_remote` overwrites the local side with the Drive state.
+  - `keep_both` keeps conflict copies and is available only for supported file conflicts.
+  - `confirm_delete` propagates the deletion to the remaining side using recoverable trash behavior.
+  - `skip` leaves the conflict open.
+- After lifecycle or conflict operations, call `app_drive_sync_snapshot_get` when the user needs the refreshed state.
+- For multiple bindings or conflicts, resolve the complete target set first, then apply the existing single-item tools sequentially. Keep successful operations when a later item fails and report successes, failures, and skipped items together. A request such as “所有当前冲突都以本地为准” is an explicit choice for that stated set, but apply it only where `keep_local` appears in each conflict's `availableActions`.
+
+There is no in-place MCP operation for changing a binding's local root, Drive target, or initial direction. When the user asks to move or retarget a binding, explain that Synapse must stop the old binding and create a new one. Snapshot and preserve its editable rules, confirm the non-atomic stop-and-recreate workflow unless the user already explicitly requested it, remove the old binding without deleting either side, then preview and create the replacement. If replacement creation fails, report clearly that both sides still exist but no active binding remains; never claim the old binding was migrated.
 
 ## Drive Link Intake Flow
 
@@ -114,7 +177,7 @@ Use this flow when the user asks to upload or share a local Markdown document. T
 4. If local HTML links need remote URLs, derive a sibling path by inserting `_final` before the source extension, ask before overwriting an existing file, and rewrite only the inventoried HTML targets in that copy. Otherwise upload the original Markdown unchanged.
 5. Upload the chosen Markdown with `app_drive_file_upload` while passing the original Markdown basename as `name`, unless the unchanged file was already uploaded by `app_drive_folder_upload`. Within the native preview limits, use `app_drive_item_preview_get` to confirm each supported relative image has a non-null `resolvedUrl`; do not claim the upload is complete while a required image is unresolved.
 6. If the user asked to share the Markdown, call `app_drive_share_create` for the uploaded Markdown item itself. A single-file Markdown share can read only the relative images that its current content actually references. Do not create a folder share as a shortcut, and keep every referenced HTML share or site independent.
-7. Pass only share settings the user explicitly requested, and apply them to every file share in this transaction unless the user scopes them to one artifact. When the user did not specify password enablement, expiry, access mode, or editor emails, omit `passwordEnabled`, `expiresIn`, `accessMode`, and `editorEmails` so the current Synapse version supplies its defaults. Do not hardcode those defaults in this skill. `app_drive_site_create` requires access settings; ask for its required values when the user did not provide them.
+7. Pass only share settings the user explicitly requested, and apply them to every file share in this transaction unless the user scopes them to one artifact. When the user did not specify password enablement, expiry, access mode, or editor emails, omit `passwordEnabled`, `expiresIn`, `accessMode`, and `editorEmails` so the current Synapse version supplies its defaults. Do not hardcode those defaults in this skill. For `app_drive_site_create`, also omit `accessMode` and `expiresIn` when the user did not specify them.
 8. Do not upload the Markdown when a required dependency upload, HTML share/site publication, rewrite, or verification fails. A folder upload may have completed some remote writes before reporting failures; do not delete them without explicit authorization, and report the completed writes and the blocking failure.
 
 ## HTML Sharing Route
@@ -178,7 +241,7 @@ Updating either route does not live-reload pages already open in a visitor's bro
    - Do not pass `editorEmails` for read-only or link-edit links. For `specified_users_edit`, provide one or more email addresses.
    - Use the `app_drive_share_create` result when the user needs the password for a specific share. `app_drive_share_list` lists existing shares without returning passwords.
 11. After applying **HTML Sharing Route**, call `app_drive_site_create` for a Drive folder containing a multi-file static website, build bundle, multi-page HTML prototype, or product prototype site, or when the user explicitly asks to publish the whole folder as a webpage share. A folder containing only `index.html` is valid in the explicit whole-folder case. Webpage shares use `/sites/<siteId>/`, copy the folder at publish time, and do not grant Drive browse or edit access.
-   - Use `sourceFolderItemId`, `name`, `accessMode`, and `expiresIn`.
+   - Use `sourceFolderItemId` and `name`; pass `accessMode` and `expiresIn` only when the user requested non-default access settings.
    - Set `entryPath` only when the homepage is not the default `index.html`.
    - Use `accessMode: "public"` for open sites or `accessMode: "password"` when the user asks for a password. Pass `password` only when the user provides a custom site password. Site MCP results never return passwords, so ask for a custom password when the user needs a known value.
    - Use `app_drive_site_list`, `app_drive_site_update_access`, `app_drive_site_disable`, `app_drive_site_enable`, `app_drive_site_delete`, and `app_drive_site_republish` for existing site management.

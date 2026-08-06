@@ -32,8 +32,15 @@ describe("loadEnv", () => {
     expect(env.appPublicUrl).toBe("https://synapse.test")
     expect(env.desktopUpdateIntentSecret).toBe(productionUpdateIntentSecret)
     expect(env.driveLocalRoot).toBe("/app/data/drive")
+    expect(env.driveCollaborationEnabled).toBe(false)
     expect(isSkillRepositoryCosConfigured(env)).toBe(true)
     expect(env.trustProxy).toBe(false)
+  })
+
+  it("parses the Drive collaboration feature flag", () => {
+    expect(loadEnv({ ...baseEnv, DRIVE_COLLABORATION_ENABLED: "true" }).driveCollaborationEnabled).toBe(true)
+    expect(loadEnv({ ...baseEnv, DRIVE_COLLABORATION_ENABLED: "false" }).driveCollaborationEnabled).toBe(false)
+    expect(() => loadEnv({ ...baseEnv, DRIVE_COLLABORATION_ENABLED: "yes" })).toThrow("DRIVE_COLLABORATION_ENABLED")
   })
 
   it("allows missing public app URL outside production", () => {

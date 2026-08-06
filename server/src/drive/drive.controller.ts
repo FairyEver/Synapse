@@ -34,6 +34,7 @@ import { DriveLinkIntakeService } from "./drive-link-intake.service"
 import {
   parseDriveAnnotationCommentUpdateBody,
   parseDriveAnnotationCreateBody,
+  parseDriveAnnotationAnchorUpdateBody,
   parseDriveAnnotationReplyBody,
 } from "./drive-annotation-target"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
@@ -78,6 +79,11 @@ const folderSchema = z.object({
 const folderPathEnsureSchema = z.object({
   parentId: z.string().nullable().optional(),
   segments: z.array(z.string().min(1).max(255)).min(1).max(20),
+}).strict()
+
+const collaborationCheckpointSchema = z.object({
+  epoch: z.string().min(1).max(64),
+  idempotencyKey: z.string().min(8).max(128),
 }).strict()
 
 const reorganizationPreviewSchema = z.object({
@@ -143,9 +149,9 @@ const driveSiteCreateSchema = z.object({
   sourceFolderItemId: z.string().min(1),
   name: z.string().min(1).max(255),
   entryPath: z.string().min(1).max(1024).nullable().optional(),
-  accessMode: z.enum(["public", "password"]),
+  accessMode: z.enum(["public", "password"]).optional(),
   password: z.string().min(1).max(256).nullable().optional(),
-  expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]),
+  expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]).optional(),
 }).strict()
 const driveSiteAccessUpdateSchema = z.object({
   accessMode: z.enum(["public", "password"]),
@@ -656,6 +662,22 @@ export class DriveUserController {
     )
   }
 
+  @Patch("/browser/owner/items/:itemId/annotations/:threadId/anchor")
+  updateOwnerAnnotationAnchor(
+    @Param("itemId") itemId: string,
+    @Param("threadId") threadId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).updateOwnerAnchor(
+      request.user!.id,
+      itemId,
+      threadId,
+      parseDriveAnnotationAnchorUpdateBody(body),
+      driveAuditContext(request),
+    )
+  }
+
   @Patch("/browser/owner/items/:itemId/annotations/comments/:commentId")
   updateOwnerAnnotationComment(
     @Param("itemId") itemId: string,
@@ -698,6 +720,19 @@ export class DriveUserController {
   ) {
     const parsed = parseBody(driveFileTextUpdateSchema, body, "保存请求无效。")
     return this.drive.updateOwnerFileText(request.user!.id, itemId, parsed, driveAuditContext(request))
+  }
+
+  @Post("/browser/owner/items/:itemId/collaboration/checkpoint")
+  checkpointOwnerCollaboration(
+    @Param("itemId") itemId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.checkpointOwnerCollaboration(
+      request.user!.id,
+      itemId,
+      parseBody(collaborationCheckpointSchema, body, "保存版本请求无效。"),
+    )
   }
 
   private async sendFileVersionDownloadWithAudit(
@@ -1351,6 +1386,44 @@ export class DrivePublicController {
   }
 
   @UseGuards(UserAuthGuard)
+  @Patch("/api/drive/browser/shares/:shareId/annotations/:threadId/anchor")
+  updateShareRootAnnotationAnchor(
+    @Param("shareId") shareId: string,
+    @Param("threadId") threadId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).updateShareAnchor({
+      actorUserId: request.user!.id,
+      shareId,
+      threadId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      body: parseDriveAnnotationAnchorUpdateBody(body),
+      auditContext: driveAuditContext(request),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Patch("/api/drive/browser/shares/:shareId/items/:itemId/annotations/:threadId/anchor")
+  updateShareItemAnnotationAnchor(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Param("threadId") threadId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).updateShareAnchor({
+      actorUserId: request.user!.id,
+      shareId,
+      itemId,
+      threadId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      body: parseDriveAnnotationAnchorUpdateBody(body),
+      auditContext: driveAuditContext(request),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
   @Patch("/api/drive/browser/shares/:shareId/items/:itemId/annotations/comments/:commentId")
   updateShareItemAnnotationComment(
     @Param("shareId") shareId: string,
@@ -1435,6 +1508,38 @@ export class DrivePublicController {
       threadId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       auditContext: driveAuditContext(request),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/browser/shares/:shareId/collaboration/checkpoint")
+  checkpointShareRootCollaboration(
+    @Param("shareId") shareId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.checkpointShareCollaboration({
+      actorUserId: request.user!.id,
+      shareId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      checkpoint: parseBody(collaborationCheckpointSchema, body, "保存版本请求无效。"),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/browser/shares/:shareId/items/:itemId/collaboration/checkpoint")
+  checkpointShareItemCollaboration(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.checkpointShareCollaboration({
+      actorUserId: request.user!.id,
+      shareId,
+      itemId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      checkpoint: parseBody(collaborationCheckpointSchema, body, "保存版本请求无效。"),
     })
   }
 

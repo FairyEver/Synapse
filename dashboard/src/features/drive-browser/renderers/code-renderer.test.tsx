@@ -39,6 +39,12 @@ vi.mock('@monaco-editor/react', async () => {
   }
 })
 
+vi.mock('y-monaco', () => ({
+  MonacoBinding: class {
+    destroy(): void {}
+  },
+}))
+
 let root: Root | null = null
 let host: HTMLDivElement | null = null
 

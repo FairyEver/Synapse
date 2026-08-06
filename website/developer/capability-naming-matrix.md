@@ -112,5 +112,14 @@
 | `app.drive.folder_path.ensure` | `app_drive_folder_path_ensure` | `app.drive.folder_path.ensure` | `driveFolderPathEnsure` |
 | `app.drive.reorganization.preview` | `app_drive_reorganization_preview` | `app.drive.reorganization.preview` | `driveReorganizationPreview` |
 | `app.drive.reorganization.apply` | `app_drive_reorganization_apply` | `app.drive.reorganization.apply` | `driveReorganizationApply` |
+| `app.drive.sync.snapshot.get` | `app_drive_sync_snapshot_get` | `app.drive.sync.snapshot.get` | `getSnapshot` |
+| `app.drive.sync.binding.preview` | `app_drive_sync_binding_preview` | `app.drive.sync.binding.preview` | `previewBinding` |
+| `app.drive.sync.binding.create` | `app_drive_sync_binding_create` | `app.drive.sync.binding.create` | `createSafeBinding` |
+| `app.drive.sync.binding.pause` | `app_drive_sync_binding_pause` | `app.drive.sync.binding.pause` | `pauseBinding` |
+| `app.drive.sync.binding.resume` | `app_drive_sync_binding_resume` | `app.drive.sync.binding.resume` | `resumeBinding` |
+| `app.drive.sync.binding.remove` | `app_drive_sync_binding_remove` | `app.drive.sync.binding.remove` | `removeBinding` |
+| `app.drive.sync.binding.exclude_rules.update` | `app_drive_sync_binding_exclude_rules_update` | `app.drive.sync.binding.exclude_rules.update` | `updateExcludeRules` |
+| `app.drive.sync.binding.rescan` | `app_drive_sync_binding_rescan` | `app.drive.sync.binding.rescan` | `rescanBinding` |
+| `app.drive.sync.conflict.resolve` | `app_drive_sync_conflict_resolve` | `app.drive.sync.conflict.resolve` | `resolveConflict` |
 
 只支持本矩阵中的规范公开名称。

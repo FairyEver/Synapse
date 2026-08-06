@@ -2659,7 +2659,7 @@ function DriveManagedShareAccessDialog({
     if (!target) return
     setSettings({
       passwordEnabled: target.passwordEnabled,
-      expiresIn: "3d",
+      expiresIn: DRIVE_DEFAULT_ACCESS_SETTINGS.expiresIn,
       accessMode: target.accessMode,
       editorEmails: [...target.editorEmails],
     })

@@ -22,8 +22,8 @@ describe("drive markdown renderer", () => {
     ].join("\n"))
 
     const html = result.html
-    expect(html).toContain('<h1 id="notes">Notes</h1>')
-    expect(html).toContain('<div data-drive-markdown-table-scroll="true"><table>')
+    expect(html).toMatch(/<h1[^>]*id="notes"[^>]*>Notes<\/h1>/u)
+    expect(html).toMatch(/<div data-drive-markdown-table-scroll="true"><table[^>]*>/u)
     expect(html).toContain("</table></div>")
     expect(html).toContain('type="checkbox"')
     expect(html).toContain("<code")
@@ -61,7 +61,7 @@ describe("drive markdown renderer", () => {
     const html = result.html
     expect(html).not.toContain("./diagram.png")
     expect(html).not.toContain("../guide.md")
-    expect(html).toContain('<a href="https://example.com/guide">external</a>')
+    expect(html).toMatch(/<a[^>]*href="https:\/\/example\.com\/guide"[^>]*>external<\/a>/u)
   })
 
   it("renders resolved Markdown and standalone raw images without changing other relative links", async () => {
@@ -88,9 +88,9 @@ describe("drive markdown renderer", () => {
       ]),
     })
 
-    expect(result.html).toContain('<img src="/share/share_1/items/image_1/download" alt="diagram">')
-    expect(result.html).toContain('<img alt="missing">')
-    expect(result.html).toContain('<img src="/share/share_1/items/image_2/download" alt="reference" title="Reference">')
+    expect(result.html).toMatch(/<img[^>]*src="\/share\/share_1\/items\/image_1\/download"[^>]*alt="diagram"[^>]*>/u)
+    expect(result.html).toMatch(/<img[^>]*alt="missing"[^>]*>/u)
+    expect(result.html).toMatch(/<img[^>]*src="\/share\/share_1\/items\/image_2\/download"[^>]*alt="reference"[^>]*title="Reference"[^>]*>/u)
     expect(result.html).toContain('src="/share/share_1/items/image_3/download"')
     expect(result.html).toContain('alt="Raw"')
     expect(result.html).toContain('width="320"')
@@ -131,10 +131,10 @@ describe("drive markdown renderer", () => {
       "#### Deep",
     ].join("\n"))
 
-    expect(result.html).toContain('<h1 id="notes">Notes!</h1>')
-    expect(result.html).toContain('<h2 id="当前-状态">当前 状态</h2>')
-    expect(result.html).toContain('<h3 id="当前-状态-2">当前 状态</h3>')
-    expect(result.html).toContain('<h2 id="当前-状态-3">当前 状态</h2>')
+    expect(result.html).toMatch(/<h1[^>]*id="notes"[^>]*>Notes!<\/h1>/u)
+    expect(result.html).toMatch(/<h2[^>]*id="当前-状态"[^>]*>当前 状态<\/h2>/u)
+    expect(result.html).toMatch(/<h3[^>]*id="当前-状态-2"[^>]*>当前 状态<\/h3>/u)
+    expect(result.html).toMatch(/<h2[^>]*id="当前-状态-3"[^>]*>当前 状态<\/h2>/u)
     expect(result.outline).toEqual([
       {
         id: "notes",

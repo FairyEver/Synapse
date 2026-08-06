@@ -10,8 +10,8 @@ const PUBLIC_ASSET_SUPPORTED_FORMATS = "PNG, JPG, JPEG, GIF, WebP, AVIF, ICO, PD
 const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.item.list" as CapabilityId, title: "List drive items", description: "List Synapse Drive files and folders under a parent folder.", mutates: false },
   { id: "app.drive.item.get" as CapabilityId, title: "Get drive item", description: "Get metadata for one Synapse Drive file or folder.", mutates: false },
-  { id: "app.drive.file.upload" as CapabilityId, title: "Upload file", description: "Upload one local file to Synapse Drive, overwriting the newest same-name file in the target folder.", mutates: true },
-  { id: "app.drive.folder.upload" as CapabilityId, title: "Upload folder", description: "Upload a local folder to Synapse Drive, merging same-name folders and overwriting same-name files.", mutates: true },
+  { id: "app.drive.file.upload" as CapabilityId, title: "Upload file", description: "Upload one local file to Synapse Drive once, overwriting the newest same-name file in the target folder. This does not create a persistent local sync binding.", mutates: true },
+  { id: "app.drive.folder.upload" as CapabilityId, title: "Upload folder", description: "Upload a local folder to Synapse Drive once, merging same-name folders and overwriting same-name files. This does not create a persistent local sync binding.", mutates: true },
   { id: "app.drive.folder.create" as CapabilityId, title: "Create folder", description: "Create a Synapse Drive folder.", mutates: true },
   { id: "app.drive.item.rename" as CapabilityId, title: "Rename item", description: "Rename a Synapse Drive file or folder.", mutates: true },
   { id: "app.drive.item.move" as CapabilityId, title: "Move item", description: "Move a Synapse Drive file or folder.", mutates: true },
@@ -46,6 +46,15 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.folder_path.ensure" as CapabilityId, title: "Ensure folder path", description: "Create or reuse a nested Synapse Drive folder path.", mutates: true },
   { id: "app.drive.reorganization.preview" as CapabilityId, title: "Preview reorganization", description: "Validate a Synapse Drive reorganization plan without moving items.", mutates: false },
   { id: "app.drive.reorganization.apply" as CapabilityId, title: "Apply reorganization", description: "Apply a previously previewed Synapse Drive reorganization plan.", mutates: true },
+  { id: "app.drive.sync.snapshot.get" as CapabilityId, title: "Get sync snapshot", description: "Get local Drive sync bindings, operations, conflicts, and health while Synapse is running.", mutates: false },
+  { id: "app.drive.sync.binding.preview" as CapabilityId, title: "Preview sync binding", description: "Validate a persistent local file or folder sync binding without creating it.", mutates: false },
+  { id: "app.drive.sync.binding.create" as CapabilityId, title: "Create sync binding", description: "Create a persistent local file or folder sync binding after repeating the safety preflight.", mutates: true, risk: "high" },
+  { id: "app.drive.sync.binding.pause" as CapabilityId, title: "Pause sync binding", description: "Pause one persistent local Drive sync binding.", mutates: true },
+  { id: "app.drive.sync.binding.resume" as CapabilityId, title: "Resume sync binding", description: "Resume and catch up one persistent local Drive sync binding.", mutates: true },
+  { id: "app.drive.sync.binding.remove" as CapabilityId, title: "Remove sync binding", description: "Stop and remove one sync binding without deleting the local or Drive content.", mutates: true },
+  { id: "app.drive.sync.binding.exclude_rules.update" as CapabilityId, title: "Update sync exclude rules", description: "Replace editable exclude rules for one folder sync binding.", mutates: true },
+  { id: "app.drive.sync.binding.rescan" as CapabilityId, title: "Rescan sync binding", description: "Run a complete catch-up scan for one sync binding.", mutates: true },
+  { id: "app.drive.sync.conflict.resolve" as CapabilityId, title: "Resolve sync conflict", description: "Resolve one local Drive sync conflict using the user's explicit choice.", mutates: true, risk: "high" },
   { id: "app.drive.direct_link.upload" as CapabilityId, title: "Upload public asset", description: `Upload a supported image or document to Drive 公开素材, also known as 外链, 直链, public asset, or direct link. Supported formats: ${PUBLIC_ASSET_SUPPORTED_FORMATS}; SVG is not supported.`, mutates: true },
   { id: "app.drive.direct_link.list" as CapabilityId, title: "List public assets", description: "List current user's Drive 公开素材 public assets. Access logs are not returned.", mutates: false },
   { id: "app.drive.direct_link.get" as CapabilityId, title: "Get public asset", description: "Get one public asset by assetId without access-log detail.", mutates: false },
@@ -100,12 +109,28 @@ const driveLinkBaseProperties = {
   password: stringField("Optional actual link password. Environment variables are not expanded in MCP parameters; read the variable first or ask the user. Used only for this call and never returned."),
 }
 const accessSettingsProperties = {
-  passwordEnabled: { type: "boolean", description: "Whether public access should require a password. Defaults to true." },
-  expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Public access expiration. Defaults to 3d." },
+  passwordEnabled: { type: "boolean", description: "Whether public access should require a password. Defaults to false." },
+  expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Public access expiration. Defaults to forever." },
   accessMode: { type: "string", enum: driveShareAccessModeValues, description: "Share permission. link_read lets link holders read; link_edit lets link holders edit supported text files only after signing in; specified_users_edit lets only listed emails edit." },
   editorEmails: { type: "array", items: { type: "string" }, description: "Editor email list for specified_users_edit. Leave empty for other access modes." },
 }
 const sitePasswordField = stringField("Optional custom webpage-share password. Used only when accessMode is password. MCP responses never return site passwords; pass a custom value when the user needs a known password.")
+const driveSyncDirectionValues = ["local_to_remote", "remote_to_local", "bind_existing"]
+const driveSyncConflictResolutionValues = ["keep_local", "keep_remote", "keep_both", "confirm_delete", "skip"]
+const driveSyncBindingProperties = {
+  localPath: stringField("Stable absolute local file or folder path. Never pass a temporary attachment or cache path."),
+  direction: {
+    type: "string",
+    enum: driveSyncDirectionValues,
+    description: "Initial sync direction. Use local_to_remote for a new Drive target, remote_to_local for a new local target, or bind_existing only when both sides already match exactly.",
+  },
+  driveItemId: stringField("Existing owned Drive item id. Required for remote_to_local and bind_existing; omit for local_to_remote."),
+  targetParentId: optionalParentId,
+  name: stringField("Optional new Drive item name for local_to_remote. Defaults to the local basename."),
+  excludeRules: { type: "array", items: { type: "string" }, description: "Optional user exclude rules for a folder binding." },
+  useDefaultExcludes: { type: "boolean", description: "Whether to include Synapse recommended folder excludes. Defaults to true." },
+  importGitignore: { type: "boolean", description: "Import the current root .gitignore rules once when creating a folder binding. Defaults to false." },
+}
 
 export function buildDriveTools(): McpToolDefinition[] {
   return withPrimaryMcpTools([
@@ -133,7 +158,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_file_upload",
-      description: "Upload one local file to Synapse Drive using server-prepared direct upload. A same-name file in the target folder is overwritten while preserving its item id and share links. The result never returns COS credentials, Authorization headers, or presigned upload URLs.",
+      description: "Upload one local file to Synapse Drive once using server-prepared direct upload. This does not create persistent sync; when the user asks to sync, keep synchronized, or upload and sync, use drive_sync_binding_preview then drive_sync_binding_create instead. A same-name file in the target folder is overwritten while preserving its item id and share links. The result never returns COS credentials, Authorization headers, or presigned upload URLs.",
       inputSchema: {
         type: "object",
         properties: {
@@ -147,7 +172,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_folder_upload",
-      description: "Upload a local folder to Synapse Drive while preserving relative paths, including empty subdirectories. Same-name folders are merged and same-name files are overwritten. The result includes uploadedFiles and createdDirectories relative paths, and never returns COS credentials, Authorization headers, or presigned upload URLs.",
+      description: "Upload a local folder to Synapse Drive once while preserving relative paths, including empty subdirectories. This does not create persistent sync; when the user asks to sync, keep synchronized, or upload and sync, use drive_sync_binding_preview then drive_sync_binding_create instead. Same-name folders are merged and same-name files are overwritten. The result includes uploadedFiles and createdDirectories relative paths, and never returns COS credentials, Authorization headers, or presigned upload URLs.",
       inputSchema: {
         type: "object",
         properties: {
@@ -421,11 +446,11 @@ export function buildDriveTools(): McpToolDefinition[] {
           sourceFolderItemId: stringField("Drive folder item id to copy into the webpage deployment."),
           name: stringField("Webpage share display name."),
           entryPath: stringField("Optional HTML entry path inside the folder. Defaults to index.html when available."),
-          accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a password." },
+          accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a password. Defaults to public." },
           password: sitePasswordField,
-          expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Webpage share expiration. Use forever for no expiry." },
+          expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Webpage share expiration. Defaults to forever." },
         },
-        required: ["sourceFolderItemId", "name", "accessMode", "expiresIn"],
+        required: ["sourceFolderItemId", "name"],
       },
     },
     {
@@ -574,6 +599,94 @@ export function buildDriveTools(): McpToolDefinition[] {
           planId: stringField("Plan id returned by drive_reorganization_preview."),
         },
         required: ["planId"],
+      },
+    },
+    {
+      name: "drive_sync_snapshot_get",
+      description: "Get all local Drive sync bindings, current operations, open conflicts, health, and summary counts. Synapse must be running; offline or logged-out state is returned as read-only health.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "drive_sync_binding_preview",
+      description: "Preflight a persistent local file or folder sync binding without creating it. Always call this before drive_sync_binding_create. Ready previews include an initialTransfer summary and up to 200 planned file/folder entries; use totalEntries and truncated to detect an abbreviated list. A blocked preview must be reported or corrected rather than bypassed.",
+      inputSchema: {
+        type: "object",
+        properties: driveSyncBindingProperties,
+        required: ["localPath", "direction"],
+      },
+    },
+    {
+      name: "drive_sync_binding_create",
+      description: "Create a persistent local file or folder sync binding. This repeats the complete safety preflight and returns an error result when blocked. Use only for explicit sync intent, never for an ordinary one-time upload.",
+      inputSchema: {
+        type: "object",
+        properties: driveSyncBindingProperties,
+        required: ["localPath", "direction"],
+      },
+    },
+    {
+      name: "drive_sync_binding_pause",
+      description: "Pause one local Drive sync binding by bindingId.",
+      inputSchema: {
+        type: "object",
+        properties: { bindingId: stringField("Sync binding id returned by create or snapshot."), },
+        required: ["bindingId"],
+      },
+    },
+    {
+      name: "drive_sync_binding_resume",
+      description: "Resume and catch up one paused or interrupted local Drive sync binding by bindingId.",
+      inputSchema: {
+        type: "object",
+        properties: { bindingId: stringField("Sync binding id returned by create or snapshot."), },
+        required: ["bindingId"],
+      },
+    },
+    {
+      name: "drive_sync_binding_remove",
+      description: "Stop and remove one local Drive sync binding. Local and Drive content remain in place.",
+      inputSchema: {
+        type: "object",
+        properties: { bindingId: stringField("Sync binding id returned by create or snapshot."), },
+        required: ["bindingId"],
+      },
+    },
+    {
+      name: "drive_sync_binding_exclude_rules_update",
+      description: "Replace editable exclude-rule groups for one folder sync binding. Forced exclusions such as .git/ remain enforced.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          bindingId: stringField("Folder sync binding id."),
+          defaults: { type: "array", items: { type: "string" }, description: "Complete replacement list of enabled Synapse default rules." },
+          importedGitignore: { type: "array", items: { type: "string" }, description: "Complete replacement list of rules previously imported from .gitignore." },
+          user: { type: "array", items: { type: "string" }, description: "Complete replacement list of user rules." },
+        },
+        required: ["bindingId", "defaults", "importedGitignore", "user"],
+      },
+    },
+    {
+      name: "drive_sync_binding_rescan",
+      description: "Run a complete catch-up scan for one local Drive sync binding and return its refreshed binding state.",
+      inputSchema: {
+        type: "object",
+        properties: { bindingId: stringField("Sync binding id returned by create or snapshot."), },
+        required: ["bindingId"],
+      },
+    },
+    {
+      name: "drive_sync_conflict_resolve",
+      description: "Resolve one open sync conflict using an explicit user choice. keep_local overwrites Drive, keep_remote overwrites local, keep_both is for supported file conflicts, confirm_delete propagates deletion, and skip leaves the conflict open.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          conflictId: stringField("Open conflict id returned by drive_sync_snapshot_get."),
+          action: { type: "string", enum: driveSyncConflictResolutionValues, description: "Resolution explicitly selected by the user." },
+        },
+        required: ["conflictId", "action"],
       },
     },
     {

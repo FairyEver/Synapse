@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import path from "node:path"
 import { createReadStream } from "node:fs"
 import { lstat, readdir, stat } from "node:fs/promises"
@@ -44,6 +45,9 @@ import type {
   DriveShareDto,
   DriveShareListPageDto,
   DriveStatsDto,
+  DriveSyncConflictResolutionAction,
+  DriveSyncCreateSafeBindingInput,
+  DriveSyncInitialDirection,
   DriveTrashItemDto,
   DriveTrashListPageDto,
   DriveUploadPrepareResult,
@@ -60,6 +64,7 @@ import {
   createDriveLocalUploadTooManyDirectoriesError,
   createDriveLocalUploadTooManyFilesError,
 } from "../../src/lib/drive-local-upload-limits"
+import type { DriveSyncService } from "../services/drive-sync-service"
 
 const sharedDrivePromise = import("@synapse/shared")
 
@@ -168,6 +173,7 @@ type FileSystemPort = {
 
 type DriveCapabilityDispatcherDeps = {
   readonly accountService: DriveAccountServicePort
+  readonly driveSyncService?: DriveSyncService
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
   readonly actor?: ActorIdentity
@@ -503,6 +509,83 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             ok: true,
             data: await deps.accountService.applyDriveReorganization({ planId: requireString(params, "planId") }),
           }))
+        case "app.drive.sync.snapshot.get":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await requireDriveSyncService(deps).getSnapshot(),
+          }))
+        case "app.drive.sync.binding.preview":
+          return dispatchDriveRead(deps, action, params, context, async () => {
+            const prepared = await prepareDriveSyncBindingInput(deps, fileSystem, params, context, action)
+            return {
+              ok: true,
+              data: await requireDriveSyncService(deps).previewBinding({
+                ...prepared.input,
+                remoteExists: prepared.remoteExists,
+                directionHint: prepared.input.direction,
+              }),
+            }
+          })
+        case "app.drive.sync.binding.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const service = requireDriveSyncService(deps)
+            const prepared = await prepareDriveSyncBindingInput(deps, fileSystem, params, context, action)
+            const preview = await service.previewBinding({
+              ...prepared.input,
+              remoteExists: prepared.remoteExists,
+              directionHint: prepared.input.direction,
+            })
+            if (preview.status === "blocked") {
+              return {
+                ok: false,
+                error: preview.reason ?? "Drive sync binding preflight was blocked.",
+                data: preview,
+              }
+            }
+            return { ok: true, data: await service.createSafeBinding(prepared.input) }
+          })
+        case "app.drive.sync.binding.pause":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await requireDriveSyncService(deps).pauseBinding(requireString(params, "bindingId")),
+          }))
+        case "app.drive.sync.binding.resume":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await requireDriveSyncService(deps).resumeBinding(requireString(params, "bindingId")),
+          }))
+        case "app.drive.sync.binding.remove":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            await requireDriveSyncService(deps).removeBinding(requireString(params, "bindingId"))
+            return { ok: true, data: { removed: true } }
+          })
+        case "app.drive.sync.binding.exclude_rules.update":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await requireDriveSyncService(deps).updateExcludeRules({
+              id: requireString(params, "bindingId"),
+              defaults: requireStringList(params, "defaults"),
+              importedGitignore: requireStringList(params, "importedGitignore"),
+              user: requireStringList(params, "user"),
+            }),
+          }))
+        case "app.drive.sync.binding.rescan":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const service = requireDriveSyncService(deps)
+            const bindingId = requireString(params, "bindingId")
+            await service.rescanBinding(bindingId)
+            const binding = (await service.getSnapshot()).bindings.find((candidate) => candidate.id === bindingId)
+            if (!binding) throw new Error("Drive sync binding no longer exists.")
+            return { ok: true, data: binding }
+          })
+        case "app.drive.sync.conflict.resolve":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            await requireDriveSyncService(deps).resolveConflict({
+              conflictId: requireString(params, "conflictId"),
+              action: requireDriveSyncConflictResolution(params.action),
+            })
+            return { ok: true, data: { resolved: true } }
+          })
         case "app.drive.direct_link.upload":
           return dispatchDriveMutation(deps, action, params, context, () =>
             uploadPublicAsset(deps, fileSystem, params, context, action))
@@ -959,7 +1042,7 @@ function driveMutationSecurity(
 
 function driveParamCorrelation(params: Record<string, unknown>): Record<string, unknown> {
   const metadata: Record<string, unknown> = {}
-  for (const key of ["itemId", "assetId", "versionId", "shareId", "siteId", "sourceFolderItemId", "parentId", "name", "folderName", "passwordEnabled", "accessMode", "isPinned", "expiresIn", "planId"]) {
+  for (const key of ["itemId", "assetId", "versionId", "shareId", "siteId", "sourceFolderItemId", "parentId", "targetParentId", "bindingId", "conflictId", "direction", "name", "folderName", "passwordEnabled", "accessMode", "isPinned", "expiresIn", "planId"]) {
     const value = params[key]
     if (typeof value === "string" || typeof value === "boolean" || value === null) {
       metadata[key] = key === "shareId" && typeof value === "string"
@@ -1007,10 +1090,12 @@ function driveResultCorrelation(result: DispatchResult): Record<string, unknown>
   if (!data || typeof data !== "object" || Array.isArray(data)) return metadata
   const record = data as Record<string, unknown>
   if (typeof record.itemId === "string") metadata.itemId = record.itemId
+  if (typeof record.driveItemId === "string") metadata.driveItemId = record.driveItemId
+  if (typeof record.id === "string" && typeof record.driveItemId === "string") metadata.bindingId = record.id
   if (typeof record.assetId === "string") metadata.assetId = record.assetId
   if (typeof record.siteId === "string") metadata.siteId = record.siteId
   if (typeof record.shareId === "string" && typeof record.id === "string") metadata.shareRecordId = record.id
-  if (typeof record.id === "string" && !metadata.itemId && !metadata.shareRecordId) metadata.itemId = record.id
+  if (typeof record.id === "string" && !metadata.itemId && !metadata.shareRecordId && !metadata.bindingId) metadata.itemId = record.id
   if (typeof record.completed === "number") metadata.completed = record.completed
   if (typeof record.failed === "number") metadata.failed = record.failed
   if (typeof record.rootCreated === "boolean") metadata.rootCreated = record.rootCreated
@@ -1312,6 +1397,118 @@ function requireLocalPath(params: Record<string, unknown>, key: string): string 
   return value
 }
 
+function requireAbsoluteLocalPath(params: Record<string, unknown>, key: string): string {
+  const localPath = requireLocalPath(params, key)
+  if (!path.isAbsolute(localPath)) {
+    throw new Error(`Missing or invalid '${key}': expected absolute local path`)
+  }
+  return localPath
+}
+
+function requireDriveSyncService(deps: DriveCapabilityDispatcherDeps): DriveSyncService {
+  if (!deps.driveSyncService) throw new Error("Drive sync service is unavailable.")
+  return deps.driveSyncService
+}
+
+async function prepareDriveSyncBindingInput(
+  deps: DriveCapabilityDispatcherDeps,
+  fileSystem: FileSystemPort,
+  params: Record<string, unknown>,
+  context: DispatchContext,
+  action: string,
+): Promise<{ readonly input: DriveSyncCreateSafeBindingInput; readonly remoteExists: boolean }> {
+  const localPath = requireAbsoluteLocalPath(params, "localPath")
+  const direction = requireDriveSyncDirection(params.direction)
+  const excludeRules = optionalStringList(params.excludeRules, "excludeRules")
+  const useDefaultExcludes = optionalBooleanValue(params.useDefaultExcludes, "useDefaultExcludes")
+  const importGitignore = optionalBooleanValue(params.importGitignore, "importGitignore")
+  const ruleInput = {
+    ...(excludeRules === undefined ? {} : { excludeRules }),
+    ...(useDefaultExcludes === undefined ? {} : { useDefaultExcludes }),
+    ...(importGitignore === undefined ? {} : { importGitignore }),
+  }
+
+  if (direction === "local_to_remote") {
+    if (params.driveItemId !== undefined && params.driveItemId !== null) {
+      throw new Error("driveItemId must be omitted for local_to_remote sync.")
+    }
+    await authorizeFileRead(deps, localPath, context, action)
+    const localStat = await fileSystem.lstat(localPath)
+    const kind = localStat.isFile() ? "file" : localStat.isDirectory() ? "folder" : null
+    if (!kind || localStat.isSymbolicLink()) {
+      throw new Error("localPath must be a regular file or directory and cannot be a symbolic link.")
+    }
+    const driveItemName = optionalString(params.name) ?? path.basename(localPath)
+    const targetParentId = optionalNullableString(params.targetParentId)
+    return {
+      remoteExists: false,
+      input: {
+        driveItemId: `pending-drive-sync:${randomUUID()}`,
+        driveItemName,
+        kind,
+        drivePathHint: driveItemName,
+        targetParentId,
+        localPath,
+        direction,
+        ...ruleInput,
+      },
+    }
+  }
+
+  if (params.name !== undefined && params.name !== null) {
+    throw new Error("name is supported only for local_to_remote sync.")
+  }
+  if (params.targetParentId !== undefined && params.targetParentId !== null) {
+    throw new Error("targetParentId is supported only for local_to_remote sync.")
+  }
+  const driveItem = await deps.accountService.getDriveItem(requireString(params, "driveItemId"))
+  return {
+    remoteExists: true,
+    input: {
+      driveItemId: driveItem.id,
+      driveItemName: driveItem.name,
+      kind: driveItem.type,
+      drivePathHint: driveItem.name,
+      localPath,
+      direction,
+      ...ruleInput,
+    },
+  }
+}
+
+function requireDriveSyncDirection(value: unknown): DriveSyncInitialDirection {
+  if (value === "local_to_remote" || value === "remote_to_local" || value === "bind_existing") return value
+  throw new Error("Missing or invalid 'direction': expected local_to_remote, remote_to_local, or bind_existing.")
+}
+
+function requireDriveSyncConflictResolution(value: unknown): DriveSyncConflictResolutionAction {
+  if (value === "keep_local" || value === "keep_remote" || value === "keep_both" || value === "confirm_delete" || value === "skip") return value
+  throw new Error("Missing or invalid 'action': expected a Drive sync conflict resolution.")
+}
+
+function optionalBooleanValue(value: unknown, key: string): boolean | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== "boolean") throw new Error(`Missing or invalid '${key}': expected boolean`)
+  return value
+}
+
+function optionalStringList(value: unknown, key: string): string[] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!Array.isArray(value)) throw new Error(`Missing or invalid '${key}': expected string array`)
+  return value.map((entry, index) => {
+    if (typeof entry !== "string" || entry.trim() === "") {
+      throw new Error(`Missing or invalid '${key}[${index}]': expected non-empty string`)
+    }
+    return entry
+  })
+}
+
+function requireStringList(params: Record<string, unknown>, key: string): string[] {
+  const value = optionalStringList(params[key], key)
+  if (!value) throw new Error(`Missing or invalid '${key}': expected string array`)
+  return value
+}
+
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
 }
@@ -1379,14 +1576,15 @@ function parsePublicLinksPageInput(params: Record<string, unknown>): DrivePublic
 }
 
 function parseDriveSiteCreateInput(params: Record<string, unknown>): DriveSiteCreateInput {
-  const accessMode = requireDriveSiteAccessMode(params.accessMode)
+  const accessMode = optionalDriveSiteAccessMode(params.accessMode)
+  const expiresIn = optionalDriveAccessExpiresIn(params.expiresIn)
   return {
     sourceFolderItemId: requireString(params, "sourceFolderItemId"),
     name: requireString(params, "name"),
     entryPath: optionalNullableString(params.entryPath),
-    accessMode,
+    ...(accessMode === undefined ? {} : { accessMode }),
     password: optionalNullableString(params.password),
-    expiresIn: requireDriveAccessExpiresIn(params.expiresIn),
+    ...(expiresIn === undefined ? {} : { expiresIn }),
   }
 }
 
@@ -1543,8 +1741,15 @@ function optionalDriveShareAccessMode(value: unknown): DriveShareAccessMode | un
   throw new Error("Expected accessMode to be one of link_read, link_edit, or specified_users_edit.")
 }
 
-function requireDriveSiteAccessMode(value: unknown): DriveSiteAccessMode {
+function optionalDriveSiteAccessMode(value: unknown): DriveSiteAccessMode | undefined {
+  if (value === undefined || value === null) return undefined
   if (value === "public" || value === "password") return value
+  throw new Error("Expected accessMode to be public or password.")
+}
+
+function requireDriveSiteAccessMode(value: unknown): DriveSiteAccessMode {
+  const accessMode = optionalDriveSiteAccessMode(value)
+  if (accessMode) return accessMode
   throw new Error("Missing or invalid 'accessMode': expected public or password.")
 }
 

@@ -106,4 +106,20 @@ describe("drive annotation target helpers", () => {
     expect(result.anchorStatus).toBe("orphaned")
     expect(result.range).toBeNull()
   })
+
+  it("requires quote context when repeated text survives a version change", () => {
+    const result = resolveDriveAnnotationTarget({
+      target: {
+        schemaVersion: 1,
+        kind: "textRange",
+        surface: "markdownRenderedText",
+        range: { start: 0, end: 2 },
+        quote: { exact: "重点", prefix: "目标", suffix: "内容" },
+      },
+      renderedText: "重点错误。重点错误。",
+      sameVersion: false,
+    })
+
+    expect(result).toEqual({ anchorStatus: "orphaned", range: null })
+  })
 })

@@ -16,6 +16,7 @@ afterEach(() => {
   root = null
   host = null
   document.body.innerHTML = ''
+  vi.unstubAllGlobals()
 })
 
 describe('MarkdownCommentsRail', () => {
@@ -26,8 +27,34 @@ describe('MarkdownCommentsRail', () => {
     expect(document.body.textContent).toContain('1')
     expect(document.body.textContent).toContain('First line')
     expect(document.body.textContent).toContain('Second line')
-    expect(document.body.textContent).toContain('位置已变化')
+    expect(document.body.textContent).toContain('未定位 1')
+    expect(document.body.textContent).toContain('原文已修改或删除')
+    expect(document.body.textContent).toContain('“Note”')
     expect(document.body.innerHTML).not.toContain('<strong>unsafe</strong>')
+  })
+
+  it('orders unlocated comments by latest activity before attached comments in compact mode', () => {
+    renderRail({
+      mode: 'list',
+      threads: [
+        thread({ id: 'attached', body: 'Attached', anchorStatus: 'attached', anchorTop: 10 }),
+        thread({ id: 'older', body: 'Older lost', updatedAt: '2026-06-21T00:01:00.000Z' }),
+        thread({ id: 'newer', body: 'Newer lost', updatedAt: '2026-06-21T00:02:00.000Z' }),
+      ],
+    })
+
+    const text = document.body.textContent ?? ''
+    expect(text.indexOf('Newer lost')).toBeLessThan(text.indexOf('Older lost'))
+    expect(text.indexOf('Older lost')).toBeLessThan(text.indexOf('Attached'))
+  })
+
+  it('keeps the unlocated section visible when its comments are collapsed', async () => {
+    renderRail()
+
+    await click(buttonWithText('未定位 1'))
+
+    expect(document.body.textContent).toContain('未定位 1')
+    expect(document.body.textContent).not.toContain('First line')
   })
 
   it('renders a compact empty state when no comments are present', () => {
@@ -115,7 +142,8 @@ describe('MarkdownCommentsRail', () => {
 
     expect(document.body.textContent).toContain('回复')
     expect(document.body.textContent).not.toContain('编辑')
-    expect(document.body.textContent).not.toContain('删除')
+    expect(document.body.textContent).not.toContain('删除评论')
+    expect(document.body.textContent).not.toContain('删除讨论')
     expect(buttonWithLabel('更多评论操作')).toBeNull()
     expect(buttonWithLabel('讨论操作')).toBeNull()
   })
@@ -173,12 +201,15 @@ describe('MarkdownCommentsRail', () => {
     renderRail({ threads: [thread({ anchorStatus: 'attached', anchorTop: 0 })] })
 
     expect(commentRail().className).toContain('min-h-full')
+    expect(commentRail().className.split(/\s+/u)).not.toContain('h-full')
     expect(commentRail().className).not.toContain('max-h-screen')
     expect(railTitle().className).toContain('sticky')
     expect(railTitle().className).toContain('top-0')
     expect(railTitle().className).toContain('z-10')
     expect(railTitle().className).toContain('shrink-0')
     expect(railScrollRegion().className).not.toContain('overflow-y-auto')
+    expect(anchoredRegion().className).not.toContain('overflow-hidden')
+    expect(anchoredLayer().className).not.toContain('will-change-transform')
   })
 
   it('keeps nearby anchored comments from overlapping', () => {
@@ -190,6 +221,56 @@ describe('MarkdownCommentsRail', () => {
     })
 
     expect(threadTop('thread-2')).toBeGreaterThan(threadTop('thread-1') + 12)
+  })
+
+  it('reflows anchored comments from live card sizes and batches resize work by frame', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    let nextFrameId = 1
+    const requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      const frameId = nextFrameId
+      nextFrameId += 1
+      frames.set(frameId, callback)
+      return frameId
+    })
+    vi.stubGlobal('requestAnimationFrame', requestAnimationFrame)
+    vi.stubGlobal('cancelAnimationFrame', vi.fn((frameId: number) => frames.delete(frameId)))
+    TestResizeObserver.instances = []
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+
+    renderRail({
+      threads: [
+        thread({ id: 'thread-1', body: 'First', anchorStatus: 'attached', anchorTop: 10 }),
+        thread({ id: 'thread-2', body: 'Second', anchorStatus: 'attached', anchorTop: 20 }),
+      ],
+    })
+
+    expect(TestResizeObserver.instances).toHaveLength(1)
+    const observer = TestResizeObserver.instances[0]
+    if (!observer) throw new Error('Missing resize observer')
+    expect(observer.observed).toEqual(new Set([threadSection('thread-1'), threadSection('thread-2')]))
+
+    observer.emit([
+      resizeEntry(threadSection('thread-1'), 80),
+      resizeEntry(threadSection('thread-2'), 40),
+    ])
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1)
+    await flushAnimationFrames(frames)
+    expect(threadTop('thread-2')).toBe(92)
+
+    observer.emit([resizeEntry(threadSection('thread-1'), 180)])
+    observer.emit([resizeEntry(threadSection('thread-1'), 200)])
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(2)
+    expect(threadTop('thread-2')).toBe(92)
+
+    await flushAnimationFrames(frames)
+    expect(threadTop('thread-2')).toBe(212)
+
+    observer.emit([resizeEntry(threadSection('thread-1'), 240)])
+    expect(frames.size).toBe(1)
+    act(() => root?.unmount())
+    root = null
+    expect(observer.disconnect).toHaveBeenCalledOnce()
+    expect(frames.size).toBe(0)
   })
 
   it('keeps own comment deletion in the comment action menu and confirms before deleting', async () => {
@@ -302,6 +383,8 @@ function thread(input: {
   readonly canDeleteThread?: boolean
   readonly handle?: string | null
   readonly email?: string | null
+  readonly quote?: string
+  readonly updatedAt?: string
 } = {}) {
   const handle = 'handle' in input ? input.handle : 'user'
   const email = 'email' in input ? input.email : 'user@example.com'
@@ -317,7 +400,7 @@ function thread(input: {
         kind: 'textRange' as const,
         surface: 'markdownRenderedText' as const,
         range: { start: 0, end: 4 },
-        quote: { exact: 'Note', prefix: '', suffix: '' },
+        quote: { exact: input.quote ?? 'Note', prefix: '', suffix: '' },
       },
       anchorStatus: input.anchorStatus ?? 'orphaned' as const,
       author: { id: 'user-1', email, handle },
@@ -335,7 +418,7 @@ function thread(input: {
         permissions: { canEdit: input.canEdit ?? true, canDelete: input.canDelete ?? true },
       }],
       createdAt: '2026-06-21T00:00:00.000Z',
-      updatedAt: '2026-06-21T00:00:00.000Z',
+      updatedAt: input.updatedAt ?? '2026-06-21T00:00:00.000Z',
       permissions: { canDelete: input.canDeleteThread ?? true },
     },
     anchorTop: input.anchorTop ?? null,
@@ -419,10 +502,66 @@ function railScrollRegion() {
   return element
 }
 
+function anchoredRegion() {
+  const element = anchoredLayer().parentElement
+  if (!(element instanceof HTMLElement)) throw new Error('Missing anchored region')
+  return element
+}
+
+function anchoredLayer() {
+  const element = document.querySelector('[data-markdown-comments-anchored-layer="true"]')
+  if (!(element instanceof HTMLElement)) throw new Error('Missing anchored layer')
+  return element
+}
+
 async function inputValue(element: HTMLTextAreaElement, value: string) {
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
     setter?.call(element, value)
     element.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+class TestResizeObserver implements ResizeObserver {
+  static instances: TestResizeObserver[] = []
+
+  readonly observed = new Set<Element>()
+
+  constructor(private readonly callback: ResizeObserverCallback) {
+    TestResizeObserver.instances.push(this)
+  }
+
+  observe(target: Element) {
+    this.observed.add(target)
+  }
+
+  readonly unobserve = vi.fn((target: Element) => {
+    this.observed.delete(target)
+  })
+
+  readonly disconnect = vi.fn(() => {
+    this.observed.clear()
+  })
+
+  emit(entries: ResizeObserverEntry[]) {
+    this.callback(entries, this)
+  }
+}
+
+function resizeEntry(target: Element, blockSize: number): ResizeObserverEntry {
+  return {
+    target,
+    borderBoxSize: [{ blockSize, inlineSize: 0 }],
+    contentBoxSize: [{ blockSize, inlineSize: 0 }],
+    devicePixelContentBoxSize: [],
+    contentRect: { height: blockSize } as DOMRectReadOnly,
+  }
+}
+
+async function flushAnimationFrames(frames: Map<number, FrameRequestCallback>) {
+  await act(async () => {
+    const callbacks = [...frames.values()]
+    frames.clear()
+    callbacks.forEach((callback) => callback(performance.now()))
   })
 }

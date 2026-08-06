@@ -690,6 +690,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
         kind: z.enum(["workflow-node", "conversation", "agent-persona"]),
         entityId: z.string(),
         entityName: z.string(),
+        projectId: z.string().optional(),
         nodeId: z.string().optional(),
         nodeName: z.string().optional(),
         providerId: z.string(),

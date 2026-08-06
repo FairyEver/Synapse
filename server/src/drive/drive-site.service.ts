@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Opt
 import { Prisma } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import {
+  DRIVE_DEFAULT_SITE_ACCESS_SETTINGS,
   DRIVE_SITE_DEFAULT_PAGE_SIZE,
   DRIVE_SITE_MAX_FILES,
   DRIVE_SITE_MAX_PAGE_SIZE,
@@ -202,18 +203,20 @@ export class DriveSiteService {
   async createSite(userId: string, publicAppUrl: string, input: DriveSiteCreateInput, auditContext: DriveAuditContext = {}): Promise<DriveSiteDto> {
     const snapshot = await this.buildSnapshot(this.prisma, userId, input.sourceFolderItemId)
     const entryPath = this.resolveEntryPath(snapshot, input.entryPath ?? null)
-    const passwordMaterial = await this.resolvePasswordMaterial(input.accessMode, input.password ?? null, input.expiresIn)
+    const accessMode = input.accessMode ?? DRIVE_DEFAULT_SITE_ACCESS_SETTINGS.accessMode
+    const expiresIn = input.expiresIn ?? DRIVE_DEFAULT_SITE_ACCESS_SETTINGS.expiresIn
+    const passwordMaterial = await this.resolvePasswordMaterial(accessMode, input.password ?? null, expiresIn)
     const site = await this.prisma.driveSite.create({
       data: {
         siteId: createDriveSiteId(),
         userId,
         name: input.name.trim(),
         status: DRIVE_SITE_STATUS.failed,
-        accessMode: input.accessMode,
+        accessMode,
         passwordHash: passwordMaterial.passwordHash,
         passwordEncrypted: passwordMaterial.passwordEncrypted,
-        expiresIn: input.expiresIn,
-        expiresAt: expiresAtFromInput(input.expiresIn),
+        expiresIn,
+        expiresAt: expiresAtFromInput(expiresIn),
         sourceFolderItemId: snapshot.sourceFolderItemId,
         sourceFolderName: snapshot.sourceFolderName,
       },

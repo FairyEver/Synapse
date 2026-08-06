@@ -1809,6 +1809,7 @@ export type SynapseBridge = {
         kind: "workflow-node" | "conversation" | "agent-persona"
         entityId: string
         entityName: string
+        projectId?: string
         nodeId?: string
         nodeName?: string
         providerId: string

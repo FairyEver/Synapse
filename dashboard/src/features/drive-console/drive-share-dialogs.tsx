@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
+  DRIVE_DEFAULT_SITE_ACCESS_SETTINGS,
   type DriveAccessExpiresIn,
   type DriveAccessSettingsInput,
   type DriveAccessSettingsUpdateInput,
@@ -58,8 +59,8 @@ export function DriveShareSettingsDialog({
   const [preflightError, setPreflightError] = useState<string | null>(null)
   const [preflightLoading, setPreflightLoading] = useState(false)
   const [entryPath, setEntryPath] = useState('')
-  const [webPasswordEnabled, setWebPasswordEnabled] = useState(true)
-  const [webExpiresIn, setWebExpiresIn] = useState<DriveAccessExpiresIn>('3d')
+  const [webPasswordEnabled, setWebPasswordEnabled] = useState(false)
+  const [webExpiresIn, setWebExpiresIn] = useState<DriveAccessExpiresIn>(DRIVE_DEFAULT_SITE_ACCESS_SETTINGS.expiresIn)
   const [submitting, setSubmitting] = useState(false)
   const [created, setCreated] = useState<ShareCreatedResult | null>(null)
 
@@ -73,8 +74,8 @@ export function DriveShareSettingsDialog({
     setPreflightError(null)
     setPreflightLoading(false)
     setEntryPath('')
-    setWebPasswordEnabled(true)
-    setWebExpiresIn('3d')
+    setWebPasswordEnabled(false)
+    setWebExpiresIn(DRIVE_DEFAULT_SITE_ACCESS_SETTINGS.expiresIn)
     setSubmitting(false)
     setCreated(null)
   }, [item?.id, open])
@@ -307,7 +308,7 @@ export function DriveSharesDialog({
     setAccessTarget(item)
     setAccessSettings({
       passwordEnabled: item.passwordEnabled,
-      expiresIn: '3d',
+      expiresIn: DRIVE_DEFAULT_ACCESS_SETTINGS.expiresIn,
       accessMode: item.accessMode,
       editorEmails: item.editorEmails,
     })

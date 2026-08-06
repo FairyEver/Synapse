@@ -4,12 +4,15 @@ import type {
   DriveAnnotationCommentDto,
   DriveAnnotationCommentUpdateInput,
   DriveAnnotationCreateInput,
+  DriveAnnotationAnchorUpdateInput,
   DriveAnnotationReplyInput,
   DriveAnnotationThreadDto,
   DriveAccessSettingsInput,
   DriveAccessSettingsUpdateInput,
   DriveBrowserPasswordRequiredDto,
   DriveBrowserSnapshotDto,
+  DriveCollaborationCheckpointInput,
+  DriveCollaborationCheckpointResultDto,
   DriveDocumentImageImportRequest,
   DriveDocumentImageImportResult,
   DriveDocumentImageSourcesDto,
@@ -416,6 +419,7 @@ function isProtectedDriveApiPath(path: string) {
 function isProtectedDriveShareBrowserPath(path: string) {
   return new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/content(?:[?#].*)?$`, 'u').test(path)
     || new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/image-sources(?:/import)?(?:[?#].*)?$`, 'u').test(path)
+    || new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/collaboration/checkpoint(?:[?#].*)?$`, 'u').test(path)
     || isProtectedDriveShareAnnotationPath(path)
 }
 
@@ -938,6 +942,11 @@ export const driveBrowserApi = {
         body: JSON.stringify(input),
       }
     ),
+  checkpointOwner: (itemId: string, input: DriveCollaborationCheckpointInput) =>
+    request<DriveCollaborationCheckpointResultDto>(
+      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(itemId)}/collaboration/checkpoint`,
+      { method: 'POST', body: JSON.stringify(input) }
+    ),
   getShareRoot: (shareId: string, options: DriveBrowserShareOptions = {}) =>
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
       `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}${driveBrowserQuerySuffix('standalone', normalizeDriveBrowserShareOptions(options))}`
@@ -965,6 +974,13 @@ export const driveBrowserApi = {
         method: 'PATCH',
         body: JSON.stringify(input),
       }
+    ),
+  checkpointShare: (shareId: string, itemId: string | null | undefined, input: DriveCollaborationCheckpointInput) =>
+    request<DriveCollaborationCheckpointResultDto>(
+      itemId
+        ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}/collaboration/checkpoint`
+        : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/collaboration/checkpoint`,
+      { method: 'POST', body: JSON.stringify(input) }
     ),
   scanOwnerImageSources: (itemId: string) =>
     request<DriveDocumentImageSourcesDto>(
@@ -1045,6 +1061,11 @@ export const driveAnnotationApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  updateOwnerAnchor: (itemId: string, threadId: string, input: DriveAnnotationAnchorUpdateInput) =>
+    request<DriveAnnotationThreadDto>(ownerAnnotationPath(itemId, `/${encodeURIComponent(threadId)}/anchor`), {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
   replyOwner: (itemId: string, threadId: string, input: DriveAnnotationReplyInput) =>
     request<DriveAnnotationCommentDto>(ownerAnnotationPath(itemId, `/${encodeURIComponent(threadId)}/comments`), {
       method: 'POST',
@@ -1064,6 +1085,11 @@ export const driveAnnotationApi = {
   createShare: (shareId: string, itemId: string | null | undefined, input: DriveAnnotationCreateInput) =>
     request<DriveAnnotationThreadDto>(shareAnnotationPath(shareId, itemId), {
       method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateShareAnchor: (shareId: string, itemId: string | null | undefined, threadId: string, input: DriveAnnotationAnchorUpdateInput) =>
+    request<DriveAnnotationThreadDto>(shareAnnotationPath(shareId, itemId, `/${encodeURIComponent(threadId)}/anchor`), {
+      method: 'PATCH',
       body: JSON.stringify(input),
     }),
   replyShare: (shareId: string, itemId: string | null | undefined, threadId: string, input: DriveAnnotationReplyInput) =>

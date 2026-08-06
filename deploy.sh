@@ -17,12 +17,18 @@ FINAL_BACKUP_FILE="$BACKUP_DIR/synapse-final-before-switch-${DEPLOY_ID}.sql"
 DRIVE_BACKUP_FILE="$BACKUP_DIR/drive/synapse-drive-final-before-switch-${DEPLOY_ID}.tar.gz"
 APPLIED_MIGRATIONS_FILE=$(mktemp)
 DRIVE_BACKUP_STATUS_FILE=$(mktemp)
-TOTAL_STEPS=18
+DRIVE_INVARIANT_BEFORE_FILE=$(mktemp)
+DRIVE_INVARIANT_AFTER_FILE=$(mktemp)
+ANNOTATION_RESET_MIGRATION="20260805140000_drive_markdown_anchor_collaboration"
+ANNOTATION_RESET_PENDING=0
+TOTAL_STEPS=21
 TOTAL_START=$(date +%s)
 
 cleanup() {
   rm -f "$APPLIED_MIGRATIONS_FILE"
   rm -f "$DRIVE_BACKUP_STATUS_FILE"
+  rm -f "$DRIVE_INVARIANT_BEFORE_FILE"
+  rm -f "$DRIVE_INVARIANT_AFTER_FILE"
 }
 
 trap cleanup EXIT
@@ -300,29 +306,115 @@ REMOTE_SCRIPT
 }
 
 preflight_remote_migrations() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && DEPLOY_ID='$DEPLOY_ID' NEW_IMAGE_TAG='$NEW_IMAGE_TAG' ONLINE_BACKUP_FILE='$ONLINE_BACKUP_FILE' bash -s" <<'REMOTE_SCRIPT'
+  ssh "$SERVER" "cd $REMOTE_DIR/server && DEPLOY_ID='$DEPLOY_ID' NEW_IMAGE_TAG='$NEW_IMAGE_TAG' ONLINE_BACKUP_FILE='$ONLINE_BACKUP_FILE' ANNOTATION_RESET_PENDING='$ANNOTATION_RESET_PENDING' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
 preflight_db="synapse_preflight_${DEPLOY_ID}"
 postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
 postgres_password=$(sed -n 's/^POSTGRES_PASSWORD=//p' .env | tail -n 1)
+before_invariants=$(mktemp)
+after_invariants=$(mktemp)
 
 cleanup_preflight_database() {
   docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${preflight_db}';" >/dev/null 2>&1 || true
   docker compose --env-file .env exec -T postgres dropdb -U "$postgres_user" --if-exists "$preflight_db" >/dev/null 2>&1 || true
 }
 
-trap cleanup_preflight_database EXIT
+cleanup_preflight() {
+  rm -f "$before_invariants" "$after_invariants"
+  cleanup_preflight_database
+}
+
+capture_drive_invariants() {
+  docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$preflight_db" -At <<'SQL'
+SELECT 'DriveItem|' || count(*) || '|' || md5(COALESCE(string_agg(row_hash, '' ORDER BY id), ''))
+FROM (SELECT id, md5(to_jsonb(source)::text) AS row_hash FROM "DriveItem" AS source) AS rows;
+SELECT 'DriveShare|' || count(*) || '|' || md5(COALESCE(string_agg(row_hash, '' ORDER BY id), ''))
+FROM (SELECT id, md5(to_jsonb(source)::text) AS row_hash FROM "DriveShare" AS source) AS rows;
+SELECT 'DriveFileVersion|' || count(*) || '|' || md5(COALESCE(string_agg(row_hash, '' ORDER BY id), ''))
+FROM (SELECT id, md5(to_jsonb(source)::text) AS row_hash FROM "DriveFileVersion" AS source) AS rows;
+SQL
+}
+
+trap cleanup_preflight EXIT
 
 cleanup_preflight_database
 docker compose --env-file .env exec -T postgres createdb -U "$postgres_user" "$preflight_db"
 docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$preflight_db" < "$ONLINE_BACKUP_FILE"
+capture_drive_invariants > "$before_invariants"
 
 database_url="postgresql://${postgres_user}:${postgres_password}@postgres:5432/${preflight_db}"
-SYNAPSE_SERVER_IMAGE_TAG="$NEW_IMAGE_TAG" docker compose --env-file .env run --rm -T --no-deps -e DATABASE_URL="$database_url" server sh -c "cd server && npx prisma migrate deploy"
+SYNAPSE_SERVER_IMAGE_TAG="$NEW_IMAGE_TAG" docker compose --env-file .env run --rm -T --no-deps --entrypoint sh -e DATABASE_URL="$database_url" server -c "cd /app/server && npx prisma migrate deploy"
 
-printf "preflight migration ok: %s\n" "$preflight_db"
+capture_drive_invariants > "$after_invariants"
+cmp "$before_invariants" "$after_invariants"
+
+schema_status=$(docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$preflight_db" -Atc \
+  "SELECT concat_ws('|', to_regclass('public.\"DriveAnnotationAnchor\"') IS NOT NULL, to_regclass('public.\"DriveCollaborationDocument\"') IS NOT NULL, to_regclass('public.\"DriveMarkdownProjection\"') IS NOT NULL);")
+if [ "$schema_status" != "true|true|true" ]; then
+  echo "Drive Markdown collaboration schema verification failed: $schema_status"
+  exit 1
+fi
+
+if [ "$ANNOTATION_RESET_PENDING" = "1" ]; then
+  annotation_counts=$(docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$preflight_db" -Atc \
+    'SELECT concat_ws('"'"'|'"'"', (SELECT count(*) FROM "DriveAnnotationThread"), (SELECT count(*) FROM "DriveAnnotationComment"), (SELECT count(*) FROM "DriveAnnotationAnchor"));')
+  if [ "$annotation_counts" != "0|0|0" ]; then
+    echo "legacy annotation cleanup verification failed: $annotation_counts"
+    exit 1
+  fi
+fi
+
+printf "preflight migration and Drive invariants ok: %s\n" "$preflight_db"
 REMOTE_SCRIPT
+}
+
+capture_remote_drive_invariants() {
+  local output_file=$1
+  ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" > "$output_file" <<'REMOTE_SCRIPT'
+set -euo pipefail
+postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+postgres_db=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
+docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$postgres_db" -At <<'SQL'
+SELECT 'DriveItem|' || count(*) || '|' || md5(COALESCE(string_agg(row_hash, '' ORDER BY id), ''))
+FROM (SELECT id, md5(to_jsonb(source)::text) AS row_hash FROM "DriveItem" AS source) AS rows;
+SELECT 'DriveShare|' || count(*) || '|' || md5(COALESCE(string_agg(row_hash, '' ORDER BY id), ''))
+FROM (SELECT id, md5(to_jsonb(source)::text) AS row_hash FROM "DriveShare" AS source) AS rows;
+SELECT 'DriveFileVersion|' || count(*) || '|' || md5(COALESCE(string_agg(row_hash, '' ORDER BY id), ''))
+FROM (SELECT id, md5(to_jsonb(source)::text) AS row_hash FROM "DriveFileVersion" AS source) AS rows;
+SQL
+REMOTE_SCRIPT
+  printf "Drive protected-data fingerprint captured\n"
+}
+
+deploy_remote_migrations() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env run --rm -T --no-deps --entrypoint sh server -c 'cd /app/server && npx prisma migrate deploy'"
+}
+
+verify_remote_drive_invariants() {
+  capture_remote_drive_invariants "$DRIVE_INVARIANT_AFTER_FILE"
+  if ! cmp "$DRIVE_INVARIANT_BEFORE_FILE" "$DRIVE_INVARIANT_AFTER_FILE"; then
+    echo "DriveItem, DriveShare or DriveFileVersion changed during migration"
+    diff -u "$DRIVE_INVARIANT_BEFORE_FILE" "$DRIVE_INVARIANT_AFTER_FILE" || true
+    return 1
+  fi
+
+  if [ "$ANNOTATION_RESET_PENDING" = "1" ]; then
+    local annotation_counts
+    annotation_counts=$(ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
+postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+postgres_db=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
+docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$postgres_db" -Atc \
+  'SELECT concat_ws('"'"'|'"'"', (SELECT count(*) FROM "DriveAnnotationThread"), (SELECT count(*) FROM "DriveAnnotationComment"), (SELECT count(*) FROM "DriveAnnotationAnchor"));'
+REMOTE_SCRIPT
+)
+    if [ "$annotation_counts" != "0|0|0" ]; then
+      echo "legacy annotation cleanup verification failed: $annotation_counts"
+      return 1
+    fi
+  fi
+  echo "Drive protected data unchanged; annotation migration state verified"
 }
 
 verify_final_backup_restore() {
@@ -684,17 +776,17 @@ run_deployed_health_check() {
 
 echo ""
 
-# [1/18] 确保远程目录存在
+# [1/21] 确保远程目录存在
 step 1 "确保远程目录存在" \
   ensure_remote_dirs
 
 # 检查是否首次部署
 if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
-  # [2/18] 首次部署同步代码（只传服务端需要的文件）
+  # [2/21] 首次部署同步代码（只传服务端需要的文件）
   step 2 "同步代码到服务器" \
     sync_remote_code
 
-  # [3/18] 首次部署同步本机环境变量
+  # [3/21] 首次部署同步本机环境变量
   step 3 "同步本机环境变量到服务器" \
     sync_remote_env
 
@@ -705,76 +797,92 @@ if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
   exit 0
 fi
 
-# [2/18] 同步本机环境变量
+# [2/21] 同步本机环境变量
 step 2 "同步本机环境变量到服务器" \
   sync_remote_env
 
-# [3/18] 检查远程环境变量
+# [3/21] 检查远程环境变量
 step 3 "检查远程环境变量" \
   validate_remote_env
 
-# [4/18] 检查数据库网络认证
+# [4/21] 检查数据库网络认证
 step 4 "检查数据库网络认证" \
   verify_remote_database_auth
 
-# [5/18] 获取远程已应用迁移
+# [5/21] 获取远程已应用迁移
 step 5 "获取远程已应用迁移" \
   fetch_applied_migrations
 
-# [6/18] 扫描待发布迁移风险
+if ! grep -Fxq "$ANNOTATION_RESET_MIGRATION" "$APPLIED_MIGRATIONS_FILE"; then
+  ANNOTATION_RESET_PENDING=1
+fi
+
+# [6/21] 扫描待发布迁移风险
 step 6 "扫描待发布迁移风险" \
   scan_pending_migrations
 
-# [7/18] 备份 Postgres globals
+# [7/21] 备份 Postgres globals
 step 7 "备份 Postgres globals" \
   backup_remote_postgres_globals
 
-# [8/18] 在线备份远程数据库
+# [8/21] 在线备份远程数据库
 step 8 "在线备份远程数据库" \
   backup_remote_database "$ONLINE_BACKUP_FILE"
 
-# [9/18] 同步代码（只传服务端需要的文件）
+# [9/21] 同步代码（只传服务端需要的文件）
 step 9 "同步代码到服务器" \
   sync_remote_code
 
-# [10/18] 构建新 Docker 镜像
+# [10/21] 构建新 Docker 镜像
 step 10 "构建 Docker 镜像" \
   build_remote_image
 
-# [11/18] 标记当前服务镜像，供失败时回滚
+# [11/21] 标记当前服务镜像，供失败时回滚
 step 11 "标记回滚镜像" \
   tag_remote_rollback_image
 
-# [12/18] 用在线备份恢复临时库并预演迁移
+# [12/21] 用在线备份恢复临时库并预演迁移
 step 12 "临时数据库预演迁移" \
   preflight_remote_migrations
 
-# [13/18] 停止旧服务，保留数据库
+# [13/21] 停止旧服务，保留数据库
 step 13 "停止旧服务" \
   stop_remote_server
 
-# [14/18] 停服后最终备份远程数据库
+# [14/21] 停服后最终备份远程数据库
 step 14 "最终备份远程数据库" \
   backup_remote_database "$FINAL_BACKUP_FILE"
 
-# [15/18] 恢复验证最终数据库备份
+# [15/21] 恢复验证最终数据库备份
 step 15 "恢复验证最终数据库备份" \
   verify_final_backup_restore
 
-# [16/18] 备份本地 Drive fallback 数据
+# [16/21] 备份本地 Drive fallback 数据
 step 16 "备份本地 Drive 数据" \
   backup_remote_drive_fallback
 
-# [17/18] 启动新服务
-step 17 "启动新服务" \
+# [17/21] 记录迁移前受保护数据指纹
+step 17 "记录 Drive 受保护数据指纹" \
+  capture_remote_drive_invariants "$DRIVE_INVARIANT_BEFORE_FILE"
+
+# [18/21] 停服状态下应用生产迁移
+step 18 "应用生产数据库迁移" \
+  deploy_remote_migrations
+
+# [19/21] 验证文档、分享与历史版本未变化
+step 19 "验证 Drive 迁移不变量" \
+  verify_remote_drive_invariants
+
+# [20/21] 启动新服务
+step 20 "启动新服务" \
   start_new_remote_server
 
-# [18/18] 健康检查
-printf "\n[%d/%d] 健康检查\n" 18 "$TOTAL_STEPS"
+# [21/21] 健康检查
+printf "\n[%d/%d] 健康检查\n" 21 "$TOTAL_STEPS"
 if run_deployed_health_check 2>&1 | sed 's/^/  /'; then
-  printf "[%d/%d] done\n" 18 "$TOTAL_STEPS"
+  printf "[%d/%d] done\n" 21 "$TOTAL_STEPS"
 else
-  printf "[%d/%d] 健康检查 .......... FAILED\n" 18 "$TOTAL_STEPS"
+  printf "[%d/%d] 健康检查 .......... FAILED\n" 21 "$TOTAL_STEPS"
   echo ""
   echo "正在回滚到上一版服务镜像，不自动恢复数据库..."
   if rollback_remote_service 2>&1 | sed 's/^/  /' && run_remote_health_check 2>&1 | sed 's/^/  /'; then

@@ -84,6 +84,7 @@ const envSchema = z
     DRIVE_COS_BUCKET: optionalEnvString,
     DRIVE_COS_REGION: optionalEnvString,
     SYNAPSE_DRIVE_LOCAL_ROOT: optionalEnvString,
+    DRIVE_COLLABORATION_ENABLED: z.enum(["true", "false"]).default("false"),
     SKILL_REPOSITORY_COS_SECRET_ID: optionalEnvString,
     SKILL_REPOSITORY_COS_SECRET_KEY: optionalEnvString,
     SKILL_REPOSITORY_COS_BUCKET: optionalEnvString,
@@ -174,6 +175,7 @@ export interface ServerEnv {
   readonly driveCosBucket?: string
   readonly driveCosRegion?: string
   readonly driveLocalRoot?: string
+  readonly driveCollaborationEnabled: boolean
   readonly skillRepositoryCosSecretId?: string
   readonly skillRepositoryCosSecretKey?: string
   readonly skillRepositoryCosBucket?: string
@@ -211,6 +213,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     driveCosBucket: result.data.DRIVE_COS_BUCKET,
     driveCosRegion: result.data.DRIVE_COS_REGION,
     driveLocalRoot: result.data.SYNAPSE_DRIVE_LOCAL_ROOT,
+    driveCollaborationEnabled: result.data.DRIVE_COLLABORATION_ENABLED === "true",
     skillRepositoryCosSecretId: result.data.SKILL_REPOSITORY_COS_SECRET_ID,
     skillRepositoryCosSecretKey: result.data.SKILL_REPOSITORY_COS_SECRET_KEY,
     skillRepositoryCosBucket: result.data.SKILL_REPOSITORY_COS_BUCKET,

@@ -1272,6 +1272,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     HTML_GENERATOR_SERVICE_ID,
     HTML_GENERATOR_FILE_SERVICE_ID,
     PROVIDER_SERVICE_ID,
+    "core.drive-sync",
   ],
   async create(ctx) {
     const eventBus = ctx.registry.get<EventBus>("core.event-bus")
@@ -1294,6 +1295,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     const textFileWriterService = ctx.registry.get<TextFileWriterService>(TEXT_FILE_WRITER_SERVICE_ID)
     const htmlGenerationService = ctx.registry.get<HtmlGenerationService>(HTML_GENERATOR_SERVICE_ID)
     const htmlGenerationFileService = ctx.registry.get<HtmlGenerationToFileService>(HTML_GENERATOR_FILE_SERVICE_ID)
+    const driveSyncService = ctx.registry.get<DriveSyncService>("core.drive-sync")
     const capabilityLogger = createMainLogger("bootstrap.workflow-capability")
     const runCompletions = new Map<string, Promise<unknown>>()
     const deletedWorkflowIds = new Set<string>()
@@ -1405,6 +1407,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     })
     const driveDispatcher = createDriveCapabilityDispatcher({
       accountService,
+      driveSyncService,
       permissionGuard,
       auditSink,
     })

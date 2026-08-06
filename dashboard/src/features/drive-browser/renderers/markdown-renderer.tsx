@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import {
   isDriveMarkdownItem,
+  type DriveAnnotationSelectorsV2,
   type DriveAnnotationTextRangeTargetV1,
+  type DriveBrowserCollaborationCapabilityDto,
   type DriveBrowserEditDto,
   type DriveBrowserItemDto,
   type DriveBrowserPreviewDto,
   type DriveMarkdownOutlineItemDto,
+  type DriveCollaborationJoinContext,
 } from '@synapse/shared'
 import { ListTree, Maximize2, MessageSquare } from 'lucide-react'
+import * as Y from 'yjs'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -31,11 +35,12 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import type { DriveAnnotationContext } from '../use-drive-annotations'
 import { useDriveAnnotations } from '../use-drive-annotations'
+import { useDriveCollaboration } from '../collaboration/use-drive-collaboration'
 import { DriveCodeRenderer } from './code-renderer'
 import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { renderMarkdownAnnotationHtml, resolveMarkdownAnnotationTextRange } from './markdown-annotation-render'
-import { createMarkdownAnnotationTargetFromSelection } from './markdown-annotation-target'
+import { createMarkdownAnnotationAnchorFromSelection } from './markdown-annotation-target'
 import { getCommentActionErrorMessage, MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdown-comments-rail'
 import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
@@ -72,12 +77,14 @@ type DriveMarkdownRendererProps = {
   readonly annotationContext?: DriveAnnotationContext
   readonly editContext?: DriveRendererEditContext
   readonly imageSourceContext?: DriveMarkdownImageSourceContext
+  readonly collaboration?: DriveBrowserCollaborationCapabilityDto | null
+  readonly collaborationContext?: DriveCollaborationJoinContext
 }
 
 export function DriveMarkdownRenderer(props: DriveMarkdownRendererProps) {
   const renderedHtml = props.preview.html?.trim()
   if (!renderedHtml) {
-    return <DriveCodeRenderer current={props.current} preview={props.preview} edit={props.edit} editContext={props.editContext} />
+    return <DriveCodeRenderer current={props.current} preview={props.preview} edit={props.edit} editContext={props.editContext} collaboration={props.collaboration} collaborationContext={props.collaborationContext} />
   }
   return <DriveMarkdownBody {...props} renderedHtml={renderedHtml} />
 }
@@ -89,13 +96,26 @@ function DriveMarkdownBody({
   annotationContext,
   editContext,
   imageSourceContext,
+  collaboration,
+  collaborationContext,
   renderedHtml,
 }: DriveMarkdownRendererProps & { readonly renderedHtml: string }) {
-  const outline = preview.outline ?? []
+  const liveCollaboration = useDriveCollaboration({
+    itemId: current.id,
+    context: collaborationContext ?? { kind: 'owner', itemId: current.id },
+    capability: collaboration,
+    onEpochReloadRequired: editContext?.reload,
+  })
+  const effectiveRenderedHtml = liveCollaboration.state?.preview?.html ?? renderedHtml
+  const outline = liveCollaboration.state?.preview?.outline ?? preview.outline ?? []
+  const projection = liveCollaboration.state?.preview?.projection ?? preview.markdownProjection
+  const collaborationTextMatchesProjection = Boolean(liveCollaboration.session) && (
+    liveCollaboration.state?.preview
+      ? liveCollaboration.state.preview.stateVector === encodeStateVector(liveCollaboration.session!.doc)
+      : preview.text === liveCollaboration.session!.text.toString()
+  )
   const layoutRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
-  const documentScrollRef = useRef<HTMLDivElement | null>(null)
-  const commentAnchorLayerRef = useRef<HTMLDivElement | null>(null)
   const commentsTouchedRef = useRef(false)
   const layoutMode = useFilePreviewLayoutMode()
   const isCompact = layoutMode === 'compact'
@@ -118,11 +138,15 @@ function DriveMarkdownBody({
   const [compactPanel, setCompactPanel] = useState<'outline' | 'comments' | null>(null)
   const [widthMode, setWidthMode] = useState<MarkdownWidthMode>('reading')
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
-  const [pendingTarget, setPendingTarget] = useState<DriveAnnotationTextRangeTargetV1 | null>(null)
+  const [pendingTarget, setPendingTarget] = useState<{
+    readonly target: DriveAnnotationTextRangeTargetV1
+    readonly selectors: DriveAnnotationSelectorsV2
+  } | null>(null)
   const [selectionPopover, setSelectionPopover] = useState<SelectionPopoverPosition | null>(null)
   const [commentDialogOpen, setCommentDialogOpen] = useState(false)
   const [commentBody, setCommentBody] = useState('')
   const [commentCreateError, setCommentCreateError] = useState<string | null>(null)
+  const [reassociatingThreadId, setReassociatingThreadId] = useState<string | null>(null)
   const [commentAnchorBaseOffset, setCommentAnchorBaseOffset] = useState(0)
   const [threadAnchorTopById, setThreadAnchorTopById] = useState<Record<string, number>>({})
   const [annotationOverlayRects, setAnnotationOverlayRects] = useState<readonly MarkdownAnnotationOverlayRect[]>([])
@@ -134,6 +158,7 @@ function DriveMarkdownBody({
     setCommentDialogOpen(false)
     setCommentBody('')
     setCommentCreateError(null)
+    setReassociatingThreadId(null)
     setThreadAnchorTopById({})
     setAnnotationOverlayRects([])
     window.getSelection()?.removeAllRanges()
@@ -144,8 +169,28 @@ function DriveMarkdownBody({
   }, [layoutMode])
 
   const annotated = useMemo(
-    () => renderMarkdownAnnotationHtml(renderedHtml, annotations.threads),
-    [annotations.threads, renderedHtml]
+    () => renderMarkdownAnnotationHtml(
+      effectiveRenderedHtml,
+      annotations.threads,
+      liveCollaboration.state?.checkpointVersionId ?? edit?.currentVersionId ?? null,
+      collaborationTextMatchesProjection && liveCollaboration.session && projection
+        ? {
+            sourceText: liveCollaboration.session.text.toString(),
+            projection,
+            resolveCrdtRange: liveCollaboration.session.resolveRelativeRange,
+          }
+        : null,
+    ),
+    [
+      annotations.threads,
+      collaborationTextMatchesProjection,
+      edit?.currentVersionId,
+      effectiveRenderedHtml,
+      liveCollaboration.session,
+      liveCollaboration.state?.checkpointVersionId,
+      liveCollaboration.state?.preview?.stateVector,
+      projection,
+    ]
   )
   const annotatedHtmlProperty = useMemo(
     () => ({ __html: annotated.html }),
@@ -177,9 +222,19 @@ function DriveMarkdownBody({
   const railThreads = useMemo(
     (): readonly MarkdownCommentsRailThread[] => sortedThreads.map((thread) => {
       const resolved = resolvedByThreadId.get(thread.id)
-      const effectiveThread = !resolved || resolved.anchorStatus === thread.anchorStatus
+      const effectiveAnchor = thread.anchor && resolved?.positionStatus
+        ? {
+            ...thread.anchor,
+            positionStatus: resolved.positionStatus,
+            quoteStatus: resolved.quoteStatus ?? thread.anchor.quoteStatus,
+            resolvedSourceRange: resolved.sourceRange ?? null,
+            resolvedRenderedRange: resolved.range,
+            confidence: resolved.confidence ?? thread.anchor.confidence,
+          }
+        : thread.anchor
+      const effectiveThread = !resolved
         ? thread
-        : { ...thread, anchorStatus: resolved.anchorStatus }
+        : { ...thread, anchorStatus: resolved.anchorStatus, anchor: effectiveAnchor }
       return {
         thread: effectiveThread,
         anchorTop: resolved?.anchorStatus === 'orphaned' ? null : threadAnchorTopById[thread.id] ?? null,
@@ -195,7 +250,7 @@ function DriveMarkdownBody({
     const rootRect = root.getBoundingClientRect()
     const layoutRect = layoutRef.current?.getBoundingClientRect()
     if (layoutRect) {
-      const nextBaseOffset = Math.round(rootRect.top - layoutRect.top + (documentScrollRef.current?.scrollTop ?? 0))
+      const nextBaseOffset = Math.round(rootRect.top - layoutRect.top + (layoutRef.current?.scrollTop ?? 0))
       setCommentAnchorBaseOffset((current) => current === nextBaseOffset ? current : nextBaseOffset)
     }
     const renderedTextSegments = collectRenderedTextSegments(root)
@@ -219,7 +274,7 @@ function DriveMarkdownBody({
     }
 
     if (pendingTarget) {
-      const pending = resolveMarkdownAnnotationTextRange(pendingTarget, renderedText)
+      const pending = resolveMarkdownAnnotationTextRange(pendingTarget.target, renderedText)
       if (pending.range) {
         measureRenderedTextRange(root, renderedTextSegments, pending.range, rootRect).forEach((rect, index) => {
           nextRects.push({
@@ -235,6 +290,11 @@ function DriveMarkdownBody({
     setThreadAnchorTopById((current) => sameNumberRecord(current, nextAnchors) ? current : nextAnchors)
     setAnnotationOverlayRects((current) => sameOverlayRects(current, nextRects) ? current : nextRects)
   }, [annotated.resolved, pendingTarget])
+
+  useEffect(() => {
+    if (!liveCollaboration.state?.annotationRevision) return
+    void annotations.refresh()
+  }, [liveCollaboration.state?.annotationRevision])
 
   useLayoutEffect(() => {
     measureAnnotationLayout()
@@ -258,34 +318,6 @@ function DriveMarkdownBody({
       if (frame !== null) window.cancelAnimationFrame(frame)
     }
   }, [measureAnnotationLayout])
-
-  const syncCommentScrollTransform = useCallback(() => {
-    setCommentAnchorLayerScrollTransform(commentAnchorLayerRef.current, documentScrollRef.current?.scrollTop ?? 0)
-  }, [])
-
-  const setCommentAnchorLayer = useCallback((element: HTMLDivElement | null) => {
-    commentAnchorLayerRef.current = element
-    syncCommentScrollTransform()
-  }, [syncCommentScrollTransform])
-
-  useEffect(() => {
-    const scroller = documentScrollRef.current
-    if (!scroller) return
-    let frame: number | null = null
-    const scheduleScrollSync = () => {
-      if (frame !== null) return
-      frame = window.requestAnimationFrame(() => {
-        frame = null
-        syncCommentScrollTransform()
-      })
-    }
-    syncCommentScrollTransform()
-    scroller.addEventListener('scroll', scheduleScrollSync, { passive: true })
-    return () => {
-      scroller.removeEventListener('scroll', scheduleScrollSync)
-      if (frame !== null) window.cancelAnimationFrame(frame)
-    }
-  }, [syncCommentScrollTransform])
 
   useEffect(() => {
     if (isCompact || commentsTouchedRef.current || annotations.threads.length === 0) return
@@ -315,6 +347,7 @@ function DriveMarkdownBody({
     setCommentDialogOpen(false)
     setCommentBody('')
     setCommentCreateError(null)
+    setReassociatingThreadId(null)
     window.getSelection()?.removeAllRanges()
   }, [])
 
@@ -323,6 +356,29 @@ function DriveMarkdownBody({
     setSelectionPopover(null)
     setCommentCreateError(null)
   }, [])
+
+  const applyReassociation = useCallback(async () => {
+    const baseVersionId = liveCollaboration.state?.checkpointVersionId ?? edit?.currentVersionId
+    if (!reassociatingThreadId || !pendingTarget || !baseVersionId) return
+    setCommentCreateError(null)
+    try {
+      await annotations.updateAnchor({
+        threadId: reassociatingThreadId,
+        baseVersionId,
+        epoch: liveCollaboration.state?.epoch ?? null,
+        stateVector: liveCollaboration.session ? encodeStateVector(liveCollaboration.session.doc) : null,
+        selectors: pendingTarget.selectors,
+        idempotencyKey: crypto.randomUUID(),
+      })
+      setActiveThreadId(reassociatingThreadId)
+      setPendingTarget(null)
+      setSelectionPopover(null)
+      setReassociatingThreadId(null)
+      window.getSelection()?.removeAllRanges()
+    } catch (cause) {
+      setCommentCreateError(getCommentActionErrorMessage(cause))
+    }
+  }, [annotations, edit?.currentVersionId, liveCollaboration.session, liveCollaboration.state?.checkpointVersionId, liveCollaboration.state?.epoch, pendingTarget, reassociatingThreadId])
 
   const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
     const items: DriveRendererToolbarItem[] = [
@@ -391,6 +447,10 @@ function DriveMarkdownBody({
   }
 
   const focusThreadFromRail = (threadId: string) => {
+    if (resolvedByThreadId.get(threadId)?.anchorStatus === 'orphaned') {
+      setActiveThreadId(threadId)
+      return
+    }
     if (isCompact) setCompactPanel(null)
     scrollToThread(threadId)
   }
@@ -400,7 +460,15 @@ function DriveMarkdownBody({
     const root = bodyRef.current
     if (!root) return
     const selection = window.getSelection()
-    const target = createMarkdownAnnotationTargetFromSelection(root, selection)
+    const target = createMarkdownAnnotationAnchorFromSelection({
+      root,
+      selection,
+      projection,
+      epoch: liveCollaboration.state?.epoch,
+      yText: liveCollaboration.session && collaborationTextMatchesProjection
+        ? liveCollaboration.session.text
+        : null,
+    })
     if (!target || !selection || selection.rangeCount === 0) {
       if (!commentDialogOpen) clearPendingSelectionAction()
       return
@@ -415,7 +483,7 @@ function DriveMarkdownBody({
       top: Math.max(8, rect.top - 40),
       left: rect.left + rect.width / 2,
     })
-  }, [canCreateAnnotation, clearPendingSelectionAction, commentDialogOpen])
+  }, [canCreateAnnotation, clearPendingSelectionAction, collaborationTextMatchesProjection, commentDialogOpen, liveCollaboration.session, liveCollaboration.state?.epoch, projection])
 
   useEffect(() => {
     if (!canCreateAnnotation) return
@@ -469,9 +537,15 @@ function DriveMarkdownBody({
     setCommentCreateError(null)
     try {
       const thread = await annotations.createThread({
-        ...(edit?.currentVersionId ? { baseVersionId: edit.currentVersionId } : {}),
+        ...((liveCollaboration.state?.checkpointVersionId ?? edit?.currentVersionId)
+          ? { baseVersionId: liveCollaboration.state?.checkpointVersionId ?? edit?.currentVersionId }
+          : {}),
+        epoch: liveCollaboration.state?.epoch ?? null,
+        stateVector: liveCollaboration.session ? encodeStateVector(liveCollaboration.session.doc) : null,
+        selectors: pendingTarget.selectors,
+        idempotencyKey: crypto.randomUUID(),
         targetKind: 'textRange',
-        target: pendingTarget,
+        target: pendingTarget.target,
         body: commentBody,
       })
       setActiveThreadId(thread.id)
@@ -487,7 +561,7 @@ function DriveMarkdownBody({
   }
 
   const documentView = (
-    <div ref={documentScrollRef} data-testid='markdown-document-scroll' className='h-full min-w-0 overflow-auto px-4 py-6 md:px-6'>
+    <div data-testid='markdown-document-scroll' className='min-h-full min-w-0 px-4 py-6 md:px-6'>
       <div
         data-markdown-width-mode={widthMode}
         className={cn(
@@ -545,13 +619,19 @@ function DriveMarkdownBody({
       canReply={canCreateAnnotation}
       loading={annotations.loading}
       anchorBaseOffset={commentAnchorBaseOffset}
-      anchoredLayerRef={setCommentAnchorLayer}
       onFocusThread={focusThreadFromRail}
       onRefresh={() => { void annotations.refresh() }}
       onReply={annotations.reply}
       onUpdateComment={annotations.updateComment}
       onDeleteComment={annotations.deleteComment}
       onDeleteThread={annotations.deleteThread}
+      onStartReassociate={(threadId) => {
+        setReassociatingThreadId(threadId)
+        setActiveThreadId(threadId)
+        setPendingTarget(null)
+        setSelectionPopover(null)
+        if (isCompact) setCompactPanel(null)
+      }}
     />
   )
 
@@ -567,9 +647,15 @@ function DriveMarkdownBody({
             type='button'
             className='shadow-md'
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => setCommentDialogOpen(true)}
+            onClick={() => {
+              if (reassociatingThreadId) {
+                void applyReassociation()
+                return
+              }
+              setCommentDialogOpen(true)
+            }}
           >
-            添加评论
+            {reassociatingThreadId ? '重新关联' : '添加评论'}
           </Button>
         </div>
       ) : null}
@@ -606,9 +692,9 @@ function DriveMarkdownBody({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <div ref={layoutRef} data-testid='markdown-layout' className='h-full min-h-0 w-full overflow-hidden'>
+      <div ref={layoutRef} data-testid='markdown-layout' className='h-full min-h-0 w-full overflow-auto'>
         {isCompact ? documentView : (
-          <ResizablePanelGroup orientation='horizontal' className='h-full min-h-0'>
+          <ResizablePanelGroup orientation='horizontal' className='!h-auto min-h-full !overflow-visible'>
             {outlinePanelOpen ? (
               <>
                 <ResizablePanel
@@ -619,9 +705,9 @@ function DriveMarkdownBody({
                   data-panel-min-size={outlinePanelMinSize}
                   data-panel-max-size={outlinePanelMaxSize}
                   data-markdown-resizable-panel='outline'
-                  className='h-full min-h-0 !overflow-visible'
+                  className='min-h-full !overflow-visible'
                 >
-                  <aside className='h-full overflow-hidden px-4 py-6 md:px-6'>
+                  <aside className='min-h-full overflow-hidden px-4 py-6 md:px-6'>
                     <nav className='sticky top-6 max-h-[calc(100vh-3rem)] overflow-auto' aria-label='目录'>
                       <p className='mb-2 text-xs font-medium text-muted-foreground'>目录</p>
                       <MarkdownOutlineTree items={outline} />
@@ -635,7 +721,7 @@ function DriveMarkdownBody({
               defaultSize={documentPanelDefaultSize}
               minSize='35%'
               data-markdown-resizable-panel='document'
-              className='h-full min-h-0 min-w-0 !overflow-visible'
+              className='min-h-full min-w-0 !overflow-visible'
             >
               {documentView}
             </ResizablePanel>
@@ -650,9 +736,9 @@ function DriveMarkdownBody({
                   data-panel-min-size={commentsPanelMinSize}
                   data-panel-max-size={commentsPanelMaxSize}
                   data-markdown-resizable-panel='comments'
-                  className='h-full min-h-0 !overflow-visible'
+                  className='min-h-full !overflow-visible'
                 >
-                  <aside className='h-full min-h-0 self-stretch overflow-hidden border-l bg-background'>
+                  <aside className='min-h-full self-stretch border-l bg-background'>
                     {renderCommentsRail('anchored')}
                   </aside>
                 </ResizablePanel>
@@ -702,10 +788,17 @@ function DriveMarkdownBody({
       ) : null}
       {imageSources.panel}
       {annotated.resolved.some((item) => item.anchorStatus === 'orphaned') ? (
-        <div className='sr-only'>位置已变化</div>
+        <div className='sr-only'>原文已修改或删除</div>
       ) : null}
     </div>
   )
+}
+
+function encodeStateVector(doc: Y.Doc): string {
+  const value = Y.encodeStateVector(doc)
+  let binary = ''
+  for (let index = 0; index < value.length; index += 1) binary += String.fromCharCode(value[index] ?? 0)
+  return btoa(binary)
 }
 
 function resizablePanelPercent(value: number): ResizablePanelPercent {
@@ -741,13 +834,6 @@ function driveMarkdownAnnotationStateKey(
 
 function countMarkdownComments(threads: readonly MarkdownCommentsRailThread[]): number {
   return threads.reduce((total, { thread }) => total + thread.comments.length, 0)
-}
-
-function setCommentAnchorLayerScrollTransform(element: HTMLElement | null, scrollTop: number): void {
-  if (!element) return
-  const offset = Math.max(0, Math.round(scrollTop))
-  element.dataset.markdownCommentScrollOffset = String(offset)
-  element.style.transform = offset === 0 ? '' : `translate3d(0px, -${offset}px, 0px)`
 }
 
 function getSelectionRect(range: Range): DOMRect | null {

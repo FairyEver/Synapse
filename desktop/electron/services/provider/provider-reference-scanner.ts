@@ -4,6 +4,7 @@ export interface ProviderReference {
   kind: "workflow-node" | "conversation" | "agent-persona"
   entityId: string
   entityName: string
+  projectId?: string
   nodeId?: string
   nodeName?: string
   providerId: string
@@ -40,7 +41,7 @@ export interface ProviderReferenceScannerDeps {
     workflowId: string, nodeId: string,
     providerId: string, modelTier: string,
   ) => Promise<void>
-  listConversations: () => Promise<Array<{ id: string; name: string; providerId?: string }>>
+  listConversations: () => Promise<Array<{ id: string; name: string; projectId: string; providerId?: string }>>
   listAgentPersonas: () => Promise<Array<{
     id: string
     name: string
@@ -76,6 +77,7 @@ export class ProviderReferenceScanner {
           kind: "conversation",
           entityId: conv.id,
           entityName: conv.name,
+          projectId: conv.projectId,
           providerId,
           modelTier: "",
         })

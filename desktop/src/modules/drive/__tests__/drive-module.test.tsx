@@ -242,10 +242,10 @@ beforeEach(() => {
     itemId: "file-1",
     enabled: true,
     url: "https://synapse.test/share/shr_test",
-    urlWithPassword: "https://synapse.test/share/shr_test?password=AbC234xy",
-    passwordEnabled: true,
-    password: "AbC234xy",
-    expiresAt: "2026-06-14T00:00:00.000Z",
+    urlWithPassword: "https://synapse.test/share/shr_test",
+    passwordEnabled: false,
+    password: null,
+    expiresAt: null,
     accessMode: "link_read",
     editorEmails: [],
     createdAt: "2026-06-07T00:00:00.000Z",
@@ -452,7 +452,8 @@ describe("DriveModule", () => {
       passwordEnabled: true,
       password: "SitePw1",
       urlWithPassword: "https://synapse.test/sites/site_abc/?password=SitePw1",
-      expiresAt: "2026-06-26T00:00:00.000Z",
+      expiresIn: "forever",
+      expiresAt: null,
     }))
 
     await render(<DriveModule />)
@@ -463,7 +464,9 @@ describe("DriveModule", () => {
 
     expect(document.querySelector<HTMLInputElement>("#drive-site-password")).toBeNull()
     expect(document.body.textContent).toContain("需要密码")
-    expect(document.body.textContent).toContain("3 天")
+    expect(document.body.textContent).toContain("永久")
+
+    await clickButtonByLabel("需要密码")
 
     await clickButtonText("创建分享")
 
@@ -472,7 +475,7 @@ describe("DriveModule", () => {
       name: "原型",
       entryPath: "index.html",
       accessMode: "password",
-      expiresIn: "3d",
+      expiresIn: "forever",
     })
     expect(getSiteCreatedUrlInput().value).toBe("https://synapse.test/sites/site_abc/?password=SitePw1")
     expect(getSiteCreatedPasswordInput().value).toBe("SitePw1")
@@ -3108,39 +3111,35 @@ describe("DriveModule", () => {
     expect(document.body.textContent).not.toContain("链接可编辑")
     expect(document.body.textContent).toContain("需要密码")
     expect(document.body.textContent).toContain("有效时长")
-    expect(document.body.textContent).toContain("3 天")
+    expect(document.body.textContent).toContain("永久")
     expect(getDialogContent().className).toContain("sm:max-w-lg")
 
     await clickButtonText("创建分享")
 
     expect(mocks.shareDriveItem).toHaveBeenCalledWith({
       itemId: "file-1",
-      passwordEnabled: true,
-      expiresIn: "3d",
+      passwordEnabled: false,
+      expiresIn: "forever",
       accessMode: "link_read",
       editorEmails: [],
     })
-    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/share/shr_test?password=AbC234xy")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/share/shr_test")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
     expect(document.body.textContent).toContain("文件已分享")
     expect(getDialogContent().className).toContain("sm:max-w-lg")
-    expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_test?password=AbC234xy")
-    expect(document.body.textContent).toContain("AbC234xy")
+    expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_test")
     expect(document.body.textContent).toMatch(/\d+ (?:分钟|小时|天|个月|年)前/)
     expect(getButton("复制链接").querySelector("svg")).toBeNull()
     expect(getButton("打开文件").querySelector("svg")).toBeNull()
-    expect(queryButtonByLabel("复制密码")?.querySelector("svg")).toBeNull()
+    expect(queryButtonByLabel("复制密码")).toBeNull()
     expect(getDialogFooterButtonTexts()).toEqual(["关闭"])
 
     await clickButtonText("打开文件")
-    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/share/shr_test?password=AbC234xy")
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/share/shr_test")
 
     await clickButtonText("复制链接")
-    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("https://synapse.test/share/shr_test?password=AbC234xy")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("https://synapse.test/share/shr_test")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
-
-    await clickButtonByLabel("复制密码")
-    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("AbC234xy")
     expect(getDialogFooterButtonTexts()).toEqual(["关闭"])
   })
 
@@ -3265,7 +3264,7 @@ describe("DriveModule", () => {
 
     expect(document.body.textContent).not.toContain("分享设置")
     expect(document.body.textContent).toContain("文件已分享")
-    expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_test?password=AbC234xy")
+    expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_test")
 
     clipboardWrite.resolve()
     await flushAct()
@@ -3281,10 +3280,10 @@ describe("DriveModule", () => {
       itemId: "folder-1",
       enabled: true,
       url: "https://synapse.test/share/shr_folder",
-      urlWithPassword: "https://synapse.test/share/shr_folder?password=AbC234xy",
-      passwordEnabled: true,
-      password: "AbC234xy",
-      expiresAt: "2026-06-14T00:00:00.000Z",
+      urlWithPassword: "https://synapse.test/share/shr_folder",
+      passwordEnabled: false,
+      password: null,
+      expiresAt: null,
       accessMode: "link_read",
       editorEmails: [],
       createdAt: "2026-06-07T00:00:00.000Z",
@@ -3301,14 +3300,14 @@ describe("DriveModule", () => {
       itemId: "folder-1",
       ...DRIVE_DEFAULT_ACCESS_SETTINGS,
     })
-    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/share/shr_folder?password=AbC234xy")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/share/shr_folder")
     expect(document.body.textContent).toContain("文件夹已分享")
     expect(getDialogContent().className).toContain("sm:max-w-lg")
-    expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_folder?password=AbC234xy")
+    expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_folder")
     expect(getDialogFooterButtonTexts()).toEqual(["关闭"])
 
     await clickButtonText("打开文件夹")
-    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/share/shr_folder?password=AbC234xy")
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/share/shr_folder")
   })
 
   it("shows the shared URL when automatic clipboard copy fails", async () => {
@@ -3328,7 +3327,7 @@ describe("DriveModule", () => {
     })
     expect(mocks.toast).toHaveBeenCalledWith("分享成功，复制失败")
     expect(document.body.textContent).toContain("文件已分享")
-    expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_test?password=AbC234xy")
+    expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_test")
   })
 
   it("renders row menu items without icons and keeps deletion outside the menu", async () => {

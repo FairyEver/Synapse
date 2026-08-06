@@ -31,10 +31,12 @@
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cos-nodejs-sdk-v5": "^2.15.4",
+    "diff": "^8.0.4",
     "express": "^5.2.1",
     "helmet": "^8.1.0",
     "ipaddr.js": "^1.9.1",
     "jsonc-parser": "^3.3.1",
+    "lib0": "^0.2.117",
     "nestjs-pino": "^4.6.1",
     "pg": "^8.16.3",
     "pino-http": "^11.0.0",
@@ -50,6 +52,8 @@
     "tar": "^7.5.13",
     "unified": "^11.0.5",
     "ws": "^8.20.0",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.31",
     "zod": "^4.3.6"
   },
   "devDependencies": {

@@ -33,53 +33,54 @@ model AdminSession {
 }
 
 model User {
-  id                           String                        @id @default(cuid())
-  email                        String                        @unique
-  handle                       String                        @unique @db.VarChar(64)
-  adminNote                    String?                       @db.VarChar(500)
-  passwordHash                 String
-  passwordChangedAt            DateTime?
-  status                       UserStatus                    @default(active)
-  sessions                     UserSession[]
-  desktopLoginCodes            DesktopLoginCode[]
-  passwordResetTokens          UserPasswordResetToken[]
-  modulePermissions            UserModulePermission[]
-  webhooks                     UserWebhook[]
-  devices                      UserDevice[]
-  driveItems                   DriveItem[]
-  driveUsage                   DriveUsage?
-  driveUploadSessions          DriveUploadSession[]
-  driveFileVersions            DriveFileVersion[]
-  driveChanges                 DriveChange[]
-  driveAnnotationThreads       DriveAnnotationThread[]
-  driveAnnotationComments      DriveAnnotationComment[]
-  publicAssets                 PublicAsset[]
-  driveSites                   DriveSite[]
-  userHandleRedirects          UserHandleRedirect[]
-  skillRepositories            SkillRepository[]
+  id                             String                          @id @default(cuid())
+  email                          String                          @unique
+  handle                         String                          @unique @db.VarChar(64)
+  adminNote                      String?                         @db.VarChar(500)
+  passwordHash                   String
+  passwordChangedAt              DateTime?
+  status                         UserStatus                      @default(active)
+  sessions                       UserSession[]
+  desktopLoginCodes              DesktopLoginCode[]
+  passwordResetTokens            UserPasswordResetToken[]
+  modulePermissions              UserModulePermission[]
+  webhooks                       UserWebhook[]
+  devices                        UserDevice[]
+  driveItems                     DriveItem[]
+  driveUsage                     DriveUsage?
+  driveUploadSessions            DriveUploadSession[]
+  driveFileVersions              DriveFileVersion[]
+  driveFileVersionContributions  DriveFileVersionContributor[]
+  driveChanges                   DriveChange[]
+  driveAnnotationThreads         DriveAnnotationThread[]
+  driveAnnotationComments        DriveAnnotationComment[]
+  publicAssets                   PublicAsset[]
+  driveSites                     DriveSite[]
+  userHandleRedirects            UserHandleRedirect[]
+  skillRepositories              SkillRepository[]
   skillRepositoryInstallSessions SkillRepositoryInstallSession[]
-  skillRepositoryInstallEvents SkillRepositoryInstallEvent[]
-  agentPersonas                AgentPersona[]
-  agentPersonaPreferences      AgentPersonaPreference[]
-  createdAt                    DateTime                      @default(now())
-  updatedAt                    DateTime                      @updatedAt
+  skillRepositoryInstallEvents   SkillRepositoryInstallEvent[]
+  agentPersonas                  AgentPersona[]
+  agentPersonaPreferences        AgentPersonaPreference[]
+  createdAt                      DateTime                        @default(now())
+  updatedAt                      DateTime                        @updatedAt
 }
 
 model AgentPersona {
-  id                   String                    @id @default(cuid())
-  source               String                    @db.VarChar(16)
+  id                   String                   @id @default(cuid())
+  source               String                   @db.VarChar(16)
   ownerUserId          String?
-  owner                User?                     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  stableKey            String?                   @db.VarChar(120)
-  name                 String                    @db.VarChar(120)
-  description          String                    @db.VarChar(1000)
+  owner                User?                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  stableKey            String?                  @db.VarChar(120)
+  name                 String                   @db.VarChar(120)
+  description          String                   @db.VarChar(1000)
   systemPrompt         String
   defaultProviderModel Json?
   defaultToolPolicy    Json?
-  status               String                    @db.VarChar(16)
-  version              Int                       @default(1)
-  createdAt            DateTime                  @default(now())
-  updatedAt            DateTime                  @updatedAt
+  status               String                   @db.VarChar(16)
+  version              Int                      @default(1)
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
   preferences          AgentPersonaPreference[]
 
   @@unique([source, stableKey])
@@ -114,14 +115,14 @@ model UserModulePermission {
 }
 
 model UserSession {
-  id               String    @id @default(cuid())
+  id               String                    @id @default(cuid())
   userId           String
-  user             User      @relation(fields: [userId], references: [id])
-  refreshTokenHash String    @unique
+  user             User                      @relation(fields: [userId], references: [id])
+  refreshTokenHash String                    @unique
   expiresAt        DateTime
   revokedAt        DateTime?
   lastUsedAt       DateTime?
-  createdAt        DateTime  @default(now())
+  createdAt        DateTime                  @default(now())
   refreshTokens    UserSessionRefreshToken[]
 
   @@index([userId])
@@ -262,39 +263,43 @@ model WebhookDeliveryReceipt {
 }
 
 model DriveItem {
-  id                   String                @id @default(cuid())
-  userId               String
-  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parentId             String?
-  parent               DriveItem?            @relation("DriveTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children             DriveItem[]           @relation("DriveTree")
-  type                 String                @db.VarChar(16)
-  name                 String                @db.VarChar(255)
-  size                 BigInt                @default(0)
-  mimeType             String?               @db.VarChar(255)
-  storageKey           String?               @unique
-  storageStatus        String                @db.VarChar(32)
-  uploadStatus         String                @db.VarChar(32)
-  storageDeletePending Boolean               @default(false)
-  lifecycleStatus      String                @default("active") @db.VarChar(32)
-  trashedAt            DateTime?
-  trashedBy            String?
-  hiddenAt             DateTime?
-  hiddenBy             String?
-  restoreParentId      String?
-  restorePath          String?
-  deleteRootId         String?
-  objectMissing        Boolean               @default(false)
-  deletedAt            DateTime?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  shares               DriveShare[]
-  uploadSessions       DriveUploadSession[]
-  fileVersions         DriveFileVersion[]
-  changes              DriveChange[]
-  annotationThreads    DriveAnnotationThread[]
-  publicAsset          PublicAsset?
-  publicAssetRevisions PublicAssetRevision[]
+  id                    String                      @id @default(cuid())
+  userId                String
+  user                  User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentId              String?
+  parent                DriveItem?                  @relation("DriveTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children              DriveItem[]                 @relation("DriveTree")
+  type                  String                      @db.VarChar(16)
+  name                  String                      @db.VarChar(255)
+  size                  BigInt                      @default(0)
+  mimeType              String?                     @db.VarChar(255)
+  storageKey            String?                     @unique
+  storageStatus         String                      @db.VarChar(32)
+  uploadStatus          String                      @db.VarChar(32)
+  storageDeletePending  Boolean                     @default(false)
+  lifecycleStatus       String                      @default("active") @db.VarChar(32)
+  trashedAt             DateTime?
+  trashedBy             String?
+  hiddenAt              DateTime?
+  hiddenBy              String?
+  restoreParentId       String?
+  restorePath           String?
+  deleteRootId          String?
+  objectMissing         Boolean                     @default(false)
+  deletedAt             DateTime?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  shares                DriveShare[]
+  uploadSessions        DriveUploadSession[]
+  fileVersions          DriveFileVersion[]
+  changes               DriveChange[]
+  annotationThreads     DriveAnnotationThread[]
+  annotationAnchors     DriveAnnotationAnchor[]
+  collaborationDocument DriveCollaborationDocument?
+  collaborationSegments DriveCollaborationSegment[]
+  markdownProjections   DriveMarkdownProjection[]
+  publicAsset           PublicAsset?
+  publicAssetRevisions  PublicAssetRevision[]
 
   @@index([userId, parentId, deletedAt, createdAt])
   @@index([userId, deletedAt, updatedAt])
@@ -396,14 +401,14 @@ model DriveSite {
 }
 
 model DriveSiteDeployment {
-  id          String           @id @default(cuid())
+  id          String            @id @default(cuid())
   driveSiteId String
-  driveSite   DriveSite        @relation(fields: [driveSiteId], references: [id], onDelete: Cascade)
-  status      String           @db.VarChar(32)
-  entryPath   String           @db.VarChar(1024)
+  driveSite   DriveSite         @relation(fields: [driveSiteId], references: [id], onDelete: Cascade)
+  status      String            @db.VarChar(32)
+  entryPath   String            @db.VarChar(1024)
   fileCount   Int
   totalBytes  BigInt
-  createdAt   DateTime         @default(now())
+  createdAt   DateTime          @default(now())
   activatedAt DateTime?
   error       String?
   assets      DriveSiteAsset[]
@@ -484,23 +489,25 @@ model DriveUploadSession {
 }
 
 model DriveFileVersion {
-  id                    String    @id @default(cuid())
+  id                    String                        @id @default(cuid())
   itemId                String
-  item                  DriveItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  item                  DriveItem                     @relation(fields: [itemId], references: [id], onDelete: Restrict)
   userId                String
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                  User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
   versionNumber         Int
-  storageKey            String    @unique
+  storageKey            String                        @unique
   size                  BigInt
-  mimeType              String?   @db.VarChar(255)
+  mimeType              String?                       @db.VarChar(255)
   etag                  String?
-  source                String    @db.VarChar(32)
+  source                String                        @db.VarChar(32)
   createdBy             String?
   restoredFromVersionId String?
-  isPinned              Boolean   @default(false)
+  isPinned              Boolean                       @default(false)
   deletedAt             DateTime?
-  deletePending         Boolean   @default(false)
-  createdAt             DateTime  @default(now())
+  deletePending         Boolean                       @default(false)
+  createdAt             DateTime                      @default(now())
+  contributors          DriveFileVersionContributor[]
+  markdownProjection    DriveMarkdownProjection?
 
   @@unique([itemId, versionNumber])
   @@index([itemId, deletedAt, versionNumber])
@@ -522,10 +529,38 @@ model DriveAnnotationThread {
   updatedAt       DateTime                 @updatedAt
   deletedAt       DateTime?
   comments        DriveAnnotationComment[]
+  anchor          DriveAnnotationAnchor?
 
   @@index([itemId, deletedAt, createdAt])
   @@index([createdByUserId, createdAt])
   @@index([anchorStatus])
+}
+
+model DriveAnnotationAnchor {
+  id                    String                @id @default(cuid())
+  threadId              String                @unique
+  thread                DriveAnnotationThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  itemId                String
+  item                  DriveItem             @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  schemaVersion         Int                   @default(2)
+  baseVersionId         String?
+  selectors             Json
+  positionStatus        String                @default("attached") @db.VarChar(32)
+  quoteStatus           String                @default("exact") @db.VarChar(16)
+  lastResolvedVersionId String?
+  resolvedSourceStart   Int?
+  resolvedSourceEnd     Int?
+  resolvedRenderedStart Int?
+  resolvedRenderedEnd   Int?
+  confidence            Float?
+  idempotencyKey        String?               @unique @db.VarChar(128)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  deletedAt             DateTime?
+
+  @@index([itemId, positionStatus, updatedAt])
+  @@index([baseVersionId])
+  @@index([lastResolvedVersionId])
 }
 
 model DriveAnnotationComment {
@@ -546,6 +581,74 @@ model DriveAnnotationComment {
   @@index([threadId, createdAt])
   @@index([parentCommentId])
   @@index([createdByUserId, createdAt])
+}
+
+model DriveCollaborationDocument {
+  itemId              String    @id
+  item                DriveItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  epoch               String    @db.VarChar(64)
+  checkpointVersionId String
+  snapshotStorageKey  String?
+  snapshotSha256      String?   @db.VarChar(64)
+  durableSequence     BigInt    @default(0)
+  checkpointSequence  BigInt    @default(0)
+  reservedBytes       BigInt    @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([epoch])
+  @@index([checkpointVersionId])
+}
+
+model DriveCollaborationSegment {
+  id            String    @id @default(cuid())
+  itemId        String
+  item          DriveItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  epoch         String    @db.VarChar(64)
+  sequenceStart BigInt
+  sequenceEnd   BigInt
+  storageKey    String    @unique
+  size          BigInt
+  sha256        String    @db.VarChar(64)
+  deletePending Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  @@unique([itemId, epoch, sequenceStart])
+  @@index([itemId, epoch, sequenceEnd])
+  @@index([deletePending, createdAt])
+}
+
+model DriveMarkdownProjection {
+  id            String           @id @default(cuid())
+  itemId        String
+  item          DriveItem        @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  versionId     String           @unique
+  version       DriveFileVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  storageKey    String           @unique
+  sha256        String           @db.VarChar(64)
+  sourceSha256  String           @db.VarChar(64)
+  parserVersion String           @db.VarChar(32)
+  schemaVersion Int              @default(1)
+  status        String           @default("ready") @db.VarChar(16)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([itemId, createdAt])
+  @@index([status, updatedAt])
+}
+
+model DriveFileVersionContributor {
+  id            String           @id @default(cuid())
+  versionId     String
+  version       DriveFileVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  sequenceStart BigInt
+  sequenceEnd   BigInt
+  createdAt     DateTime         @default(now())
+
+  @@unique([versionId, userId])
+  @@index([userId, createdAt])
 }
 
 model PublicAsset {
@@ -665,25 +768,25 @@ model UserHandleRedirect {
 }
 
 model SkillRepository {
-  id                       String                        @id @default(cuid())
-  ownerUserId              String
-  owner                    User                          @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  name                     String                        @db.VarChar(64)
-  title                    String                        @db.VarChar(160)
-  description              String?
-  visibility               String                        @default("private") @db.VarChar(16)
-  status                   String                        @default("active") @db.VarChar(16)
-  forkedFromRepositoryId   String?
-  forkedFromRepository     SkillRepository?              @relation("SkillRepositoryForks", fields: [forkedFromRepositoryId], references: [id], onDelete: SetNull)
-  forks                    SkillRepository[]             @relation("SkillRepositoryForks")
-  lastSyncedAt             DateTime?
-  createdAt                DateTime                      @default(now())
-  updatedAt                DateTime                      @updatedAt
-  files                    SkillRepositoryFile[]
-  nameRedirects            SkillRepositoryNameRedirect[]
-  objectCleanupTasks       SkillRepositoryObjectCleanupTask[]
-  installSessions          SkillRepositoryInstallSession[]
-  installEvents            SkillRepositoryInstallEvent[]
+  id                     String                             @id @default(cuid())
+  ownerUserId            String
+  owner                  User                               @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  name                   String                             @db.VarChar(64)
+  title                  String                             @db.VarChar(160)
+  description            String?
+  visibility             String                             @default("private") @db.VarChar(16)
+  status                 String                             @default("active") @db.VarChar(16)
+  forkedFromRepositoryId String?
+  forkedFromRepository   SkillRepository?                   @relation("SkillRepositoryForks", fields: [forkedFromRepositoryId], references: [id], onDelete: SetNull)
+  forks                  SkillRepository[]                  @relation("SkillRepositoryForks")
+  lastSyncedAt           DateTime?
+  createdAt              DateTime                           @default(now())
+  updatedAt              DateTime                           @updatedAt
+  files                  SkillRepositoryFile[]
+  nameRedirects          SkillRepositoryNameRedirect[]
+  objectCleanupTasks     SkillRepositoryObjectCleanupTask[]
+  installSessions        SkillRepositoryInstallSession[]
+  installEvents          SkillRepositoryInstallEvent[]
 
   @@unique([ownerUserId, name])
   @@index([visibility, status, updatedAt])

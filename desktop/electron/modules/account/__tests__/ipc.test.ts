@@ -297,8 +297,6 @@ describe("accountIpcModule", () => {
       sourceFolderItemId: "folder-1",
       name: "产品原型",
       entryPath: null,
-      accessMode: "password",
-      expiresIn: "3d",
     })
     await accountIpcModule.methods.updateDriveSiteAccess.handler({} as IpcHandlerContext, {
       siteId: "site_abc",
@@ -315,8 +313,6 @@ describe("accountIpcModule", () => {
       sourceFolderItemId: "folder-1",
       name: "产品原型",
       entryPath: null,
-      accessMode: "password",
-      expiresIn: "3d",
     })
     expect(accountService.updateDriveSiteAccess).toHaveBeenCalledWith({
       siteId: "site_abc",

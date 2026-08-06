@@ -1,6 +1,6 @@
-import { useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto } from '@synapse/shared'
-import { Loader2, MoreHorizontal, RefreshCw } from 'lucide-react'
+import { ChevronDown, Loader2, MoreHorizontal, RefreshCw } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,17 @@ const COMMENT_CARD_GAP = 12
 const COMMENT_RAIL_HEADER_HEIGHT = 40
 type CommentActionPromise = Promise<unknown>
 
+type CommentRailMeasurements = {
+  readonly cardHeights: Record<string, number>
+  readonly unlocatedSectionHeight: number
+}
+
+type MeasurementTarget =
+  | { readonly kind: 'card'; readonly threadId: string }
+  | { readonly kind: 'unlocated' }
+
+type PendingMeasurement = number | HTMLElement | null
+
 export type MarkdownCommentsRailThread = {
   readonly thread: DriveAnnotationThreadDto
   readonly anchorTop: number | null
@@ -45,7 +57,6 @@ export function MarkdownCommentsRail({
   activeThreadId,
   canReply,
   anchorBaseOffset = 0,
-  anchoredLayerRef,
   onFocusThread,
   loading = false,
   onRefresh,
@@ -53,13 +64,13 @@ export function MarkdownCommentsRail({
   onUpdateComment,
   onDeleteComment,
   onDeleteThread,
+  onStartReassociate,
 }: {
   readonly mode?: 'anchored' | 'list'
   readonly threads: readonly MarkdownCommentsRailThread[]
   readonly activeThreadId: string | null
   readonly canReply: boolean
   readonly anchorBaseOffset?: number
-  readonly anchoredLayerRef?: Ref<HTMLDivElement>
   readonly onFocusThread: (threadId: string) => void
   readonly loading?: boolean
   readonly onRefresh?: () => void
@@ -67,19 +78,15 @@ export function MarkdownCommentsRail({
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
   readonly onDeleteThread: (threadId: string) => CommentActionPromise
+  readonly onStartReassociate?: (threadId: string) => void
 }) {
-  const cardRefs = useRef(new Map<string, HTMLElement>())
-  const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({})
-  const layout = useMemo(() => layoutRailThreads(threads, measuredHeights, anchorBaseOffset), [anchorBaseOffset, measuredHeights, threads])
-
-  useLayoutEffect(() => {
-    if (mode === 'list') return
-    const next: Record<string, number> = {}
-    for (const [threadId, element] of cardRefs.current) {
-      next[threadId] = Math.ceil(element.getBoundingClientRect().height || element.offsetHeight || COMMENT_CARD_ESTIMATED_HEIGHT)
-    }
-    setMeasuredHeights((current) => sameHeightMap(current, next) ? current : next)
-  }, [mode, threads])
+  const [unlocatedOpen, setUnlocatedOpen] = useState(true)
+  const partition = useMemo(() => partitionRailThreads(threads), [threads])
+  const measurements = useCommentRailMeasurements(mode !== 'list', threads)
+  const layout = useMemo(
+    () => layoutRailThreads(partition.anchored, measurements.cardHeights, anchorBaseOffset, measurements.unlocatedSectionHeight),
+    [anchorBaseOffset, measurements.cardHeights, measurements.unlocatedSectionHeight, partition.anchored]
+  )
 
   const compact = mode === 'list'
 
@@ -87,7 +94,7 @@ export function MarkdownCommentsRail({
     <div
       data-markdown-comments-rail='true'
       data-markdown-comments-mode={mode}
-      className='h-full min-h-full bg-background'
+      className='min-h-full bg-background'
     >
       <div className={cn(
         'sticky top-0 z-10 flex shrink-0 items-center justify-between border-b bg-background px-3 text-sm font-medium',
@@ -117,7 +124,7 @@ export function MarkdownCommentsRail({
         ) : null}
         {compact && threads.length > 0 ? (
           <div className='space-y-3 p-3'>
-            {threads.map((item) => (
+            {[...partition.orphaned, ...partition.anchored].map((item) => (
               <div
                 key={item.thread.id}
                 data-markdown-comment-thread-id={item.thread.id}
@@ -132,62 +139,77 @@ export function MarkdownCommentsRail({
                   onUpdateComment={onUpdateComment}
                   onDeleteComment={onDeleteComment}
                   onDeleteThread={onDeleteThread}
+                  onStartReassociate={onStartReassociate}
                 />
               </div>
             ))}
+          </div>
+        ) : null}
+        {!compact && partition.orphaned.length > 0 ? (
+          <div ref={measurements.unlocatedSectionRef} data-markdown-comments-unlocated='true' className='shrink-0 border-b bg-muted/30'>
+            <Collapsible open={unlocatedOpen} onOpenChange={setUnlocatedOpen}>
+              <CollapsibleTrigger asChild>
+                <Button type='button' variant='ghost' size='sm' className='w-full justify-between rounded-none px-3'>
+                  <span>未定位 {partition.orphaned.length}</span>
+                  <ChevronDown className={cn('size-4 transition-transform', unlocatedOpen && 'rotate-180')} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className='max-h-64 space-y-3 overflow-auto p-3 pt-0'>
+                  {partition.orphaned.map((item) => (
+                    <div
+                      key={item.thread.id}
+                      data-markdown-comment-thread-id={item.thread.id}
+                    >
+                      <ThreadView
+                        thread={item.thread}
+                        active={item.thread.id === activeThreadId}
+                        canReply={canReply}
+                        compact={false}
+                        onFocusThread={onFocusThread}
+                        onReply={onReply}
+                        onUpdateComment={onUpdateComment}
+                        onDeleteComment={onDeleteComment}
+                        onDeleteThread={onDeleteThread}
+                        onStartReassociate={onStartReassociate}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         ) : null}
         {!compact && layout.anchored.length > 0 ? (
-          <div
-            ref={anchoredLayerRef}
-            data-markdown-comments-anchored-layer='true'
-            className='relative p-3 will-change-transform'
-            style={{ minHeight: layout.anchoredHeight }}
-          >
-            {layout.anchored.map(({ item, top }) => (
-              <div
-                key={item.thread.id}
-                ref={(element) => setCardRef(cardRefs.current, item.thread.id, element)}
-                data-markdown-comment-thread-id={item.thread.id}
-                className='absolute left-3 right-3'
-                style={{ top }}
-              >
-                <ThreadView
-                  thread={item.thread}
-                  active={item.thread.id === activeThreadId}
-                  canReply={canReply}
-                  compact={false}
-                  onFocusThread={onFocusThread}
-                  onReply={onReply}
-                  onUpdateComment={onUpdateComment}
-                  onDeleteComment={onDeleteComment}
-                  onDeleteThread={onDeleteThread}
-                />
-              </div>
-            ))}
-          </div>
-        ) : null}
-        {!compact && layout.orphaned.length > 0 ? (
-          <div className={cn('space-y-3 p-3', layout.anchored.length > 0 && 'pt-0')}>
-            {layout.orphaned.map((item) => (
-              <div
-                key={item.thread.id}
-                ref={(element) => setCardRef(cardRefs.current, item.thread.id, element)}
-                data-markdown-comment-thread-id={item.thread.id}
-              >
-                <ThreadView
-                  thread={item.thread}
-                  active={item.thread.id === activeThreadId}
-                  canReply={canReply}
-                  compact={false}
-                  onFocusThread={onFocusThread}
-                  onReply={onReply}
-                  onUpdateComment={onUpdateComment}
-                  onDeleteComment={onDeleteComment}
-                  onDeleteThread={onDeleteThread}
-                />
-              </div>
-            ))}
+          <div className='relative'>
+            <div
+              data-markdown-comments-anchored-layer='true'
+              className='relative min-h-full p-3'
+              style={{ minHeight: layout.anchoredHeight }}
+            >
+              {layout.anchored.map(({ item, top }) => (
+                <div
+                  key={item.thread.id}
+                  ref={measurements.cardRef(item.thread.id)}
+                  data-markdown-comment-thread-id={item.thread.id}
+                  className='absolute left-3 right-3'
+                  style={{ top }}
+                >
+                  <ThreadView
+                    thread={item.thread}
+                    active={item.thread.id === activeThreadId}
+                    canReply={canReply}
+                    compact={false}
+                    onFocusThread={onFocusThread}
+                    onReply={onReply}
+                    onUpdateComment={onUpdateComment}
+                    onDeleteComment={onDeleteComment}
+                    onDeleteThread={onDeleteThread}
+                    onStartReassociate={onStartReassociate}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         ) : null}
       </div>
@@ -205,6 +227,7 @@ function ThreadView({
   onUpdateComment,
   onDeleteComment,
   onDeleteThread,
+  onStartReassociate,
 }: {
   readonly thread: DriveAnnotationThreadDto
   readonly active: boolean
@@ -215,6 +238,7 @@ function ThreadView({
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
   readonly onDeleteThread: (threadId: string) => CommentActionPromise
+  readonly onStartReassociate?: (threadId: string) => void
 }) {
   const authorByCommentId = useMemo(() => new Map(thread.comments.map((comment) => [comment.id, comment.author])), [thread.comments])
   const firstVisibleCommentId = thread.comments.find((comment) => !comment.deleted)?.id ?? null
@@ -233,7 +257,15 @@ function ThreadView({
       {showThreadHeader ? (
         <div className='mb-2 flex items-center justify-between gap-2'>
           {thread.anchorStatus === 'orphaned' ? (
-            <div className='rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground'>位置已变化</div>
+            <div className='min-w-0 space-y-1'>
+              <div className='text-xs font-medium text-muted-foreground'>{annotationPositionLabel(thread)}</div>
+              <div className='line-clamp-2 text-xs text-muted-foreground'>“{annotationQuoteExcerpt(thread)}”</div>
+              {canReply && onStartReassociate ? (
+                <Button type='button' variant='ghost' size='sm' className='h-7 px-2 text-xs' onClick={() => onStartReassociate(thread.id)}>
+                  重新关联
+                </Button>
+              ) : null}
+            </div>
           ) : <span />}
           {thread.permissions.canDelete && !firstVisibleCommentId ? (
             <ThreadActionMenu compact={compact} onDeleteThread={() => onDeleteThread(thread.id)} />
@@ -257,6 +289,13 @@ function ThreadView({
       </div>
     </section>
   )
+}
+
+function annotationPositionLabel(thread: DriveAnnotationThreadDto): string {
+  if (thread.anchor?.positionStatus === 'source_deleted') return '原文已删除'
+  if (thread.anchor?.positionStatus === 'ambiguous') return '位置不明确'
+  if (thread.anchor?.positionStatus === 'unavailable') return '暂无法定位'
+  return '原文已修改或删除'
 }
 
 function CommentView({
@@ -582,6 +621,10 @@ function isInteractiveCommentTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && Boolean(target.closest('button, textarea, input, a'))
 }
 
+function annotationQuoteExcerpt(thread: DriveAnnotationThreadDto): string {
+  return thread.target.quote.exact.replace(/\s+/gu, ' ').trim()
+}
+
 export function getCommentActionErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message
   if (typeof error === 'string' && error.trim()) return error
@@ -592,40 +635,213 @@ function layoutRailThreads(
   items: readonly MarkdownCommentsRailThread[],
   measuredHeights: Record<string, number>,
   anchorBaseOffset = 0,
+  blockedTop = 0,
 ): {
   readonly anchored: readonly { readonly item: MarkdownCommentsRailThread; readonly top: number }[]
-  readonly orphaned: readonly MarkdownCommentsRailThread[]
   readonly anchoredHeight: number
 } {
-  const anchoredSource = items
-    .filter((item) => item.anchorTop !== null && item.thread.anchorStatus !== 'orphaned')
-    .sort((a, b) => (a.anchorTop ?? 0) - (b.anchorTop ?? 0))
-  const orphaned = items.filter((item) => item.anchorTop === null || item.thread.anchorStatus === 'orphaned')
+  const anchoredSource = [...items].sort((a, b) => (a.anchorTop ?? 0) - (b.anchorTop ?? 0))
   const anchored: Array<{ readonly item: MarkdownCommentsRailThread; readonly top: number }> = []
   let previousBottom = 0
 
   for (const item of anchoredSource) {
-    const requestedTop = Math.max(0, (item.anchorTop ?? 0) + anchorBaseOffset - COMMENT_RAIL_HEADER_HEIGHT)
+    const requestedTop = Math.max(0, (item.anchorTop ?? 0) + anchorBaseOffset - COMMENT_RAIL_HEADER_HEIGHT - blockedTop)
     const top = anchored.length === 0 ? requestedTop : Math.max(requestedTop, previousBottom + COMMENT_CARD_GAP)
     const height = measuredHeights[item.thread.id] ?? COMMENT_CARD_ESTIMATED_HEIGHT
     anchored.push({ item, top })
     previousBottom = top + height
   }
 
-  return { anchored, orphaned, anchoredHeight: anchored.length > 0 ? previousBottom : 0 }
+  return { anchored, anchoredHeight: anchored.length > 0 ? previousBottom : 0 }
 }
 
-function setCardRef(map: Map<string, HTMLElement>, threadId: string, element: HTMLElement | null): void {
-  if (element) {
-    map.set(threadId, element)
-    return
+function partitionRailThreads(items: readonly MarkdownCommentsRailThread[]): {
+  readonly anchored: readonly MarkdownCommentsRailThread[]
+  readonly orphaned: readonly MarkdownCommentsRailThread[]
+} {
+  const orphaned = items
+    .filter((item) => item.anchorTop === null || item.thread.anchorStatus === 'orphaned')
+    .sort((a, b) => Date.parse(b.thread.updatedAt) - Date.parse(a.thread.updatedAt))
+  const anchored = items.filter((item) => item.anchorTop !== null && item.thread.anchorStatus !== 'orphaned')
+  return { anchored, orphaned }
+}
+
+function useCommentRailMeasurements(enabled: boolean, fallbackRefreshKey: unknown) {
+  const cardElementsRef = useRef(new Map<string, HTMLElement>())
+  const unlocatedElementRef = useRef<HTMLElement | null>(null)
+  const targetByElementRef = useRef(new WeakMap<Element, MeasurementTarget>())
+  const cardRefCallbacksRef = useRef(new Map<string, (element: HTMLDivElement | null) => void>())
+  const observerRef = useRef<ResizeObserver | null>(null)
+  const pendingCardMeasurementsRef = useRef(new Map<string, PendingMeasurement>())
+  const pendingUnlocatedMeasurementRef = useRef<PendingMeasurement | undefined>(undefined)
+  const frameRef = useRef<number | null>(null)
+  const disposedRef = useRef(false)
+  const initialMeasurements: CommentRailMeasurements = {
+    cardHeights: {},
+    unlocatedSectionHeight: 0,
   }
-  map.delete(threadId)
+  const measurementsRef = useRef(initialMeasurements)
+  const [measurements, setMeasurements] = useState<CommentRailMeasurements>(initialMeasurements)
+
+  const flushMeasurements = useCallback(() => {
+    frameRef.current = null
+    const pendingCards = [...pendingCardMeasurementsRef.current]
+    const pendingUnlocated = pendingUnlocatedMeasurementRef.current
+    pendingCardMeasurementsRef.current.clear()
+    pendingUnlocatedMeasurementRef.current = undefined
+
+    const resolvedCards = pendingCards.map(([threadId, value]) => [
+      threadId,
+      resolvePendingMeasurement(value, COMMENT_CARD_ESTIMATED_HEIGHT),
+    ] as const)
+    const resolvedUnlocated = pendingUnlocated === undefined
+      ? undefined
+      : resolvePendingMeasurement(pendingUnlocated, 0)
+
+    setMeasurements((current) => {
+      let nextCardHeights = current.cardHeights
+      let changed = false
+
+      for (const [threadId, height] of resolvedCards) {
+        if (height === null) {
+          if (!(threadId in nextCardHeights)) continue
+          if (nextCardHeights === current.cardHeights) nextCardHeights = { ...current.cardHeights }
+          delete nextCardHeights[threadId]
+          changed = true
+          continue
+        }
+        if (nextCardHeights[threadId] === height) continue
+        if (nextCardHeights === current.cardHeights) nextCardHeights = { ...current.cardHeights }
+        nextCardHeights[threadId] = height
+        changed = true
+      }
+
+      const nextUnlocatedHeight = resolvedUnlocated === undefined
+        ? current.unlocatedSectionHeight
+        : resolvedUnlocated ?? 0
+      if (nextUnlocatedHeight !== current.unlocatedSectionHeight) changed = true
+      if (!changed) return current
+      const next = { cardHeights: nextCardHeights, unlocatedSectionHeight: nextUnlocatedHeight }
+      measurementsRef.current = next
+      return next
+    })
+  }, [])
+
+  const scheduleFrame = useCallback(() => {
+    if (disposedRef.current || frameRef.current !== null) return
+    frameRef.current = window.requestAnimationFrame(flushMeasurements)
+  }, [flushMeasurements])
+
+  const scheduleCardMeasurement = useCallback((threadId: string, value: PendingMeasurement) => {
+    pendingCardMeasurementsRef.current.set(threadId, value)
+    scheduleFrame()
+  }, [scheduleFrame])
+
+  const scheduleUnlocatedMeasurement = useCallback((value: PendingMeasurement) => {
+    pendingUnlocatedMeasurementRef.current = value
+    scheduleFrame()
+  }, [scheduleFrame])
+
+  const registerCardElement = useCallback((threadId: string, element: HTMLDivElement | null) => {
+    const previous = cardElementsRef.current.get(threadId)
+    if (previous === element) return
+    if (previous) {
+      unobserveElement(observerRef.current, previous)
+      targetByElementRef.current.delete(previous)
+    }
+    if (!element) {
+      cardElementsRef.current.delete(threadId)
+      if (!pendingCardMeasurementsRef.current.has(threadId) && !(threadId in measurementsRef.current.cardHeights)) return
+      scheduleCardMeasurement(threadId, null)
+      return
+    }
+    cardElementsRef.current.set(threadId, element)
+    targetByElementRef.current.set(element, { kind: 'card', threadId })
+    observerRef.current?.observe(element)
+    if (typeof ResizeObserver === 'undefined') scheduleCardMeasurement(threadId, element)
+  }, [scheduleCardMeasurement])
+
+  const cardRef = useCallback((threadId: string) => {
+    const existing = cardRefCallbacksRef.current.get(threadId)
+    if (existing) return existing
+    const callback = (element: HTMLDivElement | null) => {
+      registerCardElement(threadId, element)
+      if (!element) cardRefCallbacksRef.current.delete(threadId)
+    }
+    cardRefCallbacksRef.current.set(threadId, callback)
+    return callback
+  }, [registerCardElement])
+
+  const unlocatedSectionRef = useCallback((element: HTMLDivElement | null) => {
+    const previous = unlocatedElementRef.current
+    if (previous === element) return
+    if (previous) {
+      unobserveElement(observerRef.current, previous)
+      targetByElementRef.current.delete(previous)
+    }
+    unlocatedElementRef.current = element
+    if (!element) {
+      if (pendingUnlocatedMeasurementRef.current === undefined && measurementsRef.current.unlocatedSectionHeight === 0) return
+      scheduleUnlocatedMeasurement(null)
+      return
+    }
+    targetByElementRef.current.set(element, { kind: 'unlocated' })
+    observerRef.current?.observe(element)
+    if (typeof ResizeObserver === 'undefined') scheduleUnlocatedMeasurement(element)
+  }, [scheduleUnlocatedMeasurement])
+
+  useLayoutEffect(() => {
+    if (!enabled || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const target = targetByElementRef.current.get(entry.target)
+        if (!target) continue
+        const height = resizeObserverEntryHeight(entry)
+        if (target.kind === 'card') scheduleCardMeasurement(target.threadId, height)
+        else scheduleUnlocatedMeasurement(height)
+      }
+    })
+    observerRef.current = observer
+    cardElementsRef.current.forEach((element) => observer.observe(element))
+    if (unlocatedElementRef.current) observer.observe(unlocatedElementRef.current)
+    return () => {
+      if (observerRef.current === observer) observerRef.current = null
+      observer.disconnect()
+    }
+  }, [enabled, scheduleCardMeasurement, scheduleUnlocatedMeasurement])
+
+  useLayoutEffect(() => {
+    if (!enabled || typeof ResizeObserver !== 'undefined') return
+    cardElementsRef.current.forEach((element, threadId) => scheduleCardMeasurement(threadId, element))
+    scheduleUnlocatedMeasurement(unlocatedElementRef.current)
+  }, [enabled, fallbackRefreshKey, scheduleCardMeasurement, scheduleUnlocatedMeasurement])
+
+  useLayoutEffect(() => {
+    disposedRef.current = false
+    return () => {
+      disposedRef.current = true
+      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current)
+      frameRef.current = null
+      pendingCardMeasurementsRef.current.clear()
+      pendingUnlocatedMeasurementRef.current = undefined
+    }
+  }, [])
+
+  return { ...measurements, cardRef, unlocatedSectionRef }
 }
 
-function sameHeightMap(left: Record<string, number>, right: Record<string, number>): boolean {
-  const leftKeys = Object.keys(left)
-  const rightKeys = Object.keys(right)
-  if (leftKeys.length !== rightKeys.length) return false
-  return leftKeys.every((key) => left[key] === right[key])
+function resolvePendingMeasurement(value: PendingMeasurement, fallback: number): number | null {
+  if (value === null) return null
+  if (typeof value === 'number') return Math.max(0, Math.ceil(value))
+  if (!value.isConnected) return null
+  const measured = value.getBoundingClientRect().height || value.offsetHeight
+  return Math.max(0, Math.ceil(measured || fallback))
+}
+
+function resizeObserverEntryHeight(entry: ResizeObserverEntry): number {
+  return entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height
+}
+
+function unobserveElement(observer: ResizeObserver | null, element: Element): void {
+  if (observer && typeof observer.unobserve === 'function') observer.unobserve(element)
 }

@@ -85,8 +85,8 @@ MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统
 | `automation` | 14 | 14 |
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
-| `drive` | 48 | 48 |
-| 合计 | 210 | 206 |
+| `drive` | 57 | 57 |
+| 合计 | 219 | 215 |
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 
@@ -94,6 +94,10 @@ MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统
 - `app.nodejs.script.execute`
 - `app.clipboard.text.write`
 - `app.clipboard.text.read`
+
+Drive 的 `app.drive.share.create` 与 `app.drive.site.create` 在未传访问设置时均创建公开、永久的新分享；网页分享创建工具只要求来源文件夹与名称。该契约调整不改变 `drive` domain 的 capability 或 MCP tool 数量。
+
+Drive 本地同步通过 9 个 `app.drive.sync.*` capability 暴露给 MCP：快照、预检、创建、暂停、恢复、停止、排除规则、完整扫描和冲突处理。它们复用桌面端 `core.drive-sync`，不新增独立同步引擎或 Web 端能力。
 
 ## 同步硬规则
 

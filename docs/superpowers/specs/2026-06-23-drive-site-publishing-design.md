@@ -29,7 +29,7 @@ Site creation is a one-way copy. After creation, the source Drive folder is only
 - If the folder contains no HTML file, site creation is blocked.
 - The first version supports HTML, CSS, JavaScript, images, fonts, and nested static assets.
 - Published sites are read-only. Public visitors cannot browse the Drive folder, download the original folder as a Drive object, edit files, comment, or receive Drive share permissions.
-- Webpage share access settings support public access, password access, and expiry. Dashboard creation defaults to password access for 3 days.
+- Webpage share access settings support public access, password access, and expiry. New webpage shares default to public access with no expiry.
 - Site access settings are independent from Drive share settings. Creating or updating a site must not create or mutate a Drive share.
 - Cancelling publication disables public access but keeps the site record, access settings, current deployment, and history.
 - Deleting a site is a destructive management action and requires confirmation.
@@ -500,7 +500,7 @@ Dashboard tests:
 
 - File and folder rows expose only `分享`; the old `发布站点` action is absent.
 - HTML files only expose ordinary file sharing.
-- Folder share creation handles the explicit webpage mode, entry selection, preflight states, protected three-day defaults, and completion URL.
+- Folder share creation handles the explicit webpage mode, entry selection, preflight states, public non-expiring defaults, and completion URL.
 - Top-bar `分享管理` opens one dialog with `文件`、`文件夹`、`网页` tabs.
 - Long site names and long tables do not overflow.
 - Management actions call the bridge APIs with expected inputs.

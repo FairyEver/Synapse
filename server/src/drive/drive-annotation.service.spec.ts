@@ -38,15 +38,45 @@ describe("DriveAnnotationService", () => {
       }),
     }))
     expect(prisma.driveAnnotationThread.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        itemId: "item-1",
-        baseVersionId: "version-1",
-        deletedAt: null,
-      }),
+      where: { itemId: "item-1", deletedAt: null },
     }))
     expect(result[0]?.comments[0]?.author.email).toBe("reader-1@example.com")
     expect(result[0]?.comments[0]?.permissions).toEqual({ canEdit: false, canDelete: true })
     expect(result[0]?.permissions.canDelete).toBe(true)
+  })
+
+  it("keeps annotations from multiple document versions visible", async () => {
+    prisma.driveFileVersion.findFirst.mockResolvedValue({ id: "version-3" })
+    prisma.driveAnnotationThread.findMany.mockResolvedValue([
+      threadRecord({ baseVersionId: "version-1" }),
+      { ...threadRecord({ baseVersionId: "version-2" }), id: "thread-2" },
+    ])
+
+    const result = await service.listOwnerAnnotations("owner-1", "item-1")
+
+    expect(result.map((thread) => thread.baseVersionId)).toEqual(["version-1", "version-2"])
+    expect(prisma.driveFileVersion.findFirst).not.toHaveBeenCalled()
+  })
+
+  it("keeps shared annotations from multiple document versions visible", async () => {
+    prisma.driveFileVersion.findFirst.mockResolvedValue({ id: "version-3" })
+    prisma.driveAnnotationThread.findMany.mockResolvedValue([
+      threadRecord({ baseVersionId: "version-1" }),
+      { ...threadRecord({ baseVersionId: "version-2" }), id: "thread-2" },
+    ])
+
+    const result = await service.listShareAnnotations({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+    })
+
+    expect(result.map((thread) => thread.baseVersionId)).toEqual(["version-1", "version-2"])
+    expect(prisma.driveAnnotationThread.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { itemId: "item-1", deletedAt: null },
+    }))
+    expect(prisma.driveFileVersion.findFirst).not.toHaveBeenCalled()
   })
 
   it("rejects owner annotation writes when the item is no longer active", async () => {
@@ -158,21 +188,24 @@ describe("DriveAnnotationService", () => {
     expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
   })
 
-  it("rejects owner annotation writes when the thread version is stale", async () => {
-    prisma.driveAnnotationThread.findFirst.mockResolvedValue(threadRecord({ baseVersionId: "version-0" }))
+  it("allows owner annotation writes after the document version changes", async () => {
+    const staleThread = threadRecord({ baseVersionId: "version-0" })
+    const ownComment = commentRecord({ createdByUserId: "owner-1" })
+    prisma.driveAnnotationThread.findFirst.mockResolvedValue(staleThread)
+    prisma.driveAnnotationComment.findFirst.mockResolvedValue(ownComment)
 
     await expect(service.replyOwnerAnnotation("owner-1", "item-1", "thread-1", { parentCommentId: null, body: "Reply" }))
-      .rejects.toBeInstanceOf(ConflictException)
+      .resolves.toMatchObject({ threadId: "thread-1" })
     await expect(service.updateOwnerComment("owner-1", "item-1", "comment-1", { body: "updated" }))
-      .rejects.toBeInstanceOf(ConflictException)
+      .resolves.toMatchObject({ id: "comment-1" })
     await expect(service.deleteOwnerComment("owner-1", "item-1", "comment-1"))
-      .rejects.toBeInstanceOf(ConflictException)
+      .resolves.toEqual({ ok: true })
     await expect(service.deleteOwnerThread("owner-1", "item-1", "thread-1"))
-      .rejects.toBeInstanceOf(ConflictException)
+      .resolves.toEqual({ ok: true })
 
-    expect(prisma.driveAnnotationComment.create).not.toHaveBeenCalled()
-    expect(prisma.driveAnnotationComment.update).not.toHaveBeenCalled()
-    expect(prisma.driveAnnotationThread.update).not.toHaveBeenCalled()
+    expect(prisma.driveAnnotationComment.create).toHaveBeenCalled()
+    expect(prisma.driveAnnotationComment.update).toHaveBeenCalled()
+    expect(prisma.driveAnnotationThread.update).toHaveBeenCalled()
   })
 
   it("rejects comment creation for unsupported file names", async () => {
@@ -268,7 +301,7 @@ describe("DriveAnnotationService", () => {
     expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
   })
 
-  it("rejects share annotation replies when the thread version is stale", async () => {
+  it("allows share annotation replies after the document version changes", async () => {
     prisma.driveAnnotationThread.findFirst.mockResolvedValue(threadRecord({ baseVersionId: "version-0" }))
 
     await expect(service.replyShareAnnotation({
@@ -278,9 +311,9 @@ describe("DriveAnnotationService", () => {
       cookie: "cookie",
       threadId: "thread-1",
       body: { parentCommentId: null, body: "Reply" },
-    })).rejects.toBeInstanceOf(ConflictException)
+    })).resolves.toMatchObject({ threadId: "thread-1" })
 
-    expect(prisma.driveAnnotationComment.create).not.toHaveBeenCalled()
+    expect(prisma.driveAnnotationComment.create).toHaveBeenCalled()
   })
 
   it("allows share annotation writes when the share can be commented but cannot be edited", async () => {
@@ -449,11 +482,7 @@ describe("DriveAnnotationService", () => {
     }))
     expect(drive.getShareBrowserSnapshot).not.toHaveBeenCalled()
     expect(prisma.driveAnnotationThread.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        itemId: "item-1",
-        baseVersionId: "version-1",
-        deletedAt: null,
-      }),
+      where: { itemId: "item-1", deletedAt: null },
     }))
     expect(result[0]?.comments[0]?.permissions).toEqual({ canEdit: true, canDelete: true })
     expect(result[0]?.permissions.canDelete).toBe(true)

@@ -120,6 +120,15 @@ describe("createDriveCapabilityDispatcher", () => {
       "app_drive_folder_path_ensure",
       "app_drive_reorganization_preview",
       "app_drive_reorganization_apply",
+      "app_drive_sync_snapshot_get",
+      "app_drive_sync_binding_preview",
+      "app_drive_sync_binding_create",
+      "app_drive_sync_binding_pause",
+      "app_drive_sync_binding_resume",
+      "app_drive_sync_binding_remove",
+      "app_drive_sync_binding_exclude_rules_update",
+      "app_drive_sync_binding_rescan",
+      "app_drive_sync_conflict_resolve",
       "app_drive_direct_link_upload",
       "app_drive_direct_link_list",
       "app_drive_direct_link_get",
@@ -252,6 +261,126 @@ describe("createDriveCapabilityDispatcher", () => {
     }, { source: "mcp-stdio" })).rejects.toThrow("targetParentId is required")
 
     expect(accountService.previewDriveReorganization).not.toHaveBeenCalled()
+  })
+
+  it("previews and creates a local file sync binding with root defaults", async () => {
+    const preview = driveSyncPreview()
+    const binding = driveSyncBinding()
+    const driveSyncService = createDriveSyncService({
+      previewBinding: vi.fn(async () => preview),
+      createSafeBinding: vi.fn(async () => binding),
+    })
+    const fileSystem = regularFileSystemForTest()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService(),
+      driveSyncService,
+      fileSystem,
+      permissionGuard,
+    })
+    const params = { localPath: "/workspace/spec.md", direction: "local_to_remote" }
+
+    await expect(dispatcher.dispatch("app.drive.sync.binding.preview", params, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: preview })
+    await expect(dispatcher.dispatch("app.drive.sync.binding.create", params, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: binding })
+
+    expect(driveSyncService.previewBinding).toHaveBeenCalledWith(expect.objectContaining({
+      localPath: "/workspace/spec.md",
+      directionHint: "local_to_remote",
+      targetParentId: null,
+      driveItemName: "spec.md",
+      kind: "file",
+      remoteExists: false,
+    }))
+    expect(driveSyncService.createSafeBinding).toHaveBeenCalledWith(expect.objectContaining({
+      localPath: "/workspace/spec.md",
+      direction: "local_to_remote",
+      targetParentId: null,
+      driveItemName: "spec.md",
+      kind: "file",
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: "/workspace/spec.md",
+      context: expect.objectContaining({ driveAction: "app.drive.sync.binding.create" }),
+    }))
+  })
+
+  it("returns blocked sync preflight details without creating a binding", async () => {
+    const preview = driveSyncPreview({ status: "blocked", direction: null, reason: "目标已存在" })
+    const driveSyncService = createDriveSyncService({
+      previewBinding: vi.fn(async () => preview),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService(),
+      driveSyncService,
+      fileSystem: regularFileSystemForTest(),
+    })
+
+    await expect(dispatcher.dispatch("app.drive.sync.binding.create", {
+      localPath: "/workspace/spec.md",
+      direction: "local_to_remote",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: false,
+      error: "目标已存在",
+      data: preview,
+    })
+    expect(driveSyncService.createSafeBinding).not.toHaveBeenCalled()
+  })
+
+  it("routes Drive sync lifecycle and conflict actions", async () => {
+    const binding = driveSyncBinding()
+    const snapshot = driveSyncSnapshot({ bindings: [binding] })
+    const driveSyncService = createDriveSyncService({
+      getSnapshot: vi.fn(async () => snapshot),
+      pauseBinding: vi.fn(async () => ({ ...binding, status: "paused" as const })),
+      resumeBinding: vi.fn(async () => binding),
+      updateExcludeRules: vi.fn(async () => binding),
+      rescanBinding: vi.fn(async () => undefined),
+      removeBinding: vi.fn(async () => undefined),
+      resolveConflict: vi.fn(async () => undefined),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService(),
+      driveSyncService,
+    })
+    const context = { source: "mcp-stdio" as const }
+
+    await expect(dispatcher.dispatch("app.drive.sync.snapshot.get", {}, context))
+      .resolves.toEqual({ ok: true, data: snapshot })
+    await expect(dispatcher.dispatch("app.drive.sync.binding.pause", { bindingId: "binding-1" }, context))
+      .resolves.toMatchObject({ ok: true, data: { status: "paused" } })
+    await expect(dispatcher.dispatch("app.drive.sync.binding.resume", { bindingId: "binding-1" }, context))
+      .resolves.toMatchObject({ ok: true, data: { status: "active" } })
+    await expect(dispatcher.dispatch("app.drive.sync.binding.exclude_rules.update", {
+      bindingId: "binding-1",
+      defaults: [],
+      importedGitignore: [],
+      user: ["private/"],
+    }, context)).resolves.toMatchObject({ ok: true })
+    await expect(dispatcher.dispatch("app.drive.sync.binding.rescan", { bindingId: "binding-1" }, context))
+      .resolves.toEqual({ ok: true, data: binding })
+    await expect(dispatcher.dispatch("app.drive.sync.binding.remove", { bindingId: "binding-1" }, context))
+      .resolves.toEqual({ ok: true, data: { removed: true } })
+    await expect(dispatcher.dispatch("app.drive.sync.conflict.resolve", {
+      conflictId: "conflict-1",
+      action: "keep_local",
+    }, context)).resolves.toEqual({ ok: true, data: { resolved: true } })
+
+    expect(driveSyncService.updateExcludeRules).toHaveBeenCalledWith({
+      id: "binding-1",
+      defaults: [],
+      importedGitignore: [],
+      user: ["private/"],
+    })
+    expect(driveSyncService.resolveConflict).toHaveBeenCalledWith({
+      conflictId: "conflict-1",
+      action: "keep_local",
+    })
   })
 
   it("dispatches Drive link read tools without exposing passwords in audit metadata", async () => {
@@ -617,6 +746,24 @@ describe("createDriveCapabilityDispatcher", () => {
       expiresIn: "forever",
     })
     expect(shareDriveItem).not.toHaveBeenCalled()
+  })
+
+  it("allows Drive site creation to use server access defaults", async () => {
+    const site = driveSite({ accessMode: "public", expiresIn: "forever", expiresAt: null })
+    const createDriveSite = vi.fn(async () => site)
+    const dispatcher = createDriveCapabilityDispatcher({ accountService: createAccountService({ createDriveSite }) })
+
+    await expect(dispatcher.dispatch("app.drive.site.create", {
+      sourceFolderItemId: "folder-1",
+      name: "产品原型",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+
+    expect(createDriveSite).toHaveBeenCalledWith({
+      sourceFolderItemId: "folder-1",
+      name: "产品原型",
+      entryPath: null,
+      password: null,
+    })
   })
 
   it("routes Drive site management tools", async () => {
@@ -2088,6 +2235,85 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("shr_public_secret")
   })
 })
+
+type DriveSyncServicePort = NonNullable<DriveDispatcherDeps["driveSyncService"]>
+type DriveSyncSnapshot = Awaited<ReturnType<DriveSyncServicePort["getSnapshot"]>>
+type DriveSyncBinding = DriveSyncSnapshot["bindings"][number]
+type DriveSyncPreview = Awaited<ReturnType<DriveSyncServicePort["previewBinding"]>>
+
+function createDriveSyncService(overrides: Partial<DriveSyncServicePort> = {}): DriveSyncServicePort {
+  const binding = driveSyncBinding()
+  return {
+    getSnapshot: vi.fn(async () => driveSyncSnapshot()),
+    previewBinding: vi.fn(async () => driveSyncPreview()),
+    createSafeBinding: vi.fn(async () => binding),
+    pauseBinding: vi.fn(async () => ({ ...binding, status: "paused" })),
+    resumeBinding: vi.fn(async () => binding),
+    removeBinding: vi.fn(async () => undefined),
+    updateExcludeRules: vi.fn(async () => binding),
+    rescanBinding: vi.fn(async () => undefined),
+    resolveConflict: vi.fn(async () => undefined),
+    ...overrides,
+  } as unknown as DriveSyncServicePort
+}
+
+function driveSyncBinding(overrides: Partial<DriveSyncBinding> = {}): DriveSyncBinding {
+  return {
+    id: "binding-1",
+    driveItemId: "drive-item-1",
+    driveItemName: "spec.md",
+    drivePathHint: "spec.md",
+    kind: "file",
+    localPath: "/workspace/spec.md",
+    status: "active",
+    remoteCursor: "1",
+    excludeRules: { forced: [], defaults: [], importedGitignore: [], user: [] },
+    createdAt: "2026-08-05T00:00:00.000Z",
+    updatedAt: "2026-08-05T00:00:00.000Z",
+    lastSyncedAt: "2026-08-05T00:00:00.000Z",
+    lastError: null,
+    ...overrides,
+  }
+}
+
+function driveSyncPreview(overrides: Partial<DriveSyncPreview> = {}): DriveSyncPreview {
+  return {
+    status: "ready",
+    direction: "local_to_remote",
+    reason: null,
+    localPath: "/workspace/spec.md",
+    localKind: "file",
+    localEmpty: false,
+    forcedExcludeRules: [],
+    defaultExcludeRules: [],
+    importedGitignoreRules: [],
+    detectedGitignoreRules: [],
+    ...overrides,
+  }
+}
+
+function driveSyncSnapshot(overrides: Partial<DriveSyncSnapshot> = {}): DriveSyncSnapshot {
+  return {
+    bindings: [],
+    conflicts: [],
+    operations: [],
+    health: {
+      status: "idle",
+      connectivity: "online",
+      readOnly: false,
+      lastError: null,
+      updatedAt: "2026-08-05T00:00:00.000Z",
+    },
+    summary: {
+      activeBindingCount: 0,
+      runningOperationCount: 0,
+      retryWaitingOperationCount: 0,
+      conflictCount: 0,
+      errorCount: 0,
+    },
+    ...overrides,
+  }
+}
 
 function createAccountService(overrides: Partial<DriveAccountService> & Record<string, unknown> = {}): DriveAccountService {
   return {

@@ -9,6 +9,7 @@ import { AllExceptionsFilter } from "./common/all-exceptions.filter"
 import { registerHttpBodyParsers } from "./common/http-body-parser"
 import { loadEnv } from "./config/env"
 import { LiveDesktopGateway } from "./live/live-desktop.gateway"
+import { DriveCollaborationGateway } from "./drive/drive-collaboration.gateway"
 import { registerLiveShutdownSignalHandlers } from "./live/live-shutdown-signals"
 import { isProblemFeedbackPublicPath } from "./problem-feedback/problem-feedback-http"
 
@@ -37,6 +38,7 @@ async function bootstrap(): Promise<void> {
   const liveDesktopGateway = app.get(LiveDesktopGateway)
   registerLiveShutdownSignalHandlers(liveDesktopGateway)
   liveDesktopGateway.attach(app.getHttpServer())
+  app.get(DriveCollaborationGateway).attach(app.getHttpServer())
   await app.listen(env.port)
 }
 

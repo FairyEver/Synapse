@@ -57,7 +57,7 @@ export function UserAuthForm({
         return
       }
       await navigate({
-        to: nextPath,
+        href: nextPath,
         replace: true,
       })
     } catch (err: unknown) {

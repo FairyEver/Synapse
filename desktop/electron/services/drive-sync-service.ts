@@ -13,6 +13,8 @@ import type {
   DriveItemDto,
   DriveItemTreeListPageDto,
   DriveSyncBindingPreviewDto,
+  DriveSyncInitialTransferPreviewDto,
+  DriveSyncInitialTransferPreviewEntryDto,
   DriveSyncConflictResolutionInput,
   DriveSyncCreateSafeBindingInput,
   DriveChangeListInput,
@@ -225,6 +227,7 @@ const DEFAULT_REMOTE_POLL_INTERVAL_MS = 30_000
 const SNAPSHOT_GLOBAL_OPERATION_LIMIT = 20
 const SNAPSHOT_BINDING_OPERATION_LIMIT = 20
 const OPERATION_HISTORY_LIMIT_PER_BINDING = SNAPSHOT_BINDING_OPERATION_LIMIT * 5
+const INITIAL_TRANSFER_PREVIEW_ENTRY_LIMIT = 200
 const LEGACY_OWNER_ID = "drive-sync:legacy-test-owner"
 const RETRY_MAX_DELAY_MS = 5 * 60_000
 
@@ -911,7 +914,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     readonly directionHint?: DriveSyncCreateSafeBindingInput["direction"] | null
   }): Promise<DriveSyncBindingPreviewDto> {
     await authorizeLocalPath({
-      action: "fs.read.outside-userdata",
+      action: input.directionHint === "remote_to_local" ? "fs.write.outside-userdata" : "fs.read.outside-userdata",
       localPath: input.localPath,
       source: "driveSync.previewBinding",
       metadata: {
@@ -939,6 +942,18 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         reason: remoteOverlapReason,
       }
     }
+    if (preview.status !== "blocked" && input.directionHint === "local_to_remote") {
+      try {
+        await assertNoRemoteUploadRootConflict(input.targetParentId ?? null, input.driveItemName)
+      } catch (error) {
+        return {
+          ...preview,
+          status: "blocked",
+          direction: null,
+          reason: errorMessage(error),
+        }
+      }
+    }
     if (
       preview.status === "ready"
       && preview.direction === "bind_existing"
@@ -962,7 +977,21 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         }
       }
     }
-    return preview
+    if (preview.status === "blocked" || preview.direction === null) return preview
+    try {
+      return {
+        ...preview,
+        initialTransfer: await buildInitialTransferPreview(input, preview, remoteItem),
+      }
+    } catch (error) {
+      return {
+        ...preview,
+        status: "blocked",
+        direction: null,
+        reason: errorMessage(error),
+        initialTransfer: null,
+      }
+    }
   }
 
   async function createSafeBinding(input: DriveSyncCreateSafeBindingInput): Promise<DriveSyncBindingDto> {
@@ -983,6 +1012,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const importedGitignoreRules = await readBindingImportedGitignoreRules(input)
     if (input.kind === "folder" && input.direction === "local_to_remote") {
       await assertLocalFolderTreeFullySyncable(input.localPath, createBindingExcludeRules(input.excludeRules ?? [], importedGitignoreRules, input.useDefaultExcludes))
+    }
+    if (input.direction === "local_to_remote") {
+      await assertNoRemoteUploadRootConflict(input.targetParentId ?? null, input.driveItemName)
     }
     if (input.direction === "remote_to_local") {
       await assertRemoteToLocalTargetStillSafe(input)
@@ -1417,6 +1449,96 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return entries
   }
 
+  async function buildInitialTransferPreview(
+    input: Omit<DriveSyncCreateSafeBindingInput, "direction"> & {
+      readonly remoteExists: boolean
+      readonly directionHint?: DriveSyncCreateSafeBindingInput["direction"] | null
+    },
+    preview: DriveSyncBindingPreviewDto,
+    remoteItem: DriveItemDto | null,
+  ): Promise<DriveSyncInitialTransferPreviewDto> {
+    if (preview.direction === null || preview.direction === "bind_existing") {
+      return summarizeInitialTransferEntries([])
+    }
+
+    if (preview.direction === "local_to_remote") {
+      if (input.kind === "file") {
+        const stats = await lstat(input.localPath)
+        return summarizeInitialTransferEntries([{
+          action: "upload_file",
+          relativePath: ".",
+          size: String(stats.size),
+        }])
+      }
+      const snapshot = await scanDriveSyncLocalTreeDetailed({
+        rootPath: input.localPath,
+        rules: createBindingExcludeRules(input.excludeRules ?? [], preview.importedGitignoreRules, input.useDefaultExcludes),
+        hashFiles: false,
+      })
+      const entries: DriveSyncInitialTransferPreviewEntryDto[] = [{
+        action: "create_remote_folder",
+        relativePath: ".",
+        size: null,
+      }, ...snapshot.entries.map((entry) => ({
+        action: entry.kind === "file" ? "upload_file" as const : "create_remote_folder" as const,
+        relativePath: entry.relativePath,
+        size: entry.kind === "file" ? String(entry.size ?? 0) : null,
+      }))]
+      return summarizeInitialTransferEntries(entries)
+    }
+
+    if (!remoteItem) throw new Error("云盘条目不存在。")
+    if (input.kind === "file") {
+      return summarizeInitialTransferEntries([{
+        action: "download_file",
+        relativePath: ".",
+        size: remoteItem.size,
+      }])
+    }
+    const rules = createBindingExcludeRules(input.excludeRules ?? [], preview.importedGitignoreRules, input.useDefaultExcludes)
+    const remoteEntries = await listAllRemoteTreeEntries(input.driveItemId)
+    assertNoRemoteFolderPathCollisions(remoteEntries, input.driveItemName, rules, input.drivePathHint)
+    const entries: DriveSyncInitialTransferPreviewEntryDto[] = [{
+      action: "create_local_folder",
+      relativePath: ".",
+      size: null,
+    }]
+    for (const entry of remoteEntries) {
+      const relativePath = normalizeRemoteTreePath(entry.path, input.driveItemName, input.drivePathHint)
+      if (!relativePath || isDriveSyncExcluded(relativePath, rules, entry.type)) continue
+      entries.push({
+        action: entry.type === "file" ? "download_file" : "create_local_folder",
+        relativePath,
+        size: entry.type === "file" ? entry.size : null,
+      })
+    }
+    return summarizeInitialTransferEntries(entries)
+  }
+
+  function summarizeInitialTransferEntries(
+    entries: readonly DriveSyncInitialTransferPreviewEntryDto[],
+  ): DriveSyncInitialTransferPreviewDto {
+    const ordered = [...entries].sort((left, right) => {
+      if (left.relativePath === right.relativePath) return 0
+      if (left.relativePath === ".") return -1
+      if (right.relativePath === ".") return 1
+      return left.relativePath.localeCompare(right.relativePath)
+    })
+    const fileEntries = ordered.filter((entry) => entry.action === "upload_file" || entry.action === "download_file")
+    const totalBytes = fileEntries.reduce((total, entry) => {
+      if (!entry.size || !/^\d+$/.test(entry.size)) return total
+      return total + BigInt(entry.size)
+    }, 0n)
+    return {
+      totalEntries: ordered.length,
+      fileCount: fileEntries.length,
+      folderCount: ordered.length - fileEntries.length,
+      totalBytes: totalBytes.toString(),
+      entries: ordered.slice(0, INITIAL_TRANSFER_PREVIEW_ENTRY_LIMIT),
+      truncated: ordered.length > INITIAL_TRANSFER_PREVIEW_ENTRY_LIMIT,
+    }
+  }
+
   async function downloadInitialFile(binding: DriveSyncBindingDto): Promise<void> {
     const operation = await recordOperation({
       bindingId: binding.id,
@@ -1559,6 +1681,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function uploadInitialFile(binding: DriveSyncBindingDto, targetParentId: string | null): Promise<string> {
+    await assertNoRemoteUploadRootConflict(targetParentId, binding.driveItemName)
     const snapshot = await createInitialFileUploadSnapshot(binding.id, binding.localPath)
     const operation = await recordOperation({
       bindingId: binding.id,
@@ -1664,12 +1787,15 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return null
   }
 
-  async function assertNoRemoteFolderUploadRootConflict(parentId: string | null, name: string): Promise<void> {
+  async function assertNoRemoteUploadRootConflict(parentId: string | null, name: string): Promise<void> {
     let offset: number | null = 0
     while (offset !== null) {
       const page = await deps.accountService.listDriveItemTree({ parentId, offset, limit: 200 })
-      const item = page.items.find((candidate) => isDirectRemoteFolderMatch(candidate, parentId, name))
-      if (item) throw new Error("目标云盘位置已存在同名文件夹，请改用绑定已有云盘文件夹。")
+      const item = page.items.find((candidate) => isDirectRemoteItemMatch(candidate, parentId, name))
+      if (item) {
+        const itemLabel = item.type === "folder" ? "文件夹" : "文件"
+        throw new Error(`目标云盘位置已存在同名${itemLabel}，请改用绑定已有云盘条目，或选择新的名称或位置。`)
+      }
       offset = page.nextOffset ?? null
     }
   }
@@ -1856,6 +1982,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function uploadInitialFolder(binding: DriveSyncBindingDto, targetParentId: string | null, drivePathHint: string | null): Promise<string> {
+    await assertNoRemoteUploadRootConflict(targetParentId, binding.driveItemName)
     const operation = await recordOperation({
       bindingId: binding.id,
       kind: "upload",
@@ -1866,7 +1993,6 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       source: "initialization",
       message: "正在生成上传快照。",
     })
-    await assertNoRemoteFolderUploadRootConflict(targetParentId, binding.driveItemName)
     const snapshot = await scanDriveSyncLocalTree({
       rootPath: binding.localPath,
       rules: binding.excludeRules,
@@ -4229,7 +4355,7 @@ function isDirectUploadedRemoteMatch(
     && item.depth === expectedDepth
 }
 
-function isDirectRemoteFolderMatch(
+function isDirectRemoteItemMatch(
   item: Partial<DriveItemTreeListPageDto["items"][number]> & {
     readonly name: string
     readonly type: string
@@ -4237,11 +4363,18 @@ function isDirectRemoteFolderMatch(
   parentId: string | null,
   name: string,
 ): boolean {
-  if (item.name !== name || item.type !== "folder") return false
+  if (normalizeDriveSyncCollisionName(item.name) !== normalizeDriveSyncCollisionName(name)) return false
   if (Object.hasOwn(item, "parentId")) return (item.parentId ?? null) === parentId
   if (typeof item.depth === "number") return item.depth === 0
-  if (typeof item.path === "string") return normalizeRemoteTreePathSegments(item.path) === name
+  if (typeof item.path === "string") {
+    const pathName = normalizeRemoteTreePathSegments(item.path).split("/").filter(Boolean).at(-1) ?? ""
+    return normalizeDriveSyncCollisionName(pathName) === normalizeDriveSyncCollisionName(name)
+  }
   return true
+}
+
+function normalizeDriveSyncCollisionName(value: string): string {
+  return value.normalize("NFC").toLowerCase()
 }
 
 function isRunningOperationStatus(status: DriveSyncOperationStatus): boolean {

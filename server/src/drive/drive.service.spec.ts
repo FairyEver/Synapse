@@ -1626,7 +1626,7 @@ describe("DriveService", () => {
     }))
   })
 
-  it("creates password-protected share links by default", async () => {
+  it("creates public non-expiring share links by default", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -1638,14 +1638,60 @@ describe("DriveService", () => {
 
     const share = await service.createShare("user-1", file.id, "https://synapse.test")
 
+    expect(share.passwordEnabled).toBe(false)
+    expect(share.password).toBeNull()
+    expect(share.urlWithPassword).toBe(share.url)
+    expect(share.expiresAt).toBeNull()
+    const stored = await prisma.driveShare.findFirst({ where: { id: share.id } })
+    expect(stored.passwordHash).toBeNull()
+    expect(stored.passwordEncrypted).toBeNull()
+    expect(stored.accessSettingsAppliedAt).toBeInstanceOf(Date)
+  })
+
+  it("generates a password when password protection is explicitly enabled", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      mimeType: "text/plain",
+    })
+
+    const share = await service.createShare("user-1", file.id, "https://synapse.test", {
+      passwordEnabled: true,
+      expiresIn: "forever",
+    })
+
     expect(share.passwordEnabled).toBe(true)
     expect(share.password).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789]{8}$/u)
     expect(share.urlWithPassword).toBe(`${share.url}?password=${share.password}`)
-    expect(share.expiresAt).not.toBeNull()
+    expect(share.expiresAt).toBeNull()
+  })
+
+  it("keeps the protected three-day policy for legacy share migration", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "legacy.txt",
+      mimeType: "text/plain",
+    })
+    const share = await service.createShare("user-1", file.id, "https://synapse.test")
+    await prisma.driveShare.update({
+      where: { id: share.id },
+      data: { accessSettingsAppliedAt: null },
+    })
+    const migratedAt = new Date("2026-08-05T00:00:00.000Z")
+
+    await expect(service.backfillLegacyDriveAccessProtection(migratedAt)).resolves.toEqual({ shares: 1 })
+
     const stored = await prisma.driveShare.findFirst({ where: { id: share.id } })
+    expect(stored.passwordEnabled).toBe(true)
     expect(stored.passwordHash).toEqual(expect.any(String))
     expect(stored.passwordEncrypted).toEqual(expect.any(String))
-    expect(stored.accessSettingsAppliedAt).toBeInstanceOf(Date)
+    expect(stored.expiresAt).toEqual(new Date("2026-08-08T00:00:00.000Z"))
   })
 
   it("rejects share creation for non-active items", async () => {
@@ -1709,8 +1755,7 @@ describe("DriveService", () => {
     expect(second.id).toBe(first.id)
     expect(second.shareId).toBe(first.shareId)
     expect(second.url).toBe(first.url)
-    expect(second.expiresAt).not.toBe("2020-01-01T00:00:00.000Z")
-    expect(new Date(second.expiresAt ?? 0).getTime()).toBeGreaterThan(Date.now())
+    expect(second.expiresAt).toBeNull()
     await expect(service.resolvePublicShareAccess({
       shareId: second.shareId,
       password: second.password ?? undefined,
@@ -2384,8 +2429,8 @@ describe("DriveService", () => {
       name: "brief.txt",
       mimeType: "text/plain",
     })
-    const fileShare = await service.createShare("user-1", file.id, "https://synapse.test")
-    const folderShare = await service.createShare("user-1", folder.id, "https://synapse.test")
+    const fileShare = await service.createShare("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "forever" })
+    const folderShare = await service.createShare("user-1", folder.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "forever" })
     vi.mocked(storageMock.createDownloadUrl).mockClear()
     vi.mocked(storageMock.getObjectStream).mockClear()
 
@@ -2629,7 +2674,7 @@ describe("DriveService", () => {
     expect(snapshot.preview).toMatchObject({
       kind: "markdown",
       text: expectedPreviewText,
-      html: expect.stringContaining('<h1 id="notes">Notes</h1>'),
+      html: expect.stringMatching(/<h1[^>]*id="notes"[^>]*>Notes<\/h1>/u),
       outline: [
         {
           id: "notes",
@@ -2918,7 +2963,7 @@ describe("DriveService", () => {
       { src: "../outside.png", resolvedUrl: null },
     ])
     expect(snapshot.preview?.html).toContain(`items/${inside.id}/download`)
-    expect(snapshot.preview?.html).toContain('<img alt="outside">')
+    expect(snapshot.preview?.html).toMatch(/<img alt="outside"[^>]*>/u)
   })
 
   it("rejects collaborator edits that expand a single-file share image scope", async () => {
@@ -3190,8 +3235,8 @@ describe("DriveService", () => {
       actorUserId: "reader-1",
     })
 
-    expect(snapshot.annotation).toEqual({ canComment: false, reason: "permission_denied" })
-    expect(loggedInSnapshot.annotation).toEqual({ canComment: false, reason: "permission_denied" })
+    expect(snapshot.annotation).toEqual({ canComment: false, reason: "login_required" })
+    expect(loggedInSnapshot.annotation).toEqual({ canComment: true, reason: null })
 
     const editableShare = await service.createShare("user-1", file.id, "https://synapse.test", {
       accessMode: "link_edit",
@@ -3209,7 +3254,7 @@ describe("DriveService", () => {
     expect(snapshot.preview).toMatchObject({
       kind: "markdown",
       text: "# Notes\n\n## Shared",
-      html: expect.stringContaining('<h1 id="notes">Notes</h1>'),
+      html: expect.stringMatching(/<h1[^>]*id="notes"[^>]*>Notes<\/h1>/u),
       outline: [
         {
           id: "notes",
@@ -3866,6 +3911,7 @@ describe("DriveService", () => {
       quotaBytes: "5368709120",
     })
 
+    vi.mocked(storage.getObjectStream).mockClear()
     const tree = await service.listItemTree("user-1", { parentId: null, offset: 1, limit: 2 })
 
     expect(tree).toMatchObject({

@@ -148,6 +148,8 @@ DRIVE_COS_SECRET_ID=用户文件桶 SecretId
 DRIVE_COS_SECRET_KEY=用户文件桶 SecretKey
 DRIVE_COS_BUCKET=用户文件桶名称，如 synapse-drive-1250000000
 DRIVE_COS_REGION=用户文件桶地域，如 ap-beijing
+# Markdown 实时协同开关；Anchor V2 评论定位不受该开关影响
+DRIVE_COLLABORATION_ENABLED=false
 PLATFORM_MEDIA_COS_SECRET_ID=平台媒体桶 SecretId
 PLATFORM_MEDIA_COS_SECRET_KEY=平台媒体桶 SecretKey
 PLATFORM_MEDIA_COS_BUCKET=平台媒体桶名称，如 synapse-file-platform-1250000000
@@ -164,6 +166,7 @@ BACKUP_COS_REGION=备份桶地域，如 ap-beijing
 - `DESKTOP_UPDATE_INTENT_SECRET` 少于 43 位，或与管理访问密钥、用户 JWT 密钥相同
 - `APP_PUBLIC_URL` 不是用户可访问的站点根地址，或误填成了 `/api` 地址
 - `PORT` 不应和对外 Nginx 端口混用，默认保持 `3001`
+- `DRIVE_COLLABORATION_ENABLED` 只接受 `true` 或 `false`；启用后 `/api/drive/collaboration` 必须允许 WebSocket Upgrade
 
 ---
 

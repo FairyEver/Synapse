@@ -8,6 +8,10 @@ import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveChangeLogService } from "./drive-change-log"
 import { DriveDocumentImageService } from "./drive-document-image.service"
 import { DriveLinkIntakeService } from "./drive-link-intake.service"
+import { DriveMarkdownProjectionService } from "./drive-markdown-projection.service"
+import { DriveCollaborationGateway } from "./drive-collaboration.gateway"
+import { DriveCollaborationService } from "./drive-collaboration.service"
+import { LocalDriveCollaborationBus } from "./drive-collaboration-bus"
 import { DriveLifecycleService } from "./drive-lifecycle.service"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveRemoteImageFetcher } from "./drive-remote-image-fetcher"
@@ -22,6 +26,10 @@ import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./
     DriveLifecycleService,
     DriveChangeLogService,
     DriveAnnotationService,
+    DriveMarkdownProjectionService,
+    DriveCollaborationService,
+    DriveCollaborationGateway,
+    LocalDriveCollaborationBus,
     DriveDocumentImageService,
     DrivePublicAssetService,
     DriveRemoteImageFetcher,
@@ -52,6 +60,6 @@ import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./
       inject: [CosDriveStorage, LocalDriveStorage],
     },
   ],
-  exports: [DriveService, DriveLifecycleService, DriveChangeLogService, DrivePublicAssetService, DriveSiteService, DriveAnnotationService, DriveDocumentImageService, DriveLinkIntakeService],
+  exports: [DriveService, DriveLifecycleService, DriveChangeLogService, DrivePublicAssetService, DriveSiteService, DriveAnnotationService, DriveMarkdownProjectionService, DriveCollaborationService, LocalDriveCollaborationBus, DriveDocumentImageService, DriveLinkIntakeService],
 })
 export class DriveModule {}

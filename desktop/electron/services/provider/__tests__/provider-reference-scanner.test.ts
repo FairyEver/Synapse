@@ -37,7 +37,7 @@ describe("ProviderReferenceScanner", () => {
     } as unknown as WorkflowService
     const dataRepository = {
       namespace: () => ({
-        list: vi.fn(async () => [{ id: "conversation-1", name: "会话", providerId: "source-provider" }]),
+        list: vi.fn(async () => [{ id: "conversation-1", name: "会话", projectId: "project-1", providerId: "source-provider" }]),
       }),
     } as unknown as DataRepository
     const agentPersonaService = {
@@ -60,7 +60,9 @@ describe("ProviderReferenceScanner", () => {
       providerId: "source-provider",
       modelTier: "sonnet",
     })])
-    await expect(deps.listConversations()).resolves.toEqual([expect.objectContaining({ id: "conversation-1" })])
+    await expect(deps.listConversations()).resolves.toEqual([
+      expect.objectContaining({ id: "conversation-1", projectId: "project-1" }),
+    ])
     await expect(deps.listAgentPersonas()).resolves.toEqual([expect.objectContaining({ id: "persona-1" })])
 
     await deps.updateWorkflowNodeProvider("workflow-1", "", "target-provider", "opus")
@@ -99,12 +101,15 @@ describe("ProviderReferenceScanner", () => {
     it("finds references in conversations", async () => {
       const scanner = new ProviderReferenceScanner(makeDeps({
         listConversations: async () => [
-          { id: "conv-1", name: "Chat 1", providerId: "target" },
-          { id: "conv-2", name: "Chat 2", providerId: "other" },
+          { id: "conv-1", name: "Chat 1", projectId: "project-1", providerId: "target" },
+          { id: "conv-2", name: "Chat 2", projectId: "project-2", providerId: "other" },
         ],
       }))
       const result = await scanner.scan("target")
       expect(result.conversationCount).toBe(1)
+      expect(result.references).toEqual([
+        expect.objectContaining({ kind: "conversation", entityId: "conv-1", projectId: "project-1" }),
+      ])
     })
 
     it("finds specified model references in the current local agent persona snapshot", async () => {

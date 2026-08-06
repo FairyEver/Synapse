@@ -180,6 +180,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.html-generator",
       "core.html-generator-file",
       "provider",
+      "core.drive-sync",
     ])
     expect(coreDatabaseDescriptor.stop).toBeTypeOf("function")
   })

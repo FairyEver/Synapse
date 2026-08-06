@@ -8,6 +8,7 @@ export const DRIVE_FILE_VERSION_SOURCE = {
   upload: "upload",
   onlineEdit: "online_edit",
   restore: "restore",
+  collaboration: "collaboration",
 } as const satisfies Record<string, DriveFileVersionSource>
 
 export const DRIVE_FILE_VERSION_MAX_COUNT = 100
@@ -156,6 +157,7 @@ export async function listCleanupCandidateVersions(tx: VersionTx, input: {
 function normalizeDriveFileVersionSource(value: string): DriveFileVersionSource {
   if (value === DRIVE_FILE_VERSION_SOURCE.restore) return DRIVE_FILE_VERSION_SOURCE.restore
   if (value === DRIVE_FILE_VERSION_SOURCE.onlineEdit) return DRIVE_FILE_VERSION_SOURCE.onlineEdit
+  if (value === DRIVE_FILE_VERSION_SOURCE.collaboration) return DRIVE_FILE_VERSION_SOURCE.collaboration
   return DRIVE_FILE_VERSION_SOURCE.upload
 }
 

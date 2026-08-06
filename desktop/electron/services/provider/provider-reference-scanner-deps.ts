@@ -69,6 +69,7 @@ export function createProviderReferenceScannerDeps(
       return conversations.map((conversation) => ({
         id: conversation.id,
         name: conversation.name ?? conversation.id,
+        projectId: conversation.projectId,
         providerId: conversation.providerId,
       }))
     },

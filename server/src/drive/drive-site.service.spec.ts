@@ -33,6 +33,24 @@ describe("DriveSiteService", () => {
     ])
   })
 
+  it("creates a public non-expiring site when access settings are omitted", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma()
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    const result = await service.createSite("user-1", "https://synapse.test", {
+      sourceFolderItemId: "folder-1",
+      name: "原型",
+      entryPath: null,
+    })
+
+    expect(result.accessMode).toBe("public")
+    expect(result.passwordEnabled).toBe(false)
+    expect(result.password).toBeNull()
+    expect(result.expiresIn).toBe("forever")
+    expect(result.expiresAt).toBeNull()
+  })
+
   it("copies site deployment files with a concurrency limit of 10", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma({

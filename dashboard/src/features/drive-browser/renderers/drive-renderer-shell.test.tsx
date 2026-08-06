@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
-import { DriveRendererContent, DriveRendererShell } from './drive-renderer-shell'
+import { DriveRendererContent, DriveRendererShell, refreshBeforeDriveRendererSwitch } from './drive-renderer-shell'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 ;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
@@ -106,6 +106,23 @@ afterEach(() => {
 })
 
 describe('DriveRendererShell', () => {
+  it('refreshes the latest checkpoint before entering MDXEditor from collaboration', async () => {
+    const reload = vi.fn(async () => baseSnapshot())
+
+    await refreshBeforeDriveRendererSwitch({ id: 'mdxeditor', collaborationEnabled: true, reload })
+
+    expect(reload).toHaveBeenCalledOnce()
+  })
+
+  it('does not reload when switching between collaboration-aware renderers', async () => {
+    const reload = vi.fn(async () => baseSnapshot())
+
+    await refreshBeforeDriveRendererSwitch({ id: 'code', collaborationEnabled: true, reload })
+    await refreshBeforeDriveRendererSwitch({ id: 'markdown', collaborationEnabled: true, reload })
+
+    expect(reload).not.toHaveBeenCalled()
+  })
+
   it('renders registered code actions in the shared header', () => {
     window.history.pushState(null, '', '/share/share-1')
     renderShell({
