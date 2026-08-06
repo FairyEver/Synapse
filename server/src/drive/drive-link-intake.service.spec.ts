@@ -100,13 +100,23 @@ function createService(overrides: Partial<ConstructorParameters<typeof DriveLink
       contentType: "text/html",
     })),
   }
+  const annotations = {
+    getShareAnnotationSnapshot: vi.fn(async () => ({ itemId: "item-1", canComment: true, threads: [] })),
+    createShareAnnotationByQuote: vi.fn(async () => ({ id: "thread-1" })),
+    replyShareAnnotation: vi.fn(async () => ({ id: "comment-2" })),
+    updateShareComment: vi.fn(async () => ({ id: "comment-2" })),
+    deleteShareComment: vi.fn(async () => ({ ok: true })),
+    deleteShareThread: vi.fn(async () => ({ ok: true })),
+    updateShareAnchorByQuote: vi.fn(async () => ({ id: "thread-1" })),
+  }
 
   return {
     drive,
     sites,
     publicAssets,
     storage,
-    service: new DriveLinkIntakeService({ drive, sites, publicAssets, storage, publicAppUrl, ...overrides } as never),
+    annotations,
+    service: new DriveLinkIntakeService({ drive, sites, publicAssets, storage, annotations, publicAppUrl, ...overrides } as never),
   }
 }
 
@@ -168,6 +178,78 @@ describe("DriveLinkIntakeService", () => {
       password: "query-secret",
       cookie: undefined,
     })
+  })
+
+  it("lists and mutates shared Markdown annotations using itemId before path", async () => {
+    const { service, drive, annotations } = createService()
+    const base = { url: `${publicAppUrl}/share/shr_123?password=query-secret`, password: "explicit-secret", itemId: "item-1", path: "ignored.md" }
+
+    await expect(service.listAnnotationThreads(base, "user-1")).resolves.toEqual({ itemId: "item-1", canComment: true, threads: [] })
+    await service.createAnnotationThread({ ...base, target: { exact: "正文" }, body: "评论", idempotencyKey: "thread-key-1" }, { actorUserId: "user-1" })
+    await service.createAnnotationComment({ ...base, threadId: "thread-1", parentCommentId: "comment-1", body: "回复" }, { actorUserId: "user-1" })
+    await service.updateAnnotationComment({ ...base, commentId: "comment-2", body: "编辑" }, { actorUserId: "user-1" })
+    await service.deleteAnnotationComment({ ...base, commentId: "comment-2" }, { actorUserId: "user-1" })
+    await service.deleteAnnotationThread({ ...base, threadId: "thread-1" }, { actorUserId: "user-1" })
+    await service.updateAnnotationAnchor({ ...base, threadId: "thread-1", target: { exact: "新正文" }, idempotencyKey: "anchor-key-1" }, { actorUserId: "user-1" })
+
+    expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      shareId: "shr_123",
+      itemId: "item-1",
+      password: "explicit-secret",
+      actorUserId: "user-1",
+    }))
+    expect(annotations.getShareAnnotationSnapshot).toHaveBeenCalledWith({
+      shareId: "shr_123",
+      itemId: "item-1",
+      password: "explicit-secret",
+      actorUserId: "user-1",
+    })
+    expect(annotations.createShareAnnotationByQuote).toHaveBeenCalledWith(expect.objectContaining({
+      actorUserId: "user-1",
+      itemId: "item-1",
+      target: { exact: "正文" },
+      idempotencyKey: "thread-key-1",
+    }))
+    expect(annotations.replyShareAnnotation).toHaveBeenCalledWith(expect.objectContaining({
+      threadId: "thread-1",
+      body: { parentCommentId: "comment-1", body: "回复" },
+    }))
+    expect(annotations.updateShareAnchorByQuote).toHaveBeenCalledWith(expect.objectContaining({
+      target: { exact: "新正文" },
+      idempotencyKey: "anchor-key-1",
+    }))
+  })
+
+  it("resolves a share folder child path for annotation management", async () => {
+    const { service, drive, annotations } = createService()
+    drive.getShareBrowserSnapshot
+      .mockResolvedValueOnce({
+        current: { id: "folder-1", name: "docs", type: "folder", mimeType: null },
+        children: [{ id: "item-prd", name: "PRD.md", type: "file", mimeType: "text/markdown" }],
+        childrenPage: { hasMore: false, nextOffset: null },
+      } as never)
+      .mockResolvedValueOnce({
+        current: { id: "item-prd", name: "PRD.md", type: "file", mimeType: "text/markdown" },
+        children: [],
+      } as never)
+
+    await service.listAnnotationThreads({ url: `${publicAppUrl}/share/shr_123`, path: "PRD.md" }, "user-1")
+
+    expect(annotations.getShareAnnotationSnapshot).toHaveBeenCalledWith(expect.objectContaining({ itemId: "item-prd" }))
+  })
+
+  it("rejects annotation management for non-share links and non-md items", async () => {
+    const { service, drive, annotations } = createService()
+    await expect(service.listAnnotationThreads({ url: `${publicAppUrl}/sites/site_123/` }, "user-1"))
+      .rejects.toThrow("评论管理仅支持 Synapse 分享链接。")
+
+    drive.getShareBrowserSnapshot.mockResolvedValueOnce({
+      current: { id: "item-txt", name: "notes.txt", type: "file", mimeType: "text/plain" },
+      children: [],
+    } as never)
+    await expect(service.listAnnotationThreads({ url: `${publicAppUrl}/share/shr_123` }, "user-1"))
+      .rejects.toThrow("评论管理仅支持 .md 文档。")
+    expect(annotations.getShareAnnotationSnapshot).not.toHaveBeenCalled()
   })
 
   it("rejects drive-shaped links from other origins before resolving content", async () => {

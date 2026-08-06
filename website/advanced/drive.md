@@ -22,7 +22,7 @@ Drive site 可把 Drive 文件夹发布为只读站点，路径形如 `/sites/<s
 
 ## MCP 能力
 
-Drive MCP 暴露 item、file、folder、local sync、share、site、usage、stats、tree、path ensure、reorganization、direct link、trash 和 restore 能力。
+Drive MCP 暴露 item、file、folder、link annotation、local sync、share、site、usage、stats、tree、path ensure、reorganization、direct link、trash 和 restore 能力。
 
 Agent 收到“上传到云盘”时使用普通的一次性上传；收到“同步”“持续同步”“上传并同步”或“绑定到云盘”时，先预检稳定的本地绝对路径，再创建持续同步绑定。“备份”“归档”“自动上传”等没有说明后续变化是否继续更新的说法需要先确认。未指定云盘目录时默认绑定到根目录。拖拽附件只有在 Agent 能取得原始稳定路径时才能同步，临时附件或缓存路径不能作为同步根路径。
 
@@ -34,4 +34,6 @@ Agent 收到“上传到云盘”时使用普通的一次性上传；收到“�
 
 Drive MCP 不提供批量读取文件正文的接口。需要判断内容时，应少量、逐个读取可预览文本文件。
 
-评论、评论重新关联、在线成员和实时协同房间只存在于浏览器界面，不属于 Drive MCP。MCP 修改文件仍会创建版本，并可能让打开中的浏览器进入新的协同代际。
+AI 收到当前 Synapse `/share/...` 下的 `.md` 文档链接后，可以读取全部可见评论，并按现有权限新建锚点评论、回复、编辑自己的评论、删除评论或线程，以及重新关联评论位置。创建和重关联使用可见文本及可选前后文定位；找不到或仍有歧义时会明确报错，不会猜测位置。评论列表和写操作结果均隐藏作者邮箱；重关联后的当前位置以 V2 `anchor` 为准，兼容 `target` 保留创建时的原始引文。密码只用于当次请求。`/sites`、`/files`、文件夹和其他文件格式不支持评论管理。
+
+在线成员、实时 presence、协同房间控制和分享文档正文编辑仍不属于 Drive MCP。评论删除要求用户明确指定目标，但按普通写操作处理，不标记为高风险能力。

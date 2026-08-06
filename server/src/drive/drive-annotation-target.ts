@@ -1,6 +1,8 @@
 import { BadRequestException } from "@nestjs/common"
 import {
+  DRIVE_ANNOTATION_COMMENT_MAX_LENGTH,
   DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH,
+  DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH,
   isDriveMarkdownItem,
   type DriveAnnotationAnchorStatus,
   type DriveAnnotationCreateInput,
@@ -9,8 +11,6 @@ import {
   type DriveAnnotationTextRangeTargetV1,
 } from "@synapse/shared"
 import { z } from "zod"
-
-const COMMENT_MAX_LENGTH = 4000
 
 const textRangeTargetSchema = z.object({
   schemaVersion: z.literal(1),
@@ -22,8 +22,8 @@ const textRangeTargetSchema = z.object({
   }).strict(),
   quote: z.object({
     exact: z.string().max(DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH),
-    prefix: z.string().max(200),
-    suffix: z.string().max(200),
+    prefix: z.string().max(DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH),
+    suffix: z.string().max(DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH),
   }).strict(),
   source: z.object({
     startOffset: z.number().int().nonnegative(),
@@ -62,12 +62,12 @@ const createBodySchema = z.object({
     renderedPosition: z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() }).strict().optional(),
     quote: z.object({
       exact: z.string().min(1).max(DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH),
-      prefix: z.string().max(200),
-      suffix: z.string().max(200),
+      prefix: z.string().max(DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH),
+      suffix: z.string().max(DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH),
     }).strict(),
   }).strict().optional(),
   idempotencyKey: z.string().min(8).max(128).optional(),
-  body: z.string().max(COMMENT_MAX_LENGTH),
+  body: z.string().max(DRIVE_ANNOTATION_COMMENT_MAX_LENGTH),
 }).strict()
 
 const anchorUpdateBodySchema = createBodySchema.pick({
@@ -143,7 +143,7 @@ function assertSelectorRanges(selectors: DriveAnnotationSelectorsV2): void {
 export function parseDriveAnnotationReplyBody(value: unknown): { readonly parentCommentId: string | null; readonly body: string } {
   const parsed = z.object({
     parentCommentId: z.string().min(1).nullable().optional(),
-    body: z.string().max(COMMENT_MAX_LENGTH),
+    body: z.string().max(DRIVE_ANNOTATION_COMMENT_MAX_LENGTH),
   }).strict().safeParse(value)
   if (!parsed.success) throw new BadRequestException("回复请求无效。")
   const body = parsed.data.body.trim()
@@ -152,7 +152,7 @@ export function parseDriveAnnotationReplyBody(value: unknown): { readonly parent
 }
 
 export function parseDriveAnnotationCommentUpdateBody(value: unknown): { readonly body: string } {
-  const parsed = z.object({ body: z.string().max(COMMENT_MAX_LENGTH) }).strict().safeParse(value)
+  const parsed = z.object({ body: z.string().max(DRIVE_ANNOTATION_COMMENT_MAX_LENGTH) }).strict().safeParse(value)
   if (!parsed.success) throw new BadRequestException("评论更新请求无效。")
   const body = parsed.data.body.trim()
   if (!body) throw new BadRequestException("评论内容不能为空。")

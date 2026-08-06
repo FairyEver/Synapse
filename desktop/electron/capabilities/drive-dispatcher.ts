@@ -20,6 +20,13 @@ import type {
   DriveItemTreeListPageDto,
   DriveLinkDownloadFileDto,
   DriveLinkDownloadFileInput,
+  DriveLinkAnnotationAnchorUpdateInput,
+  DriveLinkAnnotationCommentCreateInput,
+  DriveLinkAnnotationCommentDeleteInput,
+  DriveLinkAnnotationCommentUpdateInput,
+  DriveLinkAnnotationThreadCreateInput,
+  DriveLinkAnnotationThreadDeleteInput,
+  DriveLinkAnnotationThreadListInput,
   DriveLinkListDto,
   DriveLinkListInput,
   DriveLinkMaterializeDto,
@@ -131,6 +138,13 @@ type DriveAccountServicePort = {
   readonly readDriveLinkText: (input: DriveLinkReadTextInput) => Promise<DriveLinkReadTextDto>
   readonly materializeDriveLink: (input: DriveLinkMaterializeInput) => Promise<DriveLinkMaterializeDto>
   readonly downloadDriveLinkFile: (input: DriveLinkDownloadFileInput) => Promise<DriveLinkDownloadFileDto>
+  readonly listDriveLinkAnnotationThreads: (input: DriveLinkAnnotationThreadListInput) => Promise<unknown>
+  readonly createDriveLinkAnnotationThread: (input: DriveLinkAnnotationThreadCreateInput) => Promise<unknown>
+  readonly createDriveLinkAnnotationComment: (input: DriveLinkAnnotationCommentCreateInput) => Promise<unknown>
+  readonly updateDriveLinkAnnotationComment: (input: DriveLinkAnnotationCommentUpdateInput) => Promise<unknown>
+  readonly deleteDriveLinkAnnotationComment: (input: DriveLinkAnnotationCommentDeleteInput) => Promise<unknown>
+  readonly deleteDriveLinkAnnotationThread: (input: DriveLinkAnnotationThreadDeleteInput) => Promise<unknown>
+  readonly updateDriveLinkAnnotationAnchor: (input: DriveLinkAnnotationAnchorUpdateInput) => Promise<unknown>
   readonly downloadDriveFolderZip: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<unknown>
   readonly listDrivePublicAssets: (input?: DrivePublicLinksPageInput) => Promise<DrivePublicAssetListPageDto>
   readonly getDrivePublicAsset: (assetId: string) => Promise<DrivePublicAssetDto>
@@ -349,6 +363,41 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.readDriveLinkText(parseDriveLinkReadTextInput(params)),
+          }))
+        case "app.drive.link.annotation.thread.list":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.listDriveLinkAnnotationThreads(parseDriveLinkAnnotationBaseInput(params)),
+          }))
+        case "app.drive.link.annotation.thread.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.createDriveLinkAnnotationThread(parseDriveLinkAnnotationThreadCreateInput(params)),
+          }))
+        case "app.drive.link.annotation.comment.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.createDriveLinkAnnotationComment(parseDriveLinkAnnotationCommentCreateInput(params)),
+          }))
+        case "app.drive.link.annotation.comment.update":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.updateDriveLinkAnnotationComment(parseDriveLinkAnnotationCommentUpdateInput(params)),
+          }))
+        case "app.drive.link.annotation.comment.delete":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.deleteDriveLinkAnnotationComment(parseDriveLinkAnnotationCommentDeleteInput(params)),
+          }))
+        case "app.drive.link.annotation.thread.delete":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.deleteDriveLinkAnnotationThread(parseDriveLinkAnnotationThreadDeleteInput(params)),
+          }))
+        case "app.drive.link.annotation.anchor.update":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.updateDriveLinkAnnotationAnchor(parseDriveLinkAnnotationAnchorUpdateInput(params)),
           }))
         case "app.drive.link.materialize":
           return dispatchDriveMutation(deps, action, params, context, async () => {
@@ -1042,7 +1091,7 @@ function driveMutationSecurity(
 
 function driveParamCorrelation(params: Record<string, unknown>): Record<string, unknown> {
   const metadata: Record<string, unknown> = {}
-  for (const key of ["itemId", "assetId", "versionId", "shareId", "siteId", "sourceFolderItemId", "parentId", "targetParentId", "bindingId", "conflictId", "direction", "name", "folderName", "passwordEnabled", "accessMode", "isPinned", "expiresIn", "planId"]) {
+  for (const key of ["itemId", "assetId", "versionId", "shareId", "siteId", "sourceFolderItemId", "parentId", "targetParentId", "bindingId", "conflictId", "threadId", "commentId", "direction", "name", "folderName", "passwordEnabled", "accessMode", "isPinned", "expiresIn", "planId"]) {
     const value = params[key]
     if (typeof value === "string" || typeof value === "boolean" || value === null) {
       metadata[key] = key === "shareId" && typeof value === "string"
@@ -1645,6 +1694,89 @@ function parseDriveLinkReadTextInput(params: Record<string, unknown>): DriveLink
     itemId: optionalString(params.itemId),
     maxBytes: optionalNumber(params.maxBytes),
   }
+}
+
+function parseDriveLinkAnnotationBaseInput(params: Record<string, unknown>): DriveLinkAnnotationThreadListInput {
+  return {
+    ...parseDriveLinkResolveInput(params),
+    path: optionalString(params.path),
+    itemId: optionalString(params.itemId),
+  }
+}
+
+function parseDriveLinkAnnotationThreadCreateInput(params: Record<string, unknown>): DriveLinkAnnotationThreadCreateInput {
+  return {
+    ...parseDriveLinkAnnotationBaseInput(params),
+    target: parseDriveLinkAnnotationTarget(params.target),
+    body: requireString(params, "body"),
+    idempotencyKey: requireString(params, "idempotencyKey"),
+  }
+}
+
+function parseDriveLinkAnnotationCommentCreateInput(params: Record<string, unknown>): DriveLinkAnnotationCommentCreateInput {
+  return {
+    ...parseDriveLinkAnnotationBaseInput(params),
+    threadId: requireString(params, "threadId"),
+    parentCommentId: optionalNullableString(params.parentCommentId),
+    body: requireString(params, "body"),
+  }
+}
+
+function parseDriveLinkAnnotationCommentUpdateInput(params: Record<string, unknown>): DriveLinkAnnotationCommentUpdateInput {
+  return {
+    ...parseDriveLinkAnnotationBaseInput(params),
+    commentId: requireString(params, "commentId"),
+    body: requireString(params, "body"),
+  }
+}
+
+function parseDriveLinkAnnotationCommentDeleteInput(params: Record<string, unknown>): DriveLinkAnnotationCommentDeleteInput {
+  return {
+    ...parseDriveLinkAnnotationBaseInput(params),
+    commentId: requireString(params, "commentId"),
+  }
+}
+
+function parseDriveLinkAnnotationThreadDeleteInput(params: Record<string, unknown>): DriveLinkAnnotationThreadDeleteInput {
+  return {
+    ...parseDriveLinkAnnotationBaseInput(params),
+    threadId: requireString(params, "threadId"),
+  }
+}
+
+function parseDriveLinkAnnotationAnchorUpdateInput(params: Record<string, unknown>): DriveLinkAnnotationAnchorUpdateInput {
+  return {
+    ...parseDriveLinkAnnotationBaseInput(params),
+    threadId: requireString(params, "threadId"),
+    target: parseDriveLinkAnnotationTarget(params.target),
+    idempotencyKey: requireString(params, "idempotencyKey"),
+  }
+}
+
+function parseDriveLinkAnnotationTarget(value: unknown): DriveLinkAnnotationThreadCreateInput["target"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Missing or invalid 'target': expected object")
+  }
+  const target = value as Record<string, unknown>
+  return {
+    exact: requireDriveLinkAnnotationText(target, "exact"),
+    prefix: optionalDriveLinkAnnotationContext(target.prefix, "prefix"),
+    suffix: optionalDriveLinkAnnotationContext(target.suffix, "suffix"),
+  }
+}
+
+function requireDriveLinkAnnotationText(params: Record<string, unknown>, key: string): string {
+  const value = params[key]
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Missing or invalid '${key}': expected non-empty string`)
+  }
+  return value
+}
+
+function optionalDriveLinkAnnotationContext(value: unknown, key: string): string | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== "string") throw new Error(`Missing or invalid '${key}': expected string`)
+  return value
 }
 
 function parseDriveLinkMaterializeInput(params: Record<string, unknown>): DriveLinkMaterializeInput {

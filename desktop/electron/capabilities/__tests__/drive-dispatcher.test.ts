@@ -101,6 +101,13 @@ describe("createDriveCapabilityDispatcher", () => {
       "app_drive_link_resolve",
       "app_drive_link_list",
       "app_drive_link_read_text",
+      "app_drive_link_annotation_thread_list",
+      "app_drive_link_annotation_thread_create",
+      "app_drive_link_annotation_comment_create",
+      "app_drive_link_annotation_comment_update",
+      "app_drive_link_annotation_comment_delete",
+      "app_drive_link_annotation_thread_delete",
+      "app_drive_link_annotation_anchor_update",
       "app_drive_link_materialize",
       "app_drive_link_download_file",
       "app_drive_folder_zip_create",
@@ -401,6 +408,71 @@ describe("createDriveCapabilityDispatcher", () => {
 
     expect(accountService.resolveDriveLink).toHaveBeenCalledWith({ url: "https://synapse.test/share/shr_123", password: "secret" })
     expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret")
+  })
+
+  it("routes shared Markdown annotation management without auditing passwords or comment bodies", async () => {
+    const listDriveLinkAnnotationThreads = vi.fn(async () => ({ itemId: "item-1", canComment: true, threads: [] }))
+    const createDriveLinkAnnotationThread = vi.fn(async () => ({ id: "thread-1" }))
+    const createDriveLinkAnnotationComment = vi.fn(async () => ({ id: "comment-2" }))
+    const updateDriveLinkAnnotationComment = vi.fn(async () => ({ id: "comment-2" }))
+    const deleteDriveLinkAnnotationComment = vi.fn(async () => ({ ok: true as const }))
+    const deleteDriveLinkAnnotationThread = vi.fn(async () => ({ ok: true as const }))
+    const updateDriveLinkAnnotationAnchor = vi.fn(async () => ({ id: "thread-1" }))
+    const accountService = createAccountService({
+      listDriveLinkAnnotationThreads,
+      createDriveLinkAnnotationThread,
+      createDriveLinkAnnotationComment,
+      updateDriveLinkAnnotationComment,
+      deleteDriveLinkAnnotationComment,
+      deleteDriveLinkAnnotationThread,
+      updateDriveLinkAnnotationAnchor,
+    })
+    const auditSink = createAuditSink()
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
+    const base = { url: "https://synapse.test/share/shr_123", password: "link-secret", itemId: "item-1", path: "ignored.md" }
+
+    await expect(dispatcher.dispatch("app.drive.link.annotation.thread.list", base, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: { itemId: "item-1", canComment: true, threads: [] } })
+    await dispatcher.dispatch("app.drive.link.annotation.thread.create", {
+      ...base,
+      target: { exact: " 可见原文 ", prefix: " 前文 " },
+      body: "private initial body",
+      idempotencyKey: "thread-key-1",
+    }, { source: "mcp-stdio" })
+    await dispatcher.dispatch("app.drive.link.annotation.comment.create", {
+      ...base,
+      threadId: "thread-1",
+      parentCommentId: "comment-1",
+      body: "private reply body",
+    }, { source: "mcp-stdio" })
+    await dispatcher.dispatch("app.drive.link.annotation.comment.update", {
+      ...base,
+      commentId: "comment-2",
+      body: "private edited body",
+    }, { source: "mcp-stdio" })
+    await dispatcher.dispatch("app.drive.link.annotation.comment.delete", { ...base, commentId: "comment-2" }, { source: "mcp-stdio" })
+    await dispatcher.dispatch("app.drive.link.annotation.thread.delete", { ...base, threadId: "thread-1" }, { source: "mcp-stdio" })
+    await dispatcher.dispatch("app.drive.link.annotation.anchor.update", {
+      ...base,
+      threadId: "thread-1",
+      target: { exact: "新位置", suffix: "后文" },
+      idempotencyKey: "anchor-key-1",
+    }, { source: "mcp-stdio" })
+
+    expect(createDriveLinkAnnotationThread).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: "item-1",
+      path: "ignored.md",
+      target: { exact: " 可见原文 ", prefix: " 前文 ", suffix: undefined },
+    }))
+    expect(createDriveLinkAnnotationComment).toHaveBeenCalledWith(expect.objectContaining({ parentCommentId: "comment-1" }))
+    expect(updateDriveLinkAnnotationAnchor).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: "anchor-key-1" }))
+    const audit = JSON.stringify(vi.mocked(auditSink.record).mock.calls)
+    expect(audit).not.toContain("link-secret")
+    expect(audit).not.toContain("private initial body")
+    expect(audit).not.toContain("private reply body")
+    expect(audit).not.toContain("private edited body")
+    expect(audit).not.toContain("可见原文")
+    expect(audit).not.toContain("新位置")
   })
 
   it("authorizes Drive link materialize as a local write", async () => {
@@ -2364,6 +2436,13 @@ function createAccountService(overrides: Partial<DriveAccountService> & Record<s
     resolveDriveLink: vi.fn(),
     listDriveLink: vi.fn(),
     readDriveLinkText: vi.fn(),
+    listDriveLinkAnnotationThreads: vi.fn(),
+    createDriveLinkAnnotationThread: vi.fn(),
+    createDriveLinkAnnotationComment: vi.fn(),
+    updateDriveLinkAnnotationComment: vi.fn(),
+    deleteDriveLinkAnnotationComment: vi.fn(),
+    deleteDriveLinkAnnotationThread: vi.fn(),
+    updateDriveLinkAnnotationAnchor: vi.fn(),
     materializeDriveLink: vi.fn(),
     downloadDriveLinkFile: vi.fn(),
     downloadDriveFolderZip: vi.fn(),

@@ -5,6 +5,7 @@ import {
   DRIVE_PUBLIC_PATH_PREFIX,
   DRIVE_SITE_PATH_PREFIX,
   decodeUtf8Prefix,
+  isDriveMarkdownItem,
   isDrivePublicAssetTextMimeType,
   truncateUtf8StringToBytes,
   type DriveBrowserItemDto,
@@ -12,6 +13,14 @@ import {
   type DriveBrowserSnapshotDto,
   type DriveLinkEntryDto,
   type DriveLinkDownloadFileInput,
+  type DriveLinkAnnotationAnchorUpdateInput,
+  type DriveLinkAnnotationCommentCreateInput,
+  type DriveLinkAnnotationCommentDeleteInput,
+  type DriveLinkAnnotationCommentUpdateInput,
+  type DriveLinkAnnotationThreadCreateInput,
+  type DriveLinkAnnotationThreadDeleteInput,
+  type DriveLinkAnnotationThreadListDto,
+  type DriveLinkAnnotationThreadListInput,
   type DriveLinkListDto,
   type DriveLinkListInput,
   type DriveLinkPreviewKind,
@@ -22,6 +31,7 @@ import {
   type DriveLinkResolveInput,
   type DriveLinkType,
 } from "@synapse/shared"
+import { DriveAnnotationService } from "./drive-annotation.service"
 
 type PublicShareAccessResult =
   | {
@@ -50,6 +60,7 @@ export type DriveLinkIntakeDeps = {
       readonly itemId?: string
       readonly password?: string
       readonly cookie?: string
+      readonly actorUserId?: string | null
       readonly childrenPage?: { readonly offset?: number; readonly limit?: number }
     }) => Promise<DriveBrowserSnapshotDto>
     readonly openShareBrowserItemDownload: (input: {
@@ -108,7 +119,13 @@ export type DriveLinkIntakeDeps = {
       readonly contentType?: string | null
     }>
   }
+  readonly annotations: DriveAnnotationService
   readonly publicAppUrl: string
+}
+
+type DriveLinkAnnotationContext = {
+  readonly actorUserId: string
+  readonly auditContext?: { readonly ipAddress?: string }
 }
 
 type ParsedDriveLink =
@@ -172,6 +189,85 @@ export class DriveLinkIntakeService {
     if (parsed.linkType === "public_asset") return this.readPublicAssetText(parsed, input)
     if (parsed.linkType === "site") return this.readSiteText(parsed, input)
     return this.readShareText(parsed, input)
+  }
+
+  async listAnnotationThreads(
+    input: DriveLinkAnnotationThreadListInput,
+    actorUserId: string | null,
+  ): Promise<DriveLinkAnnotationThreadListDto> {
+    const target = await this.resolveAnnotationShareTarget(input, actorUserId)
+    return this.deps.annotations.getShareAnnotationSnapshot({
+      shareId: target.shareId,
+      itemId: target.itemId,
+      password: target.password,
+      actorUserId,
+    })
+  }
+
+  async createAnnotationThread(input: DriveLinkAnnotationThreadCreateInput, context: DriveLinkAnnotationContext) {
+    const target = await this.resolveAnnotationShareTarget(input, context.actorUserId)
+    return this.deps.annotations.createShareAnnotationByQuote({
+      ...target,
+      actorUserId: context.actorUserId,
+      target: input.target,
+      body: input.body,
+      idempotencyKey: input.idempotencyKey,
+      auditContext: context.auditContext,
+    })
+  }
+
+  async createAnnotationComment(input: DriveLinkAnnotationCommentCreateInput, context: DriveLinkAnnotationContext) {
+    const target = await this.resolveAnnotationShareTarget(input, context.actorUserId)
+    return this.deps.annotations.replyShareAnnotation({
+      ...target,
+      actorUserId: context.actorUserId,
+      threadId: input.threadId,
+      body: { parentCommentId: input.parentCommentId ?? null, body: input.body },
+      auditContext: context.auditContext,
+    })
+  }
+
+  async updateAnnotationComment(input: DriveLinkAnnotationCommentUpdateInput, context: DriveLinkAnnotationContext) {
+    const target = await this.resolveAnnotationShareTarget(input, context.actorUserId)
+    return this.deps.annotations.updateShareComment({
+      ...target,
+      actorUserId: context.actorUserId,
+      commentId: input.commentId,
+      body: { body: input.body },
+      auditContext: context.auditContext,
+    })
+  }
+
+  async deleteAnnotationComment(input: DriveLinkAnnotationCommentDeleteInput, context: DriveLinkAnnotationContext) {
+    const target = await this.resolveAnnotationShareTarget(input, context.actorUserId)
+    return this.deps.annotations.deleteShareComment({
+      ...target,
+      actorUserId: context.actorUserId,
+      commentId: input.commentId,
+      auditContext: context.auditContext,
+    })
+  }
+
+  async deleteAnnotationThread(input: DriveLinkAnnotationThreadDeleteInput, context: DriveLinkAnnotationContext) {
+    const target = await this.resolveAnnotationShareTarget(input, context.actorUserId)
+    return this.deps.annotations.deleteShareThread({
+      ...target,
+      actorUserId: context.actorUserId,
+      threadId: input.threadId,
+      auditContext: context.auditContext,
+    })
+  }
+
+  async updateAnnotationAnchor(input: DriveLinkAnnotationAnchorUpdateInput, context: DriveLinkAnnotationContext) {
+    const target = await this.resolveAnnotationShareTarget(input, context.actorUserId)
+    return this.deps.annotations.updateShareAnchorByQuote({
+      ...target,
+      actorUserId: context.actorUserId,
+      threadId: input.threadId,
+      target: input.target,
+      idempotencyKey: input.idempotencyKey,
+      auditContext: context.auditContext,
+    })
   }
 
   async openDownload(input: DriveLinkDownloadFileInput): Promise<{
@@ -399,6 +495,28 @@ export class DriveLinkIntakeService {
       currentItemId = matched.id
     }
     return currentItemId
+  }
+
+  private async resolveAnnotationShareTarget(
+    input: DriveLinkAnnotationThreadListInput,
+    actorUserId: string | null,
+  ): Promise<{ readonly shareId: string; readonly itemId: string; readonly password?: string }> {
+    const parsed = parseDriveLinkUrl(input.url, this.deps.publicAppUrl)
+    if (parsed.linkType !== "share") throw new BadRequestException("评论管理仅支持 Synapse 分享链接。")
+    await this.assertShareLinkAccessible(parsed, input.password)
+    const itemId = await this.resolveShareItemIdByPath(parsed, input)
+    const password = driveLinkPassword(input.password, parsed.password)
+    const snapshot = await this.deps.drive.getShareBrowserSnapshot({
+      shareId: parsed.shareId,
+      itemId,
+      password,
+      cookie: undefined,
+      actorUserId,
+    })
+    if (!isDriveMarkdownItem(snapshot.current)) {
+      throw new BadRequestException("评论管理仅支持 .md 文档。")
+    }
+    return { shareId: parsed.shareId, itemId: snapshot.current.id, password }
   }
 }
 

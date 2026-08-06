@@ -5,7 +5,7 @@ Scope: `shared/`, `server/`, `desktop/electron/`, `desktop/synapse-capabilities/
 
 ## Goal
 
-Add a read-only Drive link intake capability for local Agents.
+Add a Drive link intake capability for local Agents: linked content remains read-only, while shared Markdown annotations can be managed through existing comment permissions.
 
 The first target workflow is a developer receiving a Synapse Drive link from a product manager, then asking Codex, Claude Code, Cursor, or another local Agent to read the link through Synapse MCP and analyze the product material. The link may point to a Markdown requirement file, a shared folder containing multiple Markdown or HTML files, a Drive-published static site, or a public asset.
 
@@ -15,7 +15,7 @@ The capability should expose raw material to the Agent, not perform product anal
 
 - Do not build team spaces, team roles, organization permissions, or team ownership in this version.
 - Keep existing Drive share permissions: read-only link, editable link for logged-in users, and editable link for specified emails.
-- Drive Link Intake v1 is read-only for remote Drive content. It does not edit files, create comments, reply to comments, or import shared content into the current user's Drive.
+- Drive Link Intake never edits shared file content or imports it into the current user's Drive. For current-origin `/share/...` `.md` documents only, it can list visible annotations and perform comment mutations through the existing annotation service and permission model.
 - Support password-protected share and site links through an optional `password` input.
 - Never persist, log, or return link passwords.
 - Prefer a group of small MCP tools over one large black-box intake tool.
@@ -43,7 +43,8 @@ The tools should accept absolute Synapse URLs and should reject unsupported or m
 - Do not add team member management.
 - Do not add new share access modes.
 - Do not edit shared Markdown or HTML through link intake tools.
-- Do not create, update, or delete Drive comments.
+- Do not expose annotations for `/sites`, `/files`, folders, or non-`.md` files.
+- Do not expose document editing, presence, online-member state, or collaboration-room control.
 - Do not import a shared link into the current user's Drive.
 - Do not crawl arbitrary public websites.
 - Do not make public asset access logs available through MCP.
@@ -68,6 +69,13 @@ New Drive Link MCP tools operate on content delivered by URL:
 app_drive_link_resolve
 app_drive_link_list
 app_drive_link_read_text
+app_drive_link_annotation_thread_list
+app_drive_link_annotation_thread_create
+app_drive_link_annotation_comment_create
+app_drive_link_annotation_comment_update
+app_drive_link_annotation_comment_delete
+app_drive_link_annotation_thread_delete
+app_drive_link_annotation_anchor_update
 app_drive_link_materialize
 app_drive_link_download_file
 ```
@@ -76,7 +84,7 @@ This keeps the mental model clean:
 
 ```text
 Existing Drive MCP: manage my Drive.
-Drive Link MCP: consume a Drive link someone sent me.
+Drive Link MCP: consume a Drive link someone sent me, and manage comments on its shared Markdown document.
 ```
 
 Agents should normally follow this sequence:
@@ -454,6 +462,8 @@ If the user asks to manage their own Drive files, use existing drive_* owner too
 Prefer resolve -> list -> read_text, and materialize only when local files are useful.
 ```
 
+Annotation tools accept the same URL/password/item/path selection model, with `itemId` taking precedence. Thread creation and reassociation accept only `{ exact, prefix?, suffix? }`; the server reads the current Markdown projection/version and generates V2 selectors. Missing and ambiguous targets are distinct errors and must never be guessed. Passwords and comment bodies are excluded from audits. Deletion is an ordinary mutation, while Agent guidance still requires an explicitly identified target.
+
 ## Testing
 
 Server tests should cover:
@@ -484,5 +494,5 @@ Capability tests should cover:
 Template tests or content checks should cover:
 
 - Synapse skill Drive guide mentions the link intake flow.
-- API reference documents all five tools.
+- API reference documents all twelve Drive Link tools.
 - Capability naming matrix includes the new capabilities.

@@ -19,6 +19,9 @@ import { DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "../common
 import { badRequestFromZodError } from "../common/zod-validation"
 import {
   DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
+  DRIVE_ANNOTATION_COMMENT_MAX_LENGTH,
+  DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH,
+  DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH,
   DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES,
   DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES,
   drivePublicAssetContentKind,
@@ -138,6 +141,40 @@ const driveLinkMaterializeSchema = driveLinkResolveSchema.extend({
 const driveLinkDownloadFileSchema = driveLinkResolveSchema.extend({
   path: z.string().min(1).max(1024).optional(),
   itemId: z.string().min(1).optional(),
+}).strict()
+const driveLinkAnnotationBaseSchema = driveLinkResolveSchema.extend({
+  path: z.string().min(1).max(1024).optional(),
+  itemId: z.string().min(1).optional(),
+}).strict()
+const driveLinkAnnotationTargetSchema = z.object({
+  exact: z.string().min(1).max(DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH),
+  prefix: z.string().max(DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH).optional(),
+  suffix: z.string().max(DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH).optional(),
+}).strict()
+const driveLinkAnnotationThreadCreateSchema = driveLinkAnnotationBaseSchema.extend({
+  target: driveLinkAnnotationTargetSchema,
+  body: z.string().trim().min(1).max(DRIVE_ANNOTATION_COMMENT_MAX_LENGTH),
+  idempotencyKey: z.string().min(8).max(128),
+}).strict()
+const driveLinkAnnotationCommentCreateSchema = driveLinkAnnotationBaseSchema.extend({
+  threadId: z.string().min(1),
+  parentCommentId: z.string().min(1).nullable().optional(),
+  body: z.string().trim().min(1).max(DRIVE_ANNOTATION_COMMENT_MAX_LENGTH),
+}).strict()
+const driveLinkAnnotationCommentUpdateSchema = driveLinkAnnotationBaseSchema.extend({
+  commentId: z.string().min(1),
+  body: z.string().trim().min(1).max(DRIVE_ANNOTATION_COMMENT_MAX_LENGTH),
+}).strict()
+const driveLinkAnnotationCommentDeleteSchema = driveLinkAnnotationBaseSchema.extend({
+  commentId: z.string().min(1),
+}).strict()
+const driveLinkAnnotationThreadDeleteSchema = driveLinkAnnotationBaseSchema.extend({
+  threadId: z.string().min(1),
+}).strict()
+const driveLinkAnnotationAnchorUpdateSchema = driveLinkAnnotationBaseSchema.extend({
+  threadId: z.string().min(1),
+  target: driveLinkAnnotationTargetSchema,
+  idempotencyKey: z.string().min(8).max(128),
 }).strict()
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean().optional(),
@@ -1053,6 +1090,66 @@ export class DrivePublicController {
     await sendDriveFileDownload(response, download)
   }
 
+  @Post("/api/drive/link-intake/annotations/threads/list")
+  async listDriveLinkAnnotationThreads(@Body() body: unknown, @Req() request: Request) {
+    const input = parseBody(driveLinkAnnotationBaseSchema, body, "评论列表请求无效。")
+    return requireDriveLinkIntakeService(this.linkIntake).listAnnotationThreads(input, await this.resolveOptionalUserId(request))
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/link-intake/annotations/threads")
+  createDriveLinkAnnotationThread(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveLinkIntakeService(this.linkIntake).createAnnotationThread(
+      parseBody(driveLinkAnnotationThreadCreateSchema, body, "新建评论请求无效。"),
+      { actorUserId: request.user!.id, auditContext: driveAuditContext(request) },
+    )
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/link-intake/annotations/comments")
+  createDriveLinkAnnotationComment(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveLinkIntakeService(this.linkIntake).createAnnotationComment(
+      parseBody(driveLinkAnnotationCommentCreateSchema, body, "回复评论请求无效。"),
+      { actorUserId: request.user!.id, auditContext: driveAuditContext(request) },
+    )
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Patch("/api/drive/link-intake/annotations/comments")
+  updateDriveLinkAnnotationComment(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveLinkIntakeService(this.linkIntake).updateAnnotationComment(
+      parseBody(driveLinkAnnotationCommentUpdateSchema, body, "评论更新请求无效。"),
+      { actorUserId: request.user!.id, auditContext: driveAuditContext(request) },
+    )
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Delete("/api/drive/link-intake/annotations/comments")
+  deleteDriveLinkAnnotationComment(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveLinkIntakeService(this.linkIntake).deleteAnnotationComment(
+      parseBody(driveLinkAnnotationCommentDeleteSchema, body, "评论删除请求无效。"),
+      { actorUserId: request.user!.id, auditContext: driveAuditContext(request) },
+    )
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Delete("/api/drive/link-intake/annotations/threads")
+  deleteDriveLinkAnnotationThread(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveLinkIntakeService(this.linkIntake).deleteAnnotationThread(
+      parseBody(driveLinkAnnotationThreadDeleteSchema, body, "评论线程删除请求无效。"),
+      { actorUserId: request.user!.id, auditContext: driveAuditContext(request) },
+    )
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Patch("/api/drive/link-intake/annotations/anchor")
+  updateDriveLinkAnnotationAnchor(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveLinkIntakeService(this.linkIntake).updateAnnotationAnchor(
+      parseBody(driveLinkAnnotationAnchorUpdateSchema, body, "评论位置请求无效。"),
+      { actorUserId: request.user!.id, auditContext: driveAuditContext(request) },
+    )
+  }
+
   @Get("/files/:assetId")
   @Head("/files/:assetId")
   async sendPublicAsset(@Param("assetId") assetId: string, @Req() request: Request, @Res() response: Response): Promise<void> {
@@ -1791,6 +1888,10 @@ export class DrivePublicController {
 
   private async resolveOptionalUserId(request: Request): Promise<string | null> {
     if (!this.userAuth) return null
+    const [scheme, bearerToken] = request.headers.authorization?.split(/\s+/, 2) ?? []
+    if (scheme?.toLowerCase() === "bearer" && bearerToken) {
+      return (await this.userAuth.verifyAccessToken(bearerToken)).userId
+    }
     const token = readRequestCookie(request, userSessionCookieName)
     const session = token
       ? await this.userAuth.verifyWebSession(token)

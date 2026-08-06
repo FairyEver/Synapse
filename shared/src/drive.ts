@@ -935,6 +935,56 @@ export interface DriveLinkReadTextDto {
   }
 }
 
+export interface DriveLinkAnnotationTargetInput {
+  readonly exact: string
+  readonly prefix?: string
+  readonly suffix?: string
+}
+
+export interface DriveLinkAnnotationBaseInput extends DriveLinkResolveInput {
+  readonly itemId?: string
+  readonly path?: string
+}
+
+export type DriveLinkAnnotationThreadListInput = DriveLinkAnnotationBaseInput
+
+export interface DriveLinkAnnotationThreadListDto {
+  readonly itemId: string
+  readonly canComment: boolean
+  readonly threads: readonly DriveAnnotationThreadDto[]
+}
+
+export interface DriveLinkAnnotationThreadCreateInput extends DriveLinkAnnotationBaseInput {
+  readonly target: DriveLinkAnnotationTargetInput
+  readonly body: string
+  readonly idempotencyKey: string
+}
+
+export interface DriveLinkAnnotationCommentCreateInput extends DriveLinkAnnotationBaseInput {
+  readonly threadId: string
+  readonly parentCommentId?: string | null
+  readonly body: string
+}
+
+export interface DriveLinkAnnotationCommentUpdateInput extends DriveLinkAnnotationBaseInput {
+  readonly commentId: string
+  readonly body: string
+}
+
+export interface DriveLinkAnnotationCommentDeleteInput extends DriveLinkAnnotationBaseInput {
+  readonly commentId: string
+}
+
+export interface DriveLinkAnnotationThreadDeleteInput extends DriveLinkAnnotationBaseInput {
+  readonly threadId: string
+}
+
+export interface DriveLinkAnnotationAnchorUpdateInput extends DriveLinkAnnotationBaseInput {
+  readonly threadId: string
+  readonly target: DriveLinkAnnotationTargetInput
+  readonly idempotencyKey: string
+}
+
 export interface DriveLinkMaterializeInput extends DriveLinkResolveInput {
   readonly scope?: DriveLinkMaterializeScope
   readonly maxFiles?: number
@@ -977,7 +1027,9 @@ export type DriveAnnotationTargetKind = "textRange"
 export type DriveAnnotationAnchorStatus = "attached" | "shifted" | "orphaned"
 export type DriveAnnotationPositionStatus = "attached" | "source_deleted" | "ambiguous" | "orphaned" | "unavailable"
 export type DriveAnnotationQuoteStatus = "exact" | "modified" | "deleted"
+export const DRIVE_ANNOTATION_COMMENT_MAX_LENGTH = 4000
 export const DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH = 1000
+export const DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH = 200
 
 export interface DriveAnnotationCrdtRangeSelector {
   readonly epoch: string

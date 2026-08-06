@@ -20,9 +20,11 @@ describe("DriveAnnotationService", () => {
     prisma.driveAnnotationComment.create.mockResolvedValue(commentRecord({ createdByUserId: "owner-1" }))
     prisma.driveAnnotationComment.findFirst.mockResolvedValue(commentRecord())
     prisma.driveAnnotationComment.update.mockResolvedValue(commentRecord({ body: "updated", createdByUserId: "owner-1" }))
+    prisma.driveAnnotationAnchor.upsert.mockResolvedValue(anchorRecord())
     prisma.user.findUnique.mockImplementation(async ({ where }: { readonly where: { readonly id: string } }) => ({ email: `${where.id}@example.com` }))
     auditLog.record.mockResolvedValue(undefined)
     drive.resolveShareAnnotationAccess.mockResolvedValue({ item: markdownItem(), canComment: true })
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Note"))
   })
 
   it("lists visible owner annotations with author metadata and permissions", async () => {
@@ -77,6 +79,170 @@ describe("DriveAnnotationService", () => {
       where: { itemId: "item-1", deletedAt: null },
     }))
     expect(prisma.driveFileVersion.findFirst).not.toHaveBeenCalled()
+  })
+
+  it("returns share annotation permissions and forwards one-time passwords", async () => {
+    await expect(service.getShareAnnotationSnapshot({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      password: "secret",
+    })).resolves.toMatchObject({ itemId: "item-1", canComment: true, threads: [{ id: "thread-1" }] })
+
+    expect(drive.resolveShareAnnotationAccess).toHaveBeenCalledWith({
+      shareId: "share-1",
+      itemId: "item-1",
+      password: "secret",
+      cookie: undefined,
+      actorUserId: "reader-1",
+    })
+  })
+
+  it("creates server-resolved anchors for unique visible Markdown text", async () => {
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Alpha Note Omega"))
+    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(null)
+
+    await service.createShareAnnotationByQuote({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      password: "secret",
+      target: { exact: "Note" },
+      body: "Comment body",
+      idempotencyKey: "thread-key-1",
+    })
+
+    expect(prisma.driveAnnotationThread.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        baseVersionId: "version-1",
+        target: expect.objectContaining({ range: { start: 6, end: 10 }, quote: { exact: "Note", prefix: "", suffix: "" } }),
+        anchor: { create: expect.objectContaining({
+          idempotencyKey: "thread-key-1",
+          selectors: expect.objectContaining({
+            position: { start: 6, end: 10 },
+            renderedPosition: { start: 6, end: 10 },
+            semantic: expect.objectContaining({ blockId: "block-1", start: 6, end: 10 }),
+          }),
+        }) },
+      }),
+    }))
+  })
+
+  it("uses quote context to disambiguate visible Markdown text", async () => {
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("one Note and two Note done"))
+    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(null)
+
+    await service.createShareAnnotationByQuote({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      target: { exact: "Note", prefix: "two ", suffix: " done" },
+      body: "Comment body",
+      idempotencyKey: "thread-key-2",
+    })
+
+    expect(prisma.driveAnnotationThread.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        anchor: { create: expect.objectContaining({ selectors: expect.objectContaining({ renderedPosition: { start: 17, end: 21 } }) }) },
+      }),
+    }))
+  })
+
+  it("keeps V2 selectors in code points while projecting the legacy target in UTF-16", async () => {
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("😀 Note"))
+    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(null)
+
+    await service.createShareAnnotationByQuote({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      target: { exact: "Note" },
+      body: "Comment body",
+      idempotencyKey: "thread-key-unicode",
+    })
+
+    expect(prisma.driveAnnotationThread.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        target: expect.objectContaining({ range: { start: 3, end: 7 } }),
+        anchor: { create: expect.objectContaining({ selectors: expect.objectContaining({ renderedPosition: { start: 2, end: 6 } }) }) },
+      }),
+    }))
+  })
+
+  it("distinguishes ambiguous and missing quote targets", async () => {
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Note and Note"))
+    const ambiguous = service.createShareAnnotationByQuote({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      target: { exact: "Note" },
+      body: "Comment body",
+      idempotencyKey: "thread-key-3",
+    })
+    await expect(ambiguous).rejects.toMatchObject({ response: expect.objectContaining({ code: "DRIVE_ANNOTATION_TARGET_AMBIGUOUS" }) })
+
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Different text"))
+    const missing = service.createShareAnnotationByQuote({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      target: { exact: "Note" },
+      body: "Comment body",
+      idempotencyKey: "thread-key-4",
+    })
+    await expect(missing).rejects.toMatchObject({ response: expect.objectContaining({ code: "DRIVE_ANNOTATION_TARGET_NOT_FOUND" }) })
+    expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
+  })
+
+  it("rejects quote anchor creation when the document version changes before persistence", async () => {
+    drive.resolveAnnotationDocument
+      .mockResolvedValueOnce(annotationDocument("Note", "version-1"))
+      .mockResolvedValueOnce(annotationDocument("Note", "version-2"))
+
+    await expect(service.createShareAnnotationByQuote({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      target: { exact: "Note" },
+      body: "Comment body",
+      idempotencyKey: "thread-key-5",
+    })).rejects.toBeInstanceOf(ConflictException)
+    expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
+  })
+
+  it("reassociates quote anchors for the thread creator with a stable idempotency key", async () => {
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Alpha Note Omega"))
+
+    await service.updateShareAnchorByQuote({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      threadId: "thread-1",
+      target: { exact: "Note" },
+      idempotencyKey: "anchor-key-1",
+    })
+
+    expect(prisma.driveAnnotationAnchor.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { threadId: "thread-1" },
+      update: expect.objectContaining({
+        idempotencyKey: "anchor-key-1",
+        resolvedRenderedStart: 6,
+        resolvedRenderedEnd: 10,
+      }),
+    }))
+  })
+
+  it("rejects quote anchor reassociation by another share viewer", async () => {
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Note"))
+
+    await expect(service.updateShareAnchorByQuote({
+      actorUserId: "reader-2",
+      shareId: "share-1",
+      itemId: "item-1",
+      threadId: "thread-1",
+      target: { exact: "Note" },
+      idempotencyKey: "anchor-key-2",
+    })).rejects.toBeInstanceOf(ForbiddenException)
   })
 
   it("rejects owner annotation writes when the item is no longer active", async () => {
@@ -556,6 +722,37 @@ describe("DriveAnnotationService", () => {
     expect(result[0]?.permissions.canDelete).toBe(false)
   })
 
+  it("redacts author emails for share annotation mutation responses", async () => {
+    const created = await service.createShareAnnotation({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      body: createInput(),
+    })
+    const reply = await service.replyShareAnnotation({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      threadId: "thread-1",
+      body: { body: "Reply body" },
+    })
+    const updated = await service.updateShareComment({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      commentId: "comment-1",
+      body: { body: "updated" },
+    })
+
+    expect(created.author.email).toBeNull()
+    expect(created.comments[0]?.author.email).toBeNull()
+    expect(reply.author.email).toBeNull()
+    expect(updated.author.email).toBeNull()
+  })
+
   it("projects single-comment delete permission to the share file owner", async () => {
     const result = await service.listShareAnnotations({
       actorUserId: "owner-1",
@@ -668,6 +865,7 @@ function commentRecord(input: {
 
 function createPrismaMock() {
   return {
+    $transaction: vi.fn(async (operations: readonly Promise<unknown>[]) => Promise.all(operations)),
     user: { findUnique: vi.fn() },
     driveItem: { findFirst: vi.fn() },
     driveShare: { findFirst: vi.fn() },
@@ -683,6 +881,7 @@ function createPrismaMock() {
       findFirst: vi.fn(),
       update: vi.fn(),
     },
+    driveAnnotationAnchor: { upsert: vi.fn() },
   }
 }
 
@@ -690,5 +889,62 @@ function createDriveServiceMock() {
   return {
     getShareBrowserSnapshot: vi.fn(),
     resolveShareAnnotationAccess: vi.fn(),
+    resolveAnnotationDocument: vi.fn(),
+  }
+}
+
+function annotationDocument(text: string, versionId = "version-1") {
+  const length = Array.from(text).length
+  return {
+    versionId,
+    epoch: "epoch-1",
+    sourceText: text,
+    renderedText: text,
+    projection: {
+      schemaVersion: 1 as const,
+      parserVersion: "test",
+      sourceSha256: "hash",
+      blocks: [{
+        blockId: "block-1",
+        type: "paragraph",
+        parentBlockId: null,
+        headingPath: [],
+        sourceStart: 0,
+        sourceEnd: length,
+        renderedStart: 0,
+        renderedEnd: length,
+        textFingerprint: "fingerprint",
+      }],
+      segments: [{
+        segmentId: "segment-1",
+        blockId: "block-1",
+        sourceStart: 0,
+        sourceEnd: length,
+        renderedStart: 0,
+        renderedEnd: length,
+        mapping: "identity" as const,
+      }],
+    },
+  }
+}
+
+function anchorRecord() {
+  return {
+    schemaVersion: 2,
+    baseVersionId: "version-1",
+    selectors: {
+      schemaVersion: 2,
+      position: { start: 0, end: 4 },
+      renderedPosition: { start: 0, end: 4 },
+      quote: { exact: "Note", prefix: "", suffix: "" },
+    },
+    positionStatus: "attached",
+    quoteStatus: "exact",
+    lastResolvedVersionId: "version-1",
+    resolvedSourceStart: 0,
+    resolvedSourceEnd: 4,
+    resolvedRenderedStart: 0,
+    resolvedRenderedEnd: 4,
+    confidence: 1,
   }
 }

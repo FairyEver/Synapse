@@ -27,6 +27,8 @@ import type {
 } from "../../src/types/bridge"
 import type {
   DashboardWebhookDto,
+  DriveAnnotationCommentDto,
+  DriveAnnotationThreadDto,
   DriveAccessSettingsUpdateInput,
   DriveBrowserSnapshotDto,
   DriveChangeListInput,
@@ -46,6 +48,14 @@ import type {
   DriveItemTreeListPageDto,
   DriveLinkDownloadFileDto,
   DriveLinkDownloadFileInput,
+  DriveLinkAnnotationAnchorUpdateInput,
+  DriveLinkAnnotationCommentCreateInput,
+  DriveLinkAnnotationCommentDeleteInput,
+  DriveLinkAnnotationCommentUpdateInput,
+  DriveLinkAnnotationThreadCreateInput,
+  DriveLinkAnnotationThreadDeleteInput,
+  DriveLinkAnnotationThreadListDto,
+  DriveLinkAnnotationThreadListInput,
   DriveLinkListDto,
   DriveLinkListInput,
   DriveLinkMaterializeDto,
@@ -595,6 +605,34 @@ export class AccountService {
 
   async readDriveLinkText(input: DriveLinkReadTextInput): Promise<DriveLinkReadTextDto> {
     return this.requestAuthenticatedJson<DriveLinkReadTextDto>("POST", `${apiBaseUrl()}/drive/link-intake/read-text`, input, "云盘链接正文读取失败。")
+  }
+
+  async listDriveLinkAnnotationThreads(input: DriveLinkAnnotationThreadListInput): Promise<DriveLinkAnnotationThreadListDto> {
+    return this.requestAuthenticatedJson<DriveLinkAnnotationThreadListDto>("POST", `${apiBaseUrl()}/drive/link-intake/annotations/threads/list`, input, "评论列表加载失败。")
+  }
+
+  async createDriveLinkAnnotationThread(input: DriveLinkAnnotationThreadCreateInput): Promise<DriveAnnotationThreadDto> {
+    return this.requestAuthenticatedJson<DriveAnnotationThreadDto>("POST", `${apiBaseUrl()}/drive/link-intake/annotations/threads`, input, "新建评论失败。")
+  }
+
+  async createDriveLinkAnnotationComment(input: DriveLinkAnnotationCommentCreateInput): Promise<DriveAnnotationCommentDto> {
+    return this.requestAuthenticatedJson<DriveAnnotationCommentDto>("POST", `${apiBaseUrl()}/drive/link-intake/annotations/comments`, input, "回复评论失败。")
+  }
+
+  async updateDriveLinkAnnotationComment(input: DriveLinkAnnotationCommentUpdateInput): Promise<DriveAnnotationCommentDto> {
+    return this.requestAuthenticatedJson<DriveAnnotationCommentDto>("PATCH", `${apiBaseUrl()}/drive/link-intake/annotations/comments`, input, "编辑评论失败。")
+  }
+
+  async deleteDriveLinkAnnotationComment(input: DriveLinkAnnotationCommentDeleteInput) {
+    return this.requestAuthenticatedJson<{ readonly ok: true }>("DELETE", `${apiBaseUrl()}/drive/link-intake/annotations/comments`, input, "删除评论失败。")
+  }
+
+  async deleteDriveLinkAnnotationThread(input: DriveLinkAnnotationThreadDeleteInput) {
+    return this.requestAuthenticatedJson<{ readonly ok: true }>("DELETE", `${apiBaseUrl()}/drive/link-intake/annotations/threads`, input, "删除评论线程失败。")
+  }
+
+  async updateDriveLinkAnnotationAnchor(input: DriveLinkAnnotationAnchorUpdateInput): Promise<DriveAnnotationThreadDto> {
+    return this.requestAuthenticatedJson<DriveAnnotationThreadDto>("PATCH", `${apiBaseUrl()}/drive/link-intake/annotations/anchor`, input, "重新关联评论失败。")
   }
 
   async materializeDriveLink(input: DriveLinkMaterializeInput): Promise<DriveLinkMaterializeDto> {

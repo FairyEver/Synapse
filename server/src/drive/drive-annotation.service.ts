@@ -10,6 +10,7 @@ import type {
   DriveAnnotationTargetDto,
   DriveAnnotationThreadDto,
   DriveAnnotationSelectorsV2,
+  DriveLinkAnnotationTargetInput,
 } from "@synapse/shared"
 import { resolveDriveAnnotationAnchor } from "@synapse/shared"
 import { formatAuditError } from "../common/audit-error"
@@ -292,15 +293,30 @@ export class DriveAnnotationService {
     readonly shareId: string
     readonly itemId?: string
     readonly cookie?: string | null
+    readonly password?: string
     readonly actorUserId?: string | null
-  }): Promise<DriveAnnotationThreadDto[]> {
+  }): Promise<readonly DriveAnnotationThreadDto[]> {
+    return (await this.getShareAnnotationSnapshot(input)).threads
+  }
+
+  async getShareAnnotationSnapshot(input: {
+    readonly shareId: string
+    readonly itemId?: string
+    readonly cookie?: string | null
+    readonly password?: string
+    readonly actorUserId?: string | null
+  }): Promise<{ readonly itemId: string; readonly canComment: boolean; readonly threads: readonly DriveAnnotationThreadDto[] }> {
     const { item, canComment } = await this.resolveShareAnnotationAccess(input)
     const threads = await this.prisma.driveAnnotationThread.findMany({
       where: { itemId: item.id, deletedAt: null },
       orderBy: { createdAt: "asc" },
       include: annotationInclude,
     })
-    return toVisibleThreadDtos(await this.refreshThreadAnchors(item, threads), input.actorUserId ?? null, item.userId, canComment, true)
+    return {
+      itemId: item.id,
+      canComment,
+      threads: toVisibleThreadDtos(await this.refreshThreadAnchors(item, threads), input.actorUserId ?? null, item.userId, canComment, true),
+    }
   }
 
   async createShareAnnotation(input: {
@@ -308,6 +324,7 @@ export class DriveAnnotationService {
     readonly shareId: string
     readonly itemId?: string
     readonly cookie?: string | null
+    readonly password?: string
     readonly body: DriveAnnotationCreateInput
     readonly auditContext?: DriveAuditContext
   }): Promise<DriveAnnotationThreadDto> {
@@ -318,7 +335,7 @@ export class DriveAnnotationService {
     const existing = input.body.idempotencyKey
       ? await this.findThreadByIdempotencyKey(item.id, input.body.idempotencyKey)
       : null
-    if (existing) return toThreadDto(existing, input.actorUserId, item.userId)
+    if (existing) return toThreadDto(existing, input.actorUserId, item.userId, true, true)
     const thread = await this.prisma.driveAnnotationThread.create({
       data: {
         itemId: item.id,
@@ -348,7 +365,31 @@ export class DriveAnnotationService {
       ipAddress: input.auditContext?.ipAddress,
     })
     this.notifyAnnotationChanged(item.id)
-    return toThreadDto(thread, input.actorUserId, item.userId)
+    return toThreadDto(thread, input.actorUserId, item.userId, true, true)
+  }
+
+  async createShareAnnotationByQuote(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly itemId?: string
+    readonly cookie?: string | null
+    readonly password?: string
+    readonly target: DriveLinkAnnotationTargetInput
+    readonly body: string
+    readonly idempotencyKey: string
+    readonly auditContext?: DriveAuditContext
+  }): Promise<DriveAnnotationThreadDto> {
+    const item = await this.requireCommentableShareItem(input)
+    const anchorInput = await this.resolveQuoteAnchorInput(item, input.target, input.idempotencyKey)
+    return this.createShareAnnotation({
+      actorUserId: input.actorUserId,
+      shareId: input.shareId,
+      itemId: item.id,
+      cookie: input.cookie,
+      password: input.password,
+      body: { ...anchorInput, body: input.body },
+      auditContext: input.auditContext,
+    })
   }
 
   async replyShareAnnotation(input: {
@@ -356,6 +397,7 @@ export class DriveAnnotationService {
     readonly shareId: string
     readonly itemId?: string
     readonly cookie?: string | null
+    readonly password?: string
     readonly threadId: string
     readonly body: DriveAnnotationReplyInput
     readonly auditContext?: DriveAuditContext
@@ -389,7 +431,7 @@ export class DriveAnnotationService {
       ipAddress: input.auditContext?.ipAddress,
     })
     this.notifyAnnotationChanged(item.id)
-    return toCommentDto(comment, input.actorUserId, item.userId)
+    return toCommentDto(comment, input.actorUserId, item.userId, true, true)
   }
 
   async updateShareComment(input: {
@@ -397,6 +439,7 @@ export class DriveAnnotationService {
     readonly shareId: string
     readonly itemId?: string
     readonly cookie?: string | null
+    readonly password?: string
     readonly commentId: string
     readonly body: DriveAnnotationCommentUpdateInput
     readonly auditContext?: DriveAuditContext
@@ -425,7 +468,7 @@ export class DriveAnnotationService {
       ipAddress: input.auditContext?.ipAddress,
     })
     this.notifyAnnotationChanged(item.id)
-    return toCommentDto(updated, input.actorUserId, item.userId)
+    return toCommentDto(updated, input.actorUserId, item.userId, true, true)
   }
 
   async deleteShareComment(input: {
@@ -433,6 +476,7 @@ export class DriveAnnotationService {
     readonly shareId: string
     readonly itemId?: string
     readonly cookie?: string | null
+    readonly password?: string
     readonly commentId: string
     readonly auditContext?: DriveAuditContext
   }): Promise<{ readonly ok: true }> {
@@ -464,6 +508,7 @@ export class DriveAnnotationService {
     readonly shareId: string
     readonly itemId?: string
     readonly cookie?: string | null
+    readonly password?: string
     readonly threadId: string
     readonly auditContext?: DriveAuditContext
   }): Promise<{ readonly ok: true }> {
@@ -496,6 +541,7 @@ export class DriveAnnotationService {
     readonly shareId: string
     readonly itemId?: string
     readonly cookie?: string | null
+    readonly password?: string
     readonly threadId: string
     readonly body: DriveAnnotationAnchorUpdateInput
     readonly auditContext?: DriveAuditContext
@@ -520,6 +566,31 @@ export class DriveAnnotationService {
     return toThreadDto(updated, input.actorUserId, item.userId, true, true)
   }
 
+  async updateShareAnchorByQuote(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly itemId?: string
+    readonly cookie?: string | null
+    readonly password?: string
+    readonly threadId: string
+    readonly target: DriveLinkAnnotationTargetInput
+    readonly idempotencyKey: string
+    readonly auditContext?: DriveAuditContext
+  }): Promise<DriveAnnotationThreadDto> {
+    const item = await this.requireCommentableShareItem(input)
+    const anchorInput = await this.resolveQuoteAnchorInput(item, input.target, input.idempotencyKey)
+    return this.updateShareAnchor({
+      actorUserId: input.actorUserId,
+      shareId: input.shareId,
+      itemId: item.id,
+      cookie: input.cookie,
+      password: input.password,
+      threadId: input.threadId,
+      body: anchorInput,
+      auditContext: input.auditContext,
+    })
+  }
+
   private async requireOwnerItem(userId: string, itemId: string): Promise<DriveAnnotationItem> {
     const item = await this.prisma.driveItem.findFirst({
       where: {
@@ -539,6 +610,7 @@ export class DriveAnnotationService {
     readonly shareId: string
     readonly itemId?: string
     readonly cookie?: string | null
+    readonly password?: string
     readonly actorUserId: string
   }): Promise<DriveAnnotationItem> {
     const access = await this.resolveShareAnnotationAccess(input)
@@ -550,11 +622,13 @@ export class DriveAnnotationService {
     readonly shareId: string
     readonly itemId?: string
     readonly cookie?: string | null
+    readonly password?: string
     readonly actorUserId?: string | null
   }): Promise<ShareAnnotationAccess> {
     return this.drive.resolveShareAnnotationAccess({
       shareId: input.shareId,
       itemId: input.itemId,
+      password: input.password,
       cookie: input.cookie ?? undefined,
       actorUserId: input.actorUserId ?? null,
     })
@@ -575,6 +649,83 @@ export class DriveAnnotationService {
       where: { itemId, deletedAt: null, anchor: { idempotencyKey } },
       include: annotationInclude,
     })
+  }
+
+  private async resolveQuoteAnchorInput(
+    item: DriveAnnotationItem,
+    target: DriveLinkAnnotationTargetInput,
+    idempotencyKey: string,
+  ): Promise<DriveAnnotationAnchorUpdateInput & { readonly targetKind: "textRange"; readonly target: DriveAnnotationTargetDto }> {
+    const document = await this.drive.resolveAnnotationDocument(item)
+    const quote = {
+      exact: target.exact,
+      prefix: target.prefix ?? "",
+      suffix: target.suffix ?? "",
+    }
+    const exactLength = Array.from(quote.exact).length
+    const initialSelectors: DriveAnnotationSelectorsV2 = {
+      schemaVersion: 2,
+      position: { start: 0, end: exactLength },
+      renderedPosition: { start: 0, end: exactLength },
+      quote,
+    }
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: initialSelectors,
+      projection: document.projection,
+      sourceText: document.sourceText,
+      renderedText: document.renderedText,
+    })
+    if (resolution.positionStatus === "ambiguous") {
+      throw new ConflictException({
+        code: "DRIVE_ANNOTATION_TARGET_AMBIGUOUS",
+        message: "评论原文存在多个匹配位置，请补充前后文。",
+      })
+    }
+    if (resolution.positionStatus !== "attached"
+      || resolution.quoteStatus !== "exact"
+      || !resolution.sourceRange
+      || !resolution.renderedRange) {
+      throw new ConflictException({
+        code: "DRIVE_ANNOTATION_TARGET_NOT_FOUND",
+        message: "未找到评论原文，请重新读取文档。",
+      })
+    }
+    const renderedRange = resolution.renderedRange
+    const block = document.projection.blocks
+      .filter((candidate) => candidate.renderedStart <= renderedRange.start
+        && candidate.renderedEnd >= renderedRange.end)
+      .sort((left, right) => (left.renderedEnd - left.renderedStart) - (right.renderedEnd - right.renderedStart))[0]
+    const selectors: DriveAnnotationSelectorsV2 = {
+      schemaVersion: 2,
+      position: resolution.sourceRange,
+      renderedPosition: renderedRange,
+      quote,
+      ...(block
+        ? {
+            semantic: {
+              blockId: block.blockId,
+              start: renderedRange.start - block.renderedStart,
+              end: renderedRange.end - block.renderedStart,
+              blockType: block.type,
+              headingPath: block.headingPath,
+            },
+          }
+        : {}),
+    }
+    return {
+      baseVersionId: document.versionId,
+      epoch: document.epoch,
+      selectors,
+      idempotencyKey,
+      targetKind: "textRange",
+      target: {
+        schemaVersion: 1,
+        kind: "textRange",
+        surface: "markdownRenderedText",
+        range: codePointRangeToUtf16(document.renderedText, renderedRange),
+        quote,
+      },
+    }
   }
 
   private async validateAnchorInput(item: DriveAnnotationItem, input: DriveAnnotationCreateInput, baseVersionId: string | null) {
@@ -661,6 +812,7 @@ export class DriveAnnotationService {
           resolvedRenderedStart: validated.resolution.renderedRange?.start ?? null,
           resolvedRenderedEnd: validated.resolution.renderedRange?.end ?? null,
           confidence: validated.resolution.confidence,
+          idempotencyKey: input.idempotencyKey,
           deletedAt: null,
         },
       }),
@@ -1064,6 +1216,17 @@ function toAuthorDto(record: AnnotationAuthorRecord, redactEmail: boolean) {
     id: record.id,
     email: redactEmail ? null : record.email,
     handle: record.handle,
+  }
+}
+
+function codePointRangeToUtf16(
+  value: string,
+  range: { readonly start: number; readonly end: number },
+): { readonly start: number; readonly end: number } {
+  const codePoints = Array.from(value)
+  return {
+    start: codePoints.slice(0, range.start).join("").length,
+    end: codePoints.slice(0, range.end).join("").length,
   }
 }
 

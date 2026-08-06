@@ -60,7 +60,7 @@
 - Markdown 源文本是协同与版本历史的权威数据。Yjs 更新先进入协同日志，只有检查点进入 `DriveFileVersion`；上传覆盖、历史恢复和 MDXEditor 整文保存必须经过同一 item 级协调器并切换协同代际。
 - Markdown 评论锚点独立于讨论串和评论删除状态，服务端投影与解析结果是权威。证据不足只能进入未定位状态，不得由 Renderer 自行搜索并猜测重挂。
 - Anchor V2 首次上线会一次性清理旧版评论，不转换 UTF-16 旧坐标；文档、分享标识和历史版本不得随评论清理发生变化。上线后的新评论同时保留 V2 权威锚点与回滚兼容投影。
-- Markdown 实时协同仅属于浏览器 Monaco/阅读界面；现有 Drive MCP 内容写入继续走版本化服务，不新增评论或协同 MCP 旁路。
+- Markdown 实时协同仅属于浏览器 Monaco/阅读界面；Drive MCP 内容写入继续走版本化服务，不加入协同房间。分享 `.md` 评论只能通过 `app.drive.link.annotation.*` 能力读取和管理，不得扩展为 presence、协同房间控制或分享正文编辑旁路。
 
 ## Agent 与 Knowledge Base
 

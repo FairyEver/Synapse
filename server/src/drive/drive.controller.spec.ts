@@ -2155,6 +2155,34 @@ describe("DrivePublicController link intake", () => {
     })
   })
 
+  it("projects bearer-token identity when listing Drive link annotations", async () => {
+    const userAuth = { verifyAccessToken: vi.fn(async () => ({ userId: "user-1" })) }
+    const links = {
+      listAnnotationThreads: vi.fn(async () => ({ itemId: "item-1", canComment: true, threads: [] })),
+    }
+    const controller = new DrivePublicController(
+      {} as never,
+      {} as never,
+      undefined,
+      userAuth as never,
+      undefined,
+      undefined,
+      undefined,
+      links as never,
+    )
+
+    await expect(controller.listDriveLinkAnnotationThreads(
+      { url: "https://synapse.test/share/shr_123", password: "secret" },
+      { headers: { authorization: "Bearer access-token" } } as never,
+    )).resolves.toEqual({ itemId: "item-1", canComment: true, threads: [] })
+
+    expect(userAuth.verifyAccessToken).toHaveBeenCalledWith("access-token")
+    expect(links.listAnnotationThreads).toHaveBeenCalledWith(
+      { url: "https://synapse.test/share/shr_123", password: "secret" },
+      "user-1",
+    )
+  })
+
   it("streams Drive link download content through the link-intake endpoint", async () => {
     const chunks: Buffer[] = []
     const response = new Writable({

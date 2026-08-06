@@ -217,7 +217,7 @@ orphaned: the target could not be safely reattached
 
 There is no product status such as resolved.
 
-Anchor V2 is authoritative. `DriveAnnotationAnchor` is a one-to-one record owned by the thread and stores four selectors, current position/quote status, last resolved ranges, confidence, parser/version context, idempotency, and independent deletion metadata. The legacy `target` and `anchorStatus` fields remain a temporary compatibility projection; `shifted` is not a V2 product state.
+Anchor V2 is authoritative. `DriveAnnotationAnchor` is a one-to-one record owned by the thread and stores four selectors, current position/quote status, last resolved ranges, confidence, parser/version context, idempotency, and independent deletion metadata. The legacy `target` and `anchorStatus` fields remain a temporary compatibility projection; `target` preserves the original quote snapshot and is not rewritten by manual reassociation, so consumers must use `anchor` for the current position. `shifted` is not a V2 product state.
 
 Rollout policy: the Anchor V2 migration intentionally deletes all pre-V2 annotation threads and their comments. V1 browser offsets use UTF-16 units and cannot be losslessly converted to the V2 Unicode code-point coordinate system, so the migration must not synthesize V2 anchors from legacy targets. `DriveItem`, `DriveShare`, `DriveFileVersion`, source objects, and share identifiers are not modified by this cleanup. Threads created after the migration write both the V2 anchor and the temporary legacy projection so an application rollback can still read newly created comments.
 
@@ -355,6 +355,20 @@ DELETE /api/drive/browser/shares/:shareId/items/:itemId/annotations/:threadId
 PATCH  /api/drive/browser/shares/:shareId/items/:itemId/annotations/:threadId/anchor
 POST   /api/drive/browser/shares/:shareId/items/:itemId/collaboration/checkpoint
 ```
+
+Agent-facing Link Intake routes expose the same share annotation service without joining the browser collaboration room:
+
+```text
+POST   /api/drive/link-intake/annotations/threads/list
+POST   /api/drive/link-intake/annotations/threads
+POST   /api/drive/link-intake/annotations/comments
+PATCH  /api/drive/link-intake/annotations/comments
+DELETE /api/drive/link-intake/annotations/comments
+DELETE /api/drive/link-intake/annotations/threads
+PATCH  /api/drive/link-intake/annotations/anchor
+```
+
+These routes accept only current-origin `/share/...` `.md` targets and reuse password checks, child-item resolution, logged-in identity, annotation permissions, anchor validation, visibility projection, email redaction for list and mutation responses, and audit behavior. Creation and reassociation identify visible text with `{ exact, prefix?, suffix? }`; the server generates V2 selectors against the current Markdown projection/version and rejects missing or ambiguous targets. They do not expose source offsets, CRDT coordinates, file editing, presence, or collaboration-room control.
 
 The custom WebSocket endpoint is `/api/drive/collaboration`. Its first message is a versioned JSON join containing owner/share context, item identity, client identity, Epoch, and state vector; credentials remain in existing cookies and the server requires the exact configured public Origin. Binary messages carry Yjs sync/update/awareness. Control messages carry durable acknowledgement, permission changes, Epoch replacement, preview changes, and comment invalidation. Message payloads are capped at 256 KiB and awareness never carries email, document content, or comment content.
 

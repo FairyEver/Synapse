@@ -109,7 +109,7 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(toolNames).toHaveLength(215)
+    expect(toolNames).toHaveLength(222)
     expect(toolNames.every((toolName) => toolName.startsWith("app_"))).toBe(true)
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
@@ -135,7 +135,7 @@ describe("API and MCP capability surface", () => {
       .map((match) => [match[1], match[2]] as const)
 
     expect(documentedPairs).toEqual(retiredMcpToolNamePairs())
-    expect(documentedPairs).toHaveLength(139)
+    expect(documentedPairs).toHaveLength(146)
   })
 
   it("routes every registered API action to its owning domain dispatcher", async () => {

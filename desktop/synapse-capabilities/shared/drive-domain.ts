@@ -27,6 +27,13 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.link.resolve" as CapabilityId, title: "Resolve Drive link", description: "Resolve a Synapse Drive /share, /sites, or /files URL for Agent consumption.", mutates: false },
   { id: "app.drive.link.list" as CapabilityId, title: "List Drive link", description: "List children or resources for a resolved Synapse Drive link.", mutates: false },
   { id: "app.drive.link.read_text" as CapabilityId, title: "Read Drive link text", description: "Read previewable Markdown, HTML source, or text from a Synapse Drive link.", mutates: false },
+  { id: "app.drive.link.annotation.thread.list" as CapabilityId, title: "List Drive link annotation threads", description: "List all visible annotation threads and projected permissions for a shared Markdown document.", mutates: false },
+  { id: "app.drive.link.annotation.thread.create" as CapabilityId, title: "Create Drive link annotation thread", description: "Create an anchored annotation thread on uniquely identified visible text in a shared Markdown document.", mutates: true },
+  { id: "app.drive.link.annotation.comment.create" as CapabilityId, title: "Reply to Drive link annotation", description: "Add a comment or nested reply to an annotation thread in a shared Markdown document.", mutates: true },
+  { id: "app.drive.link.annotation.comment.update" as CapabilityId, title: "Update Drive link annotation comment", description: "Edit the current user's annotation comment in a shared Markdown document.", mutates: true },
+  { id: "app.drive.link.annotation.comment.delete" as CapabilityId, title: "Delete Drive link annotation comment", description: "Delete one annotation comment when the current user has permission.", mutates: true },
+  { id: "app.drive.link.annotation.thread.delete" as CapabilityId, title: "Delete Drive link annotation thread", description: "Delete one annotation thread when the current user has permission.", mutates: true },
+  { id: "app.drive.link.annotation.anchor.update" as CapabilityId, title: "Update Drive link annotation anchor", description: "Reassociate an annotation thread with uniquely identified visible text in the current shared Markdown version.", mutates: true },
   { id: "app.drive.link.materialize" as CapabilityId, title: "Materialize Drive link", description: "Download a Synapse Drive link into a local cache directory for local Agent tools.", mutates: true },
   { id: "app.drive.link.download_file" as CapabilityId, title: "Download Drive link file", description: "Download one file or public asset from a Synapse Drive link to a local path or cache.", mutates: true },
   { id: "app.drive.folder_zip.create" as CapabilityId, title: "Create folder zip", description: "Download a Synapse Drive folder as a local zip file.", mutates: true },
@@ -107,6 +114,22 @@ const trashSearchablePageInputProperties = {
 const driveLinkBaseProperties = {
   url: stringField("Absolute Synapse Drive /share, /sites, or /files URL."),
   password: stringField("Optional actual link password. Environment variables are not expanded in MCP parameters; read the variable first or ask the user. Used only for this call and never returned."),
+}
+const driveLinkAnnotationBaseProperties = {
+  ...driveLinkBaseProperties,
+  url: stringField("Absolute current Synapse Drive /share URL."),
+  path: stringField("Optional share-relative path to a Markdown file. Ignored when itemId is supplied."),
+  itemId: stringField("Optional Drive item id inside the share. Takes precedence over path."),
+}
+const driveLinkAnnotationTargetProperty = {
+  type: "object",
+  description: "Visible Markdown text to anchor. Add prefix or suffix only when exact occurs more than once.",
+  properties: {
+    exact: { type: "string", minLength: 1, maxLength: 1000, description: "Exact visible text to anchor." },
+    prefix: { type: "string", maxLength: 200, description: "Optional visible text immediately before exact for disambiguation." },
+    suffix: { type: "string", maxLength: 200, description: "Optional visible text immediately after exact for disambiguation." },
+  },
+  required: ["exact"],
 }
 const accessSettingsProperties = {
   passwordEnabled: { type: "boolean", description: "Whether public access should require a password. Defaults to false." },
@@ -364,6 +387,84 @@ export function buildDriveTools(): McpToolDefinition[] {
           maxBytes: { type: "number", description: "Maximum UTF-8 bytes to return." },
         },
         required: ["url"],
+      },
+    },
+    {
+      name: "drive_link_annotation_thread_list",
+      description: "List every visible annotation thread on a shared .md document, including anchors, authors, nested comments, deletion placeholders, and per-comment permissions. Returns itemId and canComment. Author emails are redacted. The anchor field is the current authority; target preserves the original quote snapshot.",
+      inputSchema: { type: "object", properties: driveLinkAnnotationBaseProperties, required: ["url"] },
+    },
+    {
+      name: "drive_link_annotation_thread_create",
+      description: "Create an annotation thread on visible text in a shared .md document. The server resolves the current Markdown projection and rejects missing or ambiguous text instead of guessing.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ...driveLinkAnnotationBaseProperties,
+          target: driveLinkAnnotationTargetProperty,
+          body: { type: "string", minLength: 1, maxLength: 4000, description: "Initial comment body." },
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 128, description: "Stable caller-generated key. Reuse it when retrying the same creation." },
+        },
+        required: ["url", "target", "body", "idempotencyKey"],
+      },
+    },
+    {
+      name: "drive_link_annotation_comment_create",
+      description: "Add a comment to a shared .md annotation thread. Supply parentCommentId to reply to a specific visible comment.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ...driveLinkAnnotationBaseProperties,
+          threadId: stringField("Annotation thread id."),
+          parentCommentId: { anyOf: [{ type: "string" }, { type: "null" }], description: "Optional parent comment id for a nested reply." },
+          body: { type: "string", minLength: 1, maxLength: 4000, description: "Reply body." },
+        },
+        required: ["url", "threadId", "body"],
+      },
+    },
+    {
+      name: "drive_link_annotation_comment_update",
+      description: "Edit one annotation comment authored by the current user on a shared .md document.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ...driveLinkAnnotationBaseProperties,
+          commentId: stringField("Annotation comment id."),
+          body: { type: "string", minLength: 1, maxLength: 4000, description: "Replacement comment body." },
+        },
+        required: ["url", "commentId", "body"],
+      },
+    },
+    {
+      name: "drive_link_annotation_comment_delete",
+      description: "Delete one annotation comment on a shared .md document when permitted. Call only when the user explicitly identifies the deletion target.",
+      inputSchema: {
+        type: "object",
+        properties: { ...driveLinkAnnotationBaseProperties, commentId: stringField("Annotation comment id to delete.") },
+        required: ["url", "commentId"],
+      },
+    },
+    {
+      name: "drive_link_annotation_thread_delete",
+      description: "Delete one annotation thread on a shared .md document when permitted. Call only when the user explicitly identifies the deletion target.",
+      inputSchema: {
+        type: "object",
+        properties: { ...driveLinkAnnotationBaseProperties, threadId: stringField("Annotation thread id to delete.") },
+        required: ["url", "threadId"],
+      },
+    },
+    {
+      name: "drive_link_annotation_anchor_update",
+      description: "Reassociate an annotation thread with visible text in the current shared .md version. The server rejects missing or ambiguous text instead of guessing. Read the returned anchor for the current position; target preserves the original quote snapshot.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ...driveLinkAnnotationBaseProperties,
+          threadId: stringField("Annotation thread id."),
+          target: driveLinkAnnotationTargetProperty,
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 128, description: "Stable caller-generated key. Reuse it when retrying the same reassociation." },
+        },
+        required: ["url", "threadId", "target", "idempotencyKey"],
       },
     },
     {

@@ -100,6 +100,13 @@
 | `app.drive.link.resolve` | `app_drive_link_resolve` | `app.drive.link.resolve` | `driveLinkResolve` |
 | `app.drive.link.list` | `app_drive_link_list` | `app.drive.link.list` | `driveLinkList` |
 | `app.drive.link.read_text` | `app_drive_link_read_text` | `app.drive.link.read_text` | `driveLinkReadText` |
+| `app.drive.link.annotation.thread.list` | `app_drive_link_annotation_thread_list` | `app.drive.link.annotation.thread.list` | `driveLinkAnnotationThreadList` |
+| `app.drive.link.annotation.thread.create` | `app_drive_link_annotation_thread_create` | `app.drive.link.annotation.thread.create` | `driveLinkAnnotationThreadCreate` |
+| `app.drive.link.annotation.comment.create` | `app_drive_link_annotation_comment_create` | `app.drive.link.annotation.comment.create` | `driveLinkAnnotationCommentCreate` |
+| `app.drive.link.annotation.comment.update` | `app_drive_link_annotation_comment_update` | `app.drive.link.annotation.comment.update` | `driveLinkAnnotationCommentUpdate` |
+| `app.drive.link.annotation.comment.delete` | `app_drive_link_annotation_comment_delete` | `app.drive.link.annotation.comment.delete` | `driveLinkAnnotationCommentDelete` |
+| `app.drive.link.annotation.thread.delete` | `app_drive_link_annotation_thread_delete` | `app.drive.link.annotation.thread.delete` | `driveLinkAnnotationThreadDelete` |
+| `app.drive.link.annotation.anchor.update` | `app_drive_link_annotation_anchor_update` | `app.drive.link.annotation.anchor.update` | `driveLinkAnnotationAnchorUpdate` |
 | `app.drive.link.materialize` | `app_drive_link_materialize` | `app.drive.link.materialize` | `driveLinkMaterialize` |
 | `app.drive.link.download_file` | `app_drive_link_download_file` | `app.drive.link.download_file` | `driveLinkDownloadFile` |
 | `app.drive.folder_zip.create` | `app_drive_folder_zip_create` | `app.drive.folder_zip.create` | `driveFolderZipCreate` |

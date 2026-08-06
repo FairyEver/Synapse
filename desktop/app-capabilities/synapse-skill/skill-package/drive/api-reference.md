@@ -265,6 +265,53 @@ Use for Markdown, HTML source, JSON, and text, including public TXT, MD, and CSV
 For `/share` children, prefer `itemId` from `app_drive_link_list`; `path` is primarily for `/sites` assets and share fallback lookup.
 Protected `/share` and `/sites` links require `password`; without it, this tool reports that the link needs a password rather than treating the link as missing.
 
+### Shared Markdown annotation tools
+
+All seven tools accept:
+
+- `url` required: current Synapse `/share/...` URL.
+- `password` optional: used only for this request and never returned.
+- `itemId` optional: shared Markdown item id; takes precedence over `path`.
+- `path` optional: share-relative Markdown path fallback.
+
+They reject `/sites`, `/files`, folders, and files whose name is not `.md`. They do not expose document editing, presence, or collaboration-room controls.
+
+All list and mutation results redact author email addresses as `author.email: null`. In every returned thread, `anchor` is the current authoritative position. The legacy `target` field preserves the original quote snapshot for compatibility and can differ after reassociation; use `anchor.selectors`, `anchor.positionStatus`, and `anchor.quoteStatus` to inspect the current anchor.
+
+### `app_drive_link_annotation_thread_list`
+
+Returns `{ itemId, canComment, threads }`. `threads` includes every visible cross-version thread, nested comments, authoritative anchors, author-safe metadata with email addresses redacted, deletion placeholders needed by visible replies, and projected thread/comment permissions.
+
+### `app_drive_link_annotation_thread_create`
+
+Additional input:
+
+- `target` required: `{ exact, prefix?, suffix? }` visible text.
+- `body` required: initial comment, at most 4000 characters.
+- `idempotencyKey` required: stable 8-128 character key; reuse it when retrying the same creation.
+
+The server resolves the current Markdown projection and version. Missing text returns `DRIVE_ANNOTATION_TARGET_NOT_FOUND`; unresolved repetition returns `DRIVE_ANNOTATION_TARGET_AMBIGUOUS`. Add visible `prefix` or `suffix` context instead of guessing.
+
+### `app_drive_link_annotation_comment_create`
+
+Additional input: `threadId`, optional `parentCommentId`, and `body` up to 4000 characters. Omit `parentCommentId` for a top-level thread reply.
+
+### `app_drive_link_annotation_comment_update`
+
+Additional input: `commentId` and replacement `body` up to 4000 characters. Only the comment author can edit it.
+
+### `app_drive_link_annotation_comment_delete`
+
+Additional input: `commentId`. The author or file owner can delete a comment. Call only when the user explicitly identifies the comment to delete.
+
+### `app_drive_link_annotation_thread_delete`
+
+Additional input: `threadId`. The file owner can delete any thread; the thread creator can delete it only when all visible comments belong to that creator. Call only when the user explicitly identifies the thread to delete.
+
+### `app_drive_link_annotation_anchor_update`
+
+Additional input: `threadId`, `target: { exact, prefix?, suffix? }`, and stable `idempotencyKey`. Only the thread creator or file owner can reassociate the anchor. Target resolution uses the same missing/ambiguous behavior as thread creation. Read the returned `anchor` for the new current position; the compatibility `target` remains the original quote snapshot.
+
 ### `app_drive_link_materialize`
 
 Input:

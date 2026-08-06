@@ -26,6 +26,13 @@ describe("Drive capability domain", () => {
       "app_drive_link_resolve",
       "app_drive_link_list",
       "app_drive_link_read_text",
+      "app_drive_link_annotation_thread_list",
+      "app_drive_link_annotation_thread_create",
+      "app_drive_link_annotation_comment_create",
+      "app_drive_link_annotation_comment_update",
+      "app_drive_link_annotation_comment_delete",
+      "app_drive_link_annotation_thread_delete",
+      "app_drive_link_annotation_anchor_update",
       "app_drive_link_materialize",
       "app_drive_link_download_file",
       "app_drive_folder_zip_create",
@@ -88,6 +95,7 @@ describe("Drive capability domain", () => {
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_trash_delete).toBe("app.drive.trash.delete")
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_item_restore).toBe("app.drive.item.restore")
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_link_resolve).toBe("app.drive.link.resolve")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_link_annotation_thread_list).toBe("app.drive.link.annotation.thread.list")
     expect(DRIVE_MCP_TOOL_ACTIONS).not.toHaveProperty("drive_item_list")
     expect(getActionDomainId("app.drive.item.list")).toBe("drive")
   })
@@ -161,6 +169,16 @@ describe("Drive capability domain", () => {
     expect(capabilities.get("app.drive.link.resolve")).toMatchObject({ mutates: false })
     expect(capabilities.get("app.drive.link.materialize")).toMatchObject({ mutates: true })
     expect(capabilities.get("app.drive.link.download_file")).toMatchObject({ mutates: true })
+    expect(capabilities.get("app.drive.link.annotation.thread.list")).toMatchObject({ mutates: false })
+    expect(capabilities.get("app.drive.link.annotation.comment.delete")).toMatchObject({ mutates: true })
+    expect(capabilities.get("app.drive.link.annotation.comment.delete")?.risk).toBeUndefined()
+    expect(tools.get("app_drive_link_annotation_thread_create")?.inputSchema.required)
+      .toEqual(["url", "target", "body", "idempotencyKey"])
+    expect(tools.get("app_drive_link_annotation_anchor_update")?.inputSchema.required)
+      .toEqual(["url", "threadId", "target", "idempotencyKey"])
+    expect(tools.get("app_drive_link_annotation_thread_list")?.description).toContain("Author emails are redacted")
+    expect(tools.get("app_drive_link_annotation_thread_list")?.description).toContain("anchor field is the current authority")
+    expect(tools.get("app_drive_link_annotation_anchor_update")?.description).toContain("target preserves the original quote snapshot")
   })
 
   it("describes standalone HTML sharing as the default and folder publishing as explicit", () => {

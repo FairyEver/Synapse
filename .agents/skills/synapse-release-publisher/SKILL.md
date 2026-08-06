@@ -1,13 +1,13 @@
 ---
 name: synapse-release-publisher
-description: Use when working in the Synapse repository and the user asks to release, publish a new version, 发版, 发布新版, 发布新版本, 打包发布, run release, or continue the CI/Release publish loop for FairyEver/Synapse.
+description: Use when working in the Synapse repository and the user asks to release, publish a new version, 发版, 发布新版, 发布新版本, 打包发布, run release, or continue the CI/Release publish loop for FairyEver/Synapse, including the success-only Enterprise WeChat update notification.
 ---
 
 # Synapse Release Publisher
 
 ## Purpose
 
-Run the Synapse release loop: commit and push a version bump, watch GitHub Actions, fix failures, repeat until CI and Release pass, then report Tencent Cloud COS/CDN download links from the matching GitHub Release body and open the matching GitHub Release page.
+Run the Synapse release loop: commit and push a version bump, watch GitHub Actions, fix failures, repeat until CI and Release pass, then report Tencent Cloud COS/CDN download links from the matching GitHub Release body, open the matching GitHub Release page, and send the configured Enterprise WeChat group a minimal one-click update notification.
 
 Use this skill only for release/publish commands in `/Users/liyang/Documents/code/github/Synapse`.
 
@@ -24,12 +24,25 @@ Use this skill only for release/publish commands in `/Users/liyang/Documents/cod
 - Release page URL template: `https://github.com/FairyEver/SynapseAppRelease/releases/tag/$EXPECTED_TAG`
 - CDN base URL: `https://desktop.release.synapse.d2.pub/`
 - COS bucket: `synapse-desktop-release-1252371654`
+- One-click update URL: `https://synapse.d2.pub/desktop/update`
+- WeCom notification command: `node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-notification.mjs`
+- WeCom destination configuration: local ignored `.env` key `SYNAPSE_RELEASE_WECOM_WEBHOOK_URL`
 
 The current Release workflow no longer stores installer binaries as GitHub Release assets. It builds platform artifacts as short-lived GitHub Actions artifacts, prepares `cdn-release/`, uploads installers, update metadata, `manifest.json`, and `release-body.md` to Tencent Cloud COS, refreshes/verifies CDN, then creates or edits the GitHub Release body in `FairyEver/SynapseAppRelease`. An empty GitHub `assets` array is expected and must not be treated as a release failure.
 
 ## Release Loop
 
 Track the current loop number, latest `EXPECTED_TAG`, `CI_RUN_ID`, `RELEASE_RUN_ID`, matching release body, CDN download links, and the most recent failure summary.
+
+### 0. Validate The Enterprise WeChat Destination
+
+Before changing the version or pushing commits, validate the configured destination and exact Markdown payload without sending a message:
+
+```bash
+node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-notification.mjs --check
+```
+
+If this check fails, report the configuration or helper error and stop before starting the release.
 
 ### 1. Collect Pending Release Notes
 
@@ -318,9 +331,28 @@ fi
 
 If opening the browser fails or no opener command exists, keep the release successful and include the release URL in the final response.
 
+### 11. Send The Enterprise WeChat Update Notification
+
+Run this section only after all release success conditions in section 10 are satisfied. Read and follow `/Users/liyang/.agents/skills/wecom-notification/SKILL.md`, then use the bundled command, which delegates delivery to that Skill's helper and passes the configured webhook through stdin:
+
+```bash
+node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-notification.mjs
+```
+
+The notification must use WeCom `markdown` and its complete body must remain exactly:
+
+```markdown
+[一键更新](https://synapse.d2.pub/desktop/update)
+```
+
+Do not add a title, version, current-state text, GitHub repository or Release information, installer or metadata links, release notes, timestamps, mentions, or any other content.
+
+If delivery fails, do not rerun or roll back the successful release, do not change pending release notes again, and do not try another destination. Report that the release succeeded but the Enterprise WeChat notification failed, including status, `errcode`, and `errmsg` when available.
+
 ## Exit Conditions
 
-- Success: CI and Release both pass, the matching GitHub Release is found, Tencent Cloud COS/CDN download links are extracted from the Release body, pending release notes are either published while preserving CDN links and consumed or explicitly empty, the matching GitHub Release page was opened in the system default browser or its URL was reported, and the final response includes version and download links.
+- Success: CI and Release both pass, the matching GitHub Release is found, Tencent Cloud COS/CDN download links are extracted from the Release body, pending release notes are either published while preserving CDN links and consumed or explicitly empty, the matching GitHub Release page was opened in the system default browser or its URL was reported, the Enterprise WeChat one-click update notification was delivered, and the final response includes version and download links.
+- Notification failure: keep the package release successful, stop after reporting the Enterprise WeChat delivery failure, and do not claim the complete release workflow succeeded.
 - Loop limit: after 10 loops, stop and report unresolved status plus the latest failure summary.
 - Commit failure: if `pnpm bump:commit:push` fails, report the command output and stop.
 - Download-link failure: if the matching Release exists but expected CDN links are missing from the body, report the body state and do not consume pending notes.

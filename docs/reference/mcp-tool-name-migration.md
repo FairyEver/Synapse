@@ -162,6 +162,13 @@
 | `drive_link_resolve` | `app_drive_link_resolve` |
 | `drive_link_list` | `app_drive_link_list` |
 | `drive_link_read_text` | `app_drive_link_read_text` |
+| `drive_link_annotation_thread_list` | `app_drive_link_annotation_thread_list` |
+| `drive_link_annotation_thread_create` | `app_drive_link_annotation_thread_create` |
+| `drive_link_annotation_comment_create` | `app_drive_link_annotation_comment_create` |
+| `drive_link_annotation_comment_update` | `app_drive_link_annotation_comment_update` |
+| `drive_link_annotation_comment_delete` | `app_drive_link_annotation_comment_delete` |
+| `drive_link_annotation_thread_delete` | `app_drive_link_annotation_thread_delete` |
+| `drive_link_annotation_anchor_update` | `app_drive_link_annotation_anchor_update` |
 | `drive_link_materialize` | `app_drive_link_materialize` |
 | `drive_link_download_file` | `app_drive_link_download_file` |
 | `drive_folder_zip_create` | `app_drive_folder_zip_create` |

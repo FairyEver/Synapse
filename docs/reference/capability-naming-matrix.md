@@ -122,6 +122,13 @@ For HTTP action, IPC channel, and preload bridge changes, see [API、IPC 与 Bri
 | `app.drive.item_preview.get` | `app_drive_item_preview_get` | `app.drive.item_preview.get` | `driveItemPreviewGet` |
 | `app.drive.file_content.read` | `app_drive_file_content_read` | `app.drive.file_content.read` | `driveFileContentRead` |
 | `app.drive.file_download.create` | `app_drive_file_download_create` | `app.drive.file_download.create` | `driveFileDownloadCreate` |
+| `app.drive.link.annotation.thread.list` | `app_drive_link_annotation_thread_list` | `app.drive.link.annotation.thread.list` | `driveLinkAnnotationThreadList` |
+| `app.drive.link.annotation.thread.create` | `app_drive_link_annotation_thread_create` | `app.drive.link.annotation.thread.create` | `driveLinkAnnotationThreadCreate` |
+| `app.drive.link.annotation.comment.create` | `app_drive_link_annotation_comment_create` | `app.drive.link.annotation.comment.create` | `driveLinkAnnotationCommentCreate` |
+| `app.drive.link.annotation.comment.update` | `app_drive_link_annotation_comment_update` | `app.drive.link.annotation.comment.update` | `driveLinkAnnotationCommentUpdate` |
+| `app.drive.link.annotation.comment.delete` | `app_drive_link_annotation_comment_delete` | `app.drive.link.annotation.comment.delete` | `driveLinkAnnotationCommentDelete` |
+| `app.drive.link.annotation.thread.delete` | `app_drive_link_annotation_thread_delete` | `app.drive.link.annotation.thread.delete` | `driveLinkAnnotationThreadDelete` |
+| `app.drive.link.annotation.anchor.update` | `app_drive_link_annotation_anchor_update` | `app.drive.link.annotation.anchor.update` | `driveLinkAnnotationAnchorUpdate` |
 | `app.drive.file_version.list` | `app_drive_file_version_list` | `app.drive.file_version.list` | `driveFileVersionList` |
 | `app.drive.file_version_download.create` | `app_drive_file_version_download_create` | `app.drive.file_version_download.create` | `driveFileVersionDownloadCreate` |
 | `app.drive.file_version.restore` | `app_drive_file_version_restore` | `app.drive.file_version.restore` | `driveFileVersionRestore` |
