@@ -81,6 +81,47 @@ describe('markdown annotation target helpers', () => {
     expect(getMarkdownRenderedText(root)).toBe('前 图标 后\n下一行')
   })
 
+  it('keeps selection offsets aligned after fenced code blocks', () => {
+    document.body.innerHTML = '<main><pre><code data-drive-markdown-segment-id="code">first\n</code></pre>\n<p data-drive-markdown-block-id="paragraph" data-drive-markdown-segment-id="paragraph-segment">after Pinia</p></main>'
+    const root = document.querySelector<HTMLElement>('main')
+    const paragraphText = document.querySelector('p')?.firstChild
+    if (!root || !paragraphText) throw new Error('missing fixture')
+    const range = document.createRange()
+    range.setStart(paragraphText, 6)
+    range.setEnd(paragraphText, 11)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+
+    const anchor = createMarkdownAnnotationAnchorFromSelection({
+      root,
+      selection,
+      projection: {
+        schemaVersion: 1,
+        parserVersion: 'test',
+        sourceSha256: 'test',
+        blocks: [{
+          blockId: 'paragraph', type: 'paragraph', parentBlockId: null, headingPath: [],
+          sourceStart: 13, sourceEnd: 24, renderedStart: 5, renderedEnd: 16, textFingerprint: 'paragraph',
+        }],
+        segments: [
+          {
+            segmentId: 'code', blockId: 'code-block', sourceStart: 0, sourceEnd: 12,
+            renderedStart: 0, renderedEnd: 5, mapping: 'markdown_syntax',
+          },
+          {
+            segmentId: 'paragraph-segment', blockId: 'paragraph', sourceStart: 13, sourceEnd: 24,
+            renderedStart: 5, renderedEnd: 16, mapping: 'identity',
+          },
+        ],
+      },
+    })
+
+    expect(anchor?.target.quote.exact).toBe('Pinia')
+    expect(anchor?.target.range).toEqual({ start: 11, end: 16 })
+    expect(anchor?.selectors.renderedPosition).toEqual({ start: 11, end: 16 })
+  })
+
   it('returns null for collapsed or external selections', () => {
     document.body.innerHTML = '<main>正文</main><aside>旁栏</aside>'
     const root = document.querySelector('main')

@@ -8,8 +8,8 @@ import type {
   DriveAnnotationThreadDto,
   DriveMarkdownProjectionDto,
 } from '@synapse/shared'
-import { resolveDriveAnnotationAnchor } from '@synapse/shared'
-import { getMarkdownRenderedText } from './markdown-annotation-target'
+import { resolveDriveAnnotationAnchor, sliceByCodePoints } from '@synapse/shared'
+import { getMarkdownRenderedText } from './markdown-rendered-text'
 
 export type MarkdownAnnotationResolvedRange = {
   readonly threadId: string
@@ -68,14 +68,18 @@ export function renderMarkdownAnnotationHtml(
           confidence: resolution.confidence,
         }
       }
+      const cachedRange = thread.anchor.resolvedRenderedRange
+      const exactRangeMatches = thread.anchor.quoteStatus !== 'exact'
+        || Boolean(cachedRange && sliceByCodePoints(renderedText, cachedRange.start, cachedRange.end) === thread.anchor.selectors.quote.exact)
+      const positionStatus = exactRangeMatches ? thread.anchor.positionStatus : 'orphaned' as const
       return {
         threadId: thread.id,
-        anchorStatus: thread.anchor.positionStatus === 'attached' && thread.anchor.resolvedRenderedRange ? 'attached' as const : 'orphaned' as const,
-        range: thread.anchor.positionStatus === 'attached' && thread.anchor.resolvedRenderedRange
-          ? codePointRangeToUtf16(renderedText, thread.anchor.resolvedRenderedRange)
+        anchorStatus: positionStatus === 'attached' && cachedRange ? 'attached' as const : 'orphaned' as const,
+        range: positionStatus === 'attached' && cachedRange
+          ? codePointRangeToUtf16(renderedText, cachedRange)
           : null,
-        renderedRange: thread.anchor.resolvedRenderedRange,
-        positionStatus: thread.anchor.positionStatus,
+        renderedRange: exactRangeMatches ? cachedRange : null,
+        positionStatus,
         quoteStatus: thread.anchor.quoteStatus,
         sourceRange: thread.anchor.resolvedSourceRange,
         confidence: thread.anchor.confidence ?? undefined,

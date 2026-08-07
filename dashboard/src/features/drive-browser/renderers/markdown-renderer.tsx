@@ -42,6 +42,11 @@ import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { renderMarkdownAnnotationHtml, resolveMarkdownAnnotationTextRange } from './markdown-annotation-render'
 import { createMarkdownAnnotationAnchorFromSelection } from './markdown-annotation-target'
 import { getCommentActionErrorMessage, MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdown-comments-rail'
+import {
+  createMarkdownRenderedDomRange,
+  createMarkdownRenderedTextModel,
+  type MarkdownRenderedTextSegment,
+} from './markdown-rendered-text'
 import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
 const MARKDOWN_BODY_CLASSNAME = 'max-w-full break-words space-y-3 text-base leading-7 [&_a]:underline [&_blockquote]:border-l [&_blockquote]:pl-3 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_h1]:scroll-mt-6 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:scroll-mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:scroll-mt-6 [&_h3]:font-medium [&_h4]:scroll-mt-6 [&_h5]:scroll-mt-6 [&_h6]:scroll-mt-6 [&_hr]:border-border [&_li]:ml-4 [&_ol]:list-decimal [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_[data-drive-markdown-table-scroll="true"]]:max-w-full [&_[data-drive-markdown-table-scroll="true"]]:overflow-x-auto [&_table]:w-max [&_table]:min-w-full [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_td]:align-top [&_td:not(:first-child)]:min-w-56 [&_th]:border [&_th]:p-2 [&_th]:align-top [&_th:not(:first-child)]:min-w-56 [&_ul]:list-disc'
@@ -274,8 +279,9 @@ function DriveMarkdownBody({
       const nextNaturalHeight = Math.ceil(nextBaseOffset + contentHeight + paddingBottom)
       setDocumentNaturalHeight((current) => current === nextNaturalHeight ? current : nextNaturalHeight)
     }
-    const renderedTextSegments = collectRenderedTextSegments(root)
-    const renderedText = getRenderedTextFromSegments(renderedTextSegments)
+    const renderedTextModel = createMarkdownRenderedTextModel(root, projection)
+    const renderedTextSegments = renderedTextModel.segments
+    const renderedText = renderedTextModel.text
     const nextAnchors: Record<string, number> = {}
     const nextRects: MarkdownAnnotationOverlayRect[] = []
 
@@ -310,7 +316,7 @@ function DriveMarkdownBody({
 
     setThreadAnchorTopById((current) => sameNumberRecord(current, nextAnchors) ? current : nextAnchors)
     setAnnotationOverlayRects((current) => sameOverlayRects(current, nextRects) ? current : nextRects)
-  }, [annotated.resolved, pendingTarget])
+  }, [annotated.resolved, pendingTarget, projection])
 
   useEffect(() => {
     if (!liveCollaboration.state?.annotationRevision) return
@@ -998,20 +1004,13 @@ function getSelectionRect(range: Range): DOMRect | null {
   return rect.width > 0 || rect.height > 0 ? rect : null
 }
 
-type RenderedTextSegment = {
-  readonly node: Text
-  readonly text: string
-  readonly start: number
-  readonly end: number
-}
-
 function measureRenderedTextRange(
   root: HTMLElement,
-  segments: readonly RenderedTextSegment[],
+  segments: readonly MarkdownRenderedTextSegment[],
   range: { readonly start: number; readonly end: number },
   rootRect: DOMRect,
 ): Array<Omit<MarkdownAnnotationOverlayRect, 'key' | 'kind' | 'threadId'>> {
-  const domRange = createRenderedTextRange(root, segments, range.start, range.end)
+  const domRange = createMarkdownRenderedDomRange(root, segments, range.start, range.end)
   if (!domRange) return []
   const rects = typeof domRange.getClientRects === 'function'
     ? Array.from(domRange.getClientRects())
@@ -1024,62 +1023,6 @@ function measureRenderedTextRange(
       width: rect.width,
       height: rect.height,
     }))
-}
-
-function createRenderedTextRange(
-  root: HTMLElement,
-  segments: readonly RenderedTextSegment[],
-  start: number,
-  end: number,
-): Range | null {
-  if (start >= end) return null
-  const startPoint = findRenderedTextPoint(segments, start)
-  const endPoint = findRenderedTextPoint(segments, end)
-  if (!startPoint || !endPoint) return null
-  const range = root.ownerDocument.createRange()
-  range.setStart(startPoint.node, startPoint.offset)
-  range.setEnd(endPoint.node, endPoint.offset)
-  return range
-}
-
-function collectRenderedTextSegments(root: HTMLElement): RenderedTextSegment[] {
-  const segments: RenderedTextSegment[] = []
-  let offset = 0
-  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      return isMarkdownAnnotationMarkerText(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
-    },
-  })
-  let current = walker.nextNode()
-  while (current) {
-    const text = current.textContent ?? ''
-    const length = text.length
-    segments.push({ node: current as Text, text, start: offset, end: offset + length })
-    offset += length
-    current = walker.nextNode()
-  }
-  return segments
-}
-
-function getRenderedTextFromSegments(segments: readonly RenderedTextSegment[]): string {
-  return segments.map((segment) => segment.text).join('')
-}
-
-function findRenderedTextPoint(
-  segments: readonly RenderedTextSegment[],
-  offset: number,
-): { readonly node: Text; readonly offset: number } | null {
-  for (const segment of segments) {
-    if (offset < segment.start || offset > segment.end) continue
-    if (offset === segment.end && offset !== segment.start) return { node: segment.node, offset: segment.node.data.length }
-    return { node: segment.node, offset: Math.max(0, offset - segment.start) }
-  }
-  return null
-}
-
-function isMarkdownAnnotationMarkerText(node: Node): boolean {
-  const parent = node.parentElement
-  return Boolean(parent?.closest('[data-drive-annotation-marker="true"]'))
 }
 
 function isUsableOverlayRect(rect: DOMRect, rootRect: DOMRect): boolean {

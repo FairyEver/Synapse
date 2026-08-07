@@ -7,6 +7,12 @@ import {
   type DriveMarkdownProjectionDto,
 } from '@synapse/shared'
 import * as Y from 'yjs'
+import {
+  getMarkdownRangeRenderedText,
+  getMarkdownRenderedText,
+} from './markdown-rendered-text'
+
+export { getMarkdownRenderedText } from './markdown-rendered-text'
 
 const CONTEXT_LENGTH = 80
 
@@ -20,6 +26,7 @@ export function createMarkdownAnnotationTargetFromSelection(
 function createMarkdownAnnotationSelectionSnapshot(
   root: HTMLElement,
   selection: Selection | null,
+  projection?: DriveMarkdownProjectionDto | null,
 ): {
   readonly target: DriveAnnotationTextRangeTargetV1
   readonly renderedText: string
@@ -28,18 +35,18 @@ function createMarkdownAnnotationSelectionSnapshot(
   const range = selection.getRangeAt(0)
   if (!rootContainsRange(root, range)) return null
 
-  const exact = getRangeRenderedText(range)
+  const exact = getMarkdownRangeRenderedText(range, projection)
   if (!exact.trim()) return null
   if (exact.length > DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH) return null
 
   const beforeRange = document.createRange()
   beforeRange.selectNodeContents(root)
   beforeRange.setEnd(range.startContainer, range.startOffset)
-  const start = getRangeRenderedText(beforeRange).length
+  const start = getMarkdownRangeRenderedText(beforeRange, projection).length
   beforeRange.detach()
 
   const end = start + exact.length
-  const renderedText = getMarkdownRenderedText(root)
+  const renderedText = getMarkdownRenderedText(root, projection)
   return {
     renderedText,
     target: {
@@ -63,7 +70,7 @@ export function createMarkdownAnnotationAnchorFromSelection(input: {
   readonly epoch?: string | null
   readonly yText?: Y.Text | null
 }): { readonly target: DriveAnnotationTextRangeTargetV1; readonly selectors: DriveAnnotationSelectorsV2 } | null {
-  const snapshot = createMarkdownAnnotationSelectionSnapshot(input.root, input.selection)
+  const snapshot = createMarkdownAnnotationSelectionSnapshot(input.root, input.selection, input.projection)
   if (!snapshot) return null
   const { renderedText, target } = snapshot
   if (!hasGraphemeBoundaries(renderedText, target.range.start, target.range.end)) return null
@@ -136,21 +143,6 @@ export function createMarkdownAnnotationAnchorFromSelection(input: {
   }
 }
 
-export function getMarkdownRenderedText(root: Node): string {
-  if (root.nodeType === Node.TEXT_NODE) return isNonRenderedText(root) ? '' : (root.textContent ?? '')
-  if (root instanceof HTMLElement) {
-    if (root.closest('[data-drive-annotation-marker="true"]')) return ''
-    if (root.tagName === 'IMG') return root.getAttribute('alt') ?? ''
-    if (root.tagName === 'BR') return '\n'
-  }
-  return [...root.childNodes].map(getMarkdownRenderedText).join('')
-}
-
-function getRangeRenderedText(range: Range): string {
-  const fragment = range.cloneContents()
-  return getMarkdownRenderedText(fragment)
-}
-
 function rootContainsRange(root: HTMLElement, range: Range): boolean {
   return rootContainsNode(root, range.startContainer)
     && rootContainsNode(root, range.endContainer)
@@ -159,13 +151,6 @@ function rootContainsRange(root: HTMLElement, range: Range): boolean {
 
 function rootContainsNode(root: HTMLElement, node: Node): boolean {
   return node === root || root.contains(node)
-}
-
-function isNonRenderedText(node: Node): boolean {
-  const parent = node.parentElement
-  if (parent?.closest('[data-drive-annotation-marker="true"]')) return true
-  if (node.textContent?.trim() || parent?.closest('pre, code')) return false
-  return !parent?.closest('p, h1, h2, h3, h4, h5, h6, li, td, th, a, em, strong, del, s')
 }
 
 function hasGraphemeBoundaries(value: string, startUtf16: number, endUtf16: number): boolean {

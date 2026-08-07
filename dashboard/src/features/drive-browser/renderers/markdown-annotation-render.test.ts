@@ -147,6 +147,17 @@ describe('renderMarkdownAnnotationHtml', () => {
       renderedRange: { start: 2, end: 6 },
     })
   })
+
+  it('does not attach an exact cached anchor to different rendered text', () => {
+    const result = renderMarkdownAnnotationHtml('<p>错误位置正确原文</p>', [anchoredThread()], 'version-1')
+
+    expect(result.resolved[0]).toMatchObject({
+      threadId: 'thread-anchored',
+      anchorStatus: 'orphaned',
+      positionStatus: 'orphaned',
+      range: null,
+    })
+  })
 })
 
 function thread(input: {
