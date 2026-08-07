@@ -14,6 +14,16 @@ export function createMarkdownAnnotationTargetFromSelection(
   root: HTMLElement,
   selection: Selection | null,
 ): DriveAnnotationTextRangeTargetV1 | null {
+  return createMarkdownAnnotationSelectionSnapshot(root, selection)?.target ?? null
+}
+
+function createMarkdownAnnotationSelectionSnapshot(
+  root: HTMLElement,
+  selection: Selection | null,
+): {
+  readonly target: DriveAnnotationTextRangeTargetV1
+  readonly renderedText: string
+} | null {
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null
   const range = selection.getRangeAt(0)
   if (!rootContainsRange(root, range)) return null
@@ -31,14 +41,17 @@ export function createMarkdownAnnotationTargetFromSelection(
   const end = start + exact.length
   const renderedText = getMarkdownRenderedText(root)
   return {
-    schemaVersion: 1,
-    kind: 'textRange',
-    surface: 'markdownRenderedText',
-    range: { start, end },
-    quote: {
-      exact,
-      prefix: renderedText.slice(Math.max(0, start - CONTEXT_LENGTH), start),
-      suffix: renderedText.slice(end, end + CONTEXT_LENGTH),
+    renderedText,
+    target: {
+      schemaVersion: 1,
+      kind: 'textRange',
+      surface: 'markdownRenderedText',
+      range: { start, end },
+      quote: {
+        exact,
+        prefix: renderedText.slice(Math.max(0, start - CONTEXT_LENGTH), start),
+        suffix: renderedText.slice(end, end + CONTEXT_LENGTH),
+      },
     },
   }
 }
@@ -50,14 +63,14 @@ export function createMarkdownAnnotationAnchorFromSelection(input: {
   readonly epoch?: string | null
   readonly yText?: Y.Text | null
 }): { readonly target: DriveAnnotationTextRangeTargetV1; readonly selectors: DriveAnnotationSelectorsV2 } | null {
-  const target = createMarkdownAnnotationTargetFromSelection(input.root, input.selection)
-  if (!target) return null
-  const renderedText = getMarkdownRenderedText(input.root)
+  const snapshot = createMarkdownAnnotationSelectionSnapshot(input.root, input.selection)
+  if (!snapshot) return null
+  const { renderedText, target } = snapshot
+  if (!hasGraphemeBoundaries(renderedText, target.range.start, target.range.end)) return null
   const renderedPosition = {
     start: codePointCount(renderedText.slice(0, target.range.start)),
     end: codePointCount(renderedText.slice(0, target.range.end)),
   }
-  if (!hasGraphemeBoundaries(renderedText, renderedPosition.start, renderedPosition.end)) return null
   if (!input.projection) {
     return {
       target,
@@ -155,7 +168,7 @@ function isNonRenderedText(node: Node): boolean {
   return !parent?.closest('p, h1, h2, h3, h4, h5, h6, li, td, th, a, em, strong, del, s')
 }
 
-function hasGraphemeBoundaries(value: string, start: number, end: number): boolean {
+function hasGraphemeBoundaries(value: string, startUtf16: number, endUtf16: number): boolean {
   const Segmenter = (Intl as typeof Intl & {
     readonly Segmenter?: new (
       locale?: string,
@@ -163,12 +176,17 @@ function hasGraphemeBoundaries(value: string, start: number, end: number): boole
     ) => { segment: (input: string) => Iterable<{ readonly index: number }> }
   }).Segmenter
   if (!Segmenter) return true
-  const boundaries = new Set<number>([0, codePointCount(value)])
+  let hasStart = startUtf16 === 0 || startUtf16 === value.length
+  let hasEnd = endUtf16 === 0 || endUtf16 === value.length
+  if (hasStart && hasEnd) return true
   const segmenter = new Segmenter(undefined, { granularity: 'grapheme' })
   for (const segment of segmenter.segment(value)) {
-    boundaries.add(codePointCount(value.slice(0, segment.index)))
+    if (segment.index === startUtf16) hasStart = true
+    if (segment.index === endUtf16) hasEnd = true
+    if (hasStart && hasEnd) return true
+    if (segment.index > endUtf16) return false
   }
-  return boundaries.has(start) && boundaries.has(end)
+  return hasStart && hasEnd
 }
 
 function encodeRelativePosition(position: Y.RelativePosition): string {

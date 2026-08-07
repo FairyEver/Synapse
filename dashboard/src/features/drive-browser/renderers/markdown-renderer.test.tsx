@@ -3,7 +3,7 @@
 import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DriveDocumentImageImportResult, DriveDocumentImageSource, DriveDocumentImageSourcesDto } from '@synapse/shared'
+import type { DriveDocumentImageImportResult, DriveDocumentImageSource, DriveDocumentImageSourcesDto, DriveMarkdownOutlineItemDto } from '@synapse/shared'
 import { DriveMarkdownRenderer } from './markdown-renderer'
 import { useAuthStore } from '@/stores/auth-store'
 import { FilePreviewLayout } from '@/features/file-browser/preview/file-preview-layout'
@@ -73,6 +73,9 @@ beforeEach(() => {
   animationFrameCallbacks = []
   nextAnimationFrameId = 1
   Element.prototype.scrollIntoView = scrollIntoViewMock
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function () {
+    return this.hasAttribute('data-markdown-comments-header') ? 40 : 0
+  })
   Range.prototype.getBoundingClientRect = vi.fn(() => rangeRects[0] ?? domRect())
   Range.prototype.getClientRects = vi.fn(() => rangeRects as unknown as DOMRectList)
   vi.stubGlobal('ResizeObserver', class ResizeObserverMock {
@@ -125,11 +128,13 @@ describe('DriveMarkdownRenderer', () => {
     renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
 
     const outlineNav = document.querySelector('nav[aria-label="目录"]')
-    expect(outlineNav?.className).toContain('top-6')
-    expect(outlineNav?.className).not.toContain('top-16')
+    expect(outlineNav?.closest('aside')?.className).toContain('py-6')
+    expect(outlineNav?.className).toContain('overflow-y-auto')
+    expect(outlineNav?.className).toContain('px-4')
+    expect(outlineNav?.className).toContain('md:px-6')
   })
 
-  it('keeps the outline pinned while the native layout scroller moves the document', () => {
+  it('keeps the rails fixed while only the markdown document scrolls', () => {
     renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
 
     const layout = document.querySelector('[data-testid="markdown-layout"]')
@@ -140,8 +145,8 @@ describe('DriveMarkdownRenderer', () => {
     const documentScroller = document.querySelector('[data-testid="markdown-document-scroll"]')
 
     expect(layout?.className).toContain('h-full')
-    expect(layout?.className).toContain('overflow-auto')
-    expect(layout?.className).not.toContain('overflow-hidden')
+    expect(layout?.className).toContain('overflow-hidden')
+    expect(layout?.className).not.toContain('overflow-auto')
     expect(layout?.className).toContain('w-full')
     expect(layout?.className).not.toContain('min-h-full')
     expect(layout?.className).not.toContain('px-4')
@@ -152,30 +157,89 @@ describe('DriveMarkdownRenderer', () => {
     expect(layout?.className).not.toContain('gap-6')
     const panelGroup = document.querySelector('[data-slot="resizable-panel-group"]')
     expect(panelGroup).not.toBeNull()
-    expect(panelGroup?.className).toContain('!h-auto')
-    expect(panelGroup?.className).toContain('min-h-full')
-    expect(panelGroup?.className).toContain('!overflow-visible')
+    expect(panelGroup?.className).toContain('h-full')
+    expect(panelGroup?.className).toContain('min-h-0')
+    expect(panelGroup?.className).toContain('overflow-hidden')
     expect(outlineRail?.getAttribute('data-slot')).toBe('resizable-panel')
-    expect(outlineRailContent?.className).toContain('min-h-full')
-    expect(outlineRailContent?.className.split(/\s+/u)).not.toContain('h-full')
+    expect(outlineRailContent?.className).toContain('h-full')
+    expect(outlineRailContent?.className).toContain('min-h-0')
     expect(outlineRail?.getAttribute('data-panel-size')).toBe('16%')
     expect(outlineRail?.getAttribute('data-panel-min-size')).toBe('12%')
     expect(outlineRail?.getAttribute('data-panel-max-size')).toBe('22%')
-    expect(outlineAside?.className).toContain('px-4')
+    expect(outlineAside?.className).not.toContain('px-4')
+    expect(outlineAside?.className).not.toContain('md:px-6')
     expect(outlineAside?.className).toContain('py-6')
     expect(outlineAside?.className).toContain('overflow-hidden')
-    expect(outlineAside?.className).toContain('min-h-full')
-    expect(outlineAside?.className.split(/\s+/u)).not.toContain('h-full')
+    expect(outlineAside?.className).toContain('h-full')
+    expect(outlineAside?.className).toContain('min-h-0')
     expect(outlineAside?.className.split(/\s+/u)).not.toContain('hidden')
     expect(outlineAside?.className).not.toContain('xl:block')
-    expect(documentScroller?.className).toContain('min-h-full')
-    expect(documentScroller?.className).not.toContain('overflow-auto')
-    expect(documentScroller?.className).toContain('px-4')
-    expect(documentScroller?.className).toContain('py-6')
+    expect(documentScroller?.className).toContain('h-full')
+    expect(documentScroller?.className).toContain('min-h-0')
+    expect(documentScroller?.className).toContain('overflow-y-auto')
+    expect(documentScroller?.className).toContain('overscroll-contain')
+    expect(documentScroller?.firstElementChild?.className).toContain('px-4')
+    expect(documentScroller?.firstElementChild?.className).toContain('py-6')
     expect(documentColumn?.className).toContain('mx-auto')
     expect(documentColumn?.className).not.toContain('ml-auto')
     expect(documentColumn?.className).toContain('max-w-3xl')
     expect(documentColumn?.getAttribute('data-markdown-width-mode')).toBe('reading')
+  })
+
+  it('activates the current outline item and reveals it inside the independent outline scroller', async () => {
+    renderMarkdown({
+      previewData: preview({
+        html: '<h1 id="heading-1">First</h1><h2 id="heading-2">Second</h2>',
+        text: 'FirstSecond',
+        outline: [
+          { id: 'heading-1', text: 'First', depth: 1, children: [] },
+          { id: 'heading-2', text: 'Second', depth: 2, children: [] },
+        ],
+      }),
+    })
+
+    const scroller = markdownDocumentScroller()
+    const outlineScroller = document.querySelector<HTMLElement>('nav[aria-label="目录"]')
+    const firstHeading = document.getElementById('heading-1')
+    const secondHeading = document.getElementById('heading-2')
+    const secondLink = document.querySelector<HTMLElement>('[data-markdown-outline-id="heading-2"]')
+    if (!outlineScroller || !firstHeading || !secondHeading || !secondLink) throw new Error('Missing outline fixtures')
+    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 1000 })
+    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
+    vi.spyOn(firstHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: -20, height: 20 }))
+    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 10, height: 20 }))
+    vi.spyOn(outlineScroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
+    vi.spyOn(secondLink, 'getBoundingClientRect').mockReturnValue(domRect({ top: 120, height: 20 }))
+    scrollIntoViewMock.mockClear()
+
+    scroller.dispatchEvent(new Event('scroll'))
+    await flushAnimationFrames()
+
+    expect(secondLink.getAttribute('aria-current')).toBe('location')
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'nearest' })
+  })
+
+  it('scrolls the markdown document instead of the page when an outline item is selected', async () => {
+    renderMarkdown({
+      previewData: preview({
+        html: '<h1 id="heading-1">First</h1>',
+        text: 'First',
+        outline: [outlineItem()],
+      }),
+    })
+    const scroller = markdownDocumentScroller()
+    const heading = document.getElementById('heading-1')
+    const link = document.querySelector<HTMLElement>('[data-markdown-outline-id="heading-1"]')
+    if (!heading || !link) throw new Error('Missing outline fixtures')
+    scroller.scrollTop = 50
+    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
+    vi.spyOn(heading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 200, height: 20 }))
+    scrollContainerScrollToMock.mockClear()
+
+    await click(link)
+
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 226, behavior: 'smooth' })
+    expect(host?.scrollTop).toBe(0)
   })
 
   it('switches the markdown document between reading and wide width', async () => {
@@ -310,14 +374,13 @@ describe('DriveMarkdownRenderer', () => {
     expect(commentRailPanelGroup()?.getAttribute('data-panel-size')).toBe('22%')
     expect(commentRailPanelGroup()?.getAttribute('data-panel-min-size')).toBe('17%')
     expect(commentRailPanelGroup()?.getAttribute('data-panel-max-size')).toBe('32%')
-    expect(commentRailShell()?.className).not.toContain('overflow-hidden')
+    expect(commentRailShell()?.className).toContain('overflow-hidden')
     expect(commentRailShell()?.className).not.toContain('gap-6')
-    expect(commentRailPanel()?.className).toContain('min-h-full')
-    expect(commentRailPanel()?.className.split(/\s+/u)).not.toContain('h-full')
+    expect(commentRailPanel()?.className).toContain('min-h-0')
+    expect(commentRailPanel()?.className).toContain('h-full')
     expect(commentRailPanel()?.className).not.toContain('max-h-screen')
-    expect(commentRailTitle()?.className).toContain('sticky')
-    expect(commentRailTitle()?.className).toContain('top-0')
-    expect(commentRailScrollRegion()?.className).not.toContain('overflow-y-auto')
+    expect(commentRailTitle()?.className).toContain('shrink-0')
+    expect(commentRailScrollRegion()?.className).toContain('overflow-hidden')
     expect(windowAddEventListener).not.toHaveBeenCalledWith('resize', expect.any(Function))
     expect(document.querySelector('[data-testid="markdown-body"]')?.parentElement?.className).toContain('mx-auto')
     expect(document.querySelector('[data-testid="markdown-body"]')?.parentElement?.className).not.toContain('ml-auto')
@@ -344,6 +407,16 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.querySelector('[data-markdown-sheet="comments"]')).not.toBeNull()
     expect(document.querySelector('[data-markdown-comments-mode="list"]')).not.toBeNull()
     expect(commentAnchorLayer()).toBeNull()
+  })
+
+  it('switches the shared markdown layout at the preview container width boundary', async () => {
+    renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
+
+    await setPreviewWidth(1023)
+    expect(document.querySelector('[data-slot="resizable-panel-group"]')).toBeNull()
+
+    await setPreviewWidth(1024)
+    expect(document.querySelector('[data-slot="resizable-panel-group"]')).not.toBeNull()
   })
 
   it('closes compact sheets after selecting outline and comment targets', async () => {
@@ -458,7 +531,7 @@ describe('DriveMarkdownRenderer', () => {
     selection?.addRange(range)
 
     await act(async () => {
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      dispatchPointerUpOnMarkdownBody()
     })
 
     expect(document.querySelector('textarea')).toBeNull()
@@ -487,7 +560,7 @@ describe('DriveMarkdownRenderer', () => {
     expect(pendingOverlay()).toBeNull()
   })
 
-  it('opens a selection action from a document selectionchange event', async () => {
+  it('waits for pointer completion before creating a selection anchor', async () => {
     renderMarkdown()
     selectStrongText()
 
@@ -495,6 +568,13 @@ describe('DriveMarkdownRenderer', () => {
       document.dispatchEvent(new Event('selectionchange'))
     })
     await flushAnimationFrames()
+
+    expect(queryButtonWithText('添加评论')).toBeNull()
+    expect(pendingOverlay()).toBeNull()
+
+    await act(async () => {
+      dispatchPointerUpOnMarkdownBody()
+    })
 
     expect(buttonWithText('添加评论')).not.toBeNull()
     expect(pendingOverlay()).not.toBeNull()
@@ -505,13 +585,43 @@ describe('DriveMarkdownRenderer', () => {
     selectStrongText()
 
     await act(async () => {
-      document.dispatchEvent(new Event('selectionchange'))
+      dispatchPointerUpOnMarkdownBody()
     })
-    await flushAnimationFrames()
 
     expect(window.getSelection()?.toString()).toBe('重点')
     expect(buttonWithText('添加评论')).not.toBeNull()
     expect(pendingOverlay()).not.toBeNull()
+  })
+
+  it('creates one selection anchor for the pointer release event sequence', async () => {
+    renderMarkdown()
+    selectStrongText()
+    const cloneContents = vi.spyOn(Range.prototype, 'cloneContents')
+
+    await act(async () => {
+      dispatchPointerUpOnMarkdownBody()
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    })
+
+    expect(cloneContents).toHaveBeenCalledTimes(2)
+    expect(buttonWithText('添加评论')).not.toBeNull()
+  })
+
+  it('updates only the selection action position while the document scrolls', async () => {
+    renderMarkdown()
+    selectStrongText()
+    await act(async () => {
+      dispatchPointerUpOnMarkdownBody()
+    })
+    const cloneContents = vi.spyOn(Range.prototype, 'cloneContents')
+    rangeRects = [domRect({ left: 160, top: 240, width: 80, height: 20 })]
+
+    markdownDocumentScroller().dispatchEvent(new Event('scroll'))
+    await flushAnimationFrames()
+
+    expect(cloneContents).not.toHaveBeenCalled()
+    expect(selectionAction()?.style.top).toBe('200px')
+    expect(selectionAction()?.style.left).toBe('200px')
   })
 
   it('shows an error when creating a comment fails', async () => {
@@ -519,7 +629,7 @@ describe('DriveMarkdownRenderer', () => {
     renderMarkdown()
     selectStrongText()
     await act(async () => {
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      dispatchPointerUpOnMarkdownBody()
     })
 
     await click(buttonWithText('添加评论'))
@@ -535,7 +645,7 @@ describe('DriveMarkdownRenderer', () => {
     const { rerender } = renderMarkdown()
     selectStrongText()
     await act(async () => {
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      dispatchPointerUpOnMarkdownBody()
     })
     await click(buttonWithText('添加评论'))
     await inputValue(textarea(), 'Old file comment')
@@ -558,7 +668,7 @@ describe('DriveMarkdownRenderer', () => {
     selectStrongText()
 
     await act(async () => {
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      dispatchPointerUpOnMarkdownBody()
     })
 
     expect(pendingOverlay()).not.toBeNull()
@@ -576,7 +686,7 @@ describe('DriveMarkdownRenderer', () => {
     selectStrongText()
 
     await act(async () => {
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      dispatchPointerUpOnMarkdownBody()
     })
 
     expect(document.querySelector('textarea')).toBeNull()
@@ -597,7 +707,7 @@ describe('DriveMarkdownRenderer', () => {
     selectStrongText()
 
     await act(async () => {
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      dispatchPointerUpOnMarkdownBody()
     })
 
     expect(buttonWithText('添加评论')).not.toBeNull()
@@ -619,7 +729,7 @@ describe('DriveMarkdownRenderer', () => {
     selectStrongText()
 
     await act(async () => {
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      dispatchPointerUpOnMarkdownBody()
     })
 
     expect(document.body.textContent).not.toContain('评论')
@@ -637,7 +747,7 @@ describe('DriveMarkdownRenderer', () => {
 
     expect(scrollIntoViewMock).not.toHaveBeenCalled()
     expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 80, behavior: 'smooth' })
-    expect(host?.scrollTop).toBe(80)
+    expect(markdownDocumentScroller().scrollTop).toBe(80)
   })
 
   it('renders existing comments as overlay rectangles and focuses them by click position', async () => {
@@ -723,7 +833,7 @@ describe('DriveMarkdownRenderer', () => {
     expect(createTreeWalker.mock.calls.length).toBeLessThan(threadCount)
   })
 
-  it('lets anchored comments extend the shared scroll area without a scroll transform', async () => {
+  it('translates anchored comments with the document scroller while keeping the rails fixed', async () => {
     annotationsMock.threads = [thread()]
     renderMarkdown()
 
@@ -734,23 +844,56 @@ describe('DriveMarkdownRenderer', () => {
     const commentShell = commentRailShell()
     const anchorLayer = commentAnchorLayer()
 
-    expect(layout?.className).toContain('overflow-auto')
-    expect(documentContent.className).not.toContain('overflow-auto')
-    expect(commentShell?.className).not.toContain('overflow-hidden')
-    expect(anchorLayer?.parentElement?.className).not.toContain('overflow-hidden')
-    expect(anchorLayer?.className).not.toContain('will-change-transform')
+    expect(layout?.className).toContain('overflow-hidden')
+    expect(documentContent.className).toContain('overflow-y-auto')
+    expect(commentShell?.className).toContain('overflow-hidden')
+    expect(anchorLayer?.parentElement?.className).toContain('overflow-hidden')
+    expect(anchorLayer?.className).toContain('will-change-transform')
     expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain('top: 80px')
-    expect(anchorLayer?.style.transform).toBe('')
+    expect(anchorLayer?.style.transform).toBe('translate3d(0, 0px, 0)')
 
-    if (!layout) throw new Error('Missing markdown layout')
-    layout.scrollTop = 50
+    documentContent.scrollTop = 50
     await act(async () => {
-      layout.dispatchEvent(new Event('scroll'))
+      documentContent.dispatchEvent(new Event('scroll'))
     })
 
-    expect(animationFrameCallbacks).toHaveLength(0)
+    expect(animationFrameCallbacks).toHaveLength(1)
+    await flushAnimationFrames()
     expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain('top: 80px')
-    expect(anchorLayer?.style.transform).toBe('')
+    expect(anchorLayer?.style.transform).toBe('translate3d(0, -50px, 0)')
+  })
+
+  it('forwards anchored comment wheel input to the markdown document scroller', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown()
+    await act(async () => undefined)
+    const scroller = markdownDocumentScroller()
+    const commentRegion = document.querySelector<HTMLElement>('[data-markdown-comments-scroll-region="true"]')
+    if (!commentRegion) throw new Error('Missing anchored comment region')
+    scroller.scrollTop = 10
+    animationFrameCallbacks = []
+    const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 30 })
+    Object.defineProperty(wheel, 'deltaY', { configurable: true, value: 30 })
+
+    await act(async () => {
+      commentRegion.dispatchEvent(wheel)
+    })
+
+    expect(wheel.defaultPrevented).toBe(true)
+    expect(scroller.scrollTop).toBe(40)
+    expect(animationFrameCallbacks).toHaveLength(1)
+    await flushAnimationFrames()
+    expect(commentAnchorLayer()?.style.transform).toBe('translate3d(0, -40px, 0)')
+  })
+
+  it('adds document bottom compensation when stacked comments extend beyond the markdown content', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown()
+
+    await act(async () => undefined)
+
+    const compensation = document.querySelector<HTMLElement>('[data-markdown-comment-bottom-compensation="true"]')
+    expect(Number.parseFloat(compensation?.style.height ?? '0')).toBeGreaterThan(0)
   })
 
   it('renders the focused thread overlay with a stronger active highlight', async () => {
@@ -803,7 +946,7 @@ describe('DriveMarkdownRenderer', () => {
     selectStrongText()
 
     await act(async () => {
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      dispatchPointerUpOnMarkdownBody()
     })
 
     expect(document.querySelectorAll('[data-drive-annotation-overlay-kind="pending"]')).toHaveLength(1)
@@ -818,7 +961,7 @@ describe('DriveMarkdownRenderer', () => {
     selectStrongText()
 
     await act(async () => {
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      dispatchPointerUpOnMarkdownBody()
     })
 
     const overlays = document.querySelectorAll<HTMLElement>('[data-drive-annotation-overlay-kind="pending"]')
@@ -1006,13 +1149,33 @@ function renderMarkdown({
   act(() => {
     render(initialInput)
   })
+  configureMarkdownDocumentScroller()
   return {
     rerender: (overrides: Partial<typeof initialInput>) => {
       act(() => {
         render({ ...initialInput, ...overrides })
       })
+      configureMarkdownDocumentScroller()
     },
   }
+}
+
+function configureMarkdownDocumentScroller() {
+  const scroller = document.querySelector<HTMLElement>('[data-testid="markdown-document-scroll"]')
+  if (!scroller) return
+  scroller.style.overflow = 'auto'
+  Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 100 })
+  Object.defineProperty(scroller, 'scrollTo', {
+    configurable: true,
+    value: vi.fn(function scrollTo(this: HTMLElement, options?: ScrollToOptions) {
+      scrollContainerScrollToMock(options)
+      if (typeof options?.top === 'number') this.scrollTop = options.top
+    }),
+  })
+}
+
+function dispatchPointerUpOnMarkdownBody() {
+  document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new Event('pointerup', { bubbles: true }))
 }
 
 function ToolbarHost() {
@@ -1054,7 +1217,7 @@ function preview({
   html = '<p>这是 <strong>重点</strong> 内容</p>',
   text = '这是 重点 内容',
 }: {
-  readonly outline?: ReturnType<typeof outlineItem>[]
+  readonly outline?: DriveMarkdownOutlineItemDto[]
   readonly html?: string
   readonly text?: string
 } = {}) {
@@ -1276,7 +1439,7 @@ function commentRailTitle() {
 }
 
 function commentRailScrollRegion() {
-  return document.querySelector<HTMLElement>('[data-markdown-comments-rail="true"] > div + div') ?? undefined
+  return document.querySelector<HTMLElement>('[data-markdown-comments-scroll-region="true"]') ?? undefined
 }
 
 function textarea() {

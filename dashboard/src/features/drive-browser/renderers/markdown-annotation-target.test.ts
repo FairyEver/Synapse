@@ -155,4 +155,51 @@ describe('markdown annotation target helpers', () => {
     expect(anchor?.selectors.crdt?.start).toBeTruthy()
     doc.destroy()
   })
+
+  it('keeps Unicode code-point offsets while validating grapheme boundaries', () => {
+    document.body.innerHTML = '<main>甲😀é乙</main>'
+    const root = document.querySelector<HTMLElement>('main')
+    const text = root?.firstChild
+    if (!root || !text) throw new Error('missing fixture')
+    const selection = window.getSelection()
+    const emojiRange = document.createRange()
+    emojiRange.setStart(text, 1)
+    emojiRange.setEnd(text, 3)
+    selection?.removeAllRanges()
+    selection?.addRange(emojiRange)
+
+    const emojiAnchor = createMarkdownAnnotationAnchorFromSelection({ root, selection, projection: null })
+
+    expect(emojiAnchor?.target.range).toEqual({ start: 1, end: 3 })
+    expect(emojiAnchor?.selectors.renderedPosition).toEqual({ start: 1, end: 2 })
+
+    const partialGraphemeRange = document.createRange()
+    partialGraphemeRange.setStart(text, 3)
+    partialGraphemeRange.setEnd(text, 4)
+    selection?.removeAllRanges()
+    selection?.addRange(partialGraphemeRange)
+
+    expect(createMarkdownAnnotationAnchorFromSelection({ root, selection, projection: null })).toBeNull()
+  })
+
+  it('creates an anchor for a long document without blocking selection completion', () => {
+    const value = `${'长文档内容'.repeat(5_000)}重点`
+    const root = document.createElement('main')
+    const text = document.createTextNode(value)
+    root.append(text)
+    document.body.replaceChildren(root)
+    const range = document.createRange()
+    range.setStart(text, value.length - 2)
+    range.setEnd(text, value.length)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    const startedAt = performance.now()
+
+    const anchor = createMarkdownAnnotationAnchorFromSelection({ root, selection, projection: null })
+
+    expect(performance.now() - startedAt).toBeLessThan(750)
+    expect(anchor?.selectors.renderedPosition).toEqual({ start: value.length - 2, end: value.length })
+    expect(anchor?.selectors.quote.exact).toBe('重点')
+  })
 })

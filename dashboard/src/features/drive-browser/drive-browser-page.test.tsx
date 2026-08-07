@@ -292,10 +292,47 @@ describe('DriveBrowserPage', () => {
     selectStrongText()
 
     await act(async () => {
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new Event('pointerup', { bubbles: true }))
     })
 
     expect(buttonWithText('添加评论')).not.toBeNull()
+    expect(document.querySelector('[data-drive-finder="file"]')).not.toBeNull()
+    expect(document.querySelector('[data-testid="markdown-document-scroll"]')?.className).toContain('overflow-y-auto')
+  })
+
+  it('uses the shared bounded markdown scroller in public share readers', () => {
+    mockDriveBrowserState({
+      status: 'ready',
+      snapshot: createSnapshot({
+        context: 'share',
+        surface: 'standalone',
+        current: {
+          ...baseCurrent(),
+          name: 'notes.md',
+          mimeType: 'text/markdown',
+          previewKind: 'markdown',
+        },
+        preview: {
+          ...basePreview(),
+          kind: 'markdown',
+          text: '# Notes',
+          html: '<h1 id="notes">Notes</h1>',
+          outline: [{ id: 'notes', text: 'Notes', depth: 1, children: [] }],
+          visitUrl: null,
+        },
+      }),
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload: vi.fn(async () => createSnapshot()),
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+
+    renderPage(<DriveBrowserPage context='share' shareId='share-1' itemId='file' />)
+
+    expect(document.querySelector('[data-testid="markdown-layout"]')?.className).toContain('overflow-hidden')
+    expect(document.querySelector('[data-testid="markdown-document-scroll"]')?.className).toContain('overflow-y-auto')
   })
 
   it('keeps standalone owner file reader behavior outside the console shell', () => {
@@ -320,6 +357,8 @@ describe('DriveBrowserPage', () => {
     renderPage(<DriveBrowserPage context='owner' surface='standalone' itemId='file' />)
 
     expect(document.body.textContent).toContain('notes.md')
+    expect(document.querySelector('[data-testid="markdown-layout"]')?.className).toContain('overflow-hidden')
+    expect(document.querySelector('[data-testid="markdown-document-scroll"]')?.className).toContain('overflow-y-auto')
   })
 
   it('uses injected client navigation for finder rows and breadcrumbs', () => {

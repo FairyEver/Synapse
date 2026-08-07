@@ -135,6 +135,18 @@ describe('renderMarkdownAnnotationHtml', () => {
       range: null,
     })
   })
+
+  it('converts cached V2 code-point ranges to UTF-16 offsets for DOM measurement', () => {
+    const html = '<p>😀 Note</p>'
+    const result = renderMarkdownAnnotationHtml(html, [unicodeAnchoredThread()], 'version-1')
+
+    expect(result.resolved[0]).toMatchObject({
+      threadId: 'thread-unicode',
+      anchorStatus: 'attached',
+      range: { start: 3, end: 7 },
+      renderedRange: { start: 2, end: 6 },
+    })
+  })
 })
 
 function thread(input: {
@@ -180,6 +192,29 @@ function anchoredThread(): DriveAnnotationThreadDto {
       quoteStatus: 'exact',
       resolvedSourceRange: { start: 2, end: 7 },
       resolvedRenderedRange: { start: 2, end: 7 },
+      confidence: 1,
+      lastResolvedVersionId: 'version-1',
+    },
+  }
+}
+
+function unicodeAnchoredThread(): DriveAnnotationThreadDto {
+  return {
+    ...thread(),
+    id: 'thread-unicode',
+    anchor: {
+      schemaVersion: 2,
+      baseVersionId: 'version-1',
+      selectors: {
+        schemaVersion: 2,
+        position: { start: 2, end: 6 },
+        renderedPosition: { start: 2, end: 6 },
+        quote: { exact: 'Note', prefix: '😀 ', suffix: '' },
+      },
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      resolvedSourceRange: { start: 2, end: 6 },
+      resolvedRenderedRange: { start: 2, end: 6 },
       confidence: 1,
       lastResolvedVersionId: 'version-1',
     },

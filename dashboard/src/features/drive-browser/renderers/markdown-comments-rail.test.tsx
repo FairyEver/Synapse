@@ -16,6 +16,7 @@ afterEach(() => {
   root = null
   host = null
   document.body.innerHTML = ''
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -197,19 +198,18 @@ describe('MarkdownCommentsRail', () => {
     expect(threadSection('thread-1').getAttribute('style')).toContain('top: 32px')
   })
 
-  it('keeps the rail title sticky without an internal scrolling comment list', () => {
+  it('keeps the rail frame fixed and clips the translated anchored layer', () => {
     renderRail({ threads: [thread({ anchorStatus: 'attached', anchorTop: 0 })] })
 
-    expect(commentRail().className).toContain('min-h-full')
-    expect(commentRail().className.split(/\s+/u)).not.toContain('h-full')
+    expect(commentRail().className).toContain('h-full')
+    expect(commentRail().className).toContain('min-h-0')
+    expect(commentRail().className).toContain('overflow-hidden')
     expect(commentRail().className).not.toContain('max-h-screen')
-    expect(railTitle().className).toContain('sticky')
-    expect(railTitle().className).toContain('top-0')
-    expect(railTitle().className).toContain('z-10')
     expect(railTitle().className).toContain('shrink-0')
-    expect(railScrollRegion().className).not.toContain('overflow-y-auto')
-    expect(anchoredRegion().className).not.toContain('overflow-hidden')
-    expect(anchoredLayer().className).not.toContain('will-change-transform')
+    expect(railScrollRegion().className).toContain('min-h-0')
+    expect(railScrollRegion().className).toContain('flex-1')
+    expect(anchoredRegion().className).toContain('overflow-hidden')
+    expect(anchoredLayer().className).toContain('will-change-transform')
   })
 
   it('keeps nearby anchored comments from overlapping', () => {
@@ -221,6 +221,49 @@ describe('MarkdownCommentsRail', () => {
     })
 
     expect(threadTop('thread-2')).toBeGreaterThan(threadTop('thread-1') + 12)
+  })
+
+  it('reports the anchored document height for markdown bottom compensation', () => {
+    const onAnchoredHeightChange = vi.fn()
+    renderRail({
+      threads: [thread({ anchorStatus: 'attached', anchorTop: 80 })],
+      onAnchoredHeightChange,
+    })
+
+    expect(onAnchoredHeightChange).toHaveBeenLastCalledWith(208)
+  })
+
+  it('repositions anchored comments from the measured rail header height', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    let nextFrameId = 1
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const frameId = nextFrameId
+      nextFrameId += 1
+      frames.set(frameId, callback)
+      return frameId
+    })
+    vi.stubGlobal('cancelAnimationFrame', (frameId: number) => frames.delete(frameId))
+    TestResizeObserver.instances = []
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+
+    renderRail({
+      threads: [
+        thread({ id: 'thread-1', anchorStatus: 'attached', anchorTop: 100 }),
+        thread({ id: 'thread-2', anchorStatus: 'attached', anchorTop: 110 }),
+      ],
+    })
+    const observer = TestResizeObserver.instances[0]
+    if (!observer) throw new Error('Missing resize observer')
+
+    observer.emit([
+      resizeEntry(railTitle(), 56),
+      resizeEntry(threadSection('thread-1'), 80),
+      resizeEntry(threadSection('thread-2'), 40),
+    ])
+    await flushAnimationFrames(frames)
+
+    expect(threadTop('thread-1')).toBe(44)
+    expect(threadTop('thread-2')).toBe(136)
   })
 
   it('reflows anchored comments from live card sizes and batches resize work by frame', async () => {
@@ -247,7 +290,7 @@ describe('MarkdownCommentsRail', () => {
     expect(TestResizeObserver.instances).toHaveLength(1)
     const observer = TestResizeObserver.instances[0]
     if (!observer) throw new Error('Missing resize observer')
-    expect(observer.observed).toEqual(new Set([threadSection('thread-1'), threadSection('thread-2')]))
+    expect(observer.observed).toEqual(new Set([railTitle(), threadSection('thread-1'), threadSection('thread-2')]))
 
     observer.emit([
       resizeEntry(threadSection('thread-1'), 80),
@@ -271,6 +314,71 @@ describe('MarkdownCommentsRail', () => {
     root = null
     expect(observer.disconnect).toHaveBeenCalledOnce()
     expect(frames.size).toBe(0)
+  })
+
+  it('keeps the last measured card sizes while anchored cards are temporarily detached', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    let nextFrameId = 1
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const frameId = nextFrameId
+      nextFrameId += 1
+      frames.set(frameId, callback)
+      return frameId
+    })
+    vi.stubGlobal('cancelAnimationFrame', (frameId: number) => frames.delete(frameId))
+    TestResizeObserver.instances = []
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+    const threads = [
+      thread({ id: 'thread-1', body: 'First', anchorStatus: 'attached', anchorTop: 10 }),
+      thread({ id: 'thread-2', body: 'Second', anchorStatus: 'attached', anchorTop: 20 }),
+    ]
+
+    renderRail({ threads })
+    const observer = TestResizeObserver.instances[0]
+    if (!observer) throw new Error('Missing resize observer')
+    observer.emit([
+      resizeEntry(threadSection('thread-1'), 80),
+      resizeEntry(threadSection('thread-2'), 40),
+    ])
+    await flushAnimationFrames(frames)
+    expect(threadTop('thread-2')).toBe(92)
+
+    rerenderRail({ mode: 'list', threads })
+    await flushAnimationFrames(frames)
+    rerenderRail({ threads })
+
+    expect(threadTop('thread-2')).toBe(92)
+  })
+
+  it('drops cached card sizes after a thread is actually removed', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    let nextFrameId = 1
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const frameId = nextFrameId
+      nextFrameId += 1
+      frames.set(frameId, callback)
+      return frameId
+    })
+    vi.stubGlobal('cancelAnimationFrame', (frameId: number) => frames.delete(frameId))
+    TestResizeObserver.instances = []
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+    const first = thread({ id: 'thread-1', body: 'First', anchorStatus: 'attached', anchorTop: 10 })
+    const second = thread({ id: 'thread-2', body: 'Second', anchorStatus: 'attached', anchorTop: 20 })
+
+    renderRail({ threads: [first, second] })
+    const observer = TestResizeObserver.instances[0]
+    if (!observer) throw new Error('Missing resize observer')
+    observer.emit([
+      resizeEntry(threadSection('thread-1'), 200),
+      resizeEntry(threadSection('thread-2'), 40),
+    ])
+    await flushAnimationFrames(frames)
+    expect(threadTop('thread-2')).toBe(212)
+
+    rerenderRail({ threads: [second] })
+    rerenderRail({ threads: [first, second] })
+
+    expect(threadTop('thread-2')).toBe(140)
   })
 
   it('keeps own comment deletion in the comment action menu and confirms before deleting', async () => {
@@ -353,7 +461,30 @@ describe('MarkdownCommentsRail', () => {
 function renderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>[0]> = {}) {
   host = document.createElement('div')
   document.body.append(host)
+  const getBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    if (this.hasAttribute('data-markdown-comments-header')) return rectWithHeight(40)
+    return getBoundingClientRect.call(this)
+  })
   root = createRoot(host)
+  act(() => {
+    root?.render(
+      <MarkdownCommentsRail
+        threads={[thread()]}
+        activeThreadId={null}
+        canReply
+        onFocusThread={vi.fn()}
+        onReply={vi.fn(async () => undefined)}
+        onUpdateComment={vi.fn(async () => undefined)}
+        onDeleteComment={vi.fn(async () => undefined)}
+        onDeleteThread={vi.fn(async () => undefined)}
+        {...overrides}
+      />
+    )
+  })
+}
+
+function rerenderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>[0]> = {}) {
   act(() => {
     root?.render(
       <MarkdownCommentsRail
@@ -555,6 +686,20 @@ function resizeEntry(target: Element, blockSize: number): ResizeObserverEntry {
     contentBoxSize: [{ blockSize, inlineSize: 0 }],
     devicePixelContentBoxSize: [],
     contentRect: { height: blockSize } as DOMRectReadOnly,
+  }
+}
+
+function rectWithHeight(height: number): DOMRect {
+  return {
+    x: 0,
+    y: 0,
+    width: 0,
+    height,
+    top: 0,
+    right: 0,
+    bottom: height,
+    left: 0,
+    toJSON: () => ({}),
   }
 }
 

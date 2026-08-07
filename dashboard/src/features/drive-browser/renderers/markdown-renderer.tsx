@@ -114,11 +114,17 @@ function DriveMarkdownBody({
       ? liveCollaboration.state.preview.stateVector === encodeStateVector(liveCollaboration.session!.doc)
       : preview.text === liveCollaboration.session!.text.toString()
   )
-  const layoutRef = useRef<HTMLDivElement | null>(null)
+  const documentScrollRef = useRef<HTMLDivElement | null>(null)
+  const documentInnerRef = useRef<HTMLDivElement | null>(null)
+  const documentContentRef = useRef<HTMLDivElement | null>(null)
+  const outlineScrollRef = useRef<HTMLElement | null>(null)
+  const commentAnchorLayerRef = useRef<HTMLDivElement | null>(null)
+  const documentScrollFrameRef = useRef<number | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const commentsTouchedRef = useRef(false)
   const layoutMode = useFilePreviewLayoutMode()
   const isCompact = layoutMode === 'compact'
+  const outlineItems = useMemo(() => flattenMarkdownOutline(outline), [outline])
   const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
   const annotationsEnabled = isDriveMarkdownItem(current)
   const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
@@ -148,6 +154,9 @@ function DriveMarkdownBody({
   const [commentCreateError, setCommentCreateError] = useState<string | null>(null)
   const [reassociatingThreadId, setReassociatingThreadId] = useState<string | null>(null)
   const [commentAnchorBaseOffset, setCommentAnchorBaseOffset] = useState(0)
+  const [commentAnchoredDocumentHeight, setCommentAnchoredDocumentHeight] = useState(0)
+  const [documentNaturalHeight, setDocumentNaturalHeight] = useState(0)
+  const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
   const [threadAnchorTopById, setThreadAnchorTopById] = useState<Record<string, number>>({})
   const [annotationOverlayRects, setAnnotationOverlayRects] = useState<readonly MarkdownAnnotationOverlayRect[]>([])
 
@@ -159,10 +168,16 @@ function DriveMarkdownBody({
     setCommentBody('')
     setCommentCreateError(null)
     setReassociatingThreadId(null)
+    setCommentAnchoredDocumentHeight(0)
+    setDocumentNaturalHeight(0)
     setThreadAnchorTopById({})
     setAnnotationOverlayRects([])
     window.getSelection()?.removeAllRanges()
   }, [annotationStateKey])
+
+  useEffect(() => {
+    setActiveOutlineId(outlineItems[0]?.id ?? null)
+  }, [outlineItems])
 
   useEffect(() => {
     setCompactPanel(null)
@@ -228,7 +243,7 @@ function DriveMarkdownBody({
             positionStatus: resolved.positionStatus,
             quoteStatus: resolved.quoteStatus ?? thread.anchor.quoteStatus,
             resolvedSourceRange: resolved.sourceRange ?? null,
-            resolvedRenderedRange: resolved.range,
+            resolvedRenderedRange: resolved.renderedRange ?? thread.anchor.resolvedRenderedRange,
             confidence: resolved.confidence ?? thread.anchor.confidence,
           }
         : thread.anchor
@@ -248,10 +263,16 @@ function DriveMarkdownBody({
     const root = bodyRef.current
     if (!root) return
     const rootRect = root.getBoundingClientRect()
-    const layoutRect = layoutRef.current?.getBoundingClientRect()
-    if (layoutRect) {
-      const nextBaseOffset = Math.round(rootRect.top - layoutRect.top + (layoutRef.current?.scrollTop ?? 0))
+    const documentScroller = documentScrollRef.current
+    const scrollerRect = documentScroller?.getBoundingClientRect()
+    if (documentScroller && scrollerRect) {
+      const nextBaseOffset = Math.round(rootRect.top - scrollerRect.top + documentScroller.scrollTop)
       setCommentAnchorBaseOffset((current) => current === nextBaseOffset ? current : nextBaseOffset)
+      const contentHeight = documentContentRef.current?.getBoundingClientRect().height ?? 0
+      const documentInnerStyle = documentInnerRef.current ? window.getComputedStyle(documentInnerRef.current) : null
+      const paddingBottom = documentInnerStyle ? Number.parseFloat(documentInnerStyle.paddingBottom) || 0 : 0
+      const nextNaturalHeight = Math.ceil(nextBaseOffset + contentHeight + paddingBottom)
+      setDocumentNaturalHeight((current) => current === nextNaturalHeight ? current : nextNaturalHeight)
     }
     const renderedTextSegments = collectRenderedTextSegments(root)
     const renderedText = getRenderedTextFromSegments(renderedTextSegments)
@@ -456,7 +477,7 @@ function DriveMarkdownBody({
   }
 
   const syncSelectionActionFromCurrentSelection = useCallback(() => {
-    if (!canCreateAnnotation) return
+    if (!canCreateAnnotation || commentDialogOpen) return
     const root = bodyRef.current
     if (!root) return
     const selection = window.getSelection()
@@ -485,33 +506,119 @@ function DriveMarkdownBody({
     })
   }, [canCreateAnnotation, clearPendingSelectionAction, collaborationTextMatchesProjection, commentDialogOpen, liveCollaboration.session, liveCollaboration.state?.epoch, projection])
 
+  const syncSelectionPopoverPositionFromCurrentSelection = useCallback(() => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
+    const rect = getSelectionRect(selection.getRangeAt(0))
+    if (!rect) return
+    const nextPosition = {
+      top: Math.max(8, rect.top - 40),
+      left: rect.left + rect.width / 2,
+    }
+    setSelectionPopover((current) => current
+      && current.top === nextPosition.top
+      && current.left === nextPosition.left
+      ? current
+      : nextPosition)
+  }, [])
+
   useEffect(() => {
     if (!canCreateAnnotation) return
-    let frame: number | null = null
-    const scheduleSelectionSync = () => {
-      if (frame !== null) return
-      frame = window.requestAnimationFrame(() => {
-        frame = null
-        syncSelectionActionFromCurrentSelection()
-      })
-    }
-    const syncSelection = () => {
-      if (frame !== null) {
-        window.cancelAnimationFrame(frame)
-        frame = null
-      }
-      syncSelectionActionFromCurrentSelection()
-    }
-    document.addEventListener('selectionchange', scheduleSelectionSync)
-    document.addEventListener('pointerup', syncSelection)
-    document.addEventListener('keyup', syncSelection)
+    document.addEventListener('keyup', syncSelectionActionFromCurrentSelection)
     return () => {
-      document.removeEventListener('selectionchange', scheduleSelectionSync)
-      document.removeEventListener('pointerup', syncSelection)
-      document.removeEventListener('keyup', syncSelection)
-      if (frame !== null) window.cancelAnimationFrame(frame)
+      document.removeEventListener('keyup', syncSelectionActionFromCurrentSelection)
     }
   }, [canCreateAnnotation, syncSelectionActionFromCurrentSelection])
+
+  const updateActiveOutline = useCallback(() => {
+    const scroller = documentScrollRef.current
+    const body = bodyRef.current
+    if (!scroller || !body || outlineItems.length === 0) return
+    const threshold = scroller.getBoundingClientRect().top + 24
+    let nextActiveId = outlineItems[0]?.id ?? null
+    for (const item of outlineItems) {
+      const heading = findMarkdownHeadingById(body, item.id)
+      if (!heading) continue
+      if (heading.getBoundingClientRect().top > threshold) break
+      nextActiveId = item.id
+    }
+    if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1) {
+      nextActiveId = outlineItems[outlineItems.length - 1]?.id ?? nextActiveId
+    }
+    setActiveOutlineId((current) => current === nextActiveId ? current : nextActiveId)
+  }, [outlineItems])
+
+  const flushDocumentScrollEffects = useCallback(() => {
+    documentScrollFrameRef.current = null
+    const scroller = documentScrollRef.current
+    if (!scroller) return
+    setCommentAnchorLayerScrollTransform(commentAnchorLayerRef.current, scroller.scrollTop)
+    updateActiveOutline()
+    if (selectionPopover || pendingTarget) syncSelectionPopoverPositionFromCurrentSelection()
+  }, [pendingTarget, selectionPopover, syncSelectionPopoverPositionFromCurrentSelection, updateActiveOutline])
+
+  const scheduleDocumentScrollEffects = useCallback(() => {
+    if (documentScrollFrameRef.current !== null) return
+    documentScrollFrameRef.current = window.requestAnimationFrame(flushDocumentScrollEffects)
+  }, [flushDocumentScrollEffects])
+
+  useEffect(() => () => {
+    if (documentScrollFrameRef.current !== null) window.cancelAnimationFrame(documentScrollFrameRef.current)
+  }, [])
+
+  useLayoutEffect(() => {
+    setCommentAnchorLayerScrollTransform(commentAnchorLayerRef.current, documentScrollRef.current?.scrollTop ?? 0)
+    updateActiveOutline()
+  }, [commentsOpen, isCompact, outlineOpen, updateActiveOutline, widthMode])
+
+  useEffect(() => {
+    if (!activeOutlineId) return
+    const outlineScroller = outlineScrollRef.current
+    const activeLink = outlineScroller
+      ? Array.from(outlineScroller.querySelectorAll<HTMLElement>('[data-markdown-outline-id]'))
+        .find((element) => element.dataset.markdownOutlineId === activeOutlineId)
+      : null
+    if (!outlineScroller || !activeLink) return
+    const scrollerRect = outlineScroller.getBoundingClientRect()
+    const linkRect = activeLink.getBoundingClientRect()
+    if (linkRect.top < scrollerRect.top || linkRect.bottom > scrollerRect.bottom) {
+      activeLink.scrollIntoView({ block: 'nearest' })
+    }
+  }, [activeOutlineId])
+
+  const scrollToOutlineItem = useCallback((itemId: string) => {
+    const scroller = documentScrollRef.current
+    const body = bodyRef.current
+    const heading = body ? findMarkdownHeadingById(body, itemId) : null
+    if (!scroller || !heading) return
+    const targetTop = Math.max(
+      0,
+      scroller.scrollTop
+        + heading.getBoundingClientRect().top
+        - scroller.getBoundingClientRect().top
+        - 24
+    )
+    setActiveOutlineId(itemId)
+    if (typeof scroller.scrollTo === 'function') {
+      scroller.scrollTo({ top: targetTop, behavior: 'smooth' })
+    } else {
+      scroller.scrollTop = targetTop
+    }
+  }, [])
+
+  const setCommentAnchorLayerRef = useCallback((element: HTMLDivElement | null) => {
+    commentAnchorLayerRef.current = element
+    setCommentAnchorLayerScrollTransform(element, documentScrollRef.current?.scrollTop ?? 0)
+  }, [])
+
+  const handleCommentsWheel = useCallback((event: WheelEvent) => {
+    if (event.deltaY === 0) return
+    const scroller = documentScrollRef.current
+    if (!scroller) return
+    event.preventDefault()
+    scroller.scrollTop += normalizeWheelDelta(event, scroller.clientHeight)
+    scheduleDocumentScrollEffects()
+  }, [scheduleDocumentScrollEffects])
 
   const handleBodyClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     const threadId = findOverlayThreadAtPoint(annotationOverlayRects, event.clientX, event.clientY, bodyRef.current)
@@ -531,6 +638,9 @@ function DriveMarkdownBody({
   const commentsPanelDefaultSize = resizablePanelPercent(MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE)
   const commentsPanelMinSize = resizablePanelPercent(MARKDOWN_COMMENTS_PANEL_MIN_SIZE)
   const commentsPanelMaxSize = resizablePanelPercent(MARKDOWN_COMMENTS_PANEL_MAX_SIZE)
+  const commentBottomCompensation = commentsOpen && !isCompact
+    ? Math.max(0, Math.ceil(commentAnchoredDocumentHeight - documentNaturalHeight))
+    : 0
 
   const createThread = async () => {
     if (!pendingTarget || !commentBody.trim()) return
@@ -561,51 +671,64 @@ function DriveMarkdownBody({
   }
 
   const documentView = (
-    <div data-testid='markdown-document-scroll' className='min-h-full min-w-0 px-4 py-6 md:px-6'>
-      <div
-        data-markdown-width-mode={widthMode}
-        className={cn(
-          'relative mx-auto',
-          widthMode === 'reading' ? 'max-w-3xl' : 'w-full max-w-none'
-        )}
-      >
+    <div
+      ref={documentScrollRef}
+      data-testid='markdown-document-scroll'
+      className='h-full min-h-0 min-w-0 overflow-y-auto overscroll-contain'
+      onScroll={scheduleDocumentScrollEffects}
+    >
+      <div ref={documentInnerRef} className='min-h-full px-4 py-6 md:px-6'>
         <div
-          ref={bodyRef}
-          data-testid='markdown-body'
-          className={MARKDOWN_BODY_CLASSNAME}
-          onClick={handleBodyClick}
-          onMouseUp={syncSelectionActionFromCurrentSelection}
-          onPointerUp={syncSelectionActionFromCurrentSelection}
-          onKeyUp={syncSelectionActionFromCurrentSelection}
-          dangerouslySetInnerHTML={annotatedHtmlProperty}
-        />
-        {annotationOverlayRects.length > 0 ? (
-          <div aria-hidden className='pointer-events-none absolute inset-0'>
-            {annotationOverlayRects.map((rect) => (
-              <div
-                key={rect.key}
-                data-drive-annotation-overlay-kind={rect.kind}
-                data-drive-annotation-overlay-thread-id={rect.threadId ?? undefined}
-                className={cn(
-                  'absolute mix-blend-multiply dark:mix-blend-screen',
-                  rect.kind === 'pending'
-                    ? 'bg-amber-200/55 ring-1 ring-amber-300/70 dark:bg-amber-800/40 dark:ring-amber-600/60'
-                    : rect.threadId === activeThreadId
-                      ? 'bg-amber-200/70 ring-1 ring-amber-400/70 dark:bg-amber-800/45 dark:ring-amber-600/70'
-                      : 'bg-amber-200/55 dark:bg-amber-800/35'
-                )}
-                style={{
-                  top: rect.top,
-                  left: rect.left,
-                  width: rect.width,
-                  height: rect.height,
-                }}
-              />
-            ))}
-          </div>
-        ) : null}
-        {preview.truncated ? (
-          <div className='mt-4 border-t pt-2 text-xs text-muted-foreground'>内容已截断</div>
+          ref={documentContentRef}
+          data-markdown-width-mode={widthMode}
+          className={cn(
+            'relative mx-auto',
+            widthMode === 'reading' ? 'max-w-3xl' : 'w-full max-w-none'
+          )}
+        >
+          <div
+            ref={bodyRef}
+            data-testid='markdown-body'
+            className={MARKDOWN_BODY_CLASSNAME}
+            onClick={handleBodyClick}
+            onPointerUp={syncSelectionActionFromCurrentSelection}
+            dangerouslySetInnerHTML={annotatedHtmlProperty}
+          />
+          {annotationOverlayRects.length > 0 ? (
+            <div aria-hidden className='pointer-events-none absolute inset-0'>
+              {annotationOverlayRects.map((rect) => (
+                <div
+                  key={rect.key}
+                  data-drive-annotation-overlay-kind={rect.kind}
+                  data-drive-annotation-overlay-thread-id={rect.threadId ?? undefined}
+                  className={cn(
+                    'absolute mix-blend-multiply dark:mix-blend-screen',
+                    rect.kind === 'pending'
+                      ? 'bg-amber-200/55 ring-1 ring-amber-300/70 dark:bg-amber-800/40 dark:ring-amber-600/60'
+                      : rect.threadId === activeThreadId
+                        ? 'bg-amber-200/70 ring-1 ring-amber-400/70 dark:bg-amber-800/45 dark:ring-amber-600/70'
+                        : 'bg-amber-200/55 dark:bg-amber-800/35'
+                  )}
+                  style={{
+                    top: rect.top,
+                    left: rect.left,
+                    width: rect.width,
+                    height: rect.height,
+                  }}
+                />
+              ))}
+            </div>
+          ) : null}
+          {preview.truncated ? (
+            <div className='mt-4 border-t pt-2 text-xs text-muted-foreground'>内容已截断</div>
+          ) : null}
+        </div>
+        {commentBottomCompensation > 0 ? (
+          <div
+            aria-hidden
+            data-markdown-comment-bottom-compensation='true'
+            style={{ height: commentBottomCompensation }}
+          />
         ) : null}
       </div>
     </div>
@@ -619,6 +742,9 @@ function DriveMarkdownBody({
       canReply={canCreateAnnotation}
       loading={annotations.loading}
       anchorBaseOffset={commentAnchorBaseOffset}
+      anchorLayerRef={mode === 'anchored' ? setCommentAnchorLayerRef : undefined}
+      onAnchoredHeightChange={mode === 'anchored' ? setCommentAnchoredDocumentHeight : undefined}
+      onAnchoredWheel={mode === 'anchored' ? handleCommentsWheel : undefined}
       onFocusThread={focusThreadFromRail}
       onRefresh={() => { void annotations.refresh() }}
       onReply={annotations.reply}
@@ -692,9 +818,9 @@ function DriveMarkdownBody({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <div ref={layoutRef} data-testid='markdown-layout' className='h-full min-h-0 w-full overflow-auto'>
+      <div data-testid='markdown-layout' className='h-full min-h-0 w-full overflow-hidden'>
         {isCompact ? documentView : (
-          <ResizablePanelGroup orientation='horizontal' className='!h-auto min-h-full !overflow-visible'>
+          <ResizablePanelGroup orientation='horizontal' className='h-full min-h-0 overflow-hidden'>
             {outlinePanelOpen ? (
               <>
                 <ResizablePanel
@@ -705,12 +831,16 @@ function DriveMarkdownBody({
                   data-panel-min-size={outlinePanelMinSize}
                   data-panel-max-size={outlinePanelMaxSize}
                   data-markdown-resizable-panel='outline'
-                  className='min-h-full !overflow-visible'
+                  className='h-full min-h-0 overflow-hidden'
                 >
-                  <aside className='min-h-full overflow-hidden px-4 py-6 md:px-6'>
-                    <nav className='sticky top-6 max-h-[calc(100vh-3rem)] overflow-auto' aria-label='目录'>
-                      <p className='mb-2 text-xs font-medium text-muted-foreground'>目录</p>
-                      <MarkdownOutlineTree items={outline} />
+                  <aside className='flex h-full min-h-0 flex-col overflow-hidden py-6'>
+                    <p className='mb-2 shrink-0 px-4 text-xs font-medium text-muted-foreground md:px-6'>目录</p>
+                    <nav ref={outlineScrollRef} className='min-h-0 flex-1 overflow-y-auto px-4 md:px-6' aria-label='目录'>
+                      <MarkdownOutlineTree
+                        items={outline}
+                        activeItemId={activeOutlineId}
+                        onSelect={scrollToOutlineItem}
+                      />
                     </nav>
                   </aside>
                 </ResizablePanel>
@@ -721,7 +851,7 @@ function DriveMarkdownBody({
               defaultSize={documentPanelDefaultSize}
               minSize='35%'
               data-markdown-resizable-panel='document'
-              className='min-h-full min-w-0 !overflow-visible'
+              className='h-full min-h-0 min-w-0 overflow-hidden'
             >
               {documentView}
             </ResizablePanel>
@@ -736,9 +866,9 @@ function DriveMarkdownBody({
                   data-panel-min-size={commentsPanelMinSize}
                   data-panel-max-size={commentsPanelMaxSize}
                   data-markdown-resizable-panel='comments'
-                  className='min-h-full !overflow-visible'
+                  className='h-full min-h-0 overflow-hidden'
                 >
-                  <aside className='min-h-full self-stretch border-l bg-background'>
+                  <aside className='h-full min-h-0 self-stretch overflow-hidden border-l bg-background'>
                     {renderCommentsRail('anchored')}
                   </aside>
                 </ResizablePanel>
@@ -761,7 +891,11 @@ function DriveMarkdownBody({
               <MarkdownOutlineTree
                 items={outline}
                 compact
-                onSelect={() => setCompactPanel(null)}
+                activeItemId={activeOutlineId}
+                onSelect={(itemId) => {
+                  scrollToOutlineItem(itemId)
+                  setCompactPanel(null)
+                }}
               />
             </nav>
           </SheetContent>
@@ -799,6 +933,26 @@ function encodeStateVector(doc: Y.Doc): string {
   let binary = ''
   for (let index = 0; index < value.length; index += 1) binary += String.fromCharCode(value[index] ?? 0)
   return btoa(binary)
+}
+
+function flattenMarkdownOutline(items: readonly DriveMarkdownOutlineItemDto[]): DriveMarkdownOutlineItemDto[] {
+  return items.flatMap((item) => [item, ...flattenMarkdownOutline(item.children)])
+}
+
+function findMarkdownHeadingById(root: HTMLElement, itemId: string): HTMLElement | null {
+  const element = root.ownerDocument.getElementById(itemId)
+  return element && root.contains(element) ? element : null
+}
+
+function setCommentAnchorLayerScrollTransform(element: HTMLElement | null, scrollTop: number): void {
+  if (!element) return
+  element.style.transform = `translate3d(0, ${-scrollTop}px, 0)`
+}
+
+function normalizeWheelDelta(event: Pick<WheelEvent, 'deltaMode' | 'deltaY'>, pageHeight: number): number {
+  if (event.deltaMode === 1) return event.deltaY * 16
+  if (event.deltaMode === 2) return event.deltaY * pageHeight
+  return event.deltaY
 }
 
 function resizablePanelPercent(value: number): ResizablePanelPercent {
@@ -1094,10 +1248,12 @@ function sameOverlayRects(left: readonly MarkdownAnnotationOverlayRect[], right:
 export function MarkdownOutlineTree({
   items,
   compact = false,
+  activeItemId,
   onSelect,
 }: {
   readonly items: readonly DriveMarkdownOutlineItemDto[]
   readonly compact?: boolean
+  readonly activeItemId?: string | null
   readonly onSelect?: (itemId: string) => void
 }) {
   return (
@@ -1107,6 +1263,7 @@ export function MarkdownOutlineTree({
           key={item.id}
           item={item}
           compact={compact}
+          activeItemId={activeItemId}
           onSelect={onSelect}
         />
       ))}
@@ -1117,22 +1274,32 @@ export function MarkdownOutlineTree({
 function MarkdownOutlineNode({
   item,
   compact,
+  activeItemId,
   onSelect,
 }: {
   readonly item: DriveMarkdownOutlineItemDto
   readonly compact: boolean
+  readonly activeItemId?: string | null
   readonly onSelect?: (itemId: string) => void
 }) {
+  const active = item.id === activeItemId
   return (
     <li>
       <a
         className={cn(
           'truncate rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           compact ? 'flex min-h-11 items-center py-2 text-sm' : 'block py-1 text-xs',
+          active && 'bg-muted font-medium text-foreground',
           outlineDepthClassName(item.depth)
         )}
+        data-markdown-outline-id={item.id}
         href={`#${item.id}`}
-        onClick={() => onSelect?.(item.id)}
+        aria-current={active ? 'location' : undefined}
+        onClick={(event) => {
+          if (!onSelect) return
+          event.preventDefault()
+          onSelect(item.id)
+        }}
       >
         {item.text}
       </a>
@@ -1140,6 +1307,7 @@ function MarkdownOutlineNode({
         <MarkdownOutlineTree
           items={item.children}
           compact={compact}
+          activeItemId={activeItemId}
           onSelect={onSelect}
         />
       ) : null}

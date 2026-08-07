@@ -15,6 +15,7 @@ export type MarkdownAnnotationResolvedRange = {
   readonly threadId: string
   readonly anchorStatus: DriveAnnotationAnchorStatus
   readonly range: { readonly start: number; readonly end: number } | null
+  readonly renderedRange?: { readonly start: number; readonly end: number } | null
   readonly positionStatus?: DriveAnnotationPositionStatus
   readonly quoteStatus?: DriveAnnotationQuoteStatus
   readonly sourceRange?: DriveAnnotationTextPositionSelector | null
@@ -57,7 +58,10 @@ export function renderMarkdownAnnotationHtml(
         return {
           threadId: thread.id,
           anchorStatus: resolution.positionStatus === 'attached' ? 'attached' as const : 'orphaned' as const,
-          range: resolution.positionStatus === 'attached' ? resolution.renderedRange : null,
+          range: resolution.positionStatus === 'attached' && resolution.renderedRange
+            ? codePointRangeToUtf16(renderedText, resolution.renderedRange)
+            : null,
+          renderedRange: resolution.renderedRange,
           positionStatus: resolution.positionStatus,
           quoteStatus: resolution.quoteStatus,
           sourceRange: resolution.sourceRange,
@@ -67,7 +71,10 @@ export function renderMarkdownAnnotationHtml(
       return {
         threadId: thread.id,
         anchorStatus: thread.anchor.positionStatus === 'attached' && thread.anchor.resolvedRenderedRange ? 'attached' as const : 'orphaned' as const,
-        range: thread.anchor.positionStatus === 'attached' ? thread.anchor.resolvedRenderedRange : null,
+        range: thread.anchor.positionStatus === 'attached' && thread.anchor.resolvedRenderedRange
+          ? codePointRangeToUtf16(renderedText, thread.anchor.resolvedRenderedRange)
+          : null,
+        renderedRange: thread.anchor.resolvedRenderedRange,
         positionStatus: thread.anchor.positionStatus,
         quoteStatus: thread.anchor.quoteStatus,
         sourceRange: thread.anchor.resolvedSourceRange,
@@ -81,6 +88,17 @@ export function renderMarkdownAnnotationHtml(
   })
 
   return { html, resolved }
+}
+
+function codePointRangeToUtf16(
+  value: string,
+  range: { readonly start: number; readonly end: number },
+): { readonly start: number; readonly end: number } {
+  const codePoints = Array.from(value)
+  return {
+    start: codePoints.slice(0, range.start).join('').length,
+    end: codePoints.slice(0, range.end).join('').length,
+  }
 }
 
 export function resolveMarkdownAnnotationTextRange(
