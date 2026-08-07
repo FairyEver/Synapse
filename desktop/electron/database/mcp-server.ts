@@ -117,6 +117,7 @@ function applyCorsHeaders(req: IncomingMessage, res: ServerResponse): boolean {
 }
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  res.setHeader("Connection", "close")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
   if (!applyCorsHeaders(req, res)) {

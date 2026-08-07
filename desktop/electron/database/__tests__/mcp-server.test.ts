@@ -1,4 +1,4 @@
-import { request } from "node:http"
+import { Agent, request } from "node:http"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("../../services/log-store", () => ({
@@ -52,6 +52,37 @@ function postJson(
   })
 }
 
+function postJsonWithKeepAlive(
+  port: number,
+  payload: unknown,
+  agent: Agent,
+): Promise<{ connection: string | undefined; reusedSocket: boolean }> {
+  return new Promise((resolve, reject) => {
+    const body = Buffer.from(JSON.stringify(payload), "utf8")
+    const req = request({
+      method: "POST",
+      hostname: "127.0.0.1",
+      port,
+      path: "/mcp",
+      agent,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Length": body.length,
+      },
+    }, (res) => {
+      res.resume()
+      res.on("end", () => {
+        resolve({
+          connection: res.headers.connection,
+          reusedSocket: req.reusedSocket,
+        })
+      })
+    })
+    req.on("error", reject)
+    req.end(body)
+  })
+}
+
 describe("MCP HTTP server", () => {
   afterEach(async () => {
     const { stopMcpServer } = await import("../mcp-server")
@@ -84,6 +115,32 @@ describe("MCP HTTP server", () => {
         serverInfo: { name: "synapse-mcp" },
       },
     })
+  })
+
+  it("closes each response instead of leaving an idle keep-alive connection", async () => {
+    const { startMcpServer } = await import("../mcp-server")
+    const port = await startMcpServer({
+      dispatch: vi.fn(),
+    })
+    const agent = new Agent({ keepAlive: true })
+
+    try {
+      const first = await postJsonWithKeepAlive(port, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "ping",
+      }, agent)
+      const second = await postJsonWithKeepAlive(port, {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "ping",
+      }, agent)
+
+      expect(first).toEqual({ connection: "close", reusedSocket: false })
+      expect(second).toEqual({ connection: "close", reusedSocket: false })
+    } finally {
+      agent.destroy()
+    }
   })
 
   it("accepts local MCP requests even when an invalid Authorization header is present", async () => {
