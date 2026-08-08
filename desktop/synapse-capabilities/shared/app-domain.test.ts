@@ -255,6 +255,11 @@ describe("App capability domain", () => {
               expect.objectContaining({ type: "null" }),
             ]) }),
             environment: expect.objectContaining({ type: "object" }),
+            inheritEnvironmentKeys: expect.objectContaining({
+              type: "array",
+              maxItems: 256,
+              items: expect.objectContaining({ type: "string", pattern: "^[A-Za-z_][A-Za-z0-9_]*$" }),
+            }),
           },
           additionalProperties: false,
         }),

@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type {
   SynapseTerminalDataEvent,
+  SynapseTerminalGlobalLaunchSettings,
   SynapseTerminalGroup,
   SynapseTerminalGroupCommand,
   SynapseTerminalOutputChunk,
@@ -14,6 +15,10 @@ import type {
 } from "../../../../src/types/terminal"
 
 const bridgeState = vi.hoisted(() => ({
+  globalLaunch: {
+    revision: 1,
+    updatedAt: "2026-08-08T00:00:00.000Z",
+  } as SynapseTerminalGlobalLaunchSettings,
   groups: [] as SynapseTerminalGroup[],
   sessions: [] as SynapseTerminalSession[],
   chunks: [] as SynapseTerminalOutputChunk[],
@@ -42,8 +47,27 @@ const bridgeState = vi.hoisted(() => ({
 }))
 
 const terminalBridge = vi.hoisted(() => ({
-  chooseDefaultCwd: vi.fn(async () => "/repo/app"),
+  chooseCwd: vi.fn(async () => "/repo/app"),
+  revealEnvironmentValue: vi.fn(async () => null),
+  copyEnvironmentValue: vi.fn(async () => undefined),
+  getGlobalLaunchSettings: vi.fn(async () => bridgeState.globalLaunch),
+  updateGlobalLaunchSettings: vi.fn(async ({ expectedRevision, settings }: {
+    expectedRevision: number
+    settings?: SynapseTerminalGlobalLaunchSettings["settings"]
+  }) => {
+    bridgeState.globalLaunch = {
+      revision: expectedRevision + 1,
+      updatedAt: "2026-08-08T00:01:00.000Z",
+      settings,
+    }
+    return bridgeState.globalLaunch
+  }),
   listGroups: vi.fn(async () => bridgeState.groups),
+  getGroup: vi.fn(async ({ groupId }: { groupId: string }) => {
+    const group = bridgeState.groups.find((item) => item.id === groupId)
+    if (!group) throw new Error("Group not found")
+    return group
+  }),
   createGroup: vi.fn(async ({ name }: { name: string }) => {
     const group = createGroup({
       id: `group-${bridgeState.groups.length + 1}`,
@@ -76,6 +100,11 @@ const terminalBridge = vi.hoisted(() => ({
     } as SynapseTerminalGroup
     bridgeState.groups = bridgeState.groups.map((item) => item.id === groupId ? group : item)
     return group
+  }),
+  getGroupCommand: vi.fn(async ({ groupId, commandId }: { groupId: string; commandId: string }) => {
+    const command = bridgeState.groups.find((item) => item.id === groupId)?.settings?.commands?.find((item) => item.id === commandId)
+    if (!command) throw new Error("Command not found")
+    return command
   }),
   createGroupCommand: vi.fn(async ({ groupId, name, command }: {
     groupId: string
@@ -292,20 +321,31 @@ const webglState = vi.hoisted(() => ({
 
 const toastState = vi.hoisted(() => ({
   error: vi.fn(),
+  success: vi.fn(),
 }))
 
 vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
     if (domain === "terminal") return terminalDomainCache.value ??= {
+      globalLaunch: {
+        get: terminalBridge.getGlobalLaunchSettings,
+        update: terminalBridge.updateGlobalLaunchSettings,
+      },
+      launch: {
+        chooseCwd: terminalBridge.chooseCwd,
+        revealEnvironmentValue: terminalBridge.revealEnvironmentValue,
+        copyEnvironmentValue: terminalBridge.copyEnvironmentValue,
+      },
       group: {
-        chooseDefaultCwd: terminalBridge.chooseDefaultCwd,
         list: terminalBridge.listGroups,
+        get: terminalBridge.getGroup,
         create: terminalBridge.createGroup,
         rename: terminalBridge.renameGroup,
         updateSettings: terminalBridge.updateGroupSettings,
         delete: terminalBridge.deleteGroup,
       },
       groupCommand: {
+        get: terminalBridge.getGroupCommand,
         create: terminalBridge.createGroupCommand,
         update: terminalBridge.updateGroupCommand,
         delete: terminalBridge.deleteGroupCommand,
@@ -472,6 +512,7 @@ let roots: Root[] = []
 
 beforeEach(() => {
   window.synapse = { platform: "darwin" } as typeof window.synapse
+  bridgeState.globalLaunch = { revision: 1, updatedAt: "2026-08-08T00:00:00.000Z" }
   bridgeState.groups = []
   bridgeState.sessions = []
   bridgeState.chunks = []
@@ -488,10 +529,16 @@ beforeEach(() => {
   bridgeState.resizedUnsubscribe.mockClear()
   bridgeState.domainChangedUnsubscribe.mockClear()
   terminalBridge.listGroups.mockClear()
-  terminalBridge.chooseDefaultCwd.mockClear()
+  terminalBridge.getGroup.mockClear()
+  terminalBridge.chooseCwd.mockClear()
+  terminalBridge.revealEnvironmentValue.mockClear()
+  terminalBridge.copyEnvironmentValue.mockClear()
+  terminalBridge.getGlobalLaunchSettings.mockClear()
+  terminalBridge.updateGlobalLaunchSettings.mockClear()
   terminalBridge.createGroup.mockClear()
   terminalBridge.renameGroup.mockClear()
   terminalBridge.updateGroupSettings.mockClear()
+  terminalBridge.getGroupCommand.mockClear()
   terminalBridge.createGroupCommand.mockClear()
   terminalBridge.updateGroupCommand.mockClear()
   terminalBridge.deleteGroupCommand.mockClear()
@@ -512,6 +559,7 @@ beforeEach(() => {
   shellBridge.filePathForDroppedFile.mockClear()
   droppedPathState.paths = new WeakMap<object, string | null>()
   toastState.error.mockClear()
+  toastState.success.mockClear()
   terminalBridge.onData.mockClear()
   terminalBridge.onSessionChanged.mockClear()
   terminalBridge.onSessionDeleted.mockClear()
@@ -560,11 +608,34 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("Session 1")
   })
 
-  it("does not render a global new terminal action in the embedded header", async () => {
+  it("renders terminal actions in the embedded header", async () => {
     await renderEmbeddedModule()
 
     const actions = document.querySelector("[data-embedded-system-app-actions]")
-    expect(actions?.textContent).not.toContain("新建终端")
+    expect(actions?.textContent).toContain("新建终端")
+    expect(actions?.textContent).toContain("终端设置")
+  })
+
+  it("edits global launch settings from the terminal header without remounting the active terminal", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "zsh" })]
+    await renderEmbeddedModule()
+
+    await clickButton("终端设置")
+    expect(document.body.textContent).toContain("终端设置")
+    expect(document.querySelector('[data-slot="dialog-content"]')?.classList.contains("sm:max-w-3xl")).toBe(true)
+    expect(document.querySelectorAll('[data-slot="dialog-content"] [data-slot="dialog-close"]')).toHaveLength(1)
+    await changeInput("工作目录", "/repo/global")
+    expect(document.body.textContent).toContain("环境变量")
+    await clickButton("保存")
+
+    expect(terminalBridge.updateGlobalLaunchSettings).toHaveBeenCalledWith({
+      expectedRevision: 1,
+      settings: {
+        defaultCwd: "/repo/global",
+      },
+    })
+    expect(xtermState.instances).toHaveLength(1)
   })
 
   it("keeps lost sessions read-only without terminal-pane actions", async () => {
@@ -583,7 +654,7 @@ describe("TerminalModule", () => {
 
     const actions = document.querySelector("[data-embedded-system-app-actions]")
     const main = document.body.querySelector("main")
-    expect(actions?.textContent).not.toContain("新建终端")
+    expect(actions?.textContent).toContain("新建终端")
     expect(document.body.textContent).toContain("已失联")
     expect(main?.textContent).not.toContain("同目录新开")
     expect(main?.textContent).not.toContain("终止进程")
@@ -858,21 +929,15 @@ describe("TerminalModule", () => {
     await clickGroupMenu("构建")
     await clickMenuItem("设置")
     await changeInput("分组名称", "开发")
-    await changeInput("默认目录", "/repo/app")
+    await changeInput("工作目录", "/repo/app")
     await clickButton("保存")
 
     expect(terminalBridge.updateGroupSettings).toHaveBeenCalledWith({
       groupId: "group-build",
       name: "开发",
+      expectedLaunchRevision: 1,
       settings: {
         defaultCwd: "/repo/app",
-        commands: [{
-          id: "cmd-dev",
-          name: "dev",
-          command: "pnpm dev",
-          createdAt: "2026-06-24T00:00:00.000Z",
-          updatedAt: "2026-06-24T00:00:00.000Z",
-        }],
       },
     })
     expect(document.body.textContent).toContain("开发")
@@ -949,7 +1014,7 @@ describe("TerminalModule", () => {
     await clickMenuItem("设置")
 
     expect(document.body.textContent).toContain("分组设置")
-    expect(document.body.textContent).toContain("默认目录")
+    expect(document.body.textContent).toContain("工作目录")
     expect(document.body.textContent).not.toContain("启动命令")
   })
 
@@ -973,6 +1038,7 @@ describe("TerminalModule", () => {
 
     expect(terminalBridge.createGroupCommand).toHaveBeenCalledWith({
       groupId: "group-1",
+      expectedCommandCollectionRevision: 1,
       name: "dev",
       command: "pnpm dev",
     })
@@ -989,6 +1055,7 @@ describe("TerminalModule", () => {
       commandId: "cmd-1",
       name: "test",
       command: "pnpm test",
+      launch: {},
     })
 
     await clickButtonByAriaLabel("删除命令：test")
@@ -1005,7 +1072,7 @@ describe("TerminalModule", () => {
       name: "构建",
     })]
     bridgeState.sessions = []
-    terminalBridge.chooseDefaultCwd.mockResolvedValueOnce("/repo/chosen")
+    terminalBridge.chooseCwd.mockResolvedValueOnce("/repo/chosen")
 
     await renderModule()
     await clickGroupMenu("构建")
@@ -1013,10 +1080,11 @@ describe("TerminalModule", () => {
     await clickButton("选择")
     await clickButton("保存")
 
-    expect(terminalBridge.chooseDefaultCwd).toHaveBeenCalled()
+    expect(terminalBridge.chooseCwd).toHaveBeenCalled()
     expect(terminalBridge.updateGroupSettings).toHaveBeenCalledWith({
       groupId: "group-build",
       name: "构建",
+      expectedLaunchRevision: 1,
       settings: {
         defaultCwd: "/repo/chosen",
       },
@@ -1920,6 +1988,10 @@ function createGroup(overrides: Partial<SynapseTerminalGroup> = {}): SynapseTerm
     createdAt: "2026-06-24T00:00:00.000Z",
     updatedAt: "2026-06-24T00:00:00.000Z",
     sortOrder: 0,
+    groupRevision: 1,
+    launchRevision: 1,
+    membershipRevision: 1,
+    commandCollectionRevision: 1,
     ...overrides,
   }
 }

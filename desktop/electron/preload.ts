@@ -540,15 +540,25 @@ const synapseBridge: SynapseBridge = {
     },
   },
   terminal: {
+    globalLaunch: {
+      get: () => invoke(IPC_CHANNELS.terminal.getGlobalLaunchSettings)(),
+      update: (input) => invoke(IPC_CHANNELS.terminal.updateGlobalLaunchSettings)(input),
+    },
+    launch: {
+      chooseCwd: () => invoke(IPC_CHANNELS.terminal.chooseCwd)(),
+      revealEnvironmentValue: (input) => invoke(IPC_CHANNELS.terminal.revealEnvironmentValue)(input),
+      copyEnvironmentValue: (input) => invoke(IPC_CHANNELS.terminal.copyEnvironmentValue)(input),
+    },
     group: {
-      chooseDefaultCwd: () => invoke(IPC_CHANNELS.terminal.chooseDefaultCwd)(),
       list: () => invoke(IPC_CHANNELS.terminal.listGroups)(),
+      get: (input) => invoke(IPC_CHANNELS.terminal.getGroup)(input),
       create: (input) => invoke(IPC_CHANNELS.terminal.createGroup)(input),
       rename: (input) => invoke(IPC_CHANNELS.terminal.renameGroup)(input),
       updateSettings: (input) => invoke(IPC_CHANNELS.terminal.updateGroupSettings)(input),
       delete: (input) => invoke(IPC_CHANNELS.terminal.deleteGroup)(input),
     },
     groupCommand: {
+      get: (input) => invoke(IPC_CHANNELS.terminal.getGroupCommand)(input),
       create: (input) => invoke(IPC_CHANNELS.terminal.createGroupCommand)(input),
       update: (input) => invoke(IPC_CHANNELS.terminal.updateGroupCommand)(input),
       delete: (input) => invoke(IPC_CHANNELS.terminal.deleteGroupCommand)(input),

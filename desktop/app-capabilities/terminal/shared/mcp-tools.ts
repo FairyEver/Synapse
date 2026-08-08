@@ -22,6 +22,8 @@ import {
   terminalGroupListInputSchema,
   terminalGroupRenameInputSchema,
   terminalGroupTargetSchema,
+  terminalGlobalLaunchGetInputSchema,
+  terminalGlobalLaunchUpdateInputSchema,
   terminalLeaseOperationInputSchema,
   terminalObserveInputSchema,
   terminalOperationGetInputSchema,
@@ -44,6 +46,8 @@ import {
 const schemaByCapabilityId: Readonly<Record<string, ZodType>> = {
   "app.terminal.capabilities.get": terminalRequestBaseSchema,
   "app.terminal.diagnostics.get": terminalPagedRequestSchema,
+  "app.terminal.global_launch.get": terminalGlobalLaunchGetInputSchema,
+  "app.terminal.global_launch.update": terminalGlobalLaunchUpdateInputSchema,
   "app.terminal.group.list": terminalGroupListInputSchema,
   "app.terminal.group.get": terminalGroupTargetSchema,
   "app.terminal.group.create": terminalGroupCreateInputSchema,

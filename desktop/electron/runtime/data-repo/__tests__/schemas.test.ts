@@ -70,6 +70,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.terminal.commands",
         "app.terminal.delete-intents",
         "app.terminal.domain-state",
+        "app.terminal.global-launch",
+        "app.terminal.global-launch-bodies",
         "app.terminal.group-launch-bodies",
         "app.terminal.groups",
         "app.terminal.idempotency",
@@ -283,6 +285,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       const expected = schema.name === "secrets"
         || schema.name === "app.secrets.items"
         || schema.name === "app.terminal.command-bodies"
+        || schema.name === "app.terminal.global-launch-bodies"
         || schema.name === "app.terminal.group-launch-bodies"
         || schema.name === "app.terminal.launch-bodies"
         || schema.name === "webhook.config"

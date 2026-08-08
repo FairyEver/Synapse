@@ -38,6 +38,8 @@ import {
   terminalGroupListInputSchema,
   terminalGroupRenameInputSchema,
   terminalGroupTargetSchema,
+  terminalGlobalLaunchGetInputSchema,
+  terminalGlobalLaunchUpdateInputSchema,
   terminalLeaseOperationInputSchema,
   terminalObserveInputSchema,
   terminalOperationGetInputSchema,
@@ -63,6 +65,7 @@ import {
   terminalResult,
 } from "../shared/errors"
 import { terminalInputSchemaForCapability } from "../shared/mcp-tools"
+import type { TerminalLaunchLayer } from "../shared/schema"
 import type { TerminalControllerContext, TerminalService } from "./service"
 
 const TERMINAL_PERMISSION_ACTIONS: Readonly<Record<TerminalPermissionFamily, PermissionAction>> = {
@@ -80,6 +83,7 @@ const TERMINAL_PERMISSION_ACTIONS: Readonly<Record<TerminalPermissionFamily, Per
   "session.stop": "terminal.session.stop",
   "session.forceStop": "terminal.session.forceStop",
   "metadata.manage": "terminal.metadata.manage",
+  "settings.manage": "terminal.settings.manage",
   "group.manage": "terminal.group.manage",
   "command.manage": "terminal.command.manage",
   "session.delete": "terminal.session.delete",
@@ -214,6 +218,7 @@ const SERVICE_IDEMPOTENT_ACTIONS = new Set([
 ])
 
 const PERSISTED_MUTATION_ACTIONS = new Set([
+  "app.terminal.global_launch.update",
   "app.terminal.group.create",
   "app.terminal.group.rename",
   "app.terminal.group.delete",
@@ -256,6 +261,33 @@ async function dispatchAuthorizedCore(
       generatedAt: new Date().toISOString(),
     }
   }
+  if (action === "app.terminal.global_launch.get") {
+    terminalGlobalLaunchGetInputSchema.parse(params)
+    const settings = service.getGlobalLaunchSettings()
+    return {
+      revision: settings.revision,
+      updatedAt: settings.updatedAt,
+      defaultCwd: settings.settings?.defaultCwd ?? null,
+      shell: settings.settings?.shell ?? null,
+      environment: environmentMetadata(settings.settings?.environment, "global"),
+    }
+  }
+  if (action === "app.terminal.global_launch.update") {
+    const input = terminalGlobalLaunchUpdateInputSchema.parse(params)
+    const current = service.getGlobalLaunchSettings()
+    requireRevision(current.revision, input.expectedRevision, "revision")
+    const updated = await service.updateGlobalLaunchSettings({
+      expectedRevision: input.expectedRevision,
+      settings: mergeLaunchLayer(current.settings, input.settings),
+    })
+    return mutationResult({
+      revision: updated.revision,
+      updatedAt: updated.updatedAt,
+      defaultCwd: updated.settings?.defaultCwd ?? null,
+      shell: updated.settings?.shell ?? null,
+      environment: environmentMetadata(updated.settings?.environment, "global"),
+    }, current.revision, updated.revision, updated !== current)
+  }
   if (action === "app.terminal.group.list") {
     const input = terminalGroupListInputSchema.parse(params)
     const visible = await filterAuthorizedResources(
@@ -296,29 +328,19 @@ async function dispatchAuthorizedCore(
       launchRevision: group.launchRevision,
       defaultCwd: group.settings?.defaultCwd ?? null,
       shell: group.settings?.shell ?? null,
-      environmentKeys: Object.keys(group.settings?.environment ?? {}).sort(),
+      environment: environmentMetadata(group.settings?.environment, "group"),
     }
   }
   if (action === "app.terminal.group_launch.update") {
     const input = terminalGroupLaunchUpdateInputSchema.parse(params)
     const group = requireGroup(service, input.groupId)
     requireRevision(group.launchRevision, input.expectedLaunchRevision, "launchRevision")
-    const defaultCwd = input.settings.defaultCwd === undefined
-      ? group.settings?.defaultCwd
-      : input.settings.defaultCwd ?? undefined
-    const shell = input.settings.shell === undefined
-      ? group.settings?.shell
-      : input.settings.shell ?? undefined
-    const environment = input.settings.environment === undefined
-      ? group.settings?.environment
-      : input.settings.environment
+    const launch = mergeLaunchLayer(group.settings, input.settings)
     const updated = await service.updateGroupSettings({
       groupId: group.id,
       name: group.name,
       settings: {
-        ...(defaultCwd ? { defaultCwd } : {}),
-        ...(shell ? { shell } : {}),
-        ...(environment && Object.keys(environment).length ? { environment } : {}),
+        ...launch,
         ...(group.settings?.commands ? { commands: group.settings.commands } : {}),
         ...(group.settings?.startupCommand ? { startupCommand: group.settings.startupCommand } : {}),
       },
@@ -341,20 +363,38 @@ async function dispatchAuthorizedCore(
   if (action === "app.terminal.group_command.get") {
     const input = terminalGroupCommandTargetSchema.parse(params)
     const command = requireCommand(requireGroup(service, input.groupId), input.commandId)
-    return { groupId: input.groupId, commandId: command.id, name: command.name, commandRevision: command.commandRevision, command: command.command }
+    return {
+      groupId: input.groupId,
+      commandId: command.id,
+      name: command.name,
+      commandRevision: command.commandRevision,
+      command: command.command,
+      launch: launchMetadata(command.launch, "command"),
+    }
   }
   if (action === "app.terminal.group_command.create") {
     const input = terminalGroupCommandCreateInputSchema.parse(params)
     const group = requireGroup(service, input.groupId)
     requireRevision(group.commandCollectionRevision, input.expectedCommandCollectionRevision, "commandCollectionRevision")
-    const command = await service.createGroupCommand({ groupId: input.groupId, name: input.name, command: input.command })
+    const command = await service.createGroupCommand({
+      groupId: input.groupId,
+      name: input.name,
+      command: input.command,
+      ...(input.launch ? { launch: launchLayerFromMcpInput(input.launch) } : {}),
+    })
     return commandSummary(input.groupId, command)
   }
   if (action === "app.terminal.group_command.update") {
     const input = terminalGroupCommandUpdateInputSchema.parse(params)
     const command = requireCommand(requireGroup(service, input.groupId), input.commandId)
     requireRevision(command.commandRevision, input.expectedCommandRevision, "commandRevision")
-    return commandSummary(input.groupId, await service.updateGroupCommand(input))
+    return commandSummary(input.groupId, await service.updateGroupCommand({
+      groupId: input.groupId,
+      commandId: input.commandId,
+      name: input.name,
+      command: input.command,
+      launch: input.launch ? launchLayerFromMcpInput(input.launch) : command.launch,
+    }))
   }
   if (action === "app.terminal.group_command.delete") {
     const input = terminalGroupCommandDeleteInputSchema.parse(params)
@@ -696,7 +736,73 @@ function sessionSummary(session: ReturnType<TerminalService["listSessions"]>[num
 }
 
 function commandSummary(groupId: string, command: ReturnType<typeof requireCommand>) {
-  return { groupId, commandId: command.id, name: command.name, commandRevision: command.commandRevision, createdAt: command.createdAt, updatedAt: command.updatedAt }
+  return {
+    groupId,
+    commandId: command.id,
+    name: command.name,
+    commandRevision: command.commandRevision,
+    createdAt: command.createdAt,
+    updatedAt: command.updatedAt,
+    launch: launchMetadata(command.launch, "command"),
+  }
+}
+
+function environmentMetadata(
+  environment: Record<string, string | null> | undefined,
+  source: "global" | "group" | "command",
+) {
+  return Object.entries(environment ?? {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => ({ key, action: value === null ? "unset" as const : "set" as const, source }))
+}
+
+function launchMetadata(
+  launch: TerminalLaunchLayer | undefined,
+  source: "global" | "group" | "command",
+) {
+  return {
+    defaultCwd: launch?.defaultCwd ?? null,
+    shell: launch?.shell ?? null,
+    environment: environmentMetadata(launch?.environment, source),
+  }
+}
+
+function mergeLaunchLayer(
+  current: TerminalLaunchLayer | undefined,
+  patch: {
+    defaultCwd?: string | null
+    shell?: string | null
+    environment?: Record<string, string | null>
+    inheritEnvironmentKeys?: readonly string[]
+  },
+): TerminalLaunchLayer | undefined {
+  const environment = patch.environment === undefined
+    ? current?.environment
+    : { ...current?.environment, ...patch.environment }
+  const nextEnvironment = environment ? { ...environment } : undefined
+  for (const key of patch.inheritEnvironmentKeys ?? []) delete nextEnvironment?.[key]
+  const next: TerminalLaunchLayer = {
+    ...((patch.defaultCwd === undefined ? current?.defaultCwd : patch.defaultCwd) ? {
+      defaultCwd: (patch.defaultCwd === undefined ? current?.defaultCwd : patch.defaultCwd)!,
+    } : {}),
+    ...((patch.shell === undefined ? current?.shell : patch.shell) ? {
+      shell: (patch.shell === undefined ? current?.shell : patch.shell)!,
+    } : {}),
+    ...(nextEnvironment && Object.keys(nextEnvironment).length ? { environment: nextEnvironment } : {}),
+  }
+  return Object.keys(next).length ? next : undefined
+}
+
+function launchLayerFromMcpInput(input: {
+  defaultCwd?: string | null
+  shell?: string | null
+  environment?: Record<string, string | null>
+}): TerminalLaunchLayer {
+  return {
+    ...(input.defaultCwd ? { defaultCwd: input.defaultCwd } : {}),
+    ...(input.shell ? { shell: input.shell } : {}),
+    ...(input.environment && Object.keys(input.environment).length ? { environment: input.environment } : {}),
+  }
 }
 
 function createdSession(session: ReturnType<TerminalService["getSession"]>, launchRevisionApplied: number | null) {

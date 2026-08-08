@@ -418,6 +418,7 @@ describe("ConfigBackupService quick inputs", () => {
         format: "synapse-backup-v1" as const,
         exportedAt: "2026-07-22T00:00:00.000Z",
         namespaces: [
+          { name: "app.terminal.global-launch-bodies", schemaVersion: 1, encrypted: true, data: { items: [{ id: "default", environment: { SECRET: "global secret" } }] } },
           { name: "app.terminal.command-bodies", schemaVersion: 1, encrypted: true, data: { items: [{ id: "body", body: "secret command" }] } },
           { name: "app.terminal.blocks", schemaVersion: 1, encrypted: false, data: { items: [{ id: "block", blockId: "block", sha256: "digest" }] } },
           { name: "app.terminal.sessions", schemaVersion: 2, encrypted: false, data: { items: [{ id: "session", launchBodyRef: "launch", lifecycle: "running", nextOutputSeq: 7 }] } },
@@ -429,11 +430,14 @@ describe("ConfigBackupService quick inputs", () => {
     const backup = await createConfigBackupPayload(new Date("2026-07-22T00:00:00.000Z"))
     expect(backup.dataRepository?.namespaces.find((entry) => entry.name === "app.terminal.command-bodies")?.data)
       .toEqual({ items: [] })
+    expect(backup.dataRepository?.namespaces.find((entry) => entry.name === "app.terminal.global-launch-bodies")?.data)
+      .toEqual({ items: [] })
     expect(backup.dataRepository?.namespaces.find((entry) => entry.name === "app.terminal.blocks")?.data)
       .toEqual({ items: [] })
     expect(backup.dataRepository?.namespaces.find((entry) => entry.name === "app.terminal.sessions")?.data)
       .toEqual({ items: [{ id: "session", lifecycle: "running", nextOutputSeq: 7 }] })
     expect(JSON.stringify(backup)).not.toContain("secret command")
+    expect(JSON.stringify(backup)).not.toContain("global secret")
   })
 
   it("imports DataRepository payloads from backups", async () => {

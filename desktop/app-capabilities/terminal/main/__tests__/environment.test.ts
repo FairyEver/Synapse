@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  resolveTerminalLaunchConfiguration,
   resolveTerminalEnvironment,
   resolveTerminalShellArgs,
 } from "../environment"
@@ -77,6 +78,74 @@ describe("TerminalEnvironmentResolver", () => {
       overrides: { USER_API_TOKEN: "explicit" },
     })
     expect(result.env.USER_API_TOKEN).toBe("explicit")
+  })
+
+  it("merges global, group, command, and one-time layers in order", () => {
+    const result = resolveTerminalLaunchConfiguration({
+      platform: "darwin",
+      global: { shell: "/bin/bash", defaultCwd: "/global", environment: { SHARED: "global", GLOBAL_ONLY: "yes" } },
+      group: { defaultCwd: "/group", environment: { SHARED: "group", GROUP_ONLY: "yes" } },
+      command: { shell: "/bin/zsh", environment: { SHARED: "command", GROUP_ONLY: null, EMPTY: "" } },
+      override: { defaultCwd: "/override", environment: { SHARED: "override" } },
+    })
+
+    expect(result).toEqual({
+      shell: "/bin/zsh",
+      cwd: "/override",
+      shellKind: "command",
+      cwdKind: "override",
+      environment: {
+        SHARED: "override",
+        GLOBAL_ONLY: "yes",
+        GROUP_ONLY: null,
+        EMPTY: "",
+      },
+      environmentEntries: [
+        { key: "EMPTY", action: "set", source: "command" },
+        { key: "GLOBAL_ONLY", action: "set", source: "global" },
+        { key: "GROUP_ONLY", action: "unset", source: "command" },
+        { key: "SHARED", action: "set", source: "override" },
+      ],
+    })
+  })
+
+  it("normalizes environment names case-insensitively only on Windows", () => {
+    expect(resolveTerminalLaunchConfiguration({
+      platform: "win32",
+      global: { environment: { Path: "global" } },
+      group: { environment: { PATH: "group" } },
+    }).environment).toEqual({ PATH: "group" })
+    expect(resolveTerminalLaunchConfiguration({
+      platform: "darwin",
+      global: { environment: { Path: "global" } },
+      group: { environment: { PATH: "group" } },
+    }).environment).toEqual({ Path: "global", PATH: "group" })
+  })
+
+  it("keeps empty strings and removes unset values from the spawned environment", () => {
+    const result = resolveTerminalEnvironment({
+      platform: "darwin",
+      baseEnv: { HOME: "/Users/test", SHELL: "/bin/zsh", PATH: "/usr/bin", LANG: "en_US.UTF-8" },
+      cwd: "/Users/test",
+      validateFilesystem: false,
+      overrides: { LANG: null, EMPTY: "" },
+      appVersion: "1.2.3",
+    })
+    expect(result.env).not.toHaveProperty("LANG")
+    expect(result.env.EMPTY).toBe("")
+    expect(result.env).toMatchObject({ TERM_PROGRAM: "Synapse", TERM_PROGRAM_VERSION: "1.2.3" })
+  })
+
+  it("rejects protected variables and bounded environment limits before launch", () => {
+    expect(() => resolveTerminalLaunchConfiguration({
+      global: { environment: { TERM_PROGRAM: "Other" } },
+    })).toThrow("Protected")
+    expect(() => resolveTerminalLaunchConfiguration({
+      global: { environment: Object.fromEntries(Array.from({ length: 257 }, (_, index) => [`KEY_${index}`, "value"])) },
+    })).toThrow("Too many")
+    expect(() => resolveTerminalLaunchConfiguration({
+      global: { environment: { TOO_LARGE: "x".repeat(32 * 1024 + 1) } },
+    })).toThrow("too large")
   })
 
   it("provides a UTF-8 locale for macOS GUI environments without locale variables", () => {

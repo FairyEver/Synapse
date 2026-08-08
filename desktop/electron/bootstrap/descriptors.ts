@@ -446,6 +446,7 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
         },
       }),
       logger: ctx.logger.child("terminal"),
+      appVersion: SYNAPSE_APP_VERSION,
     })
   },
   async start(instance) {

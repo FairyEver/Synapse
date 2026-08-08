@@ -6,6 +6,8 @@ Terminal MCP currently exposes one development contract. Tool names are the full
 
 - `app_terminal_capabilities_get`: local unauthenticated capability discovery for platform, risk, limits, degradation, persistence protection, termination matrix, and raw encoding.
 - `app_terminal_diagnostics_get`: bounded diagnostics only for the caller's authorized scope; it never reveals other actors or object usage.
+- `app_terminal_global_launch_get`: global Shell, cwd, environment key/action/source metadata, and revision. Environment values are never returned.
+- `app_terminal_global_launch_update`: sparse global launch mutation protected by exact revision and `settings.manage`. Unmentioned environment entries remain unchanged; list keys in `settings.inheritEnvironmentKeys` to remove the current-layer entry and restore inheritance.
 
 `supported` describes the current implementation and platform, not permission to exceed the user's request. If a required capability is degraded or unsupported, use only a documented narrower workflow; never substitute a higher-risk capability merely to bypass the limitation.
 
@@ -16,7 +18,7 @@ Terminal MCP currently exposes one development contract. Tool names are the full
 - `app_terminal_session_list`, `app_terminal_session_summary_get`: minimal non-state session summaries.
 - `app_terminal_session_state_list`, `app_terminal_session_state_get`: lifecycle, attention evidence, redacted lease occupancy, and state/output watermarks without output bytes.
 - `app_terminal_session_metadata_get`: sensitive launch metadata.
-- `app_terminal_group_launch_get`: sensitive group launch settings.
+- `app_terminal_group_launch_get`: group Shell, cwd, environment key/action/source metadata, and launch revision without environment values.
 - `app_terminal_group_command_get`: encrypted saved-command body when separately authorized.
 
 All lists have default and hard maximum limits and opaque cursors bound to their query. Do not reuse a cursor after changing filters. Titles and names are discovery aids only; a sensitive operation always uses a unique id and never guesses among multiple matches.
@@ -26,6 +28,8 @@ All lists have default and hard maximum limits and opaque cursors bound to their
 - `app_terminal_session_create`: ordinary UI-equivalent creation. With `groupId`, include exact `expectedLaunchRevision`. It does not accept cwd, shell, environment, or size overrides. The result includes the initial `inputRevision`, `stateRevision`, and output watermark so a known first action does not require a state read.
 - `app_terminal_session_override_create`: explicit controlled overrides. Initial dimensions additionally require the resize permission policy.
 - `app_terminal_group_command_launch`: only `groupId`, `commandId`, exact launch and command revisions, and idempotency. It accepts no command body or launch override.
+
+Ordinary creation resolves protected Synapse identity, global settings, group settings, and an optional saved-command layer before PTY spawn. Explicit one-time overrides are last. Settings changed afterward do not mutate a running session. A saved-command layer applies to the entire new session, while the saved command body remains the only delivered input sequence.
 
 Saved command bodies normalize CRLF to LF. Empty bodies are rejected, interior empty lines become Enter-only actions, one final LF only terminates the preceding line, and each additional final LF preserves one intentional empty line. Launch writes every logical line as `text` then `Enter`; it is not `shell -c` or a script transaction.
 
@@ -68,6 +72,7 @@ Termination operations progress independently through `pending_delivery`, `deliv
 
 ## Management
 
+- Global launch: `app_terminal_global_launch_get` and `app_terminal_global_launch_update`.
 - Groups: `app_terminal_group_create`, `app_terminal_group_rename`, `app_terminal_group_launch_update`, and `app_terminal_group_delete`.
 - Commands: `app_terminal_group_command_create`, `app_terminal_group_command_update`, and `app_terminal_group_command_delete`.
 - Sessions: `app_terminal_session_metadata_rename` and `app_terminal_session_resize`.
@@ -76,7 +81,7 @@ Use the exact revision named by each schema. Group metadata, launch settings, me
 
 ## Stable safety semantics
 
-Permission checks precede sensitive existence checks. An unauthorized request receives `permission_denied` without confirming whether the id exists. Errors and audit never contain input, output, command bodies, credentials, absolute paths, raw Base64, control sequences, or plaintext lease ids. Ordinary configuration backup excludes terminal output, checkpoints, command bodies, active leases, and short-lived idempotency state.
+Permission checks precede sensitive existence checks. An unauthorized request receives `permission_denied` without confirming whether the id exists. Errors, audit, and launch-setting MCP responses never contain environment values, input, output, command bodies, credentials, absolute paths, raw Base64, control sequences, or plaintext lease ids. Ordinary configuration backup excludes terminal environment bodies, output, checkpoints, command bodies, active leases, and short-lived idempotency state.
 
 Treat a rejection before side effects as an error. Once identity creation, byte acceptance, or platform delivery may have occurred, use the returned `outcome`, ids, revisions, and acceptance boundary to decide what is safe next. `accepted`, `partial`, `delivery_uncertain`, `no_op`, and `failed_after_identity_created` are not interchangeable. In particular, never automatically replay `partial` or `delivery_uncertain`, even when `retryable` is true; inspect the current facts and ask the user when the next action could duplicate or escalate a side effect.
 

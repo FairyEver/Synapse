@@ -4,15 +4,21 @@ import path from "node:path"
 import { z } from "zod"
 import { terminalOperationSchema } from "../shared/contract-schema"
 import {
+  terminalGlobalLaunchSettingsSchema,
   terminalGroupSchema,
   terminalOutputChunkSchema,
   terminalSessionSchema,
   type TerminalGroup,
+  type TerminalGlobalLaunchSettings,
   type TerminalOutputChunk,
   type TerminalSession,
 } from "../shared/schema"
 
 export const terminalStoreStateSchema = z.object({
+  globalLaunch: terminalGlobalLaunchSettingsSchema.default({
+    revision: 1,
+    updatedAt: new Date(0).toISOString(),
+  }),
   groups: z.array(terminalGroupSchema),
   sessions: z.array(terminalSessionSchema),
   output: z.array(terminalOutputChunkSchema),
@@ -42,6 +48,7 @@ export type TerminalStoreState = z.infer<typeof terminalStoreStateSchema>
 export type TerminalStore = {
   loadState(): Promise<TerminalStoreState>
   saveState(state: {
+    globalLaunch: TerminalGlobalLaunchSettings
     groups: TerminalGroup[]
     sessions: TerminalSession[]
     output: TerminalOutputChunk[]
@@ -63,7 +70,16 @@ export function createTerminalStore(options: { baseDir: string }): TerminalStore
         return parseTerminalStoreState(JSON.parse(raw))
       } catch (error) {
         if (isNodeError(error) && error.code === "ENOENT") {
-          return { groups: [], sessions: [], output: [], terminalDomainRevision: 0, operations: [], idempotency: [], checkpoints: [] }
+          return {
+            globalLaunch: { revision: 1, updatedAt: new Date(0).toISOString() },
+            groups: [],
+            sessions: [],
+            output: [],
+            terminalDomainRevision: 0,
+            operations: [],
+            idempotency: [],
+            checkpoints: [],
+          }
         }
         throw error
       }

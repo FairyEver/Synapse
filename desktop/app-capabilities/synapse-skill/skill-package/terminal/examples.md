@@ -15,6 +15,15 @@ Example request: "Open a new Synapse terminal, run the desktop tests, and tell m
 
 Do not use session overrides merely to choose a working directory. If the user needs a specific cwd, shell, environment, or initial size, explain that this is an explicit higher-risk override path and use `app_terminal_session_override_create` only when the request requires it.
 
+## Configure future Terminal launches
+
+Example request: "Make new Synapse terminals use wheel scrolling for Grok."
+
+1. Read `app_terminal_global_launch_get` and retain its exact revision. The result identifies existing keys and actions but never their values.
+2. Call `app_terminal_global_launch_update` with only the requested environment operation, the exact revision, and a fresh idempotency key. Do not replace or clear unmentioned keys.
+3. Report that the change affects new terminals only. Do not restart, stop, or rewrite an existing session unless the user separately requests it.
+4. When a narrower group or saved-command scope is requested, update that layer instead. Group overrides global; saved command overrides group for the whole new session.
+
 ## Create inside a named group
 
 Example request: "Create a terminal in the Frontend group and run the dev server."

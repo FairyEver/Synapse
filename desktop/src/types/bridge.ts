@@ -115,8 +115,11 @@ import type {
   SynapseTerminalDeleteGroupCommandInput,
   SynapseTerminalDeleteGroupInput,
   SynapseTerminalDeleteSessionInput,
+  SynapseTerminalEnvironmentValueInput,
   SynapseTerminalGroup,
   SynapseTerminalGroupCommand,
+  SynapseTerminalGroupSummary,
+  SynapseTerminalGlobalLaunchSettings,
   SynapseTerminalLaunchGroupCommandInput,
   SynapseTerminalReadSessionInput,
   SynapseTerminalReadSessionResult,
@@ -130,6 +133,7 @@ import type {
   SynapseTerminalStopSessionInput,
   SynapseTerminalUpdateGroupCommandInput,
   SynapseTerminalUpdateGroupSettingsInput,
+  SynapseTerminalUpdateGlobalLaunchSettingsInput,
   SynapseTerminalWriteSessionInput,
 } from "./terminal"
 import type {
@@ -1164,15 +1168,25 @@ export type SynapseBridge = {
     }
   }
   terminal: {
+    globalLaunch: {
+      get: () => Promise<SynapseTerminalGlobalLaunchSettings>
+      update: (input: SynapseTerminalUpdateGlobalLaunchSettingsInput) => Promise<SynapseTerminalGlobalLaunchSettings>
+    }
+    launch: {
+      chooseCwd: () => Promise<string | null>
+      revealEnvironmentValue: (input: SynapseTerminalEnvironmentValueInput) => Promise<string | null>
+      copyEnvironmentValue: (input: SynapseTerminalEnvironmentValueInput) => Promise<void>
+    }
     group: {
-      chooseDefaultCwd: () => Promise<string | null>
-      list: () => Promise<SynapseTerminalGroup[]>
-      create: (input: SynapseTerminalCreateGroupInput) => Promise<SynapseTerminalGroup>
-      rename: (input: SynapseTerminalRenameGroupInput) => Promise<SynapseTerminalGroup>
-      updateSettings: (input: SynapseTerminalUpdateGroupSettingsInput) => Promise<SynapseTerminalGroup>
+      list: () => Promise<SynapseTerminalGroupSummary[]>
+      get: (input: { groupId: string }) => Promise<SynapseTerminalGroup>
+      create: (input: SynapseTerminalCreateGroupInput) => Promise<SynapseTerminalGroupSummary>
+      rename: (input: SynapseTerminalRenameGroupInput) => Promise<SynapseTerminalGroupSummary>
+      updateSettings: (input: SynapseTerminalUpdateGroupSettingsInput) => Promise<SynapseTerminalGroupSummary>
       delete: (input: SynapseTerminalDeleteGroupInput) => Promise<void>
     }
     groupCommand: {
+      get: (input: { groupId: string; commandId: string }) => Promise<SynapseTerminalGroupCommand>
       create: (input: SynapseTerminalCreateGroupCommandInput) => Promise<SynapseTerminalGroupCommand>
       update: (input: SynapseTerminalUpdateGroupCommandInput) => Promise<SynapseTerminalGroupCommand>
       delete: (input: SynapseTerminalDeleteGroupCommandInput) => Promise<void>

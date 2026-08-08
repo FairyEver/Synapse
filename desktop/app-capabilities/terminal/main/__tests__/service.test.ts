@@ -67,6 +67,59 @@ describe("TerminalService core", () => {
     })
   })
 
+  it("applies global, group, and command launch settings to new PTYs only", async () => {
+    const cwd = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-layers-"))
+    const spawnPty = vi.fn(() => fakePty())
+    const service = createTerminalService({
+      store: memoryStore(),
+      spawnPty,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => cwd,
+      resolveEffectivePath: () => "/usr/bin:/bin",
+      appVersion: "9.8.7",
+    })
+    await service.start()
+    const before = await service.createSession({ title: "Before" })
+    await service.updateGlobalLaunchSettings({
+      expectedRevision: 1,
+      settings: { environment: { GROK_SCROLL_MODE: "wheel", GROK_SCROLL_LINES: "9", EMPTY: "" } },
+    })
+    const group = await service.createGroup({ name: "Grok" })
+    await service.updateGroupSettings({
+      groupId: group.id,
+      name: group.name,
+      settings: { environment: { GROK_SCROLL_LINES: "12", GROUP_ONLY: "yes" } },
+    })
+    const command = await service.createGroupCommand({
+      groupId: group.id,
+      name: "Resume",
+      command: "grok --resume",
+      launch: { environment: { GROUP_ONLY: null, COMMAND_ONLY: "yes" } },
+    })
+    const launched = await service.launchGroupCommand({ groupId: group.id, commandId: command.id })
+
+    expect(before.launchEnvironment).toBeUndefined()
+    expect(before.globalLaunchRevisionApplied).toBe(1)
+    expect(launched.launchEnvironment).toEqual({
+      GROK_SCROLL_MODE: "wheel",
+      GROK_SCROLL_LINES: "12",
+      EMPTY: "",
+      COMMAND_ONLY: "yes",
+    })
+    expect(launched.globalLaunchRevisionApplied).toBe(2)
+    expect(spawnPty).toHaveBeenLastCalledWith(expect.objectContaining({
+      env: expect.objectContaining({
+        GROK_SCROLL_MODE: "wheel",
+        GROK_SCROLL_LINES: "12",
+        EMPTY: "",
+        COMMAND_ONLY: "yes",
+        TERM_PROGRAM: "Synapse",
+        TERM_PROGRAM_VERSION: "9.8.7",
+      }),
+    }))
+    expect(spawnPty.mock.lastCall?.[0].env).not.toHaveProperty("GROUP_ONLY")
+  })
+
   it("allows one MCP client to keep more than eight sessions running", async () => {
     const { service } = await startedHarness()
     for (let index = 0; index < 9; index += 1) {

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { chmodSync, existsSync, statSync } from "node:fs"
+import { createRequire } from "node:module"
 import os from "node:os"
 import path from "node:path"
 
@@ -41,6 +42,8 @@ import type {
   TerminalGroup,
   TerminalGroupCommand,
   TerminalGroupSettings,
+  TerminalGlobalLaunchSettings,
+  TerminalLaunchLayer,
   TerminalLaunchGroupCommandInput,
   TerminalReadSessionInput,
   TerminalReadSessionResult,
@@ -51,11 +54,16 @@ import type {
   TerminalSession,
   TerminalStopSessionInput,
   TerminalUpdateGroupCommandInput,
+  TerminalUpdateGlobalLaunchSettingsInput,
   TerminalUpdateGroupSettingsInput,
   TerminalWriteSessionInput,
 } from "../shared/schema"
 import { createTerminalCoreEmulator, type TerminalCoreEmulator } from "./emulator"
-import { resolveTerminalEnvironment, resolveTerminalShellArgs } from "./environment"
+import {
+  resolveTerminalEnvironment,
+  resolveTerminalLaunchConfiguration,
+  resolveTerminalShellArgs,
+} from "./environment"
 import { createTerminalOutputBuffer, type TerminalOutputBuffer } from "./output-buffer"
 import type { TerminalStore, TerminalStoreState } from "./store"
 
@@ -141,6 +149,7 @@ const DELETE_TOMBSTONE_RETENTION_MS = 24 * 60 * 60 * 1_000
 const MAX_SEMANTIC_ACTIONS = 128
 const MAX_SEMANTIC_BYTES = 256 * 1024
 const NODE_PTY_SPAWN_HELPER_ENV = "SYNAPSE_NODE_PTY_SPAWN_HELPER"
+const requireNodePty = createRequire(__filename)
 let nodePtyModule: typeof import("node-pty") | undefined
 const KEY_BYTES: Readonly<Record<string, string>> = {
   Enter: "\r",
@@ -162,6 +171,7 @@ export function createTerminalService(deps: {
   readonly resolveDefaultShell?: () => string
   readonly resolveDefaultCwd?: () => string
   readonly resolveEffectivePath?: () => string | null
+  readonly appVersion?: string
   readonly spawnPty?: (input: SpawnPtyInput) => PtyLike
   readonly logger?: TerminalServiceLogger
 }) {
@@ -204,6 +214,10 @@ export function createTerminalService(deps: {
   const outputRetentionBytes = deps.outputRetentionBytes ?? TERMINAL_SESSION_OUTPUT_RETENTION_BYTES
   const globalOutputRetentionBytes = deps.globalOutputRetentionBytes ?? TERMINAL_GLOBAL_OUTPUT_RETENTION_BYTES
   let terminalDomainRevision = 0
+  let globalLaunch: TerminalGlobalLaunchSettings = {
+    revision: 1,
+    updatedAt: new Date(0).toISOString(),
+  }
   let persistInFlight: Promise<void> | undefined
   let persistPending = false
   let persistIdleWaiters: Array<() => void> = []
@@ -228,6 +242,7 @@ export function createTerminalService(deps: {
       }]
     })
     return {
+      globalLaunch,
       groups: [...groups.values()],
       sessions: [...sessions.values()],
       output: [...buffers.values()].flatMap((buffer) => buffer.snapshot()),
@@ -551,23 +566,33 @@ export function createTerminalService(deps: {
     source: "ui" | "mcp" = "ui",
     launchOverrides?: {
       readonly shell?: string
-      readonly environment?: Readonly<Record<string, string>>
+      readonly environment?: TerminalLaunchLayer["environment"]
       readonly overriddenFields?: readonly ("cwd" | "shell" | "environment" | "cols" | "rows")[]
     },
     createdByClientId?: string,
+    commandLaunch?: TerminalLaunchLayer,
   ): Promise<TerminalSession> {
     assertCreateQuota()
     const group = input.groupId ? getGroupOrThrow(input.groupId) : ensureDefaultGroup()
-    const launchEnvironment = {
-      ...(group.settings?.environment ?? {}),
-      ...(launchOverrides?.environment ?? {}),
-    }
-    const environment = resolveTerminalEnvironment({
-      shell: launchOverrides?.shell ?? group.settings?.shell ?? deps.resolveDefaultShell?.(),
-      cwd: input.cwd ?? group.settings?.defaultCwd ?? deps.resolveDefaultCwd?.() ?? os.homedir(),
-      effectivePath: deps.resolveEffectivePath?.(),
-      overrides: launchEnvironment,
+    const resolvedLaunch = resolveTerminalLaunchConfiguration({
+      global: globalLaunch.settings,
+      group: launchLayerFromGroup(group.settings),
+      command: commandLaunch,
+      override: {
+        ...(input.cwd ? { defaultCwd: input.cwd } : {}),
+        ...(launchOverrides?.shell ? { shell: launchOverrides.shell } : {}),
+        ...(launchOverrides?.environment ? { environment: launchOverrides.environment } : {}),
+      },
     })
+    const environment = resolveTerminalEnvironment({
+      shell: resolvedLaunch.shell ?? deps.resolveDefaultShell?.(),
+      cwd: resolvedLaunch.cwd ?? deps.resolveDefaultCwd?.() ?? os.homedir(),
+      effectivePath: deps.resolveEffectivePath?.(),
+      overrides: resolvedLaunch.environment,
+      appVersion: deps.appVersion,
+    })
+    const launchEnvironment = Object.fromEntries(Object.entries(resolvedLaunch.environment)
+      .filter((entry): entry is [string, string] => entry[1] !== null))
     const timestamp = now()
     const sessionId = randomUUID()
     const session: TerminalSession = {
@@ -603,17 +628,15 @@ export function createTerminalService(deps: {
       endTimeUnknown: false,
       inputHistoryBeforeBaselineUnknown: false,
       launchRevisionApplied: group.launchRevision,
+      globalLaunchRevisionApplied: globalLaunch.revision,
       discardedOutputBytes: 0,
       discardedOutputChunks: 0,
       ...(Object.keys(launchEnvironment).length ? { launchEnvironment } : {}),
       launchFacts: {
-        shellKind: launchOverrides?.overriddenFields?.includes("shell")
-          ? "override"
-          : group.settings?.shell ? "group" : "default",
-        cwdKind: launchOverrides?.overriddenFields?.includes("cwd")
-          ? "override"
-          : group.settings?.defaultCwd ? "group" : "default",
+        shellKind: resolvedLaunch.shellKind,
+        cwdKind: resolvedLaunch.cwdKind,
         environmentKeys: Object.keys(launchEnvironment).sort(),
+        environmentEntries: [...resolvedLaunch.environmentEntries],
         overriddenFields: [...(launchOverrides?.overriddenFields ?? [])],
         cols: input.cols ?? DEFAULT_COLS,
         rows: input.rows ?? DEFAULT_ROWS,
@@ -662,6 +685,10 @@ export function createTerminalService(deps: {
 
   async function start(): Promise<void> {
     const state = await deps.store.loadState()
+    globalLaunch = state.globalLaunch ?? {
+      revision: 1,
+      updatedAt: new Date(0).toISOString(),
+    }
     terminalDomainRevision = state.terminalDomainRevision
     groups.clear()
     sessions.clear()
@@ -767,6 +794,39 @@ export function createTerminalService(deps: {
     return [...groups.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id))
   }
 
+  function getGroup(groupId: string): TerminalGroup {
+    return getGroupOrThrow(groupId)
+  }
+
+  function getGroupCommand(groupId: string, commandId: string): TerminalGroupCommand {
+    return getCommand(getGroupOrThrow(groupId), commandId)
+  }
+
+  function getGlobalLaunchSettings(): TerminalGlobalLaunchSettings {
+    return globalLaunch
+  }
+
+  async function updateGlobalLaunchSettings(
+    input: TerminalUpdateGlobalLaunchSettingsInput,
+  ): Promise<TerminalGlobalLaunchSettings> {
+    if (input.expectedRevision !== globalLaunch.revision) {
+      throw terminalContractError("revision_conflict", "revision", {
+        details: { currentRevision: globalLaunch.revision },
+      })
+    }
+    const settings = normalizeLaunchLayer(input.settings)
+    if (hasSensitiveEnvironment(settings?.environment)) requireSensitivePersistence()
+    if (stableJson(settings ?? {}) === stableJson(globalLaunch.settings ?? {})) return globalLaunch
+    globalLaunch = {
+      revision: globalLaunch.revision + 1,
+      updatedAt: now(),
+      ...(settings ? { settings } : {}),
+    }
+    bumpDomain("global_launch.updated", "default", globalLaunch.revision)
+    await flushPersist()
+    return globalLaunch
+  }
+
   function listSessions(): TerminalSession[] {
     return [...sessions.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
   }
@@ -803,7 +863,14 @@ export function createTerminalService(deps: {
 
   async function updateGroupSettings(input: TerminalUpdateGroupSettingsInput): Promise<TerminalGroup> {
     const group = getGroupOrThrow(input.groupId)
-    const normalized = normalizeGroupSettings(input.settings, now())
+    if (input.expectedLaunchRevision !== undefined && input.expectedLaunchRevision !== group.launchRevision) {
+      throw terminalContractError("revision_conflict", "revision", { details: { currentRevision: group.launchRevision } })
+    }
+    const normalized = normalizeGroupSettings({
+      ...input.settings,
+      ...(group.settings?.commands?.length ? { commands: group.settings.commands } : {}),
+      ...(group.settings?.startupCommand ? { startupCommand: group.settings.startupCommand } : {}),
+    }, now())
     if (normalized?.commands?.length || normalized?.environment || normalized?.startupCommand) requireSensitivePersistence()
     const launchChanged = normalized?.defaultCwd !== group.settings?.defaultCwd
       || normalized?.shell !== group.settings?.shell
@@ -826,6 +893,9 @@ export function createTerminalService(deps: {
   async function createGroupCommand(input: TerminalCreateGroupCommandInput): Promise<TerminalGroupCommand> {
     requireSensitivePersistence()
     const group = getGroupOrThrow(input.groupId)
+    if (input.expectedCommandCollectionRevision !== undefined && input.expectedCommandCollectionRevision !== group.commandCollectionRevision) {
+      throw terminalContractError("revision_conflict", "revision", { details: { currentRevision: group.commandCollectionRevision } })
+    }
     const timestamp = now()
     const command: TerminalGroupCommand = {
       id: randomUUID(),
@@ -834,6 +904,10 @@ export function createTerminalService(deps: {
       createdAt: timestamp,
       updatedAt: timestamp,
       commandRevision: 1,
+      ...(() => {
+        const launch = normalizeLaunchLayer(input.launch)
+        return launch ? { launch } : {}
+      })(),
     }
     const commands = [...(group.settings?.commands ?? []), command]
     setGroupCommands(group, commands, "command.created")
@@ -845,13 +919,19 @@ export function createTerminalService(deps: {
     requireSensitivePersistence()
     const group = getGroupOrThrow(input.groupId)
     const existing = getCommand(group, input.commandId)
+    if (input.expectedCommandRevision !== undefined && input.expectedCommandRevision !== existing.commandRevision) {
+      throw terminalContractError("revision_conflict", "revision", { details: { currentRevision: existing.commandRevision } })
+    }
+    const launch = normalizeLaunchLayer(input.launch)
     const updated: TerminalGroupCommand = {
       ...existing,
       name: input.name.trim(),
       command: normalizeSavedCommand(input.command),
       updatedAt: now(),
       commandRevision: existing.commandRevision + 1,
+      ...(launch ? { launch } : {}),
     }
+    if (input.launch !== undefined && !launch) delete updated.launch
     setGroupCommands(group, (group.settings?.commands ?? []).map((item) => item.id === updated.id ? updated : item), "command.updated")
     await flushPersist()
     return updated
@@ -895,7 +975,7 @@ export function createTerminalService(deps: {
       title: command.name,
       cols: input.cols,
       rows: input.rows,
-    }, origin.source, undefined, origin.clientId)
+    }, origin.source, undefined, origin.clientId, command.launch)
     const operation = createOperation("command_delivery", session.id, "terminal-command-launch")
     if (session.status !== "running") {
       operation.status = "failed"
@@ -1914,7 +1994,11 @@ export function createTerminalService(deps: {
   return {
     start,
     stop,
+    getGlobalLaunchSettings,
+    updateGlobalLaunchSettings,
     listGroups,
+    getGroup,
+    getGroupCommand,
     createGroup,
     renameGroup,
     updateGroupSettings,
@@ -1989,7 +2073,7 @@ function loadNodePty(): typeof import("node-pty") {
   } else {
     delete process.env[NODE_PTY_SPAWN_HELPER_ENV]
   }
-  nodePtyModule = require("node-pty") as typeof import("node-pty")
+  nodePtyModule = requireNodePty("node-pty") as typeof import("node-pty")
   return nodePtyModule
 }
 
@@ -2021,27 +2105,55 @@ export function ensureExecutableIfPresent(filePath: string): void {
 
 function normalizeGroupSettings(settings: TerminalGroupSettings | undefined, timestamp: string): TerminalGroupSettings | undefined {
   if (!settings) return undefined
-  const defaultCwd = settings.defaultCwd?.trim()
-  const shell = settings.shell?.trim()
-  const environment = settings.environment && Object.keys(settings.environment).length
-    ? Object.fromEntries(Object.entries(settings.environment).sort(([left], [right]) => left.localeCompare(right)))
-    : undefined
+  const launch = normalizeLaunchLayer(settings)
   const commands = (settings.commands ?? []).map((command) => ({
     ...command,
     name: command.name.trim(),
     command: normalizeSavedCommand(command.command),
     updatedAt: command.updatedAt || timestamp,
     commandRevision: command.commandRevision || 1,
+    ...(() => {
+      const commandLaunch = normalizeLaunchLayer(command.launch)
+      return commandLaunch ? { launch: commandLaunch } : {}
+    })(),
   }))
   const startupCommand = settings.startupCommand?.trim()
-  if (!defaultCwd && !shell && !environment && !commands.length && !startupCommand) return undefined
+  if (!launch && !commands.length && !startupCommand) return undefined
   return {
-    ...(defaultCwd ? { defaultCwd: path.resolve(defaultCwd) } : {}),
-    ...(shell ? { shell } : {}),
-    ...(environment ? { environment } : {}),
+    ...(launch ?? {}),
     ...(commands.length ? { commands } : {}),
     ...(startupCommand ? { startupCommand: normalizeSavedCommand(startupCommand) } : {}),
   }
+}
+
+function normalizeLaunchLayer(settings: TerminalLaunchLayer | undefined): TerminalLaunchLayer | undefined {
+  if (!settings) return undefined
+  const defaultCwd = settings.defaultCwd?.trim()
+  const shell = settings.shell?.trim()
+  const environment = settings.environment && Object.keys(settings.environment).length
+    ? Object.fromEntries(Object.entries(settings.environment).sort(([left], [right]) => left.localeCompare(right)))
+    : undefined
+  if (!defaultCwd && !shell && !environment) return undefined
+  const normalized = {
+    ...(defaultCwd ? { defaultCwd: path.resolve(defaultCwd) } : {}),
+    ...(shell ? { shell } : {}),
+    ...(environment ? { environment } : {}),
+  }
+  resolveTerminalLaunchConfiguration({ global: normalized })
+  return normalized
+}
+
+function launchLayerFromGroup(settings: TerminalGroupSettings | undefined): TerminalLaunchLayer | undefined {
+  if (!settings) return undefined
+  return normalizeLaunchLayer({
+    ...(settings.defaultCwd ? { defaultCwd: settings.defaultCwd } : {}),
+    ...(settings.shell ? { shell: settings.shell } : {}),
+    ...(settings.environment ? { environment: settings.environment } : {}),
+  })
+}
+
+function hasSensitiveEnvironment(environment: TerminalLaunchLayer["environment"]): boolean {
+  return Object.values(environment ?? {}).some((value) => value !== null)
 }
 
 function normalizeSavedCommand(command: string): string {

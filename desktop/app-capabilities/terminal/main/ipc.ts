@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog } from "electron"
+import { BrowserWindow, clipboard, dialog } from "electron"
 import { z } from "zod"
 
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
@@ -14,8 +14,14 @@ import {
   terminalDeleteGroupCommandInputSchema,
   terminalDeleteGroupInputSchema,
   terminalDeleteSessionInputSchema,
+  terminalEnvironmentValueInputSchema,
   terminalGroupCommandSchema,
+  terminalGroupCommandIdInputSchema,
+  terminalGroupCommandSummarySchema,
+  terminalGroupIdInputSchema,
+  terminalGroupListItemSchema,
   terminalGroupSchema,
+  terminalGlobalLaunchSettingsSchema,
   terminalLaunchGroupCommandInputSchema,
   terminalOutputChunkSchema,
   terminalReadSessionInputSchema,
@@ -29,6 +35,7 @@ import {
   terminalSessionSchema,
   terminalStopSessionInputSchema,
   terminalUpdateGroupCommandInputSchema,
+  terminalUpdateGlobalLaunchSettingsInputSchema,
   terminalUpdateGroupSettingsInputSchema,
   terminalWriteSessionInputSchema,
 } from "../shared/schema"
@@ -71,7 +78,10 @@ function wireTerminalEvents(
     windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.data.operationId), payload)
   })
   service.events.on("sessionChanged", (payload) => {
-    windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.sessionChanged.operationId), payload)
+    windowManager.broadcast(
+      ipcOperationIdToChannel(terminalIpcModule.events.sessionChanged.operationId),
+      sanitizeRendererSession(payload),
+    )
   })
   service.events.on("sessionDeleted", (payload) => {
     windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.sessionDeleted.operationId), payload)
@@ -88,52 +98,83 @@ function wireTerminalEvents(
 export const terminalIpcModule: IpcModule = {
   id: "terminal",
   methods: {
+    getGlobalLaunchSettings: {
+      operationId: "app.terminal.global_launch.get",
+      kind: "invoke",
+      request: z.void(),
+      response: terminalGlobalLaunchSettingsSchema,
+      handler: (ctx) => resolveTerminalService(ctx).getGlobalLaunchSettings(),
+    },
+    updateGlobalLaunchSettings: {
+      operationId: "app.terminal.global_launch.update",
+      kind: "invoke",
+      request: terminalUpdateGlobalLaunchSettingsInputSchema,
+      response: terminalGlobalLaunchSettingsSchema,
+      handler: (ctx, request: z.infer<typeof terminalUpdateGlobalLaunchSettingsInputSchema>) =>
+        resolveTerminalService(ctx).updateGlobalLaunchSettings(request),
+    },
     listGroups: {
       operationId: "app.terminal.group.list",
       kind: "invoke",
       request: z.void(),
-      response: z.array(terminalGroupSchema),
-      handler: (ctx) => resolveTerminalService(ctx).listGroups(),
+      response: z.array(terminalGroupListItemSchema),
+      handler: (ctx) => resolveTerminalService(ctx).listGroups().map(summarizeGroup),
+    },
+    getGroup: {
+      operationId: "app.terminal.group.get",
+      kind: "invoke",
+      request: terminalGroupIdInputSchema,
+      response: terminalGroupSchema,
+      handler: (ctx, request: z.infer<typeof terminalGroupIdInputSchema>) =>
+        launchDetailsGroup(resolveTerminalService(ctx).getGroup(request.groupId)),
     },
     createGroup: {
       operationId: "app.terminal.group.create",
       kind: "invoke",
       request: terminalCreateGroupInputSchema,
-      response: terminalGroupSchema,
-      handler: (ctx, request: z.infer<typeof terminalCreateGroupInputSchema>) =>
-        resolveTerminalService(ctx).createGroup(request),
+      response: terminalGroupListItemSchema,
+      handler: async (ctx, request: z.infer<typeof terminalCreateGroupInputSchema>) =>
+        summarizeGroup(await resolveTerminalService(ctx).createGroup(request)),
     },
     renameGroup: {
       operationId: "app.terminal.group.rename",
       kind: "invoke",
       request: terminalRenameGroupInputSchema,
-      response: terminalGroupSchema,
-      handler: (ctx, request: z.infer<typeof terminalRenameGroupInputSchema>) =>
-        resolveTerminalService(ctx).renameGroup(request),
+      response: terminalGroupListItemSchema,
+      handler: async (ctx, request: z.infer<typeof terminalRenameGroupInputSchema>) =>
+        summarizeGroup(await resolveTerminalService(ctx).renameGroup(request)),
     },
     updateGroupSettings: {
       operationId: "app.terminal.group.update_settings",
       kind: "invoke",
       request: terminalUpdateGroupSettingsInputSchema,
-      response: terminalGroupSchema,
-      handler: (ctx, request: z.infer<typeof terminalUpdateGroupSettingsInputSchema>) =>
-        resolveTerminalService(ctx).updateGroupSettings(request),
+      response: terminalGroupListItemSchema,
+      handler: async (ctx, request: z.infer<typeof terminalUpdateGroupSettingsInputSchema>) =>
+        summarizeGroup(await resolveTerminalService(ctx).updateGroupSettings(request)),
+    },
+    getGroupCommand: {
+      operationId: "app.terminal.group_command.get",
+      kind: "invoke",
+      request: terminalGroupCommandIdInputSchema,
+      response: terminalGroupCommandSchema,
+      handler: (ctx, request: z.infer<typeof terminalGroupCommandIdInputSchema>) =>
+        resolveTerminalService(ctx).getGroupCommand(request.groupId, request.commandId),
     },
     createGroupCommand: {
       operationId: "app.terminal.group_command.create",
       kind: "invoke",
       request: terminalCreateGroupCommandInputSchema,
-      response: terminalGroupCommandSchema,
-      handler: (ctx, request: z.infer<typeof terminalCreateGroupCommandInputSchema>) =>
-        resolveTerminalService(ctx).createGroupCommand(request),
+      response: terminalGroupCommandSummarySchema,
+      handler: async (ctx, request: z.infer<typeof terminalCreateGroupCommandInputSchema>) =>
+        summarizeCommand(await resolveTerminalService(ctx).createGroupCommand(request)),
     },
     updateGroupCommand: {
       operationId: "app.terminal.group_command.update",
       kind: "invoke",
       request: terminalUpdateGroupCommandInputSchema,
-      response: terminalGroupCommandSchema,
-      handler: (ctx, request: z.infer<typeof terminalUpdateGroupCommandInputSchema>) =>
-        resolveTerminalService(ctx).updateGroupCommand(request),
+      response: terminalGroupCommandSummarySchema,
+      handler: async (ctx, request: z.infer<typeof terminalUpdateGroupCommandInputSchema>) =>
+        summarizeCommand(await resolveTerminalService(ctx).updateGroupCommand(request)),
     },
     deleteGroupCommand: {
       operationId: "app.terminal.group_command.delete",
@@ -148,24 +189,43 @@ export const terminalIpcModule: IpcModule = {
       kind: "invoke",
       request: terminalLaunchGroupCommandInputSchema,
       response: terminalSessionSchema,
-      handler: (ctx, request: z.infer<typeof terminalLaunchGroupCommandInputSchema>) =>
-        resolveTerminalService(ctx).launchGroupCommand(request),
+      handler: async (ctx, request: z.infer<typeof terminalLaunchGroupCommandInputSchema>) =>
+        sanitizeRendererSession(await resolveTerminalService(ctx).launchGroupCommand(request)),
     },
-    chooseDefaultCwd: {
-      operationId: "app.terminal.group.choose_default_cwd",
+    chooseCwd: {
+      operationId: "app.terminal.launch.choose_cwd",
       kind: "invoke",
       request: z.void().optional(),
       response: z.string().nullable(),
       handler: async () => {
         const parentWindow = focusedWindow()
         const options = {
-          title: "选择默认目录",
+          title: "选择工作目录",
           properties: ["openDirectory"] as Electron.OpenDialogOptions["properties"],
         }
         const result = parentWindow
           ? await dialog.showOpenDialog(parentWindow, options)
           : await dialog.showOpenDialog(options)
         return result.canceled ? null : result.filePaths[0] ?? null
+      },
+    },
+    revealEnvironmentValue: {
+      operationId: "app.terminal.environment.reveal",
+      kind: "invoke",
+      request: terminalEnvironmentValueInputSchema,
+      response: z.string().nullable(),
+      handler: (ctx, request: z.infer<typeof terminalEnvironmentValueInputSchema>) =>
+        resolveEnvironmentValue(resolveTerminalService(ctx), request),
+    },
+    copyEnvironmentValue: {
+      operationId: "app.terminal.environment.copy",
+      kind: "invoke",
+      request: terminalEnvironmentValueInputSchema,
+      response: z.void(),
+      handler: (ctx, request: z.infer<typeof terminalEnvironmentValueInputSchema>) => {
+        const value = request.draftValue ?? resolveEnvironmentValue(resolveTerminalService(ctx), request)
+        if (value === null) throw new Error("Terminal environment value is unavailable.")
+        clipboard.writeText(value)
       },
     },
     deleteGroup: {
@@ -186,15 +246,15 @@ export const terminalIpcModule: IpcModule = {
       kind: "invoke",
       request: z.void(),
       response: z.array(terminalSessionSchema),
-      handler: (ctx) => resolveTerminalService(ctx).listSessions(),
+      handler: (ctx) => resolveTerminalService(ctx).listSessions().map(sanitizeRendererSession),
     },
     createSession: {
       operationId: "app.terminal.session.create",
       kind: "invoke",
       request: terminalCreateSessionInputSchema,
       response: terminalSessionSchema,
-      handler: (ctx, request: z.infer<typeof terminalCreateSessionInputSchema>) =>
-        resolveTerminalService(ctx).createSession(request),
+      handler: async (ctx, request: z.infer<typeof terminalCreateSessionInputSchema>) =>
+        sanitizeRendererSession(await resolveTerminalService(ctx).createSession(request)),
     },
     getSession: {
       operationId: "app.terminal.session.get",
@@ -202,31 +262,35 @@ export const terminalIpcModule: IpcModule = {
       request: terminalSessionIdInputSchema,
       response: terminalSessionSchema,
       handler: (ctx, request: z.infer<typeof terminalSessionIdInputSchema>) =>
-        resolveTerminalService(ctx).getSession(request),
+        sanitizeRendererSession(resolveTerminalService(ctx).getSession(request)),
     },
     attachSession: {
       operationId: "app.terminal.session.attach",
       kind: "invoke",
       request: terminalAttachSessionInputSchema,
       response: terminalAttachSessionResultSchema,
-      handler: (ctx, request: z.infer<typeof terminalAttachSessionInputSchema>) =>
-        resolveTerminalService(ctx).attachSession(request),
+      handler: async (ctx, request: z.infer<typeof terminalAttachSessionInputSchema>) => {
+        const result = await resolveTerminalService(ctx).attachSession(request)
+        return { ...result, session: sanitizeRendererSession(result.session) }
+      },
     },
     readSession: {
       operationId: "app.terminal.session.read",
       kind: "invoke",
       request: terminalReadSessionInputSchema,
       response: terminalReadSessionResultSchema,
-      handler: (ctx, request: z.infer<typeof terminalReadSessionInputSchema>) =>
-        resolveTerminalService(ctx).readSession(request),
+      handler: (ctx, request: z.infer<typeof terminalReadSessionInputSchema>) => {
+        const result = resolveTerminalService(ctx).readSession(request)
+        return { ...result, session: sanitizeRendererSession(result.session) }
+      },
     },
     renameSession: {
       operationId: "app.terminal.session.rename",
       kind: "invoke",
       request: terminalRenameSessionInputSchema,
       response: terminalSessionSchema,
-      handler: (ctx, request: z.infer<typeof terminalRenameSessionInputSchema>) =>
-        resolveTerminalService(ctx).renameSession(request),
+      handler: async (ctx, request: z.infer<typeof terminalRenameSessionInputSchema>) =>
+        sanitizeRendererSession(await resolveTerminalService(ctx).renameSession(request)),
     },
     writeSession: {
       operationId: "app.terminal.session.write",
@@ -296,6 +360,81 @@ export const terminalIpcModule: IpcModule = {
       payload: terminalDomainChangedEventPayloadSchema,
     },
   },
+}
+
+function summarizeCommand(command: ReturnType<TerminalService["getGroupCommand"]>) {
+  return {
+    id: command.id,
+    name: command.name,
+    createdAt: command.createdAt,
+    updatedAt: command.updatedAt,
+    commandRevision: command.commandRevision,
+  }
+}
+
+function summarizeGroup(group: ReturnType<TerminalService["getGroup"]>) {
+  const commands = group.settings?.commands?.map(summarizeCommand)
+  return {
+    id: group.id,
+    name: group.name,
+    createdAt: group.createdAt,
+    updatedAt: group.updatedAt,
+    sortOrder: group.sortOrder,
+    groupRevision: group.groupRevision,
+    launchRevision: group.launchRevision,
+    membershipRevision: group.membershipRevision,
+    commandCollectionRevision: group.commandCollectionRevision,
+    ...(commands?.length ? { settings: { commands } } : {}),
+  }
+}
+
+function launchDetailsGroup(group: ReturnType<TerminalService["getGroup"]>) {
+  const launch = group.settings ? {
+    ...(group.settings.defaultCwd ? { defaultCwd: group.settings.defaultCwd } : {}),
+    ...(group.settings.shell ? { shell: group.settings.shell } : {}),
+    ...(group.settings.environment ? { environment: group.settings.environment } : {}),
+  } : undefined
+  return {
+    id: group.id,
+    name: group.name,
+    createdAt: group.createdAt,
+    updatedAt: group.updatedAt,
+    sortOrder: group.sortOrder,
+    groupRevision: group.groupRevision,
+    launchRevision: group.launchRevision,
+    membershipRevision: group.membershipRevision,
+    commandCollectionRevision: group.commandCollectionRevision,
+    ...(launch && Object.keys(launch).length ? { settings: launch } : {}),
+  }
+}
+
+function sanitizeRendererSession(session: ReturnType<TerminalService["getSession"]>) {
+  const safeSession = { ...session }
+  delete safeSession.launchEnvironment
+  return safeSession
+}
+
+function resolveEnvironmentValue(
+  service: TerminalService,
+  input: z.infer<typeof terminalEnvironmentValueInputSchema>,
+): string | null {
+  const environment = input.scope === "global"
+    ? service.getGlobalLaunchSettings().settings?.environment
+    : input.scope === "group"
+      ? service.getGroup(requireGroupId(input)).settings?.environment
+      : service.getGroupCommand(requireGroupId(input), requireCommandId(input)).launch?.environment
+  const value = environment?.[input.key]
+  return typeof value === "string" ? value : null
+}
+
+function requireGroupId(input: z.infer<typeof terminalEnvironmentValueInputSchema>): string {
+  if (!input.groupId) throw new Error("Terminal environment scope requires groupId.")
+  return input.groupId
+}
+
+function requireCommandId(input: z.infer<typeof terminalEnvironmentValueInputSchema>): string {
+  if (!input.commandId) throw new Error("Terminal command environment scope requires commandId.")
+  return input.commandId
 }
 
 function focusedWindow(): Electron.BrowserWindow | undefined {

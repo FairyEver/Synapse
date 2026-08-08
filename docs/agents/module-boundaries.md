@@ -36,6 +36,8 @@
 
 - app id `terminal`，capability 使用 `app.terminal.<subdomain>.<action>`，tool 名严格点转下划线。
 - UI、IPC、MCP 复用 `desktop/app-capabilities/terminal/main/service.ts` 的分组、会话、命令、历史和不可变 `sessionId`。
+- 启动设置只属于 Terminal：全局入口位于 Terminal Header，分组和快捷命令入口位于对应对象；不得在系统设置中增加重复入口。解析顺序固定为安全系统环境、Synapse 内置、全局、分组、快捷命令、一次性覆盖，配置变化只影响新 PTY。
+- `TERM_PROGRAM=Synapse` 与 `TERM_PROGRAM_VERSION` 是受保护宿主身份。环境变量明文只进入加密 body；结构化元数据和 MCP 只能记录键、`set/unset`、来源及 revision。
 - 不得新增通用 `shell.exec`、MCP 专属终端、静默输入抢占、隐式停止删除或自动强杀旁路。
 - 生命周期、注意三态、写入租约、输入/尺寸修订和输出水位相互正交。loopback MCP 不要求 Terminal 专属 token，但传输层必须提供稳定 `clientId` 与 `controllerInstanceId` 约束租约、幂等、配额和审计。
 - 结构元数据使用已注册 `app.terminal.*` DataRepository；原始输出/检查点只进入专属有界加密块存储，安全存储不可用时不得回退明文。

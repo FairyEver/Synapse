@@ -140,6 +140,64 @@ describe("Terminal capability dispatcher", () => {
     expect(JSON.stringify(result)).not.toContain("groupCount")
   })
 
+  it("reads and updates global launch settings without exposing environment values", async () => {
+    const current = {
+      revision: 3,
+      updatedAt: "2026-08-08T00:00:00.000Z",
+      settings: { shell: "/bin/zsh", environment: { GROK_SCROLL_MODE: "wheel", BLOCKED: null } },
+    }
+    const updateGlobalLaunchSettings = vi.fn(async (input) => ({
+      revision: 4,
+      updatedAt: "2026-08-08T00:01:00.000Z",
+      settings: input.settings,
+    }))
+    const security = allowingSecurity()
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: serviceStub({
+        getGlobalLaunchSettings: vi.fn(() => current),
+        updateGlobalLaunchSettings,
+      }),
+      ...security,
+    })
+
+    const read = await dispatcher.dispatch("app.terminal.global_launch.get", {}, localMcpContext)
+    expect(read).toMatchObject({
+      ok: true,
+      data: {
+        revision: 3,
+        shell: "/bin/zsh",
+        environment: [
+          { key: "BLOCKED", action: "unset", source: "global" },
+          { key: "GROK_SCROLL_MODE", action: "set", source: "global" },
+        ],
+      },
+    })
+    expect(JSON.stringify(read)).not.toContain("wheel")
+
+    const updated = await dispatcher.dispatch("app.terminal.global_launch.update", {
+      expectedRevision: 3,
+      settings: {
+        environment: { GROK_SCROLL_LINES: "9" },
+        inheritEnvironmentKeys: ["BLOCKED"],
+      },
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000099",
+    }, localMcpContext)
+    expect(updated).toMatchObject({ ok: true, data: { afterRevision: 4 } })
+    expect(updateGlobalLaunchSettings).toHaveBeenCalledWith(expect.objectContaining({
+      expectedRevision: 3,
+      settings: expect.objectContaining({ environment: {
+        GROK_SCROLL_MODE: "wheel",
+        GROK_SCROLL_LINES: "9",
+      } }),
+    }))
+    expect(security.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "terminal.settings.manage",
+      resource: "terminal:domain",
+    }))
+    expect(JSON.stringify(updated)).not.toContain("wheel")
+    expect(JSON.stringify(updated)).not.toContain('"9"')
+  })
+
   it("checks state permission before resolving a session and never returns output", async () => {
     const service = serviceStub()
     const security = allowingSecurity()

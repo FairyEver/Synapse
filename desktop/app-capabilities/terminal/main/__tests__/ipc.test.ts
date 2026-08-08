@@ -10,6 +10,7 @@ import { terminalIpcModule } from "../ipc"
 const electronDialogMock = vi.hoisted(() => ({
   showOpenDialog: vi.fn(),
 }))
+const electronClipboardMock = vi.hoisted(() => ({ writeText: vi.fn() }))
 
 vi.mock("electron", () => ({
   app: {
@@ -30,6 +31,7 @@ vi.mock("electron", () => ({
     }
   },
   dialog: electronDialogMock,
+  clipboard: electronClipboardMock,
   ipcMain: { handle: () => {}, on: () => {} },
   shell: {},
   Tray: class {},
@@ -66,11 +68,17 @@ vi.mock("electron-updater", () => ({
 describe("terminalIpcModule", () => {
   it("declares stable method and event channels", () => {
     expect(terminalIpcModule.id).toBe("terminal")
+    expect(terminalIpcModule.methods.getGlobalLaunchSettings.operationId).toBe("app.terminal.global_launch.get")
+    expect(terminalIpcModule.methods.updateGlobalLaunchSettings.operationId).toBe("app.terminal.global_launch.update")
     expect(terminalIpcModule.methods.listGroups.operationId).toBe("app.terminal.group.list")
+    expect(terminalIpcModule.methods.getGroup.operationId).toBe("app.terminal.group.get")
     expect(terminalIpcModule.methods.createGroup.operationId).toBe("app.terminal.group.create")
     expect(terminalIpcModule.methods.renameGroup.operationId).toBe("app.terminal.group.rename")
     expect(terminalIpcModule.methods.updateGroupSettings.operationId).toBe("app.terminal.group.update_settings")
-    expect(terminalIpcModule.methods.chooseDefaultCwd.operationId).toBe("app.terminal.group.choose_default_cwd")
+    expect(terminalIpcModule.methods.getGroupCommand.operationId).toBe("app.terminal.group_command.get")
+    expect(terminalIpcModule.methods.revealEnvironmentValue.operationId).toBe("app.terminal.environment.reveal")
+    expect(terminalIpcModule.methods.copyEnvironmentValue.operationId).toBe("app.terminal.environment.copy")
+    expect(terminalIpcModule.methods.chooseCwd.operationId).toBe("app.terminal.launch.choose_cwd")
     expect(terminalIpcModule.methods.createGroupCommand.operationId).toBe("app.terminal.group_command.create")
     expect(terminalIpcModule.methods.updateGroupCommand.operationId).toBe("app.terminal.group_command.update")
     expect(terminalIpcModule.methods.deleteGroupCommand.operationId).toBe("app.terminal.group_command.delete")
@@ -94,17 +102,17 @@ describe("terminalIpcModule", () => {
     expect(terminalIpcModule.events.resized.operationId).toBe("app.terminal.operation.resized")
   })
 
-  it("chooses a terminal group default cwd through the native directory dialog", async () => {
+  it("chooses a terminal launch cwd through the native directory dialog", async () => {
     electronDialogMock.showOpenDialog.mockResolvedValueOnce({
       canceled: false,
       filePaths: ["/Users/liyang/project"],
     })
 
-    await expect(terminalIpcModule.methods.chooseDefaultCwd.handler(createContext(createService()), undefined))
+    await expect(terminalIpcModule.methods.chooseCwd.handler(createContext(createService()), undefined))
       .resolves.toBe("/Users/liyang/project")
 
     expect(electronDialogMock.showOpenDialog).toHaveBeenCalledWith({
-      title: "选择默认目录",
+      title: "选择工作目录",
       properties: ["openDirectory"],
     })
   })
@@ -182,6 +190,57 @@ describe("terminalIpcModule", () => {
     })
   })
 
+  it("validates group mutation responses with saved command summaries", async () => {
+    const service = createService()
+    const groupWithCommand = (input: { groupId: string; name: string }) => ({
+      id: input.groupId,
+      name: input.name,
+      createdAt: "2026-06-24T00:00:00.000Z",
+      updatedAt: "2026-06-24T00:01:00.000Z",
+      sortOrder: 0,
+      groupRevision: 2,
+      launchRevision: 2,
+      membershipRevision: 1,
+      commandCollectionRevision: 2,
+      settings: {
+        defaultCwd: "/tmp",
+        commands: [{
+          id: "cmd-1",
+          name: "dev",
+          command: "pnpm dev",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          updatedAt: "2026-06-24T00:00:00.000Z",
+          commandRevision: 1,
+        }],
+      },
+    })
+    service.renameGroup = vi.fn(async (input) => groupWithCommand(input))
+    service.updateGroupSettings = vi.fn(async (input) => groupWithCommand(input))
+
+    const ctx = createContext(service)
+    const renamed = await terminalIpcModule.methods.renameGroup.handler(ctx, {
+      groupId: "group-1",
+      name: "构建",
+    })
+    const updated = await terminalIpcModule.methods.updateGroupSettings.handler(ctx, {
+      groupId: "group-1",
+      name: "构建",
+      expectedLaunchRevision: 1,
+      settings: { defaultCwd: "/tmp" },
+    })
+
+    expect(() => terminalIpcModule.methods.renameGroup.response.parse(renamed)).not.toThrow()
+    expect(() => terminalIpcModule.methods.updateGroupSettings.response.parse(updated)).not.toThrow()
+    for (const response of [renamed, updated]) {
+      expect(response).toMatchObject({
+        settings: {
+          commands: [{ id: "cmd-1", name: "dev", commandRevision: 1 }],
+        },
+      })
+      expect(response.settings?.commands?.[0]).not.toHaveProperty("command")
+    }
+  })
+
   it("manages and launches terminal group commands through IPC", async () => {
     const service = createService()
     const ctx = createContext(service)
@@ -229,6 +288,59 @@ describe("terminalIpcModule", () => {
       groupId: "group-1",
       commandId: "cmd-1",
     })
+  })
+
+  it("keeps list and session payloads free of launch values and command bodies", async () => {
+    const session = { ...createSession(), launchEnvironment: { SECRET_TOKEN: "session-secret" } }
+    const group = {
+      id: "group-1",
+      name: "构建",
+      createdAt: "2026-06-24T00:00:00.000Z",
+      updatedAt: "2026-06-24T00:00:00.000Z",
+      sortOrder: 0,
+      groupRevision: 1,
+      launchRevision: 1,
+      membershipRevision: 1,
+      commandCollectionRevision: 1,
+      settings: {
+        environment: { SECRET_TOKEN: "group-secret" },
+        commands: [{
+          id: "cmd-1",
+          name: "dev",
+          command: "echo command-secret",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          updatedAt: "2026-06-24T00:00:00.000Z",
+          commandRevision: 1,
+        }],
+      },
+    }
+    const service = {
+      ...createService(),
+      listGroups: vi.fn(() => [group]),
+      listSessions: vi.fn(() => [session]),
+      getGlobalLaunchSettings: vi.fn(() => ({
+        revision: 1,
+        updatedAt: "2026-06-24T00:00:00.000Z",
+        settings: { environment: { SECRET_TOKEN: "global-secret" } },
+      })),
+      getGroup: vi.fn(() => group),
+    } as Partial<TerminalService>
+    const ctx = createContext(service)
+
+    const listedGroups = await terminalIpcModule.methods.listGroups.handler(ctx, undefined)
+    const listedSessions = await terminalIpcModule.methods.listSessions.handler(ctx, undefined)
+    expect(JSON.stringify({ listedGroups, listedSessions })).not.toMatch(/group-secret|command-secret|session-secret/)
+
+    expect(terminalIpcModule.methods.revealEnvironmentValue.handler(ctx, {
+      scope: "global",
+      key: "SECRET_TOKEN",
+    })).toBe("global-secret")
+    await terminalIpcModule.methods.copyEnvironmentValue.handler(ctx, {
+      scope: "group",
+      groupId: "group-1",
+      key: "SECRET_TOKEN",
+    })
+    expect(electronClipboardMock.writeText).toHaveBeenCalledWith("group-secret")
   })
 
   it("validates event payloads", () => {
@@ -380,9 +492,37 @@ function createContext(
 function createService(): Partial<TerminalService> {
   const session = createSession()
   return {
+    getGlobalLaunchSettings: vi.fn(() => ({ revision: 1, updatedAt: "2026-06-24T00:00:00.000Z" })),
+    updateGlobalLaunchSettings: vi.fn(async (input) => ({
+      revision: input.expectedRevision + 1,
+      updatedAt: "2026-06-24T00:00:00.000Z",
+      settings: input.settings,
+    })),
     listGroups: vi.fn(() => []),
+    getGroup: vi.fn(() => ({
+      id: "group-1",
+      name: "构建",
+      createdAt: "2026-06-24T00:00:00.000Z",
+      updatedAt: "2026-06-24T00:00:00.000Z",
+      sortOrder: 0,
+      groupRevision: 1,
+      launchRevision: 1,
+      membershipRevision: 1,
+      commandCollectionRevision: 1,
+    })),
+    getGroupCommand: vi.fn(),
     createGroup: vi.fn(),
-    renameGroup: vi.fn(),
+    renameGroup: vi.fn((input) => ({
+      id: input.groupId,
+      name: input.name,
+      createdAt: "2026-06-24T00:00:00.000Z",
+      updatedAt: "2026-06-24T00:00:00.000Z",
+      sortOrder: 0,
+      groupRevision: 1,
+      launchRevision: 1,
+      membershipRevision: 1,
+      commandCollectionRevision: 1,
+    })),
     updateGroupSettings: vi.fn((input) => ({
       id: input.groupId,
       name: input.name,

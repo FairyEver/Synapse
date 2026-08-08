@@ -46,6 +46,7 @@ export type PermissionAction =
   | "terminal.session.stop"
   | "terminal.session.forceStop"
   | "terminal.metadata.manage"
+  | "terminal.settings.manage"
   | "terminal.group.manage"
   | "terminal.command.manage"
   | "terminal.session.delete"

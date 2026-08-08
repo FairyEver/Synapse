@@ -11,6 +11,8 @@ Read `api-reference.md` before constructing requests. Read `examples.md` when tr
 - A visible session is not automatically safe to control. Operate on an existing UI-created session only when the request identifies it or clearly asks to continue work there. Track ids created during the current task so later actions remain within the requested scope.
 - Local Terminal MCP requires no separate authentication or Terminal grant. `supported` only describes platform availability; it does not expand the user's request. On `permission_denied`, report that a local policy blocked the operation instead of asking the user to log in or authorize Terminal in Synapse.
 - Terminal MCP is still in development and exposes one current contract. Do not send `contractVersion`, probe for a v1/v2 variant, or call removed aliases such as `app_terminal_session_read`, `app_terminal_session_write`, and `app_terminal_group_update_settings`. If current `app_terminal_*` tools are absent after Synapse was updated, ask the user to restart Synapse and open a new Codex task so the tool catalog is rebuilt.
+- Launch settings resolve as global, group, saved command, then explicit one-time override. They affect only newly created PTYs. A saved command's layer configures its whole new session before Synapse delivers the saved input sequence.
+- Launch-setting reads expose environment keys, `set/unset`, source, and revision but never values. Do not infer, request, or report a secret value from metadata. Preserve unmentioned entries in sparse updates; use `settings.inheritEnvironmentKeys` to restore inheritance for named keys.
 
 ## Safe operating flow
 

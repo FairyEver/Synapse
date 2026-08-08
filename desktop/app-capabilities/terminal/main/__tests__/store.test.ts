@@ -76,6 +76,7 @@ describe("terminal store", () => {
 
   it("returns empty state when the state file does not exist", async () => {
     await expect(createTerminalStore({ baseDir: tempDir }).loadState()).resolves.toEqual({
+      globalLaunch: { revision: 1, updatedAt: "1970-01-01T00:00:00.000Z" },
       groups: [],
       sessions: [],
       output: [],
@@ -120,6 +121,7 @@ describe("terminal store", () => {
     }))
 
     await expect(createTerminalStore({ baseDir: tempDir }).loadState()).resolves.toEqual({
+      globalLaunch: { revision: 1, updatedAt: "1970-01-01T00:00:00.000Z" },
       groups: [expect.objectContaining({ id: "g1", name: "Legacy" })],
       sessions: [],
       output: [],

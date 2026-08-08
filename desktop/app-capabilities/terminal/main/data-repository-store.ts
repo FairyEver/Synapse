@@ -7,7 +7,13 @@ import type {
   TerminalIdempotencyRecord,
   TerminalSessionRecord,
 } from "../shared/contract-schema"
-import { terminalOutputChunkSchema, type TerminalGroup, type TerminalGroupCommand, type TerminalSession } from "../shared/schema"
+import {
+  terminalOutputChunkSchema,
+  type TerminalEnvironment,
+  type TerminalGroup,
+  type TerminalGroupCommand,
+  type TerminalSession,
+} from "../shared/schema"
 import type { TerminalEncryptedBlockStore } from "./encrypted-block-store"
 import type { TerminalRepository } from "./repository"
 import { terminalStoreStateSchema, type TerminalStore, type TerminalStoreState } from "./store"
@@ -38,34 +44,46 @@ export function createTerminalDataRepositoryStore(options: {
       if (!retainedBlockIds.has(blockId)) await options.blocks.deleteBlock(blockId)
     }
     const commandBodies = await safeList(options.repository.commandBodies, options.logger)
+    const globalLaunchBody = await safeGetSingleton(options.repository.globalLaunchBodies, options.logger)
     const groupLaunchBodies = await safeList(options.repository.groupLaunchBodies, options.logger)
     const launchBodies = await safeList(options.repository.launchBodies, options.logger)
-    const commandBodyById = new Map(commandBodies.map((item) => [item.commandId, item.body]))
+    const commandBodyById = new Map(commandBodies.map((item) => [item.commandId, item]))
     const groupEnvironmentById = new Map(groupLaunchBodies.map((item) => [item.groupId, item.environment]))
     const sessionEnvironmentById = new Map(launchBodies.map((item) => [item.sessionId, item.environment]))
     const commandsByGroup = new Map<string, TerminalGroupCommand[]>()
     for (const command of snapshot.commands) {
       const body = commandBodyById.get(command.commandId)
       if (body === undefined) continue
+      const environment = combineStoredEnvironment(body.environment, command.unsetEnvironmentKeys)
       const items = commandsByGroup.get(command.groupId) ?? []
       items.push({
         id: command.commandId,
         name: command.name,
-        command: body,
+        command: body.body,
         createdAt: command.createdAt,
         updatedAt: command.updatedAt,
         commandRevision: command.commandRevision,
+        ...((command.defaultCwd || command.shell || Object.keys(environment).length) ? {
+          launch: {
+            ...(command.defaultCwd ? { defaultCwd: command.defaultCwd } : {}),
+            ...(command.shell ? { shell: command.shell } : {}),
+            ...(Object.keys(environment).length ? { environment } : {}),
+          },
+        } : {}),
       })
       commandsByGroup.set(command.groupId, items)
     }
 
     const groups: TerminalGroup[] = snapshot.groups.map((group) => {
       const commands = commandsByGroup.get(group.groupId) ?? []
-      const environment = groupEnvironmentById.get(group.groupId)
+      const environment = combineStoredEnvironment(
+        groupEnvironmentById.get(group.groupId),
+        group.unsetEnvironmentKeys,
+      )
       const settings = {
         ...(group.defaultCwd ? { defaultCwd: group.defaultCwd } : {}),
         ...(group.shell ? { shell: group.shell } : {}),
-        ...(environment && Object.keys(environment).length ? { environment } : {}),
+        ...(Object.keys(environment).length ? { environment } : {}),
         ...(commands.length ? { commands } : {}),
       }
       return {
@@ -116,6 +134,21 @@ export function createTerminalDataRepositoryStore(options: {
     ))
 
     return terminalStoreStateSchema.parse({
+      globalLaunch: snapshot.globalLaunch ? {
+        revision: snapshot.globalLaunch.revision,
+        updatedAt: snapshot.globalLaunch.updatedAt,
+        settings: {
+          ...(snapshot.globalLaunch.defaultCwd ? { defaultCwd: snapshot.globalLaunch.defaultCwd } : {}),
+          ...(snapshot.globalLaunch.shell ? { shell: snapshot.globalLaunch.shell } : {}),
+          ...(() => {
+            const environment = combineStoredEnvironment(
+              globalLaunchBody?.environment,
+              snapshot.globalLaunch?.unsetEnvironmentKeys,
+            )
+            return Object.keys(environment).length ? { environment } : {}
+          })(),
+        },
+      } : undefined,
       groups,
       sessions,
       output,
@@ -138,12 +171,14 @@ export function createTerminalDataRepositoryStore(options: {
     await initialize()
     const state = terminalStoreStateSchema.parse(source)
     const hasSensitiveConfiguration = state.groups.some((group) =>
-      Boolean(group.settings?.commands?.length || Object.keys(group.settings?.environment ?? {}).length))
+      Boolean(group.settings?.commands?.length || hasSetEnvironmentValue(group.settings?.environment)))
+      || hasSetEnvironmentValue(state.globalLaunch.settings?.environment)
       || state.sessions.some((session) => Object.keys(session.launchEnvironment ?? {}).length > 0)
     if (hasSensitiveConfiguration && options.blocks.persistenceProtection !== "available") {
       throw new Error("Terminal persistence protection unavailable for sensitive configuration")
     }
     const deleteIntent = await createDeleteIntent(state)
+    await syncGlobalLaunch(state)
     await syncGroups(state)
     await syncSessions(state)
     await syncOperations(state)
@@ -156,6 +191,35 @@ export function createTerminalDataRepositoryStore(options: {
       updatedAt: new Date().toISOString(),
     })
     if (deleteIntent) await options.repository.deleteIntents.remove(deleteIntent.id)
+  }
+
+  async function syncGlobalLaunch(state: TerminalStoreState): Promise<void> {
+    const settings = state.globalLaunch.settings
+    const environment = splitEnvironment(settings?.environment)
+    await options.repository.globalLaunch.setSingleton({
+      schemaVersion: 1,
+      id: "default",
+      revision: state.globalLaunch.revision,
+      updatedAt: state.globalLaunch.updatedAt,
+      defaultCwd: settings?.defaultCwd,
+      shell: settings?.shell,
+      environmentKeys: Object.keys(environment.values).sort(),
+      unsetEnvironmentKeys: environment.unsetKeys,
+    })
+    if (Object.keys(environment.values).length) {
+      await options.repository.globalLaunchBodies.setSingleton({
+        schemaVersion: 1,
+        id: "default",
+        environment: environment.values,
+        updatedAt: state.globalLaunch.updatedAt,
+      })
+    } else {
+      if (options.repository.globalLaunchBodies.clearSingleton) {
+        await options.repository.globalLaunchBodies.clearSingleton()
+      } else {
+        await options.repository.globalLaunchBodies.remove("default")
+      }
+    }
   }
 
   async function createDeleteIntent(state: TerminalStoreState): Promise<TerminalDeleteIntentEntry | null> {
@@ -209,8 +273,8 @@ export function createTerminalDataRepositoryStore(options: {
     const wantedGroupIds = new Set(state.groups.map((group) => group.id))
     const wantedCommandIds = new Set<string>()
     for (const group of state.groups) {
-      const environment = group.settings?.environment ?? {}
-      const launchBodyRef = Object.keys(environment).length ? group.id : undefined
+      const environment = splitEnvironment(group.settings?.environment)
+      const launchBodyRef = Object.keys(environment.values).length ? group.id : undefined
       const record: TerminalGroupRecord = {
         schemaVersion: 2,
         id: group.id,
@@ -226,7 +290,8 @@ export function createTerminalDataRepositoryStore(options: {
         defaultCwd: group.settings?.defaultCwd,
         shell: group.settings?.shell,
         launchBodyRef,
-        environmentKeys: Object.keys(environment).sort(),
+        environmentKeys: Object.keys(environment.values).sort(),
+        unsetEnvironmentKeys: environment.unsetKeys,
       }
       await options.repository.groups.upsert(record)
       if (launchBodyRef) {
@@ -234,7 +299,7 @@ export function createTerminalDataRepositoryStore(options: {
           schemaVersion: 1,
           id: launchBodyRef,
           groupId: group.id,
-          environment,
+          environment: environment.values,
           updatedAt: group.updatedAt,
         })
       } else {
@@ -242,6 +307,7 @@ export function createTerminalDataRepositoryStore(options: {
       }
       for (const command of group.settings?.commands ?? []) {
         wantedCommandIds.add(command.id)
+        const commandEnvironment = splitEnvironment(command.launch?.environment)
         const commandRecord: TerminalCommandRecord = {
           schemaVersion: 2,
           id: command.id,
@@ -255,12 +321,17 @@ export function createTerminalDataRepositoryStore(options: {
           bodyRef: command.id,
           bodyByteLength: Buffer.byteLength(command.command, "utf8"),
           bodyAvailable: true,
+          defaultCwd: command.launch?.defaultCwd,
+          shell: command.launch?.shell,
+          environmentKeys: Object.keys(commandEnvironment.values).sort(),
+          unsetEnvironmentKeys: commandEnvironment.unsetKeys,
         }
         await options.repository.commandBodies.upsert({
           schemaVersion: 1,
           id: command.id,
           commandId: command.id,
           body: command.command,
+          ...(Object.keys(commandEnvironment.values).length ? { environment: commandEnvironment.values } : {}),
           updatedAt: command.updatedAt,
         })
         await options.repository.commands.upsert(commandRecord)
@@ -444,6 +515,7 @@ function toServiceSession(
     endTimeUnknown: session.endFacts?.endTimeUnknown ?? false,
     inputHistoryBeforeBaselineUnknown: session.inputHistoryBeforeBaselineUnknown,
     launchRevisionApplied: session.launchRevisionApplied,
+    globalLaunchRevisionApplied: session.globalLaunchRevisionApplied,
     commandId: session.commandId,
     commandRevisionApplied: session.commandRevisionApplied,
     commandDeliveryOperationId: session.commandDeliveryOperationId,
@@ -504,6 +576,7 @@ function toSessionRecord(
     discardedOutputChunks: Math.max(session.discardedOutputChunks, firstRetainedOutputSeq - 1),
     lastEvictedAt: session.lastEvictedAt,
     launchRevisionApplied: session.launchRevisionApplied,
+    globalLaunchRevisionApplied: session.globalLaunchRevisionApplied,
     commandId: session.commandId,
     commandRevisionApplied: session.commandRevisionApplied,
     commandDeliveryOperationId: session.commandDeliveryOperationId,
@@ -550,6 +623,44 @@ async function safeList<T>(
     logger?.warn("Terminal encrypted metadata is unavailable.", { error })
     return []
   }
+}
+
+async function safeGetSingleton<T>(
+  namespace: { getSingleton(): Promise<T | null> },
+  logger?: PersistenceLogger,
+): Promise<T | null> {
+  try {
+    return await namespace.getSingleton()
+  } catch (error) {
+    logger?.warn("Terminal encrypted metadata is unavailable.", { error })
+    return null
+  }
+}
+
+function splitEnvironment(environment: Readonly<TerminalEnvironment> | undefined): {
+  values: Record<string, string>
+  unsetKeys: string[]
+} {
+  const values: Record<string, string> = {}
+  const unsetKeys: string[] = []
+  for (const [key, value] of Object.entries(environment ?? {})) {
+    if (value === null) unsetKeys.push(key)
+    else values[key] = value
+  }
+  return { values, unsetKeys: unsetKeys.sort() }
+}
+
+function combineStoredEnvironment(
+  values: Readonly<Record<string, string>> | undefined,
+  unsetKeys: readonly string[] | undefined,
+): TerminalEnvironment {
+  const environment: TerminalEnvironment = { ...(values ?? {}) }
+  for (const key of unsetKeys ?? []) environment[key] = null
+  return environment
+}
+
+function hasSetEnvironmentValue(environment: Readonly<TerminalEnvironment> | undefined): boolean {
+  return Object.values(environment ?? {}).some((value) => value !== null)
 }
 
 function parseCheckpoint(value: unknown): TerminalStoreState["checkpoints"][number] {

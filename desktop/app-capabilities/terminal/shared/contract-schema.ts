@@ -63,9 +63,14 @@ export const terminalLeaseViewSchema = z.discriminatedUnion("occupied", [
 ])
 
 export const terminalLaunchFactsSchema = z.object({
-  shellKind: z.string().min(1),
-  cwdKind: z.enum(["default", "group", "override", "legacy_unversioned"]),
+  shellKind: z.enum(["default", "global", "group", "command", "override", "legacy_unversioned"]),
+  cwdKind: z.enum(["default", "global", "group", "command", "override", "legacy_unversioned"]),
   environmentKeys: z.array(z.string().min(1)).max(256),
+  environmentEntries: z.array(z.object({
+    key: z.string().min(1),
+    action: z.enum(["set", "unset"]),
+    source: z.enum(["global", "group", "command", "override"]),
+  }).strict()).max(256).optional(),
   overriddenFields: z.array(z.enum(["cwd", "shell", "environment", "cols", "rows"])),
   cols: z.number().int().positive(),
   rows: z.number().int().positive(),
@@ -101,6 +106,7 @@ export const terminalSessionRecordSchema = z.object({
   discardedOutputChunks: z.number().int().nonnegative(),
   lastEvictedAt: z.string().datetime().optional(),
   launchRevisionApplied: z.number().int().positive().nullable(),
+  globalLaunchRevisionApplied: z.number().int().positive().nullable().default(null),
   commandId: z.string().uuid().optional(),
   commandRevisionApplied: z.number().int().positive().optional(),
   commandDeliveryOperationId: z.string().uuid().optional(),
@@ -132,6 +138,7 @@ export const terminalGroupRecordSchema = z.object({
   shell: z.string().min(1).optional(),
   launchBodyRef: z.string().uuid().optional(),
   environmentKeys: z.array(z.string().min(1)).max(256),
+  unsetEnvironmentKeys: z.array(z.string().min(1)).max(256).optional(),
 }).strict()
 
 export const terminalGroupLaunchBodyRecordSchema = z.object({
@@ -155,6 +162,10 @@ export const terminalCommandRecordSchema = z.object({
   bodyRef: z.string().min(1).optional(),
   bodyByteLength: z.number().int().nonnegative(),
   bodyAvailable: z.boolean(),
+  defaultCwd: z.string().min(1).optional(),
+  shell: z.string().min(1).optional(),
+  environmentKeys: z.array(z.string().min(1)).max(256).optional(),
+  unsetEnvironmentKeys: z.array(z.string().min(1)).max(256).optional(),
 }).strict()
 
 export const terminalCommandBodyRecordSchema = z.object({
@@ -162,6 +173,25 @@ export const terminalCommandBodyRecordSchema = z.object({
   id: z.string().uuid(),
   commandId: z.string().uuid(),
   body: z.string().min(1).max(64 * 1024),
+  environment: z.record(z.string().min(1), z.string()).optional(),
+  updatedAt: z.string().datetime(),
+}).strict()
+
+export const terminalGlobalLaunchRecordSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.literal("default"),
+  revision: z.number().int().positive(),
+  updatedAt: z.string().datetime(),
+  defaultCwd: z.string().min(1).optional(),
+  shell: z.string().min(1).optional(),
+  environmentKeys: z.array(z.string().min(1)).max(256),
+  unsetEnvironmentKeys: z.array(z.string().min(1)).max(256),
+}).strict()
+
+export const terminalGlobalLaunchBodyRecordSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.literal("default"),
+  environment: z.record(z.string().min(1), z.string()),
   updatedAt: z.string().datetime(),
 }).strict()
 
@@ -225,6 +255,21 @@ export const terminalGroupTargetSchema = z.object({
   groupId: z.string().uuid(),
 }).strict()
 
+const terminalEnvironmentLayerSchema = z.record(z.string().min(1), z.string().nullable())
+const terminalLaunchLayerInputSchema = z.object({
+  defaultCwd: z.string().min(1).nullable().optional(),
+  shell: z.string().min(1).nullable().optional(),
+  environment: terminalEnvironmentLayerSchema.optional(),
+  inheritEnvironmentKeys: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/)).max(256).optional(),
+}).strict()
+
+export const terminalGlobalLaunchGetInputSchema = terminalRequestBaseSchema
+export const terminalGlobalLaunchUpdateInputSchema = z.object({
+  expectedRevision: z.number().int().positive(),
+  settings: terminalLaunchLayerInputSchema,
+  idempotencyKey: terminalIdempotencyKeySchema,
+}).strict()
+
 export const terminalGroupListInputSchema = terminalPagedRequestSchema.extend({
   name: z.string().min(1).max(80).optional(),
 }).strict()
@@ -244,11 +289,7 @@ export const terminalGroupRenameInputSchema = z.object({
 export const terminalGroupLaunchUpdateInputSchema = z.object({
   groupId: z.string().uuid(),
   expectedLaunchRevision: z.number().int().positive(),
-  settings: z.object({
-    defaultCwd: z.string().min(1).nullable().optional(),
-    shell: z.string().min(1).nullable().optional(),
-    environment: z.record(z.string().min(1), z.string()).optional(),
-  }).strict(),
+  settings: terminalLaunchLayerInputSchema,
   idempotencyKey: terminalIdempotencyKeySchema,
 }).strict()
 
@@ -284,6 +325,7 @@ export const terminalGroupCommandCreateInputSchema = z.object({
   expectedCommandCollectionRevision: z.number().int().positive(),
   name: z.string().min(1).max(80),
   command: terminalSavedCommandBodySchema,
+  launch: terminalLaunchLayerInputSchema.optional(),
   idempotencyKey: terminalIdempotencyKeySchema,
 }).strict()
 
@@ -293,6 +335,7 @@ export const terminalGroupCommandUpdateInputSchema = z.object({
   expectedCommandRevision: z.number().int().positive(),
   name: z.string().min(1).max(80),
   command: terminalSavedCommandBodySchema,
+  launch: terminalLaunchLayerInputSchema.optional(),
   idempotencyKey: terminalIdempotencyKeySchema,
 }).strict()
 
@@ -468,6 +511,8 @@ export type TerminalAttention = z.infer<typeof terminalAttentionSchema>
 export type TerminalEndFacts = z.infer<typeof terminalEndFactsSchema>
 export type TerminalLease = z.infer<typeof terminalLeaseSchema>
 export type TerminalSessionRecord = z.infer<typeof terminalSessionRecordSchema>
+export type TerminalGlobalLaunchRecord = z.infer<typeof terminalGlobalLaunchRecordSchema>
+export type TerminalGlobalLaunchBodyRecord = z.infer<typeof terminalGlobalLaunchBodyRecordSchema>
 export type TerminalLaunchBodyRecord = z.infer<typeof terminalLaunchBodyRecordSchema>
 export type TerminalGroupRecord = z.infer<typeof terminalGroupRecordSchema>
 export type TerminalGroupLaunchBodyRecord = z.infer<typeof terminalGroupLaunchBodyRecordSchema>

@@ -36,7 +36,7 @@
 | Sound Notifier | 否 | 否 | — | — | 1 | — |
 | Synapse Skill | 是 | 否 | — | — | — | — |
 | System Notifier | 否 | 否 | 1 | — | 1 | — |
-| Terminal | 是 | 是 | — | — | 41 | — |
+| Terminal | 是 | 是 | — | — | 43 | — |
 | Text Extractor | 否 | 否 | 1 | — | 2 | — |
 | Text File Writer | 否 | 否 | 1 | — | 1 | — |
 | Script Runtime | 否 | 否 | — | — | — | — |
@@ -49,6 +49,7 @@
 - Screenshot 当前是空目录占位。
 - Workflow/Automation 的 `discovery: "visible" | "hidden"` 只控制创建选择器；`hidden` 不注销类型，已有配置仍可加载和执行。
 - System App 的 `visibility` 控制启动器和 Dock 条件入口。未注册 System App 的能力包不得进入 `SYSTEM_APP_IDS`、definitions/registry、内容宿主或应用窗口 IPC。
+- Terminal 的 43 个 MCP 工具包含 `global_launch.get/update`；环境变量值只存在于加密 body，MCP 只返回键、动作、来源和 revision。
 
 ## 普通业务模块 System App
 
@@ -86,7 +87,7 @@ MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
 | `drive` | 64 | 64 |
-| 合计 | 226 | 222 |
+| 合计 | 226 | 224 |
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

@@ -25,11 +25,27 @@ describe("Terminal DataRepository store", () => {
       blocks: createTerminalEncryptedBlockStore({ baseDir: path.join(root, "terminal"), safeStorage }),
     })
     await store.saveState({
+      globalLaunch: {
+        revision: 2,
+        updatedAt: timestamp(),
+        settings: { shell: "/bin/zsh", environment: { GLOBAL_SECRET: "global-private", GLOBAL_UNSET: null } },
+      },
       terminalDomainRevision: 3,
       groups: [{
         id: groupId, name: "Main", createdAt: timestamp(), updatedAt: timestamp(), sortOrder: 0,
         groupRevision: 1, launchRevision: 1, membershipRevision: 1, commandCollectionRevision: 1,
-        settings: { commands: [{ id: commandId, name: "secret", command: "printf private", createdAt: timestamp(), updatedAt: timestamp(), commandRevision: 1 }] },
+        settings: {
+          environment: { GROUP_SECRET: "group-private", GROUP_UNSET: null },
+          commands: [{
+            id: commandId,
+            name: "secret",
+            command: "printf private",
+            createdAt: timestamp(),
+            updatedAt: timestamp(),
+            commandRevision: 1,
+            launch: { defaultCwd: "/tmp", environment: { COMMAND_SECRET: "command-private", COMMAND_UNSET: null } },
+          }],
+        },
       }],
       sessions: [{
         id: sessionId, groupId, title: "Shell", cwd: "/tmp", shell: "/bin/sh", status: "ended",
@@ -54,13 +70,25 @@ describe("Terminal DataRepository store", () => {
     })
     const loaded = await store.loadState()
     expect(loaded.terminalDomainRevision).toBe(3)
+    expect(loaded.globalLaunch).toMatchObject({
+      revision: 2,
+      settings: { environment: { GLOBAL_SECRET: "global-private", GLOBAL_UNSET: null } },
+    })
+    expect(loaded.groups[0]?.settings?.environment).toEqual({ GROUP_SECRET: "group-private", GROUP_UNSET: null })
     expect(loaded.groups[0]?.settings?.commands?.[0]?.command).toBe("printf private")
+    expect(loaded.groups[0]?.settings?.commands?.[0]?.launch).toEqual({
+      defaultCwd: "/tmp",
+      environment: { COMMAND_SECRET: "command-private", COMMAND_UNSET: null },
+    })
     expect(loaded.output[0]?.data).toBe("private-output")
     expect(loaded.checkpoints[0]?.serialized).toBe("private-checkpoint")
     const persisted = readAllFiles(root).join("\n")
     expect(persisted).not.toContain("printf private")
     expect(persisted).not.toContain("private-output")
     expect(persisted).not.toContain("private-checkpoint")
+    expect(persisted).not.toContain("global-private")
+    expect(persisted).not.toContain("group-private")
+    expect(persisted).not.toContain("command-private")
   })
 
   it("rejects sensitive configuration before writing when safe storage is unavailable", async () => {

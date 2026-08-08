@@ -6,6 +6,8 @@ import {
   terminalDomainStateSchema,
   terminalGroupRecordSchema,
   terminalGroupLaunchBodyRecordSchema,
+  terminalGlobalLaunchBodyRecordSchema,
+  terminalGlobalLaunchRecordSchema,
   terminalIdempotencyRecordSchema,
   terminalLaunchBodyRecordSchema,
   terminalOperationSchema,
@@ -15,6 +17,8 @@ import {
   type TerminalDomainState,
   type TerminalGroupRecord,
   type TerminalGroupLaunchBodyRecord,
+  type TerminalGlobalLaunchBodyRecord,
+  type TerminalGlobalLaunchRecord,
   type TerminalIdempotencyRecord,
   type TerminalLaunchBodyRecord,
   type TerminalOperation,
@@ -51,6 +55,23 @@ const terminalDeleteIntentEntrySchema = z.object({
 export type TerminalDeleteIntentEntry = z.infer<typeof terminalDeleteIntentEntrySchema>
 
 const noMigrations = [] as const
+
+export const terminalGlobalLaunchSchema: NamespaceSchema<TerminalGlobalLaunchRecord> = {
+  name: "app.terminal.global-launch",
+  backend: "sqlite",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (value): value is TerminalGlobalLaunchRecord => terminalGlobalLaunchRecordSchema.safeParse(value).success,
+}
+
+export const terminalGlobalLaunchBodiesSchema: NamespaceSchema<TerminalGlobalLaunchBodyRecord> = {
+  name: "app.terminal.global-launch-bodies",
+  backend: "encrypted-json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  encrypted: true,
+  validate: (value): value is TerminalGlobalLaunchBodyRecord => terminalGlobalLaunchBodyRecordSchema.safeParse(value).success,
+}
 
 export const terminalGroupsSchema: NamespaceSchema<TerminalGroupRecord> = {
   name: "app.terminal.groups",

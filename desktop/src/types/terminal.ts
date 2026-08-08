@@ -9,6 +9,12 @@ import type {
   TerminalDeleteSessionInput,
   TerminalGroup,
   TerminalGroupCommand,
+  TerminalGroupCommandSummary,
+  TerminalGroupListItem,
+  TerminalGlobalLaunchSettings,
+  TerminalEnvironment,
+  TerminalEnvironmentValueInput,
+  TerminalLaunchLayer,
   TerminalLaunchGroupCommandInput,
   TerminalOutputChunk,
   TerminalReadSessionInput,
@@ -22,16 +28,24 @@ import type {
   TerminalStopSessionInput,
   TerminalUpdateGroupCommandInput,
   TerminalUpdateGroupSettingsInput,
+  TerminalUpdateGlobalLaunchSettingsInput,
   TerminalWriteSessionInput,
 } from "../../app-capabilities/terminal/shared/schema"
 
 export type SynapseTerminalGroup = TerminalGroup
+export type SynapseTerminalGroupSummary = TerminalGroupListItem
 export type SynapseTerminalGroupCommand = TerminalGroupCommand
+export type SynapseTerminalGroupCommandSummary = TerminalGroupCommandSummary
+export type SynapseTerminalEnvironment = TerminalEnvironment
+export type SynapseTerminalEnvironmentValueInput = TerminalEnvironmentValueInput
+export type SynapseTerminalLaunchLayer = TerminalLaunchLayer
+export type SynapseTerminalGlobalLaunchSettings = TerminalGlobalLaunchSettings
 export type SynapseTerminalSession = TerminalSession
 export type SynapseTerminalOutputChunk = TerminalOutputChunk
 export type SynapseTerminalCreateGroupInput = TerminalCreateGroupInput
 export type SynapseTerminalRenameGroupInput = TerminalRenameGroupInput
 export type SynapseTerminalUpdateGroupSettingsInput = TerminalUpdateGroupSettingsInput
+export type SynapseTerminalUpdateGlobalLaunchSettingsInput = TerminalUpdateGlobalLaunchSettingsInput
 export type SynapseTerminalCreateGroupCommandInput = TerminalCreateGroupCommandInput
 export type SynapseTerminalUpdateGroupCommandInput = TerminalUpdateGroupCommandInput
 export type SynapseTerminalDeleteGroupCommandInput = TerminalDeleteGroupCommandInput

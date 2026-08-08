@@ -974,6 +974,7 @@ async function createConfigBackupPayload(exportedAt = new Date()): Promise<Synap
 
 const TERMINAL_BODY_NAMESPACES = new Set([
   "app.terminal.command-bodies",
+  "app.terminal.global-launch-bodies",
   "app.terminal.group-launch-bodies",
   "app.terminal.launch-bodies",
   "app.terminal.blocks",

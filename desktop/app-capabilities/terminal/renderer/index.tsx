@@ -23,6 +23,10 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameFooter,
+  DialogFrameHeader,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -57,10 +61,15 @@ import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { getRendererPlatform } from "../../../src/lib/runtime-platform"
 import { cn } from "../../../src/lib/utils"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
+import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import type {
+  SynapseTerminalGlobalLaunchSettings,
   SynapseTerminalGroup,
   SynapseTerminalGroupCommand,
+  SynapseTerminalGroupCommandSummary,
+  SynapseTerminalGroupSummary,
   SynapseTerminalCreateSessionInput,
+  SynapseTerminalLaunchLayer,
   SynapseTerminalOutputChunk,
   SynapseTerminalResizedEvent,
   SynapseTerminalSession,
@@ -68,6 +77,7 @@ import type {
 import { encodeTerminalCommandInput } from "../shared/terminal-input"
 import { isTerminalShiftEnterEvent } from "./terminal-keyboard"
 import { createTerminalRenderingOptions } from "./terminal-rendering"
+import { TerminalLaunchSettingsForm } from "./terminal-launch-settings-form"
 import {
   getTerminalToolbarActions,
   isTerminalToolbarActionEnabled,
@@ -84,33 +94,42 @@ const logger = createRendererLogger("terminal.app")
 export function TerminalModule() {
   const terminalBridge = requireBridgeDomain("terminal")
   const shellBridge = requireBridgeDomain("shell")
-  const [groups, setGroups] = useState<SynapseTerminalGroup[]>([])
+  const [groups, setGroups] = useState<SynapseTerminalGroupSummary[]>([])
   const [sessions, setSessions] = useState<SynapseTerminalSession[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false)
+  const [globalLaunchSettings, setGlobalLaunchSettings] = useState<SynapseTerminalGlobalLaunchSettings | null>(null)
+  const [globalLaunchDraft, setGlobalLaunchDraft] = useState<SynapseTerminalLaunchLayer>({})
+  const [globalLaunchSaving, setGlobalLaunchSaving] = useState(false)
+  const [globalLaunchChoosingDirectory, setGlobalLaunchChoosingDirectory] = useState(false)
   const [renameTarget, setRenameTarget] = useState<SynapseTerminalSession | null>(null)
   const [renameTitle, setRenameTitle] = useState("")
   const [renameSaving, setRenameSaving] = useState(false)
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
   const [stoppingSessionId, setStoppingSessionId] = useState<string | null>(null)
   const [groupDialogMode, setGroupDialogMode] = useState<"create" | "rename" | null>(null)
-  const [groupRenameTarget, setGroupRenameTarget] = useState<SynapseTerminalGroup | null>(null)
+  const [groupRenameTarget, setGroupRenameTarget] = useState<SynapseTerminalGroupSummary | null>(null)
   const [groupName, setGroupName] = useState("")
   const [groupSaving, setGroupSaving] = useState(false)
-  const [deleteGroupTarget, setDeleteGroupTarget] = useState<SynapseTerminalGroup | null>(null)
+  const [deleteGroupTarget, setDeleteGroupTarget] = useState<SynapseTerminalGroupSummary | null>(null)
   const [deleteGroupSaving, setDeleteGroupSaving] = useState(false)
   const [groupSettingsTarget, setGroupSettingsTarget] = useState<SynapseTerminalGroup | null>(null)
   const [groupSettingsName, setGroupSettingsName] = useState("")
-  const [groupSettingsDefaultCwd, setGroupSettingsDefaultCwd] = useState("")
+  const [groupSettingsLaunch, setGroupSettingsLaunch] = useState<SynapseTerminalLaunchLayer>({})
   const [groupSettingsSaving, setGroupSettingsSaving] = useState(false)
   const [groupSettingsChoosingDirectory, setGroupSettingsChoosingDirectory] = useState(false)
   const [commandManagerTarget, setCommandManagerTarget] = useState<SynapseTerminalGroup | null>(null)
+  const [commandManagerCommands, setCommandManagerCommands] = useState<SynapseTerminalGroupCommandSummary[]>([])
   const [commandFormOpen, setCommandFormOpen] = useState(false)
   const [commandEditTarget, setCommandEditTarget] = useState<SynapseTerminalGroupCommand | null>(null)
   const [commandName, setCommandName] = useState("")
   const [commandText, setCommandText] = useState("")
+  const [commandLaunch, setCommandLaunch] = useState<SynapseTerminalLaunchLayer>({})
+  const [commandChoosingDirectory, setCommandChoosingDirectory] = useState(false)
   const [commandSaving, setCommandSaving] = useState(false)
   const [commandDeletingId, setCommandDeletingId] = useState<string | null>(null)
+  const [discardAction, setDiscardAction] = useState<(() => void) | null>(null)
   const [terminalReadError, setTerminalReadError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [openGroupIds, setOpenGroupIds] = useState<Record<string, boolean>>({})
@@ -129,13 +148,31 @@ export function TerminalModule() {
   activeSessionRef.current = activeSession
 
   const sessionGroups = useMemo(() => groupSessions(groups, sessions), [groups, sessions])
-  const commandManagerCommands = commandManagerTarget?.settings?.commands ?? []
   const activeSessionRunning = activeSession?.status === "running"
   const rendererPlatform = getRendererPlatform()
   const toolbarActions = useMemo(
     () => getTerminalToolbarActions(rendererPlatform),
     [rendererPlatform],
   )
+  const globalLaunchDirty = globalSettingsOpen
+    && JSON.stringify(globalLaunchDraft) !== JSON.stringify(globalLaunchSettings?.settings ?? {})
+  const groupSettingsDirty = Boolean(groupSettingsTarget) && (
+    groupSettingsName !== groupSettingsTarget?.name
+    || JSON.stringify(groupSettingsLaunch) !== JSON.stringify(groupSettingsTarget ? launchLayerFromGroup(groupSettingsTarget) : {})
+  )
+  const commandFormDirty = commandFormOpen && (
+    commandName !== (commandEditTarget?.name ?? "")
+    || commandText !== (commandEditTarget?.command ?? "")
+    || JSON.stringify(commandLaunch) !== JSON.stringify(commandEditTarget?.launch ?? {})
+  )
+
+  const requestDiscard = useCallback((dirty: boolean, action: () => void) => {
+    if (!dirty) {
+      action()
+      return
+    }
+    setDiscardAction(() => action)
+  }, [])
 
   const refreshSessions = useCallback(async () => {
     const [nextGroups, nextSessions] = await Promise.all([
@@ -201,17 +238,76 @@ export function TerminalModule() {
     setGroupName("")
   }, [])
 
-  const openRenameGroupDialog = useCallback((group: SynapseTerminalGroup) => {
+  const openRenameGroupDialog = useCallback((group: SynapseTerminalGroupSummary) => {
     setGroupDialogMode("rename")
     setGroupRenameTarget(group)
     setGroupName(group.name)
   }, [])
 
-  const openGroupSettingsDialog = useCallback((group: SynapseTerminalGroup) => {
-    setGroupSettingsTarget(group)
-    setGroupSettingsName(group.name)
-    setGroupSettingsDefaultCwd(group.settings?.defaultCwd ?? "")
-  }, [])
+  const openGroupSettingsDialog = useCallback(async (group: SynapseTerminalGroupSummary) => {
+    try {
+      const [details, globalSettings] = await Promise.all([
+        terminalBridge.group.get({ groupId: group.id }),
+        terminalBridge.globalLaunch.get(),
+      ])
+      setGlobalLaunchSettings(globalSettings)
+      setGroupSettingsTarget(details)
+      setGroupSettingsName(details.name)
+      setGroupSettingsLaunch(launchLayerFromGroup(details))
+    } catch (error) {
+      logger.error("Failed to load terminal group settings.", error)
+      toast.error("加载分组设置失败")
+    }
+  }, [terminalBridge])
+
+  const openGlobalSettingsDialog = useCallback(async () => {
+    try {
+      const settings = await terminalBridge.globalLaunch.get()
+      setGlobalLaunchSettings(settings)
+      setGlobalLaunchDraft(settings.settings ?? {})
+      setGlobalSettingsOpen(true)
+    } catch (error) {
+      logger.error("Failed to load global terminal launch settings.", error)
+      toast.error("加载终端设置失败")
+    }
+  }, [terminalBridge])
+
+  const chooseLaunchCwd = useCallback(async (
+    setChoosing: (value: boolean) => void,
+    setLaunch: (updater: (current: SynapseTerminalLaunchLayer) => SynapseTerminalLaunchLayer) => void,
+  ) => {
+    setChoosing(true)
+    try {
+      const selectedPath = await terminalBridge.launch.chooseCwd()
+      if (selectedPath) setLaunch((current) => ({ ...current, defaultCwd: selectedPath }))
+    } catch (error) {
+      logger.error("Failed to choose terminal launch cwd.", error)
+      toast.error("选择工作目录失败")
+    } finally {
+      setChoosing(false)
+    }
+  }, [terminalBridge])
+
+  const saveGlobalLaunchSettings = useCallback(async () => {
+    if (!globalLaunchSettings) return
+    setGlobalLaunchSaving(true)
+    try {
+      const updated = await terminalBridge.globalLaunch.update({
+        expectedRevision: globalLaunchSettings.revision,
+        settings: Object.keys(globalLaunchDraft).length ? globalLaunchDraft : undefined,
+      })
+      setGlobalLaunchSettings(updated)
+      setGlobalSettingsOpen(false)
+      toast.success("终端设置已保存")
+    } catch (error) {
+      logger.error("Failed to save global terminal launch settings.", error)
+      toast.error(error instanceof Error && error.message.includes("revision_conflict")
+        ? "设置已被其他操作更新，请重新打开后再保存"
+        : "保存终端设置失败")
+    } finally {
+      setGlobalLaunchSaving(false)
+    }
+  }, [globalLaunchDraft, globalLaunchSettings, terminalBridge])
 
   const saveGroup = useCallback(async () => {
     const name = groupName.trim()
@@ -223,7 +319,7 @@ export function TerminalModule() {
           groupId: groupRenameTarget.id,
           name: groupName,
         })
-        setGroups((current) => current.map((item) => item.id === group.id ? group : item))
+        setGroups((current) => current.map((item) => item.id === group.id ? summarizeGroup(group) : item))
       } else {
         const group = await terminalBridge.group.create({ name })
         setGroups((current) => mergeGroup(current, group))
@@ -326,7 +422,7 @@ export function TerminalModule() {
   const deleteGroupHasActiveSessions = deleteGroupMembers.some((session) =>
     session.status === "running" || session.status === "stopping")
 
-  const startDeleteGroup = useCallback((group: SynapseTerminalGroup, event: MouseEvent<HTMLElement>) => {
+  const startDeleteGroup = useCallback((group: SynapseTerminalGroupSummary, event: MouseEvent<HTMLElement>) => {
     if (shouldBypassDeleteConfirm(event)) {
       void deleteGroup(group)
       return
@@ -337,43 +433,32 @@ export function TerminalModule() {
   const resetGroupSettingsDialog = useCallback(() => {
     setGroupSettingsTarget(null)
     setGroupSettingsName("")
-    setGroupSettingsDefaultCwd("")
+    setGroupSettingsLaunch({})
     setGroupSettingsChoosingDirectory(false)
   }, [])
 
   const chooseGroupSettingsDefaultCwd = useCallback(async () => {
     setGroupSettingsChoosingDirectory(true)
     try {
-      const selectedPath = await terminalBridge.group.chooseDefaultCwd()
-      if (selectedPath) {
-        setGroupSettingsDefaultCwd(selectedPath)
-      }
-    } catch (error) {
-      logger.error("Failed to choose terminal group default cwd.", error)
-      toast.error("选择默认目录失败")
+      await chooseLaunchCwd(setGroupSettingsChoosingDirectory, setGroupSettingsLaunch)
     } finally {
       setGroupSettingsChoosingDirectory(false)
     }
-  }, [terminalBridge])
+  }, [chooseLaunchCwd])
 
   const saveGroupSettings = useCallback(async () => {
     if (!groupSettingsTarget) return
     const name = groupSettingsName.trim()
     if (!name) return
-    const defaultCwd = groupSettingsDefaultCwd.trim()
     setGroupSettingsSaving(true)
     try {
       const group = await terminalBridge.group.updateSettings({
         groupId: groupSettingsTarget.id,
         name,
-        settings: {
-          ...(defaultCwd ? { defaultCwd } : {}),
-          ...(groupSettingsTarget.settings?.shell ? { shell: groupSettingsTarget.settings.shell } : {}),
-          ...(groupSettingsTarget.settings?.environment ? { environment: groupSettingsTarget.settings.environment } : {}),
-          ...(groupSettingsTarget.settings?.commands?.length ? { commands: groupSettingsTarget.settings.commands } : {}),
-        },
+        expectedLaunchRevision: groupSettingsTarget.launchRevision,
+        settings: groupSettingsLaunch,
       })
-      setGroups((current) => current.map((item) => item.id === group.id ? group : item))
+      setGroups((current) => current.map((item) => item.id === group.id ? summarizeGroup(group) : item))
       resetGroupSettingsDialog()
     } catch (error) {
       logger.error("Failed to update terminal group settings.", error)
@@ -382,46 +467,76 @@ export function TerminalModule() {
       setGroupSettingsSaving(false)
     }
   }, [
-    groupSettingsDefaultCwd,
+    groupSettingsLaunch,
     groupSettingsName,
     groupSettingsTarget,
     resetGroupSettingsDialog,
     terminalBridge,
   ])
 
-  const openCommandManager = useCallback((group: SynapseTerminalGroup) => {
-    setCommandManagerTarget(group)
-    setCommandFormOpen(false)
-    setCommandEditTarget(null)
-    setCommandName("")
-    setCommandText("")
-  }, [])
+  const openCommandManager = useCallback(async (group: SynapseTerminalGroupSummary) => {
+    try {
+      const [details, globalSettings] = await Promise.all([
+        terminalBridge.group.get({ groupId: group.id }),
+        terminalBridge.globalLaunch.get(),
+      ])
+      setGlobalLaunchSettings(globalSettings)
+      setCommandManagerTarget(details)
+      setCommandManagerCommands(group.settings?.commands ?? [])
+      setCommandFormOpen(false)
+      setCommandEditTarget(null)
+      setCommandName("")
+      setCommandText("")
+      setCommandLaunch({})
+    } catch (error) {
+      logger.error("Failed to load terminal commands.", error)
+      toast.error("加载命令失败")
+    }
+  }, [terminalBridge])
 
   const openCreateCommandDialog = useCallback(() => {
     setCommandEditTarget(null)
     setCommandName("")
     setCommandText("")
+    setCommandLaunch({})
     setCommandFormOpen(true)
   }, [])
 
-  const openEditCommandDialog = useCallback((command: SynapseTerminalGroupCommand) => {
-    setCommandEditTarget(command)
-    setCommandName(command.name)
-    setCommandText(command.command)
-    setCommandFormOpen(true)
-  }, [])
+  const openEditCommandDialog = useCallback(async (command: SynapseTerminalGroupCommandSummary) => {
+    if (!commandManagerTarget) return
+    try {
+      const details = await terminalBridge.groupCommand.get({
+        groupId: commandManagerTarget.id,
+        commandId: command.id,
+      })
+      setCommandEditTarget(details)
+      setCommandName(details.name)
+      setCommandText(details.command)
+      setCommandLaunch(details.launch ?? {})
+      setCommandFormOpen(true)
+    } catch (error) {
+      logger.error("Failed to load terminal command.", error)
+      toast.error("加载命令失败")
+    }
+  }, [commandManagerTarget, terminalBridge])
 
   const closeCommandForm = useCallback(() => {
     setCommandFormOpen(false)
     setCommandEditTarget(null)
     setCommandName("")
     setCommandText("")
+    setCommandLaunch({})
+    setCommandChoosingDirectory(false)
   }, [])
 
   const refreshGroupsForCommandManager = useCallback(async (targetGroupId: string) => {
-    const nextGroups = await terminalBridge.group.list()
+    const [nextGroups, details] = await Promise.all([
+      terminalBridge.group.list(),
+      terminalBridge.group.get({ groupId: targetGroupId }),
+    ])
     setGroups(nextGroups)
-    setCommandManagerTarget(nextGroups.find((group) => group.id === targetGroupId) ?? null)
+    setCommandManagerTarget(details)
+    setCommandManagerCommands(nextGroups.find((group) => group.id === targetGroupId)?.settings?.commands ?? [])
   }, [terminalBridge])
 
   const saveCommand = useCallback(async () => {
@@ -435,14 +550,18 @@ export function TerminalModule() {
         await terminalBridge.groupCommand.update({
           groupId: commandManagerTarget.id,
           commandId: commandEditTarget.id,
+          ...(commandEditTarget.commandRevision ? { expectedCommandRevision: commandEditTarget.commandRevision } : {}),
           name,
           command,
+          launch: commandLaunch,
         })
       } else {
         await terminalBridge.groupCommand.create({
           groupId: commandManagerTarget.id,
+          expectedCommandCollectionRevision: commandManagerTarget.commandCollectionRevision,
           name,
           command,
+          ...(Object.keys(commandLaunch).length ? { launch: commandLaunch } : {}),
         })
       }
       await refreshGroupsForCommandManager(commandManagerTarget.id)
@@ -458,12 +577,13 @@ export function TerminalModule() {
     commandEditTarget,
     commandManagerTarget,
     commandName,
+    commandLaunch,
     commandText,
     refreshGroupsForCommandManager,
     terminalBridge,
   ])
 
-  const deleteCommand = useCallback(async (command: SynapseTerminalGroupCommand) => {
+  const deleteCommand = useCallback(async (command: SynapseTerminalGroupCommandSummary) => {
     if (!commandManagerTarget) return
     setCommandDeletingId(command.id)
     try {
@@ -487,7 +607,10 @@ export function TerminalModule() {
     terminalBridge,
   ])
 
-  const launchCommand = useCallback(async (group: SynapseTerminalGroup, command: SynapseTerminalGroupCommand) => {
+  const launchCommand = useCallback(async (
+    group: SynapseTerminalGroupSummary,
+    command: SynapseTerminalGroupCommandSummary,
+  ) => {
     try {
       const session = await terminalBridge.groupCommand.launch({
         groupId: group.id,
@@ -864,7 +987,7 @@ export function TerminalModule() {
                           {command.name}
                         </DropdownMenuItem>
                       ))}
-                      <DropdownMenuItem onClick={() => openCommandManager(group)}>
+                      <DropdownMenuItem onClick={() => { void openCommandManager(group) }}>
                         <Settings />
                         管理命令
                       </DropdownMenuItem>
@@ -882,11 +1005,11 @@ export function TerminalModule() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openGroupSettingsDialog(group)}>
+                      <DropdownMenuItem onClick={() => { void openGroupSettingsDialog(group) }}>
                         <Settings />
                         设置
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openCommandManager(group)}>
+                      <DropdownMenuItem onClick={() => { void openCommandManager(group) }}>
                         <Code2 />
                         命令
                       </DropdownMenuItem>
@@ -936,7 +1059,18 @@ export function TerminalModule() {
   )
 
   return (
-    <SystemAppWindowShell>
+    <SystemAppWindowShell actions={(
+      <>
+        <SystemAppTopBarActionButton type="button" onClick={() => { void createSession() }}>
+          <Plus data-icon="inline-start" />
+          新建终端
+        </SystemAppTopBarActionButton>
+        <SystemAppTopBarActionButton type="button" onClick={() => { void openGlobalSettingsDialog() }}>
+          <Settings data-icon="inline-start" />
+          终端设置
+        </SystemAppTopBarActionButton>
+      </>
+    )}>
       <SidebarContentLayout
         sidebar={sidebar}
         contentScrollable={false}
@@ -1002,6 +1136,34 @@ export function TerminalModule() {
           )}
         </main>
       </SidebarContentLayout>
+      <Dialog open={globalSettingsOpen} onOpenChange={(open) => {
+        if (!open && !globalLaunchSaving) requestDiscard(globalLaunchDirty, () => setGlobalSettingsOpen(false))
+      }}>
+        <DialogContent
+          aria-describedby={undefined}
+          className="h-[min(42rem,calc(100vh-2rem))] overflow-hidden p-0 sm:max-w-3xl"
+          showCloseButton={false}
+        >
+          <DialogFrame>
+            <DialogFrameHeader bordered title="终端设置" />
+            <DialogFrameBody className="overflow-auto px-5 py-4">
+              <TerminalLaunchSettingsForm
+                value={globalLaunchDraft}
+                inheritedLabel="系统"
+                choosingDirectory={globalLaunchChoosingDirectory}
+                onChooseDirectory={() => { void chooseLaunchCwd(setGlobalLaunchChoosingDirectory, setGlobalLaunchDraft) }}
+                onRevealEnvironmentValue={(key) => terminalBridge.launch.revealEnvironmentValue({ scope: "global", key })}
+                onCopyEnvironmentValue={(key, draftValue) => terminalBridge.launch.copyEnvironmentValue({ scope: "global", key, draftValue })}
+                onChange={setGlobalLaunchDraft}
+              />
+            </DialogFrameBody>
+            <DialogFrameFooter>
+              <Button type="button" variant="outline" disabled={globalLaunchSaving} onClick={() => requestDiscard(globalLaunchDirty, () => setGlobalSettingsOpen(false))}>取消</Button>
+              <Button type="button" disabled={globalLaunchSaving} onClick={() => { void saveGlobalLaunchSettings() }}>保存</Button>
+            </DialogFrameFooter>
+          </DialogFrame>
+        </DialogContent>
+      </Dialog>
       <Dialog open={groupDialogMode !== null} onOpenChange={(open) => {
         if (!open) {
           setGroupDialogMode(null)
@@ -1052,13 +1214,13 @@ export function TerminalModule() {
         </DialogContent>
       </Dialog>
       <Dialog open={groupSettingsTarget !== null} onOpenChange={(open) => {
-        if (!open) resetGroupSettingsDialog()
+        if (!open) requestDiscard(groupSettingsDirty, resetGroupSettingsDialog)
       }}>
-        <DialogContent>
+        <DialogContent className="max-w-[min(56rem,calc(100vw-2rem))]">
           <DialogHeader>
             <DialogTitle>分组设置</DialogTitle>
             <DialogDescription className="sr-only">
-              设置分组名称和默认目录。
+              设置分组名称和启动环境。
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
@@ -1071,32 +1233,27 @@ export function TerminalModule() {
                 autoFocus
               />
             </label>
-            <div className="grid gap-1.5">
-              <span className="text-sm font-medium">默认目录</span>
-              <div className="flex gap-2">
-                <Input
-                  aria-label="默认目录"
-                  value={groupSettingsDefaultCwd}
-                  onChange={(event) => setGroupSettingsDefaultCwd(event.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={groupSettingsSaving || groupSettingsChoosingDirectory}
-                  onClick={() => { void chooseGroupSettingsDefaultCwd() }}
-                >
-                  <FolderOpen data-icon="inline-start" />
-                  选择
-                </Button>
-              </div>
-            </div>
+            <TerminalLaunchSettingsForm
+              value={groupSettingsLaunch}
+              inheritedValue={globalLaunchSettings?.settings}
+              inheritedLabel="全局"
+              choosingDirectory={groupSettingsChoosingDirectory}
+              onChooseDirectory={() => { void chooseGroupSettingsDefaultCwd() }}
+              onRevealEnvironmentValue={(key) => groupSettingsTarget
+                ? terminalBridge.launch.revealEnvironmentValue({ scope: "group", groupId: groupSettingsTarget.id, key })
+                : Promise.resolve(null)}
+              onCopyEnvironmentValue={(key, draftValue) => groupSettingsTarget
+                ? terminalBridge.launch.copyEnvironmentValue({ scope: "group", groupId: groupSettingsTarget.id, key, draftValue })
+                : Promise.resolve()}
+              onChange={setGroupSettingsLaunch}
+            />
           </div>
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
               disabled={groupSettingsSaving}
-              onClick={resetGroupSettingsDialog}
+              onClick={() => requestDiscard(groupSettingsDirty, resetGroupSettingsDialog)}
             >
               取消
             </Button>
@@ -1113,6 +1270,7 @@ export function TerminalModule() {
       <Dialog open={commandManagerTarget !== null} onOpenChange={(open) => {
         if (!open) {
           setCommandManagerTarget(null)
+          setCommandManagerCommands([])
           closeCommandForm()
         }
       }}>
@@ -1128,8 +1286,7 @@ export function TerminalModule() {
               <Table className="table-fixed">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-40">名称</TableHead>
-                    <TableHead>命令内容</TableHead>
+                    <TableHead>名称</TableHead>
                     <TableHead className="w-20 text-right" aria-label="操作" />
                   </TableRow>
                 </TableHeader>
@@ -1139,11 +1296,6 @@ export function TerminalModule() {
                       <TableCell className="min-w-0">
                         <div className="truncate font-medium">{command.name}</div>
                       </TableCell>
-                      <TableCell className="min-w-0">
-                        <div className="truncate font-mono text-xs text-muted-foreground" title={command.command}>
-                          {command.command}
-                        </div>
-                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Button
@@ -1151,7 +1303,7 @@ export function TerminalModule() {
                             variant="ghost"
                             size="icon-xs"
                             aria-label={`编辑命令：${command.name}`}
-                            onClick={() => openEditCommandDialog(command)}
+                            onClick={() => { void openEditCommandDialog(command) }}
                           >
                             <Pencil className="size-3.5" />
                           </Button>
@@ -1191,6 +1343,7 @@ export function TerminalModule() {
               disabled={commandSaving}
               onClick={() => {
                 setCommandManagerTarget(null)
+                setCommandManagerCommands([])
                 closeCommandForm()
               }}
             >
@@ -1209,9 +1362,9 @@ export function TerminalModule() {
         </DialogContent>
       </Dialog>
       <Dialog open={commandManagerTarget !== null && commandFormOpen} onOpenChange={(open) => {
-        if (!open) closeCommandForm()
+        if (!open) requestDiscard(commandFormDirty, closeCommandForm)
       }}>
-        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
+        <DialogContent className="max-w-[min(56rem,calc(100vw-2rem))]" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{commandEditTarget ? "编辑命令" : "新增命令"}</DialogTitle>
           </DialogHeader>
@@ -1235,13 +1388,33 @@ export function TerminalModule() {
                 rows={5}
               />
             </Field>
+            <TerminalLaunchSettingsForm
+              value={commandLaunch}
+              inheritedValue={mergeLaunchLayers(globalLaunchSettings?.settings, commandManagerTarget ? launchLayerFromGroup(commandManagerTarget) : undefined)}
+              inheritedLabel="全局 / 分组"
+              choosingDirectory={commandChoosingDirectory}
+              onChooseDirectory={() => { void chooseLaunchCwd(setCommandChoosingDirectory, setCommandLaunch) }}
+              onRevealEnvironmentValue={(key) => commandManagerTarget && commandEditTarget
+                ? terminalBridge.launch.revealEnvironmentValue({ scope: "command", groupId: commandManagerTarget.id, commandId: commandEditTarget.id, key })
+                : Promise.resolve(null)}
+              onCopyEnvironmentValue={(key, draftValue) => commandManagerTarget
+                ? terminalBridge.launch.copyEnvironmentValue({
+                    scope: "command",
+                    groupId: commandManagerTarget.id,
+                    ...(commandEditTarget ? { commandId: commandEditTarget.id } : {}),
+                    key,
+                    draftValue,
+                  })
+                : Promise.resolve()}
+              onChange={setCommandLaunch}
+            />
           </div>
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
               disabled={commandSaving}
-              onClick={closeCommandForm}
+              onClick={() => requestDiscard(commandFormDirty, closeCommandForm)}
             >
               取消
             </Button>
@@ -1327,6 +1500,24 @@ export function TerminalModule() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AlertDialog open={discardAction !== null} onOpenChange={(open) => {
+        if (!open) setDiscardAction(null)
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>放弃未保存的更改？</AlertDialogTitle>
+            <AlertDialogDescription>当前修改尚未保存。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>继续编辑</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              const action = discardAction
+              setDiscardAction(null)
+              action?.()
+            }}>放弃更改</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SystemAppWindowShell>
   )
 }
@@ -1394,9 +1585,9 @@ function TerminalSessionStatusIcon({ status }: { readonly status: SynapseTermina
 }
 
 function groupSessions(
-  groups: readonly SynapseTerminalGroup[],
+  groups: readonly SynapseTerminalGroupSummary[],
   sessions: readonly SynapseTerminalSession[],
-): Array<SynapseTerminalGroup & { sessions: SynapseTerminalSession[] }> {
+): Array<SynapseTerminalGroupSummary & { sessions: SynapseTerminalSession[] }> {
   const sortedGroups = [...groups].sort((a, b) => a.sortOrder - b.sortOrder)
   const grouped = sortedGroups.map((group) => ({
     ...group,
@@ -1468,13 +1659,61 @@ function mergeSession(
 }
 
 function mergeGroup(
-  groups: readonly SynapseTerminalGroup[],
-  group: SynapseTerminalGroup,
-): SynapseTerminalGroup[] {
+  groups: readonly SynapseTerminalGroupSummary[],
+  group: SynapseTerminalGroupSummary | SynapseTerminalGroup,
+): SynapseTerminalGroupSummary[] {
+  const summary = summarizeGroup(group)
   const nextGroups = groups.some((item) => item.id === group.id)
-    ? groups.map((item) => item.id === group.id ? group : item)
-    : [...groups, group]
+    ? groups.map((item) => item.id === group.id ? summary : item)
+    : [...groups, summary]
   return nextGroups.sort((left, right) => left.sortOrder - right.sortOrder)
+}
+
+function summarizeGroup(group: SynapseTerminalGroupSummary | SynapseTerminalGroup): SynapseTerminalGroupSummary {
+  const commands = group.settings?.commands?.map(({ id, name, createdAt, updatedAt, commandRevision }) => ({
+    id,
+    name,
+    createdAt,
+    updatedAt,
+    commandRevision,
+  }))
+  return {
+    id: group.id,
+    name: group.name,
+    createdAt: group.createdAt,
+    updatedAt: group.updatedAt,
+    sortOrder: group.sortOrder,
+    groupRevision: group.groupRevision,
+    launchRevision: group.launchRevision,
+    membershipRevision: group.membershipRevision,
+    commandCollectionRevision: group.commandCollectionRevision,
+    ...(commands?.length ? { settings: { commands } } : {}),
+  }
+}
+
+function launchLayerFromGroup(group: SynapseTerminalGroup): SynapseTerminalLaunchLayer {
+  return {
+    ...(group.settings?.defaultCwd ? { defaultCwd: group.settings.defaultCwd } : {}),
+    ...(group.settings?.shell ? { shell: group.settings.shell } : {}),
+    ...(group.settings?.environment ? { environment: group.settings.environment } : {}),
+  }
+}
+
+function mergeLaunchLayers(
+  lower: SynapseTerminalLaunchLayer | undefined,
+  higher: SynapseTerminalLaunchLayer | undefined,
+): SynapseTerminalLaunchLayer | undefined {
+  if (!lower && !higher) return undefined
+  return {
+    ...(lower?.defaultCwd ? { defaultCwd: lower.defaultCwd } : {}),
+    ...(lower?.shell ? { shell: lower.shell } : {}),
+    ...(lower?.environment ? { environment: lower.environment } : {}),
+    ...(higher?.defaultCwd ? { defaultCwd: higher.defaultCwd } : {}),
+    ...(higher?.shell ? { shell: higher.shell } : {}),
+    ...((lower?.environment || higher?.environment) ? {
+      environment: { ...lower?.environment, ...higher?.environment },
+    } : {}),
+  }
 }
 
 function loadWebglRenderer(xterm: Terminal): { dispose(): void; refresh(): void } | undefined {
