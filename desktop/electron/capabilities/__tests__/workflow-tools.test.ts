@@ -74,6 +74,14 @@ describe("workflow MCP tool definitions", () => {
   })
 
   it("teaches agents that app-provided Workflow node types are supported", () => {
+    const recentNodeTypes = [
+      "json_repair_text_repair",
+      "system_notifier_notification_trigger",
+      "clipboard_text_write",
+      "clipboard_text_read",
+      "javascript_run",
+      "nodejs_run",
+    ]
     const listDescription = toolByName("app_workflow_node_type_list").description
     expect(listDescription).toContain("document_template_docx_generate")
     expect(listDescription).toContain("text_extract")
@@ -81,6 +89,9 @@ describe("workflow MCP tool definitions", () => {
     expect(listDescription).toContain("text_file_writer_file_write")
     expect(listDescription).toContain("PDF")
     expect(listDescription).toContain("DOCX")
+    for (const nodeType of recentNodeTypes) {
+      expect(listDescription).toContain(nodeType)
+    }
 
     const describeProperties = toolByName("app_workflow_node_type_describe").inputSchema.properties
     const describeNodeType = objectProperty(describeProperties, "nodeType")
@@ -88,6 +99,9 @@ describe("workflow MCP tool definitions", () => {
     expect(stringProperty(describeNodeType, "description")).toContain("text_extract")
     expect(stringProperty(describeNodeType, "description")).toContain("file_opener_file_open")
     expect(stringProperty(describeNodeType, "description")).toContain("text_file_writer_file_write")
+    for (const nodeType of recentNodeTypes) {
+      expect(stringProperty(describeNodeType, "description")).toContain(nodeType)
+    }
 
     const createProperties = toolByName("app_workflow_node_create").inputSchema.properties
     const nodeSchema = objectProperty(createProperties, "node")
@@ -97,6 +111,9 @@ describe("workflow MCP tool definitions", () => {
     expect(stringProperty(typeSchema, "description")).toContain("text_extract")
     expect(stringProperty(typeSchema, "description")).toContain("file_opener_file_open")
     expect(stringProperty(typeSchema, "description")).toContain("text_file_writer_file_write")
+    for (const nodeType of recentNodeTypes) {
+      expect(stringProperty(typeSchema, "description")).toContain(nodeType)
+    }
   })
 
   it("documents workflow_call, codex, and claude_code config fields in the full definition schema", () => {
