@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import type { SynapseGitRepository, SynapseGitRepositorySnapshot, SynapseGitWorkingTreeChange } from "../../../src/types/git"
 import type { StructuredLogger } from "../../runtime/logging"
-import { errorLogMeta } from "../error-sanitize"
+import { errorLogMeta, sanitizeError } from "../error-sanitize"
 import { sanitizeGitDiagnosticText } from "./git-sanitize"
 
 const MAX_OUTPUT_PREVIEW_LENGTH = 1200
@@ -38,7 +38,13 @@ function elapsedMs(startedAt: number | undefined): number | undefined {
 }
 
 function sanitizeGitLogText(value: string): string {
-  return sanitizeGitDiagnosticText(value)
+  return sanitizeError(sanitizeGitDiagnosticText(value))
+}
+
+function sanitizeGitLogPath(value: string): string {
+  const normalized = value.trim().replace(/^file:\/\/\/?/, "/").replace(/\\/g, "/")
+  const basename = normalized.split("/").filter(Boolean).at(-1)
+  return basename ? `[path redacted]/${basename}` : "[path redacted]"
 }
 
 function truncateText(value: string, limit = MAX_OUTPUT_PREVIEW_LENGTH): string {
@@ -140,7 +146,7 @@ function gitErrorMeta(error: unknown): Record<string, unknown> {
       includeCode: true,
       includeMessage: true,
       messageLimit: 600,
-      sanitizeMessage: sanitizeGitDiagnosticText,
+      sanitizeMessage: sanitizeGitLogText,
     }),
     category: categorizeGitErrorForLog(error),
     ...(diagnostics.exitCode !== undefined ? { exitCode: diagnostics.exitCode } : {}),
@@ -203,8 +209,8 @@ function logGitOperationFailed(
     operation: input.operation,
     operationId: input.operationId,
     ...(input.repositoryId ? { repositoryId: input.repositoryId } : {}),
-    ...(input.repoPath ? { repoPath: input.repoPath } : {}),
-    ...(input.cwd ? { cwd: input.cwd } : {}),
+    ...(input.repoPath ? { repoPath: sanitizeGitLogPath(input.repoPath) } : {}),
+    ...(input.cwd ? { cwd: sanitizeGitLogPath(input.cwd) } : {}),
     ...(input.args ? { gitArgs: summarizeGitArgs(input.args) } : {}),
     ...(input.startedAt !== undefined ? { durationMs: elapsedMs(input.startedAt) } : {}),
     ...input.extra,
@@ -248,7 +254,7 @@ function summarizeSnapshot(snapshot: Pick<SynapseGitRepositorySnapshot, "current
 function repositoryLogMeta(repository: Pick<SynapseGitRepository, "id" | "localPath" | "name">): Record<string, unknown> {
   return {
     repositoryId: repository.id,
-    repoPath: repository.localPath,
+    repoPath: sanitizeGitLogPath(repository.localPath),
     repositoryName: repository.name,
   }
 }
@@ -261,6 +267,7 @@ export {
   logGitOperationStarted,
   logGitOperationSucceeded,
   repositoryLogMeta,
+  sanitizeGitLogPath,
   sanitizeGitLogText,
   sanitizeOutputPreview,
   sanitizeRemoteUrl,

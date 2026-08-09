@@ -1,6 +1,6 @@
 import type { SynapseGitErrorCategory, SynapseGitUserFacingFailure } from "../../../src/types/git"
 import { runGitCommand, type GitCommandResult } from "../git-command"
-import { createGitOperationId, gitErrorMeta, summarizeGitArgs } from "./git-logging"
+import { createGitOperationId, gitErrorMeta, sanitizeGitLogPath, summarizeGitArgs } from "./git-logging"
 import { createGitUserFacingFailure, sanitizeGitUserFacingFailureText } from "./git-user-facing-failure"
 
 type GitClientRunInput = {
@@ -148,8 +148,8 @@ export function createGitClientCommandRunner(deps: {
             operation,
             operationId,
             ...(input.repositoryId ? { repositoryId: input.repositoryId } : {}),
-            repoPath: input.repoPath ?? input.cwd,
-            cwd: input.cwd,
+            repoPath: sanitizeGitLogPath(input.repoPath ?? input.cwd),
+            cwd: sanitizeGitLogPath(input.cwd),
             gitArgs: summarizeGitArgs(input.args),
             durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
             ...gitErrorMeta(error),
