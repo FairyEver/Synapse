@@ -82,6 +82,20 @@ describe("TextFileWriterService", () => {
     await expect(readFile(htmlPath)).resolves.toEqual(Buffer.from("<h1>报告</h1>", "utf16le"))
   })
 
+  it("writes a legal long target name without exceeding the temporary filename limit", async () => {
+    const directory = await createTempDirectory()
+    const fileName = `${"a".repeat(240)}.txt`
+    const outputPath = path.join(directory, fileName)
+    const { service } = createService()
+
+    await expect(service.write({ text: "long target", path: outputPath })).resolves.toMatchObject({
+      fileName,
+      size: Buffer.byteLength("long target"),
+    })
+    await expect(readFile(outputPath, "utf8")).resolves.toBe("long target")
+    expect((await readdir(directory)).filter((name) => name.startsWith(".synapse-text-file-writer-"))).toEqual([])
+  })
+
   it("refuses implicit overwrite and preserves the existing file mode on explicit overwrite", async () => {
     const directory = await createTempDirectory()
     const outputPath = path.join(directory, "report.txt")

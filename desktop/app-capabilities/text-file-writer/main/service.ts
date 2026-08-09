@@ -239,7 +239,7 @@ async function writeTextFile(
   const bytes = Buffer.from(input.text, input.encoding)
   const temporaryPath = path.join(
     actualParent,
-    `.synapse-text-file-writer-${path.basename(actualPath)}-${process.pid}-${randomUUID()}.tmp`,
+    `.synapse-text-file-writer-${randomUUID()}.tmp`,
   )
   const noFollow = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0
   const mode = initialTarget?.mode ?? 0o666
