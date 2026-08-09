@@ -4,7 +4,10 @@ import type { AgentSendDeps, NodeExecutionResult, NodeRuntimeDeps, WorkflowCallS
 import type { ActorIdentity } from "../../runtime/security"
 import { SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/system-notifier/shared/capability"
 import { JSON_REPAIR_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/json-repair/shared/capability"
-import { CLIPBOARD_TEXT_WRITE_WORKFLOW_NODE_TYPE } from "../../../app-capabilities/clipboard/shared/capability"
+import {
+  CLIPBOARD_TEXT_READ_WORKFLOW_NODE_TYPE,
+  CLIPBOARD_TEXT_WRITE_WORKFLOW_NODE_TYPE,
+} from "../../../app-capabilities/clipboard/shared/capability"
 import {
   JAVASCRIPT_RUN_WORKFLOW_NODE_TYPE,
   NODEJS_RUN_WORKFLOW_NODE_TYPE,
@@ -462,7 +465,9 @@ export class WorkflowEngine {
           logger.info("node succeeded", {
             runId, nodeId: outcome.nodeId, nodeName: nodeNames[outcome.nodeId], durationMs: nr.durationMs,
             triggerSource: triggerSource ?? "unknown",
-            ...(nr.output !== undefined ? { outputLength: nr.output.length } : {}),
+            ...(nr.output !== undefined && nodeType !== CLIPBOARD_TEXT_READ_WORKFLOW_NODE_TYPE
+              ? { outputLength: nr.output.length }
+              : {}),
             ...(nr.activeBranch !== undefined ? { activeBranch: nr.activeBranch } : {}),
             ...(nr.usage !== undefined ? { usage: nr.usage } : {}),
             ...(nr.costUsd !== undefined ? { costUsd: nr.costUsd } : {}),
