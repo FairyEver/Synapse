@@ -23,6 +23,7 @@ export const jsonRepairNodeManifest: NodeManifest<JsonRepairNodeConfig> = {
     inputs: [{ id: "in", label: "输入" }],
     outputs: [{ id: "out", label: "JSON" }],
   },
+  publicOutputs: ["json"],
   cardSummary: () => ({
     title: "JSON 修复",
     subtitle: "",

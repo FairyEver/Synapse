@@ -10,6 +10,7 @@ describe("JSON repair workflow manifest", () => {
         inputs: [{ id: "in", label: "输入" }],
         outputs: [{ id: "out", label: "JSON" }],
       },
+      publicOutputs: ["json"],
       share: {
         selfContained: false,
         capability: {
