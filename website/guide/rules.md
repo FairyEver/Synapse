@@ -1,6 +1,6 @@
 # Rule
 
-<!-- Sources: desktop/src/modules/rules/index.tsx; desktop/src/config/content-types/rule.ts; desktop/electron/services/content-write-service.ts -->
+<!-- Sources: desktop/src/modules/rules/index.tsx; desktop/src/config/content-types/rule.ts; desktop/electron/services/content-write-service.ts; website/guide/editors.md -->
 
 ## 用途
 
@@ -16,9 +16,9 @@ Rule 下载为 `.md` 文件，仅包含当前版本正文。
 
 ## 安装
 
-Rule 支持安装到 Claude Code、Cursor、Codex 和 Windsurf。安装时选择编辑器和安装范围。
+Rule 支持安装到 Antigravity、Claude Code、Codex、Cursor、Hermes 和 Windsurf。WorkBuddy 不支持 Rule。
 
-Rule 的项目级安装支持 Claude Code、Cursor、Codex 和 Windsurf。Rule 的全局安装支持 Claude Code、Codex 和 Windsurf；Cursor 全局 Rule 当前不支持。
+Rule 的项目级安装支持 Antigravity、Claude Code、Codex、Cursor、Hermes 和 Windsurf。Rule 的全局安装支持 Antigravity、Claude Code、Codex、Hermes 和 Windsurf；Cursor 全局 Rule 当前不支持。
 
 ## 适用场景
 

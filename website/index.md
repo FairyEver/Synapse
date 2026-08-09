@@ -20,7 +20,7 @@ features:
   - title: Resource Repository
     details: 资源仓库管理 Rule、Skill 和 Prompt，支持本地目录、Git 仓库、版本历史、删除恢复和编辑器安装。
   - title: 跨编辑器安装
-    details: 安装目标包括 Claude Code、Cursor、Codex 和 Windsurf，支持全局范围和项目范围。
+    details: 安装目标包括 Antigravity、Claude Code、Codex、Cursor、Hermes、Windsurf 和 WorkBuddy，具体内容类型与范围按编辑器支持情况提供。
   - title: Agent Runtime
     details: Agent 会话绑定项目和 agentType，记录消息、工具、权限、错误、结果和 transcript。
   - title: Workflow

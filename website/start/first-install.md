@@ -10,7 +10,7 @@ Prompt 由 Synapse 管理和版本化，不作为编辑器安装目标。
 
 ## 选择编辑器
 
-安装时选择目标编辑器。Synapse 支持将 Rule 和 Skill 安装到 Claude Code、Cursor、Codex、Windsurf。
+安装时选择目标编辑器。Synapse 支持 Antigravity、Claude Code、Codex、Cursor、Hermes、Windsurf 和 WorkBuddy。WorkBuddy 仅支持 Skill。
 
 编辑器安装规则参见 [编辑器安装](/guide/editors)。
 

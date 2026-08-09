@@ -22,7 +22,7 @@ Skill 下载为 `.zip` 文件，包含主说明文件和全部附件。
 
 ## 安装
 
-Skill 支持安装到 Claude Code、Cursor、Codex 和 Windsurf。安装时选择编辑器和安装范围。
+Skill 支持安装到 Antigravity、Claude Code、Codex、Cursor、Hermes、Windsurf 和 WorkBuddy。安装时选择编辑器和安装范围。
 
 全局安装写入编辑器用户目录。项目级安装写入所选项目目录。
 

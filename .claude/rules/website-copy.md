@@ -15,7 +15,7 @@ Synapse 网站是面向开发者和技术团队的桌面端功能文档。所有
 
 - Synapse 是跨编辑器的 AI capability 管理桌面应用。
 - 桌面端公开能力包括 Resource Repository、Rule、Skill、Prompt、编辑器安装、Agent、Workflow、Automation、Knowledge Base、Drive、Database、Usage Analysis、Model Price、Git、Diagnostics、系统 App 和 Synapse MCP。
-- 编辑器安装目标包括 Claude Code、Cursor、Codex 和 Windsurf。
+- 编辑器安装目标包括 Antigravity、Claude Code、Codex、Cursor、Hermes、Windsurf 和 WorkBuddy；WorkBuddy 仅支持 Skill，Cursor 不支持全局 Rule。
 - 内容仓库可以是本地目录或 Git 仓库；云盘、账号、分享等能力按当前桌面端公开入口描述。
 - 安装包通过 GitHub Releases 发布，公开下载链接使用 `https://github.com/FairyEver/SynapseAppRelease/releases`。
 
@@ -121,7 +121,7 @@ Synapse 网站是面向开发者和技术团队的桌面端功能文档。所有
 ## 6. 格式规范
 
 - 产品名 `Synapse` 首字母大写，不缩写
-- 编辑器名称使用官方写法：Claude Code、Cursor、Codex、Windsurf
+- 编辑器名称使用官方写法：Antigravity、Claude Code、Codex、Cursor、Hermes、Windsurf、WorkBuddy
 - 文件格式用 code 标记：`.md`、`.zip`、`.dmg`
 - 路径和命令用 code 标记：`git clone`、`Settings`
 - 中英文之间加空格：`支持 Claude Code 的全局安装`
