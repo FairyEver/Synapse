@@ -296,6 +296,25 @@ export class BackupService {
     }) as NodeJS.ReadableStream
   }
 
+  async checkBackupAvailable(filename: string): Promise<void> {
+    const cos = this.getBackupCos()
+    const key = buildBackupKey(this.prefix, filename)
+
+    await new Promise<void>((resolve, reject) => {
+      cos.headObject(
+        {
+          Bucket: this.bucket,
+          Region: this.region,
+          Key: key,
+        },
+        (error) => {
+          if (error) reject(error)
+          else resolve()
+        },
+      )
+    })
+  }
+
   async deleteBackup(filename: string): Promise<void> {
     const cos = this.getBackupCos()
     const key = buildBackupKey(this.prefix, filename)

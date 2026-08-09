@@ -737,6 +737,30 @@ describe("BackupService", () => {
     })
   })
 
+  it("checks backup availability without opening the object stream", async () => {
+    const headObject = vi.fn((_options, callback) => callback(null))
+    const getObjectStream = vi.fn()
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({ headObject, getObjectStream }, logger)
+
+    await expect(service.checkBackupAvailable("synapse-backup.tar.gz")).resolves.toBeUndefined()
+    expect(headObject).toHaveBeenCalledWith({
+      Bucket: "bucket",
+      Region: "ap-guangzhou",
+      Key: "backups/synapse-backup.tar.gz",
+    }, expect.any(Function))
+    expect(getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it("rejects backup availability checks when COS cannot find the object", async () => {
+    const error = new Error("NoSuchKey")
+    const headObject = vi.fn((_options, callback) => callback(error))
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({ headObject }, logger)
+
+    await expect(service.checkBackupAvailable("missing.tar.gz")).rejects.toThrow(error)
+  })
+
   it("streams backup archives to COS without buffering the whole file", async () => {
     const archiveStream = Readable.from(["archive"])
     const createReadStream = vi.mocked(fs.createReadStream).mockReturnValueOnce(archiveStream as fs.ReadStream)
