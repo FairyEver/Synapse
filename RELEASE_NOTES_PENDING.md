@@ -11,5 +11,6 @@
 - 修复 Workflow 中 JSON 修复节点的结构化 `json` 输出无法绑定到 JavaScript/Node.js 节点的问题。
 - 管理密钥页现在会区分密钥无效、请求来源错误、认证服务故障和网络失败，不再把所有问题都显示为“密钥无效”。
 - 修复内置 Synapse Skill 错误否认 JavaScript/Node.js Automation Action 的问题，Agent 现在会将脚本自动化配置正确路由到 Automation 能力。
+- Agent 工作区的复制、导出、打开引用与直发操作不再将会话路由标识写入日志或诊断埋点。
 
 ## 技术调整
