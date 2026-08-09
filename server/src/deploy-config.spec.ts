@@ -373,6 +373,8 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("http://127.0.0.1:3000/console/")
     expect(deployScript).toContain("http://127.0.0.1:3000/admin/")
     expect(deployScript).toContain("<title>Synapse 管理</title>")
+    expect(deployScript).toContain('echo "管理面板: https://synapse.d2.pub/admin"')
+    expect(deployScript).not.toContain('管理面板: https://synapse.d2.pub/console')
     expect(deployScript).toContain("http://127.0.0.1:3000/webhooks/not-found/test")
     expect(deployScript).toContain("http://127.0.0.1:3000/share/shr_not_found")
     expect(deployScript).toContain("Location: /console/")

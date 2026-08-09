@@ -805,5 +805,5 @@ fi
 TOTAL_ELAPSED=$(( $(date +%s) - TOTAL_START ))
 echo ""
 echo "部署完成 (${TOTAL_ELAPSED}s)"
-echo "管理面板: https://synapse.d2.pub/console"
+echo "管理面板: https://synapse.d2.pub/admin"
 print_deployment_artifacts
