@@ -61,6 +61,8 @@ The system exposes no API or UI to read, copy, generate or change the secret. Ro
 
 The secret-entry value exists only in component memory. It is never written to browser persistence, URLs, logs, errors, telemetry or test snapshots. The password field allows paste and temporary visibility and is cleared after every request.
 
+The access page treats only 400/401 unlock responses as `密钥无效`. A trusted-Origin 403, authentication-service 5xx, network failure, or other operational failure uses a separate non-secret form error so administrators can distinguish credential, deployment, service, and connectivity recovery paths. These failures remain excluded from the global admin-session-expired handler, and the secret field is still cleared after every request.
+
 ## Administrator Sessions
 
 The admin session API is:
@@ -175,6 +177,10 @@ The admin access page uses the existing auth layout, Card, Form, PasswordInput a
 - label: `密钥`;
 - action: `进入管理界面`;
 - invalid state: `密钥无效`.
+- Origin state: `请求来源无效，请检查管理后台地址或代理配置。`;
+- service state: `认证服务暂时不可用，请稍后重试。`;
+- network state: `无法连接认证服务，请检查网络后重试。`;
+- fallback state: `暂时无法进入管理界面，请重试。`.
 
 It introduces no custom colors, gradients, CSS module, inline styles, nested cards, welcome copy or implementation explanation. Keyboard submission, visible focus, disabled/loading state and password visibility remain accessible.
 
