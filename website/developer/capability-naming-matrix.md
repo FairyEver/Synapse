@@ -97,6 +97,11 @@
 | `app.drive.item_preview.get` | `app_drive_item_preview_get` | `app.drive.item_preview.get` | `driveItemPreviewGet` |
 | `app.drive.file_content.read` | `app_drive_file_content_read` | `app.drive.file_content.read` | `driveFileContentRead` |
 | `app.drive.file_download.create` | `app_drive_file_download_create` | `app.drive.file_download.create` | `driveFileDownloadCreate` |
+| `app.drive.file_version.list` | `app_drive_file_version_list` | `app.drive.file_version.list` | `driveFileVersionList` |
+| `app.drive.file_version_download.create` | `app_drive_file_version_download_create` | `app.drive.file_version_download.create` | `driveFileVersionDownloadCreate` |
+| `app.drive.file_version.restore` | `app_drive_file_version_restore` | `app.drive.file_version.restore` | `driveFileVersionRestore` |
+| `app.drive.file_version.delete` | `app_drive_file_version_delete` | `app.drive.file_version.delete` | `driveFileVersionDelete` |
+| `app.drive.file_version_pin.update` | `app_drive_file_version_pin_update` | `app.drive.file_version_pin.update` | `driveFileVersionPinUpdate` |
 | `app.drive.link.resolve` | `app_drive_link_resolve` | `app.drive.link.resolve` | `driveLinkResolve` |
 | `app.drive.link.list` | `app_drive_link_list` | `app.drive.link.list` | `driveLinkList` |
 | `app.drive.link.read_text` | `app_drive_link_read_text` | `app.drive.link.read_text` | `driveLinkReadText` |
@@ -113,6 +118,13 @@
 | `app.drive.share.list` | `app_drive_share_list` | `app.drive.share.list` | `driveShareList` |
 | `app.drive.share.create` | `app_drive_share_create` | `app.drive.share.create` | `driveShareCreate` |
 | `app.drive.share.disable` | `app_drive_share_disable` | `app.drive.share.disable` | `driveShareDisable` |
+| `app.drive.site.create` | `app_drive_site_create` | `app.drive.site.create` | `createDriveSite` |
+| `app.drive.site.list` | `app_drive_site_list` | `app.drive.site.list` | `listDriveSites` |
+| `app.drive.site.update_access` | `app_drive_site_update_access` | `app.drive.site.update_access` | `updateDriveSiteAccess` |
+| `app.drive.site.disable` | `app_drive_site_disable` | `app.drive.site.disable` | `disableDriveSite` |
+| `app.drive.site.enable` | `app_drive_site_enable` | `app.drive.site.enable` | `enableDriveSite` |
+| `app.drive.site.delete` | `app_drive_site_delete` | `app.drive.site.delete` | `deleteDriveSite` |
+| `app.drive.site.republish` | `app_drive_site_republish` | `app.drive.site.republish` | `republishDriveSite` |
 | `app.drive.usage.get` | `app_drive_usage_get` | `app.drive.usage.get` | `driveUsageGet` |
 | `app.drive.stats.get` | `app_drive_stats_get` | `app.drive.stats.get` | `driveStatsGet` |
 | `app.drive.item_tree.list` | `app_drive_item_tree_list` | `app.drive.item_tree.list` | `driveItemTreeList` |
@@ -128,5 +140,15 @@
 | `app.drive.sync.binding.exclude_rules.update` | `app_drive_sync_binding_exclude_rules_update` | `app.drive.sync.binding.exclude_rules.update` | `updateExcludeRules` |
 | `app.drive.sync.binding.rescan` | `app_drive_sync_binding_rescan` | `app.drive.sync.binding.rescan` | `rescanBinding` |
 | `app.drive.sync.conflict.resolve` | `app_drive_sync_conflict_resolve` | `app.drive.sync.conflict.resolve` | `resolveConflict` |
+| `app.drive.direct_link.upload` | `app_drive_direct_link_upload` | `app.drive.direct_link.upload` | `uploadDrivePublicAssets` |
+| `app.drive.direct_link.list` | `app_drive_direct_link_list` | `app.drive.direct_link.list` | `listDrivePublicAssets` |
+| `app.drive.direct_link.get` | `app_drive_direct_link_get` | `app.drive.direct_link.get` | `getDrivePublicAsset` |
+| `app.drive.direct_link.update` | `app_drive_direct_link_update` | `app.drive.direct_link.update` | `replaceDrivePublicAssetFile` |
+| `app.drive.direct_link.rename` | `app_drive_direct_link_rename` | `app.drive.direct_link.rename` | `renameDrivePublicAsset` |
+| `app.drive.direct_link.delete` | `app_drive_direct_link_delete` | `app.drive.direct_link.delete` | `trashDrivePublicAsset` |
+| `app.drive.direct_link.restore` | `app_drive_direct_link_restore` | `app.drive.direct_link.restore` | `restoreDrivePublicAsset` |
+| `app.drive.trash.list` | `app_drive_trash_list` | `app.drive.trash.list` | `listDriveTrash` |
+| `app.drive.trash.delete` | `app_drive_trash_delete` | `app.drive.trash.delete` | `deleteDriveTrashItem` |
+| `app.drive.item.restore` | `app_drive_item_restore` | `app.drive.item.restore` | `restoreDriveTrashItem` |
 
 只支持本矩阵中的规范公开名称。
