@@ -202,6 +202,11 @@ describe("mcp-installer", () => {
         url: "http://127.0.0.1:51234/mcp",
       },
     })
+    expect(state.logger.info).toHaveBeenCalledWith("MCP settings backup created before write.", {
+      settingsPath: "[path redacted]/mcp.json",
+      backupPath: expect.stringMatching(/^\[path redacted\]\/mcp\.synapse-backup-/),
+    })
+    expect(JSON.stringify(state.logger.info.mock.calls)).not.toContain(state.home)
   })
 
   it("registers and detects WorkBuddy MCP in the user configuration", async () => {
@@ -347,6 +352,15 @@ describe("mcp-installer", () => {
         target: "cursor",
       }),
     }))
+    expect(state.logger.info).toHaveBeenCalledWith("MCP auto-registered.", expect.objectContaining({
+      target: "cursor",
+      settingsPath: "[path redacted]/mcp.json",
+    }))
+    expect(JSON.stringify([
+      ...state.logger.info.mock.calls,
+      ...state.logger.warn.mock.calls,
+      ...state.logger.error.mock.calls,
+    ])).not.toContain(state.home)
   })
 
   it("auto-registers Claude MCP for first-run users with the default permission guard", async () => {

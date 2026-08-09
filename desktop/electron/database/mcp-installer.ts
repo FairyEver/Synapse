@@ -5,10 +5,12 @@ import { randomUUID } from "node:crypto"
 import { shell } from "electron"
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml"
 import { createMainLogger } from "../services/log-store"
+import { errorLogMeta } from "../services/error-sanitize"
 import { mcpDefinitions } from "../services/definitions/generated/main-registry"
 import type { SynapseMcpDefinition } from "../../src/definitions/types"
 import { SYNAPSE_MCP_LEGACY_SERVER_NAMES, SYNAPSE_MCP_SERVER_NAME } from "../../database/shared/server-identity"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
+import { sanitizeDatabaseLogPath } from "./logging"
 
 const logger = createMainLogger("database.mcp-installer")
 
@@ -112,8 +114,8 @@ function writeSettingsFileSafely(settingsPath: string, content: string): void {
     renameSync(temporaryPath, settingsPath)
     if (backupPath) {
       logger.info("MCP settings backup created before write.", {
-        settingsPath,
-        backupPath,
+        settingsPath: sanitizeDatabaseLogPath(settingsPath),
+        backupPath: sanitizeDatabaseLogPath(backupPath),
       })
     }
   } catch (error) {
@@ -521,18 +523,18 @@ async function cleanupStaticAuthorizationForTarget(
     return
   }
 
-  let modified = false
-  if (usesJsonSettings(definition)) {
-    modified = cleanupJsonStaticAuthorization(settingsPath)
-  } else if (usesHermesYamlSettings(definition)) {
-    modified = cleanupHermesStaticAuthorization(settingsPath)
-  } else {
-    modified = cleanupCodexStaticAuthorization(settingsPath, mcpUrl)
-  }
+  const modified = usesJsonSettings(definition)
+    ? cleanupJsonStaticAuthorization(settingsPath)
+    : usesHermesYamlSettings(definition)
+      ? cleanupHermesStaticAuthorization(settingsPath)
+      : cleanupCodexStaticAuthorization(settingsPath, mcpUrl)
 
   if (modified) {
     recordMcpWriteAudit(security, audit, "allowed")
-    logger.info("MCP static Authorization header removed.", { target: definition.target, settingsPath })
+    logger.info("MCP static Authorization header removed.", {
+      target: definition.target,
+      settingsPath: sanitizeDatabaseLogPath(settingsPath),
+    })
   }
 }
 
@@ -577,13 +579,17 @@ async function registerMcp(
       registerCodexMcp(settingsPath, mcpUrl)
     }
 
-    logger.info("MCP server registered.", { target, settingsPath, mode: "http" })
+    logger.info("MCP server registered.", {
+      target,
+      settingsPath: sanitizeDatabaseLogPath(settingsPath),
+      mode: "http",
+    })
     recordMcpWriteAudit(security, audit, "allowed")
     return { success: true }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     recordMcpWriteAudit(security, audit, "failed", message)
-    logger.error("MCP registration failed.", { target, error: message })
+    logger.error("MCP registration failed.", { target, ...errorLogMeta(error) })
     return { success: false, error: message }
   }
 }
@@ -660,7 +666,7 @@ async function unregisterMcp(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     recordMcpWriteAudit(security, audit, "failed", message)
-    logger.warn("MCP unregister failed.", { target, name: serverName, error: message })
+    logger.warn("MCP unregister failed.", { target, name: serverName, ...errorLogMeta(error) })
     return { success: false, modified: false, error: message }
   }
 }
@@ -753,18 +759,26 @@ async function cleanupLegacyClaudePermissions(security?: McpRegistrationSecurity
     const audit = buildMcpWriteAudit(CLAUDE_TARGET, settingsPath, security, "unregister")
     const permission = await authorizeMcpWrite(security, audit)
     if (!permission.allowed) {
-      logger.warn("Legacy Claude MCP permission cleanup denied.", { settingsPath, reason: permission.reason })
+      logger.warn("Legacy Claude MCP permission cleanup denied.", {
+        settingsPath: sanitizeDatabaseLogPath(settingsPath),
+        reason: permission.reason,
+      })
       continue
     }
     try {
       if (removeLegacyClaudePermissionAllowlistEntries(settingsPath)) {
         recordMcpWriteAudit(security, audit, "allowed")
-        logger.info("Legacy Claude MCP permission allowlist entries removed.", { settingsPath })
+        logger.info("Legacy Claude MCP permission allowlist entries removed.", {
+          settingsPath: sanitizeDatabaseLogPath(settingsPath),
+        })
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       recordMcpWriteAudit(security, audit, "failed", message)
-      logger.warn("Legacy Claude MCP permission cleanup failed.", { settingsPath, error: message })
+      logger.warn("Legacy Claude MCP permission cleanup failed.", {
+        settingsPath: sanitizeDatabaseLogPath(settingsPath),
+        ...errorLogMeta(error),
+      })
     }
   }
 }
@@ -780,7 +794,10 @@ async function autoRegisterMcp(mcpPort: number, security?: McpRegistrationSecuri
       const settingsPath = getSettingsPath(definition)
       const settingsDir = path.dirname(settingsPath)
       if (!existsSync(settingsDir)) {
-        logger.info("MCP target skipped: settings directory not found.", { target, settingsDir })
+        logger.info("MCP target skipped: settings directory not found.", {
+          target,
+          settingsDir: sanitizeDatabaseLogPath(settingsDir),
+        })
         continue
       }
 
@@ -798,7 +815,10 @@ async function autoRegisterMcp(mcpPort: number, security?: McpRegistrationSecuri
       }
 
       if (detection.registered && detection.mode === "http" && detection.url === mcpUrl) {
-        logger.info("MCP target already registered with correct URL.", { target, settingsPath })
+        logger.info("MCP target already registered with correct URL.", {
+          target,
+          settingsPath: sanitizeDatabaseLogPath(settingsPath),
+        })
         await cleanupStaticAuthorizationForTarget(definition, settingsPath, mcpUrl, security)
         await cleanupLegacyMcpNamesForTarget(target, security)
         if (target === CLAUDE_TARGET) await cleanupLegacyClaudePermissions(security)
@@ -807,14 +827,22 @@ async function autoRegisterMcp(mcpPort: number, security?: McpRegistrationSecuri
 
       const result = await registerMcp(target, mcpPort, security)
       if (result.success) {
-        logger.info("MCP auto-registered.", { target, settingsPath, previousMode: detection.mode, previousUrl: detection.url })
+        logger.info("MCP auto-registered.", {
+          target,
+          settingsPath: sanitizeDatabaseLogPath(settingsPath),
+          previousMode: detection.mode,
+          previousUrl: detection.url,
+        })
         await cleanupLegacyMcpNamesForTarget(target, security)
         if (target === CLAUDE_TARGET) await cleanupLegacyClaudePermissions(security)
       } else {
-        logger.warn("MCP auto-registration failed, preserving legacy entries.", { target, error: result.error })
+        logger.warn("MCP auto-registration failed, preserving legacy entries.", {
+          target,
+          ...errorLogMeta(result.error),
+        })
       }
     } catch (error) {
-      logger.warn("MCP auto-registration failed (non-fatal).", { target, error: error instanceof Error ? error.message : String(error) })
+      logger.warn("MCP auto-registration failed (non-fatal).", { target, ...errorLogMeta(error) })
     }
   }
   logger.info("MCP auto-registration completed.")
