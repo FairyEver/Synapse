@@ -6,7 +6,8 @@
 
 - 工作流是有向无环图（DAG）
 - 节点按拓扑序执行；无依赖关系的节点并行运行
-- 内置节点类型包括 `prompt`、`switch`、`http_request`、`script`、`workflow_call`、`document_template_docx_generate`、`text_extract`、`file_opener_file_open`、`codex`、`claude_code` 和 `end`
+- 内置节点类型包括 `text`、`prompt`、`switch`、`http_request`、`script`、`workflow_call`、`document_template_docx_generate`、`text_extract`、`file_opener_file_open`、`text_file_writer_file_write`、`html_generator_ejs_generate`、`html_generator_ejs_file_generate`、`json_repair_text_repair`、`system_notifier_notification_trigger`、`clipboard_text_write`、`clipboard_text_read`、`javascript_run`、`nodejs_run`、`codex`、`claude_code` 和 `end`
+- 配置任何节点前必须调用 `app_workflow_node_type_describe`，以返回的 `configSchema.required` 和能力声明为准
 - 每个工作流必须有且仅有一个 `end` 节点，不允许环
 - 节点通过有向边连接（`from` → `to`）
 - switch 节点的出边必须携带 `branch` 字段
@@ -33,7 +34,7 @@
 | `static` | 硬编码值 | `{ "type": "static", "value": "你是一个翻译助手" }` |
 
 变量在节点执行前解析完毕。变量名支持字母、数字、下划线和中文。
-变量可用于 prompt/switch/codex/claude_code 提示词、end 输出模板、HTTP 文本字段、`workflow_call.paramTemplates`、`document_template_docx_generate` 的路径和内联 JSON 字段，以及 `text_extract.filePath` 和 `file_opener_file_open.path`。script 节点会把变量作为环境变量注入，不支持在脚本文本中写 `{{变量名}}`。POSIX 使用 `$变量名`，cmd 使用 `%变量名%`，PowerShell 使用 `$env:变量名`。
+变量可用于 `text.template`、prompt/switch/codex/claude_code 提示词、end 输出模板、HTTP 文本字段、`workflow_call.paramTemplates`、`document_template_docx_generate` 的路径和内联 JSON、`text_extract.filePath`、`file_opener_file_open.path`、`text_file_writer_file_write.path/text`、`html_generator_ejs_file_generate.outputPath`、`json_repair_text_repair.text`、System Notifier 的标题/正文以及 `clipboard_text_write.text`。HTML Generator 的 EJS `template`、JavaScript/Node.js 的 `source` 不做 Workflow 插值。script 节点会把变量作为环境变量注入，不支持在脚本文本中写 `{{变量名}}`。POSIX 使用 `$变量名`，cmd 使用 `%变量名%`，PowerShell 使用 `$env:变量名`。
 
 单个文件或文件夹变量注入绝对路径；多选资源变量注入保持顺序的 JSON 路径数组。例如 POSIX 脚本可用 `printf '%s\n' "$input_file"` 读取单文件路径，用 `printf '%s\n' "$input_files"` 输出多文件 JSON 数组。
 
@@ -49,6 +50,10 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 - 不允许引用不存在的工作流参数
 
 ## 4. 节点类型
+
+### text — 确定性文本节点
+
+不需要 provider 或项目。`template` 是原样输出模板，可使用 `{{变量名}}`；`variables` 是显式变量绑定。空字符串和纯空白均是有效输出。输入边只控制执行顺序，不会隐式追加上游输出，也不能替代必须存在的 end 节点。
 
 ### prompt — AI 对话节点
 
@@ -176,6 +181,76 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 | `variables` | VariableBinding[] | `path` 使用的变量绑定 |
 
 插值后只接受已存在、非符号链接的绝对普通文件路径；拒绝相对路径、目录、`http/https`、`file://` 和多文件输入，也不支持指定应用。节点先检查 `fs.read.outside-userdata` 和 `shell.exec` 权限，任一拒绝都不会提交打开请求。主输出和 `outputs.path` 都是实际提交给系统的绝对路径。成功仅表示系统接受请求，不保证默认应用已完成启动、置前或加载文件。手动运行、子工作流、重新运行和 Automation 都会执行真实打开动作，可能重复打开；请求提交后取消不能撤销该动作。
+
+### text_file_writer_file_write — 文本文件写入节点
+
+不需要 provider 或项目。配置字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `path` | string | 当前系统的绝对目标路径，支持 `{{变量名}}`；扩展名不限，也可无扩展名 |
+| `text` | string | 完整写入内容，允许空字符串，支持 `{{变量名}}` |
+| `encoding` | `"utf8"` \| `"utf16le"` | 输出编码 |
+| `overwrite` | boolean | 是否允许替换已有普通文件；`false` 时已有目标会失败 |
+| `variables` | VariableBinding[] | `path` 和 `text` 使用的显式绑定 |
+
+节点需要 `fs.write.outside-userdata` 权限，会创建缺失的父目录。主输出是规范化后的实际路径，结构化输出包含 `path`、`fileName`、`format`、`encoding`、`size` 和 `overwritten`。没有单独的 `format` 配置或扩展名白名单。
+
+### html_generator_ejs_generate — HTML 字符串生成节点
+
+不需要 provider 或项目。`template` 是非空 EJS 源码，不做 Workflow `{{变量名}}` 插值；`variables` 必须且只能包含一个名为 `data` 的上游 `node_output` 绑定。上游主输出必须是顶层对象的纯 JSON 文本，模板通过 `data` 根访问。节点禁止 EJS include 和模板文件加载，主输出是完整 HTML，结构化输出只包含 UTF-8 字节数 `size`。模板属于可执行配置，导入工作流时按高风险脚本确认。
+
+### html_generator_ejs_file_generate — HTML 文件生成节点
+
+使用同一 EJS 合约，并通过文本文件写入能力保存结果：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `template` | string | 非空 EJS 源码，不做 Workflow 插值 |
+| `outputPath` | string | 插值后必须是绝对 `.html` 或 `.htm` 路径 |
+| `overwrite` | boolean | 是否允许替换已有普通文件 |
+| `variables` | VariableBinding[] | 一个保留的上游 `data` 绑定，以及仅供 `outputPath` 使用的普通绑定 |
+
+`outputPath` 不能引用保留变量 `data`。节点固定写入 UTF-8，主输出是规范化后的实际路径；除模板执行风险外，还保留文本文件写入的权限和错误边界。
+
+### json_repair_text_repair — JSON 修复节点
+
+不需要 provider 或项目。`text` 是非空模板，支持 `{{变量名}}` 或 `{{$变量名}}`；`variables` 提供显式绑定。插值后输入必须是非空、有效 Unicode 且不超过 128 KiB。主输出是完整、已验证可解析的 JSON 文本，结构化输出为 `{ json }`。修复结果仍是不可信数据，不会自动按业务 Schema 校验或净化。
+
+### system_notifier_notification_trigger — 系统通知节点
+
+不需要 provider 或项目。`title` 与 `body` 都是非空单行模板，共用 `variables`；插值后不得有首尾空白，分别最多 64 和 256 个 Unicode code point。接受后主输出为 `{"success":true}`，结构化输出为 `{ success: true }`，只表示通知请求已被系统接受，不保证实际显示或送达，也不得据此自动重试。
+
+### clipboard_text_write — 剪贴板写入节点
+
+仅当用户当前明确要求 Clipboard 工作流时配置或执行。`text` 是非空模板，支持显式 `variables`；输入边只控制顺序，不会隐式提供正文。插值结果允许纯空白，但必须是有效 Unicode、无 NUL 且不超过 1 MiB。节点需要 `clipboard.write` 权限，成功输出 `{"success":true}`，不会回显写入正文。
+
+### clipboard_text_read — 剪贴板读取节点
+
+配置必须严格为 `{}`，仅当用户当前明确要求 Clipboard 工作流时配置或执行；不得为普通回答、环境检查或补充上下文而读取。节点需要 `clipboard.read` 权限。空剪贴板成功输出空字符串；非空文本必须是有效 Unicode、无 NUL 且不超过 1 MiB。完整值只在当前运行中供下游使用，持久化快照不保存该节点的 `output` 或 `outputs.text`。
+
+### javascript_run — JavaScript 文件运行节点
+
+在一次性 Chromium Dedicated Worker 中把 `source` 作为普通 classic JavaScript 文件运行，不需要 provider 或项目。`inputs` 把 `static_json`、Workflow 参数、上游输出、结构化节点值或 Secret 组装成严格 JSON 对象；`timeoutSeconds` 为 1–900，`saveRunContent` 控制脚本、输入、结果和日志是否持久化。Worker 收到输入对象后，第一个严格 JSON `postMessage` 值成为 `outputs.result`。
+
+Worker 没有 DOM、Node.js、Electron 或本地文件 API，但网络与动态代码能力仍按浏览器 Worker 自然存在；超时和一次性 Worker 是稳定性边界，不是网络沙箱。节点声明 `javascript.execute` 高风险，配置前必须通过 `app_workflow_node_type_describe` 获取完整输入 schema。
+
+### nodejs_run — Node.js 文件运行节点
+
+通过当前 Electron Node CLI runtime 运行普通 CommonJS 或 ESM 文件，不需要 provider。`source` 最大 1 MiB；`inputs` 与 `javascript_run` 相同；`moduleMode` 为 `commonjs` 或 `esm`；`workingDirectory` 可显式指定，否则依次使用工作流项目目录和 Synapse 默认目录；`timeoutSeconds` 为 1–900；`saveRunContent` 控制持久化。
+
+脚本从 stdin 读取严格 JSON 输入对象。只有退出码为 0 且 stdout 恰好包含一个严格 UTF-8 JSON 文档时成功，该值成为 `outputs.result`；stderr 仅用于日志。此节点可访问原生 Node.js 的环境、文件系统、网络、子进程和模块解析，不提供依赖安装或额外 allowlist，声明 `local-code.execute` 高风险。两个脚本节点都只有固定的 `outputs.result`，对象 key 不会变成动态端口。
+
+快速配置示例（字段全集仍以 `app_workflow_node_type_describe` 为准）：
+
+```json
+[
+  { "type": "text", "config": { "template": "{{name}}", "variables": [{ "name": "name", "source": { "type": "param", "param": "name" } }] } },
+  { "type": "text_file_writer_file_write", "config": { "path": "/tmp/report.txt", "text": "{{body}}", "encoding": "utf8", "overwrite": false, "variables": [{ "name": "body", "source": { "type": "node_output", "node": "prepare" } }] } },
+  { "type": "html_generator_ejs_generate", "config": { "template": "<h1><%= data.title %></h1>", "variables": [{ "name": "data", "source": { "type": "node_output", "node": "prepare_json" } }] } },
+  { "type": "system_notifier_notification_trigger", "config": { "title": "完成", "body": "{{message}}", "variables": [{ "name": "message", "source": { "type": "node_output", "node": "result" } }] } }
+]
+```
 
 ### codex — Codex 节点
 
@@ -531,6 +606,11 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 - 创建 `document_template_docx_generate` 前，先用 `workflow_node_type_describe({ nodeType: "document_template_docx_generate" })` 读取最新 schema，并按 `dataSource` 提供 `dataPath` 或 `dataJson`
 - 创建 `text_extract` 前，先用 `workflow_node_type_describe({ nodeType: "text_extract" })` 读取最新 schema，并只提供 `filePath` 和 `variables`
 - 创建 `file_opener_file_open` 前，先用 `workflow_node_type_describe({ nodeType: "file_opener_file_open" })` 读取最新 schema，并只提供 `path` 和 `variables`
+- 创建 `text_file_writer_file_write` 前读取最新 schema，并显式提供 `encoding`、`overwrite` 和 `variables`；不要虚构 `format` 字段或扩展名白名单
+- 创建 HTML Generator 节点前分别 describe 对应类型；`data` 必须直接绑定一个上游 `node_output`，EJS `template` 不能使用 Workflow 插值
+- 创建 `json_repair_text_repair` 或 `system_notifier_notification_trigger` 前读取最新 schema，并为所有模板变量提供显式绑定
+- Clipboard 读写节点只用于用户当前明确提出的 Clipboard 工作流；创建前分别 describe，读取节点的 config 必须严格为 `{}`
+- 创建 `javascript_run` 或 `nodejs_run` 前读取最新 schema；使用 `inputs` 组装严格 JSON 输入，不要把 `source` 当作 Workflow 插值模板，也不要虚构动态输出端口
 - 创建 `codex` 前，先用 `workflow_node_type_describe({ nodeType: "codex" })` 读取最新 schema；不要给 codex 节点设置 `providerId` 或 `modelTier`
 - 创建 `claude_code` 前，先用 `workflow_node_type_describe({ nodeType: "claude_code" })` 读取最新 schema；不要给 claude_code 节点设置 `providerId` 或 `modelTier`
 - 步骤 8 在新增、删除或重连节点后调用，自动整理为左右层级排列，无需打开 UI
