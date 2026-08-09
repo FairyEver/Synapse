@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { getSynapseBridge, requireBridgeDomain, requireSynapseBridge } from "@/lib/electron-bridge"
+import { redactSessionKey } from "@/lib/agent-redaction"
 import { track } from "@/lib/ui-tracking"
 import type {
   SynapseAgentDisplayProfile,
@@ -373,7 +374,7 @@ function AgentConversationWorkspace({
         boundary: "renderer.agent.transcript-copy",
         projectId: target.projectId,
         conversationId: target.conversationId,
-        sessionKey: target.sessionKey,
+        sessionKey: redactSessionKey(target.sessionKey),
         ...errorDiagnostic(rawError),
       })
       toast("复制失败")
@@ -397,7 +398,7 @@ function AgentConversationWorkspace({
               boundary: "renderer.agent.conversation-export.open-location",
               projectId: target.projectId,
               conversationId: target.conversationId,
-              sessionKey: target.sessionKey,
+              sessionKey: redactSessionKey(target.sessionKey),
               ...errorDiagnostic(rawError),
             })
           })
@@ -409,7 +410,7 @@ function AgentConversationWorkspace({
         boundary: "renderer.agent.conversation-export",
         projectId: target.projectId,
         conversationId: target.conversationId,
-        sessionKey: target.sessionKey,
+        sessionKey: redactSessionKey(target.sessionKey),
         ...errorDiagnostic(rawError),
       })
       toast("导出失败")
@@ -495,7 +496,7 @@ function AgentConversationWorkspace({
         boundary: "renderer.agent.open-reference",
         projectId: target.projectId,
         conversationId: target.conversationId,
-        sessionKey: target.sessionKey,
+        sessionKey: redactSessionKey(target.sessionKey),
         referenceLength: reference.length,
         errorName: "BridgeUnavailable",
         errorLength: 0,
@@ -508,7 +509,7 @@ function AgentConversationWorkspace({
         boundary: "renderer.agent.open-reference",
         projectId: target.projectId,
         conversationId: target.conversationId,
-        sessionKey: target.sessionKey,
+        sessionKey: redactSessionKey(target.sessionKey),
         referenceLength: reference.length,
         ...errorDiagnostic(rawError),
       })
@@ -799,7 +800,7 @@ function trackDirectAgentSend(input: DirectSendTrackInput): void {
       ...(input.commandName ? { commandName: input.commandName } : {}),
       projectId: input.target.projectId,
       conversationId: input.target.conversationId,
-      sessionKey: input.target.sessionKey,
+      sessionKey: redactSessionKey(input.target.sessionKey),
       sending: input.sending,
       ...(input.preserveDraft === undefined ? {} : { preserveDraft: input.preserveDraft }),
     },

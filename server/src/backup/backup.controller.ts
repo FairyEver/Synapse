@@ -55,10 +55,11 @@ export class BackupController {
   }
 
   @Head("download/:filename")
-  checkDownloadBackup(
+  async checkDownloadBackup(
     @Param("filename") filename: string,
     @Res() response: Response,
   ) {
+    await this.backupService.checkBackupAvailable(filename)
     response.set({
       "Content-Type": contentType(filename),
       "Content-Disposition": attachmentContentDisposition(filename),

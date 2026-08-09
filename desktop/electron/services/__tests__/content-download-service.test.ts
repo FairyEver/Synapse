@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   createZipArchive: vi.fn(async (_sourceDirectoryPath: string, outputFilePath: string) => {
     await writeFile(outputFilePath, "zip-by-runtime-archive", "utf8")
   }),
+  getContent: vi.fn(),
   getDetail: vi.fn(),
   getRepositoryState: vi.fn(async () => ({ gitRootPath: "/repo-root" })),
   loadConfig: vi.fn(async () => ({
@@ -48,7 +49,7 @@ vi.mock("../../runtime/archive", () => ({
 
 vi.mock("../content-service", () => ({
   contentService: {
-    getContent: vi.fn(),
+    getContent: mocks.getContent,
     getDetail: mocks.getDetail,
   },
 }))
@@ -148,6 +149,30 @@ describe("ContentDownloadService", () => {
     await contentDownloadService.downloadSkill("skill-1", targetPath)
 
     expect(await readFile(targetPath, "utf8")).toBe("zip-by-runtime-archive")
+  })
+
+  it("exports a Rule with a legal long target filename", async () => {
+    const root = await createTempRoot()
+    const fileName = `${"a".repeat(240)}.md`
+    const targetPath = path.join(root, fileName)
+    mocks.getContent.mockResolvedValue({ content: "# Long Rule\n" })
+
+    await contentDownloadService.downloadRule("rule-1", targetPath)
+
+    await expect(readFile(targetPath, "utf8")).resolves.toBe("# Long Rule\n")
+    await expect(readdir(root)).resolves.toEqual([fileName])
+  })
+
+  it("exports a Skill with a legal long target filename", async () => {
+    const root = await createTempRoot()
+    const fileName = `${"a".repeat(240)}.zip`
+    const targetPath = path.join(root, fileName)
+    mocks.getDetail.mockResolvedValue(createSkillDetail("skill-1"))
+
+    await contentDownloadService.downloadSkill("skill-1", targetPath)
+
+    await expect(readFile(targetPath, "utf8")).resolves.toBe("zip-by-runtime-archive")
+    await expect(readdir(root)).resolves.toEqual([fileName])
   })
 
   it("rejects repository skill downloads when an attachment cannot be copied", async () => {

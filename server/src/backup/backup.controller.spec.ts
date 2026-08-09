@@ -80,8 +80,9 @@ describe("BackupController", () => {
     })
   })
 
-  it("answers backup download HEAD checks without opening the backup stream", () => {
+  it("answers backup download HEAD checks without opening the backup stream", async () => {
     const service = {
+      checkBackupAvailable: vi.fn().mockResolvedValue(undefined),
       downloadBackup: vi.fn(),
     }
     const auditLog = {
@@ -93,8 +94,9 @@ describe("BackupController", () => {
     }
     const controller = new BackupController(service as unknown as BackupService, auditLog as never)
 
-    controller.checkDownloadBackup("synapse-backup.tar", response as never)
+    await controller.checkDownloadBackup("synapse-backup.tar", response as never)
 
+    expect(service.checkBackupAvailable).toHaveBeenCalledWith("synapse-backup.tar")
     expect(service.downloadBackup).not.toHaveBeenCalled()
     expect(response.set).toHaveBeenCalledWith({
       "Content-Type": "application/x-tar",
@@ -102,6 +104,22 @@ describe("BackupController", () => {
     })
     expect(response.end).toHaveBeenCalledOnce()
     expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
+  it("rejects backup download HEAD checks when the archive is unavailable", async () => {
+    const error = new Error("backup missing")
+    const service = {
+      checkBackupAvailable: vi.fn().mockRejectedValue(error),
+    }
+    const response = {
+      end: vi.fn(),
+      set: vi.fn(),
+    }
+    const controller = new BackupController(service as unknown as BackupService)
+
+    await expect(controller.checkDownloadBackup("missing.tar", response as never)).rejects.toThrow(error)
+    expect(response.set).not.toHaveBeenCalled()
+    expect(response.end).not.toHaveBeenCalled()
   })
 
   it("rethrows backup stream errors before sending headers", async () => {

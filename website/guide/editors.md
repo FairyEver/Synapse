@@ -1,19 +1,22 @@
-<!-- Sources: desktop/src/definitions/editor/claude-code/editor.ts; desktop/src/definitions/editor/claude-code/adapter.ts; desktop/src/definitions/editor/claude-code/install.ts; desktop/src/definitions/editor/claude-code/forms.tsx; desktop/src/definitions/editor/codex/editor.ts; desktop/src/definitions/editor/codex/adapter.ts; desktop/src/definitions/editor/codex/install.ts; desktop/src/definitions/editor/cursor/editor.ts; desktop/src/definitions/editor/cursor/adapter.ts; desktop/src/definitions/editor/cursor/install.ts; desktop/src/definitions/editor/cursor/forms.tsx; desktop/src/definitions/editor/windsurf/editor.ts; desktop/src/definitions/editor/windsurf/adapter.ts; desktop/src/definitions/editor/windsurf/install.ts; desktop/src/definitions/editor/windsurf/forms.tsx; desktop/electron/services/editor-adapters/utils.ts; desktop/src/modules/content/components/editor-write-target-selector.tsx; desktop/src/types/editor.ts -->
+<!-- Sources: desktop/src/definitions/generated/renderer-registry.ts; desktop/src/definitions/editor/; desktop/electron/services/editor-adapters/utils.ts; desktop/src/modules/content/components/editor-write-target-selector.tsx; desktop/src/types/editor.ts; docs/reference/editor-integration-matrix.md -->
 
 # 编辑器安装
 
 ## 支持范围
 
-Synapse 目前支持 Cursor、Codex、Claude Code 和 Windsurf。以上编辑器均可安装 Rule 和 Skill，具体安装范围如下。
+Synapse 目前支持 Antigravity、Claude Code、Codex、Cursor、Hermes、Windsurf 和 WorkBuddy。WorkBuddy 仅支持 Skill；其他编辑器支持 Rule 和 Skill，具体安装范围如下。
 
-安装前，Synapse 检查目标位置是否可用。Cursor 暂不支持全局 Rule 安装，因此该组合显示为”不支持”。
+安装前，Synapse 检查目标位置是否可用。Cursor 暂不支持全局 Rule，WorkBuddy 不支持 Rule，因此对应组合显示为“不支持”。
 
 | 编辑器 | Rule 全局 | Rule 项目 | Skill 全局 | Skill 项目 |
 | --- | --- | --- | --- | --- |
-| Cursor | 不支持 | 支持 | 支持 | 支持 |
-| Codex | 支持 | 支持 | 支持 | 支持 |
+| Antigravity | 支持 | 支持 | 支持 | 支持 |
 | Claude Code | 支持 | 支持 | 支持 | 支持 |
+| Codex | 支持 | 支持 | 支持 | 支持 |
+| Cursor | 不支持 | 支持 | 支持 | 支持 |
+| Hermes | 支持 | 支持 | 支持 | 支持 |
 | Windsurf | 支持 | 支持 | 支持 | 支持 |
+| WorkBuddy | 不支持 | 不支持 | 支持 | 支持 |
 
 安装路径支持 macOS、Linux 和 Windows。其他系统显示为“不支持”。
 
@@ -23,12 +26,15 @@ Synapse 目前支持 Cursor、Codex、Claude Code 和 Windsurf。以上编辑器
 
 | 编辑器 | Rule | Skill |
 | --- | --- | --- |
-| Cursor | 不支持 | `~/.cursor/skills/{skillName}/` |
-| Codex | `$CODEX_HOME/AGENTS.md`，未设置时为 `~/.codex/AGENTS.md` | `~/.agents/skills/{skillName}/` |
+| Antigravity | `~/.gemini/GEMINI.md` | `~/.gemini/antigravity/skills/{skillName}/` |
 | Claude Code | `~/.claude/rules/{name}.md` | `~/.claude/skills/{skillName}/` |
+| Codex | `$CODEX_HOME/AGENTS.md`，未设置时为 `~/.codex/AGENTS.md` | `~/.agents/skills/{skillName}/` |
+| Cursor | 不支持 | `~/.cursor/skills/{skillName}/` |
+| Hermes | `$HERMES_HOME/SOUL.md`，未设置时为 `~/.hermes/SOUL.md` | `$HERMES_HOME/skills/{skillName}/`，未设置时为 `~/.hermes/skills/{skillName}/` |
 | Windsurf | `~/.codeium/windsurf/memories/global_rules.md` | `~/.codeium/windsurf/skills/{skillName}/` |
+| WorkBuddy | 不支持 | `~/.workbuddy/skills/{skillName}/` |
 
-Codex 全局 Rule 和 Windsurf 全局 Rule 写入已有文件中的 Synapse 标记区块。Skill 全局安装写入目录。
+Antigravity、Codex 和 Windsurf 的全局 Rule，以及 Hermes 的 Rule，写入目标文件中的 Synapse 标记区块。Skill 全局安装写入目录。
 
 ## 项目级安装
 
@@ -36,10 +42,13 @@ Codex 全局 Rule 和 Windsurf 全局 Rule 写入已有文件中的 Synapse 标�
 
 | 编辑器 | Rule | Skill |
 | --- | --- | --- |
-| Cursor | `{projectPath}/.cursor/rules/{name}.mdc` | `{projectPath}/.cursor/skills/{skillName}/` |
-| Codex | `{projectPath}/AGENTS.md` | `{projectPath}/.agents/skills/{skillName}/` |
+| Antigravity | `{projectPath}/.agents/rules/{name}.md` | `{projectPath}/.agents/skills/{skillName}/` |
 | Claude Code | `{projectPath}/.claude/rules/{name}.md` | `{projectPath}/.claude/skills/{skillName}/` |
+| Codex | `{projectPath}/AGENTS.md` | `{projectPath}/.agents/skills/{skillName}/` |
+| Cursor | `{projectPath}/.cursor/rules/{name}.mdc` | `{projectPath}/.cursor/skills/{skillName}/` |
+| Hermes | `{projectPath}/.hermes.md` | `{projectPath}/.hermes/skills/{skillName}/` |
 | Windsurf | `{projectPath}/.windsurf/rules/{name}.md` | `{projectPath}/.windsurf/skills/{skillName}/` |
+| WorkBuddy | 不支持 | `{projectPath}/.workbuddy/skills/{skillName}/` |
 
 安装项目级 Rule 时，部分编辑器需要补充以下信息：
 

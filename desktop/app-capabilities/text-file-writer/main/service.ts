@@ -74,7 +74,6 @@ export class TextFileWriterService {
         capabilityAction: "app.text_file_writer.file.write",
         format,
         encoding: parsed.encoding,
-        textLength: parsed.text.length,
       }
       let authorized = false
       try {
@@ -111,7 +110,6 @@ export class TextFileWriterService {
           errorCode: normalized.code,
           format,
           encoding: parsed.encoding,
-          textLength: parsed.text.length,
           pathLength: actualPath.length,
         })
         throw normalized
@@ -239,7 +237,7 @@ async function writeTextFile(
   const bytes = Buffer.from(input.text, input.encoding)
   const temporaryPath = path.join(
     actualParent,
-    `.synapse-text-file-writer-${path.basename(actualPath)}-${process.pid}-${randomUUID()}.tmp`,
+    `.synapse-text-file-writer-${randomUUID()}.tmp`,
   )
   const noFollow = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0
   const mode = initialTarget?.mode ?? 0o666

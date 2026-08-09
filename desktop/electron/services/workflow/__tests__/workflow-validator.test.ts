@@ -115,6 +115,42 @@ describe("validateWorkflow", () => {
     expect(bound.errors).toEqual([])
   })
 
+  it("accepts JSON Repair json output as a script node_value binding", () => {
+    const definition = definitionWithJsonRepairNode({
+      text: "{ok:true}",
+      variables: [],
+    })
+    definition.nodes.splice(1, 0, {
+      id: "script-1",
+      name: "Consume JSON",
+      type: "javascript_run",
+      position: { x: 200, y: 0 },
+      config: {
+        source: "postMessage(event.data)",
+        inputs: [{
+          name: "json",
+          source: {
+            type: "node_value",
+            node: "repair-1",
+            output: "json",
+            path: [],
+          },
+        }],
+        timeoutSeconds: 60,
+        saveRunContent: true,
+      },
+    })
+    definition.edges = [
+      { id: "repair-script", from: "repair-1", to: "script-1" },
+      { id: "script-end", from: "script-1", to: "end" },
+    ]
+
+    const result = validateWorkflow(definition)
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
   it("validates Clipboard write text and template bindings before save", () => {
     const missing = validateWorkflow(definitionWithClipboardWriteNode({
       text: "{{missing}}",

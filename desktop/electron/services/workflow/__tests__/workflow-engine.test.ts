@@ -283,6 +283,7 @@ describe("WorkflowEngine", () => {
 
   it("keeps the complete Clipboard read result in the active engine data flow", async () => {
     const text = "中".repeat(20_000)
+    const initialInfoCallCount = logger.info.mock.calls.length
     const read = vi.fn(() => ({ text }))
     nodeTypeRegistry.register(clipboardTextReadNodeManifest, clipboardTextReadNodeExecutor)
     nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
@@ -332,6 +333,17 @@ describe("WorkflowEngine", () => {
     expect(result.nodeResults.read?.output).toBe(text)
     expect(result.nodeResults.read?.outputs).toEqual({ text })
     expect(result.nodeResults.end?.output).toBe(text)
+    const infoCalls = logger.info.mock.calls.slice(initialInfoCallCount)
+    const readSuccessLog = infoCalls.find(([message, metadata]) =>
+      message === "node succeeded"
+      && (metadata as { nodeId?: string } | undefined)?.nodeId === "read"
+    )
+    expect(readSuccessLog).toEqual(["node succeeded", expect.objectContaining({ nodeId: "read" })])
+    expect(readSuccessLog?.[1]).not.toHaveProperty("outputLength")
+    expect(infoCalls).toContainEqual([
+      "node succeeded",
+      expect.objectContaining({ nodeId: "end", outputLength: text.length }),
+    ])
   })
 
   it("applies workflow default timeout to codex nodes with blank timeout", async () => {

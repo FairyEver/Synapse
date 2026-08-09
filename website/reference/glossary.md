@@ -60,4 +60,4 @@ MCP 是 Synapse 向外部 Agent 暴露桌面能力的工具入口。
 
 ## 编辑器
 
-编辑器是 Rule 或 Skill 的安装目标。Synapse 目前支持 Claude Code、Cursor、Codex 和 Windsurf。
+编辑器是 Rule 或 Skill 的安装目标。Synapse 目前支持 Antigravity、Claude Code、Codex、Cursor、Hermes、Windsurf 和 WorkBuddy；WorkBuddy 仅支持 Skill。

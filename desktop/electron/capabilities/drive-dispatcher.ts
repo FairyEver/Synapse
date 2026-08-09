@@ -406,9 +406,6 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             try {
               const data = await deps.accountService.materializeDriveLink(input)
               recordDriveLinkMaterializeCacheWrite(deps, cacheAudit, "allowed", {
-                localRootPath: data.localRootPath,
-                manifestPath: data.manifestPath,
-                entryPath: data.entryPath,
                 fileCount: data.files.length,
                 skippedCount: data.skipped.length,
                 warningCount: data.warnings.length,
@@ -1360,7 +1357,7 @@ function recordDriveLinkMaterializeCacheWrite(
   deps.auditSink?.record({
     action: "fs.write",
     actor: audit.actor,
-    resource: typeof metadata.localRootPath === "string" ? metadata.localRootPath : audit.resource,
+    resource: audit.resource,
     outcome,
     metadata: { ...audit.metadata, ...metadata },
   })

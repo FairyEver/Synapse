@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { appendAgentTimelineEvent } from "@/lib/agent-timeline"
+import { redactSessionKey } from "@/lib/agent-redaction"
 import type { SynapseAgentDomainEvent, SynapseAgentEvent, SynapseAgentStreamDomainEvent } from "@/types/agent"
 import { reducePhaseEvent } from "../utils/phase-reducer"
 import {
@@ -18,7 +19,6 @@ const logger = createRendererLogger("agent")
 // Token-level SDK deltas can arrive hundreds of times per second; batching
 // them keeps live text layout stable while preserving event order.
 const STREAM_EVENT_FLUSH_DELAY_MS = 50
-const REDACTED_SESSION_KEY = "[redacted]"
 
 type ChatEventRefs = ChatConnectionRefs
 
@@ -355,10 +355,6 @@ function shouldRefreshPendingPermissionsAfterEvent(event: SynapseAgentEvent): bo
     || event.type === "toolResult"
     || event.type === "result"
     || event.type === "error"
-}
-
-function redactSessionKey(sessionKey: string | undefined): string | undefined {
-  return sessionKey ? REDACTED_SESSION_KEY : undefined
 }
 
 function matchesSelectedEvent(

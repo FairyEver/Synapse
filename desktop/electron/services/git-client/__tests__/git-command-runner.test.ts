@@ -44,24 +44,26 @@ describe("createGitClientCommandRunner", () => {
     const runner = createGitClientCommandRunner({ logger, runGitCommand: run })
 
     await expect(runner.run({
-      cwd: "/repo",
+      cwd: "/Users/writer/work/repo",
       args: ["push", "https://user:secret@git.example.com/team/docs.git?token=raw-token"],
       operation: "git.push",
       operationId: "git-op-1",
       repositoryId: "repo-1",
-      repoPath: "/repo",
+      repoPath: "C:\\Users\\writer\\work\\repo",
     })).rejects.toThrow("Authentication failed")
 
     expect(logger.error).toHaveBeenCalledWith("Git command failed.", expect.objectContaining({
       operation: "git.push",
       operationId: "git-op-1",
       repositoryId: "repo-1",
-      repoPath: "/repo",
+      repoPath: "[path redacted]/repo",
+      cwd: "[path redacted]/repo",
       exitCode: 128,
       stderrPreview: expect.stringContaining("[redacted]"),
     }))
     const serialized = JSON.stringify(logger.error.mock.calls)
-    expect(serialized).toContain("/Users/writer/work/repo")
+    expect(serialized).not.toContain("/Users/writer/work/repo")
+    expect(serialized).not.toContain("C:\\\\Users\\\\writer\\\\work\\\\repo")
     expect(serialized).not.toContain("dXNlcjpzZWNyZXQ")
     expect(serialized).not.toContain("raw-token")
     expect(serialized).not.toContain("raw.bearer.token")

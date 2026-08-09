@@ -1,4 +1,5 @@
 import { createRendererLogger } from "@/app-shell/logging"
+import { isSensitiveKey } from "@/lib/agent-redaction"
 import { recordDiagnosticBreadcrumb } from "@/lib/diagnostic-context"
 
 const logger = createRendererLogger("ui.tracking")
@@ -90,7 +91,7 @@ export function sanitizeTrackValue(fieldName: string, value: unknown): Sanitized
 
   const text = String(value)
 
-  if (SENSITIVE_TRACK_FIELD_PATTERN.test(fieldName)) {
+  if (SENSITIVE_TRACK_FIELD_PATTERN.test(fieldName) || isSensitiveKey(fieldName)) {
     return "[redacted]"
   }
 

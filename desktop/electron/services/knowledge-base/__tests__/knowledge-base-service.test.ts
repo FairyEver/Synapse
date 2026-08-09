@@ -201,10 +201,10 @@ describe("KnowledgeBaseService", () => {
     expect(result.templateSource?.commit).toBe("75d3b6feb77b96c6bb16599c4550cc9703553d87")
     expect(mocks.logger.info).toHaveBeenCalledWith("Managed Knowledge Base runtime created.", expect.objectContaining({
       projectId: "kb-1",
-      runtimePath: result.runtimePath,
       templateVersion: "2026-05-21",
       templateSourceCommit: "75d3b6feb77b96c6bb16599c4550cc9703553d87",
     }))
+    expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain(result.runtimePath)
     await expect(readFile(path.join(result.runtimePath, "wiki", "index.md"), "utf8")).resolves.toBe("# Index\n\nNo entries yet.\n")
     await expect(readFile(path.join(result.runtimePath, "wiki", "log.md"), "utf8")).resolves.toBe("# Log\n\n")
     await expect(readFile(path.join(result.runtimePath, "wiki", "hot.md"), "utf8")).resolves.toBe("# Hot\n\n")
@@ -365,8 +365,8 @@ describe("KnowledgeBaseService", () => {
 
     expect(mocks.logger.warn).toHaveBeenCalledWith("Managed Knowledge Base runtime already exists.", {
       projectId: "kb-1",
-      runtimePath,
     })
+    expect(JSON.stringify(mocks.logger.warn.mock.calls)).not.toContain(runtimePath)
   })
 
   it("removes a partially created managed runtime when initialization fails", async () => {
@@ -381,8 +381,8 @@ describe("KnowledgeBaseService", () => {
     expect(mocks.logger.warn).toHaveBeenCalledWith("Managed Knowledge Base runtime creation failed.", expect.objectContaining({
       errorName: "Error",
       projectId: "kb-1",
-      runtimePath,
     }))
+    expect(JSON.stringify(mocks.logger.warn.mock.calls)).not.toContain(runtimePath)
   })
 
   it("trashes managed knowledge base runtime", async () => {
@@ -398,6 +398,10 @@ describe("KnowledgeBaseService", () => {
       runtimePath: projectPath,
       deleted: true,
     })
+    expect(mocks.logger.info).toHaveBeenCalledWith("Managed Knowledge Base runtime trashed.", {
+      projectId,
+    })
+    expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain(projectPath)
     await expect(readFile(path.join(projectPath, "CLAUDE.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
   })
 

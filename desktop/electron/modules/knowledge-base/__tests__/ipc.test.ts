@@ -325,7 +325,7 @@ describe("knowledgeBaseIpcModule", () => {
       },
     }
     const importManagedFolder = vi.fn().mockResolvedValue(imported)
-    const { harness, permissionGuard } = createHarness({
+    const { auditSink, harness, permissionGuard } = createHarness({
       service: {},
       transferService: { importManagedFolder },
     })
@@ -344,9 +344,65 @@ describe("knowledgeBaseIpcModule", () => {
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "fs.write",
       actor: { kind: "user" },
-      resource: "managed-knowledge-base-import:preview-token",
+      resource: "managed-knowledge-base-import",
       context: { source: "knowledgeBase.importManagedFolder" },
     })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "managed-knowledge-base-import",
+      outcome: "allowed",
+    }))
+    expect(JSON.stringify(vi.mocked(permissionGuard.check).mock.calls)).not.toContain("preview-token")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("preview-token")
+    expect(JSON.stringify(logStoreMock.logger.info.mock.calls)).not.toContain("preview-token")
+  })
+
+  it("keeps a denied import preview token out of permission audit surfaces", async () => {
+    const importManagedFolder = vi.fn()
+    const { auditSink, harness, permissionGuard } = createHarness({
+      permissions: [{ allowed: false, reason: "denied", policyId: "deny-import" }],
+      service: {},
+      transferService: { importManagedFolder },
+    })
+
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:import_managed_folder", {
+      token: "denied-preview-token",
+      name: "Recovered",
+      trusted: true,
+    })).rejects.toThrow("denied")
+
+    expect(importManagedFolder).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "managed-knowledge-base-import",
+      outcome: "denied",
+    }))
+    expect(JSON.stringify(vi.mocked(permissionGuard.check).mock.calls)).not.toContain("denied-preview-token")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("denied-preview-token")
+    expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("denied-preview-token")
+  })
+
+  it("keeps a failed import preview token out of audit and logs", async () => {
+    const importManagedFolder = vi.fn().mockRejectedValue(new Error("import failed"))
+    const { auditSink, harness, permissionGuard } = createHarness({
+      service: {},
+      transferService: { importManagedFolder },
+    })
+
+    await expect(harness.invoke("synapse:app:knowledge_base:operation:import_managed_folder", {
+      token: "failed-preview-token",
+      name: "Recovered",
+      trusted: true,
+    })).rejects.toThrow("import failed")
+
+    expect(importManagedFolder).toHaveBeenCalledWith(expect.objectContaining({
+      token: "failed-preview-token",
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "managed-knowledge-base-import",
+      outcome: "failed",
+    }))
+    expect(JSON.stringify(vi.mocked(permissionGuard.check).mock.calls)).not.toContain("failed-preview-token")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("failed-preview-token")
+    expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("failed-preview-token")
   })
 
   it("exports one managed folder through guarded read and destination permissions", async () => {

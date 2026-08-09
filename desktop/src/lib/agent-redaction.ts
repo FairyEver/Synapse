@@ -82,9 +82,14 @@ function isSensitiveTextKey(key: string): boolean {
   return SENSITIVE_KEY_PATTERN.test(key)
 }
 
+function redactSessionKey(sessionKey: string | undefined): string | undefined {
+  return sessionKey ? REDACTED : undefined
+}
+
 export {
   isSensitiveKey,
   isSensitiveTextKey,
+  redactSessionKey,
   redactSensitiveText,
   redactSensitiveValue,
   REDACTED,

@@ -19,7 +19,7 @@ describe('desktopUpdateApi', () => {
       expiresAt: '2026-07-21T12:00:00.000Z',
     })
     expect(fetchMock).toHaveBeenCalledWith('/api/desktop/update-intent', {
-      credentials: 'include',
+      credentials: 'omit',
       method: 'POST',
       headers: undefined,
     })

@@ -10,9 +10,10 @@ import { useAdminAuthStore } from '@/stores/admin-auth-store'
 import { DirectionProvider } from '@/context/direction-provider'
 import { FontProvider } from '@/context/font-provider'
 import { ThemeProvider } from '@/context/theme-provider'
+import { shouldRetryAdminQuery } from '@/lib/admin-query-retry'
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+  defaultOptions: { queries: { retry: shouldRetryAdminQuery, refetchOnWindowFocus: false } },
 })
 
 export const adminRouter = createRouter({

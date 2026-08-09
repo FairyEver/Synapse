@@ -151,6 +151,9 @@ type CodexRuntimeDiagnostics = {
   processListError?: string
 }
 
+type CodexRuntimeReportDiagnostics = Omit<CodexRuntimeDiagnostics, "settingsPath">
+type McpRegistrationReportDiagnostics = Omit<McpRegistrationInfo, "settingsPath">
+
 type DiagnosticsServiceDeps = {
   appInfo: AppInfo
   configStore: ConfigStoreLike
@@ -1125,8 +1128,8 @@ class DiagnosticsService {
       const details = {
         http,
         probe,
-        registrations,
-        codexRuntime,
+        registrations: registrations.map(projectMcpRegistrationDiagnostics),
+        codexRuntime: projectCodexRuntimeDiagnostics(codexRuntime),
         unregisteredTargets: unregistered.map((server) => server.target),
       }
 
@@ -1588,6 +1591,42 @@ async function collectCodexRuntimeDiagnostics(settingsPath: string): Promise<Cod
   }
 
   return diagnostics
+}
+
+function projectMcpRegistrationDiagnostics(
+  registration: McpRegistrationInfo,
+): McpRegistrationReportDiagnostics {
+  return {
+    target: registration.target,
+    settingsFileExists: registration.settingsFileExists,
+    registered: registration.registered,
+    mode: registration.mode,
+    url: registration.url,
+    ...(registration.readError === undefined
+      ? {}
+      : { readError: redactDiagnosticPath(registration.readError, registration.settingsPath) }),
+  }
+}
+
+function projectCodexRuntimeDiagnostics(
+  diagnostics: CodexRuntimeDiagnostics,
+): CodexRuntimeReportDiagnostics {
+  return {
+    settingsFileExists: diagnostics.settingsFileExists,
+    ...(diagnostics.settingsModifiedAt === undefined ? {} : { settingsModifiedAt: diagnostics.settingsModifiedAt }),
+    ...(diagnostics.settingsModifiedMs === undefined ? {} : { settingsModifiedMs: diagnostics.settingsModifiedMs }),
+    ...(diagnostics.settingsStatError === undefined
+      ? {}
+      : { settingsStatError: redactDiagnosticPath(diagnostics.settingsStatError, diagnostics.settingsPath) }),
+    processes: diagnostics.processes,
+    processStartedBeforeConfigModified: diagnostics.processStartedBeforeConfigModified,
+    ...(diagnostics.warning === undefined ? {} : { warning: diagnostics.warning }),
+    ...(diagnostics.processListError === undefined ? {} : { processListError: diagnostics.processListError }),
+  }
+}
+
+function redactDiagnosticPath(value: string, targetPath: string): string {
+  return targetPath ? value.replaceAll(targetPath, "[settings-path]") : value
 }
 
 function collectCodexProcesses(input: {

@@ -71,10 +71,9 @@ async function withTemporaryOutput<T>(
 
 async function copyFileToTargetAtomically(sourcePath: string, targetPath: string): Promise<void> {
   const targetDirectoryPath = path.dirname(targetPath)
-  const targetName = path.basename(targetPath)
   const temporaryTargetPath = path.join(
     targetDirectoryPath,
-    `.${targetName}.tmp-${randomBytes(ATOMIC_TARGET_TEMP_SUFFIX_BYTES).toString("hex")}`,
+    `.synapse-content-download-${randomBytes(ATOMIC_TARGET_TEMP_SUFFIX_BYTES).toString("hex")}.tmp`,
   )
 
   await mkdir(targetDirectoryPath, { recursive: true })

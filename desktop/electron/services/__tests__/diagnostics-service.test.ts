@@ -266,14 +266,25 @@ describe("DiagnosticsService.collect", () => {
         port: 23578,
         url: "http://127.0.0.1:23578/mcp",
       })),
-      getMcpServers: vi.fn(() => [{
-        target: "codex",
-        settingsPath: "/Users/lcj/.codex/config.toml",
-        settingsFileExists: true,
-        registered: true,
-        mode: "http" as const,
-        url: "http://127.0.0.1:23578/mcp",
-      }]),
+      getMcpServers: vi.fn(() => [
+        {
+          target: "codex",
+          settingsPath: "/Users/lcj/.codex/config.toml",
+          settingsFileExists: true,
+          registered: true,
+          mode: "http" as const,
+          url: "http://127.0.0.1:23578/mcp",
+        },
+        {
+          target: "cursor",
+          settingsPath: "/Users/lcj/.cursor/mcp.json",
+          settingsFileExists: true,
+          registered: false,
+          mode: null,
+          url: null,
+          readError: "invalid config at /Users/lcj/.cursor/mcp.json",
+        },
+      ]),
       probeMcpHttp: vi.fn(async () => ({ ok: true, method: "ping", status: 200 })),
       collectCodexRuntimeDiagnostics: vi.fn(async () => ({
         settingsPath: "/Users/lcj/.codex/config.toml",
@@ -297,14 +308,31 @@ describe("DiagnosticsService.collect", () => {
     expect(check).toMatchObject({
       status: "ok",
       details: {
+        registrations: [
+          {
+            target: "codex",
+            settingsFileExists: true,
+            registered: true,
+            mode: "http",
+            url: "http://127.0.0.1:23578/mcp",
+          },
+          {
+            target: "cursor",
+            settingsFileExists: true,
+            registered: false,
+            mode: null,
+            url: null,
+            readError: "invalid config at [settings-path]",
+          },
+        ],
         codexRuntime: {
-          settingsPath: "/Users/lcj/.codex/config.toml",
           settingsModifiedAt: "2026-06-15T00:42:59.000Z",
           processStartedBeforeConfigModified: true,
           warning: "Codex 进程/会话早于 MCP 配置修改，旧会话可能未加载 Synapse MCP。",
         },
       },
     })
+    expect(JSON.stringify(check?.details)).not.toContain("/Users/lcj")
   })
 
   it("degrades MCP diagnostics when Codex process listing fails", async () => {
@@ -326,6 +354,7 @@ describe("DiagnosticsService.collect", () => {
       collectCodexRuntimeDiagnostics: vi.fn(async () => ({
         settingsPath: "/Users/lcj/.codex/config.toml",
         settingsFileExists: true,
+        settingsStatError: "stat failed for /Users/lcj/.codex/config.toml",
         processes: [],
         processStartedBeforeConfigModified: false,
         processListError: "process list unavailable",
@@ -341,10 +370,12 @@ describe("DiagnosticsService.collect", () => {
       message: "Codex 运行态检查失败",
       details: {
         codexRuntime: {
+          settingsStatError: "stat failed for [settings-path]",
           processListError: "process list unavailable",
         },
       },
     })
+    expect(JSON.stringify(check?.details)).not.toContain("/Users/lcj")
   })
 
   it("uses PowerShell to collect Codex processes on Windows", async () => {

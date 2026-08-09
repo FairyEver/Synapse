@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import { redactSessionKey } from "../agent-redaction"
 import {
   sanitizeTrackRecord,
   sanitizeTrackValue,
@@ -17,6 +18,10 @@ describe("ui tracking value sanitizers", () => {
   it("redacts sensitive values", () => {
     expect(sanitizeTrackValue("apiKey", "sk-secret")).toBe("[redacted]")
     expect(sanitizeTrackValue("ownerId", "user-123")).toBe("[redacted]")
+    expect(sanitizeTrackValue("sessionKey", "workflow:private-timeline")).toBe("[redacted]")
+    expect(redactSessionKey("scheduled:private-timeline")).toBe("[redacted]")
+    expect(redactSessionKey("external:private-timeline")).toBe("[redacted]")
+    expect(redactSessionKey(undefined)).toBeUndefined()
   })
 
   it("keeps path context without logging the full path", () => {

@@ -637,7 +637,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       handler: (ctx, request: { token: string; name: string; trusted: boolean }) => runGuardedKnowledgeBaseOperation({
         ctx,
         action: "fs.write",
-        resource: `managed-knowledge-base-import:${request.token}`,
+        resource: "managed-knowledge-base-import",
         source: "knowledgeBase.importManagedFolder",
         run: () => transferService(ctx).importManagedFolder(request),
       }),

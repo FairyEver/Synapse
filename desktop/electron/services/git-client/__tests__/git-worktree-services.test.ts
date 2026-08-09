@@ -80,7 +80,7 @@ describe("git worktree services", () => {
       operation: "git.status",
       operationId: expect.any(String),
       repositoryId: "repo-1",
-      repoPath: "/repo",
+      repoPath: "[path redacted]/repo",
       anomalies: ["upstream-missing", "conflicts", "index-lock", "merge-in-progress"],
       branch: "main",
       changeCount: 1,

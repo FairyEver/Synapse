@@ -12,9 +12,10 @@ import type { AdminRequest } from "../admin-auth/admin-auth.guard"
 import { formatAuditError } from "./audit-error"
 import { AuditLogService } from "./audit-log.service"
 
-const SENSITIVE_BODY_KEY_PATTERN = /authorization|bearer|cookie|password|token|secret|credential|api[-_]?key|access[-_]?key/i
+const SENSITIVE_BODY_KEY_PATTERN = /authorization|bearer|cookie|password|token|secret|credential|api[-_]?key|access[-_]?key|admin[-_]?note/i
 const REDACTED_VALUE = "[REDACTED]"
 const USER_STATUS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/status$/
+const USER_ADMIN_NOTE_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/admin-note$/
 const ADMIN_WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
 const PROBLEM_FEEDBACK_ADMIN_PATH_PATTERN =
   /^\/api\/admin\/problem-feedback(?:\/[^/]+)?$/u
@@ -135,6 +136,7 @@ function shouldAuditAdminSuccessFallback(method: string, path: string): boolean 
 
 function hasControllerManagedAdminSuccessAudit(method: string, path: string): boolean {
   if (method === "PATCH" && USER_STATUS_PATH_PATTERN.test(path)) return true
+  if (method === "PATCH" && USER_ADMIN_NOTE_PATH_PATTERN.test(path)) return true
   return method === "DELETE" && path === "/api/admin/logs/cleanup"
 }
 
@@ -168,6 +170,9 @@ function resolveKnownAdminAuditTarget(
 ): { action: string; targetType: string; targetId: string } | null {
   if (method === "PATCH" && USER_STATUS_PATH_PATTERN.test(path)) {
     return { action: "admin.user.status_update", targetType: "user", targetId: params.id ?? readId(responseBody) }
+  }
+  if (method === "PATCH" && USER_ADMIN_NOTE_PATH_PATTERN.test(path)) {
+    return { action: "admin.user.admin_note_update", targetType: "user", targetId: params.id ?? readId(responseBody) }
   }
   if (method === "GET" && path === "/api/admin/backup/list") {
     return { action: "backup.list", targetType: "backup", targetId: "list" }

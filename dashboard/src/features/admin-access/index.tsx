@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@/features/auth/zod-resolver'
 import { AuthLayout } from '@/features/auth/auth-layout'
-import { adminApi } from '@/lib/api'
+import { adminApi, ApiError } from '@/lib/api'
 import { normalizeAdminRedirect } from '@/lib/admin-redirect'
 import { useAdminAuthStore } from '@/stores/admin-auth-store'
 import { PasswordInput } from '@/components/password-input'
@@ -14,6 +14,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 
 const schema = z.object({ accessSecret: z.string().min(1, '密钥无效') })
+const invalidSecretStatuses = new Set([400, 401])
+
+function operationalErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 403) return '请求来源无效，请检查管理后台地址或代理配置。'
+    if (error.status >= 500) return '认证服务暂时不可用，请稍后重试。'
+    return '暂时无法进入管理界面，请重试。'
+  }
+  return '无法连接认证服务，请检查网络后重试。'
+}
 
 export function AdminAccessPage({ redirectTo }: { redirectTo?: string }) {
   const [isLoading, setIsLoading] = useState(false)
@@ -26,12 +36,17 @@ export function AdminAccessPage({ redirectTo }: { redirectTo?: string }) {
 
   async function submit(input: z.infer<typeof schema>) {
     setIsLoading(true)
+    form.clearErrors()
     try {
       const session = await adminApi.unlock(input.accessSecret)
       setSession(session)
       await navigate({ to: normalizeAdminRedirect(redirectTo) ?? '/system', replace: true })
-    } catch {
-      form.setError('accessSecret', { message: '密钥无效' })
+    } catch (error: unknown) {
+      if (error instanceof ApiError && invalidSecretStatuses.has(error.status)) {
+        form.setError('accessSecret', { type: 'server', message: '密钥无效' })
+      } else {
+        form.setError('root', { type: 'server', message: operationalErrorMessage(error) })
+      }
     } finally {
       form.setValue('accessSecret', '', { shouldDirty: false, shouldTouch: false })
       setIsLoading(false)
@@ -64,6 +79,11 @@ export function AdminAccessPage({ redirectTo }: { redirectTo?: string }) {
                   </FormItem>
                 )}
               />
+              {form.formState.errors.root?.message && (
+                <p role='alert' className='text-sm text-destructive'>
+                  {form.formState.errors.root.message}
+                </p>
+              )}
               <Button className='mt-2 h-11 sm:h-9' disabled={isLoading}>
                 {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
                 进入管理界面

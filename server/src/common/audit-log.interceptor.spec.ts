@@ -138,6 +138,7 @@ describe("AuditLogInterceptor", () => {
           authorization: "Bearer plain-authorization",
           cookie: "sid=plain-cookie",
           password: "plain-password",
+          adminNote: "private customer context",
           nested: {
             refreshToken: "refresh-token",
             headers: {
@@ -162,6 +163,7 @@ describe("AuditLogInterceptor", () => {
       authorization: "[REDACTED]",
       cookie: "[REDACTED]",
       password: "[REDACTED]",
+      adminNote: "[REDACTED]",
       nested: {
         refreshToken: "[REDACTED]",
         headers: {
@@ -177,6 +179,7 @@ describe("AuditLogInterceptor", () => {
     expect(JSON.stringify(detail)).not.toContain("plain-authorization")
     expect(JSON.stringify(detail)).not.toContain("plain-cookie")
     expect(JSON.stringify(detail)).not.toContain("nested-authorization")
+    expect(JSON.stringify(detail)).not.toContain("private customer context")
   })
 
   it("does not audit non-admin write endpoints", async () => {
@@ -366,6 +369,50 @@ describe("AuditLogInterceptor", () => {
     ))
 
     expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
+  it("leaves successful admin note audits to the service", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const interceptor = new AuditLogInterceptor(auditLog as never)
+
+    await lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "PATCH",
+        path: "/api/admin/users/user-1/admin-note",
+        params: { id: "user-1" },
+        body: { adminNote: "private customer context" },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => of({ ok: true }) },
+    ))
+
+    expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
+  it("redacts admin note bodies from failed operation audits", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const interceptor = new AuditLogInterceptor(auditLog as never)
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "PATCH",
+        path: "/api/admin/users/user-1/admin-note",
+        params: { id: "user-1" },
+        body: { adminNote: "private customer context" },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => new Error("用户不存在。")) },
+    ))).rejects.toThrow("用户不存在。")
+
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.user.admin_note_update.failed",
+      targetType: "user",
+      targetId: "user-1",
+      detail: expect.objectContaining({
+        body: { adminNote: "[REDACTED]" },
+      }),
+    }))
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("private customer context")
   })
 
   it("records failed authenticated admin operations without duplicating service success audits", async () => {

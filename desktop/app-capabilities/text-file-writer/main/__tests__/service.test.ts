@@ -39,12 +39,14 @@ describe("TextFileWriterService", () => {
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write.outside-userdata",
       resource: expectedPath,
+      context: expect.not.objectContaining({ textLength: expect.any(Number) }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       resource: expectedPath,
       outcome: "allowed",
       metadata: expect.not.objectContaining({ text }),
     }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain('"textLength"')
   })
 
   it("supports exact UTF-16 LE bytes and empty files without a BOM", async () => {
@@ -82,12 +84,26 @@ describe("TextFileWriterService", () => {
     await expect(readFile(htmlPath)).resolves.toEqual(Buffer.from("<h1>报告</h1>", "utf16le"))
   })
 
+  it("writes a legal long target name without exceeding the temporary filename limit", async () => {
+    const directory = await createTempDirectory()
+    const fileName = `${"a".repeat(240)}.txt`
+    const outputPath = path.join(directory, fileName)
+    const { service } = createService()
+
+    await expect(service.write({ text: "long target", path: outputPath })).resolves.toMatchObject({
+      fileName,
+      size: Buffer.byteLength("long target"),
+    })
+    await expect(readFile(outputPath, "utf8")).resolves.toBe("long target")
+    expect((await readdir(directory)).filter((name) => name.startsWith(".synapse-text-file-writer-"))).toEqual([])
+  })
+
   it("refuses implicit overwrite and preserves the existing file mode on explicit overwrite", async () => {
     const directory = await createTempDirectory()
     const outputPath = path.join(directory, "report.txt")
     await writeFile(outputPath, "old", "utf8")
     if (process.platform !== "win32") await chmod(outputPath, 0o640)
-    const { service } = createService()
+    const { service, auditSink } = createService()
 
     await expect(service.write({ text: "new", path: outputPath })).rejects.toMatchObject({
       code: "TARGET_EXISTS",
@@ -101,6 +117,7 @@ describe("TextFileWriterService", () => {
     if (process.platform !== "win32") {
       expect((await stat(outputPath)).mode & 0o777).toBe(0o640)
     }
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain('"textLength"')
   })
 
   it("rejects unsupported inputs and unsafe existing targets", async () => {
@@ -183,6 +200,9 @@ describe("TextFileWriterService", () => {
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain(secretText)
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(secretText)
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(outputPath)
+    expect(JSON.stringify(permissionGuard.check.mock.calls)).not.toContain('"textLength"')
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain('"textLength"')
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('"textLength"')
   })
 })
 

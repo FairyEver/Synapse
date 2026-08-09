@@ -49,7 +49,7 @@ export async function requestJson<T>(path: string, options: RequestInit = {}) {
 
   const response = await fetch(path, {
     ...options,
-    credentials: 'include',
+    credentials: options.credentials ?? 'include',
     headers,
   })
 

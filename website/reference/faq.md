@@ -18,7 +18,7 @@
 
 ### 支持范围包含哪些编辑器？
 
-Synapse 目前支持 Claude Code、Cursor、Codex 和 Windsurf。以上编辑器均可安装 Rule 和 Skill。
+Synapse 目前支持 Antigravity、Claude Code、Codex、Cursor、Hermes、Windsurf 和 WorkBuddy。WorkBuddy 仅支持 Skill；其他编辑器支持 Rule 和 Skill。Cursor 不支持全局 Rule。
 
 编辑器安装范围和路径参见 [编辑器安装](/guide/editors)。
 
