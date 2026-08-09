@@ -65,7 +65,7 @@ describe('UpdateHandoffPage', () => {
     expect(buttonWithText('正在申请更新凭证').getAttribute('aria-busy')).toBe('true')
     expect(fetchSpy).toHaveBeenCalledOnce()
     expect(fetchSpy).toHaveBeenCalledWith('/api/desktop/update-intent', expect.objectContaining({
-      credentials: 'include',
+      credentials: 'omit',
       method: 'POST',
     }))
 

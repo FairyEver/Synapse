@@ -8,5 +8,8 @@ export type DesktopUpdateIntent = {
 const desktopUpdateIntentPath = '/api/desktop/update-intent'
 
 export const desktopUpdateApi = {
-  issueIntent: () => requestJson<DesktopUpdateIntent>(desktopUpdateIntentPath, { method: 'POST' }),
+  issueIntent: () => requestJson<DesktopUpdateIntent>(desktopUpdateIntentPath, {
+    method: 'POST',
+    credentials: 'omit',
+  }),
 }
