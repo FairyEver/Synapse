@@ -505,14 +505,13 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write",
       outcome: "allowed",
-      resource: "/tmp/intake",
+      resource: "synapse-drive:link-intake-cache",
       metadata: expect.objectContaining({
         driveAction: "app.drive.link.materialize",
-        manifestPath: "/tmp/intake/manifest.json",
-        entryPath: "/tmp/intake/content/req.md",
         fileCount: 0,
       }),
     }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("/tmp/intake")
     expect(JSON.stringify(vi.mocked(permissionGuard.check).mock.calls)).not.toContain("secret-token")
     expect(JSON.stringify(vi.mocked(permissionGuard.check).mock.calls)).not.toContain("secret-password")
     expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret-token")

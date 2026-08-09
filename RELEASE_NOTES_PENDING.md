@@ -13,5 +13,6 @@
 - 修复内置 Synapse Skill 错误否认 JavaScript/Node.js Automation Action 的问题，Agent 现在会将脚本自动化配置正确路由到 Automation 能力。
 - Agent 工作区的复制、导出、打开引用与直发操作不再将会话路由标识写入日志或诊断埋点。
 - 文本写入、HTML 文件生成与文本提取保存现在支持文件系统允许的长文件名，不再因内部临时文件名过长而失败。
+- Drive 链接 materialize 的审计记录不再包含本地缓存绝对路径，工具返回的本地文件结果保持不变。
 
 ## 技术调整
