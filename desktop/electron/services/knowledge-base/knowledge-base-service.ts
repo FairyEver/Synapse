@@ -115,7 +115,6 @@ export class KnowledgeBaseService {
     if (await pathExists(runtimePath)) {
       logger.warn("Managed Knowledge Base runtime already exists.", {
         projectId: payload.projectId,
-        runtimePath,
       })
       throw new Error("知识库已存在。")
     }
@@ -125,7 +124,6 @@ export class KnowledgeBaseService {
       const source = await readTemplateSource(this.managedTemplateRoot)
       logger.info("Managed Knowledge Base runtime created.", {
         projectId: payload.projectId,
-        runtimePath,
         templateVersion: KNOWLEDGE_BASE_TEMPLATE_VERSION,
         templateSourceCommit: source?.commit,
       })
@@ -141,13 +139,12 @@ export class KnowledgeBaseService {
         await rm(runtimePath, { recursive: true, force: true })
       } catch (cleanupError) {
         logger.warn("Managed Knowledge Base runtime cleanup after create failure failed.", {
-          runtimePath,
+          projectId: payload.projectId,
           ...knowledgeBaseErrorMeta(cleanupError),
         })
       }
       logger.warn("Managed Knowledge Base runtime creation failed.", {
         projectId: payload.projectId,
-        runtimePath,
         ...knowledgeBaseErrorMeta(error),
       })
       throw error
@@ -167,7 +164,6 @@ export class KnowledgeBaseService {
     await this.trashItem(runtimePath)
     logger.info("Managed Knowledge Base runtime trashed.", {
       projectId: payload.projectId,
-      runtimePath,
     })
     return { projectId: payload.projectId, runtimePath, deleted: true }
   }
