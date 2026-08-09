@@ -74,7 +74,6 @@ export class TextFileWriterService {
         capabilityAction: "app.text_file_writer.file.write",
         format,
         encoding: parsed.encoding,
-        textLength: parsed.text.length,
       }
       let authorized = false
       try {
@@ -111,7 +110,6 @@ export class TextFileWriterService {
           errorCode: normalized.code,
           format,
           encoding: parsed.encoding,
-          textLength: parsed.text.length,
           pathLength: actualPath.length,
         })
         throw normalized
