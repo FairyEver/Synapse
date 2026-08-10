@@ -254,7 +254,20 @@ function DriveMarkdownBody({
     }),
     [resolvedByThreadId, sortedThreads, threadAnchorTopById]
   )
-  const commentCount = railThreads.length
+  const navigableThreadIds = useMemo(
+    () => railThreads
+      .filter((item) => item.anchorTop !== null && item.thread.anchorStatus !== 'orphaned')
+      .map((item) => item.thread.id),
+    [railThreads]
+  )
+  const activeNavigableIndex = activeThreadId ? navigableThreadIds.indexOf(activeThreadId) : -1
+  const previousThreadId = activeNavigableIndex > 0
+    ? navigableThreadIds[activeNavigableIndex - 1] ?? null
+    : null
+  const nextThreadId = activeNavigableIndex === -1
+    ? navigableThreadIds[0] ?? null
+    : navigableThreadIds[activeNavigableIndex + 1] ?? null
+  const commentCount = railThreads.length + (commentDraftOpen ? 1 : 0)
 
   useEffect(() => {
     if (!activeThreadId || railThreads.some((item) => item.thread.id === activeThreadId)) return
@@ -458,7 +471,6 @@ function DriveMarkdownBody({
   useRegisterDriveRendererToolbarItems('markdown', toolbarItems)
 
   const scrollToThread = (threadId: string) => {
-    if (threadId === activeThreadId) return
     setActiveThreadId(threadId)
     const root = bodyRef.current
     const overlayRect = findOverlayRectByThreadId(annotationOverlayRects, threadId, root)
@@ -767,6 +779,8 @@ function DriveMarkdownBody({
       onAnchoredHeightChange={mode === 'anchored' ? setCommentAnchoredDocumentHeight : undefined}
       onAnchoredWheel={mode === 'anchored' ? handleCommentsWheel : undefined}
       onFocusThread={focusThreadFromRail}
+      onNavigatePrevious={previousThreadId ? () => scrollToThread(previousThreadId) : undefined}
+      onNavigateNext={nextThreadId ? () => scrollToThread(nextThreadId) : undefined}
       onRefresh={() => { void annotations.refresh() }}
       onReply={annotations.reply}
       onUpdateComment={annotations.updateComment}
@@ -894,7 +908,14 @@ function DriveMarkdownBody({
           open={compactPanel === 'comments'}
           onOpenChange={(open) => setCommentPanelOpen(open)}
         >
-          <SheetContent side='right' data-markdown-sheet='comments' className='gap-0 overflow-hidden'>
+          <SheetContent
+            side='right'
+            data-markdown-sheet='comments'
+            className='gap-0 overflow-hidden'
+            onEscapeKeyDown={(event) => {
+              if (isMarkdownCommentComposerTarget(event.target)) event.preventDefault()
+            }}
+          >
             <SheetHeader className='sr-only'>
               <SheetTitle>评论</SheetTitle>
               <SheetDescription>查看和管理文档评论</SheetDescription>
@@ -1130,6 +1151,14 @@ function hasSelectionWithin(element: HTMLElement): boolean {
   const selection = element.ownerDocument.getSelection()
   if (!selection || selection.isCollapsed || !selection.toString()) return false
   return [selection.anchorNode, selection.focusNode].some((node) => node && element.contains(node))
+}
+
+function isMarkdownCommentComposerTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && Boolean(target.closest([
+    '[data-markdown-comment-draft-composer="true"]',
+    '[data-markdown-comment-reply-composer="true"]',
+    '[data-markdown-comment-edit-composer="true"]',
+  ].join(', ')))
 }
 
 function findNearestScrollContainer(element: HTMLElement): HTMLElement | null {

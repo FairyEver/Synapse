@@ -451,6 +451,37 @@ describe('DriveMarkdownRenderer', () => {
     expect(scrollContainerScrollToMock).not.toHaveBeenCalled()
   })
 
+  it('keeps a compact non-empty reply draft open when Escape is pressed', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown()
+
+    await act(async () => undefined)
+    await setPreviewWidth(390)
+    await click(buttonWithText('评论 1'))
+    await click(elementWithText('Comment body'))
+    await inputValue(textarea(), 'Saved reply')
+    await keyDown(textarea(), { key: 'Escape' })
+
+    expect(document.querySelector('[data-markdown-sheet="comments"]')).not.toBeNull()
+    expect(textarea().value).toBe('Saved reply')
+  })
+
+  it('cancels a compact comment edit without closing the comments sheet', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown()
+
+    await act(async () => undefined)
+    await setPreviewWidth(390)
+    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('编辑'))
+    await inputValue(textarea(), 'Updated comment')
+    await keyDown(textarea(), { key: 'Escape' })
+
+    expect(document.querySelector('[data-markdown-sheet="comments"]')).not.toBeNull()
+    expect(document.querySelector('[data-markdown-comment-edit-composer="true"]')).toBeNull()
+    expect(document.body.textContent).toContain('Comment body')
+  })
+
   it('preserves regular outline preferences across compact mode changes', async () => {
     renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
 
@@ -547,7 +578,7 @@ describe('DriveMarkdownRenderer', () => {
     expect(pendingOverlay()).not.toBeNull()
     expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).not.toBeNull()
     expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
-    expect(toolbarButtonTexts()).toContain('评论 0')
+    expect(toolbarButtonTexts()).toContain('评论 1')
     await inputValue(textarea(), 'New comment')
     await click(buttonWithText('评论'))
 
@@ -768,12 +799,59 @@ describe('DriveMarkdownRenderer', () => {
   it('does not scroll again when the active comment card is clicked repeatedly', async () => {
     annotationsMock.threads = [thread()]
     renderMarkdown()
+    vi.spyOn(markdownDocumentScroller(), 'getBoundingClientRect').mockReturnValue(domRect({ left: 0, top: 0, width: 500, height: 100 }))
 
     await act(async () => undefined)
     await click(elementWithText('Comment body'))
+    rangeRects = [domRect({ top: 32, height: 20 })]
+    triggerMarkdownResize()
+    await flushAnimationFrames()
     await click(elementWithText('Comment body'))
 
     expect(scrollContainerScrollToMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('scrolls an active comment again after its anchor leaves the safe viewport', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown()
+    vi.spyOn(markdownDocumentScroller(), 'getBoundingClientRect').mockReturnValue(domRect({ left: 0, top: 0, width: 500, height: 100 }))
+
+    await act(async () => undefined)
+    await click(elementWithText('Comment body'))
+    expect(scrollContainerScrollToMock).toHaveBeenCalledTimes(1)
+
+    rangeRects = [domRect({ top: 240, height: 20 })]
+    triggerMarkdownResize()
+    await flushAnimationFrames()
+    await click(elementWithText('Comment body'))
+
+    expect(scrollContainerScrollToMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('navigates attached comments in anchor order without wrapping or including orphaned threads', async () => {
+    annotationsMock.threads = [
+      thread({ id: 'thread-2', body: 'Second comment', range: { start: 6, end: 8 }, quote: '内容' }),
+      thread({ id: 'thread-orphaned', body: 'Lost comment', range: { start: 0, end: 2 }, quote: '缺失' }),
+      thread({ id: 'thread-1', body: 'First comment', range: { start: 3, end: 5 }, quote: '重点' }),
+    ]
+    renderMarkdown()
+
+    await act(async () => undefined)
+    expect(buttonByLabel('上一条评论').disabled).toBe(true)
+    expect(buttonByLabel('下一条评论').disabled).toBe(false)
+
+    await click(buttonByLabel('下一条评论'))
+    expect(threadOverlay('thread-1')?.className).toContain('ring-1')
+    expect(buttonByLabel('上一条评论').disabled).toBe(true)
+    expect(buttonByLabel('下一条评论').disabled).toBe(false)
+
+    await click(buttonByLabel('下一条评论'))
+    expect(threadOverlay('thread-2')?.className).toContain('ring-1')
+    expect(buttonByLabel('上一条评论').disabled).toBe(false)
+    expect(buttonByLabel('下一条评论').disabled).toBe(true)
+
+    await click(buttonByLabel('上一条评论'))
+    expect(threadOverlay('thread-1')?.className).toContain('ring-1')
   })
 
   it('uses instant positioning for comment navigation when reduced motion is requested', async () => {
@@ -1613,5 +1691,11 @@ async function inputValue(element: HTMLTextAreaElement, value: string) {
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
     setter?.call(element, value)
     element.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+async function keyDown(element: HTMLElement, init: KeyboardEventInit) {
+  await act(async () => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
   })
 }

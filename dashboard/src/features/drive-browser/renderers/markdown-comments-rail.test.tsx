@@ -164,13 +164,22 @@ describe('MarkdownCommentsRail', () => {
     expect(onFocusThread).not.toHaveBeenCalled()
   })
 
-  it('activates a focused thread card with Enter', async () => {
+  it('activates a thread through its accessible quote action', async () => {
     const onFocusThread = vi.fn()
     renderRail({ onFocusThread })
 
-    await keyDown(threadCard('thread-1'), { key: 'Enter' })
+    const action = requiredButtonWithLabel('查看评论：Note')
+    expect(action.getAttribute('aria-current')).toBeNull()
+    await click(action)
 
     expect(onFocusThread).toHaveBeenCalledWith('thread-1')
+  })
+
+  it('marks the active thread quote action as current', () => {
+    renderRail({ activeThreadId: 'thread-1' })
+
+    expect(requiredButtonWithLabel('查看评论：Note').getAttribute('aria-current')).toBe('true')
+    expect(threadCard('thread-1').hasAttribute('tabindex')).toBe(false)
   })
 
   it('opens a thread-level reply composer for the active card without submitting multiline or IME input', async () => {
@@ -197,6 +206,15 @@ describe('MarkdownCommentsRail', () => {
     await inputValue(textarea(), '')
     await keyDown(textarea(), { key: 'Escape' })
     expect(replyComposer('thread-1')).toBeNull()
+  })
+
+  it('cancels a non-empty new comment draft with Escape', async () => {
+    const onCancel = vi.fn()
+    renderRail({ draft: commentDraft({ value: 'Draft comment', onCancel }) })
+
+    await keyDown(textarea(), { key: 'Escape' })
+
+    expect(onCancel).toHaveBeenCalledTimes(1)
   })
 
   it('preserves a thread reply draft while another thread is active', async () => {
@@ -241,6 +259,19 @@ describe('MarkdownCommentsRail', () => {
     await click(buttonWithText('编辑'))
     await inputValue(textarea(), 'Updated comment')
     await click(buttonWithText('取消'))
+
+    expect(onUpdateComment).not.toHaveBeenCalled()
+    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).toBeNull()
+    expect(document.body.textContent).toContain('First line')
+  })
+
+  it('cancels a non-empty inline edit with Escape', async () => {
+    const onUpdateComment = vi.fn(async () => undefined)
+    renderRail({ onUpdateComment })
+
+    await click(buttonWithText('编辑'))
+    await inputValue(textarea(), 'Updated comment')
+    await keyDown(textarea(), { key: 'Escape' })
 
     expect(onUpdateComment).not.toHaveBeenCalled()
     expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).toBeNull()
@@ -299,19 +330,38 @@ describe('MarkdownCommentsRail', () => {
     expect(document.querySelector('[role="status"]')?.textContent).toBe('回复失败')
   })
 
-  it('renders an uncounted inline draft card in anchored and compact rails', () => {
+  it('counts an inline draft as a provisional thread in anchored and compact rails', () => {
     const draft = commentDraft()
     renderRail({ threads: [], draft })
 
     expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).not.toBeNull()
     expect(document.body.textContent).toContain('“Selected text”')
-    expect(railTitle().textContent).toContain('0')
+    expect(railTitle().textContent).toContain('1')
     expect(document.body.textContent).not.toContain('暂无评论')
     expect(draftTop()).toBe(24)
 
     rerenderRail({ mode: 'list', threads: [], draft })
     expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).not.toBeNull()
+    expect(railTitle().textContent).toContain('1')
     expect(document.body.textContent).not.toContain('暂无评论')
+  })
+
+  it('runs comment navigation from the rail header and disables unavailable directions', async () => {
+    const onNavigatePrevious = vi.fn()
+    const onNavigateNext = vi.fn()
+    renderRail({ onNavigatePrevious, onNavigateNext })
+
+    expect(requiredButtonWithLabel('上一条评论').disabled).toBe(false)
+    expect(requiredButtonWithLabel('下一条评论').disabled).toBe(false)
+    await click(requiredButtonWithLabel('上一条评论'))
+    await click(requiredButtonWithLabel('下一条评论'))
+
+    expect(onNavigatePrevious).toHaveBeenCalledTimes(1)
+    expect(onNavigateNext).toHaveBeenCalledTimes(1)
+
+    rerenderRail({ onNavigatePrevious: undefined, onNavigateNext: undefined })
+    expect(requiredButtonWithLabel('上一条评论').disabled).toBe(true)
+    expect(requiredButtonWithLabel('下一条评论').disabled).toBe(true)
   })
 
   it('shows pending state while an inline reply is being submitted', async () => {
@@ -696,7 +746,11 @@ function rerenderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>
 
 const canReply = true
 
-function commentDraft() {
+function commentDraft(overrides: Partial<ReturnType<typeof createCommentDraft>> = {}) {
+  return { ...createCommentDraft(), ...overrides }
+}
+
+function createCommentDraft() {
   return {
     anchorTop: 64,
     quote: 'Selected text',

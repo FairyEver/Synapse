@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto } from '@synapse/shared'
-import { ChevronDown, Loader2, MoreHorizontal, RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronUp, Loader2, MoreHorizontal, RefreshCw } from 'lucide-react'
 import { RelativeTime } from '@/components/relative-time'
 import {
   AlertDialog,
@@ -72,6 +72,8 @@ export function MarkdownCommentsRail({
   onFocusThread,
   loading = false,
   onRefresh,
+  onNavigatePrevious,
+  onNavigateNext,
   onReply,
   onUpdateComment,
   onDeleteComment,
@@ -89,6 +91,8 @@ export function MarkdownCommentsRail({
   readonly onFocusThread: (threadId: string) => void
   readonly loading?: boolean
   readonly onRefresh?: () => void
+  readonly onNavigatePrevious?: () => void
+  readonly onNavigateNext?: () => void
   readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
@@ -145,7 +149,14 @@ export function MarkdownCommentsRail({
         data-markdown-comments-mode={mode}
         className='min-h-full bg-background'
       >
-        <CommentsRailHeader compact threads={threads} loading={loading} onRefresh={onRefresh} />
+        <CommentsRailHeader
+          compact
+          count={threads.length + (draft ? 1 : 0)}
+          loading={loading}
+          onRefresh={onRefresh}
+          onNavigatePrevious={onNavigatePrevious}
+          onNavigateNext={onNavigateNext}
+        />
         {threads.length === 0 && !draft ? (
           <div className='px-3 py-6 text-sm text-muted-foreground'>暂无评论</div>
         ) : (
@@ -180,9 +191,11 @@ export function MarkdownCommentsRail({
     >
       <CommentsRailHeader
         compact={false}
-        threads={threads}
+        count={threads.length + (draft ? 1 : 0)}
         loading={loading}
         onRefresh={onRefresh}
+        onNavigatePrevious={onNavigatePrevious}
+        onNavigateNext={onNavigateNext}
         elementRef={measurements.headerRef}
       />
       {partition.orphaned.length > 0 ? (
@@ -265,15 +278,19 @@ export function MarkdownCommentsRail({
 
 function CommentsRailHeader({
   compact,
-  threads,
+  count,
   loading,
   onRefresh,
+  onNavigatePrevious,
+  onNavigateNext,
   elementRef,
 }: {
   readonly compact: boolean
-  readonly threads: readonly MarkdownCommentsRailThread[]
+  readonly count: number
   readonly loading: boolean
   readonly onRefresh?: () => void
+  readonly onNavigatePrevious?: () => void
+  readonly onNavigateNext?: () => void
   readonly elementRef?: (element: HTMLDivElement | null) => void
 }) {
   return (
@@ -283,7 +300,29 @@ function CommentsRailHeader({
     )}>
       <span>评论</span>
       <div className='flex items-center gap-1'>
-        <span className='text-xs font-normal text-muted-foreground'>{threads.length}</span>
+        <span className='text-xs font-normal text-muted-foreground'>{count}</span>
+        <Button
+          type='button'
+          variant='ghost'
+          size='icon'
+          className={compact ? 'size-11' : 'size-7'}
+          aria-label='上一条评论'
+          disabled={!onNavigatePrevious}
+          onClick={onNavigatePrevious}
+        >
+          <ChevronUp />
+        </Button>
+        <Button
+          type='button'
+          variant='ghost'
+          size='icon'
+          className={compact ? 'size-11' : 'size-7'}
+          aria-label='下一条评论'
+          disabled={!onNavigateNext}
+          onClick={onNavigateNext}
+        >
+          <ChevronDown />
+        </Button>
         {onRefresh ? (
           <Button
             type='button'
@@ -394,19 +433,12 @@ function ThreadView({
 
   return (
     <section
-      tabIndex={0}
-      aria-current={active ? 'true' : undefined}
       className={cn(
-        'relative cursor-default overflow-hidden rounded-lg border border-border bg-card p-3 pt-4 text-sm transition-colors hover:border-ring/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-within:border-ring',
+        'relative cursor-default overflow-hidden rounded-lg border border-border bg-card p-3 pt-4 text-sm transition-colors hover:border-ring/60 focus-within:border-ring',
         emphasized && 'border-amber-400/70 bg-muted/30 dark:border-amber-600/70'
       )}
       onClick={(event) => {
         if (isInteractiveCommentTarget(event.target) || hasSelectionWithin(event.currentTarget)) return
-        onFocusThread(thread.id)
-      }}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return
-        event.preventDefault()
         onFocusThread(thread.id)
       }}
     >
@@ -415,7 +447,20 @@ function ThreadView({
       <div className='mb-3 flex items-start gap-2'>
         <span aria-hidden className='mt-0.5 h-4 w-0.5 shrink-0 rounded-full bg-border' />
         <div className='min-w-0 flex-1 space-y-1'>
-          <div className='line-clamp-2 text-xs font-medium text-muted-foreground'>“{quote}”</div>
+          <Button
+            type='button'
+            variant='ghost'
+            size='sm'
+            className={cn(
+              'h-auto w-full justify-start whitespace-normal px-0 py-1 text-left text-xs font-medium text-muted-foreground hover:bg-transparent hover:text-foreground',
+              compact ? 'min-h-11' : 'min-h-7'
+            )}
+            aria-label={`查看评论：${quote}`}
+            aria-current={active ? 'true' : undefined}
+            onClick={() => onFocusThread(thread.id)}
+          >
+            <span className='line-clamp-2'>“{quote}”</span>
+          </Button>
           {thread.anchorStatus === 'orphaned' ? (
             <div className='flex flex-wrap items-center gap-1'>
               <span className='text-xs text-muted-foreground'>{annotationPositionLabel(thread)}</span>
@@ -628,7 +673,7 @@ function CommentComposer({
       onSubmit()
       return
     }
-    if (event.key === 'Escape' && !value.trim()) {
+    if (event.key === 'Escape' && (dataAttribute !== 'reply' || !value.trim())) {
       event.preventDefault()
       onCancel()
     }
