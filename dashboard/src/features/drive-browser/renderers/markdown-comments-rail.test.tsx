@@ -74,6 +74,7 @@ describe('MarkdownCommentsRail', () => {
     expect(replyComposer('thread-1')).not.toBeNull()
     expect(optionalDialogContent()).toBeNull()
     expect(threadCard('thread-1').querySelector('textarea')).not.toBeNull()
+    expect(threadCard('thread-1').querySelector('.bg-amber-400')).not.toBeNull()
     await inputValue(textarea(), 'Reply body')
     await click(buttonWithText('发送'))
 

@@ -306,19 +306,20 @@ function ThreadView({
   const authorByCommentId = useMemo(() => new Map(thread.comments.map((comment) => [comment.id, comment.author])), [thread.comments])
   const firstVisibleCommentId = thread.comments.find((comment) => !comment.deleted)?.id ?? null
   const replyingToComment = thread.comments.find((comment) => comment.id === replyingToCommentId && !comment.deleted) ?? null
+  const emphasized = active || Boolean(replyingToComment)
   const quote = annotationQuoteExcerpt(thread)
   return (
     <section
       className={cn(
         'relative cursor-default overflow-hidden rounded-lg border border-border bg-card p-3 pt-4 text-sm transition-colors hover:border-ring/60 focus-within:border-ring',
-        active && 'border-amber-400/70 bg-muted/30 dark:border-amber-600/70'
+        emphasized && 'border-amber-400/70 bg-muted/30 dark:border-amber-600/70'
       )}
       onClick={(event) => {
         if (isInteractiveCommentTarget(event.target)) return
         onFocusThread(thread.id)
       }}
     >
-      {active ? <div aria-hidden className='absolute inset-x-0 top-0 h-1 bg-amber-400 dark:bg-amber-600' /> : null}
+      {emphasized ? <div aria-hidden className='absolute inset-x-0 top-0 h-1 bg-amber-400 dark:bg-amber-600' /> : null}
       <div className='mb-3 flex items-start gap-2'>
         <span aria-hidden className='mt-0.5 h-4 w-0.5 shrink-0 rounded-full bg-border' />
         <div className='min-w-0 flex-1 space-y-1'>
