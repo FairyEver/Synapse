@@ -18,9 +18,11 @@ describe("createTextFileWriterCapabilityDispatcher", () => {
     const write = vi.fn(async () => result)
     const dispatcher = createTextFileWriterCapabilityDispatcher({ service: { write } as never })
     const params = { text: "hello", path: outputPath }
+    const abortSignal = new AbortController().signal
     const context = {
       source: "mcp-http" as const,
       actor: { kind: "user" as const, id: "mcp-client" },
+      abortSignal,
     }
 
     await expect(dispatcher.dispatch("app.text_file_writer.file.write", params, context)).resolves.toEqual({
@@ -31,6 +33,7 @@ describe("createTextFileWriterCapabilityDispatcher", () => {
     expect(write).toHaveBeenCalledWith(params, {
       actor: context.actor,
       source: context.source,
+      abortSignal,
     })
   })
 

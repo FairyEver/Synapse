@@ -19,6 +19,7 @@ export function createTextFileWriterCapabilityDispatcher(deps: {
         const result = await deps.service.write(params as never, {
           actor: context.actor,
           source: context.source,
+          abortSignal: context.abortSignal,
         })
         return { ok: true, data: result, affected: 1 }
       } catch (error) {
