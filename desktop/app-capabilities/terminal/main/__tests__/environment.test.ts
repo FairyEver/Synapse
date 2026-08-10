@@ -4,6 +4,7 @@ import {
   resolveTerminalLaunchConfiguration,
   resolveTerminalEnvironment,
   resolveTerminalShellArgs,
+  TerminalLaunchValidationError,
 } from "../environment"
 
 describe("TerminalEnvironmentResolver", () => {
@@ -139,7 +140,7 @@ describe("TerminalEnvironmentResolver", () => {
   it("rejects protected variables and bounded environment limits before launch", () => {
     expect(() => resolveTerminalLaunchConfiguration({
       global: { environment: { TERM_PROGRAM: "Other" } },
-    })).toThrow("Protected")
+    })).toThrow(TerminalLaunchValidationError)
     expect(() => resolveTerminalLaunchConfiguration({
       global: { environment: Object.fromEntries(Array.from({ length: 257 }, (_, index) => [`KEY_${index}`, "value"])) },
     })).toThrow("Too many")

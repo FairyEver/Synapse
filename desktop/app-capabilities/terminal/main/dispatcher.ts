@@ -66,6 +66,7 @@ import {
 } from "../shared/errors"
 import { terminalInputSchemaForCapability } from "../shared/mcp-tools"
 import type { TerminalLaunchLayer } from "../shared/schema"
+import { TerminalLaunchValidationError } from "./environment"
 import type { TerminalControllerContext, TerminalService } from "./service"
 
 const TERMINAL_PERMISSION_ACTIONS: Readonly<Record<TerminalPermissionFamily, PermissionAction>> = {
@@ -89,6 +90,13 @@ const TERMINAL_PERMISSION_ACTIONS: Readonly<Record<TerminalPermissionFamily, Per
   "session.delete": "terminal.session.delete",
   "group.delete": "terminal.group.delete",
 }
+
+const TERMINAL_LAUNCH_SETTING_MUTATION_ACTIONS = new Set([
+  "app.terminal.global_launch.update",
+  "app.terminal.group_launch.update",
+  "app.terminal.group_command.create",
+  "app.terminal.group_command.update",
+])
 
 export type TerminalCapabilityDispatcher = {
   dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult>
@@ -137,7 +145,9 @@ export function createTerminalCapabilityDispatcher(deps: {
         recordDispatchOutcome(deps, context, authorizedAudit, "allowed", envelope.correlationId, envelope.outcome)
         return envelope as DispatchResult
       } catch (error) {
-        const envelope = !(error instanceof TerminalContractError) && isZodError(error)
+        const isLaunchSettingValidationError = error instanceof TerminalLaunchValidationError
+          && TERMINAL_LAUNCH_SETTING_MUTATION_ACTIONS.has(action)
+        const envelope = !(error instanceof TerminalContractError) && (isZodError(error) || isLaunchSettingValidationError)
           ? terminalErrorEnvelope(terminalContractError("validation_error", "validation"))
           : terminalErrorEnvelope(error)
         if (authorizedAudit) {

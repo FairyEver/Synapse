@@ -12,6 +12,13 @@ export type TerminalEnvironmentSnapshot = {
   readonly environmentKeys: string[]
 }
 
+export class TerminalLaunchValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "TerminalLaunchValidationError"
+  }
+}
+
 const UNIX_ENV_KEYS = ["HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR"] as const
 const WINDOWS_ENV_KEYS = [
   "SystemRoot",
@@ -190,47 +197,47 @@ export function resolveTerminalShellArgs(
 }
 
 function validateEnvironmentEntry(key: string, value: string | null): void {
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error("Invalid Terminal environment key")
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new TerminalLaunchValidationError("Invalid Terminal environment key")
   const normalizedKey = key.toUpperCase()
-  if (TERMINAL_RESERVED_ENV_KEYS.has(normalizedKey)) throw new Error("Protected Terminal environment key")
+  if (TERMINAL_RESERVED_ENV_KEYS.has(normalizedKey)) throw new TerminalLaunchValidationError("Protected Terminal environment key")
   if (TERMINAL_RESERVED_INTERNAL_ENV_PREFIXES.some((prefix) => normalizedKey.startsWith(prefix))) {
-    throw new Error("Protected Terminal environment key")
+    throw new TerminalLaunchValidationError("Protected Terminal environment key")
   }
-  if (value?.includes("\0")) throw new Error("Invalid Terminal environment value")
+  if (value?.includes("\0")) throw new TerminalLaunchValidationError("Invalid Terminal environment value")
   if (value !== null && Buffer.byteLength(value, "utf8") > TERMINAL_ENVIRONMENT_VALUE_BYTE_LIMIT) {
-    throw new Error("Terminal environment value is too large")
+    throw new TerminalLaunchValidationError("Terminal environment value is too large")
   }
 }
 
 function validateTerminalEnvironment(environment: Readonly<TerminalEnvironment>, platform: NodeJS.Platform): void {
   const entries = Object.entries(environment)
-  if (entries.length > TERMINAL_ENVIRONMENT_ENTRY_LIMIT) throw new Error("Too many Terminal environment entries")
+  if (entries.length > TERMINAL_ENVIRONMENT_ENTRY_LIMIT) throw new TerminalLaunchValidationError("Too many Terminal environment entries")
   const normalized = new Set<string>()
   let totalBytes = 0
   for (const [key, value] of entries) {
     validateEnvironmentEntry(key, value)
     const normalizedKey = platform === "win32" ? key.toUpperCase() : key
-    if (normalized.has(normalizedKey)) throw new Error("Duplicate Terminal environment key")
+    if (normalized.has(normalizedKey)) throw new TerminalLaunchValidationError("Duplicate Terminal environment key")
     normalized.add(normalizedKey)
     totalBytes += Buffer.byteLength(key, "utf8") + (value === null ? 0 : Buffer.byteLength(value, "utf8"))
   }
-  if (totalBytes > TERMINAL_ENVIRONMENT_TOTAL_BYTE_LIMIT) throw new Error("Terminal environment is too large")
+  if (totalBytes > TERMINAL_ENVIRONMENT_TOTAL_BYTE_LIMIT) throw new TerminalLaunchValidationError("Terminal environment is too large")
 }
 
 function validateExecutableOrCommand(shell: string, platform: NodeJS.Platform): void {
-  if (!shell.trim() || shell.includes("\0")) throw new Error("Invalid Terminal shell")
+  if (!shell.trim() || shell.includes("\0")) throw new TerminalLaunchValidationError("Invalid Terminal shell")
   const targetPath = platform === "win32" ? path.win32 : path.posix
-  if (targetPath.isAbsolute(shell) && targetPath.normalize(shell) !== shell) throw new Error("Invalid Terminal shell path")
+  if (targetPath.isAbsolute(shell) && targetPath.normalize(shell) !== shell) throw new TerminalLaunchValidationError("Invalid Terminal shell path")
 }
 
 function validateCwd(cwd: string, platform: NodeJS.Platform): void {
   const targetPath = platform === "win32" ? path.win32 : path.posix
-  if (!targetPath.isAbsolute(cwd) || cwd.includes("\0")) throw new Error("Invalid Terminal cwd")
+  if (!targetPath.isAbsolute(cwd) || cwd.includes("\0")) throw new TerminalLaunchValidationError("Invalid Terminal cwd")
 }
 
 function validateLocalFilesystemTargets(shell: string, cwd: string, platform: NodeJS.Platform): void {
   if (platform !== process.platform) return
-  if (!statSync(cwd).isDirectory()) throw new Error("Terminal cwd is not a directory")
+  if (!statSync(cwd).isDirectory()) throw new TerminalLaunchValidationError("Terminal cwd is not a directory")
   const targetPath = platform === "win32" ? path.win32 : path.posix
-  if (targetPath.isAbsolute(shell) && !statSync(shell).isFile()) throw new Error("Terminal shell is not a file")
+  if (targetPath.isAbsolute(shell) && !statSync(shell).isFile()) throw new TerminalLaunchValidationError("Terminal shell is not a file")
 }

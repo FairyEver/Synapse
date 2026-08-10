@@ -8,6 +8,7 @@ import {
 } from "../../../../electron/runtime/security"
 import { TERMINAL_CAPABILITY_CATALOG } from "../../shared/capability"
 import { createTerminalCapabilityDispatcher } from "../dispatcher"
+import { TerminalLaunchValidationError } from "../environment"
 import type { TerminalService } from "../service"
 
 const localMcpContext = {
@@ -196,6 +197,36 @@ describe("Terminal capability dispatcher", () => {
     }))
     expect(JSON.stringify(updated)).not.toContain("wheel")
     expect(JSON.stringify(updated)).not.toContain('"9"')
+  })
+
+  it("reports launch-setting validation failures without exposing environment values", async () => {
+    const security = allowingSecurity()
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: serviceStub({
+        getGlobalLaunchSettings: vi.fn(() => ({ revision: 3, settings: {} })),
+        updateGlobalLaunchSettings: vi.fn(() => {
+          throw new TerminalLaunchValidationError("Protected Terminal environment key")
+        }),
+      }),
+      ...security,
+    })
+
+    const result = await dispatcher.dispatch("app.terminal.global_launch.update", {
+      expectedRevision: 3,
+      settings: { environment: { TERM_PROGRAM: "sensitive-value" } },
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000100",
+    }, localMcpContext)
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "validation_error", category: "validation", retryable: false },
+    })
+    expect(JSON.stringify(result)).not.toContain("sensitive-value")
+    expect(JSON.stringify(result)).not.toContain("Protected Terminal environment key")
+    expect(security.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: "failed",
+      metadata: expect.objectContaining({ stage: "result", result: "validation_error" }),
+    }))
   })
 
   it("checks state permission before resolving a session and never returns output", async () => {
