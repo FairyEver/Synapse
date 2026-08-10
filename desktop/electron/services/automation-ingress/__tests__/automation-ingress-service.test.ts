@@ -511,6 +511,34 @@ describe("AutomationIngressService", () => {
     expect(send).toHaveBeenCalledTimes(1)
   })
 
+  it("rejects requests immediately after disabling an existing webhook", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const send = vi.fn(async () => ({ resultText: "should not run" }))
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+    })
+    const enabled = await service.updateConfig({ enabled: true, resetToken: true })
+    await service.updateConfig({ enabled: false })
+
+    const response = await handleWebhookRequest(service, {
+      method: "POST",
+      url: "/hook",
+      headers: { authorization: `Bearer ${enabled.token ?? ""}`, "Content-Type": "application/json" },
+      body: Buffer.from(JSON.stringify({ project: "project-1", prompt: "run" })),
+      remoteAddress: "127.0.0.1",
+    })
+
+    expect(response.status).toBe(404)
+    expect(send).not.toHaveBeenCalled()
+    expect(await runs.list()).toEqual([])
+  })
+
   it("does not persist or return webhook session credentials or unsafe metadata", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")

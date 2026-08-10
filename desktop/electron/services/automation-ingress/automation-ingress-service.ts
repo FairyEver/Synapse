@@ -312,6 +312,9 @@ export class AutomationIngressService {
     const url = new URL(request.url, "http://127.0.0.1")
     try {
       const config = await this.getConfigOrDefault()
+      if (!config.enabled) {
+        return jsonResponse(404, false, undefined, "not_found", "not found")
+      }
       if (url.pathname !== config.path) {
         return jsonResponse(404, false, undefined, "not_found", "not found")
       }
