@@ -144,24 +144,97 @@ describe('MarkdownCommentsRail', () => {
     expect(onFocusThread).not.toHaveBeenCalled()
   })
 
-  it('opens edits in a dialog with the existing body and saves changes', async () => {
+  it('does not focus the thread when comment text is selected', async () => {
+    const onFocusThread = vi.fn()
+    renderRail({ onFocusThread })
+    const textNode = threadCard('thread-1').querySelector('p')?.firstChild
+    if (!textNode) throw new Error('Missing comment text')
+    const range = document.createRange()
+    range.setStart(textNode, 0)
+    range.setEnd(textNode, 5)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+
+    await act(async () => {
+      threadCard('thread-1').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(selection?.toString()).toBe('First')
+    expect(onFocusThread).not.toHaveBeenCalled()
+  })
+
+  it('activates a focused thread card with Enter', async () => {
+    const onFocusThread = vi.fn()
+    renderRail({ onFocusThread })
+
+    await keyDown(threadCard('thread-1'), { key: 'Enter' })
+
+    expect(onFocusThread).toHaveBeenCalledWith('thread-1')
+  })
+
+  it('opens a thread-level reply composer for the active card without submitting multiline or IME input', async () => {
+    const onReply = vi.fn(async () => undefined)
+    renderRail({ activeThreadId: 'thread-1', onReply })
+
+    expect(replyComposer('thread-1')).not.toBeNull()
+    await inputValue(textarea(), 'Reply body')
+    await keyDown(textarea(), { key: 'Enter', shiftKey: true })
+    await keyDown(textarea(), { key: 'Enter', isComposing: true })
+    expect(onReply).not.toHaveBeenCalled()
+
+    await keyDown(textarea(), { key: 'Enter' })
+    expect(onReply).toHaveBeenCalledWith({ threadId: 'thread-1', parentCommentId: null, body: 'Reply body' })
+  })
+
+  it('closes an empty composer with Escape but preserves non-empty input', async () => {
+    renderRail({ activeThreadId: 'thread-1' })
+
+    await inputValue(textarea(), 'Draft')
+    await keyDown(textarea(), { key: 'Escape' })
+    expect(textarea().value).toBe('Draft')
+
+    await inputValue(textarea(), '')
+    await keyDown(textarea(), { key: 'Escape' })
+    expect(replyComposer('thread-1')).toBeNull()
+  })
+
+  it('preserves a thread reply draft while another thread is active', async () => {
+    const threads = [
+      thread({ id: 'thread-1', body: 'First', anchorStatus: 'attached', anchorTop: 10 }),
+      thread({ id: 'thread-2', body: 'Second', anchorStatus: 'attached', anchorTop: 200 }),
+    ]
+    renderRail({ threads, activeThreadId: 'thread-1' })
+    const firstTextarea = replyComposer('thread-1')?.querySelector('textarea')
+    if (!(firstTextarea instanceof HTMLTextAreaElement)) throw new Error('Missing first reply input')
+    await inputValue(firstTextarea, 'Saved draft')
+
+    rerenderRail({ threads, activeThreadId: 'thread-2' })
+    rerenderRail({ threads, activeThreadId: 'thread-1' })
+
+    const restoredTextarea = replyComposer('thread-1')?.querySelector('textarea')
+    expect(restoredTextarea).toBeInstanceOf(HTMLTextAreaElement)
+    expect((restoredTextarea as HTMLTextAreaElement).value).toBe('Saved draft')
+  })
+
+  it('edits comments inline with the existing body and saves changes', async () => {
     const onUpdateComment = vi.fn(async () => undefined)
     renderRail({ onUpdateComment })
 
     await click(buttonWithText('编辑'))
 
-    expect(document.body.textContent).toContain('编辑评论')
     expect(textarea().value).toBe('First line\nSecond line\n<strong>unsafe</strong>')
-    expect(threadCard('thread-1').querySelector('textarea')).toBeNull()
+    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).not.toBeNull()
+    expect(optionalDialogContent()).toBeNull()
 
     await inputValue(textarea(), 'Updated comment')
     await click(buttonWithText('保存'))
 
     expect(onUpdateComment).toHaveBeenCalledWith({ commentId: 'comment-1', body: 'Updated comment' })
-    expect(document.body.textContent).not.toContain('编辑评论')
+    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).toBeNull()
   })
 
-  it('cancels edit dialogs without updating the comment', async () => {
+  it('cancels inline edits without updating the comment', async () => {
     const onUpdateComment = vi.fn(async () => undefined)
     renderRail({ onUpdateComment })
 
@@ -170,7 +243,7 @@ describe('MarkdownCommentsRail', () => {
     await click(buttonWithText('取消'))
 
     expect(onUpdateComment).not.toHaveBeenCalled()
-    expect(document.body.textContent).not.toContain('编辑评论')
+    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).toBeNull()
     expect(document.body.textContent).toContain('First line')
   })
 
@@ -224,6 +297,21 @@ describe('MarkdownCommentsRail', () => {
     await click(buttonWithText('发送'))
 
     expect(document.querySelector('[role="status"]')?.textContent).toBe('回复失败')
+  })
+
+  it('renders an uncounted inline draft card in anchored and compact rails', () => {
+    const draft = commentDraft()
+    renderRail({ threads: [], draft })
+
+    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('“Selected text”')
+    expect(railTitle().textContent).toContain('0')
+    expect(document.body.textContent).not.toContain('暂无评论')
+    expect(draftTop()).toBe(24)
+
+    rerenderRail({ mode: 'list', threads: [], draft })
+    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).not.toBeNull()
+    expect(document.body.textContent).not.toContain('暂无评论')
   })
 
   it('shows pending state while an inline reply is being submitted', async () => {
@@ -489,6 +577,7 @@ describe('MarkdownCommentsRail', () => {
     await click(actionElementWithText('删除评论'))
 
     expect(document.body.textContent).toContain('删除评论？')
+    expect(document.body.textContent).toContain('讨论和原文标记会一并移除')
     expect(onDeleteComment).not.toHaveBeenCalled()
 
     await click(buttonWithText('删除评论'))
@@ -506,6 +595,28 @@ describe('MarkdownCommentsRail', () => {
     expect(document.body.textContent).not.toContain('删除讨论')
     expect(buttonWithLabel('更多评论操作')).toBeNull()
     expect(buttonWithLabel('讨论操作')).toBeNull()
+  })
+
+  it('explains that replies remain when deleting a parent comment', async () => {
+    const source = thread()
+    const firstComment = source.thread.comments[0]
+    const reply = {
+      ...firstComment,
+      id: 'comment-2',
+      parentCommentId: firstComment.id,
+      body: 'Reply body',
+    }
+    renderRail({
+      threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, reply] } }],
+    })
+
+    const actionButton = document.querySelector<HTMLButtonElement>('button[aria-label="更多评论操作"]')
+    if (!actionButton) throw new Error('Missing comment action button')
+    await click(actionButton)
+    await click(actionElementWithText('删除评论'))
+
+    expect(document.body.textContent).toContain('回复会保留')
+    expect(document.body.textContent).toContain('评论已删除')
   })
 
   it('deletes the selected reply from its own action menu', async () => {
@@ -585,6 +696,19 @@ function rerenderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>
 
 const canReply = true
 
+function commentDraft() {
+  return {
+    anchorTop: 64,
+    quote: 'Selected text',
+    value: '',
+    submitting: false,
+    error: null,
+    onValueChange: vi.fn(),
+    onSubmit: vi.fn(),
+    onCancel: vi.fn(),
+  }
+}
+
 function thread(input: {
   readonly id?: string
   readonly body?: string
@@ -641,6 +765,12 @@ async function click(element: HTMLElement) {
   await act(async () => {
     element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
     element.click()
+  })
+}
+
+async function keyDown(element: HTMLElement, init: KeyboardEventInit) {
+  await act(async () => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
   })
 }
 
@@ -709,6 +839,12 @@ function threadCard(threadId: string) {
 function threadTop(threadId: string): number {
   const top = threadSection(threadId).style.top
   return Number(top.replace('px', ''))
+}
+
+function draftTop(): number {
+  const element = document.querySelector<HTMLElement>('[data-markdown-comment-draft="true"]')
+  if (!element) throw new Error('Missing draft')
+  return Number(element.style.top.replace('px', ''))
 }
 
 function railTitle() {

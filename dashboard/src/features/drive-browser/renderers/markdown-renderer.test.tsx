@@ -419,7 +419,7 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.querySelector('[data-slot="resizable-panel-group"]')).not.toBeNull()
   })
 
-  it('closes compact sheets after selecting outline and comment targets', async () => {
+  it('closes the compact outline after navigation and keeps comments open while activating a thread', async () => {
     annotationsMock.threads = [thread()]
     renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
 
@@ -434,7 +434,7 @@ describe('DriveMarkdownRenderer', () => {
 
     await click(buttonWithText('评论 1'))
     await click(elementWithText('Comment body'))
-    expect(document.querySelector('[data-markdown-sheet="comments"]')).toBeNull()
+    expect(document.querySelector('[data-markdown-sheet="comments"]')).not.toBeNull()
     expect(scrollContainerScrollToMock).toHaveBeenCalled()
   })
 
@@ -484,7 +484,7 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.querySelector('[data-markdown-resizable-panel="comments"]')).toBeNull()
   })
 
-  it('counts replies in the toolbar comments total', async () => {
+  it('counts comment threads rather than replies in the toolbar total', async () => {
     const baseThread = thread()
     annotationsMock.threads = [{
       ...baseThread,
@@ -503,7 +503,7 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
 
-    expect(toolbarButtonTexts()).toEqual(['宽屏', '评论 2'])
+    expect(toolbarButtonTexts()).toEqual(['宽屏', '评论 1'])
     expect(document.body.textContent).toContain('Reply body')
   })
 
@@ -545,6 +545,9 @@ describe('DriveMarkdownRenderer', () => {
 
     await click(buttonWithText('添加评论'))
     expect(pendingOverlay()).not.toBeNull()
+    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).not.toBeNull()
+    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
+    expect(toolbarButtonTexts()).toContain('评论 0')
     await inputValue(textarea(), 'New comment')
     await click(buttonWithText('评论'))
 
@@ -746,8 +749,42 @@ describe('DriveMarkdownRenderer', () => {
     await click(elementWithText('Comment body'))
 
     expect(scrollIntoViewMock).not.toHaveBeenCalled()
-    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 80, behavior: 'smooth' })
-    expect(markdownDocumentScroller().scrollTop).toBe(80)
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 96, behavior: 'smooth' })
+    expect(markdownDocumentScroller().scrollTop).toBe(96)
+  })
+
+  it('does not scroll when the focused comment is already inside the safe viewport area', async () => {
+    rangeRects = [domRect({ top: 32, height: 20 })]
+    annotationsMock.threads = [thread()]
+    renderMarkdown()
+    vi.spyOn(markdownDocumentScroller(), 'getBoundingClientRect').mockReturnValue(domRect({ left: 0, top: 0, width: 500, height: 100 }))
+
+    await act(async () => undefined)
+    await click(elementWithText('Comment body'))
+
+    expect(scrollContainerScrollToMock).not.toHaveBeenCalled()
+  })
+
+  it('does not scroll again when the active comment card is clicked repeatedly', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown()
+
+    await act(async () => undefined)
+    await click(elementWithText('Comment body'))
+    await click(elementWithText('Comment body'))
+
+    expect(scrollContainerScrollToMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses instant positioning for comment navigation when reduced motion is requested', async () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => mediaQuery(query, query === '(prefers-reduced-motion: reduce)')))
+    annotationsMock.threads = [thread()]
+    renderMarkdown()
+
+    await act(async () => undefined)
+    await click(elementWithText('Comment body'))
+
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 96, behavior: 'auto' })
   })
 
   it('renders existing comments as overlay rectangles and focuses them by click position', async () => {
@@ -772,7 +809,7 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.body.textContent).toContain('评论')
     expect(document.body.textContent).toContain('1')
     expect(scrollIntoViewMock).not.toHaveBeenCalled()
-    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 80, behavior: 'smooth' })
+    expect(scrollContainerScrollToMock).not.toHaveBeenCalled()
   })
 
   it('remeasures comment overlays after markdown body resize without using window resize listeners', async () => {
@@ -808,7 +845,7 @@ describe('DriveMarkdownRenderer', () => {
       }))
     })
 
-    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 201, behavior: 'smooth' })
+    expect(scrollContainerScrollToMock).not.toHaveBeenCalled()
     expect(windowAddEventListener).not.toHaveBeenCalledWith('resize', expect.any(Function))
 
     windowAddEventListener.mockRestore()
@@ -934,7 +971,7 @@ describe('DriveMarkdownRenderer', () => {
     await click(elementWithText('Comment body'))
 
     expect(scrollIntoViewMock).not.toHaveBeenCalled()
-    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 20, behavior: 'smooth' })
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 34, behavior: 'smooth' })
   })
 
   it('filters narrow empty overlay rectangles from cross-structure selections', async () => {
@@ -1538,6 +1575,19 @@ function domRect({
     left,
     toJSON: () => ({}),
   } as DOMRect
+}
+
+function mediaQuery(query: string, matches: boolean): MediaQueryList {
+  return {
+    matches,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }
 }
 
 function selectStrongText() {

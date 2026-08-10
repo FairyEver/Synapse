@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto } from '@synapse/shared'
 import { ChevronDown, Loader2, MoreHorizontal, RefreshCw } from 'lucide-react'
 import { RelativeTime } from '@/components/relative-time'
@@ -16,14 +16,6 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -34,6 +26,7 @@ import { cn, getDisplayNameInitials } from '@/lib/utils'
 
 const COMMENT_CARD_ESTIMATED_HEIGHT = 128
 const COMMENT_CARD_GAP = 12
+const COMMENT_DRAFT_CARD_ID = '__comment-draft__'
 type CommentActionPromise = Promise<unknown>
 
 type CommentRailMeasurements = {
@@ -54,9 +47,25 @@ export type MarkdownCommentsRailThread = {
   readonly anchorTop: number | null
 }
 
+export type MarkdownCommentDraft = {
+  readonly anchorTop: number
+  readonly quote: string
+  readonly value: string
+  readonly submitting: boolean
+  readonly error: string | null
+  readonly onValueChange: (value: string) => void
+  readonly onSubmit: () => void
+  readonly onCancel: () => void
+}
+
+type AnchoredRailCard =
+  | { readonly id: string; readonly kind: 'thread'; readonly anchorTop: number; readonly item: MarkdownCommentsRailThread }
+  | { readonly id: typeof COMMENT_DRAFT_CARD_ID; readonly kind: 'draft'; readonly anchorTop: number; readonly draft: MarkdownCommentDraft }
+
 export function MarkdownCommentsRail({
   mode = 'anchored',
   threads,
+  draft,
   activeThreadId,
   canReply,
   anchorBaseOffset = 0,
@@ -73,6 +82,7 @@ export function MarkdownCommentsRail({
 }: {
   readonly mode?: 'anchored' | 'list'
   readonly threads: readonly MarkdownCommentsRailThread[]
+  readonly draft?: MarkdownCommentDraft | null
   readonly activeThreadId: string | null
   readonly canReply: boolean
   readonly anchorBaseOffset?: number
@@ -90,11 +100,25 @@ export function MarkdownCommentsRail({
   const [unlocatedOpen, setUnlocatedOpen] = useState(true)
   const anchoredRegionRef = useRef<HTMLDivElement | null>(null)
   const partition = useMemo(() => partitionRailThreads(threads), [threads])
-  const measurements = useCommentRailMeasurements(mode !== 'list', threads)
+  const anchoredCards = useMemo<readonly AnchoredRailCard[]>(() => {
+    const cards: AnchoredRailCard[] = partition.anchored.map((item) => ({
+      id: item.thread.id,
+      kind: 'thread',
+      anchorTop: item.anchorTop ?? 0,
+      item,
+    }))
+    if (draft) cards.push({ id: COMMENT_DRAFT_CARD_ID, kind: 'draft', anchorTop: draft.anchorTop, draft })
+    return cards
+  }, [draft, partition.anchored])
+  const measurementIds = useMemo(
+    () => [...threads.map((item) => item.thread.id), ...(draft ? [COMMENT_DRAFT_CARD_ID] : [])],
+    [draft, threads]
+  )
+  const measurements = useCommentRailMeasurements(mode !== 'list', measurementIds)
   const reservedTop = measurements.headerHeight + measurements.unlocatedSectionHeight
   const layout = useMemo(
-    () => layoutRailThreads(partition.anchored, measurements.cardHeights, anchorBaseOffset, reservedTop),
-    [anchorBaseOffset, measurements.cardHeights, partition.anchored, reservedTop]
+    () => layoutRailCards(anchoredCards, measurements.cardHeights, anchorBaseOffset, reservedTop),
+    [anchorBaseOffset, anchoredCards, measurements.cardHeights, reservedTop]
   )
 
   const compact = mode === 'list'
@@ -122,10 +146,11 @@ export function MarkdownCommentsRail({
         className='min-h-full bg-background'
       >
         <CommentsRailHeader compact threads={threads} loading={loading} onRefresh={onRefresh} />
-        {threads.length === 0 ? (
+        {threads.length === 0 && !draft ? (
           <div className='px-3 py-6 text-sm text-muted-foreground'>暂无评论</div>
         ) : (
           <div className='space-y-3 p-3'>
+            {draft ? <CommentDraftCard draft={draft} compact /> : null}
             {[...partition.orphaned, ...partition.anchored].map((item) => (
               <div key={item.thread.id} data-markdown-comment-thread-id={item.thread.id}>
                 <ThreadView
@@ -195,7 +220,7 @@ export function MarkdownCommentsRail({
         </div>
       ) : null}
       <div ref={anchoredRegionRef} data-markdown-comments-scroll-region='true' className='relative min-h-0 flex-1 overflow-hidden'>
-        {threads.length === 0 ? (
+        {threads.length === 0 && !draft ? (
           <div className='px-3 py-6 text-sm text-muted-foreground'>暂无评论</div>
         ) : null}
         {layout.anchored.length > 0 ? (
@@ -208,23 +233,26 @@ export function MarkdownCommentsRail({
             >
               {layout.anchored.map(({ item, top }) => (
                 <div
-                  key={item.thread.id}
-                  ref={measurements.cardRef(item.thread.id)}
-                  data-markdown-comment-thread-id={item.thread.id}
+                  key={item.id}
+                  ref={measurements.cardRef(item.id)}
+                  data-markdown-comment-thread-id={item.kind === 'thread' ? item.item.thread.id : undefined}
+                  data-markdown-comment-draft={item.kind === 'draft' ? 'true' : undefined}
                   className='absolute left-3 right-3'
                   style={{ top }}
                 >
-                  <ThreadView
-                    thread={item.thread}
-                    active={item.thread.id === activeThreadId}
-                    canReply={canReply}
-                    compact={false}
-                    onFocusThread={onFocusThread}
-                    onReply={onReply}
-                    onUpdateComment={onUpdateComment}
-                    onDeleteComment={onDeleteComment}
-                    onStartReassociate={onStartReassociate}
-                  />
+                  {item.kind === 'thread' ? (
+                    <ThreadView
+                      thread={item.item.thread}
+                      active={item.item.thread.id === activeThreadId}
+                      canReply={canReply}
+                      compact={false}
+                      onFocusThread={onFocusThread}
+                      onReply={onReply}
+                      onUpdateComment={onUpdateComment}
+                      onDeleteComment={onDeleteComment}
+                      onStartReassociate={onStartReassociate}
+                    />
+                  ) : <CommentDraftCard draft={item.draft} compact={false} />}
                 </div>
               ))}
             </div>
@@ -274,6 +302,33 @@ function CommentsRailHeader({
   )
 }
 
+function CommentDraftCard({ draft, compact }: { readonly draft: MarkdownCommentDraft; readonly compact: boolean }) {
+  return (
+    <section
+      data-markdown-comment-draft-card='true'
+      className='relative overflow-hidden rounded-lg border border-amber-400/70 bg-muted/30 p-3 pt-4 text-sm dark:border-amber-600/70'
+    >
+      <div aria-hidden className='absolute inset-x-0 top-0 h-1 bg-amber-400 dark:bg-amber-600' />
+      <div className='mb-3 line-clamp-2 text-xs font-medium text-muted-foreground'>“{draft.quote}”</div>
+      <CommentComposer
+        dataAttribute='draft'
+        value={draft.value}
+        ariaLabel='添加评论'
+        placeholder='添加评论'
+        compact={compact}
+        submitting={draft.submitting}
+        error={draft.error}
+        submitLabel='评论'
+        submittingLabel='提交中'
+        autoFocus
+        onValueChange={draft.onValueChange}
+        onCancel={draft.onCancel}
+        onSubmit={draft.onSubmit}
+      />
+    </section>
+  )
+}
+
 function ThreadView({
   thread,
   active,
@@ -296,21 +351,66 @@ function ThreadView({
   readonly onStartReassociate?: (threadId: string) => void
 }) {
   const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null)
+  const [replyComposerOpen, setReplyComposerOpen] = useState(active)
+  const [replyComposerRevision, setReplyComposerRevision] = useState(0)
+  const [replyValue, setReplyValue] = useState('')
+  const [replySubmitting, setReplySubmitting] = useState(false)
+  const [replyError, setReplyError] = useState<string | null>(null)
+  const previousActiveRef = useRef(active)
   const authorByCommentId = useMemo(() => new Map(thread.comments.map((comment) => [comment.id, comment.author])), [thread.comments])
   const replyingToComment = thread.comments.find((comment) => comment.id === replyingToCommentId && !comment.deleted) ?? null
-  const emphasized = active || Boolean(replyingToComment)
+  const composerVisible = replyComposerOpen && (active || replyingToCommentId !== null)
+  const emphasized = active || composerVisible
   const quote = annotationQuoteExcerpt(thread)
+
+  useEffect(() => {
+    if (active && !previousActiveRef.current) setReplyComposerOpen(true)
+    previousActiveRef.current = active
+  }, [active])
+
+  const openReplyComposer = (commentId: string | null) => {
+    setReplyingToCommentId(commentId)
+    setReplyComposerOpen(true)
+    setReplyValue('')
+    setReplyError(null)
+    setReplyComposerRevision((current) => current + 1)
+  }
+
+  const submitReply = async () => {
+    if (!replyValue.trim() || replySubmitting) return
+    setReplySubmitting(true)
+    setReplyError(null)
+    try {
+      await onReply({ threadId: thread.id, parentCommentId: replyingToComment?.id ?? null, body: replyValue })
+      setReplyComposerOpen(false)
+      setReplyingToCommentId(null)
+      setReplyValue('')
+    } catch (cause) {
+      setReplyError(getCommentActionErrorMessage(cause))
+    } finally {
+      setReplySubmitting(false)
+    }
+  }
+
   return (
     <section
+      tabIndex={0}
+      aria-current={active ? 'true' : undefined}
       className={cn(
-        'relative cursor-default overflow-hidden rounded-lg border border-border bg-card p-3 pt-4 text-sm transition-colors hover:border-ring/60 focus-within:border-ring',
+        'relative cursor-default overflow-hidden rounded-lg border border-border bg-card p-3 pt-4 text-sm transition-colors hover:border-ring/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-within:border-ring',
         emphasized && 'border-amber-400/70 bg-muted/30 dark:border-amber-600/70'
       )}
       onClick={(event) => {
-        if (isInteractiveCommentTarget(event.target)) return
+        if (isInteractiveCommentTarget(event.target) || hasSelectionWithin(event.currentTarget)) return
+        onFocusThread(thread.id)
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return
+        event.preventDefault()
         onFocusThread(thread.id)
       }}
     >
+      {active ? <span className='sr-only'>当前评论</span> : null}
       {emphasized ? <div aria-hidden className='absolute inset-x-0 top-0 h-1 bg-amber-400 dark:bg-amber-600' /> : null}
       <div className='mb-3 flex items-start gap-2'>
         <span aria-hidden className='mt-0.5 h-4 w-0.5 shrink-0 rounded-full bg-border' />
@@ -336,23 +436,42 @@ function ThreadView({
             replyToName={comment.parentCommentId ? displayAuthor(authorByCommentId.get(comment.parentCommentId)) : null}
             canReply={canReply}
             compact={compact}
-            onStartReply={() => setReplyingToCommentId(comment.id)}
+            deleteDescription={commentDeleteDescription(comment, thread.comments)}
+            onStartReply={() => openReplyComposer(comment.id)}
+            onStartEdit={() => setReplyComposerOpen(false)}
             onUpdateComment={onUpdateComment}
             onDeleteComment={onDeleteComment}
           />
         ))}
       </div>
-      {replyingToComment ? (
-        <ThreadReplyComposer
-          key={replyingToComment.id}
-          compact={compact}
-          targetName={displayAuthor(replyingToComment.author)}
-          onCancel={() => setReplyingToCommentId(null)}
-          onSubmit={async (body) => {
-            await onReply({ threadId: thread.id, parentCommentId: replyingToComment.id, body })
-            setReplyingToCommentId(null)
-          }}
-        />
+      {replyComposerOpen ? (
+        <div className={cn(!composerVisible && 'hidden')}>
+          <CommentComposer
+            key={replyComposerRevision}
+            dataAttribute='reply'
+            value={replyValue}
+            ariaLabel={replyingToComment ? `回复 ${displayAuthor(replyingToComment.author)}` : '回复讨论'}
+            label={replyingToComment ? `回复 ${displayAuthor(replyingToComment.author)}` : null}
+            placeholder='回复'
+            compact={compact}
+            submitting={replySubmitting}
+            error={replyError}
+            submitLabel='发送'
+            submittingLabel='发送中'
+            autoFocus={replyingToCommentId !== null}
+            onValueChange={(value) => {
+              setReplyValue(value)
+              if (replyError) setReplyError(null)
+            }}
+            onCancel={() => {
+              setReplyComposerOpen(false)
+              setReplyingToCommentId(null)
+              setReplyValue('')
+              setReplyError(null)
+            }}
+            onSubmit={() => { void submitReply() }}
+          />
+        </div>
       ) : null}
     </section>
   )
@@ -370,7 +489,9 @@ function CommentView({
   replyToName,
   canReply,
   compact,
+  deleteDescription,
   onStartReply,
+  onStartEdit,
   onUpdateComment,
   onDeleteComment,
 }: {
@@ -378,11 +499,15 @@ function CommentView({
   readonly replyToName: string | null
   readonly canReply: boolean
   readonly compact: boolean
+  readonly deleteDescription: string
   readonly onStartReply: () => void
+  readonly onStartEdit: () => void
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
 }) {
   const [editValue, setEditValue] = useState<string | null>(null)
+  const [editSubmitting, setEditSubmitting] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
   if (comment.deleted) {
     return <div className='text-xs text-muted-foreground'>评论已删除</div>
   }
@@ -406,6 +531,7 @@ function CommentView({
               <div className={cn('shrink-0 transition-opacity', !compact && 'opacity-40 group-hover/comment:opacity-100 group-focus-within/comment:opacity-100')}>
                 <CommentActionMenu
                   compact={compact}
+                  deleteDescription={deleteDescription}
                   onDeleteComment={() => onDeleteComment(comment.id)}
                 />
               </div>
@@ -421,129 +547,116 @@ function CommentView({
               <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} onClick={onStartReply}>回复</Button>
             ) : null}
             {comment.permissions.canEdit ? (
-              <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} onClick={() => setEditValue(comment.body)}>编辑</Button>
+              <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} onClick={() => {
+                onStartEdit()
+                setEditValue(comment.body)
+              }}>编辑</Button>
             ) : null}
           </div>
         </div>
       </div>
       {editValue !== null ? (
-        <CommentEditDialog
+        <CommentComposer
+          dataAttribute='edit'
           value={editValue}
-          onValueChange={setEditValue}
-          onSubmit={(body) => onUpdateComment({ commentId: comment.id, body })}
+          ariaLabel='编辑评论'
+          placeholder='编辑评论'
+          compact={compact}
+          submitting={editSubmitting}
+          error={editError}
+          submitLabel='保存'
+          submittingLabel='保存中'
+          autoFocus
+          onValueChange={(value) => {
+            setEditValue(value)
+            if (editError) setEditError(null)
+          }}
+          onCancel={() => {
+            setEditValue(null)
+            setEditError(null)
+          }}
+          onSubmit={() => {
+            if (!editValue.trim() || editSubmitting) return
+            setEditSubmitting(true)
+            setEditError(null)
+            void onUpdateComment({ commentId: comment.id, body: editValue })
+              .then(() => setEditValue(null))
+              .catch((cause) => setEditError(getCommentActionErrorMessage(cause)))
+              .finally(() => setEditSubmitting(false))
+          }}
         />
       ) : null}
     </article>
   )
 }
 
-function CommentEditDialog({
+function CommentComposer({
+  dataAttribute,
   value,
-  onValueChange,
-  onSubmit,
-}: {
-  readonly value: string
-  readonly onValueChange: (value: string | null) => void
-  readonly onSubmit: (body: string) => CommentActionPromise
-}) {
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const handleSubmit = async () => {
-    const body = value
-    if (!body.trim() || submitting) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      await onSubmit(body)
-      onValueChange(null)
-    } catch (cause) {
-      setError(getCommentActionErrorMessage(cause))
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <Dialog
-      open={true}
-      onOpenChange={(open) => {
-        if (submitting) return
-        if (!open) onValueChange(null)
-      }}
-    >
-      <DialogContent onClick={(event) => event.stopPropagation()}>
-        <DialogHeader>
-          <DialogTitle>编辑评论</DialogTitle>
-          <DialogDescription className='sr-only'>编辑评论</DialogDescription>
-        </DialogHeader>
-        <Textarea
-          value={value}
-          aria-label='编辑评论'
-          onChange={(event) => {
-            onValueChange(event.currentTarget.value)
-            if (error) setError(null)
-          }}
-          className='min-h-24'
-          autoFocus
-        />
-        {error ? <div role='status' className='text-sm text-destructive'>{error}</div> : null}
-        <DialogFooter>
-          <Button type='button' variant='ghost' disabled={submitting} onClick={() => onValueChange(null)}>取消</Button>
-          <Button type='button' disabled={!value.trim() || submitting} onClick={() => { void handleSubmit() }}>
-            {submitting ? '保存中' : '保存'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function ThreadReplyComposer({
-  targetName,
+  ariaLabel,
+  label = null,
+  placeholder,
   compact,
+  submitting,
+  error,
+  submitLabel,
+  submittingLabel,
+  autoFocus = false,
+  onValueChange,
   onCancel,
   onSubmit,
 }: {
-  readonly targetName: string
+  readonly dataAttribute: 'draft' | 'reply' | 'edit'
+  readonly value: string
+  readonly ariaLabel: string
+  readonly label?: string | null
+  readonly placeholder: string
   readonly compact: boolean
+  readonly submitting: boolean
+  readonly error: string | null
+  readonly submitLabel: string
+  readonly submittingLabel: string
+  readonly autoFocus?: boolean
+  readonly onValueChange: (value: string) => void
   readonly onCancel: () => void
-  readonly onSubmit: (body: string) => CommentActionPromise
+  readonly onSubmit: () => void
 }) {
-  const [value, setValue] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const handleSubmit = async () => {
-    if (!value.trim() || submitting) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      await onSubmit(value)
-    } catch (cause) {
-      setError(getCommentActionErrorMessage(cause))
-    } finally {
-      setSubmitting(false)
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing) return
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      onSubmit()
+      return
+    }
+    if (event.key === 'Escape' && !value.trim()) {
+      event.preventDefault()
+      onCancel()
     }
   }
 
   return (
-    <div data-markdown-comment-reply-composer='true' className='mt-3 border-t pt-3' onClick={(event) => event.stopPropagation()}>
-      <div className='mb-2 text-xs text-muted-foreground'>回复 {targetName}</div>
+    <div
+      data-markdown-comment-draft-composer={dataAttribute === 'draft' ? 'true' : undefined}
+      data-markdown-comment-reply-composer={dataAttribute === 'reply' ? 'true' : undefined}
+      data-markdown-comment-edit-composer={dataAttribute === 'edit' ? 'true' : undefined}
+      className='mt-3 border-t pt-3'
+      onClick={(event) => event.stopPropagation()}
+    >
+      {label ? <div className='mb-2 text-xs text-muted-foreground'>{label}</div> : null}
       <Textarea
         value={value}
-        aria-label={`回复 ${targetName}`}
-        placeholder='回复'
+        aria-label={ariaLabel}
+        placeholder={placeholder}
         disabled={submitting}
-        autoFocus
-        onChange={(event) => {
-          setValue(event.currentTarget.value)
-          if (error) setError(null)
-        }}
+        autoFocus={autoFocus}
+        onChange={(event) => onValueChange(event.currentTarget.value)}
+        onKeyDown={handleKeyDown}
       />
       {error ? <div role='status' className='mt-2 text-sm text-destructive'>{error}</div> : null}
       <div className='mt-2 flex justify-end gap-1'>
         <Button type='button' variant='ghost' size='sm' className={compact ? 'min-h-11' : 'h-7'} disabled={submitting} onClick={onCancel}>取消</Button>
-        <Button type='button' size='sm' className={compact ? 'min-h-11' : 'h-7'} disabled={!value.trim() || submitting} onClick={() => { void handleSubmit() }}>
-          {submitting ? '发送中' : '发送'}
+        <Button type='button' size='sm' className={compact ? 'min-h-11' : 'h-7'} disabled={!value.trim() || submitting} onClick={onSubmit}>
+          {submitting ? submittingLabel : submitLabel}
         </Button>
       </div>
     </div>
@@ -552,9 +665,11 @@ function ThreadReplyComposer({
 
 function CommentActionMenu({
   compact = false,
+  deleteDescription,
   onDeleteComment,
 }: {
   readonly compact?: boolean
+  readonly deleteDescription: string
   readonly onDeleteComment: () => CommentActionPromise
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -581,7 +696,7 @@ function CommentActionMenu({
           open={true}
           onOpenChange={setDeleteOpen}
           title='删除评论？'
-          description='会删除这条评论。'
+          description={deleteDescription}
           actionLabel='删除评论'
           onConfirm={onDeleteComment}
         />
@@ -656,7 +771,37 @@ function displayAuthor(author: { readonly handle: string | null; readonly email:
 }
 
 function isInteractiveCommentTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && Boolean(target.closest('button, textarea, input, a'))
+  return target instanceof HTMLElement && Boolean(target.closest('button, textarea, input, select, a, [contenteditable="true"], [role="button"]'))
+}
+
+function hasSelectionWithin(element: HTMLElement): boolean {
+  const selection = element.ownerDocument.getSelection()
+  if (!selection || selection.isCollapsed || !selection.toString()) return false
+  return [selection.anchorNode, selection.focusNode].some((node) => node && element.contains(node))
+}
+
+function commentDeleteDescription(
+  comment: DriveAnnotationCommentDto,
+  comments: readonly DriveAnnotationCommentDto[]
+): string {
+  const visibleComments = comments.filter((item) => !item.deleted)
+  if (visibleComments.length === 1) return '删除后，该讨论和原文标记会一并移除。'
+  if (hasVisibleDescendant(comment.id, visibleComments)) return '删除后将显示“评论已删除”，回复会保留。'
+  return '删除后无法恢复。'
+}
+
+function hasVisibleDescendant(commentId: string, comments: readonly DriveAnnotationCommentDto[]): boolean {
+  const parentById = new Map(comments.map((comment) => [comment.id, comment.parentCommentId]))
+  return comments.some((comment) => {
+    let parentCommentId = comment.parentCommentId
+    const visited = new Set<string>()
+    while (parentCommentId && !visited.has(parentCommentId)) {
+      if (parentCommentId === commentId) return true
+      visited.add(parentCommentId)
+      parentCommentId = parentById.get(parentCommentId) ?? null
+    }
+    return false
+  })
 }
 
 function annotationQuoteExcerpt(thread: DriveAnnotationThreadDto): string {
@@ -669,23 +814,23 @@ export function getCommentActionErrorMessage(error: unknown): string {
   return '操作失败'
 }
 
-function layoutRailThreads(
-  items: readonly MarkdownCommentsRailThread[],
+function layoutRailCards(
+  items: readonly AnchoredRailCard[],
   measuredHeights: Record<string, number>,
   anchorBaseOffset = 0,
   reservedTop = 0,
 ): {
-  readonly anchored: readonly { readonly item: MarkdownCommentsRailThread; readonly top: number }[]
+  readonly anchored: readonly { readonly item: AnchoredRailCard; readonly top: number }[]
   readonly anchoredHeight: number
 } {
-  const anchoredSource = [...items].sort((a, b) => (a.anchorTop ?? 0) - (b.anchorTop ?? 0))
-  const anchored: Array<{ readonly item: MarkdownCommentsRailThread; readonly top: number }> = []
+  const anchoredSource = [...items].sort((a, b) => a.anchorTop - b.anchorTop)
+  const anchored: Array<{ readonly item: AnchoredRailCard; readonly top: number }> = []
   let previousBottom = 0
 
   for (const item of anchoredSource) {
-    const requestedTop = Math.max(0, (item.anchorTop ?? 0) + anchorBaseOffset - reservedTop)
+    const requestedTop = Math.max(0, item.anchorTop + anchorBaseOffset - reservedTop)
     const top = anchored.length === 0 ? requestedTop : Math.max(requestedTop, previousBottom + COMMENT_CARD_GAP)
-    const height = measuredHeights[item.thread.id] ?? COMMENT_CARD_ESTIMATED_HEIGHT
+    const height = measuredHeights[item.id] ?? COMMENT_CARD_ESTIMATED_HEIGHT
     anchored.push({ item, top })
     previousBottom = top + height
   }
@@ -704,7 +849,7 @@ function partitionRailThreads(items: readonly MarkdownCommentsRailThread[]): {
   return { anchored, orphaned }
 }
 
-function useCommentRailMeasurements(enabled: boolean, threads: readonly MarkdownCommentsRailThread[]) {
+function useCommentRailMeasurements(enabled: boolean, cardIds: readonly string[]) {
   const cardElementsRef = useRef(new Map<string, HTMLElement>())
   const headerElementRef = useRef<HTMLElement | null>(null)
   const unlocatedElementRef = useRef<HTMLElement | null>(null)
@@ -904,23 +1049,23 @@ function useCommentRailMeasurements(enabled: boolean, threads: readonly Markdown
     cardElementsRef.current.forEach((element, threadId) => scheduleCardMeasurement(threadId, element))
     scheduleHeaderMeasurement(headerElementRef.current)
     scheduleUnlocatedMeasurement(unlocatedElementRef.current)
-  }, [enabled, threads, scheduleCardMeasurement, scheduleHeaderMeasurement, scheduleUnlocatedMeasurement])
+  }, [cardIds, enabled, scheduleCardMeasurement, scheduleHeaderMeasurement, scheduleUnlocatedMeasurement])
 
   useEffect(() => {
-    const activeThreadIds = new Set(threads.map((item) => item.thread.id))
+    const activeCardIds = new Set(cardIds)
     setMeasurements((current) => {
-      const staleThreadIds = Object.keys(current.cardHeights).filter((threadId) => !activeThreadIds.has(threadId))
-      if (staleThreadIds.length === 0) return current
+      const staleCardIds = Object.keys(current.cardHeights).filter((cardId) => !activeCardIds.has(cardId))
+      if (staleCardIds.length === 0) return current
       const cardHeights = { ...current.cardHeights }
-      for (const threadId of staleThreadIds) {
-        delete cardHeights[threadId]
-        pendingCardMeasurementsRef.current.delete(threadId)
+      for (const cardId of staleCardIds) {
+        delete cardHeights[cardId]
+        pendingCardMeasurementsRef.current.delete(cardId)
       }
       const next = { ...current, cardHeights }
       measurementsRef.current = next
       return next
     })
-  }, [threads])
+  }, [cardIds])
 
   useLayoutEffect(() => {
     disposedRef.current = false

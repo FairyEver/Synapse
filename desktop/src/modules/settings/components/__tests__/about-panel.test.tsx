@@ -296,6 +296,60 @@ describe("AboutPanel", () => {
     expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(18)
   })
 
+  it("stops automatic download retries when the retryable state contains an error", async () => {
+    const updater = getUpdaterBridge()
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({
+        message: "发现新版本 v0.2.190。",
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+    })
+    await act(async () => {
+      getButtonWithText("下载并安装").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      emitUpdaterState(updateState({
+        error: "下载更新失败，请重试。",
+        message: "下载更新失败，请重试。",
+        releaseVersion: "0.2.190",
+        status: "available",
+      }))
+      await Promise.resolve()
+    })
+
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).toContain("下载更新失败，请重试。")
+
+    await act(async () => {
+      getButtonWithText("下载并安装").click()
+      await Promise.resolve()
+    })
+
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(2)
+  })
+
+  it("stops automatic progression when an update action does not advance the state", async () => {
+    const updater = getUpdaterBridge()
+    const availableState = updateState({
+      message: "发现新版本 v0.2.190。",
+      releaseVersion: "0.2.190",
+      status: "available",
+    })
+    vi.mocked(updater.downloadUpdate)
+      .mockResolvedValueOnce(availableState)
+      .mockImplementation(() => new Promise(() => undefined))
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    await emitStateAndAutomaticRequest(availableState, 31)
+
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1)
+    expect(updater.acknowledgeOpenRequest).toHaveBeenCalledWith(31)
+  })
+
   it("finishes automatic progression when the current version is already latest", async () => {
     const updater = getUpdaterBridge()
     await renderAboutPanel({ onAdminModeChange: vi.fn() })

@@ -13,14 +13,6 @@ import {
 import { ListTree, Maximize2, MessageSquare } from 'lucide-react'
 import * as Y from 'yjs'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import {
   Sheet,
@@ -29,7 +21,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Textarea } from '@/components/ui/textarea'
 import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -56,6 +47,7 @@ const MARKDOWN_OUTLINE_PANEL_MAX_SIZE = 22
 const MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE = 22
 const MARKDOWN_COMMENTS_PANEL_MIN_SIZE = 17
 const MARKDOWN_COMMENTS_PANEL_MAX_SIZE = 32
+const COMMENT_SCROLL_SAFE_INSET = 24
 
 type ResizablePanelPercent = `${number}%`
 type MarkdownWidthMode = 'reading' | 'wide'
@@ -154,7 +146,7 @@ function DriveMarkdownBody({
     readonly selectors: DriveAnnotationSelectorsV2
   } | null>(null)
   const [selectionPopover, setSelectionPopover] = useState<SelectionPopoverPosition | null>(null)
-  const [commentDialogOpen, setCommentDialogOpen] = useState(false)
+  const [commentDraftOpen, setCommentDraftOpen] = useState(false)
   const [commentBody, setCommentBody] = useState('')
   const [commentCreateError, setCommentCreateError] = useState<string | null>(null)
   const [reassociatingThreadId, setReassociatingThreadId] = useState<string | null>(null)
@@ -169,7 +161,7 @@ function DriveMarkdownBody({
     setActiveThreadId(null)
     setPendingTarget(null)
     setSelectionPopover(null)
-    setCommentDialogOpen(false)
+    setCommentDraftOpen(false)
     setCommentBody('')
     setCommentCreateError(null)
     setReassociatingThreadId(null)
@@ -262,7 +254,12 @@ function DriveMarkdownBody({
     }),
     [resolvedByThreadId, sortedThreads, threadAnchorTopById]
   )
-  const commentCount = useMemo(() => countMarkdownComments(railThreads), [railThreads])
+  const commentCount = railThreads.length
+
+  useEffect(() => {
+    if (!activeThreadId || railThreads.some((item) => item.thread.id === activeThreadId)) return
+    setActiveThreadId(null)
+  }, [activeThreadId, railThreads])
 
   const measureAnnotationLayout = useCallback(() => {
     const root = bodyRef.current
@@ -371,7 +368,7 @@ function DriveMarkdownBody({
   const clearPendingComment = useCallback(() => {
     setPendingTarget(null)
     setSelectionPopover(null)
-    setCommentDialogOpen(false)
+    setCommentDraftOpen(false)
     setCommentBody('')
     setCommentCreateError(null)
     setReassociatingThreadId(null)
@@ -461,6 +458,7 @@ function DriveMarkdownBody({
   useRegisterDriveRendererToolbarItems('markdown', toolbarItems)
 
   const scrollToThread = (threadId: string) => {
+    if (threadId === activeThreadId) return
     setActiveThreadId(threadId)
     const root = bodyRef.current
     const overlayRect = findOverlayRectByThreadId(annotationOverlayRects, threadId, root)
@@ -470,7 +468,7 @@ function DriveMarkdownBody({
 
   const focusThreadFromDocument = (threadId: string) => {
     setCommentPanelOpen(true)
-    scrollToThread(threadId)
+    setActiveThreadId(threadId)
   }
 
   const focusThreadFromRail = (threadId: string) => {
@@ -478,12 +476,11 @@ function DriveMarkdownBody({
       setActiveThreadId(threadId)
       return
     }
-    if (isCompact) setCompactPanel(null)
     scrollToThread(threadId)
   }
 
   const syncSelectionActionFromCurrentSelection = useCallback(() => {
-    if (!canCreateAnnotation || commentDialogOpen) return
+    if (!canCreateAnnotation || commentDraftOpen) return
     const root = bodyRef.current
     if (!root) return
     const selection = window.getSelection()
@@ -497,12 +494,12 @@ function DriveMarkdownBody({
         : null,
     })
     if (!target || !selection || selection.rangeCount === 0) {
-      if (!commentDialogOpen) clearPendingSelectionAction()
+      if (!commentDraftOpen) clearPendingSelectionAction()
       return
     }
     const rect = getSelectionRect(selection.getRangeAt(0))
     if (!rect) {
-      if (!commentDialogOpen) clearPendingSelectionAction()
+      if (!commentDraftOpen) clearPendingSelectionAction()
       return
     }
     setPendingTarget(target)
@@ -510,7 +507,7 @@ function DriveMarkdownBody({
       top: Math.max(8, rect.top - 40),
       left: rect.left + rect.width / 2,
     })
-  }, [canCreateAnnotation, clearPendingSelectionAction, collaborationTextMatchesProjection, commentDialogOpen, liveCollaboration.session, liveCollaboration.state?.epoch, projection])
+  }, [canCreateAnnotation, clearPendingSelectionAction, collaborationTextMatchesProjection, commentDraftOpen, liveCollaboration.session, liveCollaboration.state?.epoch, projection])
 
   const syncSelectionPopoverPositionFromCurrentSelection = useCallback(() => {
     const selection = window.getSelection()
@@ -627,6 +624,7 @@ function DriveMarkdownBody({
   }, [scheduleDocumentScrollEffects])
 
   const handleBodyClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (hasSelectionWithin(event.currentTarget)) return
     const threadId = findOverlayThreadAtPoint(annotationOverlayRects, event.clientX, event.clientY, bodyRef.current)
       ?? findRenderedOverlayThreadAtPoint(event.clientX, event.clientY, bodyRef.current)
     if (!threadId) return
@@ -668,7 +666,7 @@ function DriveMarkdownBody({
       setCommentPanelOpen(true)
       setPendingTarget(null)
       setSelectionPopover(null)
-      setCommentDialogOpen(false)
+      setCommentDraftOpen(false)
       setCommentBody('')
       window.getSelection()?.removeAllRanges()
     } catch (cause) {
@@ -740,10 +738,27 @@ function DriveMarkdownBody({
     </div>
   )
 
+  const commentDraft = commentDraftOpen && pendingTarget
+    ? {
+        anchorTop: annotationOverlayRects.find((rect) => rect.kind === 'pending')?.top ?? 0,
+        quote: pendingTarget.target.quote.exact.replace(/\s+/gu, ' ').trim(),
+        value: commentBody,
+        submitting: annotations.creatingThread,
+        error: commentCreateError,
+        onValueChange: (value: string) => {
+          setCommentBody(value)
+          if (commentCreateError) setCommentCreateError(null)
+        },
+        onSubmit: () => { void createThread() },
+        onCancel: clearPendingComment,
+      }
+    : null
+
   const renderCommentsRail = (mode: 'anchored' | 'list') => (
     <MarkdownCommentsRail
       mode={mode}
       threads={railThreads}
+      draft={commentDraft}
       activeThreadId={activeThreadId}
       canReply={canCreateAnnotation}
       loading={annotations.loading}
@@ -768,7 +783,7 @@ function DriveMarkdownBody({
 
   return (
     <div className='h-full min-h-0 overflow-hidden bg-background'>
-      {selectionPopover && pendingTarget && !commentDialogOpen ? (
+      {selectionPopover && pendingTarget && !commentDraftOpen ? (
         <div
           data-drive-annotation-selection-action
           className='fixed z-50 -translate-x-1/2'
@@ -783,46 +798,14 @@ function DriveMarkdownBody({
                 void applyReassociation()
                 return
               }
-              setCommentDialogOpen(true)
+              setCommentDraftOpen(true)
+              setCommentPanelOpen(true)
             }}
           >
             {reassociatingThreadId ? '重新关联' : '添加评论'}
           </Button>
         </div>
       ) : null}
-      <Dialog
-        open={commentDialogOpen}
-        onOpenChange={(open) => {
-          if (open) {
-            setCommentDialogOpen(true)
-            return
-          }
-          clearPendingComment()
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>添加评论</DialogTitle>
-            <DialogDescription className='sr-only'>为选中的文字添加评论</DialogDescription>
-          </DialogHeader>
-          <Textarea
-            value={commentBody}
-            onChange={(event) => {
-              setCommentBody(event.currentTarget.value)
-              if (commentCreateError) setCommentCreateError(null)
-            }}
-            className='min-h-24'
-            autoFocus
-          />
-          {commentCreateError ? <div role='status' className='text-sm text-destructive'>{commentCreateError}</div> : null}
-          <DialogFooter>
-            <Button type='button' variant='ghost' onClick={clearPendingComment}>取消</Button>
-            <Button type='button' disabled={!commentBody.trim() || annotations.creatingThread} onClick={() => { void createThread() }}>
-              评论
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <div data-testid='markdown-layout' className='h-full min-h-0 w-full overflow-hidden'>
         {isCompact ? documentView : (
           <ResizablePanelGroup orientation='horizontal' className='h-full min-h-0 overflow-hidden'>
@@ -991,10 +974,6 @@ function driveMarkdownAnnotationStateKey(
   return `${currentId}\0${currentVersionId ?? ''}\0share\0${annotationContext.shareId}\0${annotationContext.itemId ?? ''}`
 }
 
-function countMarkdownComments(threads: readonly MarkdownCommentsRailThread[]): number {
-  return threads.reduce((total, { thread }) => total + thread.comments.length, 0)
-}
-
 function getSelectionRect(range: Range): DOMRect | null {
   const rects = typeof range.getClientRects === 'function'
     ? Array.from(range.getClientRects()).filter((rect) => rect.width > 0 || rect.height > 0)
@@ -1130,20 +1109,27 @@ function scrollPreviewContainerToRect(root: HTMLElement, rect: MarkdownAnnotatio
   if (!container) return
   const rootRect = root.getBoundingClientRect()
   const containerRect = container.getBoundingClientRect()
+  const rectTop = rootRect.top + rect.top
+  const rectBottom = rectTop + rect.height
+  const safeTop = containerRect.top + COMMENT_SCROLL_SAFE_INSET
+  const safeBottom = containerRect.bottom - COMMENT_SCROLL_SAFE_INSET
+  if (rectTop >= safeTop && rectBottom <= safeBottom) return
   const targetTop = Math.max(
     0,
-    container.scrollTop
-      + rootRect.top
-      - containerRect.top
-      + rect.top
-      + rect.height / 2
-      - container.clientHeight / 2
+    container.scrollTop + rectTop - safeTop
   )
   if (typeof container.scrollTo === 'function') {
-    container.scrollTo({ top: targetTop, behavior: 'smooth' })
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    container.scrollTo({ top: targetTop, behavior: reduceMotion ? 'auto' : 'smooth' })
     return
   }
   container.scrollTop = targetTop
+}
+
+function hasSelectionWithin(element: HTMLElement): boolean {
+  const selection = element.ownerDocument.getSelection()
+  if (!selection || selection.isCollapsed || !selection.toString()) return false
+  return [selection.anchorNode, selection.focusNode].some((node) => node && element.contains(node))
 }
 
 function findNearestScrollContainer(element: HTMLElement): HTMLElement | null {

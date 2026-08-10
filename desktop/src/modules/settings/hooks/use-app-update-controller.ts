@@ -76,7 +76,7 @@ function useAppUpdateController() {
 
     let state = initialState
     while (automaticInstallArmedRef.current) {
-      if (state.status === "error" || state.status === "not-available") {
+      if (state.error || state.status === "error" || state.status === "not-available") {
         setAutomaticInstallArmed(false)
         return
       }
@@ -96,6 +96,10 @@ function useAppUpdateController() {
       try {
         const nextState = await runUpdateAction(state.status === "available" ? "download" : "check")
         if (!nextState || !automaticInstallArmedRef.current) return
+        if (nextState.status === state.status) {
+          setAutomaticInstallArmed(false)
+          return
+        }
         state = nextState
       } catch (error) {
         const message = error instanceof Error ? error.message : "软件更新操作失败。"
