@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
@@ -108,5 +108,48 @@ describe("publish-mac-release", () => {
     ], { cwd: desktopRoot })
 
     expect(stdout).not.toContain("Would prune old COS release versions after publish")
+  })
+
+  it("uses a private COS config and removes it after a publish failure", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-publish-mac-secret-"))
+    const artifactsDir = path.join(root, "release")
+    const outDir = path.join(root, "cdn-release")
+    const tempDir = path.join(root, "tmp")
+    const coscliPath = path.join(root, "fake-coscli.mjs")
+    const logPath = path.join(root, "coscli-log.json")
+    await mkdir(tempDir)
+    await writeMacArtifacts(artifactsDir)
+    await writeFile(coscliPath, [
+      "#!/usr/bin/env node",
+      'import { appendFileSync, statSync } from "node:fs"',
+      'const configPath = process.argv[process.argv.indexOf("-c") + 1]',
+      'appendFileSync(process.env.COSCLI_TEST_LOG, JSON.stringify({ configPath, mode: statSync(configPath).mode & 0o777 }) + "\\n")',
+      'process.exitCode = 1',
+      "",
+    ].join("\n"), { mode: 0o755 })
+
+    await expect(execFileAsync(process.execPath, [
+      scriptPath,
+      "--artifacts-dir", artifactsDir,
+      "--out-dir", outDir,
+      "--version", "0.2.214",
+      "--skip-cdn-refresh",
+      "--skip-cdn-verify",
+      "--skip-cos-prune",
+    ], {
+      cwd: desktopRoot,
+      env: {
+        ...process.env,
+        TMPDIR: tempDir,
+        COSCLI_PATH: coscliPath,
+        COSCLI_TEST_LOG: logPath,
+        TENCENT_CLOUD_SECRET_ID: "secret-id",
+        TENCENT_CLOUD_SECRET_KEY: "secret-key",
+      },
+    })).rejects.toThrow()
+
+    const log = JSON.parse((await readFile(logPath, "utf8")).trim())
+    expect(log.mode).toBe(0o600)
+    expect(await readdir(tempDir)).toEqual([])
   })
 })

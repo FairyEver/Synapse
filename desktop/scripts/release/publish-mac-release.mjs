@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { access, chmod, mkdir, readFile, writeFile } from "node:fs/promises"
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { spawn } from "node:child_process"
@@ -206,23 +206,29 @@ function requireEnv(name) {
 }
 
 async function writeCosConfig({ bucket, region, endpoint }) {
-  const configPath = path.join(os.tmpdir(), `synapse-cos-${Date.now()}.yaml`)
-  await writeFile(configPath, [
-    "cos:",
-    "  base:",
-    `    secretid: ${requireEnv("TENCENT_CLOUD_SECRET_ID")}`,
-    `    secretkey: ${requireEnv("TENCENT_CLOUD_SECRET_KEY")}`,
-    '    sessiontoken: ""',
-    "    protocol: https",
-    "  buckets:",
-    `    - name: ${bucket}`,
-    "      alias: release",
-    `      region: ${region}`,
-    `      endpoint: ${endpoint}`,
-    "      ofs: false",
-    "",
-  ].join("\n"), "utf8")
-  return configPath
+  const configDir = await mkdtemp(path.join(os.tmpdir(), "synapse-cos-"))
+  const configPath = path.join(configDir, "config.yaml")
+  try {
+    await writeFile(configPath, [
+      "cos:",
+      "  base:",
+      `    secretid: ${requireEnv("TENCENT_CLOUD_SECRET_ID")}`,
+      `    secretkey: ${requireEnv("TENCENT_CLOUD_SECRET_KEY")}`,
+      '    sessiontoken: ""',
+      "    protocol: https",
+      "  buckets:",
+      `    - name: ${bucket}`,
+      "      alias: release",
+      `      region: ${region}`,
+      `      endpoint: ${endpoint}`,
+      "      ofs: false",
+      "",
+    ].join("\n"), { encoding: "utf8", flag: "wx", mode: 0o600 })
+    return { configDir, configPath }
+  } catch (error) {
+    await rm(configDir, { recursive: true, force: true })
+    throw error
+  }
 }
 
 function uploadCommands({ outDir, version }) {
@@ -301,17 +307,21 @@ export async function publishMacRelease() {
   }
 
   const coscli = await resolveCoscli()
-  const cosConfig = await writeCosConfig({ bucket, region, endpoint })
-  await uploadWithCoscli({ coscli, cosConfig, outDir, version })
+  const { configDir, configPath: cosConfig } = await writeCosConfig({ bucket, region, endpoint })
+  try {
+    await uploadWithCoscli({ coscli, cosConfig, outDir, version })
 
-  if (!hasArg("--skip-cdn-refresh")) {
-    await refreshCdn(cdnBaseUrl)
-  }
-  if (!hasArg("--skip-cdn-verify")) {
-    await verifyCdn(cdnBaseUrl, outDir, version)
-  }
-  if (!hasArg("--skip-cos-prune")) {
-    await pruneCosReleaseVersions({ coscli, cosConfig })
+    if (!hasArg("--skip-cdn-refresh")) {
+      await refreshCdn(cdnBaseUrl)
+    }
+    if (!hasArg("--skip-cdn-verify")) {
+      await verifyCdn(cdnBaseUrl, outDir, version)
+    }
+    if (!hasArg("--skip-cos-prune")) {
+      await pruneCosReleaseVersions({ coscli, cosConfig })
+    }
+  } finally {
+    await rm(configDir, { recursive: true, force: true })
   }
 }
 
