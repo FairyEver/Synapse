@@ -8,6 +8,7 @@
 
 ## 问题修复
 
+- Quick Input 永久删除前现在会要求确认，避免误触导致片段无法恢复。
 - Agent Git 在新分支首次推送时会遵循仓库已配置的首选远端，不再误报需要选择远端。
 - Automation Webhook 被禁用后会立即拒绝既有监听器收到的请求，不再继续触发任务。
 - Workflow 运行快照不再保存 System Notifier 的通知标题或正文。

@@ -3,6 +3,10 @@ import { CircleAlert, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { Alert, AlertDescription, AlertTitle } from "../../../src/components/ui/alert"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "../../../src/components/ui/alert-dialog"
 import { Button } from "../../../src/components/ui/button"
 import {
   Dialog,
@@ -65,6 +69,8 @@ export function QuickInputModule() {
   const [saving, setSaving] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState<QuickInputFormState>(emptyFormState)
+  const [deleteTarget, setDeleteTarget] = useState<SynapseQuickInputItem | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const quickInputBridge = useMemo(() => requireBridgeDomain("quickInput"), [])
 
@@ -140,13 +146,18 @@ export function QuickInputModule() {
     }
   }
 
-  const deleteItem = async (item: SynapseQuickInputItem) => {
+  const deleteItem = async () => {
+    if (!deleteTarget || deleting) return
     try {
-      await quickInputBridge.item.delete({ id: item.id })
-      setItems((current) => current.filter((entry) => entry.id !== item.id))
+      setDeleting(true)
+      await quickInputBridge.item.delete({ id: deleteTarget.id })
+      setItems((current) => current.filter((entry) => entry.id !== deleteTarget.id))
+      setDeleteTarget(null)
     } catch (error) {
       logger.error("Failed to delete quick input item.", error)
       toast.error("删除失败")
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -191,7 +202,7 @@ export function QuickInputModule() {
           ) : (
             <QuickInputTable
               items={items}
-              onDelete={(item) => void deleteItem(item)}
+              onDelete={setDeleteTarget}
               onEdit={openEditForm}
             />
           )}
@@ -211,6 +222,24 @@ export function QuickInputModule() {
         }}
         onSubmit={submitForm}
       />
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除快捷输入？</AlertDialogTitle>
+            <AlertDialogDescription>删除后无法恢复。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleting}
+              onClick={(event) => { event.preventDefault(); void deleteItem() }}
+            >
+              删除快捷输入
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SystemAppWindowShell>
   )
 }

@@ -145,6 +145,9 @@ describe("QuickInputModule", () => {
     await clickButton("保存快捷输入")
     await clickButton("删除快捷输入：更新后的快捷输入")
 
+    expect(quickInputBridge.item.delete).not.toHaveBeenCalled()
+    await clickButton("删除快捷输入")
+
     expect(quickInputBridge.item.update).toHaveBeenCalledWith({
       id: "quick-1",
       content: "更新后的快捷输入",
