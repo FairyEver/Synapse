@@ -7,7 +7,7 @@ Terminal MCP currently exposes one development contract. Tool names are the full
 - `app_terminal_capabilities_get`: local unauthenticated capability discovery for platform, risk, limits, degradation, persistence protection, termination matrix, and raw encoding.
 - `app_terminal_diagnostics_get`: bounded diagnostics only for the caller's authorized scope; it never reveals other actors or object usage.
 - `app_terminal_global_launch_get`: global Shell, cwd, environment key/action/source metadata, and revision. Environment values are never returned.
-- `app_terminal_global_launch_update`: sparse global launch mutation protected by exact revision and `settings.manage`. Unmentioned environment entries remain unchanged; list keys in `settings.inheritEnvironmentKeys` to remove the current-layer entry and restore inheritance.
+- `app_terminal_global_launch_update`: sparse global launch mutation protected by exact revision and `settings.manage`. Unmentioned environment entries remain unchanged; list keys in `settings.inheritEnvironmentKeys` to remove the current-layer entry and restore inheritance. Key matching is case-insensitive on Windows and case-sensitive on macOS/Linux.
 
 `supported` describes the current implementation and platform, not permission to exceed the user's request. If a required capability is degraded or unsupported, use only a documented narrower workflow; never substitute a higher-risk capability merely to bypass the limitation.
 

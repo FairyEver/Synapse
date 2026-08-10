@@ -229,6 +229,50 @@ describe("Terminal capability dispatcher", () => {
     }))
   })
 
+  it("restores launch environment inheritance case-insensitively only on Windows", async () => {
+    const createDispatcher = (platform: NodeJS.Platform, updateGlobalLaunchSettings: ReturnType<typeof vi.fn>) =>
+      createTerminalCapabilityDispatcher({
+        service: serviceStub({
+          getGlobalLaunchSettings: vi.fn(() => ({
+            revision: 3,
+            settings: { environment: { PATH: "sensitive-value" } },
+          })),
+          updateGlobalLaunchSettings,
+        }),
+        platform,
+        ...allowingSecurity(),
+      })
+    const windowsUpdate = vi.fn(async (input) => ({
+      revision: 4,
+      updatedAt: "2026-08-08T00:01:00.000Z",
+      settings: input.settings,
+    }))
+    const darwinUpdate = vi.fn(async (input) => ({
+      revision: 4,
+      updatedAt: "2026-08-08T00:01:00.000Z",
+      settings: input.settings,
+    }))
+    const input = {
+      expectedRevision: 3,
+      settings: { inheritEnvironmentKeys: ["Path"] },
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000101",
+    }
+
+    const windowsResult = await createDispatcher("win32", windowsUpdate)
+      .dispatch("app.terminal.global_launch.update", input, localMcpContext)
+    const darwinResult = await createDispatcher("darwin", darwinUpdate)
+      .dispatch("app.terminal.global_launch.update", input, localMcpContext)
+
+    expect(windowsResult).toMatchObject({ ok: true })
+    expect(windowsUpdate).toHaveBeenCalledWith(expect.objectContaining({ settings: undefined }))
+    expect(darwinResult).toMatchObject({ ok: true })
+    expect(darwinUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      settings: { environment: { PATH: "sensitive-value" } },
+    }))
+    expect(JSON.stringify(windowsResult)).not.toContain("sensitive-value")
+    expect(JSON.stringify(darwinResult)).not.toContain("sensitive-value")
+  })
+
   it("checks state permission before resolving a session and never returns output", async () => {
     const service = serviceStub()
     const security = allowingSecurity()

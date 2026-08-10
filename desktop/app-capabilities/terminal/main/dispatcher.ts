@@ -288,7 +288,7 @@ async function dispatchAuthorizedCore(
     requireRevision(current.revision, input.expectedRevision, "revision")
     const updated = await service.updateGlobalLaunchSettings({
       expectedRevision: input.expectedRevision,
-      settings: mergeLaunchLayer(current.settings, input.settings),
+      settings: mergeLaunchLayer(current.settings, input.settings, deps.platform),
     })
     return mutationResult({
       revision: updated.revision,
@@ -345,7 +345,7 @@ async function dispatchAuthorizedCore(
     const input = terminalGroupLaunchUpdateInputSchema.parse(params)
     const group = requireGroup(service, input.groupId)
     requireRevision(group.launchRevision, input.expectedLaunchRevision, "launchRevision")
-    const launch = mergeLaunchLayer(group.settings, input.settings)
+    const launch = mergeLaunchLayer(group.settings, input.settings, deps.platform)
     const updated = await service.updateGroupSettings({
       groupId: group.id,
       name: group.name,
@@ -785,12 +785,18 @@ function mergeLaunchLayer(
     environment?: Record<string, string | null>
     inheritEnvironmentKeys?: readonly string[]
   },
+  platform: NodeJS.Platform = process.platform,
 ): TerminalLaunchLayer | undefined {
   const environment = patch.environment === undefined
     ? current?.environment
     : { ...current?.environment, ...patch.environment }
   const nextEnvironment = environment ? { ...environment } : undefined
-  for (const key of patch.inheritEnvironmentKeys ?? []) delete nextEnvironment?.[key]
+  for (const key of patch.inheritEnvironmentKeys ?? []) {
+    const storedKey = platform === "win32"
+      ? Object.keys(nextEnvironment ?? {}).find((candidate) => candidate.toUpperCase() === key.toUpperCase())
+      : key
+    if (storedKey) delete nextEnvironment?.[storedKey]
+  }
   const next: TerminalLaunchLayer = {
     ...((patch.defaultCwd === undefined ? current?.defaultCwd : patch.defaultCwd) ? {
       defaultCwd: (patch.defaultCwd === undefined ? current?.defaultCwd : patch.defaultCwd)!,
