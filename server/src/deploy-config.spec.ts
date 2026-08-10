@@ -498,9 +498,11 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("location = /dashboard")
     expect(nginx).toContain("return 301 /console/;")
     expect(nginx).toContain("location = /admin")
-    expect(nginx).toContain("location = /admin/ {\n    root /app/dashboard/dist;\n    try_files /admin.html =404;\n  }")
-    expect(nginx).toContain("location /admin/")
-    expect(nginx).toContain("try_files $uri $uri/ /admin.html;")
+    expect(nginx).toContain(
+      "location /admin/ {\n    root /app/dashboard/dist;\n    try_files /admin.html =404;\n  }",
+    )
+    expect(nginx).not.toContain("location = /admin/")
+    expect(nginx).not.toContain("/admin/admin.html")
     expect(deployScript).toContain(
       'check_body_contains "admin deep route" "http://127.0.0.1:3000/admin/system"',
     )
