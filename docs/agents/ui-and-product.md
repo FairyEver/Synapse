@@ -46,10 +46,14 @@
 
 ## System App 顶栏与表单
 
-- 顶栏优先复用 `desktop/src/modules/apps/components/system-app-top-bar.tsx`。
+- System App 入口不得直接渲染 `SystemAppTopBar`。有 tabs、actions 或顶栏信息时，统一通过 `SystemAppWindowShell` 声明；使用 `ModulePage` 的列表页由 `ModulePage` 代为接入该壳层。
+- 启动台内嵌模式只允许 `EmbeddedSystemAppShell` 渲染一条应用顶栏：左侧返回、应用名和可选信息，中间 tabs，右侧应用 actions 和新窗口入口。应用内容区不得再渲染第二条应用顶栏。
+- `SystemAppWindowShell.left` 只用于独立窗口的左侧标题；需要在内嵌顶栏应用名旁显示的信息通过 `embeddedLeftAddon` 注册，不能靠保留内部顶栏实现。
+- `SystemAppTopBar` 是共享壳层的底层布局组件；业务入口只使用 `SystemAppTopBarActionButton` 声明操作，不自行组装顶栏。
 - 居中 tab 顶栏：左侧等宽占位，中间 tab，右侧操作区；不得为填空添加冗余窗口标题。
 - 右侧 action 使用紧凑 ghost：文字用 `SystemAppTopBarActionButton` 默认形态，纯图标用 `iconOnly`，危险操作用 `tone="destructive"`。不得放 outline、默认实心或带底色 destructive 胶囊。
 - 顶栏 ghost actions 不额外加横向 gap；扩大命中区不得造成相邻 action 重叠。
+- 新增或调整 System App 时必须同步更新 `desktop/src/modules/apps/__tests__/system-app-header-architecture.test.ts` 的入口分类，并验证启动台内嵌、Dock 和独立窗口三种宿主形态。
 - 单任务表单工具默认参考 `desktop/app-capabilities/document-template/renderer/index.tsx`：收窄居中、单层工作卡片、稳定 label/控件列、InputGroup 文件选择、底部只保留必要选项/主操作/状态。
 - 主按钮使用明确动作文案；不要添加介绍段落、重复边框、卡片嵌套或大段帮助文案。
 

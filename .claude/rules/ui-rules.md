@@ -120,11 +120,14 @@ Tailwind 主要用于：
 
 ### 系统 App 顶栏补充
 
-- 系统 App 顶栏必须优先复用 `SystemAppTopBar`、`SystemAppTopBarActions` 和 `SystemAppTopBarActionButton`。
+- System App 入口禁止直接渲染 `SystemAppTopBar`；有顶栏内容时必须通过 `SystemAppWindowShell` 声明，列表页可通过已经接入该壳层的 `ModulePage` 声明。
+- 启动台内嵌模式只能由 `EmbeddedSystemAppShell` 渲染一条应用顶栏，应用的 tabs、actions 和附加信息必须进入 header slot，内容区禁止保留第二条应用顶栏。
+- `SystemAppWindowShell.left` 只保留独立窗口标题；内嵌模式需要显示在应用名旁的信息使用 `embeddedLeftAddon`。业务入口可以使用 `SystemAppTopBarActionButton`，不得自行用底层 `SystemAppTopBar` 组装顶栏。
 - 顶栏 tabs 固定放中间列，右侧 actions 不得影响 tabs 视觉居中。
 - 顶栏右侧按钮必须是无边框紧凑 ghost 样式；文字按钮用 `SystemAppTopBarActionButton` 默认形态，纯图标按钮用 `iconOnly`，危险操作用 `tone="destructive"`。
 - 禁止在系统 App 顶栏右侧直接放 `outline`、默认实心按钮或带底色 destructive 按钮。系统“新窗口打开”按钮也必须遵守该规则。
 - 顶栏 action 的视觉尺寸可以紧凑；右侧 ghost actions 不额外增加横向 gap，让按钮依靠自身内边距相邻排列。扩大命中区时不得让相邻 action 的横向命中区重叠。
+- 新增或修改 System App 入口时同步维护 `desktop/src/modules/apps/__tests__/system-app-header-architecture.test.ts`，覆盖启动台内嵌、Dock 和独立窗口的顶栏归属。
 
 ## 6. 页面结构顺序
 

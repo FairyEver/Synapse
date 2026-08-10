@@ -32,10 +32,11 @@ function EmbeddedSystemAppShellInner({
   onOpenWindow,
 }: EmbeddedSystemAppShellProps) {
   const { slot } = useSystemAppHeaderSlot()
+  const hasLeftAddon = Boolean(slot?.leftAddon)
   const hasTabs = Boolean(slot?.tabs?.length && slot.value && slot.onValueChange)
   const hasActions = Boolean(slot?.actions)
   const launcherMode = mode === "launcher"
-  const showHeader = launcherMode || hasTabs || hasActions
+  const showHeader = launcherMode || hasLeftAddon || hasTabs || hasActions
 
   if (!showHeader) {
     return (
@@ -62,8 +63,9 @@ function EmbeddedSystemAppShellInner({
                 <ArrowLeft />
               </Button>
               <h2 className="truncate text-sm font-semibold">{appName}</h2>
+              {slot?.leftAddon}
             </>
-          ) : null}
+          ) : slot?.leftAddon}
         center={hasTabs ? (
           <>
             <Tabs value={slot?.value} onValueChange={(next) => slot?.onValueChange?.(next)}>

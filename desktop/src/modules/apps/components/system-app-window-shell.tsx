@@ -26,6 +26,8 @@ type SystemAppWindowShellSingleViewProps = {
 type SystemAppWindowShellProps<T extends string = string> = (SystemAppWindowShellTabProps<T> | SystemAppWindowShellSingleViewProps) & {
   readonly actions?: ReactNode
   readonly children: ReactNode
+  readonly embeddedLeftAddon?: ReactNode
+  readonly left?: ReactNode
 }
 
 function SystemAppWindowShell<T extends string>({
@@ -34,16 +36,19 @@ function SystemAppWindowShell<T extends string>({
   onValueChange,
   actions,
   children,
+  embeddedLeftAddon,
+  left,
 }: SystemAppWindowShellProps<T>) {
   const hasTabs = tabs !== undefined
   const embeddedHeaderSlot = useOptionalSystemAppHeaderSlot()
   const setEmbeddedHeaderSlot = embeddedHeaderSlot?.setSlot
   const slotState = useMemo<SystemAppHeaderSlotState>(() => ({
+    leftAddon: embeddedLeftAddon,
     tabs: hasTabs ? tabs : undefined,
     value: hasTabs ? value : undefined,
     onValueChange: hasTabs ? (nextValue: string) => onValueChange(nextValue as T) : undefined,
     actions,
-  }), [actions, hasTabs, onValueChange, tabs, value])
+  }), [actions, embeddedLeftAddon, hasTabs, onValueChange, tabs, value])
 
   useEffect(() => {
     if (!setEmbeddedHeaderSlot) return undefined
@@ -61,7 +66,7 @@ function SystemAppWindowShell<T extends string>({
     )
   }
 
-  if (!hasTabs && !actions) {
+  if (!hasTabs && !actions && !left) {
     return (
       <div className="h-full min-h-0 min-w-0 bg-surface">
         {children}
@@ -73,7 +78,10 @@ function SystemAppWindowShell<T extends string>({
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <SystemAppTopBar
         data-system-app-window-toolbar
-        leftSlotProps={{
+        left={left}
+        leftSlotProps={left ? {
+          "data-system-app-window-left": true,
+        } : {
           "data-system-app-window-left-spacer": true,
           "aria-hidden": true,
         }}

@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { ModulePage } from "@/components/module-page"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import {
@@ -17,13 +18,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { errorLogMeta } from "@/lib/error-sanitize"
-import { SystemAppTopBar, SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
+import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import type { AutomationItem, AutomationRun, AutomationStopRunResult } from "@/types/automation"
 import { AutomationList } from "./components/automation-list"
 import { AutomationRunsDialog } from "./components/automation-runs-dialog"
@@ -352,75 +352,74 @@ function AutomationModule() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-full min-h-0 flex-col bg-surface">
-        <SystemAppTopBar
-          left={<h2 className="text-sm font-semibold">自动化</h2>}
-          actions={(
-            <>
-              <SystemAppTopBarActionButton
-                iconOnly
-                type="button"
-                disabled={loading}
-                aria-label="刷新"
-                tooltip="刷新"
-                onClick={() => { void refresh() }}
-              >
-                <RefreshCw className="size-4" />
-              </SystemAppTopBarActionButton>
-              <SystemAppTopBarActionButton
-                type="button"
-                disabled={openingEditor}
-                onClick={() => { void handleCreateEditorOpen() }}
-              >
-                <Plus />
-                新建
-              </SystemAppTopBarActionButton>
-            </>
-          )}
-        />
+      <ModulePage
+        title="自动化"
+        actions={(
+          <>
+            <SystemAppTopBarActionButton
+              iconOnly
+              type="button"
+              disabled={loading}
+              aria-label="刷新"
+              tooltip="刷新"
+              onClick={() => { void refresh() }}
+            >
+              <RefreshCw className="size-4" />
+            </SystemAppTopBarActionButton>
+            <SystemAppTopBarActionButton
+              type="button"
+              disabled={openingEditor}
+              onClick={() => { void handleCreateEditorOpen() }}
+            >
+              <Plus />
+              新建
+            </SystemAppTopBarActionButton>
+          </>
+        )}
+        afterContent={(
+          <>
+            <AutomationRunsDialog
+              open={Boolean(historyItem)}
+              item={historyItem}
+              busy={Boolean(historyItem && pendingItemIds.has(historyItem.id))}
+              onOpenChange={(open) => {
+                if (!open) setHistoryItem(null)
+              }}
+              onStopRun={async (runId) => {
+                await stopRunOrThrow(runId)
+              }}
+            />
 
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="min-h-full px-3 py-3">{content}</div>
-        </ScrollArea>
-
-        <AutomationRunsDialog
-          open={Boolean(historyItem)}
-          item={historyItem}
-          busy={Boolean(historyItem && pendingItemIds.has(historyItem.id))}
-          onOpenChange={(open) => {
-            if (!open) setHistoryItem(null)
-          }}
-          onStopRun={async (runId) => {
-            await stopRunOrThrow(runId)
-          }}
-        />
-
-        <AlertDialog
-          open={Boolean(deleteTarget)}
-          onOpenChange={(open) => {
-            if (!open) setDeleteTarget(null)
-          }}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>删除自动化</AlertDialogTitle>
-              <AlertDialogDescription>
-                删除后无法恢复。
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>取消</AlertDialogCancel>
-              <AlertDialogAction
-                disabled={Boolean(deleteTarget && pendingItemIds.has(deleteTarget.id)) ||
-                  deleteTarget?.activeRun?.status === "running"}
-                onClick={() => { void handleDelete() }}
-              >
-                删除
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
+            <AlertDialog
+              open={Boolean(deleteTarget)}
+              onOpenChange={(open) => {
+                if (!open) setDeleteTarget(null)
+              }}
+            >
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>删除自动化</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    删除后无法恢复。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={Boolean(deleteTarget && pendingItemIds.has(deleteTarget.id)) ||
+                      deleteTarget?.activeRun?.status === "running"}
+                    onClick={() => { void handleDelete() }}
+                  >
+                    删除
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+        )}
+      >
+        {content}
+      </ModulePage>
     </TooltipProvider>
   )
 }

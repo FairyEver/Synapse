@@ -14,6 +14,7 @@ type SystemAppHeaderSlotTab = {
 }
 
 type SystemAppHeaderSlotState = {
+  readonly leftAddon?: ReactNode
   readonly tabs?: readonly SystemAppHeaderSlotTab[]
   readonly value?: string
   readonly onValueChange?: (value: string) => void

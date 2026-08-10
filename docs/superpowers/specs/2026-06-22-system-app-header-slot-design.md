@@ -1,5 +1,7 @@
 # System App Header Slot Design
 
+> Follow-up (2026-08-10): the original rollout excluded top-level Drive, Automation, and Workflow modules. That scope limit is now superseded. Every built-in System App must declare app-level header content through `SystemAppWindowShell` or the slot-aware `ModulePage`; an embedded app may render only the `EmbeddedSystemAppShell` header. The slot also supports `leftAddon` for compact information beside the embedded app name while standalone titles remain local to the window shell.
+
 ## Goal
 
 Move system app-owned header controls into the embedded app shell header when a system app is opened inside the Apps module.
