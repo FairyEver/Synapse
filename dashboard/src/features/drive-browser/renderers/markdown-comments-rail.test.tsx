@@ -477,13 +477,15 @@ describe('MarkdownCommentsRail', () => {
     const onDeleteComment = vi.fn(async () => undefined)
     renderRail({
       onDeleteComment,
-      threads: [thread({ canEdit: true, canDelete: true, canDeleteThread: false })],
+      threads: [thread({ canEdit: true, canDelete: true, canDeleteThread: true })],
     })
 
     expect(document.body.textContent).toContain('编辑')
     expect(document.body.textContent).not.toContain('删除评论')
 
     await click(requiredButtonWithLabel('更多评论操作'))
+
+    expect(document.body.textContent).not.toContain('删除讨论')
     await click(actionElementWithText('删除评论'))
 
     expect(document.body.textContent).toContain('删除评论？')
@@ -494,59 +496,48 @@ describe('MarkdownCommentsRail', () => {
     expect(onDeleteComment).toHaveBeenCalledWith('comment-1')
   })
 
-  it('keeps discussion deletion separate when only thread delete is allowed', async () => {
-    const onDeleteThread = vi.fn(async () => undefined)
+  it('does not expose discussion deletion when only thread delete permission is allowed', () => {
     renderRail({
-      onDeleteThread,
       threads: [thread({ canEdit: false, canDelete: false, canDeleteThread: true })],
     })
 
     expect(document.body.textContent).not.toContain('编辑')
     expect(document.body.textContent).not.toContain('删除评论')
-
-    await click(requiredButtonWithLabel('更多评论操作'))
-
-    expect(document.body.textContent).not.toContain('删除评论')
-    expect(document.body.textContent).toContain('删除讨论')
-
-    await click(actionElementWithText('删除讨论'))
-    expect(document.body.textContent).toContain('删除讨论？')
-    expect(onDeleteThread).not.toHaveBeenCalled()
-
-    await click(buttonWithText('删除讨论'))
-
-    expect(onDeleteThread).toHaveBeenCalledWith('thread-1')
+    expect(document.body.textContent).not.toContain('删除讨论')
+    expect(buttonWithLabel('更多评论操作')).toBeNull()
+    expect(buttonWithLabel('讨论操作')).toBeNull()
   })
 
-  it('offers comment and discussion deletion separately when both delete permissions are allowed', async () => {
+  it('deletes the selected reply from its own action menu', async () => {
     const onDeleteComment = vi.fn(async () => undefined)
-    const onDeleteThread = vi.fn(async () => undefined)
+    const source = thread({ canDeleteThread: true })
+    const firstComment = source.thread.comments[0]
+    const reply = {
+      ...firstComment,
+      id: 'comment-2',
+      parentCommentId: 'comment-1',
+      body: 'Reply body',
+    }
     renderRail({
       onDeleteComment,
-      onDeleteThread,
-      threads: [thread({ canEdit: true, canDelete: true, canDeleteThread: true })],
+      threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, reply] } }],
     })
 
-    expect(document.querySelectorAll('button[aria-label="更多评论操作"]')).toHaveLength(1)
+    const actionButtons = document.querySelectorAll<HTMLButtonElement>('button[aria-label="更多评论操作"]')
+    expect(actionButtons).toHaveLength(2)
     expect(buttonWithLabel('讨论操作')).toBeNull()
+    const replyActionButton = actionButtons[1]
+    if (!replyActionButton) throw new Error('Missing reply action button')
 
-    await click(requiredButtonWithLabel('更多评论操作'))
+    await click(replyActionButton)
 
     expect(document.body.textContent).toContain('删除评论')
-    expect(document.body.textContent).toContain('删除讨论')
+    expect(document.body.textContent).not.toContain('删除讨论')
 
     await click(actionElementWithText('删除评论'))
     await click(buttonWithText('删除评论'))
 
-    expect(onDeleteComment).toHaveBeenCalledWith('comment-1')
-    expect(onDeleteThread).not.toHaveBeenCalled()
-
-    await click(requiredButtonWithLabel('更多评论操作'))
-    await click(actionElementWithText('删除讨论'))
-    expect(document.body.textContent).toContain('删除讨论？')
-    await click(buttonWithText('删除讨论'))
-
-    expect(onDeleteThread).toHaveBeenCalledWith('thread-1')
+    expect(onDeleteComment).toHaveBeenCalledWith('comment-2')
   })
 })
 
@@ -569,7 +560,6 @@ function renderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>[0
         onReply={vi.fn(async () => undefined)}
         onUpdateComment={vi.fn(async () => undefined)}
         onDeleteComment={vi.fn(async () => undefined)}
-        onDeleteThread={vi.fn(async () => undefined)}
         {...overrides}
       />
     )
@@ -587,7 +577,6 @@ function rerenderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>
         onReply={vi.fn(async () => undefined)}
         onUpdateComment={vi.fn(async () => undefined)}
         onDeleteComment={vi.fn(async () => undefined)}
-        onDeleteThread={vi.fn(async () => undefined)}
         {...overrides}
       />
     )

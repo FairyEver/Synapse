@@ -89,8 +89,6 @@ vi.mock('../use-drive-annotations', () => ({
     updatingComment: false,
     deleteComment: vi.fn(),
     deletingComment: false,
-    deleteThread: vi.fn(),
-    deletingThread: false,
   }),
 }))
 

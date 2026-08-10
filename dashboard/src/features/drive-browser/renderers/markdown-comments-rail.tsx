@@ -66,7 +66,6 @@ export function MarkdownCommentsRail({
   onReply,
   onUpdateComment,
   onDeleteComment,
-  onDeleteThread,
   onStartReassociate,
   anchorLayerRef,
   onAnchoredHeightChange,
@@ -83,7 +82,6 @@ export function MarkdownCommentsRail({
   readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
-  readonly onDeleteThread: (threadId: string) => CommentActionPromise
   readonly onStartReassociate?: (threadId: string) => void
   readonly anchorLayerRef?: (element: HTMLDivElement | null) => void
   readonly onAnchoredHeightChange?: (height: number) => void
@@ -139,7 +137,6 @@ export function MarkdownCommentsRail({
                   onReply={onReply}
                   onUpdateComment={onUpdateComment}
                   onDeleteComment={onDeleteComment}
-                  onDeleteThread={onDeleteThread}
                   onStartReassociate={onStartReassociate}
                 />
               </div>
@@ -188,7 +185,6 @@ export function MarkdownCommentsRail({
                       onReply={onReply}
                       onUpdateComment={onUpdateComment}
                       onDeleteComment={onDeleteComment}
-                      onDeleteThread={onDeleteThread}
                       onStartReassociate={onStartReassociate}
                     />
                   </div>
@@ -227,7 +223,6 @@ export function MarkdownCommentsRail({
                     onReply={onReply}
                     onUpdateComment={onUpdateComment}
                     onDeleteComment={onDeleteComment}
-                    onDeleteThread={onDeleteThread}
                     onStartReassociate={onStartReassociate}
                   />
                 </div>
@@ -288,7 +283,6 @@ function ThreadView({
   onReply,
   onUpdateComment,
   onDeleteComment,
-  onDeleteThread,
   onStartReassociate,
 }: {
   readonly thread: DriveAnnotationThreadDto
@@ -299,12 +293,10 @@ function ThreadView({
   readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
-  readonly onDeleteThread: (threadId: string) => CommentActionPromise
   readonly onStartReassociate?: (threadId: string) => void
 }) {
   const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null)
   const authorByCommentId = useMemo(() => new Map(thread.comments.map((comment) => [comment.id, comment.author])), [thread.comments])
-  const firstVisibleCommentId = thread.comments.find((comment) => !comment.deleted)?.id ?? null
   const replyingToComment = thread.comments.find((comment) => comment.id === replyingToCommentId && !comment.deleted) ?? null
   const emphasized = active || Boolean(replyingToComment)
   const quote = annotationQuoteExcerpt(thread)
@@ -335,11 +327,6 @@ function ThreadView({
             </div>
           ) : null}
         </div>
-        {thread.permissions.canDelete && !firstVisibleCommentId ? (
-          <div className='shrink-0'>
-            <ThreadActionMenu compact={compact} onDeleteThread={() => onDeleteThread(thread.id)} />
-          </div>
-        ) : null}
       </div>
       <div className='space-y-4'>
         {thread.comments.map((comment) => (
@@ -352,7 +339,6 @@ function ThreadView({
             onStartReply={() => setReplyingToCommentId(comment.id)}
             onUpdateComment={onUpdateComment}
             onDeleteComment={onDeleteComment}
-            onDeleteThread={thread.permissions.canDelete && comment.id === firstVisibleCommentId ? () => onDeleteThread(thread.id) : undefined}
           />
         ))}
       </div>
@@ -387,7 +373,6 @@ function CommentView({
   onStartReply,
   onUpdateComment,
   onDeleteComment,
-  onDeleteThread,
 }: {
   readonly comment: DriveAnnotationCommentDto
   readonly replyToName: string | null
@@ -396,7 +381,6 @@ function CommentView({
   readonly onStartReply: () => void
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
-  readonly onDeleteThread?: () => CommentActionPromise
 }) {
   const [editValue, setEditValue] = useState<string | null>(null)
   if (comment.deleted) {
@@ -418,12 +402,11 @@ function CommentView({
               <RelativeTime value={comment.createdAt} className='text-xs text-muted-foreground' />
               {comment.editedAt ? <span className='text-xs text-muted-foreground'>已编辑</span> : null}
             </div>
-            {comment.permissions.canDelete || onDeleteThread ? (
+            {comment.permissions.canDelete ? (
               <div className={cn('shrink-0 transition-opacity', !compact && 'opacity-40 group-hover/comment:opacity-100 group-focus-within/comment:opacity-100')}>
                 <CommentActionMenu
                   compact={compact}
-                  onDeleteComment={comment.permissions.canDelete ? () => onDeleteComment(comment.id) : undefined}
-                  onDeleteThread={onDeleteThread}
+                  onDeleteComment={() => onDeleteComment(comment.id)}
                 />
               </div>
             ) : null}
@@ -570,15 +553,12 @@ function ThreadReplyComposer({
 function CommentActionMenu({
   compact = false,
   onDeleteComment,
-  onDeleteThread,
 }: {
   readonly compact?: boolean
-  readonly onDeleteComment?: () => CommentActionPromise
-  readonly onDeleteThread?: () => CommentActionPromise
+  readonly onDeleteComment: () => CommentActionPromise
 }) {
-  const [activeDeleteConfig, setActiveDeleteConfig] = useState<CommentDeleteConfig | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const deleteConfigs = getCommentDeleteConfigs(onDeleteComment, onDeleteThread)
   return (
     <>
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
@@ -588,66 +568,24 @@ function CommentActionMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end'>
-          {deleteConfigs.map((config) => (
-            <DropdownMenuItem key={config.key} variant='destructive' onSelect={() => {
-              setMenuOpen(false)
-              setActiveDeleteConfig(config)
-            }}>
-              {config.label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {activeDeleteConfig ? (
-        <DeleteConfirmDialog
-          open={true}
-          onOpenChange={(open) => {
-            if (!open) setActiveDeleteConfig(null)
-          }}
-          title={activeDeleteConfig.title}
-          description={activeDeleteConfig.description}
-          actionLabel={activeDeleteConfig.actionLabel}
-          onConfirm={activeDeleteConfig.onConfirm}
-        />
-      ) : null}
-    </>
-  )
-}
-
-function ThreadActionMenu({
-  compact = false,
-  onDeleteThread,
-}: {
-  readonly compact?: boolean
-  readonly onDeleteThread: () => CommentActionPromise
-}) {
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  return (
-    <>
-      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-        <DropdownMenuTrigger asChild>
-          <Button type='button' variant='ghost' size='icon' className={compact ? 'size-11' : 'h-7 w-7'} aria-label='讨论操作' onClick={() => setMenuOpen(true)}>
-            <MoreHorizontal />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align='end'>
           <DropdownMenuItem variant='destructive' onSelect={() => {
             setMenuOpen(false)
             setDeleteOpen(true)
           }}>
-            删除讨论
+            删除评论
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <DeleteConfirmDialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        title='删除讨论？'
-        description='会删除这条讨论及其回复。'
-        actionLabel='删除讨论'
-        onConfirm={onDeleteThread}
-      />
+      {deleteOpen ? (
+        <DeleteConfirmDialog
+          open={true}
+          onOpenChange={setDeleteOpen}
+          title='删除评论？'
+          description='会删除这条评论。'
+          actionLabel='删除评论'
+          onConfirm={onDeleteComment}
+        />
+      ) : null}
     </>
   )
 }
@@ -711,43 +649,6 @@ function DeleteConfirmDialog({
       </AlertDialogContent>
     </AlertDialog>
   )
-}
-
-type CommentDeleteConfig = {
-  readonly key: 'comment' | 'thread'
-  readonly label: string
-  readonly title: string
-  readonly description: string
-  readonly actionLabel: string
-  readonly onConfirm: () => CommentActionPromise
-}
-
-function getCommentDeleteConfigs(
-  onDeleteComment: (() => CommentActionPromise) | undefined,
-  onDeleteThread: (() => CommentActionPromise) | undefined,
-): CommentDeleteConfig[] {
-  const configs: CommentDeleteConfig[] = []
-  if (onDeleteComment) {
-    configs.push({
-      key: 'comment',
-      label: '删除评论',
-      title: '删除评论？',
-      description: '会删除这条评论。',
-      actionLabel: '删除评论',
-      onConfirm: onDeleteComment,
-    })
-  }
-  if (onDeleteThread) {
-    configs.push({
-      key: 'thread',
-      label: '删除讨论',
-      title: '删除讨论？',
-      description: '会删除这条讨论及其回复。',
-      actionLabel: '删除讨论',
-      onConfirm: onDeleteThread,
-    })
-  }
-  return configs
 }
 
 function displayAuthor(author: { readonly handle: string | null; readonly email: string | null } | undefined): string {

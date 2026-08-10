@@ -73,15 +73,6 @@ export function useDriveAnnotations(input: DriveAnnotationContext | null | undef
     },
     onSuccess: invalidate,
   })
-  const deleteThreadMutation = useMutation({
-    mutationFn: (threadId: string) => {
-      if (!input) throw new Error('Drive annotation context is missing.')
-      return input.context === 'owner'
-        ? driveAnnotationApi.deleteOwnerThread(input.itemId, threadId)
-        : driveAnnotationApi.deleteShareThread(input.shareId, input.itemId, threadId)
-    },
-    onSuccess: invalidate,
-  })
   const updateAnchorMutation = useMutation({
     mutationFn: (variables: { readonly threadId: string } & DriveAnnotationAnchorUpdateInput) => {
       if (!input) throw new Error('Drive annotation context is missing.')
@@ -106,8 +97,6 @@ export function useDriveAnnotations(input: DriveAnnotationContext | null | undef
     updatingComment: updateMutation.isPending,
     deleteComment: deleteCommentMutation.mutateAsync,
     deletingComment: deleteCommentMutation.isPending,
-    deleteThread: deleteThreadMutation.mutateAsync,
-    deletingThread: deleteThreadMutation.isPending,
     updateAnchor: updateAnchorMutation.mutateAsync,
     updatingAnchor: updateAnchorMutation.isPending,
   }

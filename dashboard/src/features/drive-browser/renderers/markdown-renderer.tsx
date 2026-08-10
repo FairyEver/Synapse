@@ -756,7 +756,6 @@ function DriveMarkdownBody({
       onReply={annotations.reply}
       onUpdateComment={annotations.updateComment}
       onDeleteComment={annotations.deleteComment}
-      onDeleteThread={annotations.deleteThread}
       onStartReassociate={(threadId) => {
         setReassociatingThreadId(threadId)
         setActiveThreadId(threadId)
