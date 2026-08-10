@@ -4,6 +4,7 @@ import { normalizeAdminRedirect } from './admin-redirect'
 describe('normalizeAdminRedirect', () => {
   it('keeps only allowlisted administrator paths', () => {
     expect(normalizeAdminRedirect('/users?page=2#active')).toBe('/users?page=2#active')
+    expect(normalizeAdminRedirect('/admin/users?page=2#active')).toBe('/users?page=2#active')
     expect(normalizeAdminRedirect('/drive/')).toBe('/drive/')
     expect(normalizeAdminRedirect('/teams')).toBeUndefined()
     expect(normalizeAdminRedirect('/invitations')).toBeUndefined()
