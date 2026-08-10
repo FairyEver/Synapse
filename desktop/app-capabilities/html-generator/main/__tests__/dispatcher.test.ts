@@ -7,9 +7,11 @@ import {
 } from "../../shared/capability"
 import { createHtmlGeneratorCapabilityDispatcher } from "../dispatcher"
 
+const abortSignal = new AbortController().signal
 const context: DispatchContext = {
   actor: { kind: "user", id: "mcp-user" },
   source: "mcp.http",
+  abortSignal,
 }
 
 describe("HTML Generator capability dispatcher", () => {
@@ -39,6 +41,8 @@ describe("HTML Generator capability dispatcher", () => {
       data: { title: "Report" },
       outputPath: "/tmp/report.html",
     }, context)).resolves.toMatchObject({ ok: true, affected: 1 })
+    expect(generate).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ abortSignal }))
+    expect(generateToFile).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ abortSignal }))
   })
 
   it("preserves Writer errors instead of relabeling them", async () => {

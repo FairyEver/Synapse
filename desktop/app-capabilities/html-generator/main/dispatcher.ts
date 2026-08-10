@@ -23,6 +23,7 @@ export function createHtmlGeneratorCapabilityDispatcher(deps: {
           const result = await deps.generator.generate(params as never, {
             actor: context.actor,
             source: context.source,
+            abortSignal: context.abortSignal,
           })
           return { ok: true, data: result }
         }
@@ -30,6 +31,7 @@ export function createHtmlGeneratorCapabilityDispatcher(deps: {
           const result = await deps.fileGenerator.generateToFile(params as never, {
             actor: context.actor,
             source: context.source,
+            abortSignal: context.abortSignal,
           })
           return { ok: true, data: result, affected: 1 }
         }
