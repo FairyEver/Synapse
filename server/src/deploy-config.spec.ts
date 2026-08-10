@@ -488,6 +488,7 @@ describe("server deployment configuration", () => {
 
   it("serves independent console and admin bundles with explicit legacy redirects", () => {
     const nginx = readRepoFile("server/nginx.conf")
+    const deployScript = readRepoFile("deploy.sh")
 
     expect(nginx).toContain("location = /console")
     expect(nginx).toContain("return 301 /console/;")
@@ -499,7 +500,10 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("location = /admin")
     expect(nginx).toContain("location = /admin/ {\n    root /app/dashboard/dist;\n    try_files /admin.html =404;\n  }")
     expect(nginx).toContain("location /admin/")
-    expect(nginx).toContain("try_files $uri $uri/ /admin/admin.html;")
+    expect(nginx).toContain("try_files $uri $uri/ /admin.html;")
+    expect(deployScript).toContain(
+      'check_body_contains "admin deep route" "http://127.0.0.1:3000/admin/system"',
+    )
     expect(nginx).toContain("return 301 /admin/$1$is_args$args;")
     expect(nginx).toContain("location /dashboard/")
     expect(nginx).toContain("return 404;")

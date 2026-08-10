@@ -611,6 +611,7 @@ run_checks_once() {
   check_body_contains "healthz" "http://127.0.0.1:3000/healthz" '"status":"ok"'
   check_body_contains "console" "http://127.0.0.1:3000/console/" '<div id="root">'
   check_body_contains "admin" "http://127.0.0.1:3000/admin/" '<title>Synapse 管理</title>'
+  check_body_contains "admin deep route" "http://127.0.0.1:3000/admin/system" '<title>Synapse 管理</title>'
   check_body_contains "desktop update page" "http://127.0.0.1:3000/desktop/update" '<title>更新 Synapse</title>'
   # Expected redirect header: Location: /console/
   check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/console/"
