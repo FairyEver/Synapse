@@ -132,8 +132,8 @@ ADMIN_ACCESS_SECRET=粘贴独立生成的Base64URL随机值
 
 # 用户 JWT 和桌面更新凭证密钥必须分别独立生成
 USER_ACCESS_JWT_SECRET=粘贴独立生成的随机值
-# 桌面更新凭证密钥（不得复用管理访问密钥或用户 JWT 密钥）
-DESKTOP_UPDATE_INTENT_SECRET=第三次生成并粘贴的hex字符
+# 桌面更新凭证密钥（执行 `openssl rand -hex 32` 独立生成，不得复用其它密钥）
+DESKTOP_UPDATE_INTENT_SECRET=粘贴至少32个随机字节生成的Base64URL高熵值
 USER_ACCESS_TOKEN_MINUTES=15
 USER_REFRESH_TOKEN_DAYS=30
 
@@ -163,7 +163,7 @@ BACKUP_COS_REGION=备份桶地域，如 ap-beijing
 常见配置错误（启动时会报 "服务端环境变量无效"）：
 - `ADMIN_ACCESS_SECRET` 缺失、不是至少 43 个 Base64URL 字符的高熵随机值，或包含明显重复字符
 - `USER_ACCESS_JWT_SECRET` 少于 32 位，或和 `ADMIN_ACCESS_SECRET` 相同
-- `DESKTOP_UPDATE_INTENT_SECRET` 少于 43 位，或与管理访问密钥、用户 JWT 密钥相同
+- `DESKTOP_UPDATE_INTENT_SECRET` 不是由至少 32 个随机字节生成的高熵 Base64URL 值，包含明显重复字符，或与管理访问密钥、用户 JWT 密钥相同
 - `APP_PUBLIC_URL` 不是用户可访问的站点根地址，或误填成了 `/api` 地址
 - `PORT` 不应和对外 Nginx 端口混用，默认保持 `3001`
 - `DRIVE_COLLABORATION_ENABLED` 只接受 `true` 或 `false`；启用后 `/api/drive/collaboration` 必须允许 WebSocket Upgrade

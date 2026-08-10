@@ -215,8 +215,8 @@ describe("server deployment configuration", () => {
     expect(envExample).toContain("DESKTOP_UPDATE_INTENT_SECRET=\n")
     expect(setupScript).toContain("DESKTOP_UPDATE_INTENT_SECRET=$(openssl rand -hex 32)")
     expect(setupScript).toContain("DESKTOP_UPDATE_INTENT_SECRET=$DESKTOP_UPDATE_INTENT_SECRET")
-    expect(deployScript).toContain("DESKTOP_UPDATE_INTENT_SECRET")
-    expect(readme).toContain("DESKTOP_UPDATE_INTENT_SECRET")
+    expect(deployScript).toContain("DESKTOP_UPDATE_INTENT_SECRET must be an unpadded Base64URL value from at least 32 random bytes")
+    expect(readme).toContain("DESKTOP_UPDATE_INTENT_SECRET` 不是由至少 32 个随机字节生成的高熵 Base64URL 值")
   })
 
   it("includes the shared workspace package in the server Docker image", () => {

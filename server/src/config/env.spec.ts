@@ -7,7 +7,7 @@ import {
   loadEnv,
 } from "./env"
 
-const productionUpdateIntentSecret = "update-intent-secret-update-intent-secret-update-intent-secret-64"
+const productionUpdateIntentSecret = "Rv3kZ8nE1pT6yM4cH9qW2sF7uJ5xB0dG8iL3oA6vN1_r"
 
 describe("loadEnv", () => {
   it("parses required production settings", () => {
@@ -107,18 +107,30 @@ describe("loadEnv", () => {
   })
 
   it("rejects a weak desktop update intent secret in production", () => {
-    expect(() => loadEnv({
+    const productionEnv = {
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
-      DESKTOP_UPDATE_INTENT_SECRET: "short-update-secret",
       APP_PUBLIC_URL: "https://synapse.test",
       SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
       SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
       SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
       SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
       SKILL_REPOSITORY_COS_REGION: "ap-beijing",
+    }
+
+    expect(() => loadEnv({
+      ...productionEnv,
+      DESKTOP_UPDATE_INTENT_SECRET: "short-update-secret",
+    })).toThrow("DESKTOP_UPDATE_INTENT_SECRET")
+    expect(() => loadEnv({
+      ...productionEnv,
+      DESKTOP_UPDATE_INTENT_SECRET: "predictableupdateintentsecret".repeat(2),
+    })).toThrow("DESKTOP_UPDATE_INTENT_SECRET")
+    expect(() => loadEnv({
+      ...productionEnv,
+      DESKTOP_UPDATE_INTENT_SECRET: "Rv3kZ8nE1pT6yM4cH9qW2sF7uJ5xB0dG8iL3oA6vN1+r",
     })).toThrow("DESKTOP_UPDATE_INTENT_SECRET")
   })
 

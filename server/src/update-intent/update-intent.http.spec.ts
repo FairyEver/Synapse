@@ -24,7 +24,7 @@ type TestRequest = PromiseLike<TestResponse> & {
 const request = require("supertest") as (server: unknown) => {
   readonly post: (path: string) => TestRequest
 }
-const updateIntentSecret = "update-intent-secret-update-intent-secret-update-intent-secret-64"
+const updateIntentSecret = "Rv3kZ8nE1pT6yM4cH9qW2sF7uJ5xB0dG8iL3oA6vN1_r"
 
 @Module({
   imports: [

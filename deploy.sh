@@ -66,7 +66,7 @@ esac
 
 docker compose --env-file .env config >/dev/null
 
-for key in USER_ACCESS_JWT_SECRET DESKTOP_UPDATE_INTENT_SECRET USER_ACCESS_TOKEN_MINUTES USER_REFRESH_TOKEN_DAYS APP_PUBLIC_URL DATABASE_POOL_SIZE; do
+for key in USER_ACCESS_JWT_SECRET USER_ACCESS_TOKEN_MINUTES USER_REFRESH_TOKEN_DAYS APP_PUBLIC_URL DATABASE_POOL_SIZE; do
   value=$(read_env_value "$key")
   if [ -z "$value" ]; then
     echo "$key missing"
@@ -74,6 +74,18 @@ for key in USER_ACCESS_JWT_SECRET DESKTOP_UPDATE_INTENT_SECRET USER_ACCESS_TOKEN
   fi
   printf "%s ok\n" "$key"
 done
+
+desktop_update_intent_secret=$(read_env_value DESKTOP_UPDATE_INTENT_SECRET)
+if ! printf "%s" "$desktop_update_intent_secret" | grep -Eq '^[A-Za-z0-9_-]{43,}$'; then
+  echo "DESKTOP_UPDATE_INTENT_SECRET must be an unpadded Base64URL value from at least 32 random bytes"
+  exit 1
+fi
+desktop_update_intent_unique_chars=$(printf "%s" "$desktop_update_intent_secret" | fold -w 1 | sort -u | wc -l | tr -d ' ')
+if [ "$desktop_update_intent_unique_chars" -lt 16 ] || printf "%s" "$desktop_update_intent_secret" | grep -Eq '(.)\1{7}'; then
+  echo "DESKTOP_UPDATE_INTENT_SECRET must be a high-entropy random value without repeated-character runs"
+  exit 1
+fi
+printf "DESKTOP_UPDATE_INTENT_SECRET ok (high-entropy Base64URL)\n"
 REMOTE_SCRIPT
 }
 

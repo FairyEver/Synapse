@@ -48,7 +48,7 @@ async function withServerEnv(callback: () => Promise<void>): Promise<void> {
   process.env.DATABASE_URL = "postgresql://synapse:synapse@localhost:5433/synapse"
   process.env.ADMIN_ACCESS_SECRET = "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A"
   process.env.USER_ACCESS_JWT_SECRET = "user-secret-user-secret-user-secret"
-  process.env.DESKTOP_UPDATE_INTENT_SECRET = "update-intent-secret-update-intent-secret-update-intent-secret-64"
+  process.env.DESKTOP_UPDATE_INTENT_SECRET = "Rv3kZ8nE1pT6yM4cH9qW2sF7uJ5xB0dG8iL3oA6vN1_r"
   process.env.PORT = "3001"
   try {
     await callback()

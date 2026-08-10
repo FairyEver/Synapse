@@ -61,7 +61,7 @@ server/                 # 服务端与管理后台
 
 ## 桌面更新与发布
 
-- 服务端桌面更新凭证使用独立 `DESKTOP_UPDATE_INTENT_SECRET`；生产至少 43 字符，不得与管理员或用户 JWT 密钥相同。
+- 服务端桌面更新凭证使用独立 `DESKTOP_UPDATE_INTENT_SECRET`；生产必须使用至少 32 个随机字节生成的未填充 Base64URL 高熵值，不得与管理员或用户 JWT 密钥相同。
 - 签发只接受与 `APP_PUBLIC_URL` 精确相同的 Origin；凭证表达更新到当前最新版，120 秒过期、不落库，签发与验证接口独立严格限流并返回 `Cache-Control: no-store`。
 - 日志不得记录原始 token、完整更新深链或验证请求体。
 - GitHub Release 正文固定使用 `https://synapse.d2.pub/desktop/update`，不得写入 `synapse://`、目标版本或 query；本地 macOS 与 CI 使用同一生成逻辑。

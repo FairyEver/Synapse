@@ -32,7 +32,7 @@ const optionalEnvString = z.preprocess((value) => {
   return value
 }, z.string().optional())
 
-const adminAccessSecretSchema = z.string()
+const highEntropyBase64UrlSecretSchema = z.string()
   .regex(/^[A-Za-z0-9_-]{43,}$/u, "must contain at least 43 Base64URL characters")
   .refine((value) => new Set(value).size >= 16, "must be a high-entropy random value")
   .refine((value) => !/(.)\1{7}/u.test(value), "must not contain repeated-character runs")
@@ -69,7 +69,7 @@ const cosConfigGroups = [
 const envSchema = z
   .object({
     DATABASE_URL: z.string().min(1),
-    ADMIN_ACCESS_SECRET: adminAccessSecretSchema,
+    ADMIN_ACCESS_SECRET: highEntropyBase64UrlSecretSchema,
     USER_ACCESS_JWT_SECRET: z.string().min(32),
     DESKTOP_UPDATE_INTENT_SECRET: optionalEnvString,
     USER_ACCESS_TOKEN_MINUTES: z.coerce.number().int().positive().default(15),
@@ -134,9 +134,9 @@ const envSchema = z
     message: "DESKTOP_UPDATE_INTENT_SECRET must be different from JWT secrets",
   })
   .refine((env) => env.NODE_ENV !== "production"
-    || (env.DESKTOP_UPDATE_INTENT_SECRET?.length ?? 0) >= 43, {
+    || highEntropyBase64UrlSecretSchema.safeParse(env.DESKTOP_UPDATE_INTENT_SECRET).success, {
     path: ["DESKTOP_UPDATE_INTENT_SECRET"],
-    message: "DESKTOP_UPDATE_INTENT_SECRET must contain at least 43 characters in production",
+    message: "DESKTOP_UPDATE_INTENT_SECRET must be a high-entropy Base64URL value from at least 32 random bytes in production",
   })
   .refine((env) => {
     if (env.NODE_ENV !== "production") return true
