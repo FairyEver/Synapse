@@ -406,7 +406,11 @@ export class UserAuthService {
     return { ...session, user: { id: user.id, email: user.email, handle: user.handle } }
   }
 
-  async verifyWebSession(token: string): Promise<{ readonly userId: string; readonly sessionId: string } | null> {
+  async verifyWebSession(token: string): Promise<{
+    readonly userId: string
+    readonly sessionId: string
+    readonly expiresAt: Date
+  } | null> {
     const now = new Date()
     const record = await this.prisma.userSessionRefreshToken.findUnique({
       where: { refreshTokenHash: hashToken(token) },
@@ -432,7 +436,11 @@ export class UserAuthService {
       where: { id: record.session.id },
       data: { lastUsedAt: now },
     })
-    return { userId: record.session.user.id, sessionId: record.session.id }
+    return {
+      userId: record.session.user.id,
+      sessionId: record.session.id,
+      expiresAt: record.expiresAt < record.session.expiresAt ? record.expiresAt : record.session.expiresAt,
+    }
   }
 
   async logoutWeb(token: string, ipAddress = "system"): Promise<void> {

@@ -12,14 +12,13 @@ const loginSchema = z.object({
 }).strict()
 
 const legacyDashboardCookieName = "synapse_admin"
-const userSessionMaxAgeMs = 30 * 24 * 60 * 60 * 1000
 
 type UserCookiePath = "/api" | "/drive"
 
-function userCookieOptions(path: UserCookiePath) {
+function userCookieOptions(path: UserCookiePath, expiresAt: Date) {
   return {
     httpOnly: true,
-    maxAge: userSessionMaxAgeMs,
+    maxAge: Math.max(0, expiresAt.getTime() - Date.now()),
     path,
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
@@ -58,8 +57,8 @@ export class DashboardAuthController {
     const result = loginSchema.safeParse(body)
     if (!result.success) throw badRequestFromZodError(result.error, "登录请求无效。")
     const session = await this.auth.loginWeb(result.data, request.ip)
-    response.cookie(userSessionCookieName, session.token, userCookieOptions("/api"))
-    response.cookie(userSessionCookieName, session.token, userCookieOptions("/drive"))
+    response.cookie(userSessionCookieName, session.token, userCookieOptions("/api", session.expiresAt))
+    response.cookie(userSessionCookieName, session.token, userCookieOptions("/drive", session.expiresAt))
     clearLegacyDashboardCookie(response)
     return {
       email: session.user.email,
@@ -82,7 +81,7 @@ export class DashboardAuthController {
       throw new UnauthorizedException("未登录或登录已过期。")
     }
     const me = await this.auth.getMe(session.userId)
-    response.cookie(userSessionCookieName, token, userCookieOptions("/drive"))
+    response.cookie(userSessionCookieName, token, userCookieOptions("/drive", session.expiresAt))
     return {
       email: me.user.email,
       handle: me.user.handle,
