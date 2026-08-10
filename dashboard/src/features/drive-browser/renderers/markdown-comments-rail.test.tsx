@@ -66,21 +66,22 @@ describe('MarkdownCommentsRail', () => {
     expect(document.body.textContent).toContain('暂无评论')
   })
 
-  it('submits replies from a dialog without adding an inline composer to the rail', async () => {
+  it('submits replies from an inline composer in the active thread card', async () => {
     const onReply = vi.fn(async () => undefined)
     renderRail({ onReply })
 
     await click(buttonWithText('回复'))
-    expect(document.body.textContent).toContain('回复评论')
-    expect(threadCard('thread-1').querySelector('textarea')).toBeNull()
+    expect(replyComposer('thread-1')).not.toBeNull()
+    expect(optionalDialogContent()).toBeNull()
+    expect(threadCard('thread-1').querySelector('textarea')).not.toBeNull()
     await inputValue(textarea(), 'Reply body')
     await click(buttonWithText('发送'))
 
     expect(onReply).toHaveBeenCalledWith({ threadId: 'thread-1', parentCommentId: 'comment-1', body: 'Reply body' })
-    expect(document.body.textContent).not.toContain('回复评论')
+    expect(replyComposer('thread-1')).toBeNull()
   })
 
-  it('shows reply failures in the dialog and keeps the typed body', async () => {
+  it('shows inline reply failures and keeps the typed body', async () => {
     const onReply = vi.fn(async () => {
       throw new Error('回复失败')
     })
@@ -90,9 +91,43 @@ describe('MarkdownCommentsRail', () => {
     await inputValue(textarea(), 'Reply body')
     await click(buttonWithText('发送'))
 
-    expect(document.body.textContent).toContain('回复评论')
+    expect(replyComposer('thread-1')).not.toBeNull()
     expect(document.body.textContent).toContain('回复失败')
     expect(textarea().value).toBe('Reply body')
+  })
+
+  it('cancels inline replies without submitting', async () => {
+    const onReply = vi.fn(async () => undefined)
+    renderRail({ onReply })
+
+    await click(buttonWithText('回复'))
+    await inputValue(textarea(), 'Draft reply')
+    await click(buttonWithText('取消'))
+
+    expect(onReply).not.toHaveBeenCalled()
+    expect(replyComposer('thread-1')).toBeNull()
+  })
+
+  it('keeps one reply composer per thread and switches its target', async () => {
+    const source = thread({ anchorStatus: 'attached' })
+    const firstComment = source.thread.comments[0]
+    const secondComment = {
+      ...firstComment,
+      id: 'comment-2',
+      parentCommentId: 'comment-1',
+      body: 'Second comment',
+      author: { id: 'user-2', email: null, handle: 'reviewer' },
+    }
+    renderRail({ threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, secondComment] } }] })
+
+    const replyButtons = commentReplyButtons('thread-1')
+    await click(replyButtons[0])
+    await inputValue(textarea(), 'First draft')
+    await click(replyButtons[1])
+
+    expect(document.querySelectorAll('[data-markdown-comment-reply-composer="true"]')).toHaveLength(1)
+    expect(replyComposer('thread-1')?.textContent).toContain('回复 reviewer')
+    expect(textarea().value).toBe('')
   })
 
   it('does not focus the thread when reply actions are clicked', async () => {
@@ -165,25 +200,46 @@ describe('MarkdownCommentsRail', () => {
   it('uses restrained product styling for active cards and comment actions', () => {
     renderRail({ activeThreadId: 'thread-1' })
 
-    expect(threadCard('thread-1').className).toContain('border-ring')
+    expect(threadCard('thread-1').className).toContain('border-amber-400/70')
     expect(threadCard('thread-1').className).not.toContain('border-foreground')
+    expect(threadCard('thread-1').textContent).toContain('“Note”')
+    expect(threadCard('thread-1').querySelector('[data-slot="avatar"]')).not.toBeNull()
+    expect(threadCard('thread-1').querySelector('time')).not.toBeNull()
+    expect(threadCard('thread-1').querySelector('.bg-amber-400')).not.toBeNull()
     expect(buttonWithText('回复').className).toContain('text-xs')
     expect(buttonWithText('回复').className).toContain('h-7')
   })
 
-  it('renders comment text input in a dialog and marks async errors as status text', async () => {
+  it('renders reply input inline and marks async errors as status text', async () => {
     const onReply = vi.fn(async () => {
       throw new Error('回复失败')
     })
     renderRail({ onReply })
 
     await click(buttonWithText('回复'))
-    expect(dialogContent()).not.toBeNull()
-    expect(textarea().className).toContain('min-h-24')
+    expect(optionalDialogContent()).toBeNull()
+    expect(replyComposer('thread-1')).not.toBeNull()
     await inputValue(textarea(), 'Reply body')
     await click(buttonWithText('发送'))
 
     expect(document.querySelector('[role="status"]')?.textContent).toBe('回复失败')
+  })
+
+  it('shows pending state while an inline reply is being submitted', async () => {
+    let resolveReply: (() => void) | null = null
+    const onReply = vi.fn(() => new Promise<void>((resolve) => {
+      resolveReply = resolve
+    }))
+    renderRail({ onReply })
+
+    await click(buttonWithText('回复'))
+    await inputValue(textarea(), 'Reply body')
+    await click(buttonWithText('发送'))
+
+    expect(buttonWithText('发送中').disabled).toBe(true)
+    expect(textarea().disabled).toBe(true)
+    await act(async () => resolveReply?.())
+    expect(replyComposer('thread-1')).toBeNull()
   })
 
   it('positions attached comments by their markdown anchor', () => {
@@ -314,6 +370,41 @@ describe('MarkdownCommentsRail', () => {
     root = null
     expect(observer.disconnect).toHaveBeenCalledOnce()
     expect(frames.size).toBe(0)
+  })
+
+  it('reflows following anchored comments when the inline reply composer expands a card', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    let nextFrameId = 1
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const frameId = nextFrameId
+      nextFrameId += 1
+      frames.set(frameId, callback)
+      return frameId
+    })
+    vi.stubGlobal('cancelAnimationFrame', (frameId: number) => frames.delete(frameId))
+    TestResizeObserver.instances = []
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+    renderRail({
+      threads: [
+        thread({ id: 'thread-1', anchorStatus: 'attached', anchorTop: 10 }),
+        thread({ id: 'thread-2', anchorStatus: 'attached', anchorTop: 20 }),
+      ],
+    })
+    const observer = TestResizeObserver.instances[0]
+    if (!observer) throw new Error('Missing resize observer')
+    observer.emit([
+      resizeEntry(threadSection('thread-1'), 80),
+      resizeEntry(threadSection('thread-2'), 40),
+    ])
+    await flushAnimationFrames(frames)
+    expect(threadTop('thread-2')).toBe(92)
+
+    await click(commentReplyButtons('thread-1')[0])
+    observer.emit([resizeEntry(threadSection('thread-1'), 180)])
+    await flushAnimationFrames(frames)
+
+    expect(replyComposer('thread-1')).not.toBeNull()
+    expect(threadTop('thread-2')).toBe(192)
   })
 
   it('keeps the last measured card sizes while anchored cards are temporarily detached', async () => {
@@ -596,6 +687,21 @@ function dialogContent() {
   const element = document.querySelector('[data-slot="dialog-content"]')
   if (!(element instanceof HTMLElement)) throw new Error('Missing dialog content')
   return element
+}
+
+function optionalDialogContent() {
+  return document.querySelector<HTMLElement>('[data-slot="dialog-content"]')
+}
+
+function replyComposer(threadId: string) {
+  return threadCard(threadId).querySelector<HTMLElement>('[data-markdown-comment-reply-composer="true"]')
+}
+
+function commentReplyButtons(threadId: string) {
+  const buttons = Array.from(threadCard(threadId).querySelectorAll<HTMLButtonElement>('button'))
+    .filter((button) => button.textContent === '回复')
+  if (buttons.length === 0) throw new Error(`Missing reply buttons for ${threadId}`)
+  return buttons
 }
 
 function threadSection(threadId: string) {

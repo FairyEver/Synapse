@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto } from '@synapse/shared'
 import { ChevronDown, Loader2, MoreHorizontal, RefreshCw } from 'lucide-react'
+import { RelativeTime } from '@/components/relative-time'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,6 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
@@ -28,7 +30,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Textarea } from '@/components/ui/textarea'
-import { cn } from '@/lib/utils'
+import { cn, getDisplayNameInitials } from '@/lib/utils'
 
 const COMMENT_CARD_ESTIMATED_HEIGHT = 128
 const COMMENT_CARD_GAP = 12
@@ -300,39 +302,45 @@ function ThreadView({
   readonly onDeleteThread: (threadId: string) => CommentActionPromise
   readonly onStartReassociate?: (threadId: string) => void
 }) {
+  const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null)
   const authorByCommentId = useMemo(() => new Map(thread.comments.map((comment) => [comment.id, comment.author])), [thread.comments])
   const firstVisibleCommentId = thread.comments.find((comment) => !comment.deleted)?.id ?? null
-  const showThreadHeader = thread.anchorStatus === 'orphaned' || (thread.permissions.canDelete && !firstVisibleCommentId)
+  const replyingToComment = thread.comments.find((comment) => comment.id === replyingToCommentId && !comment.deleted) ?? null
+  const quote = annotationQuoteExcerpt(thread)
   return (
     <section
       className={cn(
-        'cursor-default rounded-lg border border-border bg-card p-3 text-sm transition-colors',
-        active && 'border-ring bg-muted/30'
+        'relative cursor-default overflow-hidden rounded-lg border border-border bg-card p-3 pt-4 text-sm transition-colors hover:border-ring/60 focus-within:border-ring',
+        active && 'border-amber-400/70 bg-muted/30 dark:border-amber-600/70'
       )}
       onClick={(event) => {
         if (isInteractiveCommentTarget(event.target)) return
         onFocusThread(thread.id)
       }}
     >
-      {showThreadHeader ? (
-        <div className='mb-2 flex items-center justify-between gap-2'>
+      {active ? <div aria-hidden className='absolute inset-x-0 top-0 h-1 bg-amber-400 dark:bg-amber-600' /> : null}
+      <div className='mb-3 flex items-start gap-2'>
+        <span aria-hidden className='mt-0.5 h-4 w-0.5 shrink-0 rounded-full bg-border' />
+        <div className='min-w-0 flex-1 space-y-1'>
+          <div className='line-clamp-2 text-xs font-medium text-muted-foreground'>“{quote}”</div>
           {thread.anchorStatus === 'orphaned' ? (
-            <div className='min-w-0 space-y-1'>
-              <div className='text-xs font-medium text-muted-foreground'>{annotationPositionLabel(thread)}</div>
-              <div className='line-clamp-2 text-xs text-muted-foreground'>“{annotationQuoteExcerpt(thread)}”</div>
+            <div className='flex flex-wrap items-center gap-1'>
+              <span className='text-xs text-muted-foreground'>{annotationPositionLabel(thread)}</span>
               {canReply && onStartReassociate ? (
                 <Button type='button' variant='ghost' size='sm' className='h-7 px-2 text-xs' onClick={() => onStartReassociate(thread.id)}>
                   重新关联
                 </Button>
               ) : null}
             </div>
-          ) : <span />}
-          {thread.permissions.canDelete && !firstVisibleCommentId ? (
-            <ThreadActionMenu compact={compact} onDeleteThread={() => onDeleteThread(thread.id)} />
           ) : null}
         </div>
-      ) : null}
-      <div className='space-y-3'>
+        {thread.permissions.canDelete && !firstVisibleCommentId ? (
+          <div className='shrink-0'>
+            <ThreadActionMenu compact={compact} onDeleteThread={() => onDeleteThread(thread.id)} />
+          </div>
+        ) : null}
+      </div>
+      <div className='space-y-4'>
         {thread.comments.map((comment) => (
           <CommentView
             key={comment.id}
@@ -340,13 +348,25 @@ function ThreadView({
             replyToName={comment.parentCommentId ? displayAuthor(authorByCommentId.get(comment.parentCommentId)) : null}
             canReply={canReply}
             compact={compact}
-            onReply={(body) => onReply({ threadId: thread.id, parentCommentId: comment.id, body })}
+            onStartReply={() => setReplyingToCommentId(comment.id)}
             onUpdateComment={onUpdateComment}
             onDeleteComment={onDeleteComment}
             onDeleteThread={thread.permissions.canDelete && comment.id === firstVisibleCommentId ? () => onDeleteThread(thread.id) : undefined}
           />
         ))}
       </div>
+      {replyingToComment ? (
+        <ThreadReplyComposer
+          key={replyingToComment.id}
+          compact={compact}
+          targetName={displayAuthor(replyingToComment.author)}
+          onCancel={() => setReplyingToCommentId(null)}
+          onSubmit={async (body) => {
+            await onReply({ threadId: thread.id, parentCommentId: replyingToComment.id, body })
+            setReplyingToCommentId(null)
+          }}
+        />
+      ) : null}
     </section>
   )
 }
@@ -363,7 +383,7 @@ function CommentView({
   replyToName,
   canReply,
   compact,
-  onReply,
+  onStartReply,
   onUpdateComment,
   onDeleteComment,
   onDeleteThread,
@@ -372,82 +392,86 @@ function CommentView({
   readonly replyToName: string | null
   readonly canReply: boolean
   readonly compact: boolean
-  readonly onReply: (body: string) => CommentActionPromise
+  readonly onStartReply: () => void
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
   readonly onDeleteThread?: () => CommentActionPromise
 }) {
-  const [textDialog, setTextDialog] = useState<CommentTextDialogState | null>(null)
+  const [editValue, setEditValue] = useState<string | null>(null)
   if (comment.deleted) {
     return <div className='text-xs text-muted-foreground'>评论已删除</div>
   }
+  const authorName = displayAuthor(comment.author)
   return (
-    <article className='space-y-2'>
-      <div className='flex items-center justify-between gap-2'>
-        <span className='truncate text-sm font-medium'>{displayAuthor(comment.author)}</span>
-        <div className='flex shrink-0 items-center gap-1'>
-          <span className='text-xs text-muted-foreground'>{comment.editedAt ? '已编辑' : null}</span>
-          {comment.permissions.canDelete || onDeleteThread ? (
-            <CommentActionMenu
-              compact={compact}
-              onDeleteComment={comment.permissions.canDelete ? () => onDeleteComment(comment.id) : undefined}
-              onDeleteThread={onDeleteThread}
-            />
-          ) : null}
+    <article className='group/comment'>
+      <div className='flex items-start gap-2.5'>
+        <Avatar className='size-8'>
+          <AvatarFallback className='text-xs font-medium text-muted-foreground'>
+            {getDisplayNameInitials(authorName)}
+          </AvatarFallback>
+        </Avatar>
+        <div className='min-w-0 flex-1 space-y-1.5'>
+          <div className='flex items-start justify-between gap-2'>
+            <div className='flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5'>
+              <span className='truncate text-sm font-medium'>{authorName}</span>
+              <RelativeTime value={comment.createdAt} className='text-xs text-muted-foreground' />
+              {comment.editedAt ? <span className='text-xs text-muted-foreground'>已编辑</span> : null}
+            </div>
+            {comment.permissions.canDelete || onDeleteThread ? (
+              <div className={cn('shrink-0 transition-opacity', !compact && 'opacity-40 group-hover/comment:opacity-100 group-focus-within/comment:opacity-100')}>
+                <CommentActionMenu
+                  compact={compact}
+                  onDeleteComment={comment.permissions.canDelete ? () => onDeleteComment(comment.id) : undefined}
+                  onDeleteThread={onDeleteThread}
+                />
+              </div>
+            ) : null}
+          </div>
+          {replyToName ? <div className='text-xs text-muted-foreground'>回复 {replyToName}</div> : null}
+          <p className='whitespace-pre-wrap break-words text-sm leading-5'>{comment.body}</p>
+          <div className={cn(
+            '-ml-2 flex flex-wrap items-center gap-1 transition-opacity',
+            !compact && 'opacity-70 group-hover/comment:opacity-100 group-focus-within/comment:opacity-100'
+          )}>
+            {canReply ? (
+              <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} onClick={onStartReply}>回复</Button>
+            ) : null}
+            {comment.permissions.canEdit ? (
+              <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} onClick={() => setEditValue(comment.body)}>编辑</Button>
+            ) : null}
+          </div>
         </div>
       </div>
-      {replyToName ? <div className='text-xs text-muted-foreground'>回复 {replyToName}</div> : null}
-      <p className='whitespace-pre-wrap break-words text-sm leading-5'>{comment.body}</p>
-      <div className='-ml-2 flex flex-wrap items-center gap-1'>
-        {canReply ? (
-          <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} onClick={() => setTextDialog({ mode: 'reply', value: '' })}>回复</Button>
-        ) : null}
-        {comment.permissions.canEdit ? (
-          <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} onClick={() => setTextDialog({ mode: 'edit', value: comment.body })}>编辑</Button>
-        ) : null}
-      </div>
-      {textDialog ? (
-        <CommentTextDialog
-          state={textDialog}
-          onStateChange={setTextDialog}
-          onSubmit={async (body) => {
-            if (textDialog.mode === 'reply') {
-              await onReply(body)
-              return
-            }
-            await onUpdateComment({ commentId: comment.id, body })
-          }}
+      {editValue !== null ? (
+        <CommentEditDialog
+          value={editValue}
+          onValueChange={setEditValue}
+          onSubmit={(body) => onUpdateComment({ commentId: comment.id, body })}
         />
       ) : null}
     </article>
   )
 }
 
-type CommentTextDialogState =
-  | { readonly mode: 'reply'; readonly value: string }
-  | { readonly mode: 'edit'; readonly value: string }
-
-function CommentTextDialog({
-  state,
-  onStateChange,
+function CommentEditDialog({
+  value,
+  onValueChange,
   onSubmit,
 }: {
-  readonly state: CommentTextDialogState
-  readonly onStateChange: (state: CommentTextDialogState | null) => void
+  readonly value: string
+  readonly onValueChange: (value: string | null) => void
   readonly onSubmit: (body: string) => CommentActionPromise
 }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const title = state.mode === 'edit' ? '编辑评论' : '回复评论'
-  const submitLabel = state.mode === 'edit' ? '保存' : '发送'
   const handleSubmit = async () => {
-    const body = state.value
+    const body = value
     if (!body.trim() || submitting) return
     setSubmitting(true)
     setError(null)
     try {
       await onSubmit(body)
-      onStateChange(null)
+      onValueChange(null)
     } catch (cause) {
       setError(getCommentActionErrorMessage(cause))
     } finally {
@@ -460,19 +484,19 @@ function CommentTextDialog({
       open={true}
       onOpenChange={(open) => {
         if (submitting) return
-        if (!open) onStateChange(null)
+        if (!open) onValueChange(null)
       }}
     >
       <DialogContent onClick={(event) => event.stopPropagation()}>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription className='sr-only'>{title}</DialogDescription>
+          <DialogTitle>编辑评论</DialogTitle>
+          <DialogDescription className='sr-only'>编辑评论</DialogDescription>
         </DialogHeader>
         <Textarea
-          value={state.value}
-          aria-label={title}
+          value={value}
+          aria-label='编辑评论'
           onChange={(event) => {
-            onStateChange({ ...state, value: event.currentTarget.value })
+            onValueChange(event.currentTarget.value)
             if (error) setError(null)
           }}
           className='min-h-24'
@@ -480,13 +504,65 @@ function CommentTextDialog({
         />
         {error ? <div role='status' className='text-sm text-destructive'>{error}</div> : null}
         <DialogFooter>
-          <Button type='button' variant='ghost' disabled={submitting} onClick={() => onStateChange(null)}>取消</Button>
-          <Button type='button' disabled={!state.value.trim() || submitting} onClick={() => { void handleSubmit() }}>
-            {submitting ? `${submitLabel}中` : submitLabel}
+          <Button type='button' variant='ghost' disabled={submitting} onClick={() => onValueChange(null)}>取消</Button>
+          <Button type='button' disabled={!value.trim() || submitting} onClick={() => { void handleSubmit() }}>
+            {submitting ? '保存中' : '保存'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function ThreadReplyComposer({
+  targetName,
+  compact,
+  onCancel,
+  onSubmit,
+}: {
+  readonly targetName: string
+  readonly compact: boolean
+  readonly onCancel: () => void
+  readonly onSubmit: (body: string) => CommentActionPromise
+}) {
+  const [value, setValue] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const handleSubmit = async () => {
+    if (!value.trim() || submitting) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await onSubmit(value)
+    } catch (cause) {
+      setError(getCommentActionErrorMessage(cause))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div data-markdown-comment-reply-composer='true' className='mt-3 border-t pt-3' onClick={(event) => event.stopPropagation()}>
+      <div className='mb-2 text-xs text-muted-foreground'>回复 {targetName}</div>
+      <Textarea
+        value={value}
+        aria-label={`回复 ${targetName}`}
+        placeholder='回复'
+        disabled={submitting}
+        autoFocus
+        onChange={(event) => {
+          setValue(event.currentTarget.value)
+          if (error) setError(null)
+        }}
+      />
+      {error ? <div role='status' className='mt-2 text-sm text-destructive'>{error}</div> : null}
+      <div className='mt-2 flex justify-end gap-1'>
+        <Button type='button' variant='ghost' size='sm' className={compact ? 'min-h-11' : 'h-7'} disabled={submitting} onClick={onCancel}>取消</Button>
+        <Button type='button' size='sm' className={compact ? 'min-h-11' : 'h-7'} disabled={!value.trim() || submitting} onClick={() => { void handleSubmit() }}>
+          {submitting ? '发送中' : '发送'}
+        </Button>
+      </div>
+    </div>
   )
 }
 
