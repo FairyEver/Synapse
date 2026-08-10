@@ -11,9 +11,7 @@ import { AdminPublicAssets } from './admin-public-assets'
 
 vi.mock('@/lib/api', () => ({
   adminApi: {
-    downloadDrivePublicAssetRevisionUrl: vi.fn((assetId: string, revisionId: string) => (
-      `/api/admin/drive/public-assets/${encodeURIComponent(assetId)}/revisions/${encodeURIComponent(revisionId)}/download`
-    )),
+    downloadDrivePublicAssetRevision: vi.fn(),
     listDrivePublicAssetAccessLogs: vi.fn(),
     listDrivePublicAssetRevisions: vi.fn(),
     listDrivePublicAssets: vi.fn(),
@@ -26,6 +24,7 @@ let root: Root | null = null
 let host: HTMLDivElement | null = null
 
 beforeEach(() => {
+  mockedAdminApi.downloadDrivePublicAssetRevision.mockResolvedValue(undefined)
   mockedAdminApi.listDrivePublicAssets.mockResolvedValue({
     data: [createPublicAsset({ assetId: 'asset/id', name: 'logo.png' })],
     page: 1,
@@ -75,7 +74,7 @@ afterEach(() => {
 })
 
 describe('AdminPublicAssets', () => {
-  it('searches assets and opens detail tabs with revision download links', async () => {
+  it('searches assets and downloads revisions through the admin API', async () => {
     renderView()
 
     await waitForText('logo.png')
@@ -119,8 +118,13 @@ describe('AdminPublicAssets', () => {
 
     await clickButtonText('历史版本')
     await waitForText('logo-old.png')
-    const downloadLink = document.querySelector<HTMLAnchorElement>('a[href*="/revisions/"]')
-    expect(downloadLink?.getAttribute('href')).toBe('/api/admin/drive/public-assets/asset%2Fid/revisions/revision%2Fid/download')
+    expect(document.querySelector('a[href*="/revisions/"]')).toBeNull()
+    await clickButtonText('下载')
+    expect(mockedAdminApi.downloadDrivePublicAssetRevision).toHaveBeenCalledWith(
+      'asset/id',
+      'revision/id',
+      'logo-old.png'
+    )
   })
 
   it('shows detail table fetch errors instead of empty states', async () => {

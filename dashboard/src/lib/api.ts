@@ -1262,8 +1262,11 @@ export const adminApi = {
       `${adminApiBasePath}/drive/items/${encodeURIComponent(id)}`,
       { method: 'DELETE' }
     ),
-  downloadDriveItemUrl: (id: string) =>
-    `${adminApiBasePath}/drive/items/${encodeURIComponent(id)}/download`,
+  downloadDriveItem: (id: string, filename: string) =>
+    downloadFile(
+      `${adminApiBasePath}/drive/items/${encodeURIComponent(id)}/download`,
+      filename
+    ),
   restoreDriveItem: (id: string) =>
     request<AdminDriveItemRow>(
       `${adminApiBasePath}/drive/items/${encodeURIComponent(id)}/restore`,
@@ -1293,8 +1296,15 @@ export const adminApi = {
     request<PaginatedResponse<AdminDrivePublicAssetRevisionRow>>(
       `${adminApiBasePath}/drive/public-assets/${encodeURIComponent(assetId)}/revisions${paginationSuffix(options)}`
     ),
-  downloadDrivePublicAssetRevisionUrl: (assetId: string, revisionId: string) =>
-    `${adminApiBasePath}/drive/public-assets/${encodeURIComponent(assetId)}/revisions/${encodeURIComponent(revisionId)}/download`,
+  downloadDrivePublicAssetRevision: (
+    assetId: string,
+    revisionId: string,
+    filename: string
+  ) =>
+    downloadFile(
+      `${adminApiBasePath}/drive/public-assets/${encodeURIComponent(assetId)}/revisions/${encodeURIComponent(revisionId)}/download`,
+      filename
+    ),
   listSkillRepositories: (options: AdminSkillRepositoryListQuery = {}) =>
     request<PaginatedResponse<AdminSkillRepositoryRow>>(
       `${adminApiBasePath}/skill-repositories${adminSkillRepositoryQuerySuffix(options)}`

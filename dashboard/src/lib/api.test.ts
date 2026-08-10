@@ -106,10 +106,103 @@ describe('adminApi.drive', () => {
     )
   })
 
-  it('encodes admin public asset revision download URLs', () => {
-    expect(adminApi.downloadDrivePublicAssetRevisionUrl('asset/id', 'revision/id')).toBe(
-      '/api/admin/drive/public-assets/asset%2Fid/revisions/revision%2Fid/download'
+  it('downloads admin Drive files through authenticated preflight requests', async () => {
+    const links: Array<{
+      click: ReturnType<typeof vi.fn>
+      download: string
+      href: string
+      rel: string
+      remove: ReturnType<typeof vi.fn>
+    }> = []
+    const createElement = vi.fn(() => {
+      const link = {
+        click: vi.fn(),
+        download: '',
+        href: '',
+        rel: '',
+        remove: vi.fn(),
+      }
+      links.push(link)
+      return link
+    })
+    const append = vi.fn()
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, { status: 200 })
     )
+    vi.stubGlobal('document', {
+      body: { append },
+      createElement,
+    })
+
+    await adminApi.downloadDriveItem('item/id', 'report.pdf')
+    await adminApi.downloadDrivePublicAssetRevision(
+      'asset/id',
+      'revision/id',
+      'logo-old.png'
+    )
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/admin/drive/items/item%2Fid/download',
+      { credentials: 'include', method: 'HEAD' }
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/admin/drive/public-assets/asset%2Fid/revisions/revision%2Fid/download',
+      { credentials: 'include', method: 'HEAD' }
+    )
+    expect(links).toMatchObject([
+      {
+        download: 'report.pdf',
+        href: '/api/admin/drive/items/item%2Fid/download',
+        rel: 'noopener',
+      },
+      {
+        download: 'logo-old.png',
+        href: '/api/admin/drive/public-assets/asset%2Fid/revisions/revision%2Fid/download',
+        rel: 'noopener',
+      },
+    ])
+    expect(links[0]?.click).toHaveBeenCalledOnce()
+    expect(links[1]?.click).toHaveBeenCalledOnce()
+    expect(append).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    [
+      'current file',
+      () => adminApi.downloadDriveItem('item/id', 'report.pdf'),
+    ],
+    [
+      'public asset revision',
+      () => adminApi.downloadDrivePublicAssetRevision(
+        'asset/id',
+        'revision/id',
+        'logo-old.png'
+      ),
+    ],
+  ])('notifies admin auth expiration before downloading %s', async (_label, download) => {
+    const authExpired = vi.fn()
+    const unsubscribe = subscribeAdminAuthExpired(authExpired)
+    const createElement = vi.fn()
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ message: '会话已过期。' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 401,
+      })
+    )
+    vi.stubGlobal('document', {
+      body: { append: vi.fn() },
+      createElement,
+    })
+
+    try {
+      await expect(download()).rejects.toMatchObject({ status: 401 })
+      expect(authExpired).toHaveBeenCalledOnce()
+      expect(createElement).not.toHaveBeenCalled()
+    } finally {
+      unsubscribe()
+    }
   })
 })
 

@@ -11,9 +11,7 @@ import { AdminPublicAssetDetailsDialog } from './admin-public-assets'
 
 vi.mock('@/lib/api', () => ({
   adminApi: {
-    downloadDrivePublicAssetRevisionUrl: vi.fn((assetId: string, revisionId: string) => (
-      `/api/admin/drive/public-assets/${encodeURIComponent(assetId)}/revisions/${encodeURIComponent(revisionId)}/download`
-    )),
+    downloadDrivePublicAssetRevision: vi.fn(),
     listDrivePublicAssetAccessLogs: vi.fn(),
     listDrivePublicAssetRevisions: vi.fn(),
   },

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Download, Eye } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   adminApi,
   type AdminDrivePublicAssetAccessLogRow,
@@ -418,6 +419,18 @@ function RevisionTable({
   readonly onPageChange: (page: number) => void
   readonly onPageSizeChange: (pageSize: number) => void
 }) {
+  const downloadMutation = useMutation({
+    mutationFn: ({
+      targetAssetId,
+      revisionId,
+      filename,
+    }: {
+      targetAssetId: string
+      revisionId: string
+      filename: string
+    }) => adminApi.downloadDrivePublicAssetRevision(targetAssetId, revisionId, filename),
+    onError: (err: Error) => toast.error(err.message),
+  })
   const columns = useMemo<ColumnDef<AdminDrivePublicAssetRevisionRow>[]>(
     () => [
       {
@@ -472,11 +485,19 @@ function RevisionTable({
         enableHiding: false,
         cell: ({ row }) => (
           <div className='flex justify-end'>
-            <Button asChild variant='ghost' size='sm'>
-              <a href={adminApi.downloadDrivePublicAssetRevisionUrl(assetId, row.original.id)}>
-                <Download />
-                下载
-              </a>
+            <Button
+              type='button'
+              variant='ghost'
+              size='sm'
+              disabled={downloadMutation.isPending}
+              onClick={() => downloadMutation.mutate({
+                targetAssetId: assetId,
+                revisionId: row.original.id,
+                filename: row.original.name,
+              })}
+            >
+              <Download />
+              下载
             </Button>
           </div>
         ),
@@ -487,7 +508,7 @@ function RevisionTable({
         },
       },
     ],
-    [assetId]
+    [assetId, downloadMutation.isPending, downloadMutation.mutate]
   )
 
   return (

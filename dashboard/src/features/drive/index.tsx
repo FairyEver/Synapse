@@ -93,6 +93,12 @@ export default function DriveAdminPage() {
     onError: (err: Error) => toast.error(err.message),
   })
 
+  const downloadMutation = useMutation({
+    mutationFn: ({ id, filename }: { id: string; filename: string }) =>
+      adminApi.downloadDriveItem(id, filename),
+    onError: (err: Error) => toast.error(err.message),
+  })
+
   const columns = useMemo<ColumnDef<AdminDriveItemRow>[]>(
     () => [
       {
@@ -188,11 +194,16 @@ export default function DriveAdminPage() {
           return (
             <div className='flex justify-end gap-2'>
               {item.type === 'file' && item.storageStatus === 'active' ? (
-                <Button asChild variant='ghost' size='icon' className='size-8'>
-                  <a href={adminApi.downloadDriveItemUrl(item.id)}>
-                    <Download data-icon='inline-start' />
-                    <span className='sr-only'>下载</span>
-                  </a>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon'
+                  className='size-8'
+                  disabled={downloadMutation.isPending}
+                  onClick={() => downloadMutation.mutate({ id: item.id, filename: item.name })}
+                >
+                  <Download data-icon='inline-start' />
+                  <span className='sr-only'>下载</span>
                 </Button>
               ) : null}
               {canRestore ? (
@@ -231,7 +242,13 @@ export default function DriveAdminPage() {
         },
       },
     ],
-    [deleteMutation.isPending, restoreMutation.isPending, restoreMutation.mutate]
+    [
+      deleteMutation.isPending,
+      downloadMutation.isPending,
+      downloadMutation.mutate,
+      restoreMutation.isPending,
+      restoreMutation.mutate,
+    ]
   )
 
   return (
