@@ -158,7 +158,7 @@ export function GitBranchSwitcher({
       type="button"
       variant="outline"
       size="sm"
-      disabled={disabled || busy}
+      disabled={busy}
       onClick={() => fetchingRemote ? void gitBranches.cancelRemoteFetch() : void gitBranches.fetchRemote()}
     >
       {fetchingRemote ? <X data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}

@@ -388,6 +388,19 @@ describe("GitWorkbench", () => {
     expect(bridge.git.listRemoteBranches).toHaveBeenCalledTimes(3)
   })
 
+  it("keeps remote fetch available during an external Git operation", async () => {
+    bridge.git.getSnapshot.mockResolvedValueOnce({
+      ...(await bridge.git.getSnapshot()),
+      repositoryOperationState: "merge",
+    })
+
+    await renderWorkbench(roots)
+
+    expect(findButton("获取远程分支").hasAttribute("disabled")).toBe(false)
+    await click(findButton("获取远程分支"))
+    expect(bridge.git.fetchRemoteBranches).toHaveBeenCalled()
+  })
+
   it("cancels an in-flight remote branch fetch by operation id", async () => {
     const pendingFetch = deferred<void>()
     bridge.git.fetchRemoteBranches.mockReturnValueOnce(pendingFetch.promise)
