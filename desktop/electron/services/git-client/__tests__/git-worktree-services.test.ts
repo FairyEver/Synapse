@@ -515,6 +515,26 @@ describe("git worktree services", () => {
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ args: ["push", "--set-upstream", "origin", "main"] }))
   })
 
+  it("protects ignored files during remote initialization checkout", async () => {
+    const run = vi.fn(async (input: { args: string[] }) => ({
+      stdout: input.args[0] === "ls-remote"
+        ? "ref: refs/heads/main\tHEAD\nabc\tHEAD\nabc\trefs/heads/main\n"
+        : "",
+      stderr: "",
+    }))
+    const getSnapshot = vi.fn().mockResolvedValue({
+      changes: [], changeCount: 0, behind: 0, ahead: 0,
+      currentBranch: "main", hasCommits: false, trackingStatus: "untracked",
+    })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot })
+
+    await service.initialize(repository, { kind: "track-remote", branchName: "main", remoteName: "origin" })
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["checkout", "--no-overwrite-ignore", "--track", "-b", "main", "origin/main"],
+    }))
+  })
+
   it("rechecks local and remote state before changing an uninitialized repository", async () => {
     const cleanSnapshot = {
       changes: [],

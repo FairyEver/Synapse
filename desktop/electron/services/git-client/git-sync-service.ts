@@ -244,7 +244,7 @@ export function createGitSyncService(deps: SyncDeps) {
         })
         if (localBranch.stdout.trim()) throw new Error("本地已有同名分支，请进入仓库选择分支。")
         await deps.commandRunner.run({
-          args: ["checkout", "--track", "-b", currentPlan.branchName, `${input.remoteName}/${currentPlan.branchName}`],
+          args: ["checkout", "--no-overwrite-ignore", "--track", "-b", currentPlan.branchName, `${input.remoteName}/${currentPlan.branchName}`],
           abortSignal: options.signal,
           cwd: repository.localPath,
           operation: "git.initialize",
