@@ -182,7 +182,7 @@ function sanitizeWorkflowNodeForSnapshot(node: WorkflowNode): WorkflowNode {
     return {
       ...node,
       config: {
-        title: sanitizeSnapshotValue(node.config.title, new WeakMap(), "title"),
+        title: "[redacted]",
         body: "[redacted]",
         variables: [],
       },

@@ -593,7 +593,7 @@ describe("sanitizeWorkflowRunSnapshot", () => {
     expect(snapshot.params.apiToken).toBe("sk-raw-secret")
   })
 
-  it("does not persist System Notifier bodies, bindings, or resolved variable values", () => {
+  it("does not persist System Notifier content, bindings, or resolved variable values", () => {
     const snapshot: WorkflowRunSnapshot = {
       runId: "run-1",
       workflowId: "workflow-system-notifier",
@@ -616,7 +616,7 @@ describe("sanitizeWorkflowRunSnapshot", () => {
             type: "system_notifier_notification_trigger",
             position: { x: 0, y: 0 },
             config: {
-              title: "Safe title",
+              title: "private-title-canary",
               body: "private-body-canary {{secret}}",
               variables: [{
                 name: "secret",
@@ -644,12 +644,13 @@ describe("sanitizeWorkflowRunSnapshot", () => {
     const raw = JSON.stringify(sanitized)
 
     expect(sanitized.definition?.nodes[0]?.config).toEqual({
-      title: "Safe title",
+      title: "[redacted]",
       body: "[redacted]",
       variables: [],
     })
     expect(sanitized.nodeResults["notify-1"]?.input).toEqual({ variables: {} })
     expect(raw).not.toContain("private-body-canary")
+    expect(raw).not.toContain("private-title-canary")
     expect(raw).not.toContain("resolved-variable-canary")
   })
 
