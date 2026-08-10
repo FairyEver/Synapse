@@ -5,6 +5,7 @@ import {
   TERMINAL_MCP_TOOL_ACTIONS,
 } from "../capability"
 import { buildTerminalMcpTools } from "../mcp-tools"
+import { terminalCreateSessionOverrideInputSchema } from "../contract-schema"
 
 describe("Terminal capability contract", () => {
   it("publishes the consolidated capability baseline from one catalog", () => {
@@ -41,5 +42,12 @@ describe("Terminal capability contract", () => {
 
     expect(commandTool?.description).toContain("accepted result only proves PTY byte delivery")
     expect(commandTool?.description).toContain("observe fresh output or a rendered view")
+  })
+
+  it("allows one-time session overrides to unset inherited environment variables", () => {
+    expect(terminalCreateSessionOverrideInputSchema.parse({
+      overrides: { environment: { INHERITED_SECRET: null } },
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000101",
+    }).overrides.environment).toEqual({ INHERITED_SECRET: null })
   })
 })

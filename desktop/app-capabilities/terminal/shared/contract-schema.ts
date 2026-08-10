@@ -400,7 +400,7 @@ export const terminalCreateSessionOverrideInputSchema = z.object({
   overrides: z.object({
     cwd: z.string().min(1).optional(),
     shell: z.string().min(1).optional(),
-    environment: z.record(z.string().min(1), z.string()).optional(),
+    environment: terminalEnvironmentLayerSchema.optional(),
     cols: z.number().int().min(2).max(500).optional(),
     rows: z.number().int().min(1).max(200).optional(),
   }).strict().refine((value) => Object.keys(value).length > 0, "At least one override is required"),
