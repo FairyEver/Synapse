@@ -11,7 +11,7 @@ import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard
 import { UserAuthService } from "../auth/user-auth.service"
 import { userSessionCookieName } from "../auth/user-web-session"
 import { formatAuditError } from "../common/audit-error"
-import { AuditLogService } from "../common/audit-log.service"
+import { auditActors, AuditLogService } from "../common/audit-log.service"
 import { attachmentContentDisposition, inlineContentDisposition } from "../common/content-disposition"
 import { parsePagination } from "../common/pagination"
 import { resolvePublicAppUrl } from "../common/public-app-url"
@@ -873,8 +873,25 @@ export class DriveAdminController {
   }
 
   @Get("/storage-summary")
-  getStorageSummary(@Req() _request?: AdminRequest) {
-    return this.drive.getAdminStorageSummary()
+  async getStorageSummary(@Req() request: AdminRequest) {
+    const result = await this.drive.getAdminStorageSummary()
+    await this.recordAuditSafely({
+      actor: auditActors.platformAdmin(request.admin!.sessionId),
+      action: "admin.drive.storage_summary.get",
+      targetType: "drive_storage_summary",
+      targetId: "global",
+      detail: {
+        normalDriveCount: result.normalDrive.active.count
+          + result.normalDrive.trashed.count
+          + result.normalDrive.hidden.count,
+        publicAssetCount: result.publicAssets.active.count
+          + result.publicAssets.trashed.count
+          + result.publicAssets.hidden.count,
+        publicAssetRevisionCount: result.publicAssetRevisions.count,
+      },
+      ipAddress: request.ip ?? "system",
+    })
+    return result
   }
 
   @Get("/public-assets")

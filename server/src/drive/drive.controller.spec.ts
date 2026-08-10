@@ -109,6 +109,20 @@ describe("DriveController", () => {
   const storage = {
     getObjectStream: vi.fn(async () => ({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })),
   }
+  const adminStorageSummary = {
+    normalDrive: {
+      active: { count: 2, bytes: "11" },
+      trashed: { count: 1, bytes: "5" },
+      hidden: { count: 1, bytes: "7" },
+    },
+    publicAssets: {
+      active: { count: 3, bytes: "13" },
+      trashed: { count: 0, bytes: "0" },
+      hidden: { count: 1, bytes: "17" },
+    },
+    publicAssetRevisions: { count: 4, bytes: "19" },
+    total: { quotaBytes: "29", adminVisibleBytes: "72" },
+  }
 
   it("uses relaxed default API throttling", () => {
     expect(DEFAULT_API_RATE_LIMIT_PER_MINUTE).toBe(600)
@@ -149,6 +163,7 @@ describe("DriveController", () => {
     drive.openShareBrowserItemDownload.mockReset()
     drive.listAdminItems.mockReset()
     drive.getAdminStorageSummary.mockReset()
+    drive.getAdminStorageSummary.mockResolvedValue(adminStorageSummary)
     drive.openAdminItemDownload.mockReset()
     drive.restoreItemAsAdmin.mockReset()
     publicAssets.listAdminAssets.mockReset()
@@ -850,6 +865,43 @@ describe("DriveController", () => {
     }))
   })
 
+  it("records only aggregate counts when admins read drive storage summary", async () => {
+    const auditLog = { record: vi.fn(async (_input: unknown) => undefined) }
+    const controller = new DriveAdminController(drive as unknown as DriveService, publicAssets as never, auditLog as never)
+    const resultWithSensitiveFields = {
+      ...adminStorageSummary,
+      storagePath: "/private/drive/storage",
+      secretValue: "must-not-be-audited",
+    }
+    drive.getAdminStorageSummary.mockResolvedValue(resultWithSensitiveFields)
+
+    const result = await controller.getStorageSummary({
+      admin: { sessionId: "admin-session-1" },
+      ip: "127.0.0.1",
+    } as never)
+
+    expect(result).toBe(resultWithSensitiveFields)
+    const auditInput = auditLog.record.mock.calls[0]?.[0]
+    expect(auditInput).toEqual({
+      actor: {
+        actorType: "platform_admin",
+        actorLabel: "平台管理员",
+        adminSessionId: "admin-session-1",
+      },
+      action: "admin.drive.storage_summary.get",
+      targetType: "drive_storage_summary",
+      targetId: "global",
+      detail: {
+        normalDriveCount: 4,
+        publicAssetCount: 4,
+        publicAssetRevisionCount: 4,
+      },
+      ipAddress: "127.0.0.1",
+    })
+    expect(JSON.stringify(auditInput)).not.toContain("/private/drive/storage")
+    expect(JSON.stringify(auditInput)).not.toContain("must-not-be-audited")
+  })
+
   it("routes admin public asset APIs and audits downloads", async () => {
     process.env.APP_PUBLIC_URL = "https://dashboard.example"
     const auditLog = { record: vi.fn(async () => undefined) }
@@ -877,10 +929,8 @@ describe("DriveController", () => {
       contentType: "text/plain",
     })
     drive.restoreItemAsAdmin.mockResolvedValue({ id: "item-1" })
-    drive.getAdminStorageSummary.mockResolvedValue({ total: { quotaBytes: "1" } })
-
     const requestContext = {
-      admin: { email: "admin@example.com" },
+      admin: { email: "admin@example.com", sessionId: "admin-session-1" },
       ip: "127.0.0.1",
       headers: { host: "dashboard.example" },
     } as never
