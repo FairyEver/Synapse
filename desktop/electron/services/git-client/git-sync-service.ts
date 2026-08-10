@@ -304,11 +304,7 @@ export function createGitSyncService(deps: SyncDeps) {
         }
         if (snapshot.trackingStatus === "untracked") {
           if (!snapshot.currentBranch) throw new Error("请先切换到本地分支。")
-          const targets = remoteName ? [] : await listPushTargets(repository)
-          const selectedName = remoteName ?? (targets.length === 1 ? targets[0]?.name : undefined)
-          if (!selectedName) {
-            throw new Error(targets.length === 0 ? "仓库没有可推送的远端。" : "请选择推送远端。")
-          }
+          const selectedName = await resolvePushTargetName(repository, remoteName)
           args = ["push", "--set-upstream", selectedName, snapshot.currentBranch]
         }
         await deps.commandRunner.run({

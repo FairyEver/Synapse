@@ -423,6 +423,26 @@ describe("git worktree services", () => {
     }))
   })
 
+  it("uses the preferred remote on the first push with multiple remotes", async () => {
+    const run = vi.fn(async (input: { args: string[] }) => {
+      if (input.args[0] === "remote" && input.args.length === 1) return { stdout: "origin\nupstream\n", stderr: "" }
+      if (input.args[0] === "remote") return { stdout: `git@example.com:${input.args.at(-1)}.git\n`, stderr: "" }
+      if (input.args.includes("remote.pushDefault")) return { stdout: "upstream\n", stderr: "" }
+      return { stdout: "", stderr: "" }
+    })
+    const getSnapshot = vi.fn().mockResolvedValue({
+      changes: [], behind: 0, ahead: 0,
+      currentBranch: "feature", trackingStatus: "untracked",
+    })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot })
+
+    await service.push(repository)
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["push", "--set-upstream", "upstream", "feature"],
+    }))
+  })
+
   it("plans an empty remote as an initial commit push", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
     const getSnapshot = vi.fn().mockResolvedValue({
