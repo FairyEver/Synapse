@@ -26,7 +26,15 @@ describe("TextFileWriterService", () => {
     const text = "第一行\r\nsecond\n"
     const { service, permissionGuard, auditSink } = createService()
 
-    await expect(service.write({ text, path: requestedPath })).resolves.toEqual({
+    await expect(service.write({ text, path: requestedPath }, {
+      source: "mcp-http",
+      metadata: {
+        parentCapability: "app.text_extractor.document.extract_to_file",
+        clientId: "mcp-install:test",
+        controllerInstanceId: "controller:test",
+        documentBody: "must-not-be-audited",
+      },
+    })).resolves.toEqual({
       path: expectedPath,
       fileName: "报告.MD",
       format: "md",
@@ -39,13 +47,21 @@ describe("TextFileWriterService", () => {
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write.outside-userdata",
       resource: expectedPath,
-      context: expect.not.objectContaining({ textLength: expect.any(Number) }),
+      context: expect.objectContaining({
+        clientId: "mcp-install:test",
+        controllerInstanceId: "controller:test",
+      }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       resource: expectedPath,
       outcome: "allowed",
-      metadata: expect.not.objectContaining({ text }),
+      metadata: expect.objectContaining({
+        clientId: "mcp-install:test",
+        controllerInstanceId: "controller:test",
+      }),
     }))
+    expect(JSON.stringify(permissionGuard.check.mock.calls)).not.toContain("must-not-be-audited")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("must-not-be-audited")
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain('"textLength"')
   })
 

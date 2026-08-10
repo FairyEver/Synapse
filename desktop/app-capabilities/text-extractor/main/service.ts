@@ -183,6 +183,8 @@ async function authorizeDocumentRead(
     source: context.source ?? "api",
     capabilityAction: TEXT_EXTRACTOR_CAPABILITY_ID,
     boundary: "textExtractor.service.document",
+    ...(context.clientId ? { clientId: context.clientId } : {}),
+    ...(context.controllerInstanceId ? { controllerInstanceId: context.controllerInstanceId } : {}),
   }
   const permission = await deps.permissionGuard.check({
     action: "fs.read.outside-userdata",

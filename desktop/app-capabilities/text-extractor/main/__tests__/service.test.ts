@@ -602,6 +602,8 @@ describe("TextExtractorService", () => {
     const context = {
       source: "mcp-http" as const,
       actor: { kind: "user" as const, id: "mcp-client:test" },
+      clientId: "mcp-install:test",
+      controllerInstanceId: "controller:test",
     }
     const result = await service.extract({ filePath: fixturePath }, context)
 
@@ -639,11 +641,17 @@ describe("TextExtractorService", () => {
         source: "mcp-http",
         capabilityAction: "app.text_extractor.document.extract",
         boundary: "textExtractor.service.document",
+        clientId: "mcp-install:test",
+        controllerInstanceId: "controller:test",
       },
     })
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       outcome: "allowed",
       resource: "install-guide.pdf",
+      metadata: expect.objectContaining({
+        clientId: "mcp-install:test",
+        controllerInstanceId: "controller:test",
+      }),
     }))
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain(fixturePath)
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain(result.text)

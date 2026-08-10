@@ -32,7 +32,11 @@ export function createTextExtractionToFileService(deps: {
       }, {
         actor: context.actor,
         source: context.source,
-        metadata: { parentCapability: TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID },
+        metadata: {
+          parentCapability: TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,
+          ...(context.clientId ? { clientId: context.clientId } : {}),
+          ...(context.controllerInstanceId ? { controllerInstanceId: context.controllerInstanceId } : {}),
+        },
       })
 
       return {

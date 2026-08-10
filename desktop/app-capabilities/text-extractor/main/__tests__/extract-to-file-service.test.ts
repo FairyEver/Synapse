@@ -37,6 +37,8 @@ describe("TextExtractionToFileService", () => {
     const context = {
       source: "mcp-http" as const,
       actor: { kind: "user" as const, id: "mcp-client:test" },
+      clientId: "mcp-install:test",
+      controllerInstanceId: "controller:test",
     }
 
     const result = await service.extractToFile({
@@ -54,7 +56,11 @@ describe("TextExtractionToFileService", () => {
     }, {
       actor: context.actor,
       source: context.source,
-      metadata: { parentCapability: "app.text_extractor.document.extract_to_file" },
+      metadata: {
+        parentCapability: "app.text_extractor.document.extract_to_file",
+        clientId: "mcp-install:test",
+        controllerInstanceId: "controller:test",
+      },
     })
     expect(result).toEqual({
       source: {
