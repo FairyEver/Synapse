@@ -103,7 +103,13 @@ function DriveMarkdownBody({
     capability: collaboration,
     onEpochReloadRequired: editContext?.reload,
   })
-  const effectiveRenderedHtml = liveCollaboration.state?.preview?.html ?? renderedHtml
+  const effectiveRenderedHtml = useMemo(
+    () => restoreDriveMarkdownRelativeImageSources(
+      liveCollaboration.state?.preview?.html ?? renderedHtml,
+      preview.relativeImages ?? [],
+    ),
+    [liveCollaboration.state?.preview?.html, preview.relativeImages, renderedHtml]
+  )
   const outline = liveCollaboration.state?.preview?.outline ?? preview.outline ?? []
   const projection = liveCollaboration.state?.preview?.projection ?? preview.markdownProjection
   const collaborationTextMatchesProjection = Boolean(liveCollaboration.session) && (
@@ -993,6 +999,38 @@ function driveMarkdownAnnotationStateKey(
     return `${currentId}\0${currentVersionId ?? ''}\0owner\0${annotationContext.itemId ?? ''}`
   }
   return `${currentId}\0${currentVersionId ?? ''}\0share\0${annotationContext.shareId}\0${annotationContext.itemId ?? ''}`
+}
+
+function restoreDriveMarkdownRelativeImageSources(
+  html: string,
+  relativeImages: readonly { readonly src: string; readonly resolvedUrl: string | null }[],
+): string {
+  const template = document.createElement('template')
+  template.innerHTML = html
+  const resolvedUrls = new Map(relativeImages.map((image) => [relativeImageSourceKey(image.src), image.resolvedUrl]))
+  for (const image of template.content.querySelectorAll<HTMLImageElement>('img[data-drive-markdown-relative-src]')) {
+    const source = image.getAttribute('data-drive-markdown-relative-src') ?? ''
+    const resolvedUrl = resolvedUrls.get(relativeImageSourceKey(source))
+    if (resolvedUrl) image.setAttribute('src', resolvedUrl)
+    else image.removeAttribute('src')
+  }
+  return template.innerHTML
+}
+
+function relativeImageSourceKey(source: string): string {
+  const trimmed = source.trim()
+  const queryIndex = trimmed.indexOf('?')
+  const fragmentIndex = trimmed.indexOf('#')
+  const suffixStart = queryIndex < 0
+    ? fragmentIndex
+    : fragmentIndex < 0 ? queryIndex : Math.min(queryIndex, fragmentIndex)
+  const path = suffixStart < 0 ? trimmed : trimmed.slice(0, suffixStart)
+  const suffix = suffixStart < 0 ? '' : trimmed.slice(suffixStart)
+  try {
+    return JSON.stringify([path.split('/').map((segment) => decodeURIComponent(segment).normalize('NFC')), suffix])
+  } catch {
+    return trimmed
+  }
 }
 
 function getSelectionRect(range: Range): DOMRect | null {

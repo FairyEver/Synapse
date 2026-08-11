@@ -315,12 +315,12 @@ type DriveDocumentImageSourcesDto = {
 
 - 仅 `.md`、`.markdown` 启用；`.mdx` 和其它文件类型保持原行为。
 - 路径从 Markdown 的 `DriveItem.parentId` 开始，按现有父子目录树解析 `.`、`..` 和普通文件名；不得越过所有者 Drive 顶层。
-- 支持 Markdown inline image、reference image，以及独立且 `src` 带引号的静态 `<img>`。
+- 支持 Markdown inline image、reference image，以及独立且 `src` 带引号的静态 `<img>`；inline image 兼容安全栅格相对路径中的未转义空格，但不扩展普通链接或其它非标准 Markdown 语法。
 - 仅解析 PNG、JPEG、WebP、GIF、AVIF、ICO；SVG、HTML 和未知格式不产生读取 URL。
 - owner 预览生成 `/drive/items/<imageItemId>/download`；share 预览生成 `/share/<shareId>/items/<imageItemId>/download`。
 - 文件夹分享只允许共享根子树内的图片。单文件 Markdown 分享只允许当前版本实际引用且成功解析的图片，不开放兄弟文件浏览或通用下载权限。
 - 密码、过期、停用、入口删除和生命周期检查继续复用 DriveShare 读取校验；未引用、越界、缺失和不支持目标统一按未找到处理。
-- Dashboard Markdown 预览使用服务端转换后的 HTML；MDXEditor 通过 `imagePreviewHandler` 使用响应中的 `relativeImages` 映射，编辑和保存内容仍保留原始相对路径。
+- Dashboard Markdown 预览使用服务端转换后的 HTML；实时协作 HTML 通过同一响应中的权限化 `relativeImages` 映射恢复图片地址；MDXEditor 通过 `imagePreviewHandler` 使用该映射，编辑和保存内容仍保留原始相对路径。
 - query 和 fragment 不参与 Drive 查找，解析成功后原样附加到生成 URL；以 `/` 开头的路径不支持。
 - 解析结果只做进程内派生缓存，以分享 ID、当前版本 ID 和所有者最新 DriveChange sequence 失效，不新增数据库表或存储副本。
 - 该能力不得扩展到 `.html`、`.htm` 或普通文件夹分享中的 HTML。独立 HTML 只保持单文件分享语义；需要相对 CSS、JavaScript、图片或页面跳转时，用户必须明确从文件夹创建“网页分享”。

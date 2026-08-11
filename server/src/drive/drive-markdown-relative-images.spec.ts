@@ -39,6 +39,25 @@ describe("drive markdown relative images", () => {
     ])
   })
 
+  it("accepts unescaped spaces only for safe inline relative image paths", () => {
+    const markdown = [
+      "![space](image 1.png)",
+      "before ![nested](./images/team photo.webp) after",
+      "[ordinary link](file name.md)",
+      "![external](https://example.com/image 1.png)",
+      "![document](notes 1.md)",
+      "`![inline code](code image.png)`",
+      "```md",
+      "![code block](block image.png)",
+      "```",
+    ].join("\n")
+
+    expect(extractDriveMarkdownRelativeImages(markdown)).toEqual([
+      { src: "image 1.png", segments: ["image 1.png"], suffix: "" },
+      { src: "./images/team photo.webp", segments: [".", "images", "team photo.webp"], suffix: "" },
+    ])
+  })
+
   it("decodes path segments once, normalizes Unicode and preserves query and fragment", () => {
     expect(parseDriveMarkdownRelativeImageSrc("image/%E4%B8%AD%E6%96%87.png?version=1#preview")).toEqual({
       src: "image/%E4%B8%AD%E6%96%87.png?version=1#preview",

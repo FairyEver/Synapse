@@ -59,7 +59,8 @@ describe("drive markdown renderer", () => {
     ].join("\n"))
 
     const html = result.html
-    expect(html).not.toContain("./diagram.png")
+    expect(html).not.toMatch(/<img[^>]*\ssrc="\.\/diagram\.png"/u)
+    expect(html).toContain('data-drive-markdown-relative-src="./diagram.png"')
     expect(html).not.toContain("../guide.md")
     expect(html).toMatch(/<a[^>]*href="https:\/\/example\.com\/guide"[^>]*>external<\/a>/u)
   })
@@ -92,6 +93,7 @@ describe("drive markdown renderer", () => {
     expect(result.html).toMatch(/<img[^>]*alt="missing"[^>]*>/u)
     expect(result.html).toMatch(/<img[^>]*src="\/share\/share_1\/items\/image_2\/download"[^>]*alt="reference"[^>]*title="Reference"[^>]*>/u)
     expect(result.html).toContain('src="/share/share_1/items/image_3/download"')
+    expect(result.html).toContain('data-drive-markdown-relative-src="images/raw.png"')
     expect(result.html).toContain('alt="Raw"')
     expect(result.html).toContain('width="320"')
     expect(result.html).toContain('height="180"')
@@ -116,6 +118,19 @@ describe("drive markdown renderer", () => {
 
     expect(result.html).toContain('src="/share/share_1/items/unicode/download"')
     expect(result.html).toContain('src="/share/share_1/items/space/download"')
+  })
+
+  it("renders a safe inline relative image whose path contains unescaped spaces", async () => {
+    const result = await renderDriveMarkdownFragment("before ![space](./images/team photo.png) after", {
+      relativeImageUrls: new Map([
+        ["./images/team photo.png", "/drive/items/image-space/download"],
+      ]),
+    })
+
+    expect(result.html).toContain('src="/drive/items/image-space/download"')
+    expect(result.html).toContain('data-drive-markdown-relative-src="./images/team%20photo.png"')
+    expect(result.html).toContain('alt="space"')
+    expect(result.renderedText).toBe("before space after")
   })
 
   it("extracts a nested heading outline and injects stable heading ids", async () => {

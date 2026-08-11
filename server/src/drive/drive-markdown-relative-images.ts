@@ -19,11 +19,25 @@ export type DriveMarkdownRawImage = {
 }
 
 type MarkdownAstNode = {
-  readonly type?: string
-  readonly url?: unknown
-  readonly identifier?: unknown
-  readonly value?: unknown
-  readonly children?: readonly MarkdownAstNode[]
+  type?: string
+  url?: unknown
+  alt?: unknown
+  title?: unknown
+  identifier?: unknown
+  value?: unknown
+  children?: MarkdownAstNode[]
+  position?: MarkdownAstPosition
+}
+
+type MarkdownAstPoint = {
+  line?: number
+  column?: number
+  offset?: number
+}
+
+type MarkdownAstPosition = {
+  start: MarkdownAstPoint
+  end: MarkdownAstPoint
 }
 
 const URI_SCHEME_PATTERN = /^[a-z][a-z\d+.-]*:/iu
@@ -32,12 +46,14 @@ const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u
 const STANDALONE_IMG_PATTERN = /^\s*<img\b((?:[^"'<>]|"[^"]*"|'[^']*')*)\/?>\s*$/iu
 const QUOTED_ATTRIBUTE_PATTERN = /\b([a-z][a-z\d:-]*)\s*=\s*(["'])(.*?)\2/giu
 const SAFE_RASTER_EXTENSION_PATTERN = /\.(?:png|jpe?g|webp|gif|avif|ico)$/iu
+const LOOSE_INLINE_IMAGE_PATTERN = /!\[([^\]\r\n]*)\]\(([^()\r\n]* [^()\r\n]*)\)/gu
 
 export function extractDriveMarkdownRelativeImages(
   markdown: string,
   limit = DRIVE_MARKDOWN_RELATIVE_IMAGE_LIMIT,
 ): DriveMarkdownRelativeImageReference[] {
   const tree = unified().use(remarkParse).parse(markdown) as MarkdownAstNode
+  normalizeDriveMarkdownLooseImageNodes(tree)
   const definitions = collectImageDefinitions(tree)
   const references = new Map<string, DriveMarkdownRelativeImageReference>()
 
@@ -50,6 +66,10 @@ export function extractDriveMarkdownRelativeImages(
   })
 
   return [...references.values()]
+}
+
+export function normalizeDriveMarkdownLooseImageNodes(tree: MarkdownAstNode): void {
+  normalizeLooseImageChildren(tree)
 }
 
 export function parseDriveMarkdownRelativeImageSrc(src: string): DriveMarkdownRelativeImageReference | null {
@@ -131,6 +151,88 @@ function imageNodeSource(node: MarkdownAstNode, definitions: ReadonlyMap<string,
 
 function normalizeReferenceIdentifier(value: string): string {
   return value.trim().replace(/\s+/gu, " ").toLowerCase()
+}
+
+function normalizeLooseImageChildren(node: MarkdownAstNode): void {
+  if (node.type === "code" || node.type === "inlineCode") return
+  const children = node.children
+  if (!children) return
+
+  node.children = children.flatMap((child) => {
+    if (child.type !== "text" || typeof child.value !== "string") {
+      normalizeLooseImageChildren(child)
+      return [child]
+    }
+    return splitLooseInlineImages(child)
+  })
+}
+
+function splitLooseInlineImages(node: MarkdownAstNode): MarkdownAstNode[] {
+  const value = typeof node.value === "string" ? node.value : ""
+  const result: MarkdownAstNode[] = []
+  let cursor = 0
+  LOOSE_INLINE_IMAGE_PATTERN.lastIndex = 0
+
+  for (const match of value.matchAll(LOOSE_INLINE_IMAGE_PATTERN)) {
+    const start = match.index
+    const source = match[2]
+    const parsed = parseDriveMarkdownRelativeImageSrc(source)
+    const fileName = parsed?.segments.at(-1)
+    if (
+      source !== source.trim()
+      || source.includes("<")
+      || source.includes(">")
+      || source.includes('"')
+      || source.includes("'")
+      || !parsed
+      || !fileName
+      || !isSafeDriveMarkdownRasterName(fileName)
+    ) {
+      continue
+    }
+    if (start > cursor) result.push(textNodeSlice(node, value, cursor, start))
+    const end = start + match[0].length
+    result.push({
+      type: "image",
+      url: source,
+      alt: match[1],
+      title: null,
+      position: slicePosition(node.position, value, start, end),
+    })
+    cursor = end
+  }
+
+  if (cursor === 0) return [node]
+  if (cursor < value.length) result.push(textNodeSlice(node, value, cursor, value.length))
+  return result
+}
+
+function textNodeSlice(node: MarkdownAstNode, value: string, start: number, end: number): MarkdownAstNode {
+  return {
+    type: "text",
+    value: value.slice(start, end),
+    position: slicePosition(node.position, value, start, end),
+  }
+}
+
+function slicePosition(position: MarkdownAstPosition | undefined, value: string, start: number, end: number): MarkdownAstPosition | undefined {
+  if (!position) return undefined
+  return {
+    start: offsetPoint(position.start, value, start),
+    end: offsetPoint(position.start, value, end),
+  }
+}
+
+function offsetPoint(point: MarkdownAstPoint, value: string, offset: number): MarkdownAstPoint {
+  const lines = value.slice(0, offset).split(/\r\n|\r|\n/u)
+  const lineOffset = lines.length - 1
+  return {
+    ...(point.line === undefined ? {} : { line: point.line + lineOffset }),
+    ...(point.column === undefined ? {} : {
+      column: lineOffset === 0 ? point.column + offset : (lines.at(-1)?.length ?? 0) + 1,
+    }),
+    ...(point.offset === undefined ? {} : { offset: point.offset + offset }),
+  }
 }
 
 function firstSuffixIndex(value: string): number {

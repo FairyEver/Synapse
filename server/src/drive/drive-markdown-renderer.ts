@@ -6,6 +6,7 @@ import {
   type MarkdownProjectionNode,
 } from "./drive-markdown-projection"
 import {
+  normalizeDriveMarkdownLooseImageNodes,
   parseDriveMarkdownRelativeImageSrc,
   parseStandaloneDriveMarkdownRawImage,
 } from "./drive-markdown-relative-images"
@@ -110,7 +111,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
           "data-drive-markdown-block-id",
           "data-drive-markdown-segment-id",
         ],
-        img: [...(defaultSchema.attributes?.img ?? []), "alt", "title", "width", "height", "loading"],
+        img: [...(defaultSchema.attributes?.img ?? []), "alt", "title", "width", "height", "loading", "data-drive-markdown-relative-src"],
       },
       protocols: {
         ...defaultSchema.protocols,
@@ -120,6 +121,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
     .use(wrapTablesPlugin)
     .use(rehypeStringify)
   const tree = processor.parse(markdown) as MarkdownAstNode & MarkdownProjectionNode
+  normalizeDriveMarkdownLooseImageNodes(tree)
   const renderedText = extractDriveMarkdownRenderedText(tree)
   const projection = options.projection ?? buildDriveMarkdownProjection(markdown, tree, { previous: options.previousProjection })
   annotateMarkdownProjectionTree(tree, projection, markdown)
@@ -318,6 +320,7 @@ function resolveRelativeImageProperty(
   const trimmed = value.trim()
   if (trimmed.startsWith("/files/")) return
   if (!isRelativeMarkdownUrl(trimmed)) return
+  properties["data-drive-markdown-relative-src"] = trimmed
   const resolved = relativeImageUrls.get(relativeImageLookupKey(trimmed))
   if (resolved) properties.src = resolved
   else delete properties.src

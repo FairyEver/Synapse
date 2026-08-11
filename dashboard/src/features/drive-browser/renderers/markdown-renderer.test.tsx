@@ -16,6 +16,28 @@ vi.mock('../use-drive-annotations', () => ({
   useDriveAnnotations: () => annotationsMock,
 }));
 
+let collaborationPreviewHtml: string | null = null
+
+vi.mock('../collaboration/use-drive-collaboration', () => ({
+  useDriveCollaboration: () => collaborationPreviewHtml
+    ? {
+        session: null,
+        state: {
+          epoch: 'epoch-1',
+          checkpointVersionId: 'version-1',
+          annotationRevision: 0,
+          preview: {
+            epoch: 'epoch-1',
+            stateVector: 'state-1',
+            html: collaborationPreviewHtml,
+            outline: [],
+            projection: null,
+          },
+        },
+      }
+    : { session: null, state: null },
+}));
+
 vi.mock('@monaco-editor/react', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
 
@@ -72,6 +94,7 @@ beforeEach(() => {
   resizeObservers = []
   animationFrameCallbacks = []
   nextAnimationFrameId = 1
+  collaborationPreviewHtml = null
   Element.prototype.scrollIntoView = scrollIntoViewMock
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function () {
     return this.hasAttribute('data-markdown-comments-header') ? 40 : 0
@@ -114,6 +137,39 @@ afterEach(() => {
 })
 
 describe('DriveMarkdownRenderer', () => {
+  it('restores mapped relative image sources after collaboration replaces the preview html', () => {
+    collaborationPreviewHtml = '<p><img data-drive-markdown-relative-src="./images/team%20photo.png" alt="diagram"></p>'
+    renderMarkdown({
+      previewData: preview({
+        html: '<p><img src="/drive/items/image-1/download" alt="diagram"></p>',
+        relativeImages: [{ src: './images/team photo.png', resolvedUrl: '/drive/items/image-1/download' }],
+      }),
+    })
+
+    expect(document.querySelector('img')?.getAttribute('src')).toBe('/drive/items/image-1/download')
+  })
+
+  it('does not restore collaboration image sources without a server mapping', () => {
+    collaborationPreviewHtml = '<p><img data-drive-markdown-relative-src="./images/private.png" src="/drive/items/private/download" alt="private"></p>'
+    renderMarkdown({ previewData: preview() })
+
+    expect(document.querySelector('img')?.hasAttribute('src')).toBe(false)
+  })
+
+  it('restores the share-scoped image url without converting it to an owner url', () => {
+    collaborationPreviewHtml = '<p><img data-drive-markdown-relative-src="../assets/diagram.png" alt="diagram"></p>'
+    renderMarkdown({
+      previewData: preview({
+        relativeImages: [{
+          src: '../assets/diagram.png',
+          resolvedUrl: '/share/share-1/items/image-1/download',
+        }],
+      }),
+    })
+
+    expect(document.querySelector('img')?.getAttribute('src')).toBe('/share/share-1/items/image-1/download')
+  })
+
   it('switches from the empty code fallback to rendered markdown without changing hook order', () => {
     const { rerender } = renderMarkdown({ previewData: preview({ html: '', text: '' }) })
 
@@ -1331,10 +1387,12 @@ function preview({
   outline = [],
   html = '<p>这是 <strong>重点</strong> 内容</p>',
   text = '这是 重点 内容',
+  relativeImages = [],
 }: {
   readonly outline?: DriveMarkdownOutlineItemDto[]
   readonly html?: string
   readonly text?: string
+  readonly relativeImages?: readonly { readonly src: string; readonly resolvedUrl: string | null }[]
 } = {}) {
   return {
     kind: 'markdown' as const,
@@ -1344,7 +1402,7 @@ function preview({
     truncated: false,
     imageUrl: null,
     visitUrl: null,
-    relativeImages: [],
+    relativeImages,
   }
 }
 

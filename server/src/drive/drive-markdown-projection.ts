@@ -8,7 +8,7 @@ import { diffArrays } from "diff"
 import type { DriveAnnotationTextPositionSelector } from "@synapse/shared"
 
 export const DRIVE_MARKDOWN_PROJECTION_SCHEMA_VERSION = 1
-export const DRIVE_MARKDOWN_PARSER_VERSION = "remark-15-gfm-4"
+export const DRIVE_MARKDOWN_PARSER_VERSION = "remark-15-gfm-4-space-image-1"
 
 type MarkdownPosition = {
   readonly start: { readonly offset?: number }
