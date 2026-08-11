@@ -120,6 +120,29 @@ describe("drive markdown renderer", () => {
     expect(result.html).toContain('src="/share/share_1/items/space/download"')
   })
 
+  it("renders every documented CommonMark relative image form", async () => {
+    const result = await renderDriveMarkdownFragment([
+      '![plain](./images/plain.png "Plain")',
+      "![angle](<./images/angle photo.png>)",
+      "![encoded](./images/encoded%20photo.webp)",
+      "![reference][diagram]",
+      "",
+      '[diagram]: <../assets/reference image.jpg> "Reference"',
+    ].join("\n"), {
+      relativeImageUrls: new Map([
+        ["./images/plain.png", "/drive/items/plain/download"],
+        ["./images/angle photo.png", "/drive/items/angle/download"],
+        ["./images/encoded%20photo.webp", "/drive/items/encoded/download"],
+        ["../assets/reference image.jpg", "/drive/items/reference/download"],
+      ]),
+    })
+
+    expect(result.html).toMatch(/<img[^>]*src="\/drive\/items\/plain\/download"[^>]*alt="plain"[^>]*title="Plain"[^>]*>/u)
+    expect(result.html).toMatch(/<img[^>]*src="\/drive\/items\/angle\/download"[^>]*alt="angle"[^>]*>/u)
+    expect(result.html).toMatch(/<img[^>]*src="\/drive\/items\/encoded\/download"[^>]*alt="encoded"[^>]*>/u)
+    expect(result.html).toMatch(/<img[^>]*src="\/drive\/items\/reference\/download"[^>]*alt="reference"[^>]*title="Reference"[^>]*>/u)
+  })
+
   it("renders a safe inline relative image whose path contains unescaped spaces", async () => {
     const result = await renderDriveMarkdownFragment("before ![space](./images/team photo.png) after", {
       relativeImageUrls: new Map([

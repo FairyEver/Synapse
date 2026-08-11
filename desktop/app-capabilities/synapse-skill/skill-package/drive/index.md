@@ -169,6 +169,15 @@ Choose one Drive destination before uploading and reuse it for every ordinary Dr
 5. Keep the Markdown, its referenced local images, standalone HTML files, explicitly included attachments, and HTML dependency source folders inside the selected Drive destination. A site URL or share URL is a public identity for an item in that destination, not a replacement storage location.
 6. For `.md` and `.markdown`, keep supported local image references unchanged and preserve the same relative layout between the Markdown and image files in Drive. Use `app_drive_direct_link_upload` only when the user explicitly asks for a public asset/direct link or asks to replace the Markdown references with public URLs.
 
+## Markdown Image Syntax
+
+When the Agent creates or rewrites a relative image reference, prefer these CommonMark-compatible forms, all of which Synapse resolves:
+
+- Use the standard inline form `![alt](images/diagram.png)` by default. An optional title may follow the destination, for example `![alt](images/diagram.png "Diagram")`.
+- When the destination contains whitespace, prefer the angle-bracket form `![alt](<images/team photo.png>)`; percent-encoding each space as `%20`, as in `![alt](images/team%20photo.png)`, is also supported.
+- Reference images are supported, for example `![alt][diagram]` with `[diagram]: <images/team photo.png> "Diagram"` on a separate line.
+- Never generate the ambiguous raw-space form `![alt](images/team photo.png)`. Synapse accepts this form only as compatibility input for safe raster images. Apply these writing rules only to links the Agent creates or changes; do not normalize unchanged user-authored Markdown solely for upload.
+
 ## Local Markdown Publishing Flow
 
 Use this flow when the user asks to upload or share a local Markdown document. Treat explicitly selected inputs and the Markdown's referenced local assets as one publishing transaction, and apply **Upload Destination Selection** before any remote write.

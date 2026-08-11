@@ -74,6 +74,57 @@ describe("AboutPanel", () => {
     expect(getUpdaterBridge().checkForUpdatesOnPageEnter).toHaveBeenCalledTimes(1)
   })
 
+  it("opens only the official DMG when manual recovery is required", async () => {
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+    const installerUrl = "https://desktop.release.synapse.d2.pub/v0.2.190/Synapse-0.2.190-mac-arm64.dmg"
+
+    await act(async () => {
+      emitUpdaterState(updateState({
+        error: "自动安装未完成，请下载安装包。",
+        installRecovery: {
+          manualInstallerUrl: installerUrl,
+          phase: "manual-required",
+          targetVersion: "0.2.190",
+        },
+        message: "自动安装未完成，请下载安装包。",
+        releaseVersion: "0.2.190",
+        status: "error",
+      }))
+      await Promise.resolve()
+    })
+    await act(async () => {
+      getButtonWithText("下载安装包").click()
+      await Promise.resolve()
+    })
+
+    expect(getShellBridge().openExternal).toHaveBeenCalledWith(installerUrl)
+    expect(getUpdaterBridge().checkForUpdates).not.toHaveBeenCalled()
+  })
+
+  it("rejects an official-host DMG for a different target version", async () => {
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    await act(async () => {
+      emitUpdaterState(updateState({
+        installRecovery: {
+          manualInstallerUrl: "https://desktop.release.synapse.d2.pub/v0.2.191/Synapse-0.2.191-mac-arm64.dmg",
+          phase: "manual-required",
+          targetVersion: "0.2.190",
+        },
+        releaseVersion: "0.2.190",
+        status: "error",
+      }))
+      await Promise.resolve()
+    })
+    await act(async () => {
+      getButtonWithText("下载安装包").click()
+      await Promise.resolve()
+    })
+
+    expect(getShellBridge().openExternal).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("安装包地址不可用，请稍后重试。")
+  })
+
   it("acknowledges a manual update-open request after the panel takes over navigation", async () => {
     const updater = getUpdaterBridge()
     vi.mocked(updater.getPendingOpenRequest).mockResolvedValue({ id: 7, automatic: false })
@@ -1122,8 +1173,13 @@ function installUpdaterBridge(): void {
     onStateChanged: vi.fn(() => () => {}),
   }
 
-  ;(window as unknown as { synapse?: { updater: typeof updater; cheatCodes: typeof cheatCodes } }).synapse = {
+  const shell = {
+    openExternal: vi.fn().mockResolvedValue(undefined),
+  }
+
+  ;(window as unknown as { synapse?: { updater: typeof updater; cheatCodes: typeof cheatCodes; shell: typeof shell } }).synapse = {
     cheatCodes,
+    shell,
     updater,
   }
 }
@@ -1141,8 +1197,17 @@ function updateState(overrides: Partial<SynapseAppUpdateState>): SynapseAppUpdat
     status: "idle",
     totalBytes: null,
     transferredBytes: null,
+    installRecovery: null,
     ...overrides,
   }
+}
+
+function getShellBridge() {
+  const bridge = (window as unknown as {
+    synapse?: { shell?: { openExternal: ReturnType<typeof vi.fn> } }
+  }).synapse?.shell
+  if (!bridge) throw new Error("Shell bridge not installed")
+  return bridge
 }
 
 function emitUpdaterState(state: SynapseAppUpdateState): void {

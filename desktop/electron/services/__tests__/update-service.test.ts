@@ -20,7 +20,10 @@ const updaterMock = vi.hoisted(() => {
       this.emit("checking-for-update")
       this.emit("update-available", {
         version: "0.2.32",
-        files: [{ url: "Synapse-0.2.32-mac-arm64.zip" }],
+        files: [
+          { url: "v0.2.32/Synapse-0.2.32-mac-arm64.zip" },
+          { url: "v0.2.32/Synapse-0.2.32-mac-arm64.dmg" },
+        ],
       })
       return {
         isUpdateAvailable: true,
@@ -34,6 +37,19 @@ const updaterMock = vi.hoisted(() => {
       const listeners = this.listeners.get(eventName) ?? new Set()
       listeners.add(listener)
       this.listeners.set(eventName, listeners)
+      return this
+    }
+
+    once(eventName: string, listener: (...args: unknown[]) => void): this {
+      const wrapped = (...args: unknown[]) => {
+        this.removeListener(eventName, wrapped)
+        listener(...args)
+      }
+      return this.on(eventName, wrapped)
+    }
+
+    removeListener(eventName: string, listener: (...args: unknown[]) => void): this {
+      this.listeners.get(eventName)?.delete(listener)
       return this
     }
 
@@ -59,6 +75,7 @@ const updaterMock = vi.hoisted(() => {
   return {
     appEmit: vi.fn(),
     autoUpdater: new MockAutoUpdater(),
+    nativeAutoUpdater: new MockAutoUpdater(),
     MockCancellationToken,
     notificationInstances: [] as Array<{
       readonly click: () => void
@@ -86,6 +103,7 @@ vi.mock("electron", () => ({
     isPackaged: true,
     emit: updaterMock.appEmit,
   },
+  autoUpdater: updaterMock.nativeAutoUpdater,
   Notification: class {
     private readonly listeners = new Map<string, () => void>()
     readonly show = vi.fn()
@@ -148,6 +166,7 @@ describe("UpdateService", () => {
   beforeEach(() => {
     vi.resetModules()
     updaterMock.autoUpdater.removeAllListeners()
+    updaterMock.nativeAutoUpdater.removeAllListeners()
     updaterMock.autoUpdater.downloadUpdate.mockClear()
     updaterMock.autoUpdater.checkForUpdates.mockClear()
     updaterMock.autoUpdater.quitAndInstall.mockClear()
@@ -615,7 +634,15 @@ describe("UpdateService", () => {
 
   it("prepares app quit before installing a downloaded update", async () => {
     const { updateService } = await importUpdateService()
-    const beforeInstallQuit = vi.fn()
+    const canQuit = vi.fn(() => true)
+    const allowQuit = vi.fn()
+    const installRecovery = {
+      markManualRequired: vi.fn(async () => ({ kind: "none" as const })),
+      reconcile: vi.fn(async () => ({ kind: "none" as const })),
+      recordInstallAttempt: vi.fn(async () => ({ schemaVersion: 1 as const, pendingAttempt: null })),
+      restoreState: vi.fn(async () => undefined),
+      updatePreparedTarget: vi.fn(async () => undefined),
+    }
 
     await updateService.checkForUpdates()
     updateService.downloadUpdate()
@@ -624,11 +651,24 @@ describe("UpdateService", () => {
       downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",
     })
 
-    updateService.setBeforeInstallQuitHandler(beforeInstallQuit)
-    await updateService.installUpdate()
+    updateService.setInstallQuitHandlers({ allowQuit, canQuit })
+    updateService.setInstallRecoveryService(installRecovery)
+    const installing = updateService.installUpdate()
 
-    expect(beforeInstallQuit).toHaveBeenCalledTimes(1)
-    expect(updaterMock.autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1)
+    expect(canQuit).toHaveBeenCalledTimes(1)
+    expect(allowQuit).not.toHaveBeenCalled()
+    expect(installRecovery.recordInstallAttempt).toHaveBeenCalledWith(
+      "0.2.32",
+      "https://desktop.release.synapse.d2.pub/v0.2.32/Synapse-0.2.32-mac-arm64.dmg",
+    )
+    await vi.waitFor(() => {
+      expect(updaterMock.autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true)
+    })
+
+    updaterMock.nativeAutoUpdater.emit("before-quit-for-update")
+    await installing
+
+    expect(allowQuit).toHaveBeenCalledTimes(1)
   })
 
   it("does not install a downloaded update when app quit is blocked", async () => {
@@ -642,10 +682,76 @@ describe("UpdateService", () => {
       downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",
     })
 
-    updateService.setBeforeInstallQuitHandler(beforeInstallQuit)
+    updateService.setInstallQuitHandlers({
+      allowQuit: vi.fn(),
+      canQuit: beforeInstallQuit,
+    })
     await expect(updateService.installUpdate()).rejects.toThrow("当前无法安全退出应用，请稍后再安装更新。")
 
     expect(beforeInstallQuit).toHaveBeenCalledTimes(1)
     expect(updaterMock.autoUpdater.quitAndInstall).not.toHaveBeenCalled()
+  })
+
+  it("rolls back the persisted install attempt when native macOS handoff times out", async () => {
+    vi.useFakeTimers()
+    const { updateService } = await importUpdateService()
+    const previousState = { schemaVersion: 1 as const, pendingAttempt: null }
+    const installRecovery = {
+      markManualRequired: vi.fn(async () => ({ kind: "none" as const })),
+      reconcile: vi.fn(async () => ({ kind: "none" as const })),
+      recordInstallAttempt: vi.fn(async () => previousState),
+      restoreState: vi.fn(async () => undefined),
+      updatePreparedTarget: vi.fn(async () => undefined),
+    }
+
+    await updateService.checkForUpdates()
+    updateService.downloadUpdate()
+    updaterMock.autoUpdater.emit("update-downloaded", {
+      version: "0.2.32",
+      downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",
+    })
+    updateService.setInstallQuitHandlers({ allowQuit: vi.fn(), canQuit: () => true })
+    updateService.setInstallRecoveryService(installRecovery)
+
+    const installing = updateService.installUpdate()
+    const rejection = expect(installing).rejects.toThrow("无法启动更新安装程序，请重新打开 Synapse 后重试。")
+    await vi.advanceTimersByTimeAsync(120_000)
+    await rejection
+
+    expect(installRecovery.restoreState).toHaveBeenCalledWith(previousState)
+    expect(updateService.getState()).toEqual(expect.objectContaining({
+      error: "无法启动更新安装程序，请重新打开 Synapse 后重试。",
+      status: "downloaded",
+    }))
+  })
+
+  it("repairs and redownloads once without automatically installing", async () => {
+    const { updateService } = await importUpdateService()
+    const installRecovery = {
+      markManualRequired: vi.fn(),
+      reconcile: vi.fn(async () => ({
+        kind: "recover" as const,
+        manualInstallerUrl: "https://desktop.release.synapse.d2.pub/v0.2.32/Synapse-0.2.32-mac-arm64.dmg",
+        targetVersion: "0.2.32",
+      })),
+      recordInstallAttempt: vi.fn(async () => ({ schemaVersion: 1 as const, pendingAttempt: null })),
+      restoreState: vi.fn(async () => undefined),
+      updatePreparedTarget: vi.fn(async () => undefined),
+    }
+    updateService.setInstallRecoveryService(installRecovery)
+
+    await updateService.initializeInstallRecovery()
+
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
+    expect(updaterMock.autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
+    expect(updaterMock.autoUpdater.quitAndInstall).not.toHaveBeenCalled()
+    updaterMock.autoUpdater.emit("update-downloaded", {
+      version: "0.2.32",
+      downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",
+    })
+    expect(updateService.getState()).toEqual(expect.objectContaining({
+      installRecovery: expect.objectContaining({ phase: "retry-ready" }),
+      status: "downloaded",
+    }))
   })
 })

@@ -14,13 +14,16 @@ const electronMock = vi.hoisted(() => {
 
 const updateServiceMock = vi.hoisted(() => {
   const mock = {
-    beforeInstallQuitHandler: null as (() => boolean | void) | null,
+    installQuitHandlers: null as {
+      allowQuit: () => void
+      canQuit: () => boolean | void
+    } | null,
     cancelDownload: vi.fn(async () => {}),
-    setBeforeInstallQuitHandler: vi.fn(),
+    setInstallQuitHandlers: vi.fn(),
   }
 
-  mock.setBeforeInstallQuitHandler.mockImplementation((handler: (() => boolean | void) | null) => {
-    mock.beforeInstallQuitHandler = handler
+  mock.setInstallQuitHandlers.mockImplementation((handlers: typeof mock.installQuitHandlers) => {
+    mock.installQuitHandlers = handlers
   })
 
   return mock
@@ -59,7 +62,7 @@ vi.mock("../../services/update-service", () => ({
 
 describe("attachBeforeQuitHandler", () => {
   beforeEach(() => {
-    updateServiceMock.beforeInstallQuitHandler = null
+    updateServiceMock.installQuitHandlers = null
     vi.clearAllMocks()
     vi.useRealTimers()
   })
@@ -78,7 +81,12 @@ describe("attachBeforeQuitHandler", () => {
       isAllowedToQuit: () => allowQuit,
     })
 
-    updateServiceMock.beforeInstallQuitHandler?.()
+    const canQuit = updateServiceMock.installQuitHandlers?.canQuit()
+
+    expect(canQuit).toBe(true)
+    expect(allowQuit).toBe(false)
+
+    updateServiceMock.installQuitHandlers?.allowQuit()
 
     expect(allowQuit).toBe(true)
     expect(stopAll).not.toHaveBeenCalled()
@@ -103,7 +111,7 @@ describe("attachBeforeQuitHandler", () => {
       isAllowedToQuit: () => allowQuit,
     })
 
-    const canQuit = updateServiceMock.beforeInstallQuitHandler?.()
+    const canQuit = updateServiceMock.installQuitHandlers?.canQuit()
 
     expect(canQuit).toBe(false)
     expect(allowQuit).toBe(false)
@@ -129,10 +137,10 @@ describe("attachBeforeQuitHandler", () => {
       isAllowedToQuit: () => allowQuit,
     })
 
-    const canQuit = updateServiceMock.beforeInstallQuitHandler?.()
+    const canQuit = updateServiceMock.installQuitHandlers?.canQuit()
 
     expect(canQuit).toBe(true)
-    expect(allowQuit).toBe(true)
+    expect(allowQuit).toBe(false)
     expect(storageMigration.focusDialog).not.toHaveBeenCalled()
   })
 

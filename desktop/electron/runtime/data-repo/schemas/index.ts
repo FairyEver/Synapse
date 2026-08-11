@@ -92,6 +92,12 @@ export {
   type SystemNotifierSettingsEntryV1,
 } from "./system-notifier"
 export {
+  updateInstallRecoverySchema,
+  type PendingUpdateInstallAttemptV1,
+  type UpdateInstallRecoveryEntryV1,
+  type UpdateInstallRecoveryPhase,
+} from "./update-install-recovery"
+export {
   terminalBlocksSchema,
   terminalCommandBodiesSchema,
   terminalCommandsSchema,
@@ -196,6 +202,7 @@ import { agentPersonaItemsSchema, agentPersonaSettingsSchema } from "./agent-per
 import { agentPersonaRemoteCacheSchema } from "./agent-persona-remote-cache"
 import { soundNotifierSettingsSchemaDefinition } from "./sound-notifier"
 import { systemNotifierSettingsSchemaDefinition } from "./system-notifier"
+import { updateInstallRecoverySchema } from "./update-install-recovery"
 import {
   terminalBlocksSchema,
   terminalCommandBodiesSchema,
@@ -260,6 +267,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   agentPersonaRemoteCacheSchema,
   soundNotifierSettingsSchemaDefinition,
   systemNotifierSettingsSchemaDefinition,
+  updateInstallRecoverySchema,
   terminalGlobalLaunchSchema,
   terminalGlobalLaunchBodiesSchema,
   terminalGroupsSchema,

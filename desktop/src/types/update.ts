@@ -20,6 +20,11 @@ export type SynapseAppUpdateState = {
   totalBytes: number | null
   lastCheckedAt: string | null
   canCheck: boolean
+  installRecovery: {
+    phase: "repairing" | "retry-ready" | "manual-required"
+    targetVersion: string
+    manualInstallerUrl: string | null
+  } | null
 }
 
 export type SynapseAppUpdateOpenRequest = {

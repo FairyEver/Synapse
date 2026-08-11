@@ -5,6 +5,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
+import { getSynapseBridge } from "@/lib/electron-bridge"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import {
   SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES,
@@ -114,11 +115,14 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   const isAvailable = updateState.status === "available"
   const isDownloading = updateState.status === "downloading"
   const isDownloaded = updateState.status === "downloaded"
+  const isManualInstallRequired = updateState.installRecovery?.phase === "manual-required"
   const actionLabel = isRestarting
     ? "安装中..."
     : installCountdown !== null
       ? `${installCountdown} 秒后安装`
-      : isDownloaded
+      : isManualInstallRequired
+        ? "下载安装包"
+        : isDownloaded
         ? "立即安装"
         : isAvailable
           ? "下载并安装"
@@ -127,7 +131,8 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
             : "检查更新"
   const actionDisabled = isRestarting
     || installCountdown !== null
-    || (!isAvailable && !isDownloaded && (!updateState.canCheck || isChecking || isDownloading))
+    || (isManualInstallRequired && !updateState.installRecovery?.manualInstallerUrl)
+    || (!isManualInstallRequired && !isAvailable && !isDownloaded && (!updateState.canCheck || isChecking || isDownloading))
   const statusClassName = updateState.status === "error" || updateState.error || actionError
     ? "text-sm text-destructive"
     : "text-sm text-muted-foreground"
@@ -256,6 +261,16 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     logger.info("App update action triggered.", { currentStatus: updateState.status })
 
     try {
+      if (isManualInstallRequired) {
+        const installerUrl = updateState.installRecovery?.manualInstallerUrl
+        const targetVersion = updateState.installRecovery?.targetVersion
+        if (!installerUrl || !targetVersion || !isOfficialMacInstallerUrl(installerUrl, targetVersion)) {
+          throw new Error("安装包地址不可用，请稍后重试。")
+        }
+        await getSynapseBridge()?.shell.openExternal(installerUrl)
+        return
+      }
+
       if (isDownloaded) {
         setAutomaticInstallArmed(false)
         clearInstallTimers()
@@ -409,7 +424,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
               </div>
             ) : (
               <Button
-                variant={isAvailable || isDownloaded ? "default" : "outline"}
+                variant={isAvailable || isDownloaded || isManualInstallRequired ? "default" : "outline"}
                 disabled={actionDisabled}
                 onClick={() => {
                   void handleAction()
@@ -439,3 +454,17 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
 }
 
 export { AboutPanel, type AboutPanelProps }
+
+function isOfficialMacInstallerUrl(value: string, targetVersion: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === "https:"
+      && url.host === "desktop.release.synapse.d2.pub"
+      && url.username === ""
+      && url.password === ""
+      && url.pathname.startsWith(`/v${encodeURIComponent(targetVersion)}/`)
+      && url.pathname.endsWith(".dmg")
+  } catch {
+    return false
+  }
+}

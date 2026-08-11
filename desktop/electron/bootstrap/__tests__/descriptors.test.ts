@@ -2225,6 +2225,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.window-manager",
       "core.permission-guard",
       "core.audit-sink",
+      "core.data-repository",
     ])
   })
 

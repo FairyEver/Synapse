@@ -20,6 +20,7 @@ const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
   totalBytes: null,
   lastCheckedAt: null,
   canCheck: false,
+  installRecovery: null,
 }
 
 function useAppUpdateController() {

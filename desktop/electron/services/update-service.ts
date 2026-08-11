@@ -1,4 +1,4 @@
-import { app, Notification } from "electron"
+import { app, autoUpdater as nativeAutoUpdater, Notification } from "electron"
 import { CancellationToken } from "electron-updater"
 import * as electronUpdater from "electron-updater"
 import { z } from "zod"
@@ -14,7 +14,16 @@ import type {
 } from "../../src/types/update"
 import type { WindowManager } from "../runtime/window"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
-import { DESKTOP_UPDATE_INTENT_VERIFY_TIMEOUT_MS } from "../../config"
+import type { UpdateInstallRecoveryEntryV1 } from "../runtime/data-repo"
+import type {
+  UpdateInstallRecoveryDecision,
+  UpdateInstallRecoveryService,
+} from "./update-install-recovery-service"
+import {
+  DESKTOP_UPDATE_INSTALL_HANDOFF_TIMEOUT_MS,
+  DESKTOP_UPDATE_INTENT_VERIFY_TIMEOUT_MS,
+  DESKTOP_UPDATE_RELEASE_BASE_URL,
+} from "../../config"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
 
 // Update event channels for broadcasting state changes
@@ -33,6 +42,7 @@ const AUTO_CHECK_INITIAL_DELAY_MS = 60_000
 const PAGE_ENTRY_CHECK_COOLDOWN_MS = 30_000
 const UPDATE_ERROR_MESSAGE = "检查更新失败，请稍后再试。"
 const UPDATE_DOWNLOAD_ERROR_MESSAGE = "下载更新失败，请重试。"
+const UPDATE_INSTALL_HANDOFF_TIMEOUT_MESSAGE = "无法启动更新安装程序，请重新打开 Synapse 后重试。"
 const updateIntentVerificationResponseSchema = z.object({
   authorized: z.literal(true),
 }).strict()
@@ -46,6 +56,20 @@ type UpdateIntentVerificationSecurity = {
   readonly auditSink: AuditSink
   readonly permissionGuard: PermissionGuard
 }
+
+type InstallQuitHandlers = {
+  readonly allowQuit: () => void
+  readonly canQuit: () => boolean | void
+}
+
+type InstallRecoveryController = Pick<
+  UpdateInstallRecoveryService,
+  | "markManualRequired"
+  | "reconcile"
+  | "recordInstallAttempt"
+  | "restoreState"
+  | "updatePreparedTarget"
+>
 
 function recordUpdateIntentVerificationAudit(
   auditSink: AuditSink,
@@ -101,6 +125,7 @@ function createBaseState(): SynapseAppUpdateState {
     totalBytes: null,
     lastCheckedAt: null,
     canCheck: isSupported,
+    installRecovery: null,
   }
 }
 
@@ -117,7 +142,7 @@ class UpdateService {
   private state: SynapseAppUpdateState = createBaseState()
   private downloadCancellationToken: CancellationToken | null = null
   private isCancellingDownload = false
-  private activeUpdateMode: "manual" | "auto" | null = null
+  private activeUpdateMode: "manual" | "auto" | "recovery" | null = null
   private activeUpdateFlowId: number | null = null
   private availableUpdateInfo: UpdateInfo | null = null
   private cancelledDownloadFlowId: number | null = null
@@ -127,7 +152,9 @@ class UpdateService {
   private lastNotifiedVersion: string | null = null
   private autoCheckTimer: ReturnType<typeof setInterval> | null = null
   private windowManager: WindowManager | null = null
-  private beforeInstallQuitHandler: (() => boolean | void) | null = null
+  private installQuitHandlers: InstallQuitHandlers | null = null
+  private installRecoveryService: InstallRecoveryController | null = null
+  private macInstallHandoffTimedOut = false
   private updateIntentVerificationSecurity: UpdateIntentVerificationSecurity | null = null
   private pendingOpenRequest: SynapseAppUpdateOpenRequest | null = null
   private nextOpenRequestId = 0
@@ -136,8 +163,12 @@ class UpdateService {
     this.windowManager = windowManager
   }
 
-  setBeforeInstallQuitHandler(handler: (() => boolean | void) | null): void {
-    this.beforeInstallQuitHandler = handler
+  setInstallQuitHandlers(handlers: InstallQuitHandlers | null): void {
+    this.installQuitHandlers = handlers
+  }
+
+  setInstallRecoveryService(service: InstallRecoveryController | null): void {
+    this.installRecoveryService = service
   }
 
   setUpdateIntentVerificationSecurity(security: UpdateIntentVerificationSecurity): void {
@@ -259,14 +290,14 @@ class UpdateService {
     }
   }
 
-  private beginUpdateFlow(mode: "manual" | "auto"): number {
+  private beginUpdateFlow(mode: "manual" | "auto" | "recovery"): number {
     this.activeUpdateMode = mode
     this.activeUpdateFlowId = this.nextUpdateFlowId + 1
     this.nextUpdateFlowId = this.activeUpdateFlowId
     return this.activeUpdateFlowId
   }
 
-  private clearUpdateFlow(mode?: "manual" | "auto", flowId?: number): void {
+  private clearUpdateFlow(mode?: "manual" | "auto" | "recovery", flowId?: number): void {
     if (
       (!mode || this.activeUpdateMode === mode)
       && (flowId === undefined || this.activeUpdateFlowId === flowId)
@@ -282,6 +313,11 @@ class UpdateService {
 
   private isAutoUpdateFlow(): boolean {
     return this.activeUpdateMode === "auto"
+  }
+
+  private isRecoveryUpdateFlow(flowId?: number): boolean {
+    return this.activeUpdateMode === "recovery"
+      && (flowId === undefined || this.activeUpdateFlowId === flowId)
   }
 
   private isDownloadCancelledError(error: unknown, flowId?: number): boolean {
@@ -333,6 +369,9 @@ class UpdateService {
     if (this.state.status !== "downloaded") {
       throw new Error("更新尚未准备好，请先完成下载。")
     }
+    if (process.platform === "darwin" && this.macInstallHandoffTimedOut) {
+      throw new Error("请重新打开 Synapse 后再安装更新。")
+    }
 
     logger.info("Installing downloaded update.", {
       version: this.state.releaseVersion,
@@ -340,7 +379,7 @@ class UpdateService {
 
     let canQuit: boolean
     try {
-      canQuit = this.beforeInstallQuitHandler?.() ?? true
+      canQuit = this.installQuitHandlers?.canQuit() ?? true
     } catch (error) {
       logger.error("Failed to prepare app quit for update install.", error)
       throw new Error("准备安装更新失败，请稍后重试。", { cause: error })
@@ -352,7 +391,91 @@ class UpdateService {
       throw new Error("当前无法安全退出应用，请稍后再安装更新。")
     }
 
-    autoUpdater.quitAndInstall()
+    const targetVersion = this.state.releaseVersion
+    if (!targetVersion) {
+      throw new Error("更新版本信息不可用，请重新检查更新。")
+    }
+
+    let previousRecoveryState: UpdateInstallRecoveryEntryV1 | null = null
+    if (process.platform === "darwin" && this.installRecoveryService) {
+      previousRecoveryState = await this.installRecoveryService.recordInstallAttempt(
+        targetVersion,
+        resolveManualInstallerUrl(this.availableUpdateInfo),
+      )
+    }
+
+    if (process.platform !== "darwin") {
+      this.installQuitHandlers?.allowQuit()
+      autoUpdater.quitAndInstall(false, true)
+      return
+    }
+
+    await this.handoffMacUpdate(previousRecoveryState)
+  }
+
+  private async handoffMacUpdate(
+    previousRecoveryState: UpdateInstallRecoveryEntryV1 | null,
+  ): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      let settled = false
+      const finish = (callback: () => void) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        nativeAutoUpdater.removeListener("before-quit-for-update", handleBeforeQuitForUpdate)
+        callback()
+      }
+      const handleBeforeQuitForUpdate = () => {
+        finish(() => {
+          try {
+            this.installQuitHandlers?.allowQuit()
+            resolve()
+          } catch (error) {
+            reject(error)
+          }
+        })
+      }
+      const timeout = setTimeout(() => {
+        finish(() => {
+          void this.rollbackTimedOutInstall(previousRecoveryState).then(() => {
+            reject(new Error(UPDATE_INSTALL_HANDOFF_TIMEOUT_MESSAGE))
+          }, (error) => {
+            reject(new Error(UPDATE_INSTALL_HANDOFF_TIMEOUT_MESSAGE, { cause: error }))
+          })
+        })
+      }, DESKTOP_UPDATE_INSTALL_HANDOFF_TIMEOUT_MS)
+
+      nativeAutoUpdater.once("before-quit-for-update", handleBeforeQuitForUpdate)
+      try {
+        autoUpdater.quitAndInstall(false, true)
+      } catch (error) {
+        finish(() => {
+          void this.restoreInstallRecoveryState(previousRecoveryState).then(() => reject(error), reject)
+        })
+      }
+    })
+  }
+
+  private async rollbackTimedOutInstall(
+    previousRecoveryState: UpdateInstallRecoveryEntryV1 | null,
+  ): Promise<void> {
+    await this.restoreInstallRecoveryState(previousRecoveryState)
+    this.macInstallHandoffTimedOut = true
+    const message = UPDATE_INSTALL_HANDOFF_TIMEOUT_MESSAGE
+    this.setState({
+      status: "downloaded",
+      message,
+      error: message,
+      canCheck: false,
+    })
+  }
+
+  private async restoreInstallRecoveryState(
+    previousRecoveryState: UpdateInstallRecoveryEntryV1 | null,
+  ): Promise<void> {
+    if (previousRecoveryState && this.installRecoveryService) {
+      await this.installRecoveryService.restoreState(previousRecoveryState)
+    }
   }
 
   initialize(): void {
@@ -378,10 +501,10 @@ class UpdateService {
 
     autoUpdater.on("checking-for-update", () => {
       logger.info("Checking for updates.")
-      if (this.isManualUpdateFlow()) {
+      if (this.isManualUpdateFlow() || this.isRecoveryUpdateFlow()) {
         this.setState({
           status: "checking",
-          message: "正在检查更新...",
+          message: this.isRecoveryUpdateFlow() ? "正在修复更新..." : "正在检查更新...",
           error: null,
           releaseVersion: null,
           downloadPercent: null,
@@ -399,6 +522,8 @@ class UpdateService {
       })
       if (this.isAutoUpdateFlow()) {
         this.handleAutoCheckUpdateAvailable(updateInfo)
+      } else if (this.isRecoveryUpdateFlow()) {
+        void this.handleRecoveryUpdateAvailable(updateInfo)
       } else if (this.isManualUpdateFlow()) {
         this.handleUpdateAvailable(updateInfo)
       }
@@ -408,6 +533,10 @@ class UpdateService {
       logger.info("No update available.", {
         version: updateInfo.version,
       })
+      if (this.isRecoveryUpdateFlow()) {
+        void this.enterManualRecovery()
+        return
+      }
       if (this.isManualUpdateFlow()) {
         this.availableUpdateInfo = null
         this.setState({
@@ -427,7 +556,7 @@ class UpdateService {
     })
 
     autoUpdater.on("download-progress", (progressInfo) => {
-      if (this.isManualUpdateFlow()) {
+      if (this.isManualUpdateFlow() || this.isRecoveryUpdateFlow()) {
         this.handleDownloadProgress(progressInfo)
       }
     })
@@ -437,7 +566,9 @@ class UpdateService {
         version: event.version,
         downloadedFileBase: event.downloadedFile.split(/[/\\]/).pop(),
       })
-      if (this.isManualUpdateFlow()) {
+      if (this.isRecoveryUpdateFlow()) {
+        this.handleRecoveryUpdateDownloaded(event)
+      } else if (this.isManualUpdateFlow()) {
         this.handleUpdateDownloaded(event)
       }
     })
@@ -474,6 +605,11 @@ class UpdateService {
 
       if (this.isAutoUpdateFlow()) {
         this.handleAutoCheckError()
+        return
+      }
+
+      if (this.isRecoveryUpdateFlow()) {
+        void this.enterManualRecovery()
       }
     })
 
@@ -488,10 +624,59 @@ class UpdateService {
     return cloneState(this.state)
   }
 
+  async initializeInstallRecovery(): Promise<void> {
+    this.initialize()
+    if (process.platform !== "darwin" || !this.installRecoveryService) return
+
+    let decision: UpdateInstallRecoveryDecision
+    try {
+      decision = await this.installRecoveryService.reconcile(app.getVersion())
+    } catch (error) {
+      logger.error("Failed to reconcile the pending update install.", error)
+      return
+    }
+    if (decision.kind === "none") return
+
+    if (decision.kind === "manual") {
+      this.applyManualRecovery(decision)
+      this.publishUpdateOpenRequest(false)
+      return
+    }
+
+    this.setState({
+      status: "checking",
+      message: "正在修复更新...",
+      error: null,
+      releaseVersion: decision.targetVersion,
+      downloadPercent: null,
+      bytesPerSecond: null,
+      transferredBytes: null,
+      totalBytes: null,
+      canCheck: false,
+      installRecovery: {
+        phase: "repairing",
+        targetVersion: decision.targetVersion,
+        manualInstallerUrl: decision.manualInstallerUrl,
+      },
+    })
+    this.beginUpdateFlow("recovery")
+    this.publishUpdateOpenRequest(false)
+    try {
+      await autoUpdater.checkForUpdates()
+    } catch (error) {
+      logger.error("Failed to redownload the update after repairing ShipIt.", error)
+      await this.enterManualRecovery()
+    }
+  }
+
   async checkForUpdates(): Promise<SynapseAppUpdateState> {
     this.initialize()
 
     if (!isUpdateSupportedInCurrentEnvironment()) {
+      return this.getState()
+    }
+
+    if (this.state.installRecovery?.phase === "manual-required") {
       return this.getState()
     }
 
@@ -600,6 +785,32 @@ class UpdateService {
     this.clearUpdateFlow("manual")
   }
 
+  private async handleRecoveryUpdateAvailable(updateInfo: UpdateInfo): Promise<void> {
+    const flowId = this.activeUpdateFlowId
+    if (flowId === null || !this.isRecoveryUpdateFlow(flowId) || !this.installRecoveryService) return
+
+    const manualInstallerUrl = resolveManualInstallerUrl(updateInfo)
+    try {
+      await this.installRecoveryService.updatePreparedTarget(updateInfo.version, manualInstallerUrl)
+      if (!this.isRecoveryUpdateFlow(flowId)) return
+      this.availableUpdateInfo = updateInfo
+      this.setState({
+        releaseVersion: updateInfo.version,
+        installRecovery: {
+          phase: "repairing",
+          targetVersion: updateInfo.version,
+          manualInstallerUrl,
+        },
+      })
+      await this.downloadLatestUpdate(updateInfo, flowId)
+    } catch (error) {
+      logger.error("Failed to redownload the repaired update.", error)
+      if (this.isRecoveryUpdateFlow(flowId)) {
+        await this.enterManualRecovery()
+      }
+    }
+  }
+
   private async downloadLatestUpdate(updateInfo: UpdateInfo, flowId: number): Promise<void> {
     const cancellationToken = new CancellationToken()
     this.downloadCancellationToken = cancellationToken
@@ -632,7 +843,7 @@ class UpdateService {
   private handleDownloadProgress(progressInfo: ProgressInfo): void {
     this.setState({
       status: "downloading",
-      message: "正在下载更新...",
+      message: this.isRecoveryUpdateFlow() ? "正在重新下载更新..." : "正在下载更新...",
       error: null,
       downloadPercent: toNullablePositiveNumber(progressInfo.percent),
       bytesPerSecond: toNullablePositiveNumber(progressInfo.bytesPerSecond),
@@ -655,6 +866,63 @@ class UpdateService {
       transferredBytes: this.state.totalBytes ?? this.state.transferredBytes,
       totalBytes: this.state.totalBytes ?? this.state.transferredBytes,
       canCheck: false,
+    })
+  }
+
+  private handleRecoveryUpdateDownloaded(event: UpdateDownloadedEvent): void {
+    const recovery = this.state.installRecovery
+    this.clearDownloadTracking()
+    this.clearUpdateFlow("recovery")
+    this.setState({
+      status: "downloaded",
+      message: `新版本 v${event.version} 已重新下载，请点击安装。`,
+      error: null,
+      releaseVersion: event.version,
+      downloadPercent: 100,
+      transferredBytes: this.state.totalBytes ?? this.state.transferredBytes,
+      totalBytes: this.state.totalBytes ?? this.state.transferredBytes,
+      canCheck: false,
+      installRecovery: {
+        phase: "retry-ready",
+        targetVersion: event.version,
+        manualInstallerUrl: recovery?.manualInstallerUrl ?? resolveManualInstallerUrl(this.availableUpdateInfo),
+      },
+    })
+  }
+
+  private async enterManualRecovery(): Promise<void> {
+    this.clearDownloadTracking()
+    this.clearUpdateFlow("recovery")
+    if (!this.installRecoveryService) return
+    try {
+      const decision = await this.installRecoveryService.markManualRequired()
+      if (decision.kind === "manual") {
+        this.applyManualRecovery(decision)
+      }
+    } catch (error) {
+      logger.error("Failed to persist manual update recovery state.", error)
+    }
+  }
+
+  private applyManualRecovery(
+    decision: Extract<UpdateInstallRecoveryDecision, { kind: "manual" }>,
+  ): void {
+    const message = "自动安装未完成，请下载安装包。"
+    this.setState({
+      status: "error",
+      message,
+      error: message,
+      releaseVersion: decision.targetVersion,
+      downloadPercent: null,
+      bytesPerSecond: null,
+      transferredBytes: null,
+      totalBytes: null,
+      canCheck: false,
+      installRecovery: {
+        phase: "manual-required",
+        targetVersion: decision.targetVersion,
+        manualInstallerUrl: decision.manualInstallerUrl,
+      },
     })
   }
 
@@ -836,5 +1104,36 @@ class UpdateService {
 }
 
 const updateService = new UpdateService()
+
+function resolveManualInstallerUrl(updateInfo: UpdateInfo | null): string | null {
+  if (!updateInfo) return null
+  const dmgFile = updateInfo.files.find((file) => {
+    try {
+      return new URL(file.url, DESKTOP_UPDATE_RELEASE_BASE_URL).pathname.endsWith(".dmg")
+    } catch {
+      return false
+    }
+  })
+  if (!dmgFile) return null
+
+  try {
+    const releaseBaseUrl = new URL(DESKTOP_UPDATE_RELEASE_BASE_URL)
+    const installerUrl = new URL(dmgFile.url, releaseBaseUrl)
+    const expectedVersionSegment = `/v${updateInfo.version}/`
+    if (
+      installerUrl.protocol !== "https:"
+      || installerUrl.host !== releaseBaseUrl.host
+      || installerUrl.username !== ""
+      || installerUrl.password !== ""
+      || !installerUrl.pathname.startsWith(expectedVersionSegment)
+      || !installerUrl.pathname.endsWith(".dmg")
+    ) {
+      return null
+    }
+    return installerUrl.toString()
+  } catch {
+    return null
+  }
+}
 
 export { updateService }

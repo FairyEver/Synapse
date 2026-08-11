@@ -364,6 +364,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.window-manager",
       "core.permission-guard",
       "core.audit-sink",
+      "core.data-repository",
     ])
     expect(byId.get("repo.watch")?.dependsOn).toEqual(["core.config", "core.event-bus"])
     expect(byId.get("repo.maintenance")?.dependsOn).toEqual(["repo.watch", "repo.pending-pushes"])

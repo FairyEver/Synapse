@@ -7,6 +7,12 @@ export const DESKTOP_UPDATE_INTENT_TOKEN_MAX_LENGTH = 4_096
 // 桌面更新凭证在线验证超时（毫秒）：网络异常时快速降级到手动更新，不阻塞更新页导航。
 export const DESKTOP_UPDATE_INTENT_VERIFY_TIMEOUT_MS = 3_000
 
+// macOS 原生更新器交接超时（毫秒）：超时后保留当前应用并恢复安装状态，避免应用提前退出。
+export const DESKTOP_UPDATE_INSTALL_HANDOFF_TIMEOUT_MS = 120_000
+
+// 桌面安装包官方 CDN 根地址：用于从更新元数据生成失败后的人工安装入口。
+export const DESKTOP_UPDATE_RELEASE_BASE_URL = "https://desktop.release.synapse.d2.pub/"
+
 // 文本提取单个源文件最大字节数：读取前后限制 PDF/DOCX 输入占用的主进程内存。
 export const TEXT_EXTRACTION_MAX_FILE_BYTES = 50 * 1024 * 1024
 

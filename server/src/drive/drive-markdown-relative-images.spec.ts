@@ -39,6 +39,24 @@ describe("drive markdown relative images", () => {
     ])
   })
 
+  it("extracts every documented CommonMark relative image form", () => {
+    const markdown = [
+      '![plain](./images/plain.png "Plain")',
+      "![angle](<./images/angle photo.png>)",
+      "![encoded](./images/encoded%20photo.webp)",
+      "![reference][diagram]",
+      "",
+      '[diagram]: <../assets/reference image.jpg> "Reference"',
+    ].join("\n")
+
+    expect(extractDriveMarkdownRelativeImages(markdown)).toEqual([
+      { src: "./images/plain.png", segments: [".", "images", "plain.png"], suffix: "" },
+      { src: "./images/angle photo.png", segments: [".", "images", "angle photo.png"], suffix: "" },
+      { src: "./images/encoded%20photo.webp", segments: [".", "images", "encoded photo.webp"], suffix: "" },
+      { src: "../assets/reference image.jpg", segments: ["..", "assets", "reference image.jpg"], suffix: "" },
+    ])
+  })
+
   it("accepts unescaped spaces only for safe inline relative image paths", () => {
     const markdown = [
       "![space](image 1.png)",

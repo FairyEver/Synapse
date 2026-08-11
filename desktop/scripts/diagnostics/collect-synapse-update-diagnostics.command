@@ -66,6 +66,30 @@ redact_stream() {
     -e 's#(Authorization[^:]*:[[:space:]]*)[^[:space:]]+#\1[redacted]#g'
 }
 
+evidence_after_latest_install() {
+  local pattern="$1"
+  shift
+  local evidence_line
+  local evidence_timestamp
+  local evidence_epoch
+
+  if [ "${LATEST_INSTALL_EPOCH:-0}" -le 0 ]; then
+    return 1
+  fi
+
+  while IFS= read -r evidence_line; do
+    evidence_timestamp="$(printf '%s\n' "$evidence_line" \
+      | /usr/bin/sed -nE 's/^([0-9]{4}-[0-9]{2}-[0-9]{2})[ T]([0-9]{2}:[0-9]{2}:[0-9]{2}).*$/\1 \2/p')"
+    [ -n "$evidence_timestamp" ] || continue
+    evidence_epoch="$(/bin/date -j -f '%Y-%m-%d %H:%M:%S' "$evidence_timestamp" '+%s' 2>/dev/null || printf '0')"
+    if [ "$evidence_epoch" -ge "$LATEST_INSTALL_EPOCH" ]; then
+      return 0
+    fi
+  done < <(/usr/bin/grep -ERih "$pattern" "$@" 2>/dev/null || true)
+
+  return 1
+}
+
 echo "Collecting Synapse update diagnostics..."
 echo "This script is read-only and does not modify or restart Synapse."
 
@@ -310,16 +334,27 @@ section "Recent macOS ShipIt events"
   2>&1 | /usr/bin/tail -n 3000 | redact_stream > "$PACKAGE_DIR/shipit-unified.log" || true
 printf 'unified_log_collected=%s\n' "$(yes_no test -s "$PACKAGE_DIR/shipit-unified.log")" >> "$REPORT_FILE"
 
+LATEST_INSTALL_ISO="$(/usr/bin/find "$PACKAGE_DIR/synapse-update-logs" -type f -exec \
+  /usr/bin/grep -h 'Installing downloaded update' {} + 2>/dev/null \
+  | /usr/bin/sed -nE 's/^\[([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})\..*$/\1/p' \
+  | /usr/bin/sort \
+  | /usr/bin/tail -n 1)"
+if [ -n "$LATEST_INSTALL_ISO" ]; then
+  LATEST_INSTALL_EPOCH="$(/bin/date -j -u -f '%Y-%m-%dT%H:%M:%S' "$LATEST_INSTALL_ISO" '+%s' 2>/dev/null || printf '0')"
+else
+  LATEST_INSTALL_EPOCH=0
+fi
+
 SHIPIT_ERROR_FOUND="no"
 SHIPIT_SUCCESS_FOUND="no"
-if /usr/bin/grep -ERq \
+if evidence_after_latest_install \
   'Installation completed successfully|Successfully launched application' \
-  "$PACKAGE_DIR/shipit-logs" "$PACKAGE_DIR/shipit-unified.log" 2>/dev/null; then
+  "$PACKAGE_DIR/shipit-logs" "$PACKAGE_DIR/shipit-unified.log"; then
   SHIPIT_SUCCESS_FOUND="yes"
 fi
-if /usr/bin/grep -ERiq \
+if evidence_after_latest_install \
   'permission denied|operation not permitted|not writable|ShipIt status [1-9][0-9]*|installation (failed|failure|error)|code signature.*(failed|invalid)|couldn.t move bundle|couldn.t install|could not launch' \
-  "$PACKAGE_DIR/shipit-logs" "$PACKAGE_DIR/shipit-unified.log" 2>/dev/null; then
+  "$PACKAGE_DIR/shipit-logs" "$PACKAGE_DIR/shipit-unified.log"; then
   SHIPIT_ERROR_FOUND="yes"
 fi
 
@@ -340,6 +375,7 @@ Primary app Contents writable: $PRIMARY_CONTENTS_WRITABLE
 Primary app signature valid: $PRIMARY_SIGNATURE_VALID
 Cached update ZIP files: $CACHED_ZIP_COUNT
 ShipIt log files collected: $SHIPIT_LOG_COUNT
+Latest install request: ${LATEST_INSTALL_ISO:-not found}
 ShipIt error evidence found: $SHIPIT_ERROR_FOUND
 ShipIt success evidence found: $SHIPIT_SUCCESS_FOUND
 Update feed reachable: $FEED_REACHABLE

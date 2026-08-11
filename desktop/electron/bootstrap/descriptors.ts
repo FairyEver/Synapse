@@ -124,6 +124,7 @@ import {
 } from "../modules/agent/ipc-shared"
 import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
+import { UpdateInstallRecoveryService } from "../services/update-install-recovery-service"
 import { CheatCodeStateService, CHEAT_CODE_STATE_SERVICE_ID } from "../services/cheat-code-state-service"
 import { KnowledgeBaseService } from "../services/knowledge-base"
 import { KnowledgeBaseTransferService } from "../services/knowledge-base/transfer-service"
@@ -221,7 +222,11 @@ import { createWindowManager } from "../runtime/window"
 import type { EventBus } from "../runtime/event-bus"
 import { createEventBus } from "../runtime/event-bus/bus"
 import { WindowBroadcaster } from "../runtime/event-bus/broadcaster"
-import type { DataRepository, GitCloneJournalEntryV1 } from "../runtime/data-repo"
+import type {
+  DataRepository,
+  GitCloneJournalEntryV1,
+  UpdateInstallRecoveryEntryV1,
+} from "../runtime/data-repo"
 import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { ActorIdentity, PermissionGuard, AuditSink } from "../runtime/security"
 import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, webhookShellExecPolicy, systemAutomationPolicy, systemMcpAutoRegisterPolicy } from "../runtime/security"
@@ -1514,15 +1519,31 @@ export const coreUpdateDescriptor: ServiceDescriptor<typeof updateService> = {
     "core.window-manager",
     "core.permission-guard",
     "core.audit-sink",
+    "core.data-repository",
   ],
-  create(ctx) {
+  async create(ctx) {
     const windowManager = ctx.registry.get<WindowManager>("core.window-manager")
+    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
     updateService.setWindowManager(windowManager)
     updateService.setUpdateIntentVerificationSecurity({
-      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
-      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      permissionGuard,
+      auditSink,
     })
+    updateService.setInstallRecoveryService(process.platform === "darwin"
+      ? new UpdateInstallRecoveryService({
+          auditSink,
+          cacheDirectory: path.join(app.getPath("home"), "Library", "Caches"),
+          getUid: () => process.getuid?.(),
+          permissionGuard,
+          processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+          stateStore: ctx.registry
+            .get<DataRepository>("core.data-repository")
+            .namespace<UpdateInstallRecoveryEntryV1>("core.update-install-recovery"),
+        })
+      : null)
     updateService.initialize()
+    await updateService.initializeInstallRecovery()
     updateService.startAutoCheck()
     return updateService
   },

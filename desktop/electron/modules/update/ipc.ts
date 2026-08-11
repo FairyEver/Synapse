@@ -33,6 +33,11 @@ const updateStateResponseSchema = z.object({
   totalBytes: z.number().nullable(),
   lastCheckedAt: z.string().nullable(),
   canCheck: z.boolean(),
+  installRecovery: z.object({
+    phase: z.enum(["repairing", "retry-ready", "manual-required"]),
+    targetVersion: z.string(),
+    manualInstallerUrl: z.string().nullable(),
+  }).strict().nullable(),
 })
 
 const updateOpenRequestSchema = z.object({

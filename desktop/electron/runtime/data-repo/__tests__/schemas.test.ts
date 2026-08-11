@@ -39,6 +39,7 @@ import {
   secretsSettingsSchema,
   soundNotifierSettingsSchemaDefinition,
   systemNotifierSettingsSchemaDefinition,
+  updateInstallRecoverySchema,
   runMigrations,
   webhookConfigSchema,
   webhookRunsSchema,
@@ -84,6 +85,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "conversations",
         "core.config",
         "core.identity",
+        "core.update-install-recovery",
         "drive.sync.bindings",
         "drive.sync.baseline",
         "drive.sync.conflicts",
@@ -155,6 +157,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(quickInputSettingsSchema.backend).toBe("json")
     expect(soundNotifierSettingsSchemaDefinition.backend).toBe("json")
     expect(systemNotifierSettingsSchemaDefinition.backend).toBe("json")
+    expect(updateInstallRecoverySchema.backend).toBe("json")
     expect(driveSyncBindingsSchema.backend).toBe("sqlite")
     expect(driveSyncBaselineSchema.backend).toBe("sqlite")
     expect(driveSyncOperationsSchema.backend).toBe("sqlite")
@@ -357,6 +360,12 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       coreIdentitySchema.validate({
         schemaVersion: 2,
         userId: "abc",
+      }),
+    ).toBe(true)
+    expect(
+      updateInstallRecoverySchema.validate({
+        schemaVersion: 1,
+        pendingAttempt: null,
       }),
     ).toBe(true)
     expect(
