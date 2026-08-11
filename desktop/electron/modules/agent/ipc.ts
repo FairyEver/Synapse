@@ -33,6 +33,8 @@ const agentStreamDomainEventSchema = z.object({
     projectId: z.string(),
     sessionKey: z.string(),
     platform: z.string(),
+    deliveryEpoch: z.string().optional(),
+    sequence: z.number().int().positive().optional(),
   }),
   timestamp: z.string(),
   scope: agentEventScopeSchema,

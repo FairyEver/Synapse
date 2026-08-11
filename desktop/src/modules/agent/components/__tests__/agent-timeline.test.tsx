@@ -821,6 +821,26 @@ describe("AgentTimeline", () => {
     expect(activeGroup?.kind === "processGroup" ? defaultProcessGroupOpen(activeGroup, { sending: true }) : false).toBe(true)
   })
 
+  it("treats streaming thinking as an active process", () => {
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([{
+      id: "thinking-live",
+      kind: "thinking",
+      content: "Inspecting",
+      streaming: true,
+      streamBlockIndex: 0,
+      startedAt: "2026-08-11T00:00:00.000Z",
+      timestamp: "2026-08-11T00:00:02.000Z",
+    }]), { pendingPermissionRequestIds: new Set() })
+    const group = nodes.find((node) => node.kind === "processGroup")
+
+    expect(group).toEqual(expect.objectContaining({
+      kind: "processGroup",
+      label: "处理中",
+      state: expect.objectContaining({ active: true }),
+    }))
+    expect(group?.kind === "processGroup" ? defaultProcessGroupOpen(group, { sending: false }) : false).toBe(true)
+  })
+
   it("summarizes active and pending process groups with Codex-style labels", () => {
     const activeNodes = groupTimelineDisplayEntries(timelineDisplayEntries([
       {

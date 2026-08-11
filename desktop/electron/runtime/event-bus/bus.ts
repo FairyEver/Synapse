@@ -166,7 +166,7 @@ export class EventBusImpl implements EventBus {
   }
 
   private enqueue(event: DomainEvent, policy: Exclude<BackpressurePolicy, "coalesce">, options: EventBusEmitOptions): void {
-    const key = coalesceKey(event)
+    const key = options.orderingKey ?? coalesceKey(event)
     const slot = this.backpressureQueues.get(key) ?? { queue: [], cancel: null }
     const maxQueueSize = normalizeQueueSize(options.maxQueueSize)
 

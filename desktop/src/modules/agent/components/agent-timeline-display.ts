@@ -271,6 +271,7 @@ function processGroupState(entries: readonly TimelineDisplayEntry[]): ProcessGro
     const result = entry.result ?? (item.kind === "toolResult" ? item : undefined)
     if (item.kind === "toolCall" && !result) active = true
     if (item.kind === "toolProgress" && item.status === "preparing") active = true
+    if (item.kind === "thinking" && item.streaming === true) active = true
     if (item.kind === "phase" && item.status === "in-progress") active = true
     if (item.kind === "permissionRequest") pendingPermission = true
     if (result) {

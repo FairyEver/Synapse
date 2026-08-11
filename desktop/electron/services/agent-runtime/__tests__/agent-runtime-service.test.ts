@@ -303,6 +303,9 @@ describe("AgentRuntimeService", () => {
       domain: "agent",
       type: "conversationUpdated",
       payload: expect.objectContaining({ conversationId: conversation.id }),
+    }), expect.objectContaining({
+      backpressure: "block",
+      orderingKey: expect.stringContaining(conversation.id),
     }))
   })
 
@@ -478,6 +481,9 @@ describe("AgentRuntimeService", () => {
       domain: "agent",
       type: "conversationUpdated",
       payload: expect.objectContaining({ conversationId: conversation.id }),
+    }), expect.objectContaining({
+      backpressure: "block",
+      orderingKey: expect.stringContaining(conversation.id),
     }))
   })
 
@@ -1070,7 +1076,10 @@ describe("AgentRuntimeService", () => {
           phase: "cancel_pending",
           status: "in-progress",
         }),
-      }))
+      }), {
+        backpressure: "block",
+        orderingKey: `agent:project-1:${id}`,
+      })
     } finally {
       vi.useRealTimers()
     }
@@ -2093,6 +2102,9 @@ describe("AgentRuntimeService", () => {
     expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
       type: "conversationUpdated",
       payload: expect.objectContaining({ conversationId: pending!.conversationId }),
+    }), expect.objectContaining({
+      backpressure: "block",
+      orderingKey: expect.stringContaining(pending!.conversationId),
     }))
   })
 

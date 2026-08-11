@@ -183,12 +183,10 @@ function useChatConnection(
       sessionKey: selectedSessionKeyRef.current,
     }
     const shouldApply = requestId === timelineLoadRequestIdRef.current
-      && (mode === "replace"
-        ? shouldApplyTimelineSnapshot(target, selected, {
-          capturedVersion,
-          currentVersion: timelineVersionRef.current,
-        })
-        : isSelectedConversation(target, selected))
+      && shouldApplyTimelineSnapshot(target, selected, {
+        capturedVersion,
+        currentVersion: timelineVersionRef.current,
+      })
     if (!shouldApply) {
       return
     }

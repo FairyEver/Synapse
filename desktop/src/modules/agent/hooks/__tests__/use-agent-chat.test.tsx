@@ -7,7 +7,12 @@ import { createRoot, type Root } from "react-dom/client"
 import { act } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { SynapseAgentDomainEvent, SynapseAgentSessionSummary } from "@/types/agent"
+import type {
+  SynapseAgentDomainEvent,
+  SynapseAgentSessionSummary,
+  SynapseAgentTimelineItem,
+  SynapseAgentTimelineResult,
+} from "@/types/agent"
 import { useAgentChat } from "../use-agent-chat"
 import { createImageAttachment, createPathAttachment } from "../../attachments"
 import type { AgentProjectScope } from "../../project-resolution"
@@ -320,6 +325,88 @@ describe("useAgentChat", () => {
     expect(chat?.timeline.filter((item) => item.kind === "message" && item.content === "persist me")).toHaveLength(1)
     expect(chat?.timeline.some((item) => item.kind === "sdkEvent" && item.sdkType === "compactBoundary")).toBe(false)
     expect(chat?.timelineHasMore).toBe(false)
+  })
+
+  it("does not let a stale tail refresh overwrite a newer live event", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          getTimeline: ReturnType<typeof vi.fn>
+          onEvent: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    let resolveRefresh: ((value: ReturnType<typeof timelineResult>) => void) | undefined
+    let timelineCallCount = 0
+    bridge.getTimeline.mockImplementation(() => {
+      timelineCallCount += 1
+      if (timelineCallCount === 1) return Promise.resolve(timelineResult([{
+        ...timelineHistoryMessage(0),
+        role: "user" as const,
+        content: "question",
+      }]))
+      return new Promise((resolve) => {
+        resolveRefresh = resolve
+      })
+    })
+    let emitAgentEvent: ((event: SynapseAgentDomainEvent) => void) | undefined
+    bridge.onEvent.mockImplementation((callback) => {
+      emitAgentEvent = callback
+      return () => {}
+    })
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(<HookProbe onChange={(next) => { chat = next }} />)
+    })
+    await waitFor(() => {
+      const first = chat?.timeline[0]
+      return first?.kind === "message" && first.content === "question"
+    })
+
+    await act(async () => {
+      emitAgentEvent?.({
+        domain: "agent",
+        type: "conversationUpdated",
+        timestamp: "2026-08-11T00:00:01.000Z",
+        payload: {
+          projectId: session.projectId,
+          sessionKey: session.sessionKey,
+          conversationId: session.id,
+          platform: "local-renderer",
+        },
+      })
+      await Promise.resolve()
+      emitAgentEvent?.({
+        domain: "agent",
+        type: "assistant",
+        timestamp: "2026-08-11T00:00:02.000Z",
+        scope: { projectId: session.projectId, sessionId: session.id },
+        payload: {
+          projectId: session.projectId,
+          sessionKey: session.sessionKey,
+          platform: "local-renderer",
+          sequence: 2,
+          event: { type: "assistant", content: "live answer" },
+        },
+      })
+    })
+    expect(chat?.timeline.some((item) => item.kind === "message" && item.content === "live answer")).toBe(true)
+
+    await act(async () => {
+      resolveRefresh?.(timelineResult([{
+        ...timelineHistoryMessage(0),
+        role: "user" as const,
+        content: "question",
+      }]))
+      await Promise.resolve()
+    })
+
+    expect(chat?.timeline.some((item) => item.kind === "message" && item.content === "live answer")).toBe(true)
   })
 
   it("replaces pagination state when switching conversations", async () => {
@@ -2195,6 +2282,18 @@ function timelineHistoryMessage(index: number) {
     role: index % 2 === 0 ? "user" as const : "assistant" as const,
     content: `message ${String(index)}`,
     timestamp: new Date(Date.UTC(2026, 7, 3, 0, 0, 0, index)).toISOString(),
+  }
+}
+
+function timelineResult(entries: SynapseAgentTimelineItem[]): SynapseAgentTimelineResult {
+  return {
+    projectId: session.projectId,
+    sessionKey: session.sessionKey,
+    conversationId: session.id,
+    entries,
+    total: entries.length,
+    startIndex: 0,
+    hasMore: false,
   }
 }
 

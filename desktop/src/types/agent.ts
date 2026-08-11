@@ -288,6 +288,8 @@ export interface SynapseAgentThinkingTimelineItem extends SynapseAgentTimelineBa
   readonly kind: "thinking"
   readonly content: string
   readonly startedAt?: string
+  readonly streaming?: boolean
+  readonly streamBlockIndex?: number
 }
 
 export interface SynapseAgentToolCallTimelineItem extends SynapseAgentTimelineBase {
@@ -588,6 +590,8 @@ export interface SynapseAgentEventEnvelope {
   readonly projectId: string
   readonly sessionKey: string
   readonly platform: string
+  readonly deliveryEpoch?: string
+  readonly sequence?: number
 }
 
 export interface SynapseAgentConversationUpdatedPayload {

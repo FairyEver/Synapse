@@ -546,6 +546,122 @@ describe("useChatEvents", () => {
       }),
     ])
   })
+
+  it("ignores an older stream delta that arrives after its assistant snapshot", async () => {
+    vi.useFakeTimers()
+    const updateTimeline = vi.fn()
+    const dispatch: React.Dispatch<ChatAction> = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookProbe dispatch={dispatch} updateTimeline={updateTimeline} />)
+    })
+
+    const base = {
+      domain: "agent" as const,
+      scope: { sessionId: "conversation-1" },
+      payload: {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        platform: "renderer",
+      },
+    }
+    await act(async () => {
+      bridgeState.listener?.({
+        ...base,
+        type: "assistant",
+        timestamp: "2026-08-11T00:00:02.000Z",
+        payload: {
+          ...base.payload,
+          sequence: 2,
+          event: { type: "assistant", content: "Complete answer" },
+        },
+      } satisfies SynapseAgentDomainEvent)
+      bridgeState.listener?.({
+        ...base,
+        type: "stream",
+        timestamp: "2026-08-11T00:00:01.000Z",
+        payload: {
+          ...base.payload,
+          sequence: 1,
+          event: { type: "stream", deltaType: "text_delta", text: ":", event: {} },
+        },
+      } satisfies SynapseAgentDomainEvent)
+      vi.advanceTimersByTime(50)
+    })
+
+    expect(updateTimeline).toHaveBeenCalledTimes(1)
+    const updater = updateTimeline.mock.calls[0]?.[0] as ((current: []) => unknown[]) | undefined
+    expect(updater?.([])).toEqual([
+      expect.objectContaining({ kind: "message", role: "assistant", content: "Complete answer" }),
+    ])
+  })
+
+  it("records sequence watermarks before a conversation becomes selected", async () => {
+    vi.useFakeTimers()
+    const updateTimeline = vi.fn()
+    const dispatch: React.Dispatch<ChatAction> = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe
+          dispatch={dispatch}
+          selectedConversationId="conversation-1"
+          updateTimeline={updateTimeline}
+        />,
+      )
+    })
+
+    const base = {
+      domain: "agent" as const,
+      scope: { sessionId: "conversation-2" },
+      payload: {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        platform: "renderer",
+        deliveryEpoch: "delivery-1",
+      },
+    }
+    await act(async () => {
+      bridgeState.listener?.({
+        ...base,
+        type: "assistant",
+        timestamp: "2026-08-11T00:00:02.000Z",
+        payload: {
+          ...base.payload,
+          sequence: 2,
+          event: { type: "assistant", content: "Complete answer" },
+        },
+      } satisfies SynapseAgentDomainEvent)
+    })
+    expect(updateTimeline).not.toHaveBeenCalled()
+
+    await act(async () => {
+      root.render(
+        <HookProbe
+          dispatch={dispatch}
+          selectedConversationId="conversation-2"
+          updateTimeline={updateTimeline}
+        />,
+      )
+      bridgeState.listener?.({
+        ...base,
+        type: "stream",
+        timestamp: "2026-08-11T00:00:01.000Z",
+        payload: {
+          ...base.payload,
+          sequence: 1,
+          event: { type: "stream", deltaType: "text_delta", text: ":", event: {} },
+        },
+      } satisfies SynapseAgentDomainEvent)
+      vi.advanceTimersByTime(50)
+    })
+
+    expect(updateTimeline).not.toHaveBeenCalled()
+  })
 })
 
 function HookProbe({
@@ -553,6 +669,7 @@ function HookProbe({
   loadTimeline,
   refreshConversationSnapshot,
   refreshPendingPermissions,
+  selectedConversationId = "conversation-1",
   updateTimeline,
 }: {
   readonly dispatch: React.Dispatch<ChatAction>
@@ -567,12 +684,14 @@ function HookProbe({
     readonly sessionKey: string
     readonly conversationId?: string
   }) => Promise<void>
+  readonly selectedConversationId?: string
   readonly updateTimeline?: (updater: (current: SynapseAgentTimelineItem[]) => SynapseAgentTimelineItem[]) => void
 }): ReactNode {
   const projectIdsRef = useRef(["project-1"])
   const defaultProjectIdRef = useRef<string | undefined>("project-1")
   const selectedProjectIdRef = useRef<string | undefined>("project-1")
-  const selectedConversationIdRef = useRef<string | undefined>("conversation-1")
+  const selectedConversationIdRef = useRef<string | undefined>(selectedConversationId)
+  selectedConversationIdRef.current = selectedConversationId
   const selectedSessionKeyRef = useRef("local:renderer")
   const selectRequestIdRef = useRef(0)
   const timelineVersionRef = useRef(0)

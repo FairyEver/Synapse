@@ -45,6 +45,7 @@ function useChatEvents(
   const streamEventsRef = useRef<SynapseAgentStreamDomainEvent[]>([])
   const streamFlushTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const terminalConversationTimestampsRef = useRef(new Map<string, number>())
+  const latestDeliverySequencesRef = useRef(new Map<string, DeliverySequenceState>())
 
   useEffect(() => {
     if (projectIdsRef.current.length === 0) return undefined
@@ -224,6 +225,15 @@ function useChatEvents(
         ) })
         return
       }
+      if (!acceptSequencedAgentEvent(domainEvent, latestDeliverySequencesRef.current)) {
+        logger.debug("Out-of-order Agent event ignored.", {
+          projectId: domainEvent.payload.projectId,
+          conversationId: streamEventConversationId(domainEvent),
+          eventType: domainEvent.type,
+          sequence: domainEvent.payload.sequence,
+        })
+        return
+      }
       if (!matchesSelectedEvent(domainEvent, {
         projectId: selectedProjectIdRef.current,
         conversationId: selectedConversationIdRef.current,
@@ -315,6 +325,7 @@ function useChatEvents(
     return () => {
       clearStreamFlushTimer()
       streamEventsRef.current = []
+      latestDeliverySequencesRef.current.clear()
       unsubscribe()
     }
   }, [
@@ -355,6 +366,26 @@ function shouldRefreshPendingPermissionsAfterEvent(event: SynapseAgentEvent): bo
     || event.type === "toolResult"
     || event.type === "result"
     || event.type === "error"
+}
+
+function acceptSequencedAgentEvent(
+  domainEvent: SynapseAgentStreamDomainEvent,
+  latestSequences: Map<string, DeliverySequenceState>,
+): boolean {
+  const sequence = domainEvent.payload.sequence
+  const conversationId = streamEventConversationId(domainEvent)
+  if (sequence === undefined || !Number.isSafeInteger(sequence) || sequence <= 0 || !conversationId) return true
+  const key = `${domainEvent.payload.projectId}:${conversationId}`
+  const deliveryEpoch = domainEvent.payload.deliveryEpoch ?? "legacy"
+  const latest = latestSequences.get(key)
+  if (latest?.deliveryEpoch === deliveryEpoch && sequence <= latest.sequence) return false
+  latestSequences.set(key, { deliveryEpoch, sequence })
+  return true
+}
+
+interface DeliverySequenceState {
+  readonly deliveryEpoch: string
+  readonly sequence: number
 }
 
 function matchesSelectedEvent(

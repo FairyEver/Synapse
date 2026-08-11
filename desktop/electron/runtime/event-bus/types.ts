@@ -54,9 +54,11 @@ export type BackpressurePolicy =
 
 export interface EventBusEmitOptions {
   readonly backpressure?: BackpressurePolicy
+  /** Queued events with the same key share one FIFO even when their domain event types differ. */
+  readonly orderingKey?: string
   /** Default 16ms (~60fps). Only consumed when backpressure === "coalesce". */
   readonly coalesceWindowMs?: number
-  /** Per-listener queue cap; >cap drops per `backpressure`. */
+  /** Per-ordering-key queue cap; >cap follows `backpressure`. */
   readonly maxQueueSize?: number
 }
 

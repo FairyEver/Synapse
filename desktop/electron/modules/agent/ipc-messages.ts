@@ -19,6 +19,7 @@ import { createControlledProcessRunner } from "../../runtime/process"
 import type { AgentAttachment, AgentEvent, AgentMessage } from "../../services/agent-runtime"
 import { AgentConversationExportService } from "../../services/agent-runtime/conversation-export-service"
 import { REDACTED } from "../../services/agent-runtime/redaction"
+import { agentConversationDeliveryOptions } from "../../services/agent-runtime/event-delivery"
 import type { EventBus } from "../../runtime/event-bus"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
@@ -626,7 +627,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           },
           scope: { projectId: request.projectId },
           timestamp: t_recv,
-        }, { backpressure: "block" })
+        }, agentConversationDeliveryOptions(request.projectId, request.conversationId))
 
         eventBus.emit({
           domain: "agent",
@@ -642,7 +643,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           },
           scope: { projectId: request.projectId },
           timestamp: t_recv,
-        }, { backpressure: "block" })
+        }, agentConversationDeliveryOptions(request.projectId, request.conversationId))
 
         const attachments = await normalizeSendAttachments(request.attachments)
         const message: AgentMessage = {
@@ -680,7 +681,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           },
           scope: { projectId: request.projectId },
           timestamp: t_done,
-        }, { backpressure: "block" })
+        }, agentConversationDeliveryOptions(request.projectId, result.conversationId))
         eventBus.emit({
           domain: "agent",
           type: "phase.update",
@@ -699,7 +700,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           },
           scope: { projectId: request.projectId },
           timestamp: t_done,
-        }, { backpressure: "block" })
+        }, agentConversationDeliveryOptions(request.projectId, result.conversationId))
         return {
           projectId: request.projectId,
           sessionKey,
@@ -736,7 +737,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           },
           scope: { projectId: request.projectId },
           timestamp: t_fail,
-        }, { backpressure: "block" })
+        }, agentConversationDeliveryOptions(request.projectId, request.conversationId))
         throw rawError
       }
     },

@@ -130,6 +130,19 @@ describe("EventBusImpl core (T4.1)", () => {
     expect(seen).toEqual([1, 2, 3])
   })
 
+  it("preserves cross-type order when events share an ordering key", () => {
+    const bus = createEventBus({ defaultBackpressure: "block" })
+    const seen: string[] = []
+    bus.on("agent", (event) => seen.push(`${event.type}:${String((event.payload as { value: number }).value)}`))
+
+    bus.emit(eventOf("agent", "stream", { value: 1 }), { backpressure: "block", orderingKey: "agent:p1:c1" })
+    bus.emit(eventOf("agent", "assistant", { value: 2 }), { backpressure: "block", orderingKey: "agent:p1:c1" })
+    bus.emit(eventOf("agent", "stream", { value: 3 }), { backpressure: "block", orderingKey: "agent:p1:c1" })
+    bus.flushAllForTests()
+
+    expect(seen).toEqual(["stream:1", "assistant:2", "stream:3"])
+  })
+
   it("coalesce backpressure folds rapid emits into a single dispatch", async () => {
     const bus = createEventBus({ defaultBackpressure: "coalesce" })
     const seen: number[] = []

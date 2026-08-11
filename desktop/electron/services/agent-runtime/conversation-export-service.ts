@@ -155,7 +155,12 @@ interface SdkStreamExport {
     readonly observedEventCount: number
     readonly capturedEventCount: number
     readonly exportedEventCount: number
+    /** @deprecated Export-budget drops only. Use exportDroppedEventCount. */
     readonly droppedEventCount: number
+    readonly exportDroppedEventCount: number
+    readonly deliveryDroppedEventCount: number | null
+    readonly deliveryDropCountAvailable: boolean
+    readonly deliveryPolicy: "ordered-no-drop-main-process-queue"
     readonly truncatedTurnCount: number
     readonly exportTruncated: boolean
     readonly capturedBytes: number
@@ -558,7 +563,7 @@ function buildSdkStreamExport(
     schemaVersion: 1,
     source: "Claude Agent SDK StreamEvent.event",
     rawHttpIncluded: false,
-    description: "Events are sanitized SDK StreamEvent payloads, not wire-level HTTP responses or literal SSE lines. Correlate turnId, sequence, sdkSessionId, message id, and content block index with agent-events.json. streamOnlyTurnCount identifies turns whose historical deltas were not retained.",
+    description: "Events are sanitized SDK StreamEvent payloads, not wire-level HTTP responses or literal SSE lines. Correlate turnId, sequence, sdkSessionId, message id, and content block index with agent-events.json. streamOnlyTurnCount identifies turns whose historical deltas were not retained. droppedEventCount and exportDroppedEventCount describe export-size filtering only. Historical end-to-end delivery drop counts were not recorded; the current main-process queue preserves per-conversation order without intentionally dropping events, but renderer delivery is not acknowledged or replayed.",
     runtime: {
       agentType: conversation.agentType ?? "unknown",
       platform: conversation.platform ?? "unknown",
@@ -579,6 +584,10 @@ function buildSdkStreamExport(
       capturedEventCount: candidates.length,
       exportedEventCount: selected.length,
       droppedEventCount,
+      exportDroppedEventCount: droppedEventCount,
+      deliveryDroppedEventCount: null,
+      deliveryDropCountAvailable: false,
+      deliveryPolicy: "ordered-no-drop-main-process-queue",
       truncatedTurnCount,
       exportTruncated: droppedEventCount > 0,
       capturedBytes,

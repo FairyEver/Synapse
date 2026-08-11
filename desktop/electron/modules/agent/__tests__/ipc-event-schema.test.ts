@@ -36,6 +36,8 @@ describe("agent IPC event schema", () => {
         projectId: "project-1",
         sessionKey: "local:renderer",
         platform: "renderer",
+        deliveryEpoch: "delivery-1",
+        sequence: 42,
         event: {
           type: "stream",
           sdkSessionId: "sdk-session-1",
@@ -50,7 +52,7 @@ describe("agent IPC event schema", () => {
         },
       },
       timestamp: "2026-05-14T00:00:00.000Z",
-    }) as { payload: { event: Record<string, unknown> } }
+    }) as { payload: { deliveryEpoch?: string; event: Record<string, unknown>; sequence?: number } }
 
     expect(parsed.payload.event).toMatchObject({
       type: "stream",
@@ -61,6 +63,8 @@ describe("agent IPC event schema", () => {
       projectId: "project-1",
       text: "hi",
     })
+    expect(parsed.payload.sequence).toBe(42)
+    expect(parsed.payload.deliveryEpoch).toBe("delivery-1")
   })
 
   it("preserves user question identity and resolution in timeline responses", () => {

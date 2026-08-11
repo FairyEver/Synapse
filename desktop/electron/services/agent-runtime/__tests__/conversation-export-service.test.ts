@@ -134,6 +134,10 @@ describe("AgentConversationExportService", () => {
           observedEventCount: number
           exportedEventCount: number
           exportTruncated: boolean
+          exportDroppedEventCount: number
+          deliveryDroppedEventCount: number | null
+          deliveryDropCountAvailable: boolean
+          deliveryPolicy: string
           diagnosticTurnCount: number
           streamOnlyTurnCount: number
         }
@@ -201,6 +205,10 @@ describe("AgentConversationExportService", () => {
           observedEventCount: 1,
           exportedEventCount: 1,
           exportTruncated: false,
+          exportDroppedEventCount: 0,
+          deliveryDroppedEventCount: null,
+          deliveryDropCountAvailable: false,
+          deliveryPolicy: "ordered-no-drop-main-process-queue",
           diagnosticTurnCount: 1,
           streamOnlyTurnCount: 0,
         },

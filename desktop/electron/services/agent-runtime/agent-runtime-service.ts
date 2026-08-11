@@ -26,6 +26,7 @@ import { resolveEffectiveShell, resolveShellCommand } from "../shell-exec"
 import type { ProviderService } from "../provider"
 import type { ModelPriceRule } from "../model-price"
 import { AgentCommandRouter } from "./command-router"
+import { agentConversationDeliveryOptions } from "./event-delivery"
 import {
   AGENT_ABORTED_BEFORE_EXECUTION_MESSAGE,
   AGENT_ASK_USER_QUESTION_ALL_ANSWERS_REQUIRED_MESSAGE,
@@ -709,7 +710,7 @@ export class AgentRuntimeService {
       },
       scope: { sessionId: conversationId },
       timestamp,
-    })
+    }, agentConversationDeliveryOptions(this.deps.projectId, conversationId))
   }
 
   listPendingPermissions(): readonly AgentPendingPermission[] {

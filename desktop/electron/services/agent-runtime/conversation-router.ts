@@ -81,6 +81,7 @@ import {
   type StreamDiagnosticCapture,
   type StreamDiagnosticChunkPayload,
 } from "./stream-diagnostics"
+import { agentConversationDeliveryOptions } from "./event-delivery"
 
 export interface ConversationRouterDeps {
   readonly projectId: string
@@ -120,7 +121,6 @@ const DEFAULT_LIVE_EVENT_TIMEOUT_MS = 60 * 60 * 1000
 const MAX_EVENT_PAYLOAD_BYTES = 8192
 const MAX_SUMMARY_LENGTH = 1000
 const MAX_HISTORY_CONTENT_LENGTH = 10_000
-const STREAM_EVENT_QUEUE_SIZE = 20
 const COST_EPSILON = 0.000001
 
 interface ModelUsageBreakdown {
@@ -160,6 +160,8 @@ export class ConversationRouter {
   >()
   private readonly savedSdkSessions = new Map<string, string>()
   private readonly streamDiagnostics = new Map<string, StreamDiagnosticCapture>()
+  private deliverySequence = 0
+  private readonly deliveryEpoch = randomUUID()
 
   constructor(input: {
     readonly deps: ConversationRouterDeps
@@ -1955,9 +1957,8 @@ export class ConversationRouter {
     event: AgentEvent,
   ): void {
     const target = replyTargetFromMessage(message, conversationId, event)
-    const options = isAgentStreamEvent(event)
-      ? { backpressure: "drop-oldest" as const, maxQueueSize: STREAM_EVENT_QUEUE_SIZE }
-      : { backpressure: "block" as const }
+    const sequence = this.nextDeliverySequence()
+    const options = this.deliveryOptions(conversationId)
     this.deps.eventBus?.emit({
       domain: "agent",
       type: event.type,
@@ -1966,6 +1967,8 @@ export class ConversationRouter {
         projectId: this.deps.projectId,
         sessionKey: message.sessionKey,
         platform: message.platform,
+        deliveryEpoch: this.deliveryEpoch,
+        sequence,
       },
       scope: { sessionId: conversationId },
       timestamp: this.isoNow(),
@@ -2005,7 +2008,7 @@ export class ConversationRouter {
       },
       scope: { sessionId: conversation.id },
       timestamp: this.isoNow(),
-    })
+    }, this.deliveryOptions(conversation.id))
   }
 
   private emitPhase(
@@ -2040,7 +2043,16 @@ export class ConversationRouter {
       },
       scope: { sessionId: conversationId },
       timestamp: this.isoNow(),
-    }, { backpressure: "block" })
+    }, this.deliveryOptions(conversationId))
+  }
+
+  private deliveryOptions(conversationId: string) {
+    return agentConversationDeliveryOptions(this.deps.projectId, conversationId)
+  }
+
+  private nextDeliverySequence(): number {
+    this.deliverySequence += 1
+    return this.deliverySequence
   }
 
   private assertProject(message: AgentMessage): void {

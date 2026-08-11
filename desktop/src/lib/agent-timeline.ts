@@ -45,8 +45,20 @@ export function agentEventToTimelineItem(
     case "stream": {
       const thinking = streamThinking(event)
       return thinking
-        ? { ...base, kind: "thinking", content: thinking }
-        : { ...base, kind: "message", role: "assistant", content: streamText(event), streaming: true }
+        ? {
+            ...base,
+            kind: "thinking",
+            content: thinking,
+            streaming: true,
+            ...(typeof event.blockIndex === "number" ? { streamBlockIndex: event.blockIndex } : {}),
+          }
+        : {
+            ...base,
+            kind: "message",
+            role: "assistant",
+            content: streamText(event),
+            streaming: true,
+          }
     }
     case "assistant":
       return { ...base, kind: "message", role: "assistant", content: assistantText(event) }
@@ -250,6 +262,12 @@ export function appendAgentTimelineEvent(
   timestamp: string,
   agentType?: string,
 ): SynapseAgentTimelineItem[] {
+  if (event.type === "assistant" || event.type === "result" || event.type === "error") {
+    const completedThinking = completeStreamingThinking(current, timestamp)
+    if (completedThinking) {
+      return appendAgentTimelineEvent(completedThinking, event, timestamp, agentType)
+    }
+  }
   const item = agentEventToTimelineItem(event, {
     id: `event:${timestamp}:${event.type}:${current.length}`,
     timestamp,
@@ -257,43 +275,55 @@ export function appendAgentTimelineEvent(
   })
   const last = current.at(-1)
   if (event.type === "stream") {
+    const streamCurrent = stringValue(event.event?.type) === "content_block_stop"
+      ? completeStreamingThinking(current, timestamp, event.blockIndex) ?? current
+      : current
     const toolProgress = toolProgressFromStreamEvent(event, item, timestamp)
-    if (toolProgress) return appendToolProgress(current, toolProgress, event, timestamp)
+    if (toolProgress) return appendToolProgress(streamCurrent, toolProgress, event, timestamp)
 
     const kind = streamKind(event)
     if (kind === "text" && item.kind === "message") {
-      if (item.content.length === 0) return [...current]
-      const assistantIndex = latestAssistantDraftIndex(current)
+      if (item.content.length === 0) return [...streamCurrent]
+      const assistantIndex = latestAssistantDraftIndex(streamCurrent)
       if (assistantIndex !== -1) {
-        const assistant = current[assistantIndex]
+        const assistant = streamCurrent[assistantIndex]
         if (assistant.kind === "message" && assistant.role === "assistant") {
           return [
-            ...current.slice(0, assistantIndex),
+            ...streamCurrent.slice(0, assistantIndex),
             { ...assistant, content: `${assistant.content}${item.content}`, timestamp, streaming: true },
-            ...current.slice(assistantIndex + 1),
+            ...streamCurrent.slice(assistantIndex + 1),
           ]
         }
       }
-      return [...current, item]
+      return [...streamCurrent, item]
     }
 
     if (kind === "thinking" && item.kind === "thinking") {
-      if (item.content.length === 0) return [...current]
-      const thinkingIndex = latestThinkingDraftIndex(current)
+      if (item.content.length === 0) return [...streamCurrent]
+      const thinkingIndex = latestThinkingDraftIndex(streamCurrent, event.blockIndex)
       if (thinkingIndex !== -1) {
-        const thinking = current[thinkingIndex]
+        const thinking = streamCurrent[thinkingIndex]
         if (thinking.kind === "thinking") {
           return [
-            ...current.slice(0, thinkingIndex),
-            { ...thinking, content: `${thinking.content}${item.content}`, startedAt: thinking.startedAt ?? thinking.timestamp, timestamp },
-            ...current.slice(thinkingIndex + 1),
+            ...streamCurrent.slice(0, thinkingIndex),
+            {
+              ...thinking,
+              content: `${thinking.content}${item.content}`,
+              startedAt: thinking.startedAt ?? thinking.timestamp,
+              timestamp,
+              streaming: true,
+              ...(thinking.streamBlockIndex === undefined && typeof event.blockIndex === "number"
+                ? { streamBlockIndex: event.blockIndex }
+                : {}),
+            },
+            ...streamCurrent.slice(thinkingIndex + 1),
           ]
         }
       }
-      return [...current, { ...item, startedAt: timestamp }]
+      return [...streamCurrent, { ...item, startedAt: timestamp, streaming: true }]
     }
 
-    return [...current]
+    return [...streamCurrent]
   }
   if (isEmptyTimelineItem(item)) return [...current]
   if (event.type === "toolUse" && item.kind === "toolCall") {
@@ -520,15 +550,40 @@ function latestAssistantDraftForFinalIndex(items: readonly SynapseAgentTimelineI
   return -1
 }
 
-function latestThinkingDraftIndex(items: readonly SynapseAgentTimelineItem[]): number {
+function latestThinkingDraftIndex(
+  items: readonly SynapseAgentTimelineItem[],
+  blockIndex: number | undefined,
+): number {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
-    if (item?.kind === "thinking" && item.id.includes(":stream:")) return index
+    if (
+      item?.kind === "thinking"
+      && (item.streaming === true || (item.streaming !== false && item.id.includes(":stream:")))
+      && (blockIndex === undefined || item.streamBlockIndex === undefined || item.streamBlockIndex === blockIndex)
+    ) return index
     if (item?.kind === "message" && item.role === "assistant") return -1
     if (item && isTimelineMergeBoundary(item)) return -1
     if (item?.kind === "message" && item.role === "user") return -1
   }
   return -1
+}
+
+function completeStreamingThinking(
+  items: readonly SynapseAgentTimelineItem[],
+  timestamp: string,
+  blockIndex?: number,
+): SynapseAgentTimelineItem[] | undefined {
+  let changed = false
+  const next = items.map((item) => {
+    if (
+      item.kind !== "thinking"
+      || item.streaming !== true
+      || (blockIndex !== undefined && item.streamBlockIndex !== undefined && item.streamBlockIndex !== blockIndex)
+    ) return item
+    changed = true
+    return { ...item, streaming: false, timestamp }
+  })
+  return changed ? next : undefined
 }
 
 function isStreamedAssistantDraft(item: SynapseAgentTimelineItem): boolean {

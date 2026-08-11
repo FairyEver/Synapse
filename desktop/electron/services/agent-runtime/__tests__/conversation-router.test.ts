@@ -457,7 +457,7 @@ describe("ConversationRouter", () => {
     }
   })
 
-  it("emits stream events through a bounded non-blocking queue", async () => {
+  it("emits every conversation event through one ordered lossless queue", async () => {
     const { eventBus, emits } = createEventBusRecorder()
     const { router } = createRouter({
       eventBus,
@@ -476,10 +476,13 @@ describe("ConversationRouter", () => {
       expect.objectContaining({ text: "hel" }),
       expect.objectContaining({ text: "lo" }),
     ])
-    expect(streamEmits.map(({ options }) => options)).toEqual([
-      { backpressure: "drop-oldest", maxQueueSize: 20 },
-      { backpressure: "drop-oldest", maxQueueSize: 20 },
+    expect(emits.filter(({ event }) => ["stream", "result"].includes(event.type)).map(({ options }) => options)).toEqual([
+      { backpressure: "block", orderingKey: expect.stringContaining("project-1") },
+      { backpressure: "block", orderingKey: expect.stringContaining("project-1") },
+      { backpressure: "block", orderingKey: expect.stringContaining("project-1") },
     ])
+    expect(emits.filter(({ event }) => ["stream", "result"].includes(event.type)).map(({ event }) =>
+      (event.payload as { sequence?: number }).sequence)).toEqual([1, 2, 3])
   })
 
   it("persists bounded stream diagnostics after the turn completes", async () => {

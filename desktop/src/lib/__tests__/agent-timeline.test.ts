@@ -7,6 +7,60 @@ import {
 } from "../agent-timeline"
 
 describe("agent timeline conversion", () => {
+  it("keeps streamed thinking active until its content block stops", () => {
+    const started = appendAgentTimelineEvent([], {
+      type: "stream",
+      blockIndex: 0,
+      deltaType: "thinking_delta",
+      thinking: "Inspecting",
+      event: { type: "content_block_delta" },
+    }, "2026-08-11T00:00:00.000Z")
+
+    expect(started).toEqual([
+      expect.objectContaining({ kind: "thinking", streaming: true, streamBlockIndex: 0 }),
+    ])
+
+    const stopped = appendAgentTimelineEvent(started, {
+      type: "stream",
+      blockIndex: 0,
+      event: { type: "content_block_stop", index: 0 },
+    }, "2026-08-11T00:00:05.000Z")
+
+    expect(stopped).toEqual([
+      expect.objectContaining({ kind: "thinking", streaming: false, timestamp: "2026-08-11T00:00:05.000Z" }),
+    ])
+  })
+
+  it("closes thinking and tool progress carried by the same block stop", () => {
+    const thinking = appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "thinking_delta",
+      thinking: "Inspecting",
+      event: { type: "content_block_delta" },
+    }, "2026-08-11T00:00:00.000Z")
+    const preparing = appendAgentTimelineEvent(thinking, {
+      type: "stream",
+      blockIndex: 1,
+      event: {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "tool-1", name: "Read" },
+      },
+      toolUseId: "tool-1",
+      toolName: "Read",
+    }, "2026-08-11T00:00:01.000Z")
+
+    const stopped = appendAgentTimelineEvent(preparing, {
+      type: "stream",
+      blockIndex: 1,
+      event: { type: "content_block_stop", index: 1 },
+    }, "2026-08-11T00:00:02.000Z")
+
+    expect(stopped).toEqual([
+      expect.objectContaining({ kind: "thinking", streaming: false }),
+    ])
+  })
+
   it("preserves turn outcome metadata on cancelled result events", () => {
     const item = agentEventToTimelineItem({
       type: "result",
