@@ -29,6 +29,26 @@ describe('markdown rendered text model', () => {
     expect(createMarkdownRenderedDomRange(root, model.segments, loadingStart, loadingStart + 7)?.toString()).toBe('loading')
     expect(createMarkdownRenderedDomRange(root, model.segments, piniaStart, piniaStart + 5)?.toString()).toBe('Pinia')
   })
+
+  it('keeps hidden Mermaid source in the projection while ignoring generated SVG text', () => {
+    document.body.innerHTML = [
+      '<main>',
+      '<p>Before</p>',
+      '<figure data-drive-mermaid-diagram="true">',
+      '<div data-drive-mermaid-rendered="true"><svg><text>Generated label</text></svg></div>',
+      '<pre data-drive-mermaid-source="true" class="hidden" aria-hidden="true"><code>flowchart TB\nA --&gt; B</code></pre>',
+      '</figure>',
+      '<p>After</p>',
+      '</main>',
+    ].join('')
+    const root = document.querySelector<HTMLElement>('main')
+    if (!root) throw new Error('missing fixture')
+
+    const model = createMarkdownRenderedTextModel(root)
+
+    expect(model.text).toBe('Beforeflowchart TB\nA --> BAfter')
+    expect(model.text).not.toContain('Generated label')
+  })
 })
 
 function projection(): DriveMarkdownProjectionDto {

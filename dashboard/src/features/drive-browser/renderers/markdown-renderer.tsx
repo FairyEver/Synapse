@@ -21,6 +21,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { useTheme } from '@/context/theme-provider'
 import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -33,6 +34,7 @@ import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { renderMarkdownAnnotationHtml, resolveMarkdownAnnotationTextRange } from './markdown-annotation-render'
 import { createMarkdownAnnotationAnchorFromSelection } from './markdown-annotation-target'
 import { getCommentActionErrorMessage, MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdown-comments-rail'
+import { renderDriveMermaidDiagrams, restoreDriveMermaidDiagrams } from './markdown-mermaid-renderer'
 import {
   createMarkdownRenderedDomRange,
   createMarkdownRenderedTextModel,
@@ -127,6 +129,7 @@ function DriveMarkdownBody({
   const commentsTouchedRef = useRef(false)
   const layoutMode = useFilePreviewLayoutMode()
   const isCompact = layoutMode === 'compact'
+  const { resolvedTheme } = useTheme()
   const outlineItems = useMemo(() => flattenMarkdownOutline(outline), [outline])
   const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
   const annotationsEnabled = isDriveMarkdownItem(current)
@@ -214,6 +217,17 @@ function DriveMarkdownBody({
     () => ({ __html: annotated.html }),
     [annotated.html]
   )
+
+  useEffect(() => {
+    const root = bodyRef.current
+    if (!root) return
+    const controller = new AbortController()
+    void renderDriveMermaidDiagrams({ root, resolvedTheme, signal: controller.signal })
+    return () => {
+      controller.abort()
+      restoreDriveMermaidDiagrams(root)
+    }
+  }, [annotated.html, resolvedTheme])
   const canCommentAnnotations = effectiveAnnotationContext?.context === 'owner' || Boolean(effectiveAnnotationContext?.canComment)
   const canCreateAnnotation = annotationsEnabled
     && Boolean(effectiveAnnotationContext)

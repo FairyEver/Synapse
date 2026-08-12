@@ -33,6 +33,20 @@ describe("drive markdown renderer", () => {
     expect(html).toContain("script>alert(1)")
   })
 
+  it("preserves sanitized Mermaid fences for client-side diagram rendering", async () => {
+    const result = await renderDriveMarkdownFragment([
+      "```mermaid",
+      "flowchart TB",
+      "    A[<Start>] --> B[Done]",
+      "```",
+    ].join("\n"))
+
+    expect(result.html).toContain('<code class="language-mermaid"')
+    expect(result.html).toContain("flowchart TB")
+    expect(result.html).toContain("A[&#x3C;Start>] --> B[Done]")
+    expect(result.html).not.toContain("<Start>")
+  })
+
   it("wraps tables without changing rendered text", async () => {
     const result = await renderDriveMarkdownFragment([
       "| # | 说明 |",

@@ -65,6 +65,7 @@ export function createMarkdownRenderedTextModel(
     }
 
     if (node instanceof HTMLElement) {
+      if (node.matches('[data-drive-mermaid-rendered="true"]')) return
       if (node.closest('[data-drive-annotation-marker="true"]')) return
       if (node.tagName === 'IMG') {
         const points = elementBoundaryPoints(node)
