@@ -207,6 +207,88 @@ afterEach(() => {
 })
 
 describe('DriveMDXeditorRenderer', () => {
+  it.each([
+    { label: 'Command+S', modifiers: { metaKey: true } },
+    { label: 'Ctrl+S', modifiers: { ctrlKey: true } },
+  ])('saves dirty markdown with $label', async ({ modifiers }) => {
+    const editContext = createEditContext()
+    renderRenderer({ edit: editable(), editContext })
+
+    expect(buttonWithText('保存').getAttribute('aria-keyshortcuts')).toBe('Meta+S Control+S')
+    await inputValue(editor(), '# Shortcut')
+    const accepted = await pressKey(editor(), { key: 's', ...modifiers })
+
+    expect(accepted).toBe(false)
+    expect(editContext.saveText).toHaveBeenCalledWith({ text: '# Shortcut', baseVersionId: 'version-1' })
+  })
+
+  it('ignores non-save key combinations and unavailable saves', async () => {
+    const editContext = createEditContext({ savingText: true })
+    renderRenderer({ edit: editable(), editContext })
+    await inputValue(editor(), '# Shortcut')
+
+    await pressKey(editor(), { key: 's' })
+    await pressKey(editor(), { key: 's', metaKey: true, shiftKey: true })
+    await pressKey(editor(), { key: 's', ctrlKey: true, altKey: true })
+    await pressKey(editor(), { key: 's', metaKey: true })
+
+    expect(editContext.saveText).not.toHaveBeenCalled()
+  })
+
+  it('does not save clean, read-only, or reloading markdown', async () => {
+    const cleanContext = createEditContext()
+    const { rerender } = renderRenderer({ edit: editable(), editContext: cleanContext })
+
+    await pressKey(editor(), { key: 's', metaKey: true })
+    expect(cleanContext.saveText).not.toHaveBeenCalled()
+
+    const readOnlyContext = createEditContext()
+    rerender({ edit: null, editContext: readOnlyContext })
+    await pressKey(editor(), { key: 's', ctrlKey: true })
+    expect(readOnlyContext.saveText).not.toHaveBeenCalled()
+
+    const reloadingContext = createEditContext({ reloading: true })
+    rerender({ edit: editable(), editContext: reloadingContext })
+    await inputValue(editor(), '# Reloading')
+    await pressKey(editor(), { key: 's', metaKey: true })
+    expect(reloadingContext.saveText).not.toHaveBeenCalled()
+  })
+
+  it('does not submit again while a shortcut save is uploading an image', async () => {
+    let resolveUpload!: (asset: DrivePublicAssetDto) => void
+    const uploadPromise = new Promise<DrivePublicAssetDto>((resolve) => {
+      resolveUpload = resolve
+    })
+    const upload = vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile').mockReturnValue(uploadPromise)
+    const editContext = createEditContext()
+    renderRenderer({ edit: editable(), editContext })
+
+    await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
+    await click(buttonWithText('继续插入'))
+    await pressKey(editor(), { key: 's', metaKey: true })
+    await pressKey(editor(), { key: 's', ctrlKey: true })
+
+    expect(upload).toHaveBeenCalledTimes(1)
+    expect(editContext.saveText).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveUpload(createPublicAsset({ name: 'chart.png', url: 'https://synapse.test/files/asset_image' }))
+      await uploadPromise
+      await vi.waitFor(() => expect(editContext.saveText).toHaveBeenCalledTimes(1))
+    })
+  })
+
+  it('saves recovered source markdown with Command+S', async () => {
+    const editContext = createEditContext()
+    renderRenderer({ edit: editable(), editContext })
+
+    await inputValue(editor(), '# broken-mdx')
+    await inputValue(sourceEditor(), '# Fixed')
+    await pressKey(sourceEditor(), { key: 's', metaKey: true })
+
+    expect(editContext.saveText).toHaveBeenCalledWith({ text: '# Fixed', baseVersionId: 'version-1' })
+  })
+
   it('saves dirty markdown text with the current base version', async () => {
     const editContext = createEditContext()
     renderRenderer({ edit: editable(), editContext })
@@ -906,6 +988,15 @@ async function click(element: HTMLElement) {
     element.click()
     await Promise.resolve()
   })
+}
+
+async function pressKey(element: HTMLElement, init: KeyboardEventInit): Promise<boolean> {
+  let accepted = true
+  await act(async () => {
+    accepted = element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
+    await Promise.resolve()
+  })
+  return accepted
 }
 
 async function selectImage(file: File) {

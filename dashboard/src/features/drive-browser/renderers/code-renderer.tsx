@@ -40,12 +40,14 @@ export function DriveCodeRenderer({
   const initialText = preview.text ?? ''
   const savedValueRef = useRef(initialText)
   const valueRef = useRef(initialText)
+  const saveInFlightRef = useRef(false)
   const [value, setValue] = useState(initialText)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [conflictOpen, setConflictOpen] = useState(false)
   const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
   const [bindingReady, setBindingReady] = useState(false)
+  const [savingVersion, setSavingVersion] = useState(false)
   const collaborationState = useDriveCollaboration({
     itemId: current.id,
     context: collaborationContext ?? { kind: 'owner', itemId: current.id },
@@ -56,11 +58,21 @@ export function DriveCodeRenderer({
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
   const bindingRef = useRef<{ destroy: () => void } | null>(null)
   const bindingGenerationRef = useRef(0)
+  const saveShortcutRef = useRef<() => void>(() => undefined)
   const canEdit = collaborationEnabled
     ? Boolean(collaborationState.state?.canWrite)
     : Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
   const loginUrl = buildLoginUrl()
+  const canSave = collaborationEnabled
+    ? canEdit
+      && collaborationState.state?.status !== 'connecting'
+      && collaborationState.state?.status !== 'syncing'
+      && !savingVersion
+    : canEdit
+      && dirty
+      && !editContext?.savingText
+      && !editContext?.reloading
 
   useEffect(() => {
     savedValueRef.current = initialText
@@ -105,15 +117,19 @@ export function DriveCodeRenderer({
     }
   }, [attachCollaborationBinding, collaborationState.session])
 
-  const handleEditorMount = useCallback<OnMount>((editor) => {
+  const handleEditorMount = useCallback<OnMount>((editor, monaco) => {
     editorRef.current = editor
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveShortcutRef.current())
     const session = collaborationState.session
     if (session) void attachCollaborationBinding(session, editor)
   }, [attachCollaborationBinding, collaborationState.session])
 
   const handleSave = useCallback(async () => {
+    if (!canSave || saveInFlightRef.current) return
+    saveInFlightRef.current = true
     if (collaborationEnabled && collaborationState.state?.canWrite && collaborationContext) {
       setError(null)
+      setSavingVersion(true)
       try {
         const input = {
           epoch: collaborationState.state.epoch ?? '',
@@ -127,10 +143,16 @@ export function DriveCodeRenderer({
         await editContext?.reload()
       } catch (saveError) {
         setError(saveError instanceof Error ? saveError.message : '保存版本失败。')
+      } finally {
+        saveInFlightRef.current = false
+        setSavingVersion(false)
       }
       return
     }
-    if (!canEdit || !edit?.currentVersionId || !editContext) return
+    if (!canEdit || !edit?.currentVersionId || !editContext) {
+      saveInFlightRef.current = false
+      return
+    }
     setError(null)
     const submittedValue = valueRef.current
     try {
@@ -143,8 +165,14 @@ export function DriveCodeRenderer({
         return
       }
       setError(saveError instanceof Error ? saveError.message : '保存失败。')
+    } finally {
+      saveInFlightRef.current = false
     }
-  }, [canEdit, collaborationContext, collaborationEnabled, collaborationState.state?.canWrite, collaborationState.state?.epoch, current.id, edit?.currentVersionId, editContext])
+  }, [canSave, collaborationContext, collaborationEnabled, collaborationState.state?.canWrite, collaborationState.state?.epoch, current.id, edit?.currentVersionId, editContext])
+
+  saveShortcutRef.current = () => {
+    if (canSave) void handleSave()
+  }
 
   const handleReload = useCallback(async () => {
     if (!editContext) return
@@ -207,9 +235,10 @@ export function DriveCodeRenderer({
           id: 'code-save',
           label: '保存',
           icon: Save,
+          ariaKeyShortcuts: 'Meta+S Control+S',
           compactPlacement: 'primary',
           loading: editContext?.savingText,
-          disabled: !dirty || editContext?.savingText || editContext?.reloading,
+          disabled: !canSave,
           onClick: () => { void handleSave() },
         },
       )
@@ -227,8 +256,10 @@ export function DriveCodeRenderer({
         id: 'code-checkpoint',
         label: '保存版本',
         icon: Save,
+        ariaKeyShortcuts: 'Meta+S Control+S',
         compactPlacement: 'primary',
-        disabled: collaborationState.state?.status === 'connecting' || collaborationState.state?.status === 'syncing',
+        loading: savingVersion,
+        disabled: !canSave,
         onClick: () => { void handleSave() },
       })
     }
@@ -236,6 +267,7 @@ export function DriveCodeRenderer({
   }, [
     canEdit,
     bindingReady,
+    canSave,
     collaborationEnabled,
     collaborationState.state?.onlineCount,
     collaborationState.state?.status,
@@ -247,6 +279,7 @@ export function DriveCodeRenderer({
     loginRequired,
     loginUrl,
     requestReload,
+    savingVersion,
   ])
 
   useRegisterDriveRendererToolbarItems('code-editor', toolbarItems)

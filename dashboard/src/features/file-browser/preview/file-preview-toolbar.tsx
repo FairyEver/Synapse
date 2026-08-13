@@ -27,6 +27,7 @@ export type FilePreviewToolbarItem =
         readonly kind: 'button'
         readonly icon?: LucideIcon
         readonly variant?: 'default' | 'outline' | 'secondary' | 'ghost'
+        readonly ariaKeyShortcuts?: string
         readonly disabled?: boolean
         readonly loading?: boolean
         readonly href?: string
@@ -81,6 +82,7 @@ export function FilePreviewToolbarItemView({
           variant={variant}
           size='sm'
           disabled={item.disabled}
+          aria-keyshortcuts={item.ariaKeyShortcuts}
           className={cn(compact && 'min-h-11')}
         >
           <a href={item.href} target={item.external ? '_blank' : undefined} rel={item.external ? 'noreferrer' : undefined}>
@@ -95,6 +97,7 @@ export function FilePreviewToolbarItemView({
         variant={variant}
         size='sm'
         disabled={item.disabled || item.loading}
+        aria-keyshortcuts={item.ariaKeyShortcuts}
         className={cn(compact && 'min-h-11')}
         onClick={item.onClick}
       >
@@ -164,7 +167,7 @@ export function FilePreviewToolbarMenuItems({
       )
       if (item.href) {
         return (
-          <DropdownMenuItem key={item.id} asChild disabled={item.disabled}>
+          <DropdownMenuItem key={item.id} asChild disabled={item.disabled} aria-keyshortcuts={item.ariaKeyShortcuts}>
             <a href={item.href} target={item.external ? '_blank' : undefined} rel={item.external ? 'noreferrer' : undefined}>
               {content}
             </a>
@@ -172,7 +175,12 @@ export function FilePreviewToolbarMenuItems({
         )
       }
       return (
-        <DropdownMenuItem key={item.id} disabled={item.disabled || item.loading} onSelect={item.onClick}>
+        <DropdownMenuItem
+          key={item.id}
+          disabled={item.disabled || item.loading}
+          aria-keyshortcuts={item.ariaKeyShortcuts}
+          onSelect={item.onClick}
+        >
           {content}
         </DropdownMenuItem>
       )

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -96,6 +96,7 @@ export function DriveMDXeditorRenderer({
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const savedValueRef = useRef(initialText)
   const valueRef = useRef(initialText)
+  const saveInFlightRef = useRef(false)
   const applyingExternalMarkdownRef = useRef(false)
   const externalMarkdownTargetRef = useRef<string | null>(null)
   const externalMarkdownFrameRef = useRef<number | null>(null)
@@ -117,6 +118,11 @@ export function DriveMDXeditorRenderer({
     editContext,
     disabled: dirty,
   })
+  const canSave = canEdit
+    && dirty
+    && !uploadingImage
+    && !editContext?.savingText
+    && !editContext?.reloading
   const relativeImagePreviewUrls = useMemo(
     () => new Map((preview.relativeImages ?? []).map(({ src, resolvedUrl }) => [src, resolvedUrl])),
     [preview.relativeImages],
@@ -297,7 +303,8 @@ export function DriveMDXeditorRenderer({
   }, [clearDraftPublicImages, clearExternalMarkdownSync])
 
   const handleSave = useCallback(async () => {
-    if (!canEdit || !edit?.currentVersionId || !editContext) return
+    if (!canSave || saveInFlightRef.current || !edit?.currentVersionId || !editContext) return
+    saveInFlightRef.current = true
     setError(null)
     const submittedValue = valueRef.current
     let normalizedValue = normalizeMdxEditorImageMarkdown(submittedValue)
@@ -340,8 +347,16 @@ export function DriveMDXeditorRenderer({
         return
       }
       setError(cleanupFailed ? '保存失败，未保存图片清理失败。' : saveError instanceof Error ? saveError.message : '保存失败。')
+    } finally {
+      saveInFlightRef.current = false
     }
-  }, [beginExternalMarkdownSync, canEdit, clearDraftPublicImages, edit?.currentVersionId, editContext])
+  }, [beginExternalMarkdownSync, canSave, clearDraftPublicImages, edit?.currentVersionId, editContext])
+
+  const handleSaveShortcut = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key.toLowerCase() !== 's' || (!event.metaKey && !event.ctrlKey) || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    if (canSave) void handleSave()
+  }, [canSave, handleSave])
 
   const handleEditorError = useCallback((payload: { readonly error: unknown; readonly source: string }) => {
     const message = typeof payload.error === 'string'
@@ -417,9 +432,10 @@ export function DriveMDXeditorRenderer({
           id: 'mdxeditor-save',
           label: '保存',
           icon: Save,
+          ariaKeyShortcuts: 'Meta+S Control+S',
           compactPlacement: 'primary',
           loading: editContext?.savingText,
-          disabled: !dirty || uploadingImage || editContext?.savingText || editContext?.reloading,
+          disabled: !canSave,
           onClick: () => { void handleSave() },
         },
       )
@@ -427,6 +443,7 @@ export function DriveMDXeditorRenderer({
     return items
   }, [
     canEdit,
+    canSave,
     dirty,
     editContext?.reloading,
     editContext?.savingText,
@@ -446,6 +463,7 @@ export function DriveMDXeditorRenderer({
     <div
       data-drive-mdxeditor-renderer='true'
       className='flex h-full min-h-0 w-full flex-col overflow-hidden'
+      onKeyDown={handleSaveShortcut}
     >
       <input
         ref={imageInputRef}

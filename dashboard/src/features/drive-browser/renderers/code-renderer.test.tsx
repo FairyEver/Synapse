@@ -16,6 +16,12 @@ import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-r
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+const monacoMockState = vi.hoisted(() => ({
+  ctrlCmd: 1 << 11,
+  keyS: 49,
+  saveCommand: null as null | { readonly keybinding: number; readonly handler: () => void },
+}))
+
 vi.mock('@monaco-editor/react', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
 
@@ -23,19 +29,37 @@ vi.mock('@monaco-editor/react', async () => {
     default: ({
       value,
       onChange,
+      onMount,
       options,
     }: {
       readonly value?: string
       readonly onChange?: (value?: string) => void
+      readonly onMount?: (
+        editor: { addCommand: (keybinding: number, handler: () => void) => string },
+        monaco: { KeyMod: { CtrlCmd: number }; KeyCode: { KeyS: number } },
+      ) => void
       readonly options?: { readonly readOnly?: boolean }
-    }) => React.createElement('textarea', {
-      'data-monaco-editor': 'true',
-      readOnly: options?.readOnly,
-      value: value ?? '',
-      onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-        onChange?.(event.currentTarget.value)
-      },
-    }),
+    }) => {
+      React.useEffect(() => {
+        onMount?.(
+          {
+            addCommand: (keybinding, handler) => {
+              monacoMockState.saveCommand = { keybinding, handler }
+              return 'drive-save'
+            },
+          },
+          { KeyMod: { CtrlCmd: monacoMockState.ctrlCmd }, KeyCode: { KeyS: monacoMockState.keyS } },
+        )
+      }, [])
+      return React.createElement('textarea', {
+        'data-monaco-editor': 'true',
+        readOnly: options?.readOnly,
+        value: value ?? '',
+        onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+          onChange?.(event.currentTarget.value)
+        },
+      })
+    },
   }
 })
 
@@ -58,10 +82,33 @@ afterEach(() => {
   root = null
   host = null
   document.body.innerHTML = ''
+  monacoMockState.saveCommand = null
   vi.clearAllMocks()
 })
 
 describe('DriveCodeRenderer', () => {
+  it('saves dirty source with the platform save command', async () => {
+    const editContext = createEditContext()
+    renderRenderer({ editContext })
+
+    expect(monacoMockState.saveCommand?.keybinding).toBe(monacoMockState.ctrlCmd | monacoMockState.keyS)
+    expect(buttonWithText('保存').getAttribute('aria-keyshortcuts')).toBe('Meta+S Control+S')
+
+    monacoMockState.saveCommand?.handler()
+    expect(editContext.saveText).not.toHaveBeenCalled()
+
+    await inputValue(editor(), 'const shortcut = true')
+    await act(async () => {
+      monacoMockState.saveCommand?.handler()
+      await Promise.resolve()
+    })
+
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: 'const shortcut = true',
+      baseVersionId: 'version-1',
+    })
+  })
+
   it('asks before reloading dirty source text and then reloads from the returned snapshot', async () => {
     const editContext = createEditContext({
       reload: vi.fn(async () => baseSnapshot({ preview: { ...basePreview(), text: 'const answer = 42' } })),
@@ -113,6 +160,12 @@ describe('DriveCodeRenderer', () => {
     await inputValue(editor(), 'const submitted = true')
     await click(buttonWithText('保存'))
     await inputValue(editor(), 'const newer = true')
+    await act(async () => {
+      monacoMockState.saveCommand?.handler()
+      await Promise.resolve()
+    })
+
+    expect(editContext.saveText).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       resolveSave()
