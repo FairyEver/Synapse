@@ -5,7 +5,7 @@ import type { ReactElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
-import { DriveBrowserPage } from './drive-browser-page'
+import { DriveBrowserPage, DriveSingleFileReaderView } from './drive-browser-page'
 import { useDriveBrowser, type DriveBrowserState } from './use-drive-browser'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -39,6 +39,7 @@ let root: Root | null = null
 let host: HTMLDivElement | null = null
 
 beforeEach(() => {
+  document.title = 'Synapse'
   globalThis.ResizeObserver = class ResizeObserver {
     observe() {}
     unobserve() {}
@@ -62,6 +63,79 @@ afterEach(() => {
 })
 
 describe('DriveBrowserPage', () => {
+  it.each([
+    { label: 'shared files', context: 'share' as const, surface: 'standalone' as const, embedded: false },
+    { label: 'standalone owner files', context: 'owner' as const, surface: 'standalone' as const, embedded: false },
+    { label: 'console owner files', context: 'owner' as const, surface: 'console' as const, embedded: true },
+  ])('uses the complete file name as the document title for $label', ({ context, surface, embedded }) => {
+    renderPage(
+      <DriveSingleFileReaderView
+        snapshot={createSnapshot({
+          context,
+          surface,
+          current: { ...baseCurrent(), name: '产品中心 & 开发中心共享文档仓库.md' },
+        })}
+        embedded={embedded}
+      />
+    )
+
+    expect(document.title).toBe('产品中心 & 开发中心共享文档仓库.md')
+  })
+
+  it('updates the document title when the file changes and restores the previous title on unmount', () => {
+    renderPage(
+      <DriveSingleFileReaderView
+        snapshot={createSnapshot({ current: { ...baseCurrent(), name: 'first.md' } })}
+      />
+    )
+    expect(document.title).toBe('first.md')
+
+    rerenderPage(
+      <DriveSingleFileReaderView
+        snapshot={createSnapshot({ current: { ...baseCurrent(), id: 'second', name: 'second.md' } })}
+      />
+    )
+    expect(document.title).toBe('second.md')
+
+    act(() => {
+      root?.unmount()
+    })
+    root = null
+    expect(document.title).toBe('Synapse')
+  })
+
+  it('keeps the default document title for non-file reader states', () => {
+    mockDriveBrowserState({ status: 'loading' })
+    renderPage(<DriveBrowserPage context='share' shareId='share-1' />)
+    expect(document.title).toBe('Synapse')
+
+    mockDriveBrowserState({
+      status: 'passwordRequired',
+      message: '请输入密码。',
+      unlock: vi.fn(),
+      unlocking: false,
+      unlockError: null,
+    })
+    rerenderPage(<DriveBrowserPage context='share' shareId='share-1' />)
+    expect(document.title).toBe('Synapse')
+
+    mockDriveBrowserState({
+      status: 'ready',
+      snapshot: createSnapshot({
+        current: { ...baseCurrent(), id: 'folder', name: '资料', type: 'folder' },
+        preview: null,
+      }),
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload: vi.fn(async () => createSnapshot()),
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+    rerenderPage(<DriveBrowserPage context='share' shareId='share-1' />)
+    expect(document.title).toBe('Synapse')
+  })
+
   it('renders the branded share password form and submits the entered password', async () => {
     const unlock = vi.fn()
     mockDriveBrowserState({

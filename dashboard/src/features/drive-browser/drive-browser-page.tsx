@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useDocumentTitle } from '@/hooks/use-document-title'
 import { cn } from '@/lib/utils'
 import { DriveFinder } from './finder/drive-finder'
 import { DriveRendererShell } from './renderers/drive-renderer-shell'
@@ -223,6 +224,8 @@ export function DriveSingleFileReaderView({
   readonly editContext?: DriveRendererEditContext
   readonly annotationContext?: DriveAnnotationContext
 }) {
+  useDocumentTitle(snapshot.current.name)
+
   return (
     <div className={embedded ? 'h-full min-h-0 overflow-hidden bg-background' : 'h-screen supports-[height:100svh]:h-svh min-h-0 overflow-hidden bg-background'}>
       <DriveRendererShell
