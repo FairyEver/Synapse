@@ -2734,6 +2734,43 @@ describe("DriveService", () => {
     expect(snapshot.preview?.text).toContain("../images/%E6%9E%B6%E6%9E%84%20%E5%9B%BE.png?version=1#preview")
   })
 
+  it("resolves explicit Windows Markdown image paths without rewriting the preview source", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareFolderUpload("user-1", {
+      parentId: null,
+      folderName: "需求文档",
+      files: [
+        { relativePath: "docs/readme.md", size: "11", mimeType: "text/markdown" },
+        { relativePath: "docs/image/订单/赠品.png", size: "11", mimeType: "image/png" },
+      ],
+      publicAppUrl: "https://synapse.test",
+    })
+    for (const entry of prepared.entries) await service.completeUpload("user-1", entry.sessionId)
+    const markdown = prepared.entries.find(({ relativePath }) => relativePath === "docs/readme.md")!.item
+    const image = prepared.entries.find(({ relativePath }) => relativePath === "docs/image/订单/赠品.png")!.item
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    const source = String.raw`.\image\订单\赠品.png`
+    objects.set(markdownRecord.storageKey, {
+      body: `![赠品](${source})`,
+      contentType: "text/markdown",
+    })
+
+    const snapshot = await service.getOwnerBrowserSnapshot({
+      userId: "user-1",
+      itemId: markdown.id,
+      surface: "standalone",
+    })
+
+    const resolvedUrl = `/drive/items/${image.id}/download`
+    expect(snapshot.preview?.html).toContain(`src="${resolvedUrl}"`)
+    expect(snapshot.preview?.relativeImages).toEqual([{ src: source, resolvedUrl }])
+    expect(snapshot.preview?.text).toBe(`![赠品](${source})`)
+  })
+
   it("limits a single Markdown file share to its currently referenced images", async () => {
     const prisma = createPrismaMemory()
     const objects = new Map<string, DriveTestObject>()
@@ -2946,8 +2983,10 @@ describe("DriveService", () => {
       mimeType: "image/png",
     })
     const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    const insideSource = String.raw`.\inside.png`
+    const outsideSource = String.raw`..\outside.png`
     objects.set(markdownRecord.storageKey, {
-      body: "![inside](./inside.png)\n\n![outside](../outside.png)",
+      body: `![inside](${insideSource})\n\n![outside](${outsideSource})`,
       contentType: "text/markdown",
     })
     const share = await service.createShare("user-1", sharedFolder.id, "https://synapse.test")
@@ -2959,8 +2998,8 @@ describe("DriveService", () => {
     })
 
     expect(snapshot.preview?.relativeImages).toEqual([
-      { src: "./inside.png", resolvedUrl: `/share/${share.shareId}/items/${inside.id}/download` },
-      { src: "../outside.png", resolvedUrl: null },
+      { src: insideSource, resolvedUrl: `/share/${share.shareId}/items/${inside.id}/download` },
+      { src: outsideSource, resolvedUrl: null },
     ])
     expect(snapshot.preview?.html).toContain(`items/${inside.id}/download`)
     expect(snapshot.preview?.html).toMatch(/<img alt="outside"[^>]*>/u)
@@ -3057,7 +3096,7 @@ describe("DriveService", () => {
       itemId: markdown.id,
       body: {
         contentType: "text",
-        text: "![inside](./inside.png)\n\n![external](https://example.com/image.png)",
+        text: String.raw`![inside](.\inside.png)` + "\n\n![external](https://example.com/image.png)",
         baseVersionId: version.id,
       },
     })
@@ -3069,7 +3108,7 @@ describe("DriveService", () => {
       itemId: markdown.id,
       body: {
         contentType: "text",
-        text: "![outside](../outside.png)",
+        text: String.raw`![outside](..\outside.png)`,
         baseVersionId: saved.version.id,
       },
     })).rejects.toBeInstanceOf(ForbiddenException)

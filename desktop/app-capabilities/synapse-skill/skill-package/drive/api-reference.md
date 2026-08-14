@@ -110,7 +110,7 @@ Input:
 - `childrenOffset` optional: folder child pagination offset.
 - `childrenLimit` optional: folder child pagination page size.
 
-For `.md` and `.markdown`, `preview.relativeImages` contains each supported relative image source and its `resolvedUrl`. A non-null URL means the current Drive directory tree resolves that PNG, JPG/JPEG, WebP, GIF, AVIF, or ICO reference. The Markdown content and saved file keep the original relative source unchanged. Resolution covers the current 128 KiB Markdown preview and at most 256 unique relative image sources. This does not apply to `.mdx`, root-relative paths, SVG, or relative HTML resources.
+For `.md` and `.markdown`, `preview.relativeImages` contains each supported relative image source and its `resolvedUrl`. A non-null URL means the current Drive directory tree resolves that PNG, JPG/JPEG, WebP, GIF, AVIF, or ICO reference. The Markdown content and saved file keep the original relative source unchanged. Explicit Windows-style `.\` and `..\` paths are accepted as compatibility input only when every path separator is a backslash; generated references should use `/`. Resolution covers the current 128 KiB Markdown preview and at most 256 unique relative image sources. This does not apply to `.mdx`, root-relative paths, SVG, or relative HTML resources.
 
 For `.md`, the browser snapshot may also advertise browser-only realtime collaboration and include a Markdown projection used by the web comment UI. These fields do not create MCP collaboration, presence, comment, or anchor operations. MCP content changes remain explicit Drive versions and may replace the active browser collaboration Epoch.
 

@@ -12,6 +12,7 @@ import {
 } from "@synapse/shared"
 import { formatAuditError } from "../common/audit-error"
 import { extractDriveMarkdownImages, normalizeDriveMarkdownImageSrc, replaceDriveMarkdownImageSources } from "./drive-document-image-parser"
+import { parseDriveMarkdownRelativeImageSrc } from "./drive-markdown-relative-images"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveRemoteImageFetcher } from "./drive-remote-image-fetcher"
 import { DriveService } from "./drive.service"
@@ -431,7 +432,9 @@ function summarizeDataImageSource(src: string): string {
 
 function isRelativeImageSource(src: string): boolean {
   const trimmed = src.trimStart()
-  return trimmed.startsWith("./") || trimmed.startsWith("../") || trimmed.startsWith("/")
+  if (trimmed.startsWith("./") || trimmed.startsWith("../") || trimmed.startsWith("/")) return true
+  return (trimmed.startsWith(".\\") || trimmed.startsWith("..\\"))
+    && parseDriveMarkdownRelativeImageSrc(trimmed) !== null
 }
 
 function isHttpImageSource(src: string): boolean {

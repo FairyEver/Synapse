@@ -316,7 +316,8 @@ type DriveDocumentImageSourcesDto = {
 - 仅 `.md`、`.markdown` 启用；`.mdx` 和其它文件类型保持原行为。
 - 路径从 Markdown 的 `DriveItem.parentId` 开始，按现有父子目录树解析 `.`、`..` 和普通文件名；不得越过所有者 Drive 顶层。
 - 支持 Markdown inline image、reference image，以及独立且 `src` 带引号的静态 `<img>`；inline image 兼容安全栅格相对路径中的未转义空格，但不扩展普通链接或其它非标准 Markdown 语法。
-- Agent 新建或改写图片引用时必须优先生成标准 inline image；路径含空格时优先使用尖括号 destination，也可使用 `%20`，reference image 同样支持。未转义空格只作为既有文档的输入兼容，不作为推荐输出。
+- 兼容以 `.\` 或 `..\` 开头且全程使用反斜杠的 Windows 相对图片路径；裸反斜杠相对路径、根路径、盘符、UNC、编码分隔符和正反斜杠混用均不识别。兼容解析不得改写 Markdown 原文。
+- Agent 新建或改写图片引用时必须优先生成使用 `/` 的标准 inline image；路径含空格时优先使用尖括号 destination，也可使用 `%20`，reference image 同样支持。反斜杠和未转义空格只作为既有文档的输入兼容，不作为推荐输出。
 - 仅解析 PNG、JPEG、WebP、GIF、AVIF、ICO；SVG、HTML 和未知格式不产生读取 URL。
 - owner 预览生成 `/drive/items/<imageItemId>/download`；share 预览生成 `/share/<shareId>/items/<imageItemId>/download`。
 - 文件夹分享只允许共享根子树内的图片。单文件 Markdown 分享只允许当前版本实际引用且成功解析的图片，不开放兄弟文件浏览或通用下载权限。

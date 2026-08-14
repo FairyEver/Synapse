@@ -86,11 +86,55 @@ describe("drive markdown relative images", () => {
     expect(parseDriveMarkdownRelativeImageSrc("image/%252f.png")?.segments).toEqual(["image", "%2f.png"])
   })
 
-  it("rejects roots, encoded separators, backslashes, controls and invalid encoding", () => {
+  it("accepts explicit Windows relative image paths without rewriting their source", () => {
+    expect(parseDriveMarkdownRelativeImageSrc(String.raw`.\image\订单\赠品.png?version=1#preview`)).toEqual({
+      src: String.raw`.\image\订单\赠品.png?version=1#preview`,
+      segments: [".", "image", "订单", "赠品.png"],
+      suffix: "?version=1#preview",
+    })
+    expect(parseDriveMarkdownRelativeImageSrc(String.raw`..\..\assets\架构 图.webp`)).toEqual({
+      src: String.raw`..\..\assets\架构 图.webp`,
+      segments: ["..", "..", "assets", "架构 图.webp"],
+      suffix: "",
+    })
+  })
+
+  it("extracts explicit Windows paths from supported image syntax while ignoring code", () => {
+    const markdown = [
+      String.raw`![inline](.\image\订单\inline.png)`,
+      "![reference][diagram]",
+      "",
+      String.raw`[diagram]: ..\assets\diagram.jpg "Diagram"`,
+      "",
+      String.raw`<img src=".\image\raw.webp" alt="Raw">`,
+      "",
+      String.raw`before ![space](.\image\team photo.png) after`,
+      "",
+      "```md",
+      String.raw`![ignored](.\private.png)`,
+      "```",
+    ].join("\n")
+
+    expect(extractDriveMarkdownRelativeImages(markdown)).toEqual([
+      { src: String.raw`.\image\订单\inline.png`, segments: [".", "image", "订单", "inline.png"], suffix: "" },
+      { src: String.raw`..\assets\diagram.jpg`, segments: ["..", "assets", "diagram.jpg"], suffix: "" },
+      { src: String.raw`.\image\raw.webp`, segments: [".", "image", "raw.webp"], suffix: "" },
+      { src: String.raw`.\image\team photo.png`, segments: [".", "image", "team photo.png"], suffix: "" },
+    ])
+  })
+
+  it("rejects ambiguous or unsafe backslash paths, roots, controls and invalid encoding", () => {
     expect(parseDriveMarkdownRelativeImageSrc("/image/a.png")).toBeNull()
     expect(parseDriveMarkdownRelativeImageSrc("image%2Fa.png")).toBeNull()
     expect(parseDriveMarkdownRelativeImageSrc("image%5Ca.png")).toBeNull()
-    expect(parseDriveMarkdownRelativeImageSrc("image\\a.png")).toBeNull()
+    expect(parseDriveMarkdownRelativeImageSrc(String.raw`.\image%5Ca.png`)).toBeNull()
+    expect(parseDriveMarkdownRelativeImageSrc(String.raw`image\a.png`)).toBeNull()
+    expect(parseDriveMarkdownRelativeImageSrc(String.raw`.\image/a.png`)).toBeNull()
+    expect(parseDriveMarkdownRelativeImageSrc(String.raw`\image\a.png`)).toBeNull()
+    expect(parseDriveMarkdownRelativeImageSrc(String.raw`\\server\share\a.png`)).toBeNull()
+    expect(parseDriveMarkdownRelativeImageSrc(String.raw`C:\image\a.png`)).toBeNull()
+    expect(parseDriveMarkdownRelativeImageSrc(String.raw`https:\example.com\a.png`)).toBeNull()
+    expect(parseDriveMarkdownRelativeImageSrc(String.raw`.\image\\a.png`)).toBeNull()
     expect(parseDriveMarkdownRelativeImageSrc("image/%00a.png")).toBeNull()
     expect(parseDriveMarkdownRelativeImageSrc("image/%zz.png")).toBeNull()
   })

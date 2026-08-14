@@ -387,6 +387,8 @@ describe("SynapseSkillService", () => {
     expect(driveIndex).toContain("prefer the angle-bracket form `![alt](<images/team photo.png>)`")
     expect(driveIndex).toContain("`![alt](images/team%20photo.png)`")
     expect(driveIndex).toContain("`![alt][diagram]` with `[diagram]: <images/team photo.png> \"Diagram\"`")
+    expect(driveIndex).toContain("Never generate backslash-separated image paths")
+    expect(driveIndex).toContain("explicit Windows-style `.\\` and `..\\` paths only as compatibility input")
     expect(driveIndex).toContain("Never generate the ambiguous raw-space form `![alt](images/team photo.png)`")
     expect(driveIndex).toContain("only as compatibility input for safe raster images")
     expect(driveIndex).toContain("do not normalize unchanged user-authored Markdown solely for upload")
@@ -404,6 +406,7 @@ describe("SynapseSkillService", () => {
     expect(driveApiText).not.toContain("New shares default to `3d`")
     expect(driveIndex).toContain("Do not upload the Markdown when a required dependency upload")
     expect(driveApiText).toContain("`preview.relativeImages`")
+    expect(driveApiText).toContain("Explicit Windows-style `.\\` and `..\\` paths are accepted as compatibility input")
     expect(driveApiText).toContain("without rewriting the Markdown or converting images to public assets")
   })
 

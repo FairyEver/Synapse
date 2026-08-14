@@ -134,6 +134,43 @@ describe("drive markdown renderer", () => {
     expect(result.html).toContain('src="/share/share_1/items/space/download"')
   })
 
+  it("renders resolved explicit Windows image paths after remark encodes their separators", async () => {
+    const inlineSource = String.raw`.\image\订单\inline.png?version=1#preview`
+    const referenceSource = String.raw`..\assets\reference.jpg`
+    const rawSource = String.raw`.\image\raw.webp`
+    const missingSource = String.raw`.\image\missing.png`
+    const markdown = [
+      `![inline](${inlineSource})`,
+      "",
+      "![reference][diagram]",
+      "",
+      `[diagram]: ${referenceSource} "Diagram"`,
+      "",
+      `<img src="${rawSource}" alt="Raw">`,
+      "",
+      `![missing](${missingSource})`,
+    ].join("\n")
+
+    const result = await renderDriveMarkdownFragment(markdown, {
+      allowStandaloneRawImages: true,
+      relativeImageUrls: new Map([
+        [inlineSource, "/drive/items/inline/download?version=1#preview"],
+        [referenceSource, "/drive/items/reference/download"],
+        [rawSource, "/drive/items/raw/download"],
+        [missingSource, null],
+      ]),
+    })
+
+    expect(result.html).toContain('src="/drive/items/inline/download?version=1#preview"')
+    expect(result.html).toContain('src="/drive/items/reference/download"')
+    expect(result.html).toContain('src="/drive/items/raw/download"')
+    expect(result.html).toContain(`data-drive-markdown-relative-src="${inlineSource}"`)
+    expect(result.html).toContain(`data-drive-markdown-relative-src="${referenceSource}"`)
+    expect(result.html).toContain(`data-drive-markdown-relative-src="${rawSource}"`)
+    expect(result.html).toMatch(/<img(?=[^>]*alt="missing")(?=[^>]*data-drive-markdown-relative-src="\.\\image\\missing\.png")(?![^>]*\ssrc=)[^>]*>/u)
+    expect(result.html).not.toContain("%5C")
+  })
+
   it("renders every documented CommonMark relative image form", async () => {
     const result = await renderDriveMarkdownFragment([
       '![plain](./images/plain.png "Plain")',

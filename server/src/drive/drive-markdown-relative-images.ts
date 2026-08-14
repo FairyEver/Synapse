@@ -75,12 +75,14 @@ export function normalizeDriveMarkdownLooseImageNodes(tree: MarkdownAstNode): vo
 export function parseDriveMarkdownRelativeImageSrc(src: string): DriveMarkdownRelativeImageReference | null {
   const trimmed = src.trim()
   if (!trimmed || trimmed.startsWith("/") || trimmed.startsWith("#") || trimmed.startsWith("//")) return null
-  if (URI_SCHEME_PATTERN.test(trimmed) || trimmed.includes("\\") || CONTROL_CHARACTER_PATTERN.test(trimmed)) return null
+  if (URI_SCHEME_PATTERN.test(trimmed) || CONTROL_CHARACTER_PATTERN.test(trimmed)) return null
 
   const suffixStart = firstSuffixIndex(trimmed)
-  const path = suffixStart < 0 ? trimmed : trimmed.slice(0, suffixStart)
+  const rawPath = suffixStart < 0 ? trimmed : trimmed.slice(0, suffixStart)
   const suffix = suffixStart < 0 ? "" : trimmed.slice(suffixStart)
-  if (!path || ENCODED_PATH_SEPARATOR_PATTERN.test(path)) return null
+  const path = normalizeExplicitWindowsRelativeImagePath(rawPath)
+  if (!path || suffix.includes("\\")) return null
+  if (ENCODED_PATH_SEPARATOR_PATTERN.test(path)) return null
 
   const rawSegments = path.split("/")
   if (rawSegments.some((segment) => segment.length === 0)) return null
@@ -98,6 +100,12 @@ export function parseDriveMarkdownRelativeImageSrc(src: string): DriveMarkdownRe
   }
 
   return { src: trimmed, segments, suffix }
+}
+
+function normalizeExplicitWindowsRelativeImagePath(path: string): string | null {
+  if (!path.includes("\\")) return path
+  if (path.includes("/") || (!path.startsWith(".\\") && !path.startsWith("..\\"))) return null
+  return path.replaceAll("\\", "/")
 }
 
 export function parseStandaloneDriveMarkdownRawImage(value: string): DriveMarkdownRawImage | null {

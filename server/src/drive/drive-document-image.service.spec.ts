@@ -23,6 +23,7 @@ describe("DriveDocumentImageService", () => {
         `![other](https://synapse.test/files/${COLLABORATOR_ASSET_ID})`,
         "![external](https://example.test/a.png)",
         "![relative](./a.png)",
+        String.raw`![windows](.\image\a.png)`,
         "![data](data:image/png;base64,aaaa)",
       ].join("\n"),
       assetOwners: new Map([
@@ -39,6 +40,7 @@ describe("DriveDocumentImageService", () => {
       "owner_asset",
       "collaborator_asset",
       "external",
+      "relative",
       "relative",
       "data",
     ])

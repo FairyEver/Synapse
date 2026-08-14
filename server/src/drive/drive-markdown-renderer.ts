@@ -36,6 +36,12 @@ type HtmlAstNode = {
   children?: HtmlAstNode[]
 }
 
+type ResolvedRelativeImage = {
+  readonly source: string
+  readonly resolvedUrl: string | null
+  readonly windowsStyle: boolean
+}
+
 export type DriveMarkdownRenderResult = {
   readonly html: string
   readonly outline: readonly DriveMarkdownOutlineItemDto[]
@@ -261,9 +267,13 @@ function visitMarkdownAst(node: MarkdownAstNode): void {
 }
 
 function resolveRelativeResourceUrlsPlugin(relativeImageUrls: ReadonlyMap<string, string | null>) {
-  const indexedImageUrls = new Map<string, string | null>()
+  const indexedImageUrls = new Map<string, ResolvedRelativeImage>()
   for (const [src, resolvedUrl] of relativeImageUrls) {
-    indexedImageUrls.set(relativeImageLookupKey(src), resolvedUrl)
+    indexedImageUrls.set(relativeImageLookupKey(src), {
+      source: src.trim(),
+      resolvedUrl,
+      windowsStyle: src.includes("\\") && parseDriveMarkdownRelativeImageSrc(src) !== null,
+    })
   }
   return (tree: HtmlAstNode) => {
     visitHtmlAst(tree, indexedImageUrls)
@@ -297,7 +307,7 @@ function wrapTablesInHtmlAst(node: HtmlAstNode): void {
   })
 }
 
-function visitHtmlAst(node: HtmlAstNode, relativeImageUrls: ReadonlyMap<string, string | null>): void {
+function visitHtmlAst(node: HtmlAstNode, relativeImageUrls: ReadonlyMap<string, ResolvedRelativeImage>): void {
   const properties = node.properties
   if (properties) {
     removeRelativeUrlProperty(properties, "href")
@@ -313,22 +323,44 @@ function visitHtmlAst(node: HtmlAstNode, relativeImageUrls: ReadonlyMap<string, 
 
 function resolveRelativeImageProperty(
   properties: Record<string, unknown>,
-  relativeImageUrls: ReadonlyMap<string, string | null>,
+  relativeImageUrls: ReadonlyMap<string, ResolvedRelativeImage>,
 ): void {
   const value = properties.src
   if (typeof value !== "string") return
   const trimmed = value.trim()
   if (trimmed.startsWith("/files/")) return
   if (!isRelativeMarkdownUrl(trimmed)) return
-  properties["data-drive-markdown-relative-src"] = trimmed
-  const resolved = relativeImageUrls.get(relativeImageLookupKey(trimmed))
-  if (resolved) properties.src = resolved
+  const resolved = relativeImageUrls.get(relativeImageLookupKey(trimmed, true))
+  properties["data-drive-markdown-relative-src"] = resolved?.windowsStyle ? resolved.source : trimmed
+  if (resolved?.resolvedUrl) properties.src = resolved.resolvedUrl
   else delete properties.src
 }
 
-function relativeImageLookupKey(src: string): string {
-  const parsed = parseDriveMarkdownRelativeImageSrc(src)
-  return parsed ? JSON.stringify([parsed.segments, parsed.suffix]) : src.trim()
+function relativeImageLookupKey(src: string, allowRemarkEncodedWindowsPath = false): string {
+  const lookupSource = allowRemarkEncodedWindowsPath
+    ? decodeRemarkEncodedWindowsImagePath(src) ?? src
+    : src
+  const parsed = parseDriveMarkdownRelativeImageSrc(lookupSource)
+  if (!parsed) return src.trim()
+  return JSON.stringify([lookupSource.includes("\\") ? "windows" : "portable", parsed.segments, parsed.suffix])
+}
+
+function decodeRemarkEncodedWindowsImagePath(src: string): string | null {
+  const trimmed = src.trim()
+  const suffixStart = firstResourceSuffixIndex(trimmed)
+  const path = suffixStart < 0 ? trimmed : trimmed.slice(0, suffixStart)
+  const suffix = suffixStart < 0 ? "" : trimmed.slice(suffixStart)
+  if (path.includes("/") || path.includes("\\") || !/%5c/iu.test(path)) return null
+  const decoded = `${path.replace(/%5c/giu, "\\")}${suffix}`
+  return parseDriveMarkdownRelativeImageSrc(decoded) ? decoded : null
+}
+
+function firstResourceSuffixIndex(value: string): number {
+  const queryIndex = value.indexOf("?")
+  const fragmentIndex = value.indexOf("#")
+  if (queryIndex < 0) return fragmentIndex
+  if (fragmentIndex < 0) return queryIndex
+  return Math.min(queryIndex, fragmentIndex)
 }
 
 function removeRelativeUrlProperty(properties: Record<string, unknown>, key: string): void {
