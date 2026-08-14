@@ -13,7 +13,6 @@ import {
 import { ListTree, Maximize2, MessageSquare } from 'lucide-react'
 import * as Y from 'yjs'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import {
   Sheet,
@@ -31,6 +30,7 @@ import { useDriveAnnotations } from '../use-drive-annotations'
 import { useDriveCollaboration } from '../collaboration/use-drive-collaboration'
 import { DriveCodeRenderer } from './code-renderer'
 import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
+import { MarkdownImageViewer, type MarkdownImageViewerPreview } from './markdown-image-viewer'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { renderMarkdownAnnotationHtml, resolveMarkdownAnnotationTextRange } from './markdown-annotation-render'
 import { createMarkdownAnnotationAnchorFromSelection } from './markdown-annotation-target'
@@ -54,12 +54,6 @@ const COMMENT_SCROLL_SAFE_INSET = 24
 
 type ResizablePanelPercent = `${number}%`
 type MarkdownWidthMode = 'reading' | 'wide'
-
-type MarkdownPreviewImage = {
-  readonly alt: string
-  readonly src: string
-  readonly trigger: HTMLImageElement
-}
 
 type SelectionPopoverPosition = {
   readonly top: number
@@ -172,7 +166,7 @@ function DriveMarkdownBody({
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
   const [threadAnchorTopById, setThreadAnchorTopById] = useState<Record<string, number>>({})
   const [annotationOverlayRects, setAnnotationOverlayRects] = useState<readonly MarkdownAnnotationOverlayRect[]>([])
-  const [previewImage, setPreviewImage] = useState<MarkdownPreviewImage | null>(null)
+  const [previewImage, setPreviewImage] = useState<MarkdownImageViewerPreview | null>(null)
 
   useEffect(() => {
     setActiveThreadId(null)
@@ -675,9 +669,15 @@ function DriveMarkdownBody({
   }, [scheduleDocumentScrollEffects])
 
   const openImagePreview = (image: HTMLImageElement) => {
-    const src = image.currentSrc || image.getAttribute('src')
-    if (!src) return
-    setPreviewImage({ alt: image.alt, src, trigger: image })
+    const root = bodyRef.current
+    if (!root) return
+    const entries = Array.from(root.querySelectorAll<HTMLImageElement>('img[src]')).flatMap((element) => {
+      const src = element.currentSrc || element.getAttribute('src')
+      return src ? [{ element, image: { alt: element.alt, src } }] : []
+    })
+    const initialIndex = entries.findIndex((entry) => entry.element === image)
+    if (initialIndex < 0) return
+    setPreviewImage({ images: entries.map((entry) => entry.image), initialIndex, trigger: image })
   }
 
   const handleBodyClick = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -998,20 +998,7 @@ function DriveMarkdownBody({
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>{annotations.error}</div>
       ) : null}
       {imageSources.panel}
-      <Dialog open={Boolean(previewImage)} onOpenChange={(open) => {
-        if (!open) closeImagePreview()
-      }}>
-        {previewImage ? (
-          <DialogContent
-            aria-describedby={undefined}
-            className='h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] p-4 sm:max-w-[calc(100%-2rem)]'
-            data-markdown-image-preview='true'
-          >
-            <DialogTitle className='sr-only'>图片预览</DialogTitle>
-            <img className='h-full w-full object-contain' src={previewImage.src} alt={previewImage.alt} />
-          </DialogContent>
-        ) : null}
-      </Dialog>
+      {previewImage ? <MarkdownImageViewer preview={previewImage} onClose={closeImagePreview} /> : null}
       {annotated.resolved.some((item) => item.anchorStatus === 'orphaned') ? (
         <div className='sr-only'>原文已修改或删除</div>
       ) : null}

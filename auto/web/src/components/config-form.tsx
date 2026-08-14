@@ -7,7 +7,7 @@ interface ConfigFormProps {
   onChange: (config: UiConfig) => void
 }
 
-const CONCURRENCY_OPTIONS = [1, 2, 3, 4, 5, 6, 8]
+const CONCURRENCY_OPTIONS = Array.from({ length: 20 }, (_, index) => index + 1)
 const TIMEOUT_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90, 120]
 const MAX_LOGS_OPTIONS = [10, 20, 30, 50, 100, 200]
 

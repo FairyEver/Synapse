@@ -5,7 +5,17 @@ interface ProviderSettingsProps {
   onChange: (config: UiConfig) => void
 }
 
-const CODEX_MODELS = ['gpt-5.5', 'gpt-4.1', 'gpt-4.1-mini', 'o3', 'o4-mini', 'codex-mini-latest']
+const CODEX_MODELS = [
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+  'gpt-5.5',
+  'gpt-4.1',
+  'gpt-4.1-mini',
+  'o3',
+  'o4-mini',
+  'codex-mini-latest',
+]
 const CLAUDE_MODELS = ['sonnet', 'opus', 'haiku', 'claude-sonnet-4-20250514', 'claude-opus-4-20250514']
 const MAX_TURNS_OPTIONS = [10, 20, 30, 50, 75, 100, 150, 200]
 

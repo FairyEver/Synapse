@@ -13,8 +13,8 @@ import {
   validateUiConfig,
 } from './config.js'
 
-test('DEFAULT_UI_CONFIG uses GPT-5.5 as the default model', () => {
-  assert.equal(DEFAULT_UI_CONFIG.codex.model, 'gpt-5.5')
+test('DEFAULT_UI_CONFIG uses GPT-5.6 Sol as the default model', () => {
+  assert.equal(DEFAULT_UI_CONFIG.codex.model, 'gpt-5.6-sol')
 })
 
 test('validateUiConfig rejects invalid concurrency', () => {
@@ -22,6 +22,7 @@ test('validateUiConfig rejects invalid concurrency', () => {
 })
 
 test('validateUiConfig rejects resource limit values above supported bounds', () => {
+  assert.equal(MAX_CONCURRENCY, 20)
   assert.throws(() => validateUiConfig({ concurrency: MAX_CONCURRENCY + 1 }), /concurrency/)
   assert.throws(() => validateUiConfig({ timeoutMinutes: MAX_TIMEOUT_MINUTES + 1 }), /timeoutMinutes/)
   assert.throws(() => validateUiConfig({ maxLogs: MAX_LOGS + 1 }), /maxLogs/)
@@ -36,9 +37,9 @@ test('validateUiConfig rejects resource limit values above supported bounds', ()
   assert.equal(config.maxLogs, MAX_LOGS)
 })
 
-test('validateUiConfig fills blank model with GPT-5.5', () => {
+test('validateUiConfig fills blank model with GPT-5.6 Sol', () => {
   const config = validateUiConfig({ codex: { model: '' } })
-  assert.equal(config.codex.model, 'gpt-5.5')
+  assert.equal(config.codex.model, 'gpt-5.6-sol')
 })
 
 test('saveUiConfig persists active prompt content and runtime settings separately', async () => {

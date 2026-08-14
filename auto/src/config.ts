@@ -8,7 +8,7 @@ export const PACKAGE_ROOT = resolve(__dirname, '..')
 export const STATE_DIR = resolve(PACKAGE_ROOT, 'state')
 export const UI_CONFIG_PATH = resolve(STATE_DIR, 'ui-config.json')
 export const PROMPT_PATH = resolve(PACKAGE_ROOT, 'prompt.md')
-export const MAX_CONCURRENCY = 8
+export const MAX_CONCURRENCY = 20
 export const MAX_TIMEOUT_MINUTES = 240
 export const MAX_LOGS = 500
 
@@ -58,7 +58,7 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
   provider: 'codex',
   codex: {
     command: 'codex',
-    model: 'gpt-5.5',
+    model: 'gpt-5.6-sol',
     sandbox: 'danger-full-access',
     approvalPolicy: 'never',
     json: true,

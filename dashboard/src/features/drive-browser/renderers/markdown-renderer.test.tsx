@@ -208,6 +208,31 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.querySelector('[data-markdown-image-preview] img')?.getAttribute('src')).toBe('/image.png')
   })
 
+  it('opens markdown images as a document-ordered preview group', async () => {
+    renderMarkdown({
+      previewData: preview({
+        html: '<p><img src="/first.png" alt="第一张"></p><p><img src="/second.png" alt="第二张"></p>',
+      }),
+    })
+    const images = document.querySelectorAll<HTMLImageElement>('[data-testid="markdown-body"] img')
+    const secondImage = images[1]
+    if (!secondImage) throw new Error('Missing second markdown image')
+
+    await act(async () => {
+      secondImage.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: ' ' }))
+    })
+
+    expect(document.querySelector('[data-markdown-image-preview]')?.textContent).toContain('2 / 2')
+    expect(document.querySelector('[data-markdown-image-active]')?.getAttribute('src')).toBe('/second.png')
+
+    await act(async () => {
+      document.querySelector('[data-markdown-image-preview]')?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowLeft' }))
+    })
+
+    expect(document.querySelector('[data-markdown-image-preview]')?.textContent).toContain('1 / 2')
+    expect(document.querySelector('[data-markdown-image-active]')?.getAttribute('src')).toBe('/first.png')
+  })
+
   it('switches from the empty code fallback to rendered markdown without changing hook order', () => {
     const { rerender } = renderMarkdown({ previewData: preview({ html: '', text: '' }) })
 
