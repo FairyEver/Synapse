@@ -13,6 +13,7 @@ import {
 import { ListTree, Maximize2, MessageSquare } from 'lucide-react'
 import * as Y from 'yjs'
 import { Button } from '@/components/ui/button'
+import { ImageLightbox, type ImageLightboxPreview } from '@/components/image-lightbox'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import {
   Sheet,
@@ -30,7 +31,6 @@ import { useDriveAnnotations } from '../use-drive-annotations'
 import { useDriveCollaboration } from '../collaboration/use-drive-collaboration'
 import { DriveCodeRenderer } from './code-renderer'
 import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
-import { MarkdownImageViewer, type MarkdownImageViewerPreview } from './markdown-image-viewer'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { renderMarkdownAnnotationHtml, resolveMarkdownAnnotationTextRange } from './markdown-annotation-render'
 import { createMarkdownAnnotationAnchorFromSelection } from './markdown-annotation-target'
@@ -166,7 +166,7 @@ function DriveMarkdownBody({
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
   const [threadAnchorTopById, setThreadAnchorTopById] = useState<Record<string, number>>({})
   const [annotationOverlayRects, setAnnotationOverlayRects] = useState<readonly MarkdownAnnotationOverlayRect[]>([])
-  const [previewImage, setPreviewImage] = useState<MarkdownImageViewerPreview | null>(null)
+  const [previewImage, setPreviewImage] = useState<ImageLightboxPreview | null>(null)
 
   useEffect(() => {
     setActiveThreadId(null)
@@ -703,11 +703,7 @@ function DriveMarkdownBody({
   }
 
   const closeImagePreview = () => {
-    const trigger = previewImage?.trigger
     setPreviewImage(null)
-    window.requestAnimationFrame(() => {
-      if (trigger?.isConnected) trigger.focus()
-    })
   }
 
   const outlinePanelOpen = outline.length > 0 && outlineOpen
@@ -998,7 +994,7 @@ function DriveMarkdownBody({
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>{annotations.error}</div>
       ) : null}
       {imageSources.panel}
-      {previewImage ? <MarkdownImageViewer preview={previewImage} onClose={closeImagePreview} /> : null}
+      {previewImage ? <ImageLightbox preview={previewImage} onClose={closeImagePreview} /> : null}
       {annotated.resolved.some((item) => item.anchorStatus === 'orphaned') ? (
         <div className='sr-only'>原文已修改或删除</div>
       ) : null}

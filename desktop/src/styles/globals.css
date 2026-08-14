@@ -4,6 +4,7 @@
 @import "@fontsource-variable/geist";
 
 @source "../../../node_modules/streamdown/dist/*.js";
+@source "../../../ui/src";
 
 @custom-variant dark (&:is(.dark *));
 

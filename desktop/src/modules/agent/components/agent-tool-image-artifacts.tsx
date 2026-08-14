@@ -1,3 +1,7 @@
+import { useState } from "react"
+
+import { Button } from "@/components/ui/button"
+import { ImageLightbox, type ImageLightboxPreview } from "@/components/image-lightbox"
 import type { SynapseAgentImageArtifact } from "@/types/agent"
 
 const AGENT_ARTIFACT_PROTOCOL_PREFIX = "synapse-agent-artifact://local/"
@@ -9,29 +13,42 @@ interface AgentToolImageArtifactsProps {
 }
 
 function AgentToolImageArtifacts({ toolName, artifacts }: AgentToolImageArtifactsProps) {
+  const [preview, setPreview] = useState<ImageLightboxPreview | null>(null)
   if (artifacts.length === 0) return null
+  const images = artifacts.map((artifact, index) => ({
+    alt: `${toolName} image ${index + 1}`,
+    src: displayableImageUrl(artifact.url),
+  }))
   return (
-    <div className="grid max-w-full grid-cols-2 gap-2 sm:grid-cols-3">
-      {artifacts.map((artifact, index) => {
-        const imageUrl = displayableImageUrl(artifact.url)
-        return (
-          <a
-            key={artifact.id}
-            href={imageUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="block overflow-hidden rounded border border-border bg-muted/30"
-          >
-            <img
-              src={imageUrl}
-              alt={`${toolName} image ${index + 1}`}
-              className="aspect-video h-auto w-full object-contain"
-              loading="lazy"
-            />
-          </a>
-        )
-      })}
-    </div>
+    <>
+      <div className="grid max-w-full grid-cols-2 gap-2 sm:grid-cols-3">
+        {artifacts.map((artifact, index) => {
+          const image = images[index]
+          if (!image) return null
+          return (
+            <Button
+              key={artifact.id}
+              type="button"
+              variant="ghost"
+              className="block h-auto overflow-hidden rounded border border-border bg-muted/30 p-0 hover:bg-muted/50"
+              aria-label={`预览图片 ${index + 1}`}
+              data-track="agent-tool-image-preview-open"
+              onClick={(event) => {
+                setPreview({ images, initialIndex: index, trigger: event.currentTarget })
+              }}
+            >
+              <img
+                src={image.src}
+                alt={image.alt}
+                className="aspect-video h-auto w-full object-contain"
+                loading="lazy"
+              />
+            </Button>
+          )
+        })}
+      </div>
+      {preview ? <ImageLightbox preview={preview} onClose={() => setPreview(null)} /> : null}
+    </>
   )
 }
 

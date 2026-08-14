@@ -16,9 +16,23 @@ import { getPermissionModeCapability } from "../permission-mode-capability"
   unobserve() {}
   disconnect() {}
 }
+Object.defineProperty(URL, "createObjectURL", {
+  configurable: true,
+  value: vi.fn(() => "blob:agent-composer-image"),
+})
+Object.defineProperty(URL, "revokeObjectURL", {
+  configurable: true,
+  value: vi.fn(),
+})
 
 const track = vi.hoisted(() => vi.fn())
 const toast = vi.hoisted(() => vi.fn())
+const logger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+}))
 
 vi.mock("@/lib/ui-tracking", () => ({
   extractLabel: () => "button",
@@ -33,6 +47,10 @@ vi.mock("@/lib/ui-tracking", () => ({
 
 vi.mock("sonner", () => ({
   toast,
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => logger,
 }))
 
 let roots: Root[] = []
@@ -664,6 +682,7 @@ describe("AgentComposer", () => {
   })
 
   it("renders a pasted image attachment and lets users delete it", async () => {
+    installShellBridge()
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -703,7 +722,17 @@ describe("AgentComposer", () => {
 
     expect(container.textContent).toContain("screen.png")
     expect(container.textContent).toContain("PNG · 3 B")
+    const previewButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="预览图片 screen.png"]',
+    )
+    expect(previewButton).toBeTruthy()
+    expect(previewButton?.querySelector("img")?.getAttribute("src")).toBe("blob:agent-composer-image")
     expect(container.querySelector('button[aria-label^="删除附件"]')).toBeTruthy()
+
+    await act(async () => previewButton?.click())
+    expect(document.querySelector("[data-image-lightbox]")).toBeTruthy()
+    expect(document.querySelector("[data-image-lightbox-active]")?.getAttribute("src"))
+      .toBe("blob:agent-composer-image")
 
     await act(async () => {
       container.querySelector('button[aria-label^="删除附件"]')
@@ -711,6 +740,59 @@ describe("AgentComposer", () => {
     })
 
     expect(container.textContent).not.toContain("screen.png")
+  })
+
+  it("closes an image lightbox without removing the attachment", async () => {
+    installShellBridge()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")!
+    await act(async () => {
+      textarea.dispatchEvent(createPasteEvent({
+        items: [{
+          kind: "file",
+          type: "image/png",
+          getAsFile: () => imageFile([7, 8], "failure.png", "image/png"),
+        }],
+      }))
+      await wait(0)
+    })
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="预览图片 failure.png"]',
+      )?.click()
+      await wait(0)
+    })
+
+    expect(document.querySelector("[data-image-lightbox]")).toBeTruthy()
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('button[aria-label="关闭图片预览"]')?.click()
+      await wait(0)
+    })
+
+    expect(document.querySelector("[data-image-lightbox]")).toBeNull()
+    expect(container.textContent).toContain("failure.png")
   })
 
   it("renders pasted non-image files with names, metadata, and full path titles", async () => {

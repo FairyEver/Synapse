@@ -343,6 +343,12 @@ describe("AgentToolEvent", () => {
             mimeType: "image/png",
             byteSize: 4,
             url: "/Users/liyang/Library/Application Support/Synapse/agent-artifacts/project_1/conversation_1/artifact-1.png",
+          }, {
+            id: "artifact-2",
+            kind: "image",
+            mimeType: "image/webp",
+            byteSize: 8,
+            url: "https://example.com/artifact-2.webp",
           }],
           success: true,
         }}
@@ -352,10 +358,20 @@ describe("AgentToolEvent", () => {
 
     expect(container.querySelector("[data-slot='collapsible']")?.getAttribute("data-state")).toBe("open")
     const image = container.querySelector("img[alt='Read image 1']")
-    const link = container.querySelector("a")
+    const previewButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="预览图片 2"]',
+    )
     expect(image).toBeTruthy()
     expect(image?.getAttribute("src")).toBe("synapse-agent-artifact://local/project_1/conversation_1/artifact-1.png")
-    expect(link?.getAttribute("href")).toBe("synapse-agent-artifact://local/project_1/conversation_1/artifact-1.png")
+    expect(previewButton).toBeTruthy()
+    expect(container.querySelector("a")).toBeNull()
+
+    await act(async () => previewButton?.click())
+
+    expect(document.querySelector("[data-image-lightbox]")).toBeTruthy()
+    expect(document.querySelector("[data-image-lightbox]")?.textContent).toContain("2 / 2")
+    expect(document.querySelector("[data-image-lightbox-active]")?.getAttribute("src"))
+      .toBe("https://example.com/artifact-2.webp")
   })
 
   it("collapses failed tool results while keeping the failed status visible", () => {

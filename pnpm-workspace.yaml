@@ -1,5 +1,6 @@
 packages:
   - shared
+  - ui
   - desktop
   - website
   - server

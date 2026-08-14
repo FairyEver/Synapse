@@ -6,7 +6,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { createPathAttachment } from "../../attachments"
+import { createImageAttachment, createPathAttachment } from "../../attachments"
 import { AgentComposerAttachmentStrip } from "../agent-composer-attachment-strip"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -15,6 +15,16 @@ import { AgentComposerAttachmentStrip } from "../agent-composer-attachment-strip
   unobserve() {}
   disconnect() {}
 }
+Object.defineProperty(URL, "createObjectURL", {
+  configurable: true,
+  value: vi.fn(),
+})
+Object.defineProperty(URL, "revokeObjectURL", {
+  configurable: true,
+  value: vi.fn(),
+})
+
+const track = vi.hoisted(() => vi.fn())
 
 vi.mock("@/lib/ui-tracking", () => ({
   extractLabel: () => "button",
@@ -24,7 +34,7 @@ vi.mock("@/lib/ui-tracking", () => ({
       else if (ref) ref.current = node
     }
   },
-  track: vi.fn(),
+  track,
 }))
 
 let roots: Root[] = []
@@ -48,7 +58,10 @@ describe("AgentComposerAttachmentStrip", () => {
       mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     })
     const html = renderToStaticMarkup(
-      <AgentComposerAttachmentStrip attachments={[attachment]} onRemove={vi.fn()} />,
+      <AgentComposerAttachmentStrip
+        attachments={[attachment]}
+        onRemove={vi.fn()}
+      />,
     )
 
     expect(html).toContain("agent-composer-attachment-strip")
@@ -61,6 +74,7 @@ describe("AgentComposerAttachmentStrip", () => {
     expect(html).toContain('title="/Users/liyang/Desktop/薪资等级.xlsx"')
     expect(html).toContain("flex-nowrap")
     expect(html).toContain("w-44")
+    expect(html).not.toContain("w-52")
     expect(html).toContain("bg-muted/60")
     expect(html).toContain("hover:bg-muted")
     expect(html).toContain("tabular-nums")
@@ -81,6 +95,79 @@ describe("AgentComposerAttachmentStrip", () => {
     expect(html).not.toContain("lucide-image")
   })
 
+  it("renders image thumbnails on the left and opens an ordered lightbox group", async () => {
+    const createObjectURL = vi.mocked(URL.createObjectURL)
+      .mockReturnValueOnce("blob:first")
+      .mockReturnValueOnce("blob:screen")
+    const revokeObjectURL = vi.mocked(URL.revokeObjectURL).mockImplementation(() => undefined)
+    const onRemove = vi.fn()
+    const firstImage = createImageAttachment({
+      id: "image-0",
+      name: "first.png",
+      mimeType: "image/png",
+      size: 2,
+      bytes: Uint8Array.from([8, 9]).buffer,
+    })
+    const image = createImageAttachment({
+      id: "image-1",
+      name: "screen.png",
+      mimeType: "image/png",
+      size: 3,
+      bytes: Uint8Array.from([1, 2, 3]).buffer,
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposerAttachmentStrip
+          attachments={[firstImage, image]}
+          onRemove={onRemove}
+        />,
+      )
+    })
+
+    const previewButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="预览图片 screen.png"]',
+    )
+    const removeButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="删除附件 screen.png"]',
+    )
+    const card = previewButton?.closest('[role="listitem"]')
+    const thumbnail = previewButton?.querySelector("img")
+    expect(createObjectURL).toHaveBeenCalledTimes(2)
+    expect(card?.className).toContain("w-52")
+    expect(previewButton?.className).toContain("size-10")
+    expect(thumbnail?.getAttribute("src")).toBe("blob:screen")
+    expect(thumbnail?.className).toContain("object-cover")
+
+    await act(async () => previewButton?.click())
+    expect(track).toHaveBeenCalledWith({
+      component: "button",
+      name: "agent-attachment-preview-open",
+      action: "click",
+    })
+    expect(document.querySelector("[data-image-lightbox]")?.textContent).toContain("2 / 2")
+    expect(document.querySelector("[data-image-lightbox-active]")?.getAttribute("src")).toBe("blob:screen")
+    expect(previewButton?.disabled).toBe(false)
+
+    await act(async () => removeButton?.click())
+    expect(onRemove).toHaveBeenCalledWith("image-1")
+
+    await act(async () => {
+      root.render(
+        <AgentComposerAttachmentStrip
+          attachments={[]}
+          onRemove={onRemove}
+        />,
+      )
+    })
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:first")
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:screen")
+  })
+
   it("shows directional controls only while more attachments remain", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -94,7 +181,12 @@ describe("AgentComposerAttachmentStrip", () => {
     }))
 
     await act(async () => {
-      root.render(<AgentComposerAttachmentStrip attachments={attachments} onRemove={vi.fn()} />)
+      root.render(
+        <AgentComposerAttachmentStrip
+          attachments={attachments}
+          onRemove={vi.fn()}
+        />,
+      )
     })
 
     const viewport = container.querySelector<HTMLElement>(".agent-composer-attachment-strip__viewport")

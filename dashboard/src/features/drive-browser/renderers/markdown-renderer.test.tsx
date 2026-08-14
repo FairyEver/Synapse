@@ -202,13 +202,13 @@ describe('DriveMarkdownRenderer', () => {
 
     await click(image)
 
-    const previewImage = document.querySelector('[data-markdown-image-preview] img')
+    const previewImage = document.querySelector('[data-image-lightbox] img')
     expect(previewImage?.getAttribute('src')).toBe('/share/share-1/items/image-1/download')
     expect(previewImage?.getAttribute('alt')).toBe('税费支出申请单')
 
     await click(dialogCloseButton())
     await flushAnimationFrames()
-    expect(document.querySelector('[data-markdown-image-preview]')).toBeNull()
+    expect(document.querySelector('[data-image-lightbox]')).toBeNull()
     expect(document.activeElement).toBe(image)
   })
 
@@ -221,7 +221,7 @@ describe('DriveMarkdownRenderer', () => {
       image.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
     })
 
-    expect(document.querySelector('[data-markdown-image-preview] img')?.getAttribute('src')).toBe('/image.png')
+    expect(document.querySelector('[data-image-lightbox] img')?.getAttribute('src')).toBe('/image.png')
   })
 
   it('opens markdown images as a document-ordered preview group', async () => {
@@ -238,15 +238,15 @@ describe('DriveMarkdownRenderer', () => {
       secondImage.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: ' ' }))
     })
 
-    expect(document.querySelector('[data-markdown-image-preview]')?.textContent).toContain('2 / 2')
-    expect(document.querySelector('[data-markdown-image-active]')?.getAttribute('src')).toBe('/second.png')
+    expect(document.querySelector('[data-image-lightbox]')?.textContent).toContain('2 / 2')
+    expect(document.querySelector('[data-image-lightbox-active]')?.getAttribute('src')).toBe('/second.png')
 
     await act(async () => {
-      document.querySelector('[data-markdown-image-preview]')?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowLeft' }))
+      document.querySelector('[data-image-lightbox]')?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowLeft' }))
     })
 
-    expect(document.querySelector('[data-markdown-image-preview]')?.textContent).toContain('1 / 2')
-    expect(document.querySelector('[data-markdown-image-active]')?.getAttribute('src')).toBe('/first.png')
+    expect(document.querySelector('[data-image-lightbox]')?.textContent).toContain('1 / 2')
+    expect(document.querySelector('[data-image-lightbox-active]')?.getAttribute('src')).toBe('/first.png')
   })
 
   it('switches from the empty code fallback to rendered markdown without changing hook order', () => {
