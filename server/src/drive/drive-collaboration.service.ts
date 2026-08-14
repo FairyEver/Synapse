@@ -9,6 +9,7 @@ import { PrismaService } from "../prisma/prisma.service"
 import { DriveChangeLogService } from "./drive-change-log"
 import { DRIVE_INLINE_TEXT_EDIT_MAX_BYTES } from "./drive-editable-preview"
 import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
+import { isPlainDriveMarkdownName } from "./drive-markdown-relative-images"
 import { DriveMarkdownProjectionService } from "./drive-markdown-projection.service"
 import type { DriveStoragePort } from "./drive-storage"
 import { DRIVE_ITEM_LIFECYCLE_STATUS, DRIVE_ITEM_TYPE, DRIVE_STORAGE_STATUS, DRIVE_UPLOAD_STATUS } from "./drive.constants"
@@ -381,7 +382,10 @@ export class DriveCollaborationService implements OnApplicationShutdown {
     room.contributors.clear()
     await this.compactSegments(room)
     this.resetCheckpointTimers(room)
-    const rendered = await renderDriveMarkdownFragment(body.toString("utf8"), { projection: room.projectionState.projection })
+    const rendered = await renderDriveMarkdownFragment(body.toString("utf8"), {
+      projection: room.projectionState.projection,
+      allowStandaloneRawImages: isPlainDriveMarkdownName(room.itemName),
+    })
     await this.projections.persist({ itemId, versionId, projection: rendered.projection })
     this.bus.publish(itemId, {
       type: "checkpoint.changed",
@@ -538,6 +542,7 @@ export class DriveCollaborationService implements OnApplicationShutdown {
     const currentSource = doc.getText("content").toString()
     const checkpointProjection = await this.projections.load(version.id)
     const currentProjection = await renderDriveMarkdownFragment(currentSource, {
+      allowStandaloneRawImages: isPlainDriveMarkdownName(item.name),
       previousProjection: checkpointProjection
         ? { source: checkpointSource.toString("utf8"), projection: checkpointProjection }
         : null,
@@ -702,7 +707,10 @@ export class DriveCollaborationService implements OnApplicationShutdown {
     room.previewTimer = setTimeout(() => {
       room.previewTimer = null
       const source = room.text.toString()
-      void renderDriveMarkdownFragment(source, { previousProjection: room.projectionState }).then((rendered) => {
+      void renderDriveMarkdownFragment(source, {
+        allowStandaloneRawImages: isPlainDriveMarkdownName(room.itemName),
+        previousProjection: room.projectionState,
+      }).then((rendered) => {
         room.projectionState = {
           source,
           html: rendered.html,

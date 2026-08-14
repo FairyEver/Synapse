@@ -28,13 +28,18 @@ APP_PATHS_FILE="$WORK_DIR/app-paths.txt"
 CACHE_PATHS_FILE="$WORK_DIR/cache-paths.txt"
 FINAL_ZIP="$DESKTOP_DIR/${PACKAGE_NAME}.zip"
 FINAL_SUMMARY="$DESKTOP_DIR/${PACKAGE_NAME}-summary.txt"
+RECOVERY_STATE_SOURCE="$HOME/Library/Application Support/Synapse/data-v1/core.update-install-recovery.json"
 
 cleanup() {
   rm -rf "$WORK_DIR"
 }
 trap cleanup EXIT
 
-mkdir -p "$PACKAGE_DIR/shipit-logs" "$PACKAGE_DIR/synapse-update-logs" "$PACKAGE_DIR/network"
+mkdir -p \
+  "$PACKAGE_DIR/network" \
+  "$PACKAGE_DIR/recovery-state" \
+  "$PACKAGE_DIR/shipit-logs" \
+  "$PACKAGE_DIR/synapse-update-logs"
 
 section() {
   printf '\n\n===== %s =====\n' "$1" >> "$REPORT_FILE"
@@ -64,6 +69,10 @@ redact_stream() {
     -e 's#/Users/[^/[:space:]]+#/Users/[redacted]#g' \
     -e 's#([?&](token|credential|code)=)[^&[:space:]]+#\1[redacted]#g' \
     -e 's#(Authorization[^:]*:[[:space:]]*)[^[:space:]]+#\1[redacted]#g'
+}
+
+read_recovery_value() {
+  /usr/bin/plutil -extract "$1" raw "$RECOVERY_STATE_SOURCE" 2>/dev/null || true
 }
 
 evidence_after_latest_install() {
@@ -197,6 +206,25 @@ else
   done < "$APP_PATHS_FILE"
 fi
 
+section "Persisted update install recovery state"
+RECOVERY_STATE_PRESENT="no"
+RECOVERY_ATTEMPTED_AT=""
+RECOVERY_INSTALL_ATTEMPTS=""
+RECOVERY_PHASE=""
+RECOVERY_TARGET_VERSION=""
+if [ -f "$RECOVERY_STATE_SOURCE" ]; then
+  RECOVERY_STATE_PRESENT="yes"
+  redact_stream < "$RECOVERY_STATE_SOURCE" \
+    > "$PACKAGE_DIR/recovery-state/core.update-install-recovery.json" 2>/dev/null || true
+  redact_stream < "$RECOVERY_STATE_SOURCE" >> "$REPORT_FILE" 2>/dev/null || true
+  RECOVERY_ATTEMPTED_AT="$(read_recovery_value 'singleton.pendingAttempt.attemptedAt')"
+  RECOVERY_INSTALL_ATTEMPTS="$(read_recovery_value 'singleton.pendingAttempt.installAttempts')"
+  RECOVERY_PHASE="$(read_recovery_value 'singleton.pendingAttempt.recoveryPhase')"
+  RECOVERY_TARGET_VERSION="$(read_recovery_value 'singleton.pendingAttempt.targetVersion')"
+else
+  printf 'No persisted update install recovery state was found.\n' >> "$REPORT_FILE"
+fi
+
 section "Squirrel settings"
 run_and_record "Direct Contents update setting" /usr/bin/defaults read "$APP_BUNDLE_ID" SquirrelMacEnableDirectContentsWrite
 run_and_record "ShipIt launch service (GUI domain)" /bin/launchctl print "gui/$(id -u)/${APP_BUNDLE_ID}.ShipIt"
@@ -292,12 +320,12 @@ SYNAPSE_LOG_DIR="$HOME/Library/Application Support/Synapse/logs"
 if [ -d "$SYNAPSE_LOG_DIR" ]; then
   log_index=0
   /bin/ls -1t "$SYNAPSE_LOG_DIR"/*.log 2>/dev/null \
-    | /usr/bin/head -n 5 \
+    | /usr/bin/head -n 30 \
     | while IFS= read -r synapse_log; do
         log_index=$((log_index + 1))
         output_log="$PACKAGE_DIR/synapse-update-logs/update-events-${log_index}.log"
         /usr/bin/grep -Ei \
-          'main:updater|bootstrap\.before-quit|Squirrel|ShipIt|update downloaded|Installing downloaded update|Update install' \
+          'main:(updater|update-install-recovery)|bootstrap\.before-quit|Squirrel|ShipIt|update downloaded|Installing downloaded update|Update install|macOS native updater' \
           "$synapse_log" 2>/dev/null \
           | redact_stream > "$output_log" || true
         if [ ! -s "$output_log" ]; then
@@ -335,7 +363,7 @@ section "Recent macOS ShipIt events"
 printf 'unified_log_collected=%s\n' "$(yes_no test -s "$PACKAGE_DIR/shipit-unified.log")" >> "$REPORT_FILE"
 
 LATEST_INSTALL_ISO="$(/usr/bin/find "$PACKAGE_DIR/synapse-update-logs" -type f -exec \
-  /usr/bin/grep -h 'Installing downloaded update' {} + 2>/dev/null \
+  /usr/bin/grep -Eh 'Update install attempt persisted|Installing downloaded update' {} + 2>/dev/null \
   | /usr/bin/sed -nE 's/^\[([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})\..*$/\1/p' \
   | /usr/bin/sort \
   | /usr/bin/tail -n 1)"
@@ -379,6 +407,11 @@ Latest install request: ${LATEST_INSTALL_ISO:-not found}
 ShipIt error evidence found: $SHIPIT_ERROR_FOUND
 ShipIt success evidence found: $SHIPIT_SUCCESS_FOUND
 Update feed reachable: $FEED_REACHABLE
+Persisted recovery state found: $RECOVERY_STATE_PRESENT
+Pending install attempted at: ${RECOVERY_ATTEMPTED_AT:-not found}
+Pending install attempts: ${RECOVERY_INSTALL_ATTEMPTS:-not found}
+Pending recovery phase: ${RECOVERY_PHASE:-not found}
+Pending target version: ${RECOVERY_TARGET_VERSION:-not found}
 EOF
 
 {

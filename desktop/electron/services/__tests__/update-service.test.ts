@@ -669,6 +669,25 @@ describe("UpdateService", () => {
     await installing
 
     expect(allowQuit).toHaveBeenCalledTimes(1)
+    expect(loggerMock.info).toHaveBeenCalledWith(
+      "macOS native updater requested app quit.",
+      expect.objectContaining({ targetVersion: "0.2.32" }),
+    )
+  })
+
+  it("records when the native macOS updater finishes staging", async () => {
+    const { updateService } = await importUpdateService()
+    await updateService.checkForUpdates()
+
+    updaterMock.nativeAutoUpdater.emit("update-downloaded")
+
+    expect(loggerMock.info).toHaveBeenCalledWith(
+      "macOS native updater finished staging the update.",
+      expect.objectContaining({
+        currentVersion: "0.2.28",
+        targetVersion: "0.2.32",
+      }),
+    )
   })
 
   it("does not install a downloaded update when app quit is blocked", async () => {

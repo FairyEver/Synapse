@@ -174,9 +174,10 @@ Choose one Drive destination before uploading and reuse it for every ordinary Dr
 When the Agent creates or rewrites a relative image reference, prefer these CommonMark-compatible forms, all of which Synapse resolves:
 
 - Use the standard inline form `![alt](images/diagram.png)` by default. An optional title may follow the destination, for example `![alt](images/diagram.png "Diagram")`.
+- Forward slashes are the standard separators. Bare relative paths such as `images/diagram.png`, explicit current-directory paths such as `./images/diagram.png`, and parent-directory paths such as `../images/diagram.png` are supported.
 - When the destination contains whitespace, prefer the angle-bracket form `![alt](<images/team photo.png>)`; percent-encoding each space as `%20`, as in `![alt](images/team%20photo.png)`, is also supported.
 - Reference images are supported, for example `![alt][diagram]` with `[diagram]: <images/team photo.png> "Diagram"` on a separate line.
-- Never generate backslash-separated image paths. Synapse accepts explicit Windows-style `.\` and `..\` paths only as compatibility input when the path uses backslashes consistently; bare, rooted, drive-letter, UNC, and mixed-separator paths remain unsupported.
+- Never generate backslash-separated image paths. Synapse accepts explicit Windows-style `.\images\diagram.png` and `..\images\diagram.png` only as compatibility input when the path uses backslashes consistently. A bare backslash path such as `images\diagram.png`, as well as rooted, drive-letter, UNC, and mixed-separator paths, remains unsupported.
 - Never generate the ambiguous raw-space form `![alt](images/team photo.png)`. Synapse accepts this form only as compatibility input for safe raster images. Apply these writing rules only to links the Agent creates or changes; do not normalize unchanged user-authored Markdown solely for upload.
 
 ## Local Markdown Publishing Flow

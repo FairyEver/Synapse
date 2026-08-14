@@ -121,6 +121,62 @@ describe("DriveCollaborationService", () => {
     expect(internal.rooms.get("item-1")?.connections.get(connection.clientId)).toBe(replacement)
   })
 
+  it("renders standalone Markdown images safely when loading a collaboration room", async () => {
+    const source = [
+      "# Notes",
+      "",
+      String.raw`<img src="..\assets\图片.webp" alt="Preview" width="320" onerror="alert(1)" style="color:red" srcset="private">`,
+      "",
+      '<img src="javascript:alert(1)" alt="Unsafe">',
+      "",
+      String.raw`<div><img src="..\assets\nested.webp"></div>`,
+      "",
+      "<script>alert(1)</script>",
+    ].join("\n")
+    const { service, connection } = createService(source)
+
+    await service.join(access, connection, null)
+
+    const html = service.getRoomPreview("item-1")?.html ?? ""
+    expect(html).toMatch(/<img(?=[^>]*alt="Preview")(?=[^>]*data-drive-markdown-relative-src=)(?![^>]*\ssrc=)[^>]*>/u)
+    expect(html).toContain('width="320"')
+    expect(html).not.toContain("onerror")
+    expect(html).not.toContain("style=")
+    expect(html).not.toContain("srcset=")
+    expect(html).toMatch(/<img alt="Unsafe">/u)
+    expect(html).not.toContain("javascript:")
+    expect(html).not.toContain("<div><img")
+    expect(html).not.toContain("<script>")
+  })
+
+  it("keeps standalone Markdown images safe in realtime collaboration previews", async () => {
+    vi.useFakeTimers()
+    try {
+      const { service, connection } = createService()
+      const joined = await service.join(access, connection, null)
+      const clientDocument = new Y.Doc()
+      Y.applyUpdate(clientDocument, Y.encodeStateAsUpdate(joined.doc))
+      const before = Y.encodeStateVector(clientDocument)
+      const text = clientDocument.getText("content")
+      text.insert(text.length, `\n\n${String.raw`<img src="..\assets\live.webp" alt="Live">`}`)
+
+      await service.applyClientUpdate(
+        "item-1",
+        connection.clientId,
+        Y.encodeStateAsUpdate(clientDocument, before),
+      )
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(service.getRoomPreview("item-1")?.html).toMatch(
+        /<img(?=[^>]*alt="Live")(?=[^>]*data-drive-markdown-relative-src=)(?![^>]*\ssrc=)[^>]*>/u,
+      )
+      clientDocument.destroy()
+    } finally {
+      vi.clearAllTimers()
+      vi.useRealTimers()
+    }
+  })
+
   it("retries an object-storage failure without dropping the pending update", async () => {
     vi.useFakeTimers()
     try {
@@ -182,7 +238,7 @@ const access: DriveCollaborationAccess = {
   userId: "user-1",
 }
 
-function createService() {
+function createService(source = "# Notes") {
   process.env.DATABASE_URL = "postgresql://synapse:synapse@localhost:5432/synapse"
   process.env.ADMIN_ACCESS_SECRET = "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A"
   process.env.USER_ACCESS_JWT_SECRET = "user-access-secret-with-enough-length-32chars"
@@ -246,8 +302,8 @@ function createService() {
     putObject: vi.fn(),
     copyObject: vi.fn(),
     getObjectStream: vi.fn(async () => ({
-      stream: Readable.from("# Notes"),
-      size: 7n,
+      stream: Readable.from(source),
+      size: BigInt(Buffer.byteLength(source, "utf8")),
       contentType: "text/markdown",
     })),
     deleteObject: vi.fn(),

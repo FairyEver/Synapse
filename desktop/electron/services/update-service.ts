@@ -417,6 +417,7 @@ class UpdateService {
     previousRecoveryState: UpdateInstallRecoveryEntryV1 | null,
   ): Promise<void> {
     await new Promise<void>((resolve, reject) => {
+      const handoffStartedAt = Date.now()
       let settled = false
       const finish = (callback: () => void) => {
         if (settled) return
@@ -426,6 +427,10 @@ class UpdateService {
         callback()
       }
       const handleBeforeQuitForUpdate = () => {
+        logger.info("macOS native updater requested app quit.", {
+          elapsedMs: Date.now() - handoffStartedAt,
+          targetVersion: this.state.releaseVersion,
+        })
         finish(() => {
           try {
             this.installQuitHandlers?.allowQuit()
@@ -436,6 +441,10 @@ class UpdateService {
         })
       }
       const timeout = setTimeout(() => {
+        logger.warn("macOS native update handoff timed out.", {
+          elapsedMs: Date.now() - handoffStartedAt,
+          targetVersion: this.state.releaseVersion,
+        })
         finish(() => {
           void this.rollbackTimedOutInstall(previousRecoveryState).then(() => {
             reject(new Error(UPDATE_INSTALL_HANDOFF_TIMEOUT_MESSAGE))
@@ -447,8 +456,12 @@ class UpdateService {
 
       nativeAutoUpdater.once("before-quit-for-update", handleBeforeQuitForUpdate)
       try {
+        logger.info("Requesting macOS native update handoff.", {
+          targetVersion: this.state.releaseVersion,
+        })
         autoUpdater.quitAndInstall(false, true)
       } catch (error) {
+        logger.error("macOS native update handoff failed synchronously.", error)
         finish(() => {
           void this.restoreInstallRecoveryState(previousRecoveryState).then(() => reject(error), reject)
         })
@@ -498,6 +511,19 @@ class UpdateService {
     autoUpdater.logger = logger
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = false
+
+    if (process.platform === "darwin") {
+      nativeAutoUpdater.on("update-downloaded", () => {
+        logger.info("macOS native updater finished staging the update.", {
+          activeUpdateMode: this.activeUpdateMode,
+          currentVersion: this.state.currentVersion,
+          targetVersion: this.state.releaseVersion,
+        })
+      })
+      nativeAutoUpdater.on("error", (error) => {
+        logger.error("macOS native updater reported an error.", error)
+      })
+    }
 
     autoUpdater.on("checking-for-update", () => {
       logger.info("Checking for updates.")
@@ -614,6 +640,8 @@ class UpdateService {
     })
 
     logger.info("App updater initialized.", {
+      autoDownload: autoUpdater.autoDownload,
+      autoInstallOnAppQuit: autoUpdater.autoInstallOnAppQuit,
       currentVersion: this.state.currentVersion,
       platform: process.platform,
     })

@@ -170,6 +170,22 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.querySelector('img')?.getAttribute('src')).toBe('/share/share-1/items/image-1/download')
   })
 
+  it('restores an encoded Windows collaboration image only from the server mapping', () => {
+    collaborationPreviewHtml = '<p><img data-drive-markdown-relative-src="..%5Cassets%5C%E5%9B%BE%E7%89%87.webp?version=1#preview" alt="Windows"></p>'
+    renderMarkdown({
+      previewData: preview({
+        relativeImages: [{
+          src: String.raw`..\assets\图片.webp?version=1#preview`,
+          resolvedUrl: '/share/share-1/items/image-1/download?version=1#preview',
+        }],
+      }),
+    })
+
+    expect(document.querySelector('img')?.getAttribute('src')).toBe(
+      '/share/share-1/items/image-1/download?version=1#preview'
+    )
+  })
+
   it('opens rendered markdown images in an accessible in-page preview', async () => {
     renderMarkdown({
       previewData: preview({

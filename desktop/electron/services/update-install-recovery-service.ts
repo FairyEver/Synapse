@@ -7,7 +7,7 @@ import type {
   UpdateInstallRecoveryEntryV1,
 } from "../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
-import type { ControlledProcessRunner } from "../runtime/process"
+import type { ControlledProcessResult, ControlledProcessRunner } from "../runtime/process"
 import { createMainLogger } from "./log-store"
 
 const SHIPIT_SERVICE_LABEL = "com.fairyever.synapse.ShipIt"
@@ -73,18 +73,29 @@ export class UpdateInstallRecoveryService {
     const previous = await this.readState()
     const pending = previous.pendingAttempt
     const isRecoveredRetry = pending?.installAttempts === 1 && pending.recoveryPhase === "prepared"
-    await this.writeAttempt({
+    const attempt: PendingUpdateInstallAttemptV1 = {
       attemptedAt: new Date().toISOString(),
       installAttempts: isRecoveredRetry ? 2 : 1,
       manualInstallerUrl: manualInstallerUrl ?? pending?.manualInstallerUrl ?? null,
       recoveryPhase: isRecoveredRetry ? "prepared" : "not-started",
       targetVersion,
+    }
+    await this.writeAttempt(attempt)
+    logger.info("Update install attempt persisted.", {
+      attemptedAt: attempt.attemptedAt,
+      installAttempts: attempt.installAttempts,
+      recoveryPhase: attempt.recoveryPhase,
+      targetVersion: attempt.targetVersion,
     })
     return previous
   }
 
   async restoreState(state: UpdateInstallRecoveryEntryV1): Promise<void> {
     await this.stateStore.setSingleton(state)
+    logger.info("Update install attempt rolled back after handoff failure.", {
+      restoredPendingAttempt: state.pendingAttempt !== null,
+      targetVersion: state.pendingAttempt?.targetVersion ?? null,
+    })
   }
 
   async reconcile(currentVersion: string): Promise<UpdateInstallRecoveryDecision> {
@@ -92,8 +103,21 @@ export class UpdateInstallRecoveryService {
     const pending = state.pendingAttempt
     if (!pending) return { kind: "none" }
 
+    logger.info("Reconciling pending macOS update install.", {
+      attemptedAt: pending.attemptedAt,
+      currentVersion,
+      installAttempts: pending.installAttempts,
+      recoveryPhase: pending.recoveryPhase,
+      targetVersion: pending.targetVersion,
+    })
+
     if (isVersionAtLeast(currentVersion, pending.targetVersion)) {
       await this.clearPendingAttempt()
+      logger.info("Pending macOS update install completed successfully.", {
+        attemptedAt: pending.attemptedAt,
+        currentVersion,
+        targetVersion: pending.targetVersion,
+      })
       return { kind: "none" }
     }
 
@@ -106,6 +130,11 @@ export class UpdateInstallRecoveryService {
     }
 
     if (pending.recoveryPhase === "prepared") {
+      logger.info("Resuming prepared macOS update recovery.", {
+        attemptedAt: pending.attemptedAt,
+        currentVersion,
+        targetVersion: pending.targetVersion,
+      })
       return decisionFromAttempt("resume", pending)
     }
 
@@ -114,6 +143,10 @@ export class UpdateInstallRecoveryService {
       await this.resetMacUpdaterState()
       const prepared = { ...pending, recoveryPhase: "prepared" as const }
       await this.writeAttempt(prepared)
+      logger.info("macOS update installer state repair completed.", {
+        attemptedAt: pending.attemptedAt,
+        targetVersion: pending.targetVersion,
+      })
       return decisionFromAttempt("recover", prepared)
     } catch (error) {
       logger.error("Failed to repair the macOS update installer state.", error)
@@ -143,6 +176,11 @@ export class UpdateInstallRecoveryService {
   ): Promise<UpdateInstallRecoveryDecision> {
     const manualAttempt = { ...attempt, recoveryPhase: "manual-required" as const }
     await this.writeAttempt(manualAttempt)
+    logger.warn("macOS update recovery requires manual installation.", {
+      attemptedAt: attempt.attemptedAt,
+      installAttempts: attempt.installAttempts,
+      targetVersion: attempt.targetVersion,
+    })
     return decisionFromAttempt("manual", manualAttempt)
   }
 
@@ -151,6 +189,8 @@ export class UpdateInstallRecoveryService {
     if (uid === undefined) {
       throw new Error("Current user id is unavailable.")
     }
+
+    await this.logShipItLaunchServiceState(uid)
 
     const launchctlResult = await this.processRunner.run({
       action: "shell.exec",
@@ -167,9 +207,42 @@ export class UpdateInstallRecoveryService {
     ) {
       throw new Error("Unable to unload the stale ShipIt launch service.")
     }
+    logger.info("Stale ShipIt launch service unload completed.", {
+      alreadyAbsent: isMissingLaunchServiceError(launchctlResult.stderr),
+      exitCode: launchctlResult.exitCode,
+      timedOut: launchctlResult.timedOut,
+    })
 
     await this.removeCacheDirectory(UPDATE_CACHE_DIRECTORY_NAME)
     await this.removeCacheDirectory(SHIPIT_CACHE_DIRECTORY_NAME)
+  }
+
+  private async logShipItLaunchServiceState(uid: number): Promise<void> {
+    try {
+      const result = await this.processRunner.run({
+        action: "shell.exec",
+        actor: recoveryActor,
+        args: ["print", `gui/${String(uid)}/${SHIPIT_SERVICE_LABEL}`],
+        command: "/bin/launchctl",
+        metadata: {
+          operation: "inspect-shipit-launch-service",
+          source: UPDATE_RECOVERY_SOURCE,
+        },
+        output: {
+          maxBufferBytes: 64 * 1024,
+          overflow: "truncate",
+          stderr: "buffer",
+          stdout: "buffer",
+        },
+        timeoutMs: 10_000,
+      })
+      logger.info("Captured ShipIt launch service state before recovery.", {
+        ...summarizeLaunchService(result),
+        serviceLabel: SHIPIT_SERVICE_LABEL,
+      })
+    } catch (error) {
+      logger.warn("Unable to inspect ShipIt launch service before recovery.", { error })
+    }
   }
 
   private async removeCacheDirectory(directoryName: string): Promise<void> {
@@ -205,6 +278,9 @@ export class UpdateInstallRecoveryService {
 
     try {
       await this.removePath(targetPath)
+      logger.info("Removed macOS updater cache directory during recovery.", {
+        directoryName,
+      })
       this.auditSink.record({
         action: "fs.write.outside-userdata",
         actor: recoveryActor,
@@ -263,6 +339,37 @@ function decisionFromAttempt(
 function isMissingLaunchServiceError(stderr: string | undefined): boolean {
   return stderr?.includes("Could not find service") === true
     || stderr?.includes("No such process") === true
+}
+
+function summarizeLaunchService(result: ControlledProcessResult): Record<string, unknown> {
+  const stdout = result.stdout ?? ""
+  return {
+    exitCode: result.exitCode,
+    lastExitCode: readLaunchctlValue(stdout, "last exit code"),
+    pendingNonDemandSpawn: stdout.includes("pended nondemand spawn = semaphore"),
+    pid: readLaunchctlValue(stdout, "pid"),
+    runs: readLaunchctlValue(stdout, "runs"),
+    serviceFound: result.exitCode === 0,
+    state: readLaunchctlValue(stdout, "state"),
+    stderrSummary: firstNonEmptyLine(result.stderr),
+    stdoutTruncated: result.stdoutTruncated === true,
+    timedOut: result.timedOut,
+  }
+}
+
+function readLaunchctlValue(output: string, key: string): string | null {
+  const prefix = `${key} = `
+  for (const line of output.split("\n")) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith(prefix)) {
+      return trimmed.slice(prefix.length).trim() || null
+    }
+  }
+  return null
+}
+
+function firstNonEmptyLine(value: string | undefined): string | null {
+  return value?.split("\n").map((line) => line.trim()).find(Boolean)?.slice(0, 500) ?? null
 }
 
 function isVersionAtLeast(currentVersion: string, targetVersion: string): boolean {
