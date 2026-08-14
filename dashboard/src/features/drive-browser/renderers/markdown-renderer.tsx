@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import {
   isDriveMarkdownItem,
   type DriveAnnotationSelectorsV2,
@@ -13,6 +13,7 @@ import {
 import { ListTree, Maximize2, MessageSquare } from 'lucide-react'
 import * as Y from 'yjs'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import {
   Sheet,
@@ -42,7 +43,7 @@ import {
 } from './markdown-rendered-text'
 import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
-const MARKDOWN_BODY_CLASSNAME = 'max-w-full break-words space-y-3 text-base leading-7 [&_a]:underline [&_blockquote]:border-l [&_blockquote]:pl-3 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_h1]:scroll-mt-6 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:scroll-mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:scroll-mt-6 [&_h3]:font-medium [&_h4]:scroll-mt-6 [&_h5]:scroll-mt-6 [&_h6]:scroll-mt-6 [&_hr]:border-border [&_li]:ml-4 [&_ol]:list-decimal [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_[data-drive-markdown-table-scroll="true"]]:max-w-full [&_[data-drive-markdown-table-scroll="true"]]:overflow-x-auto [&_table]:w-max [&_table]:min-w-full [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_td]:align-top [&_td:not(:first-child)]:min-w-56 [&_th]:border [&_th]:p-2 [&_th]:align-top [&_th:not(:first-child)]:min-w-56 [&_ul]:list-disc'
+const MARKDOWN_BODY_CLASSNAME = 'max-w-full break-words space-y-3 text-base leading-7 [&_a]:underline [&_blockquote]:border-l [&_blockquote]:pl-3 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_h1]:scroll-mt-6 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:scroll-mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:scroll-mt-6 [&_h3]:font-medium [&_h4]:scroll-mt-6 [&_h5]:scroll-mt-6 [&_h6]:scroll-mt-6 [&_hr]:border-border [&_img[role="button"]]:cursor-zoom-in [&_img[role="button"]]:focus-visible:outline-none [&_img[role="button"]]:focus-visible:ring-2 [&_img[role="button"]]:focus-visible:ring-ring [&_img[role="button"]]:focus-visible:ring-offset-2 [&_li]:ml-4 [&_ol]:list-decimal [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_[data-drive-markdown-table-scroll="true"]]:max-w-full [&_[data-drive-markdown-table-scroll="true"]]:overflow-x-auto [&_table]:w-max [&_table]:min-w-full [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_td]:align-top [&_td:not(:first-child)]:min-w-56 [&_th]:border [&_th]:p-2 [&_th]:align-top [&_th:not(:first-child)]:min-w-56 [&_ul]:list-disc'
 const MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE = 16
 const MARKDOWN_OUTLINE_PANEL_MIN_SIZE = 12
 const MARKDOWN_OUTLINE_PANEL_MAX_SIZE = 22
@@ -53,6 +54,12 @@ const COMMENT_SCROLL_SAFE_INSET = 24
 
 type ResizablePanelPercent = `${number}%`
 type MarkdownWidthMode = 'reading' | 'wide'
+
+type MarkdownPreviewImage = {
+  readonly alt: string
+  readonly src: string
+  readonly trigger: HTMLImageElement
+}
 
 type SelectionPopoverPosition = {
   readonly top: number
@@ -165,6 +172,7 @@ function DriveMarkdownBody({
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
   const [threadAnchorTopById, setThreadAnchorTopById] = useState<Record<string, number>>({})
   const [annotationOverlayRects, setAnnotationOverlayRects] = useState<readonly MarkdownAnnotationOverlayRect[]>([])
+  const [previewImage, setPreviewImage] = useState<MarkdownPreviewImage | null>(null)
 
   useEffect(() => {
     setActiveThreadId(null)
@@ -178,6 +186,7 @@ function DriveMarkdownBody({
     setDocumentNaturalHeight(0)
     setThreadAnchorTopById({})
     setAnnotationOverlayRects([])
+    setPreviewImage(null)
     window.getSelection()?.removeAllRanges()
   }, [annotationStateKey])
 
@@ -228,6 +237,16 @@ function DriveMarkdownBody({
       restoreDriveMermaidDiagrams(root)
     }
   }, [annotated.html, resolvedTheme])
+
+  useEffect(() => {
+    const root = bodyRef.current
+    if (!root) return
+    for (const image of root.querySelectorAll<HTMLImageElement>('img[src]')) {
+      image.tabIndex = 0
+      image.setAttribute('role', 'button')
+      image.setAttribute('aria-label', image.alt ? `预览图片：${image.alt}` : '预览图片')
+    }
+  }, [annotated.html])
   const canCommentAnnotations = effectiveAnnotationContext?.context === 'owner' || Boolean(effectiveAnnotationContext?.canComment)
   const canCreateAnnotation = annotationsEnabled
     && Boolean(effectiveAnnotationContext)
@@ -655,12 +674,40 @@ function DriveMarkdownBody({
     scheduleDocumentScrollEffects()
   }, [scheduleDocumentScrollEffects])
 
+  const openImagePreview = (image: HTMLImageElement) => {
+    const src = image.currentSrc || image.getAttribute('src')
+    if (!src) return
+    setPreviewImage({ alt: image.alt, src, trigger: image })
+  }
+
   const handleBodyClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const image = findMarkdownPreviewImage(event.target, event.currentTarget)
+    if (image) {
+      event.preventDefault()
+      openImagePreview(image)
+      return
+    }
     if (hasSelectionWithin(event.currentTarget)) return
     const threadId = findOverlayThreadAtPoint(annotationOverlayRects, event.clientX, event.clientY, bodyRef.current)
       ?? findRenderedOverlayThreadAtPoint(event.clientX, event.clientY, bodyRef.current)
     if (!threadId) return
     focusThreadFromDocument(threadId)
+  }
+
+  const handleBodyKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    const image = findMarkdownPreviewImage(event.target, event.currentTarget)
+    if (!image) return
+    event.preventDefault()
+    openImagePreview(image)
+  }
+
+  const closeImagePreview = () => {
+    const trigger = previewImage?.trigger
+    setPreviewImage(null)
+    window.requestAnimationFrame(() => {
+      if (trigger?.isConnected) trigger.focus()
+    })
   }
 
   const outlinePanelOpen = outline.length > 0 && outlineOpen
@@ -727,6 +774,7 @@ function DriveMarkdownBody({
             data-testid='markdown-body'
             className={MARKDOWN_BODY_CLASSNAME}
             onClick={handleBodyClick}
+            onKeyDown={handleBodyKeyDown}
             onPointerUp={syncSelectionActionFromCurrentSelection}
             dangerouslySetInnerHTML={annotatedHtmlProperty}
           />
@@ -950,11 +998,31 @@ function DriveMarkdownBody({
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>{annotations.error}</div>
       ) : null}
       {imageSources.panel}
+      <Dialog open={Boolean(previewImage)} onOpenChange={(open) => {
+        if (!open) closeImagePreview()
+      }}>
+        {previewImage ? (
+          <DialogContent
+            aria-describedby={undefined}
+            className='h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] p-4 sm:max-w-[calc(100%-2rem)]'
+            data-markdown-image-preview='true'
+          >
+            <DialogTitle className='sr-only'>图片预览</DialogTitle>
+            <img className='h-full w-full object-contain' src={previewImage.src} alt={previewImage.alt} />
+          </DialogContent>
+        ) : null}
+      </Dialog>
       {annotated.resolved.some((item) => item.anchorStatus === 'orphaned') ? (
         <div className='sr-only'>原文已修改或删除</div>
       ) : null}
     </div>
   )
+}
+
+function findMarkdownPreviewImage(target: EventTarget | null, root: HTMLElement): HTMLImageElement | null {
+  return target instanceof HTMLImageElement && root.contains(target) && target.hasAttribute('src')
+    ? target
+    : null
 }
 
 function encodeStateVector(doc: Y.Doc): string {

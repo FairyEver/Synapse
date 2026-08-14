@@ -170,6 +170,44 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.querySelector('img')?.getAttribute('src')).toBe('/share/share-1/items/image-1/download')
   })
 
+  it('opens rendered markdown images in an accessible in-page preview', async () => {
+    renderMarkdown({
+      previewData: preview({
+        html: '<p><img src="/share/share-1/items/image-1/download" alt="税费支出申请单"></p>',
+      }),
+    })
+
+    const image = document.querySelector('[data-testid="markdown-body"] img')
+    if (!(image instanceof HTMLImageElement)) throw new Error('Missing markdown image')
+
+    expect(image.getAttribute('role')).toBe('button')
+    expect(image.tabIndex).toBe(0)
+    expect(image.getAttribute('aria-label')).toBe('预览图片：税费支出申请单')
+
+    await click(image)
+
+    const previewImage = document.querySelector('[data-markdown-image-preview] img')
+    expect(previewImage?.getAttribute('src')).toBe('/share/share-1/items/image-1/download')
+    expect(previewImage?.getAttribute('alt')).toBe('税费支出申请单')
+
+    await click(dialogCloseButton())
+    await flushAnimationFrames()
+    expect(document.querySelector('[data-markdown-image-preview]')).toBeNull()
+    expect(document.activeElement).toBe(image)
+  })
+
+  it('opens a focused markdown image with the keyboard', async () => {
+    renderMarkdown({ previewData: preview({ html: '<p><img src="/image.png" alt="示意图"></p>' }) })
+    const image = document.querySelector('[data-testid="markdown-body"] img')
+    if (!(image instanceof HTMLImageElement)) throw new Error('Missing markdown image')
+
+    await act(async () => {
+      image.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+    })
+
+    expect(document.querySelector('[data-markdown-image-preview] img')?.getAttribute('src')).toBe('/image.png')
+  })
+
   it('switches from the empty code fallback to rendered markdown without changing hook order', () => {
     const { rerender } = renderMarkdown({ previewData: preview({ html: '', text: '' }) })
 
