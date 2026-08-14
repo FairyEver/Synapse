@@ -52,7 +52,15 @@ function createFixture(initial: UpdateInstallRecoveryEntryV1["pendingAttempt"] =
   const processRunner = {
     run: runProcess,
   } as unknown as ControlledProcessRunner
-  const removePath = vi.fn<(targetPath: string) => Promise<void>>(async () => undefined)
+  const removePath = vi.fn<(
+    targetPath: string,
+    options?: {
+      force?: boolean
+      maxRetries?: number
+      recursive?: boolean
+      retryDelay?: number
+    },
+  ) => Promise<void>>(async () => undefined)
   const service = new UpdateInstallRecoveryService({
     auditSink,
     cacheDirectory: "/Users/test/Library/Caches",
@@ -100,6 +108,18 @@ describe("UpdateInstallRecoveryService", () => {
       "/Users/test/Library/Caches/@synapsedesktop-updater",
       "/Users/test/Library/Caches/com.fairyever.synapse.ShipIt",
     ])
+    expect(fixture.removePath).toHaveBeenNthCalledWith(1, expect.any(String), {
+      force: true,
+      maxRetries: 5,
+      recursive: true,
+      retryDelay: 200,
+    })
+    expect(fixture.removePath).toHaveBeenNthCalledWith(2, expect.any(String), {
+      force: true,
+      maxRetries: 5,
+      recursive: true,
+      retryDelay: 200,
+    })
     expect(fixture.current().pendingAttempt).toEqual(expect.objectContaining({
       installAttempts: 1,
       recoveryPhase: "prepared",

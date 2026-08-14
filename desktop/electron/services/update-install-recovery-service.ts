@@ -1,5 +1,6 @@
 import path from "node:path"
 import { rm } from "node:fs/promises"
+import type { RmOptions } from "node:fs"
 
 import type {
   DataNamespace,
@@ -14,10 +15,16 @@ const SHIPIT_SERVICE_LABEL = "com.fairyever.synapse.ShipIt"
 const UPDATE_CACHE_DIRECTORY_NAME = "@synapsedesktop-updater"
 const SHIPIT_CACHE_DIRECTORY_NAME = SHIPIT_SERVICE_LABEL
 const UPDATE_RECOVERY_SOURCE = "desktop.update-install.recovery"
+const UPDATE_CACHE_REMOVE_OPTIONS = {
+  force: true,
+  maxRetries: 5,
+  recursive: true,
+  retryDelay: 200,
+} as const satisfies RmOptions
 const recoveryActor = { kind: "user" } as const
 const logger = createMainLogger("update-install-recovery")
 
-type RemovePath = (targetPath: string) => Promise<void>
+type RemovePath = (targetPath: string, options: RmOptions) => Promise<void>
 
 export type UpdateInstallRecoveryDecision =
   | { readonly kind: "none" }
@@ -62,7 +69,7 @@ export class UpdateInstallRecoveryService {
     this.getUid = deps.getUid
     this.permissionGuard = deps.permissionGuard
     this.processRunner = deps.processRunner
-    this.removePath = deps.removePath ?? ((targetPath) => rm(targetPath, { force: true, recursive: true }))
+    this.removePath = deps.removePath ?? rm
     this.stateStore = deps.stateStore
   }
 
@@ -277,7 +284,7 @@ export class UpdateInstallRecoveryService {
     }
 
     try {
-      await this.removePath(targetPath)
+      await this.removePath(targetPath, UPDATE_CACHE_REMOVE_OPTIONS)
       logger.info("Removed macOS updater cache directory during recovery.", {
         directoryName,
       })

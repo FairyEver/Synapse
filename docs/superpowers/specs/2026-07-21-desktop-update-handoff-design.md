@@ -632,6 +632,6 @@ macOS 更新下载完成不等于 ShipIt 已经接管安装。客户端在调用
 - 用户再次明确安装后仍未达到目标版本时停止自动恢复，在“关于 Synapse”提供该版本官方 DMG；公开网页仍不提供安装包。
 - 恢复准备完成后，如果用户在再次安装前正常关闭应用，下次启动只继续下载，不重复清理，也不计为第二次安装失败。
 
-该恢复不改变更新源、签名校验、公证要求或 `electron-updater` 制品信任链。launchd 与缓存操作必须经过 PermissionGuard、AuditSink 和受控进程执行器，并严格限制在当前用户的两个预期缓存目录。
+该恢复不改变更新源、签名校验、公证要求或 `electron-updater` 制品信任链。launchd 与缓存操作必须经过 PermissionGuard、AuditSink 和受控进程执行器，并严格限制在当前用户的两个预期缓存目录。递归删除缓存遇到 `ENOTEMPTY`、`EBUSY`、`EPERM` 等瞬时文件系统错误时必须使用有界线性退避重试；只有重试耗尽后才进入人工安装状态。
 
 更新诊断必须能按安装请求时间串联下载完成、原生 Squirrel 暂存、`before-quit-for-update` 退出交接和下次启动恢复。第一次安装未生效时，在卸载旧 job 前通过受控进程执行器读取并结构化记录 ShipIt launchd 的 `state`、`runs`、`last exit code` 与 pending spawn 状态；读取失败不得阻断既有恢复流程。诊断脚本同时收集持久化恢复状态、全部保留期内的更新相关应用日志、当前 launchd 状态及最近 ShipIt 系统日志，历史安装成功证据仍必须晚于最近一次安装请求才可计入本次判断。
