@@ -1124,7 +1124,7 @@ describe('DriveMarkdownRenderer', () => {
     windowAddEventListener.mockRestore()
   })
 
-  it('moves and clips table comment overlays when the table scrolls horizontally', async () => {
+  it('moves and clips table comment overlays when a rerendered table scrolls horizontally', async () => {
     annotationsMock.threads = [thread()]
     renderMarkdown({
       previewData: preview({
@@ -1134,8 +1134,10 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
 
-    const tableScroller = document.querySelector<HTMLElement>('[data-drive-markdown-table-scroll="true"]')
-    if (!tableScroller) throw new Error('Missing markdown table scroller')
+    const initialTableScroller = document.querySelector<HTMLElement>('[data-drive-markdown-table-scroll="true"]')
+    if (!initialTableScroller) throw new Error('Missing markdown table scroller')
+    const tableScroller = initialTableScroller.cloneNode(true) as HTMLElement
+    initialTableScroller.replaceWith(tableScroller)
     vi.spyOn(markdownBody(), 'getBoundingClientRect').mockReturnValue(domRect({ left: 0, top: 0, width: 500, height: 500 }))
     vi.spyOn(tableScroller, 'getBoundingClientRect').mockReturnValue(domRect({ left: 100, top: 80, width: 200, height: 80 }))
 

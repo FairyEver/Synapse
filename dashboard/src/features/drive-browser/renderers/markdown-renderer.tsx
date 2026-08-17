@@ -379,11 +379,10 @@ function DriveMarkdownBody({
     }
     const observer = new ResizeObserver(scheduleMeasurement)
     observer.observe(root)
-    const tableScrollers = Array.from(root.querySelectorAll<HTMLElement>('[data-drive-markdown-table-scroll="true"]'))
-    tableScrollers.forEach((element) => element.addEventListener('scroll', scheduleMeasurement, { passive: true }))
+    root.addEventListener('scroll', scheduleMeasurement, { capture: true, passive: true })
     return () => {
       observer.disconnect()
-      tableScrollers.forEach((element) => element.removeEventListener('scroll', scheduleMeasurement))
+      root.removeEventListener('scroll', scheduleMeasurement, true)
       if (frame !== null) window.cancelAnimationFrame(frame)
     }
   }, [measureAnnotationLayout])
