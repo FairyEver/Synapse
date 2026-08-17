@@ -45,7 +45,7 @@ import {
 } from './markdown-rendered-text'
 import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
-const MARKDOWN_BODY_CLASSNAME = 'markdown-body max-w-full [&_img[role="button"]]:cursor-zoom-in [&_img[role="button"]]:focus-visible:outline-none [&_img[role="button"]]:focus-visible:ring-2 [&_img[role="button"]]:focus-visible:ring-ring [&_img[role="button"]]:focus-visible:ring-offset-2'
+const MARKDOWN_BODY_CLASSNAME = 'markdown-body max-w-full [&_[data-drive-markdown-table-scroll="true"]]:max-w-full [&_[data-drive-markdown-table-scroll="true"]]:overflow-x-auto [&_table]:w-max [&_table]:min-w-full [&_table]:max-w-none [&_td:not(:first-child)]:min-w-56 [&_th:not(:first-child)]:min-w-56 [&_img[role="button"]]:cursor-zoom-in [&_img[role="button"]]:focus-visible:outline-none [&_img[role="button"]]:focus-visible:ring-2 [&_img[role="button"]]:focus-visible:ring-ring [&_img[role="button"]]:focus-visible:ring-offset-2'
 const MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE = 16
 const MARKDOWN_OUTLINE_PANEL_MIN_SIZE = 12
 const MARKDOWN_OUTLINE_PANEL_MAX_SIZE = 22
